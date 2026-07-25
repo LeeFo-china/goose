@@ -6,15 +6,17 @@ import type {
   WechatPayApplymentSensitiveRecord,
 } from "@/repositories/wechat-pay-applyments";
 import { encryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321"; process.env.SUPABASE_PUBLISH ??= "test-publish-key"; process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const tenantId = "11111111-1111-4111-8111-111111111111";
-const applymentId = "33333333-3333-4333-8333-333333333333";
-const rootSecret = "preflight-test-root-secret";
-const now = "2026-07-21T10:00:00.000Z";
+const tenantId = "11111111-1111-4111-8111-111111111111"; const applymentId = "33333333-3333-4333-8333-333333333333";
+const rootSecret = "preflight-test-root-secret"; const now = "2026-07-21T10:00:00.000Z";
+const settlementRuleService = {
+  assertActiveRule: async (input: Record<string, string | null | undefined>) => {
+    const key = `${input.subject_type}:${input.settlement_id}:${input.qualification_type}`;
+    if (key === "SUBJECT_TYPE_ENTERPRISE:716:零售" || key === "SUBJECT_TYPE_INDIVIDUAL:719:零售") return;
+    throw Errors.business(400, "请选择有效的微信支付经营行业与结算规则", "WECHAT_PAY_SETTLEMENT_RULE_INVALID");
+  },
+};
 
 const sensitivePayload = {
   identity_name: "张三",
@@ -92,7 +94,7 @@ function applyment(
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
     settlement_id: "716",
-    qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    qualification_type: "零售",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments: [
@@ -166,6 +168,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(await preflight.runForApplyment?.(applyment())).toEqual({
@@ -187,6 +190,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile,
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report).toEqual({ ready: true, blockers: [] });
@@ -213,6 +217,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report).toEqual({
@@ -237,13 +242,14 @@ describe("wechat pay applyment preflight", () => {
       repository: {
         findById: async () => applyment({
           settlement_id: "719",
-          qualification_type: "生活服务/家装服务",
+          qualification_type: "零售",
         }),
         findSensitivePayloadById: async () => sensitiveRecord(),
       },
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report).toEqual({
@@ -274,6 +280,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report).toEqual({
@@ -332,6 +339,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile,
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report.ready).toBe(false);
@@ -376,6 +384,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     };
 
     expect(await runWechatPayApplymentPreflight(applymentId, dependencies))
@@ -416,6 +425,7 @@ describe("wechat pay applyment preflight", () => {
       loadRuntimeProfile: async () => ({ ready: true }),
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     })).toEqual({ ready: true, blockers: [] });
   });
 
@@ -431,6 +441,7 @@ describe("wechat pay applyment preflight", () => {
       },
       encryptionRootSecretFactory: () => rootSecret,
       nowFactory: () => now,
+      settlementRuleService,
     });
 
     expect(report).toEqual({

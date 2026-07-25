@@ -52,6 +52,33 @@ export const mockAttachments = attachmentCategories.map((category, index) => ({
   ocr_review_status: "confirmed",
 }));
 
+export const mockSettlementRules = [
+  {
+    id: "00000000-0000-4000-8000-000000000716",
+    subject_type: "SUBJECT_TYPE_ENTERPRISE",
+    settlement_id: "716",
+    qualification_type: "零售",
+    label: "零售",
+    rate_label: "0.6%",
+    settlement_cycle_label: "T+1",
+    requires_special_qualification: false,
+    status: "active",
+    sort_order: 10,
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000719",
+    subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+    settlement_id: "719",
+    qualification_type: "零售",
+    label: "零售",
+    rate_label: "0.6%",
+    settlement_cycle_label: "T+1",
+    requires_special_qualification: false,
+    status: "active",
+    sort_order: 20,
+  },
+];
+
 export const mockOcrRecognitions = mockAttachments.map((attachment) => ({
   id: attachment.ocr_recognition_id,
   tenant_id: mockTenantId,
@@ -96,7 +123,7 @@ export const initialApplyment = {
   settlement_bank_branch_id: "123456789012",
   settlement_account_summary: "测试银行营业部 6222••••1234",
   settlement_id: "716",
-  qualification_type: "零售批发/生活娱乐/网上商城/其他",
+  qualification_type: "零售",
   business_scene_description: "线下家装服务",
   contact_address: "测试市测试区一号",
   attachments: mockAttachments,

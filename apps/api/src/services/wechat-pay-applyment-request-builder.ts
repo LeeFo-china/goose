@@ -1,4 +1,6 @@
-import { findWechatPaySettlementRule } from "@gooes/domain";
+import {
+  normalizeWechatPayQualificationType,
+} from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import { encryptWechatPaySensitiveField } from "@/services/wechat-pay-applyment-crypto";
@@ -119,6 +121,9 @@ export function buildWechatPayApplymentSubmitRequest(input: {
   media: WechatPayApplymentMediaIds;
 }): WechatPayApplymentSubmitRequest {
   assertRequestSource(input);
+  const qualificationType = normalizeWechatPayQualificationType(
+    input.source.qualification_type,
+  );
   const encrypt = (value: string) =>
     encryptWechatPaySensitiveField(value, input.publicKeyPem);
 
@@ -176,7 +181,7 @@ export function buildWechatPayApplymentSubmitRequest(input: {
     },
     settlement_info: {
       settlement_id: input.source.settlement_id,
-      qualification_type: input.source.qualification_type,
+      qualification_type: qualificationType,
     },
     bank_account_info: {
       bank_account_type: input.source.settlement_account_type,
@@ -279,14 +284,11 @@ function assertRequestSource(
   ) {
     missing.push("source.settlement_account_type");
   }
-  if (
-    !findWechatPaySettlementRule(
-      input.source.subject_type,
-      input.source.settlement_id,
-      input.source.qualification_type,
-    )
-  ) {
+  if (!input.source.settlement_id.trim()) {
     missing.push("source.settlement_id");
+  }
+  if (!input.source.qualification_type.trim()) {
+    missing.push("source.qualification_type");
   }
   if (input.source.contact_type === "SUPER") {
     for (const [field, value] of [

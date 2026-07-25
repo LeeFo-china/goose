@@ -36,7 +36,7 @@ const baseApplymentInput = {
   settlement_bank_branch_id: "104515080123",
   settlement_account_number: "6212345678901234",
   settlement_id: "716",
-  qualification_type: "零售批发/生活娱乐/网上商城/其他",
+  qualification_type: "零售",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: [
@@ -252,37 +252,23 @@ describe("wechat pay applyment schemas", () => {
     }).success).toBe(true);
   });
 
-  test("rejects a settlement rule that does not belong to the subject", () => {
+  test("defers settlement rule membership checks to service dictionary validation", () => {
     const result = CreateWechatPayApplymentSchema.safeParse({
       ...baseApplymentInput,
       settlement_id: "719",
-      qualification_type: "零售批发/生活娱乐/其他",
+      qualification_type: "零售",
     });
 
-    expect(result.success).toBe(false);
-    if (result.success) return;
-    expect(result.error.issues).toContainEqual(
-      expect.objectContaining({
-        path: ["settlement_id"],
-        message: "请选择当前主体可用的结算规则",
-      }),
-    );
+    expect(result.success).toBe(true);
   });
 
-  test("rejects an industry that does not match the settlement rule", () => {
+  test("accepts structurally valid official industry names for dynamic dictionaries", () => {
     const result = CreateWechatPayApplymentSchema.safeParse({
       ...baseApplymentInput,
-      qualification_type: "生活服务/家装服务",
+      qualification_type: "餐饮",
     });
 
-    expect(result.success).toBe(false);
-    if (result.success) return;
-    expect(result.error.issues).toContainEqual(
-      expect.objectContaining({
-        path: ["qualification_type"],
-        message: "所属行业与结算规则不匹配",
-      }),
-    );
+    expect(result.success).toBe(true);
   });
 
   test("validates only the settlement rule combinations present in a draft", () => {
@@ -298,7 +284,7 @@ describe("wechat pay applyment schemas", () => {
       UpdateWechatPayApplymentSchema.safeParse({
         subject_type: "SUBJECT_TYPE_ENTERPRISE",
         settlement_id: "716",
-        qualification_type: "零售批发/生活娱乐/网上商城/其他",
+        qualification_type: "零售",
         draft_epoch: 2,
         draft_revision: 7,
       }).success,
@@ -316,7 +302,7 @@ describe("wechat pay applyment schemas", () => {
       UpdateWechatPayApplymentSchema.safeParse({
         subject_type: "SUBJECT_TYPE_INDIVIDUAL",
         settlement_id: "719",
-        qualification_type: "零售批发/生活娱乐/其他",
+        qualification_type: "零售",
         draft_epoch: 2,
         draft_revision: 9,
       }).success,

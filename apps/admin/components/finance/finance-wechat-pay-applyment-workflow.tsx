@@ -18,6 +18,7 @@ type WorkflowProps = Omit<
 
 export function FinanceWechatPayApplymentWorkflow({
   applyment,
+  settlementRules,
   subjectType,
   contactType,
   reviewConfirmed,
@@ -42,6 +43,7 @@ export function FinanceWechatPayApplymentWorkflow({
   return (
     <FinanceWechatPayApplymentSinglePage
       applyment={applyment}
+      settlementRules={settlementRules}
       subjectType={subjectType}
       contactType={contactType}
       reviewConfirmed={reviewConfirmed}

@@ -374,6 +374,7 @@ function throwUpstreamError(input: {
     requestId: input.requestId,
     status: input.status,
     wechatCode: safeWechatCode(input.payload.code),
+    wechatMessage: safeWechatMessage(input.payload.message),
   };
   if (input.status === 429 || input.status >= 500) {
     throw Errors.business(
@@ -417,6 +418,18 @@ function safeWechatCode(value: unknown) {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)
     ? value
     : null;
+}
+
+function safeWechatMessage(value: unknown) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (
+    !normalized ||
+    normalized.length > 300 ||
+    /[\u0000-\u001F\u007F]/.test(normalized) ||
+    /\d{11,}/.test(normalized)
+  ) return null;
+  return normalized;
 }
 
 function normalizeBaseUrl(value: string) {

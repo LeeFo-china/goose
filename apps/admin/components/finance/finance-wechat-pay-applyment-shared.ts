@@ -176,6 +176,29 @@ export type WechatPayApplymentSubmissionReadiness = {
   blockers: WechatPayApplymentPreflightBlocker[];
 };
 
+export type WechatPaySettlementRuleRecord = {
+  id: string;
+  subject_type: "SUBJECT_TYPE_ENTERPRISE" | "SUBJECT_TYPE_INDIVIDUAL";
+  settlement_id: string;
+  qualification_type: string;
+  label: string;
+  rate_label: string;
+  settlement_cycle_label: string;
+  requires_special_qualification: boolean;
+  status: "active" | "inactive";
+  sort_order: number;
+};
+
+export type WechatPaySettlementRuleListData = {
+  list: WechatPaySettlementRuleRecord[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type WechatPayApplymentDetailData = {
   applyment: WechatPayApplymentRecord | null;
   events: WechatPayApplymentEvent[];
@@ -183,6 +206,7 @@ export type WechatPayApplymentDetailData = {
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness | null;
+  settlement_rules?: WechatPaySettlementRuleListData | null;
 };
 
 export type WechatPayApplymentDetailResult = WechatPayApplymentDetailData & {
@@ -197,6 +221,10 @@ export function emptyWechatPayApplyment(): WechatPayApplymentDetailResult {
     can_submit: false,
     available_actions: [],
     submission_readiness: null,
+    settlement_rules: {
+      list: [],
+      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+    },
     error: null,
   };
 }

@@ -9,6 +9,9 @@ import type {
   WechatPayApplymentRepositoryPort,
   WechatPayApplymentTenantReviewReadinessPort,
 } from "@/services/wechat-pay-applyments-types";
+import type {
+  WechatPaySettlementRuleListResult,
+} from "@/services/wechat-pay-settlement-rules";
 
 type TenantApplymentDetailInput = {
   applyment: WechatPayApplymentRecord | null;
@@ -18,11 +21,18 @@ type TenantApplymentDetailInput = {
     & ApplymentSensitivePayloadRepositoryPort;
   encryptionRootSecret: string | null | undefined;
   tenantReadinessService: WechatPayApplymentTenantReviewReadinessPort;
+  settlementRules?: WechatPaySettlementRuleListResult;
+};
+
+const EMPTY_SETTLEMENT_RULES: WechatPaySettlementRuleListResult = {
+  list: [],
+  pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
 };
 
 export async function buildTenantApplymentDetail(
   input: TenantApplymentDetailInput,
 ): Promise<ApplymentDetailResult> {
+  const settlementRules = input.settlementRules ?? EMPTY_SETTLEMENT_RULES;
   if (!input.applyment) {
     return {
       applyment: null,
@@ -30,6 +40,7 @@ export async function buildTenantApplymentDetail(
       can_edit: input.canEdit,
       can_submit: false,
       available_actions: [],
+      settlement_rules: settlementRules,
     };
   }
 
@@ -50,6 +61,7 @@ export async function buildTenantApplymentDetail(
     can_submit: input.canEdit && submissionReadiness.review_ready,
     available_actions: [],
     submission_readiness: submissionReadiness,
+    settlement_rules: settlementRules,
   };
 }
 

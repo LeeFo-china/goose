@@ -301,6 +301,9 @@ export function sanitizedApplymentErrorMetadata(
     ...(safeToken(details.wechatCode)
       ? { wechat_code: safeToken(details.wechatCode) }
       : {}),
+    ...(hasSafeWechatMessage(details.wechatMessage)
+      ? { wechat_message: details.wechatMessage }
+      : {}),
   };
 }
 
@@ -340,4 +343,13 @@ function safeToken(value: unknown) {
   return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,63}$/.test(value)
     ? value
     : null;
+}
+
+function hasSafeWechatMessage(value: unknown): value is string {
+  return typeof value === "string" &&
+    value.trim() === value &&
+    value.length > 0 &&
+    value.length <= 300 &&
+    !/[\u0000-\u001F\u007F]/.test(value) &&
+    !/\d{11,}/.test(value);
 }

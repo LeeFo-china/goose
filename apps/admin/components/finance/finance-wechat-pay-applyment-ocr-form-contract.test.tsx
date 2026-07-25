@@ -31,6 +31,7 @@ import type {
 import type {
   WechatPayApplymentAttachment,
   WechatPayApplymentRecord,
+  WechatPaySettlementRuleRecord,
 } from "./finance-wechat-pay-applyment-shared";
 import {
   FinanceWechatPayApplymentSettlementFields,
@@ -66,6 +67,33 @@ const SINGLE_PAGE_FIELD_NAMES = [
 ] as const;
 
 const manualEntryActions: Array<() => void> = [];
+
+const settlementRules: WechatPaySettlementRuleRecord[] = [
+  {
+    id: "00000000-0000-4000-8000-000000000716",
+    subject_type: "SUBJECT_TYPE_ENTERPRISE",
+    settlement_id: "716",
+    qualification_type: "零售",
+    label: "零售",
+    rate_label: "0.6%",
+    settlement_cycle_label: "T+1",
+    requires_special_qualification: false,
+    status: "active",
+    sort_order: 10,
+  },
+  {
+    id: "00000000-0000-4000-8000-000000000719",
+    subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+    settlement_id: "719",
+    qualification_type: "零售",
+    label: "零售",
+    rate_label: "0.6%",
+    settlement_cycle_label: "T+1",
+    requires_special_qualification: false,
+    status: "active",
+    sort_order: 20,
+  },
+];
 
 mock.module("@/components/ui/button", () => ({
   Button({
@@ -126,6 +154,7 @@ function buildSinglePageProps(
   const values = {};
   return {
     applyment,
+    settlementRules,
     subjectType,
     contactType,
     reviewConfirmed: false,
@@ -178,9 +207,11 @@ describe("wechat pay applyment OCR form registration", () => {
     test(`keeps ${previousSubjectType} -> ${nextSubjectType} UI defaults aligned with autosave overrides`, () => {
       const previousDefaults = buildWechatPayApplymentSubjectTypeOverrides(
         previousSubjectType,
+        settlementRules,
       );
       const nextDefaults = buildWechatPayApplymentSubjectTypeOverrides(
         nextSubjectType,
+        settlementRules,
       );
       const markup = renderToStaticMarkup(
         createElement(FinanceWechatPayApplymentSettlementFields, {
@@ -192,6 +223,7 @@ describe("wechat pay applyment OCR form registration", () => {
             qualification_type: previousDefaults.qualification_type,
           } as WechatPayApplymentRecord,
           subjectType: nextSubjectType,
+          settlementRules,
           disabled: false,
           onDataChange: () => undefined,
         }),
@@ -213,6 +245,7 @@ describe("wechat pay applyment OCR form registration", () => {
           settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
         } as WechatPayApplymentRecord,
         subjectType: "SUBJECT_TYPE_ENTERPRISE",
+        settlementRules,
         disabled: true,
         onDataChange: () => undefined,
       }),
@@ -231,6 +264,7 @@ describe("wechat pay applyment OCR form registration", () => {
           settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
         } as WechatPayApplymentRecord,
         subjectType: "SUBJECT_TYPE_INDIVIDUAL",
+        settlementRules,
         disabled: false,
         onDataChange: () => undefined,
       }),

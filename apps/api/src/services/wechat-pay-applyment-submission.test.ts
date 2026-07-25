@@ -9,9 +9,7 @@ import type {
   WechatPayApplymentQueryResult,
 } from "./wechat-pay-applyment-gateway";
 import { encryptApplymentSensitivePayload } from "./wechat-pay-applyment-sensitive-payload";
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321"; process.env.SUPABASE_PUBLISH ??= "test-publish-key"; process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const employeeId = "22222222-2222-4222-8222-222222222222";
 const applymentId = "33333333-3333-4333-8333-333333333333";
@@ -76,7 +74,7 @@ function applyment(
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
     settlement_id: "716",
-    qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    qualification_type: "零售",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments,
@@ -260,6 +258,7 @@ async function createService() {
     encryptionRootSecretFactory: () => rootSecret,
     businessCodeFactory: () => businessCode,
     nowFactory: () => now,
+    settlementRuleService: { assertActiveRule: async () => undefined },
   });
 }
 describe("WechatPayApplymentSubmissionService", () => {

@@ -1,8 +1,8 @@
 import {
-  findWechatPaySettlementRule,
   type OcrDocumentType,
 } from "@gooes/domain";
 
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import type { OcrRecognitionOwnershipRecord } from "@/repositories/ocr-recognitions";
 import type {
@@ -23,8 +23,16 @@ import type {
   WechatPayApplymentOcrRecognitionRepositoryPort,
   WechatPayApplymentPreflightBlocker,
 } from "@/services/wechat-pay-applyments-types";
+import {
+  wechatPaySettlementRuleService,
+  type WechatPaySettlementRuleService,
+} from "@/services/wechat-pay-settlement-rules";
 
 const MAX_APPLYMENT_ATTACHMENTS = 20;
+type SettlementRuleValidationPort = Pick<
+  WechatPaySettlementRuleService,
+  "assertActiveRule"
+>;
 
 export type ApplymentSensitivePayloadRepositoryPort = {
   findSensitivePayloadById: (input: {
@@ -79,9 +87,14 @@ export async function loadCompleteApplymentSensitivePayload(input: {
 export async function getApplymentSubmissionContentBlockers(input: {
   applyment: WechatPayApplymentRecord;
   ocrRecognitionRepository: WechatPayApplymentOcrRecognitionRepositoryPort;
+  settlementRuleService?: SettlementRuleValidationPort;
 }): Promise<WechatPayApplymentPreflightBlocker[]> {
   const blockers: WechatPayApplymentPreflightBlocker[] = [];
-  collectSettlementBlockers(input.applyment, blockers);
+  await collectSettlementBlockers(
+    input.applyment,
+    blockers,
+    input.settlementRuleService ?? wechatPaySettlementRuleService,
+  );
   await collectOcrReviewBlockers(input, blockers);
   return deduplicateBlockers(blockers);
 }
@@ -89,6 +102,7 @@ export async function getApplymentSubmissionContentBlockers(input: {
 export async function assertApplymentSubmissionContentValid(input: {
   applyment: WechatPayApplymentRecord;
   ocrRecognitionRepository: WechatPayApplymentOcrRecognitionRepositoryPort;
+  settlementRuleService?: SettlementRuleValidationPort;
 }): Promise<void> {
   const blockers = await getApplymentSubmissionContentBlockers(input);
   if (blockers.length === 0) return;
@@ -100,9 +114,10 @@ export async function assertApplymentSubmissionContentValid(input: {
   );
 }
 
-function collectSettlementBlockers(
+async function collectSettlementBlockers(
   applyment: WechatPayApplymentRecord,
   blockers: WechatPayApplymentPreflightBlocker[],
+  settlementRuleService: SettlementRuleValidationPort,
 ) {
   if (
     applyment.subject_type === "SUBJECT_TYPE_ENTERPRISE" &&
@@ -119,20 +134,33 @@ function collectSettlementBlockers(
     !applyment.qualification_type
   ) return;
   if (
-    (
-      applyment.subject_type !== "SUBJECT_TYPE_ENTERPRISE" &&
-      applyment.subject_type !== "SUBJECT_TYPE_INDIVIDUAL"
-    ) ||
-    !findWechatPaySettlementRule(
-      applyment.subject_type,
-      applyment.settlement_id,
-      applyment.qualification_type,
-    )
+    applyment.subject_type !== "SUBJECT_TYPE_ENTERPRISE" &&
+    applyment.subject_type !== "SUBJECT_TYPE_INDIVIDUAL"
   ) {
     blockers.push({
       code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
       field: "settlement_id",
     });
+    return;
+  }
+  try {
+    await settlementRuleService.assertActiveRule({
+      subject_type: applyment.subject_type,
+      settlement_id: applyment.settlement_id,
+      qualification_type: applyment.qualification_type,
+    });
+  } catch (error) {
+    if (
+      error instanceof AppError &&
+      error.code === "WECHAT_PAY_SETTLEMENT_RULE_INVALID"
+    ) {
+      blockers.push({
+        code: "APPLYMENT_SETTLEMENT_RULE_INVALID",
+        field: "settlement_id",
+      });
+      return;
+    }
+    throw error;
   }
 }
 

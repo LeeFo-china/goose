@@ -123,7 +123,7 @@ describe("buildWechatPayApplymentPayload", () => {
           contact_type: "LEGAL",
           license_name: "人工保留主体",
           settlement_id: "716",
-          qualification_type: "零售批发/生活娱乐/网上商城/其他",
+          qualification_type: "零售",
         },
       },
     );
@@ -133,7 +133,7 @@ describe("buildWechatPayApplymentPayload", () => {
       contact_type: "LEGAL",
       license_name: "人工保留主体",
       settlement_id: "716",
-      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+      qualification_type: "零售",
     });
   });
 
@@ -154,7 +154,7 @@ describe("buildWechatPayApplymentPayload", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(formData({
       subject_type: "SUBJECT_TYPE_ENTERPRISE",
       settlement_id: "716",
-      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+      qualification_type: "零售",
     }), {
       attachments: [],
       overrides: {
@@ -173,7 +173,7 @@ describe("buildWechatPayApplymentPayload", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(formData({
       subject_type: "SUBJECT_TYPE_ENTERPRISE",
       settlement_id: "716",
-      qualification_type: "零售批发/生活娱乐/网上商城/其他",
+      qualification_type: "零售",
     }), {
       attachments: [],
       subjectType: "SUBJECT_TYPE_INDIVIDUAL",
@@ -190,19 +190,19 @@ describe("buildWechatPayApplymentPayload", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(formData({
       subject_type: "SUBJECT_TYPE_INDIVIDUAL",
       settlement_id: "719",
-      qualification_type: "零售批发/生活娱乐/其他",
+      qualification_type: "零售",
     }), {
       attachments: [],
       overrides: {
         settlement_id: "719",
-        qualification_type: "零售批发/生活娱乐/其他",
+        qualification_type: "零售",
       },
     });
 
     expect(payload).toMatchObject({
       subject_type: "SUBJECT_TYPE_INDIVIDUAL",
       settlement_id: "719",
-      qualification_type: "零售批发/生活娱乐/其他",
+      qualification_type: "零售",
     });
   });
 

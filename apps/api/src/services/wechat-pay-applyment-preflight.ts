@@ -17,6 +17,9 @@ import type {
   WechatPayApplymentPreflightPort,
   WechatPayApplymentPreflightReport,
 } from "@/services/wechat-pay-applyments-types";
+import type {
+  WechatPaySettlementRuleService,
+} from "@/services/wechat-pay-settlement-rules";
 
 export type {
   WechatPayApplymentPreflightBlocker,
@@ -26,6 +29,10 @@ export type {
 const SUBMISSION_LEASE_MS = 5 * 60 * 1000;
 const SAFE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,127}$/;
 const SUBMITTABLE_STATUSES = new Set(["approved", "wechat_editing"]);
+type SettlementRuleValidationPort = Pick<
+  WechatPaySettlementRuleService,
+  "assertActiveRule"
+>;
 
 type PreflightRepository = {
   findById: (input: { id: string }) => Promise<WechatPayApplymentRecord | null>;
@@ -39,6 +46,7 @@ type PreflightDependencies = TenantReviewReadinessDependencies & {
   repository?: PreflightRepository;
   loadRuntimeProfile?: () => Promise<unknown>;
   nowFactory?: () => string;
+  settlementRuleService?: SettlementRuleValidationPort;
 };
 
 export function createWechatPayApplymentPreflightService(
@@ -89,6 +97,7 @@ export async function runWechatPayApplymentPreflightForApplyment(
       encryptionRootSecretFactory: dependencies.encryptionRootSecretFactory,
       ocrRecognitionRepository: dependencies.ocrRecognitionRepository ??
         ocrRecognitionRepository,
+      settlementRuleService: dependencies.settlementRuleService,
     },
   );
   for (const blocker of tenantReadiness.blockers) blockers.add(blocker);

@@ -9,9 +9,12 @@ import {
 } from "./finance-wechat-pay-applyment-form-fields";
 import type { WechatPayApplymentRecord } from "./finance-wechat-pay-applyment-shared";
 import {
-  buildWechatPayApplymentSubjectTypeOverrides,
+  findWechatPayDefaultSettlementRule,
 } from "./finance-wechat-pay-applyment-subject-type";
 import { FinanceWechatPaySettlementRuleField } from "./finance-wechat-pay-settlement-rule-field";
+import type {
+  WechatPaySettlementRuleRecord,
+} from "./finance-wechat-pay-applyment-shared";
 
 export const SUPPLEMENT_FIELD_NAMES = [
   "merchant_short_name",
@@ -45,6 +48,7 @@ type DataChangeProps = {
 
 type SettlementFieldsProps = CommonFieldsProps & DataChangeProps & {
   subjectType: string;
+  settlementRules: readonly WechatPaySettlementRuleRecord[];
 };
 
 export function FinanceWechatPayApplymentContactFields({
@@ -109,11 +113,13 @@ export function FinanceWechatPayApplymentContactFields({
 export function FinanceWechatPayApplymentSettlementFields({
   applyment,
   subjectType,
+  settlementRules,
   disabled,
   onDataChange,
 }: SettlementFieldsProps) {
-  const subjectDefaults = buildWechatPayApplymentSubjectTypeOverrides(
+  const subjectDefaults = buildSettlementDefaults(
     subjectType,
+    settlementRules,
   );
   const persistedIndividualAccountType =
     subjectDefaults.subject_type === "SUBJECT_TYPE_INDIVIDUAL" &&
@@ -166,11 +172,33 @@ export function FinanceWechatPayApplymentSettlementFields({
         subjectType={subjectType}
         settlementId={applyment?.settlement_id}
         qualificationType={applyment?.qualification_type}
+        settlementRules={settlementRules}
         disabled={disabled}
         onValueChange={(overrides) => onDataChange(overrides)}
       />
     </FieldGroup>
   );
+}
+
+function buildSettlementDefaults(
+  subjectType: string,
+  settlementRules: readonly WechatPaySettlementRuleRecord[],
+) {
+  const normalizedSubjectType = subjectType === "SUBJECT_TYPE_INDIVIDUAL"
+    ? "SUBJECT_TYPE_INDIVIDUAL"
+    : "SUBJECT_TYPE_ENTERPRISE";
+  const settlementRule = findWechatPayDefaultSettlementRule(
+    normalizedSubjectType,
+    settlementRules,
+  );
+  return {
+    subject_type: normalizedSubjectType,
+    settlement_account_type: normalizedSubjectType === "SUBJECT_TYPE_ENTERPRISE"
+      ? "BANK_ACCOUNT_TYPE_CORPORATE"
+      : "BANK_ACCOUNT_TYPE_PERSONAL",
+    settlement_id: settlementRule?.settlement_id ?? "",
+    qualification_type: settlementRule?.qualification_type ?? "",
+  };
 }
 
 export function FinanceWechatPayApplymentBusinessFields({

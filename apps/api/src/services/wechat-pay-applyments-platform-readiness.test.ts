@@ -53,7 +53,7 @@ const submittedApplyment: WechatPayApplymentRecord = {
   settlement_bank_branch_id: "104515080123",
   settlement_account_summary: "中国银行 尾号 1234",
   settlement_id: "719",
-  qualification_type: "生活服务/家装服务",
+  qualification_type: "零售",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
   attachments: [],

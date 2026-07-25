@@ -17,10 +17,17 @@ import type {
   WechatPayApplymentSubmissionReadiness,
   WechatPayApplymentTenantReviewReadinessPort,
 } from "@/services/wechat-pay-applyments-types";
+import type {
+  WechatPaySettlementRuleService,
+} from "@/services/wechat-pay-settlement-rules";
 
 const MAX_MEDIA_SIZE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_MEDIA_TYPES = new Set(["image/jpeg", "image/png", "image/bmp"]);
 const SAFE_FIELD_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+type SettlementRuleValidationPort = Pick<
+  WechatPaySettlementRuleService,
+  "assertActiveRule"
+>;
 const SINGLETON_MEDIA_CATEGORIES = new Set([
   "license_copy",
   "legal_representative_id_card_front",
@@ -41,6 +48,7 @@ export type TenantReviewReadinessDependencies = {
   repository?: TenantReviewRepository;
   ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
   encryptionRootSecretFactory?: () => string | null | undefined;
+  settlementRuleService?: SettlementRuleValidationPort;
 };
 
 export function createWechatPayApplymentTenantReviewReadinessService(
@@ -64,6 +72,7 @@ export async function runWechatPayApplymentTenantReviewReadiness(
     applyment,
     ocrRecognitionRepository: dependencies.ocrRecognitionRepository ??
       ocrRecognitionRepository,
+    settlementRuleService: dependencies.settlementRuleService,
     add: blockers.add,
   });
   await collectSensitivePayloadBlockers({
@@ -143,6 +152,7 @@ function collectAttachmentBlockers(
 async function collectSubmissionContentBlockers(input: {
   applyment: WechatPayApplymentRecord;
   ocrRecognitionRepository: WechatPayApplymentOcrRecognitionRepositoryPort;
+  settlementRuleService?: SettlementRuleValidationPort;
   add: (blocker: WechatPayApplymentPreflightBlocker) => void;
 }) {
   try {

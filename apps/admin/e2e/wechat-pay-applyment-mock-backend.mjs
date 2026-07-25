@@ -3,6 +3,7 @@ import {
   getMockAttachmentReadinessBlockers,
   initialApplyment,
   mockOcrRecognitions,
+  mockSettlementRules,
   mockTenantId,
 } from "./wechat-pay-applyment-mock-fixture.mjs";
 
@@ -103,6 +104,15 @@ function applymentDetail() {
     can_edit: canEdit,
     can_submit: canEdit && ready,
     available_actions: [],
+    settlement_rules: {
+      list: mockSettlementRules,
+      pagination: {
+        page: 1,
+        pageSize: 100,
+        total: mockSettlementRules.length,
+        totalPages: 1,
+      },
+    },
     submission_readiness: {
       ready,
       review_ready: ready,
@@ -137,6 +147,24 @@ const server = createServer(async (request, response) => {
       mockOcrRecognitions.map((recognition) => [recognition.id, recognition]),
     );
     sendJson(response, 200, { success: true });
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    url.pathname === "/finance/wechat-pay/settlement-rules"
+  ) {
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        list: mockSettlementRules,
+        pagination: {
+          page: 1,
+          pageSize: 100,
+          total: mockSettlementRules.length,
+          totalPages: 1,
+        },
+      },
+    });
     return;
   }
   if (

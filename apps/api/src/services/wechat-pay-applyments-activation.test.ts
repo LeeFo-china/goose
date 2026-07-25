@@ -56,7 +56,7 @@ const activatableApplyment: WechatPayApplymentRecord = {
   license_address: "河南省信阳市固始县示例大道1号",
   license_period_begin: "2020-01-01",
   license_period_end: "长期",
-  qualification_type: "生活服务/家装服务",
+  qualification_type: "零售",
   sensitive_payload_updated_at: "2026-07-01T09:00:00.000Z",
   sensitive_payload_version: 1,
   service_phone: "0376-1234567",

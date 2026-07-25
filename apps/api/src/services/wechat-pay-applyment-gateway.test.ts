@@ -70,7 +70,7 @@ const submitRequest = {
   },
   settlement_info: {
     settlement_id: "719",
-    qualification_type: "生活服务/家装服务",
+    qualification_type: "零售",
   },
   bank_account_info: {
     bank_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
@@ -218,8 +218,8 @@ describe("WechatPayApplymentGateway", () => {
       });
   });
 
-  test("maps signed WeChat failures without exposing the message or request body", async () => {
-    const upstreamMessage = "身份证号 41000019900101001X 不正确";
+  test("maps signed WeChat failures with safe upstream diagnostics", async () => {
+    const upstreamMessage = "参数错误：settlement_info.qualification_type 无效";
     const gateway = await createGateway(
       mock(async () => signedResponse(
         { code: "PARAM_ERROR", message: upstreamMessage },
@@ -240,9 +240,9 @@ describe("WechatPayApplymentGateway", () => {
         requestId: "rejected-request-id",
         status: 400,
         wechatCode: "PARAM_ERROR",
+        wechatMessage: upstreamMessage,
       },
     });
-    expect(JSON.stringify(error)).not.toContain(upstreamMessage);
     expect(JSON.stringify(error)).not.toContain(submitRequest.contact_info.contact_name);
   });
 

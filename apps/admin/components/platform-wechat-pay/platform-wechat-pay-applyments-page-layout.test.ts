@@ -172,9 +172,9 @@ describe("Platform wechat pay applyments page layout", () => {
       "utf8",
     );
 
-    expect(pageSource).toContain("findWechatPaySettlementRule");
+    expect(pageSource).not.toContain("findWechatPaySettlementRule");
     expect(pageSource).toContain('label="经营行业与结算规则"');
-    expect(pageSource).toContain("settlementRule.label");
+    expect(pageSource).toContain("formatSettlementRuleLabel");
     expect(pageSource).toContain("微信规则 ID");
     expect(pageSource).toContain("applyment.settlement_id");
     expect(pageSource).toContain("applyment.qualification_type");

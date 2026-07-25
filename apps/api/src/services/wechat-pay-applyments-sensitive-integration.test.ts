@@ -73,7 +73,7 @@ const applyment: WechatPayApplymentRecord = {
   merchant_short_name: "晴天装饰",
   opened_at: null,
   payment_config_id: null,
-  qualification_type: "生活服务/家装服务",
+  qualification_type: "零售",
   rejected_at: null,
   rejected_reason: null,
   remark: null,
@@ -246,7 +246,7 @@ const createInput = {
   settlement_bank_branch_id: "104515080123",
   settlement_account_number: "6212345678901234",
   settlement_id: "719",
-  qualification_type: "生活服务/家装服务",
+  qualification_type: "零售",
   business_scene_description: "装修项目收款",
   contact_address: "河南省信阳市固始县",
 };

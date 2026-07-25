@@ -9,18 +9,10 @@ import type {
 } from "@/repositories/wechat-pay-applyments";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import { encryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-const tenantId = "11111111-1111-4111-8111-111111111111";
-const employeeId = "22222222-2222-4222-8222-222222222222";
-const applymentId = "33333333-3333-4333-8333-333333333333";
-const paymentConfigId = "55555555-5555-4555-8555-555555555555";
-const requiredAttachments = [
-  ["license_copy", "license.jpg", "营业执照.jpg", 120000],
-  ["legal_representative_id_card_front", "id-front.jpg", "法人身份证人像面.jpg", 90000],
-  ["legal_representative_id_card_back", "id-back.jpg", "法人身份证国徽面.jpg", 92000],
-].map(([category, file, fileName, size]) => ({
+import type { WechatPaySettlementRuleRecord } from "@/services/wechat-pay-settlement-rules";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321"; process.env.SUPABASE_PUBLISH ??= "test-publish-key"; process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+const tenantId = "11111111-1111-4111-8111-111111111111"; const employeeId = "22222222-2222-4222-8222-222222222222"; const applymentId = "33333333-3333-4333-8333-333333333333"; const paymentConfigId = "55555555-5555-4555-8555-555555555555";
+const requiredAttachments = [["license_copy", "license.jpg", "营业执照.jpg", 120000], ["legal_representative_id_card_front", "id-front.jpg", "法人身份证人像面.jpg", 90000], ["legal_representative_id_card_back", "id-back.jpg", "法人身份证国徽面.jpg", 92000]].map(([category, file, fileName, size]) => ({
   category,
   object_key: `tenants/tenant-1/wechat-pay-applyment/unassigned/2026/07/02/${file}`,
   file_name: fileName,
@@ -67,7 +59,7 @@ const submittedApplyment: WechatPayApplymentRecord = {
   license_address: "河南省信阳市固始县示例大道1号",
   license_period_begin: "2020-01-01",
   license_period_end: "长期",
-  qualification_type: "零售批发/生活娱乐/网上商城/其他",
+  qualification_type: "零售",
   sensitive_payload_updated_at: "2026-07-01T09:00:00.000Z",
   sensitive_payload_version: 1,
   service_phone: "0376-1234567",
@@ -171,6 +163,9 @@ const listApplyments = mock(async () => ({
   list: [submittedApplyment],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
 }));
+const settlementRules: WechatPaySettlementRuleRecord[] = [{ id: "66666666-6666-4666-8666-666666666666", subject_type: "SUBJECT_TYPE_ENTERPRISE", settlement_id: "716", qualification_type: "零售", label: "零售", rate_label: "0.6%", settlement_cycle_label: "T+1", requires_special_qualification: false, status: "active", sort_order: 10 }];
+const listSettlementRules = mock(async () => ({ list: settlementRules, pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 } }));
+const findSettlementRule = mock(async () => settlementRules[0] ?? null);
 const upsertWechatPayConfig = mock(
   async (input: Record<string, unknown>): Promise<WechatPayConfigRecord> => ({
     app_id: null,
@@ -258,12 +253,8 @@ function authContextWithPermissions(
     ...overrides,
   };
 }
-const tenantReadAuth = () => authContextWithPermissions([
-  { code: "wechat_pay.applyment.read", scope: "all" },
-]);
-const tenantSubmitAuth = () => authContextWithPermissions([
-  { code: "wechat_pay.applyment.submit", scope: "all" },
-]);
+const tenantReadAuth = () => authContextWithPermissions([{ code: "wechat_pay.applyment.read", scope: "all" }]);
+const tenantSubmitAuth = () => authContextWithPermissions([{ code: "wechat_pay.applyment.submit", scope: "all" }]);
 const platformAdminAuth = (permissions: AuthContext["permissions"] = []) =>
   authContextWithPermissions(permissions, {
     tenantId: null,
@@ -302,6 +293,7 @@ async function createService() {
     nowFactory,
     preflightService: { run: async () => ({ ready: true, blockers: [] }) },
     tenantReadinessService: { runForApplyment: async () => ({ ready: true, review_ready: true, blockers: [] }) },
+    settlementRuleRepository: { listActive: listSettlementRules, findActiveRule: findSettlementRule },
   });
 }
 describe("WechatPayApplymentService", () => {
@@ -320,6 +312,8 @@ describe("WechatPayApplymentService", () => {
     updateWechatPayConfig.mockClear();
     applicationNoFactory.mockClear();
     nowFactory.mockClear();
+    listSettlementRules.mockClear();
+    findSettlementRule.mockClear();
     findLatestByTenant.mockImplementation(async () => submittedApplyment);
     findById.mockImplementation(async () => submittedApplyment);
   });
@@ -333,6 +327,11 @@ describe("WechatPayApplymentService", () => {
     expect(result.can_submit).toBe(false);
     expect(result.can_edit).toBe(false);
     expect(result.submission_readiness?.review_ready).toBe(true);
+    expect(result.settlement_rules).toEqual({ list: settlementRules, pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 } });
+    expect(listSettlementRules).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 100,
+    });
   });
   test("hides closed tenant applyment from current draft entry", async () => {
     findLatestByTenant.mockImplementationOnce(async () => ({

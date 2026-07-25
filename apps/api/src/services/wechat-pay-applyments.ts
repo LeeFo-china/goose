@@ -31,6 +31,10 @@ import {
   hasSensitiveDraftValues,
   throwDraftSessionStale,
 } from "@/services/wechat-pay-applyment-draft";
+import {
+  hasWechatPaySettlementRulePatch,
+  mergeWechatPaySettlementRuleFields,
+} from "@/services/wechat-pay-applyment-settlement-rule-fields";
 import { encryptApplymentSensitivePayload } from "@/services/wechat-pay-applyment-sensitive-payload";
 import {
   assertApplymentSubmissionContentValid,
@@ -43,6 +47,9 @@ import { buildTenantApplymentDetail } from "@/services/wechat-pay-applyment-tena
 import { wechatPayApplymentStatusService } from "@/services/wechat-pay-applyment-status";
 import { WechatPayApplymentPlatformActions } from "@/services/wechat-pay-applyments-platform";
 import { wechatPayApplymentSubmissionService } from "@/services/wechat-pay-applyment-submission";
+import {
+  WechatPaySettlementRuleService,
+} from "@/services/wechat-pay-settlement-rules";
 import type {
   AccessPolicyPort,
   ApplymentDetailResult,
@@ -72,6 +79,7 @@ export class WechatPayApplymentService {
     NonNullable<WechatPayApplymentServiceDependencies["tenantReadinessService"]>;
   private readonly fileObjectRepository:
     NonNullable<WechatPayApplymentServiceDependencies["fileObjectRepository"]>;
+  private readonly settlementRuleService: WechatPaySettlementRuleService;
 
   constructor(dependencies: WechatPayApplymentServiceDependencies = {}) {
     this.repository = dependencies.repository ?? wechatPayApplymentRepository;
@@ -89,12 +97,16 @@ export class WechatPayApplymentService {
       ocrRecognitionRepository;
     this.fileObjectRepository = dependencies.fileObjectRepository ??
       platformFileObjectRepository;
+    this.settlementRuleService = new WechatPaySettlementRuleService({
+      repository: dependencies.settlementRuleRepository,
+    });
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
     this.tenantReadinessService = dependencies.tenantReadinessService ??
       createWechatPayApplymentTenantReviewReadinessService({
         repository: this.repository,
         ocrRecognitionRepository: this.ocrRecognitionRepository,
         encryptionRootSecretFactory: this.encryptionRootSecretFactory,
+        settlementRuleService: this.settlementRuleService,
       });
     const preflightService = dependencies.preflightService ??
       createWechatPayApplymentPreflightService({
@@ -102,6 +114,7 @@ export class WechatPayApplymentService {
         ocrRecognitionRepository: this.ocrRecognitionRepository,
         encryptionRootSecretFactory: this.encryptionRootSecretFactory,
         nowFactory: this.nowFactory,
+        settlementRuleService: this.settlementRuleService,
       });
     this.platformActions = new WechatPayApplymentPlatformActions(
       this.repository,
@@ -156,6 +169,7 @@ export class WechatPayApplymentService {
       employeeId,
       fileRepository: this.fileObjectRepository,
     });
+    await this.settlementRuleService.assertActiveRule(input);
 
     const applymentId = this.applymentIdFactory();
     const now = this.nowFactory();
@@ -233,6 +247,7 @@ export class WechatPayApplymentService {
       employeeId,
       fileRepository: this.fileObjectRepository,
     });
+    await this.assertDraftSettlementRule(current, input);
 
     const now = this.nowFactory();
     const sensitivePatch = await buildSensitivePayloadUpdate({
@@ -318,6 +333,7 @@ export class WechatPayApplymentService {
     await assertApplymentSubmissionContentValid({
       applyment: current,
       ocrRecognitionRepository: this.ocrRecognitionRepository,
+      settlementRuleService: this.settlementRuleService,
     });
     const updated = await this.repository.submitTenantApplymentAtomically({
       applymentId: id,
@@ -331,71 +347,39 @@ export class WechatPayApplymentService {
     return this.toDetail(authContext, updated);
   }
 
-  async listForPlatform(
-    authContext: AuthContext,
-    query: PlatformWechatPayApplymentListQuery,
-  ) {
+  async listForPlatform(authContext: AuthContext, query: PlatformWechatPayApplymentListQuery) {
     return this.platformActions.listForPlatform(authContext, query);
   }
 
-  async getPlatformDetail(
-    authContext: AuthContext,
-    id: string,
-  ): Promise<ApplymentDetailResult> {
+  async getPlatformDetail(authContext: AuthContext, id: string): Promise<ApplymentDetailResult> {
     return this.platformActions.getPlatformDetail(authContext, id);
   }
 
-  async approve(
-    authContext: AuthContext,
-    id: string,
-    input: ApproveWechatPayApplymentInput,
-  ): Promise<ApplymentDetailResult> {
+  async approve(authContext: AuthContext, id: string, input: ApproveWechatPayApplymentInput): Promise<ApplymentDetailResult> {
     return this.platformActions.approve(authContext, id, input);
   }
 
-  async reject(
-    authContext: AuthContext,
-    id: string,
-    input: RejectWechatPayApplymentInput,
-  ): Promise<ApplymentDetailResult> {
+  async reject(authContext: AuthContext, id: string, input: RejectWechatPayApplymentInput): Promise<ApplymentDetailResult> {
     return this.platformActions.reject(authContext, id, input);
   }
 
-  async markApplying(
-    authContext: AuthContext,
-    id: string,
-    input: MarkWechatPayApplymentApplyingInput,
-  ): Promise<ApplymentDetailResult> {
+  async markApplying(authContext: AuthContext, id: string, input: MarkWechatPayApplymentApplyingInput): Promise<ApplymentDetailResult> {
     return this.platformActions.markApplying(authContext, id, input);
   }
 
-  async submitToWechat(
-    authContext: AuthContext,
-    id: string,
-  ): Promise<ApplymentDetailResult> {
+  async submitToWechat(authContext: AuthContext, id: string): Promise<ApplymentDetailResult> {
     return this.platformActions.submitToWechat(authContext, id);
   }
 
-  async syncWechatStatus(
-    authContext: AuthContext,
-    id: string,
-  ): Promise<ApplymentDetailResult> {
+  async syncWechatStatus(authContext: AuthContext, id: string): Promise<ApplymentDetailResult> {
     return this.platformActions.syncWechatStatus(authContext, id);
   }
 
-  async repairWechatState(
-    authContext: AuthContext,
-    id: string,
-    input: RepairWechatPayApplymentStateInput,
-  ): Promise<ApplymentDetailResult> {
+  async repairWechatState(authContext: AuthContext, id: string, input: RepairWechatPayApplymentStateInput): Promise<ApplymentDetailResult> {
     return this.platformActions.repairWechatState(authContext, id, input);
   }
 
-  async activateConfig(
-    authContext: AuthContext,
-    id: string,
-    _input: ActivateWechatPayApplymentConfigInput,
-  ): Promise<ApplymentDetailResult> {
+  async activateConfig(authContext: AuthContext, id: string, _input: ActivateWechatPayApplymentConfigInput): Promise<ApplymentDetailResult> {
     return this.platformActions.activateConfig(authContext, id);
   }
 
@@ -409,13 +393,28 @@ export class WechatPayApplymentService {
         applyment?.status,
         this.canTenantSubmit(authContext),
       );
+    const settlementRules = await this.settlementRuleService.listTenantOptions({
+      page: 1,
+      pageSize: 100,
+    });
     return buildTenantApplymentDetail({
       applyment,
       canEdit,
       repository: this.repository,
       encryptionRootSecret: this.encryptionRootSecretFactory(),
       tenantReadinessService: this.tenantReadinessService,
+      settlementRules,
     });
+  }
+
+  private async assertDraftSettlementRule(
+    current: WechatPayApplymentRecord,
+    input: UpdateWechatPayApplymentInput,
+  ) {
+    if (!hasWechatPaySettlementRulePatch(input)) return;
+    await this.settlementRuleService.assertActiveRule(
+      mergeWechatPaySettlementRuleFields(current, input),
+    );
   }
 
   private assertTenantRead(authContext: AuthContext) {

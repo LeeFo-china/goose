@@ -1,10 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  findWechatPaySettlementRule,
-  getWechatPaySettlementRulesForSubject,
-} from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import {
@@ -17,8 +13,11 @@ import {
 } from "@/components/ui/select";
 
 import {
-  buildWechatPayApplymentSubjectTypeOverrides,
+  findWechatPayDefaultSettlementRule,
 } from "./finance-wechat-pay-applyment-subject-type";
+import type {
+  WechatPaySettlementRuleRecord,
+} from "./finance-wechat-pay-applyment-shared";
 
 const FIELD_ID = "wechat-pay-applyment-settlement-rule";
 
@@ -26,6 +25,7 @@ type Props = {
   subjectType: string;
   settlementId?: string | null;
   qualificationType?: string | null;
+  settlementRules: readonly WechatPaySettlementRuleRecord[];
   disabled?: boolean;
   onValueChange?: (overrides: {
     settlement_id: string;
@@ -37,27 +37,25 @@ export function FinanceWechatPaySettlementRuleField({
   subjectType,
   settlementId,
   qualificationType,
+  settlementRules,
   disabled,
   onValueChange,
 }: Props) {
-  const subjectDefaults = buildWechatPayApplymentSubjectTypeOverrides(
-    subjectType,
+  const normalizedSubjectType = normalizeSubjectType(subjectType);
+  const rules = settlementRules.filter((rule) =>
+    rule.status === "active" && rule.subject_type === normalizedSubjectType
   );
-  const normalizedSubjectType = subjectDefaults.subject_type;
-  const rules = getWechatPaySettlementRulesForSubject(normalizedSubjectType);
+  const defaultRule = findWechatPayDefaultSettlementRule(
+    subjectType,
+    settlementRules,
+  );
   const savedRule = settlementId && qualificationType
-    ? findWechatPaySettlementRule(
-      normalizedSubjectType,
-      settlementId,
-      qualificationType,
+    ? rules.find((rule) =>
+      rule.settlement_id === settlementId &&
+      rule.qualification_type === qualificationType
     )
     : undefined;
-  const fallbackRule = savedRule ??
-    findWechatPaySettlementRule(
-      normalizedSubjectType,
-      subjectDefaults.settlement_id,
-      subjectDefaults.qualification_type,
-    );
+  const fallbackRule = savedRule ?? defaultRule;
   const [selectedRuleId, setSelectedRuleId] = useState(fallbackRule?.id ?? "");
   const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ??
     fallbackRule;
@@ -75,12 +73,12 @@ export function FinanceWechatPaySettlementRuleField({
       <input
         type="hidden"
         name="settlement_id"
-        value={selectedRule?.id ?? ""}
+        value={selectedRule?.settlement_id ?? ""}
       />
       <input
         type="hidden"
         name="qualification_type"
-        value={selectedRule?.qualificationType ?? ""}
+        value={selectedRule?.qualification_type ?? ""}
       />
       <Select
         value={selectedRule?.id ?? ""}
@@ -89,8 +87,8 @@ export function FinanceWechatPaySettlementRuleField({
           const nextRule = rules.find((rule) => rule.id === value);
           if (nextRule) {
             onValueChange?.({
-              settlement_id: nextRule.id,
-              qualification_type: nextRule.qualificationType,
+              settlement_id: nextRule.settlement_id,
+              qualification_type: nextRule.qualification_type,
             });
           }
         }}
@@ -112,8 +110,8 @@ export function FinanceWechatPaySettlementRuleField({
       <FieldDescription>
         系统根据主体类型提交微信对应规则，无需填写技术编号。
         {selectedRule
-          ? ` 微信行业：${selectedRule.qualificationType}。`
-          : ""}
+          ? ` 微信行业：${selectedRule.qualification_type}。`
+          : " 当前主体暂无可用规则，请联系平台维护字典。"}
       </FieldDescription>
     </Field>
   );
@@ -121,8 +119,14 @@ export function FinanceWechatPaySettlementRuleField({
 
 function formatRuleLabel(rule: {
   label: string;
-  rateLabel: string;
-  settlementCycleLabel: string;
+  rate_label: string;
+  settlement_cycle_label: string;
 }) {
-  return `${rule.label} · ${rule.rateLabel} · ${rule.settlementCycleLabel}`;
+  return `${rule.label} · ${rule.rate_label} · ${rule.settlement_cycle_label}`;
+}
+
+function normalizeSubjectType(value: string) {
+  return value === "SUBJECT_TYPE_INDIVIDUAL"
+    ? "SUBJECT_TYPE_INDIVIDUAL"
+    : "SUBJECT_TYPE_ENTERPRISE";
 }

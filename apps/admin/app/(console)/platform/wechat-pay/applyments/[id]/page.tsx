@@ -2,10 +2,6 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, ExternalLink, FileCheck2, Paperclip } from "lucide-react";
-import {
-  findWechatPaySettlementRule,
-  type WechatPayApplymentSubjectType,
-} from "@gooes/domain";
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
   buildWechatPayApplymentAttachmentPreviewUrl,
@@ -57,7 +53,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
     };
   const applyment = data.applyment;
   const statusMeta = getWechatPayApplymentStatusMeta(applyment?.status);
-  const settlementRule = resolveSettlementRule(applyment);
+  const settlementRuleLabel = formatSettlementRuleLabel(applyment);
   const merchantDisplayName =
     applyment?.merchant_short_name?.trim() ||
     applyment?.tenant?.name?.trim() ||
@@ -216,9 +212,7 @@ export default async function PlatformWechatPayApplymentDetailPage({
                     />
                     <InfoItem
                       label="经营行业与结算规则"
-                      value={settlementRule
-                        ? `${settlementRule.label} · ${settlementRule.rateLabel} · ${settlementRule.settlementCycleLabel}`
-                        : "未识别规则"}
+                      value={settlementRuleLabel}
                       description={`微信规则 ID：${applyment.settlement_id || "-"}；所属行业：${applyment.qualification_type || "-"}`}
                       className="md:col-span-2"
                     />
@@ -430,25 +424,11 @@ function formatSettlementAccountType(value?: string | null) {
   return value || "-";
 }
 
-function resolveSettlementRule(applyment: WechatPayApplymentRecord | null) {
-  if (
-    !applyment ||
-    !isSupportedSubjectType(applyment.subject_type) ||
-    !applyment.settlement_id ||
-    !applyment.qualification_type
-  ) {
-    return undefined;
+function formatSettlementRuleLabel(
+  applyment: WechatPayApplymentRecord | null,
+) {
+  if (!applyment?.settlement_id || !applyment.qualification_type) {
+    return "未填写";
   }
-  return findWechatPaySettlementRule(
-    applyment.subject_type,
-    applyment.settlement_id,
-    applyment.qualification_type,
-  );
-}
-
-function isSupportedSubjectType(
-  value?: string | null,
-): value is WechatPayApplymentSubjectType {
-  return value === "SUBJECT_TYPE_ENTERPRISE" ||
-    value === "SUBJECT_TYPE_INDIVIDUAL";
+  return `${applyment.qualification_type} · 微信规则 ${applyment.settlement_id}`;
 }

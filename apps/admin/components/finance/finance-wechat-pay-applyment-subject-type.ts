@@ -1,7 +1,10 @@
-import {
-  getWechatPaySettlementRulesForSubject,
-  type WechatPayApplymentSubjectType,
-} from "@gooes/domain";
+import type {
+  WechatPaySettlementRuleRecord,
+} from "./finance-wechat-pay-applyment-shared";
+
+export type WechatPayApplymentSubjectType =
+  | "SUBJECT_TYPE_ENTERPRISE"
+  | "SUBJECT_TYPE_INDIVIDUAL";
 
 export type WechatPayApplymentSubjectTypeOverrides = {
   subject_type: WechatPayApplymentSubjectType;
@@ -14,9 +17,13 @@ export type WechatPayApplymentSubjectTypeOverrides = {
 
 export function buildWechatPayApplymentSubjectTypeOverrides(
   value: string,
+  settlementRules: readonly WechatPaySettlementRuleRecord[],
 ): WechatPayApplymentSubjectTypeOverrides {
   const subjectType = normalizeSubjectType(value);
-  const settlementRule = getWechatPaySettlementRulesForSubject(subjectType)[0];
+  const settlementRule = findWechatPayDefaultSettlementRule(
+    subjectType,
+    settlementRules,
+  );
   if (!settlementRule) {
     throw new Error(`主体类型 ${subjectType} 缺少可用结算规则`);
   }
@@ -26,9 +33,19 @@ export function buildWechatPayApplymentSubjectTypeOverrides(
     settlement_account_type: subjectType === "SUBJECT_TYPE_ENTERPRISE"
       ? "BANK_ACCOUNT_TYPE_CORPORATE"
       : "BANK_ACCOUNT_TYPE_PERSONAL",
-    settlement_id: settlementRule.id,
-    qualification_type: settlementRule.qualificationType,
+    settlement_id: settlementRule.settlement_id,
+    qualification_type: settlementRule.qualification_type,
   };
+}
+
+export function findWechatPayDefaultSettlementRule(
+  value: string,
+  settlementRules: readonly WechatPaySettlementRuleRecord[],
+): WechatPaySettlementRuleRecord | null {
+  const subjectType = normalizeSubjectType(value);
+  return settlementRules.find((rule) =>
+    rule.status === "active" && rule.subject_type === subjectType
+  ) ?? null;
 }
 
 function normalizeSubjectType(

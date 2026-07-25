@@ -29,6 +29,7 @@ import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-
 import {
   formatWechatPayApplymentTime,
   type WechatPayApplymentRecord,
+  type WechatPaySettlementRuleRecord,
 } from "./finance-wechat-pay-applyment-shared";
 import {
   FinanceWechatPayApplymentBusinessFields,
@@ -102,6 +103,7 @@ type SinglePageOcrReview = Pick<
 
 export type FinanceWechatPayApplymentSinglePageProps = {
   applyment: WechatPayApplymentRecord | null;
+  settlementRules: readonly WechatPaySettlementRuleRecord[];
   subjectType: string;
   contactType: string;
   reviewConfirmed: boolean;
@@ -123,6 +125,7 @@ export type FinanceWechatPayApplymentSinglePageProps = {
 
 export function FinanceWechatPayApplymentSinglePage({
   applyment,
+  settlementRules,
   subjectType,
   contactType,
   reviewConfirmed,
@@ -261,6 +264,7 @@ export function FinanceWechatPayApplymentSinglePage({
         <FinanceWechatPayApplymentSettlementFields
           applyment={applyment}
           subjectType={subjectType}
+          settlementRules={settlementRules}
           disabled={disabled}
           onDataChange={onSupplementDataChange}
         />

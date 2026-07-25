@@ -56,6 +56,8 @@ export function FinanceWechatPayApplymentPanel({
     resetKey,
   });
   const applyment = autosave.currentApplyment;
+  const settlementRules = autosave.currentDetail.settlement_rules?.list ??
+    data.settlement_rules?.list ?? [];
   const currentApplymentRef = autosave.currentApplymentRef;
   const editable = autosave.canEdit;
   const canSubmit = autosave.canSubmit;
@@ -248,7 +250,20 @@ export function FinanceWechatPayApplymentPanel({
   }
 
   function handleSubjectTypeChange(value: string) {
-    const overrides = buildWechatPayApplymentSubjectTypeOverrides(value);
+    let overrides: ReturnType<typeof buildWechatPayApplymentSubjectTypeOverrides>;
+    try {
+      overrides = buildWechatPayApplymentSubjectTypeOverrides(
+        value,
+        settlementRules,
+      );
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "当前主体缺少可用微信支付经营行业规则",
+      );
+      return;
+    }
     setSubjectType(value);
     invalidateReview();
     scheduleDraftSave(overrides);
@@ -340,6 +355,7 @@ export function FinanceWechatPayApplymentPanel({
       />
       <FinanceWechatPayApplymentWorkflow
         applyment={applyment}
+        settlementRules={settlementRules}
         subjectType={subjectType}
         contactType={contactType}
         reviewConfirmed={reviewConfirmed}

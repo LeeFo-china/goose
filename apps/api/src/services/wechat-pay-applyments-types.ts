@@ -26,6 +26,10 @@ import type {
 } from "@/repositories/wechat-pay-configs";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 import type { AuthContext } from "@/services/authorization";
+import type {
+  WechatPaySettlementRuleListResult,
+  WechatPaySettlementRuleRepositoryPort,
+} from "@/services/wechat-pay-settlement-rules";
 import type { Json } from "@/types/database";
 
 export type WechatPayApplymentRepositoryPort = {
@@ -153,6 +157,7 @@ export type WechatPayApplymentServiceDependencies = {
   preflightService?: WechatPayApplymentPreflightPort;
   tenantReadinessService?: WechatPayApplymentTenantReviewReadinessPort;
   fileObjectRepository?: WechatPayApplymentFileObjectRepositoryPort;
+  settlementRuleRepository?: WechatPaySettlementRuleRepositoryPort;
 };
 
 export type WechatPayApplymentFileObjectRepositoryPort = {
@@ -213,6 +218,7 @@ export type ApplymentDetailResult = {
   can_submit: boolean;
   available_actions: WechatPayApplymentAvailableAction[];
   submission_readiness?: WechatPayApplymentSubmissionReadiness;
+  settlement_rules?: WechatPaySettlementRuleListResult;
 };
 
 export type WechatPayApplymentSubmissionPort = {

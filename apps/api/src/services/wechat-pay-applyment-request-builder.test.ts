@@ -38,7 +38,7 @@ const source = {
   settlement_bank_full_name: "中国银行股份有限公司固始支行",
   settlement_bank_branch_id: "104515080123",
   settlement_id: "716",
-  qualification_type: "零售批发/生活娱乐/网上商城/其他",
+  qualification_type: "零售",
 };
 
 const sensitive = {
@@ -108,7 +108,7 @@ describe("buildWechatPayApplymentSubmitRequest", () => {
       },
       settlement_info: {
         settlement_id: "716",
-        qualification_type: "零售批发/生活娱乐/网上商城/其他",
+        qualification_type: "零售",
       },
       bank_account_info: {
         bank_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
@@ -180,6 +180,44 @@ describe("buildWechatPayApplymentSubmitRequest", () => {
     expect(decrypt(request.contact_info.contact_id_number ?? "")).toBe(
       "410000198801010013",
     );
+  });
+
+  test("normalizes legacy internal industry paths before submitting to WeChat", () => {
+    const request = buildWechatPayApplymentSubmitRequest({
+      businessCode: "1561816121_WPA202607010005",
+      serviceProviderAppId: "wxbac3b1e168fd968a",
+      publicKeyPem: keys.publicKey,
+      source: {
+        ...source,
+        qualification_type: "零售批发/生活娱乐/其他",
+      },
+      sensitive,
+      media,
+    });
+
+    expect(request.settlement_info).toMatchObject({
+      settlement_id: "716",
+      qualification_type: "零售",
+    });
+  });
+
+  test("passes through official industry names that are validated by the settlement dictionary", () => {
+    const request = buildWechatPayApplymentSubmitRequest({
+      businessCode: "1561816121_WPA202607010006",
+      serviceProviderAppId: "wxbac3b1e168fd968a",
+      publicKeyPem: keys.publicKey,
+      source: {
+        ...source,
+        qualification_type: "餐饮",
+      },
+      sensitive,
+      media,
+    });
+
+    expect(request.settlement_info).toMatchObject({
+      settlement_id: "716",
+      qualification_type: "餐饮",
+    });
   });
 
   test("rejects missing required SUPER contact media", () => {

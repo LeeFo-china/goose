@@ -110,7 +110,8 @@ describe("wechat pay applyment single-page contracts", () => {
     expect(supplementSource).toContain("FinanceWechatPaySettlementRuleField");
     expect(supplementSource).not.toContain('<TextField label="结算规则 ID"');
     expect(supplementSource).not.toContain('<TextField label="所属行业"');
-    expect(ruleFieldSource).toContain("getWechatPaySettlementRulesForSubject");
+    expect(ruleFieldSource).not.toContain("getWechatPaySettlementRulesForSubject");
+    expect(ruleFieldSource).toContain("settlementRules");
     expect(ruleFieldSource).toContain("@/components/ui/select");
     expect(ruleFieldSource).toContain('name="settlement_id"');
     expect(ruleFieldSource).toContain('name="qualification_type"');

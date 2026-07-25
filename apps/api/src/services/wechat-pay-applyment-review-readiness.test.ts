@@ -17,6 +17,9 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const applymentId = "33333333-3333-4333-8333-333333333333";
 const rootSecret = "tenant-review-readiness-root-secret";
+const settlementRuleService = {
+  assertActiveRule: async () => undefined,
+};
 
 function attachment(category: string) {
   return {
@@ -57,7 +60,7 @@ function completeDraft(
     settlement_account_number_masked: "62**********1234",
     settlement_account_summary: "中国银行 尾号 1234",
     settlement_id: "716",
-    qualification_type: "零售批发/生活娱乐/网上商城/其他",
+    qualification_type: "零售",
     business_scene_description: "装修项目收款",
     contact_address: "河南省信阳市固始县",
     attachments: [
@@ -110,6 +113,7 @@ async function createHarness() {
       repository: { findSensitivePayloadById },
       ocrRecognitionRepository: { findByIdsForTenant },
       encryptionRootSecretFactory: () => rootSecret,
+      settlementRuleService,
     }),
     findSensitivePayloadById,
     findByIdsForTenant,
@@ -172,6 +176,7 @@ describe("tenant WeChat Pay applyment review readiness", () => {
         findByIdsForTenant: async () => mockOcrRecognitions,
       },
       encryptionRootSecretFactory: () => rootSecret,
+      settlementRuleService,
     });
 
     expect(await service.runForApplyment(applyment)).toEqual({

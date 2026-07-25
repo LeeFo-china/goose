@@ -58,6 +58,9 @@ import type {
   WechatPayApplymentSubmissionRepositoryPort,
 } from "@/services/wechat-pay-applyments-types";
 import { PLATFORM_SUBMIT_PERMISSION } from "@/services/wechat-pay-applyments-types";
+import type {
+  WechatPaySettlementRuleService,
+} from "@/services/wechat-pay-settlement-rules";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 
 type SubmissionGatewayPort = Pick<
@@ -66,6 +69,10 @@ type SubmissionGatewayPort = Pick<
 >;
 type MediaServicePort = Pick<WechatPayApplymentMediaService, "resolveMedia">;
 type SubmissionAccessPolicyPort = Pick<AccessPolicyPort, "hasPermission">;
+type SettlementRuleValidationPort = Pick<
+  WechatPaySettlementRuleService,
+  "assertActiveRule"
+>;
 
 type SubmissionDependencies = {
   repository?: WechatPayApplymentSubmissionRepositoryPort;
@@ -82,6 +89,7 @@ type SubmissionDependencies = {
   }) => string;
   nowFactory?: () => string;
   ocrRecognitionRepository?: WechatPayApplymentOcrRecognitionRepositoryPort;
+  settlementRuleService?: SettlementRuleValidationPort;
 };
 
 export class WechatPayApplymentSubmissionService
@@ -99,6 +107,8 @@ export class WechatPayApplymentSubmissionService
   private readonly nowFactory: () => string;
   private readonly ocrRecognitionRepository:
     WechatPayApplymentOcrRecognitionRepositoryPort;
+  private readonly settlementRuleService:
+    SettlementRuleValidationPort | undefined;
 
   constructor(dependencies: SubmissionDependencies = {}) {
     this.repository = dependencies.repository ?? wechatPayApplymentRepository;
@@ -124,6 +134,7 @@ export class WechatPayApplymentSubmissionService
     this.nowFactory = dependencies.nowFactory ?? (() => new Date().toISOString());
     this.ocrRecognitionRepository = dependencies.ocrRecognitionRepository ??
       ocrRecognitionRepository;
+    this.settlementRuleService = dependencies.settlementRuleService;
   }
 
   async submitToWechat(
@@ -153,6 +164,7 @@ export class WechatPayApplymentSubmissionService
       await assertApplymentSubmissionContentValid({
         applyment: claimed,
         ocrRecognitionRepository: this.ocrRecognitionRepository,
+        settlementRuleService: this.settlementRuleService,
       });
       let current = claimed;
       const hadBusinessCode = hasText(current.applyment_business_code);

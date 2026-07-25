@@ -13090,6 +13090,54 @@ export type Database = {
           },
         ]
       }
+      wechat_pay_settlement_rules: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          qualification_type: string
+          rate_label: string
+          requires_special_qualification: boolean
+          settlement_cycle_label: string
+          settlement_id: string
+          sort_order: number
+          status: string
+          subject_type: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          qualification_type: string
+          rate_label?: string
+          requires_special_qualification?: boolean
+          settlement_cycle_label?: string
+          settlement_id: string
+          sort_order?: number
+          status?: string
+          subject_type: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          qualification_type?: string
+          rate_label?: string
+          requires_special_qualification?: boolean
+          settlement_cycle_label?: string
+          settlement_id?: string
+          sort_order?: number
+          status?: string
+          subject_type?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       wechat_payment_orders: {
         Row: {
           amount: number

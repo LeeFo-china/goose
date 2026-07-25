@@ -7,6 +7,7 @@ describe("wechat pay database types", () => {
     const config = {} as Tables<"tenant_payment_configs">;
     const applyment = {} as Tables<"tenant_wechat_pay_applyments">;
     const applymentEvent = {} as Tables<"tenant_wechat_pay_applyment_events">;
+    const settlementRule = {} as Tables<"wechat_pay_settlement_rules">;
     const orderRow = {} as Tables<"wechat_payment_orders">;
     const notificationRow = {} as Tables<"wechat_payment_notifications">;
     const applymentInsert: Inserts<"tenant_wechat_pay_applyments"> = {
@@ -34,6 +35,7 @@ describe("wechat pay database types", () => {
       applyment.application_no,
       applyment.status,
       applymentEvent.event_type,
+      settlementRule.qualification_type,
       applymentInsert.application_no,
       orderRow.metadata,
       orderInsert.amount,
@@ -41,6 +43,6 @@ describe("wechat pay database types", () => {
       notificationUpdate.processed,
     ];
 
-    expect(fields).toHaveLength(13);
+    expect(fields).toHaveLength(14);
   });
 });
