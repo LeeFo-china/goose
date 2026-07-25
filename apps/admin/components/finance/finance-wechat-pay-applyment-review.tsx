@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, CircleAlert, PencilLine } from "lucide-react";
+import { ChevronRight, CircleAlert } from "lucide-react";
 
 import {
   Alert,
@@ -11,20 +11,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Separator } from "@/components/ui/separator";
 
-import type { ApplymentStageKey } from "./finance-wechat-pay-applyment-flow-model";
-import type {
-  WechatPayApplymentReadinessItem,
+import {
+  focusApplymentReadinessTarget,
+  type WechatPayApplymentReadinessItem,
 } from "./finance-wechat-pay-applyment-readiness";
 import {
   type WechatPayApplymentAttachment,
 } from "./finance-wechat-pay-applyment-shared";
-import {
-  getWechatPayApplymentReviewTargets,
-  type WechatPayApplymentReviewSnapshot,
-  type WechatPayApplymentReviewTarget,
-} from "./finance-wechat-pay-applyment-review-model";
 
 const BASE_REQUIRED_ATTACHMENTS = [
   "license_copy",
@@ -32,36 +26,23 @@ const BASE_REQUIRED_ATTACHMENTS = [
   "legal_representative_id_card_back",
 ];
 
-const REVIEW_SECTIONS = [
-  { key: "subject", label: "主体和营业执照" },
-  { key: "contact", label: "法人和超级管理员" },
-  { key: "settlement", label: "经营及结算" },
-  { key: "attachments", label: "申请附件" },
-] as const;
-
-export function FinanceWechatPayApplymentReview({
-  review,
-  attachments,
-  contactType,
-  confirmed,
-  disabled,
-  navigationDisabled,
-  readinessBlockers,
-  onConfirmedChange,
-  onNavigate,
-  onStageChange,
-}: {
-  review: WechatPayApplymentReviewSnapshot;
+export type ReviewProps = {
   attachments: WechatPayApplymentAttachment[];
   contactType: string;
   confirmed: boolean;
   disabled: boolean;
-  navigationDisabled: boolean;
   readinessBlockers: readonly WechatPayApplymentReadinessItem[];
   onConfirmedChange: (checked: boolean) => void;
-  onNavigate: (target: WechatPayApplymentReviewTarget) => void;
-  onStageChange: (stage: ApplymentStageKey) => void;
-}) {
+};
+
+export function FinanceWechatPayApplymentReview({
+  attachments,
+  contactType,
+  confirmed,
+  disabled,
+  readinessBlockers,
+  onConfirmedChange,
+}: ReviewProps) {
   const requiredCategories = contactType === "SUPER"
     ? [
         ...BASE_REQUIRED_ATTACHMENTS,
@@ -76,23 +57,14 @@ export function FinanceWechatPayApplymentReview({
     uploadedCategories.has(category)
   ).length;
   const attachmentsReady = readyAttachmentCount === requiredCategories.length;
-  const targets = getWechatPayApplymentReviewTargets(contactType);
 
   return (
-    <section className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">提交复核</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            提交后由平台审核，再发送至微信支付。
-          </p>
-        </div>
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
         <Badge variant={attachmentsReady ? "success" : "warning"}>
           必传附件 {readyAttachmentCount}/{requiredCategories.length}
         </Badge>
       </div>
-
-      <Separator />
 
       {readinessBlockers.length > 0
         ? (
@@ -101,52 +73,14 @@ export function FinanceWechatPayApplymentReview({
             <AlertTitle>
               还有 {readinessBlockers.length} 项需要处理
             </AlertTitle>
-            <AlertDescription className="grid gap-1">
+            <AlertDescription className="flex flex-col gap-1">
               {readinessBlockers.map((blocker) => (
-                <Button
-                  key={blocker.key}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-auto w-full justify-between whitespace-normal px-2 py-2 text-left font-normal"
-                  disabled={navigationDisabled}
-                  data-readiness-blocker=""
-                  onClick={() => onStageChange(blocker.targetStage)}
-                >
-                  <span className="min-w-0 break-words">{blocker.label}</span>
-                  <ChevronRight aria-hidden="true" />
-                </Button>
+                <ReadinessBlocker key={blocker.key} blocker={blocker} />
               ))}
             </AlertDescription>
           </Alert>
         )
         : null}
-
-      <div className="divide-y rounded-md border">
-        {REVIEW_SECTIONS.map((section) => (
-          <section
-            key={section.key}
-            className="flex flex-wrap items-start justify-between gap-3 p-3"
-          >
-            <div className="min-w-0">
-              <h3 className="text-sm font-medium">{section.label}</h3>
-              <p className="mt-1 break-words text-xs text-muted-foreground">
-                {review[section.key]}
-              </p>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={navigationDisabled}
-              onClick={() => onNavigate(targets[section.key])}
-            >
-              <PencilLine data-icon="inline-start" />
-              返回修改
-            </Button>
-          </section>
-        ))}
-      </div>
 
       <Field data-disabled={disabled || undefined}>
         <div className="flex items-start gap-3 rounded-md bg-muted/50 p-3">
@@ -169,6 +103,37 @@ export function FinanceWechatPayApplymentReview({
           </div>
         </div>
       </Field>
-    </section>
+    </div>
+  );
+}
+
+function ReadinessBlocker({
+  blocker,
+}: {
+  blocker: WechatPayApplymentReadinessItem;
+}) {
+  if (!blocker.targetId) {
+    return (
+      <p
+        className="px-2 py-2 text-foreground"
+        data-readiness-blocker=""
+      >
+        {blocker.label}
+      </p>
+    );
+  }
+  const targetId = blocker.targetId;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-auto w-full justify-between whitespace-normal px-2 py-2 text-left font-normal"
+      data-readiness-blocker=""
+      onClick={() => focusApplymentReadinessTarget(targetId)}
+    >
+      <span className="min-w-0 break-words">{blocker.label}</span>
+      <ChevronRight aria-hidden="true" />
+    </Button>
   );
 }

@@ -81,7 +81,6 @@ export function FinanceWechatPayApplymentPanelStatus({
   saveState,
   saveError,
   error,
-  stageError,
   materialsError,
   editable,
   canRetrySave,
@@ -91,7 +90,6 @@ export function FinanceWechatPayApplymentPanelStatus({
   saveState: ApplymentDraftSaveState;
   saveError: string;
   error: string;
-  stageError: string;
   materialsError: string;
   editable: boolean;
   canRetrySave: boolean;
@@ -107,7 +105,6 @@ export function FinanceWechatPayApplymentPanelStatus({
         onRetry={onRetry}
       />
       {error ? <StatusAlert>{error}</StatusAlert> : null}
-      {stageError ? <StatusAlert>{stageError}</StatusAlert> : null}
       {materialsError ? <StatusAlert>{materialsError}</StatusAlert> : null}
       {!editable ? (
         <StatusAlert tone="warning">

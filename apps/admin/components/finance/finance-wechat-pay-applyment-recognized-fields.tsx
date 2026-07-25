@@ -20,6 +20,9 @@ export const APPLYMENT_OCR_REVIEW_CATEGORIES = [
   "settlement_account_proof",
 ] as const satisfies readonly WechatPayApplymentAttachmentCategory[];
 
+export type WechatPayApplymentOcrReviewCategory =
+  (typeof APPLYMENT_OCR_REVIEW_CATEGORIES)[number];
+
 const SENSITIVE_OCR_FIELD_KEYS = [
   "identity_name",
   "identity_number",
@@ -182,7 +185,7 @@ const RECOGNIZED_FIELDS: Record<
 };
 
 function getRecognizedFields(
-  category: (typeof APPLYMENT_OCR_REVIEW_CATEGORIES)[number],
+  category: WechatPayApplymentOcrReviewCategory,
   contactType: string,
 ) {
   if (contactType !== "SUPER" && category.startsWith("contact_id_card_")) {
@@ -198,55 +201,60 @@ function getRecognizedFields(
 }
 
 export function FinanceWechatPayApplymentRecognizedFields({
-  selectedCategory,
+  category,
   contactType,
   subjectType,
   values,
   fieldSources,
   disabled,
+  labelledBy,
   onManualChange,
 }: {
-  selectedCategory: WechatPayApplymentAttachmentCategory;
+  category: WechatPayApplymentAttachmentCategory;
   contactType: string;
   subjectType: string;
   values: Readonly<Record<string, string>>;
   fieldSources: Readonly<Record<string, ApplymentFieldSource>>;
   disabled?: boolean;
+  labelledBy: string;
   onManualChange: (key: string, value: string) => void;
 }) {
+  if (!isApplymentOcrReviewCategory(category)) return null;
+
   return (
-    <div className="min-w-0">
-      {APPLYMENT_OCR_REVIEW_CATEGORIES.map((category) => (
-        <section
-          key={category}
-          hidden={selectedCategory !== category}
-          aria-label="识别字段核对"
-          data-ocr-category={category}
-        >
-          <FieldGroup className="grid gap-4 md:grid-cols-2">
-            {getRecognizedFields(category, contactType)
-              .map((field) => (
-                <RecognizedField
-                  key={field.key}
-                  field={field}
-                  required={Boolean(
-                    field.required &&
-                    (
-                      field.key !== "identity_address" ||
-                      subjectType === "SUBJECT_TYPE_ENTERPRISE"
-                    ),
-                  )}
-                  value={values[field.key] ?? ""}
-                  source={fieldSources[field.key]}
-                  disabled={disabled}
-                  onValueChange={(value) => onManualChange(field.key, value)}
-                />
-              ))}
-          </FieldGroup>
-        </section>
-      ))}
-    </div>
+    <section
+      className="min-w-0"
+      aria-labelledby={labelledBy}
+      data-ocr-category={category}
+    >
+      <FieldGroup className="grid gap-4 md:grid-cols-2">
+        {getRecognizedFields(category, contactType).map((field) => (
+          <RecognizedField
+            key={field.key}
+            field={field}
+            required={Boolean(
+              field.required &&
+              (
+                field.key !== "identity_address" ||
+                subjectType === "SUBJECT_TYPE_ENTERPRISE"
+              ),
+            )}
+            value={values[field.key] ?? ""}
+            source={fieldSources[field.key]}
+            disabled={disabled}
+            onValueChange={(value) => onManualChange(field.key, value)}
+          />
+        ))}
+      </FieldGroup>
+    </section>
   );
+}
+
+function isApplymentOcrReviewCategory(
+  category: WechatPayApplymentAttachmentCategory,
+): category is WechatPayApplymentOcrReviewCategory {
+  return (APPLYMENT_OCR_REVIEW_CATEGORIES as
+    readonly WechatPayApplymentAttachmentCategory[]).includes(category);
 }
 
 function RecognizedField({

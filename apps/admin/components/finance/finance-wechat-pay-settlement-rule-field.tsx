@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import {
   findWechatPaySettlementRule,
   getWechatPaySettlementRulesForSubject,
-  type WechatPayApplymentSubjectType,
 } from "@gooes/domain";
 import { Badge } from "@/components/ui/badge";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -16,6 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+import {
+  buildWechatPayApplymentSubjectTypeOverrides,
+} from "./finance-wechat-pay-applyment-subject-type";
 
 const FIELD_ID = "wechat-pay-applyment-settlement-rule";
 
@@ -37,7 +40,10 @@ export function FinanceWechatPaySettlementRuleField({
   disabled,
   onValueChange,
 }: Props) {
-  const normalizedSubjectType = normalizeSubjectType(subjectType);
+  const subjectDefaults = buildWechatPayApplymentSubjectTypeOverrides(
+    subjectType,
+  );
+  const normalizedSubjectType = subjectDefaults.subject_type;
   const rules = getWechatPaySettlementRulesForSubject(normalizedSubjectType);
   const savedRule = settlementId && qualificationType
     ? findWechatPaySettlementRule(
@@ -46,7 +52,12 @@ export function FinanceWechatPaySettlementRuleField({
       qualificationType,
     )
     : undefined;
-  const fallbackRule = savedRule ?? rules[0];
+  const fallbackRule = savedRule ??
+    findWechatPaySettlementRule(
+      normalizedSubjectType,
+      subjectDefaults.settlement_id,
+      subjectDefaults.qualification_type,
+    );
   const [selectedRuleId, setSelectedRuleId] = useState(fallbackRule?.id ?? "");
   const selectedRule = rules.find((rule) => rule.id === selectedRuleId) ??
     fallbackRule;
@@ -106,12 +117,6 @@ export function FinanceWechatPaySettlementRuleField({
       </FieldDescription>
     </Field>
   );
-}
-
-function normalizeSubjectType(value: string): WechatPayApplymentSubjectType {
-  return value === "SUBJECT_TYPE_INDIVIDUAL"
-    ? "SUBJECT_TYPE_INDIVIDUAL"
-    : "SUBJECT_TYPE_ENTERPRISE";
 }
 
 function formatRuleLabel(rule: {

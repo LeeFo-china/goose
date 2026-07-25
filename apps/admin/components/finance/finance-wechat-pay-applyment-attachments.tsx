@@ -1,24 +1,19 @@
 "use client";
 
-import { type ChangeEvent, useState } from "react";
-import { FileImage, FilePenLine, RefreshCw } from "lucide-react";
+import { FileImage, RefreshCw } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
-  uploadDirectToCos,
-  validateUploadFile,
-} from "@/lib/cos-direct-upload";
-import {
-  type AttachmentCheckpointErrorMap,
-} from "./finance-wechat-pay-applyment-checkpoint";
+  type ApplymentAttachmentController,
+} from "./finance-wechat-pay-applyment-attachment-controller";
+export {
+  useWechatPayApplymentAttachmentController,
+} from "./finance-wechat-pay-applyment-attachment-controller";
 import {
   type ApplymentMaterialState,
-  type ApplymentMaterialStateMap,
   getMaterialRetryAction,
-  replaceApplymentAttachment,
-  updateAttachmentOcrReviewMetadata,
 } from "./finance-wechat-pay-applyment-flow-model";
 import {
   getWechatPayApplymentAttachmentCategoryLabel,
@@ -33,40 +28,23 @@ import {
   AttachmentCheckpointStatus,
 } from "./finance-wechat-pay-applyment-attachment-checkpoint-status";
 import {
-  createApplymentAttachmentMutationIntent,
-  type ApplymentAttachmentChangeOptions,
-} from "./finance-wechat-pay-applyment-manual-entry";
-import {
   ApplymentAttachmentUploadButton,
 } from "./finance-wechat-pay-applyment-upload-button";
 
-const APPLYMENT_ATTACHMENT_UPLOAD_SCENE = "wechat_pay_applyment";
-const MAX_APPLYMENT_ATTACHMENT_SIZE = 2 * 1024 * 1024;
 const MAX_BUSINESS_SCENE_MATERIALS = 5;
-const APPLYMENT_ATTACHMENT_ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-]);
 
-const BASE_ATTACHMENT_SLOTS: Array<{
+export type ApplymentAttachmentSlotDefinition = {
   category: WechatPayApplymentAttachmentCategory;
   required: boolean;
   description: string;
-}> = [
-  { category: "license_copy", required: true, description: "营业执照清晰照片或扫描件。" },
-  { category: "legal_representative_id_card_front", required: true, description: "法人身份证人像面。" },
-  { category: "legal_representative_id_card_back", required: true, description: "法人身份证国徽面。" },
-  { category: "settlement_account_proof", required: false, description: "开户许可证、银行卡或银行账户证明。" },
-];
-
-const CONTACT_ATTACHMENT_SLOTS = [
-  { category: "contact_id_card_front" as const, required: true, description: "经办人身份证人像面。" },
-  { category: "contact_id_card_back" as const, required: true, description: "经办人身份证国徽面。" },
-];
+};
 
 const MATERIAL_STATUS_META: Record<
   ApplymentMaterialState["status"],
-  { label: string; variant: "outline" | "secondary" | "warning" | "danger" | "success" }
+  {
+    label: string;
+    variant: "outline" | "secondary" | "warning" | "danger" | "success";
+  }
 > = {
   missing: { label: "未上传", variant: "outline" },
   uploaded: { label: "已上传", variant: "secondary" },
@@ -77,301 +55,128 @@ const MATERIAL_STATUS_META: Record<
   failed: { label: "识别失败", variant: "danger" },
 };
 
-export type AttachmentUploadedInput = {
-  attachment: WechatPayApplymentAttachment;
-  nextAttachments: WechatPayApplymentAttachment[];
-};
+export type WechatPayApplymentAttachmentSlotProps =
+  ApplymentAttachmentSlotDefinition & {
+    controller: ApplymentAttachmentController;
+  };
 
-export function WechatPayApplymentAttachmentsField({
-  attachments,
-  contactType,
-  editable,
-  disabled,
-  materialStates,
-  attachmentSaveErrors,
-  supportedOcrDocumentTypes,
-  onUploaded,
-  onRetrySave,
-  onRetryRecognition,
-  onChange,
+export function WechatPayApplymentBusinessMaterials({
+  controller,
+  id,
 }: {
-  attachments: WechatPayApplymentAttachment[];
-  contactType: string;
-  editable: boolean;
-  disabled?: boolean;
-  materialStates: ApplymentMaterialStateMap;
-  attachmentSaveErrors: AttachmentCheckpointErrorMap;
-  supportedOcrDocumentTypes: ReadonlySet<string>;
-  onUploaded: (input: AttachmentUploadedInput) => void | Promise<void>;
-  onRetrySave: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void | Promise<void>;
-  onRetryRecognition: (
-    attachment: WechatPayApplymentAttachment,
-  ) => void | Promise<void>;
-  onChange: (
-    nextAttachments: WechatPayApplymentAttachment[],
-    options?: ApplymentAttachmentChangeOptions,
-  ) => void | Promise<void>;
+  controller: ApplymentAttachmentController;
+  id?: string;
 }) {
-  const [uploadingCategory, setUploadingCategory] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const busy = disabled || Boolean(uploadingCategory);
-  const slots = contactType === "SUPER"
-    ? [...BASE_ATTACHMENT_SLOTS, ...CONTACT_ATTACHMENT_SLOTS]
-    : BASE_ATTACHMENT_SLOTS;
-  const businessMaterials = attachments.filter(
+  const headingId = id ? `${id}-heading` : undefined;
+  const businessMaterials = controller.attachments.filter(
     (item) => item.category === "business_scene_material",
   );
-
-  async function uploadAttachment(
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
-    setError("");
-    setUploadingCategory(category);
-    try {
-      validateUploadFile(file, {
-        allowedTypes: APPLYMENT_ATTACHMENT_ALLOWED_TYPES,
-        maxSizeBytes: MAX_APPLYMENT_ATTACHMENT_SIZE,
-        typeMessage: "仅支持 JPEG、PNG 图片",
-        sizeMessage: "单个申请附件不能超过 2MB",
-      });
-      const uploaded = await uploadDirectToCos(file, {
-        scene: APPLYMENT_ATTACHMENT_UPLOAD_SCENE,
-        uploadErrorLabel: getWechatPayApplymentAttachmentCategoryLabel(category),
-      });
-      if (!uploaded.fileId) {
-        throw new Error("附件上传成功但未返回文件 ID，请重新上传");
-      }
-      const attachment: WechatPayApplymentAttachment = {
-        category,
-        file_object_id: uploaded.fileId,
-        object_key: uploaded.storagePath,
-        file_name: file.name,
-        content_type: file.type || null,
-        size: file.size,
-        ocr_recognition_id: null,
-        ocr_review_status: "uploaded",
-      };
-      const nextAttachments = replaceApplymentAttachment(
-        attachments,
-        attachment,
-      );
-      await onUploaded({ attachment, nextAttachments });
-    } catch (uploadError) {
-      setError(uploadError instanceof Error
-        ? uploadError.message
-        : "上传申请附件失败");
-    } finally {
-      setUploadingCategory(null);
-    }
-  }
-
-  async function removeAttachment(attachment: WechatPayApplymentAttachment) {
-    setError("");
-    try {
-      const nextAttachments = attachments.filter(
-        (item) => item.object_key !== attachment.object_key,
-      );
-      await onChange(nextAttachments, {
-        intent: createApplymentAttachmentMutationIntent(
-          attachments,
-          nextAttachments,
-        ),
-      });
-    } catch (changeError) {
-      setError(changeError instanceof Error
-        ? changeError.message
-        : "移除申请附件失败");
-    }
-  }
-
-  async function useManualEntry(attachment: WechatPayApplymentAttachment) {
-    setError("");
-    try {
-      const nextAttachments = updateAttachmentOcrReviewMetadata(
-        attachments,
-        attachment.object_key,
-        {
-          ocr_recognition_id: attachment.ocr_recognition_id ?? null,
-          ocr_review_status: "manual",
-        },
-      );
-      await onChange(nextAttachments, {
-        intent: createApplymentAttachmentMutationIntent(
-          attachments,
-          nextAttachments,
-        ),
-      });
-    } catch (changeError) {
-      setError(changeError instanceof Error
-        ? changeError.message
-        : "切换手动填写失败");
-    }
-  }
-
-  function openAttachmentPicker(inputId: string) {
-    const input = document.getElementById(inputId);
-    if (input instanceof HTMLInputElement) input.click();
-  }
-
+  const error = controller.errorCategory === "business_scene_material"
+    ? controller.error
+    : "";
   return (
-    <section className="rounded-md border p-4">
+    <section
+      id={id}
+      tabIndex={id ? -1 : undefined}
+      aria-labelledby={headingId}
+      className="flex min-w-0 flex-col gap-3"
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold">申请附件</h2>
+          <h3
+            id={headingId}
+            className="flex items-center gap-2 text-sm font-medium"
+          >
+            经营场景材料
+            <Badge variant="outline">选传</Badge>
+          </h3>
           <p className="mt-1 text-xs text-muted-foreground">
-            单张不超过 2MB，仅支持 JPEG、PNG。
+            门店、经营场景或小程序服务截图，最多 {MAX_BUSINESS_SCENE_MATERIALS} 张。
           </p>
         </div>
-        <Badge variant="outline">私有存储</Badge>
+        <Badge variant="secondary">
+          {businessMaterials.length}/{MAX_BUSINESS_SCENE_MATERIALS}
+        </Badge>
       </div>
 
-      {error ? <div className="mt-3"><StatusAlert>{error}</StatusAlert></div> : null}
+      {error ? <StatusAlert>{error}</StatusAlert> : null}
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {slots.map((slot) => {
-          const attachment = attachments.find(
-            (item) => item.category === slot.category,
-          );
-          const materialState = materialStates[slot.category];
-          const documentType = WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[
-            slot.category
-          ];
-          return (
-            <AttachmentSlot
-              key={slot.category}
-              category={slot.category}
-              required={slot.required}
-              description={slot.description}
-              attachment={attachment}
-              materialState={materialState}
-              saveError={attachment
-                ? attachmentSaveErrors[attachment.object_key]
-                : undefined}
-              editable={editable}
-              busy={Boolean(busy)}
-              uploading={uploadingCategory === slot.category}
-              ocrSupported={Boolean(
-                documentType &&
-                supportedOcrDocumentTypes.has(documentType),
-              )}
-              onOpen={openAttachmentPicker}
-              onUpload={uploadAttachment}
-              onRemove={removeAttachment}
-              onRetrySave={onRetrySave}
-              onRetryRecognition={onRetryRecognition}
-              onManualEntry={useManualEntry}
-            />
-          );
-        })}
-      </div>
-
-      <div className="mt-4 rounded-md border p-3">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-sm font-medium">
-              经营场景材料
-              <Badge variant="outline">选传</Badge>
+      {businessMaterials.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {businessMaterials.map((attachment) => (
+            <div key={attachment.object_key} className="min-w-0">
+              <AttachmentPreviewCard
+                attachment={attachment}
+                editable={controller.editable}
+                busy={controller.busy}
+                onRemove={controller.removeAttachment}
+              />
+              <AttachmentCheckpointStatus
+                error={controller.attachmentSaveErrors[attachment.object_key]}
+                editable={controller.editable}
+                busy={controller.busy}
+                onRetry={() => controller.onRetrySave(attachment)}
+              />
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              门店、经营场景或小程序服务截图，最多 {MAX_BUSINESS_SCENE_MATERIALS} 张。
-            </p>
-          </div>
-          <Badge variant="secondary">
-            {businessMaterials.length}/{MAX_BUSINESS_SCENE_MATERIALS}
-          </Badge>
+          ))}
         </div>
+      ) : (
+        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+          暂未上传经营场景材料
+        </div>
+      )}
 
-        {businessMaterials.length > 0 ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {businessMaterials.map((attachment) => (
-              <div key={attachment.object_key} className="min-w-0">
-                <AttachmentPreviewCard
-                  attachment={attachment}
-                  editable={editable}
-                  busy={Boolean(busy)}
-                  onRemove={removeAttachment}
-                />
-                <AttachmentCheckpointStatus
-                  error={attachmentSaveErrors[attachment.object_key]}
-                  editable={editable}
-                  busy={Boolean(busy)}
-                  onRetry={() => onRetrySave(attachment)}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-md border border-dashed p-3 text-sm text-muted-foreground">
-            暂未上传经营场景材料
-          </div>
-        )}
-
-        {editable ? (
-          <div className="mt-3">
-            <ApplymentAttachmentUploadButton
-              category="business_scene_material"
-              inputId="wechat-pay-applyment-attachment-business-scene"
-              disabled={Boolean(
-                busy ||
-                businessMaterials.length >= MAX_BUSINESS_SCENE_MATERIALS
-              )}
-              uploading={uploadingCategory === "business_scene_material"}
-              label="添加场景图片"
-              onOpen={openAttachmentPicker}
-              onUpload={uploadAttachment}
-            />
-          </div>
-        ) : null}
-      </div>
+      {controller.editable ? (
+        <div>
+          <ApplymentAttachmentUploadButton
+            category="business_scene_material"
+            inputId="wechat-pay-applyment-attachment-business-scene"
+            disabled={Boolean(
+              controller.busy ||
+              businessMaterials.length >= MAX_BUSINESS_SCENE_MATERIALS
+            )}
+            uploading={
+              controller.uploadingCategory === "business_scene_material"
+            }
+            label="添加场景图片"
+            onOpen={controller.openAttachmentPicker}
+            onUpload={controller.uploadAttachment}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }
 
-function AttachmentSlot({
+export function WechatPayApplymentAttachmentSlot({
   category,
   required,
   description,
-  attachment,
-  materialState,
-  saveError,
-  editable,
-  busy,
-  uploading,
-  ocrSupported,
-  onOpen,
-  onUpload,
-  onRemove,
-  onRetrySave,
-  onRetryRecognition,
-  onManualEntry,
-}: {
-  category: WechatPayApplymentAttachmentCategory;
-  required: boolean;
-  description: string;
-  attachment?: WechatPayApplymentAttachment;
-  materialState?: ApplymentMaterialState;
-  saveError?: string;
-  editable: boolean;
-  busy: boolean;
-  uploading: boolean;
-  ocrSupported: boolean;
-  onOpen: (inputId: string) => void;
-  onUpload: (
-    category: WechatPayApplymentAttachmentCategory,
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
-  onRemove: (attachment: WechatPayApplymentAttachment) => void;
-  onRetrySave: (attachment: WechatPayApplymentAttachment) => void;
-  onRetryRecognition: (attachment: WechatPayApplymentAttachment) => void;
-  onManualEntry: (attachment: WechatPayApplymentAttachment) => void;
-}) {
+  controller,
+}: WechatPayApplymentAttachmentSlotProps) {
+  const {
+    attachments,
+    materialStates,
+    attachmentSaveErrors,
+    supportedOcrDocumentTypes,
+    editable,
+    busy,
+    uploadingCategory,
+    openAttachmentPicker,
+    uploadAttachment,
+    removeAttachment,
+    onRetrySave,
+    onRetryRecognition,
+  } = controller;
+  const attachment = attachments.find((item) => item.category === category);
+  const materialState = materialStates[category];
+  const saveError = attachment
+    ? attachmentSaveErrors[attachment.object_key]
+    : undefined;
+  const documentType = WECHAT_PAY_APPLYMENT_OCR_DOCUMENT_TYPES[category];
+  const ocrSupported = Boolean(
+    documentType && supportedOcrDocumentTypes.has(documentType),
+  );
   const inputId = `wechat-pay-applyment-attachment-${category}`;
   const currentState = materialState?.attachmentObjectKey ===
       attachment?.object_key
@@ -395,17 +200,22 @@ function AttachmentSlot({
           </div>
           <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        <Badge variant={statusMeta.variant}>{statusMeta.label}</Badge>
+        <Badge
+          variant={statusMeta.variant}
+          className="shrink-0 whitespace-nowrap"
+        >
+          {statusMeta.label}
+        </Badge>
       </div>
       {attachment ? (
         <AttachmentPreviewCard
           attachment={attachment}
           editable={editable}
           busy={busy}
-          onRemove={onRemove}
+          onRemove={removeAttachment}
         />
       ) : (
-        <div className="flex aspect-[4/3] items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground">
+        <div className="flex h-40 items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground sm:h-48">
           <FileImage aria-hidden="true" className="size-8" />
         </div>
       )}
@@ -426,10 +236,10 @@ function AttachmentSlot({
             category={category}
             inputId={inputId}
             disabled={busy}
-            uploading={uploading}
+            uploading={uploadingCategory === category}
             label={attachment ? "替换附件" : "上传附件"}
-            onOpen={onOpen}
-            onUpload={onUpload}
+            onOpen={openAttachmentPicker}
+            onUpload={uploadAttachment}
           />
           {attachment &&
               (needsPersistRetry ||
@@ -443,18 +253,6 @@ function AttachmentSlot({
             >
               <RefreshCw data-icon="inline-start" />
               {needsPersistRetry ? "重试保存" : "重试识别"}
-            </Button>
-          ) : null}
-          {attachment && currentState?.status === "failed" ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={busy}
-              onClick={() => onManualEntry(attachment)}
-            >
-              <FilePenLine data-icon="inline-start" />
-              手动填写
             </Button>
           ) : null}
         </div>

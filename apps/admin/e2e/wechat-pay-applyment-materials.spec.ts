@@ -10,12 +10,14 @@ async function loginAsTenantAdmin(page: Page) {
   expect(response.ok()).toBe(true);
 }
 
-function stageButton(page: Page, label: string) {
-  return page.getByRole("button", { name: new RegExp(`\\d+\\.\\s*${label}`) });
-}
-
 function attachmentInput(page: Page, category: string) {
   return page.locator(`#wechat-pay-applyment-attachment-${category}`);
+}
+
+function documentSection(page: Page, title: string) {
+  return page.getByRole("heading", { name: title, level: 2 }).locator(
+    "xpath=ancestor::section[1]",
+  );
 }
 
 function attachmentSlot(page: Page, category: string) {
@@ -33,14 +35,6 @@ function pngUpload(name: string) {
       "base64",
     ),
   };
-}
-
-async function selectReviewCategory(page: Page, label: string) {
-  const categorySelect = page.getByRole("combobox", {
-    name: "选择核对资料",
-  });
-  await categorySelect.click();
-  await page.getByRole("option", { name: label }).click();
 }
 
 function ocrReviewRow(page: Page, fieldLabel: string) {
@@ -66,6 +60,69 @@ test.beforeEach(async ({ request }) => {
   expect(response.ok()).toBe(true);
 });
 
+test("单页资料区紧邻核对字段、身份证同区且移动端无水平溢出", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await loginAsTenantAdmin(page);
+  await page.goto("/finance/wechat-pay/applyment", {
+    waitUntil: "networkidle",
+  });
+
+  await expect(page.getByText("处理记录", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", {
+    name: /\d+\.\s*(上传资料|核对识别|补充信息|确认提交)/,
+  })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "下一步" })).toHaveCount(0);
+
+  const licenseSection = documentSection(page, "营业执照");
+  await expect(
+    licenseSection.getByRole("heading", {
+      name: "营业执照照片",
+      level: 3,
+    }),
+  ).toBeVisible();
+  await expect(
+    licenseSection.getByRole("textbox", {
+      name: /^营业执照主体名称/,
+    }),
+  ).toBeVisible();
+  await expect(
+    licenseSection.locator(
+      "#wechat-pay-applyment-attachment-license_copy",
+    ),
+  ).toHaveCount(1);
+
+  const legalIdSection = documentSection(page, "法人身份证");
+  await expect(
+    legalIdSection.locator(
+      "#wechat-pay-applyment-attachment-legal_representative_id_card_front",
+    ),
+  ).toHaveCount(1);
+  await expect(
+    legalIdSection.locator(
+      "#wechat-pay-applyment-attachment-legal_representative_id_card_back",
+    ),
+  ).toHaveCount(1);
+  await expect(
+    legalIdSection.getByRole("heading", {
+      name: "法人身份证人像面",
+      level: 3,
+    }),
+  ).toBeVisible();
+  await expect(
+    legalIdSection.getByRole("heading", {
+      name: "法人身份证国徽面",
+      level: 3,
+    }),
+  ).toBeVisible();
+
+  expect(await page.evaluate(() => {
+    const root = document.documentElement;
+    return root.scrollWidth <= root.clientWidth;
+  })).toBe(true);
+});
+
 test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复待核对结果", async ({
   page,
   request,
@@ -75,7 +132,6 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
     waitUntil: "networkidle",
   });
 
-  await stageButton(page, "上传资料").click();
   await page.getByRole("checkbox", {
     name: "同意使用已上传证照进行信息识别和申请资料回填",
   }).click();
@@ -85,8 +141,6 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   await expect(attachmentSlot(page, "license_copy")).toContainText("待核对");
   await expect(firstLicenseInput).toBeEnabled();
 
-  await stageButton(page, "核对识别").click();
-  await selectReviewCategory(page, "营业执照照片");
   await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
     "OCR 识别主体 1",
   );
@@ -96,7 +150,6 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   await expect(licenseName).toHaveValue("复核测试商户有限公司");
   await licenseName.fill("人工保留主体");
 
-  await stageButton(page, "上传资料").click();
   const replacementLicenseInput = attachmentInput(page, "license_copy");
   await expect(replacementLicenseInput).toBeEnabled();
   await replacementLicenseInput.setInputFiles(
@@ -105,8 +158,6 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   await expect(attachmentSlot(page, "license_copy")).toContainText("待核对");
   await expect(replacementLicenseInput).toBeEnabled();
 
-  await stageButton(page, "核对识别").click();
-  await selectReviewCategory(page, "营业执照照片");
   await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
     "OCR 识别主体 2",
   );
@@ -117,8 +168,6 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   }).toBe("人工保留主体");
 
   await page.reload({ waitUntil: "networkidle" });
-  await stageButton(page, "核对识别").click();
-  await selectReviewCategory(page, "营业执照照片");
   await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
     "OCR 识别主体 2",
   );
@@ -140,7 +189,6 @@ test("识别失败后重试同一附件并恢复为待核对", async ({
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await stageButton(page, "上传资料").click();
   await page.getByRole("checkbox", {
     name: "同意使用已上传证照进行信息识别和申请资料回填",
   }).click();
@@ -153,8 +201,6 @@ test("识别失败后重试同一附件并恢复为待核对", async ({
   await licenseSlot.getByRole("button", { name: "重试识别" }).click();
   await expect(licenseSlot).toContainText("待核对");
 
-  await stageButton(page, "核对识别").click();
-  await selectReviewCategory(page, "营业执照照片");
   await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
     "OCR 识别主体 2",
   );

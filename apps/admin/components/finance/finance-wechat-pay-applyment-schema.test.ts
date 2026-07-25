@@ -206,6 +206,61 @@ describe("buildWechatPayApplymentPayload", () => {
     });
   });
 
+  test("normalizes dirty enterprise account types in draft and formal payloads", () => {
+    const form = formData({
+      subject_type: "SUBJECT_TYPE_ENTERPRISE",
+      contact_type: "LEGAL",
+      settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+    });
+    const draftFromForm = buildWechatPayApplymentPartialDraftPayload(
+      form,
+      { attachments: [] },
+    );
+    const draftFromFallback = buildWechatPayApplymentPartialDraftPayload(
+      new FormData(),
+      {
+        attachments: [],
+        fallbackValues: {
+          subject_type: "SUBJECT_TYPE_ENTERPRISE",
+          settlement_account_type: "BANK_ACCOUNT_TYPE_PERSONAL",
+        },
+      },
+    );
+    const formal = buildWechatPayApplymentPayload(form, {
+      hasSensitivePayload: false,
+      attachments: [],
+    });
+
+    for (const payload of [draftFromForm, draftFromFallback, formal]) {
+      expect(payload).toMatchObject({
+        subject_type: "SUBJECT_TYPE_ENTERPRISE",
+        settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
+      });
+    }
+  });
+
+  test("preserves a valid individual account type in draft and formal payloads", () => {
+    const form = formData({
+      subject_type: "SUBJECT_TYPE_INDIVIDUAL",
+      contact_type: "LEGAL",
+      settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
+    });
+    const draft = buildWechatPayApplymentPartialDraftPayload(form, {
+      attachments: [],
+    });
+    const formal = buildWechatPayApplymentPayload(form, {
+      hasSensitivePayload: false,
+      attachments: [],
+    });
+
+    expect(draft.settlement_account_type).toBe(
+      "BANK_ACCOUNT_TYPE_CORPORATE",
+    );
+    expect(formal.settlement_account_type).toBe(
+      "BANK_ACCOUNT_TYPE_CORPORATE",
+    );
+  });
+
   test("submits null when controlled contact identity periods are cleared", () => {
     const payload = buildWechatPayApplymentPartialDraftPayload(formData({
       contact_type: "SUPER",
@@ -274,7 +329,7 @@ describe("buildWechatPayApplymentPayload", () => {
       remark: null,
       service_phone: null,
       settlement_account_name: null,
-      settlement_account_type: null,
+      settlement_account_type: "BANK_ACCOUNT_TYPE_CORPORATE",
       settlement_bank_branch_id: null,
       settlement_bank_full_name: null,
       settlement_bank_name: null,

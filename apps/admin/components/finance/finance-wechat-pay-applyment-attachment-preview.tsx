@@ -75,7 +75,7 @@ export function AttachmentPreviewDialog({
           className="h-auto w-full p-0"
           aria-label={`预览${displayName}`}
         >
-          <span className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-md border bg-background">
+          <span className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-md border bg-background sm:h-48">
             <FileImage aria-hidden="true" className="text-muted-foreground" />
             <PreviewImage
               previewUrl={previewUrl}

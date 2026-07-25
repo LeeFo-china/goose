@@ -1,9 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { FinanceWechatPayApplymentReview } from "./finance-wechat-pay-applyment-review";
+import type { WechatPayApplymentReadinessItem } from "./finance-wechat-pay-applyment-readiness";
 
 function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
@@ -21,6 +22,7 @@ describe("presentApplymentBlocker", () => {
     })).toEqual({
       label: "缺少法人身份证国徽面",
       targetStage: "materials",
+      targetId: "legal-id-materials",
     });
     expect(presentApplymentBlocker({
       code: "APPLYMENT_REQUIRED_FIELD_MISSING",
@@ -28,6 +30,7 @@ describe("presentApplymentBlocker", () => {
     })).toEqual({
       label: "请核对法人身份证号码",
       targetStage: "recognition",
+      targetId: "wechat-pay-ocr-review-identity_number",
     });
     expect(presentApplymentBlocker({
       code: "APPLYMENT_UNKNOWN_TECHNICAL_BLOCKER",
@@ -111,7 +114,7 @@ describe("presentApplymentBlocker", () => {
       expect(presentApplymentBlocker({
         code: "APPLYMENT_REQUIRED_FIELD_MISSING",
         field,
-      })).toEqual({ label, targetStage });
+      })).toMatchObject({ label, targetStage });
     }
   });
 
@@ -126,6 +129,7 @@ describe("presentApplymentBlocker", () => {
     })).toEqual({
       label: "缺少营业执照",
       targetStage: "materials",
+      targetId: "license-materials",
     });
     expect(presentApplymentBlocker({
       code: "APPLYMENT_SENSITIVE_PAYLOAD_MISSING",
@@ -140,6 +144,31 @@ describe("presentApplymentBlocker", () => {
       label: "缺少申请附件",
       targetStage: "materials",
     });
+  });
+
+  test("maps settlement and business attachment blockers to stable sections", async () => {
+    const { presentApplymentBlocker } = await import(
+      "./finance-wechat-pay-applyment-readiness"
+    );
+    const cases = [
+      ["settlement_account_proof", "settlement-materials"],
+      ["business_scene_material", "business-materials"],
+    ] as const;
+
+    for (const [category, targetId] of cases) {
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_REQUIRED_ATTACHMENT_MISSING",
+        category,
+      })).toMatchObject({ targetId });
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_ATTACHMENT_OCR_REVIEW_REQUIRED",
+        category,
+      })).toMatchObject({ targetId });
+      expect(presentApplymentBlocker({
+        code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+        category,
+      })).toMatchObject({ targetId });
+    }
   });
 });
 
@@ -170,11 +199,13 @@ describe("presentApplymentBlockers", () => {
         key: "supplement:请填写商户简称",
         label: "请填写商户简称",
         targetStage: "supplement",
+        targetId: "wechat-pay-applyment-merchant_short_name",
       },
       {
         key: "recognition:请核对超级管理员姓名",
         label: "请核对超级管理员姓名",
         targetStage: "recognition",
+        targetId: "wechat-pay-ocr-review-super_admin_name",
       },
       {
         key: "submit:申请资料尚未满足提交条件",
@@ -186,48 +217,57 @@ describe("presentApplymentBlockers", () => {
 });
 
 describe("FinanceWechatPayApplymentReview readiness", () => {
-  test("renders all blockers as focused navigation actions", () => {
-    const markup = renderToStaticMarkup(createElement(
-      FinanceWechatPayApplymentReview,
+  test("renders two blocker labels without stage navigation props", () => {
+    const readinessBlockers = [
       {
-        review: {
-          subject: "主体资料",
-          contact: "联系人资料",
-          settlement: "结算资料",
-          attachments: "申请附件",
-        },
+        key: "materials:缺少营业执照",
+        label: "缺少营业执照",
+        targetStage: "materials",
+        targetId: "license-materials",
+      },
+      {
+        key: "supplement:请填写商户简称",
+        label: "请填写商户简称",
+        targetStage: "supplement",
+      },
+    ] as const satisfies readonly WechatPayApplymentReadinessItem[];
+    const markup = renderToStaticMarkup(
+      createElement(FinanceWechatPayApplymentReview, {
         attachments: [],
         contactType: "LEGAL",
         confirmed: false,
         disabled: false,
-        navigationDisabled: false,
-        readinessBlockers: [
-          {
-            key: "missing-back",
-            label: "缺少法人身份证国徽面",
-            targetStage: "materials",
-          },
-          {
-            key: "unknown",
-            label: "申请资料尚未满足提交条件",
-            targetStage: "submit",
-          },
-        ],
+        readinessBlockers,
         onConfirmedChange: () => undefined,
-        onNavigate: () => undefined,
-        onStageChange: () => undefined,
-      },
-    ));
+      }),
+    );
 
-    expect(markup).toContain('role="alert"');
-    expect(markup).toContain("还有 2 项需要处理");
-    expect(markup).toContain("缺少法人身份证国徽面");
-    expect(markup).toContain("申请资料尚未满足提交条件");
-    expect(markup).not.toContain("APPLYMENT_");
-    expect(markup.match(/data-readiness-blocker/g)).toHaveLength(2);
+    expect(markup).toContain("缺少营业执照");
+    expect(markup).toContain("请填写商户简称");
+    expect(markup).toContain("必传附件 0/3");
+    expect(markup).toContain('id="wechat-pay-applyment-confirmed"');
+    expect(markup).toContain("确认资料真实有效");
+    expect(markup.match(/data-readiness-blocker=/g)).toHaveLength(2);
+    expect(markup).toMatch(
+      /<p[^>]*data-readiness-blocker="">请填写商户简称<\/p>/,
+    );
+
+    const reviewSource = readSource(
+      "./finance-wechat-pay-applyment-review.tsx",
+    );
+    expect(reviewSource).not.toContain("onStageChange");
+    expect(reviewSource).not.toContain("onNavigate");
+    expect(reviewSource).not.toContain("getWechatPayApplymentReviewTargets");
+    expect(reviewSource).not.toContain("navigationDisabled");
+    expect(reviewSource).not.toContain("WechatPayApplymentReviewSnapshot");
+    expect(reviewSource).toContain("focusApplymentReadinessTarget");
   });
 
-  test("keeps refreshed readiness wired through the workflow", () => {
+  test("passes refreshed blockers from Workflow into the single-page Review", () => {
+    const singlePageUrl = new URL(
+      "./finance-wechat-pay-applyment-single-page.tsx",
+      import.meta.url,
+    );
     const panelSource = readSource(
       "./finance-wechat-pay-applyment-panel.tsx",
     );
@@ -238,21 +278,22 @@ describe("FinanceWechatPayApplymentReview readiness", () => {
       "./finance-wechat-pay-applyment-review.tsx",
     );
 
+    expect(existsSync(singlePageUrl)).toBe(true);
+    if (!existsSync(singlePageUrl)) return;
+    const singlePageSource = readFileSync(singlePageUrl, "utf8");
     expect(workflowSource).toContain("presentApplymentBlockers");
     expect(panelSource).toContain(
       "submissionReadiness={autosave.currentDetail.submission_readiness}",
     );
-    expect(panelSource).toContain(
-      "blockerStages: getApplymentBlockerStages",
-    );
     expect(workflowSource).toContain(
       "readinessBlockers={readinessBlockers}",
     );
-    expect(reviewSource).toContain("@/components/ui/alert");
-    expect(reviewSource).toContain("CircleAlert");
-    expect(reviewSource).toContain("ChevronRight");
-    expect(reviewSource).toContain(
-      "onStageChange(blocker.targetStage)",
+    expect(singlePageSource).toMatch(
+      /readinessBlockers=\{(?:props\.)?readinessBlockers\}/,
     );
+    expect(singlePageSource).toContain("<FinanceWechatPayApplymentReview");
+    expect(panelSource).not.toContain("getApplymentBlockerStages");
+    expect(workflowSource).not.toContain("onStageChange");
+    expect(reviewSource).not.toContain("onStageChange");
   });
 });

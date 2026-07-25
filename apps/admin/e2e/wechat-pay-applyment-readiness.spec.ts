@@ -10,16 +10,12 @@ async function loginAsTenantAdmin(page: Page) {
   expect(response.ok()).toBe(true);
 }
 
-function stageButton(page: Page, label: string) {
-  return page.getByRole("button", { name: new RegExp(`\\d+\\.\\s*${label}`) });
-}
-
 test.beforeEach(async ({ request }) => {
   const response = await request.post(`${MOCK_BACKEND_URL}/__test/reset`);
   expect(response.ok()).toBe(true);
 });
 
-test("集中展示 readiness 阻塞项并定位到首个未完成阶段", async ({
+test("集中展示 readiness 阻塞项并定位到单页对应资料或字段", async ({
   page,
   request,
 }) => {
@@ -96,20 +92,7 @@ test("集中展示 readiness 阻塞项并定位到首个未完成阶段", async 
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await expect(stageButton(page, "上传资料")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
 
-  const nextButton = page.getByRole("button", { name: "下一步" });
-  await nextButton.click();
-  await nextButton.click();
-  await nextButton.click();
-
-  await expect(stageButton(page, "确认提交")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
   const alert = page.getByRole("alert").filter({
     hasText: "还有 4 项需要处理",
   });
@@ -122,16 +105,15 @@ test("集中展示 readiness 阻塞项并定位到首个未完成阶段", async 
   await alert.getByRole("button", {
     name: "缺少法人身份证国徽面",
   }).click();
-  await expect(stageButton(page, "上传资料")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
-  await stageButton(page, "确认提交").click();
-  await page.getByRole("alert").getByRole("button", {
+  await expect(page.locator("#legal-id-materials")).toBeFocused();
+
+  await alert.getByRole("button", {
     name: "请核对法人身份证人像面识别结果",
   }).click();
-  await expect(stageButton(page, "核对识别")).toHaveAttribute(
-    "aria-current",
-    "step",
-  );
+  await expect(page.locator("#legal-id-materials")).toBeFocused();
+
+  await alert.getByRole("button", {
+    name: "请核对超级管理员姓名",
+  }).click();
+  await expect(page.getByLabel("超级管理员姓名")).toBeFocused();
 });

@@ -1,7 +1,7 @@
 # 微信支付开通申请单页重构设计
 
 > 日期：2026-07-24
-> 状态：已确认，待实现
+> 状态：已实现并验收
 > 范围：租户 Admin 微信支付开通申请
 > 设计系统：Gooes Admin + shadcn/ui
 > 取代范围：`2026-07-23-wechat-pay-applyment-ocr-first-ux-design.md` 中的四阶段向导信息架构
@@ -233,3 +233,11 @@ OCR 建议值与已保存值冲突时，继续使用现有逐字段选择和确�
 10. 360px、768px、1280px 视口下无横向溢出、内容遮挡和按钮文字截断。
 11. 相关单元测试、Admin 静态检查和浏览器 smoke 通过。
 
+## 13. 实施验收记录
+
+- 相关 Bun 单元测试：183 通过。
+- 微信支付进件专用 Playwright：11 通过。
+- `pnpm --dir apps/admin check`：通过。
+- `pnpm --dir apps/admin build`：通过。
+- 360px、768px、1280px 浏览器检查：无横向溢出、console error 或 hydration 异常。
+- 移动端改为整页连续滚动；证照预览使用受控高度，OCR 核对字段紧跟上传区。
