@@ -23,14 +23,6 @@ export const APPLYMENT_OCR_REVIEW_CATEGORIES = [
 export type WechatPayApplymentOcrReviewCategory =
   (typeof APPLYMENT_OCR_REVIEW_CATEGORIES)[number];
 
-const SENSITIVE_OCR_FIELD_KEYS = [
-  "identity_name",
-  "identity_number",
-  "identity_address",
-  "contact_identity_number",
-  "contact_identity_address",
-] as const;
-
 export function getStoredOcrValues(
   applyment: WechatPayApplymentRecord | null,
 ): Record<string, string> {
@@ -41,12 +33,18 @@ export function getStoredOcrValues(
     license_period_begin: applyment?.license_period_begin ?? "",
     license_period_end: applyment?.license_period_end ?? "",
     legal_representative_name: applyment?.legal_representative_name ?? "",
+    identity_name: applyment?.identity_name ?? "",
+    identity_number: applyment?.identity_number ?? "",
+    identity_address: applyment?.identity_address ?? "",
     identity_period_begin: applyment?.identity_period_begin ?? "",
     identity_period_end: applyment?.identity_period_end ?? "",
     super_admin_name: applyment?.super_admin_name ?? "",
+    contact_identity_number: applyment?.contact_identity_number ?? "",
+    contact_identity_address: applyment?.contact_identity_address ?? "",
     contact_identity_period_begin:
       applyment?.contact_identity_period_begin ?? "",
     contact_identity_period_end: applyment?.contact_identity_period_end ?? "",
+    settlement_account_number: applyment?.settlement_account_number ?? "",
     settlement_bank_name: applyment?.settlement_bank_name ?? "",
   };
 }
@@ -60,12 +58,6 @@ export function getStoredFieldSources(
       .filter(([, value]) => Boolean(value))
       .map(([key]) => [key, "tenant" as const]),
   );
-  if (applyment?.has_sensitive_payload) {
-    for (const key of SENSITIVE_OCR_FIELD_KEYS) sources[key] = "stored";
-  }
-  if (applyment?.settlement_account_number_masked) {
-    sources.settlement_account_number = "stored";
-  }
   return sources;
 }
 
@@ -74,17 +66,6 @@ export function getOcrComparisonValues(
   values: Readonly<Record<string, string>>,
 ) {
   const comparisons = { ...values };
-  if (applyment?.has_sensitive_payload) {
-    for (const key of SENSITIVE_OCR_FIELD_KEYS) {
-      if (!comparisons[key]) comparisons[key] = "已安全保存";
-    }
-  }
-  if (
-    applyment?.settlement_account_number_masked &&
-    !comparisons.settlement_account_number
-  ) {
-    comparisons.settlement_account_number = "已安全保存";
-  }
   return comparisons;
 }
 
@@ -287,14 +268,8 @@ function RecognizedField({
   return (
     <TextField
       {...shared}
-      required={required && source !== "stored"}
+      required={required}
       type={field.type}
-      placeholder={
-        field.sensitive && source === "stored"
-          ? "已安全保存，修改将替换原值"
-          : undefined
-      }
-      stored={field.sensitive && source === "stored"}
     />
   );
 }

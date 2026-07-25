@@ -33,27 +33,25 @@ export function AttachmentPreviewCard({
 }) {
   const displayName = getWechatPayApplymentAttachmentDisplayName(attachment);
   return (
-    <div className="min-w-0 rounded-md bg-muted/50 p-3">
+    <div className="flex min-w-0 flex-1 items-center gap-3 rounded-md bg-muted/40 p-2">
       <AttachmentPreviewDialog attachment={attachment} />
-      <div className="mt-2 truncate text-sm">
-        {displayName}
-      </div>
-      <div className="mt-1 text-xs text-muted-foreground">
-        {formatWechatPayApplymentAttachmentSize(attachment.size) || "已上传"}
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="truncate">{displayName}</div>
+        <div className="text-xs text-muted-foreground">
+          {formatWechatPayApplymentAttachmentSize(attachment.size) || "已上传"}
+        </div>
       </div>
       {editable ? (
-        <div className="mt-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={busy}
-            onClick={() => onRemove(attachment)}
-          >
-            <Trash2 data-icon="inline-start" />
-            移除
-          </Button>
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={busy}
+          aria-label={`移除${displayName}`}
+          onClick={() => onRemove(attachment)}
+        >
+          <Trash2 />
+        </Button>
       ) : null}
     </div>
   );
@@ -72,10 +70,11 @@ export function AttachmentPreviewDialog({
         <Button
           type="button"
           variant="ghost"
-          className="h-auto w-full p-0"
+          size="icon"
+          className="size-14 shrink-0 p-0"
           aria-label={`预览${displayName}`}
         >
-          <span className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-md border bg-background sm:h-48">
+          <span className="relative flex size-14 items-center justify-center overflow-hidden rounded-md border bg-background">
             <FileImage aria-hidden="true" className="text-muted-foreground" />
             <PreviewImage
               previewUrl={previewUrl}
@@ -89,7 +88,7 @@ export function AttachmentPreviewDialog({
         <DialogHeader>
           <DialogTitle className="break-all">{displayName}</DialogTitle>
           <DialogDescription>
-            已上传。私有附件短时预览，仅用于当前资料核对。
+            已上传。私有附件短时预览，仅用于查看原图。
           </DialogDescription>
         </DialogHeader>
         <div className="flex max-h-[70vh] min-h-64 items-center justify-center overflow-hidden rounded-md border bg-muted/30">

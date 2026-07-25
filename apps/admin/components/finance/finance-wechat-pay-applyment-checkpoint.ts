@@ -121,7 +121,6 @@ export async function continueAfterAttachmentCheckpoint(input: {
   attachment: WechatPayApplymentAttachment;
   supportedDocumentTypes: ReadonlySet<string>;
   isActive: () => boolean;
-  hasRecognitionConsent: () => boolean;
   markUnsupportedManual: () => Promise<void>;
   recognize: () => Promise<void>;
 }) {
@@ -132,7 +131,7 @@ export async function continueAfterAttachmentCheckpoint(input: {
     await input.markUnsupportedManual();
     return;
   }
-  if (input.isActive() && input.hasRecognitionConsent()) {
+  if (input.isActive()) {
     await input.recognize();
   }
 }
@@ -152,7 +151,6 @@ export async function checkpointApplymentAttachment(input: {
   reportError: (message: string) => void;
   capabilityLoading: boolean;
   supportedDocumentTypes: ReadonlySet<string>;
-  hasRecognitionConsent: () => boolean;
   markUnsupportedManual: () => Promise<void>;
   recognize: () => Promise<void>;
 }) {
@@ -182,7 +180,6 @@ export async function checkpointApplymentAttachment(input: {
         isActive: () =>
           input.isCurrent(input.generation) &&
           input.isCurrentAttachment(input.attachment),
-        hasRecognitionConsent: input.hasRecognitionConsent,
         markUnsupportedManual: input.markUnsupportedManual,
         recognize: input.recognize,
       });

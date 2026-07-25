@@ -26,12 +26,11 @@ export async function processApplymentUploadedMaterials(input: {
   supportedDocumentTypes: ReadonlySet<string>;
   excludedObjectKeys: ReadonlySet<string>;
   isActive: () => boolean;
-  hasConsent: () => boolean;
   markUnsupportedManual: () => Promise<void>;
   recognize: (attachment: WechatPayApplymentAttachment) => Promise<void>;
 }) {
   await input.markUnsupportedManual();
-  if (!input.isActive() || !input.hasConsent()) return;
+  if (!input.isActive()) return;
   const attachments = getPendingRecognitionAttachments({
     attachments: input.attachments,
     materialStates: input.materialStates,
@@ -39,7 +38,7 @@ export async function processApplymentUploadedMaterials(input: {
     excludedObjectKeys: input.excludedObjectKeys,
   });
   for (const attachment of attachments) {
-    if (!input.isActive() || !input.hasConsent()) break;
+    if (!input.isActive()) break;
     await input.recognize(attachment);
   }
 }

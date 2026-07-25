@@ -225,10 +225,24 @@ function matchesApplymentAttachment(
   return recognition?.tenant_id === applyment.tenant_id &&
     recognition.scene === "wechat_pay_applyment" &&
     recognition.document_type === documentType &&
-    recognition.file_object_id === fileObjectId &&
-    recognition.subject_type === "wechat_pay_applyment" &&
-    recognition.subject_id === applyment.id &&
+    matchesApplymentRecognitionOwnership(
+      recognition,
+      applyment.id,
+      fileObjectId,
+    ) &&
     recognition.status === "succeeded";
+}
+
+function matchesApplymentRecognitionOwnership(
+  recognition: OcrRecognitionOwnershipRecord,
+  applymentId: string,
+  fileObjectId: string,
+) {
+  if (!recognition.subject_type && !recognition.subject_id) {
+    return recognition.file_object_id === fileObjectId;
+  }
+  return recognition.subject_type === "wechat_pay_applyment" &&
+    recognition.subject_id === applymentId;
 }
 
 function safeRecord(value: unknown): Record<string, unknown> | null {

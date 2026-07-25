@@ -413,6 +413,7 @@ export class WechatPayApplymentService {
       applyment,
       canEdit,
       repository: this.repository,
+      encryptionRootSecret: this.encryptionRootSecretFactory(),
       tenantReadinessService: this.tenantReadinessService,
     });
   }

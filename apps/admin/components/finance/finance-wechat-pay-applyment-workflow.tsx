@@ -31,7 +31,6 @@ export function FinanceWechatPayApplymentWorkflow({
   onSubjectTypeChange,
   onContactTypeChange,
   onAttachmentsChange,
-  onApplyRecognition,
   onManualFieldChange,
   onSupplementDataChange,
   onReviewConfirmedChange,
@@ -56,7 +55,6 @@ export function FinanceWechatPayApplymentWorkflow({
       onSubjectTypeChange={onSubjectTypeChange}
       onContactTypeChange={onContactTypeChange}
       onAttachmentsChange={onAttachmentsChange}
-      onApplyRecognition={onApplyRecognition}
       onManualFieldChange={onManualFieldChange}
       onSupplementDataChange={onSupplementDataChange}
       onReviewConfirmedChange={onReviewConfirmedChange}

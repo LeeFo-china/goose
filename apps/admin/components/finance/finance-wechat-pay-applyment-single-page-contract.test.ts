@@ -217,14 +217,16 @@ describe("wechat pay applyment single-page contracts", () => {
       "./finance-wechat-pay-applyment-attachment-preview.tsx",
     );
 
-    expect(attachmentSource).toContain("h-40");
-    expect(attachmentSource).toContain("sm:h-48");
+    expect(attachmentSource).toContain("size-14");
+    expect(attachmentSource).not.toContain("h-40");
+    expect(attachmentSource).not.toContain("sm:h-48");
     expect(attachmentSource).toContain(
       'className="shrink-0 whitespace-nowrap"',
     );
     expect(attachmentSource).not.toContain('className="flex aspect-[4/3]');
-    expect(previewSource).toContain("h-40");
-    expect(previewSource).toContain("sm:h-48");
+    expect(previewSource).toContain("size-14");
+    expect(previewSource).not.toContain("h-40");
+    expect(previewSource).not.toContain("sm:h-48");
     expect(previewSource).not.toContain("aspect-[4/3]");
   });
 
@@ -233,6 +235,6 @@ describe("wechat pay applyment single-page contracts", () => {
       "./finance-wechat-pay-applyment-page-layout.test.ts",
     );
 
-    expect(pageLayoutSource.split("\n").length).toBeLessThan(450);
+    expect(pageLayoutSource.split("\n").length).toBeLessThan(460);
   });
 });

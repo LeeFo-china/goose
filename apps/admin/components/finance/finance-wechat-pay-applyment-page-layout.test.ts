@@ -134,8 +134,8 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(materialsHookSource).toContain('draftUpdateSource: "attachment_change"');
     expect(recognitionSource).toContain('draftUpdateSource: "ocr_review"');
     expect(manualEntrySource).toContain('draftUpdateSource: "manual_entry"');
-    expect(singlePageSource).toContain("@/components/ui/checkbox");
-    expect(singlePageSource).toContain(
+    expect(singlePageSource).not.toContain("@/components/ui/checkbox");
+    expect(singlePageSource).not.toContain(
       "同意使用已上传证照进行信息识别和申请资料回填",
     );
     expect(singlePageSource).toContain("证照识别暂不可用");
@@ -147,8 +147,9 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(attachmentSource).toContain("materialStates");
     expect(attachmentSource).toContain("AttachmentPreviewCard");
     expect(previewSource).toContain("AttachmentPreviewDialog");
-    expect(previewSource).toContain("h-40");
-    expect(previewSource).toContain("sm:h-48");
+    expect(previewSource).toContain("size-14");
+    expect(previewSource).not.toContain("h-40");
+    expect(previewSource).not.toContain("sm:h-48");
     expect(previewSource).not.toContain("aspect-[4/3]");
     expect(previewSource).toContain("object-contain");
     expect(previewSource).not.toContain("attachment.object_key");
@@ -178,7 +179,7 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(ocrRequestSource).toContain("/ocr/recognitions/${encodeURIComponent(id)}");
   });
 
-  test("reviews OCR results inline within each document section", () => {
+  test("renders OCR-backed form fields directly within each document section", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const documentSectionUrl = new URL(
       "./finance-wechat-pay-applyment-document-section.tsx",
@@ -206,9 +207,12 @@ describe("Finance wechat pay applyment page layout", () => {
     const reviewSource = readFileSync(reviewUrl, "utf8");
     const recognizedFieldsSource = readFileSync(recognizedFieldsUrl, "utf8");
     expect(documentSectionSource).toContain(
+      "FinanceWechatPayApplymentRecognizedFields",
+    );
+    expect(documentSectionSource).not.toContain(
       "FinanceWechatPayApplymentInlineOcrReview",
     );
-    expect(documentSectionSource).toContain("showPreview={false}");
+    expect(documentSectionSource).not.toContain("showPreview={false}");
     expect(documentSectionSource).not.toContain("showManualEntryAction");
     expect(reviewSource).toContain("FinanceWechatPayApplymentInlineOcrReview");
     expect(reviewSource).toContain("showPreview = true");
@@ -234,6 +238,9 @@ describe("Finance wechat pay applyment page layout", () => {
     const workflowSource = readSource(
       "./finance-wechat-pay-applyment-workflow.tsx",
     );
+    const actionsSource = readSource(
+      "./finance-wechat-pay-applyment-actions.tsx",
+    );
     const pageSource = readSource(
       "../../app/(console)/finance/wechat-pay/applyment/page.tsx",
     );
@@ -242,7 +249,7 @@ describe("Finance wechat pay applyment page layout", () => {
     expect(singlePageSource).toContain("联系信息");
     expect(singlePageSource).toContain("结算账户");
     expect(singlePageSource).toContain("经营资料");
-    expect(singlePageSource).toContain("提交平台审核");
+    expect(actionsSource).toContain("提交平台审核");
     expect(singlePageSource).not.toContain("Progress");
     expect(singlePageSource).not.toContain("上一步");
     expect(singlePageSource).not.toContain("下一步");
@@ -283,7 +290,7 @@ describe("Finance wechat pay applyment page layout", () => {
       "WechatPayApplymentAttachmentSlot",
     );
     expect(documentSectionSource).toContain(
-      "FinanceWechatPayApplymentInlineOcrReview",
+      "FinanceWechatPayApplymentRecognizedFields",
     );
     expect(documentSectionSource).toContain(
       "legal_representative_id_card_front",
@@ -293,7 +300,7 @@ describe("Finance wechat pay applyment page layout", () => {
     );
   });
 
-  test("persists selected OCR values and confirmed metadata atomically", () => {
+  test("auto applies OCR values and confirmed metadata atomically", () => {
     const panelSource = readSource("./finance-wechat-pay-applyment-panel.tsx");
     const reviewSource = readSource(
       "./finance-wechat-pay-applyment-ocr-review.tsx",
@@ -307,7 +314,8 @@ describe("Finance wechat pay applyment page layout", () => {
     const persistenceContract =
       `${panelSource}\n${workflowSource}\n${reviewSource}\n${reviewHookSource}`;
 
-    expect(persistenceContract).toContain("applyRecognitionRows");
+    expect(panelSource).toContain("autoApplyPendingRecognitionFields");
+    expect(reviewHookSource).toContain("confirmRecognitionFields");
     expect(persistenceContract).toContain("row.selected");
     expect(persistenceContract).toContain("ocr_review_status: \"confirmed\"");
     expect(persistenceContract).toContain("relatedMutation");

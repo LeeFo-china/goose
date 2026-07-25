@@ -157,7 +157,6 @@ describe("wechat pay applyment attachment checkpoint", () => {
       },
       capabilityLoading: false,
       supportedDocumentTypes: new Set(["business_license"]),
-      hasRecognitionConsent: () => true,
       markUnsupportedManual: async () => {
         manualCalls += 1;
       },
@@ -205,7 +204,7 @@ describe("wechat pay applyment attachment checkpoint", () => {
     expect(retainAttachmentCheckpointErrors(errors, [])).toEqual({});
   });
 
-  test("rechecks consent after a pending save before starting recognition", async () => {
+  test("starts recognition after a pending save completes", async () => {
     const attachment = {
       category: "license_copy" as const,
       file_object_id: "file-1",
@@ -215,7 +214,6 @@ describe("wechat pay applyment attachment checkpoint", () => {
     const pendingPersist = new Promise<void>((resolve) => {
       releasePersist = resolve;
     });
-    let consent = true;
     let recognitionCalls = 0;
     const generation = createMaterialOperationGeneration();
 
@@ -232,16 +230,14 @@ describe("wechat pay applyment attachment checkpoint", () => {
       reportError: () => undefined,
       capabilityLoading: false,
       supportedDocumentTypes: new Set(["business_license"]),
-      hasRecognitionConsent: () => consent,
       markUnsupportedManual: async () => undefined,
       recognize: async () => {
         recognitionCalls += 1;
       },
     });
 
-    consent = false;
     releasePersist();
     expect((await checkpoint).type).toBe("persisted");
-    expect(recognitionCalls).toBe(0);
+    expect(recognitionCalls).toBe(1);
   });
 });

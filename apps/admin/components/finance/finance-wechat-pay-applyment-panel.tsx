@@ -9,7 +9,6 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 
-import type { OcrFieldReviewRow } from "@/components/ocr/ocr-field-review-dialog";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import {
@@ -19,6 +18,7 @@ import {
 import { submitApplymentAfterDraftFlush } from "./finance-wechat-pay-applyment-autosave-coordinator";
 import { changeApplymentContactTypeWithRollback } from "./finance-wechat-pay-applyment-contact-type";
 import { isApplymentDataBearingControl } from "./finance-wechat-pay-applyment-form-change";
+import type { ApplymentMaterialState } from "./finance-wechat-pay-applyment-flow-model";
 import type { ApplymentAttachmentChangeOptions } from "./finance-wechat-pay-applyment-manual-entry";
 import { useWechatPayApplymentOcrReview } from "./finance-wechat-pay-applyment-ocr-review";
 import type { ApplymentSaveGenerationContext } from "./finance-wechat-pay-applyment-save-generation";
@@ -69,6 +69,7 @@ export function FinanceWechatPayApplymentPanel({
   const initialAttachments = sourceApplyment?.attachments || [];
   const [error, setError] = useState(data.error || "");
   const [pending, startTransition] = useTransition();
+  const autoAppliedRecognitionKeysRef = useRef<Set<string>>(new Set());
   const materials = useWechatPayApplymentMaterials({
     initialAttachments,
     initialApplymentId: sourceApplyment?.id,
@@ -96,7 +97,12 @@ export function FinanceWechatPayApplymentPanel({
     );
     setContactType(sourceApplyment?.contact_type || "LEGAL");
     setReviewConfirmed(false);
+    autoAppliedRecognitionKeysRef.current.clear();
   }, [resetKey, sourceApplyment]);
+
+  useEffect(() => {
+    autoApplyPendingRecognitionFields();
+  });
 
   function buildCurrentDraftPayload(
     overrides: ApplymentDraftSavePayload = {},
@@ -179,12 +185,32 @@ export function FinanceWechatPayApplymentPanel({
     invalidateReview();
     await materials.onChange(nextAttachments, options);
   }
-  function applyRecognitionRows(
-    category: WechatPayApplymentAttachmentCategory,
-    rows: readonly OcrFieldReviewRow[],
-  ) {
-    if (!rows.some((row) => row.selected)) return;
-    return ocrReview.applyRecognitionRows(category, rows);
+
+  function autoApplyPendingRecognitionFields() {
+    if (!editable || pending) return;
+    for (const [category, state] of Object.entries(materialStates) as Array<
+      [WechatPayApplymentAttachmentCategory, ApplymentMaterialState]
+    >) {
+      if (
+        state.status !== "review_required" ||
+        !state.attachmentObjectKey ||
+        !state.recognitionId
+      ) continue;
+      const key = `${category}:${state.attachmentObjectKey}:${state.recognitionId}`;
+      if (autoAppliedRecognitionKeysRef.current.has(key)) continue;
+      autoAppliedRecognitionKeysRef.current.add(key);
+      void ocrReview.confirmRecognitionFields(
+        category,
+        state.fields,
+        contactType,
+      ).then((outcome) => {
+        if (outcome?.type !== "persisted") {
+          autoAppliedRecognitionKeysRef.current.delete(key);
+        }
+      }).catch(() => {
+        autoAppliedRecognitionKeysRef.current.delete(key);
+      });
+    }
   }
 
   function changeContactType(value: string) {
@@ -327,7 +353,6 @@ export function FinanceWechatPayApplymentPanel({
         onSubjectTypeChange={handleSubjectTypeChange}
         onContactTypeChange={changeContactType}
         onAttachmentsChange={handleAttachmentsChange}
-        onApplyRecognition={applyRecognitionRows}
         onManualFieldChange={handleManualFieldChange}
         onSupplementDataChange={handleSupplementDataChange}
         onReviewConfirmedChange={setReviewConfirmed}

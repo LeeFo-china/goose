@@ -1,4 +1,8 @@
 import type { WechatPayApplymentRecord } from "@/repositories/wechat-pay-applyments";
+import {
+  loadApplymentSensitiveDraftPayload,
+  type ApplymentSensitivePayloadRepositoryPort,
+} from "@/services/wechat-pay-applyment-content-validation";
 import { sanitizeApplymentRecord } from "@/services/wechat-pay-applyment-draft";
 import type {
   ApplymentDetailResult,
@@ -9,7 +13,10 @@ import type {
 type TenantApplymentDetailInput = {
   applyment: WechatPayApplymentRecord | null;
   canEdit: boolean;
-  repository: Pick<WechatPayApplymentRepositoryPort, "findEvents">;
+  repository:
+    & Pick<WechatPayApplymentRepositoryPort, "findEvents">
+    & ApplymentSensitivePayloadRepositoryPort;
+  encryptionRootSecret: string | null | undefined;
   tenantReadinessService: WechatPayApplymentTenantReviewReadinessPort;
 };
 
@@ -35,11 +42,37 @@ export async function buildTenantApplymentDetail(
     input.tenantReadinessService.runForApplyment(applyment),
   ]);
   return {
-    applyment: sanitizeApplymentRecord(applyment),
+    applyment: sanitizeApplymentRecord(
+      await hydrateTenantSensitiveReviewFields({ ...input, applyment }),
+    ),
     events,
     can_edit: input.canEdit,
     can_submit: input.canEdit && submissionReadiness.review_ready,
     available_actions: [],
     submission_readiness: submissionReadiness,
+  };
+}
+
+async function hydrateTenantSensitiveReviewFields(
+  input: TenantApplymentDetailInput & {
+    applyment: WechatPayApplymentRecord;
+  },
+): Promise<WechatPayApplymentRecord> {
+  if (!input.canEdit || !input.applyment.has_sensitive_payload) {
+    return input.applyment;
+  }
+  const sensitive = await loadApplymentSensitiveDraftPayload({
+    applyment: input.applyment,
+    repository: input.repository,
+    rootSecret: input.encryptionRootSecret,
+  });
+  return {
+    ...input.applyment,
+    identity_name: sensitive.identity_name ?? null,
+    identity_number: sensitive.identity_number ?? null,
+    identity_address: sensitive.identity_address ?? null,
+    contact_identity_number: sensitive.contact_identity_number ?? null,
+    contact_identity_address: sensitive.contact_identity_address ?? null,
+    settlement_account_number: sensitive.bank_account_number ?? null,
   };
 }

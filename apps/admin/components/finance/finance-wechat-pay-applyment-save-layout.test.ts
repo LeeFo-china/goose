@@ -74,7 +74,6 @@ describe("Finance wechat pay applyment save layout", () => {
       ["onSubjectTypeChange", "handleSubjectTypeChange"],
       ["onContactTypeChange", "changeContactType"],
       ["onAttachmentsChange", "handleAttachmentsChange"],
-      ["onApplyRecognition", "applyRecognitionRows"],
       ["onManualFieldChange", "handleManualFieldChange"],
       ["onSupplementDataChange", "handleSupplementDataChange"],
       ["onReviewConfirmedChange", "setReviewConfirmed"],
@@ -119,12 +118,11 @@ describe("Finance wechat pay applyment save layout", () => {
       "onChange: onAttachmentsChange",
     );
 
-    const ocrController = getObjectDeclaration(
+    const fieldController = getObjectDeclaration(
       singlePageSource,
-      "const ocrController = {",
+      "const fieldController = {",
     );
-    expect(ocrController).toContain("onApply: onApplyRecognition");
-    expect(ocrController).toContain(
+    expect(fieldController).toContain(
       "onManualChange: onManualFieldChange",
     );
 
@@ -135,7 +133,7 @@ describe("Finance wechat pay applyment save layout", () => {
     expect(documentSections.length).toBeGreaterThan(0);
     for (const invocation of documentSections) {
       expect(invocation).toContain("attachmentController={attachmentController}");
-      expect(invocation).toContain("ocrController={ocrController}");
+      expect(invocation).toContain("fieldController={fieldController}");
       for (const pseudoProp of [
         "onSubjectTypeChange",
         "onAttachmentsChange",
@@ -145,7 +143,7 @@ describe("Finance wechat pay applyment save layout", () => {
         expect(invocation).not.toContain(`${pseudoProp}=`);
       }
     }
-    expect(documentSectionSource).toContain("{...ocrController}");
+    expect(documentSectionSource).toContain("{...fieldController}");
 
     const selectFields = getComponentInvocations(singlePageSource, "SelectField");
     expect(

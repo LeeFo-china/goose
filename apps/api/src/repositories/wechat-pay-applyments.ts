@@ -16,14 +16,19 @@ import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase/index";
 import type { PlatformWechatPayApplymentListQuery } from "@/schema/wechat-pay-applyments";
 type WechatPayApplymentTableRow = Tables<"tenant_wechat_pay_applyments">;
-type WechatPayApplymentMediaTableRow =
-  Tables<"tenant_wechat_pay_applyment_media">;
+type WechatPayApplymentMediaTableRow = Tables<"tenant_wechat_pay_applyment_media">;
 export type WechatPayApplymentRecord =
   Omit<
     WechatPayApplymentTableRow,
     "merchant_short_name" | "sensitive_payload_ciphertext"
   > & {
     merchant_short_name: string | null;
+    identity_name?: string | null;
+    identity_number?: string | null;
+    identity_address?: string | null;
+    contact_identity_number?: string | null;
+    contact_identity_address?: string | null;
+    settlement_account_number?: string | null;
     tenant?: {
       id: string;
       name: string | null;
@@ -38,20 +43,15 @@ export type WechatPayApplymentSensitiveRecord = Pick<
   | "sensitive_payload_ciphertext"
   | "sensitive_payload_version"
 >;
-export type WechatPayApplymentInsert =
-  Inserts<"tenant_wechat_pay_applyments">;
-export type WechatPayApplymentUpdate =
-  Updates<"tenant_wechat_pay_applyments">;
-export type WechatPayApplymentEventRecord =
-  Tables<"tenant_wechat_pay_applyment_events">;
-export type WechatPayApplymentEventInsert =
-  Inserts<"tenant_wechat_pay_applyment_events">;
+export type WechatPayApplymentInsert = Inserts<"tenant_wechat_pay_applyments">;
+export type WechatPayApplymentUpdate = Updates<"tenant_wechat_pay_applyments">;
+export type WechatPayApplymentEventRecord = Tables<"tenant_wechat_pay_applyment_events">;
+export type WechatPayApplymentEventInsert = Inserts<"tenant_wechat_pay_applyment_events">;
 export type WechatPayApplymentMediaRecord = Pick<
   WechatPayApplymentMediaTableRow,
   "id" | "applyment_id" | "object_key" | "sha256" | "media_id" | "request_id"
 >;
-export type WechatPayApplymentMediaInsert =
-  Inserts<"tenant_wechat_pay_applyment_media">;
+export type WechatPayApplymentMediaInsert = Inserts<"tenant_wechat_pay_applyment_media">;
 export type WechatPayApplymentListResult = {
   list: WechatPayApplymentRecord[];
   pagination: {

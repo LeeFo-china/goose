@@ -22,7 +22,7 @@ function documentSection(page: Page, title: string) {
 
 function attachmentSlot(page: Page, category: string) {
   return attachmentInput(page, category).locator(
-    "xpath=ancestor::div[contains(@class,'flex-col')][1]",
+    "xpath=ancestor::div[contains(@class,'rounded-md') and contains(@class,'border')][1]",
   );
 }
 
@@ -35,12 +35,6 @@ function pngUpload(name: string) {
       "base64",
     ),
   };
-}
-
-function ocrReviewRow(page: Page, fieldLabel: string) {
-  return page.getByRole("checkbox", { name: fieldLabel }).locator(
-    "xpath=ancestor::div[contains(@class,'grid')][1]",
-  );
 }
 
 type MockSaveEvents = {
@@ -77,14 +71,13 @@ test("单页资料区紧邻核对字段、身份证同区且移动端无水平�
 
   const licenseSection = documentSection(page, "营业执照");
   await expect(
-    licenseSection.getByRole("heading", {
-      name: "营业执照照片",
-      level: 3,
+    licenseSection.getByRole("textbox", {
+      name: /^营业执照主体名称/,
     }),
   ).toBeVisible();
   await expect(
     licenseSection.getByRole("textbox", {
-      name: /^营业执照主体名称/,
+      name: /^统一社会信用代码/,
     }),
   ).toBeVisible();
   await expect(
@@ -105,15 +98,13 @@ test("单页资料区紧邻核对字段、身份证同区且移动端无水平�
     ),
   ).toHaveCount(1);
   await expect(
-    legalIdSection.getByRole("heading", {
-      name: "法人身份证人像面",
-      level: 3,
+    legalIdSection.getByRole("textbox", {
+      name: /^身份证姓名/,
     }),
   ).toBeVisible();
   await expect(
-    legalIdSection.getByRole("heading", {
-      name: "法人身份证国徽面",
-      level: 3,
+    legalIdSection.getByRole("textbox", {
+      name: /^身份证有效期开始/,
     }),
   ).toBeVisible();
 
@@ -123,7 +114,7 @@ test("单页资料区紧邻核对字段、身份证同区且移动端无水平�
   })).toBe(true);
 });
 
-test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复待核对结果", async ({
+test("上传后自动识别回填，替换附件不覆盖人工值且刷新后恢复表单值", async ({
   page,
   request,
 }) => {
@@ -132,18 +123,12 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
     waitUntil: "networkidle",
   });
 
-  await page.getByRole("checkbox", {
-    name: "同意使用已上传证照进行信息识别和申请资料回填",
-  }).click();
   const firstLicenseInput = attachmentInput(page, "license_copy");
   await expect(firstLicenseInput).toBeEnabled();
   await firstLicenseInput.setInputFiles(pngUpload("license-first.png"));
-  await expect(attachmentSlot(page, "license_copy")).toContainText("待核对");
+  await expect(attachmentSlot(page, "license_copy")).toContainText("已回填");
   await expect(firstLicenseInput).toBeEnabled();
 
-  await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
-    "OCR 识别主体 1",
-  );
   const licenseName = page.getByRole("textbox", {
     name: /^营业执照主体名称/,
   });
@@ -155,12 +140,9 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   await replacementLicenseInput.setInputFiles(
     pngUpload("license-replacement.png"),
   );
-  await expect(attachmentSlot(page, "license_copy")).toContainText("待核对");
+  await expect(attachmentSlot(page, "license_copy")).toContainText("已回填");
   await expect(replacementLicenseInput).toBeEnabled();
 
-  await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
-    "OCR 识别主体 2",
-  );
   await expect(licenseName).toHaveValue("人工保留主体");
   await expect.poll(async () => {
     const events = await getMockSaveEvents(request);
@@ -168,15 +150,12 @@ test("上传后自动识别，替换附件不覆盖人工值且刷新后恢复�
   }).toBe("人工保留主体");
 
   await page.reload({ waitUntil: "networkidle" });
-  await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
-    "OCR 识别主体 2",
-  );
   await expect(page.getByRole("textbox", {
     name: /^营业执照主体名称/,
   })).toHaveValue("人工保留主体");
 });
 
-test("识别失败后重试同一附件并恢复为待核对", async ({
+test("识别失败后重试同一附件并自动回填", async ({
   page,
   request,
 }) => {
@@ -189,9 +168,6 @@ test("识别失败后重试同一附件并恢复为待核对", async ({
   await page.goto("/finance/wechat-pay/applyment", {
     waitUntil: "networkidle",
   });
-  await page.getByRole("checkbox", {
-    name: "同意使用已上传证照进行信息识别和申请资料回填",
-  }).click();
   const licenseInput = attachmentInput(page, "license_copy");
   await expect(licenseInput).toBeEnabled();
   await licenseInput.setInputFiles(pngUpload("license-retry.png"));
@@ -199,9 +175,9 @@ test("识别失败后重试同一附件并恢复为待核对", async ({
   const licenseSlot = attachmentSlot(page, "license_copy");
   await expect(licenseSlot).toContainText("识别失败");
   await licenseSlot.getByRole("button", { name: "重试识别" }).click();
-  await expect(licenseSlot).toContainText("待核对");
+  await expect(licenseSlot).toContainText("已回填");
 
-  await expect(ocrReviewRow(page, "营业执照主体名称")).toContainText(
-    "OCR 识别主体 2",
-  );
+  await expect(page.getByRole("textbox", {
+    name: /^营业执照主体名称/,
+  })).toHaveValue("复核测试商户有限公司");
 });

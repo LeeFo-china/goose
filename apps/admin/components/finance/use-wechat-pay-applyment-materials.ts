@@ -57,8 +57,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     "loading",
   );
   const capabilityStatusRef = useRef<CapabilityStatus>("loading");
-  const [recognitionConsent, setRecognitionConsentState] = useState(false);
-  const recognitionConsentRef = useRef(false);
   const applymentIdRef = useRef(input.initialApplymentId ?? null);
   const unpersistedObjectKeysRef = useRef<Set<string>>(new Set());
   const [attachmentSaveErrors, setAttachmentSaveErrors] = useState<
@@ -78,7 +76,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
   useEffect(() => setupMountedRefLifecycle(
     mountedRef,
     () => {
-      recognitionConsentRef.current = false;
       generationRef.current.advance();
     },
   ), []);
@@ -271,7 +268,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       supportedDocumentTypes,
       excludedObjectKeys: unpersistedObjectKeysRef.current,
       isActive: () => generationRef.current.isCurrent(generation),
-      hasConsent: () => recognitionConsentRef.current,
       markUnsupportedManual: () =>
         markUnsupportedMaterialsManual(supportedDocumentTypes, generation),
       recognize: (attachment) => recognizeAttachment(attachment, generation),
@@ -323,7 +319,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       reportError: setError,
       capabilityLoading: capabilityStatusRef.current === "loading",
       supportedDocumentTypes: supportedOcrDocumentTypesRef.current,
-      hasRecognitionConsent: () => recognitionConsentRef.current,
       markUnsupportedManual: () => markUnsupportedMaterialsManual(
         supportedOcrDocumentTypesRef.current,
         generation,
@@ -432,21 +427,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
       recognize: (attachment) => recognizeAttachment(attachment, generation),
     });
   }
-  function setRecognitionConsent(checked: boolean) {
-    if (!input.editable) return;
-    recognitionConsentRef.current = checked;
-    setRecognitionConsentState(checked);
-    if (checked && capabilityStatusRef.current !== "loading") {
-      const generation = generationRef.current.current();
-      void enqueue(
-        () => processUploadedMaterials(
-          supportedOcrDocumentTypesRef.current,
-          generation,
-        ),
-        generation,
-      ).catch(reportOperationError(generation));
-    }
-  }
   function reportOperationError(generation: number) {
     return (operationError: unknown) => {
       reportGenerationGuardedError({
@@ -467,8 +447,6 @@ export function useWechatPayApplymentMaterials(input: UseWechatPayApplymentMater
     materialStates,
     attachmentSaveErrors,
     supportedOcrDocumentTypes,
-    recognitionConsent,
-    setRecognitionConsent,
     capabilitiesUnavailable: capabilityStatus === "unavailable",
     pending,
     error,

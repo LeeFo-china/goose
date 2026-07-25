@@ -36,7 +36,7 @@ const MAX_BUSINESS_SCENE_MATERIALS = 5;
 export type ApplymentAttachmentSlotDefinition = {
   category: WechatPayApplymentAttachmentCategory;
   required: boolean;
-  description: string;
+  description?: string;
 };
 
 const MATERIAL_STATUS_META: Record<
@@ -49,8 +49,8 @@ const MATERIAL_STATUS_META: Record<
   missing: { label: "未上传", variant: "outline" },
   uploaded: { label: "已上传", variant: "secondary" },
   recognizing: { label: "识别中", variant: "warning" },
-  review_required: { label: "待核对", variant: "warning" },
-  confirmed: { label: "已确认", variant: "success" },
+  review_required: { label: "待回填", variant: "warning" },
+  confirmed: { label: "已回填", variant: "success" },
   manual: { label: "手动填写", variant: "secondary" },
   failed: { label: "识别失败", variant: "danger" },
 };
@@ -151,7 +151,6 @@ export function WechatPayApplymentBusinessMaterials({
 export function WechatPayApplymentAttachmentSlot({
   category,
   required,
-  description,
   controller,
 }: WechatPayApplymentAttachmentSlotProps) {
   const {
@@ -187,18 +186,15 @@ export function WechatPayApplymentAttachmentSlot({
     (attachment ? "uploaded" : "missing")];
   return (
     <div className={cn(
-      "flex min-w-0 flex-col gap-3 rounded-md border p-3",
+      "flex min-w-0 flex-col gap-2 rounded-md border bg-muted/10 p-3",
       required && !attachment ? "border-dashed" : "",
     )}>
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-            {getWechatPayApplymentAttachmentCategoryLabel(category)}
-            <Badge variant={required ? "secondary" : "outline"}>
-              {required ? "必传" : "选传"}
-            </Badge>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm font-medium">
+          {getWechatPayApplymentAttachmentCategoryLabel(category)}
+          <Badge variant={required ? "secondary" : "outline"}>
+            {required ? "必传" : "选传"}
+          </Badge>
         </div>
         <Badge
           variant={statusMeta.variant}
@@ -207,18 +203,55 @@ export function WechatPayApplymentAttachmentSlot({
           {statusMeta.label}
         </Badge>
       </div>
-      {attachment ? (
-        <AttachmentPreviewCard
-          attachment={attachment}
-          editable={editable}
-          busy={busy}
-          onRemove={removeAttachment}
-        />
-      ) : (
-        <div className="flex h-40 items-center justify-center rounded-md border border-dashed bg-muted/30 text-muted-foreground sm:h-48">
-          <FileImage aria-hidden="true" className="size-8" />
-        </div>
-      )}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        {attachment ? (
+          <AttachmentPreviewCard
+            attachment={attachment}
+            editable={editable}
+            busy={busy}
+            onRemove={removeAttachment}
+          />
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-3 rounded-md bg-muted/30 p-2">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-md border border-dashed bg-background text-muted-foreground">
+              <FileImage aria-hidden="true" className="size-5" />
+            </div>
+            <div className="min-w-0 text-sm">
+              <div>JPG/PNG，最大 2MB</div>
+              <div className="text-xs text-muted-foreground">
+                上传后自动回填表单
+              </div>
+            </div>
+          </div>
+        )}
+        {editable ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <ApplymentAttachmentUploadButton
+              category={category}
+              inputId={inputId}
+              disabled={busy}
+              uploading={uploadingCategory === category}
+              label={attachment ? "替换图片" : "上传图片"}
+              onOpen={openAttachmentPicker}
+              onUpload={uploadAttachment}
+            />
+            {attachment &&
+                (needsPersistRetry ||
+                  (currentState?.status === "failed" && ocrSupported)) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => onRetryRecognition(attachment)}
+              >
+                <RefreshCw data-icon="inline-start" />
+                {needsPersistRetry ? "重试保存" : "重试识别"}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       {currentState?.error ? (
         <p className="text-xs text-destructive">{currentState.error}</p>
       ) : null}
@@ -230,33 +263,6 @@ export function WechatPayApplymentAttachmentSlot({
           if (attachment) onRetrySave(attachment);
         }}
       />
-      {editable ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <ApplymentAttachmentUploadButton
-            category={category}
-            inputId={inputId}
-            disabled={busy}
-            uploading={uploadingCategory === category}
-            label={attachment ? "替换附件" : "上传附件"}
-            onOpen={openAttachmentPicker}
-            onUpload={uploadAttachment}
-          />
-          {attachment &&
-              (needsPersistRetry ||
-                (currentState?.status === "failed" && ocrSupported)) ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() => onRetryRecognition(attachment)}
-            >
-              <RefreshCw data-icon="inline-start" />
-              {needsPersistRetry ? "重试保存" : "重试识别"}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

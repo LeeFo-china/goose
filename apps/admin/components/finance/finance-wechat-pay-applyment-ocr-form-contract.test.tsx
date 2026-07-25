@@ -13,6 +13,7 @@ import {
 import {
   getOcrComparisonValues,
   getStoredFieldSources,
+  getStoredOcrValues,
 } from "./finance-wechat-pay-applyment-recognized-fields";
 import {
   FinanceWechatPayApplymentSinglePage,
@@ -138,24 +139,19 @@ function buildSinglePageProps(
       materialStates: {},
       attachmentSaveErrors: {},
       supportedOcrDocumentTypes: new Set<string>(),
-      recognitionConsent: true,
       capabilitiesUnavailable: false,
       pending: false,
-      setRecognitionConsent: () => undefined,
       onUploaded: async () => undefined,
       onRetrySave: async () => undefined,
       onRetryRecognition: async () => undefined,
     },
     ocrReview: {
       currentValues: values,
-      comparisonValues: getOcrComparisonValues(applyment, values),
       fieldSources: getStoredFieldSources(applyment, values),
-      useManualEntry: async () => undefined,
     },
     onSubjectTypeChange: () => undefined,
     onContactTypeChange: () => undefined,
     onAttachmentsChange: async () => undefined,
-    onApplyRecognition: () => undefined,
     onManualFieldChange: () => undefined,
     onSupplementDataChange: () => undefined,
     onReviewConfirmedChange: () => undefined,
@@ -246,7 +242,7 @@ describe("wechat pay applyment OCR form registration", () => {
   });
 
   for (const status of ["failed", "review_required"] as const) {
-    test(`routes the single ${status} manual entry action through the OCR controller`, () => {
+    test(`renders ${status} OCR fields as ordinary document-section controls`, () => {
       const category = "legal_representative_id_card_front";
       const attachment: WechatPayApplymentAttachment = {
         category,
@@ -267,7 +263,6 @@ describe("wechat pay applyment OCR form registration", () => {
           error: status === "failed" ? "证照识别失败" : null,
         },
       };
-      const onUseManualEntry = mock(() => undefined);
       const attachmentController = {
         attachments: [attachment],
         editable: true,
@@ -289,17 +284,15 @@ describe("wechat pay applyment OCR form registration", () => {
         createElement(FinanceWechatPayApplymentDocumentSection, {
           ...LEGAL_REPRESENTATIVE_ID_CARD_DOCUMENT_SECTION_CONFIG,
           attachmentController,
-          ocrController: {
-            attachments: [attachment],
-            materialStates,
+          fieldController: {
             contactType: "LEGAL",
             subjectType: "SUBJECT_TYPE_ENTERPRISE",
-            values: {},
-            comparisonValues: {},
+            values: {
+              identity_name: "张三",
+              identity_number: "110101199001011234",
+            },
             fieldSources: {},
             onManualChange: () => undefined,
-            onApply: () => undefined,
-            onUseManualEntry,
           },
         }),
       );
@@ -308,13 +301,12 @@ describe("wechat pay applyment OCR form registration", () => {
         (match) => match[1],
       );
 
-      expect(markup.match(/改为手动填写/g)).toHaveLength(1);
-      expect(manualEntryActions).toHaveLength(1);
-      manualEntryActions[0]?.();
-      expect(onUseManualEntry).toHaveBeenCalledTimes(1);
-      expect(onUseManualEntry).toHaveBeenCalledWith(category);
-      expect(labelledBy).toHaveLength(2);
-      expect(new Set(labelledBy).size).toBe(2);
+      expect(markup).toContain('name="identity_name"');
+      expect(markup).toContain('name="identity_number"');
+      expect(markup).not.toContain("改为手动填写");
+      expect(manualEntryActions).toHaveLength(0);
+      expect(labelledBy).toHaveLength(3);
+      expect(new Set(labelledBy).size).toBe(1);
       for (const id of labelledBy) expect(markup).toContain(`id="${id}"`);
     });
   }
@@ -380,41 +372,43 @@ describe("wechat pay applyment OCR form registration", () => {
   );
 
   test(
-    "keeps bank account required unless its own masked value exists",
+    "renders hydrated identity and bank fields as reviewable required values",
     () => {
-      const identityOnly = {
+      const applyment = {
         has_sensitive_payload: true,
-        settlement_account_number_masked: null,
-      } as WechatPayApplymentRecord;
-      const withBankAccount = {
-        ...identityOnly,
+        identity_name: "张三",
+        identity_number: "41000019900101001X",
+        identity_address: "河南省信阳市固始县示例路1号",
+        contact_identity_number: "41000019920202002X",
+        contact_identity_address: "河南省信阳市固始县经办人路2号",
+        settlement_account_number: "6212345678901234",
         settlement_account_number_masked: "6222••••8888",
-      };
-      const requiredMarkup = renderSinglePage({
-        applyment: identityOnly,
-      });
-      const storedMarkup = renderSinglePage({
-        applyment: withBankAccount,
-      });
-      const requiredControl = requiredMarkup.match(
-        /<input[^>]*name="settlement_account_number"[^>]*>/,
-      )?.[0];
-      const storedControl = storedMarkup.match(
-        /<input[^>]*name="settlement_account_number"[^>]*>/,
-      )?.[0];
+      } as WechatPayApplymentRecord;
+      const markup = renderSinglePage({ applyment, contactType: "SUPER" });
 
-      expect(getStoredFieldSources(identityOnly, {})).toMatchObject({
-        identity_name: "stored",
+      const values = getStoredOcrValues(applyment);
+
+      expect(getStoredFieldSources(applyment, values)).toMatchObject({
+        identity_name: "tenant",
+        identity_number: "tenant",
+        settlement_account_number: "tenant",
       });
-      expect(getStoredFieldSources(identityOnly, {}))
-        .not.toHaveProperty("settlement_account_number");
-      expect(getStoredFieldSources(withBankAccount, {}))
-        .toHaveProperty("settlement_account_number", "stored");
-      expect(getOcrComparisonValues(withBankAccount, {}))
-        .toHaveProperty("settlement_account_number", "已安全保存");
-      expect(requiredControl).toContain("required");
-      expect(storedControl).toBeDefined();
-      expect(storedControl).not.toContain("required");
+      expect(getOcrComparisonValues(applyment, values)).toMatchObject({
+        identity_number: "41000019900101001X",
+        settlement_account_number: "6212345678901234",
+      });
+      expect(markup).not.toContain("已安全保存");
+      expect(markup).not.toContain("修改将替换原值");
+      for (const name of [
+        "identity_number",
+        "contact_identity_number",
+        "settlement_account_number",
+      ]) {
+        const control = markup.match(
+          new RegExp(`<input[^>]*name="${name}"[^>]*>`),
+        )?.[0];
+        expect(control).toContain("required");
+      }
     },
   );
 

@@ -7,8 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
+import type { OcrFieldSuggestion } from "@gooes/domain";
 import {
+  buildOcrFieldReviewRows,
   getUnreviewedOcrConflictKeys,
+  mapApplymentOcrFields,
   type OcrFieldReviewRow,
 } from "@/components/ocr/ocr-field-review-dialog";
 import type {
@@ -82,12 +85,12 @@ export function useWechatPayApplymentOcrReview(input: {
   async function applyRecognitionRows(
     category: WechatPayApplymentAttachmentCategory,
     rows: readonly OcrFieldReviewRow[],
+    options: { confirmWhenNoSelected?: boolean } = {},
   ) {
     const formElement = input.formRef.current;
     if (!formElement) return;
-    const selectedKeys = rows
-      .filter((row) => row.selected)
-      .map((row) => row.field.key);
+    const selectedRows = rows.filter((row) => row.selected);
+    const selectedKeys = selectedRows.map((row) => row.field.key);
     const liveValues = readFormValues(formElement, selectedKeys);
     const unreviewedKeys = getUnreviewedOcrConflictKeys(rows, liveValues);
     if (unreviewedKeys.length > 0) {
@@ -95,15 +98,18 @@ export function useWechatPayApplymentOcrReview(input: {
       return;
     }
     const values = Object.fromEntries(
-      rows
-        .filter((row) => row.selected)
+      selectedRows
         .map((row) => [row.field.key, String(row.field.value ?? "")]),
     );
     const selected = getCurrentApplymentAttachment(
       input.attachmentsRef.current,
       category,
     );
-    if (!selected || Object.keys(values).length === 0) return;
+    const valueKeys = Object.keys(values);
+    if (
+      !selected ||
+      (valueKeys.length === 0 && !options.confirmWhenNoSelected)
+    ) return;
     const selectedState = input.materialStates[category];
     const recognitionId = selectedState?.attachmentObjectKey ===
         selected.object_key
@@ -119,7 +125,7 @@ export function useWechatPayApplymentOcrReview(input: {
     );
     if (!update) return;
     const nextAttachments = update.attachments;
-    const previousValues = readFormValues(formElement, Object.keys(values));
+    const previousValues = readFormValues(formElement, valueKeys);
     const previousApplied = { ...appliedValues };
     const previousCurrent = { ...currentValues };
     const previousSources = { ...fieldSources };
@@ -127,7 +133,7 @@ export function useWechatPayApplymentOcrReview(input: {
 
     input.onReviewInvalidated();
     input.onError("");
-    await runGenerationGuardedOcrReviewMutation({
+    return await runGenerationGuardedOcrReviewMutation({
       generation,
       isCurrentGeneration: mutationGenerationRef.current.isCurrent,
       mutate: () => input.onAttachmentsChange(nextAttachments, {
@@ -143,7 +149,7 @@ export function useWechatPayApplymentOcrReview(input: {
             setFieldSources((current) => ({
               ...current,
               ...Object.fromEntries(
-                Object.keys(values).map((key) => [key, "ocr" as const]),
+                valueKeys.map((key) => [key, "ocr" as const]),
               ),
             }));
           },
@@ -157,6 +163,20 @@ export function useWechatPayApplymentOcrReview(input: {
       }),
       fallbackMessage: "识别结果保存失败",
       onError: input.onError,
+    });
+  }
+
+  function confirmRecognitionFields(
+    category: WechatPayApplymentAttachmentCategory,
+    fields: readonly OcrFieldSuggestion[],
+    contactType: string,
+  ) {
+    const rows = buildOcrFieldReviewRows(
+      mapApplymentOcrFields(category, fields, contactType),
+      getOcrComparisonValues(input.applyment, currentValues),
+    );
+    return applyRecognitionRows(category, rows, {
+      confirmWhenNoSelected: true,
     });
   }
 
@@ -217,6 +237,7 @@ export function useWechatPayApplymentOcrReview(input: {
     fieldSources,
     onManualChange,
     applyRecognitionRows,
+    confirmRecognitionFields,
     useManualEntry,
   };
 }

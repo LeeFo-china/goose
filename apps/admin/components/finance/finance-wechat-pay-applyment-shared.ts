@@ -79,6 +79,9 @@ export type WechatPayApplymentRecord = {
   license_period_end: string | null;
   legal_representative_name: string | null;
   identity_doc_type: string | null;
+  identity_name?: string | null;
+  identity_number?: string | null;
+  identity_address?: string | null;
   identity_address_masked: string | null;
   identity_period_begin: string | null;
   identity_period_end: string | null;
@@ -87,11 +90,14 @@ export type WechatPayApplymentRecord = {
   super_admin_phone_masked: string | null;
   super_admin_email: string | null;
   contact_identity_doc_type: string | null;
+  contact_identity_number?: string | null;
+  contact_identity_address?: string | null;
   contact_identity_period_begin: string | null;
   contact_identity_period_end: string | null;
   service_phone: string | null;
   settlement_account_type: string | null;
   settlement_account_name: string | null;
+  settlement_account_number?: string | null;
   settlement_account_number_masked: string | null;
   settlement_bank_name: string | null;
   settlement_bank_full_name: string | null;

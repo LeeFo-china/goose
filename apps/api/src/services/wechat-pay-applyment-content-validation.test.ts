@@ -10,6 +10,8 @@ function attachment(category: string, status: string) {
   return {
     category,
     object_key: `tenants/${tenantId}/${category}.jpg`,
+    file_object_id: "77777777-7777-4777-8777-777777777777",
+    ocr_recognition_id: "66666666-6666-4666-8666-666666666666",
     ocr_review_status: status,
   };
 }
@@ -54,4 +56,90 @@ test("allows manual review for optional OCR-capable attachments", async () => {
     ocrRecognitionRepository: repository,
   });
   expect(blockers).toEqual([]);
+});
+
+test("allows confirmed OCR created before applyment subject binding", async () => {
+  const blockers = await getApplymentSubmissionContentBlockers({
+    applyment: applyment([attachment("license_copy", "confirmed")]),
+    ocrRecognitionRepository: {
+      findByIdsForTenant: async () => [{
+        id: "66666666-6666-4666-8666-666666666666",
+        tenant_id: tenantId,
+        scene: "wechat_pay_applyment",
+        document_type: "business_license",
+        file_object_id: "77777777-7777-4777-8777-777777777777",
+        subject_type: null,
+        subject_id: null,
+        status: "succeeded",
+      }],
+    },
+  });
+
+  expect(blockers).toEqual([]);
+});
+
+test("allows confirmed OCR bound to the current applyment after image replacement", async () => {
+  const blockers = await getApplymentSubmissionContentBlockers({
+    applyment: applyment([attachment("license_copy", "confirmed")]),
+    ocrRecognitionRepository: {
+      findByIdsForTenant: async () => [{
+        id: "66666666-6666-4666-8666-666666666666",
+        tenant_id: tenantId,
+        scene: "wechat_pay_applyment",
+        document_type: "business_license",
+        file_object_id: "88888888-8888-4888-8888-888888888888",
+        subject_type: "wechat_pay_applyment",
+        subject_id: applymentId,
+        status: "succeeded",
+      }],
+    },
+  });
+
+  expect(blockers).toEqual([]);
+});
+
+test("rejects unbound confirmed OCR for a different file", async () => {
+  const blockers = await getApplymentSubmissionContentBlockers({
+    applyment: applyment([attachment("license_copy", "confirmed")]),
+    ocrRecognitionRepository: {
+      findByIdsForTenant: async () => [{
+        id: "66666666-6666-4666-8666-666666666666",
+        tenant_id: tenantId,
+        scene: "wechat_pay_applyment",
+        document_type: "business_license",
+        file_object_id: "88888888-8888-4888-8888-888888888888",
+        subject_type: null,
+        subject_id: null,
+        status: "succeeded",
+      }],
+    },
+  });
+
+  expect(blockers).toContainEqual({
+    code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+    category: "license_copy",
+  });
+});
+
+test("rejects confirmed OCR bound to a different applyment", async () => {
+  const blockers = await getApplymentSubmissionContentBlockers({
+    applyment: applyment([attachment("license_copy", "confirmed")]),
+    ocrRecognitionRepository: {
+      findByIdsForTenant: async () => [{
+        id: "66666666-6666-4666-8666-666666666666",
+        tenant_id: tenantId,
+        scene: "wechat_pay_applyment",
+        document_type: "business_license",
+        file_object_id: "77777777-7777-4777-8777-777777777777",
+        subject_type: "wechat_pay_applyment",
+        subject_id: "99999999-9999-4999-8999-999999999999",
+        status: "succeeded",
+      }],
+    },
+  });
+
+  expect(blockers).toContainEqual({
+    code: "APPLYMENT_ATTACHMENT_OCR_RECOGNITION_MISMATCH",
+    category: "license_copy",
+  });
 });
