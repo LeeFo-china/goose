@@ -97,9 +97,6 @@ export async function loadWechatPayOrderPaymentContext(input: {
   )) {
     mismatchFields.push("enabled_channels");
   }
-  if (input.tenantConfig.sub_app_id !== null) {
-    mismatchFields.push("sub_app_id");
-  }
   if (
     platformConfig.id !== platformConfigId ||
     platformConfig.profile_code !== definition.profile_code

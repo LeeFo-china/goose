@@ -230,21 +230,28 @@ describe("WechatPayOrderService platform profile provenance", () => {
     expect(loadSecretBundle).not.toHaveBeenCalled();
   });
 
-  test("rejects a tenant sub AppID that is absent from the central profile", async () => {
+  test("allows a tenant mini program sub AppID with a central service-provider profile", async () => {
     findWechatPayConfig.mockImplementationOnce(async () => ({
       ...serviceProviderConfig,
-      sub_app_id: "stale-sub-appid",
+      sub_app_id: "wx-tenant-mini-program",
     }));
     const service = await createService();
 
-    await expect(service.createOrder(authContext(), orderInput)).rejects.toMatchObject({
-      statusCode: 409,
-      code: "WECHAT_PAY_PLATFORM_PROFILE_MISMATCH",
-      details: { mismatch_fields: ["sub_app_id"] },
-    });
+    const result = await service.createOrder(authContext(), orderInput);
 
-    expect(createOrder).not.toHaveBeenCalled();
-    expect(loadSecretBundle).not.toHaveBeenCalled();
+    expect(createServiceProviderOrder).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        app_id: centralProfile.app_id,
+        sub_app_id: "wx-tenant-mini-program",
+      }),
+    }));
+    expect(createJsapiPrepay).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        app_id: centralProfile.app_id,
+        sub_app_id: "wx-tenant-mini-program",
+      }),
+    }));
+    expect(result.idempotent).toBe(false);
   });
 
   test.each(staleTenantProvenanceCases)(
