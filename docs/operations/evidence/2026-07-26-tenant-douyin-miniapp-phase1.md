@@ -205,6 +205,33 @@ HTTP smoke 在脚本内部使用测试租户员工手机号和短生命周期登
 不落盘、不提交任何手机号或 Token。登录会按现有开发登录流程更新既有登录上下文与
 身份关系，但未修改租户业务资料、小程序安装、版本或公开内容。
 
+### Next Admin 服务端渲染 smoke
+
+使用当前分支本地 API 与 Next Admin，经过 Admin 登录路由设置 HttpOnly Cookie 后，
+请求真实 `/douyin-miniapp/workspace` 页面：
+
+```json
+{
+  "anonymousStatus": 307,
+  "anonymousRedirectsToLogin": true,
+  "loginStatus": 200,
+  "cookieIsHttpOnly": true,
+  "cookieIsSameSiteLax": true,
+  "pageStatus": 200,
+  "rendersWorkspaceTitle": true,
+  "rendersInternalTenantLabel": true,
+  "rendersPublicBrandLabel": true,
+  "rendersPublishedProfileState": true,
+  "rendersTestingReleaseState": true,
+  "rendersProjectManagementLink": true,
+  "rendersServiceProviderLink": true,
+  "secretBoundaryClean": true
+}
+```
+
+该验证证明 session、权限、页面服务端请求、真实工作台 API 和 SSR HTML 已闭环。
+它不验证 CSS 实际像素布局，因此不能替代下面仍待补充的浏览器视觉截图。
+
 ## 开发数据库 migration
 
 目标：
