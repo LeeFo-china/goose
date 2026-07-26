@@ -17,6 +17,14 @@ const HttpsUrlSchema = z.string().url().max(2048).refine((value) => {
   }
 });
 
+export const TenantDouyinAuthorizationLinkSchema = z.strictObject({});
+
+export const TenantDouyinAuthorizationCallbackSchema = z.strictObject({
+  intent: z.string().min(32).max(200),
+  authorization_code: z.string().min(8).max(4096),
+  expires_in: z.coerce.number().int().positive().max(7200),
+});
+
 export const TenantDouyinAuthorizationStateSchema = z.enum([
   "unbound",
   "active",
@@ -106,6 +114,9 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
 
 export type TenantDouyinWorkspace = z.infer<
   typeof TenantDouyinWorkspaceSchema
+>;
+export type TenantDouyinAuthorizationCallbackInput = z.infer<
+  typeof TenantDouyinAuthorizationCallbackSchema
 >;
 export type TenantDouyinAuthorizationState = z.infer<
   typeof TenantDouyinAuthorizationStateSchema
