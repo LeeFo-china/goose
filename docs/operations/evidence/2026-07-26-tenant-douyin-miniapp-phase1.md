@@ -20,6 +20,7 @@
 | Admin 工作台 | `64bb0d86` |
 | 公开资料审核状态补强 | `48d7770f` |
 | 系统管理员抖音权限上下文修复 | `0508e3bb` |
+| 租户工作台根路由注册修复 | `e62cf869` |
 
 分支：`feature/douyin-decoration-miniapp`
 
@@ -166,6 +167,43 @@ focused API tests: 14 pass, 0 fail
 ```
 
 该摘要未输出租户 ID、员工 ID、手机号、AppID、Token、密钥或运行时配置。
+
+### 本地真实 HTTP smoke
+
+首次启动当前分支 API 后，真实登录已包含新权限，但
+`GET /tenant/douyin-miniapp/workspace` 返回 404。服务器路由树确认该路径未注册。
+
+Root Cause：
+
+controller 自身的装饰器注册测试通过，但新 controller 没有导入并注册到
+`apps/api/src/routes/index.ts`。原测试只验证了 controller 的局部路由元数据，
+没有验证根路由注册表。
+
+修复：
+
+- 将 `TenantDouyinMiniappController` 加入根路由注册表；
+- 增加根注册表契约测试；
+- 重启本地 API 后重新执行真实登录与 HTTP 请求。
+
+修复后安全摘要：
+
+```json
+{
+  "unauthenticatedStatus": 401,
+  "loginStatus": 200,
+  "loginHasReadPermission": true,
+  "workspaceStatus": 200,
+  "authorizationState": "active",
+  "releaseState": "testing",
+  "publicProfileStatus": "published",
+  "distinctInternalAndPublicNames": true,
+  "secretBoundaryClean": true
+}
+```
+
+HTTP smoke 在脚本内部使用测试租户员工手机号和短生命周期登录 Token，不打印、
+不落盘、不提交任何手机号或 Token。登录会按现有开发登录流程更新既有登录上下文与
+身份关系，但未修改租户业务资料、小程序安装、版本或公开内容。
 
 ## 开发数据库 migration
 
