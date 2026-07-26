@@ -44,6 +44,19 @@ function createController() {
 }
 
 describe("TenantDouyinMiniappController", () => {
+  test("registers the controller in the root route registry", async () => {
+    const source = await Bun.file(
+      new URL("../../routes/index.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain(
+      'import TenantDouyinMiniappController from "@/controllers/tenant-douyin-miniapp";',
+    );
+    expect(source).toContain(
+      "TenantDouyinMiniappController.registerExtraRoutes(app);",
+    );
+  });
+
   test("registers the tenant workspace route", () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
