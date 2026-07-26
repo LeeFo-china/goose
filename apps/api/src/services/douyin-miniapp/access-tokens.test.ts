@@ -4,8 +4,7 @@ import { Errors } from "@/errors/error-factory";
 import type { DouyinOpenPlatformGateway } from "@/gateways/douyin-open-platform/client";
 import type { DouyinThirdPartyComponentRecord } from "@/repositories/douyin-third-party-components";
 import type { DouyinMiniappInstallationRecord } from "@/repositories/douyin-miniapp-installations";
-import { openDouyinCredential, sealDouyinCredential,
-  type DouyinCredentialKeyring } from "./credential-envelope";
+import { openDouyinCredential, sealDouyinCredential, type DouyinCredentialKeyring } from "./credential-envelope";
 import type { ComponentTokenRepository, AuthorizerTokenRepository } from "./access-tokens";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -61,6 +60,7 @@ function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpen
       refreshExpiresIn: 2_592_000, permissions: [],
     })),
     retrieveAuthorizationCode: mock(async () => "replacement-code"),
+    generateAuthorizationLink: mock(async () => ({ link: "https://open.douyin.com/authorize/unused", logId: "unused-log" })),
     code2Session: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     code2SessionForTemplate: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     ...overrides,

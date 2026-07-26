@@ -2,6 +2,13 @@ import { z } from "zod";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
+  buildAuthorizationLinkRequest,
+  GENERATE_AUTHORIZATION_LINK_URL,
+  parseAuthorizationLinkResponse,
+  type GenerateAuthorizationLinkInput,
+  type GenerateAuthorizationLinkResult,
+} from "./authorization-link";
+import {
   DouyinMiniappReleaseClient,
   SafeDouyinLogIdSchema,
   type AuthorizerRequestInput,
@@ -14,6 +21,10 @@ import {
   type UploadTemplateVersionInput,
   type UploadTemplateVersionResult,
 } from "./release-client";
+export type {
+  GenerateAuthorizationLinkInput,
+  GenerateAuthorizationLinkResult,
+} from "./authorization-link";
 export type {
   AuthorizerRequestInput,
   AvailableAuditHostsResult,
@@ -161,6 +172,9 @@ export interface DouyinOpenPlatformGateway {
   exchangeAuthorizationCode(input: AuthorizationCodeInput): Promise<AuthorizerTokenResult>;
   refreshAuthorizerToken(input: RefreshAuthorizerTokenInput): Promise<AuthorizerTokenResult>;
   retrieveAuthorizationCode(input: RetrieveAuthorizationCodeInput): Promise<string>;
+  generateAuthorizationLink(
+    input: GenerateAuthorizationLinkInput,
+  ): Promise<GenerateAuthorizationLinkResult>;
   code2Session(input: Code2SessionInput): Promise<Code2SessionResult>;
   code2SessionForTemplate(input: TemplateCode2SessionInput): Promise<Code2SessionResult>;
 }
@@ -249,6 +263,22 @@ export class DouyinOpenPlatformClient
     const parsed = RetrieveAuthorizationCodeSuccessSchema.safeParse(body);
     if (!parsed.success) throw invalidResponseError(safeLogId(body));
     return parsed.data.data.authorization_code;
+  }
+
+  async generateAuthorizationLink(
+    input: GenerateAuthorizationLinkInput,
+  ): Promise<GenerateAuthorizationLinkResult> {
+    const body = await this.request(
+      GENERATE_AUTHORIZATION_LINK_URL,
+      buildAuthorizationLinkRequest(input),
+    );
+    assertOpenApiSuccess(body);
+    return parseAuthorizationLinkResponse(
+      body,
+      () => {
+        throw invalidResponseError(safeLogId(body));
+      },
+    );
   }
 
   async code2Session(input: Code2SessionInput): Promise<Code2SessionResult> {

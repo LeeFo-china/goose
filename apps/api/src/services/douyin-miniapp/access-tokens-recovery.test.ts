@@ -90,6 +90,10 @@ function gateway(overrides: Partial<DouyinOpenPlatformGateway> = {}): DouyinOpen
       authorizerAppId: "authorizer-appid", refreshToken: "rotated-refresh", expiresIn: 7200,
       refreshExpiresIn: 2_592_000, permissions: [] })),
     retrieveAuthorizationCode: mock(async () => "replacement-code"),
+    generateAuthorizationLink: mock(async () => ({
+      link: "https://open.douyin.com/authorize/unused",
+      logId: "unused-log",
+    })),
     code2Session: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     code2SessionForTemplate: mock(async () => ({ sessionKey: "unused", openId: "unused" })),
     ...overrides,
