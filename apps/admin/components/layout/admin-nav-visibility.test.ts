@@ -107,4 +107,23 @@ describe("admin nav visibility", () => {
       },
     ]);
   });
+
+  test("shows the Douyin miniapp group only with tenant read permission", () => {
+    const withoutPermission = getVisibleGroups(
+      createSession([]),
+      tenantNavGroups,
+    );
+    const withPermission = getVisibleGroups(
+      createSession([{ code: "douyin_miniapp.read", scope: "all" }]),
+      tenantNavGroups,
+    );
+
+    expect(
+      withoutPermission.some((group) => group.label === "抖音小程序"),
+    ).toBe(false);
+    expect(
+      withPermission.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["小程序工作台"]);
+  });
 });

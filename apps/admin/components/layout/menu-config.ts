@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   BadgeCheck,
   BarChart3,
   Bot,
@@ -176,6 +177,17 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "费用审批",
         icon: CircleDollarSign,
         permission: "finance.expense.review",
+      },
+    ],
+  },
+  {
+    label: "抖音小程序",
+    items: [
+      {
+        href: "/douyin-miniapp/workspace",
+        label: "小程序工作台",
+        icon: AppWindow,
+        permission: "douyin_miniapp.read",
       },
     ],
   },
