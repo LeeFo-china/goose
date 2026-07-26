@@ -236,6 +236,20 @@ describe("TenantDouyinMiniappReleasesService", () => {
     )).rejects.toMatchObject({
       code: "DOUYIN_TENANT_AUDIT_PREFLIGHT_INCOMPLETE",
     });
+
+    const expiredQr = fixture({
+      foundRelease: release({
+        test_qr_url:
+          "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1",
+      }),
+    });
+    await expect(expiredQr.service.submitAudit(
+      tenantContext(["douyin_miniapp.audit.submit"]),
+      RELEASE_ID,
+      { host_names: ["douyin.com"], audit_note: "审核说明" },
+    )).rejects.toMatchObject({
+      code: "DOUYIN_TENANT_AUDIT_PREFLIGHT_INCOMPLETE",
+    });
   });
 
   test("uses distinct permissions for preview, audit, and sync", async () => {

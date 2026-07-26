@@ -107,7 +107,8 @@ describe("TenantDouyinMiniappWorkspace", () => {
 
     expect(html).toContain("已授权");
     expect(html).toContain("体验测试中");
-    expect(html).toContain("生成体验二维码");
+    expect(html).toContain("体验二维码已就绪");
+    expect(html).toContain("提交审核");
     expect(html).not.toMatch(/appsecret|component_access_token|template_app_secret/i);
   });
 
@@ -131,10 +132,12 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(errorHtml).toContain("工作台加载失败");
   });
 
-  test("guides unbound tenants without presenting unavailable actions as active", () => {
+  test("lets authorized operators start tenant authorization", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
         canRead
+        canManage
+        canSubmitAudit
         loadError={null}
         workspace={{
           ...workspace,
@@ -148,8 +151,29 @@ describe("TenantDouyinMiniappWorkspace", () => {
 
     expect(html).toContain("未授权");
     expect(html).toContain("授权抖音小程序");
-    expect(html).toContain("下一阶段开放");
-    expect(html).toContain("disabled");
+    expect(html).not.toContain("下一阶段开放");
+    expect(html).not.toContain('disabled=""');
+  });
+
+  test("never renders a tenant publish action after audit approval", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        workspace={{
+          ...workspace,
+          release_state: "audit_approved",
+          latest_release: workspace.latest_release
+            ? { ...workspace.latest_release, status: "audit_approved" }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("同步审核状态");
+    expect(html).not.toContain("发布小程序");
   });
 
   test("surfaces a pending public profile instead of implying it is live", () => {

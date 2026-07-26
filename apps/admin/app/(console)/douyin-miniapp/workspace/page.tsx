@@ -6,6 +6,8 @@ import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
 const READ_PERMISSION = "douyin_miniapp.read";
+const MANAGE_PERMISSION = "douyin_miniapp.manage";
+const AUDIT_PERMISSION = "douyin_miniapp.audit.submit";
 
 export default async function TenantDouyinMiniappWorkspacePage() {
   const [session, token] = await Promise.all([
@@ -17,6 +19,12 @@ export default async function TenantDouyinMiniappWorkspacePage() {
 
   const canRead = session.permissions.some(
     (permission) => permission.code === READ_PERMISSION,
+  );
+  const canManage = session.permissions.some(
+    (permission) => permission.code === MANAGE_PERMISSION,
+  );
+  const canSubmitAudit = session.permissions.some(
+    (permission) => permission.code === AUDIT_PERMISSION,
   );
   let workspace: TenantDouyinWorkspace | null = null;
   let loadError: string | null = null;
@@ -43,7 +51,9 @@ export default async function TenantDouyinMiniappWorkspacePage() {
 
   return (
     <TenantDouyinMiniappWorkspace
+      canManage={canManage}
       canRead={canRead}
+      canSubmitAudit={canSubmitAudit}
       loadError={loadError}
       workspace={workspace}
     />

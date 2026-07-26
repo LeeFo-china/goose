@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isDouyinTestQrUrlUsable } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import type {
@@ -231,7 +232,12 @@ function assertAuditPreflight(
   profile: TenantDouyinMiniappWorkspaceProfile | null,
   release: DouyinMiniappReleaseRecord,
 ): void {
-  if (profile?.status === "published" && release.test_qr_url) return;
+  if (
+    profile?.status === "published"
+    && isDouyinTestQrUrlUsable(release.test_qr_url)
+  ) {
+    return;
+  }
   throw Errors.business(
     409,
     "请先发布公开资料并生成体验二维码",

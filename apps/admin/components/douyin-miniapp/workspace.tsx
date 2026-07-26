@@ -36,18 +36,24 @@ import {
   profileStatusTone,
   releaseLabel,
   releaseTone,
-  workspaceNextAction,
 } from "./workspace-display";
+import {
+  TenantDouyinMiniappWorkspaceActions,
+} from "./workspace-actions";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
 type TenantDouyinMiniappWorkspaceProps = {
   canRead: boolean;
+  canManage?: boolean;
+  canSubmitAudit?: boolean;
   loadError: string | null;
   workspace: TenantDouyinWorkspace | null;
 };
 
 export function TenantDouyinMiniappWorkspace({
   canRead,
+  canManage = false,
+  canSubmitAudit = false,
   loadError,
   workspace,
 }: TenantDouyinMiniappWorkspaceProps) {
@@ -64,7 +70,11 @@ export function TenantDouyinMiniappWorkspace({
       {canRead && loadError ? <LoadError message={loadError} /> : null}
       {canRead && !loadError && !workspace ? <MissingWorkspace /> : null}
       {canRead && !loadError && workspace ? (
-        <WorkspaceOverview workspace={workspace} />
+        <WorkspaceOverview
+          canManage={canManage}
+          canSubmitAudit={canSubmitAudit}
+          workspace={workspace}
+        />
       ) : null}
     </main>
   );
@@ -121,15 +131,14 @@ function MissingWorkspace() {
 }
 
 function WorkspaceOverview({
+  canManage,
+  canSubmitAudit,
   workspace,
 }: {
+  canManage: boolean;
+  canSubmitAudit: boolean;
   workspace: TenantDouyinWorkspace;
 }) {
-  const nextAction = workspaceNextAction({
-    authorizationState: workspace.authorization_state,
-    releaseState: workspace.release_state,
-  });
-
   return (
     <Card className="overflow-hidden">
       <CardHeader className="gap-4 border-b bg-muted/20">
@@ -137,7 +146,7 @@ function WorkspaceOverview({
           <div className="flex min-w-0 flex-col gap-1.5">
             <CardTitle>运营状态总览</CardTitle>
             <CardDescription>
-              当前页面仅提供只读状态，授权与版本操作将在下一阶段开放。
+              核对授权、公开资料与版本进度，按当前状态完成体验和提审。
             </CardDescription>
           </div>
           <div
@@ -153,19 +162,12 @@ function WorkspaceOverview({
           </div>
         </div>
 
-        <div className="flex flex-col gap-2 rounded-md border bg-background p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-medium text-muted-foreground">
-              当前建议动作
-            </p>
-            <p className="mt-1 truncate text-sm font-semibold">{nextAction}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Badge variant="outline">下一阶段开放</Badge>
-            <Button disabled size="sm">
-              {nextAction}
-            </Button>
-          </div>
+        <div className="rounded-md border bg-background p-4">
+          <TenantDouyinMiniappWorkspaceActions
+            canManage={canManage}
+            canSubmitAudit={canSubmitAudit}
+            workspace={workspace}
+          />
         </div>
       </CardHeader>
 

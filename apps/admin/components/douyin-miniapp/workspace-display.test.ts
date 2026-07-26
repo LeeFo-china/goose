@@ -63,5 +63,7 @@ describe("Douyin miniapp workspace display", () => {
     ];
 
     expect(labels.join("")).not.toMatch(/[—–]/);
+    expect(labels).not.toContain("发布小程序");
+    expect(labels).toContain("同步审核状态");
   });
 });

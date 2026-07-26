@@ -8,6 +8,7 @@ import {
   DOUYIN_PHONE_CAPTURE_MODE_VALUES,
   DOUYIN_RELEASE_STATUS_VALUES,
   DouyinRuntimeConfigSchema,
+  isDouyinTestQrUrlUsable,
   type DouyinRuntimeConfigDto,
 } from './douyin-miniapp';
 
@@ -66,6 +67,23 @@ interface InvalidConfigCase {
 describe('Douyin miniapp domain contracts', () => {
   test('re-exports the runtime schema from the domain entry point', () => {
     expect(domain.DouyinRuntimeConfigSchema).toBe(DouyinRuntimeConfigSchema);
+    expect(domain.isDouyinTestQrUrlUsable).toBe(isDouyinTestQrUrlUsable);
+  });
+
+  test('rejects expired signed test QR URLs', () => {
+    const now = Date.parse('2026-07-26T13:04:00.000Z');
+    expect(isDouyinTestQrUrlUsable(
+      'https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1785055276',
+      now,
+    )).toBe(false);
+    expect(isDouyinTestQrUrlUsable(
+      'https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1785075276',
+      now,
+    )).toBe(true);
+    expect(isDouyinTestQrUrlUsable(
+      'https://example.test/stable-test-qr.png',
+      now,
+    )).toBe(true);
   });
 
   test('exports stable lifecycle and event values', () => {

@@ -107,3 +107,23 @@ export type DouyinPhoneCaptureMode =
 export type DouyinRuntimeConfigDto = z.infer<
   typeof DouyinRuntimeConfigSchema
 >;
+
+export function isDouyinTestQrUrlUsable(
+  value: string | null | undefined,
+  now = Date.now(),
+) {
+  if (!value) return false;
+
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const expires = url.searchParams.get('x-expires');
+    if (expires === null) return true;
+    if (!/^[1-9][0-9]{0,11}$/.test(expires)) return false;
+
+    const expiresAt = Number(expires) * 1000;
+    return Number.isSafeInteger(expiresAt) && expiresAt > now;
+  } catch {
+    return false;
+  }
+}

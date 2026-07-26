@@ -104,6 +104,7 @@ export type TenantDouyinWorkspace = {
       | "released"
       | "failed";
     test_qr_url: string | null;
+    audit_host_names?: string[];
     audit_note: string | null;
     audit_result: {
       audit_id?: string;

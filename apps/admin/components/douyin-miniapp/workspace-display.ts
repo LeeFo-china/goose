@@ -99,7 +99,7 @@ export function workspaceNextAction(input: {
     case "sync_error":
       return "处理审核反馈";
     case "audit_approved":
-      return "发布小程序";
+      return "同步审核状态";
     case "released":
       return "查看运行状态";
     case "audit_pending":
