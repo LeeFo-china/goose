@@ -252,12 +252,12 @@ UI 完成前必须执行静态检查、浏览器检查和可访问性预检，�
 
 ### 8.4 线索状态
 
-- `unassigned`：待分配
-- `following_up`：跟进中
-- `converted`：已转客户
-- `closed`：已关闭
+- `unassigned`：`marketing_leads.lead_status = 'new'` 且负责人为空。
+- `following_up`：负责人不为空，且 `lead_status` 为 `new` 或 `contacted`。
+- `converted`：`lead_status = 'converted'`。
+- `closed`：`lead_status = 'invalid'`。
 
-状态变化写入活动记录。已转客户状态不可重复执行转换。
+租户侧状态由现有营销线索状态和新增负责人字段共同映射，不再创建一套重复的线索状态枚举。状态变化写入活动记录，已转客户状态不可重复执行转换。
 
 ## 9. 权限与数据范围
 
@@ -289,38 +289,25 @@ UI 完成前必须执行静态检查、浏览器检查和可访问性预检，�
 - `tenant_service_provider_profiles`：小程序公开名称、Logo、简介和资料审核状态。
 - 现有案例、工地和客户实体。
 
-### 10.2 新增实体
+### 10.2 扩展现有线索实体
 
-#### `douyin_miniapp_leads`
+项目已经通过 `marketing_leads.source = 'douyin_miniapp'` 保存抖音咨询，并使用 `douyin_miniapp_lead_submissions` 记录幂等提交事实。租户工作台必须复用这两张现有表，禁止再创建 `douyin_miniapp_leads` 重复表。
 
-主要字段：
+在 `marketing_leads` 现有字段基础上补充：
 
-- `id`
-- `tenant_id`
-- `installation_id`
-- `source_page`
-- `source_entity_type`
-- `source_entity_id`
-- `contact_name`
-- `contact_phone`
-- `requirements`
-- `status`
-- `assignee_employee_id`
-- `converted_customer_id`
-- `idempotency_key`
+- `assigned_employee_id`
 - `assigned_at`
-- `converted_at`
 - `closed_at`
-- `created_at`
-- `updated_at`
 
-#### `douyin_miniapp_lead_activities`
+来源页面、案例或工地标识继续保存在现有 `form_data.attribution` 中；联系人、手机号、小区、需求、客户关系、幂等键和提交时间继续使用现有字段及 `douyin_miniapp_lead_submissions`，不复制数据。
+
+新增 `douyin_miniapp_lead_activities`：
 
 主要字段：
 
 - `id`
 - `tenant_id`
-- `lead_id`
+- `marketing_lead_id`
 - `activity_type`
 - `actor_employee_id`
 - `content`
@@ -334,7 +321,7 @@ UI 完成前必须执行静态检查、浏览器检查和可访问性预检，�
 数据库变更全部通过 `supabase/migrations/` 管理，包括：
 
 - 每租户最多一个启用安装的部分唯一约束或等价原子约束
-- 线索幂等键唯一约束
+- 保持并验证现有抖音线索幂等键唯一约束
 - 线索与活动记录的租户一致性保护
 - 转化客户唯一性和状态约束
 - RLS/policy 或项目现有等价访问控制
