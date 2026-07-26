@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   authorizationLabel,
+  profileStatusLabel,
   releaseLabel,
   workspaceNextAction,
 } from "./workspace-display";
@@ -19,6 +20,13 @@ describe("Douyin miniapp workspace display", () => {
     expect(releaseLabel("audit_rejected")).toBe("审核驳回");
     expect(releaseLabel("sync_error")).toBe("状态同步失败");
     expect(releaseLabel("released")).toBe("已发布");
+  });
+
+  test("makes public profile review state visible", () => {
+    expect(profileStatusLabel("draft")).toBe("公开资料草稿");
+    expect(profileStatusLabel("pending_review")).toBe("公开资料待审核");
+    expect(profileStatusLabel("published")).toBe("公开资料展示中");
+    expect(profileStatusLabel("suspended")).toBe("公开资料已暂停");
   });
 
   test("prioritizes authorization before release actions", () => {

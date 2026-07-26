@@ -32,6 +32,8 @@ import { Separator } from "@/components/ui/separator";
 import {
   authorizationLabel,
   authorizationTone,
+  profileStatusLabel,
+  profileStatusTone,
   releaseLabel,
   releaseTone,
   workspaceNextAction,
@@ -173,13 +175,26 @@ function WorkspaceOverview({
           aria-labelledby="douyin-brand-heading"
         >
           <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-            <div>
-              <h2
-                id="douyin-brand-heading"
-                className="text-sm font-semibold"
-              >
-                品牌与公开资料
-              </h2>
+            <div className="flex min-w-0 flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2
+                  id="douyin-brand-heading"
+                  className="text-sm font-semibold"
+                >
+                  品牌与公开资料
+                </h2>
+                {workspace.public_profile ? (
+                  <Badge
+                    variant={profileStatusTone(
+                      workspace.public_profile.status,
+                    )}
+                  >
+                    {profileStatusLabel(workspace.public_profile.status)}
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary">公开资料未创建</Badge>
+                )}
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 内部租户名称用于后台识别，公开品牌展示给小程序访客。
               </p>

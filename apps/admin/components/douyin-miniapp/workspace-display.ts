@@ -1,9 +1,11 @@
 import type {
   DouyinAuthorizationState,
+  DouyinPublicProfileStatus,
   DouyinReleaseState,
 } from "./workspace-types";
 
 export type WorkspaceStatusTone =
+  | "outline"
   | "secondary"
   | "success"
   | "warning"
@@ -26,6 +28,16 @@ const releaseLabels: Record<DouyinReleaseState, string> = {
   audit_approved: "审核通过",
   released: "已发布",
   sync_error: "状态同步失败",
+};
+
+const profileStatusMeta: Record<
+  DouyinPublicProfileStatus,
+  { label: string; tone: WorkspaceStatusTone }
+> = {
+  draft: { label: "公开资料草稿", tone: "outline" },
+  pending_review: { label: "公开资料待审核", tone: "warning" },
+  published: { label: "公开资料展示中", tone: "success" },
+  suspended: { label: "公开资料已暂停", tone: "danger" },
 };
 
 export function authorizationLabel(state: DouyinAuthorizationState) {
@@ -58,6 +70,14 @@ export function releaseTone(
   }
   if (state === "audit_rejected" || state === "sync_error") return "danger";
   return "secondary";
+}
+
+export function profileStatusLabel(state: DouyinPublicProfileStatus) {
+  return profileStatusMeta[state].label;
+}
+
+export function profileStatusTone(state: DouyinPublicProfileStatus) {
+  return profileStatusMeta[state].tone;
 }
 
 export function workspaceNextAction(input: {

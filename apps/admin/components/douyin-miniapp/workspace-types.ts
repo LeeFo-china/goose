@@ -15,6 +15,12 @@ export type DouyinReleaseState =
   | "released"
   | "sync_error";
 
+export type DouyinPublicProfileStatus =
+  | "draft"
+  | "pending_review"
+  | "published"
+  | "suspended";
+
 export type DouyinRuntimeConfig = {
   brand: {
     logo_url: string | null;
@@ -69,7 +75,7 @@ export type TenantDouyinWorkspace = {
     public_name: string | null;
     introduction: string | null;
     public_phone: string | null;
-    status: string;
+    status: DouyinPublicProfileStatus;
     version: number;
     submitted_at: string | null;
     reviewed_at: string | null;

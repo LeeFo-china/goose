@@ -88,6 +88,7 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("好店装修内部租户");
     expect(html).toContain("小程序公开品牌");
     expect(html).toContain("好店装修服务");
+    expect(html).toContain("公开资料展示中");
     expect(html).toContain("6 个");
     expect(html).toContain("3 个");
     expect(html).toContain("2 个");
@@ -149,5 +150,51 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("授权抖音小程序");
     expect(html).toContain("下一阶段开放");
     expect(html).toContain("disabled");
+  });
+
+  test("surfaces a pending public profile instead of implying it is live", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        loadError={null}
+        workspace={{
+          ...workspace,
+          public_profile: workspace.public_profile
+            ? { ...workspace.public_profile, status: "pending_review" }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("公开资料待审核");
+    expect(html).not.toContain("公开资料展示中");
+  });
+
+  test("keeps long public names and rejected releases readable in one flat card", () => {
+    const longPublicName = "河南好店透明施工档案与装修服务中心".repeat(6);
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        loadError={null}
+        workspace={{
+          ...workspace,
+          release_state: "audit_rejected",
+          public_profile: workspace.public_profile
+            ? { ...workspace.public_profile, public_name: longPublicName }
+            : null,
+          latest_release: workspace.latest_release
+            ? { ...workspace.latest_release, status: "audit_rejected" }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain(longPublicName);
+    expect(html).toContain("审核驳回");
+    expect(html).toContain("break-words");
+    expect(html).toContain("overflow-y-auto");
+    expect(
+      html.match(/rounded-lg border border-border bg-card/g),
+    ).toHaveLength(1);
   });
 });
