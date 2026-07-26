@@ -19,6 +19,7 @@
 | 租户工作台 API | `dae70bd3` |
 | Admin 工作台 | `64bb0d86` |
 | 公开资料审核状态补强 | `48d7770f` |
+| 系统管理员抖音权限上下文修复 | `0508e3bb` |
 
 分支：`feature/douyin-decoration-miniapp`
 
@@ -107,6 +108,64 @@ component_app_secret
 ```
 
 结果：0 个匹配。
+
+## 真实开发数据运行态验证
+
+migration 执行后，首次使用真实开发租户身份调用工作台 service 时发现：
+
+```text
+NO_BOUND_EMPLOYEE_WITH_DOUYIN_READ_PERMISSION
+```
+
+只读分层诊断确认：
+
+- 当前唯一活跃商家安装对应租户有 1 名活跃员工；
+- 该员工已绑定登录用户；
+- 该员工角色为 `system_admin`；
+- 数据库 `role_permissions` 已正确包含七项租户抖音权限；
+- 但派生的 `AuthContext` 中没有 `douyin_*` 权限。
+
+Root Cause：
+
+租户 `system_admin` 的权限上下文不读取 `role_permissions`，而是直接使用
+`@gooes/domain` 的静态 `PERMISSION_CODE_VALUES`。Phase 1 migration 已写入
+数据库权限，但共享领域权限清单未同步，导致真实登录上下文遗漏新权限。
+
+修复：
+
+- 在共享领域权限清单和配置中补齐七项租户抖音权限；
+- 增加领域权限契约测试；
+- 增加系统管理员派生上下文测试；
+- 未修改数据库数据、角色分配或授权逻辑。
+
+修复后验证：
+
+```text
+domain permissions: 10 pass, 0 fail
+system administrator Douyin permissions: 1 pass, 0 fail
+focused API tests: 14 pass, 0 fail
+```
+
+真实开发库只读调用安全摘要：
+
+```json
+{
+  "contextTenantMatchesInstallation": true,
+  "hasReadPermission": true,
+  "authorizationState": "active",
+  "releaseState": "testing",
+  "profileStatus": "published",
+  "hasDistinctInternalAndPublicNames": true,
+  "publicContent": {
+    "cases": 1,
+    "sites": 1,
+    "active_service_areas": 1
+  },
+  "hasLatestRelease": true
+}
+```
+
+该摘要未输出租户 ID、员工 ID、手机号、AppID、Token、密钥或运行时配置。
 
 ## 开发数据库 migration
 
