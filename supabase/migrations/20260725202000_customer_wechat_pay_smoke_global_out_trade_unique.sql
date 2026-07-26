@@ -1,0 +1,4 @@
+DROP INDEX IF EXISTS public.customer_wechat_pay_smoke_tenant_out_trade_unique_idx;
+
+CREATE UNIQUE INDEX IF NOT EXISTS customer_wechat_pay_smoke_out_trade_unique_idx
+ON public.customer_wechat_pay_smoke_orders(out_trade_no);
