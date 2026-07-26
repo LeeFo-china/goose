@@ -231,7 +231,7 @@ describe("DouyinOpenPlatformClient failures", () => {
     } catch (error) {
       caught = error;
     }
-    expectSafeError(caught, "DOUYIN_OPEN_PLATFORM_API_ERROR", "safe-log-id");
+    expectSafeError(caught, "DOUYIN_AUTHORIZATION_CODE_INVALID_OR_CONSUMED", "safe-log-id");
   });
 
   test("rejects non-zero legacy errno and missing success fields", async () => {

@@ -1,4 +1,4 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
@@ -244,6 +244,14 @@ export class DouyinAuthorizationEventsService {
         ? RECLAIMED_START_HEADROOM_MS
         : CLAIMED_START_HEADROOM_MS,
     );
+    const attached = await this.options.eventRepository
+      .attachAuthorizationCodeDigest({
+        eventKey,
+        authorizationCodeDigest: createHash("sha256")
+          .update(message.AuthorizationCode)
+          .digest("hex"),
+      });
+    this.assertCompleted(attached);
     const componentAccessToken = await this.options.accessTokens.getComponentAccessToken();
     let authorizationCode = message.AuthorizationCode;
     if (claim.state === "reclaimed") {

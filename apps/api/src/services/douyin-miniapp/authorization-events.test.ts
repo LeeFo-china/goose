@@ -21,7 +21,6 @@ const AES_KEY = Buffer.alloc(32, 0x5a);
 const ENCODING_AES_KEY = AES_KEY.toString("base64").slice(0, -1);
 const CREDENTIAL_KEY = createSecretKey(Buffer.alloc(32, 0x31));
 const CLAIM_TOKEN = "11111111-1111-4111-8111-111111111111";
-
 type CallbackMessage = Record<string, unknown>;
 type ClaimResult =
   | { readonly state: "claimed" | "reclaimed"; readonly claimToken: string;
@@ -102,6 +101,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
       claimToken: CLAIM_TOKEN,
       claimExpiresAt: new Date(NOW_MS + 60_000).toISOString(),
     })),
+    attachAuthorizationCodeDigest: mock(async (_input: unknown) => true),
     findEventState: mock(async (_eventKey: string): Promise<EventState> => "completed"),
     completeTicketEvent: mock(async (_input: unknown) => true),
     completeAuthorizationEvent: mock(async (_input: unknown) => true),
@@ -285,6 +285,8 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
       return { state: "claimed", claimToken: CLAIM_TOKEN,
         claimExpiresAt: new Date(NOW_MS + 60_000).toISOString() } as const;
     });
+    context.eventRepository.attachAuthorizationCodeDigest
+      .mockImplementation(async () => { order.push("attach"); return true; });
     context.openPlatform.exchangeAuthorizationCode.mockImplementation(async () => {
       order.push("exchange");
       return { accessToken: "authorizer-access-token", authorizerAppId: AUTHORIZER_APP_ID,
@@ -292,7 +294,11 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
         refreshExpiresIn: 2_592_000, permissions: [{ id: 1 }] };
     });
     await context.service.handleCallback(callback(authorizationMessage()));
-    expect(order).toEqual(["claim", "exchange"]);
+    expect(order).toEqual(["claim", "attach", "exchange"]);
+    expect(context.eventRepository.attachAuthorizationCodeDigest).toHaveBeenCalledWith(
+      { eventKey: expect.any(String), authorizationCodeDigest:
+        createHash("sha256").update("callback-auth-code").digest("hex") },
+    );
     expect(context.openPlatform.exchangeAuthorizationCode).toHaveBeenCalledWith({
       componentAccessToken: "component-access-token",
       authorizationCode: "callback-auth-code",
@@ -329,7 +335,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
         occurredAt: "2026-07-20T07:59:50.000Z",
       }));
   });
-
   test("accepts official authorization metadata but strips contact fields", async () => {
     const context = fixture();
     const officialMessage = {
@@ -358,7 +363,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     expect(calls).not.toContain("13800000000");
     expect(calls).not.toContain("CompanyName");
   });
-
   test("rejects invalid official calendar timestamps", async () => {
     const context = fixture();
     await expect(context.service.handleCallback(callback({
@@ -366,7 +370,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     }))).rejects.toMatchObject({ code: "DOUYIN_CALLBACK_MESSAGE_INVALID" });
     expect(context.eventRepository.claimEvent).not.toHaveBeenCalled();
   });
-
   test("retrieves a fresh code for a reclaimed authorization lease", async () => {
     const context = fixture();
     context.eventRepository.claimEvent.mockResolvedValue({
@@ -383,7 +386,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
       authorizationCode: "retrieved-auth-code",
     });
   });
-
   test("acks completed duplicates without provider work", async () => {
     const context = fixture();
     context.eventRepository.claimEvent.mockResolvedValue({ state: "completed" });
@@ -391,7 +393,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     expect(context.accessTokens.getComponentAccessToken).not.toHaveBeenCalled();
     expect(context.openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
   });
-
   test("short-polls busy deliveries and returns stable 503 while still processing", async () => {
     const context = fixture();
     context.eventRepository.claimEvent.mockResolvedValue({ state: "busy" });
@@ -402,7 +403,6 @@ describe("DouyinAuthorizationEventsService delivery handling", () => {
     expect(context.eventRepository.findEventState.mock.calls.length).toBeGreaterThan(0);
     expect(context.openPlatform.exchangeAuthorizationCode).not.toHaveBeenCalled();
   });
-
   test("acks a busy delivery when polling observes completion", async () => {
     const context = fixture();
     context.eventRepository.claimEvent.mockResolvedValue({ state: "busy" });

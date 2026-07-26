@@ -8,6 +8,7 @@ import {
   type GenerateAuthorizationLinkInput,
   type GenerateAuthorizationLinkResult,
 } from "./authorization-link";
+import { assertAuthorizationCodeUsable } from "./authorization-token";
 import {
   DouyinMiniappReleaseClient,
   SafeDouyinLogIdSchema,
@@ -38,7 +39,6 @@ export type {
   UploadTemplateVersionInput,
   UploadTemplateVersionResult,
 } from "./release-client";
-
 const REQUEST_TIMEOUT_MS = 10_000;
 const EXPIRED_ACCESS_TOKEN_ERROR = 28_001_008;
 const RETRIEVE_AUTHORIZATION_EXPIRED_ERRORS = new Set([40_004, 40_022]);
@@ -47,7 +47,6 @@ const AUTHORIZER_TOKEN_URL = "https://open.douyin.com/api/tpapp/v2/auth/get_auth
 const RETRIEVE_AUTH_CODE_URL = "https://open.douyin.com/api/tpapp/v2/auth/retrieve_auth_code/";
 const MERCHANT_CODE2SESSION_URL = "https://open.douyin.com/api/apps/v1/microapp/code2session/";
 const TEMPLATE_CODE2SESSION_URL = "https://developer.toutiao.com/api/apps/v2/jscode2session";
-
 const JsonObjectSchema = z.looseObject({});
 const SafeLogSchema = z.looseObject({ log_id: SafeDouyinLogIdSchema.optional() });
 const ComponentSuccessSchema = z.looseObject({
@@ -342,6 +341,7 @@ export class DouyinOpenPlatformClient
       method: "GET",
       headers: { "access-token": accessToken },
     });
+    assertAuthorizationCodeUsable(body, queryInput.grant_type ?? "");
     assertOpenApiSuccess(body);
     const parsed = AuthorizerSuccessSchema.safeParse(body);
     if (!parsed.success) throw invalidResponseError(safeLogId(body));

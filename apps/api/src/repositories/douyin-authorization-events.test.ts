@@ -85,6 +85,21 @@ describe("DouyinAuthorizationEventsRepository", () => {
     });
   });
 
+  test("attaches only the authorization-code digest through the atomic RPC", async () => {
+    const fixture = client(true);
+    await expect(new Repository(fixture.client).attachAuthorizationCodeDigest({
+      eventKey: EVENT_KEY,
+      authorizationCodeDigest: "d".repeat(64),
+    })).resolves.toBe(true);
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      "attach_douyin_authorization_event_code_digest",
+      {
+        p_event_key: EVENT_KEY,
+        p_authorization_code_digest: "d".repeat(64),
+      },
+    );
+  });
+
   test("passes distinct event keys and authorizers independently to the atomic claim RPC", async () => {
     const fixture = client([{
       claim_state: "busy", claim_token: null, claim_expires_at: null,

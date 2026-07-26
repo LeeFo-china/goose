@@ -45,6 +45,10 @@ export interface DouyinAuthorizationEventRepository {
     readonly authorizerAppId: string | null;
     readonly occurredAt: string;
   }): Promise<DouyinAuthorizationEventClaim>;
+  attachAuthorizationCodeDigest(input: {
+    readonly eventKey: string;
+    readonly authorizationCodeDigest: string;
+  }): Promise<boolean>;
   findEventState(eventKey: string): Promise<"processing" | "completed" | null>;
   completeTicketEvent(input: {
     readonly eventKey: string;
@@ -115,6 +119,16 @@ implements DouyinAuthorizationEventRepository {
     const parsed = EventStateSchema.safeParse(result.data);
     if (!parsed.success) throw invalidResponseError();
     return parsed.data;
+  }
+
+  async attachAuthorizationCodeDigest(input: {
+    readonly eventKey: string;
+    readonly authorizationCodeDigest: string;
+  }): Promise<boolean> {
+    return this.complete("attach_douyin_authorization_event_code_digest", {
+      p_event_key: input.eventKey,
+      p_authorization_code_digest: input.authorizationCodeDigest,
+    });
   }
 
   async completeTicketEvent(
