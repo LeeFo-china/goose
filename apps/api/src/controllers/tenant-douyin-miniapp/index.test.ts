@@ -46,14 +46,27 @@ function createController() {
       authorizer_appid: "tt-authorizer",
     })),
   };
+  const releases = {
+    list: mock(async () => ({ list: [], pagination: {
+      page: 1, pageSize: 20, total: 0, totalPages: 0,
+    } })),
+    getTestQr: mock(async () => ({ id: "release-id", status: "testing" })),
+    submitAudit: mock(async () => ({
+      id: "release-id", status: "audit_pending",
+    })),
+    syncStatus: mock(async () => ({
+      id: "release-id", status: "audit_approved",
+    })),
+  };
   const controller = new Controller(
     workspace as never,
     () => authorization as never,
+    async () => releases as never,
   );
   (
     controller as unknown as Record<string, unknown>
   ).getRequiredTenantContext = mock(async () => authContext);
-  return { controller, workspace, authorization };
+  return { controller, workspace, authorization, releases };
 }
 
 describe("TenantDouyinMiniappController", () => {
@@ -89,6 +102,19 @@ describe("TenantDouyinMiniappController", () => {
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/authorization-callback",
+      },
+      { method: "GET", path: "/tenant/douyin-miniapp/releases" },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/:releaseId/test-qr",
+      },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/:releaseId/submit-audit",
+      },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/:releaseId/sync-status",
       },
     ]);
   });
@@ -141,5 +167,52 @@ describe("TenantDouyinMiniappController", () => {
     await expect(controller.completeAuthorization({
       body: { ...body, intent: "short" },
     } as never)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test("lists tenant releases with bounded pagination", async () => {
+    const { controller, releases } = createController();
+    await controller.listReleases({
+      query: { page: "1", pageSize: "20" },
+    } as never);
+    expect(releases.list).toHaveBeenCalledWith(
+      authContext,
+      { page: 1, pageSize: 20 },
+    );
+    await expect(controller.listReleases({
+      query: { page: "1", pageSize: "101" },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  test("validates and delegates tenant release actions without publish", async () => {
+    const { controller, releases } = createController();
+    const params = { releaseId: "77777777-7777-4777-8777-777777777777" };
+
+    await controller.getReleaseTestQr({ params, body: {} } as never);
+    await controller.submitReleaseAudit({
+      params,
+      body: {
+        host_names: ["douyin.com"],
+        audit_note: "装修行业租户联调版本",
+      },
+    } as never);
+    await controller.syncReleaseStatus({ params, body: {} } as never);
+
+    expect(releases.getTestQr).toHaveBeenCalledWith(
+      authContext,
+      params.releaseId,
+    );
+    expect(releases.submitAudit).toHaveBeenCalledWith(
+      authContext,
+      params.releaseId,
+      {
+        host_names: ["douyin.com"],
+        audit_note: "装修行业租户联调版本",
+      },
+    );
+    expect(releases.syncStatus).toHaveBeenCalledWith(
+      authContext,
+      params.releaseId,
+    );
+    expect("publishRelease" in controller).toBe(false);
   });
 });

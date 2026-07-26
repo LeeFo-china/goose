@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { DouyinRuntimeConfigSchema } from "@/schema/platform-douyin-miniapps";
+import {
+  DouyinRuntimeConfigSchema,
+  SubmitPlatformDouyinMiniappReleaseAuditSchema,
+} from "@/schema/platform-douyin-miniapps";
 import { TenantServiceProviderProfileStatusSchema } from "@/schema/tenant-onboarding";
 
 const DateTimeSchema = z.iso.datetime({ offset: true });
@@ -24,6 +27,17 @@ export const TenantDouyinAuthorizationCallbackSchema = z.strictObject({
   authorization_code: z.string().min(8).max(4096),
   expires_in: z.coerce.number().int().positive().max(7200),
 });
+
+export const TenantDouyinReleaseListQuerySchema = z.strictObject({
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+export const TenantDouyinReleaseParamsSchema = z.strictObject({
+  releaseId: z.uuid("无效的抖音小程序发布记录 ID"),
+});
+export const TenantDouyinReleaseEmptyObjectSchema = z.strictObject({});
+export const TenantDouyinSubmitReleaseAuditSchema =
+  SubmitPlatformDouyinMiniappReleaseAuditSchema;
 
 export const TenantDouyinAuthorizationStateSchema = z.enum([
   "unbound",

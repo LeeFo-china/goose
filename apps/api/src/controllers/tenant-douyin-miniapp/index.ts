@@ -3,11 +3,19 @@ import { Errors } from "@/errors/error-factory";
 import {
   TenantDouyinAuthorizationCallbackSchema,
   TenantDouyinAuthorizationLinkSchema,
+  TenantDouyinReleaseEmptyObjectSchema,
+  TenantDouyinReleaseListQuerySchema,
+  TenantDouyinReleaseParamsSchema,
+  TenantDouyinSubmitReleaseAuditSchema,
 } from "@/schema/tenant-douyin-miniapp";
 import {
   getTenantDouyinMiniappAuthorizationService,
   type TenantDouyinMiniappAuthorizationService,
 } from "@/services/tenant-douyin-miniapp/authorization";
+import {
+  getTenantDouyinMiniappReleasesService,
+  type TenantDouyinMiniappReleasesService,
+} from "@/services/tenant-douyin-miniapp/releases";
 import {
   tenantDouyinMiniappWorkspaceService,
   type TenantDouyinMiniappWorkspaceService,
@@ -25,6 +33,11 @@ type AuthorizationServicePort = Pick<
   "startAuthorization" | "completeAuthorizationCallback"
 >;
 type AuthorizationServiceProvider = () => AuthorizationServicePort;
+type ReleaseServicePort = Pick<
+  TenantDouyinMiniappReleasesService,
+  "list" | "getTestQr" | "submitAudit" | "syncStatus"
+>;
+type ReleaseServiceProvider = () => Promise<ReleaseServicePort>;
 
 export class TenantDouyinMiniappController extends TenantBaseController {
   constructor(
@@ -32,6 +45,8 @@ export class TenantDouyinMiniappController extends TenantBaseController {
       tenantDouyinMiniappWorkspaceService,
     private readonly authorizationProvider: AuthorizationServiceProvider =
       getTenantDouyinMiniappAuthorizationService,
+    private readonly releaseProvider: ReleaseServiceProvider =
+      getTenantDouyinMiniappReleasesService,
   ) {
     super("tenant-douyin-miniapp");
   }
@@ -69,6 +84,71 @@ export class TenantDouyinMiniappController extends TenantBaseController {
         bodyResult.data,
       ),
     );
+  }
+
+  @Get("/tenant/douyin-miniapp/releases")
+  async listReleases(request: FastifyRequest) {
+    const queryResult = TenantDouyinReleaseListQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const authContext = await this.getRequiredTenantContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.list(authContext, queryResult.data),
+    );
+  }
+
+  @Post("/tenant/douyin-miniapp/releases/:releaseId/test-qr")
+  async getReleaseTestQr(request: FastifyRequest) {
+    const { authContext, releaseId } = await this.releaseActionContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.getTestQr(authContext, releaseId),
+    );
+  }
+
+  @Post("/tenant/douyin-miniapp/releases/:releaseId/submit-audit")
+  async submitReleaseAudit(request: FastifyRequest) {
+    const paramsResult = TenantDouyinReleaseParamsSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = TenantDouyinSubmitReleaseAuditSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const authContext = await this.getRequiredTenantContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.submitAudit(
+        authContext,
+        paramsResult.data.releaseId,
+        bodyResult.data,
+      ),
+    );
+  }
+
+  @Post("/tenant/douyin-miniapp/releases/:releaseId/sync-status")
+  async syncReleaseStatus(request: FastifyRequest) {
+    const { authContext, releaseId } = await this.releaseActionContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.syncStatus(authContext, releaseId),
+    );
+  }
+
+  private async releaseActionContext(request: FastifyRequest) {
+    const paramsResult = TenantDouyinReleaseParamsSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = TenantDouyinReleaseEmptyObjectSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const authContext = await this.getRequiredTenantContext(request);
+    return { authContext, releaseId: paramsResult.data.releaseId };
   }
 }
 
