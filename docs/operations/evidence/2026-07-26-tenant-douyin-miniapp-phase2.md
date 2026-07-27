@@ -328,3 +328,58 @@ cd67 授权域名/权限集/测试列表和 d301 主体认证/基本信息的控
 仓库稳定测试仍有一项既有 release contract 基线失败：测试固定期待 15 个待处理显式
 事务 migration，而当前工作树实际有 35 个。该失败与本次抖音提审状态机改动无关，
 本次未修改 migration 或 release contract。
+
+### 9.5 开发 API 发布
+
+旧提审记录自愈修复已发布到开发 API：
+
+- Git SHA：`8c0907d330da65c7aef39e120783a12dd4fa3596`；
+- Release Dev run：`30230965862`；
+- API 镜像构建：通过；
+- development migration history 门禁：通过；
+- API-only 开发部署与健康检查：通过；
+- Web、Admin 和 social-video-worker 未构建、未部署；
+- 未执行 migration、db push、repair 或手工数据库写入。
+
+### 9.6 0.1.2 受控提审结果
+
+第一次租户提审请求在 Gooes 前置门禁返回：
+
+- HTTP：`409`；
+- code：`DOUYIN_TENANT_AUDIT_PREFLIGHT_INCOMPLETE`；
+- message：`请先发布公开资料并生成体验二维码`。
+
+只读核对确认公开资料已发布，实际阻断是原体验二维码 URL 已过期：
+
+- 原二维码到期 epoch：`1785079835`；
+- 核对时 epoch：`1785117778`；
+- 原二维码约已过期 10.5 小时。
+
+随后仅刷新一次 0.1.2 体验二维码，新 URL 有效期核验通过，再仅调用一次抖音提审。
+抖音返回：
+
+- HTTP：`502`；
+- code：`DOUYIN_OPEN_PLATFORM_API_ERROR`；
+- log ID：`202607271003368A0550321848F8C50DBA`。
+
+失败后的 release 状态已只读核对：
+
+- status：`testing`；
+- `audit_host_names`：空；
+- `audit_note`：空；
+- `submitted_at`：空；
+- `audit_result.error_code`：`DOUYIN_OPEN_PLATFORM_API_ERROR`；
+- 操作锁已释放。
+
+这证明本次状态机修复已生效：抖音明确拒绝后不再留下永久阻塞的审核意图；本次没有
+盲目重试。
+
+官方提审接口错误表新增确认的前置项包括：
+
+- `11312`：小程序未配置或未更新隐私协议；
+- `11317`：未预设主营类目；
+- `11306`：名称、简介、图标或至少一个通过的服务类目未完成。
+
+Chrome 只读证据显示 d301 的隐私协议为“未设置”，类目仅为“资质通过”且尚未
+“发布上线”。官方类目文档要求审核通过的类目在类目管理页执行“发布上线”，然后才
+能用于代码提审。因此，在完成隐私协议和类目上线前，不再重试 0.1.2 提审。
