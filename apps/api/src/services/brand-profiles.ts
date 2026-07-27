@@ -13,7 +13,10 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { mapBrandProfileMutationError } from "@/services/brand-profile-errors";
 import { assertValidBrandLogoFile } from "@/services/branding-file-policy";
-import { serializeBrandProfile } from "@/services/branding-contracts";
+import {
+  serializeBrandProfile,
+  serializeTenantBrandingEntitlementSummary,
+} from "@/services/branding-contracts";
 import { tenantEntitlementsService } from "@/services/tenant-entitlements";
 
 type BrandingRepositoryPort = Pick<
@@ -123,7 +126,9 @@ export class BrandProfilesService {
 
     return {
       profile: await this.serializeTenantProfile(profile, tenantId),
-      entitlement: summary?.entitlement ?? null,
+      entitlement: serializeTenantBrandingEntitlementSummary(
+        summary?.entitlement ?? null,
+      ),
       can_customize: canCustomize,
     };
   }
@@ -133,10 +138,11 @@ export class BrandProfilesService {
     input: BrandingDraftInput,
   ) {
     const { tenantId, employeeId } = this.requireTenantEmployee(authContext);
-    await this.tenantEntitlementsService.assertCanCustomize(
-      authContext,
-      this.nowFactory(),
-    );
+    const customization =
+      await this.tenantEntitlementsService.assertCanCustomize(
+        authContext,
+        this.nowFactory(),
+      );
     const file = await this.requireTenantFile(input.logo_file_id, tenantId);
     const profile = await this.saveDraft({
       scope: "tenant",
@@ -146,7 +152,13 @@ export class BrandProfilesService {
       expectedVersion: input.version,
       actorEmployeeId: employeeId,
     });
-    return { profile: serializeBrandProfile(profile, file.public_url) };
+    return {
+      profile: serializeBrandProfile(profile, file.public_url),
+      entitlement: serializeTenantBrandingEntitlementSummary(
+        customization.entitlement,
+      ),
+      can_customize: true,
+    };
   }
 
   async publishTenant(
@@ -154,10 +166,11 @@ export class BrandProfilesService {
     input: BrandingPublishInput,
   ) {
     const { tenantId, employeeId } = this.requireTenantEmployee(authContext);
-    await this.tenantEntitlementsService.assertCanCustomize(
-      authContext,
-      this.nowFactory(),
-    );
+    const customization =
+      await this.tenantEntitlementsService.assertCanCustomize(
+        authContext,
+        this.nowFactory(),
+      );
     const draft = await this.findTenantProfile(tenantId);
     assertCompleteDraft(draft);
     const file = await this.requireTenantFile(draft.logo_file_id, tenantId);
@@ -167,7 +180,13 @@ export class BrandProfilesService {
       expectedVersion: input.version,
       actorEmployeeId: employeeId,
     });
-    return { profile: serializeBrandProfile(profile, file.public_url) };
+    return {
+      profile: serializeBrandProfile(profile, file.public_url),
+      entitlement: serializeTenantBrandingEntitlementSummary(
+        customization.entitlement,
+      ),
+      can_customize: true,
+    };
   }
 
   private requirePlatformEmployee(authContext: AuthContext): string {

@@ -779,8 +779,9 @@ platform/tenant mutations and reads stay protected.
 - [ ] **Step 2: Run RED**
 
 ```bash
-bun test apps/api/src/controllers/branding/routes.test.ts \
-  apps/api/src/plugins/auth/legacy/routes.test.ts
+cd apps/api
+bun test src/controllers/branding/routes.test.ts \
+  src/plugins/auth/legacy/routes.test.ts
 ```
 
 - [ ] **Step 3: Implement the controller**
@@ -869,21 +870,22 @@ git commit -m "docs(branding): 增加批次A联调契约"
 - [ ] **Step 1: Run focused tests**
 
 ```bash
-bun test packages/domain/src/permission.test.ts \
-  apps/api/src/schema/branding.test.ts \
-  apps/api/src/repositories/branding.test.ts \
-  apps/api/src/repositories/tenant-entitlements.test.ts \
-  apps/api/src/services/branding-migration-contract.test.ts \
-  apps/api/src/services/branding-contracts.test.ts \
-  apps/api/src/services/branding-image-metadata.test.ts \
-  apps/api/src/services/branding-file-policy.test.ts \
-  apps/api/src/services/tenant-entitlements.test.ts \
-  apps/api/src/services/brand-profiles.test.ts \
-  apps/api/src/services/effective-branding.test.ts \
-  apps/api/src/controllers/branding/routes.test.ts \
-  apps/api/src/controllers/uploads \
-  apps/api/src/plugins/auth/legacy/routes.test.ts \
-  scripts/verify-branding-tenant-isolation.test.ts
+cd apps/api
+bun test ../../packages/domain/src/permission.test.ts \
+  src/schema/branding.test.ts \
+  src/repositories/branding.test.ts \
+  src/repositories/tenant-entitlements.test.ts \
+  src/services/branding-migration-contract.test.ts \
+  src/services/branding-contracts.test.ts \
+  src/services/branding-image-metadata.test.ts \
+  src/services/branding-file-policy.test.ts \
+  src/services/tenant-entitlements.test.ts \
+  src/services/brand-profiles.test.ts \
+  src/services/effective-branding.test.ts \
+  src/controllers/branding/routes.test.ts \
+  src/controllers/uploads \
+  src/plugins/auth/legacy/routes.test.ts \
+  ../../scripts/verify-branding-tenant-isolation.test.ts
 ```
 
 Expected: all pass with no warnings.

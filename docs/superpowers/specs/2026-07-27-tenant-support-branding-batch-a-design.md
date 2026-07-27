@@ -306,8 +306,8 @@ unreferenced，供后续延迟清理任务处理。
 
 ```json
 {
-  "success": true,
-  "data": {}
+  "data": {},
+  "message": "success"
 }
 ```
 

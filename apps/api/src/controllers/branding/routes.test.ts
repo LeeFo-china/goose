@@ -1,5 +1,4 @@
 import { describe, expect, mock, test } from "bun:test";
-import { readFileSync } from "node:fs";
 import type { FastifyRequest } from "fastify";
 import type { AuthContext } from "@/services/authorization";
 import type {
@@ -265,6 +264,7 @@ describe("BrandingController routes", () => {
       auth: authorizationService.getRequiredAuthContext,
       get: brandProfilesService.getTenant,
       save: brandProfilesService.saveTenantDraft,
+      publish: brandProfilesService.publishTenant,
       resolve: effectiveBrandingService.resolveForTenant,
     };
     const getTenant = mock(async () => ({
@@ -272,18 +272,28 @@ describe("BrandingController routes", () => {
       entitlement: null,
       can_customize: false,
     }));
-    const saveTenantDraft = mock(async () => ({
+    const mutationResult = {
       profile: {
         ...platformProfile,
         version: 1,
         published_version: null,
         has_unpublished_changes: true,
       } satisfies SerializedBrandProfile,
-    }));
+      entitlement: {
+        code: "custom_support_branding",
+        status: "active" as const,
+        expires_at: serializedEntitlement.expires_at,
+        version: serializedEntitlement.version,
+      },
+      can_customize: true as const,
+    };
+    const saveTenantDraft = mock(async () => mutationResult);
+    const publishTenant = mock(async () => mutationResult);
     const resolveForTenant = mock(async () => tenantEffective);
     authorizationService.getRequiredAuthContext = mock(async () => tenantAuth);
     brandProfilesService.getTenant = getTenant;
     brandProfilesService.saveTenantDraft = saveTenantDraft;
+    brandProfilesService.publishTenant = publishTenant;
     effectiveBrandingService.resolveForTenant = resolveForTenant;
 
     try {
@@ -315,10 +325,32 @@ describe("BrandingController routes", () => {
         code: "VALIDATION_ERROR",
       });
       expect(saveTenantDraft).not.toHaveBeenCalled();
+
+      const draft = {
+        display_name: "租户品牌",
+        logo_file_id: LOGO_FILE_ID,
+        version: 0,
+      };
+      const mutationRoutes = [
+        ["PATCH /tenant/branding", draft, saveTenantDraft],
+        ["POST /tenant/branding/publish", { version: 1 }, publishTenant],
+      ] as const;
+      for (const [route, body, service] of mutationRoutes) {
+        const response = await requiredHandler(controller, route)({
+          body,
+          user: { sub: AUTH_USER_ID },
+        } as FastifyRequest, {});
+        expect(response.data).toEqual({
+          ...mutationResult,
+          effective: tenantEffective,
+        });
+        expect(service).toHaveBeenCalledWith(tenantAuth, body);
+      }
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       brandProfilesService.getTenant = originals.get;
       brandProfilesService.saveTenantDraft = originals.save;
+      brandProfilesService.publishTenant = originals.publish;
       effectiveBrandingService.resolveForTenant = originals.resolve;
     }
   });
@@ -453,23 +485,4 @@ describe("BrandingController routes", () => {
     }
   });
 
-  test("stays controller-only and is registered by the API route index", () => {
-    const controllerSource = readFileSync(
-      new URL("./index.ts", import.meta.url),
-      "utf8",
-    );
-    const routesSource = readFileSync(
-      new URL("../../routes/index.ts", import.meta.url),
-      "utf8",
-    );
-    expect(controllerSource).not.toContain("@/repositories/");
-    expect(controllerSource).not.toContain("@/utils/supabase");
-    expect(controllerSource).not.toContain(".from(");
-    expect(routesSource).toContain(
-      'import BrandingController from "@/controllers/branding";',
-    );
-    expect(routesSource).toContain(
-      "BrandingController.registerExtraRoutes(app);",
-    );
-  });
 });

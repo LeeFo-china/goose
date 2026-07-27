@@ -153,15 +153,11 @@ export type FixtureOptions = {
   customizeFailure?: unknown;
 };
 
+type BrandProfilesServiceConstructor =
+  typeof import("./brand-profiles")["BrandProfilesService"];
+
 export function createFixture(
-  Service: new (dependencies: never) => {
-    getPlatform(authContext: AuthContext): Promise<unknown>;
-    savePlatformDraft(authContext: AuthContext, input: unknown): Promise<unknown>;
-    publishPlatform(authContext: AuthContext, input: unknown): Promise<unknown>;
-    getTenant(authContext: AuthContext): Promise<unknown>;
-    saveTenantDraft(authContext: AuthContext, input: unknown): Promise<unknown>;
-    publishTenant(authContext: AuthContext, input: unknown): Promise<unknown>;
-  },
+  Service: BrandProfilesServiceConstructor,
   options: FixtureOptions = {},
 ) {
   const resolvedPlatformProfile = options.platformProfile === undefined

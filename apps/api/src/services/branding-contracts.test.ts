@@ -6,6 +6,7 @@ import {
   isEntitlementActive,
   serializeBrandProfile,
   serializeEntitlement,
+  serializeTenantBrandingEntitlementSummary,
 } from "./branding-contracts";
 import type {
   BrandProfileRecord,
@@ -98,6 +99,30 @@ describe("branding serializers", () => {
     expect("entitlement_code" in result).toBe(false);
     expect("updated_by_employee_id" in result).toBe(false);
     expect("created_at" in result).toBe(false);
+  });
+
+  test("serializes only the tenant-branding entitlement summary", () => {
+    const result = serializeTenantBrandingEntitlementSummary(
+      serializeEntitlement({
+        ...entitlement,
+        suspended_at: now.toISOString(),
+        suspend_reason: "内部核验原因",
+      }),
+    );
+
+    expect(result).toEqual({
+      code: CUSTOM_SUPPORT_BRANDING,
+      status: "active",
+      expires_at: entitlement.expires_at,
+      version: 1,
+    });
+    expect(Object.keys(result!)).toEqual([
+      "code",
+      "status",
+      "expires_at",
+      "version",
+    ]);
+    expect(serializeTenantBrandingEntitlementSummary(null)).toBeNull();
   });
 
   test("retains a null profile", () => {

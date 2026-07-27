@@ -23,9 +23,8 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-let BrandProfilesService: new (dependencies: never) => ReturnType<
-  typeof createFixture
->["service"];
+let BrandProfilesService:
+  typeof import("./brand-profiles")["BrandProfilesService"];
 
 beforeAll(async () => {
   ({ BrandProfilesService } = await import("./brand-profiles"));
@@ -169,9 +168,24 @@ describe("BrandProfilesService tenant read", () => {
           display_name: tenantProfile.display_name,
           logo_url: tenantFile.public_url,
         },
-        entitlement: summary?.entitlement ?? null,
+        entitlement: summary
+          ? {
+            code: "custom_support_branding",
+            status,
+            expires_at: entitlement.expires_at,
+            version: 1,
+          }
+          : null,
         can_customize: isActive,
       });
+      if (result.entitlement) {
+        expect(Object.keys(result.entitlement)).toEqual([
+          "code",
+          "status",
+          "expires_at",
+          "version",
+        ]);
+      }
       expect(fixture.getTenantSummary).toHaveBeenCalledWith(TENANT_ID, NOW);
       expect(fixture.assertCanCustomize).not.toHaveBeenCalled();
     },
@@ -258,14 +272,35 @@ describe("BrandProfilesService draft saves", () => {
       tenantName: OTHER_TENANT_ID,
     };
 
-    await fixture.service.saveTenantDraft(context, {
+    const result = await fixture.service.saveTenantDraft(context, {
       display_name: "晴天装饰",
       logo_file_id: FILE_ID,
       version: 0,
     });
 
+    expect(result).toMatchObject({
+      profile: { version: 1 },
+      entitlement: {
+        code: "custom_support_branding",
+        status: "active",
+        expires_at: entitlement.expires_at,
+        version: 1,
+      },
+      can_customize: true,
+    });
+    expect(result.entitlement).not.toBeNull();
+    if (result.entitlement === null) {
+      return;
+    }
+    expect(Object.keys(result.entitlement)).toEqual([
+      "code",
+      "status",
+      "expires_at",
+      "version",
+    ]);
     expect(fixture.assertTenantContext).toHaveBeenCalledWith(context);
     expect(fixture.assertCanCustomize).toHaveBeenCalledWith(context, NOW);
+    expect(fixture.getTenantSummary).not.toHaveBeenCalled();
     expect(fixture.findTenantBrandLogoForBinding)
       .toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     expect(fixture.saveDraft).toHaveBeenCalledWith({
@@ -352,7 +387,16 @@ describe("BrandProfilesService publish", () => {
         published_version: tenantProfile.version,
         has_unpublished_changes: false,
       },
+      entitlement: {
+        code: "custom_support_branding",
+        status: "active",
+        expires_at: entitlement.expires_at,
+        version: 1,
+      },
+      can_customize: true,
     });
+    expect(fixture.assertCanCustomize).toHaveBeenCalledTimes(1);
+    expect(fixture.getTenantSummary).not.toHaveBeenCalled();
     expect(fixture.findTenantProfile).toHaveBeenCalledWith(TENANT_ID);
     expect(fixture.findTenantBrandLogoForBinding)
       .toHaveBeenCalledWith(FILE_ID, TENANT_ID);

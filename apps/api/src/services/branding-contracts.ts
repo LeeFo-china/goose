@@ -41,6 +41,13 @@ export interface SerializedEntitlement {
   updated_at: string;
 }
 
+export interface TenantBrandingEntitlementSummary {
+  code: string;
+  status: EntitlementStatus;
+  expires_at: string;
+  version: number;
+}
+
 export type BrandProfileScope = "platform" | "tenant";
 export type BrandProfileStatus = "draft" | "published" | "disabled";
 
@@ -113,6 +120,18 @@ export function serializeEntitlement(
     suspend_reason: entitlement.suspend_reason,
     version: entitlement.version,
     updated_at: entitlement.updated_at,
+  };
+}
+
+export function serializeTenantBrandingEntitlementSummary(
+  entitlement: SerializedEntitlement | null,
+): TenantBrandingEntitlementSummary | null {
+  if (!entitlement) return null;
+  return {
+    code: entitlement.code,
+    status: entitlement.status,
+    expires_at: entitlement.expires_at,
+    version: entitlement.version,
   };
 }
 
