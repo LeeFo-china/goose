@@ -45,6 +45,8 @@ function createCosClient(input: {
   headEtag?: string | null;
   headError?: unknown;
   getBody?: unknown;
+  getEtag?: string | null;
+  getHeaders?: Record<string, unknown>;
   getError?: unknown;
 }) {
   const headObject = mock(async () => {
@@ -61,7 +63,8 @@ function createCosClient(input: {
     if (input.getError) throw input.getError;
     return {
       Body: input.getBody === undefined ? input.body : input.getBody,
-      ETag: '"etag-1"',
+      ETag: input.getEtag === undefined ? '"etag-1"' : input.getEtag,
+      headers: input.getHeaders,
     };
   });
   return {
@@ -81,6 +84,8 @@ function verify(input: {
   headEtag?: string | null;
   headError?: unknown;
   getBody?: unknown;
+  getEtag?: string | null;
+  getHeaders?: Record<string, unknown>;
   getError?: unknown;
 }) {
   const body = input.body ?? validPng;
@@ -91,6 +96,8 @@ function verify(input: {
     headEtag: input.headEtag,
     headError: input.headError,
     getBody: input.getBody,
+    getEtag: input.getEtag,
+    getHeaders: input.getHeaders,
     getError: input.getError,
   });
   return {
@@ -158,6 +165,69 @@ describe("verifyBrandLogoCosObject authoritative metadata", () => {
     await expectInvalid({ headEtag: null });
     await expectInvalid({ clientEtag: '"client-etag"' });
   });
+
+  test("rejects an object replaced between HEAD and GET", async () => {
+    const cos = await expectInvalid({
+      headEtag: '"etag-old"',
+      getEtag: '"etag-new"',
+    });
+
+    expect(cos.getObject).toHaveBeenCalledWith(expect.objectContaining({
+      IfMatch: '"etag-old"',
+    }));
+  });
+
+  test("maps a COS 412 response to the bounded branding error", async () => {
+    const cos = await expectInvalid({
+      headEtag: '"etag-old"',
+      getError: {
+        statusCode: 412,
+        code: "PreconditionFailed",
+        RequestId: "sensitive-request-id",
+      },
+    });
+
+    expect(cos.getObject).toHaveBeenCalledWith(expect.objectContaining({
+      IfMatch: '"etag-old"',
+    }));
+  });
+
+  test("rejects GET responses without an authoritative ETag", async () => {
+    await expectInvalid({ getEtag: null });
+  });
+
+  test("accepts a matching GET ETag from response headers", async () => {
+    const { result } = verify({
+      getEtag: null,
+      getHeaders: { ETag: '"etag-1"' },
+    });
+
+    await expect(result).resolves.toMatchObject({ etag: "etag-1" });
+  });
+
+  test("canonicalizes an unquoted strong HEAD ETag for If-Match", async () => {
+    const { result, cos } = verify({
+      headEtag: " etag-1 ",
+      getEtag: '"etag-1"',
+      clientEtag: '"etag-1"',
+    });
+
+    await expect(result).resolves.toMatchObject({ etag: "etag-1" });
+    expect(cos.getObject).toHaveBeenCalledWith(expect.objectContaining({
+      IfMatch: '"etag-1"',
+    }));
+  });
+
+  test.each([
+    ["HEAD", { headEtag: 'W/"etag-1"' }],
+    ["GET field", { getEtag: 'W/"etag-1"' }],
+    ["GET header", {
+      getEtag: null,
+      getHeaders: { etag: 'W/"etag-1"' },
+    }],
+  ])("rejects weak %s ETags", async (_name, input) => {
+    await expectInvalid(input);
+  });
 });
 
 describe("verifyBrandLogoCosObject bounded content validation", () => {
@@ -169,6 +239,7 @@ describe("verifyBrandLogoCosObject bounded content validation", () => {
       Bucket: "bucket",
       Region: "ap-guangzhou",
       Key: OBJECT_KEY,
+      IfMatch: '"etag-1"',
       Range: `bytes=0-${MAX_SIZE_BYTES}`,
     });
   });

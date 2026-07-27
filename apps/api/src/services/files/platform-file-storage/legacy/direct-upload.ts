@@ -1,6 +1,6 @@
 import { ErrorCodes, Errors, getFilenameFromObjectKey, getMimeTypeFromObjectKey, normalizeEtag, platformFileObjectRepository, resolveStoredFileUrl } from "./shared";
 import type { CompleteDirectUploadInput, DirectUploadInput, RegisterExistingCosObjectInput } from "./shared";
-import { buildTenantOnboardingLicenseVisitorPrefix } from "./paths";
+import { buildTenantOnboardingLicenseVisitorPrefix } from "./object-owner-prefixes";
 import {
   createPrivateUploadIntent,
   normalizePrivateUploadMimeType,

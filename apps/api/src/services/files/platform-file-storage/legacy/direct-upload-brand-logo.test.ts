@@ -53,17 +53,25 @@ function brandLogoInput(
   };
 }
 
-function storageContext(body: unknown = validPng) {
+function storageContext(
+  body: unknown = validPng,
+  input: {
+    headEtag?: string;
+    getEtag?: string | null;
+  } = {},
+) {
   const headObject = mock(async () => ({
     headers: {
       "content-length": String(validPng.length),
       "content-type": "image/png",
     },
-    ETag: '"etag-brand-logo"',
+    ETag: input.headEtag ?? '"etag-brand-logo"',
   }));
   const getObject = mock(async () => ({
     Body: body,
-    ETag: '"etag-brand-logo"',
+    ETag: input.getEtag === undefined
+      ? '"etag-brand-logo"'
+      : input.getEtag,
   }));
   return {
     headObject,
@@ -198,6 +206,27 @@ describe("brand logo direct upload completion", () => {
       statusCode: 400,
       code: "BRANDING_LOGO_FILE_INVALID",
     });
+    expect(createOrFindByObjectKey).not.toHaveBeenCalled();
+  });
+
+  test("does not register an object replaced after HEAD", async () => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context, getObject } = storageContext(validPng, {
+      headEtag: '"etag-old"',
+      getEtag: '"etag-new"',
+    });
+
+    await expect(registerExistingCosObject.call(
+      context,
+      brandLogoInput(),
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "BRANDING_LOGO_FILE_INVALID",
+      details: undefined,
+    });
+    expect(getObject).toHaveBeenCalledWith(expect.objectContaining({
+      IfMatch: '"etag-old"',
+    }));
     expect(createOrFindByObjectKey).not.toHaveBeenCalled();
   });
 

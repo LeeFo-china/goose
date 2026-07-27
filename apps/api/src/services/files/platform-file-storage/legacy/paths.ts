@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Errors, getFileExtension, joinPublicUrl, trimSlashes } from "./shared";
 import type {
   PlatformFileProvider,
@@ -6,6 +6,15 @@ import type {
   PlatformUploadScene,
   UploadImageInput,
 } from "./shared";
+import {
+  buildSupplierBusinessLicenseEmployeePrefix,
+  buildTenantOnboardingLicenseVisitorPrefix,
+} from "./object-owner-prefixes";
+
+export {
+  buildSupplierBusinessLicenseEmployeePrefix,
+  buildTenantOnboardingLicenseVisitorPrefix,
+} from "./object-owner-prefixes";
 
 export function buildLegacyObjectPath(this: any, input: {
   scene: PlatformUploadScene;
@@ -80,32 +89,6 @@ export function buildCosObjectKey(this: any, input: Pick<
     : "unassigned";
 
   return `${tenantPrefix}/${scene}/${projectSegment}/${year}/${month}/${day}/${randomUUID()}${extension}`;
-}
-
-export function buildSupplierBusinessLicenseEmployeePrefix(
-  employeeId: string | null | undefined,
-) {
-  const normalizedEmployeeId = employeeId?.trim();
-  if (!normalizedEmployeeId) {
-    throw Errors.forbidden();
-  }
-  const employeeHash = createHash("sha256")
-    .update(normalizedEmployeeId)
-    .digest("hex");
-  return `private/supplier-business-license/employees/${employeeHash}/`;
-}
-
-export function buildTenantOnboardingLicenseVisitorPrefix(
-  visitorId: string | null | undefined,
-) {
-  const normalizedVisitorId = visitorId?.trim();
-  if (!normalizedVisitorId) {
-    throw Errors.forbidden();
-  }
-  const visitorHash = createHash("sha256")
-    .update(normalizedVisitorId)
-    .digest("hex");
-  return `private/tenant-onboarding-license/visitors/${visitorHash}/`;
 }
 
 export function buildCosPublicUrl(this: any, input: {

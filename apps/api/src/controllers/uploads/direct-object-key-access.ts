@@ -3,7 +3,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   buildSupplierBusinessLicenseEmployeePrefix,
   buildTenantOnboardingLicenseVisitorPrefix,
-} from "@/services/files/platform-file-storage";
+} from "@/services/files/platform-file-storage/legacy/object-owner-prefixes";
 
 const PROJECT_REQUIRED_UPLOAD_SCENES = new Set([
   "project_log",

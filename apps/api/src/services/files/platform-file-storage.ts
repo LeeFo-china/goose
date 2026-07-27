@@ -5,7 +5,7 @@ export {
 export {
   buildSupplierBusinessLicenseEmployeePrefix,
   buildTenantOnboardingLicenseVisitorPrefix,
-} from "./platform-file-storage/legacy/paths";
+} from "./platform-file-storage/legacy/object-owner-prefixes";
 export {
   getSupplierBusinessLicenseUploadPolicy,
   getWechatPayApplymentUploadPolicy,

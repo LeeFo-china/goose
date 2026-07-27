@@ -19,6 +19,11 @@ export type VerifiedBrandLogoCosObject = {
   etag: string;
 };
 
+type StrongEtag = {
+  normalized: string;
+  ifMatch: string;
+};
+
 export function validateBrandLogoDirectUpload(input: {
   scene: string;
   visibility?: string;
@@ -66,35 +71,46 @@ export async function verifyBrandLogoCosObject(input: {
     return invalidBrandLogo();
   }
 
-  const etag = normalizeEtag(headObject.ETag) ??
-    normalizeEtag(getHeader(headObject.headers, "etag"));
-  const clientEtag = normalizeEtag(input.clientEtag);
-  if (!etag || (clientEtag && clientEtag !== etag)) {
+  const headEtag = parseStrongEtag(getResponseEtag(headObject));
+  const clientEtag = input.clientEtag?.trim()
+    ? parseStrongEtag(input.clientEtag)
+    : null;
+  if (
+    !headEtag ||
+    (input.clientEtag?.trim() && !clientEtag) ||
+    (clientEtag && clientEtag.normalized !== headEtag.normalized)
+  ) {
     return invalidBrandLogo();
   }
 
-  const bytes = await loadBoundedObject(input);
-  if (bytes.length !== contentLength) {
+  const downloaded = await loadBoundedObject({
+    ...input,
+    ifMatch: headEtag.ifMatch,
+  });
+  if (
+    downloaded.bytes.length !== contentLength ||
+    downloaded.etag !== headEtag.normalized
+  ) {
     return invalidBrandLogo();
   }
 
-  const metadata = await parseBrandLogoImageMetadata(bytes);
+  const metadata = await parseBrandLogoImageMetadata(downloaded.bytes);
   if (metadata.mimeType !== contentType) {
     return invalidBrandLogo();
   }
   assertBrandLogoImageProperties({
     mimeType: metadata.mimeType,
-    sizeBytes: bytes.length,
+    sizeBytes: downloaded.bytes.length,
     width: metadata.width,
     height: metadata.height,
   });
 
   return {
     mimeType: metadata.mimeType,
-    sizeBytes: bytes.length,
+    sizeBytes: downloaded.bytes.length,
     width: metadata.width,
     height: metadata.height,
-    etag,
+    etag: downloaded.etag,
   };
 }
 
@@ -120,12 +136,14 @@ async function loadBoundedObject(input: {
   bucket: string;
   region: string;
   objectKey: string;
-}): Promise<Buffer> {
+  ifMatch: string;
+}): Promise<{ bytes: Buffer; etag: string }> {
   try {
     const response = await input.cos.getObject({
       Bucket: input.bucket,
       Region: input.region,
       Key: input.objectKey,
+      IfMatch: input.ifMatch,
       Range: `bytes=0-${BRAND_LOGO_POLICY.maxSizeBytes}`,
     });
     if (
@@ -134,7 +152,12 @@ async function loadBoundedObject(input: {
     ) {
       return invalidBrandLogo();
     }
-    return response.Body;
+    const responseEtag = parseStrongEtag(getResponseEtag(response));
+    if (!responseEtag) return invalidBrandLogo();
+    return {
+      bytes: response.Body,
+      etag: responseEtag.normalized,
+    };
   } catch {
     return invalidBrandLogo();
   }
@@ -171,10 +194,31 @@ function normalizeContentType(value: unknown): string | null {
   return BRAND_LOGO_POLICY.mimeTypes.has(canonical) ? canonical : null;
 }
 
-function normalizeEtag(value: unknown): string | null {
-  return typeof value === "string"
-    ? value.trim().replace(/^"+|"+$/g, "") || null
-    : null;
+function getResponseEtag(response: {
+  ETag?: unknown;
+  headers?: unknown;
+}): unknown {
+  if (typeof response.ETag === "string" && response.ETag.trim()) {
+    return response.ETag;
+  }
+  return getHeader(response.headers, "etag");
+}
+
+function parseStrongEtag(value: unknown): StrongEtag | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || /^W\//i.test(trimmed)) return null;
+
+  const hasOpeningQuote = trimmed.startsWith('"');
+  const hasClosingQuote = trimmed.endsWith('"');
+  if (hasOpeningQuote !== hasClosingQuote) return null;
+  const normalized = hasOpeningQuote ? trimmed.slice(1, -1) : trimmed;
+  if (!/^[\x21\x23-\x7e]+$/.test(normalized)) return null;
+
+  return {
+    normalized,
+    ifMatch: `"${normalized}"`,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

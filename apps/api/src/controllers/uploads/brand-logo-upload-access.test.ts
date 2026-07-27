@@ -1,8 +1,20 @@
-import { describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
 
-import { assertBrandLogoUploadSceneAccess } from "./brand-logo-upload-access";
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+let assertBrandLogoUploadSceneAccess: typeof import(
+  "./brand-logo-upload-access"
+)["assertBrandLogoUploadSceneAccess"];
+
+beforeAll(async () => {
+  ({ assertBrandLogoUploadSceneAccess } = await import(
+    "./brand-logo-upload-access"
+  ));
+});
 
 const tenantContext: AuthContext = {
   authUserId: "auth-tenant",

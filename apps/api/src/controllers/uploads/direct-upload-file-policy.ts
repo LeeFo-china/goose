@@ -2,7 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   getSupplierBusinessLicenseUploadPolicy,
   getWechatPayApplymentUploadPolicy,
-} from "@/services/files/platform-file-storage";
+} from "@/services/files/platform-file-storage/legacy/direct-upload-scene-policy";
 import { assertBrandLogoUploadDeclaration } from "@/services/branding-file-policy";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
