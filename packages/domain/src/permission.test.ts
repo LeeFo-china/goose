@@ -64,6 +64,12 @@ describe("domain permissions", () => {
         module: "branding",
       },
     } as const;
+    const brandingPermissionCodes = PERMISSION_CODE_VALUES.filter(
+      (code) =>
+        code.startsWith("platform.branding.") ||
+        code.startsWith("platform.tenant_entitlement.") ||
+        code.startsWith("brand.settings."),
+    ).sort();
 
     for (const code of Object.keys(expectedPermissions) as Array<
       keyof typeof expectedPermissions
@@ -71,6 +77,18 @@ describe("domain permissions", () => {
       expect(PERMISSION_CODE_VALUES).toContain(code);
       expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
     }
+
+    expect(brandingPermissionCodes).toEqual([
+      "brand.settings.read",
+      "brand.settings.update",
+      "platform.branding.manage",
+      "platform.tenant_entitlement.manage",
+    ]);
+    expect(
+      brandingPermissionCodes.some((code) =>
+        /addon|purchase|order|refund/.test(code),
+      ),
+    ).toBe(false);
   });
 
   test("exposes receivable permissions in domain permission constants", () => {

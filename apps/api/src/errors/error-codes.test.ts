@@ -44,6 +44,14 @@ describe('OCR error codes', () => {
 
 describe('branding error codes', () => {
   test('exports the stable branding and tenant entitlement error contract', () => {
+    const brandingErrorCodeKeys = Object.keys(ErrorCodes)
+      .filter(
+        (code) =>
+          code.startsWith('BRANDING_') ||
+          code.startsWith('TENANT_ENTITLEMENT_'),
+      )
+      .sort();
+
     expect([
       ErrorCodes.BRANDING_ENTITLEMENT_REQUIRED,
       ErrorCodes.BRANDING_ENTITLEMENT_SUSPENDED,
@@ -68,6 +76,19 @@ describe('branding error codes', () => {
       'TENANT_ENTITLEMENT_NOT_FOUND',
       'TENANT_ENTITLEMENT_VERSION_CONFLICT',
       'TENANT_ENTITLEMENT_STATE_CONFLICT',
+    ]);
+    expect(brandingErrorCodeKeys).toEqual([
+      'BRANDING_ENTITLEMENT_EXPIRED',
+      'BRANDING_ENTITLEMENT_REQUIRED',
+      'BRANDING_ENTITLEMENT_REVOKED',
+      'BRANDING_ENTITLEMENT_SUSPENDED',
+      'BRANDING_LOGO_FILE_INVALID',
+      'BRANDING_LOGO_FILE_NOT_FOUND',
+      'BRANDING_PROFILE_INCOMPLETE',
+      'BRANDING_PROFILE_VERSION_CONFLICT',
+      'TENANT_ENTITLEMENT_NOT_FOUND',
+      'TENANT_ENTITLEMENT_STATE_CONFLICT',
+      'TENANT_ENTITLEMENT_VERSION_CONFLICT',
     ]);
   });
 });
