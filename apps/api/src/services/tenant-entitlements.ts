@@ -372,7 +372,7 @@ function mapEntitlementActionError(error: unknown): unknown {
   if (containsErrorCode(error, ErrorCodes.BRANDING_ENTITLEMENT_EXPIRED)) {
     return brandingEntitlementExpired(409);
   }
-  return error;
+  return Errors.dbError("租户权益操作失败");
 }
 
 function containsErrorCode(value: unknown, expected: string): boolean {

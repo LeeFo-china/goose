@@ -54,7 +54,6 @@ const tenant = {
   name: "晴天装饰",
   status: "active",
 };
-
 const entitlement = {
   id: "00000000-0000-4000-8000-000000000010",
   tenant_id: TENANT_ID,
@@ -71,7 +70,6 @@ const entitlement = {
   created_at: "2026-07-27T10:00:00.000Z",
   updated_at: "2026-07-27T10:00:00.000Z",
 } satisfies TenantEntitlementRecord;
-
 function databaseError(details: unknown) {
   return new AppError(500, "执行租户权益操作失败", "DB_ERROR", details);
 }
@@ -208,11 +206,9 @@ describe("TenantEntitlementsService platform access", () => {
 describe("TenantEntitlementsService actions", () => {
   test("grant defaults to one year and takes the actor only from AuthContext", async () => {
     const fixture = createFixture({ current: null });
-
     await fixture.service.grant(platformAuthContext, TENANT_ID, {
       reason: "平台赠送一年品牌权益",
     });
-
     expect(fixture.applyAction).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       entitlementCode: "custom_support_branding",
@@ -233,7 +229,6 @@ describe("TenantEntitlementsService actions", () => {
         details: "TENANT_ENTITLEMENT_STATE_CONFLICT",
       }),
     });
-
     await expect(fixture.service.grant(
       platformAuthContext,
       TENANT_ID,
@@ -257,7 +252,6 @@ describe("TenantEntitlementsService actions", () => {
       reason: "租户主动终止服务",
       confirm: true,
     });
-
     expect(fixture.applyAction).toHaveBeenNthCalledWith(1, {
       tenantId: TENANT_ID,
       entitlementCode: "custom_support_branding",
@@ -296,7 +290,6 @@ describe("TenantEntitlementsService actions", () => {
       suspend_reason: null,
     } satisfies TenantEntitlementRecord;
     const fixture = createFixture({ current: suspended, applyResult: resumed });
-
     await expect(fixture.service.resume(
       platformAuthContext,
       TENANT_ID,
@@ -401,23 +394,30 @@ describe("TenantEntitlementsService actions", () => {
       code: "TENANT_ENTITLEMENT_VERSION_CONFLICT",
     });
   });
-
-  test("keeps unknown repository errors unchanged", async () => {
-    const failure = databaseError({ code: "XX000", message: "unexpected" });
+  test("sanitizes unknown repository errors before public serialization", async () => {
+    const failure = databaseError({
+      code: "XX000",
+      message: "relation tenant_entitlements_secret does not exist",
+      details: "password=database-secret",
+      hint: "SELECT * FROM private_table",
+    });
     const fixture = createFixture({ applyFailure: failure });
-
     await expect(fixture.service.suspend(
       platformAuthContext,
       TENANT_ID,
       { version: 1, reason: "平台操作原因" },
-    )).rejects.toBe(failure);
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "租户权益操作失败",
+      details: undefined,
+    });
   });
 });
 
 describe("TenantEntitlementsService tenant customization", () => {
   test("takes tenant ID from AuthContext and returns an active summary", async () => {
     const fixture = createFixture();
-
     await expect(fixture.service.assertCanCustomize(
       tenantAuthContext,
       NOW,
