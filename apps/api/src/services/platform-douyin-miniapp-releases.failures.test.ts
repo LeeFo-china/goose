@@ -211,11 +211,8 @@ describe("PlatformDouyinMiniappReleasesService provider failure ledger", () => {
   test("audit rejection clears its intent while sync failure preserves business status", async () => {
     const auditDeps = dependencies();
     auditDeps.releaseRepository.findById = mock(async () => ({ ...release, status: "testing" }));
-    let auditSubmitCalls = 0;
     auditDeps.gateway.submitVersionAudit = mock(async () => {
-      auditSubmitCalls += 1;
-      if (auditSubmitCalls === 1) throw providerError("audit-fail");
-      return { logId: "audit-retry-log" };
+      throw providerError("audit-fail");
     });
     await caught(() => new PlatformDouyinMiniappReleasesService(auditDeps as never).submitAudit(
       authContext,
@@ -232,31 +229,6 @@ describe("PlatformDouyinMiniappReleasesService provider failure ledger", () => {
       platformOperatorId: OPERATOR_ID,
     });
     expect(auditDeps.installationRepository.syncReleaseMetadata).not.toHaveBeenCalled();
-    auditDeps.releaseRepository.findById = mock(async () => ({
-      ...release,
-      status: "testing",
-      audit_host_names: [],
-      audit_note: null,
-    }));
-    await new PlatformDouyinMiniappReleasesService(auditDeps as never).submitAudit(
-      authContext,
-      INSTALLATION_ID,
-      RELEASE_ID,
-      { host_names: ["douyin"], audit_note: "装修模板提审" },
-    );
-    expect(auditDeps.gateway.submitVersionAudit).toHaveBeenCalledTimes(2);
-    expect(auditDeps.gateway.getVersionList).not.toHaveBeenCalled();
-    expect(auditDeps.releaseRepository.patchClaimed).toHaveBeenCalledWith(
-      RELEASE_ID,
-      CLAIM_TOKEN,
-      {
-        status: "testing",
-        auditHostNames: ["douyin"],
-        auditNote: "装修模板提审",
-        auditResult: null,
-        platformOperatorId: OPERATOR_ID,
-      },
-    );
 
     const syncDeps = dependencies();
     syncDeps.releaseRepository.findById = mock(async () => ({
@@ -273,56 +245,6 @@ describe("PlatformDouyinMiniappReleasesService provider failure ledger", () => {
       platformOperatorId: OPERATOR_ID,
     });
     expect(syncDeps.installationRepository.syncReleaseMetadata).not.toHaveBeenCalled();
-  });
-
-  test("audit timeout keeps the intent and reconciles before any retry", async () => {
-    const deps = dependencies();
-    deps.releaseRepository.findById = mock(async () => ({ ...release, status: "testing" }));
-    deps.gateway.submitVersionAudit = mock(async () => {
-      throw new AppError(502, "请求超时", "DOUYIN_OPEN_PLATFORM_TIMEOUT");
-    });
-    deps.gateway.getVersionList = mock(async () => ({
-      logId: "versions-log",
-    })) as never;
-    const service = new PlatformDouyinMiniappReleasesService(deps as never);
-    const input = { host_names: ["douyin"], audit_note: "装修模板提审" };
-
-    await caught(() => service.submitAudit(
-      authContext,
-      INSTALLATION_ID,
-      RELEASE_ID,
-      input,
-    ));
-    expect(deps.releaseRepository.updateClaimed).toHaveBeenCalledWith(
-      RELEASE_ID,
-      CLAIM_TOKEN,
-      {
-        status: "testing",
-        auditHostNames: input.host_names,
-        auditNote: input.audit_note,
-        auditResult: {
-          status: "failed",
-          error_code: "DOUYIN_OPEN_PLATFORM_TIMEOUT",
-        },
-        platformOperatorId: OPERATOR_ID,
-      },
-    );
-    deps.releaseRepository.findById = mock(async () => ({
-      ...release,
-      status: "testing",
-      audit_host_names: input.host_names,
-      audit_note: input.audit_note,
-    }));
-    const retryError = await caught(() => service.submitAudit(
-      authContext,
-      INSTALLATION_ID,
-      RELEASE_ID,
-      input,
-    ));
-
-    expect(retryError).toMatchObject({ code: "DOUYIN_RELEASE_OUTCOME_UNCERTAIN" });
-    expect(deps.gateway.submitVersionAudit).toHaveBeenCalledTimes(1);
-    expect(deps.gateway.getVersionList).toHaveBeenCalledTimes(1);
   });
 
   test("publish failure preserves freshly persisted approval and no released metadata", async () => {

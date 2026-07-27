@@ -154,7 +154,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(snapshot, "submit_audit", allowed, operatorId);
     this.assertState(release, allowed);
-    const hasIntent = release.audit_note !== null || release.audit_host_names.length > 0;
+    let hasIntent = release.audit_note !== null || release.audit_host_names.length > 0;
     if (hasIntent && !sameAuditIntent(release, input)) {
       await this.finish(release, claim, { status: release.status, platformOperatorId: operatorId });
       throw releaseStateConflict();
@@ -167,8 +167,26 @@ export class PlatformDouyinMiniappReleaseOperations {
 
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
       status: "testing", auditHostNames: release.audit_host_names,
-      auditNote: release.audit_note, platformOperatorId: operatorId,
-    });
+      auditNote: release.audit_note,
+      ...(hasIntent && release.audit_result !== null
+        ? { auditResult: release.audit_result }
+        : {}),
+      platformOperatorId: operatorId,
+    }, hasIntent && release.audit_result !== null);
+    if (
+      hasIntent
+      && !claim.recoveryRequired
+      && isStoredExplicitAuditRejection(release)
+    ) {
+      await this.patch(release, claim, {
+        status: "testing",
+        auditHostNames: [],
+        auditNote: null,
+        auditResult: null,
+        platformOperatorId: operatorId,
+      });
+      hasIntent = false;
+    }
     if (hasIntent || claim.recoveryRequired) {
       const versions = await this.provider(release, claim, {
         status: "testing", platformOperatorId: operatorId,
@@ -326,6 +344,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     operation: () => Promise<Result>,
     retainClaim = false,
     clearAuditIntentOnExplicitRejection = false,
+    preserveFailureAuditResult = false,
   ): Promise<Result> {
     try {
       return await operation();
@@ -338,10 +357,14 @@ export class PlatformDouyinMiniappReleaseOperations {
           ? { auditHostNames: [], auditNote: null }
           : {}),
         ...(safe.logId ? { douyinLogId: safe.logId } : {}),
-        auditResult: {
-          ...(failurePatch.auditResult ?? { status: "failed" as const }),
-          error_code: safe.code,
-        },
+        auditResult: preserveFailureAuditResult
+            && failurePatch.auditResult !== undefined
+            && failurePatch.auditResult !== null
+          ? failurePatch.auditResult
+          : {
+            ...(failurePatch.auditResult ?? { status: "failed" as const }),
+            error_code: safe.code,
+          },
       };
       try {
         if (retainClaim) await this.patch(release, claim, patch);
@@ -400,6 +423,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     claim: Claim,
     installation: Installation,
     failurePatch: UpdateDouyinMiniappReleaseInput,
+    preserveFailureAuditResult = false,
   ): Promise<string> {
     return this.provider(
       release,
@@ -407,6 +431,8 @@ export class PlatformDouyinMiniappReleaseOperations {
       failurePatch,
       () => this.freshAccessToken(installation),
       claim.recoveryRequired,
+      false,
+      preserveFailureAuditResult,
     );
   }
 
@@ -427,6 +453,14 @@ function sameAuditIntent(release: DouyinMiniappReleaseRecord, input: AuditInput)
   return release.audit_note === input.audit_note
     && release.audit_host_names.length === input.host_names.length
     && release.audit_host_names.every((host) => expectedHosts.has(host));
+}
+
+function isStoredExplicitAuditRejection(
+  release: DouyinMiniappReleaseRecord,
+): boolean {
+  return release.submitted_at === null
+    && release.audit_result?.status === "failed"
+    && release.audit_result.error_code === "DOUYIN_OPEN_PLATFORM_API_ERROR";
 }
 
 function publicRelease(release: DouyinMiniappClaimedUploadRelease): DouyinMiniappReleaseRecord {
