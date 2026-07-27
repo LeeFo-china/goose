@@ -720,7 +720,8 @@ Content-Type: application/json
 - 无权益/暂停/过期/撤销均显示平台品牌；
 - 草稿保存后展示品牌不变，发布后刷新生效；
 - A/B 租户切换时不短暂显示另一租户品牌；
-- A 租户不能绑定 B 租户 Logo，页面只显示稳定 404 业务提示；
+- 有权益租户不能绑定非本租户 Logo；本轮 dev fixture 使用平台
+  Logo 验证，页面只显示稳定 404 业务提示；
 - 版本冲突后刷新，不覆盖其他管理员的修改；
 - 图片加载失败不影响业务页面；
 - 退出登录立即恢复本地平台品牌。
@@ -735,7 +736,7 @@ Content-Type: application/json
 | typecheck/build/file-size | `api:typecheck`、`api:build`、permission boundaries、API/Admin file-size 全部通过 |
 | 真实 Logo 上传 | 平台和有权益租户各 complete 成功；相同 key 第二次 PUT 均返回 409 |
 | 有/无权益账号 smoke | 本机 13 pass / 0 fail；dev 远程 13 pass / 0 fail |
-| 跨租户 Logo 404 | dev 返回 `404 BRANDING_LOGO_FILE_NOT_FOUND`，响应未泄漏文件或租户 ID |
+| 跨作用域 Logo 404 | 租户绑定平台 Logo 时，dev 返回 `404 BRANDING_LOGO_FILE_NOT_FOUND`，响应未泄漏文件或租户 ID |
 | 部署健康检查 | [Release Dev 30270087844](https://github.com/LeeFo-china/goose/actions/runs/30270087844)：`gooes-api-dev` running / healthy，revision `8734884ef2936100fe2783abb54dbbb858766eb2` |
 
 自动隔离 smoke：
@@ -745,7 +746,7 @@ BRANDING_API_BASE_URL=https://api-dev.goodcms.cn \
 BRANDING_PLATFORM_TOKEN='<secret>' \
 BRANDING_TENANT_WITH_ENTITLEMENT_TOKEN='<secret>' \
 BRANDING_TENANT_WITHOUT_ENTITLEMENT_TOKEN='<secret>' \
-BRANDING_FOREIGN_FILE_ID='<uuid owned by the other tenant>' \
+BRANDING_FOREIGN_FILE_ID='<uuid not owned by the entitled tenant>' \
 bun scripts/verify-branding-tenant-isolation.ts
 ```
 
