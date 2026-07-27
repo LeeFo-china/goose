@@ -12,7 +12,6 @@ import {
   normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
   readBoundedResponseText,
-  readPlatformListTargetTenantId,
   redactSensitiveText,
   requireRecord,
 } from "./verify-branding-tenant-isolation-support";
@@ -20,6 +19,7 @@ import {
   assertEffectiveBranding,
   assertPlatformBrandingFixture,
   assertTenantBrandingFixture,
+  readAuthenticatedTenantId,
 } from "./verify-branding-tenant-isolation-contracts";
 
 export {
@@ -31,7 +31,6 @@ export {
   normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
   readBoundedResponseText,
-  readPlatformListTargetTenantId,
   redactSensitiveText,
 } from "./verify-branding-tenant-isolation-support";
 
@@ -81,17 +80,7 @@ export async function runBrandingTenantIsolationSmoke(
   dependencies: SmokeDependencies = {},
 ): Promise<BrandingTenantIsolationSmokeResult> {
   const config = readConfig(environment);
-  const withTenantId = readPlatformListTargetTenantId(
-    config.tenantWithEntitlementToken,
-  );
-  const withoutTenantId = readPlatformListTargetTenantId(
-    config.tenantWithoutEntitlementToken,
-  );
-  if (withTenantId === withoutTenantId) {
-    throw new SmokeAssertionError(
-      "tenant fixture tokens must belong to different tenants",
-    );
-  }
+  let passed = 0;
   let failed = 0;
   const request = createRequestExecutor(config, dependencies);
   const check = async (input: RequestInput) => {
@@ -100,6 +89,7 @@ export async function runBrandingTenantIsolationSmoke(
       response = await request(input);
       assertExpectedSmokeResponse(response, input.expected);
       input.validate?.(response.data);
+      passed += 1;
       write(formatSmokeMarker(input.label, response, config.secrets));
       return response;
     } catch {
@@ -111,6 +101,42 @@ export async function runBrandingTenantIsolationSmoke(
       return null;
     }
   };
+  const finish = (): BrandingTenantIsolationSmokeResult => {
+    write(
+      `[SUMMARY] branding-tenant-isolation passed=${passed} ` +
+        `failed=${failed}`,
+    );
+    return { passed, failed };
+  };
+  const withTenantAuth = await check({
+    label: "tenant-with-entitlement-authenticated-context",
+    path: "/admin/auth/me",
+    token: config.tenantWithEntitlementToken,
+    expected: { status: 200 },
+    validate: readAuthenticatedTenantId,
+  });
+  const withTenantId = withTenantAuth
+    ? readAuthenticatedTenantId(withTenantAuth.data)
+    : null;
+  const withoutTenantAuth = await check({
+    label: "tenant-without-entitlement-authenticated-context",
+    path: "/admin/auth/me",
+    token: config.tenantWithoutEntitlementToken,
+    expected: { status: 200 },
+    validate: (data) => {
+      const tenantId = readAuthenticatedTenantId(data);
+      if (tenantId === withTenantId) {
+        throw new SmokeAssertionError(
+          "tenant fixture tokens must belong to different tenants",
+        );
+      }
+    },
+  });
+  const withoutTenantId = withoutTenantAuth
+    ? readAuthenticatedTenantId(withoutTenantAuth.data)
+    : null;
+  if (!withTenantId || !withoutTenantId) return finish();
+
   await check({
     label: "anonymous/visitor-effective-platform-fallback",
     path: "/branding/effective",
@@ -214,11 +240,7 @@ export async function runBrandingTenantIsolationSmoke(
     forbiddenValues: [withoutTenantId, config.foreignFileId],
     validate: (data) => assertEntitlementList(data, withTenantId),
   });
-  write(
-    `[SUMMARY] branding-tenant-isolation passed=${11 - failed} ` +
-      `failed=${failed}`,
-  );
-  return { passed: 11 - failed, failed };
+  return finish();
 }
 function createRequestExecutor(
   config: RequiredSmokeConfig,

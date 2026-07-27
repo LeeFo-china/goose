@@ -20,6 +20,8 @@ Token 不写入仓库或本文档。Task 12 通过安全渠道提供账号或短
 token；联调反馈只回传接口、HTTP、稳定错误码、`requestId` 和
 脱敏后的必要字段。上述两个品牌名称是固定、非敏感的 fixture
 canary；Task 12 必须按原文创建并发布，不使用真实客户品牌名称。
+租户 smoke token 可直接取自现有 `POST /admin/auth/login` 的成功
+响应，不要求 token 自身携带租户 claim。
 
 本批次只包含平台/租户品牌、品牌权益、Logo 上传和有效品牌解析。
 
@@ -750,6 +752,14 @@ bun scripts/verify-branding-tenant-isolation.ts
 使用 HTTPS；HTTP 只允许 `127.0.0.1`、`localhost` 或 `[::1]`。
 每次请求固定 15 秒超时，响应体通过 `Content-Length` 和实际流读取
 双重限制为最大 1 MiB。
+
+脚本首先分别使用有权益和无权益 token 请求
+`GET /admin/auth/me`，从服务端已认证响应的 `data.tenant.id`
+严格读取 canonical UUID，并确认两个 token 属于不同租户；不解码
+或信任 token claim。两次身份检查均计入 smoke 检查和安全 marker，
+但响应体、token 和租户 ID 均不会输出。获取两个租户 ID 后，后续
+响应才启用跨租户 ID 泄漏扫描；平台权益列表的目标租户也使用
+`/admin/auth/me` 返回的有权益租户 ID。完整正常流程共 13 项检查。
 
 两条 PATCH 都固定使用不可用的哨兵版本
 `version=2147483647`，绝不读取或提交当前资料版本。正常业务门禁会

@@ -843,8 +843,11 @@ BRANDING_TENANT_WITHOUT_ENTITLEMENT_TOKEN
 BRANDING_FOREIGN_FILE_ID
 ```
 
-It must never print tokens. Verify effective brand, tenant read, no-entitlement
-mutation rejection, and foreign-file rejection.
+It must never print tokens, response bodies, or tenant IDs. Resolve both tenant
+fixtures through authenticated `GET /admin/auth/me` responses (not token
+claims), require distinct canonical `data.tenant.id` values, then verify
+effective brand, tenant read, no-entitlement mutation rejection, foreign-file
+rejection, and the platform entitlement list target.
 
 - [ ] **Step 4: Write the handoff**
 

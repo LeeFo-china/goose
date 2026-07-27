@@ -9,7 +9,6 @@ import {
   normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
   readBoundedResponseText,
-  readPlatformListTargetTenantId,
   redactSensitiveText,
 } from "./verify-branding-tenant-isolation";
 
@@ -18,14 +17,6 @@ const JWT =
 const SECRET_ENV_VALUE = "fixture-secret-value";
 const FOREIGN_TENANT_ID = "00000000-0000-4000-8000-000000000002";
 const FOREIGN_FILE_ID = "00000000-0000-4000-8000-000000000099";
-
-function jwtWithTenantId(tenantId: string): string {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256" }))
-    .toString("base64url");
-  const payload = Buffer.from(JSON.stringify({ tenant_id: tenantId }))
-    .toString("base64url");
-  return `${header}.${payload}.fixture-signature`;
-}
 
 describe("branding tenant isolation smoke helpers", () => {
   test("redacts Bearer/JWT/authorization and configured environment secrets", () => {
@@ -259,33 +250,6 @@ describe("branding tenant isolation smoke helpers", () => {
       "[FAIL] INVALID status=500 code=INVALID request_id=INVALID",
     );
     expect(marker).not.toMatch(/[\r\n\u001b]/);
-  });
-
-  test("accepts only a canonical lowercase tenant UUID as platform list target", () => {
-    expect(
-      readPlatformListTargetTenantId(
-        jwtWithTenantId("00000000-0000-4000-8000-000000000001"),
-      ),
-    ).toBe("00000000-0000-4000-8000-000000000001");
-    expect(() =>
-      readPlatformListTargetTenantId(
-        jwtWithTenantId("00000000-0000-4000-8000-00000000000A"),
-      )
-    ).toThrow(/tenant_id UUID claim/i);
-    expect(() =>
-      readPlatformListTargetTenantId(
-        jwtWithTenantId("00000000-0000-0000-0000-000000000001"),
-      )
-    ).toThrow(/tenant_id UUID claim/i);
-  });
-
-  test("bounds JWT and JWT payload length before decoding", () => {
-    expect(() =>
-      readPlatformListTargetTenantId(`a.${"a".repeat(5000)}.b`)
-    ).toThrow(/too long/i);
-    expect(() =>
-      readPlatformListTargetTenantId("x".repeat(9000))
-    ).toThrow(/too long/i);
   });
 
   test("allows remote HTTPS and loopback HTTP origins only", () => {

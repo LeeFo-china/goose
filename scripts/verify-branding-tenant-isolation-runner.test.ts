@@ -15,20 +15,9 @@ const FOREIGN_FILE_ID = "20000000-0000-4000-8000-000000000002";
 const LOGO_FILE_ID = "20000000-0000-4000-8000-000000000001";
 const TIMESTAMP = "2026-07-27T10:00:00.000Z";
 
-function jwt(payload: Record<string, unknown>): string {
-  const header = Buffer.from(JSON.stringify({ alg: "HS256" }))
-    .toString("base64url");
-  const encodedPayload = Buffer.from(JSON.stringify(payload))
-    .toString("base64url");
-  return `${header}.${encodedPayload}.fixture-signature`;
-}
-
-const platformToken = jwt({ sub: "platform-user" });
-const withToken = jwt({ sub: "with-user", tenant_id: WITH_TENANT_ID });
-const withoutToken = jwt({
-  sub: "without-user",
-  tenant_id: WITHOUT_TENANT_ID,
-});
+const platformToken = "admin-login-token-platform";
+const withToken = "admin-login-token-with-entitlement";
+const withoutToken = "admin-login-token-without-entitlement";
 
 const tenantProfile = {
   display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
@@ -112,6 +101,7 @@ describe("branding tenant isolation smoke runner", () => {
   test("uses non-persisting sentinel writes, timeout signals, and returns counts", async () => {
     const signals: AbortSignal[] = [];
     const patchBodies: Array<Record<string, unknown>> = [];
+    const authMeTokens: Array<string | null> = [];
     const signal = new AbortController().signal;
     const fetchImpl = async (
       input: string | URL | Request,
@@ -122,6 +112,18 @@ describe("branding tenant isolation smoke runner", () => {
       const authorization = new Headers(init?.headers).get("authorization");
       const method = init?.method ?? "GET";
 
+      if (url.pathname === "/admin/auth/me") {
+        authMeTokens.push(authorization);
+        return success({
+          tenant: {
+            id: authorization === `Bearer ${withToken}`
+              ? WITH_TENANT_ID
+              : WITHOUT_TENANT_ID,
+            name: "not-used-by-smoke",
+          },
+          permissions: ["not-used-by-smoke"],
+        });
+      }
       if (method === "PATCH") {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         patchBodies.push(body);
@@ -180,10 +182,14 @@ describe("branding tenant isolation smoke runner", () => {
         },
       );
 
-      expect(result).toEqual({ passed: 11, failed: 0 });
+      expect(result).toEqual({ passed: 13, failed: 0 });
       expect(process.exitCode).toBe(73);
-      expect(signals).toHaveLength(11);
+      expect(signals).toHaveLength(13);
       expect(signals.every((value) => value === signal)).toBe(true);
+      expect(authMeTokens).toEqual([
+        `Bearer ${withToken}`,
+        `Bearer ${withoutToken}`,
+      ]);
       expect(patchBodies).toHaveLength(2);
       expect(patchBodies.every((body) =>
         body.version === BRANDING_MUTATION_SENTINEL_VERSION
@@ -192,6 +198,12 @@ describe("branding tenant isolation smoke runner", () => {
         body.logo_file_id === FOREIGN_FILE_ID
       )).toBe(true);
       expect(output.every((line) => !line.includes(withToken))).toBe(true);
+      expect(output.every((line) => !line.includes(WITH_TENANT_ID))).toBe(
+        true,
+      );
+      expect(output.every((line) => !line.includes(WITHOUT_TENANT_ID))).toBe(
+        true,
+      );
     } finally {
       process.exitCode = previousExitCode ?? 0;
     }

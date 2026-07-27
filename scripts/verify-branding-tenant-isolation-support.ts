@@ -18,8 +18,6 @@ export type ExpectedResponse = {
 
 export const BRANDING_SMOKE_TIMEOUT_MS = 15_000;
 export const BRANDING_SMOKE_RESPONSE_MAX_BYTES = 1024 * 1024;
-const MAX_JWT_LENGTH = 8_192;
-const MAX_JWT_PAYLOAD_SEGMENT_LENGTH = 4_096;
 const MAX_MARKER_FIELD_LENGTH = 128;
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -257,46 +255,6 @@ export function formatSmokeMarker(
     );
   return `[${outcome}] ${safeLabel} status=${response.status} ` +
     `code=${safeCode} request_id=${safeRequestId}`;
-}
-
-/**
- * This unverified claim only distinguishes fixtures, supplies expected and
- * forbidden canaries, and selects the platform-admin list target. It never
- * authorizes a request, is never logged, and the API still authorizes through
- * its Bearer token and server-side AuthContext.
- */
-export function readPlatformListTargetTenantId(token: string): string {
-  if (token.length > MAX_JWT_LENGTH) {
-    throw new SmokeAssertionError("tenant fixture JWT is too long");
-  }
-  const parts = token.split(".");
-  const encodedPayload = parts[1];
-  if (parts.length !== 3 || !encodedPayload) {
-    throw new SmokeAssertionError("tenant fixture token must be a JWT");
-  }
-  if (encodedPayload.length > MAX_JWT_PAYLOAD_SEGMENT_LENGTH) {
-    throw new SmokeAssertionError("tenant fixture JWT payload is too long");
-  }
-  if (!/^[A-Za-z0-9_-]+$/u.test(encodedPayload)) {
-    throw new SmokeAssertionError("tenant fixture JWT payload is invalid");
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(
-      Buffer.from(encodedPayload, "base64url").toString("utf8"),
-    );
-  } catch {
-    throw new SmokeAssertionError("tenant fixture JWT payload is invalid");
-  }
-  const tenantId = isRecord(payload)
-    ? optionalString(payload.tenant_id)
-    : null;
-  if (!tenantId || !isCanonicalUuid(tenantId)) {
-    throw new SmokeAssertionError(
-      "tenant fixture JWT must contain a tenant_id UUID claim",
-    );
-  }
-  return tenantId;
 }
 
 export function requireRecord(value: unknown, label: string): JsonRecord {

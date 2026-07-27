@@ -5,6 +5,7 @@ import {
   BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   assertPlatformBrandingFixture,
   assertTenantBrandingFixture,
+  readAuthenticatedTenantId,
 } from "./verify-branding-tenant-isolation-contracts";
 
 const TENANT_ID = "10000000-0000-4000-8000-000000000001";
@@ -60,6 +61,25 @@ const entitlement = {
 };
 
 describe("branding smoke response contracts", () => {
+  test("reads a strict tenant ID from the authenticated server response", () => {
+    expect(
+      readAuthenticatedTenantId({
+        tenant: { id: TENANT_ID, name: "ignored" },
+        permissions: ["ignored"],
+      }),
+    ).toBe(TENANT_ID);
+    expect(() =>
+      readAuthenticatedTenantId({
+        tenant: {
+          id: "10000000-0000-4000-8000-00000000000A",
+        },
+      })
+    ).toThrow(/tenant.*id/i);
+    expect(() => readAuthenticatedTenantId({ tenant: null })).toThrow(
+      /tenant/i,
+    );
+  });
+
   test("accepts the clean with-entitlement tenant fixture", () => {
     expect(() =>
       assertTenantBrandingFixture(

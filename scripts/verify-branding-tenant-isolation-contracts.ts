@@ -47,6 +47,20 @@ type TenantFixtureExpectation = {
   tenantId: string;
 };
 
+export function readAuthenticatedTenantId(data: unknown): string {
+  const value = requireRecord(data, "authenticated user data");
+  const tenant = requireRecord(value.tenant, "authenticated tenant");
+  if (
+    typeof tenant.id !== "string" ||
+    !isCanonicalUuid(tenant.id)
+  ) {
+    throw new SmokeAssertionError(
+      "authenticated tenant.id must be a canonical UUID",
+    );
+  }
+  return tenant.id;
+}
+
 export function assertTenantBrandingFixture(
   data: unknown,
   expected: TenantFixtureExpectation,
