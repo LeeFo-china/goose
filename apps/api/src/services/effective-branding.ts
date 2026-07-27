@@ -6,6 +6,7 @@ import { authorizationService } from "@/services/authorization";
 import { CONTROLLED_FALLBACK_LOGO_URL } from "@/services/branding-default-logo";
 import { assertValidBrandLogoFile } from "@/services/branding-file-policy";
 import {
+  CUSTOM_SUPPORT_BRANDING,
   PLATFORM_FALLBACK_DISPLAY_NAME,
   buildSupportText,
   isEntitlementActive,
@@ -82,18 +83,12 @@ export class EffectiveBrandingService {
     user: JwtPayload | undefined,
     now = new Date(),
   ): Promise<EffectiveBranding> {
-    if (!isAuthToken(user)) {
-      return this.resolveForTenant(null, now);
-    }
-
-    const authUserId = normalizedId(user.sub);
+    const platform = await this.resolvePlatform(now);
+    const authUserId = user?.token_type === "visitor_session"
+      ? null
+      : normalizedId(user?.sub);
     if (!authUserId) {
-      return this.resolveForTenant(null, now);
-    }
-
-    const claimedTenantId = normalizedId(user.tenant_id);
-    if (claimedTenantId) {
-      return this.resolveForTenant(claimedTenantId, now);
+      return platform;
     }
 
     try {
@@ -101,9 +96,13 @@ export class EffectiveBrandingService {
         authUserId,
         { allowedWhenBillingLocked: true },
       );
-      return this.resolveForTenant(normalizedId(context.tenantId), now);
+      return this.resolveTenantAgainstPlatform(
+        normalizedId(context.tenantId),
+        now,
+        platform,
+      );
     } catch {
-      return this.resolveForTenant(null, now);
+      return platform;
     }
   }
 
@@ -111,7 +110,15 @@ export class EffectiveBrandingService {
     tenantId: string | null,
     now = new Date(),
   ): Promise<EffectiveBranding> {
-    const platform = await this.resolvePlatform();
+    const platform = await this.resolvePlatform(now);
+    return this.resolveTenantAgainstPlatform(tenantId, now, platform);
+  }
+
+  private async resolveTenantAgainstPlatform(
+    tenantId: string | null,
+    now: Date,
+    platform: EffectiveBranding,
+  ): Promise<EffectiveBranding> {
     const normalizedTenantId = normalizedId(tenantId);
     if (!normalizedTenantId) return platform;
 
@@ -125,9 +132,17 @@ export class EffectiveBrandingService {
         normalizedTenantId,
         now,
       );
+      const validatedSummary = validEntitlementSummary(
+        summary,
+        normalizedTenantId,
+      );
       if (
-        !summary?.isActive ||
-        !isEntitlementActive(summary.entitlement, tenant.status, now)
+        !validatedSummary?.isActive ||
+        !isEntitlementActive(
+          validatedSummary.entitlement,
+          tenant.status,
+          now,
+        )
       ) return platform;
 
       const profile = await this.brandingRepository.findTenantProfile(
@@ -164,7 +179,7 @@ export class EffectiveBrandingService {
     }
   }
 
-  async resolvePlatform(): Promise<EffectiveBranding> {
+  async resolvePlatform(_now = new Date()): Promise<EffectiveBranding> {
     try {
       const profile = await this.brandingRepository.findPlatformProfile();
       const published = publishedSnapshot(profile, "platform", null);
@@ -249,18 +264,64 @@ function buildBranding(input: {
   };
 }
 
-function isAuthToken(user: JwtPayload | undefined): user is JwtPayload {
-  return Boolean(
-    user &&
-      user.token_type !== "visitor_session" &&
-      (user.token_type === undefined || user.token_type === "auth"),
-  );
-}
-
 function normalizedId(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+type ValidEntitlementSummary = {
+  isActive: boolean;
+  entitlement: {
+    status: "active" | "suspended" | "expired" | "revoked";
+    starts_at: string;
+    expires_at: string;
+  };
+};
+
+function validEntitlementSummary(
+  summary: unknown,
+  tenantId: string,
+): ValidEntitlementSummary | null {
+  if (!isRecord(summary) || !isRecord(summary.entitlement)) return null;
+  const entitlement = summary.entitlement;
+  if (
+    typeof summary.isActive !== "boolean" ||
+    entitlement.tenant_id !== tenantId ||
+    entitlement.code !== CUSTOM_SUPPORT_BRANDING ||
+    !Number.isSafeInteger(entitlement.version) ||
+    typeof entitlement.version !== "number" ||
+    entitlement.version <= 0 ||
+    !isEntitlementStatus(entitlement.status) ||
+    !isFiniteDate(entitlement.starts_at) ||
+    !isFiniteDate(entitlement.expires_at)
+  ) return null;
+  return {
+    isActive: summary.isActive,
+    entitlement: {
+      status: entitlement.status,
+      starts_at: entitlement.starts_at,
+      expires_at: entitlement.expires_at,
+    },
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isEntitlementStatus(
+  value: unknown,
+): value is ValidEntitlementSummary["entitlement"]["status"] {
+  return value === "active" ||
+    value === "suspended" ||
+    value === "expired" ||
+    value === "revoked";
+}
+
+function isFiniteDate(value: unknown): value is string {
+  return typeof value === "string" &&
+    Number.isFinite(new Date(value).getTime());
 }
 
 function validDisplayName(value: string | null): value is string {
