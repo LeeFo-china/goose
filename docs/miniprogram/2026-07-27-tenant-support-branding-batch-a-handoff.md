@@ -2,24 +2,26 @@
 
 日期：2026-07-27  
 适用仓库：`gooes` 后端 / `orange` 小程序  
-状态：代码契约已冻结；dev 地址、提交号和账号由 Task 12 回填
+状态：Batch A 已部署 dev，后端与租户隔离 smoke 已通过
 
 ## 1. 联调信息
 
 | 项目 | 当前值 |
 | --- | --- |
-| API Base URL | `TASK12_DEPLOYED_API_BASE_URL` |
-| 后端 Commit | `TASK12_DEPLOYED_COMMIT_SHA` |
-| 有权益租户账号 | `TASK12_TENANT_WITH_ENTITLEMENT_ACCOUNT` |
-| 无权益租户账号 | `TASK12_TENANT_WITHOUT_ENTITLEMENT_ACCOUNT` |
+| API Base URL | `https://api-dev.goodcms.cn` |
+| 后端 Commit | `8734884ef2936100fe2783abb54dbbb858766eb2` |
+| 有权益租户账号 | `19907270001`（`branding_batch_a_with`） |
+| 无权益租户账号 | `19907270002`（`branding_batch_a_without`） |
+| 平台联调账号 | `19900000001` |
 | 平台品牌联调名称 | `品牌联调平台` |
 | 有权益租户品牌联调名称 | `品牌联调有权益租户` |
-| 凭证有效期 | `TASK12_CREDENTIAL_EXPIRES_AT` |
+| 凭证 | dev 登录接口使用空 `code`；token 按登录响应实时获取 |
 
-Token 不写入仓库或本文档。Task 12 通过安全渠道提供账号或短期
-token；联调反馈只回传接口、HTTP、稳定错误码、`requestId` 和
+Token 不写入仓库或本文档。使用上述手机号请求
+`POST /admin/auth/login`，body 为 `{"phone":"...","code":""}`；
+联调反馈只回传接口、HTTP、稳定错误码、`requestId` 和
 脱敏后的必要字段。上述两个品牌名称是固定、非敏感的 fixture
-canary；Task 12 必须按原文创建并发布，不使用真实客户品牌名称。
+canary；已按原文创建并发布，不使用真实客户品牌名称。
 租户 smoke token 可直接取自现有 `POST /admin/auth/login` 的成功
 响应，不要求 token 自身携带租户 claim。
 
@@ -725,21 +727,21 @@ Content-Type: application/json
 
 ## 10. 后端验收证据
 
-Task 12 回填：
-
 | 验证项 | 证据 |
 | --- | --- |
-| migration Local/Remote 对齐 | `TASK12_MIGRATION_STATUS_EVIDENCE` |
-| 定向单元/路由测试 | `TASK12_FOCUSED_TEST_EVIDENCE` |
-| typecheck/build/file-size | `TASK12_STATIC_CHECK_EVIDENCE` |
-| 有/无权益账号 smoke | `TASK12_FIXTURE_SMOKE_EVIDENCE` |
-| 跨租户 Logo 404 | `TASK12_FOREIGN_FILE_SMOKE_EVIDENCE` |
-| 部署健康检查 | `TASK12_DEPLOY_HEALTH_EVIDENCE` |
+| migration Local/Remote 对齐 | [plan run 30270041769](https://github.com/LeeFo-china/goose/actions/runs/30270041769)：远端 373 条，latest `20260727120000`，pending `0` |
+| Batch A migration 应用 | [apply run 30268241457](https://github.com/LeeFo-china/goose/actions/runs/30268241457)：只应用 `20260727120000` |
+| 定向单元/路由测试 | 品牌、权益、上传、路由与隔离脚本 131 pass / 0 fail；共享迁移契约 17 pass / 0 fail |
+| typecheck/build/file-size | `api:typecheck`、`api:build`、permission boundaries、API/Admin file-size 全部通过 |
+| 真实 Logo 上传 | 平台和有权益租户各 complete 成功；相同 key 第二次 PUT 均返回 409 |
+| 有/无权益账号 smoke | 本机 13 pass / 0 fail；dev 远程 13 pass / 0 fail |
+| 跨租户 Logo 404 | dev 返回 `404 BRANDING_LOGO_FILE_NOT_FOUND`，响应未泄漏文件或租户 ID |
+| 部署健康检查 | [Release Dev 30270087844](https://github.com/LeeFo-china/goose/actions/runs/30270087844)：`gooes-api-dev` running / healthy，revision `8734884ef2936100fe2783abb54dbbb858766eb2` |
 
 自动隔离 smoke：
 
 ```bash
-BRANDING_API_BASE_URL=https://api-dev.example.com \
+BRANDING_API_BASE_URL=https://api-dev.goodcms.cn \
 BRANDING_PLATFORM_TOKEN='<secret>' \
 BRANDING_TENANT_WITH_ENTITLEMENT_TOKEN='<secret>' \
 BRANDING_TENANT_WITHOUT_ENTITLEMENT_TOKEN='<secret>' \
