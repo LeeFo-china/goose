@@ -55,6 +55,9 @@ type EntitlementSummary = {
 
 const PLATFORM_MANAGE_PERMISSION = "platform.tenant_entitlement.manage";
 const TENANT_UPDATE_PERMISSION = "brand.settings.update";
+const ERROR_SEARCH_MAX_DEPTH = 8;
+const ERROR_SEARCH_MAX_NODES = 64;
+const ERROR_SEARCH_FIELDS = ["code", "message", "details", "hint"] as const;
 
 export class TenantEntitlementsService {
   private readonly entitlementRepository: EntitlementRepositoryPort;
@@ -103,15 +106,11 @@ export class TenantEntitlementsService {
   ) {
     const actor = this.requirePlatformActor(authContext);
     await this.assertTenantExists(tenantId);
-    await this.entitlementRepository.expireIfDue(
+    await this.expireEntitlementIfDue(
       tenantId,
-      CUSTOM_SUPPORT_BRANDING,
       now,
     );
-    const current = await this.entitlementRepository.findByCode(
-      tenantId,
-      CUSTOM_SUPPORT_BRANDING,
-    );
+    const current = await this.findEntitlement(tenantId);
 
     return this.applyAction({
       tenantId,
@@ -144,15 +143,8 @@ export class TenantEntitlementsService {
   ) {
     const actor = this.requirePlatformActor(authContext);
     await this.assertTenantExists(tenantId);
-    await this.entitlementRepository.expireIfDue(
-      tenantId,
-      CUSTOM_SUPPORT_BRANDING,
-      now,
-    );
-    const previous = await this.entitlementRepository.findByCode(
-      tenantId,
-      CUSTOM_SUPPORT_BRANDING,
-    );
+    await this.expireEntitlementIfDue(tenantId, now);
+    const previous = await this.findEntitlement(tenantId);
     if (!previous) {
       throw Errors.business(
         404,
@@ -160,11 +152,15 @@ export class TenantEntitlementsService {
         ErrorCodes.TENANT_ENTITLEMENT_NOT_FOUND,
       );
     }
+    const previousExpiry = finiteTimestamp(previous.expires_at);
+    if (previousExpiry === null) {
+      throw Errors.dbError("租户品牌权益到期时间无效");
+    }
     if (
       previous.status === "expired" ||
       (
         (previous.status === "active" || previous.status === "suspended") &&
-        new Date(previous.expires_at).getTime() <= now.getTime()
+        previousExpiry <= now.getTime()
       )
     ) {
       throw brandingEntitlementExpired(409);
@@ -179,8 +175,9 @@ export class TenantEntitlementsService {
       expectedVersion: input.version,
       ...actor,
     });
-    if (result.expires_at !== previous.expires_at) {
-      throw Errors.dbError("恢复租户品牌权益后到期时间异常");
+    const resultExpiry = finiteTimestamp(result.expires_at);
+    if (resultExpiry === null || resultExpiry !== previousExpiry) {
+      throw Errors.dbError("恢复租户品牌权益结果到期时间异常");
     }
 
     return { entitlement: serializeEntitlement(result) };
@@ -205,16 +202,13 @@ export class TenantEntitlementsService {
     const tenant = await this.brandingRepository.findTenant(tenantId);
     if (!tenant) return null;
 
-    await this.entitlementRepository.expireIfDue(
-      tenantId,
-      CUSTOM_SUPPORT_BRANDING,
-      now,
-    );
-    const entitlement = await this.entitlementRepository.findByCode(
-      tenantId,
-      CUSTOM_SUPPORT_BRANDING,
-    );
+    let entitlement = await this.findEntitlement(tenantId);
     if (!entitlement) return null;
+    if (isDueForReconciliation(entitlement, now)) {
+      const reconciled = await this.expireEntitlementIfDue(tenantId, now);
+      if (!reconciled) throw entitlementQueryError();
+      entitlement = reconciled;
+    }
 
     return {
       entitlement: serializeEntitlement(entitlement),
@@ -274,6 +268,29 @@ export class TenantEntitlementsService {
       return await this.entitlementRepository.applyAction(input);
     } catch (error) {
       throw mapEntitlementActionError(error);
+    }
+  }
+
+  private async findEntitlement(tenantId: string) {
+    try {
+      return await this.entitlementRepository.findByCode(
+        tenantId,
+        CUSTOM_SUPPORT_BRANDING,
+      );
+    } catch {
+      throw entitlementQueryError();
+    }
+  }
+
+  private async expireEntitlementIfDue(tenantId: string, now: Date) {
+    try {
+      return await this.entitlementRepository.expireIfDue(
+        tenantId,
+        CUSTOM_SUPPORT_BRANDING,
+        now,
+      );
+    } catch {
+      throw entitlementQueryError();
     }
   }
 
@@ -376,13 +393,58 @@ function mapEntitlementActionError(error: unknown): unknown {
 }
 
 function containsErrorCode(value: unknown, expected: string): boolean {
-  if (typeof value === "string") return value.includes(expected);
-  if (value instanceof Error && value.message.includes(expected)) return true;
-  if (Array.isArray(value)) {
-    return value.some((item) => containsErrorCode(item, expected));
+  const pending: Array<{ value: unknown; depth: number }> = [{
+    value,
+    depth: 0,
+  }];
+  const seen = new WeakSet<object>();
+  let visitedNodes = 0;
+
+  while (pending.length > 0 && visitedNodes < ERROR_SEARCH_MAX_NODES) {
+    const current = pending.pop();
+    if (!current) continue;
+    if (typeof current.value === "string") {
+      if (current.value.includes(expected)) return true;
+      continue;
+    }
+    if (typeof current.value !== "object" || current.value === null) continue;
+    if (seen.has(current.value)) continue;
+    seen.add(current.value);
+    visitedNodes += 1;
+    if (current.depth >= ERROR_SEARCH_MAX_DEPTH) continue;
+
+    const values = Array.isArray(current.value)
+      ? current.value.slice(0, ERROR_SEARCH_MAX_NODES - visitedNodes)
+      : ERROR_SEARCH_FIELDS.map((field) =>
+        (current.value as Record<string, unknown>)[field]
+      );
+    for (const nestedValue of values) {
+      pending.push({ value: nestedValue, depth: current.depth + 1 });
+    }
   }
-  if (typeof value !== "object" || value === null) return false;
-  return Object.values(value).some((item) => containsErrorCode(item, expected));
+
+  return false;
+}
+
+function isDueForReconciliation(
+  entitlement: TenantEntitlementRecord,
+  now: Date,
+) {
+  if (
+    entitlement.status !== "active" &&
+    entitlement.status !== "suspended"
+  ) return false;
+  const expiry = finiteTimestamp(entitlement.expires_at);
+  return expiry !== null && expiry <= now.getTime();
+}
+
+function finiteTimestamp(value: string) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function entitlementQueryError() {
+  return Errors.dbError("租户权益查询失败");
 }
 
 function brandingEntitlementExpired(statusCode: 403 | 409) {

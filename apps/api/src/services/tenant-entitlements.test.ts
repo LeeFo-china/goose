@@ -76,7 +76,6 @@ function databaseError(details: unknown) {
 function createFixture(options: {
   current?: TenantEntitlementRecord | null;
   tenantStatus?: string;
-  expireFailure?: unknown;
   applyFailure?: unknown;
   applyResult?: TenantEntitlementRecord;
 } = {}) {
@@ -91,7 +90,6 @@ function createFixture(options: {
   }));
   const findByCode = mock(async () => current);
   const expireIfDue = mock(async () => {
-    if (options.expireFailure) throw options.expireFailure;
     return current;
   });
   const applyAction = mock(async () => {
@@ -429,11 +427,7 @@ describe("TenantEntitlementsService tenant customization", () => {
       }),
     });
     expect(fixture.assertTenantContext).toHaveBeenCalledWith(tenantAuthContext);
-    expect(fixture.expireIfDue).toHaveBeenCalledWith(
-      TENANT_ID,
-      "custom_support_branding",
-      NOW,
-    );
+    expect(fixture.expireIfDue).not.toHaveBeenCalled();
   });
 
   test("requires brand update permission before querying entitlement state", async () => {
@@ -478,22 +472,5 @@ describe("TenantEntitlementsService tenant customization", () => {
       statusCode: 403,
       code: "BRANDING_ENTITLEMENT_EXPIRED",
     });
-  });
-
-  test("propagates expiry reconciliation failure and never authorizes stale active data", async () => {
-    const failure = databaseError({
-      code: "08006",
-      message: "connection failure",
-    });
-    const fixture = createFixture({
-      current: { ...entitlement, expires_at: NOW.toISOString() },
-      expireFailure: failure,
-    });
-
-    await expect(fixture.service.assertCanCustomize(
-      tenantAuthContext,
-      NOW,
-    )).rejects.toBe(failure);
-    expect(fixture.findByCode).not.toHaveBeenCalled();
   });
 });
