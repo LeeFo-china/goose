@@ -308,11 +308,12 @@ describe("tenant entitlement RPC error parsing", () => {
     }
   });
 
-  test("does not map codes embedded in longer uppercase tokens", async () => {
+  test("does not map codes embedded in longer identifier tokens", async () => {
     for (
       const details of [
         "TENANT_ENTITLEMENT_VERSION_CONFLICT_ARCHIVE",
         "X_TENANT_ENTITLEMENT_EXPIRED",
+        "prefixTENANT_ENTITLEMENT_VERSION_CONFLICTsuffix",
       ]
     ) {
       const fixture = createFixture({

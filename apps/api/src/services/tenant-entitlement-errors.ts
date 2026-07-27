@@ -4,7 +4,7 @@ import { Errors } from "@/errors/error-factory";
 const ERROR_SEARCH_MAX_DEPTH = 8;
 const ERROR_SEARCH_MAX_NODES = 64;
 const ERROR_SEARCH_FIELDS = ["code", "message", "details", "hint"] as const;
-const ERROR_TOKEN_CHARACTER = /^[A-Z0-9_]$/;
+const ERROR_TOKEN_CHARACTER = /^[A-Za-z0-9_]$/;
 
 export function mapTenantEntitlementActionError(error: unknown): unknown {
   if (containsErrorCode(error, ErrorCodes.TENANT_ENTITLEMENT_NOT_FOUND)) {
