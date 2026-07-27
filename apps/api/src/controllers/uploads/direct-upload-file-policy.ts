@@ -3,6 +3,7 @@ import {
   getSupplierBusinessLicenseUploadPolicy,
   getWechatPayApplymentUploadPolicy,
 } from "@/services/files/platform-file-storage";
+import { assertBrandLogoUploadDeclaration } from "@/services/branding-file-policy";
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const LARGE_IMAGE_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
@@ -25,6 +26,13 @@ export function assertDirectUploadFileDeclaration(input: {
   mimetype: string;
   sizeBytes: number;
 }) {
+  if (input.scene === "brand_logo") {
+    assertBrandLogoUploadDeclaration({
+      mimeType: input.mimetype,
+      sizeBytes: input.sizeBytes,
+    });
+    return;
+  }
   const scenePolicy = getWechatPayApplymentUploadPolicy(input.scene) ??
     getSupplierBusinessLicenseUploadPolicy(input.scene);
   const allowedMimeTypes = scenePolicy?.mimeTypes ?? ALLOWED_MIME_TYPES;

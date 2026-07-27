@@ -11,6 +11,26 @@ export const BRAND_LOGO_POLICY = {
   maxAspectRatio: 1.25,
 } as const;
 
+export function assertBrandLogoUploadDeclaration(input: {
+  mimeType: string;
+  sizeBytes: number;
+}): void {
+  if (!hasValidBrandLogoUploadDeclaration(input)) {
+    invalidBrandLogoFile();
+  }
+}
+
+export function assertBrandLogoImageProperties(input: {
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+}): void {
+  if (!hasValidBrandLogoImageProperties(input)) {
+    invalidBrandLogoFile();
+  }
+}
+
 export function assertValidBrandLogoFile(
   scope: { tenantId: string | null },
   file: BrandingPlatformFileObjectRecord | null,
@@ -23,35 +43,57 @@ export function assertValidBrandLogoFile(
     );
   }
 
-  const hasValidSize = Number.isFinite(file.size_bytes) &&
-    Number.isInteger(file.size_bytes) &&
-    file.size_bytes > 0 &&
-    file.size_bytes <= BRAND_LOGO_POLICY.maxSizeBytes;
-  const width = file.width;
-  const height = file.height;
-  const hasValidWidth = isValidDimension(width, BRAND_LOGO_POLICY.minWidth);
-  const hasValidHeight = isValidDimension(height, BRAND_LOGO_POLICY.minHeight);
-  const aspectRatio = hasValidWidth && hasValidHeight
-    ? width / height
-    : Number.NaN;
-
   if (
     file.scene !== "brand_logo" ||
     file.status !== "active" ||
     file.visibility !== "public" ||
     file.deleted_at !== null ||
-    !BRAND_LOGO_POLICY.mimeTypes.has(file.mime_type) ||
-    !hasValidSize ||
-    !hasValidWidth ||
-    !hasValidHeight ||
-    !Number.isFinite(aspectRatio) ||
-    aspectRatio < BRAND_LOGO_POLICY.minAspectRatio ||
-    aspectRatio > BRAND_LOGO_POLICY.maxAspectRatio
+    !hasValidBrandLogoFileProperties(file)
   ) {
     return invalidBrandLogoFile();
   }
 
   return file;
+}
+
+function hasValidBrandLogoFileProperties(
+  file: Pick<
+    BrandingPlatformFileObjectRecord,
+    "mime_type" | "size_bytes" | "width" | "height"
+  >,
+): boolean {
+  return hasValidBrandLogoImageProperties({
+    mimeType: file.mime_type,
+    sizeBytes: file.size_bytes,
+    width: file.width,
+    height: file.height,
+  });
+}
+
+function hasValidBrandLogoImageProperties(input: {
+  mimeType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+}): boolean {
+  if (
+    !hasValidBrandLogoUploadDeclaration(input) ||
+    !isValidDimension(input.width, BRAND_LOGO_POLICY.minWidth) ||
+    !isValidDimension(input.height, BRAND_LOGO_POLICY.minHeight)
+  ) return false;
+  const aspectRatio = input.width / input.height;
+  return aspectRatio >= BRAND_LOGO_POLICY.minAspectRatio &&
+    aspectRatio <= BRAND_LOGO_POLICY.maxAspectRatio;
+}
+
+function hasValidBrandLogoUploadDeclaration(input: {
+  mimeType: string;
+  sizeBytes: number;
+}): boolean {
+  return BRAND_LOGO_POLICY.mimeTypes.has(input.mimeType) &&
+    Number.isSafeInteger(input.sizeBytes) &&
+    input.sizeBytes > 0 &&
+    input.sizeBytes <= BRAND_LOGO_POLICY.maxSizeBytes;
 }
 
 function isValidDimension(value: number | null, minimum: number): value is number {
