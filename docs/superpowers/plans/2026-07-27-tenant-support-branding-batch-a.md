@@ -898,7 +898,7 @@ bun test ../../packages/domain/src/permission.test.ts \
   src/services/effective-branding.test.ts \
   src/controllers/uploads \
   src/plugins/auth/legacy/routes.test.ts \
-  ../../scripts/verify-branding-tenant-isolation.test.ts
+  ../../scripts/verify-branding-tenant-isolation*.test.ts
 ```
 
 Expected: all pass with no warnings.

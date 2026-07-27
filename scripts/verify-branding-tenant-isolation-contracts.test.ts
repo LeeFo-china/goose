@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
+  BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   assertPlatformBrandingFixture,
   assertTenantBrandingFixture,
 } from "./verify-branding-tenant-isolation-contracts";
@@ -9,8 +11,8 @@ const TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const LOGO_FILE_ID = "20000000-0000-4000-8000-000000000001";
 const TIMESTAMP = "2026-07-27T10:00:00.000Z";
 
-const profile = {
-  display_name: "晴天装饰",
+const tenantProfile = {
+  display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_file_id: LOGO_FILE_ID,
   logo_url: "https://cdn.example.com/logo.png",
   status: "published",
@@ -24,19 +26,30 @@ const profile = {
 const tenantEffective = {
   source: "tenant",
   tenant_id: TENANT_ID,
-  display_name: "晴天装饰",
+  display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/logo.png",
-  support_text: "晴天装饰提供技术支持",
+  support_text:
+    `${BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME}提供技术支持`,
   version: 4,
   updated_at: TIMESTAMP,
 };
 
 const platformEffective = {
-  ...tenantEffective,
   source: "platform",
   tenant_id: null,
-  display_name: "字节跳动",
-  support_text: "字节跳动提供技术支持",
+  display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  logo_url: "https://cdn.example.com/platform-logo.png",
+  support_text: `${BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  version: 3,
+  updated_at: TIMESTAMP,
+};
+
+const platformProfile = {
+  ...tenantProfile,
+  display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  logo_url: "https://cdn.example.com/platform-logo.png",
+  version: 3,
+  published_version: 3,
 };
 
 const entitlement = {
@@ -51,7 +64,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile,
+          profile: tenantProfile,
           entitlement,
           can_customize: true,
           effective: tenantEffective,
@@ -77,7 +90,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile,
+          profile: tenantProfile,
           entitlement: null,
           can_customize: false,
           effective: platformEffective,
@@ -91,7 +104,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile,
+          profile: tenantProfile,
           entitlement,
           can_customize: true,
           effective: tenantEffective,
@@ -104,7 +117,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile: { ...profile, tenant_id: TENANT_ID },
+          profile: { ...tenantProfile, tenant_id: TENANT_ID },
           entitlement,
           can_customize: true,
           effective: tenantEffective,
@@ -116,7 +129,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile,
+          profile: tenantProfile,
           entitlement: { ...entitlement, id: "hidden" },
           can_customize: true,
           effective: tenantEffective,
@@ -130,7 +143,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile: { ...profile, logo_file_id: "not-a-uuid" },
+          profile: { ...tenantProfile, logo_file_id: "not-a-uuid" },
           entitlement,
           can_customize: true,
           effective: tenantEffective,
@@ -142,7 +155,7 @@ describe("branding smoke response contracts", () => {
     expect(() =>
       assertTenantBrandingFixture(
         {
-          profile,
+          profile: tenantProfile,
           entitlement,
           can_customize: true,
           effective: {
@@ -155,10 +168,68 @@ describe("branding smoke response contracts", () => {
     ).toThrow(/tenant/i);
   });
 
+  test("rejects a structurally valid third-tenant branding canary", () => {
+    const thirdTenantName = "品牌联调第三租户";
+    expect(() =>
+      assertTenantBrandingFixture(
+        {
+          profile: {
+            ...tenantProfile,
+            display_name: thirdTenantName,
+          },
+          entitlement,
+          can_customize: true,
+          effective: {
+            ...tenantEffective,
+            display_name: thirdTenantName,
+            support_text: `${thirdTenantName}提供技术支持`,
+          },
+        },
+        { kind: "with_entitlement", tenantId: TENANT_ID },
+      )
+    ).toThrow(/fixture|display/i);
+  });
+
+  test("requires the published snapshot and effective branding to agree", () => {
+    for (const value of [
+      {
+        profile: { ...tenantProfile, has_unpublished_changes: true },
+        effective: tenantEffective,
+      },
+      {
+        profile: { ...tenantProfile, published_version: 3 },
+        effective: tenantEffective,
+      },
+      {
+        profile: tenantProfile,
+        effective: { ...tenantEffective, logo_url: "https://other/logo.png" },
+      },
+      {
+        profile: tenantProfile,
+        effective: { ...tenantEffective, version: 3 },
+      },
+      {
+        profile: tenantProfile,
+        effective: { ...tenantEffective, support_text: "unrelated support" },
+      },
+    ]) {
+      expect(() =>
+        assertTenantBrandingFixture(
+          {
+            ...value,
+            entitlement,
+            can_customize: true,
+          },
+          { kind: "with_entitlement", tenantId: TENANT_ID },
+        )
+      ).toThrow();
+    }
+  });
+
   test("requires an exact non-null platform profile and effective fallback", () => {
     expect(() =>
       assertPlatformBrandingFixture({
-        profile,
+        profile: platformProfile,
         effective: platformEffective,
       })
     ).not.toThrow();
@@ -171,10 +242,28 @@ describe("branding smoke response contracts", () => {
     ).toThrow(/profile/i);
     expect(() =>
       assertPlatformBrandingFixture({
-        profile,
+        profile: platformProfile,
         effective: platformEffective,
         internal: true,
       })
     ).toThrow(/exact/i);
+    expect(() =>
+      assertPlatformBrandingFixture({
+        profile: {
+          ...platformProfile,
+          display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
+        },
+        effective: platformEffective,
+      })
+    ).toThrow(/fixture|display/i);
+    expect(() =>
+      assertPlatformBrandingFixture({
+        profile: platformProfile,
+        effective: {
+          ...platformEffective,
+          logo_url: "https://other/platform-logo.png",
+        },
+      })
+    ).toThrow(/snapshot|effective/i);
   });
 });

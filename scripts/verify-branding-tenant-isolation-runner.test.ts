@@ -4,6 +4,10 @@ import {
   BRANDING_MUTATION_SENTINEL_VERSION,
   runBrandingTenantIsolationSmoke,
 } from "./verify-branding-tenant-isolation";
+import {
+  BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
+  BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+} from "./verify-branding-tenant-isolation-contracts";
 
 const WITH_TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const WITHOUT_TENANT_ID = "10000000-0000-4000-8000-000000000002";
@@ -26,8 +30,8 @@ const withoutToken = jwt({
   tenant_id: WITHOUT_TENANT_ID,
 });
 
-const profile = {
-  display_name: "晴天装饰",
+const tenantProfile = {
+  display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_file_id: LOGO_FILE_ID,
   logo_url: "https://cdn.example.com/logo.png",
   status: "published",
@@ -40,19 +44,27 @@ const profile = {
 const platformEffective = {
   source: "platform",
   tenant_id: null,
-  display_name: "字节跳动",
+  display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/platform.png",
-  support_text: "字节跳动提供技术支持",
-  version: 1,
+  support_text: `${BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  version: 3,
   updated_at: TIMESTAMP,
+};
+const platformProfile = {
+  ...tenantProfile,
+  display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  logo_url: "https://cdn.example.com/platform.png",
+  version: 3,
+  published_version: 3,
 };
 const tenantEffective = {
   ...platformEffective,
   source: "tenant",
   tenant_id: WITH_TENANT_ID,
-  display_name: "晴天装饰",
+  display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/logo.png",
-  support_text: "晴天装饰提供技术支持",
+  support_text:
+    `${BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME}提供技术支持`,
   version: 7,
 };
 const entitlementSummary = {
@@ -125,7 +137,7 @@ describe("branding tenant isolation smoke runner", () => {
       if (url.pathname === "/tenant/branding") {
         return success(authorization === `Bearer ${withToken}`
           ? {
-            profile,
+            profile: tenantProfile,
             entitlement: entitlementSummary,
             can_customize: true,
             effective: tenantEffective,
@@ -139,7 +151,7 @@ describe("branding tenant isolation smoke runner", () => {
       }
       if (url.pathname === "/platform/branding") {
         return authorization === `Bearer ${platformToken}`
-          ? success({ profile, effective: platformEffective })
+          ? success({ profile: platformProfile, effective: platformEffective })
           : failure(403, "FORBIDDEN", "request-forbidden");
       }
       return success({
@@ -181,7 +193,7 @@ describe("branding tenant isolation smoke runner", () => {
       )).toBe(true);
       expect(output.every((line) => !line.includes(withToken))).toBe(true);
     } finally {
-      process.exitCode = previousExitCode;
+      process.exitCode = previousExitCode ?? 0;
     }
   });
 });

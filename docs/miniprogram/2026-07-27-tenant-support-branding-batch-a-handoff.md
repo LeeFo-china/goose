@@ -12,11 +12,14 @@
 | 后端 Commit | `TASK12_DEPLOYED_COMMIT_SHA` |
 | 有权益租户账号 | `TASK12_TENANT_WITH_ENTITLEMENT_ACCOUNT` |
 | 无权益租户账号 | `TASK12_TENANT_WITHOUT_ENTITLEMENT_ACCOUNT` |
+| 平台品牌联调名称 | `品牌联调平台` |
+| 有权益租户品牌联调名称 | `品牌联调有权益租户` |
 | 凭证有效期 | `TASK12_CREDENTIAL_EXPIRES_AT` |
 
 Token 不写入仓库或本文档。Task 12 通过安全渠道提供账号或短期
 token；联调反馈只回传接口、HTTP、稳定错误码、`requestId` 和
-脱敏后的必要字段。
+脱敏后的必要字段。上述两个品牌名称是固定、非敏感的 fixture
+canary；Task 12 必须按原文创建并发布，不使用真实客户品牌名称。
 
 本批次只包含平台/租户品牌、品牌权益、Logo 上传和有效品牌解析。
 
@@ -758,7 +761,12 @@ bun scripts/verify-branding-tenant-isolation.ts
 profile、active entitlement、`can_customize=true` 和本租户
 effective；无权益租户必须返回 null profile/entitlement、
 `can_customize=false` 和平台 effective；平台 fixture 必须已有
-已发布 profile。错误响应缺少安全的非空 `request_id` 时整项失败。
+已发布 profile。平台 profile/display 必须使用 `品牌联调平台`，
+有权益租户必须使用 `品牌联调有权益租户`；两者都必须无未发布
+变更，且 effective 的名称、Logo、版本必须与已发布快照一致，
+`support_text` 必须为“名称 + 提供技术支持”。结构合法但属于第三
+租户的品牌资料也不能通过。错误响应缺少安全的非空 `request_id`
+时整项失败。
 
 仓库边界：本文档和 Batch A 代码只写入 `gooes`；Orange 原始契约和
 现有组件仅做只读核对，本次未修改 Orange。

@@ -4,6 +4,10 @@ import {
   requireRecord,
 } from "./verify-branding-tenant-isolation-support";
 
+export const BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME = "品牌联调平台";
+export const BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME =
+  "品牌联调有权益租户";
+
 const EFFECTIVE_KEYS = [
   "source",
   "tenant_id",
@@ -69,45 +73,50 @@ export function assertTenantBrandingFixture(
       "tenant with entitlement must be customizable",
     );
   }
-  const profile = assertBrandProfile(value.profile);
-  if (profile.status !== "published") {
-    throw new SmokeAssertionError(
-      "tenant with entitlement profile must be published",
-    );
-  }
+  const profile = assertPublishedFixtureProfile(
+    value.profile,
+    BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
+  );
   assertEntitlementSummary(value.entitlement);
-  assertEffectiveBranding(
+  const effective = assertEffectiveBranding(
     value.effective,
     "tenant",
     expected.tenantId,
   );
+  assertEffectiveMatchesPublishedProfile(effective, profile);
 }
 
 export function assertPlatformBrandingFixture(data: unknown): void {
   const value = requireRecord(data, "platform branding data");
   assertExactKeys(value, PLATFORM_BRANDING_KEYS, "platform branding data");
-  const profile = assertBrandProfile(value.profile);
-  if (profile.status !== "published") {
-    throw new SmokeAssertionError(
-      "platform branding profile must be published",
-    );
-  }
-  assertEffectiveBranding(value.effective, "platform", null);
+  const profile = assertPublishedFixtureProfile(
+    value.profile,
+    BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  );
+  const effective = assertEffectiveBranding(
+    value.effective,
+    "platform",
+    null,
+  );
+  assertEffectiveMatchesPublishedProfile(effective, profile);
 }
 
 export function assertEffectiveBranding(
   data: unknown,
   expectedSource: "platform" | "tenant",
   expectedTenantId: string | null,
-): void {
+): Record<string, unknown> {
   const value = requireRecord(data, "effective branding data");
   assertExactKeys(value, EFFECTIVE_KEYS, "effective branding data");
+  const expectedDisplayName = expectedSource === "platform"
+    ? BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME
+    : BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME;
   if (
     value.source !== expectedSource ||
     value.tenant_id !== expectedTenantId ||
-    !isNonBlankString(value.display_name) ||
+    value.display_name !== expectedDisplayName ||
     !isNonBlankString(value.logo_url) ||
-    !isNonBlankString(value.support_text) ||
+    value.support_text !== `${expectedDisplayName}提供技术支持` ||
     !isPositiveOrZeroSafeInteger(value.version) ||
     !isIsoTimestamp(value.updated_at)
   ) {
@@ -126,6 +135,7 @@ export function assertEffectiveBranding(
       "effective branding tenant scope is invalid",
     );
   }
+  return value;
 }
 
 function assertBrandProfile(value: unknown) {
@@ -158,6 +168,40 @@ function assertBrandProfile(value: unknown) {
     );
   }
   return profile;
+}
+
+function assertPublishedFixtureProfile(
+  value: unknown,
+  expectedDisplayName: string,
+): Record<string, unknown> {
+  const profile = assertBrandProfile(value);
+  if (
+    profile.display_name !== expectedDisplayName ||
+    profile.status !== "published" ||
+    profile.has_unpublished_changes !== false ||
+    profile.published_version !== profile.version ||
+    profile.published_at === null
+  ) {
+    throw new SmokeAssertionError(
+      "branding fixture profile must be the clean published canary",
+    );
+  }
+  return profile;
+}
+
+function assertEffectiveMatchesPublishedProfile(
+  effective: Record<string, unknown>,
+  profile: Record<string, unknown>,
+): void {
+  if (
+    effective.display_name !== profile.display_name ||
+    effective.logo_url !== profile.logo_url ||
+    effective.version !== profile.published_version
+  ) {
+    throw new SmokeAssertionError(
+      "effective branding must match the published profile snapshot",
+    );
+  }
 }
 
 function assertEntitlementSummary(value: unknown): void {
