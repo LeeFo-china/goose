@@ -14,6 +14,7 @@ import type {
 import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
 import {
   exactAuditStage,
+  isExplicitOpenPlatformApiRejection,
   publishStateConflict,
   releaseStateConflict,
   requestError,
@@ -192,7 +193,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     }
     await this.patch(release, claim, {
       status: "testing", auditHostNames: input.host_names,
-      auditNote: input.audit_note, platformOperatorId: operatorId,
+      auditNote: input.audit_note, auditResult: null,
+      platformOperatorId: operatorId,
     });
     const submitted = await this.provider(release, claim, {
       status: "testing", auditHostNames: input.host_names, auditNote: input.audit_note,
@@ -200,7 +202,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     }, async () => this.dependencies.gateway.submitVersionAudit({
       authorizerAccessToken, appId: installation.authorizer_appid,
       hostNames: input.host_names, auditNote: input.audit_note,
-    }));
+    }), false, true);
     const submittedAt = this.dependencies.now();
     return this.persistWithMetadata(release, claim, {
       status: "audit_pending", auditHostNames: input.host_names, auditNote: input.audit_note,
@@ -323,6 +325,7 @@ export class PlatformDouyinMiniappReleaseOperations {
     failurePatch: UpdateDouyinMiniappReleaseInput,
     operation: () => Promise<Result>,
     retainClaim = false,
+    clearAuditIntentOnExplicitRejection = false,
   ): Promise<Result> {
     try {
       return await operation();
@@ -330,6 +333,10 @@ export class PlatformDouyinMiniappReleaseOperations {
       const safe = safeProviderFailure(error);
       const patch = {
         ...failurePatch,
+        ...(clearAuditIntentOnExplicitRejection
+            && isExplicitOpenPlatformApiRejection(error)
+          ? { auditHostNames: [], auditNote: null }
+          : {}),
         ...(safe.logId ? { douyinLogId: safe.logId } : {}),
         auditResult: {
           ...(failurePatch.auditResult ?? { status: "failed" as const }),

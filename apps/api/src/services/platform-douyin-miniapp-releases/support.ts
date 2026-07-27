@@ -108,6 +108,11 @@ export function safeProviderFailure(error: unknown): {
   return { statusCode, code, ...(logId ? { logId } : {}) };
 }
 
+export function isExplicitOpenPlatformApiRejection(error: unknown): boolean {
+  return error instanceof AppError
+    && error.code === "DOUYIN_OPEN_PLATFORM_API_ERROR";
+}
+
 export function sanitizedProviderError(error: unknown): AppError {
   const safe = safeProviderFailure(error);
   return Errors.business(
