@@ -25,12 +25,20 @@ async function createRepository(results: QueryResult[]) {
         recordRpc(name, params, results, traces),
       )),
   };
-  const fileLookups: Array<{ fileId: string; ownerTenantId: string | null }> = [];
+  const fileLookups: Array<{
+    fileId: string;
+    scope: "platform" | "tenant";
+    tenantId?: string;
+  }> = [];
   const fileRepository = {
-    findActiveBrandLogoForOwner: mock(
-      async (fileId: string, ownerTenantId: string | null) => {
-        fileLookups.push({ fileId, ownerTenantId });
-        return { id: fileId, tenant_id: ownerTenantId };
+    findActivePlatformBrandLogo: mock(async (fileId: string) => {
+      fileLookups.push({ fileId, scope: "platform" });
+      return { id: fileId, tenant_id: null };
+    }),
+    findActiveTenantBrandLogo: mock(
+      async (fileId: string, tenantId: string) => {
+        fileLookups.push({ fileId, scope: "tenant", tenantId });
+        return { id: fileId, tenant_id: tenantId };
       },
     ),
   };
@@ -173,8 +181,8 @@ describe("BrandingRepository", () => {
     await repository.findBrandingFileForTenant("file-tenant", "tenant-1");
 
     expect(fileLookups).toEqual([
-      { fileId: "file-platform", ownerTenantId: null },
-      { fileId: "file-tenant", ownerTenantId: "tenant-1" },
+      { fileId: "file-platform", scope: "platform" },
+      { fileId: "file-tenant", scope: "tenant", tenantId: "tenant-1" },
     ]);
     expect(Object.getOwnPropertyNames(Object.getPrototypeOf(repository)))
       .not.toContain("findBrandingFile");

@@ -275,7 +275,7 @@ test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection",
 test("platform brand Logo lookup requires the exact null-owner scope", async () => {
   const { repository, trace } = await createScopedRepository(matchingExisting);
 
-  await expect(repository.findActiveBrandLogoForOwner("file-1", null))
+  await expect(repository.findActivePlatformBrandLogo("file-1"))
     .resolves.toMatchObject({ id: "file-1" });
 
   expect(trace.selects).toEqual([
@@ -299,7 +299,7 @@ test("tenant brand Logo lookup requires the exact tenant owner scope", async () 
     tenant_id: "tenant-1",
   });
 
-  await expect(repository.findActiveBrandLogoForOwner("file-1", "tenant-1"))
+  await expect(repository.findActiveTenantBrandLogo("file-1", "tenant-1"))
     .resolves.toMatchObject({ id: "file-1", tenant_id: "tenant-1" });
 
   expect(trace.equals).toEqual(expect.arrayContaining([
@@ -316,10 +316,23 @@ test("brand Logo lookup maps Supabase failures through the error factory", async
   const databaseError = { code: "XX000", message: "lookup failed" };
   const { repository } = await createScopedRepository(null, databaseError);
 
-  await expect(repository.findActiveBrandLogoForOwner("file-1", "tenant-1"))
+  await expect(repository.findActiveTenantBrandLogo("file-1", "tenant-1"))
     .rejects.toMatchObject({
       statusCode: 500,
       code: "DB_ERROR",
       details: databaseError,
     });
+});
+
+test("brand Logo repository exposes only explicit platform and tenant scopes", async () => {
+  const { PlatformFileObjectRepository } = await import(
+    "./platform-file-objects"
+  );
+  const publicMethods = Object.getOwnPropertyNames(
+    PlatformFileObjectRepository.prototype,
+  );
+
+  expect(publicMethods).toContain("findActivePlatformBrandLogo");
+  expect(publicMethods).toContain("findActiveTenantBrandLogo");
+  expect(publicMethods).not.toContain("findActiveBrandLogoForOwner");
 });

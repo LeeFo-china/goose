@@ -384,26 +384,20 @@ export class PlatformFileObjectRepository {
     return (data as SupplierBusinessLicensePreviewFileRecord | null) ?? null;
   }
 
-  async findActiveBrandLogoForOwner(
-    fileId: string,
-    ownerTenantId: string | null,
-  ) {
-    let query = this.getBrandingAdminClient()
-      .from("platform_file_objects")
-      .select(BRANDING_FILE_OBJECT_COLUMNS)
-      .eq("id", fileId)
-      .eq("scene", "brand_logo")
-      .eq("status", "active")
-      .eq("visibility", "public")
-      .is("deleted_at", null);
+  findActivePlatformBrandLogo(fileId: string) {
+    return findActiveBrandLogo(
+      this.getBrandingAdminClient(),
+      fileId,
+      { scope: "platform" },
+    );
+  }
 
-    query = ownerTenantId === null
-      ? query.is("tenant_id", null)
-      : query.eq("tenant_id", ownerTenantId);
-
-    const { data, error } = await query.maybeSingle();
-    if (error) throw Errors.dbError("查询品牌 Logo 文件失败", error);
-    return (data as BrandingPlatformFileObjectRecord | null) ?? null;
+  findActiveTenantBrandLogo(fileId: string, tenantId: string) {
+    return findActiveBrandLogo(
+      this.getBrandingAdminClient(),
+      fileId,
+      { scope: "tenant", tenantId },
+    );
   }
 
   private async findPrivateVisitorConflict(input: {
@@ -466,6 +460,31 @@ export class PlatformFileObjectRepository {
 }
 
 export const platformFileObjectRepository = new PlatformFileObjectRepository();
+
+async function findActiveBrandLogo(
+  client: BrandingFileObjectClient,
+  fileId: string,
+  owner:
+    | { scope: "platform" }
+    | { scope: "tenant"; tenantId: string },
+) {
+  let query = client
+    .from("platform_file_objects")
+    .select(BRANDING_FILE_OBJECT_COLUMNS)
+    .eq("id", fileId)
+    .eq("scene", "brand_logo")
+    .eq("status", "active")
+    .eq("visibility", "public")
+    .is("deleted_at", null);
+
+  query = owner.scope === "platform"
+    ? query.is("tenant_id", null)
+    : query.eq("tenant_id", owner.tenantId);
+
+  const { data, error } = await query.maybeSingle();
+  if (error) throw Errors.dbError("查询品牌 Logo 文件失败", error);
+  return (data as BrandingPlatformFileObjectRecord | null) ?? null;
+}
 
 function normalizeChecksum(value: string | null | undefined) {
   return value?.trim().replace(/^"+|"+$/g, "") || null;
