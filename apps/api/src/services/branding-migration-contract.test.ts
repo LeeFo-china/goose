@@ -376,6 +376,7 @@ describe("tenant support branding batch A migration contract", () => {
       const url of [
         "https://cdn.example.com/logo.png",
         "http://assets.example.com:8080/a.webp",
+        "https://cdn.xn--fiqs8s/logo.png",
       ]
     ) {
       expect(acceptsBrandLogoSqlUrl(validator, url)).toBe(true);
@@ -387,6 +388,9 @@ describe("tenant support branding batch A migration contract", () => {
         "https://[....]/logo.png",
         "https://-cdn.example.com/logo.png",
         "https://cdn-.example.com/logo.png",
+        "https://999.999.999.999/logo.png",
+        "https://256.256.256.256/logo.png",
+        "https://foo.123/logo.png",
       ]
     ) {
       expect(acceptsBrandLogoSqlUrl(validator, url)).toBe(false);

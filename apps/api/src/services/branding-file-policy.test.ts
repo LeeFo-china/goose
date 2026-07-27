@@ -120,6 +120,15 @@ describe("assertValidBrandLogoFile", () => {
     ["invalid IPv6 hostname", {
       public_url: "https://[....]/logo.png",
     }],
+    ["out-of-range numeric hostname", {
+      public_url: "https://999.999.999.999/logo.png",
+    }],
+    ["IPv4-like hostname", {
+      public_url: "https://256.256.256.256/logo.png",
+    }],
+    ["numeric final DNS label", {
+      public_url: "https://foo.123/logo.png",
+    }],
   ])("rejects invalid %s", (_name, patch) => {
     expectInvalid({
       ...platformFile,
@@ -143,6 +152,7 @@ describe("assertValidBrandLogoFile", () => {
     "https://cdn.example.com:8443/brand/logo.png?v=1#asset",
     "http://assets.example.com:8080/a.webp",
     "HTTPS://CDN.EXAMPLE.COM/logo.png",
+    "https://cdn.xn--fiqs8s/logo.png",
   ])("accepts a valid public HTTP(S) URL %s", (publicUrl) => {
     expect(assertValidBrandLogoFile(
       { tenantId: null },
