@@ -11,6 +11,15 @@ const PROJECT_REQUIRED_UPLOAD_SCENES = new Set([
   "project_payment",
 ]);
 
+const BRAND_LOGO_EXTENSION_BY_MIMETYPE: Readonly<Record<string, string>> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+const BRAND_LOGO_OBJECT_SUFFIX_PATTERN =
+  /^\d{4}\/\d{2}\/\d{2}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+
 export type DirectUploadActorContext = {
   tenantId: string | null;
   employeeId: string | null;
@@ -28,6 +37,7 @@ export function assertDirectObjectKeyBelongsToActor(input: {
   scene: string;
   actorContext: DirectUploadActorContext;
   projectId?: string;
+  mimetype?: string;
 }): void {
   const expectedPrefix = buildExpectedPrefix(input.scene, input.actorContext);
   if (!input.objectKey.startsWith(expectedPrefix)) {
@@ -36,7 +46,14 @@ export function assertDirectObjectKeyBelongsToActor(input: {
 
   if (input.scene === "brand_logo") {
     const suffix = input.objectKey.slice(expectedPrefix.length);
-    if (!/^\d{4}\/\d{2}\/\d{2}\/[^/]+$/.test(suffix)) {
+    const expectedExtension =
+      BRAND_LOGO_EXTENSION_BY_MIMETYPE[input.mimetype ?? ""];
+    const matchedExtension =
+      BRAND_LOGO_OBJECT_SUFFIX_PATTERN.exec(suffix)?.[1];
+    if (
+      !expectedExtension ||
+      matchedExtension !== expectedExtension
+    ) {
       throw ownershipError("品牌 Logo 上传对象路径无效");
     }
   }

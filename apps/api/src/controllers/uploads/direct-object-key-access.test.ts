@@ -15,19 +15,24 @@ const platformActor = {
   employeeId: "platform-employee-1",
   isPlatformAdmin: true,
 };
+const LOGO_UUID = "11111111-1111-4111-8111-111111111111";
 
 describe("brand logo direct object ownership", () => {
   test("allows only the current tenant brand-logo prefix", () => {
     expect(() => assertDirectObjectKeyBelongsToActor({
-      objectKey: "tenants/tenant-1/brand-logo/2026/07/27/logo.png",
+      objectKey:
+        `tenants/tenant-1/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       scene: "brand_logo",
       actorContext: tenantActor,
+      mimetype: "image/png",
     })).not.toThrow();
 
     expect(() => assertDirectObjectKeyBelongsToActor({
-      objectKey: "tenants/tenant-2/brand-logo/2026/07/27/logo.png",
+      objectKey:
+        `tenants/tenant-2/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       scene: "brand_logo",
       actorContext: tenantActor,
+      mimetype: "image/png",
     })).toThrow(expect.objectContaining({
       statusCode: 403,
       code: "FORBIDDEN",
@@ -36,15 +41,18 @@ describe("brand logo direct object ownership", () => {
 
   test("allows only the platform brand-logo prefix for platform actors", () => {
     expect(() => assertDirectObjectKeyBelongsToActor({
-      objectKey: "public/brand-logo/2026/07/27/logo.png",
+      objectKey: `public/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       scene: "brand_logo",
       actorContext: platformActor,
+      mimetype: "image/png",
     })).not.toThrow();
 
     expect(() => assertDirectObjectKeyBelongsToActor({
-      objectKey: "tenants/tenant-1/brand-logo/2026/07/27/logo.png",
+      objectKey:
+        `tenants/tenant-1/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       scene: "brand_logo",
       actorContext: platformActor,
+      mimetype: "image/png",
     })).toThrow(expect.objectContaining({ code: "FORBIDDEN" }));
   });
 
@@ -53,6 +61,44 @@ describe("brand logo direct object ownership", () => {
       objectKey: "tenants/tenant-1/brand-logo/unassigned/logo.png",
       scene: "brand_logo",
       actorContext: tenantActor,
+      mimetype: "image/png",
     })).toThrow(expect.objectContaining({ code: "FORBIDDEN" }));
+  });
+
+  test.each([
+    ["JPEG", "image/jpeg", "jpg"],
+    ["PNG", "image/png", "png"],
+    ["WebP", "image/webp", "webp"],
+  ])("accepts generated UUID.%s for %s", (_name, mimetype, extension) => {
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey:
+        `tenants/tenant-1/brand-logo/2026/07/27/${LOGO_UUID}.${extension}`,
+      scene: "brand_logo",
+      actorContext: tenantActor,
+      mimetype,
+    })).not.toThrow();
+  });
+
+  test.each([
+    ["PNG declared as JPG", "image/png", `${LOGO_UUID}.jpg`],
+    ["WebP declared as PNG", "image/webp", `${LOGO_UUID}.png`],
+    ["missing extension", "image/png", LOGO_UUID],
+    ["double extension", "image/png", `${LOGO_UUID}.jpg.png`],
+    ["uppercase extension", "image/png", `${LOGO_UUID}.PNG`],
+    [
+      "uppercase UUID",
+      "image/png",
+      "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA.png",
+    ],
+  ])("rejects %s", (_name, mimetype, basename) => {
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey: `tenants/tenant-1/brand-logo/2026/07/27/${basename}`,
+      scene: "brand_logo",
+      actorContext: tenantActor,
+      mimetype,
+    })).toThrow(expect.objectContaining({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    }));
   });
 });

@@ -19,6 +19,7 @@ const uploadBody = {
   mimetype: "image/png",
   size_bytes: 1024,
 };
+const LOGO_UUID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(resetUploadControllerMocks);
 
@@ -78,7 +79,7 @@ describe("UploadController brand logo direct upload", () => {
 
   test("completes a tenant logo only under the live tenant prefix", async () => {
     const objectKey =
-      `tenants/${tenantId}/brand-logo/2026/07/27/logo.png`;
+      `tenants/${tenantId}/brand-logo/2026/07/27/${LOGO_UUID}.png`;
     const { default: controller } = await import("./index");
 
     await controller.completeDirectCosUpload(
@@ -97,7 +98,7 @@ describe("UploadController brand logo direct upload", () => {
 
   test("completes a platform logo only under the public brand prefix", async () => {
     allowPlatformBrandLogoUpload();
-    const objectKey = "public/brand-logo/2026/07/27/logo.png";
+    const objectKey = `public/brand-logo/2026/07/27/${LOGO_UUID}.png`;
     const { default: controller } = await import("./index");
 
     await controller.completeDirectCosUpload(
@@ -119,7 +120,8 @@ describe("UploadController brand logo direct upload", () => {
       "tenant using platform path",
       () => buildRequest({
         ...uploadBody,
-        object_key: "public/brand-logo/2026/07/27/logo.png",
+        object_key:
+          `public/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       }),
     ],
     [
@@ -129,7 +131,7 @@ describe("UploadController brand logo direct upload", () => {
         return buildPlatformRequest({
           ...uploadBody,
           object_key:
-            `tenants/${tenantId}/brand-logo/2026/07/27/logo.png`,
+            `tenants/${tenantId}/brand-logo/2026/07/27/${LOGO_UUID}.png`,
         });
       },
     ],
@@ -146,6 +148,31 @@ describe("UploadController brand logo direct upload", () => {
 
     await expect(controller.completeDirectCosUpload(
       requestFactory(),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["PNG with JPG key", "image/png", `${LOGO_UUID}.jpg`],
+    ["WebP with PNG key", "image/webp", `${LOGO_UUID}.png`],
+    ["missing extension", "image/png", LOGO_UUID],
+    ["double extension", "image/png", `${LOGO_UUID}.jpg.png`],
+    ["uppercase extension", "image/png", `${LOGO_UUID}.PNG`],
+  ])("rejects MIME/key mismatch before storage: %s", async (
+    _name,
+    mimetype,
+    basename,
+  ) => {
+    const { default: controller } = await import("./index");
+
+    await expect(controller.completeDirectCosUpload(
+      buildRequest({
+        ...uploadBody,
+        mimetype,
+        object_key:
+          `tenants/${tenantId}/brand-logo/2026/07/27/${basename}`,
+      }),
       {} as never,
     )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
     expect(completeDirectUpload).not.toHaveBeenCalled();

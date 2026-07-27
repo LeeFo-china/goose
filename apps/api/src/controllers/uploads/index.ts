@@ -243,6 +243,7 @@ class UploadController extends BaseController {
       scene,
       actorContext,
       projectId: result.data.project_id,
+      mimetype: result.data.mimetype,
     });
 
     const uploaded = await platformFileStorageService.completeDirectUpload({
