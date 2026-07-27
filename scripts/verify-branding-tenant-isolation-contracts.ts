@@ -278,9 +278,24 @@ function isNullablePositiveSafeInteger(value: unknown): boolean {
 
 function isIsoTimestamp(value: unknown): value is string {
   if (typeof value !== "string") return false;
-  const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) &&
-    new Date(timestamp).toISOString() === value;
+  const match = value.match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/,
+  );
+  if (!match) return false;
+  const [, year, month, day, hour, minute, second] = match;
+  const yearNumber = Number(year);
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  return (
+    monthNumber >= 1 &&
+    monthNumber <= 12 &&
+    dayNumber >= 1 &&
+    dayNumber <= new Date(Date.UTC(yearNumber, monthNumber, 0)).getUTCDate() &&
+    Number(hour) <= 23 &&
+    Number(minute) <= 59 &&
+    Number(second) <= 59 &&
+    Number.isFinite(Date.parse(value))
+  );
 }
 
 function isNullableIsoTimestamp(value: unknown): boolean {

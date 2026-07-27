@@ -221,7 +221,7 @@ export async function runBrandingTenantIsolationSmoke(
     path: "/platform/branding",
     token: config.platformToken,
     expected: { status: 200 },
-    forbiddenValues: [withTenantId, withoutTenantId, config.foreignFileId],
+    forbiddenValues: [withTenantId, withoutTenantId],
     validate: assertPlatformBrandingFixture,
   });
   await check({

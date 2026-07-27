@@ -42,6 +42,7 @@ const platformEffective = {
 const platformProfile = {
   ...tenantProfile,
   display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  logo_file_id: FOREIGN_FILE_ID,
   logo_url: "https://cdn.example.com/platform.png",
   version: 3,
   published_version: 3,

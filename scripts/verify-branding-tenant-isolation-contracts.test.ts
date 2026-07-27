@@ -11,6 +11,7 @@ import {
 const TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const LOGO_FILE_ID = "20000000-0000-4000-8000-000000000001";
 const TIMESTAMP = "2026-07-27T10:00:00.000Z";
+const POSTGRES_TIMESTAMP = "2026-07-27T10:00:00.123456+00:00";
 
 const tenantProfile = {
   display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
@@ -86,6 +87,27 @@ describe("branding smoke response contracts", () => {
         {
           profile: tenantProfile,
           entitlement,
+          can_customize: true,
+          effective: tenantEffective,
+        },
+        { kind: "with_entitlement", tenantId: TENANT_ID },
+      )
+    ).not.toThrow();
+  });
+
+  test("accepts PostgreSQL microsecond timestamps returned by Supabase", () => {
+    expect(() =>
+      assertTenantBrandingFixture(
+        {
+          profile: {
+            ...tenantProfile,
+            published_at: POSTGRES_TIMESTAMP,
+            updated_at: POSTGRES_TIMESTAMP,
+          },
+          entitlement: {
+            ...entitlement,
+            expires_at: POSTGRES_TIMESTAMP,
+          },
           can_customize: true,
           effective: tenantEffective,
         },
