@@ -18,6 +18,8 @@ const SHARP_INPUT_OPTIONS = {
   failOn: "error",
   limitInputPixels: BRAND_LOGO_MAX_INPUT_PIXELS,
 } as const;
+const PNG_SIGNATURE = Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10);
+const PNG_CHUNK_OVERHEAD_BYTES = 12;
 
 export async function parseBrandLogoImageMetadata(
   bytes: Uint8Array,
@@ -45,6 +47,10 @@ export async function parseBrandLogoImageMetadata(
       return invalidBrandLogo();
     }
 
+    if (metadata.format === "png") {
+      assertPngHasNoAnimationControlChunk(input);
+    }
+
     await sharp(input, SHARP_INPUT_OPTIONS)
       .resize(1, 1, { fit: "fill" })
       .raw()
@@ -59,6 +65,45 @@ export async function parseBrandLogoImageMetadata(
       throw error;
     }
     return invalidBrandLogo();
+  }
+}
+
+function assertPngHasNoAnimationControlChunk(input: Uint8Array): void {
+  if (
+    input.byteLength < PNG_SIGNATURE.length ||
+    PNG_SIGNATURE.some((byte, index) => input[index] !== byte)
+  ) {
+    return invalidBrandLogo();
+  }
+
+  let offset = PNG_SIGNATURE.length;
+  const inputView = new DataView(
+    input.buffer,
+    input.byteOffset,
+    input.byteLength,
+  );
+  while (offset < input.byteLength) {
+    const remainingBytes = input.byteLength - offset;
+    if (remainingBytes < PNG_CHUNK_OVERHEAD_BYTES) {
+      return invalidBrandLogo();
+    }
+
+    const chunkLength = inputView.getUint32(offset);
+    const nextOffset = offset + PNG_CHUNK_OVERHEAD_BYTES + chunkLength;
+    if (nextOffset > input.byteLength) {
+      return invalidBrandLogo();
+    }
+
+    if (
+      input[offset + 4] === 0x61 &&
+      input[offset + 5] === 0x63 &&
+      input[offset + 6] === 0x54 &&
+      input[offset + 7] === 0x4c
+    ) {
+      return invalidBrandLogo();
+    }
+
+    offset = nextOffset;
   }
 }
 
