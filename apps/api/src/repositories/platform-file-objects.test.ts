@@ -11,6 +11,42 @@ type QueryTrace = {
   limits?: unknown[];
 };
 
+async function createScopedRepository(
+  existing: Record<string, unknown> | null,
+  error: unknown = null,
+) {
+  const { PlatformFileObjectRepository } = await import(
+    "./platform-file-objects"
+  );
+  const trace: QueryTrace = {
+    equals: [],
+    nullChecks: [],
+    selects: [],
+  };
+  const builder: Record<string, unknown> = {};
+  builder.select = mock((columns: string) => {
+    trace.selects.push(columns);
+    return builder;
+  });
+  builder.eq = mock((field: string, value: unknown) => {
+    trace.equals.push([field, value]);
+    return builder;
+  });
+  builder.is = mock((field: string, value: unknown) => {
+    trace.nullChecks.push([field, value]);
+    return builder;
+  });
+  builder.maybeSingle = mock(async () => ({ data: existing, error }));
+  const client = {
+    from: mock(() => builder),
+  };
+
+  return {
+    repository: new PlatformFileObjectRepository(() => client as never),
+    trace,
+  };
+}
+
 async function loadRepositoryWithExisting(
   existing: Record<string, unknown>,
   trace?: QueryTrace,
@@ -234,4 +270,56 @@ test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection",
   ]));
   expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
   expect(trace.limits).toEqual([1]);
+});
+
+test("platform brand Logo lookup requires the exact null-owner scope", async () => {
+  const { repository, trace } = await createScopedRepository(matchingExisting);
+
+  await expect(repository.findActiveBrandLogoForOwner("file-1", null))
+    .resolves.toMatchObject({ id: "file-1" });
+
+  expect(trace.selects).toEqual([
+    "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,width,height,checksum,visibility,public_url,status,deleted_at",
+  ]);
+  expect(trace.equals).toEqual(expect.arrayContaining([
+    ["id", "file-1"],
+    ["scene", "brand_logo"],
+    ["status", "active"],
+    ["visibility", "public"],
+  ]));
+  expect(trace.nullChecks).toEqual(expect.arrayContaining([
+    ["tenant_id", null],
+    ["deleted_at", null],
+  ]));
+});
+
+test("tenant brand Logo lookup requires the exact tenant owner scope", async () => {
+  const { repository, trace } = await createScopedRepository({
+    ...matchingExisting,
+    tenant_id: "tenant-1",
+  });
+
+  await expect(repository.findActiveBrandLogoForOwner("file-1", "tenant-1"))
+    .resolves.toMatchObject({ id: "file-1", tenant_id: "tenant-1" });
+
+  expect(trace.equals).toEqual(expect.arrayContaining([
+    ["id", "file-1"],
+    ["tenant_id", "tenant-1"],
+    ["scene", "brand_logo"],
+    ["status", "active"],
+    ["visibility", "public"],
+  ]));
+  expect(trace.nullChecks).not.toContainEqual(["tenant_id", null]);
+});
+
+test("brand Logo lookup maps Supabase failures through the error factory", async () => {
+  const databaseError = { code: "XX000", message: "lookup failed" };
+  const { repository } = await createScopedRepository(null, databaseError);
+
+  await expect(repository.findActiveBrandLogoForOwner("file-1", "tenant-1"))
+    .rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: databaseError,
+    });
 });

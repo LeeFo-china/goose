@@ -98,6 +98,28 @@ export type SupplierBusinessLicensePreviewFileRecord = Pick<
   | "created_by_employee_id"
 >;
 
+export type BrandingPlatformFileObjectRecord = Pick<
+  PlatformFileObjectRecord,
+  | "id"
+  | "tenant_id"
+  | "owner_type"
+  | "owner_id"
+  | "scene"
+  | "provider"
+  | "bucket"
+  | "region"
+  | "object_key"
+  | "mime_type"
+  | "size_bytes"
+  | "width"
+  | "height"
+  | "checksum"
+  | "visibility"
+  | "public_url"
+  | "status"
+  | "deleted_at"
+>;
+
 const OCR_FILE_OBJECT_COLUMNS = [
   "id",
   "tenant_id",
@@ -132,8 +154,49 @@ const SUPPLIER_LICENSE_PREVIEW_COLUMNS = [
   "deleted_at",
   "created_by_employee_id",
 ].join(",");
+const BRANDING_FILE_OBJECT_COLUMNS = [
+  "id",
+  "tenant_id",
+  "owner_type",
+  "owner_id",
+  "scene",
+  "provider",
+  "bucket",
+  "region",
+  "object_key",
+  "mime_type",
+  "size_bytes",
+  "width",
+  "height",
+  "checksum",
+  "visibility",
+  "public_url",
+  "status",
+  "deleted_at",
+].join(",");
 
-class PlatformFileObjectRepository {
+type BrandingFileObjectQueryResult = {
+  data: unknown;
+  error: unknown;
+};
+
+type BrandingFileObjectQuery = {
+  select(columns: string): BrandingFileObjectQuery;
+  eq(column: string, value: unknown): BrandingFileObjectQuery;
+  is(column: string, value: null): BrandingFileObjectQuery;
+  maybeSingle(): Promise<BrandingFileObjectQueryResult>;
+};
+
+type BrandingFileObjectClient = {
+  from(table: string): BrandingFileObjectQuery;
+};
+
+export class PlatformFileObjectRepository {
+  constructor(
+    private readonly getBrandingAdminClient: () => BrandingFileObjectClient =
+      () => SupabaseDB.getAdminClient() as unknown as BrandingFileObjectClient,
+  ) {}
+
   private toInsertPayload(input: CreatePlatformFileObjectInput) {
     return {
       tenant_id: input.tenant_id ?? null,
@@ -319,6 +382,28 @@ class PlatformFileObjectRepository {
       throw Errors.dbError("查询供应商营业执照文件失败", error);
     }
     return (data as SupplierBusinessLicensePreviewFileRecord | null) ?? null;
+  }
+
+  async findActiveBrandLogoForOwner(
+    fileId: string,
+    ownerTenantId: string | null,
+  ) {
+    let query = this.getBrandingAdminClient()
+      .from("platform_file_objects")
+      .select(BRANDING_FILE_OBJECT_COLUMNS)
+      .eq("id", fileId)
+      .eq("scene", "brand_logo")
+      .eq("status", "active")
+      .eq("visibility", "public")
+      .is("deleted_at", null);
+
+    query = ownerTenantId === null
+      ? query.is("tenant_id", null)
+      : query.eq("tenant_id", ownerTenantId);
+
+    const { data, error } = await query.maybeSingle();
+    if (error) throw Errors.dbError("查询品牌 Logo 文件失败", error);
+    return (data as BrandingPlatformFileObjectRecord | null) ?? null;
   }
 
   private async findPrivateVisitorConflict(input: {
