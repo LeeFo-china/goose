@@ -811,7 +811,10 @@ git commit -m "feat(api): 暴露品牌与权益批次A接口"
 
 - Create: `scripts/verify-branding-tenant-isolation.ts`
 - Create: `scripts/verify-branding-tenant-isolation-support.ts`
+- Create: `scripts/verify-branding-tenant-isolation-contracts.ts`
 - Create: `scripts/verify-branding-tenant-isolation.test.ts`
+- Create: `scripts/verify-branding-tenant-isolation-contracts.test.ts`
+- Create: `scripts/verify-branding-tenant-isolation-runner.test.ts`
 - Create: `docs/miniprogram/2026-07-27-tenant-support-branding-batch-a-handoff.md`
 
 - [ ] **Step 1: Write smoke result parser tests**
@@ -823,7 +826,9 @@ foreign tenant ID.
 - [ ] **Step 2: Run RED**
 
 ```bash
-bun test scripts/verify-branding-tenant-isolation.test.ts
+bun test scripts/verify-branding-tenant-isolation.test.ts \
+  scripts/verify-branding-tenant-isolation-contracts.test.ts \
+  scripts/verify-branding-tenant-isolation-runner.test.ts
 ```
 
 - [ ] **Step 3: Implement the authenticated smoke**
@@ -854,10 +859,15 @@ Batch A has no addon product/order/payment/refund endpoint.
 - [ ] **Step 5: Run GREEN and commit**
 
 ```bash
-bun test scripts/verify-branding-tenant-isolation.test.ts
+bun test scripts/verify-branding-tenant-isolation.test.ts \
+  scripts/verify-branding-tenant-isolation-contracts.test.ts \
+  scripts/verify-branding-tenant-isolation-runner.test.ts
 git add scripts/verify-branding-tenant-isolation.ts \
   scripts/verify-branding-tenant-isolation-support.ts \
+  scripts/verify-branding-tenant-isolation-contracts.ts \
   scripts/verify-branding-tenant-isolation.test.ts \
+  scripts/verify-branding-tenant-isolation-contracts.test.ts \
+  scripts/verify-branding-tenant-isolation-runner.test.ts \
   docs/miniprogram/2026-07-27-tenant-support-branding-batch-a-handoff.md
 git commit -m "docs(branding): 增加批次A联调契约"
 ```

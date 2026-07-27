@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  BRANDING_SMOKE_RESPONSE_MAX_BYTES,
+  BRANDING_SMOKE_TIMEOUT_MS,
   assertExpectedSmokeResponse,
+  createBrandingSmokeAbortSignal,
   formatSmokeMarker,
+  normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
+  readBoundedResponseText,
   readPlatformListTargetTenantId,
   redactSensitiveText,
 } from "./verify-branding-tenant-isolation";
@@ -100,6 +105,48 @@ describe("branding tenant isolation smoke helpers", () => {
     expect(snake.requestId).toBe("request-snake");
   });
 
+  test("rejects ambiguous envelopes and errors without a safe request ID", () => {
+    expect(() =>
+      parseSmokeResponse({
+        status: 200,
+        text: JSON.stringify({
+          data: {},
+          message: "success",
+          success: false,
+          code: "INJECTED",
+          requestId: "request-1",
+        }),
+      })
+    ).toThrow(/envelope/i);
+    expect(() =>
+      parseSmokeResponse({
+        status: 403,
+        text: JSON.stringify({
+          data: null,
+          success: false,
+          message: "denied",
+          code: "FORBIDDEN",
+          requestId: "request-2",
+        }),
+      })
+    ).toThrow(/envelope/i);
+
+    const missingRequestId = parseSmokeResponse({
+      status: 403,
+      text: JSON.stringify({
+        success: false,
+        message: "denied",
+        code: "FORBIDDEN",
+      }),
+    });
+    expect(() =>
+      assertExpectedSmokeResponse(missingRequestId, {
+        status: 403,
+        code: "FORBIDDEN",
+      })
+    ).toThrow(/request.?id/i);
+  });
+
   test("asserts expected status and stable code", () => {
     const parsed = parseSmokeResponse({
       status: 403,
@@ -192,6 +239,28 @@ describe("branding tenant isolation smoke helpers", () => {
     );
   });
 
+  test("prevents control characters, ANSI, and oversized marker fields", () => {
+    const marker = formatSmokeMarker(
+      "label\r\nINJECTED\u001b[31m",
+      {
+        status: 500,
+        code: `BAD\nCODE${"X".repeat(200)}`,
+        requestId: "request\r\nforged",
+        message: null,
+        data: null,
+        isSuccessEnvelope: false,
+        isErrorEnvelope: true,
+      },
+      [],
+      "FAIL",
+    );
+
+    expect(marker).toBe(
+      "[FAIL] INVALID status=500 code=INVALID request_id=INVALID",
+    );
+    expect(marker).not.toMatch(/[\r\n\u001b]/);
+  });
+
   test("accepts only a canonical lowercase tenant UUID as platform list target", () => {
     expect(
       readPlatformListTargetTenantId(
@@ -208,5 +277,90 @@ describe("branding tenant isolation smoke helpers", () => {
         jwtWithTenantId("00000000-0000-0000-0000-000000000001"),
       )
     ).toThrow(/tenant_id UUID claim/i);
+  });
+
+  test("bounds JWT and JWT payload length before decoding", () => {
+    expect(() =>
+      readPlatformListTargetTenantId(`a.${"a".repeat(5000)}.b`)
+    ).toThrow(/too long/i);
+    expect(() =>
+      readPlatformListTargetTenantId("x".repeat(9000))
+    ).toThrow(/too long/i);
+  });
+
+  test("allows remote HTTPS and loopback HTTP origins only", () => {
+    expect(normalizeBrandingApiBaseUrl("https://api-dev.goodcms.cn"))
+      .toBe("https://api-dev.goodcms.cn");
+    expect(normalizeBrandingApiBaseUrl("http://127.0.0.1:3000"))
+      .toBe("http://127.0.0.1:3000");
+    expect(normalizeBrandingApiBaseUrl("http://localhost:3000"))
+      .toBe("http://localhost:3000");
+    expect(normalizeBrandingApiBaseUrl("http://[::1]:3000"))
+      .toBe("http://[::1]:3000");
+
+    for (const value of [
+      "http://api-dev.goodcms.cn",
+      "http://192.168.1.19:3000",
+      "https://user:pass@api-dev.goodcms.cn",
+      "https://api-dev.goodcms.cn/api",
+      "https://api-dev.goodcms.cn?tenant_id=x",
+    ]) {
+      expect(() => normalizeBrandingApiBaseUrl(value)).toThrow();
+    }
+  });
+
+  test("uses a fixed fifteen-second abort signal", () => {
+    expect(BRANDING_SMOKE_TIMEOUT_MS).toBe(15_000);
+    const signal = createBrandingSmokeAbortSignal();
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+  });
+
+  test("rejects Content-Length above one MiB and cancels the body", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const response = new Response(body, {
+      headers: {
+        "content-length": String(BRANDING_SMOKE_RESPONSE_MAX_BYTES + 1),
+      },
+    });
+
+    await expect(readBoundedResponseText(response)).rejects.toThrow(
+      /too large/i,
+    );
+    expect(cancelled).toBe(true);
+  });
+
+  test("stream-limits response bodies even without Content-Length", async () => {
+    let cancelled = false;
+    const chunk = new Uint8Array(600 * 1024);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+
+    await expect(
+      readBoundedResponseText(new Response(body)),
+    ).rejects.toThrow(/too large/i);
+    expect(cancelled).toBe(true);
+  });
+
+  test("reads a bounded UTF-8 response body", async () => {
+    const response = new Response('{"data":{},"message":"success"}', {
+      headers: { "content-length": "31" },
+    });
+
+    expect(await readBoundedResponseText(response)).toBe(
+      '{"data":{},"message":"success"}',
+    );
   });
 });

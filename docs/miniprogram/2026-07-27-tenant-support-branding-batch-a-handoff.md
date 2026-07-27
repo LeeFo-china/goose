@@ -118,7 +118,9 @@ token；联调反馈只回传接口、HTTP、稳定错误码、`requestId` 和
 ### 3.1 `GET /branding/effective`
 
 鉴权：公共；可选 Bearer token。  
-Query/body：必须为空，禁止 `tenant_id`。  
+Query：严格为空；任意额外参数（包括 `tenant_id`）返回
+`400 VALIDATION_ERROR`。
+Body：GET 客户端不发送请求体；服务端不定义 body schema。
 响应头：`Cache-Control: private, no-store`。
 
 无权益、权益暂停/过期/撤销、租户非 active、租户品牌未发布或
@@ -145,7 +147,8 @@ Logo 文件异常时，均返回 `source=platform`：
 ### 3.2 `GET /platform/branding`
 
 鉴权：平台管理员 + `platform.branding.manage`。  
-Query/body：空。
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：GET 客户端不发送请求体；服务端不定义 body schema。
 
 ```json
 {
@@ -168,7 +171,10 @@ Query/body：空。
 ### 3.3 `PATCH /platform/branding`
 
 鉴权：平台管理员 + `platform.branding.manage`。  
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
 用途：只保存草稿，不改变线上发布快照。
+
+Body：
 
 ```json
 {
@@ -217,6 +223,9 @@ Query/body：空。
 
 鉴权：平台管理员 + `platform.branding.manage`。
 
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：
+
 ```json
 {
   "version": 1
@@ -258,6 +267,8 @@ Query/body：空。
 
 鉴权：平台管理员 + `platform.tenant_entitlement.manage`。  
 Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。  
+除 `page/pageSize` 外任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：GET 客户端不发送请求体；服务端不定义 body schema。
 `:id` 是平台管理员选择的目标租户 UUID。
 
 ```json
@@ -293,6 +304,9 @@ Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。
 ### 3.6 `POST /platform/tenants/:id/entitlements/custom_support_branding/grant`
 
 鉴权：平台管理员 + `platform.tenant_entitlement.manage`。
+
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：
 
 ```json
 {
@@ -332,6 +346,10 @@ Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。
 
 ### 3.7 `POST /platform/tenants/:id/entitlements/custom_support_branding/suspend`
 
+鉴权：平台管理员 + `platform.tenant_entitlement.manage`。
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：
+
 ```json
 {
   "version": 1,
@@ -344,6 +362,10 @@ Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。
 
 ### 3.8 `POST /platform/tenants/:id/entitlements/custom_support_branding/resume`
 
+鉴权：平台管理员 + `platform.tenant_entitlement.manage`。
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：
+
 ```json
 {
   "version": 2,
@@ -355,6 +377,10 @@ Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。
 `active`、清空暂停字段；恢复绝不延长原 `expires_at`。
 
 ### 3.9 `POST /platform/tenants/:id/entitlements/custom_support_branding/revoke`
+
+鉴权：平台管理员 + `platform.tenant_entitlement.manage`。
+Query：严格为空；任意额外参数返回 `400 VALIDATION_ERROR`。
+Body：
 
 ```json
 {
@@ -376,7 +402,9 @@ Query：`page=1&pageSize=20`，默认 1/20，`pageSize` 最大 100。
 ### 3.10 `GET /tenant/branding`
 
 鉴权：租户员工 + `brand.settings.read`。  
-Query/body：空；租户 ID 只来自登录态。
+Query：严格为空；任意额外参数（包括 `tenant_id`）返回
+`400 VALIDATION_ERROR`；租户 ID 只来自登录态。
+Body：GET 客户端不发送请求体；服务端不定义 body schema。
 
 ```json
 {
@@ -409,6 +437,10 @@ Query/body：空；租户 ID 只来自登录态。
 ### 3.11 `PATCH /tenant/branding`
 
 鉴权：租户员工 + `brand.settings.update` + 当前有效权益。
+
+Query：严格为空；任意额外参数（包括 `tenant_id`）返回
+`400 VALIDATION_ERROR`。
+Body：
 
 ```json
 {
@@ -461,6 +493,10 @@ Query/body：空；租户 ID 只来自登录态。
 ### 3.12 `POST /tenant/branding/publish`
 
 鉴权：租户员工 + `brand.settings.update` + 当前有效权益。
+
+Query：严格为空；任意额外参数（包括 `tenant_id`）返回
+`400 VALIDATION_ERROR`。
+Body：
 
 ```json
 {
@@ -707,9 +743,22 @@ bun scripts/verify-branding-tenant-isolation.ts
 ```
 
 脚本只输出 tenant 标签、HTTP、稳定 code、`request_id` 和汇总，不
-输出 token、Authorization header 或完整响应体。两条写请求都是
-受控负向测试，在持久化前分别以无权益 403、跨租户文件 404 终止，
-可安全重复执行。
+输出 token、Authorization header 或完整响应体。远程 API 地址必须
+使用 HTTPS；HTTP 只允许 `127.0.0.1`、`localhost` 或 `[::1]`。
+每次请求固定 15 秒超时，响应体通过 `Content-Length` 和实际流读取
+双重限制为最大 1 MiB。
+
+两条 PATCH 都固定使用不可用的哨兵版本
+`version=2147483647`，绝不读取或提交当前资料版本。正常业务门禁会
+分别在持久化前以无权益 403、跨租户文件 404 终止；即使门禁发生
+回归，保存 RPC 也会因版本不匹配或版本递增越界而回滚，不能写入
+品牌资料，因此可安全重复执行。
+
+隔离 fixture 还会严格校验响应字段集合：有权益租户必须返回已发布
+profile、active entitlement、`can_customize=true` 和本租户
+effective；无权益租户必须返回 null profile/entitlement、
+`can_customize=false` 和平台 effective；平台 fixture 必须已有
+已发布 profile。错误响应缺少安全的非空 `request_id` 时整项失败。
 
 仓库边界：本文档和 Batch A 代码只写入 `gooes`；Orange 原始契约和
 现有组件仅做只读核对，本次未修改 Orange。

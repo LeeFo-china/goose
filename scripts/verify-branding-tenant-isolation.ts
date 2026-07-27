@@ -1,25 +1,41 @@
 import {
+  BRANDING_SMOKE_RESPONSE_MAX_BYTES,
+  BRANDING_SMOKE_TIMEOUT_MS,
   type ExpectedResponse,
   type ParsedSmokeResponse,
   type SmokeEnvironment,
   SmokeAssertionError,
   assertExpectedSmokeResponse,
+  createBrandingSmokeAbortSignal,
   formatSmokeMarker,
   isCanonicalUuid,
-  isRecord,
+  normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
+  readBoundedResponseText,
   readPlatformListTargetTenantId,
   redactSensitiveText,
   requireRecord,
 } from "./verify-branding-tenant-isolation-support";
+import {
+  assertEffectiveBranding,
+  assertPlatformBrandingFixture,
+  assertTenantBrandingFixture,
+} from "./verify-branding-tenant-isolation-contracts";
 
 export {
+  BRANDING_SMOKE_RESPONSE_MAX_BYTES,
+  BRANDING_SMOKE_TIMEOUT_MS,
   assertExpectedSmokeResponse,
+  createBrandingSmokeAbortSignal,
   formatSmokeMarker,
+  normalizeBrandingApiBaseUrl,
   parseSmokeResponse,
+  readBoundedResponseText,
   readPlatformListTargetTenantId,
   redactSensitiveText,
 } from "./verify-branding-tenant-isolation-support";
+
+export const BRANDING_MUTATION_SENTINEL_VERSION = 2_147_483_647;
 
 type RequiredSmokeConfig = {
   baseUrl: string;
@@ -40,6 +56,18 @@ type RequestInput = {
   validate?: (data: unknown) => void;
 };
 type RequestExecutor = (input: RequestInput) => Promise<ParsedSmokeResponse>;
+type SmokeFetch = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+type SmokeDependencies = {
+  fetch?: SmokeFetch;
+  createAbortSignal?: () => AbortSignal;
+};
+export type BrandingTenantIsolationSmokeResult = {
+  passed: number;
+  failed: number;
+};
 const REQUIRED_ENV_NAMES = [
   "BRANDING_API_BASE_URL",
   "BRANDING_PLATFORM_TOKEN",
@@ -47,19 +75,11 @@ const REQUIRED_ENV_NAMES = [
   "BRANDING_TENANT_WITHOUT_ENTITLEMENT_TOKEN",
   "BRANDING_FOREIGN_FILE_ID",
 ] as const;
-const EFFECTIVE_KEYS = [
-  "display_name",
-  "logo_url",
-  "source",
-  "support_text",
-  "tenant_id",
-  "updated_at",
-  "version",
-] as const;
 export async function runBrandingTenantIsolationSmoke(
   environment: SmokeEnvironment = process.env,
   write: (line: string) => void = console.log,
-): Promise<void> {
+  dependencies: SmokeDependencies = {},
+): Promise<BrandingTenantIsolationSmokeResult> {
   const config = readConfig(environment);
   const withTenantId = readPlatformListTargetTenantId(
     config.tenantWithEntitlementToken,
@@ -73,7 +93,7 @@ export async function runBrandingTenantIsolationSmoke(
     );
   }
   let failed = 0;
-  const request = createRequestExecutor(config);
+  const request = createRequestExecutor(config, dependencies);
   const check = async (input: RequestInput) => {
     let response: ParsedSmokeResponse | null = null;
     try {
@@ -96,7 +116,7 @@ export async function runBrandingTenantIsolationSmoke(
     path: "/branding/effective",
     expected: { status: 200 },
     forbiddenValues: [withTenantId, withoutTenantId, config.foreignFileId],
-    validate: (data) => assertEffectiveBranding(data, "platform"),
+    validate: (data) => assertEffectiveBranding(data, "platform", null),
   });
   await check({
     label: "platform-no-tenant-effective",
@@ -104,7 +124,7 @@ export async function runBrandingTenantIsolationSmoke(
     token: config.platformToken,
     expected: { status: 200 },
     forbiddenValues: [withTenantId, withoutTenantId, config.foreignFileId],
-    validate: (data) => assertEffectiveBranding(data, "platform"),
+    validate: (data) => assertEffectiveBranding(data, "platform", null),
   });
   await check({
     label: "tenant-with-entitlement-effective",
@@ -120,30 +140,38 @@ export async function runBrandingTenantIsolationSmoke(
     token: config.tenantWithoutEntitlementToken,
     expected: { status: 200 },
     forbiddenValues: [withTenantId, withoutTenantId, config.foreignFileId],
-    validate: (data) => assertEffectiveBranding(data, "platform"),
+    validate: (data) => assertEffectiveBranding(data, "platform", null),
   });
-  const withTenantBranding = await check({
+  await check({
     label: "tenant-with-entitlement-branding-read",
     path: "/tenant/branding",
     token: config.tenantWithEntitlementToken,
     expected: { status: 200 },
     forbiddenValues: [withoutTenantId, config.foreignFileId],
-    validate: (data) => assertTenantBranding(data, true),
+    validate: (data) =>
+      assertTenantBrandingFixture(data, {
+        kind: "with_entitlement",
+        tenantId: withTenantId,
+      }),
   });
-  const withoutTenantBranding = await check({
+  await check({
     label: "tenant-without-entitlement-branding-read",
     path: "/tenant/branding",
     token: config.tenantWithoutEntitlementToken,
     expected: { status: 200 },
     forbiddenValues: [withTenantId, config.foreignFileId],
-    validate: (data) => assertTenantBranding(data, false),
+    validate: (data) =>
+      assertTenantBrandingFixture(data, {
+        kind: "without_entitlement",
+        tenantId: withoutTenantId,
+      }),
   });
   await check({
     label: "tenant-without-entitlement-draft-rejected",
     path: "/tenant/branding",
     method: "PATCH",
     token: config.tenantWithoutEntitlementToken,
-    body: mutationBody(withoutTenantBranding?.data, config.foreignFileId),
+    body: mutationBody(config.foreignFileId),
     expected: {
       status: 403,
       code: "BRANDING_ENTITLEMENT_REQUIRED",
@@ -155,7 +183,7 @@ export async function runBrandingTenantIsolationSmoke(
     path: "/tenant/branding",
     method: "PATCH",
     token: config.tenantWithEntitlementToken,
-    body: mutationBody(withTenantBranding?.data, config.foreignFileId),
+    body: mutationBody(config.foreignFileId),
     expected: {
       status: 404,
       code: "BRANDING_LOGO_FILE_NOT_FOUND",
@@ -168,7 +196,7 @@ export async function runBrandingTenantIsolationSmoke(
     token: config.platformToken,
     expected: { status: 200 },
     forbiddenValues: [withTenantId, withoutTenantId, config.foreignFileId],
-    validate: assertPlatformBranding,
+    validate: assertPlatformBrandingFixture,
   });
   await check({
     label: "tenant-cannot-read-platform-branding",
@@ -190,12 +218,19 @@ export async function runBrandingTenantIsolationSmoke(
     `[SUMMARY] branding-tenant-isolation passed=${11 - failed} ` +
       `failed=${failed}`,
   );
-  if (failed > 0) process.exitCode = 1;
+  return { passed: 11 - failed, failed };
 }
-function createRequestExecutor(config: RequiredSmokeConfig): RequestExecutor {
+function createRequestExecutor(
+  config: RequiredSmokeConfig,
+  dependencies: SmokeDependencies,
+): RequestExecutor {
+  const fetchRequest = dependencies.fetch ?? fetch;
+  const createAbortSignal = dependencies.createAbortSignal ??
+    createBrandingSmokeAbortSignal;
   return async (input) => {
-    const response = await fetch(`${config.baseUrl}${input.path}`, {
+    const response = await fetchRequest(`${config.baseUrl}${input.path}`, {
       method: input.method ?? "GET",
+      signal: createAbortSignal(),
       headers: {
         ...(input.token
           ? { authorization: `Bearer ${input.token}` }
@@ -210,7 +245,7 @@ function createRequestExecutor(config: RequiredSmokeConfig): RequestExecutor {
     });
     const parsed = parseSmokeResponse({
       status: response.status,
-      text: await response.text(),
+      text: await readBoundedResponseText(response),
       forbiddenValues: input.forbiddenValues,
     });
     return parsed;
@@ -233,7 +268,7 @@ function readConfig(environment: SmokeEnvironment): RequiredSmokeConfig {
     );
   }
   return {
-    baseUrl: normalizeBaseUrl(
+    baseUrl: normalizeBrandingApiBaseUrl(
       environment.BRANDING_API_BASE_URL?.trim() ?? "",
     ),
     platformToken: environment.BRANDING_PLATFORM_TOKEN?.trim() ?? "",
@@ -248,124 +283,12 @@ function readConfig(environment: SmokeEnvironment): RequiredSmokeConfig {
     }),
   };
 }
-function normalizeBaseUrl(value: string): string {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new SmokeAssertionError("BRANDING_API_BASE_URL is invalid");
-  }
-  if (
-    (url.protocol !== "http:" && url.protocol !== "https:") ||
-    url.username ||
-    url.password ||
-    url.pathname !== "/" ||
-    url.search ||
-    url.hash
-  ) {
-    throw new SmokeAssertionError(
-      "BRANDING_API_BASE_URL must be an HTTP(S) origin",
-    );
-  }
-  return url.origin;
-}
-function mutationBody(data: unknown, foreignFileId: string) {
-  const tenantBranding = isRecord(data) ? data : {};
-  const profile = isRecord(tenantBranding.profile)
-    ? tenantBranding.profile
-    : null;
-  const version = profile && Number.isSafeInteger(profile.version)
-    ? profile.version
-    : 0;
-  const displayName = profile && typeof profile.display_name === "string"
-    ? profile.display_name
-    : "品牌隔离校验";
+function mutationBody(foreignFileId: string) {
   return {
-    display_name: displayName,
+    display_name: "品牌隔离校验",
     logo_file_id: foreignFileId,
-    version,
+    version: BRANDING_MUTATION_SENTINEL_VERSION,
   };
-}
-function assertEffectiveBranding(
-  data: unknown,
-  expectedSource?: "platform" | "tenant",
-  expectedTenantId?: string,
-): void {
-  const value = requireRecord(data, "effective branding data");
-  const keys = Object.keys(value).sort();
-  if (JSON.stringify(keys) !== JSON.stringify([...EFFECTIVE_KEYS].sort())) {
-    throw new SmokeAssertionError(
-      "effective branding must contain exactly seven public fields",
-    );
-  }
-  if (
-    (value.source !== "platform" && value.source !== "tenant") ||
-    (expectedSource && value.source !== expectedSource) ||
-    typeof value.display_name !== "string" ||
-    !value.display_name.trim() ||
-    typeof value.logo_url !== "string" ||
-    !value.logo_url ||
-    typeof value.support_text !== "string" ||
-    !value.support_text ||
-    !Number.isSafeInteger(value.version) ||
-    typeof value.updated_at !== "string" ||
-    !Number.isFinite(new Date(value.updated_at).getTime())
-  ) {
-    throw new SmokeAssertionError("effective branding fields are invalid");
-  }
-  if (value.source === "platform" && value.tenant_id !== null) {
-    throw new SmokeAssertionError("platform branding must not expose tenant_id");
-  }
-  if (
-    value.source === "tenant" &&
-    (
-      typeof value.tenant_id !== "string" ||
-      !isCanonicalUuid(value.tenant_id) ||
-      (expectedTenantId && value.tenant_id !== expectedTenantId)
-    )
-  ) {
-    throw new SmokeAssertionError("tenant effective branding scope is invalid");
-  }
-}
-function assertTenantBranding(
-  data: unknown,
-  expectedCanCustomize: boolean,
-): void {
-  const value = requireRecord(data, "tenant branding data");
-  if (
-    !Object.hasOwn(value, "profile") ||
-    !Object.hasOwn(value, "entitlement") ||
-    value.can_customize !== expectedCanCustomize
-  ) {
-    throw new SmokeAssertionError("tenant branding summary is invalid");
-  }
-  if (!expectedCanCustomize && value.entitlement !== null) {
-    throw new SmokeAssertionError(
-      "tenant without entitlement must return a null summary",
-    );
-  }
-  if (expectedCanCustomize) {
-    const entitlement = requireRecord(
-      value.entitlement,
-      "tenant entitlement summary",
-    );
-    if (
-      entitlement.code !== "custom_support_branding" ||
-      entitlement.status !== "active"
-    ) {
-      throw new SmokeAssertionError(
-        "tenant entitlement summary must be active",
-      );
-    }
-  }
-  assertEffectiveBranding(value.effective);
-}
-function assertPlatformBranding(data: unknown): void {
-  const value = requireRecord(data, "platform branding data");
-  if (!Object.hasOwn(value, "profile")) {
-    throw new SmokeAssertionError("platform branding profile is missing");
-  }
-  assertEffectiveBranding(value.effective, "platform");
 }
 function assertEntitlementList(data: unknown, tenantId: string): void {
   const value = requireRecord(data, "entitlement list data");
@@ -404,5 +327,14 @@ function assertEntitlementList(data: unknown, tenantId: string): void {
   }
 }
 if (import.meta.main) {
-  await runBrandingTenantIsolationSmoke();
+  try {
+    const result = await runBrandingTenantIsolationSmoke();
+    if (result.failed > 0) process.exitCode = 1;
+  } catch {
+    console.error(
+      "[FAIL] branding-tenant-isolation status=unknown " +
+        "code=SMOKE_ASSERTION_FAILED request_id=null",
+    );
+    process.exitCode = 1;
+  }
 }
