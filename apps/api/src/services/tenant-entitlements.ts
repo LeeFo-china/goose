@@ -52,6 +52,8 @@ type GrantInput = Omit<EntitlementGrantInput, "term_years"> & {
 };
 
 type EntitlementSummary = {
+  tenantId: string;
+  tenantStatus: string;
   entitlement: ReturnType<typeof serializeEntitlement>;
   isActive: boolean;
 };
@@ -211,6 +213,8 @@ export class TenantEntitlementsService {
     }
 
     return {
+      tenantId: tenant.id,
+      tenantStatus: tenant.status,
       entitlement: serializeEntitlement(entitlement),
       isActive: isEntitlementActive(entitlement, tenant.status, now),
     };

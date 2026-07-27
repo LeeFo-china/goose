@@ -15,12 +15,14 @@ import { tenantEntitlementsService } from "@/services/tenant-entitlements";
 import type { JwtPayload } from "@/utils/jwt";
 
 const CONTROLLED_FALLBACK_UPDATED_AT = "1970-01-01T00:00:00.000Z";
+const MAX_FALLBACK_LOGO_URL_LENGTH = 2_048;
+const CANONICAL_UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 type BrandingRepositoryPort = Pick<
   typeof brandingRepository,
   | "findPlatformProfile"
   | "findTenantProfile"
-  | "findTenant"
   | "findPlatformBrandLogoForBinding"
   | "findTenantBrandLogoForBinding"
 >;
@@ -50,6 +52,7 @@ export type EffectiveBrandingServiceDependencies = {
   tenantEntitlementsService?: TenantEntitlementsPort;
   authorizationService?: AuthorizationPort;
   fallbackLogoUrl?: string | null;
+  runtimeEnvironment?: string;
 };
 
 export class EffectiveBrandingService {
@@ -72,7 +75,10 @@ export class EffectiveBrandingService {
       source: "platform",
       tenantId: null,
       displayName: PLATFORM_FALLBACK_DISPLAY_NAME,
-      logoUrl: validPublicHttpUrl(configuredFallback) ??
+      logoUrl: validFallbackLogoUrl(
+        configuredFallback,
+        dependencies.runtimeEnvironment ?? process.env.NODE_ENV,
+      ) ??
         CONTROLLED_FALLBACK_LOGO_URL,
       version: 0,
       updatedAt: CONTROLLED_FALLBACK_UPDATED_AT,
@@ -84,11 +90,32 @@ export class EffectiveBrandingService {
     now = new Date(),
   ): Promise<EffectiveBranding> {
     const platform = await this.resolvePlatform(now);
-    const authUserId = user?.token_type === "visitor_session"
-      ? null
-      : normalizedId(user?.sub);
-    if (!authUserId) {
+    const authUserId = strictNonBlank(user?.sub);
+    if (
+      !authUserId ||
+      (user?.token_type !== undefined && user.token_type !== "auth")
+    ) {
       return platform;
+    }
+
+    const customerId = canonicalUuid(user?.customer_id);
+    const employeeId = canonicalUuid(user?.employee_id);
+    const hasCustomerClaim = user?.customer_id !== undefined &&
+      user.customer_id !== null;
+    const hasEmployeeClaim = user?.employee_id !== undefined &&
+      user.employee_id !== null;
+    if (
+      (hasCustomerClaim && hasEmployeeClaim) ||
+      (hasCustomerClaim && !customerId) ||
+      (hasEmployeeClaim && !employeeId)
+    ) return platform;
+
+    if (customerId) {
+      return this.resolveTenantAgainstPlatform(
+        canonicalUuid(user?.tenant_id),
+        now,
+        platform,
+      );
     }
 
     try {
@@ -96,8 +123,12 @@ export class EffectiveBrandingService {
         authUserId,
         { allowedWhenBillingLocked: true },
       );
+      if (
+        context.authUserId !== authUserId ||
+        (employeeId && context.employeeId !== employeeId)
+      ) return platform;
       return this.resolveTenantAgainstPlatform(
-        normalizedId(context.tenantId),
+        canonicalUuid(context.tenantId),
         now,
         platform,
       );
@@ -119,56 +150,51 @@ export class EffectiveBrandingService {
     now: Date,
     platform: EffectiveBranding,
   ): Promise<EffectiveBranding> {
-    const normalizedTenantId = normalizedId(tenantId);
-    if (!normalizedTenantId) return platform;
+    const canonicalTenantId = canonicalUuid(tenantId);
+    if (!canonicalTenantId) return platform;
 
     try {
-      const tenant = await this.brandingRepository.findTenant(
-        normalizedTenantId,
-      );
-      if (!tenant || tenant.status !== "active") return platform;
-
       const summary = await this.tenantEntitlementsService.getTenantSummary(
-        normalizedTenantId,
+        canonicalTenantId,
         now,
       );
       const validatedSummary = validEntitlementSummary(
         summary,
-        normalizedTenantId,
+        canonicalTenantId,
       );
       if (
         !validatedSummary?.isActive ||
         !isEntitlementActive(
           validatedSummary.entitlement,
-          tenant.status,
+          validatedSummary.tenantStatus,
           now,
         )
       ) return platform;
 
       const profile = await this.brandingRepository.findTenantProfile(
-        normalizedTenantId,
+        canonicalTenantId,
       );
       const published = publishedSnapshot(
         profile,
         "tenant",
-        normalizedTenantId,
+        canonicalTenantId,
       );
       if (!published) return platform;
 
       const file =
         await this.brandingRepository.findTenantBrandLogoForBinding(
           published.logoFileId,
-          normalizedTenantId,
+          canonicalTenantId,
         );
       const validFile = assertValidBrandLogoFile(
-        { tenantId: normalizedTenantId },
+        { tenantId: canonicalTenantId },
         file,
       );
       const logoUrl = validPublicHttpUrl(validFile.public_url);
       if (!logoUrl) return platform;
       return buildBranding({
         source: "tenant",
-        tenantId: normalizedTenantId,
+        tenantId: canonicalTenantId,
         displayName: published.displayName,
         logoUrl,
         version: published.version,
@@ -219,7 +245,7 @@ function publishedSnapshot(
   tenantId: string | null,
 ): PublishedSnapshot | null {
   const displayName = profile?.published_display_name ?? null;
-  const logoFileId = normalizedId(profile?.published_logo_file_id);
+  const logoFileId = strictNonBlank(profile?.published_logo_file_id);
   const version = profile?.published_version ?? null;
   if (
     !profile ||
@@ -264,14 +290,20 @@ function buildBranding(input: {
   };
 }
 
-function normalizedId(value: string | null | undefined): string | null {
+function strictNonBlank(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
+  return value.length > 0 && value === value.trim() ? value : null;
+}
+
+function canonicalUuid(value: string | null | undefined): string | null {
+  return typeof value === "string" && CANONICAL_UUID_PATTERN.test(value)
+    ? value
+    : null;
 }
 
 type ValidEntitlementSummary = {
   isActive: boolean;
+  tenantStatus: string;
   entitlement: {
     status: "active" | "suspended" | "expired" | "revoked";
     starts_at: string;
@@ -287,6 +319,10 @@ function validEntitlementSummary(
   const entitlement = summary.entitlement;
   if (
     typeof summary.isActive !== "boolean" ||
+    summary.tenantId !== tenantId ||
+    typeof summary.tenantStatus !== "string" ||
+    summary.tenantStatus.length === 0 ||
+    summary.tenantStatus !== summary.tenantStatus.trim() ||
     entitlement.tenant_id !== tenantId ||
     entitlement.code !== CUSTOM_SUPPORT_BRANDING ||
     !Number.isSafeInteger(entitlement.version) ||
@@ -298,6 +334,7 @@ function validEntitlementSummary(
   ) return null;
   return {
     isActive: summary.isActive,
+    tenantStatus: summary.tenantStatus,
     entitlement: {
       status: entitlement.status,
       starts_at: entitlement.starts_at,
@@ -360,6 +397,22 @@ function validPublicHttpUrl(value: string | null | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function validFallbackLogoUrl(
+  value: string | null | undefined,
+  runtimeEnvironment: string | undefined,
+): string | null {
+  if (typeof value !== "string" || value.length > MAX_FALLBACK_LOGO_URL_LENGTH) {
+    return null;
+  }
+  const validUrl = validPublicHttpUrl(value);
+  if (!validUrl) return null;
+  if (
+    runtimeEnvironment === "production" &&
+    new URL(validUrl).protocol !== "https:"
+  ) return null;
+  return validUrl;
 }
 
 export const effectiveBrandingService = new EffectiveBrandingService();

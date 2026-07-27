@@ -232,6 +232,8 @@ describe("tenant entitlement summary query boundary", () => {
 
     await expect(fixture.service.getTenantSummary(TENANT_ID, NOW))
       .resolves.toMatchObject({
+        tenantId: TENANT_ID,
+        tenantStatus: "active",
         entitlement: { status: "expired", version: 2 },
         isActive: false,
       });

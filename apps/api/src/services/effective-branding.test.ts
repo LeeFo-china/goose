@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { createHash } from "node:crypto";
-import type { BrandProfileRecord, BrandingTenantRecord } from "@/repositories/branding";
+import type { BrandProfileRecord } from "@/repositories/branding";
 import type { BrandingPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
 import type { TenantEntitlementRecord } from "@/repositories/tenant-entitlements";
 import type { AuthContext } from "@/services/authorization";
@@ -16,6 +15,7 @@ const NOW = new Date("2026-07-27T10:00:00.000Z");
 const TENANT_ID = "00000000-0000-4000-8000-000000000001";
 const CLAIM_TENANT_ID = "00000000-0000-4000-8000-000000000099";
 const USER_ID = "00000000-0000-4000-8000-000000000002";
+const CUSTOMER_ID = "00000000-0000-4000-8000-000000000004";
 const PLATFORM_LOGO_ID = "00000000-0000-4000-8000-000000000010";
 const TENANT_LOGO_ID = "00000000-0000-4000-8000-000000000011";
 const FALLBACK_LOGO_URL = "https://fallback.example.com/logo.png";
@@ -58,7 +58,7 @@ const platformLogo = brandLogo(PLATFORM_LOGO_ID, null);
 const tenantLogo = brandLogo(TENANT_LOGO_ID, TENANT_ID);
 const tenant = {
   id: TENANT_ID, name: "晴天装饰", status: "active",
-} satisfies BrandingTenantRecord;
+} as const;
 const entitlement = {
   id: "00000000-0000-4000-8000-000000000030", tenant_id: TENANT_ID,
   entitlement_code: "custom_support_branding", status: "active",
@@ -85,11 +85,11 @@ type FixtureOptions = {
   tenantProfile?: BrandProfileRecord | null;
   platformLogo?: BrandingPlatformFileObjectRecord | null;
   tenantLogo?: BrandingPlatformFileObjectRecord | null;
-  tenant?: BrandingTenantRecord | null;
   entitlement?: TenantEntitlementRecord | null;
   summaryIsActive?: boolean;
+  summaryTenantId?: string;
+  summaryTenantStatus?: string;
   platformProfileFailure?: boolean;
-  tenantFailure?: boolean;
   entitlementFailure?: boolean;
   tenantProfileFailure?: boolean;
   platformLogoFailure?: boolean;
@@ -97,6 +97,7 @@ type FixtureOptions = {
   authFailure?: boolean;
   authContext?: AuthContext;
   fallbackLogoUrl?: string | null;
+  runtimeEnvironment?: string;
   summaryEntitlementOverrides?: Partial<{
     tenant_id: string; code: string; version: number;
     starts_at: string; expires_at: string;
@@ -115,10 +116,6 @@ function fixture(options: FixtureOptions = {}) {
     calls.push("tenant-profile");
     if (options.tenantProfileFailure) throw databaseFailure;
     return options.tenantProfile === undefined ? tenantProfile : options.tenantProfile;
-  });
-  const findTenant = mock(async () => {
-    calls.push("tenant"); if (options.tenantFailure) throw databaseFailure;
-    return options.tenant === undefined ? tenant : options.tenant;
   });
   const findPlatformBrandLogoForBinding = mock(async () => {
     calls.push("platform-logo");
@@ -154,6 +151,8 @@ function fixture(options: FixtureOptions = {}) {
         ...options.summaryEntitlementOverrides,
       },
       isActive: options.summaryIsActive ?? true,
+      tenantId: options.summaryTenantId ?? TENANT_ID,
+      tenantStatus: options.summaryTenantStatus ?? "active",
     };
   });
   const getRequiredAuthContext = mock(async () => {
@@ -164,7 +163,6 @@ function fixture(options: FixtureOptions = {}) {
     brandingRepository: {
       findPlatformProfile,
       findTenantProfile,
-      findTenant,
       findPlatformBrandLogoForBinding,
       findTenantBrandLogoForBinding,
     },
@@ -173,13 +171,13 @@ function fixture(options: FixtureOptions = {}) {
     fallbackLogoUrl: options.fallbackLogoUrl === undefined
       ? FALLBACK_LOGO_URL
       : options.fallbackLogoUrl,
+    runtimeEnvironment: options.runtimeEnvironment,
   });
   return {
     service,
     calls,
     findPlatformProfile,
     findTenantProfile,
-    findTenant,
     findPlatformBrandLogoForBinding,
     findTenantBrandLogoForBinding,
     getTenantSummary,
@@ -204,154 +202,98 @@ const expectedTenant = {
   version: 6,
   updated_at: tenantProfile.published_at ?? "",
 } satisfies EffectiveBranding;
-describe("EffectiveBrandingService platform fallback", () => {
-  test("uses only a valid published platform snapshot and ignores newer draft fields", async () => {
-    const current = fixture();
-    await expect(current.service.resolvePlatform()).resolves.toEqual(expectedPlatform);
-    expect(current.findPlatformBrandLogoForBinding)
-      .toHaveBeenCalledWith(PLATFORM_LOGO_ID);
-  });
-  test("returns a stable non-empty code fallback when the platform chain and configured URL fail", async () => {
-    const current = fixture({
-      platformProfileFailure: true,
-      fallbackLogoUrl: "javascript:alert(1)",
-    });
-    const first = await current.service.resolvePlatform();
-    const second = await current.service.resolvePlatform();
-    expect(first).toEqual(second);
-    expect(first).toEqual({
-      source: "platform",
-      tenant_id: null,
-      display_name: "字节跳动",
-      logo_url: expect.stringMatching(/^data:image\/png;base64,/),
-      support_text: "字节跳动提供技术支持",
-      version: 0,
-      updated_at: "1970-01-01T00:00:00.000Z",
-    });
-    expect(Object.keys(first).sort()).toEqual([
-      "display_name",
-      "logo_url",
-      "source",
-      "support_text",
-      "tenant_id",
-      "updated_at",
-      "version",
-    ]);
-    const png = Buffer.from(
-      first.logo_url.slice("data:image/png;base64,".length),
-      "base64",
-    );
-    expect(png.subarray(0, 8)).toEqual(
-      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
-    );
-    expect(png.readUInt32BE(16)).toBe(256);
-    expect(png.readUInt32BE(20)).toBe(256);
-    expect(png.byteLength).toBe(10_152);
-    expect(createHash("sha256").update(png).digest("hex")).toBe(
-      "49e804acca9d15e15577cefd8b839dc92b86dfd35313a030b5f17888ed6fc932",
-    );
-  });
-  test("rejects non-canonical fallback URLs", async () => {
-    await expect(fixture({
-      platformProfile: null, fallbackLogoUrl: "https:cdn.example.com/logo.png",
-    }).service.resolvePlatform()).resolves.toMatchObject({
-      logo_url: expect.stringMatching(/^data:image\/png;base64,/),
-    });
-  });
-  test("fails closed for incomplete platform profiles, missing files, invalid files, and DB errors", async () => {
-    const invalidProfiles: Array<BrandProfileRecord | null> = [
-      null,
-      { ...platformProfile, status: "draft" },
-      { ...platformProfile, scope: "tenant", tenant_id: TENANT_ID },
-      { ...platformProfile, published_display_name: null },
-      { ...platformProfile, published_logo_file_id: null },
-      { ...platformProfile, published_version: null },
-      { ...platformProfile, version: 3, published_version: 4 },
-      { ...platformProfile, published_at: null },
-    ];
-    for (const profile of invalidProfiles) {
-      const result = await fixture({ platformProfile: profile }).service.resolvePlatform();
-      expect(result.logo_url).toBe(FALLBACK_LOGO_URL);
-      expect(result.version).toBe(0);
-    }
-    for (const options of [
-      { platformLogo: null },
-      { platformLogo: { ...platformLogo, status: "deleted" } },
-      { platformLogoFailure: true },
-    ]) {
-      const result = await fixture(options).service.resolvePlatform();
-      expect(result.logo_url).toBe(FALLBACK_LOGO_URL);
-      expect(result.version).toBe(0);
-    }
-  });
-});
 describe("EffectiveBrandingService request context", () => {
-  test("no token and visitor session use the platform without querying tenant state", async () => {
+  test("unsupported, visitor, and malformed token identities return platform", async () => {
     for (const user of [
       undefined,
+      { token_type: "auth", tenant_id: TENANT_ID },
       {
         token_type: "visitor_session", openid: "openid",
-        visitor_id: "visitor", tenant_id: TENANT_ID,
-      } satisfies JwtPayload,
+        visitor_id: "visitor", sub: USER_ID, tenant_id: TENANT_ID,
+      },
+      {
+        token_type: "h5_marketing", sub: USER_ID,
+        tenant_id: TENANT_ID, customer_id: CUSTOMER_ID,
+      },
+      {
+        token_type: "platform_partner", sub: USER_ID,
+        tenant_id: TENANT_ID,
+      },
+      { token_type: "unknown", sub: USER_ID, tenant_id: TENANT_ID },
     ]) {
       const current = fixture();
-      await expect(current.service.resolveForRequest(user, NOW))
+      await expect(current.service.resolveForRequest(user as JwtPayload, NOW))
         .resolves.toEqual(expectedPlatform);
-      expect(current.findTenant).not.toHaveBeenCalled();
       expect(current.getRequiredAuthContext).not.toHaveBeenCalled();
+      expect(current.getTenantSummary).not.toHaveBeenCalled();
     }
   });
-  test("a tenant claim without a valid subject cannot select a tenant brand", async () => {
+  test("mixed customer and employee claims fail closed", async () => {
     const current = fixture();
-    const invalidUser = { token_type: "auth", tenant_id: TENANT_ID } as const;
-    await expect(current.service.resolveForRequest(invalidUser, NOW))
+    await expect(current.service.resolveForRequest({
+      sub: USER_ID, token_type: "auth", tenant_id: TENANT_ID,
+      customer_id: CUSTOMER_ID, employee_id: authContext.employeeId,
+    }, NOW))
       .resolves.toEqual(expectedPlatform);
-    expect(current.findTenant).not.toHaveBeenCalled();
+    expect(current.getRequiredAuthContext).not.toHaveBeenCalled();
+    expect(current.getTenantSummary).not.toHaveBeenCalled();
   });
-  test("employee and customer tokens resolve only the server auth-context tenant", async () => {
-    for (const user of [
-      {
-        sub: USER_ID, token_type: "auth", tenant_id: CLAIM_TENANT_ID,
-        employee_id: authContext.employeeId,
-      },
-      {
-        sub: USER_ID, token_type: "auth", tenant_id: CLAIM_TENANT_ID,
-        customer_id: "00000000-0000-4000-8000-000000000004",
-      },
-    ] satisfies JwtPayload[]) {
+  test("pure customer uses the plugin-verified canonical tenant without AuthContext", async () => {
+    const current = fixture({ authFailure: true });
+    await expect(current.service.resolveForRequest({
+      sub: USER_ID, token_type: "auth",
+      tenant_id: TENANT_ID, customer_id: CUSTOMER_ID,
+    }, NOW)).resolves.toEqual(expectedTenant);
+    expect(current.getRequiredAuthContext).not.toHaveBeenCalled();
+    expect(current.getTenantSummary).toHaveBeenCalledWith(TENANT_ID, NOW);
+  });
+  test("pure customer rejects non-canonical tenant claims", async () => {
+    for (const tenant_id of [
+      ` ${TENANT_ID}`, "00000000-0000-4000-8000-00000000000A",
+      "tenant-1", null,
+    ]) {
       const current = fixture();
-      await expect(current.service.resolveForRequest(user, NOW))
-        .resolves.toEqual(expectedTenant);
-      expect(current.getRequiredAuthContext).toHaveBeenCalledWith(
-        USER_ID,
-        { allowedWhenBillingLocked: true },
-      );
-      expect(current.findTenant).toHaveBeenCalledWith(TENANT_ID);
-      expect(current.findTenant).not.toHaveBeenCalledWith(CLAIM_TENANT_ID);
+      await expect(current.service.resolveForRequest({
+        sub: USER_ID, token_type: "auth", tenant_id,
+        customer_id: CUSTOMER_ID,
+      }, NOW)).resolves.toEqual(expectedPlatform);
+      expect(current.getRequiredAuthContext).not.toHaveBeenCalled();
+      expect(current.getTenantSummary).not.toHaveBeenCalled();
     }
   });
-  test("resolves the platform snapshot before auth and tenant gates", async () => {
+  test("employee requires an exact server AuthContext binding", async () => {
+    const valid = fixture();
+    await expect(valid.service.resolveForRequest({
+      sub: USER_ID, token_type: "auth", tenant_id: CLAIM_TENANT_ID,
+      employee_id: authContext.employeeId,
+    }, NOW)).resolves.toEqual(expectedTenant);
+    expect(valid.getRequiredAuthContext).toHaveBeenCalledWith(
+      USER_ID, { allowedWhenBillingLocked: true },
+    );
+    for (const context of [
+      { ...authContext, authUserId: CLAIM_TENANT_ID },
+      { ...authContext, employeeId: CLAIM_TENANT_ID },
+    ]) {
+      const current = fixture({ authContext: context });
+      await expect(current.service.resolveForRequest({
+        sub: USER_ID, token_type: "auth",
+        employee_id: authContext.employeeId,
+      }, NOW)).resolves.toEqual(expectedPlatform);
+      expect(current.getTenantSummary).not.toHaveBeenCalled();
+    }
+  });
+  test("resolves platform before employee auth and entitlement gates", async () => {
     const current = fixture();
     await current.service.resolveForRequest({
       sub: USER_ID, token_type: "auth", tenant_id: CLAIM_TENANT_ID,
+      employee_id: authContext.employeeId,
     }, NOW);
     expect(current.calls.slice(0, 3))
       .toEqual(["platform-profile", "platform-logo", "auth-context"]);
     expect(current.calls.indexOf("auth-context"))
-      .toBeLessThan(current.calls.indexOf("tenant"));
+      .toBeLessThan(current.calls.indexOf("entitlement"));
   });
-  test("loads server auth context for a valid subject without a tenant claim", async () => {
-    const current = fixture();
-    await expect(current.service.resolveForRequest({
-      sub: USER_ID,
-      token_type: "auth",
-    }, NOW)).resolves.toEqual(expectedTenant);
-    expect(current.getRequiredAuthContext).toHaveBeenCalledWith(
-      USER_ID,
-      { allowedWhenBillingLocked: true },
-    );
-  });
-  test("auth lookup failure and platform-admin context fail closed to platform", async () => {
+  test("legacy tokens use AuthContext while platform admin remains platform", async () => {
     const platformAdminContext = {
       ...authContext,
       tenantId: null,
@@ -360,30 +302,31 @@ describe("EffectiveBrandingService request context", () => {
       tenantStatus: null,
       isPlatformAdmin: true,
     };
-    for (const options of [
-      { authFailure: true },
-      { authContext: platformAdminContext },
-    ]) {
+    for (const token_type of ["auth", undefined] as const) {
+      const current = fixture();
+      await expect(current.service.resolveForRequest({
+        sub: USER_ID, token_type,
+      }, NOW)).resolves.toEqual(expectedTenant);
+      expect(current.getRequiredAuthContext).toHaveBeenCalled();
+    }
+    for (const options of [{ authFailure: true }, { authContext: platformAdminContext }]) {
       const current = fixture(options);
       await expect(current.service.resolveForRequest({
-        sub: USER_ID,
-        token_type: "auth",
+        sub: USER_ID, token_type: "auth",
       }, NOW)).resolves.toEqual(expectedPlatform);
-      expect(current.findTenant).not.toHaveBeenCalled();
     }
   });
 });
 describe("EffectiveBrandingService tenant eligibility", () => {
-  test("missing, inactive, or unreadable tenants return platform and short-circuit", async () => {
+  test("missing, inactive, or unreadable summaries return platform without a duplicate tenant lookup", async () => {
     for (const options of [
-      { tenant: null },
-      { tenant: { ...tenant, status: "suspended" } },
-      { tenantFailure: true },
+      { entitlement: null },
+      { summaryTenantStatus: "suspended", summaryIsActive: false },
+      { entitlementFailure: true },
     ]) {
       const current = fixture(options);
       await expect(current.service.resolveForTenant(TENANT_ID, NOW))
         .resolves.toEqual(expectedPlatform);
-      expect(current.getTenantSummary).not.toHaveBeenCalled();
       expect(current.findTenantProfile).not.toHaveBeenCalled();
     }
   });
@@ -416,6 +359,15 @@ describe("EffectiveBrandingService tenant eligibility", () => {
       { starts_at: "not-a-date" }, { expires_at: "not-a-date" },
     ]) {
       const current = fixture({ summaryEntitlementOverrides });
+      await expect(current.service.resolveForTenant(TENANT_ID, NOW))
+        .resolves.toEqual(expectedPlatform);
+      expect(current.findTenantProfile).not.toHaveBeenCalled();
+    }
+    for (const options of [
+      { summaryTenantId: CLAIM_TENANT_ID },
+      { summaryTenantStatus: "" },
+    ]) {
+      const current = fixture(options);
       await expect(current.service.resolveForTenant(TENANT_ID, NOW))
         .resolves.toEqual(expectedPlatform);
       expect(current.findTenantProfile).not.toHaveBeenCalled();
