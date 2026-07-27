@@ -23,6 +23,9 @@ import {
   isEntitlementActive,
   serializeEntitlement,
 } from "@/services/branding-contracts";
+import {
+  mapTenantEntitlementActionError,
+} from "@/services/tenant-entitlement-errors";
 
 type EntitlementRepositoryPort = Pick<
   typeof tenantEntitlementsRepository,
@@ -55,9 +58,6 @@ type EntitlementSummary = {
 
 const PLATFORM_MANAGE_PERMISSION = "platform.tenant_entitlement.manage";
 const TENANT_UPDATE_PERMISSION = "brand.settings.update";
-const ERROR_SEARCH_MAX_DEPTH = 8;
-const ERROR_SEARCH_MAX_NODES = 64;
-const ERROR_SEARCH_FIELDS = ["code", "message", "details", "hint"] as const;
 
 export class TenantEntitlementsService {
   private readonly entitlementRepository: EntitlementRepositoryPort;
@@ -199,7 +199,7 @@ export class TenantEntitlementsService {
     tenantId: string,
     now = new Date(),
   ): Promise<EntitlementSummary | null> {
-    const tenant = await this.brandingRepository.findTenant(tenantId);
+    const tenant = await this.findTenant(tenantId);
     if (!tenant) return null;
 
     let entitlement = await this.findEntitlement(tenantId);
@@ -267,7 +267,15 @@ export class TenantEntitlementsService {
     try {
       return await this.entitlementRepository.applyAction(input);
     } catch (error) {
-      throw mapEntitlementActionError(error);
+      throw mapTenantEntitlementActionError(error);
+    }
+  }
+
+  private async findTenant(tenantId: string) {
+    try {
+      return await this.brandingRepository.findTenant(tenantId);
+    } catch {
+      throw Errors.dbError("租户查询失败");
     }
   }
 
@@ -316,7 +324,7 @@ export class TenantEntitlementsService {
   }
 
   private async assertTenantExists(tenantId: string) {
-    const tenant = await this.brandingRepository.findTenant(tenantId);
+    const tenant = await this.findTenant(tenantId);
     if (!tenant) throw Errors.notFound("租户不存在");
   }
 
@@ -356,74 +364,6 @@ export class TenantEntitlementsService {
       );
     }
   }
-}
-
-function mapEntitlementActionError(error: unknown): unknown {
-  if (containsErrorCode(error, ErrorCodes.TENANT_ENTITLEMENT_NOT_FOUND)) {
-    return Errors.business(
-      404,
-      "租户品牌权益不存在",
-      ErrorCodes.TENANT_ENTITLEMENT_NOT_FOUND,
-    );
-  }
-  if (containsErrorCode(
-    error,
-    ErrorCodes.TENANT_ENTITLEMENT_VERSION_CONFLICT,
-  )) {
-    return Errors.business(
-      409,
-      "租户品牌权益版本已变化，请刷新后重试",
-      ErrorCodes.TENANT_ENTITLEMENT_VERSION_CONFLICT,
-    );
-  }
-  if (containsErrorCode(
-    error,
-    ErrorCodes.TENANT_ENTITLEMENT_STATE_CONFLICT,
-  )) {
-    return Errors.business(
-      409,
-      "当前租户品牌权益状态不允许该操作",
-      ErrorCodes.TENANT_ENTITLEMENT_STATE_CONFLICT,
-    );
-  }
-  if (containsErrorCode(error, ErrorCodes.BRANDING_ENTITLEMENT_EXPIRED)) {
-    return brandingEntitlementExpired(409);
-  }
-  return Errors.dbError("租户权益操作失败");
-}
-
-function containsErrorCode(value: unknown, expected: string): boolean {
-  const pending: Array<{ value: unknown; depth: number }> = [{
-    value,
-    depth: 0,
-  }];
-  const seen = new WeakSet<object>();
-  let visitedNodes = 0;
-
-  while (pending.length > 0 && visitedNodes < ERROR_SEARCH_MAX_NODES) {
-    const current = pending.pop();
-    if (!current) continue;
-    if (typeof current.value === "string") {
-      if (current.value.includes(expected)) return true;
-      continue;
-    }
-    if (typeof current.value !== "object" || current.value === null) continue;
-    if (seen.has(current.value)) continue;
-    seen.add(current.value);
-    visitedNodes += 1;
-    if (current.depth >= ERROR_SEARCH_MAX_DEPTH) continue;
-
-    const values = Array.isArray(current.value)
-      ? current.value.slice(0, ERROR_SEARCH_MAX_NODES - visitedNodes)
-      : ERROR_SEARCH_FIELDS.map((field) =>
-        (current.value as Record<string, unknown>)[field]
-      );
-    for (const nestedValue of values) {
-      pending.push({ value: nestedValue, depth: current.depth + 1 });
-    }
-  }
-
-  return false;
 }
 
 function isDueForReconciliation(

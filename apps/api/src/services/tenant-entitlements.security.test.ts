@@ -68,6 +68,7 @@ function databaseError(details: unknown) {
 
 function createFixture(options: {
   current?: TenantEntitlementRecord | null;
+  tenantFailure?: unknown;
   findFailure?: unknown;
   expireFailure?: unknown;
   expireResult?: TenantEntitlementRecord | null;
@@ -75,11 +76,15 @@ function createFixture(options: {
   applyResult?: TenantEntitlementRecord;
 } = {}) {
   const current = options.current === undefined ? entitlement : options.current;
-  const findTenant = mock(async () => ({
-    id: TENANT_ID,
-    name: "晴天装饰",
-    status: "active",
-  }));
+  const findTenant = mock(async () => {
+    if (options.tenantFailure) throw options.tenantFailure;
+    return {
+      id: TENANT_ID,
+      name: "晴天装饰",
+      status: "active",
+    };
+  });
+  const listByTenant = mock(async () => ({ rows: [], total: 0 }));
   const findByCode = mock(async () => {
     if (options.findFailure) throw options.findFailure;
     return current;
@@ -96,7 +101,7 @@ function createFixture(options: {
   });
   const dependencies = {
     entitlementRepository: {
-      listByTenant: mock(async () => ({ rows: [], total: 0 })),
+      listByTenant,
       findByCode,
       expireIfDue,
       applyAction,
@@ -113,8 +118,45 @@ function createFixture(options: {
     applyAction,
     expireIfDue,
     findByCode,
+    listByTenant,
   };
 }
+
+describe("tenant lookup security boundary", () => {
+  test("sanitizes tenant lookup failures for platform list and actions", async () => {
+    const failure = databaseError({
+      code: "42P01",
+      message: "relation private_tenants does not exist",
+      details: "table=private_tenants",
+      hint: "SELECT secret FROM private_tenants",
+    });
+    const listFixture = createFixture({ tenantFailure: failure });
+    const actionFixture = createFixture({ tenantFailure: failure });
+
+    await expect(listFixture.service.listPlatform(
+      platformAuthContext,
+      TENANT_ID,
+      { page: 1, pageSize: 20 },
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "租户查询失败",
+      details: undefined,
+    });
+    await expect(actionFixture.service.suspend(
+      platformAuthContext,
+      TENANT_ID,
+      { version: 1, reason: "平台操作原因" },
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "租户查询失败",
+      details: undefined,
+    });
+    expect(listFixture.listByTenant).not.toHaveBeenCalled();
+    expect(actionFixture.applyAction).not.toHaveBeenCalled();
+  });
+});
 
 describe("tenant entitlement summary query boundary", () => {
   test("sanitizes find failures without attempting expiry reconciliation", async () => {
@@ -264,6 +306,46 @@ describe("tenant entitlement RPC error parsing", () => {
         details: undefined,
       });
     }
+  });
+
+  test("does not map codes embedded in longer uppercase tokens", async () => {
+    for (
+      const details of [
+        "TENANT_ENTITLEMENT_VERSION_CONFLICT_ARCHIVE",
+        "X_TENANT_ENTITLEMENT_EXPIRED",
+      ]
+    ) {
+      const fixture = createFixture({
+        applyFailure: databaseError({ code: "P0001", details }),
+      });
+      await expect(fixture.service.suspend(platformAuthContext, TENANT_ID, {
+        version: 1,
+        reason: "平台操作原因",
+      })).rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+        message: "租户权益操作失败",
+        details: undefined,
+      });
+    }
+  });
+
+  test("maps an exact token surrounded by safe delimiters", async () => {
+    const fixture = createFixture({
+      applyFailure: databaseError({
+        code: "P0001",
+        details:
+          "RPC error: TENANT_ENTITLEMENT_VERSION_CONFLICT; retry request",
+      }),
+    });
+
+    await expect(fixture.service.suspend(platformAuthContext, TENANT_ID, {
+      version: 1,
+      reason: "平台操作原因",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "TENANT_ENTITLEMENT_VERSION_CONFLICT",
+    });
   });
 });
 
