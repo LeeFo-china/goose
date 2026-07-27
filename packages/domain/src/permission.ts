@@ -118,6 +118,10 @@ export const PERMISSION_CODE_VALUES = [
   'platform.site_content.read',
   'platform.site_content.manage',
   'platform.site_content.publish',
+  'platform.branding.manage',
+  'platform.tenant_entitlement.manage',
+  'brand.settings.read',
+  'brand.settings.update',
   'platform.supplier.view',
   'platform.supplier.review',
   'platform.supplier.manage',
@@ -475,6 +479,22 @@ export const PermissionCodeConfig: Record<
   'platform.site_content.publish': {
     label: '发布官网内容',
     module: 'platform_site_content',
+  },
+  'platform.branding.manage': {
+    label: '管理平台技术支持品牌',
+    module: 'platform_branding',
+  },
+  'platform.tenant_entitlement.manage': {
+    label: '管理租户增值权益',
+    module: 'platform_entitlement',
+  },
+  'brand.settings.read': {
+    label: '查看品牌技术支持设置',
+    module: 'branding',
+  },
+  'brand.settings.update': {
+    label: '编辑品牌技术支持设置',
+    module: 'branding',
   },
   'platform.supplier.view': {
     label: '查看平台供应商',

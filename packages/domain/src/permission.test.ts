@@ -45,6 +45,34 @@ describe("domain permissions", () => {
     }
   });
 
+  test("exposes branding and tenant entitlement permissions", () => {
+    const expectedPermissions = {
+      "platform.branding.manage": {
+        label: "管理平台技术支持品牌",
+        module: "platform_branding",
+      },
+      "platform.tenant_entitlement.manage": {
+        label: "管理租户增值权益",
+        module: "platform_entitlement",
+      },
+      "brand.settings.read": {
+        label: "查看品牌技术支持设置",
+        module: "branding",
+      },
+      "brand.settings.update": {
+        label: "编辑品牌技术支持设置",
+        module: "branding",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
+
   test("exposes receivable permissions in domain permission constants", () => {
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.view");
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.manage");
