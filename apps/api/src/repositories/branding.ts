@@ -26,10 +26,10 @@ type BrandingClient = {
 };
 
 type BrandingFileRepository = {
-  findActivePlatformBrandLogo(
+  findPlatformBrandLogoForBinding(
     fileId: string,
   ): Promise<BrandingPlatformFileObjectRecord | null>;
-  findActiveTenantBrandLogo(
+  findTenantBrandLogoForBinding(
     fileId: string,
     tenantId: string,
   ): Promise<BrandingPlatformFileObjectRecord | null>;
@@ -133,12 +133,12 @@ export class BrandingRepository {
     return (data as BrandingTenantRecord | null) ?? null;
   }
 
-  findBrandingFileForPlatform(fileId: string) {
-    return this.fileRepository.findActivePlatformBrandLogo(fileId);
+  findPlatformBrandLogoForBinding(fileId: string) {
+    return this.fileRepository.findPlatformBrandLogoForBinding(fileId);
   }
 
-  findBrandingFileForTenant(fileId: string, tenantId: string) {
-    return this.fileRepository.findActiveTenantBrandLogo(fileId, tenantId);
+  findTenantBrandLogoForBinding(fileId: string, tenantId: string) {
+    return this.fileRepository.findTenantBrandLogoForBinding(fileId, tenantId);
   }
 
   async saveDraft(input: SaveBrandProfileDraftInput) {

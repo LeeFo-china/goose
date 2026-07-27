@@ -58,6 +58,22 @@ function expectServiceRoleOnly(functionName: string, signature: string): void {
   );
 }
 
+function acceptsBrandLogoSqlUrl(
+  validator: string,
+  url: string,
+): boolean {
+  const pattern = validator.match(
+    /regexp_match\(v_file\.public_url, '([^']+)', 'i'\)/,
+  )?.[1];
+  if (!pattern) return false;
+  const javascriptPattern = pattern.replaceAll("[^[:space:]]", "[^\\s]");
+  const match = new RegExp(javascriptPattern, "i").exec(url);
+  if (!match) return false;
+  const port = match[3];
+  return port === undefined ||
+    (Number(port) >= 1 && Number(port) <= 65_535);
+}
+
 describe("tenant support branding batch A migration contract", () => {
   test("is transactional, reversible by a forward migration, and billing-model independent", () => {
     expect(migrationSql).toMatch(/^-- Rollback:/);
@@ -302,9 +318,9 @@ describe("tenant support branding batch A migration contract", () => {
     expect(validator).toContain("v_file.public_url is null");
     expect(validator).toContain("btrim(v_file.public_url) = ''");
     expect(validator).toContain("v_file.public_url ~ '[[:space:]]'");
-    expect(validator).toContain("v_file.public_url !~");
-    expect(validator).toContain("^https?://");
-    expect(validator).toContain("[^:/@?#[:space:]]+");
+    expect(validator).toContain("v_url_match is null");
+    expect(validator).toContain("^(https?)://");
+    expect(validator).toContain("[a-z0-9-]");
     expect(validator).toContain("detail = 'branding_logo_file_invalid'");
     expect(validator.indexOf("if not found then")).toBeLessThan(
       validator.indexOf("if v_file.scene <> 'brand_logo'"),
@@ -339,6 +355,42 @@ describe("tenant support branding batch A migration contract", () => {
     expect(normalizedMigration).not.toContain(
       `grant execute on function ${helperSignature}`,
     );
+  });
+
+  test("parses a strict DNS URL subset and bounds explicit ports", () => {
+    const validator = normalizeSql(
+      extractFunction(migrationSql, "require_valid_brand_logo_file"),
+    );
+
+    expect(validator).toContain("v_url_match text[]");
+    expect(validator).toContain("v_url_port integer");
+    expect(validator).toContain(
+      "v_url_match := regexp_match(v_file.public_url,",
+    );
+    expect(validator).toContain("v_url_port := v_url_match[3]::integer");
+    expect(validator).toContain(
+      "v_url_port not between 1 and 65535",
+    );
+
+    for (
+      const url of [
+        "https://cdn.example.com/logo.png",
+        "http://assets.example.com:8080/a.webp",
+      ]
+    ) {
+      expect(acceptsBrandLogoSqlUrl(validator, url)).toBe(true);
+    }
+    for (
+      const url of [
+        "https://cdn.example.com:99999/logo.png",
+        "https://%/logo.png",
+        "https://[....]/logo.png",
+        "https://-cdn.example.com/logo.png",
+        "https://cdn-.example.com/logo.png",
+      ]
+    ) {
+      expect(acceptsBrandLogoSqlUrl(validator, url)).toBe(false);
+    }
   });
 
   test("implements entitlement terms and atomic event plus audit writes", () => {

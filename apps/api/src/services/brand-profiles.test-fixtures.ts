@@ -204,11 +204,11 @@ export function createFixture(
     if (options.findTenantFailure) throw options.findTenantFailure;
     return resolvedTenantProfile;
   });
-  const findBrandingFileForPlatform = mock(async () => {
+  const findPlatformBrandLogoForBinding = mock(async () => {
     if (options.fileFailure) throw options.fileFailure;
     return resolvedPlatformFile;
   });
-  const findBrandingFileForTenant = mock(async () => {
+  const findTenantBrandLogoForBinding = mock(async () => {
     if (options.fileFailure) throw options.fileFailure;
     return resolvedTenantFile;
   });
@@ -252,8 +252,8 @@ export function createFixture(
     brandingRepository: {
       findPlatformProfile,
       findTenantProfile,
-      findBrandingFileForPlatform,
-      findBrandingFileForTenant,
+      findPlatformBrandLogoForBinding,
+      findTenantBrandLogoForBinding,
       saveDraft,
       publish,
     },
@@ -269,8 +269,8 @@ export function createFixture(
     service,
     assertCanCustomize,
     assertTenantContext,
-    findBrandingFileForPlatform,
-    findBrandingFileForTenant,
+    findPlatformBrandLogoForBinding,
+    findTenantBrandLogoForBinding,
     findPlatformProfile,
     findTenantProfile,
     getTenantSummary,

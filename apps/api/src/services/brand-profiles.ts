@@ -20,8 +20,8 @@ type BrandingRepositoryPort = Pick<
   typeof brandingRepository,
   | "findPlatformProfile"
   | "findTenantProfile"
-  | "findBrandingFileForPlatform"
-  | "findBrandingFileForTenant"
+  | "findPlatformBrandLogoForBinding"
+  | "findTenantBrandLogoForBinding"
   | "saveDraft"
   | "publish"
 >;
@@ -220,7 +220,9 @@ export class BrandProfilesService {
 
   private async loadPlatformFile(fileId: string) {
     try {
-      return await this.brandingRepository.findBrandingFileForPlatform(fileId);
+      return await this.brandingRepository.findPlatformBrandLogoForBinding(
+        fileId,
+      );
     } catch {
       throw Errors.dbError("查询品牌 Logo 文件失败");
     }
@@ -228,7 +230,7 @@ export class BrandProfilesService {
 
   private async loadTenantFile(fileId: string, tenantId: string) {
     try {
-      return await this.brandingRepository.findBrandingFileForTenant(
+      return await this.brandingRepository.findTenantBrandLogoForBinding(
         fileId,
         tenantId,
       );

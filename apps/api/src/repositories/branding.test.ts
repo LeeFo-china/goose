@@ -31,11 +31,11 @@ async function createRepository(results: QueryResult[]) {
     tenantId?: string;
   }> = [];
   const fileRepository = {
-    findActivePlatformBrandLogo: mock(async (fileId: string) => {
+    findPlatformBrandLogoForBinding: mock(async (fileId: string) => {
       fileLookups.push({ fileId, scope: "platform" });
       return { id: fileId, tenant_id: null };
     }),
-    findActiveTenantBrandLogo: mock(
+    findTenantBrandLogoForBinding: mock(
       async (fileId: string, tenantId: string) => {
         fileLookups.push({ fileId, scope: "tenant", tenantId });
         return { id: fileId, tenant_id: tenantId };
@@ -177,8 +177,8 @@ describe("BrandingRepository", () => {
   test("branding file lookups cannot omit their platform or tenant owner scope", async () => {
     const { repository, fileLookups } = await createRepository([]);
 
-    await repository.findBrandingFileForPlatform("file-platform");
-    await repository.findBrandingFileForTenant("file-tenant", "tenant-1");
+    await repository.findPlatformBrandLogoForBinding("file-platform");
+    await repository.findTenantBrandLogoForBinding("file-tenant", "tenant-1");
 
     expect(fileLookups).toEqual([
       { fileId: "file-platform", scope: "platform" },
@@ -186,6 +186,10 @@ describe("BrandingRepository", () => {
     ]);
     expect(Object.getOwnPropertyNames(Object.getPrototypeOf(repository)))
       .not.toContain("findBrandingFile");
+    expect(Object.getOwnPropertyNames(Object.getPrototypeOf(repository)))
+      .not.toContain("findBrandingFileForPlatform");
+    expect(Object.getOwnPropertyNames(Object.getPrototypeOf(repository)))
+      .not.toContain("findBrandingFileForTenant");
   });
 
   test("save draft calls the exact atomic RPC signature", async () => {

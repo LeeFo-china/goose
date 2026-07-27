@@ -110,7 +110,7 @@ function hasValidPublicHttpUrl(value: string | null): value is string {
     value.length === 0 ||
     value !== value.trim() ||
     /\s/u.test(value) ||
-    !/^https?:\/\/[^/?#\s]+(?:[/?#]|$)/u.test(value)
+    !/^https?:\/\/[^/?#\s]+(?:[/?#]|$)/iu.test(value)
   ) return false;
 
   try {

@@ -125,7 +125,7 @@ describe("BrandProfilesService RPC error mapping", () => {
       statusCode: 409,
       code: "BRANDING_PROFILE_VERSION_CONFLICT",
     });
-    expect(fixture.findBrandingFileForTenant).toHaveBeenCalledTimes(1);
+    expect(fixture.findTenantBrandLogoForBinding).toHaveBeenCalledTimes(1);
   });
 
   test("maps a publish-time invalid Logo race without leaking details", async () => {

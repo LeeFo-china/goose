@@ -384,16 +384,16 @@ export class PlatformFileObjectRepository {
     return (data as SupplierBusinessLicensePreviewFileRecord | null) ?? null;
   }
 
-  findActivePlatformBrandLogo(fileId: string) {
-    return findActiveBrandLogo(
+  findPlatformBrandLogoForBinding(fileId: string) {
+    return findBrandLogoForBinding(
       this.getBrandingAdminClient(),
       fileId,
       { scope: "platform" },
     );
   }
 
-  findActiveTenantBrandLogo(fileId: string, tenantId: string) {
-    return findActiveBrandLogo(
+  findTenantBrandLogoForBinding(fileId: string, tenantId: string) {
+    return findBrandLogoForBinding(
       this.getBrandingAdminClient(),
       fileId,
       { scope: "tenant", tenantId },
@@ -461,7 +461,7 @@ export class PlatformFileObjectRepository {
 
 export const platformFileObjectRepository = new PlatformFileObjectRepository();
 
-async function findActiveBrandLogo(
+async function findBrandLogoForBinding(
   client: BrandingFileObjectClient,
   fileId: string,
   owner:
@@ -471,11 +471,7 @@ async function findActiveBrandLogo(
   let query = client
     .from("platform_file_objects")
     .select(BRANDING_FILE_OBJECT_COLUMNS)
-    .eq("id", fileId)
-    .eq("scene", "brand_logo")
-    .eq("status", "active")
-    .eq("visibility", "public")
-    .is("deleted_at", null);
+    .eq("id", fileId);
 
   query = owner.scope === "platform"
     ? query.is("tenant_id", null)

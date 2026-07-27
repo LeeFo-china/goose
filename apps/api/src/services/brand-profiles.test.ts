@@ -68,7 +68,7 @@ describe("BrandProfilesService platform access and read", () => {
           updated_at: platformProfile.updated_at,
         },
       });
-    expect(fixture.findBrandingFileForPlatform).toHaveBeenCalledWith(FILE_ID);
+    expect(fixture.findPlatformBrandLogoForBinding).toHaveBeenCalledWith(FILE_ID);
   });
 
   test("keeps null profile explicit and does not query a file", async () => {
@@ -78,7 +78,7 @@ describe("BrandProfilesService platform access and read", () => {
 
     await expect(fixture.service.getPlatform(platformAuthContext))
       .resolves.toEqual({ profile: null });
-    expect(fixture.findBrandingFileForPlatform).not.toHaveBeenCalled();
+    expect(fixture.findPlatformBrandLogoForBinding).not.toHaveBeenCalled();
   });
 
   test("returns null logo URL for an invalid management-view file", async () => {
@@ -96,7 +96,7 @@ describe("BrandProfilesService platform access and read", () => {
     const fixture = createFixture(BrandProfilesService, {
       platformFile: {
         ...platformFile,
-        public_url: "javascript:alert(1)",
+        public_url: "https://%/logo.png",
       },
     });
 
@@ -203,7 +203,7 @@ describe("BrandProfilesService tenant read", () => {
         entitlement: null,
         can_customize: false,
       });
-    expect(fixture.findBrandingFileForTenant).not.toHaveBeenCalled();
+    expect(fixture.findTenantBrandLogoForBinding).not.toHaveBeenCalled();
   });
 });
 
@@ -229,7 +229,7 @@ describe("BrandProfilesService draft saves", () => {
         has_unpublished_changes: true,
       },
     });
-    expect(fixture.findBrandingFileForPlatform).toHaveBeenCalledWith(FILE_ID);
+    expect(fixture.findPlatformBrandLogoForBinding).toHaveBeenCalledWith(FILE_ID);
     expect(fixture.saveDraft).toHaveBeenCalledWith({
       scope: "platform",
       tenantId: null,
@@ -266,7 +266,7 @@ describe("BrandProfilesService draft saves", () => {
 
     expect(fixture.assertTenantContext).toHaveBeenCalledWith(context);
     expect(fixture.assertCanCustomize).toHaveBeenCalledWith(context, NOW);
-    expect(fixture.findBrandingFileForTenant)
+    expect(fixture.findTenantBrandLogoForBinding)
       .toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     expect(fixture.saveDraft).toHaveBeenCalledWith({
       scope: "tenant",
@@ -292,7 +292,7 @@ describe("BrandProfilesService draft saves", () => {
       logo_file_id: FILE_ID,
       version: 4,
     })).rejects.toBe(denial);
-    expect(fixture.findBrandingFileForTenant).not.toHaveBeenCalled();
+    expect(fixture.findTenantBrandLogoForBinding).not.toHaveBeenCalled();
     expect(fixture.saveDraft).not.toHaveBeenCalled();
   });
 
@@ -310,9 +310,13 @@ describe("BrandProfilesService draft saves", () => {
     expect(fixture.saveDraft).not.toHaveBeenCalled();
   });
 
-  test("invalid public URLs block save before the draft RPC", async () => {
+  test.each([
+    "ftp://bad/logo.png",
+    "https://cdn.example.com:99999/logo.png",
+    "https://%/logo.png",
+  ])("invalid public URL %s blocks save before the draft RPC", async (url) => {
     const fixture = createFixture(BrandProfilesService, {
-      platformFile: { ...platformFile, public_url: "ftp://bad/logo.png" },
+      platformFile: { ...platformFile, public_url: url },
     });
 
     await expect(fixture.service.savePlatformDraft(platformAuthContext, {
@@ -350,7 +354,7 @@ describe("BrandProfilesService publish", () => {
       },
     });
     expect(fixture.findTenantProfile).toHaveBeenCalledWith(TENANT_ID);
-    expect(fixture.findBrandingFileForTenant)
+    expect(fixture.findTenantBrandLogoForBinding)
       .toHaveBeenCalledWith(FILE_ID, TENANT_ID);
     expect(fixture.publish).toHaveBeenCalledWith({
       scope: "tenant",
@@ -377,7 +381,7 @@ describe("BrandProfilesService publish", () => {
         statusCode: 400,
         code: "BRANDING_PROFILE_INCOMPLETE",
       });
-      expect(fixture.findBrandingFileForTenant).not.toHaveBeenCalled();
+      expect(fixture.findTenantBrandLogoForBinding).not.toHaveBeenCalled();
       expect(fixture.publish).not.toHaveBeenCalled();
     }
   });
@@ -392,14 +396,14 @@ describe("BrandProfilesService publish", () => {
     });
     await fixture.service.publishPlatform(platformAuthContext, { version: 4 });
 
-    expect(fixture.findBrandingFileForPlatform).toHaveBeenCalledTimes(2);
+    expect(fixture.findPlatformBrandLogoForBinding).toHaveBeenCalledTimes(2);
   });
 
   test("invalid public URLs block publish before the publish RPC", async () => {
     const fixture = createFixture(BrandProfilesService, {
       platformFile: {
         ...platformFile,
-        public_url: "https://user:secret@cdn.example.com/logo.png",
+        public_url: "https://[....]/logo.png",
       },
     });
 

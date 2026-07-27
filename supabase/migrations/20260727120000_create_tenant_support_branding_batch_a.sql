@@ -654,6 +654,8 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_file public.platform_file_objects%ROWTYPE;
+  v_url_match text[];
+  v_url_port integer;
 BEGIN
   SELECT file.*
   INTO v_file
@@ -668,6 +670,12 @@ BEGIN
       MESSAGE = 'Brand logo file not found',
       DETAIL = 'BRANDING_LOGO_FILE_NOT_FOUND';
   END IF;
+
+  v_url_match := regexp_match(
+    v_file.public_url,
+    '^(https?)://([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+)(?::([0-9]{1,5}))?([/?#][^[:space:]]*)?$',
+    'i'
+  );
 
   IF v_file.scene <> 'brand_logo'
      OR v_file.status <> 'active'
@@ -684,12 +692,21 @@ BEGIN
      OR v_file.public_url IS NULL
      OR btrim(v_file.public_url) = ''
      OR v_file.public_url ~ '[[:space:]]'
-     OR v_file.public_url !~*
-       '^https?://(\[[0-9a-f:.]+\]|[^:/@?#[:space:]]+)(:[0-9]+)?([/?#][^[:space:]]*)?$' THEN
+     OR v_url_match IS NULL THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
       MESSAGE = 'Brand logo file is invalid',
       DETAIL = 'BRANDING_LOGO_FILE_INVALID';
+  END IF;
+
+  IF v_url_match[3] IS NOT NULL THEN
+    v_url_port := v_url_match[3]::integer;
+    IF v_url_port NOT BETWEEN 1 AND 65535 THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'Brand logo file is invalid',
+        DETAIL = 'BRANDING_LOGO_FILE_INVALID';
+    END IF;
   END IF;
 
   RETURN v_file;

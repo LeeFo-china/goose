@@ -272,51 +272,62 @@ test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection",
   expect(trace.limits).toEqual([1]);
 });
 
-test("platform brand Logo lookup requires the exact null-owner scope", async () => {
+test("platform brand Logo binding lookup filters only by id and null owner", async () => {
   const { repository, trace } = await createScopedRepository(matchingExisting);
 
-  await expect(repository.findActivePlatformBrandLogo("file-1"))
+  await expect(repository.findPlatformBrandLogoForBinding("file-1"))
     .resolves.toMatchObject({ id: "file-1" });
 
   expect(trace.selects).toEqual([
     "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,width,height,checksum,visibility,public_url,status,deleted_at",
   ]);
-  expect(trace.equals).toEqual(expect.arrayContaining([
-    ["id", "file-1"],
-    ["scene", "brand_logo"],
-    ["status", "active"],
-    ["visibility", "public"],
-  ]));
-  expect(trace.nullChecks).toEqual(expect.arrayContaining([
-    ["tenant_id", null],
-    ["deleted_at", null],
-  ]));
+  expect(trace.equals).toEqual([["id", "file-1"]]);
+  expect(trace.nullChecks).toEqual([["tenant_id", null]]);
 });
 
-test("tenant brand Logo lookup requires the exact tenant owner scope", async () => {
+test("tenant brand Logo binding lookup filters only by id and exact owner", async () => {
   const { repository, trace } = await createScopedRepository({
     ...matchingExisting,
     tenant_id: "tenant-1",
   });
 
-  await expect(repository.findActiveTenantBrandLogo("file-1", "tenant-1"))
+  await expect(repository.findTenantBrandLogoForBinding("file-1", "tenant-1"))
     .resolves.toMatchObject({ id: "file-1", tenant_id: "tenant-1" });
 
-  expect(trace.equals).toEqual(expect.arrayContaining([
+  expect(trace.equals).toEqual([
     ["id", "file-1"],
     ["tenant_id", "tenant-1"],
-    ["scene", "brand_logo"],
-    ["status", "active"],
-    ["visibility", "public"],
-  ]));
-  expect(trace.nullChecks).not.toContainEqual(["tenant_id", null]);
+  ]);
+  expect(trace.nullChecks).toEqual([]);
+});
+
+test("binding lookup returns same-scope invalid metadata for policy classification", async () => {
+  const invalid = {
+    ...matchingExisting,
+    tenant_id: "tenant-1",
+    owner_id: null,
+    region: null,
+    scene: "project_attachment",
+    provider: "tencent_cos" as const,
+    status: "failed",
+    visibility: "private" as const,
+    width: 128,
+    height: 128,
+    deleted_at: "2026-07-27T00:00:00.000Z",
+  };
+  const { repository } = await createScopedRepository(invalid);
+
+  await expect(repository.findTenantBrandLogoForBinding(
+    "file-1",
+    "tenant-1",
+  )).resolves.toEqual(invalid);
 });
 
 test("brand Logo lookup maps Supabase failures through the error factory", async () => {
   const databaseError = { code: "XX000", message: "lookup failed" };
   const { repository } = await createScopedRepository(null, databaseError);
 
-  await expect(repository.findActiveTenantBrandLogo("file-1", "tenant-1"))
+  await expect(repository.findTenantBrandLogoForBinding("file-1", "tenant-1"))
     .rejects.toMatchObject({
       statusCode: 500,
       code: "DB_ERROR",
@@ -332,7 +343,9 @@ test("brand Logo repository exposes only explicit platform and tenant scopes", a
     PlatformFileObjectRepository.prototype,
   );
 
-  expect(publicMethods).toContain("findActivePlatformBrandLogo");
-  expect(publicMethods).toContain("findActiveTenantBrandLogo");
-  expect(publicMethods).not.toContain("findActiveBrandLogoForOwner");
+  expect(publicMethods).toContain("findPlatformBrandLogoForBinding");
+  expect(publicMethods).toContain("findTenantBrandLogoForBinding");
+  expect(publicMethods).not.toContain("findActivePlatformBrandLogo");
+  expect(publicMethods).not.toContain("findActiveTenantBrandLogo");
+  expect(publicMethods).not.toContain("findBrandLogoForBinding");
 });
