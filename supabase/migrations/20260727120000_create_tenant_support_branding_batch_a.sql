@@ -826,7 +826,7 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  IF v_entitlement.status <> 'active'
+  IF v_entitlement.status NOT IN ('active', 'suspended')
      OR v_entitlement.expires_at > p_now THEN
     RETURN v_entitlement;
   END IF;
@@ -839,7 +839,7 @@ BEGIN
     version = version + 1,
     updated_by_employee_id = NULL
   WHERE id = v_entitlement.id
-    AND status = 'active'
+    AND status IN ('active', 'suspended')
     AND expires_at <= p_now
   RETURNING tenant_entitlements.* INTO v_entitlement;
 

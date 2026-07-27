@@ -274,15 +274,22 @@ describe("tenant support branding batch A migration contract", () => {
     expect(revokeBranch).not.toMatch(/\bexpires_at\s*=/);
   });
 
-  test("expires due active entitlements idempotently without platform audit", () => {
+  test("expires due active or suspended entitlements with a system event and no platform audit", () => {
     const expire = normalizeSql(
       extractFunction(migrationSql, "expire_tenant_entitlement_if_due"),
     );
 
-    expect(expire).toContain("status = 'active'");
-    expect(expire).toContain("expires_at <= p_now");
+    expect(expire).toMatch(
+      /if v_entitlement\.status not in \('active', 'suspended'\) or v_entitlement\.expires_at > p_now then return v_entitlement/,
+    );
+    expect(expire).toMatch(
+      /update public\.tenant_entitlements set[\s\S]*?where id = v_entitlement\.id and status in \('active', 'suspended'\) and expires_at <= p_now/,
+    );
     expect(expire).toContain(
       "insert into public.tenant_entitlement_events",
+    );
+    expect(expire).toMatch(
+      /values \(v_entitlement\.id,[\s\S]*?'expired', 'system', null,/,
     );
     expect(expire).not.toContain("insert into public.platform_audit_logs");
   });
