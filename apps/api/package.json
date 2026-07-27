@@ -75,6 +75,7 @@
     "fflate": "0.8.2",
     "openai": "^6.34.0",
     "reflect-metadata": "^0.2.2",
+    "sharp": "0.34.5",
     "tencentcloud-sdk-nodejs-common": "4.1.220",
     "tencentcloud-sdk-nodejs-ocr": "4.1.268",
     "zod": "^4.4.2"
