@@ -151,6 +151,9 @@ export type FixtureOptions = {
   saveResult?: BrandProfileRecord;
   publishResult?: BrandProfileRecord;
   customizeFailure?: unknown;
+  logoUrlResolver?: (
+    file: BrandingPlatformFileObjectRecord,
+  ) => string | null | Promise<string | null>;
 };
 
 type BrandProfilesServiceConstructor =
@@ -259,6 +262,8 @@ export function createFixture(
     },
     accessPolicyService: { assertTenantContext, hasPermission },
     nowFactory: () => NOW,
+    logoUrlResolver: options.logoUrlResolver ??
+      ((file: BrandingPlatformFileObjectRecord) => file.public_url),
   } as never);
 
   return {

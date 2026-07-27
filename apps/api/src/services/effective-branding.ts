@@ -2,9 +2,13 @@ import {
   brandingRepository,
   type BrandProfileRecord,
 } from "@/repositories/branding";
+import type { BrandingPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
 import { authorizationService } from "@/services/authorization";
 import { CONTROLLED_FALLBACK_LOGO_URL } from "@/services/branding-default-logo";
-import { assertValidBrandLogoFile } from "@/services/branding-file-policy";
+import {
+  assertValidBrandLogoFile,
+  resolveBrandLogoUrl,
+} from "@/services/branding-file-policy";
 import {
   CUSTOM_SUPPORT_BRANDING,
   PLATFORM_FALLBACK_DISPLAY_NAME,
@@ -37,6 +41,10 @@ type AuthorizationPort = Pick<
   "getRequiredAuthContext"
 >;
 
+type LogoUrlResolver = (
+  file: BrandingPlatformFileObjectRecord,
+) => string | null | Promise<string | null>;
+
 export type EffectiveBranding = {
   source: "platform" | "tenant";
   tenant_id: string | null;
@@ -53,6 +61,7 @@ export type EffectiveBrandingServiceDependencies = {
   authorizationService?: AuthorizationPort;
   fallbackLogoUrl?: string | null;
   runtimeEnvironment?: string;
+  logoUrlResolver?: LogoUrlResolver;
 };
 
 export class EffectiveBrandingService {
@@ -60,6 +69,7 @@ export class EffectiveBrandingService {
   private readonly tenantEntitlementsService: TenantEntitlementsPort;
   private readonly authorizationService: AuthorizationPort;
   private readonly controlledFallback: EffectiveBranding;
+  private readonly logoUrlResolver: LogoUrlResolver;
 
   constructor(dependencies: EffectiveBrandingServiceDependencies = {}) {
     this.brandingRepository = dependencies.brandingRepository ??
@@ -68,6 +78,8 @@ export class EffectiveBrandingService {
       tenantEntitlementsService;
     this.authorizationService = dependencies.authorizationService ??
       authorizationService;
+    this.logoUrlResolver = dependencies.logoUrlResolver ??
+      resolveBrandLogoUrl;
     const configuredFallback = dependencies.fallbackLogoUrl === undefined
       ? process.env.BRANDING_FALLBACK_LOGO_URL
       : dependencies.fallbackLogoUrl;
@@ -190,7 +202,9 @@ export class EffectiveBrandingService {
         { tenantId: canonicalTenantId },
         file,
       );
-      const logoUrl = validPublicHttpUrl(validFile.public_url);
+      const logoUrl = validPublicHttpUrl(
+        await this.logoUrlResolver(validFile),
+      );
       if (!logoUrl) return platform;
       return buildBranding({
         source: "tenant",
@@ -216,7 +230,9 @@ export class EffectiveBrandingService {
           published.logoFileId,
         );
       const validFile = assertValidBrandLogoFile({ tenantId: null }, file);
-      const logoUrl = validPublicHttpUrl(validFile.public_url);
+      const logoUrl = validPublicHttpUrl(
+        await this.logoUrlResolver(validFile),
+      );
       if (!logoUrl) return this.controlledFallback;
       return buildBranding({
         source: "platform",

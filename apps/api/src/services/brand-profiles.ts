@@ -12,7 +12,10 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { mapBrandProfileMutationError } from "@/services/brand-profile-errors";
-import { assertValidBrandLogoFile } from "@/services/branding-file-policy";
+import {
+  assertValidBrandLogoFile,
+  resolveBrandLogoUrl,
+} from "@/services/branding-file-policy";
 import {
   serializeBrandProfile,
   serializeTenantBrandingEntitlementSummary,
@@ -39,11 +42,16 @@ type TenantEntitlementsPort = Pick<
   "getTenantSummary" | "assertCanCustomize"
 >;
 
+type LogoUrlResolver = (
+  file: BrandingPlatformFileObjectRecord,
+) => string | null | Promise<string | null>;
+
 export type BrandProfilesServiceDependencies = {
   brandingRepository?: BrandingRepositoryPort;
   accessPolicyService?: AccessPolicyPort;
   tenantEntitlementsService?: TenantEntitlementsPort;
   nowFactory?: () => Date;
+  logoUrlResolver?: LogoUrlResolver;
 };
 
 const PLATFORM_MANAGE_PERMISSION = "platform.branding.manage";
@@ -55,6 +63,7 @@ export class BrandProfilesService {
   private readonly accessPolicyService: AccessPolicyPort;
   private readonly tenantEntitlementsService: TenantEntitlementsPort;
   private readonly nowFactory: () => Date;
+  private readonly logoUrlResolver: LogoUrlResolver;
 
   constructor(dependencies: BrandProfilesServiceDependencies = {}) {
     this.brandingRepository = dependencies.brandingRepository ??
@@ -64,6 +73,8 @@ export class BrandProfilesService {
     this.tenantEntitlementsService = dependencies.tenantEntitlementsService ??
       tenantEntitlementsService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+    this.logoUrlResolver = dependencies.logoUrlResolver ??
+      resolveBrandLogoUrl;
   }
 
   async getPlatform(authContext: AuthContext) {
@@ -80,6 +91,7 @@ export class BrandProfilesService {
   ) {
     const actorEmployeeId = this.requirePlatformEmployee(authContext);
     const file = await this.requirePlatformFile(input.logo_file_id);
+    const logoUrl = await this.logoUrlResolver(file);
     const profile = await this.saveDraft({
       scope: "platform",
       tenantId: null,
@@ -88,7 +100,12 @@ export class BrandProfilesService {
       expectedVersion: input.version,
       actorEmployeeId,
     });
-    return { profile: serializeBrandProfile(profile, file.public_url) };
+    return {
+      profile: serializeBrandProfile(
+        profile,
+        logoUrl,
+      ),
+    };
   }
 
   async publishPlatform(
@@ -99,13 +116,19 @@ export class BrandProfilesService {
     const draft = await this.findPlatformProfile();
     assertCompleteDraft(draft);
     const file = await this.requirePlatformFile(draft.logo_file_id);
+    const logoUrl = await this.logoUrlResolver(file);
     const profile = await this.publish({
       scope: "platform",
       tenantId: null,
       expectedVersion: input.version,
       actorEmployeeId,
     });
-    return { profile: serializeBrandProfile(profile, file.public_url) };
+    return {
+      profile: serializeBrandProfile(
+        profile,
+        logoUrl,
+      ),
+    };
   }
 
   async getTenant(authContext: AuthContext) {
@@ -144,6 +167,7 @@ export class BrandProfilesService {
         this.nowFactory(),
       );
     const file = await this.requireTenantFile(input.logo_file_id, tenantId);
+    const logoUrl = await this.logoUrlResolver(file);
     const profile = await this.saveDraft({
       scope: "tenant",
       tenantId,
@@ -153,7 +177,10 @@ export class BrandProfilesService {
       actorEmployeeId: employeeId,
     });
     return {
-      profile: serializeBrandProfile(profile, file.public_url),
+      profile: serializeBrandProfile(
+        profile,
+        logoUrl,
+      ),
       entitlement: serializeTenantBrandingEntitlementSummary(
         customization.entitlement,
       ),
@@ -174,6 +201,7 @@ export class BrandProfilesService {
     const draft = await this.findTenantProfile(tenantId);
     assertCompleteDraft(draft);
     const file = await this.requireTenantFile(draft.logo_file_id, tenantId);
+    const logoUrl = await this.logoUrlResolver(file);
     const profile = await this.publish({
       scope: "tenant",
       tenantId,
@@ -181,7 +209,10 @@ export class BrandProfilesService {
       actorEmployeeId: employeeId,
     });
     return {
-      profile: serializeBrandProfile(profile, file.public_url),
+      profile: serializeBrandProfile(
+        profile,
+        logoUrl,
+      ),
       entitlement: serializeTenantBrandingEntitlementSummary(
         customization.entitlement,
       ),
@@ -277,7 +308,11 @@ export class BrandProfilesService {
     const file = await this.loadPlatformFile(profile.logo_file_id);
     return serializeBrandProfile(
       profile,
-      validManagementLogoUrl({ tenantId: null }, file),
+      await validManagementLogoUrl(
+        { tenantId: null },
+        file,
+        this.logoUrlResolver,
+      ),
     );
   }
 
@@ -289,7 +324,11 @@ export class BrandProfilesService {
     const file = await this.loadTenantFile(profile.logo_file_id, tenantId);
     return serializeBrandProfile(
       profile,
-      validManagementLogoUrl({ tenantId }, file),
+      await validManagementLogoUrl(
+        { tenantId },
+        file,
+        this.logoUrlResolver,
+      ),
     );
   }
 
@@ -326,12 +365,13 @@ function assertCompleteDraft(
   }
 }
 
-function validManagementLogoUrl(
+async function validManagementLogoUrl(
   scope: { tenantId: string | null },
   file: BrandingPlatformFileObjectRecord | null,
-): string | null {
+  logoUrlResolver: LogoUrlResolver,
+): Promise<string | null> {
   try {
-    return assertValidBrandLogoFile(scope, file).public_url;
+    return await logoUrlResolver(assertValidBrandLogoFile(scope, file));
   } catch (error) {
     if (
       isAppErrorCode(error, ErrorCodes.BRANDING_LOGO_FILE_NOT_FOUND) ||

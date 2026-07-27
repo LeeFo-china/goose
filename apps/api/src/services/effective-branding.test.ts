@@ -102,6 +102,9 @@ type FixtureOptions = {
     tenant_id: string; code: string; version: number;
     starts_at: string; expires_at: string;
   }>;
+  logoUrlResolver?: (
+    file: BrandingPlatformFileObjectRecord,
+  ) => string | null | Promise<string | null>;
 };
 function fixture(options: FixtureOptions = {}) {
   const calls: string[] = [];
@@ -172,6 +175,7 @@ function fixture(options: FixtureOptions = {}) {
       ? FALLBACK_LOGO_URL
       : options.fallbackLogoUrl,
     runtimeEnvironment: options.runtimeEnvironment,
+    logoUrlResolver: options.logoUrlResolver ?? ((file) => file.public_url),
   });
   return {
     service,
@@ -202,6 +206,22 @@ const expectedTenant = {
   version: 6,
   updated_at: tenantProfile.published_at ?? "",
 } satisfies EffectiveBranding;
+test("effective branding resolves the stored COS URL before returning it", async () => {
+  const signedLogoUrl = "https://cos.example.com/logo.png?q-signature=signed";
+  const current = fixture({
+    logoUrlResolver: (file) =>
+      file.object_key === tenantLogo.object_key
+        ? signedLogoUrl
+        : file.public_url,
+  });
+
+  await expect(current.service.resolveForTenant(TENANT_ID, NOW))
+    .resolves.toMatchObject({
+      source: "tenant",
+      tenant_id: TENANT_ID,
+      logo_url: signedLogoUrl,
+    });
+});
 describe("EffectiveBrandingService request context", () => {
   test("unsupported, visitor, and malformed token identities return platform", async () => {
     for (const user of [

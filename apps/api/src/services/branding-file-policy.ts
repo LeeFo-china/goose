@@ -1,6 +1,10 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import type { BrandingPlatformFileObjectRecord } from "@/repositories/platform-file-objects";
+import {
+  resolveSignedStoredFileUrl,
+  resolveStoredFileUrl,
+} from "@/services/files/file-url-resolver";
 
 export const BRAND_LOGO_POLICY = {
   mimeTypes: new Set(["image/jpeg", "image/png", "image/webp"]),
@@ -54,6 +58,15 @@ export function assertValidBrandLogoFile(
   }
 
   return file;
+}
+
+export async function resolveBrandLogoUrl(
+  file: BrandingPlatformFileObjectRecord,
+): Promise<string | null> {
+  if (file.provider === "tencent_cos") {
+    return resolveSignedStoredFileUrl(file.object_key);
+  }
+  return resolveStoredFileUrl(file.public_url);
 }
 
 function hasValidBrandLogoFileProperties(

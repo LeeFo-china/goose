@@ -23,9 +23,9 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-let BrandProfilesService:
-  typeof import("./brand-profiles")["BrandProfilesService"];
-
+let BrandProfilesService: typeof import("./brand-profiles")["BrandProfilesService"];
+const rejectLogoUrl = () => Promise.reject(Object.assign(
+  new Error("签名配置不可用"), { code: "FILE_STORAGE_CONFIG_MISSING" }));
 beforeAll(async () => {
   ({ BrandProfilesService } = await import("./brand-profiles"));
 });
@@ -68,6 +68,19 @@ describe("BrandProfilesService platform access and read", () => {
         },
       });
     expect(fixture.findPlatformBrandLogoForBinding).toHaveBeenCalledWith(FILE_ID);
+  });
+
+  test("resolves a private COS object URL before returning the management profile", async () => {
+    const signedLogoUrl = "https://cos.example.com/logo.png?q-signature=signed";
+    const fixture = createFixture(BrandProfilesService, {
+      logoUrlResolver: (file) =>
+        file.object_key === platformFile.object_key ? signedLogoUrl : null,
+    });
+
+    await expect(fixture.service.getPlatform(platformAuthContext))
+      .resolves.toMatchObject({
+        profile: { logo_file_id: FILE_ID, logo_url: signedLogoUrl },
+      });
   });
 
   test("keeps null profile explicit and does not query a file", async () => {
@@ -222,6 +235,19 @@ describe("BrandProfilesService tenant read", () => {
 });
 
 describe("BrandProfilesService draft saves", () => {
+  test("does not save when the response logo URL cannot be resolved", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      logoUrlResolver: rejectLogoUrl,
+    });
+
+    await expect(fixture.service.savePlatformDraft(platformAuthContext, {
+      display_name: "新平台品牌",
+      logo_file_id: FILE_ID,
+      version: 4,
+    })).rejects.toMatchObject({ code: "FILE_STORAGE_CONFIG_MISSING" });
+    expect(fixture.saveDraft).not.toHaveBeenCalled();
+  });
+
   test("platform save validates the scoped file and passes exact RPC actor arguments", async () => {
     const saved = {
       ...platformProfile,
@@ -367,6 +393,17 @@ describe("BrandProfilesService draft saves", () => {
 });
 
 describe("BrandProfilesService publish", () => {
+  test("does not publish when the response logo URL cannot be resolved", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      logoUrlResolver: rejectLogoUrl,
+    });
+
+    await expect(fixture.service.publishTenant(tenantAuthContext, {
+      version: tenantProfile.version,
+    })).rejects.toMatchObject({ code: "FILE_STORAGE_CONFIG_MISSING" });
+    expect(fixture.publish).not.toHaveBeenCalled();
+  });
+
   test("re-reads the draft and file then publishes with no pending changes", async () => {
     const published = {
       ...tenantProfile,

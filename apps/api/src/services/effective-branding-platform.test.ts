@@ -79,6 +79,7 @@ function fixture(options: FixtureOptions = {}) {
       ? FALLBACK_LOGO_URL
       : options.fallbackLogoUrl,
     runtimeEnvironment: options.runtimeEnvironment,
+    logoUrlResolver: (file) => file.public_url,
   });
   return { service, findPlatformBrandLogoForBinding };
 }
