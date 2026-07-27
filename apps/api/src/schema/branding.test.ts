@@ -94,6 +94,16 @@ describe("branding profile schemas", () => {
     }).success).toBe(true);
   });
 
+  test("rejects isolated UTF-16 surrogate code units", () => {
+    for (const display_name of ["品牌\uD800", "品牌\uDC00"]) {
+      expect(BrandingDraftSchema.safeParse({
+        display_name,
+        logo_file_id: uuid,
+        version: 0,
+      }).success).toBe(false);
+    }
+  });
+
   test("rejects empty, control, and punctuation-or-symbol-only display names", () => {
     for (const display_name of [
       "",
@@ -229,27 +239,43 @@ describe("branding entitlement action schemas", () => {
     }
   });
 
-  test("requires positive action versions, bounded reasons, and literal revoke confirmation", () => {
-    for (const schema of [
-      EntitlementSuspendSchema,
-      EntitlementResumeSchema,
-      EntitlementRevokeSchema,
-    ]) {
-      expect(schema.safeParse({
-        version: 0,
-        reason: "内容待核验",
-        confirm: true,
-      }).success).toBe(false);
-      expect(schema.safeParse({
+  test("rejects invalid suspend versions and reasons without unrelated keys", () => {
+    expect(EntitlementSuspendSchema.safeParse({
+      version: 0,
+      reason: "内容待核验",
+    }).success).toBe(false);
+    for (const reason of ["一", "理".repeat(501)]) {
+      expect(EntitlementSuspendSchema.safeParse({
         version: 1,
-        reason: "理".repeat(501),
-        confirm: true,
+        reason,
       }).success).toBe(false);
-      expect(schema.safeParse({
+    }
+  });
+
+  test("rejects invalid resume versions and reasons without unrelated keys", () => {
+    expect(EntitlementResumeSchema.safeParse({
+      version: 0,
+      reason: "内容已核验",
+    }).success).toBe(false);
+    for (const reason of ["一", "理".repeat(501)]) {
+      expect(EntitlementResumeSchema.safeParse({
         version: 1,
-        reason: "内容待核验",
+        reason,
+      }).success).toBe(false);
+    }
+  });
+
+  test("requires valid revoke fields and literal confirmation", () => {
+    expect(EntitlementRevokeSchema.safeParse({
+      version: 0,
+      reason: "租户主动终止服务",
+      confirm: true,
+    }).success).toBe(false);
+    for (const reason of ["一", "理".repeat(501)]) {
+      expect(EntitlementRevokeSchema.safeParse({
+        version: 3,
+        reason,
         confirm: true,
-        tenant_id: uuid,
       }).success).toBe(false);
     }
 
@@ -261,6 +287,23 @@ describe("branding entitlement action schemas", () => {
       version: 3,
       reason: "租户主动终止服务",
       confirm: false,
+    }).success).toBe(false);
+  });
+
+  test("rejects unknown entitlement action keys", () => {
+    for (const schema of [EntitlementSuspendSchema, EntitlementResumeSchema]) {
+      expect(schema.safeParse({
+        version: 1,
+        reason: "内容待核验",
+        tenant_id: uuid,
+      }).success).toBe(false);
+    }
+
+    expect(EntitlementRevokeSchema.safeParse({
+      version: 3,
+      reason: "租户主动终止服务",
+      confirm: true,
+      tenant_id: uuid,
     }).success).toBe(false);
   });
 });
