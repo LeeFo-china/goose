@@ -5,7 +5,7 @@ import { Separator } from "@/components/ui/separator";
 export default function TenantDouyinMiniappWorkspaceLoading() {
   return (
     <main
-      className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 lg:p-6"
+      className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 [scrollbar-gutter:stable] lg:p-6"
       aria-busy="true"
       aria-label="抖音小程序工作台加载中"
     >

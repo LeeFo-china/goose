@@ -58,7 +58,7 @@ export function TenantDouyinMiniappWorkspace({
   workspace,
 }: TenantDouyinMiniappWorkspaceProps) {
   return (
-    <main className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 lg:p-6">
+    <main className="flex h-full min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 [scrollbar-gutter:stable] lg:p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold tracking-tight">抖音小程序</h1>
         <p className="text-sm text-muted-foreground">

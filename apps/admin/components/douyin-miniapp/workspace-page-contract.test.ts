@@ -9,8 +9,21 @@ const pageSource = readFileSync(
   ),
   "utf8",
 );
+const loadingSource = readFileSync(
+  resolve(
+    import.meta.dir,
+    "../../app/(console)/douyin-miniapp/workspace/loading.tsx",
+  ),
+  "utf8",
+);
 
 describe("Douyin miniapp workspace page contract", () => {
+  test("keeps the loading state inside the shell scroll viewport", () => {
+    expect(loadingSource).toContain("h-full");
+    expect(loadingSource).toContain("[scrollbar-gutter:stable]");
+    expect(loadingSource).toContain("overflow-y-auto");
+  });
+
   test("uses only the tenant-scoped workspace endpoint", () => {
     expect(pageSource).toContain('"/tenant/douyin-miniapp/workspace"');
     expect(pageSource).not.toContain("/platform/douyin-miniapps");

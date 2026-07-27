@@ -75,6 +75,20 @@ const workspace: TenantDouyinWorkspace = {
 };
 
 describe("TenantDouyinMiniappWorkspace", () => {
+  test("constrains the workspace to the shell height for internal scrolling", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        loadError={null}
+        workspace={workspace}
+      />,
+    );
+
+    expect(html).toContain("h-full");
+    expect(html).toContain("[scrollbar-gutter:stable]");
+    expect(html).toContain("overflow-y-auto");
+  });
+
   test("separates internal tenant identity from the public miniapp brand", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
