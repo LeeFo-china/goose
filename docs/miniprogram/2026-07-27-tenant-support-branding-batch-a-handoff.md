@@ -732,7 +732,7 @@ Content-Type: application/json
 | --- | --- |
 | migration Local/Remote 对齐 | [plan run 30270041769](https://github.com/LeeFo-china/goose/actions/runs/30270041769)：远端 373 条，latest `20260727120000`，pending `0` |
 | Batch A migration 应用 | [apply run 30268241457](https://github.com/LeeFo-china/goose/actions/runs/30268241457)：只应用 `20260727120000` |
-| 定向单元/路由测试 | 品牌、权益、上传、路由与隔离脚本 131 pass / 0 fail；共享迁移契约 17 pass / 0 fail |
+| 定向单元/路由测试 | Batch A focused 303 pass / 0 fail / 1154 expect；branding routes 9 pass / 0 fail / 60 expect；共享迁移契约 5 pass / 0 fail / 19 expect |
 | typecheck/build/file-size | `api:typecheck`、`api:build`、permission boundaries、API/Admin file-size 全部通过 |
 | 真实 Logo 上传 | 平台和有权益租户各 complete 成功；相同 key 第二次 PUT 均返回 409 |
 | 有/无权益账号 smoke | 本机 13 pass / 0 fail；dev 远程 13 pass / 0 fail |
@@ -766,7 +766,7 @@ bun scripts/verify-branding-tenant-isolation.ts
 
 两条 PATCH 都固定使用不可用的哨兵版本
 `version=2147483647`，绝不读取或提交当前资料版本。正常业务门禁会
-分别在持久化前以无权益 403、跨租户文件 404 终止；即使门禁发生
+分别在持久化前以无权益 403、跨作用域文件 404 终止；即使门禁发生
 回归，保存 RPC 也会因版本不匹配或版本递增越界而回滚，不能写入
 品牌资料，因此可安全重复执行。
 

@@ -153,11 +153,12 @@ mock.module("@/services/access-policy", () => ({
     }),
     assertTenantContext: mock((
       authContext: { tenantId?: string | null },
+      message = "当前操作必须在租户上下文中执行",
     ) => {
       if (!authContext.tenantId) {
-        throw Object.assign(new Error("tenant context required"), {
+        throw Object.assign(new Error(message), {
           statusCode: 403,
-          code: "FORBIDDEN",
+          code: "TENANT_CONTEXT_REQUIRED",
         });
       }
       return authContext.tenantId;
