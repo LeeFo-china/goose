@@ -780,8 +780,8 @@ platform/tenant mutations and reads stay protected.
 
 ```bash
 cd apps/api
-bun test src/controllers/branding/routes.test.ts \
-  src/plugins/auth/legacy/routes.test.ts
+bun test src/controllers/branding
+bun test src/plugins/auth/legacy/routes.test.ts
 ```
 
 - [ ] **Step 3: Implement the controller**
@@ -810,6 +810,8 @@ git commit -m "feat(api): 暴露品牌与权益批次A接口"
 **Files:**
 
 - Create: `scripts/verify-branding-tenant-isolation.ts`
+- Create: `scripts/verify-branding-tenant-isolation-support.ts`
+- Create: `scripts/verify-branding-tenant-isolation.test.ts`
 - Create: `docs/miniprogram/2026-07-27-tenant-support-branding-batch-a-handoff.md`
 
 - [ ] **Step 1: Write smoke result parser tests**
@@ -854,6 +856,7 @@ Batch A has no addon product/order/payment/refund endpoint.
 ```bash
 bun test scripts/verify-branding-tenant-isolation.test.ts
 git add scripts/verify-branding-tenant-isolation.ts \
+  scripts/verify-branding-tenant-isolation-support.ts \
   scripts/verify-branding-tenant-isolation.test.ts \
   docs/miniprogram/2026-07-27-tenant-support-branding-batch-a-handoff.md
 git commit -m "docs(branding): 增加批次A联调契约"
@@ -871,6 +874,7 @@ git commit -m "docs(branding): 增加批次A联调契约"
 
 ```bash
 cd apps/api
+bun test src/controllers/branding
 bun test ../../packages/domain/src/permission.test.ts \
   src/schema/branding.test.ts \
   src/repositories/branding.test.ts \
@@ -882,7 +886,6 @@ bun test ../../packages/domain/src/permission.test.ts \
   src/services/tenant-entitlements.test.ts \
   src/services/brand-profiles.test.ts \
   src/services/effective-branding.test.ts \
-  src/controllers/branding/routes.test.ts \
   src/controllers/uploads \
   src/plugins/auth/legacy/routes.test.ts \
   ../../scripts/verify-branding-tenant-isolation.test.ts
