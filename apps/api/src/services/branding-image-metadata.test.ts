@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import { parseBrandLogoImageMetadata } from "./branding-image-metadata";
-
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
 
 function uint16Be(value: number) {
@@ -63,6 +62,19 @@ function png(
   width: number,
   height: number,
   options: PngHeaderOptions = {},
+  idatPayload: readonly number[] = [
+    0x78,
+    0x01,
+    0x01,
+    0,
+    0,
+    0xff,
+    0xff,
+    0,
+    0,
+    0,
+    1,
+  ],
 ) {
   const ihdr = [
     ...uint32Be(width),
@@ -76,7 +88,7 @@ function png(
   return new Uint8Array([
     ...PNG_SIGNATURE,
     ...pngChunk("IHDR", ihdr),
-    ...pngChunk("IDAT", [0x78, 0x01, 0x01, 0, 0, 0xff, 0xff, 0, 0, 0, 1]),
+    ...pngChunk("IDAT", idatPayload),
     ...pngChunk("IEND", []),
   ]);
 }
@@ -110,6 +122,15 @@ function jpeg(
   height: number,
   sofMarker: 0xc0 | 0xc2,
   includeScan = true,
+  scanPayload: readonly number[] = [
+    0x11,
+    0xff,
+    0,
+    0x22,
+    0xff,
+    0xd0,
+    0x33,
+  ],
 ) {
   return new Uint8Array([
     ...jpegHeader(width, height, sofMarker),
@@ -125,13 +146,7 @@ function jpeg(
         0,
         63,
         0,
-        0x11,
-        0xff,
-        0,
-        0x22,
-        0xff,
-        0xd0,
-        0x33,
+        ...scanPayload,
       ]
       : []),
     0xff,
@@ -231,7 +246,6 @@ describe("parseBrandLogoImageMetadata", () => {
   test("builds fixtures with the standard PNG IEND CRC", () => {
     expect(pngChunk("IEND", []).slice(-4)).toEqual([0xae, 0x42, 0x60, 0x82]);
   });
-
   test("reads PNG IHDR dimensions", () => {
     expect(parseBrandLogoImageMetadata(png(256, 320))).toEqual({
       mimeType: "image/png",
@@ -247,6 +261,16 @@ describe("parseBrandLogoImageMetadata", () => {
     }))).toMatchObject({ width: 256, height: 320 });
   });
 
+  test("accepts multiple PNG IDAT chunks when their total payload is non-zero", () => {
+    const complete = png(256, 320);
+    expect(parseBrandLogoImageMetadata(new Uint8Array([
+      ...complete.slice(0, 33),
+      ...pngChunk("IDAT", []),
+      ...pngChunk("IDAT", [1]),
+      ...pngChunk("IEND", []),
+    ]))).toMatchObject({ width: 256, height: 320 });
+  });
+
   test.each([
     ["baseline SOF0", 0xc0],
     ["progressive SOF2", 0xc2],
@@ -256,6 +280,12 @@ describe("parseBrandLogoImageMetadata", () => {
       width: 640,
       height: 480,
     });
+  });
+
+  test("counts a stuffed FF byte as JPEG scan payload", () => {
+    expect(parseBrandLogoImageMetadata(
+      jpeg(256, 256, 0xc0, true, [0xff, 0]),
+    )).toMatchObject({ width: 256, height: 256 });
   });
 
   test("reads lossy VP8 dimensions", () => {
@@ -322,6 +352,7 @@ describe("parseBrandLogoImageMetadata", () => {
         ...pngChunk("IEND", []),
       ]),
     ],
+    ["PNG with only a zero-length IDAT", png(256, 256, {}, [])],
     [
       "PNG with a non-empty IEND",
       new Uint8Array([
@@ -413,6 +444,11 @@ describe("parseBrandLogoImageMetadata", () => {
     })],
     ["PNG dimension above the specification limit", png(0x80000000, 256)],
     ["JPEG without a scan", jpeg(256, 256, 0xc0, false)],
+    ["JPEG whose scan has no entropy payload", jpeg(256, 256, 0xc0, true, [])],
+    [
+      "JPEG whose scan contains only a restart marker",
+      jpeg(256, 256, 0xc0, true, [0xff, 0xd0]),
+    ],
     [
       "VP8X without an image chunk",
       webp("VP8X", vp8xData(256, 256)),

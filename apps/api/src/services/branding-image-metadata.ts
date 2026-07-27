@@ -28,7 +28,7 @@ export function parseBrandLogoImageMetadata(
 function parsePng(bytes: Uint8Array): BrandLogoImageMetadata {
   let offset = 8;
   let metadata: BrandLogoImageMetadata | null = null;
-  let hasIdat = false;
+  let idatPayloadBytes = 0;
   let chunkIndex = 0;
 
   while (offset < bytes.length) {
@@ -56,11 +56,11 @@ function parsePng(bytes: Uint8Array): BrandLogoImageMetadata {
       return invalidBrandLogo();
     }
 
-    if (chunkType === "IDAT") hasIdat = true;
+    if (chunkType === "IDAT") idatPayloadBytes += chunkLength;
     if (chunkType === "IEND") {
       if (
         chunkLength !== 0 ||
-        !hasIdat ||
+        idatPayloadBytes === 0 ||
         !metadata ||
         nextOffset !== bytes.length
       ) {
@@ -117,7 +117,7 @@ function isValidPngColorDepth(colorType: number, bitDepth: number) {
 function parseJpeg(bytes: Uint8Array): BrandLogoImageMetadata {
   let offset = 2;
   let metadata: BrandLogoImageMetadata | null = null;
-  let hasScan = false;
+  let hasScanPayload = false;
 
   while (offset < bytes.length) {
     if (readByte(bytes, offset) !== 0xff) return invalidBrandLogo();
@@ -129,7 +129,7 @@ function parseJpeg(bytes: Uint8Array): BrandLogoImageMetadata {
     const marker = readByte(bytes, offset);
     offset += 1;
     if (marker === 0xd9) {
-      if (!metadata || !hasScan || offset !== bytes.length) {
+      if (!metadata || !hasScanPayload || offset !== bytes.length) {
         return invalidBrandLogo();
       }
       return metadata;
@@ -151,9 +151,11 @@ function parseJpeg(bytes: Uint8Array): BrandLogoImageMetadata {
     if (marker === 0xda) {
       if (!metadata) return invalidBrandLogo();
       validateJpegScanHeader(bytes, offset, segmentLength);
-      hasScan = true;
       offset += segmentLength;
-      offset = findNextJpegMarker(bytes, offset);
+      const scan = findNextJpegMarker(bytes, offset);
+      if (!scan.hasPayload) return invalidBrandLogo();
+      hasScanPayload = true;
+      offset = scan.markerOffset;
       continue;
     }
 
@@ -201,8 +203,10 @@ function validateJpegScanHeader(
 
 function findNextJpegMarker(bytes: Uint8Array, startOffset: number) {
   let offset = startOffset;
+  let hasPayload = false;
   while (offset < bytes.length) {
     if (readByte(bytes, offset) !== 0xff) {
+      hasPayload = true;
       offset += 1;
       continue;
     }
@@ -215,8 +219,12 @@ function findNextJpegMarker(bytes: Uint8Array, startOffset: number) {
 
     const marker = readByte(bytes, offset);
     offset += 1;
-    if (marker === 0x00 || (marker >= 0xd0 && marker <= 0xd7)) continue;
-    return markerOffset;
+    if (marker === 0x00) {
+      hasPayload = true;
+      continue;
+    }
+    if (marker >= 0xd0 && marker <= 0xd7) continue;
+    return { markerOffset, hasPayload };
   }
   return invalidBrandLogo();
 }
