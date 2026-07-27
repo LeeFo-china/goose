@@ -7,7 +7,10 @@ const DisplayNameSchema = z.string()
     const length = Array.from(value).length;
     return length >= 2 && length <= 40;
   }, "品牌名称必须为 2 到 40 个字符")
-  .refine((value) => !/\p{C}/u.test(value), "品牌名称不能包含控制字符")
+  .refine(
+    (value) => !/[\p{Cc}\p{Cf}]/u.test(value),
+    "品牌名称不能包含控制字符",
+  )
   .refine(
     (value) => !/^[\p{P}\p{S}\s]+$/u.test(value),
     "品牌名称不能仅包含标点或符号",

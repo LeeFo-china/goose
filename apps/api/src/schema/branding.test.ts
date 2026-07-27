@@ -86,6 +86,14 @@ describe("branding profile schemas", () => {
     }).success).toBe(false);
   });
 
+  test("accepts private-use Unicode code points", () => {
+    expect(BrandingDraftSchema.safeParse({
+      display_name: "品牌\uE000",
+      logo_file_id: uuid,
+      version: 0,
+    }).success).toBe(true);
+  });
+
   test("rejects empty, control, and punctuation-or-symbol-only display names", () => {
     for (const display_name of [
       "",
