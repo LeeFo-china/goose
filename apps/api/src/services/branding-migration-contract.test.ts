@@ -219,7 +219,7 @@ describe("tenant support branding batch A migration contract", () => {
       migrationSql.match(
         /CREATE(?: OR REPLACE)? FUNCTION public\.[a-z0-9_]+\(/gi,
       ),
-    ).toHaveLength(5);
+    ).toHaveLength(6);
 
     for (const [functionName, signature] of Object.entries(signatures)) {
       const functionSql = extractFunction(migrationSql, functionName);
@@ -259,6 +259,86 @@ describe("tenant support branding batch A migration contract", () => {
     );
     expect(saveDraft).toContain("btrim(p_display_name) = ''");
     expect(publish).toContain("btrim(v_profile.display_name) = ''");
+  });
+
+  test("locks and fully validates brand Logo files before every brand write", () => {
+    const validator = normalizeSql(
+      extractFunction(migrationSql, "require_valid_brand_logo_file"),
+    );
+    const saveDraft = normalizeSql(
+      extractFunction(migrationSql, "save_brand_profile_draft"),
+    );
+    const publish = normalizeSql(
+      extractFunction(migrationSql, "publish_brand_profile"),
+    );
+    const normalizedMigration = normalizeSql(migrationSql);
+    const validatorCall =
+      "perform public.require_valid_brand_logo_file";
+
+    expect(validator).toContain("returns public.platform_file_objects");
+    expect(validator).toContain("security definer");
+    expect(validator).toContain("set search_path = public, pg_temp");
+    expect(validator).toMatch(
+      /select file\.\* into v_file from public\.platform_file_objects as file where file\.id = p_logo_file_id and file\.tenant_id is not distinct from p_tenant_id for share/,
+    );
+    expect(validator).toContain("detail = 'branding_logo_file_not_found'");
+    expect(validator).toContain("v_file.scene <> 'brand_logo'");
+    expect(validator).toContain("v_file.status <> 'active'");
+    expect(validator).toContain("v_file.visibility <> 'public'");
+    expect(validator).toContain("v_file.deleted_at is not null");
+    expect(validator).toContain(
+      "v_file.mime_type not in ('image/jpeg', 'image/png', 'image/webp')",
+    );
+    expect(validator).toContain(
+      "v_file.size_bytes not between 1 and 2097152",
+    );
+    expect(validator).toContain("v_file.width is null");
+    expect(validator).toContain("v_file.width < 128");
+    expect(validator).toContain("v_file.height is null");
+    expect(validator).toContain("v_file.height < 128");
+    expect(validator).toContain(
+      "v_file.width::numeric / v_file.height::numeric not between 0.8 and 1.25",
+    );
+    expect(validator).toContain("v_file.public_url is null");
+    expect(validator).toContain("btrim(v_file.public_url) = ''");
+    expect(validator).toContain("v_file.public_url ~ '[[:space:]]'");
+    expect(validator).toContain("v_file.public_url !~");
+    expect(validator).toContain("^https?://");
+    expect(validator).toContain("[^:/@?#[:space:]]+");
+    expect(validator).toContain("detail = 'branding_logo_file_invalid'");
+    expect(validator.indexOf("if not found then")).toBeLessThan(
+      validator.indexOf("if v_file.scene <> 'brand_logo'"),
+    );
+
+    for (const functionSql of [saveDraft, publish]) {
+      expect(functionSql.match(
+        /perform public\.require_valid_brand_logo_file/g,
+      )).toHaveLength(1);
+      expect(functionSql.indexOf(validatorCall)).toBeGreaterThan(-1);
+      expect(functionSql.indexOf(validatorCall)).toBeLessThan(
+        functionSql.indexOf("update public.brand_profiles"),
+      );
+    }
+    expect(saveDraft.indexOf(validatorCall)).toBeLessThan(
+      saveDraft.indexOf("insert into public.brand_profiles"),
+    );
+    expect(saveDraft).toContain(
+      "perform public.require_valid_brand_logo_file(p_logo_file_id, p_tenant_id)",
+    );
+    expect(publish).toContain(
+      "perform public.require_valid_brand_logo_file(v_profile.logo_file_id, p_tenant_id)",
+    );
+
+    const helperSignature =
+      "public.require_valid_brand_logo_file(uuid, uuid)";
+    for (const role of ["public", "anon", "authenticated", "service_role"]) {
+      expect(normalizedMigration).toContain(
+        `revoke all on function ${helperSignature} from ${role}`,
+      );
+    }
+    expect(normalizedMigration).not.toContain(
+      `grant execute on function ${helperSignature}`,
+    );
   });
 
   test("implements entitlement terms and atomic event plus audit writes", () => {

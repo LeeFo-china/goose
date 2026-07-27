@@ -643,6 +643,59 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.require_valid_brand_logo_file(
+  p_logo_file_id uuid,
+  p_tenant_id uuid
+)
+RETURNS public.platform_file_objects
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_file public.platform_file_objects%ROWTYPE;
+BEGIN
+  SELECT file.*
+  INTO v_file
+  FROM public.platform_file_objects AS file
+  WHERE file.id = p_logo_file_id
+    AND file.tenant_id IS NOT DISTINCT FROM p_tenant_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Brand logo file not found',
+      DETAIL = 'BRANDING_LOGO_FILE_NOT_FOUND';
+  END IF;
+
+  IF v_file.scene <> 'brand_logo'
+     OR v_file.status <> 'active'
+     OR v_file.visibility <> 'public'
+     OR v_file.deleted_at IS NOT NULL
+     OR v_file.mime_type NOT IN ('image/jpeg', 'image/png', 'image/webp')
+     OR v_file.size_bytes NOT BETWEEN 1 AND 2097152
+     OR v_file.width IS NULL
+     OR v_file.width < 128
+     OR v_file.height IS NULL
+     OR v_file.height < 128
+     OR v_file.width::numeric / v_file.height::numeric
+       NOT BETWEEN 0.8 AND 1.25
+     OR v_file.public_url IS NULL
+     OR btrim(v_file.public_url) = ''
+     OR v_file.public_url ~ '[[:space:]]'
+     OR v_file.public_url !~*
+       '^https?://(\[[0-9a-f:.]+\]|[^:/@?#[:space:]]+)(:[0-9]+)?([/?#][^[:space:]]*)?$' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Brand logo file is invalid',
+      DETAIL = 'BRANDING_LOGO_FILE_INVALID';
+  END IF;
+
+  RETURN v_file;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.save_brand_profile_draft(
   p_scope text,
   p_tenant_id uuid,
@@ -690,24 +743,10 @@ BEGIN
     END IF;
   END IF;
 
-  PERFORM 1
-  FROM public.platform_file_objects AS file
-  WHERE file.id = p_logo_file_id
-    AND file.scene = 'brand_logo'
-    AND file.status = 'active'
-    AND file.visibility = 'public'
-    AND (
-      (p_scope = 'platform' AND file.tenant_id IS NULL)
-      OR (p_scope = 'tenant' AND file.tenant_id = p_tenant_id)
-    )
-  FOR SHARE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'Brand logo file not found',
-      DETAIL = 'BRANDING_LOGO_FILE_NOT_FOUND';
-  END IF;
+  PERFORM public.require_valid_brand_logo_file(
+    p_logo_file_id,
+    p_tenant_id
+  );
 
   SELECT profile.*
   INTO v_profile
@@ -833,24 +872,10 @@ BEGIN
       DETAIL = 'BRANDING_PROFILE_INCOMPLETE';
   END IF;
 
-  PERFORM 1
-  FROM public.platform_file_objects AS file
-  WHERE file.id = v_profile.logo_file_id
-    AND file.scene = 'brand_logo'
-    AND file.status = 'active'
-    AND file.visibility = 'public'
-    AND (
-      (p_scope = 'platform' AND file.tenant_id IS NULL)
-      OR (p_scope = 'tenant' AND file.tenant_id = p_tenant_id)
-    )
-  FOR SHARE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'Brand logo file not found',
-      DETAIL = 'BRANDING_LOGO_FILE_NOT_FOUND';
-  END IF;
+  PERFORM public.require_valid_brand_logo_file(
+    v_profile.logo_file_id,
+    p_tenant_id
+  );
 
   UPDATE public.brand_profiles
   SET
@@ -1279,6 +1304,19 @@ BEGIN
   RETURN v_entitlement;
 END;
 $$;
+
+REVOKE ALL ON FUNCTION public.require_valid_brand_logo_file(
+  uuid, uuid
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.require_valid_brand_logo_file(
+  uuid, uuid
+) FROM anon;
+REVOKE ALL ON FUNCTION public.require_valid_brand_logo_file(
+  uuid, uuid
+) FROM authenticated;
+REVOKE ALL ON FUNCTION public.require_valid_brand_logo_file(
+  uuid, uuid
+) FROM service_role;
 
 REVOKE ALL ON FUNCTION public.save_brand_profile_draft(
   text, uuid, text, uuid, integer, uuid

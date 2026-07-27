@@ -96,6 +96,21 @@ describe("assertValidBrandLogoFile", () => {
     ["non-finite height", { height: Number.NaN }],
     ["narrow aspect ratio", { width: 128, height: 161 }],
     ["wide aspect ratio", { width: 161, height: 128 }],
+    ["missing public URL", { public_url: null }],
+    ["empty public URL", { public_url: "" }],
+    ["blank public URL", { public_url: "   " }],
+    ["FTP public URL", { public_url: "ftp://cdn.example.com/logo.png" }],
+    ["JavaScript public URL", { public_url: "javascript:alert(1)" }],
+    ["malformed public URL", { public_url: "https:///logo.png" }],
+    ["URL with whitespace", {
+      public_url: "https://cdn.example.com/logo image.png",
+    }],
+    ["URL username", {
+      public_url: "https://user@cdn.example.com/logo.png",
+    }],
+    ["URL password", {
+      public_url: "https://user:secret@cdn.example.com/logo.png",
+    }],
   ])("rejects invalid %s", (_name, patch) => {
     expectInvalid({
       ...platformFile,
@@ -112,6 +127,17 @@ describe("assertValidBrandLogoFile", () => {
       )).toMatchObject({ mime_type: mimeType });
     },
   );
+
+  test.each([
+    "http://cdn.example.com/logo.png",
+    "https://cdn.example.com/logo.png",
+    "https://cdn.example.com:8443/brand/logo.png?v=1#asset",
+  ])("accepts a valid public HTTP(S) URL %s", (publicUrl) => {
+    expect(assertValidBrandLogoFile(
+      { tenantId: null },
+      { ...platformFile, public_url: publicUrl },
+    )).toMatchObject({ public_url: publicUrl });
+  });
 
   test("accepts inclusive size, dimension, and aspect-ratio boundaries", () => {
     expect(assertValidBrandLogoFile(

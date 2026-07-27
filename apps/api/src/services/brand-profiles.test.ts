@@ -91,6 +91,20 @@ describe("BrandProfilesService platform access and read", () => {
         profile: { logo_file_id: FILE_ID, logo_url: null },
       });
   });
+
+  test("keeps the file ID but hides an invalid public URL", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      platformFile: {
+        ...platformFile,
+        public_url: "javascript:alert(1)",
+      },
+    });
+
+    await expect(fixture.service.getPlatform(platformAuthContext))
+      .resolves.toMatchObject({
+        profile: { logo_file_id: FILE_ID, logo_url: null },
+      });
+  });
 });
 
 describe("BrandProfilesService tenant read", () => {
@@ -295,6 +309,22 @@ describe("BrandProfilesService draft saves", () => {
     });
     expect(fixture.saveDraft).not.toHaveBeenCalled();
   });
+
+  test("invalid public URLs block save before the draft RPC", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      platformFile: { ...platformFile, public_url: "ftp://bad/logo.png" },
+    });
+
+    await expect(fixture.service.savePlatformDraft(platformAuthContext, {
+      display_name: "平台品牌",
+      logo_file_id: FILE_ID,
+      version: 4,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "BRANDING_LOGO_FILE_INVALID",
+    });
+    expect(fixture.saveDraft).not.toHaveBeenCalled();
+  });
 });
 
 describe("BrandProfilesService publish", () => {
@@ -363,5 +393,22 @@ describe("BrandProfilesService publish", () => {
     await fixture.service.publishPlatform(platformAuthContext, { version: 4 });
 
     expect(fixture.findBrandingFileForPlatform).toHaveBeenCalledTimes(2);
+  });
+
+  test("invalid public URLs block publish before the publish RPC", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      platformFile: {
+        ...platformFile,
+        public_url: "https://user:secret@cdn.example.com/logo.png",
+      },
+    });
+
+    await expect(fixture.service.publishPlatform(platformAuthContext, {
+      version: 4,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "BRANDING_LOGO_FILE_INVALID",
+    });
+    expect(fixture.publish).not.toHaveBeenCalled();
   });
 });

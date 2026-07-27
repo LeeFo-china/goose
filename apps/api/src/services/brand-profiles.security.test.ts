@@ -128,6 +128,24 @@ describe("BrandProfilesService RPC error mapping", () => {
     expect(fixture.findBrandingFileForTenant).toHaveBeenCalledTimes(1);
   });
 
+  test("maps a publish-time invalid Logo race without leaking details", async () => {
+    const fixture = createFixture(BrandProfilesService, {
+      publishFailure: databaseError({
+        code: "P0001",
+        details: "BRANDING_LOGO_FILE_INVALID",
+        hint: "private file metadata",
+      }),
+    });
+
+    await expect(fixture.service.publishPlatform(platformAuthContext, {
+      version: 4,
+    })).rejects.toMatchObject({
+      statusCode: 400,
+      code: "BRANDING_LOGO_FILE_INVALID",
+      details: undefined,
+    });
+  });
+
   test("does not match known codes inside longer identifier tokens", async () => {
     for (
       const token of [

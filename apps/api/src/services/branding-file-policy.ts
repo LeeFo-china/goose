@@ -59,15 +59,16 @@ export function assertValidBrandLogoFile(
 function hasValidBrandLogoFileProperties(
   file: Pick<
     BrandingPlatformFileObjectRecord,
-    "mime_type" | "size_bytes" | "width" | "height"
+    "mime_type" | "size_bytes" | "width" | "height" | "public_url"
   >,
 ): boolean {
-  return hasValidBrandLogoImageProperties({
-    mimeType: file.mime_type,
-    sizeBytes: file.size_bytes,
-    width: file.width,
-    height: file.height,
-  });
+  return hasValidPublicHttpUrl(file.public_url) &&
+    hasValidBrandLogoImageProperties({
+      mimeType: file.mime_type,
+      sizeBytes: file.size_bytes,
+      width: file.width,
+      height: file.height,
+    });
 }
 
 function hasValidBrandLogoImageProperties(input: {
@@ -101,6 +102,28 @@ function isValidDimension(value: number | null, minimum: number): value is numbe
     Number.isFinite(value) &&
     Number.isInteger(value) &&
     value >= minimum;
+}
+
+function hasValidPublicHttpUrl(value: string | null): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value !== value.trim() ||
+    /\s/u.test(value) ||
+    !/^https?:\/\/[^/?#\s]+(?:[/?#]|$)/u.test(value)
+  ) return false;
+
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      url.hostname.length > 0 &&
+      url.username.length === 0 &&
+      url.password.length === 0
+    );
+  } catch {
+    return false;
+  }
 }
 
 function invalidBrandLogoFile(): never {
