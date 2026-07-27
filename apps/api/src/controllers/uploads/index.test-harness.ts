@@ -151,6 +151,17 @@ mock.module("@/services/access-policy", () => ({
       }
       return scope;
     }),
+    assertTenantContext: mock((
+      authContext: { tenantId?: string | null },
+    ) => {
+      if (!authContext.tenantId) {
+        throw Object.assign(new Error("tenant context required"), {
+          statusCode: 403,
+          code: "FORBIDDEN",
+        });
+      }
+      return authContext.tenantId;
+    }),
   },
 }));
 mock.module("@/services/uploads", () => ({
