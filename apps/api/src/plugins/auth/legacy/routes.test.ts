@@ -80,6 +80,53 @@ describe("isVisitorSessionRoute", () => {
 });
 
 describe("auth public route allowlist", () => {
+  test("allows only effective branding reads without a token or with a visitor session", () => {
+    for (const method of ["GET", "HEAD"]) {
+      expect(isPublicRoute(method, "/branding/effective")).toBe(true);
+      expect(isVisitorSessionRoute(method, "/branding/effective")).toBe(true);
+      expect(shouldBypassAuth(method, "/branding/effective")).toBe(false);
+    }
+
+    const protectedRoutes = [
+      ["POST", "/branding/effective"],
+      ["GET", "/platform/branding"],
+      ["PATCH", "/platform/branding"],
+      ["POST", "/platform/branding/publish"],
+      ["GET", "/platform/tenants/tenant-id/entitlements"],
+      [
+        "POST",
+        "/platform/tenants/tenant-id/entitlements/custom_support_branding/grant",
+      ],
+      [
+        "POST",
+        "/platform/tenants/tenant-id/entitlements/custom_support_branding/suspend",
+      ],
+      [
+        "POST",
+        "/platform/tenants/tenant-id/entitlements/custom_support_branding/resume",
+      ],
+      [
+        "POST",
+        "/platform/tenants/tenant-id/entitlements/custom_support_branding/revoke",
+      ],
+      ["GET", "/tenant/branding"],
+      ["PATCH", "/tenant/branding"],
+      ["POST", "/tenant/branding/publish"],
+    ] as const;
+
+    for (const [method, route] of protectedRoutes) {
+      expect(isPublicRoute(method, route)).toBe(false);
+      expect(isVisitorSessionRoute(method, route)).toBe(false);
+    }
+
+    expect(isPartnerPortalRoute("GET", "/branding/effective")).toBe(false);
+    expect(isPartnerPortalRoute("HEAD", "/branding/effective")).toBe(false);
+    expect(isPublicRoute("GET", "/branding/effective/extra")).toBe(false);
+    expect(isVisitorSessionRoute("GET", "/branding/effective/extra")).toBe(
+      false,
+    );
+  });
+
   test("allows official partner application submissions without a token", () => {
     expect(isPublicRoute("POST", "/public/partner-applications")).toBe(true);
     expect(isPublicRoute("POST", "/public/partner-applications/proxy-ip-check")).toBe(true);
