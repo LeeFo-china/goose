@@ -91,21 +91,15 @@ describe("tenant support branding batch A migration contract", () => {
       expect(normalized).toContain(
         `revoke all on table public.${table} from public, anon, authenticated`,
       );
+      expect(normalized).toContain(
+        `revoke all on table public.${table} from service_role`,
+      );
+      expect(normalized).toContain(
+        `grant select on table public.${table} to service_role`,
+      );
     }
-    expect(normalized).toContain(
-      "grant select, insert, update, delete on table public.brand_profiles to service_role",
-    );
-    expect(normalized).toContain(
-      "grant select, insert, update, delete on table public.tenant_entitlements to service_role",
-    );
-    expect(normalized).toContain(
-      "grant select, insert on table public.tenant_entitlement_events to service_role",
-    );
-    expect(normalized).toContain(
-      "revoke all on table public.tenant_entitlement_events from service_role",
-    );
-    expect(normalized).not.toContain(
-      "grant select, insert, update, delete on table public.tenant_entitlement_events",
+    expect(normalized).not.toMatch(
+      /grant (?:all|[^;]*(?:insert|update|delete))[^;]* on table public\.(?:brand_profiles|tenant_entitlements|tenant_entitlement_events) to service_role/,
     );
 
     expect(normalized).toContain(
@@ -129,6 +123,7 @@ describe("tenant support branding batch A migration contract", () => {
     expect(normalized).toContain(
       "char_length(display_name) between 2 and 40",
     );
+    expect(normalized).toContain("btrim(display_name) <> ''");
     expect(normalized).toContain("check (version > 0)");
     expect(normalized).toContain("published_version <= version");
     expect(normalized).toMatch(
@@ -150,6 +145,18 @@ describe("tenant support branding batch A migration contract", () => {
 
     expect(normalized).toContain(
       "unique (tenant_id, entitlement_code)",
+    );
+    expect(normalized).toContain(
+      "constraint tenant_entitlements_event_identity_key unique (id, tenant_id, entitlement_code)",
+    );
+    expect(normalized).toContain(
+      "constraint tenant_entitlement_events_entitlement_identity_fkey foreign key (entitlement_id, tenant_id, entitlement_code) references public.tenant_entitlements(id, tenant_id, entitlement_code) on delete restrict",
+    );
+    expect(normalized).not.toMatch(
+      /entitlement_id uuid not null references public\.tenant_entitlements\(id\)/,
+    );
+    expect(normalized).not.toMatch(
+      /create table public\.tenant_entitlement_events\s*\([^;]*tenant_id uuid not null references public\.tenants\(id\)/,
     );
     expect(normalized).toContain(
       "status in ('active', 'suspended', 'expired', 'revoked')",
@@ -212,7 +219,7 @@ describe("tenant support branding batch A migration contract", () => {
       migrationSql.match(
         /CREATE(?: OR REPLACE)? FUNCTION public\.[a-z0-9_]+\(/gi,
       ),
-    ).toHaveLength(4);
+    ).toHaveLength(5);
 
     for (const [functionName, signature] of Object.entries(signatures)) {
       const functionSql = extractFunction(migrationSql, functionName);
@@ -238,6 +245,9 @@ describe("tenant support branding batch A migration contract", () => {
     const saveDraft = normalizeSql(
       extractFunction(migrationSql, "save_brand_profile_draft"),
     );
+    const publish = normalizeSql(
+      extractFunction(migrationSql, "publish_brand_profile"),
+    );
     const updateStatement =
       saveDraft.match(
         /update public\.brand_profiles[\s\S]*?returning brand_profiles\.\*/,
@@ -247,6 +257,8 @@ describe("tenant support branding batch A migration contract", () => {
     expect(updateStatement).not.toMatch(
       /published_(?:display_name|logo_file_id|version|at)\s*=/,
     );
+    expect(saveDraft).toContain("btrim(p_display_name) = ''");
+    expect(publish).toContain("btrim(v_profile.display_name) = ''");
   });
 
   test("implements entitlement terms and atomic event plus audit writes", () => {
@@ -266,6 +278,12 @@ describe("tenant support branding batch A migration contract", () => {
       "insert into public.tenant_entitlement_events",
     );
     expect(normalized).toContain("insert into public.platform_audit_logs");
+    expect(normalized).toMatch(
+      /select entitlement\.\* into v_entitlement from public\.tenant_entitlements as entitlement where entitlement\.tenant_id = p_tenant_id and entitlement\.entitlement_code = p_entitlement_code for update/,
+    );
+    expect(normalized).toMatch(
+      /from public\.employees as actor where actor\.id = p_actor_employee_id and actor\.user_id = p_actor_user_id for share/,
+    );
     expect(suspendBranch).toContain("expires_at <= v_now");
     expect(resumeBranch).not.toBe("");
     expect(resumeBranch).toContain("expires_at <= v_now");
@@ -285,6 +303,9 @@ describe("tenant support branding batch A migration contract", () => {
     expect(expire).toMatch(
       /update public\.tenant_entitlements set[\s\S]*?where id = v_entitlement\.id and status in \('active', 'suspended'\) and expires_at <= p_now/,
     );
+    expect(expire).toMatch(
+      /select entitlement\.\* into v_entitlement from public\.tenant_entitlements as entitlement where entitlement\.tenant_id = p_tenant_id and entitlement\.entitlement_code = p_entitlement_code for update/,
+    );
     expect(expire).toContain(
       "insert into public.tenant_entitlement_events",
     );
@@ -292,5 +313,39 @@ describe("tenant support branding batch A migration contract", () => {
       /values \(v_entitlement\.id,[\s\S]*?'expired', 'system', null,/,
     );
     expect(expire).not.toContain("insert into public.platform_audit_logs");
+  });
+
+  test("keeps future tenant initialization behavior while excluding platform permissions", () => {
+    const initializer = normalizeSql(
+      extractFunction(migrationSql, "initialize_default_decoration_tenant"),
+    );
+
+    expect(initializer).not.toBe("");
+    expect(initializer).toContain("security definer");
+    expect(initializer).toContain(
+      "set search_path = pg_catalog, public, auth",
+    );
+    for (const preservedBehavior of [
+      "with department_defaults(code, alias_name) as",
+      "with post_defaults(code, name, sort) as",
+      "with role_defaults(code, name, description) as",
+      "insert into public.employees",
+      "insert into public.employee_roles",
+      "insert into public.tenant_template_applications",
+      "return v_initialization",
+    ]) {
+      expect(initializer).toContain(preservedBehavior);
+    }
+    expect(initializer).toMatch(
+      /from public\.permissions as permission where permission\.status = 'active' and permission\.code not like 'platform\.%'/,
+    );
+    expect(initializer).not.toMatch(
+      /from public\.permissions as permission where permission\.status = 'active' on conflict/,
+    );
+
+    const normalized = normalizeSql(migrationSql);
+    expect(normalized).toMatch(
+      /permissions\.code in \('platform\.branding\.manage', 'platform\.tenant_entitlement\.manage'\)[\s\S]*roles\.code = 'platform_admin' and roles\.tenant_id is null/,
+    );
   });
 });
