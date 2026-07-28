@@ -5,6 +5,7 @@ import {
   parseBrandingAddonBatchBSmokeConfig,
   redactBrandingAddonSmokeValue,
   runBrandingAddonBatchBSmoke,
+  sanitizeBrandingAddonSmokeOutput,
 } from "./branding-addon-batch-b-smoke";
 
 const ADMIN_TOKEN = "admin-secret-token";
@@ -18,7 +19,7 @@ describe("parseBrandingAddonBatchBSmokeConfig", () => {
     expect(parseBrandingAddonBatchBSmokeConfig({}, [])).toEqual({
       ok: false,
       errors: [
-        "GOOES_API_BASE_URL is required",
+        "API_BASE_URL is required",
         "BRANDING_ADDON_SMOKE_ADMIN_TOKEN is required",
         "BRANDING_ADDON_SMOKE_ISOLATION_TOKEN is required",
       ],
@@ -88,6 +89,22 @@ describe("redactBrandingAddonSmokeValue", () => {
       ]
     ) {
       expect(serialized).not.toContain(secret);
+    }
+  });
+
+  test("re-sanitizes final CLI output with all configured tokens", () => {
+    const output = JSON.stringify(sanitizeBrandingAddonSmokeOutput({
+      baseUrl: "https://api.example.com",
+      adminToken: ADMIN_TOKEN,
+      isolationToken: ISOLATION_TOKEN,
+      platformToken: PLATFORM_TOKEN,
+      realPayRequested: false,
+    }, {
+      message: `${ADMIN_TOKEN} ${ISOLATION_TOKEN} ${PLATFORM_TOKEN}`,
+    }));
+
+    for (const secret of [ADMIN_TOKEN, ISOLATION_TOKEN, PLATFORM_TOKEN]) {
+      expect(output).not.toContain(secret);
     }
   });
 });
@@ -170,7 +187,9 @@ describe("runBrandingAddonBatchBSmoke", () => {
             },
             server_time: "2026-07-28T00:00:00.000Z",
           },
-          message: "success",
+          message: token === ADMIN_TOKEN
+            ? `unexpected echo ${ISOLATION_TOKEN} ${PLATFORM_TOKEN}`
+            : "success",
         });
       }
 

@@ -27,6 +27,24 @@ type RunSmokeInput = {
 const PRODUCT_CODE = "custom_support_branding_annual";
 const MAX_PAGE_SIZE = 100;
 
+export type CreateOrderSnapshot = {
+  id: string;
+  orderNo: string;
+  productCode: string;
+  productName: string;
+  amountFen: number;
+  termYears: number;
+  expiresAt: string;
+  createdAt: string;
+};
+
+export function sanitizeBrandingAddonSmokeOutput(
+  config: BrandingAddonBatchBSmokeConfig,
+  value: unknown,
+): unknown {
+  return redactBrandingAddonSmokeValue(value, getSmokeSecrets(config));
+}
+
 export function assertExpectedEffectiveBranding(
   data: Record<string, unknown>,
   expectedSource: "tenant" | "platform",
@@ -68,6 +86,7 @@ export async function runBrandingAddonBatchBSmoke(
       path,
       token,
       fetchImpl,
+      secretValues: getSmokeSecrets(input.config),
       ...options,
     });
 
@@ -118,8 +137,7 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.adminToken,
     { method: "POST", body: createBody },
   );
-  const createdOrder = assertPendingOrder(created.data);
-  assertPaymentRequest(created.data);
+  const createdOrder = assertInitialCreateOrderResult(created.data);
   checks.push(created.evidence);
 
   const replay = await request(
@@ -128,10 +146,12 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.adminToken,
     { method: "POST", body: createBody },
   );
-  assertSameOrder(replay.data, createdOrder.id, "idempotency replay");
-  if (replay.data.idempotent !== true) {
-    throw contractFailure("idempotency replay must set idempotent=true");
-  }
+  assertRepeatedCreateOrderResult(
+    replay.data,
+    createdOrder,
+    "idempotency replay",
+    { idempotent: true, reusedPending: false },
+  );
   checks.push(replay.evidence);
 
   const reused = await request(
@@ -146,10 +166,12 @@ export async function runBrandingAddonBatchBSmoke(
       },
     },
   );
-  assertSameOrder(reused.data, createdOrder.id, "pending reuse");
-  if (reused.data.reused_pending !== true) {
-    throw contractFailure("pending reuse must set reused_pending=true");
-  }
+  assertRepeatedCreateOrderResult(
+    reused.data,
+    createdOrder,
+    "pending reuse",
+    { idempotent: false, reusedPending: true },
+  );
   checks.push(reused.evidence);
 
   const list = await request(
@@ -291,22 +313,80 @@ function assertConfiguredPlatformProduct(data: Record<string, unknown>): void {
   }
 }
 
-function assertPendingOrder(data: Record<string, unknown>) {
-  const order = requireRecord(data.order, "created order");
+export function assertInitialCreateOrderResult(
+  data: Record<string, unknown>,
+): CreateOrderSnapshot {
+  assertCreateFlags(data, "initial create", false, false);
+  const snapshot = readPendingCreateSnapshot(data, "initial create");
+  assertPaymentRequest(data);
+  return snapshot;
+}
+
+export function assertRepeatedCreateOrderResult(
+  data: Record<string, unknown>,
+  expected: CreateOrderSnapshot,
+  label: string,
+  flags: { idempotent: boolean; reusedPending: boolean },
+): void {
+  assertCreateFlags(data, label, flags.idempotent, flags.reusedPending);
+  const actual = readPendingCreateSnapshot(data, label);
+  for (const key of Object.keys(expected) as Array<keyof CreateOrderSnapshot>) {
+    if (actual[key] !== expected[key]) {
+      throw contractFailure(`${label} changed order snapshot field ${key}`);
+    }
+  }
+  assertPaymentRequest(data);
+}
+
+function readPendingCreateSnapshot(
+  data: Record<string, unknown>,
+  label: string,
+): CreateOrderSnapshot {
+  const order = requireRecord(data.order, `${label} order`);
   const id = readString(order.id);
   const orderNo = readString(order.order_no);
+  const productCode = readString(order.product_code);
+  const productName = readString(order.product_name);
+  const expiresAt = readString(order.expires_at);
+  const createdAt = readString(order.created_at);
   if (
     !id ||
     !orderNo ||
+    !productCode ||
+    !productName ||
+    !expiresAt ||
+    !createdAt ||
     order.status !== "pending" ||
-    order.product_code !== PRODUCT_CODE ||
+    productCode !== PRODUCT_CODE ||
     !Number.isSafeInteger(order.amount_fen) ||
     Number(order.amount_fen) <= 0 ||
     order.term_years !== 1
   ) {
-    throw contractFailure("created order is not a valid pending order");
+    throw contractFailure(`${label} is not a valid pending order`);
   }
-  return { id, orderNo };
+  return {
+    id,
+    orderNo,
+    productCode,
+    productName,
+    amountFen: Number(order.amount_fen),
+    termYears: Number(order.term_years),
+    expiresAt,
+    createdAt,
+  };
+}
+
+function assertCreateFlags(
+  data: Record<string, unknown>,
+  label: string,
+  idempotent: boolean,
+  reusedPending: boolean,
+): void {
+  if (
+    data.idempotent === idempotent &&
+    data.reused_pending === reusedPending
+  ) return;
+  throw contractFailure(`${label} flags are invalid`);
 }
 
 function assertSameOrder(
@@ -359,6 +439,16 @@ function productPreconditionFailure(error: unknown) {
   );
 }
 
+function getSmokeSecrets(
+  config: BrandingAddonBatchBSmokeConfig,
+): string[] {
+  return [
+    config.adminToken,
+    config.isolationToken,
+    ...(config.platformToken ? [config.platformToken] : []),
+  ];
+}
+
 async function main(): Promise<number> {
   const parsed = parseBrandingAddonBatchBSmokeConfig();
   if (!parsed.ok) {
@@ -367,7 +457,10 @@ async function main(): Promise<number> {
   }
   try {
     console.log(JSON.stringify(
-      await runBrandingAddonBatchBSmoke({ config: parsed.config }),
+      sanitizeBrandingAddonSmokeOutput(
+        parsed.config,
+        await runBrandingAddonBatchBSmoke({ config: parsed.config }),
+      ),
       null,
       2,
     ));
@@ -376,13 +469,17 @@ async function main(): Promise<number> {
     const failure = error instanceof BrandingAddonSmokeFailure
       ? error
       : contractFailure("branding addon Batch B smoke failed");
-    console.error(JSON.stringify({
-      ok: false,
-      code: failure.code,
-      http_status: failure.http_status,
-      request_id: failure.request_id,
-      response: redactBrandingAddonSmokeValue(failure.response),
-    }, null, 2));
+    console.error(JSON.stringify(
+      sanitizeBrandingAddonSmokeOutput(parsed.config, {
+        ok: false,
+        code: failure.code,
+        http_status: failure.http_status,
+        request_id: failure.request_id,
+        response: failure.response,
+      }),
+      null,
+      2,
+    ));
     return 1;
   }
 }

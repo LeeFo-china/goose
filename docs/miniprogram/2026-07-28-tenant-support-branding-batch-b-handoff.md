@@ -567,12 +567,17 @@ created_to
 
 ```bash
 cd apps/api
-GOOES_API_BASE_URL=https://api-dev.goodcms.cn \
+API_BASE_URL=https://api-dev.goodcms.cn \
 BRANDING_ADDON_SMOKE_ADMIN_TOKEN='<wechat-tenant-admin-token>' \
 BRANDING_ADDON_SMOKE_ISOLATION_TOKEN='<other-tenant-admin-token>' \
 BRANDING_ADDON_SMOKE_PLATFORM_TOKEN='<optional-platform-token>' \
 bun run branding:addon:batch-b-smoke
 ```
+
+`API_BASE_URL` 是 smoke 的主变量。仅为兼容既有脚本环境，主变量缺失时
+允许读取 `GOOES_API_BASE_URL`；若两者同时存在，规范化后的地址必须完全
+一致，否则脚本在发送请求前失败。package 命令不会隐式加载 `.env`，
+调用方必须显式导出目标地址和本次临时 token，避免误连其他环境。
 
 前置条件：
 

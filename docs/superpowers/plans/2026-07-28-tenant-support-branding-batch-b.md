@@ -815,7 +815,8 @@ git commit -m "fix(branding): 保持权益风控状态优先"
 
 测试脚本必须：
 
-- 要求显式 API Base URL 和两个测试 token。
+- 要求显式 `API_BASE_URL` 和两个测试 token；
+  `GOOES_API_BASE_URL` 只作兼容，两者同时设置时必须一致。
 - 不在日志打印 token/OpenID/密钥。
 - 验证商品、幂等创建、pending 复用、跨租户 404、支付参数、订单
   分页和批次 A effective 回归。
@@ -839,8 +840,11 @@ Expected: FAIL。
 
 ```json
 "branding:addon:batch-b-smoke":
-  "bun --env-file=.env src/scripts/branding-addon-batch-b-smoke.ts"
+  "bun src/scripts/branding-addon-batch-b-smoke.ts"
 ```
+
+命令不隐式加载 `.env`；执行者必须显式导出目标 API 和临时 token，
+避免 smoke 静默命中错误环境。
 
 交接文档列出接口、响应、错误码、前端状态映射、测试账号、测试商品、
 smoke 证据、提交号和 API 地址。提交号和远端证据在部署后回填。
