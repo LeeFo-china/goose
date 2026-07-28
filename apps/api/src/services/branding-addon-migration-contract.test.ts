@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
-
 const migrationPath = new URL(
   "../../../../supabase/migrations/20260728120000_create_branding_addon_commerce.sql",
   import.meta.url,
@@ -29,6 +28,17 @@ function extractFunction(sql: string, functionName: string): string {
   );
 }
 
+function extractFunctionBody(sql: string, functionName: string): string {
+  return extractFunction(sql, functionName).match(/\bAS\s+\$\$([\s\S]*?)\$\$;/i)?.[1] ?? "";
+}
+function extractTriggerUpdateColumns(sql: string, triggerName: string): string[] {
+  const pattern = new RegExp(
+    `CREATE TRIGGER ${triggerName}\\s+BEFORE UPDATE OF([\\s\\S]*?)\\s+ON public\\.tenant_addon_orders`,
+    "i",
+  );
+  const columns = sql.match(pattern)?.[1] ?? "";
+  return columns.split(",").map((column) => column.trim().toLowerCase());
+}
 function extractTable(sql: string, tableName: string): string {
   return (
     sql.match(
@@ -46,6 +56,74 @@ function extractConstraint(tableSql: string, constraintName: string): string {
   if (start < 0) return "";
   const end = normalized.indexOf(" constraint ", start + 1);
   return normalized.slice(start, end < 0 ? undefined : end);
+}
+
+const IMMUTABLE_ORDER_FIELDS = [
+  "tenant_id", "order_no", "out_trade_no", "idempotency_key", "product_id", "product_code",
+  "entitlement_code", "product_name", "amount_fen", "term_years", "purchase_notes",
+  "refund_policy", "channel", "payer_openid", "payment_config_id", "expected_guard_version",
+  "payment_mchid", "payment_appid", "payment_expires_at", "created_by",
+] as const;
+const MUTABLE_ORDER_FIELDS = [
+  "status", "prepay_id", "transaction_id", "paid_amount_fen", "paid_at", "closed_at",
+  "failure_code", "failure_message", "entitlement_event_id", "close_claim_token",
+  "close_claim_expires_at", "close_last_error", "close_attempt_count", "metadata", "updated_at",
+] as const;
+
+function expectImmutableOrderSnapshotContract(sql: string): void {
+  const name = "guard_tenant_addon_order_snapshot";
+  const guardDefinition = normalizeSql(extractFunction(sql, name));
+  const guardBody = normalizeSql(extractFunctionBody(sql, name));
+  const triggerColumns = extractTriggerUpdateColumns(sql, "tr_tenant_addon_orders_snapshot_immutable");
+  expect(guardDefinition).toContain("returns trigger");
+  expect(guardDefinition).toContain("set search_path = public, pg_temp");
+  expect(guardBody).toContain("branding_addon_order_snapshot_immutable");
+  expect(guardBody).toMatch(/return new; end;$/);
+  for (const field of IMMUTABLE_ORDER_FIELDS) {
+    expect(guardBody).toContain(`old.${field}`);
+    expect(guardBody).toContain(`new.${field}`);
+  }
+  expect(triggerColumns).toEqual([...IMMUTABLE_ORDER_FIELDS]);
+  for (const field of MUTABLE_ORDER_FIELDS) {
+    expect(triggerColumns).not.toContain(field);
+    expect(guardBody).not.toContain(`old.${field}`);
+  }
+}
+
+function expectNaturalYearTermContract(sql: string): void {
+  const commandBody = normalizeSql(extractFunctionBody(sql, "branding_confirm_addon_purchase"));
+  expect(commandBody).toMatch(
+    /values \(v_order\.tenant_id,[\s\S]*?'active', p_paid_at, p_paid_at \+ make_interval\(years => v_order\.term_years\)/,
+  );
+
+  const renewalConditional = commandBody.match(
+    /if v_entitlement\.status in \('suspended', 'revoked'\) then[\s\S]*?end if;/,
+  )?.[0] ?? "";
+  const riskBranch = renewalConditional.match(
+    /^if v_entitlement\.status in \('suspended', 'revoked'\) then[\s\S]*?elsif/,
+  )?.[0] ?? "";
+  expect(riskBranch).toContain("status = v_entitlement.status");
+  expect(riskBranch).toContain("starts_at = v_entitlement.starts_at");
+  expect(riskBranch).toContain(
+    "expires_at = greatest(v_entitlement.expires_at, p_paid_at) + make_interval(years => v_order.term_years)",
+  );
+  const activeBranch = renewalConditional.match(
+    /elsif v_entitlement\.status = 'active' and v_entitlement\.expires_at > p_paid_at then[\s\S]*?\belse\b/,
+  )?.[0] ?? "";
+  expect(activeBranch).toMatch(
+    /^elsif v_entitlement\.status = 'active' and v_entitlement\.expires_at > p_paid_at then/,
+  );
+  expect(activeBranch).toContain(
+    "expires_at = v_entitlement.expires_at + make_interval(years => v_order.term_years)",
+  );
+  expect(activeBranch).not.toContain("starts_at =");
+  const expiredBranch = renewalConditional.match(
+    /\belse update public\.tenant_entitlements set status = 'active'[\s\S]*?end if;$/,
+  )?.[0] ?? "";
+  expect(expiredBranch).toContain("starts_at = p_paid_at");
+  expect(expiredBranch).toContain(
+    "expires_at = p_paid_at + make_interval(years => v_order.term_years)",
+  );
 }
 
 function expectServiceRoleOnly(functionName: string, signature: string): void {
@@ -211,57 +289,11 @@ describe("branding add-on commerce migration contract", () => {
     }
   });
 
-  test("prevents service-role rewrites of immutable order snapshots", () => {
-    const guard = normalizeSql(
-      extractFunction(migrationSql, "guard_tenant_addon_order_snapshot"),
-    );
-    const normalized = normalizeSql(migrationSql);
-    const protectedFields = [
-      "tenant_id",
-      "order_no",
-      "out_trade_no",
-      "idempotency_key",
-      "product_id",
-      "product_code",
-      "entitlement_code",
-      "product_name",
-      "amount_fen",
-      "term_years",
-      "purchase_notes",
-      "refund_policy",
-      "channel",
-      "payer_openid",
-      "payment_config_id",
-      "expected_guard_version",
-      "payment_mchid",
-      "payment_appid",
-      "payment_expires_at",
-      "created_by",
-    ] as const;
-
-    expect(guard).not.toBe("");
-    expect(guard).toContain("returns trigger");
-    expect(guard).toContain("set search_path = public, pg_temp");
-    expect(guard).toContain("branding_addon_order_snapshot_immutable");
-    for (const field of protectedFields) {
-      expect(guard).toContain(`old.${field}`);
-      expect(guard).toContain(`new.${field}`);
-    }
-    for (const mutableField of [
-      "status", "prepay_id", "transaction_id", "paid_at", "closed_at",
-      "metadata", "close_claim_token",
-    ]) {
-      expect(guard).not.toContain(`old.${mutableField}`);
-    }
-
-    const trigger =
-      normalized.match(
-        /create trigger tr_tenant_addon_orders_snapshot_immutable before update of [\s\S]*?execute function public\.guard_tenant_addon_order_snapshot\(\)/,
-      )?.[0] ?? "";
-    expect(trigger).not.toBe("");
-    for (const field of protectedFields) {
-      expect(trigger).toContain(field);
-    }
+  test("prevents service-role rewrites of immutable order snapshots",
+    () => expectImmutableOrderSnapshotContract(migrationSql));
+  test("mutation fixture rejects mutable order fields in the guard trigger", () => {
+    const mutated = migrationSql.replace("BEFORE UPDATE OF", "BEFORE UPDATE OF\n  paid_amount_fen,");
+    expect(() => expectImmutableOrderSnapshotContract(mutated)).toThrow();
   });
 
   test("adds bounded order uniqueness and list plus close-worker indexes", () => {
@@ -445,42 +477,11 @@ describe("branding add-on commerce migration contract", () => {
     );
   });
 
-  test("applies natural-year terms without clearing risk-controlled starts", () => {
-    const command = normalizeSql(
-      extractFunction(migrationSql, "branding_confirm_addon_purchase"),
-    );
-
-    expect(command).toMatch(
-      /values \(v_order\.tenant_id,[\s\S]*?'active', p_paid_at, p_paid_at \+ make_interval\(years => v_order\.term_years\)/,
-    );
-
-    const riskBranch =
-      command.match(
-        /if v_entitlement\.status in \('suspended', 'revoked'\) then[\s\S]*?elsif v_entitlement\.status = 'active'/,
-      )?.[0] ?? "";
-    expect(riskBranch).toContain("status = v_entitlement.status");
-    expect(riskBranch).toContain("starts_at = v_entitlement.starts_at");
-    expect(riskBranch).toContain(
-      "expires_at = greatest(v_entitlement.expires_at, p_paid_at) + make_interval(years => v_order.term_years)",
-    );
-
-    const activeBranch =
-      command.match(
-        /elsif v_entitlement\.status = 'active'[\s\S]*?else update public\.tenant_entitlements/,
-      )?.[0] ?? "";
-    expect(activeBranch).toContain(
-      "expires_at = v_entitlement.expires_at + make_interval(years => v_order.term_years)",
-    );
-    expect(activeBranch).not.toContain("starts_at =");
-
-    const expiredBranch =
-      command.match(
-        /else update public\.tenant_entitlements set status = 'active'[\s\S]*?returning tenant_entitlements\.\* into v_entitlement/,
-      )?.[0] ?? "";
-    expect(expiredBranch).toContain("starts_at = p_paid_at");
-    expect(expiredBranch).toContain(
-      "expires_at = p_paid_at + make_interval(years => v_order.term_years)",
-    );
+  test("applies natural-year terms without clearing risk-controlled starts",
+    () => expectNaturalYearTermContract(migrationSql));
+  test("mutation fixture rejects an active renewal without an expiry guard", () => {
+    const mutated = migrationSql.replace(/\s+AND v_entitlement\.expires_at > p_paid_at/i, "");
+    expect(() => expectNaturalYearTermContract(mutated)).toThrow();
   });
 
   test("documents the private commerce model and atomic confirmation", () => {
