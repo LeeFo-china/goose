@@ -44,7 +44,7 @@ function expectClaimContract(sql: string): void {
   expect(definition).not.toContain("p_now");
   expect(body).toContain("v_now timestamptz := clock_timestamp()");
   expect(body).toMatch(
-    /if coalesce\(cardinality\(p_excluded_ids\), 0\) > 100 then[\s\S]*branding_addon_claim_exclusions_too_large[\s\S]*end if;/,
+    /if coalesce\(cardinality\(p_excluded_ids\), 0\) > 100 then[\s\S]*errcode = '22023'[\s\S]*branding_addon_claim_exclusions_too_large[\s\S]*end if;/,
   );
 
   const candidates = body.match(
@@ -55,7 +55,7 @@ function expectClaimContract(sql: string): void {
     "orders.channel = 'wechat_pay'",
     "orders.status = 'pending'",
     "orders.payment_expires_at <= v_now",
-    "orders.id = any(coalesce(p_excluded_ids, array[]::uuid[]))",
+    "and not (orders.id = any(coalesce(p_excluded_ids, array[]::uuid[])))",
     "orders.close_claim_expires_at is null",
     "orders.close_claim_expires_at <= v_now",
     "order by orders.payment_expires_at asc, orders.id asc",
@@ -155,6 +155,22 @@ describe("branding add-on expiration migration contract", () => {
       sql: migrationSql.replace(
         /IF coalesce\(cardinality\(p_excluded_ids\), 0\) > 100 THEN[\s\S]*?END IF;/i,
         "",
+      ),
+      contract: expectClaimContract,
+    },
+    {
+      name: "inverted exclusion predicate",
+      sql: migrationSql.replace(
+        /\bAND NOT \((?=\s*orders\.id = ANY\(coalesce\(p_excluded_ids)/i,
+        "AND (",
+      ),
+      contract: expectClaimContract,
+    },
+    {
+      name: "changed exclusion error code",
+      sql: migrationSql.replace(
+        /ERRCODE = '22023'(?=\s*,\s*MESSAGE = 'BRANDING_ADDON_CLAIM_EXCLUSIONS_TOO_LARGE')/i,
+        "ERRCODE = 'P0001'",
       ),
       contract: expectClaimContract,
     },
