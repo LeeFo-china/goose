@@ -2,7 +2,9 @@
 -- entry points, then restore guard_pending_recharge_payment_config and
 -- guard_pending_recharge_payment_secret from 20260720224000. Restore both
 -- before dropping the tenant_addon_orders table. Revoke/drop
--- branding_confirm_addon_purchase; drop
+-- branding_confirm_addon_purchase; revoke and drop branding_claim_expired_addon_orders
+-- and
+-- branding_renew_addon_close_claim; drop
 -- tr_tenant_addon_orders_entitlement_event,
 -- tr_tenant_addon_orders_snapshot_immutable, and the functions
 -- guard_tenant_addon_order_entitlement_event and
@@ -598,6 +600,153 @@ CREATE TRIGGER tr_tenant_addon_orders_updated_at
 BEFORE UPDATE ON public.tenant_addon_orders
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE OR REPLACE FUNCTION public.branding_claim_expired_addon_orders(
+  p_limit integer,
+  p_lease_seconds integer,
+  p_excluded_ids uuid[] DEFAULT ARRAY[]::uuid[]
+)
+RETURNS SETOF public.tenant_addon_orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_now timestamptz := clock_timestamp();
+BEGIN
+  IF coalesce(cardinality(p_excluded_ids), 0) > 100 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'BRANDING_ADDON_CLAIM_EXCLUSIONS_TOO_LARGE';
+  END IF;
+
+  RETURN QUERY
+  WITH candidates AS (
+    SELECT orders.id
+    FROM public.tenant_addon_orders AS orders
+    WHERE orders.channel = 'wechat_pay'
+      AND orders.status = 'pending'
+      AND orders.payment_expires_at <= v_now
+      AND NOT (
+        orders.id = ANY(coalesce(p_excluded_ids, ARRAY[]::uuid[]))
+      )
+      AND (
+        orders.close_claim_expires_at IS NULL
+        OR orders.close_claim_expires_at <= v_now
+      )
+    ORDER BY orders.payment_expires_at ASC, orders.id ASC
+    LIMIT least(greatest(coalesce(p_limit, 100), 1), 100)
+    FOR UPDATE SKIP LOCKED
+  )
+  UPDATE public.tenant_addon_orders AS orders
+  SET close_claim_token = gen_random_uuid(),
+      close_claim_expires_at = v_now + make_interval(
+        secs => least(
+          greatest(coalesce(p_lease_seconds, 60), 10),
+          600
+        )
+      ),
+      close_attempt_count = orders.close_attempt_count + 1,
+      close_last_error = NULL
+  FROM candidates
+  WHERE orders.id = candidates.id
+  RETURNING orders.*;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.branding_renew_addon_close_claim(
+  p_order_id uuid,
+  p_claim_token uuid,
+  p_lease_seconds integer
+)
+RETURNS public.tenant_addon_orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_order public.tenant_addon_orders%ROWTYPE;
+BEGIN
+  UPDATE public.tenant_addon_orders AS orders
+  SET close_claim_expires_at = clock_timestamp() + make_interval(
+    secs => least(
+      greatest(coalesce(p_lease_seconds, 60), 10),
+      600
+    )
+  )
+  WHERE orders.id = p_order_id
+    AND orders.status = 'pending'
+    AND orders.close_claim_token = p_claim_token
+  RETURNING orders.* INTO v_order;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN v_order;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.branding_claim_expired_addon_orders(
+  integer,
+  integer,
+  uuid[]
+)
+FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.branding_claim_expired_addon_orders(
+  integer,
+  integer,
+  uuid[]
+)
+FROM anon;
+REVOKE ALL ON FUNCTION public.branding_claim_expired_addon_orders(
+  integer,
+  integer,
+  uuid[]
+)
+FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_claim_expired_addon_orders(
+  integer,
+  integer,
+  uuid[]
+)
+TO service_role;
+
+REVOKE ALL ON FUNCTION public.branding_renew_addon_close_claim(
+  uuid,
+  uuid,
+  integer
+)
+FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.branding_renew_addon_close_claim(
+  uuid,
+  uuid,
+  integer
+)
+FROM anon;
+REVOKE ALL ON FUNCTION public.branding_renew_addon_close_claim(
+  uuid,
+  uuid,
+  integer
+)
+FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_renew_addon_close_claim(
+  uuid,
+  uuid,
+  integer
+)
+TO service_role;
+
+COMMENT ON FUNCTION public.branding_claim_expired_addon_orders(
+  integer,
+  integer,
+  uuid[]
+) IS 'Claims expired pending WeChat add-on orders with a bounded close lease.';
+COMMENT ON FUNCTION public.branding_renew_addon_close_claim(
+  uuid,
+  uuid,
+  integer
+) IS 'Renews the exact pending add-on close claim using database time.';
 
 CREATE TABLE IF NOT EXISTS public.tenant_addon_wechat_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
