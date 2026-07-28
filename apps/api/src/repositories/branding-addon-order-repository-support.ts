@@ -43,6 +43,24 @@ export function mapBrandingAddonOrderConflict(error: unknown) {
   return null;
 }
 
+export function mapBrandingAddonOrderCreationError(error: unknown) {
+  if (containsToken(error, "BRANDING_ENTITLEMENT_SUSPENDED")) {
+    return Errors.business(
+      409,
+      "品牌权益已暂停，不能购买或续费",
+      "BRANDING_ENTITLEMENT_SUSPENDED",
+    );
+  }
+  if (containsToken(error, "BRANDING_ENTITLEMENT_REVOKED")) {
+    return Errors.business(
+      409,
+      "品牌权益已撤销，不能购买或续费",
+      "BRANDING_ENTITLEMENT_REVOKED",
+    );
+  }
+  return mapBrandingAddonOrderConflict(error);
+}
+
 export function mapBrandingAddonConfirmationError(error: unknown) {
   for (const [code, [status, message]] of Object.entries(CONFIRMATION_ERRORS)) {
     if (containsToken(error, code)) {

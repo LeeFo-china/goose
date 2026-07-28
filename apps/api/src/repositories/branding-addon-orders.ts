@@ -23,7 +23,7 @@ import {
   boundedBrandingAddonNotificationError,
   hasSameBrandingAddonNotificationIdentity,
   mapBrandingAddonConfirmationError,
-  mapBrandingAddonOrderConflict,
+  mapBrandingAddonOrderCreationError,
 } from "@/repositories/branding-addon-order-repository-support";
 import { markBrandingAddonOrderFailedBeforePrepay, type MarkBrandingAddonOrderFailedBeforePrepayInput } from "@/repositories/branding-addon-order-failure-transition";
 import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
@@ -69,6 +69,7 @@ type AddonClient = {
   ): AddonQuery;
   rpc(
     name:
+      | "branding_create_addon_order"
       | "branding_confirm_addon_purchase"
       | "branding_get_platform_addon_order_audit",
     params: Record<string, unknown>,
@@ -123,12 +124,33 @@ export class BrandingAddonOrderRepository {
   }
 
   async createOrder(input: BrandingAddonOrderCreateInput) {
-    const { data, error } = await this.orders()
-      .insert(input)
-      .select(PAYMENT_ORDER_COLUMNS)
-      .single();
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_create_addon_order",
+      {
+        p_tenant_id: input.tenant_id,
+        p_order_no: input.order_no,
+        p_out_trade_no: input.out_trade_no,
+        p_idempotency_key: input.idempotency_key,
+        p_product_id: input.product_id,
+        p_product_code: input.product_code,
+        p_entitlement_code: input.entitlement_code,
+        p_product_name: input.product_name,
+        p_amount_fen: input.amount_fen,
+        p_term_years: input.term_years,
+        p_purchase_notes: input.purchase_notes,
+        p_refund_policy: input.refund_policy,
+        p_payer_openid: input.payer_openid,
+        p_payment_config_id: input.payment_config_id,
+        p_expected_guard_version: input.expected_guard_version,
+        p_payment_mchid: input.payment_mchid,
+        p_payment_appid: input.payment_appid,
+        p_payment_expires_at: input.payment_expires_at,
+        p_created_by: input.created_by,
+        p_metadata: input.metadata,
+      },
+    );
     if (error) {
-      const conflict = mapBrandingAddonOrderConflict(error);
+      const conflict = mapBrandingAddonOrderCreationError(error);
       if (conflict) throw conflict;
       throw Errors.dbError("创建年度品牌权益订单失败");
     }

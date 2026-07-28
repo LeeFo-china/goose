@@ -2,10 +2,14 @@
 -- entry points, then restore guard_pending_recharge_payment_config and
 -- guard_pending_recharge_payment_secret from 20260720224000. Restore both
 -- before dropping the tenant_addon_orders table. Revoke/drop
--- branding_get_platform_addon_order_audit and
+-- branding_get_platform_addon_order_audit,
+-- branding_create_addon_order, and
 -- branding_confirm_addon_purchase; revoke and drop branding_claim_expired_addon_orders
 -- and
 -- branding_renew_addon_close_claim; drop
+-- restore apply_tenant_entitlement_action from 20260727120000 before
+-- removing the commerce tables; remove close_reason only after all
+-- retained order audit data no longer depends on it; drop
 -- tr_tenant_addon_orders_entitlement_event,
 -- tr_tenant_addon_orders_snapshot_immutable, and the functions
 -- guard_tenant_addon_order_entitlement_event and
@@ -111,6 +115,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
   paid_amount_fen integer NULL,
   paid_at timestamptz NULL,
   closed_at timestamptz NULL,
+  close_reason text NULL,
   failure_code text NULL,
   failure_message text NULL,
   entitlement_event_id uuid NULL,
@@ -175,6 +180,14 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
     ),
   CONSTRAINT tenant_addon_orders_paid_amount_check
     CHECK (paid_amount_fen >= 0),
+  CONSTRAINT tenant_addon_orders_close_reason_check
+    CHECK (
+      close_reason IS NULL
+      OR close_reason IN (
+        'ENTITLEMENT_SUSPENDED',
+        'ENTITLEMENT_REVOKED'
+      )
+    ),
   CONSTRAINT tenant_addon_orders_failure_code_check
     CHECK (
       failure_code IS NULL
@@ -205,6 +218,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
         AND paid_amount_fen IS NULL
         AND paid_at IS NULL
         AND closed_at IS NULL
+        AND close_reason IS NULL
         AND failure_code IS NULL
         AND failure_message IS NULL
         AND entitlement_event_id IS NULL
@@ -218,6 +232,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
         AND paid_amount_fen = amount_fen
         AND paid_at IS NOT NULL
         AND closed_at IS NULL
+        AND close_reason IS NULL
         AND failure_code IS NULL
         AND failure_message IS NULL
         AND entitlement_event_id IS NOT NULL
@@ -246,6 +261,7 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
         AND paid_amount_fen IS NULL
         AND paid_at IS NULL
         AND closed_at IS NULL
+        AND close_reason IS NULL
         AND entitlement_event_id IS NULL
       )
     )
@@ -440,6 +456,512 @@ WHERE status = 'pending';
 CREATE INDEX tenant_addon_orders_payment_config_pending_idx
 ON public.tenant_addon_orders(payment_config_id, expected_guard_version)
 WHERE status = 'pending';
+
+CREATE OR REPLACE FUNCTION public.apply_tenant_entitlement_action(
+  p_tenant_id uuid,
+  p_entitlement_code text,
+  p_action text,
+  p_term_years integer,
+  p_reason text,
+  p_expected_version integer,
+  p_actor_employee_id uuid,
+  p_actor_user_id uuid
+)
+RETURNS public.tenant_entitlements
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_entitlement public.tenant_entitlements%ROWTYPE;
+  v_now timestamptz := clock_timestamp();
+  v_old_value jsonb := '{}'::jsonb;
+  v_new_value jsonb;
+  v_event_type text;
+  v_found boolean := false;
+BEGIN
+  IF p_tenant_id IS NULL
+     OR p_entitlement_code IS NULL
+     OR p_entitlement_code <> 'custom_support_branding'
+     OR p_action IS NULL
+     OR p_action NOT IN ('grant', 'suspend', 'resume', 'revoke')
+     OR p_expected_version IS NULL
+     OR p_expected_version < 0
+     OR p_actor_employee_id IS NULL
+     OR p_actor_user_id IS NULL
+     OR (
+       p_reason IS NOT NULL
+       AND btrim(p_reason) = ''
+     ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Invalid tenant entitlement action input',
+      DETAIL = 'VALIDATION_ERROR';
+  END IF;
+
+  IF p_action = 'grant' THEN
+    IF p_term_years IS NULL
+       OR p_term_years NOT BETWEEN 1 AND 10 THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'Invalid tenant entitlement term',
+        DETAIL = 'VALIDATION_ERROR';
+    END IF;
+  ELSIF p_term_years IS NOT NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Term is only valid for grant',
+      DETAIL = 'VALIDATION_ERROR';
+  END IF;
+
+  IF p_action IN ('suspend', 'resume', 'revoke')
+     AND (p_reason IS NULL OR btrim(p_reason) = '') THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Reason is required for this entitlement action',
+      DETAIL = 'VALIDATION_ERROR';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(
+      p_tenant_id::text || ':' || p_entitlement_code,
+      20260728
+    )
+  );
+
+  PERFORM 1
+  FROM public.employees AS actor
+  WHERE actor.id = p_actor_employee_id
+    AND actor.user_id = p_actor_user_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Actor employee and user do not match',
+      DETAIL = 'VALIDATION_ERROR';
+  END IF;
+
+  PERFORM 1
+  FROM public.tenants AS tenant
+  WHERE tenant.id = p_tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Tenant not found',
+      DETAIL = 'TENANT_NOT_FOUND';
+  END IF;
+
+  SELECT entitlement.*
+  INTO v_entitlement
+  FROM public.tenant_entitlements AS entitlement
+  WHERE entitlement.tenant_id = p_tenant_id
+    AND entitlement.entitlement_code = p_entitlement_code
+  FOR UPDATE;
+
+  v_found := FOUND;
+
+  IF p_action = 'grant' THEN
+    IF NOT v_found THEN
+      IF p_expected_version <> 0 THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement version conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_VERSION_CONFLICT';
+      END IF;
+
+      INSERT INTO public.tenant_entitlements (
+        tenant_id,
+        entitlement_code,
+        status,
+        starts_at,
+        expires_at,
+        source_type,
+        source_id,
+        version,
+        updated_by_employee_id
+      )
+      VALUES (
+        p_tenant_id,
+        p_entitlement_code,
+        'active',
+        v_now,
+        v_now + make_interval(years => p_term_years),
+        'manual_grant',
+        NULL,
+        1,
+        p_actor_employee_id
+      )
+      RETURNING tenant_entitlements.* INTO v_entitlement;
+
+      v_event_type := 'granted';
+    ELSE
+      IF v_entitlement.version <> p_expected_version THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement version conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_VERSION_CONFLICT';
+      END IF;
+
+      IF v_entitlement.status IN ('active', 'suspended') THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement state conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_STATE_CONFLICT';
+      END IF;
+
+      v_old_value := to_jsonb(v_entitlement);
+
+      UPDATE public.tenant_entitlements
+      SET
+        status = 'active',
+        starts_at = v_now,
+        expires_at = v_now + make_interval(years => p_term_years),
+        source_type = 'manual_grant',
+        source_id = NULL,
+        suspended_at = NULL,
+        suspend_reason = NULL,
+        version = version + 1,
+        updated_by_employee_id = p_actor_employee_id
+      WHERE id = v_entitlement.id
+      RETURNING tenant_entitlements.* INTO v_entitlement;
+
+      v_event_type := 'renewed';
+    END IF;
+  ELSE
+    IF NOT v_found THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'Tenant entitlement not found',
+        DETAIL = 'TENANT_ENTITLEMENT_NOT_FOUND';
+    END IF;
+
+    IF v_entitlement.version <> p_expected_version THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'Tenant entitlement version conflict',
+        DETAIL = 'TENANT_ENTITLEMENT_VERSION_CONFLICT';
+    END IF;
+
+    v_old_value := to_jsonb(v_entitlement);
+
+    IF p_action = 'suspend' THEN
+      IF v_entitlement.status <> 'active' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement state conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_STATE_CONFLICT';
+      END IF;
+
+      IF v_entitlement.expires_at <= v_now THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement has expired',
+          DETAIL = 'BRANDING_ENTITLEMENT_EXPIRED';
+      END IF;
+
+      UPDATE public.tenant_entitlements
+      SET
+        status = 'suspended',
+        suspended_at = v_now,
+        suspend_reason = p_reason,
+        version = version + 1,
+        updated_by_employee_id = p_actor_employee_id
+      WHERE id = v_entitlement.id
+      RETURNING tenant_entitlements.* INTO v_entitlement;
+
+      v_event_type := 'suspended';
+    ELSIF p_action = 'resume' THEN
+      IF v_entitlement.status <> 'suspended' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement state conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_STATE_CONFLICT';
+      END IF;
+
+      IF v_entitlement.expires_at <= v_now THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement has expired',
+          DETAIL = 'BRANDING_ENTITLEMENT_EXPIRED';
+      END IF;
+
+      UPDATE public.tenant_entitlements
+      SET
+        status = 'active',
+        suspended_at = NULL,
+        suspend_reason = NULL,
+        version = version + 1,
+        updated_by_employee_id = p_actor_employee_id
+      WHERE id = v_entitlement.id
+      RETURNING tenant_entitlements.* INTO v_entitlement;
+
+      v_event_type := 'resumed';
+    ELSIF p_action = 'revoke' THEN
+      IF v_entitlement.status NOT IN ('active', 'suspended') THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'Tenant entitlement state conflict',
+          DETAIL = 'TENANT_ENTITLEMENT_STATE_CONFLICT';
+      END IF;
+
+      UPDATE public.tenant_entitlements
+      SET
+        status = 'revoked',
+        version = version + 1,
+        updated_by_employee_id = p_actor_employee_id
+      WHERE id = v_entitlement.id
+      RETURNING tenant_entitlements.* INTO v_entitlement;
+
+      v_event_type := 'revoked';
+    END IF;
+  END IF;
+
+  IF p_action IN ('suspend', 'revoke') THEN
+    UPDATE public.tenant_addon_orders
+    SET
+      status = 'closed',
+      closed_at = v_now,
+      close_reason = CASE p_action
+        WHEN 'suspend' THEN 'ENTITLEMENT_SUSPENDED'
+        ELSE 'ENTITLEMENT_REVOKED'
+      END,
+      close_claim_token = NULL,
+      close_claim_expires_at = NULL,
+      close_last_error = NULL
+    WHERE tenant_id = p_tenant_id
+      AND product_code = 'custom_support_branding_annual'
+      AND entitlement_code = p_entitlement_code
+      AND status = 'pending';
+  END IF;
+
+  v_new_value := to_jsonb(v_entitlement);
+
+  INSERT INTO public.tenant_entitlement_events (
+    entitlement_id,
+    tenant_id,
+    entitlement_code,
+    event_type,
+    source_type,
+    source_id,
+    old_value,
+    new_value,
+    reason,
+    actor_employee_id,
+    actor_user_id
+  )
+  VALUES (
+    v_entitlement.id,
+    v_entitlement.tenant_id,
+    v_entitlement.entitlement_code,
+    v_event_type,
+    'manual_grant',
+    NULL,
+    v_old_value,
+    v_new_value,
+    p_reason,
+    p_actor_employee_id,
+    p_actor_user_id
+  );
+
+  INSERT INTO public.platform_audit_logs (
+    action,
+    actor_employee_id,
+    actor_user_id,
+    target_tenant_id,
+    resource_type,
+    resource_id,
+    resource_label,
+    status,
+    summary,
+    metadata
+  )
+  VALUES (
+    'tenant_entitlement_' || p_action,
+    p_actor_employee_id,
+    p_actor_user_id,
+    p_tenant_id,
+    'tenant_entitlement',
+    v_entitlement.id,
+    p_entitlement_code,
+    'success',
+    'Tenant entitlement action applied',
+    jsonb_build_object(
+      'previous',
+      v_old_value,
+      'current',
+      v_new_value,
+      'reason',
+      p_reason
+    )
+  );
+
+  RETURN v_entitlement;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.apply_tenant_entitlement_action(
+  uuid, text, text, integer, text, integer, uuid, uuid
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.apply_tenant_entitlement_action(
+  uuid, text, text, integer, text, integer, uuid, uuid
+) FROM anon;
+REVOKE ALL ON FUNCTION public.apply_tenant_entitlement_action(
+  uuid, text, text, integer, text, integer, uuid, uuid
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.apply_tenant_entitlement_action(
+  uuid, text, text, integer, text, integer, uuid, uuid
+) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.branding_create_addon_order(
+  p_tenant_id uuid,
+  p_order_no text,
+  p_out_trade_no text,
+  p_idempotency_key uuid,
+  p_product_id uuid,
+  p_product_code text,
+  p_entitlement_code text,
+  p_product_name text,
+  p_amount_fen integer,
+  p_term_years integer,
+  p_purchase_notes text,
+  p_refund_policy text,
+  p_payer_openid text,
+  p_payment_config_id uuid,
+  p_expected_guard_version bigint,
+  p_payment_mchid text,
+  p_payment_appid text,
+  p_payment_expires_at timestamptz,
+  p_created_by uuid,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+)
+RETURNS public.tenant_addon_orders
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_order public.tenant_addon_orders%ROWTYPE;
+BEGIN
+  IF p_tenant_id IS NULL
+     OR p_entitlement_code IS NULL
+     OR p_entitlement_code <> 'custom_support_branding'
+     OR p_metadata IS NULL
+     OR jsonb_typeof(p_metadata) <> 'object'
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Invalid branding add-on order input',
+      DETAIL = 'BRANDING_ADDON_ORDER_INPUT_INVALID';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(
+      p_tenant_id::text || ':' || p_entitlement_code,
+      20260728
+    )
+  );
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.tenant_entitlements AS entitlement
+    WHERE entitlement.tenant_id = p_tenant_id
+      AND entitlement.entitlement_code = p_entitlement_code
+      AND entitlement.status = 'suspended'
+    FOR UPDATE
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Branding entitlement is suspended',
+      DETAIL = 'BRANDING_ENTITLEMENT_SUSPENDED';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.tenant_entitlements AS entitlement
+    WHERE entitlement.tenant_id = p_tenant_id
+      AND entitlement.entitlement_code = p_entitlement_code
+      AND entitlement.status = 'revoked'
+    FOR UPDATE
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Branding entitlement is revoked',
+      DETAIL = 'BRANDING_ENTITLEMENT_REVOKED';
+  END IF;
+
+  INSERT INTO public.tenant_addon_orders (
+    tenant_id,
+    order_no,
+    out_trade_no,
+    idempotency_key,
+    product_id,
+    product_code,
+    entitlement_code,
+    product_name,
+    amount_fen,
+    term_years,
+    purchase_notes,
+    refund_policy,
+    status,
+    channel,
+    payer_openid,
+    payment_config_id,
+    expected_guard_version,
+    payment_mchid,
+    payment_appid,
+    payment_expires_at,
+    created_by,
+    metadata
+  )
+  VALUES (
+    p_tenant_id,
+    p_order_no,
+    p_out_trade_no,
+    p_idempotency_key,
+    p_product_id,
+    p_product_code,
+    p_entitlement_code,
+    p_product_name,
+    p_amount_fen,
+    p_term_years,
+    p_purchase_notes,
+    p_refund_policy,
+    'pending',
+    'wechat_pay',
+    p_payer_openid,
+    p_payment_config_id,
+    p_expected_guard_version,
+    p_payment_mchid,
+    p_payment_appid,
+    p_payment_expires_at,
+    p_created_by,
+    p_metadata
+  )
+  RETURNING tenant_addon_orders.* INTO v_order;
+
+  RETURN v_order;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.branding_create_addon_order(
+  uuid, text, text, uuid, uuid, text, text, text, integer, integer,
+  text, text, text, uuid, bigint, text, text, timestamptz, uuid, jsonb
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.branding_create_addon_order(
+  uuid, text, text, uuid, uuid, text, text, text, integer, integer,
+  text, text, text, uuid, bigint, text, text, timestamptz, uuid, jsonb
+) FROM anon;
+REVOKE ALL ON FUNCTION public.branding_create_addon_order(
+  uuid, text, text, uuid, uuid, text, text, text, integer, integer,
+  text, text, text, uuid, bigint, text, text, timestamptz, uuid, jsonb
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_create_addon_order(
+  uuid, text, text, uuid, uuid, text, text, text, integer, integer,
+  text, text, text, uuid, bigint, text, text, timestamptz, uuid, jsonb
+) TO service_role;
 
 -- Preserve the central payment-config lock protocol and include pending
 -- branding add-on orders before allowing merchant or secret revision changes.
@@ -906,10 +1428,13 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_order public.tenant_addon_orders%ROWTYPE;
+  v_order_tenant_id uuid;
+  v_order_entitlement_code text;
   v_entitlement public.tenant_entitlements%ROWTYPE;
   v_event public.tenant_entitlement_events%ROWTYPE;
   v_old_value jsonb := '{}'::jsonb;
   v_event_type text;
+  v_risk_close_reason text;
 BEGIN
   IF p_order_id IS NULL
      OR p_out_trade_no IS NULL
@@ -932,11 +1457,14 @@ BEGIN
       DETAIL = 'BRANDING_ADDON_CONFIRM_INPUT_INVALID';
   END IF;
 
-  SELECT addon_order.*
-  INTO v_order
+  SELECT
+    addon_order.tenant_id,
+    addon_order.entitlement_code
+  INTO
+    v_order_tenant_id,
+    v_order_entitlement_code
   FROM public.tenant_addon_orders AS addon_order
-  WHERE addon_order.id = p_order_id
-  FOR UPDATE;
+  WHERE addon_order.id = p_order_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION USING
@@ -944,6 +1472,19 @@ BEGIN
       MESSAGE = 'Branding add-on order not found',
       DETAIL = 'BRANDING_ADDON_ORDER_NOT_FOUND';
   END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(
+      v_order_tenant_id::text || ':' || v_order_entitlement_code,
+      20260728
+    )
+  );
+
+  SELECT addon_order.*
+  INTO v_order
+  FROM public.tenant_addon_orders AS addon_order
+  WHERE addon_order.id = p_order_id
+  FOR UPDATE;
 
   IF v_order.out_trade_no IS DISTINCT FROM p_out_trade_no THEN
     RAISE EXCEPTION USING
@@ -996,12 +1537,25 @@ BEGIN
     );
   END IF;
 
-  IF v_order.status <> 'pending' THEN
+  IF v_order.status <> 'pending'
+     AND NOT (
+       v_order.status = 'closed'
+       AND v_order.close_reason IN (
+         'ENTITLEMENT_SUSPENDED',
+         'ENTITLEMENT_REVOKED'
+       )
+     )
+  THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
       MESSAGE = 'Branding add-on order status invalid',
       DETAIL = 'BRANDING_ADDON_ORDER_STATUS_INVALID';
   END IF;
+
+  v_risk_close_reason := CASE
+    WHEN v_order.status = 'closed' THEN v_order.close_reason
+    ELSE NULL
+  END;
 
   PERFORM pg_advisory_xact_lock(hashtextextended(p_transaction_id, 0));
 
@@ -1161,15 +1715,26 @@ BEGIN
     paid_amount_fen = p_paid_amount_fen,
     paid_at = p_paid_at,
     entitlement_event_id = v_event.id,
+    closed_at = NULL,
+    close_reason = NULL,
     close_claim_token = NULL,
     close_claim_expires_at = NULL,
     close_last_error = NULL,
     metadata = metadata || p_metadata || jsonb_build_object(
-      'confirmation_notification_id',
-      p_notification_id
+      'confirmation_notification_id', p_notification_id,
+      'risk_close_reason', v_risk_close_reason
     )
   WHERE id = v_order.id
-    AND status = 'pending'
+    AND (
+      status = 'pending'
+      OR (
+        status = 'closed'
+        AND close_reason IN (
+          'ENTITLEMENT_SUSPENDED',
+          'ENTITLEMENT_REVOKED'
+        )
+      )
+    )
   RETURNING tenant_addon_orders.* INTO v_order;
 
   IF NOT FOUND THEN
@@ -1207,7 +1772,8 @@ BEGIN
       'product_code', v_order.product_code,
       'amount_fen', v_order.amount_fen,
       'paid_at', v_order.paid_at,
-      'transaction_id', v_order.transaction_id
+      'transaction_id', v_order.transaction_id,
+      'risk_close_reason', v_risk_close_reason
     )
   );
 

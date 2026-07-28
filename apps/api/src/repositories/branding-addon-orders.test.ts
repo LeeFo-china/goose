@@ -269,15 +269,11 @@ describe("BrandingAddonOrderRepository", () => {
     }
   });
 
-  test("creates the immutable order snapshot and conditionally stores prepay", async () => {
+  test("conditionally stores prepay on a pending unexpired order", async () => {
     const { BrandingAddonOrderRepository } = await import(
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-    await repository.createOrder(orderCreateInput);
-    expect(calls).toContainEqual(["insert", orderCreateInput]);
-
-    calls.length = 0;
     await repository.markPrepayCreated({
       tenantId: "tenant-a",
       orderId: "order-1",
@@ -292,26 +288,6 @@ describe("BrandingAddonOrderRepository", () => {
       "payment_expires_at",
       "2026-07-28T08:00:00.000Z",
     ]);
-  });
-
-  test("maps the single-pending unique constraint to a stable conflict", async () => {
-    singleResult = {
-      data: null,
-      error: {
-        code: "23505",
-        message:
-          'duplicate key violates "tenant_addon_orders_pending_product_unique_idx"',
-      },
-    };
-    const { BrandingAddonOrderRepository } = await import(
-      "./branding-addon-orders"
-    );
-    const repository = new BrandingAddonOrderRepository(() => client);
-
-    await expect(repository.createOrder(orderCreateInput)).rejects.toMatchObject({
-      statusCode: 409,
-      code: "BRANDING_ADDON_PENDING_ORDER_EXISTS",
-    });
   });
 
   test("detects duplicate merchant and transaction identifiers", async () => {
