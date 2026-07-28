@@ -51,6 +51,14 @@ describe("domain permissions", () => {
         label: "管理平台技术支持品牌",
         module: "platform_branding",
       },
+      "platform.branding_product.manage": {
+        label: "管理品牌技术支持权益商品",
+        module: "platform_branding",
+      },
+      "platform.branding_order.read": {
+        label: "查看品牌技术支持权益订单",
+        module: "platform_branding",
+      },
       "platform.tenant_entitlement.manage": {
         label: "管理租户增值权益",
         module: "platform_entitlement",
@@ -63,12 +71,22 @@ describe("domain permissions", () => {
         label: "编辑品牌技术支持设置",
         module: "branding",
       },
+      "brand.entitlement.purchase": {
+        label: "购买品牌技术支持权益",
+        module: "branding",
+      },
+      "brand.entitlement_order.read": {
+        label: "查看品牌技术支持权益订单",
+        module: "branding",
+      },
     } as const;
     const brandingPermissionCodes = PERMISSION_CODE_VALUES.filter(
       (code) =>
         code.startsWith("platform.branding.") ||
+        code.startsWith("platform.branding_") ||
         code.startsWith("platform.tenant_entitlement.") ||
-        code.startsWith("brand.settings."),
+        code.startsWith("brand.settings.") ||
+        code.startsWith("brand.entitlement"),
     ).sort();
 
     for (const code of Object.keys(expectedPermissions) as Array<
@@ -79,16 +97,26 @@ describe("domain permissions", () => {
     }
 
     expect(brandingPermissionCodes).toEqual([
+      "brand.entitlement.purchase",
+      "brand.entitlement_order.read",
       "brand.settings.read",
       "brand.settings.update",
       "platform.branding.manage",
+      "platform.branding_order.read",
+      "platform.branding_product.manage",
       "platform.tenant_entitlement.manage",
     ]);
-    expect(
-      brandingPermissionCodes.some((code) =>
-        /addon|purchase|order|refund/.test(code),
-      ),
-    ).toBe(false);
+
+    const purchasePermissionCodes = [
+      "platform.branding_product.manage",
+      "platform.branding_order.read",
+      "brand.entitlement.purchase",
+      "brand.entitlement_order.read",
+    ] as const;
+    for (const code of purchasePermissionCodes) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code].label.length).toBeGreaterThan(0);
+    }
   });
 
   test("exposes receivable permissions in domain permission constants", () => {
