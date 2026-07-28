@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
+  assertEffectiveBranding,
   assertPlatformBrandingFixture,
   assertTenantBrandingFixture,
   readAuthenticatedTenantId,
@@ -30,8 +31,7 @@ const tenantEffective = {
   tenant_id: TENANT_ID,
   display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/logo.png",
-  support_text:
-    `${BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  support_text: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   version: 4,
   updated_at: TIMESTAMP,
 };
@@ -41,7 +41,7 @@ const platformEffective = {
   tenant_id: null,
   display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/platform-logo.png",
-  support_text: `${BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  support_text: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   version: 3,
   updated_at: TIMESTAMP,
 };
@@ -93,6 +93,31 @@ describe("branding smoke response contracts", () => {
         { kind: "with_entitlement", tenantId: TENANT_ID },
       )
     ).not.toThrow();
+  });
+
+  test("rejects legacy support text with the appended suffix", () => {
+    expect(() =>
+      assertEffectiveBranding(
+        {
+          ...tenantEffective,
+          support_text:
+            `${BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME}提供技术支持`,
+        },
+        "tenant",
+        TENANT_ID,
+      )
+    ).toThrow(/fields|scope/i);
+    expect(() =>
+      assertEffectiveBranding(
+        {
+          ...platformEffective,
+          support_text:
+            `${BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME}提供技术支持`,
+        },
+        "platform",
+        null,
+      )
+    ).toThrow(/fields|scope/i);
   });
 
   test("accepts PostgreSQL microsecond timestamps returned by Supabase", () => {
@@ -224,7 +249,7 @@ describe("branding smoke response contracts", () => {
           effective: {
             ...tenantEffective,
             display_name: thirdTenantName,
-            support_text: `${thirdTenantName}提供技术支持`,
+            support_text: thirdTenantName,
           },
         },
         { kind: "with_entitlement", tenantId: TENANT_ID },

@@ -35,7 +35,7 @@ const platformEffective = {
   tenant_id: null,
   display_name: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/platform.png",
-  support_text: `${BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  support_text: BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME,
   version: 3,
   updated_at: TIMESTAMP,
 };
@@ -53,8 +53,7 @@ const tenantEffective = {
   tenant_id: WITH_TENANT_ID,
   display_name: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   logo_url: "https://cdn.example.com/logo.png",
-  support_text:
-    `${BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME}提供技术支持`,
+  support_text: BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME,
   version: 7,
 };
 const entitlementSummary = {

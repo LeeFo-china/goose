@@ -130,7 +130,7 @@ export function assertEffectiveBranding(
     value.tenant_id !== expectedTenantId ||
     value.display_name !== expectedDisplayName ||
     !isNonBlankString(value.logo_url) ||
-    value.support_text !== `${expectedDisplayName}提供技术支持` ||
+    value.support_text !== expectedDisplayName ||
     !isPositiveOrZeroSafeInteger(value.version) ||
     !isIsoTimestamp(value.updated_at)
   ) {
