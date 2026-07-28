@@ -562,7 +562,7 @@ Content-Type: application/json
     "headers": {
       "content-type": "image/png",
       "content-length": "10152",
-      "x-cos-forbid-overwrite": true
+      "x-cos-forbid-overwrite": "true"
     },
     "expires_in": 600,
     "expires_at": "2026-07-27T10:10:00.000Z",

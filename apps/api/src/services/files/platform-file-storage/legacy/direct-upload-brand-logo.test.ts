@@ -154,7 +154,7 @@ describe("brand logo direct upload initialization", () => {
     expect(response.headers).toEqual({
       "content-type": "image/png",
       "content-length": String(validPng.length),
-      "x-cos-forbid-overwrite": true,
+      "x-cos-forbid-overwrite": "true",
     });
     expect(response.upload_intent).toBeString();
   });

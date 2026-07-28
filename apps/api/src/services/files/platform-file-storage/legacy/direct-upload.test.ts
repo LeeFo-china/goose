@@ -181,7 +181,7 @@ describe("private direct upload init", () => {
     expect(response.headers).toEqual({
       "content-type": "image/jpeg",
       "content-length": "100",
-      "x-cos-forbid-overwrite": true,
+      "x-cos-forbid-overwrite": "true",
     });
     const uploadIntent = response.upload_intent;
     expect(uploadIntent).toBeString();
@@ -264,7 +264,7 @@ describe("private direct upload init", () => {
     expect(response.headers).toEqual({
       "content-type": "image/jpeg",
       "content-length": "100",
-      "x-cos-forbid-overwrite": true,
+      "x-cos-forbid-overwrite": "true",
     });
     expect(response.upload_intent).toBeString();
   });

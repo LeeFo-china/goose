@@ -155,7 +155,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
       ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy || isBrandLogo
         ? {
           "content-length": String(input.sizeBytes),
-          "x-cos-forbid-overwrite": true,
+          "x-cos-forbid-overwrite": "true",
         }
         : {}),
     },

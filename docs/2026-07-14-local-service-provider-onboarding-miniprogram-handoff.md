@@ -141,7 +141,7 @@ Authorization: Bearer <visitor_session token>
     "headers": {
       "content-type": "image/jpeg",
       "content-length": "102400",
-      "x-cos-forbid-overwrite": true
+      "x-cos-forbid-overwrite": "true"
     },
     "upload_intent": "v1.<payload>.<signature>",
     "expires_at": "2026-07-14T10:05:00.000Z"
@@ -704,4 +704,3 @@ POST /partner-onboarding/tenant-applications
 | 小程序 API client、直传工具扩展、Idempotency-Key 本地保存 | orange |
 | 城市合伙人协查页面 | orange |
 | 发布窗口、旧入口截止配置、删除旧入口跟踪 | gooes 负责配置，orange 负责版本全量时间确认 |
-
