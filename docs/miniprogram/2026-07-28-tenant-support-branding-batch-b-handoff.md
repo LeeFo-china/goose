@@ -4,22 +4,23 @@
 
 适用仓库：`gooes` 后端 / `orange` 小程序
 
-状态：本地实现与联调契约初稿；dev 部署、测试商品和远端 smoke 证据待
-Task 12 回填
+状态：dev 后端已部署，Migration 与测试商品已就绪；不依赖微信登录态的
+公网回归已通过，创建订单、支付参数、5 分钟关单和真实支付闭环等待小程序
+使用真实 `wx.login` 登录态验收
 
 ## 1. 联调信息
 
 | 项目 | 当前值 |
 | --- | --- |
-| API Base URL | `https://api-dev.goodcms.cn`（待本批次部署确认） |
-| 后端 API Commit | `待 Task 12 回填` |
-| Migration | `20260728120000_create_branding_addon_commerce.sql`（待远端对齐确认） |
+| API Base URL | `https://api-dev.goodcms.cn` |
+| 后端 API Commit | `ed243e6fdff7a26d86c46520d06d544c71f91666` |
+| Migration | `20260728120000_create_branding_addon_commerce.sql`（dev Local/Remote 已对齐） |
 | 商品编码 | `custom_support_branding_annual` |
 | 权益编码 | `custom_support_branding` |
-| dev 商品 | `待 Task 12 配置为 1 分、1 年、enabled=true` |
-| 有权益租户管理员 | `19907270001`（候选，待 Task 12 复核微信登录态和购买权限） |
-| 无权益隔离租户管理员 | `19907270002`（候选，待 Task 12 复核微信登录态和购买权限） |
-| 平台管理员 | `19900000001`（候选，平台订单审计 smoke 可选） |
+| dev 商品 | `年度品牌技术支持（1分测试）`，`amount_fen=1`、`term_years=1`、`enabled=true`、`version=2` |
+| 有权益租户管理员 | `19907270001`（租户、角色与批次 A 品牌回归已复核；当前 fixture 没有微信绑定，不能用于发起支付） |
+| 无权益隔离租户管理员 | `19907270002`（租户、角色与平台品牌回退已复核；当前 fixture 没有微信绑定，不能用于发起支付） |
+| 平台管理员 | `19900000001`（商品配置、商品读取和平台订单列表已复核） |
 
 Token、OpenID、微信支付签名、APIv3 密钥和证书不写入仓库、本文档或
 联调反馈。创建订单和获取支付参数必须使用小程序微信登录态 JWT；
@@ -600,21 +601,76 @@ bun run branding:addon:batch-b-smoke
 bun run branding:addon:batch-b-smoke -- --real-pay
 ```
 
-## 8. Dev 证据（待 Task 12 回填）
+## 8. Dev 证据
 
 | 检查 | 结果 |
 | --- | --- |
-| Migration Local/Remote 对齐 | 待回填 |
-| API commit 与部署 | 待回填 |
-| 单元测试 / 类型检查 / build / file-size | 待回填 |
-| 有权益管理员商品与订单 | 待回填 |
-| 无权益租户隔离 404 | 待回填 |
-| 幂等重放 / pending 复用 | 待回填 |
-| 5 分钟超时关单 | 待回填 |
-| 真实支付首购或续费 | 待回填 |
-| 重复回调权益只延长一次 | 待回填 |
-| 平台订单和权益来源审计 | 待回填 |
-| 批次 A effective 回归 | 待回填 |
+| Migration Local/Remote 对齐 | 通过。plan run `30368690241` 仅发现 `20260728120000`；apply run `30368742776` 成功，远端记录 `373 -> 374`；复核 plan run `30368786732` 为 `pending_count=0` |
+| API commit 与部署 | 通过。dev release run `30369316350` 成功；API job `90309437284`、`billing-reconcile-worker` job `90309641459` 均通过服务健康检查；部署 commit 为 `ed243e6fdff7a26d86c46520d06d544c71f91666` |
+| 单元测试 / 类型检查 / build / file-size | 通过。批次 B 定向 `152/152`、批次 A 与充值回归 `96/96`；`api:typecheck`、`api:build`、`api:check-file-size` 均通过 |
+| 有权益管理员商品与订单 | 部分通过。商品 HTTP 200、`amount_fen=1`；订单列表 HTTP 200 且当前 `total=0`。fixture 没有微信绑定，因此未创建订单 |
+| 无权益租户隔离 404 | 前置范围通过：另一租户商品与订单列表均 HTTP 200、当前 `total=0`。因为没有可安全创建的订单，跨租户详情 404 尚未执行 |
+| 幂等重放 / pending 复用 | 自动化单元契约通过；远端尚未执行，等待真实微信登录态创建首笔 pending |
+| 5 分钟超时关单 | worker 已部署且健康；远端尚无 pending 订单，等待小程序创建订单后验证 `pending -> closed` |
+| 真实支付首购或续费 | 未执行，等待小程序开发构建完成 1 分真实支付 |
+| 重复回调权益只延长一次 | 原子 RPC、回调重复通知单元契约通过；未伪造远端微信回调，真实重复通知证据等待真实支付 |
+| 平台订单和权益来源审计 | 平台商品和空订单分页 HTTP 200；当前 `total=0`，订单详情审计与 purchase 事件等待首笔订单 |
+| 批次 A effective 回归 | 通过。有权益管理员 HTTP 200、`source=tenant`；无权益管理员 HTTP 200、`source=platform` |
+| 支付身份边界 | 通过。使用上述 fixture 的 `admin_web` token 创建订单稳定返回 HTTP 403、`BRANDING_ADDON_WECHAT_LOGIN_REQUIRED`，没有写入订单 |
+
+### 8.1 数据库结构和查询计划
+
+- 三张批次 B 表均为 `RLS=true`、`FORCE RLS=true`；五个品牌权益
+  `SECURITY DEFINER` RPC 仅 `service_role` 可执行，`anon` 和
+  `authenticated` 均不可执行。
+- 平台默认排序命中
+  `tenant_addon_orders_platform_created_idx`，dev 空表实测
+  `Execution Time: 0.038 ms`。
+- 租户排序命中
+  `tenant_addon_orders_platform_tenant_created_idx`，dev 空表实测
+  `Execution Time: 0.063 ms`。
+- 三字段关键词在当前空表下由自然规划器选择顺序扫描，
+  `Execution Time: 0.049 ms`。事务内执行
+  `SET LOCAL enable_seqscan=off` 后选择 `BitmapOr`；订单号和商户订单号
+  命中两个 trigram GIN。交易号因空表且存在成本更低的非空唯一 B-tree，
+  规划器选择该 B-tree；目录复核确认
+  `tenant_addon_orders_transaction_id_trgm_idx` 使用
+  `gin_trgm_ops`。没有修改数据库全局 planner 配置。
+
+### 8.2 小程序下一步真实联调
+
+两个手机号 fixture 可继续用于批次 A 和只读租户边界回归，但目前均没有
+active `wechat_mini` 绑定。后端没有伪造 OpenID、借用其他用户绑定或绕过
+支付身份校验。小程序请使用真实 `wx.login` 获取的员工管理员登录态执行：
+
+```bash
+cd apps/api
+API_BASE_URL=https://api-dev.goodcms.cn \
+BRANDING_ADDON_SMOKE_ADMIN_TOKEN='<有权益租户真实微信 JWT>' \
+BRANDING_ADDON_SMOKE_ISOLATION_TOKEN='<另一租户真实微信 JWT>' \
+BRANDING_ADDON_SMOKE_PLATFORM_TOKEN='<平台管理员临时 JWT>' \
+bun --env-file=/dev/null run branding:addon:batch-b-smoke
+```
+
+脚本成功后会输出脱敏 `order_no` 和各检查的 HTTP/稳定错误码，不输出
+OpenID、`prepay_id`、支付签名或 token。保留该 pending 订单并按服务端
+`server_time/expires_at` 轮询列表或详情，验证约 5 分钟后自动收敛为
+`closed`；若要验收真实支付，在小程序开发构建中对新的 pending 订单调用
+`wx.requestPayment`，最终以订单 `paid` 和权益接口为准。
+
+回传字段限定为：身份类型、租户 fixture、`order_no`、接口、HTTP、
+稳定错误码、`requestId`、订单状态、权益 `starts_at/expires_at/status/source`
+和脱敏响应。不要回传 token、OpenID、`prepay_id`、支付签名、微信交易号
+或 APIv3 密钥。
+
+### 8.3 已知 dev 环境风险
+
+远程只读核验时，Supabase CLI 同时报告两个既有的客户微信支付 smoke 表
+`customer_wechat_pay_smoke_orders` 和
+`customer_wechat_pay_smoke_notifications` 未启用 RLS。它们不是批次 B
+新增表，本轮没有擅自修改；应单独核对历史 smoke 表是否仍需保留，再通过
+独立 migration 设计 RLS/policy 或安全下线，不能直接手工启用后造成现有
+访问被全部阻断。
 
 真实支付验收反馈只回传订单号、接口、HTTP、错误码、`requestId` 和脱敏
 响应，不回传 token、OpenID、支付签名或微信密钥。
