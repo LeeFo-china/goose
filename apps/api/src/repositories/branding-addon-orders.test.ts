@@ -329,7 +329,7 @@ describe("BrandingAddonOrderRepository", () => {
       .toMatchObject({ code: "BRANDING_ADDON_OUT_TRADE_NO_DUPLICATED" });
     expect(calls).toContainEqual(["limit", 2]);
     const callbackSelect = calls.find(([method]) => method === "select");
-    expect(callbackSelect?.[1]).toContain("payment_mchid");
+    expect(callbackSelect?.[1]).toContain("payment_config_id,payment_mchid,payment_appid");
     expect(callbackSelect?.[1]).not.toContain("payer_openid");
     expect(callbackSelect?.[1]).not.toContain("metadata");
 

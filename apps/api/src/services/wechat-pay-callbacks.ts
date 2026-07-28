@@ -2,6 +2,9 @@ import { Errors } from "@/errors/error-factory";
 import { PAYMENT_TYPE_VALUES } from "@gooes/domain";
 import type { Json } from "@/types/database";
 import {
+  brandingAddonOrderRepository,
+} from "@/repositories/branding-addon-orders";
+import {
   billingRechargeRepository,
   type TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
@@ -16,6 +19,14 @@ import {
 } from "@/repositories/wechat-pay-orders";
 import { workflowTaskRepository } from "@/repositories/workflow-tasks";
 import type { AuthContext } from "@/services/authorization";
+import {
+  brandingAddonPaymentConfirmation,
+} from "@/services/branding-addon-payment-confirmation";
+import {
+  handleBrandingAddonCallback,
+  type BrandingAddonCallbackRepositoryPort,
+  type BrandingAddonPaymentConfirmationPort,
+} from "@/services/wechat-pay-callback-branding-addon";
 import {
   type CallbackHeaders,
   type CreditRechargeCallbackContext,
@@ -59,12 +70,13 @@ type RechargePaymentConfirmationPort = Pick<
   BillingRechargePaymentConfirmation,
   "confirm"
 >;
-
 type WechatPayCallbackServiceDependencies =
   WechatPayCallbackContextMatcherDependencies & {
   contextMatcher?: Pick<WechatPayCallbackContextMatcher, "match">;
   orderRepository?: OrderRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
+  brandingAddonOrderRepository?: BrandingAddonCallbackRepositoryPort;
+  brandingAddonPaymentConfirmation?: BrandingAddonPaymentConfirmationPort;
   customerSmokeRepository?: CustomerWechatPaySmokeCallbackRepositoryPort;
   rechargePaymentConfirmation?: RechargePaymentConfirmationPort;
   paymentRepository?: PaymentRepositoryPort;
@@ -79,6 +91,9 @@ export class WechatPayCallbackService {
   private readonly contextMatcher: Pick<WechatPayCallbackContextMatcher, "match">;
   private readonly orderRepository: OrderRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
+  private readonly brandingAddonOrderRepository:
+    BrandingAddonCallbackRepositoryPort;
+  private readonly brandingAddonPaymentConfirmation: BrandingAddonPaymentConfirmationPort;
   private readonly customerSmokeRepository:
     CustomerWechatPaySmokeCallbackRepositoryPort;
   private readonly rechargePaymentConfirmation: RechargePaymentConfirmationPort;
@@ -93,6 +108,11 @@ export class WechatPayCallbackService {
       wechatPayOrderRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
+    this.brandingAddonOrderRepository = dependencies.brandingAddonOrderRepository ??
+      brandingAddonOrderRepository;
+    this.brandingAddonPaymentConfirmation =
+      dependencies.brandingAddonPaymentConfirmation ??
+        brandingAddonPaymentConfirmation;
     this.customerSmokeRepository = dependencies.customerSmokeRepository ??
       customerWechatPaySmokeRepository;
     this.rechargePaymentConfirmation = dependencies.rechargePaymentConfirmation ??
@@ -126,6 +146,15 @@ export class WechatPayCallbackService {
     }
     if (matched.kind === "credit_recharge") {
       return this.handleCreditRechargeCallback({ matched, notifyId, payload });
+    }
+    if (matched.kind === "branding_addon") {
+      return handleBrandingAddonCallback({
+        matched,
+        notifyId,
+        payload,
+        repository: this.brandingAddonOrderRepository,
+        confirmation: this.brandingAddonPaymentConfirmation,
+      });
     }
     if (matched.kind === "customer_wechat_pay_smoke") {
       return handleCustomerWechatPaySmokeCallback({

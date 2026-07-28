@@ -154,6 +154,7 @@ export type BrandingAddonCallbackOrderRecord = Pick<
   | "amount_fen"
   | "term_years"
   | "status"
+  | "payment_config_id"
   | "payment_mchid"
   | "payment_appid"
   | "payment_expires_at"
@@ -273,7 +274,7 @@ export const PAYMENT_ORDER_COLUMNS = [
 
 export const CALLBACK_ORDER_COLUMNS = [
   "id,tenant_id,order_no,out_trade_no,product_code,entitlement_code,amount_fen",
-  "term_years,status,payment_mchid,payment_appid,payment_expires_at",
+  "term_years,status,payment_config_id,payment_mchid,payment_appid,payment_expires_at",
   "transaction_id,paid_amount_fen,paid_at,entitlement_event_id,created_at,updated_at",
 ].join(",");
 
