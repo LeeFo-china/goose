@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   BRANDING_ADDON_ORDER_STATUSES,
   BRANDING_ADDON_PRODUCT_CODE,
+  MAX_POSTGRES_INTEGER_FEN,
 } from "../services/branding-addon-contracts";
 import { PaginationQuerySchema } from "./request";
 
@@ -17,9 +18,10 @@ const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "enabled",
 ] as const;
 
-const positiveIntegerFen = z.number()
+export const BrandingAddonAmountFenSchema = z.number()
   .int("金额必须是整数分")
-  .positive("金额必须大于 0");
+  .positive("金额必须大于 0")
+  .max(MAX_POSTGRES_INTEGER_FEN, "金额超出支持范围");
 
 export const BrandingAddonProductPatchSchema = z.object({
   name: z.string()
@@ -27,7 +29,7 @@ export const BrandingAddonProductPatchSchema = z.object({
     .min(1, "商品名称不能为空")
     .max(PRODUCT_NAME_MAX_LENGTH, "商品名称不能超过 100 个字符")
     .optional(),
-  amount_fen: positiveIntegerFen.optional(),
+  amount_fen: BrandingAddonAmountFenSchema.optional(),
   purchase_notes: z.string()
     .trim()
     .min(1, "购买说明不能为空")

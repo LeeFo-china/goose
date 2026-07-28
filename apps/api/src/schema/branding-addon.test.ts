@@ -89,6 +89,20 @@ describe("BrandingAddonProductPatchSchema", () => {
     }
   });
 
+  test("matches the PostgreSQL integer upper boundary for prices", () => {
+    expect(BrandingAddonProductPatchSchema.parse({
+      amount_fen: 2_147_483_647,
+      version: 1,
+    }).amount_fen).toBe(2_147_483_647);
+
+    for (const amount_fen of [2_147_483_648, 3_000_000_000]) {
+      expect(() => BrandingAddonProductPatchSchema.parse({
+        amount_fen,
+        version: 1,
+      })).toThrow();
+    }
+  });
+
   test("enforces product name and purchase notes length boundaries", () => {
     expect(BrandingAddonProductPatchSchema.parse({
       name: "品".repeat(100),

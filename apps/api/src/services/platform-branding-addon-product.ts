@@ -7,6 +7,7 @@ import {
 import type { BrandingAddonProductPatchInput } from "@/schema/branding-addon";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { MAX_POSTGRES_INTEGER_FEN } from "@/services/branding-addon-contracts";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 
 const MANAGE_PERMISSION = "platform.branding_product.manage";
@@ -132,12 +133,18 @@ export class PlatformBrandingAddonProductService {
     const isEnabled = input.enabled ?? current.enabled;
     const amountFen = input.amount_fen ?? current.amount_fen;
     if (
-      isEnabled &&
+      amountFen !== null &&
       (
-        amountFen === null ||
         !Number.isSafeInteger(amountFen) ||
-        amountFen <= 0
+        amountFen <= 0 ||
+        amountFen > MAX_POSTGRES_INTEGER_FEN
       )
+    ) {
+      throw Errors.badRequest("商品价格必须是支持范围内的正整数分");
+    }
+    if (
+      isEnabled &&
+      amountFen === null
     ) {
       throw Errors.business(
         409,

@@ -301,6 +301,37 @@ describe("PlatformBrandingAddonProductService updates", () => {
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
 
+  test("accepts the database integer upper boundary", async () => {
+    const fixture = createFixture();
+
+    await fixture.service.update(platformAuth, {
+      amount_fen: 2_147_483_647,
+      version: 1,
+    });
+
+    expect(fixture.updateProduct).toHaveBeenCalledWith({
+      amountFen: 2_147_483_647,
+      expectedVersion: 1,
+      updatedByEmployeeId: EMPLOYEE_ID,
+    });
+  });
+
+  test("rejects prices above the database integer boundary before repository access", async () => {
+    for (const amount_fen of [2_147_483_648, 3_000_000_000]) {
+      const fixture = createFixture();
+
+      await expect(fixture.service.update(platformAuth, {
+        amount_fen,
+        version: 1,
+      })).rejects.toMatchObject({
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+      });
+      expect(fixture.updateProduct).not.toHaveBeenCalled();
+      expect(fixture.recordBestEffort).not.toHaveBeenCalled();
+    }
+  });
+
   test("rejects a stale version before attempting the update", async () => {
     const fixture = createFixture({
       current: { ...product, version: 3 },
