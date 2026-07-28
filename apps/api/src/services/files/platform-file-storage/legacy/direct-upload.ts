@@ -27,6 +27,7 @@ import {
   validateBrandLogoDirectUpload,
   verifyBrandLogoCosObject,
 } from "../brand-logo-cos-verifier";
+import { assertValidBrandLogoUploadIntent, createDirectBrandLogoUploadIntent } from "./brand-logo-upload-intent";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
@@ -135,6 +136,10 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
       sizeBytes: input.sizeBytes,
       expiresAtSeconds,
     })
+    : isBrandLogo
+    ? createDirectBrandLogoUploadIntent(input, {
+      secretKey: config.secretKey, objectKey, expiresAtSeconds,
+    })
     : undefined;
 
   return {
@@ -209,6 +214,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       secretKey: config.secretKey,
     });
   }
+  if (isBrandLogo) assertValidBrandLogoUploadIntent(input, config.secretKey);
 
   let headObject: {
     headers?: Record<string, string | number | undefined>;

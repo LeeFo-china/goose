@@ -1,12 +1,14 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
 import sharp from "sharp";
 import type { CompleteDirectUploadInput } from "./shared";
+import { createBrandLogoUploadIntent } from "./brand-logo-upload-intent";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const OBJECT_KEY = "tenants/tenant-1/brand-logo/2026/07/27/logo.png";
+const SECRET_KEY = "secret";
 const createOrFindByObjectKey = mock(async (input: Record<string, unknown>) => ({
   id: "file-brand-logo",
   provider: "tencent_cos",
@@ -36,6 +38,29 @@ beforeAll(async () => {
 
 beforeEach(() => createOrFindByObjectKey.mockClear());
 
+function brandLogoIntent(
+  overrides: Partial<{
+    tenantId: string | null;
+    employeeId: string;
+    objectKey: string;
+    mimeType: string;
+    sizeBytes: number;
+    expiresAtSeconds: number;
+  }> = {},
+) {
+  return createBrandLogoUploadIntent({
+    secretKey: SECRET_KEY,
+    scene: "brand_logo",
+    tenantId: "tenant-1",
+    employeeId: "employee-1",
+    objectKey: OBJECT_KEY,
+    mimeType: "image/png",
+    sizeBytes: validPng.length,
+    expiresAtSeconds: Math.floor(Date.now() / 1000) + 600,
+    ...overrides,
+  });
+}
+
 function brandLogoInput(
   overrides: Partial<CompleteDirectUploadInput> = {},
 ): CompleteDirectUploadInput {
@@ -49,6 +74,7 @@ function brandLogoInput(
     employeeId: "employee-1",
     authUserId: "auth-1",
     visibility: "public",
+    uploadIntent: brandLogoIntent(),
     ...overrides,
   };
 }
@@ -130,10 +156,90 @@ describe("brand logo direct upload initialization", () => {
       "content-length": String(validPng.length),
       "x-cos-forbid-overwrite": true,
     });
+    expect(response.upload_intent).toBeString();
+  });
+
+  test.each([
+    [
+      "tenant",
+      "tenant-1",
+      "tenants/tenant-1/brand-logo/2026/07/27/logo.png",
+    ],
+    [
+      "platform",
+      null,
+      "public/brand-logo/2026/07/27/logo.png",
+    ],
+  ])("issues an intent that completes the same %s scope", async (
+    _scope,
+    tenantId,
+    objectKey,
+  ) => {
+    const {
+      createDirectUpload,
+      registerExistingCosObject,
+    } = await import("./direct-upload");
+    const getObjectUrl = mock(() => "https://cos.example.com/signed-put");
+    const initResponse = await createDirectUpload.call({
+      getStorageProvider: async () => "tencent_cos",
+      getCosConfig: async () => ({
+        secretKey: SECRET_KEY,
+        bucket: "bucket",
+        region: "ap-guangzhou",
+        signedUrlTtl: 600,
+        uploadUseAccelerate: false,
+      }),
+      buildCosObjectKey: () => objectKey,
+      getCosClient: () => ({ getObjectUrl }),
+      setCosAccessCache: () => undefined,
+    }, brandLogoInput({ tenantId, objectKey }));
+    const { context } = storageContext();
+
+    await registerExistingCosObject.call(context, brandLogoInput({
+      tenantId,
+      objectKey,
+      uploadIntent: initResponse.upload_intent,
+    }));
+
+    expect(createOrFindByObjectKey).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant_id: tenantId, object_key: objectKey }),
+    );
   });
 });
 
 describe("brand logo direct upload completion", () => {
+  test.each([
+    ["missing intent", () => null],
+    ["another tenant", () => brandLogoIntent({ tenantId: "tenant-2" })],
+    ["platform scope", () => brandLogoIntent({ tenantId: null })],
+    ["another employee", () => brandLogoIntent({ employeeId: "employee-2" })],
+    ["another object key", () => brandLogoIntent({
+      objectKey: `${OBJECT_KEY}.replaced`,
+    })],
+    ["another MIME declaration", () => brandLogoIntent({
+      mimeType: "image/jpeg",
+    })],
+    ["another size declaration", () => brandLogoIntent({
+      sizeBytes: validPng.length + 1,
+    })],
+    ["expired intent", () => brandLogoIntent({ expiresAtSeconds: 1 })],
+    ["tampered intent", () => `${brandLogoIntent()}tampered`],
+  ])("rejects %s before COS or database access", async (_name, buildIntent) => {
+    const { registerExistingCosObject } = await import("./direct-upload");
+    const { context, headObject, getObject } = storageContext();
+
+    await expect(registerExistingCosObject.call(
+      context,
+      brandLogoInput({ uploadIntent: buildIntent() }),
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "FILE_STORAGE_UPLOAD_FAILED",
+    });
+    expect(headObject).not.toHaveBeenCalled();
+    expect(getObject).not.toHaveBeenCalled();
+    expect(createOrFindByObjectKey).not.toHaveBeenCalled();
+  });
+
   test.each([
     ["private visibility", { visibility: "private" as const }],
     ["missing employee", { employeeId: null }],

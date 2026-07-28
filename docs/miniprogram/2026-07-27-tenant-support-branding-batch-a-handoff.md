@@ -565,7 +565,8 @@ Content-Type: application/json
       "x-cos-forbid-overwrite": true
     },
     "expires_in": 600,
-    "expires_at": "2026-07-27T10:10:00.000Z"
+    "expires_at": "2026-07-27T10:10:00.000Z",
+    "upload_intent": "v1.<payload>.<signature>"
   },
   "message": "success"
 }
@@ -592,12 +593,16 @@ Content-Type: application/json
   "mimetype": "image/png",
   "size_bytes": 10152,
   "object_key": "tenants/tenant-uuid/brand-logo/2026/07/27/file-uuid.png",
-  "etag": "cos-response-etag"
+  "etag": "cos-response-etag",
+  "upload_intent": "v1.<payload>.<signature>"
 }
 ```
 
 服务端会 HEAD 并以强 ETag 条件下载最多 2 MiB 的真实对象，解码验证
 格式、帧数、尺寸和比例；只有通过后才创建可绑定文件记录。
+`upload_intent` 必须原样回传。凭证绑定初始化时的租户范围、员工、
+`object_key`、MIME、大小和过期时间；缺失、篡改、跨租户复用或过期
+均在访问 COS 和写入文件记录前拒绝。
 
 ```json
 {
@@ -661,6 +666,8 @@ Content-Type: application/json
 | 400 | `BRANDING_PROFILE_INCOMPLETE` | 补全名称和 Logo 后发布 |
 | 404 | `BRANDING_LOGO_FILE_NOT_FOUND` | 文件不存在或不属于当前作用域 |
 | 400 | `BRANDING_LOGO_FILE_INVALID` | 文件 scene/状态/MIME/尺寸等无效 |
+| 400 | `VALIDATION_ERROR` | Logo 完成请求缺少 `upload_intent` |
+| 400 | `FILE_STORAGE_UPLOAD_FAILED` | Logo 上传凭证无效、篡改或过期 |
 | 404 | `TENANT_ENTITLEMENT_NOT_FOUND` | 目标权益不存在 |
 | 409 | `TENANT_ENTITLEMENT_VERSION_CONFLICT` | 刷新权益版本 |
 | 409 | `TENANT_ENTITLEMENT_STATE_CONFLICT` | 刷新并按状态机选择动作 |
@@ -705,8 +712,9 @@ Content-Type: application/json
    租户切换、退出登录时清理。
 4. 新增品牌设置页；入口受 `brand.settings.read` 控制，
    `can_customize=false` 时只读。
-5. 上传严格执行 direct-init → COS PUT → direct-complete，再把
-   `file_id` 用于 PATCH。
+5. 上传严格执行 direct-init → COS PUT → direct-complete；init 200
+   必须检查非空 `upload_intent`，否则立即中止，complete 时原样回传，
+   最后再把 `file_id` 用于 PATCH。
 6. 保存成功仅更新草稿态；发布成功后重新 GET
    `/branding/effective`。
 7. 平台入口/visitor 页面显式使用平台品牌，不能复用上一租户状态。

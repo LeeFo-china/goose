@@ -179,6 +179,7 @@ mock.module("@/utils/upload-timing-logger", () => ({ logUploadTiming }));
 mock.module("@/services/files/file-url-resolver", () => ({
   resolveStoredFileUrl,
   resolveStoredFileUrlList: mock((value: unknown) => value),
+  resolveSignedStoredFileUrl: mock(async () => "https://example.com/signed.jpg"),
   refreshPlatformCosPublicBaseUrlCache: mock(async () => undefined),
   setPlatformCosAccessConfigCache: mock(() => undefined),
   setPlatformCosPublicBaseUrlCache: mock(() => undefined),

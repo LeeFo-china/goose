@@ -91,14 +91,17 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
     (
       value.scene === "tenant_onboarding_license" ||
       value.scene === "wechat_pay_applyment" ||
-      value.scene === "supplier_business_license"
+      value.scene === "supplier_business_license" ||
+      value.scene === "brand_logo"
     ) &&
     !value.upload_intent
   ) {
     context.addIssue({
       code: "custom",
       path: ["upload_intent"],
-      message: "缺少私有上传凭证",
+      message: value.scene === "brand_logo"
+        ? "缺少品牌 Logo 上传凭证"
+        : "缺少私有上传凭证",
     });
   }
 });

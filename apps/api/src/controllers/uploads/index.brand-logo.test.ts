@@ -19,6 +19,10 @@ const uploadBody = {
   mimetype: "image/png",
   size_bytes: 1024,
 };
+const completeUploadBody = {
+  ...uploadBody,
+  upload_intent: "v1.brand-logo-intent.signature",
+};
 const LOGO_UUID = "11111111-1111-4111-8111-111111111111";
 
 beforeEach(resetUploadControllerMocks);
@@ -77,13 +81,28 @@ describe("UploadController brand logo direct upload", () => {
     expect(createDirectUpload).not.toHaveBeenCalled();
   });
 
+  test("requires an upload intent when completing a brand logo", async () => {
+    const objectKey =
+      `tenants/${tenantId}/brand-logo/2026/07/27/${LOGO_UUID}.png`;
+    const { default: controller } = await import("./index");
+
+    await expect(controller.completeDirectCosUpload(
+      buildRequest({ ...uploadBody, object_key: objectKey }),
+      {} as never,
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    expect(completeDirectUpload).not.toHaveBeenCalled();
+  });
+
   test("completes a tenant logo only under the live tenant prefix", async () => {
     const objectKey =
       `tenants/${tenantId}/brand-logo/2026/07/27/${LOGO_UUID}.png`;
     const { default: controller } = await import("./index");
 
     await controller.completeDirectCosUpload(
-      buildRequest({ ...uploadBody, object_key: objectKey }),
+      buildRequest({ ...completeUploadBody, object_key: objectKey }),
       {} as never,
     );
 
@@ -102,7 +121,7 @@ describe("UploadController brand logo direct upload", () => {
     const { default: controller } = await import("./index");
 
     await controller.completeDirectCosUpload(
-      buildPlatformRequest({ ...uploadBody, object_key: objectKey }),
+      buildPlatformRequest({ ...completeUploadBody, object_key: objectKey }),
       {} as never,
     );
 
@@ -119,7 +138,7 @@ describe("UploadController brand logo direct upload", () => {
     [
       "tenant using platform path",
       () => buildRequest({
-        ...uploadBody,
+        ...completeUploadBody,
         object_key:
           `public/brand-logo/2026/07/27/${LOGO_UUID}.png`,
       }),
@@ -129,7 +148,7 @@ describe("UploadController brand logo direct upload", () => {
       () => {
         allowPlatformBrandLogoUpload();
         return buildPlatformRequest({
-          ...uploadBody,
+          ...completeUploadBody,
           object_key:
             `tenants/${tenantId}/brand-logo/2026/07/27/${LOGO_UUID}.png`,
         });
@@ -138,7 +157,7 @@ describe("UploadController brand logo direct upload", () => {
     [
       "tenant using unassigned path",
       () => buildRequest({
-        ...uploadBody,
+        ...completeUploadBody,
         object_key:
           `tenants/${tenantId}/brand-logo/unassigned/2026/logo.png`,
       }),
@@ -168,7 +187,7 @@ describe("UploadController brand logo direct upload", () => {
 
     await expect(controller.completeDirectCosUpload(
       buildRequest({
-        ...uploadBody,
+        ...completeUploadBody,
         mimetype,
         object_key:
           `tenants/${tenantId}/brand-logo/2026/07/27/${basename}`,
