@@ -7,7 +7,10 @@ import {
   platformPaymentConfigRepository,
   type PlatformPaymentConfigRecord,
 } from "@/repositories/platform-payment-configs";
-import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
+import {
+  isPlatformPaymentSecretBundleRevisionError,
+  requireMatchingPlatformPaymentSecretBundle,
+} from "@/services/platform-payment-secret-bundle-revision";
 import {
   wechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
@@ -274,4 +277,16 @@ function paymentConfigChanged() {
     "微信支付配置已更新，请重新发起购买",
     "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
   );
+}
+
+export function isBrandingAddonPostInsertPaymentGuardError(error: unknown) {
+  return readErrorCode(error) ===
+      "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED" ||
+    isPlatformPaymentSecretBundleRevisionError(error);
+}
+
+function readErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") return null;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
 }

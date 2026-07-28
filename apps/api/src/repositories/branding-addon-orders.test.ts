@@ -38,6 +38,10 @@ const query = {
     calls.push(["eq", column, value]);
     return query;
   },
+  is(column: string, value: unknown) {
+    calls.push(["is", column, value]);
+    return query;
+  },
   gt(column: string, value: unknown) {
     calls.push(["gt", column, value]);
     return query;
@@ -241,15 +245,12 @@ describe("BrandingAddonOrderRepository", () => {
     expect(internalSelect?.[1]).not.toContain("metadata");
     expect(internalSelect?.[1]).not.toContain("close_claim_token");
   });
-
   test("keeps platform detail free of OpenID and close-worker fields", async () => {
     const { BrandingAddonOrderRepository } = await import(
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-
     await repository.findPlatformOrderById("order-1");
-
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).toContain("refund_policy");
     expect(selectCall?.[1]).toContain("transaction_id");

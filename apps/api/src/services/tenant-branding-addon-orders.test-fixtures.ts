@@ -166,6 +166,10 @@ export function createDependencies(overrides: {
     ),
     createOrder: mock(async () => currentOrder ?? order),
     markPrepayCreated: mock(async () => currentOrder ?? order),
+    markFailedBeforePrepay: mock(
+      async (): Promise<BrandingAddonOrderRecord | null> =>
+        currentOrder ?? order,
+    ),
     findInternalTenantOrderById: mock(async () => currentOrder),
     findTenantOrderById: mock(async () => currentOrder),
     listTenantOrders: mock(async () => ({

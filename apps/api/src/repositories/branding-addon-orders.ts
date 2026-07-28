@@ -18,10 +18,10 @@ import {
   type TenantBrandingAddonOrderDetailRecord,
   type TenantBrandingAddonOrderListRecord,
 } from "@/repositories/branding-addon-order-records";
+import { markBrandingAddonOrderFailedBeforePrepay, type MarkBrandingAddonOrderFailedBeforePrepayInput } from "@/repositories/branding-addon-order-failure-transition";
 import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
 import type { BrandingAddonOrderStatus } from "@/services/branding-addon-contracts";
 import { SupabaseDB } from "@/utils/supabase";
-
 export type {
   BrandingAddonNotificationCreateInput,
   BrandingAddonCallbackOrderRecord,
@@ -36,16 +36,13 @@ export type {
   TenantBrandingAddonOrderListRecord,
 } from "@/repositories/branding-addon-order-records";
 
-type QueryResult = {
-  data: unknown;
-  error: unknown;
-  count?: number | null;
-};
+type QueryResult = { data: unknown; error: unknown; count?: number | null };
 type AddonQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): AddonQuery;
   insert(record: Record<string, unknown>): AddonQuery;
   update(patch: Record<string, unknown>): AddonQuery;
   eq(column: string, value: unknown): AddonQuery;
+  is(column: string, value: unknown): AddonQuery;
   gt(column: string, value: unknown): AddonQuery;
   gte(column: string, value: unknown): AddonQuery;
   lte(column: string, value: unknown): AddonQuery;
@@ -144,6 +141,12 @@ export class BrandingAddonOrderRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("保存年度品牌权益预支付单失败");
     return (data as BrandingAddonPaymentOrderRecord | null) ?? null;
+  }
+
+  async markFailedBeforePrepay(
+    input: MarkBrandingAddonOrderFailedBeforePrepayInput,
+  ) {
+    return markBrandingAddonOrderFailedBeforePrepay(this.orders(), input);
   }
 
   async findTenantOrderById(input: { tenantId: string; orderId: string }) {

@@ -41,6 +41,10 @@ const query = {
     calls.push(["eq", column, value]);
     return query;
   },
+  is(column: string, value: unknown) {
+    calls.push(["is", column, value]);
+    return query;
+  },
   gt() {
     return query;
   },

@@ -182,6 +182,24 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       .toHaveBeenCalled();
   });
 
+  test("rejects an idempotency replay bound to another payer", async () => {
+    const dependencies = createDependencies();
+    dependencies.orderRepository.findByIdempotencyKey.mockResolvedValue(order);
+    const fixture = await createService(dependencies);
+
+    await expect(fixture.service.createOrder(authContext, {
+      ...createInput,
+      payer_openid: "another-openid",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
+      details: undefined,
+    });
+    expect(dependencies.wechatPayGateway.createMiniProgramPaymentRequest)
+      .not.toHaveBeenCalled();
+    expect(dependencies.orderRepository.createOrder).not.toHaveBeenCalled();
+  });
+
   test("reuses the existing tenant product pending order for a new key", async () => {
     const dependencies = createDependencies();
     dependencies.orderRepository.findPendingByTenantProduct
@@ -198,6 +216,25 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       reused_pending: true,
       order: { id: ORDER_ID },
     });
+    expect(dependencies.orderRepository.createOrder).not.toHaveBeenCalled();
+  });
+
+  test("rejects an existing pending order bound to another payer", async () => {
+    const dependencies = createDependencies();
+    dependencies.orderRepository.findPendingByTenantProduct
+      .mockResolvedValue(order);
+    const fixture = await createService(dependencies);
+
+    await expect(fixture.service.createOrder(authContext, {
+      ...createInput,
+      payer_openid: "another-openid",
+      idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
+    });
+    expect(dependencies.wechatPayGateway.createMiniProgramPaymentRequest)
+      .not.toHaveBeenCalled();
     expect(dependencies.orderRepository.createOrder).not.toHaveBeenCalled();
   });
 
@@ -243,6 +280,130 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       reused_pending: false,
       order: { id: ORDER_ID },
     });
+  });
+
+  test.each([
+    [
+      "BRANDING_ADDON_IDEMPOTENCY_KEY_CONFLICT",
+      "findByIdempotencyKey",
+    ],
+    [
+      "BRANDING_ADDON_PENDING_ORDER_EXISTS",
+      "findPendingByTenantProduct",
+    ],
+  ] as const)(
+    "rejects a %s race when the recovered order belongs to another payer",
+    async (conflictCode, lookup) => {
+      const dependencies = createDependencies();
+      dependencies.orderRepository.createOrder.mockRejectedValue(
+        Object.assign(new Error("secret constraint"), {
+          statusCode: 409,
+          code: conflictCode,
+        }),
+      );
+      dependencies.orderRepository[lookup]
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(order);
+      const fixture = await createService(dependencies);
+
+      await expect(fixture.service.createOrder(authContext, {
+        ...createInput,
+        payer_openid: "another-openid",
+      })).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
+      });
+      expect(dependencies.wechatPayGateway.createMiniProgramPaymentRequest)
+        .not.toHaveBeenCalled();
+    },
+  );
+
+  test("fails a prepay-free order when the post-insert payment guard changes", async () => {
+    const dependencies = createDependencies();
+    dependencies.paymentConfigRepository.findWechatPayConfigById
+      .mockResolvedValue({
+        ...(await dependencies.paymentConfigRepository.findWechatPayConfig()),
+        recharge_guard_version: 4,
+      });
+    dependencies.orderRepository.markFailedBeforePrepay.mockResolvedValue({
+      ...order,
+      status: "failed",
+      failure_code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
+      failure_message: "支付配置或密钥版本在预下单前发生变化",
+    });
+    const fixture = await createService(dependencies);
+
+    await expect(
+      fixture.service.createOrder(authContext, createInput),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
+    });
+    expect(dependencies.orderRepository.markFailedBeforePrepay)
+      .toHaveBeenCalledWith({
+        tenantId: TENANT_ID,
+        orderId: ORDER_ID,
+        paymentConfigId: order.payment_config_id,
+        expectedGuardVersion: order.expected_guard_version,
+      });
+    expect(dependencies.wechatPayGateway.createJsapiPrepay)
+      .not.toHaveBeenCalled();
+  });
+
+  test("fails a prepay-free order when the post-insert secret revision changes", async () => {
+    const dependencies = createDependencies();
+    dependencies.secretBundleService.load
+      .mockResolvedValueOnce({
+        privateKeyPem: "private-key",
+        apiV3Key: "12345678901234567890123456789012",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+        revision: "bundle-revision-1",
+      })
+      .mockResolvedValueOnce({
+        privateKeyPem: "private-key",
+        apiV3Key: "12345678901234567890123456789012",
+        wechatPayPublicKeyId: null,
+        wechatPayPublicKeyPem: null,
+        baseUrl: "https://api.mch.weixin.qq.com",
+        revision: "bundle-revision-2",
+      });
+    const fixture = await createService(dependencies);
+
+    await expect(
+      fixture.service.createOrder(authContext, createInput),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
+    });
+    expect(dependencies.orderRepository.markFailedBeforePrepay)
+      .toHaveBeenCalledWith(expect.objectContaining({
+        tenantId: TENANT_ID,
+        orderId: ORDER_ID,
+      }));
+    expect(dependencies.wechatPayGateway.createJsapiPrepay)
+      .not.toHaveBeenCalled();
+  });
+
+  test("keeps the original guard error when a concurrent prepay prevents failure transition", async () => {
+    const dependencies = createDependencies();
+    dependencies.paymentConfigRepository.findWechatPayConfigById
+      .mockResolvedValue({
+        ...(await dependencies.paymentConfigRepository.findWechatPayConfig()),
+        recharge_guard_version: 4,
+      });
+    dependencies.orderRepository.markFailedBeforePrepay.mockResolvedValue(null);
+    const fixture = await createService(dependencies);
+
+    await expect(
+      fixture.service.createOrder(authContext, createInput),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
+    });
+    expect(dependencies.orderRepository.markFailedBeforePrepay)
+      .toHaveBeenCalledTimes(1);
   });
 
   test("does not reuse an expired pending order for a new idempotency key", async () => {

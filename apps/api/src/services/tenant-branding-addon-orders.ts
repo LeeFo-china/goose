@@ -1,8 +1,5 @@
-import { randomUUID } from "node:crypto";
-
 import { Errors } from "@/errors/error-factory";
 import type {
-  BrandingAddonOrderCreateInput,
   BrandingAddonPaymentOrderRecord,
 } from "@/repositories/branding-addon-orders";
 import { brandingAddonOrderRepository } from "@/repositories/branding-addon-orders";
@@ -16,7 +13,6 @@ import {
 } from "@/repositories/tenant-entitlements";
 import {
   platformPaymentConfigRepository,
-  type PlatformPaymentConfigRecord,
 } from "@/repositories/platform-payment-configs";
 import type {
   BrandingAddonCreateOrderInput,
@@ -26,9 +22,13 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
   BRANDING_ADDON_PAYMENT_WINDOW_MS,
-  BRANDING_ADDON_REFUND_POLICY,
   MAX_POSTGRES_INTEGER_FEN,
 } from "@/services/branding-addon-contracts";
+import {
+  assertBrandingAddonOrderPayerMatches,
+  buildBrandingAddonOrderCreateInput,
+  createBrandingAddonTradeNo,
+} from "@/services/tenant-branding-addon-order-creation";
 import {
   toTenantBrandingAddonOrderView,
   toTenantBrandingAddonProductView,
@@ -37,6 +37,7 @@ import {
   type BrandingAddonGatewayPort,
   type BrandingAddonPaymentConfigRepositoryPort,
   type BrandingAddonSecretBundleServicePort,
+  isBrandingAddonPostInsertPaymentGuardError,
   TenantBrandingAddonOrderPayment,
 } from "@/services/tenant-branding-addon-order-payment";
 import { wechatPayGateway } from "@/services/wechat-pay-gateway";
@@ -56,6 +57,7 @@ type OrderRepositoryPort = Pick<
   | "findPendingByTenantProduct"
   | "createOrder"
   | "markPrepayCreated"
+  | "markFailedBeforePrepay"
   | "findInternalTenantOrderById"
   | "findTenantOrderById"
   | "listTenantOrders"
@@ -100,7 +102,8 @@ export class TenantBrandingAddonOrderService {
     this.entitlementRepository = dependencies.entitlementRepository ??
       tenantEntitlementsRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
-    this.tradeNoFactory = dependencies.tradeNoFactory ?? createTradeNo;
+    this.tradeNoFactory = dependencies.tradeNoFactory ??
+      createBrandingAddonTradeNo;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
     this.payment = new TenantBrandingAddonOrderPayment({
       orderRepository: this.orderRepository,
@@ -143,7 +146,13 @@ export class TenantBrandingAddonOrderService {
       idempotencyKey: input.idempotency_key,
     });
     if (replay) {
-      return this.buildCreateResult(replay, entitlement, true, false);
+      return this.buildCreateResult(
+        replay,
+        entitlement,
+        input.payer_openid,
+        true,
+        false,
+      );
     }
 
     const pending = await this.orderRepository.findPendingByTenantProduct({
@@ -151,7 +160,13 @@ export class TenantBrandingAddonOrderService {
       productCode: input.product_code,
     });
     if (pending) {
-      return this.buildCreateResult(pending, entitlement, false, true);
+      return this.buildCreateResult(
+        pending,
+        entitlement,
+        input.payer_openid,
+        false,
+        true,
+      );
     }
 
     const product = await this.requireEnabledProduct();
@@ -161,7 +176,7 @@ export class TenantBrandingAddonOrderService {
     const expiresAt = new Date(
       creationNow.getTime() + BRANDING_ADDON_PAYMENT_WINDOW_MS,
     ).toISOString();
-    const createInput = buildOrderCreateInput({
+    const createInput = buildBrandingAddonOrderCreateInput({
       actor,
       input,
       product,
@@ -185,7 +200,22 @@ export class TenantBrandingAddonOrderService {
       throw error;
     }
 
-    const payment = await this.payment.createInitialPrepay(created);
+    let payment: Awaited<
+      ReturnType<TenantBrandingAddonOrderPayment["createInitialPrepay"]>
+    >;
+    try {
+      payment = await this.payment.createInitialPrepay(created);
+    } catch (error) {
+      if (isBrandingAddonPostInsertPaymentGuardError(error)) {
+        await this.orderRepository.markFailedBeforePrepay({
+          tenantId: actor.tenantId,
+          orderId: created.id,
+          paymentConfigId: created.payment_config_id,
+          expectedGuardVersion: created.expected_guard_version,
+        });
+      }
+      throw error;
+    }
 
     const responseNow = this.nowFactory();
     return {
@@ -324,9 +354,11 @@ export class TenantBrandingAddonOrderService {
   private async buildCreateResult(
     order: BrandingAddonPaymentOrderRecord,
     entitlement: TenantEntitlementRecord | null,
+    payerOpenid: string,
     idempotent: boolean,
     reusedPending: boolean,
   ) {
+    assertBrandingAddonOrderPayerMatches(order, payerOpenid);
     const responseNow = this.nowFactory();
     if (reusedPending) {
       this.payment.assertPayable(order, responseNow);
@@ -357,7 +389,13 @@ export class TenantBrandingAddonOrderService {
         idempotencyKey: input.idempotency_key,
       });
       return existing
-        ? this.buildCreateResult(existing, entitlement, true, false)
+        ? this.buildCreateResult(
+          existing,
+          entitlement,
+          input.payer_openid,
+          true,
+          false,
+        )
         : null;
     }
     if (code === "BRANDING_ADDON_PENDING_ORDER_EXISTS") {
@@ -366,49 +404,17 @@ export class TenantBrandingAddonOrderService {
         productCode: input.product_code,
       });
       return pending
-        ? this.buildCreateResult(pending, entitlement, false, true)
+        ? this.buildCreateResult(
+          pending,
+          entitlement,
+          input.payer_openid,
+          false,
+          true,
+        )
         : null;
     }
     return null;
   }
-}
-
-function buildOrderCreateInput(input: {
-  actor: { tenantId: string; employeeId: string };
-  input: BrandingAddonCreateOrderInput;
-  product: BrandingAddonProductRecord & { amount_fen: number };
-  config: PlatformPaymentConfigRecord & {
-    merchant_id: string;
-    app_id: string;
-  };
-  guardVersion: number;
-  tradeNo: string;
-  expiresAt: string;
-}): BrandingAddonOrderCreateInput {
-  return {
-    tenant_id: input.actor.tenantId,
-    order_no: input.tradeNo,
-    out_trade_no: input.tradeNo,
-    idempotency_key: input.input.idempotency_key,
-    product_id: input.product.id,
-    product_code: input.product.code,
-    entitlement_code: input.product.entitlement_code,
-    product_name: input.product.name,
-    amount_fen: input.product.amount_fen,
-    term_years: input.product.term_years,
-    purchase_notes: input.product.purchase_notes,
-    refund_policy: BRANDING_ADDON_REFUND_POLICY,
-    status: "pending",
-    channel: "wechat_pay",
-    payer_openid: input.input.payer_openid,
-    payment_config_id: input.config.id,
-    expected_guard_version: input.guardVersion,
-    payment_mchid: input.config.merchant_id,
-    payment_appid: input.config.app_id,
-    payment_expires_at: input.expiresAt,
-    created_by: input.actor.employeeId,
-    metadata: { product_version: input.product.version },
-  };
 }
 
 function assertEntitlementAllowsPurchase(
@@ -453,12 +459,6 @@ function orderNotFound() {
     "年度品牌权益订单不存在",
     "BRANDING_ADDON_ORDER_NOT_FOUND",
   );
-}
-
-function createTradeNo() {
-  const time = new Date().toISOString().replace(/\D/g, "").slice(0, 17);
-  const nonce = randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase();
-  return `BA${time}${nonce}`;
 }
 
 export const tenantBrandingAddonOrderService =
