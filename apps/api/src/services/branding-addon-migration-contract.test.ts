@@ -83,10 +83,10 @@ function expectImmutableOrderSnapshotContract(sql: string): void {
     expect(guardBody).toContain(`old.${field}`);
     expect(guardBody).toContain(`new.${field}`);
   }
-  expect(triggerColumns).toEqual([...IMMUTABLE_ORDER_FIELDS]);
+  expect([...triggerColumns].sort()).toEqual([...IMMUTABLE_ORDER_FIELDS].sort());
   for (const field of MUTABLE_ORDER_FIELDS) {
     expect(triggerColumns).not.toContain(field);
-    expect(guardBody).not.toContain(`old.${field}`);
+    expect(guardBody).not.toMatch(new RegExp(`(?:old|new)\\.${field}`));
   }
 }
 
@@ -291,11 +291,11 @@ describe("branding add-on commerce migration contract", () => {
 
   test("prevents service-role rewrites of immutable order snapshots",
     () => expectImmutableOrderSnapshotContract(migrationSql));
-  test("mutation fixture rejects mutable order fields in the guard trigger", () => {
-    const mutated = migrationSql.replace("BEFORE UPDATE OF", "BEFORE UPDATE OF\n  paid_amount_fen,");
+  test("mutation fixture rejects guarding a mutable field in snapshot tuples", () => {
+    const mutated = migrationSql.replace(/(OLD\.created_by)(\s+\) IS DISTINCT FROM ROW\([\s\S]*?)(NEW\.created_by)(\s+\) THEN)/,
+      "$1,\n    OLD.paid_amount_fen$2$3,\n    NEW.paid_amount_fen$4");
     expect(() => expectImmutableOrderSnapshotContract(mutated)).toThrow();
   });
-
   test("adds bounded order uniqueness and list plus close-worker indexes", () => {
     const normalized = normalizeSql(migrationSql);
 
