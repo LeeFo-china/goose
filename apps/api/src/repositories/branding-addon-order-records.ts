@@ -184,26 +184,16 @@ export type BrandingAddonConfirmedOrderRecord = Pick<
   | "updated_at"
 >;
 
-export type BrandingAddonExpirationOrderRecord = Pick<
-  BrandingAddonOrderRecord,
-  | "id"
-  | "tenant_id"
-  | "order_no"
-  | "out_trade_no"
-  | "product_code"
-  | "status"
-  | "prepay_id"
-  | "payment_config_id"
-  | "expected_guard_version"
-  | "payment_mchid"
-  | "payment_appid"
-  | "payment_expires_at"
-  | "close_claim_token"
-  | "close_claim_expires_at"
-  | "close_attempt_count"
-  | "close_last_error"
-  | "updated_at"
->;
+export type BrandingAddonExpirationOrderRecord =
+  BrandingAddonCallbackOrderRecord & Pick<
+    BrandingAddonOrderRecord,
+    | "prepay_id"
+    | "expected_guard_version"
+    | "close_claim_token"
+    | "close_claim_expires_at"
+    | "close_attempt_count"
+    | "close_last_error"
+  >;
 
 export type BrandingAddonCloseResultRecord = Pick<
   BrandingAddonOrderRecord,

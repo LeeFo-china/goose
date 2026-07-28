@@ -20,6 +20,15 @@ const RECHARGE_EXPIRATION_RESULT = {
   release_failed: 0,
 };
 
+const BRANDING_ADDON_EXPIRATION_RESULT = {
+  claimed: 2,
+  paid: 1,
+  closed: 1,
+  retried: 0,
+  failed: 0,
+  release_failed: 0,
+};
+
 const REFUND_RESULT = {
   claimed: 2,
   success: 1,
@@ -164,6 +173,9 @@ describe("billing reconcile worker partial failures", () => {
     const rechargeExpirationService = {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
+    const brandingAddonExpirationService = {
+      runExpiredOrderChecks: mock(async () => BRANDING_ADDON_EXPIRATION_RESULT),
+    };
     const refundReconciliationService = {
       runBatch: mock(async () => ({
         ...REFUND_RESULT,
@@ -176,6 +188,7 @@ describe("billing reconcile worker partial failures", () => {
     const dependencies = {
       subscriptionService,
       rechargeExpirationService,
+      brandingAddonExpirationService,
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -188,6 +201,8 @@ describe("billing reconcile worker partial failures", () => {
     expect(markHealthy).toHaveBeenCalledTimes(1);
     expect(subscriptionService.runDueChecks).toHaveBeenCalledTimes(2);
     expect(rechargeExpirationService.runExpiredOrderChecks).toHaveBeenCalledTimes(2);
+    expect(brandingAddonExpirationService.runExpiredOrderChecks)
+      .toHaveBeenCalledTimes(2);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(2);
     expect(logger).toHaveBeenNthCalledWith(
       1,
@@ -219,6 +234,9 @@ async function runTick(overrides: TickOverrides) {
       overrides.expiration ?? RECHARGE_EXPIRATION_RESULT
     ),
   };
+  const brandingAddonExpirationService = {
+    runExpiredOrderChecks: mock(async () => BRANDING_ADDON_EXPIRATION_RESULT),
+  };
   const refundReconciliationService = {
     runBatch: mock(async () => overrides.refund ?? REFUND_RESULT),
   };
@@ -229,6 +247,7 @@ async function runTick(overrides: TickOverrides) {
   await tick({
     subscriptionService,
     rechargeExpirationService,
+    brandingAddonExpirationService,
     refundReconciliationService,
     healthEvidence: { markHealthy },
     logger,
@@ -237,6 +256,7 @@ async function runTick(overrides: TickOverrides) {
   return {
     subscriptionService,
     rechargeExpirationService,
+    brandingAddonExpirationService,
     refundReconciliationService,
     markHealthy,
     logger,
@@ -246,6 +266,8 @@ async function runTick(overrides: TickOverrides) {
 function assertEveryChildExecuted(result: Awaited<ReturnType<typeof runTick>>): void {
   expect(result.subscriptionService.runDueChecks).toHaveBeenCalledTimes(1);
   expect(result.rechargeExpirationService.runExpiredOrderChecks)
+    .toHaveBeenCalledTimes(1);
+  expect(result.brandingAddonExpirationService.runExpiredOrderChecks)
     .toHaveBeenCalledTimes(1);
   expect(result.refundReconciliationService.runBatch).toHaveBeenCalledTimes(1);
 }

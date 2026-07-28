@@ -8,6 +8,7 @@ import {
   type RefundReconciliationSummary,
 } from "@/services/billing-recharge-refund-reconciliation";
 import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
+import type { BrandingAddonExpirationTelemetry } from "@/services/branding-addon-expiration";
 import { markBillingReconcileWorkerHealthy } from "@/workers/billing-reconcile-worker-health";
 
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -15,6 +16,7 @@ const MIN_INTERVAL_MS = 10_000;
 const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE = 50;
+const DEFAULT_BRANDING_ADDON_EXPIRATION_BATCH_SIZE = 50;
 const DEFAULT_REFUND_BATCH_SIZE = 20;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
@@ -24,6 +26,7 @@ export type BillingReconcileWorkerConfig = {
   intervalMs: number;
   batchSize: number;
   rechargeExpirationBatchSize: number;
+  brandingAddonExpirationBatchSize: number;
   refundBatchSize: number;
 };
 
@@ -41,6 +44,11 @@ type BillingReconcileWorkerDependencies = {
     runExpiredOrderChecks(input: {
       batchSize: number;
     }): Promise<BillingRechargeExpirationTelemetry>;
+  };
+  brandingAddonExpirationService?: {
+    runExpiredOrderChecks(input: {
+      batchSize: number;
+    }): Promise<BrandingAddonExpirationTelemetry>;
   };
   refundReconciliationService?: {
     runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
@@ -63,6 +71,9 @@ type BillingReconcileTickResults = {
   rechargeExpiration: ChildResult<
     ReturnType<typeof summarizeRechargeExpirationResult>
   >;
+  brandingAddonExpiration: ChildResult<
+    ReturnType<typeof summarizeBrandingAddonExpirationResult>
+  >;
   refund: ChildResult<ReturnType<typeof summarizeRefundResult>>;
 };
 
@@ -72,6 +83,9 @@ type SuccessfulBillingReconcileTickResults = {
   >;
   rechargeExpiration: FulfilledChildResult<
     ReturnType<typeof summarizeRechargeExpirationResult>
+  >;
+  brandingAddonExpiration: FulfilledChildResult<
+    ReturnType<typeof summarizeBrandingAddonExpirationResult>
   >;
   refund: FulfilledChildResult<ReturnType<typeof summarizeRefundResult>>;
 };
@@ -148,6 +162,12 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    brandingAddonExpirationBatchSize: parseNumberEnv(
+      "BILLING_BRANDING_ADDON_EXPIRATION_BATCH_SIZE",
+      DEFAULT_BRANDING_ADDON_EXPIRATION_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
     refundBatchSize: parseNumberEnv(
       "BILLING_REFUND_RECONCILE_BATCH_SIZE",
       DEFAULT_REFUND_BATCH_SIZE,
@@ -195,13 +215,28 @@ export async function tick(
       },
       summarizeRechargeExpirationResult,
     );
+    const brandingAddonExpiration = await runChild(
+      async () => {
+        const service = dependencies.brandingAddonExpirationService ??
+          await loadDefaultBrandingAddonExpirationService();
+        return service.runExpiredOrderChecks({
+          batchSize: config.brandingAddonExpirationBatchSize,
+        });
+      },
+      summarizeBrandingAddonExpirationResult,
+    );
     const refund = await runChild(
       () => refundReconciliationService.runBatch({
         limit: config.refundBatchSize,
       }),
       summarizeRefundResult,
     );
-    const tickResults = { subscription, rechargeExpiration, refund };
+    const tickResults = {
+      subscription,
+      rechargeExpiration,
+      brandingAddonExpiration,
+      refund,
+    };
     const childrenSucceeded = isSuccessfulBillingReconcileTick(tickResults);
     let healthEvidenceFailed = false;
     if (childrenSucceeded) {
@@ -220,7 +255,12 @@ export async function tick(
       ? "tick completed with errors"
       : "tick completed", {
       duration_ms: Date.now() - startedAt,
-      result: { subscription, recharge_expiration: rechargeExpiration, refund },
+      result: {
+        subscription,
+        recharge_expiration: rechargeExpiration,
+        branding_addon_expiration: brandingAddonExpiration,
+        refund,
+      },
       ...(healthEvidenceFailed
         ? { error_code: "BILLING_RECONCILE_HEALTH_WRITE_FAILED" }
         : {}),
@@ -236,6 +276,7 @@ function isSuccessfulBillingReconcileTick(
   if (
     results.subscription.status !== "fulfilled" ||
     results.rechargeExpiration.status !== "fulfilled" ||
+    results.brandingAddonExpiration.status !== "fulfilled" ||
     results.refund.status !== "fulfilled"
   ) {
     return false;
@@ -244,6 +285,8 @@ function isSuccessfulBillingReconcileTick(
   return results.subscription.result.error_count === 0 &&
     results.rechargeExpiration.result.failed === 0 &&
     results.rechargeExpiration.result.release_failed === 0 &&
+    results.brandingAddonExpiration.result.failed === 0 &&
+    results.brandingAddonExpiration.result.release_failed === 0 &&
     results.refund.result.failed === 0;
 }
 
@@ -294,11 +337,31 @@ function summarizeRechargeExpirationResult(
   };
 }
 
+function summarizeBrandingAddonExpirationResult(
+  result: BrandingAddonExpirationTelemetry,
+) {
+  return {
+    claimed: result.claimed,
+    paid: result.paid,
+    closed: result.closed,
+    retried: result.retried,
+    failed: result.failed,
+    release_failed: result.release_failed,
+  };
+}
+
 async function loadDefaultRechargeExpirationService() {
   const { billingRechargeExpirationService } = await import(
     "@/services/billing-recharge-expiration"
   );
   return billingRechargeExpirationService;
+}
+
+async function loadDefaultBrandingAddonExpirationService() {
+  const { brandingAddonExpirationService } = await import(
+    "@/services/branding-addon-expiration"
+  );
+  return brandingAddonExpirationService;
 }
 
 function registerShutdownSignalHandlers(): void {

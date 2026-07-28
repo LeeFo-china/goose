@@ -16,6 +16,10 @@ const query = {
     calls.push(["eq", column, value]);
     return query;
   },
+  is(column: string, value: null) {
+    calls.push(["is", column, value]);
+    return query;
+  },
   select(columns: string) {
     calls.push(["select", columns]);
     return query;
@@ -103,10 +107,12 @@ describe("BrandingAddonExpirationRepository", () => {
       orderId: "order-1",
       claimToken: "claim-1",
       closedAt: new Date("2026-07-28T08:10:00.000Z"),
+      requireMissingPrepay: true,
     });
     expect(calls).toContainEqual(["eq", "id", "order-1"]);
     expect(calls).toContainEqual(["eq", "status", "pending"]);
     expect(calls).toContainEqual(["eq", "close_claim_token", "claim-1"]);
+    expect(calls).toContainEqual(["is", "prepay_id", null]);
 
     calls.length = 0;
     await repository.releaseCloseClaim({

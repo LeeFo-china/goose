@@ -13,6 +13,7 @@ type QueryResult = {
 type ExpirationQuery = {
   update(patch: Record<string, unknown>): ExpirationQuery;
   eq(column: string, value: unknown): ExpirationQuery;
+  is(column: string, value: null): ExpirationQuery;
   select(columns: string): ExpirationQuery;
   maybeSingle(): Promise<QueryResult>;
 };
@@ -43,6 +44,7 @@ export type MarkBrandingAddonOrderClosedInput = {
   orderId: string;
   claimToken: string;
   closedAt: Date;
+  requireMissingPrepay?: boolean;
 };
 
 export type ReleaseBrandingAddonCloseClaimInput = {
@@ -112,6 +114,7 @@ export class BrandingAddonExpirationRepository {
         close_last_error: null,
       },
       "关闭过期品牌权益订单失败",
+      input.requireMissingPrepay ?? false,
     );
   }
 
@@ -133,13 +136,16 @@ export class BrandingAddonExpirationRepository {
     claimToken: string,
     patch: Record<string, unknown>,
     message: string,
+    requireMissingPrepay = false,
   ) {
-    const { data, error } = await this.clientProvider()
+    let query = this.clientProvider()
       .from("tenant_addon_orders")
       .update(patch)
       .eq("id", orderId)
       .eq("status", "pending")
-      .eq("close_claim_token", claimToken)
+      .eq("close_claim_token", claimToken);
+    if (requireMissingPrepay) query = query.is("prepay_id", null);
+    const { data, error } = await query
       .select(CLOSE_RESULT_COLUMNS)
       .maybeSingle();
     if (error) throw Errors.dbError(message);
