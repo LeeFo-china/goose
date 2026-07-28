@@ -8,6 +8,7 @@ import {
   ErrorCodes,
   Errors,
   authorizationService,
+  invalidateWechatIdentityCheckCache,
   userIdentityService,
   wechatCustomerIdentityService,
   wechatRebindRequestRepository,
@@ -47,6 +48,14 @@ export async function unbindCustomer(user: JwtUserLike) {
     source: "customer_unbind_wechat",
   });
 
+  wechatCustomerIdentityService.invalidateWechatLoginState({
+    authUserId: user.sub,
+    openid: user.openid,
+  });
+  invalidateWechatIdentityCheckCache({
+    authUserId: user.sub,
+    openid: user.openid,
+  });
   authorizationService.invalidateAuthContext({ authUserId: user.sub });
   return { success: true, message: "微信绑定已解除" };
 }

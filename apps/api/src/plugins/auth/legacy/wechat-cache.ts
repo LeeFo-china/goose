@@ -7,6 +7,29 @@ const MAX_WECHAT_IDENTITY_CHECK_CACHE_SIZE = 4_000;
 
 const wechatIdentityCheckCache = new Map<string, { expiresAt: number; result?: unknown }>();
 const wechatIdentityCheckInFlight = new Map<string, Promise<unknown>>();
+let wechatIdentityCheckCacheGeneration = 0;
+
+export function invalidateWechatIdentityCheckCache(input: {
+  authUserId: string;
+  openid?: string | null;
+}): void {
+  wechatIdentityCheckCacheGeneration += 1;
+  const keys = new Set([
+    ...wechatIdentityCheckCache.keys(),
+    ...wechatIdentityCheckInFlight.keys(),
+  ]);
+
+  for (const key of keys) {
+    const [, authUserId, openid] = key.split(":");
+    if (
+      authUserId === input.authUserId &&
+      (!input.openid || openid === input.openid)
+    ) {
+      wechatIdentityCheckCache.delete(key);
+      wechatIdentityCheckInFlight.delete(key);
+    }
+  }
+}
 
 function getWechatIdentityCheckCacheTtlMs() {
   const parsed = Number(process.env.WECHAT_IDENTITY_CHECK_CACHE_TTL_MS);
@@ -95,9 +118,12 @@ export async function runWechatIdentityCheckOnce<T>(
     return inFlight as Promise<T | undefined>;
   }
 
+  const cacheGeneration = wechatIdentityCheckCacheGeneration;
   const request = handler()
     .then((result) => {
-      setWechatIdentityCheckCache(cacheKey, payload, result);
+      if (cacheGeneration === wechatIdentityCheckCacheGeneration) {
+        setWechatIdentityCheckCache(cacheKey, payload, result);
+      }
       return result;
     })
     .finally(() => {

@@ -16,6 +16,7 @@ export { authorizationService } from "@/services/authorization";
 export { platformAuditLogService } from "@/services/platform-audit-logs";
 export { userIdentityService } from "@/services/user-identities";
 export { wechatCustomerIdentityService } from "@/services/wechat-customer-identities";
+export { invalidateWechatIdentityCheckCache } from "@/plugins/auth/legacy/wechat-cache";
 export { SupabaseDB } from "@/utils/supabase";
 export { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 export { isEmployeeOperableStatus } from "@gooes/domain";
