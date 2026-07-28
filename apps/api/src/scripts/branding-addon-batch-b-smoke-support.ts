@@ -379,6 +379,31 @@ export function contractFailure(message: string) {
   );
 }
 
+export function withContractEvidence<T>(
+  evidence: SmokeEvidence,
+  validate: () => T,
+): T {
+  try {
+    return validate();
+  } catch (error) {
+    if (!(error instanceof BrandingAddonSmokeFailure)) throw error;
+    return throwFailureWithEvidence(error, evidence);
+  }
+}
+
+function throwFailureWithEvidence(
+  failure: BrandingAddonSmokeFailure,
+  evidence: SmokeEvidence,
+): never {
+  throw new BrandingAddonSmokeFailure(
+    failure.message,
+    failure.code,
+    evidence.http_status,
+    evidence.request_id,
+    evidence.response,
+  );
+}
+
 export function requireRecord(
   value: unknown,
   label: string,

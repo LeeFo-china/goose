@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   assertInitialCreateOrderResult,
   assertRepeatedCreateOrderResult,
-} from "./branding-addon-batch-b-smoke";
+} from "./branding-addon-batch-b-smoke-contracts";
 
 const baseData = {
   idempotent: false,

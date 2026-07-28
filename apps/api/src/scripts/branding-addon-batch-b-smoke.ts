@@ -5,13 +5,23 @@ import {
   type FetchLike,
   type SmokeEvidence,
   contractFailure,
-  isRecord,
   parseBrandingAddonBatchBSmokeConfig,
-  readString,
   redactBrandingAddonSmokeValue,
   requestBrandingAddonSmokeJson,
-  requireRecord,
+  withContractEvidence,
 } from "./branding-addon-batch-b-smoke-support";
+import {
+  BRANDING_ADDON_PRODUCT_CODE,
+  assertConfiguredPlatformProduct,
+  assertExpectedEffectiveBranding,
+  assertInitialCreateOrderResult,
+  assertPaginatedOrders,
+  assertPaymentRequest,
+  assertPurchasableProduct,
+  assertRepeatedCreateOrderResult,
+  assertSameOrder,
+  productPreconditionFailure,
+} from "./branding-addon-batch-b-smoke-contracts";
 
 export {
   parseBrandingAddonBatchBSmokeConfig,
@@ -24,46 +34,12 @@ type RunSmokeInput = {
   uuidFactory?: () => string;
 };
 
-const PRODUCT_CODE = "custom_support_branding_annual";
-const MAX_PAGE_SIZE = 100;
-
-export type CreateOrderSnapshot = {
-  id: string;
-  orderNo: string;
-  productCode: string;
-  productName: string;
-  amountFen: number;
-  termYears: number;
-  expiresAt: string;
-  createdAt: string;
-};
-
 export function sanitizeBrandingAddonSmokeOutput(
   config: BrandingAddonBatchBSmokeConfig,
   value: unknown,
 ): unknown {
   return redactBrandingAddonSmokeValue(value, getSmokeSecrets(config));
 }
-
-export function assertExpectedEffectiveBranding(
-  data: Record<string, unknown>,
-  expectedSource: "tenant" | "platform",
-): void {
-  if (data.source !== expectedSource) {
-    throw contractFailure(
-      `effective branding source must be ${expectedSource}`,
-    );
-  }
-  if (
-    !readString(data.display_name) ||
-    !readString(data.logo_url) ||
-    data.support_text !== data.display_name ||
-    !Number.isInteger(data.version)
-  ) {
-    throw contractFailure("Batch A effective branding contract is invalid");
-  }
-}
-
 export async function runBrandingAddonBatchBSmoke(
   input: RunSmokeInput,
 ) {
@@ -100,7 +76,8 @@ export async function runBrandingAddonBatchBSmoke(
   } catch (error) {
     throw productPreconditionFailure(error);
   }
-  assertPurchasableProduct(adminProduct.data);
+  withContractEvidence(adminProduct.evidence, () =>
+    assertPurchasableProduct(adminProduct.data));
   checks.push(adminProduct.evidence);
 
   const isolationProduct = await request(
@@ -108,7 +85,8 @@ export async function runBrandingAddonBatchBSmoke(
     "/tenant/branding/entitlement-product",
     input.config.isolationToken,
   );
-  assertPurchasableProduct(isolationProduct.data);
+  withContractEvidence(isolationProduct.evidence, () =>
+    assertPurchasableProduct(isolationProduct.data));
   checks.push(isolationProduct.evidence);
 
   for (
@@ -122,13 +100,14 @@ export async function runBrandingAddonBatchBSmoke(
     ] as const
   ) {
     const result = await request(name, "/branding/effective", token);
-    assertExpectedEffectiveBranding(result.data, expectedSource);
+    withContractEvidence(result.evidence, () =>
+      assertExpectedEffectiveBranding(result.data, expectedSource));
     checks.push(result.evidence);
   }
 
   const idempotencyKey = uuidFactory();
   const createBody = {
-    product_code: PRODUCT_CODE,
+    product_code: BRANDING_ADDON_PRODUCT_CODE,
     idempotency_key: idempotencyKey,
   };
   const created = await request(
@@ -137,7 +116,8 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.adminToken,
     { method: "POST", body: createBody },
   );
-  const createdOrder = assertInitialCreateOrderResult(created.data);
+  const createdOrder = withContractEvidence(created.evidence, () =>
+    assertInitialCreateOrderResult(created.data));
   checks.push(created.evidence);
 
   const replay = await request(
@@ -146,12 +126,13 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.adminToken,
     { method: "POST", body: createBody },
   );
-  assertRepeatedCreateOrderResult(
-    replay.data,
-    createdOrder,
-    "idempotency replay",
-    { idempotent: true, reusedPending: false },
-  );
+  withContractEvidence(replay.evidence, () =>
+    assertRepeatedCreateOrderResult(
+      replay.data,
+      createdOrder,
+      "idempotency replay",
+      { idempotent: true, reusedPending: false },
+    ));
   checks.push(replay.evidence);
 
   const reused = await request(
@@ -161,17 +142,18 @@ export async function runBrandingAddonBatchBSmoke(
     {
       method: "POST",
       body: {
-        product_code: PRODUCT_CODE,
+        product_code: BRANDING_ADDON_PRODUCT_CODE,
         idempotency_key: uuidFactory(),
       },
     },
   );
-  assertRepeatedCreateOrderResult(
-    reused.data,
-    createdOrder,
-    "pending reuse",
-    { idempotent: false, reusedPending: true },
-  );
+  withContractEvidence(reused.evidence, () =>
+    assertRepeatedCreateOrderResult(
+      reused.data,
+      createdOrder,
+      "pending reuse",
+      { idempotent: false, reusedPending: true },
+    ));
   checks.push(reused.evidence);
 
   const list = await request(
@@ -179,7 +161,8 @@ export async function runBrandingAddonBatchBSmoke(
     "/tenant/branding/entitlement-orders?page=1&pageSize=20",
     input.config.adminToken,
   );
-  assertPaginatedOrders(list.data, createdOrder.id);
+  withContractEvidence(list.evidence, () =>
+    assertPaginatedOrders(list.data, createdOrder.id));
   checks.push(list.evidence);
 
   const detailPath =
@@ -189,7 +172,8 @@ export async function runBrandingAddonBatchBSmoke(
     detailPath,
     input.config.adminToken,
   );
-  assertSameOrder(detail.data, createdOrder.id, "tenant detail");
+  withContractEvidence(detail.evidence, () =>
+    assertSameOrder(detail.data, createdOrder.id, "tenant detail"));
   checks.push(detail.evidence);
 
   const isolated = await request(
@@ -198,14 +182,14 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.isolationToken,
     { expectedStatuses: [404] },
   );
-  if (
-    isolated.evidence.http_status !== 404 ||
-    isolated.evidence.code !== "BRANDING_ADDON_ORDER_NOT_FOUND"
-  ) {
-    throw contractFailure(
+  withContractEvidence(isolated.evidence, () => {
+    if (
+      isolated.evidence.http_status !== 404 ||
+      isolated.evidence.code !== "BRANDING_ADDON_ORDER_NOT_FOUND"
+    ) throw contractFailure(
       "cross-tenant detail must return 404 BRANDING_ADDON_ORDER_NOT_FOUND",
     );
-  }
+  });
   checks.push(isolated.evidence);
 
   const payment = await request(
@@ -214,8 +198,10 @@ export async function runBrandingAddonBatchBSmoke(
     input.config.adminToken,
     { method: "POST", body: {} },
   );
-  assertSameOrder(payment.data, createdOrder.id, "payment request");
-  assertPaymentRequest(payment.data);
+  withContractEvidence(payment.evidence, () => {
+    assertSameOrder(payment.data, createdOrder.id, "payment request");
+    assertPaymentRequest(payment.data);
+  });
   checks.push(payment.evidence);
 
   if (input.config.platformToken) {
@@ -260,7 +246,8 @@ async function runPlatformChecks(input: {
     "/platform/branding/entitlement-product",
     token,
   );
-  assertConfiguredPlatformProduct(platformProduct.data);
+  withContractEvidence(platformProduct.evidence, () =>
+    assertConfiguredPlatformProduct(platformProduct.data));
   input.checks.push(platformProduct.evidence);
 
   const platformList = await input.request(
@@ -268,7 +255,8 @@ async function runPlatformChecks(input: {
     "/platform/branding/entitlement-orders?page=1&pageSize=20",
     token,
   );
-  assertPaginatedOrders(platformList.data, input.orderId);
+  withContractEvidence(platformList.evidence, () =>
+    assertPaginatedOrders(platformList.data, input.orderId));
   input.checks.push(platformList.evidence);
 
   const platformAudit = await input.request(
@@ -276,167 +264,9 @@ async function runPlatformChecks(input: {
     `/platform/branding/entitlement-orders/${encodeURIComponent(input.orderId)}`,
     token,
   );
-  assertSameOrder(platformAudit.data, input.orderId, "platform audit");
+  withContractEvidence(platformAudit.evidence, () =>
+    assertSameOrder(platformAudit.data, input.orderId, "platform audit"));
   input.checks.push(platformAudit.evidence);
-}
-
-function assertPurchasableProduct(data: Record<string, unknown>): void {
-  const product = requireRecord(data.product, "tenant product");
-  if (
-    product.code !== PRODUCT_CODE ||
-    !Number.isSafeInteger(product.amount_fen) ||
-    Number(product.amount_fen) <= 0 ||
-    product.term_years !== 1
-  ) {
-    throw productPreconditionFailure(contractFailure("product is not configured"));
-  }
-  const action = requireRecord(product.purchase_action, "purchase_action");
-  if (action.enabled !== true || action.disabled_reason !== null) {
-    throw productPreconditionFailure(
-      contractFailure("test tenant is not allowed to purchase"),
-    );
-  }
-}
-
-function assertConfiguredPlatformProduct(data: Record<string, unknown>): void {
-  const product = requireRecord(data.product, "platform product");
-  if (
-    product.code !== PRODUCT_CODE ||
-    product.enabled !== true ||
-    !Number.isSafeInteger(product.amount_fen) ||
-    Number(product.amount_fen) <= 0 ||
-    product.term_years !== 1
-  ) {
-    throw productPreconditionFailure(
-      contractFailure("platform product is disabled or has no positive price"),
-    );
-  }
-}
-
-export function assertInitialCreateOrderResult(
-  data: Record<string, unknown>,
-): CreateOrderSnapshot {
-  assertCreateFlags(data, "initial create", false, false);
-  const snapshot = readPendingCreateSnapshot(data, "initial create");
-  assertPaymentRequest(data);
-  return snapshot;
-}
-
-export function assertRepeatedCreateOrderResult(
-  data: Record<string, unknown>,
-  expected: CreateOrderSnapshot,
-  label: string,
-  flags: { idempotent: boolean; reusedPending: boolean },
-): void {
-  assertCreateFlags(data, label, flags.idempotent, flags.reusedPending);
-  const actual = readPendingCreateSnapshot(data, label);
-  for (const key of Object.keys(expected) as Array<keyof CreateOrderSnapshot>) {
-    if (actual[key] !== expected[key]) {
-      throw contractFailure(`${label} changed order snapshot field ${key}`);
-    }
-  }
-  assertPaymentRequest(data);
-}
-
-function readPendingCreateSnapshot(
-  data: Record<string, unknown>,
-  label: string,
-): CreateOrderSnapshot {
-  const order = requireRecord(data.order, `${label} order`);
-  const id = readString(order.id);
-  const orderNo = readString(order.order_no);
-  const productCode = readString(order.product_code);
-  const productName = readString(order.product_name);
-  const expiresAt = readString(order.expires_at);
-  const createdAt = readString(order.created_at);
-  if (
-    !id ||
-    !orderNo ||
-    !productCode ||
-    !productName ||
-    !expiresAt ||
-    !createdAt ||
-    order.status !== "pending" ||
-    productCode !== PRODUCT_CODE ||
-    !Number.isSafeInteger(order.amount_fen) ||
-    Number(order.amount_fen) <= 0 ||
-    order.term_years !== 1
-  ) {
-    throw contractFailure(`${label} is not a valid pending order`);
-  }
-  return {
-    id,
-    orderNo,
-    productCode,
-    productName,
-    amountFen: Number(order.amount_fen),
-    termYears: Number(order.term_years),
-    expiresAt,
-    createdAt,
-  };
-}
-
-function assertCreateFlags(
-  data: Record<string, unknown>,
-  label: string,
-  idempotent: boolean,
-  reusedPending: boolean,
-): void {
-  if (
-    data.idempotent === idempotent &&
-    data.reused_pending === reusedPending
-  ) return;
-  throw contractFailure(`${label} flags are invalid`);
-}
-
-function assertSameOrder(
-  data: Record<string, unknown>,
-  expectedId: string,
-  label: string,
-): void {
-  const order = requireRecord(data.order, `${label} order`);
-  if (order.id !== expectedId) {
-    throw contractFailure(`${label} returned a different order`);
-  }
-}
-
-function assertPaymentRequest(data: Record<string, unknown>): void {
-  const payment = requireRecord(data.payment_request, "payment_request");
-  for (
-    const field of ["timeStamp", "nonceStr", "package", "signType", "paySign"]
-  ) {
-    if (!readString(payment[field])) {
-      throw contractFailure(`payment_request.${field} is required`);
-    }
-  }
-}
-
-function assertPaginatedOrders(
-  data: Record<string, unknown>,
-  expectedOrderId: string,
-): void {
-  const list = Array.isArray(data.list) ? data.list : null;
-  const pagination = requireRecord(data.pagination, "pagination");
-  if (
-    !list ||
-    pagination.page !== 1 ||
-    pagination.pageSize !== 20 ||
-    Number(pagination.pageSize) > MAX_PAGE_SIZE ||
-    !list.some((item) => isRecord(item) && item.id === expectedOrderId)
-  ) {
-    throw contractFailure("paginated order list is invalid");
-  }
-}
-
-function productPreconditionFailure(error: unknown) {
-  const failure = error instanceof BrandingAddonSmokeFailure ? error : null;
-  return new BrandingAddonSmokeFailure(
-    "年度品牌权益商品必须已启用并配置正整数分价格，两个测试租户管理员必须具备购买权限",
-    "BRANDING_ADDON_SMOKE_PRECONDITION_PRODUCT_UNAVAILABLE",
-    failure?.http_status ?? 0,
-    failure?.request_id ?? null,
-    failure?.response ?? null,
-  );
 }
 
 function getSmokeSecrets(

@@ -576,8 +576,9 @@ bun run branding:addon:batch-b-smoke
 
 `API_BASE_URL` 是 smoke 的主变量。仅为兼容既有脚本环境，主变量缺失时
 允许读取 `GOOES_API_BASE_URL`；若两者同时存在，规范化后的地址必须完全
-一致，否则脚本在发送请求前失败。package 命令不会隐式加载 `.env`，
-调用方必须显式导出目标地址和本次临时 token，避免误连其他环境。
+一致，否则脚本在发送请求前失败。package 命令通过
+`bun --env-file=/dev/null` 禁止 Bun 默认向当前目录或父目录发现 `.env`。
+调用方必须显式 `export` 目标地址和本次临时 token，避免误连其他环境。
 
 前置条件：
 

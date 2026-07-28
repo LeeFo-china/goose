@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  assertExpectedEffectiveBranding,
   parseBrandingAddonBatchBSmokeConfig,
   redactBrandingAddonSmokeValue,
   runBrandingAddonBatchBSmoke,
   sanitizeBrandingAddonSmokeOutput,
 } from "./branding-addon-batch-b-smoke";
+import {
+  assertExpectedEffectiveBranding,
+} from "./branding-addon-batch-b-smoke-contracts";
 
 const ADMIN_TOKEN = "admin-secret-token";
 const ISOLATION_TOKEN = "isolation-secret-token";

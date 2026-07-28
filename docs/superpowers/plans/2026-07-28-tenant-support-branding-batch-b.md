@@ -840,11 +840,11 @@ Expected: FAIL。
 
 ```json
 "branding:addon:batch-b-smoke":
-  "bun src/scripts/branding-addon-batch-b-smoke.ts"
+  "bun --env-file=/dev/null src/scripts/branding-addon-batch-b-smoke.ts"
 ```
 
-命令不隐式加载 `.env`；执行者必须显式导出目标 API 和临时 token，
-避免 smoke 静默命中错误环境。
+`/dev/null` 明确禁止 Bun 默认向当前目录或父目录发现 `.env`；执行者
+必须显式 `export` 目标 API 和临时 token，避免 smoke 静默命中错误环境。
 
 交接文档列出接口、响应、错误码、前端状态映射、测试账号、测试商品、
 smoke 证据、提交号和 API 地址。提交号和远端证据在部署后回填。
