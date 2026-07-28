@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import type { BrandingAddonOrderRecord } from "@/repositories/branding-addon-orders";
+import type {
+  BrandingAddonCloseResultRecord,
+  BrandingAddonExpirationOrderRecord,
+} from "@/repositories/branding-addon-order-records";
 import { SupabaseDB } from "@/utils/supabase";
 
 type QueryResult = {
@@ -80,8 +83,8 @@ export class BrandingAddonExpirationRepository {
         p_excluded_ids: input.excludedOrderIds.slice(0, 100),
       },
     );
-    if (error) throw Errors.dbError("领取过期品牌权益订单失败", error);
-    return (data ?? []) as BrandingAddonOrderRecord[];
+    if (error) throw Errors.dbError("领取过期品牌权益订单失败");
+    return (data ?? []) as BrandingAddonExpirationOrderRecord[];
   }
 
   async renewCloseClaim(input: RenewBrandingAddonCloseClaimInput) {
@@ -93,8 +96,8 @@ export class BrandingAddonExpirationRepository {
         p_lease_seconds: clampInteger(input.leaseSeconds, 10, 600),
       },
     );
-    if (error) throw Errors.dbError("续租品牌权益订单关单领取失败", error);
-    return (data as BrandingAddonOrderRecord | null) ?? null;
+    if (error) throw Errors.dbError("续租品牌权益订单关单领取失败");
+    return (data as BrandingAddonExpirationOrderRecord | null) ?? null;
   }
 
   async markOrderClosed(input: MarkBrandingAddonOrderClosedInput) {
@@ -139,8 +142,8 @@ export class BrandingAddonExpirationRepository {
       .eq("close_claim_token", claimToken)
       .select(CLOSE_RESULT_COLUMNS)
       .maybeSingle();
-    if (error) throw Errors.dbError(message, error);
-    return (data as BrandingAddonOrderRecord | null) ?? null;
+    if (error) throw Errors.dbError(message);
+    return (data as BrandingAddonCloseResultRecord | null) ?? null;
   }
 }
 

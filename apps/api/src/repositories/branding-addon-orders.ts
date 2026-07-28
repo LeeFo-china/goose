@@ -1,8 +1,10 @@
 import { Errors } from "@/errors/error-factory";
 import {
   type BrandingAddonNotificationCreateInput,
+  type BrandingAddonCallbackOrderRecord,
+  type BrandingAddonConfirmedOrderRecord,
   type BrandingAddonOrderCreateInput,
-  type BrandingAddonOrderRecord,
+  type BrandingAddonPaymentOrderRecord,
   type BrandingAddonWechatNotificationRecord,
   CALLBACK_ORDER_COLUMNS,
   NOTIFICATION_COLUMNS,
@@ -22,8 +24,11 @@ import { SupabaseDB } from "@/utils/supabase";
 
 export type {
   BrandingAddonNotificationCreateInput,
+  BrandingAddonCallbackOrderRecord,
+  BrandingAddonConfirmedOrderRecord,
   BrandingAddonOrderCreateInput,
   BrandingAddonOrderRecord,
+  BrandingAddonPaymentOrderRecord,
   BrandingAddonWechatNotificationRecord,
   PlatformBrandingAddonOrderDetailRecord,
   PlatformBrandingAddonOrderListRecord,
@@ -44,6 +49,7 @@ type AddonQuery = PromiseLike<QueryResult> & {
   gt(column: string, value: unknown): AddonQuery;
   gte(column: string, value: unknown): AddonQuery;
   lte(column: string, value: unknown): AddonQuery;
+  ilike(column: string, pattern: string): AddonQuery;
   or(filter: string): AddonQuery;
   order(column: string, options: { ascending: boolean }): AddonQuery;
   range(from: number, to: number): AddonQuery;
@@ -76,7 +82,7 @@ export type BrandingConfirmPurchaseInput = {
 
 export type BrandingConfirmPurchaseResult = {
   idempotent: boolean;
-  order: BrandingAddonOrderRecord | null;
+  order: BrandingAddonConfirmedOrderRecord | null;
   entitlement: Record<string, unknown> | null;
   event: Record<string, unknown> | null;
   source_type: "purchase";
@@ -117,9 +123,9 @@ export class BrandingAddonOrderRepository {
     if (error) {
       const conflict = orderConflict(error);
       if (conflict) throw conflict;
-      throw Errors.dbError("创建年度品牌权益订单失败", error);
+      throw Errors.dbError("创建年度品牌权益订单失败");
     }
-    return data as BrandingAddonOrderRecord;
+    return data as BrandingAddonPaymentOrderRecord;
   }
 
   async markPrepayCreated(input: {
@@ -136,8 +142,8 @@ export class BrandingAddonOrderRepository {
       .gt("payment_expires_at", input.now.toISOString())
       .select(PAYMENT_ORDER_COLUMNS)
       .maybeSingle();
-    if (error) throw Errors.dbError("保存年度品牌权益预支付单失败", error);
-    return (data as BrandingAddonOrderRecord | null) ?? null;
+    if (error) throw Errors.dbError("保存年度品牌权益预支付单失败");
+    return (data as BrandingAddonPaymentOrderRecord | null) ?? null;
   }
 
   async findTenantOrderById(input: { tenantId: string; orderId: string }) {
@@ -146,7 +152,7 @@ export class BrandingAddonOrderRepository {
       .eq("tenant_id", input.tenantId)
       .eq("id", input.orderId)
       .maybeSingle();
-    if (error) throw Errors.dbError("查询年度品牌权益订单失败", error);
+    if (error) throw Errors.dbError("查询年度品牌权益订单失败");
     return (data as TenantBrandingAddonOrderDetailRecord | null) ?? null;
   }
 
@@ -176,11 +182,10 @@ export class BrandingAddonOrderRepository {
       .range(pagination.from, pagination.to);
     if (input.status) query = query.eq("status", input.status);
     if (input.keyword) {
-      const escaped = input.keyword.replaceAll(",", "\\,");
-      query = query.or(`order_no.ilike.%${escaped}%`);
+      query = query.ilike("order_no", buildIlikePattern(input.keyword));
     }
     const { data, error, count } = await query;
-    if (error) throw Errors.dbError("查询年度品牌权益订单列表失败", error);
+    if (error) throw Errors.dbError("查询年度品牌权益订单列表失败");
     return pageResult<TenantBrandingAddonOrderListRecord>(
       data,
       count,
@@ -211,13 +216,13 @@ export class BrandingAddonOrderRepository {
     if (input.createdFrom) query = query.gte("created_at", input.createdFrom);
     if (input.createdTo) query = query.lte("created_at", input.createdTo);
     if (input.keyword) {
-      const escaped = input.keyword.replaceAll(",", "\\,");
+      const pattern = quotePostgrestValue(buildIlikePattern(input.keyword));
       query = query.or(
-        `order_no.ilike.%${escaped}%,out_trade_no.ilike.%${escaped}%,transaction_id.ilike.%${escaped}%`,
+        `order_no.ilike.${pattern},out_trade_no.ilike.${pattern},transaction_id.ilike.${pattern}`,
       );
     }
     const { data, error, count } = await query;
-    if (error) throw Errors.dbError("查询平台品牌权益订单失败", error);
+    if (error) throw Errors.dbError("查询平台品牌权益订单失败");
     return pageResult<PlatformBrandingAddonOrderListRecord>(
       data,
       count,
@@ -232,7 +237,7 @@ export class BrandingAddonOrderRepository {
       )
       .eq("id", orderId)
       .maybeSingle();
-    if (error) throw Errors.dbError("查询平台品牌权益订单失败", error);
+    if (error) throw Errors.dbError("查询平台品牌权益订单失败");
     return (data as PlatformBrandingAddonOrderDetailRecord | null) ?? null;
   }
 
@@ -259,7 +264,7 @@ export class BrandingAddonOrderRepository {
       .select(NOTIFICATION_COLUMNS)
       .eq("notify_id", notifyId)
       .maybeSingle();
-    if (error) throw Errors.dbError("查询品牌权益微信通知失败", error);
+    if (error) throw Errors.dbError("查询品牌权益微信通知失败");
     return (data as BrandingAddonWechatNotificationRecord | null) ?? null;
   }
 
@@ -271,9 +276,18 @@ export class BrandingAddonOrderRepository {
     if (error) {
       if (isPostgresUniqueViolation(error)) {
         const existing = await this.findNotificationByNotifyId(input.notify_id);
-        if (existing) return existing;
+        if (existing && hasSameNotificationIdentity(existing, input)) {
+          return existing;
+        }
+        if (existing) {
+          throw Errors.business(
+            409,
+            "微信支付通知 ID 与既有订单不一致",
+            "BRANDING_ADDON_NOTIFICATION_ID_COLLISION",
+          );
+        }
       }
-      throw Errors.dbError("写入品牌权益微信通知失败", error);
+      throw Errors.dbError("写入品牌权益微信通知失败");
     }
     return data as BrandingAddonWechatNotificationRecord;
   }
@@ -293,11 +307,18 @@ export class BrandingAddonOrderRepository {
     notificationId: string;
     errorMessage: string;
   }) {
-    return this.updateNotification(input.notificationId, {
-      processed: false,
-      processed_at: null,
-      error_message: boundedOptionalText(input.errorMessage),
-    }, "记录品牌权益微信通知失败原因失败");
+    const { data, error } = await this.notifications()
+      .update({
+        processed: false,
+        processed_at: null,
+        error_message: boundedOptionalText(input.errorMessage),
+      })
+      .eq("id", input.notificationId)
+      .eq("processed", false)
+      .select(NOTIFICATION_COLUMNS)
+      .maybeSingle();
+    if (error) throw Errors.dbError("记录品牌权益微信通知失败原因失败");
+    return (data as BrandingAddonWechatNotificationRecord | null) ?? null;
   }
 
   async confirmPurchase(input: BrandingConfirmPurchaseInput) {
@@ -318,7 +339,7 @@ export class BrandingAddonOrderRepository {
     if (error) {
       const mapped = confirmationError(error);
       if (mapped) throw mapped;
-      throw Errors.dbError("确认年度品牌权益支付失败", error);
+      throw Errors.dbError("确认年度品牌权益支付失败");
     }
     return data as BrandingConfirmPurchaseResult;
   }
@@ -335,8 +356,8 @@ export class BrandingAddonOrderRepository {
     let query = this.orders().select(PAYMENT_ORDER_COLUMNS);
     for (const [column, value] of filters) query = query.eq(column, value);
     const { data, error } = await query.maybeSingle();
-    if (error) throw Errors.dbError("查询年度品牌权益订单失败", error);
-    return (data as BrandingAddonOrderRecord | null) ?? null;
+    if (error) throw Errors.dbError("查询年度品牌权益订单失败");
+    return (data as BrandingAddonPaymentOrderRecord | null) ?? null;
   }
 
   private async findUniquePaymentIdentifier(
@@ -349,8 +370,8 @@ export class BrandingAddonOrderRepository {
       .select(CALLBACK_ORDER_COLUMNS)
       .eq(column, value)
       .limit(2);
-    if (error) throw Errors.dbError("查询年度品牌权益支付订单失败", error);
-    const rows = (data ?? []) as BrandingAddonOrderRecord[];
+    if (error) throw Errors.dbError("查询年度品牌权益支付订单失败");
+    const rows = (data ?? []) as BrandingAddonCallbackOrderRecord[];
     if (rows.length > 1) throw Errors.business(409, message, code);
     return rows[0] ?? null;
   }
@@ -365,7 +386,7 @@ export class BrandingAddonOrderRepository {
       .eq("id", notificationId)
       .select(NOTIFICATION_COLUMNS)
       .single();
-    if (error) throw Errors.dbError(message, error);
+    if (error) throw Errors.dbError(message);
     return data as BrandingAddonWechatNotificationRecord;
   }
 }
@@ -448,6 +469,27 @@ function containsToken(error: unknown, token: string) {
 function boundedOptionalText(value: string) {
   const bounded = value.trim().slice(0, 500);
   return bounded.length > 0 ? bounded : null;
+}
+
+function buildIlikePattern(value: string) {
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+  return `%${escaped}%`;
+}
+
+function quotePostgrestValue(value: string) {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
+
+function hasSameNotificationIdentity(
+  existing: BrandingAddonWechatNotificationRecord,
+  input: BrandingAddonNotificationCreateInput,
+) {
+  return existing.tenant_id === input.tenant_id &&
+    existing.order_id === input.order_id &&
+    existing.event_type === input.event_type;
 }
 
 export const brandingAddonOrderRepository =

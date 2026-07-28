@@ -50,6 +50,10 @@ const query = {
     calls.push(["lte", column, value]);
     return query;
   },
+  ilike(column: string, value: string) {
+    calls.push(["ilike", column, value]);
+    return query;
+  },
   or(filter: string) {
     calls.push(["or", filter]);
     return query;
@@ -113,7 +117,6 @@ const orderCreateInput = {
   created_by: "employee-1",
   metadata: {},
 };
-
 describe("BrandingAddonOrderRepository", () => {
   beforeEach(() => {
     calls.length = 0;
@@ -125,20 +128,17 @@ describe("BrandingAddonOrderRepository", () => {
     query.single.mockClear();
     client.rpc.mockClear();
   });
-
   test("paginates and tenant-scopes the tenant order list", async () => {
     const { BrandingAddonOrderRepository } = await import(
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-
     await repository.listTenantOrders({
       tenantId: "tenant-a",
       page: 2,
       pageSize: 20,
-      keyword: "BA,1",
+      keyword: "BA-1",
     });
-
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-a"]);
     expect(calls).toContainEqual(["range", 20, 39]);
     const selectCall = calls.find(([method]) => method === "select");
@@ -149,33 +149,31 @@ describe("BrandingAddonOrderRepository", () => {
     expect(selectCall?.[1]).not.toContain("metadata");
     expect(selectCall?.[1]).not.toContain("close_claim_token");
     expect(calls).toContainEqual([
-      "or",
-      "order_no.ilike.%BA\\,1%",
+      "ilike",
+      "order_no",
+      "%BA-1%",
     ]);
   });
-
   test("clamps platform pagination and applies filters", async () => {
     const { BrandingAddonOrderRepository } = await import(
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-
     const page = await repository.listPlatformOrders({
       page: 0,
       pageSize: 150,
       tenantId: "tenant-a",
       status: "paid",
-      keyword: "ORDER,1",
+      keyword: "ORDER-1",
       createdFrom: "2026-07-01T00:00:00.000Z",
       createdTo: "2026-07-31T23:59:59.999Z",
     });
-
     expect(calls).toContainEqual(["range", 0, 99]);
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-a"]);
     expect(calls).toContainEqual(["eq", "status", "paid"]);
     expect(calls).toContainEqual([
       "or",
-      "order_no.ilike.%ORDER\\,1%,out_trade_no.ilike.%ORDER\\,1%,transaction_id.ilike.%ORDER\\,1%",
+      'order_no.ilike."%ORDER-1%",out_trade_no.ilike."%ORDER-1%",transaction_id.ilike."%ORDER-1%"',
     ]);
     expect(calls).toContainEqual([
       "gte",
@@ -203,13 +201,11 @@ describe("BrandingAddonOrderRepository", () => {
     }
     expect(page.pagination).toMatchObject({ page: 1, pageSize: 100 });
   });
-
   test("always tenant-scopes order detail and deduplication lookups", async () => {
     const { BrandingAddonOrderRepository } = await import(
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-
     await repository.findTenantOrderById({
       tenantId: "tenant-a",
       orderId: "order-1",
@@ -220,7 +216,6 @@ describe("BrandingAddonOrderRepository", () => {
     expect(tenantDetailSelect?.[1]).toContain("refund_policy");
     expect(tenantDetailSelect?.[1]).not.toContain("payer_openid");
     expect(tenantDetailSelect?.[1]).not.toContain("metadata");
-
     calls.length = 0;
     await repository.findByIdempotencyKey({
       tenantId: "tenant-a",
@@ -228,7 +223,6 @@ describe("BrandingAddonOrderRepository", () => {
     });
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-a"]);
     expect(calls).toContainEqual(["eq", "idempotency_key", "idem-1"]);
-
     calls.length = 0;
     await repository.findPendingByTenantProduct({
       tenantId: "tenant-a",
@@ -397,7 +391,13 @@ describe("BrandingAddonOrderRepository", () => {
       error: { code: "23505", message: "duplicate notify_id" },
     };
     maybeResult = {
-      data: { id: "notification-1", notify_id: "notify-1" },
+      data: {
+        id: "notification-1",
+        notify_id: "notify-1",
+        tenant_id: "tenant-a",
+        order_id: "order-1",
+        event_type: "TRANSACTION.SUCCESS",
+      },
       error: null,
     };
     const { BrandingAddonOrderRepository } = await import(

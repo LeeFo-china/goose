@@ -121,4 +121,24 @@ describe("BrandingAddonExpirationRepository", () => {
     expect((updateCall?.[1] as { close_last_error: string }).close_last_error)
       .toHaveLength(500);
   });
+
+  test("does not expose Supabase diagnostics", async () => {
+    result = {
+      data: null,
+      error: { message: "secret sql", details: "private row" },
+    };
+    const { BrandingAddonExpirationRepository } = await import(
+      "./branding-addon-expiration"
+    );
+    const repository = new BrandingAddonExpirationRepository(() => client);
+
+    await expect(repository.claimExpiredOrders({
+      batchSize: 20,
+      leaseSeconds: 60,
+      excludedOrderIds: [],
+    })).rejects.toMatchObject({
+      code: "DB_ERROR",
+      details: undefined,
+    });
+  });
 });

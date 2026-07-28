@@ -186,6 +186,9 @@ describe("BrandingAddonOrderListQuerySchema", () => {
     expect(() => BrandingAddonOrderListQuerySchema.parse({
       keyword: "x".repeat(121),
     })).toThrow();
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      keyword: "(),\"%_\\",
+    })).toThrow();
   });
 });
 
@@ -215,6 +218,10 @@ describe("PlatformBrandingAddonOrderListQuerySchema", () => {
     })).toThrow();
     expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
       created_to: "not-a-time",
+    })).toThrow();
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      created_from: "2026-08-01T00:00:00.000Z",
+      created_to: "2026-07-01T00:00:00.000Z",
     })).toThrow();
   });
 });

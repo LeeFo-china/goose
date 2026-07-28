@@ -9,6 +9,7 @@ import { PaginationQuerySchema } from "./request";
 const PRODUCT_NAME_MAX_LENGTH = 100;
 const PURCHASE_NOTES_MAX_LENGTH = 500;
 const PAYER_OPENID_MAX_LENGTH = 128;
+const ORDER_KEYWORD_PATTERN = /^[\p{L}\p{N} .-]+$/u;
 const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "name",
   "amount_fen",
@@ -60,6 +61,7 @@ export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
     .trim()
     .min(1, "关键词不能为空")
     .max(120, "关键词不能超过 120 个字符")
+    .regex(ORDER_KEYWORD_PATTERN, "关键词包含不支持的字符")
     .optional(),
 });
 
@@ -68,7 +70,15 @@ export const PlatformBrandingAddonOrderListQuerySchema =
     tenant_id: z.uuid("租户 ID 格式不正确").optional(),
     created_from: z.iso.datetime("开始时间格式不正确").optional(),
     created_to: z.iso.datetime("结束时间格式不正确").optional(),
-});
+  }).refine(
+    (input) => !input.created_from ||
+      !input.created_to ||
+      Date.parse(input.created_from) <= Date.parse(input.created_to),
+    {
+      message: "开始时间不能晚于结束时间",
+      path: ["created_from"],
+    },
+  );
 
 export type BrandingAddonProductPatchInput =
   z.infer<typeof BrandingAddonProductPatchSchema>;

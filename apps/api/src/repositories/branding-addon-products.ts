@@ -71,7 +71,7 @@ export class BrandingAddonProductRepository {
       .select(PRODUCT_COLUMNS)
       .eq("code", BRANDING_ADDON_PRODUCT_CODE)
       .maybeSingle();
-    if (error) throw Errors.dbError("查询年度品牌权益商品失败", error);
+    if (error) throw Errors.dbError("查询年度品牌权益商品失败");
     return (data as BrandingAddonProductRecord | null) ?? null;
   }
 
@@ -94,7 +94,7 @@ export class BrandingAddonProductRepository {
       .eq("version", input.expectedVersion)
       .select(PRODUCT_COLUMNS)
       .maybeSingle();
-    if (error) throw Errors.dbError("更新年度品牌权益商品失败", error);
+    if (error) throw Errors.dbError("更新年度品牌权益商品失败");
     return (data as BrandingAddonProductRecord | null) ?? null;
   }
 }

@@ -107,6 +107,121 @@ export type PlatformBrandingAddonOrderDetailRecord =
     | "created_by"
   >;
 
+export type BrandingAddonPaymentOrderRecord = Pick<
+  BrandingAddonOrderRecord,
+  | "id"
+  | "tenant_id"
+  | "order_no"
+  | "out_trade_no"
+  | "idempotency_key"
+  | "product_id"
+  | "product_code"
+  | "entitlement_code"
+  | "product_name"
+  | "amount_fen"
+  | "term_years"
+  | "purchase_notes"
+  | "refund_policy"
+  | "status"
+  | "channel"
+  | "payer_openid"
+  | "payment_config_id"
+  | "expected_guard_version"
+  | "payment_mchid"
+  | "payment_appid"
+  | "prepay_id"
+  | "payment_expires_at"
+  | "transaction_id"
+  | "paid_amount_fen"
+  | "paid_at"
+  | "closed_at"
+  | "failure_code"
+  | "failure_message"
+  | "entitlement_event_id"
+  | "created_by"
+  | "created_at"
+  | "updated_at"
+>;
+
+export type BrandingAddonCallbackOrderRecord = Pick<
+  BrandingAddonOrderRecord,
+  | "id"
+  | "tenant_id"
+  | "order_no"
+  | "out_trade_no"
+  | "product_code"
+  | "entitlement_code"
+  | "amount_fen"
+  | "term_years"
+  | "status"
+  | "payment_mchid"
+  | "payment_appid"
+  | "payment_expires_at"
+  | "transaction_id"
+  | "paid_amount_fen"
+  | "paid_at"
+  | "entitlement_event_id"
+  | "created_at"
+  | "updated_at"
+>;
+
+export type BrandingAddonConfirmedOrderRecord = Pick<
+  BrandingAddonOrderRecord,
+  | "id"
+  | "tenant_id"
+  | "order_no"
+  | "out_trade_no"
+  | "product_code"
+  | "entitlement_code"
+  | "amount_fen"
+  | "term_years"
+  | "status"
+  | "transaction_id"
+  | "paid_amount_fen"
+  | "paid_at"
+  | "entitlement_event_id"
+  | "updated_at"
+>;
+
+export type BrandingAddonExpirationOrderRecord = Pick<
+  BrandingAddonOrderRecord,
+  | "id"
+  | "tenant_id"
+  | "order_no"
+  | "out_trade_no"
+  | "product_code"
+  | "status"
+  | "prepay_id"
+  | "payment_config_id"
+  | "expected_guard_version"
+  | "payment_mchid"
+  | "payment_appid"
+  | "payment_expires_at"
+  | "close_claim_token"
+  | "close_claim_expires_at"
+  | "close_attempt_count"
+  | "close_last_error"
+  | "updated_at"
+>;
+
+export type BrandingAddonCloseResultRecord = Pick<
+  BrandingAddonOrderRecord,
+  | "id"
+  | "tenant_id"
+  | "order_no"
+  | "out_trade_no"
+  | "product_code"
+  | "status"
+  | "prepay_id"
+  | "payment_expires_at"
+  | "closed_at"
+  | "close_claim_token"
+  | "close_claim_expires_at"
+  | "close_attempt_count"
+  | "close_last_error"
+  | "updated_at"
+>;
+
 export type BrandingAddonWechatNotificationRecord = {
   id: string;
   notify_id: string;

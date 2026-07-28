@@ -92,4 +92,20 @@ describe("BrandingAddonProductRepository", () => {
     expect(actual?.id).toBe("product-1");
     expect(actual?.version).toBe(4);
   });
+
+  test("does not expose Supabase diagnostics", async () => {
+    result = {
+      data: null,
+      error: { message: "secret sql", details: "private row" },
+    };
+    const { BrandingAddonProductRepository } = await import(
+      "./branding-addon-products"
+    );
+    const repository = new BrandingAddonProductRepository(() => client);
+
+    await expect(repository.getProduct()).rejects.toMatchObject({
+      code: "DB_ERROR",
+      details: undefined,
+    });
+  });
 });
