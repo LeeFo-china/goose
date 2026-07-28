@@ -183,9 +183,10 @@ describe("BrandingAddonOrderRepository hardening", () => {
       data: {
         id: "notification-existing",
         notify_id: "notify-1",
-        tenant_id: "tenant-b",
-        order_id: "order-2",
+        tenant_id: "tenant-a",
+        order_id: "order-1",
         event_type: "TRANSACTION.SUCCESS",
+        resource_type: "different-resource",
       },
       error: null,
     };
@@ -207,5 +208,7 @@ describe("BrandingAddonOrderRepository hardening", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_NOTIFICATION_ID_COLLISION",
     });
+    expect(calls.find(([method]) => method === "select")?.[1])
+      .toContain("resource_type");
   });
 });

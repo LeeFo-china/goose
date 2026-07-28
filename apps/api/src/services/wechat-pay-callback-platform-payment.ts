@@ -68,14 +68,21 @@ export class WechatPayPlatformPaymentCallbackMatcher {
       this.creditRepository.findWechatOrderByOutTradeNo(outTradeNo),
       this.brandingRepository.findByOutTradeNo(outTradeNo),
     ]);
-    if (creditOrder && brandingOrder) {
+    const boundCreditOrder = creditOrder?.payment_config_id === input.config.id
+      ? creditOrder
+      : null;
+    const boundBrandingOrder =
+      brandingOrder?.payment_config_id === input.config.id
+        ? brandingOrder
+        : null;
+    if (boundCreditOrder && boundBrandingOrder) {
       throw Errors.business(
         409,
         "商户订单号匹配到多个支付业务订单",
         "WECHAT_PAY_CALLBACK_ORDER_AMBIGUOUS",
       );
     }
-    if (creditOrder?.payment_config_id === input.config.id) {
+    if (boundCreditOrder) {
       const resource = convertWechatPayTransactionCallbackResource(
         input.decrypted,
       );
@@ -91,14 +98,14 @@ export class WechatPayPlatformPaymentCallbackMatcher {
             merchantId: input.config.merchant_id,
             subMerchantId: input.config.sub_merchant_id,
             outTradeNo,
-            amountFen: creditOrder.amount_fen,
-            transactionId: creditOrder.transaction_id,
+            amountFen: boundCreditOrder.amount_fen,
+            transactionId: boundCreditOrder.transaction_id,
           }),
         ),
-        order: creditOrder,
+        order: boundCreditOrder,
       };
     }
-    if (brandingOrder?.payment_config_id === input.config.id) {
+    if (boundBrandingOrder) {
       return {
         kind: "branding_addon",
         config: input.config,
@@ -106,9 +113,9 @@ export class WechatPayPlatformPaymentCallbackMatcher {
         transaction: parseAndAssertBrandingAddonCallback(
           eventType,
           input.decrypted,
-          brandingOrder,
+          boundBrandingOrder,
         ),
-        order: brandingOrder,
+        order: boundBrandingOrder,
       };
     }
     return null;

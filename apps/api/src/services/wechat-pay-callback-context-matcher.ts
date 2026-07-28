@@ -178,6 +178,16 @@ export class WechatPayCallbackContextMatcher {
       );
     }
 
+    const platformPaymentMatch = await this.matchPlatformPayment({
+      ...input,
+      timestamp,
+      nonce,
+      signature,
+      callbackSerial,
+      resource,
+    });
+    if (platformPaymentMatch) return platformPaymentMatch;
+
     const projectMatch = await this.matchProjectPayment({
       ...input,
       timestamp,
@@ -197,16 +207,6 @@ export class WechatPayCallbackContextMatcher {
       resource,
     });
     if (smokeMatch) return smokeMatch;
-
-    const platformPaymentMatch = await this.matchPlatformPayment({
-      ...input,
-      timestamp,
-      nonce,
-      signature,
-      callbackSerial,
-      resource,
-    });
-    if (platformPaymentMatch) return platformPaymentMatch;
 
     throw Errors.business(
       401,

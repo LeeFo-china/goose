@@ -125,8 +125,15 @@ const successfulResource = {
   payer: { openid: "openid-1" },
 };
 
-const listProjectConfigs = mock(async () => []);
-const listPlatformConfigs = mock(async () => [config]);
+const candidateLoaderCalls: string[] = [];
+const listProjectConfigs = mock(async () => {
+  candidateLoaderCalls.push("tenant");
+  return [];
+});
+const listPlatformConfigs = mock(async () => {
+  candidateLoaderCalls.push("platform");
+  return [config];
+});
 const loadSecretBundle = mock(async () => secretBundle);
 const verifySignature = mock(() => true);
 const decryptResource = mock(
@@ -241,6 +248,7 @@ const callbackHeaders = {
 
 describe("WechatPayCallbackService branding add-on callbacks", () => {
   beforeEach(() => {
+    candidateLoaderCalls.length = 0;
     for (const fn of [
       listProjectConfigs,
       listPlatformConfigs,
@@ -292,6 +300,8 @@ describe("WechatPayCallbackService branding add-on callbacks", () => {
     }));
     expect(loadSecretBundle).toHaveBeenCalledWith(config.encrypted_config_ref);
     expect(findAddonOrder).toHaveBeenCalledWith(order.out_trade_no);
+    expect(listProjectConfigs).not.toHaveBeenCalled();
+    expect(candidateLoaderCalls).toEqual(["platform"]);
     expect(confirmAddonPurchase).toHaveBeenCalledWith({
       order: expect.objectContaining({ id: order.id }),
       transaction: expect.objectContaining({
@@ -352,6 +362,21 @@ describe("WechatPayCallbackService branding add-on callbacks", () => {
     });
     expect(confirmAddonPurchase).not.toHaveBeenCalled();
     expect(createAddonNotification).not.toHaveBeenCalled();
+  });
+
+  test("ignores an out-trade-no match bound to another payment config", async () => {
+    findCreditOrder.mockImplementationOnce(async () => ({
+      ...collidingCreditOrder,
+      payment_config_id: "different-config",
+    }));
+    const service = await createService();
+
+    expect(await service.handleCallback({
+      rawBody: callbackBody(),
+      headers: callbackHeaders,
+    })).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(confirmAddonPurchase).toHaveBeenCalledTimes(1);
+    expect(markAddonNotificationProcessed).toHaveBeenCalledTimes(1);
   });
 
   test("rejects a success notification without a resource type", async () => {

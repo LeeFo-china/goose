@@ -34,11 +34,20 @@ export async function handleBrandingAddonCallback(input: {
     input.payload.event_type,
     "微信支付回调事件类型缺失",
   );
+  const resourceType = requireString(
+    input.payload.resource_type,
+    "微信支付回调资源类型缺失",
+  );
   const existing = await input.repository.findNotificationByNotifyId(
     input.notifyId,
   );
   if (existing) {
-    assertNotificationIdentity(existing, input.matched, eventType);
+    assertNotificationIdentity(
+      existing,
+      input.matched,
+      eventType,
+      resourceType,
+    );
     if (existing.processed) return SUCCESS_RESPONSE;
   }
 
@@ -48,10 +57,7 @@ export async function handleBrandingAddonCallback(input: {
       order_id: input.matched.order.id,
       notify_id: input.notifyId,
       event_type: eventType,
-      resource_type: requireString(
-        input.payload.resource_type,
-        "微信支付回调资源类型缺失",
-      ),
+      resource_type: resourceType,
       raw_payload: input.payload,
       signature_valid: true,
       processed: false,
@@ -81,11 +87,13 @@ function assertNotificationIdentity(
   notification: BrandingAddonWechatNotificationRecord,
   matched: BrandingAddonCallbackContext,
   eventType: string,
+  resourceType: string,
 ) {
   if (
     notification.tenant_id !== matched.order.tenant_id ||
     notification.order_id !== matched.order.id ||
-    notification.event_type !== eventType
+    notification.event_type !== eventType ||
+    notification.resource_type !== resourceType
   ) {
     throw Errors.business(
       409,

@@ -385,7 +385,6 @@ describe("BrandingAddonOrderRepository", () => {
     expect((updateCall?.[1] as { error_message: string }).error_message)
       .toHaveLength(500);
   });
-
   test("returns the existing notification after a concurrent notify-id insert", async () => {
     singleResult = {
       data: null,
@@ -398,6 +397,7 @@ describe("BrandingAddonOrderRepository", () => {
         tenant_id: "tenant-a",
         order_id: "order-1",
         event_type: "TRANSACTION.SUCCESS",
+        resource_type: "encrypt-resource",
       },
       error: null,
     };
