@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 
 import {
   parseBrandingAddonBatchBSmokeConfig,
@@ -142,8 +143,13 @@ describe("requestBrandingAddonSmokeJson timeout and evidence", () => {
     });
   });
 
-  test("preserves bounded sanitized invalid JSON evidence and header request ID", async () => {
-    const longBody = `${ISOLATION_TOKEN}:${"x".repeat(2_000)}`;
+  test("fingerprints invalid text without retaining unknown payment values", async () => {
+    const dynamicPaySign = "dynamic-pay-sign-not-in-secret-list";
+    const dynamicPrepayId = "wx-prepay-dynamic-123";
+    const dynamicOpenid = "openid-dynamic-456";
+    const invalidBody =
+      `paySign=${dynamicPaySign}&prepay_id=${dynamicPrepayId}` +
+      `&openid=${dynamicOpenid}&${"x".repeat(2_000)}`;
 
     let failure: {
       code?: string;
@@ -160,9 +166,12 @@ describe("requestBrandingAddonSmokeJson timeout and evidence", () => {
         secretValues: SECRETS,
         timeoutMs: 100,
         fetchImpl: async () =>
-          new Response(longBody, {
+          new Response(invalidBody, {
             status: 502,
-            headers: { "x-request-id": "req-invalid-json" },
+            headers: {
+              "content-type": "text/plain",
+              "x-request-id": "req-invalid-json",
+            },
           }),
       });
     } catch (error) {
@@ -174,13 +183,65 @@ describe("requestBrandingAddonSmokeJson timeout and evidence", () => {
       http_status: 502,
       request_id: "req-invalid-json",
     });
-    const evidence = JSON.stringify(failure.response);
-    expect(evidence).toContain("[TRUNCATED]");
-    expect(evidence).not.toContain(ISOLATION_TOKEN);
-    expect(evidence.length).toBeLessThan(1_500);
+    expect(failure.response).toEqual({
+      summary: "NON_JSON_RESPONSE",
+      body_length: invalidBody.length,
+      body_sha256: sha256(invalidBody),
+    });
+    const serialized = JSON.stringify(failure.response);
+    for (
+      const secret of [dynamicPaySign, dynamicPrepayId, dynamicOpenid]
+    ) {
+      expect(serialized).not.toContain(secret);
+    }
+    for (const field of ["paySign", "prepay_id", "openid"]) {
+      expect(serialized).not.toContain(field);
+    }
+  });
+
+  test("fingerprints oversized JSON without retaining its dynamic fields", async () => {
+    const dynamicPaySign = "oversized-dynamic-pay-sign";
+    const oversizedBody = JSON.stringify({
+      data: { paySign: dynamicPaySign },
+      padding: "x".repeat(300_000),
+    });
+
+    let failure: BrandingFailureLike = {};
+    try {
+      await requestBrandingAddonSmokeJson({
+        name: "oversized",
+        baseUrl: "https://api.example.com",
+        path: "/oversized",
+        token: ADMIN_TOKEN,
+        secretValues: SECRETS,
+        timeoutMs: 100,
+        fetchImpl: async () =>
+          new Response(oversizedBody, {
+            status: 200,
+            headers: { "x-request-id": "req-oversized" },
+          }),
+      });
+    } catch (error) {
+      failure = error as BrandingFailureLike;
+    }
+
+    expect(failure).toMatchObject({
+      code: "BRANDING_ADDON_SMOKE_RESPONSE_INVALID",
+      http_status: 200,
+      request_id: "req-oversized",
+      response: {
+        summary: "RESPONSE_BODY_TOO_LARGE",
+        body_length: oversizedBody.length,
+        body_sha256: sha256(oversizedBody),
+      },
+    });
+    const serialized = JSON.stringify(failure.response);
+    expect(serialized).not.toContain(dynamicPaySign);
+    expect(serialized).not.toContain("paySign");
   });
 
   test("reports a 200 response-envelope drift with its real HTTP evidence", async () => {
+    const invalidEnvelope = JSON.stringify({ message: PLATFORM_TOKEN });
     await expect(requestBrandingAddonSmokeJson({
       name: "drift",
       baseUrl: "https://api.example.com",
@@ -189,7 +250,7 @@ describe("requestBrandingAddonSmokeJson timeout and evidence", () => {
       secretValues: SECRETS,
       timeoutMs: 100,
       fetchImpl: async () =>
-        new Response(JSON.stringify({ message: PLATFORM_TOKEN }), {
+        new Response(invalidEnvelope, {
           status: 200,
           headers: { "request-id": "req-drift" },
         }),
@@ -197,6 +258,22 @@ describe("requestBrandingAddonSmokeJson timeout and evidence", () => {
       code: "BRANDING_ADDON_SMOKE_RESPONSE_INVALID",
       http_status: 200,
       request_id: "req-drift",
+      response: {
+        summary: "INVALID_RESPONSE_ENVELOPE",
+        body_length: invalidEnvelope.length,
+        body_sha256: sha256(invalidEnvelope),
+      },
     });
   });
 });
+
+type BrandingFailureLike = {
+  code?: string;
+  http_status?: number;
+  request_id?: string | null;
+  response?: unknown;
+};
+
+function sha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}

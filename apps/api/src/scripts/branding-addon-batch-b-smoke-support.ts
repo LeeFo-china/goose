@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 type EnvLike = Record<string, string | undefined>;
 export type FetchLike = (
   input: string | URL | Request,
@@ -35,8 +37,6 @@ export type ApiResult = {
 const REDACTED = "[REDACTED]";
 const DEFAULT_HTTP_TIMEOUT_MS = 15_000;
 const MAX_RESPONSE_BODY_CHARS = 256 * 1024;
-const MAX_RAW_BODY_SUMMARY_CHARS = 1_024;
-const TRUNCATED_MARKER = "[TRUNCATED]";
 const SENSITIVE_KEY_PATTERN =
   /(token|openid|secret|api.?v3|pay.?sign|nonce|package|prepay|transaction.?id|out.?trade.?no|payment.?request)/i;
 
@@ -257,14 +257,16 @@ function parseApiResult(input: {
   secretValues: readonly string[];
 }): ApiResult {
   const requestIdFromHeader = readHeaderRequestId(input.response.headers);
-  const rawEvidence = buildRawBodyEvidence(input.rawBody, input.secretValues);
+  const isOversized = input.rawBody.length > MAX_RESPONSE_BODY_CHARS;
   let rawPayload: unknown;
-  try {
-    rawPayload = input.rawBody.length <= MAX_RESPONSE_BODY_CHARS
-      ? JSON.parse(input.rawBody) as unknown
-      : null;
-  } catch {
-    rawPayload = null;
+  let didParseJson = false;
+  if (!isOversized) {
+    try {
+      rawPayload = JSON.parse(input.rawBody) as unknown;
+      didParseJson = true;
+    } catch {
+      rawPayload = null;
+    }
   }
   if (!isRecord(rawPayload)) {
     throw new BrandingAddonSmokeFailure(
@@ -274,7 +276,14 @@ function parseApiResult(input: {
         : "BRANDING_ADDON_SMOKE_HTTP_ERROR",
       input.response.status,
       requestIdFromHeader,
-      rawEvidence,
+      buildBodyFingerprint(
+        input.rawBody,
+        isOversized
+          ? "RESPONSE_BODY_TOO_LARGE"
+          : didParseJson
+          ? "INVALID_RESPONSE_ENVELOPE"
+          : "NON_JSON_RESPONSE",
+      ),
     );
   }
 
@@ -305,7 +314,10 @@ function parseApiResult(input: {
       "BRANDING_ADDON_SMOKE_RESPONSE_INVALID",
       input.response.status,
       requestId,
-      rawEvidence,
+      buildBodyFingerprint(
+        input.rawBody,
+        "INVALID_RESPONSE_ENVELOPE",
+      ),
     );
   }
   return {
@@ -332,19 +344,17 @@ function requestTimeoutFailure(
   );
 }
 
-function buildRawBodyEvidence(
+function buildBodyFingerprint(
   rawBody: string,
-  secretValues: readonly string[],
+  summary:
+    | "NON_JSON_RESPONSE"
+    | "RESPONSE_BODY_TOO_LARGE"
+    | "INVALID_RESPONSE_ENVELOPE",
 ) {
-  const sanitized = String(
-    redactBrandingAddonSmokeValue(rawBody, secretValues),
-  );
-  const isTruncated = sanitized.length > MAX_RAW_BODY_SUMMARY_CHARS;
   return {
-    raw_body: isTruncated
-      ? `${sanitized.slice(0, MAX_RAW_BODY_SUMMARY_CHARS)}${TRUNCATED_MARKER}`
-      : sanitized,
-    body_length: rawBody.length,
+    summary,
+    body_length: new TextEncoder().encode(rawBody).byteLength,
+    body_sha256: createHash("sha256").update(rawBody).digest("hex"),
   };
 }
 
