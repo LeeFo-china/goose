@@ -1,4 +1,3 @@
-import { Errors } from "@/errors/error-factory";
 import type { BrandingAddonExpirationOrderRecord } from "@/repositories/branding-addon-order-records";
 import {
   brandingAddonExpirationRepository,
@@ -10,7 +9,16 @@ import {
 import {
   brandingAddonPaymentConfirmation,
   type BrandingAddonPaymentConfirmationInput,
+  type BrandingAddonValidatedSuccessTransaction,
 } from "@/services/branding-addon-payment-confirmation";
+import {
+  assertBoundBrandingAddonPaymentContext,
+  canCloseNonexistentBrandingAddonOrder,
+  hasMatchingBrandingAddonAppid,
+  optionalString,
+  paymentContextInvalid,
+} from "@/services/branding-addon-expiration-validation";
+import { classifyLeaseRenewal } from "@/services/lease-renewal-result";
 import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import {
@@ -21,7 +29,6 @@ import {
   assertWechatPaySuccessTransaction,
   buildWechatPayTransactionExpectedBinding,
   parseAndAssertWechatPayTransactionQuery,
-  type WechatPayValidatedSuccessTransaction,
   type WechatPayValidatedTransaction,
 } from "@/services/wechat-pay-transaction-contract";
 
@@ -88,6 +95,7 @@ const DIAGNOSTIC = {
   paymentContextFailed: "BRANDING_ADDON_EXPIRE_PAYMENT_CONTEXT_FAILED",
   claimRenewFailed: "BRANDING_ADDON_EXPIRE_CLAIM_RENEW_FAILED",
   queryFailed: "BRANDING_ADDON_EXPIRE_QUERY_FAILED",
+  appidMismatch: "BRANDING_ADDON_EXPIRE_APPID_MISMATCH",
   tradeStateRetry: "BRANDING_ADDON_EXPIRE_TRADE_STATE_RETRY",
   confirmFailed: "BRANDING_ADDON_EXPIRE_CONFIRM_FAILED",
   markClosedFailed: "BRANDING_ADDON_EXPIRE_MARK_CLOSED_FAILED",
@@ -172,7 +180,7 @@ export class BrandingAddonExpirationService {
         input.order.payment_config_id,
         input.contextCache,
       );
-      assertBoundPaymentContext(input.order, context.config);
+      assertBoundBrandingAddonPaymentContext(input.order, context.config);
     } catch {
       this.deferFailure(
         input,
@@ -212,7 +220,7 @@ export class BrandingAddonExpirationService {
     try {
       transaction = await this.query(input);
     } catch (error) {
-      if (canCloseNonexistentWechatOrder(input.order, error)) {
+      if (canCloseNonexistentBrandingAddonOrder(input.order, error)) {
         return this.markClosed(input, true);
       }
       this.defer(input, DIAGNOSTIC.queryFailed);
@@ -226,6 +234,13 @@ export class BrandingAddonExpirationService {
   ): Promise<OrderOutcome> {
     if (input.transaction.tradeState === "SUCCESS") {
       assertWechatPaySuccessTransaction(input.transaction);
+      if (!hasMatchingBrandingAddonAppid(
+        input.transaction,
+        input.order.payment_appid,
+      )) {
+        this.defer(input, DIAGNOSTIC.appidMismatch);
+        return "failed";
+      }
       return this.confirmPaid(input, input.transaction);
     }
     if (input.transaction.tradeState === "CLOSED") {
@@ -236,9 +251,22 @@ export class BrandingAddonExpirationService {
       return "retried";
     }
 
-    const renewed = await this.renewForClose(input);
-    if (!renewed) return "retried";
-    const ownedInput = { ...input, order: renewed };
+    const renewal = await this.renewForClose(input);
+    if (renewal.status === "failed") {
+      this.defer(input, DIAGNOSTIC.claimRenewFailed);
+      return "failed";
+    }
+    if (renewal.status === "lost") return "retried";
+    try {
+      assertBoundBrandingAddonPaymentContext(
+        renewal.value,
+        input.context.config,
+      );
+    } catch {
+      this.defer(input, DIAGNOSTIC.paymentContextFailed);
+      return "failed";
+    }
+    const ownedInput = { ...input, order: renewal.value };
     let closeAccepted = false;
     try {
       await this.wechatPayGateway.closeTransactionByOutTradeNo({
@@ -255,20 +283,14 @@ export class BrandingAddonExpirationService {
 
   private async renewForClose(
     input: OwnedOrderInput,
-  ): Promise<BrandingAddonExpirationOrderRecord | null> {
-    try {
-      const renewed = await this.repository.renewCloseClaim({
+  ) {
+    return classifyLeaseRenewal(() =>
+      this.repository.renewCloseClaim({
         orderId: input.order.id,
         claimToken: input.claimToken,
         leaseSeconds: this.leaseSeconds,
-      });
-      if (!renewed) return null;
-      assertBoundPaymentContext(renewed, input.context.config);
-      return renewed;
-    } catch {
-      this.defer(input, DIAGNOSTIC.claimRenewFailed);
-      return null;
-    }
+      })
+    );
   }
 
   private async reconcileAfterClose(
@@ -279,7 +301,7 @@ export class BrandingAddonExpirationService {
     try {
       transaction = await this.query(input);
     } catch (error) {
-      if (canCloseNonexistentWechatOrder(input.order, error)) {
+      if (canCloseNonexistentBrandingAddonOrder(input.order, error)) {
         return this.markClosed(input, true);
       }
       this.defer(input, DIAGNOSTIC.secondQueryFailed);
@@ -288,6 +310,13 @@ export class BrandingAddonExpirationService {
 
     if (transaction.tradeState === "SUCCESS") {
       assertWechatPaySuccessTransaction(transaction);
+      if (!hasMatchingBrandingAddonAppid(
+        transaction,
+        input.order.payment_appid,
+      )) {
+        this.defer(input, DIAGNOSTIC.appidMismatch);
+        return "failed";
+      }
       return this.confirmPaid(input, transaction);
     }
     if (
@@ -302,15 +331,12 @@ export class BrandingAddonExpirationService {
 
   private async confirmPaid(
     input: OwnedOrderInput,
-    transaction: WechatPayValidatedSuccessTransaction,
+    transaction: BrandingAddonValidatedSuccessTransaction,
   ): Promise<OrderOutcome> {
     try {
       await this.paymentConfirmation.confirm({
         order: input.order,
-        transaction: {
-          ...transaction,
-          appid: input.order.payment_appid,
-        },
+        transaction,
         notificationId: null,
         source: "expiration_reconcile",
       });
@@ -433,45 +459,6 @@ type OwnedOrderInput = {
   deferred: DeferredRelease[];
 };
 
-function assertBoundPaymentContext(
-  order: BrandingAddonExpirationOrderRecord,
-  config: PlatformPaymentConfigRecord,
-) {
-  const ready = config.id === order.payment_config_id &&
-    config.provider === "wechat_pay" &&
-    config.profile_code === "platform_direct_recharge" &&
-    config.principal_type === "platform" &&
-    config.merchant_mode === "direct_merchant" &&
-    ["active", "disabled", "suspended"].includes(config.status) &&
-    config.merchant_id === order.payment_mchid &&
-    config.app_id === order.payment_appid &&
-    config.recharge_guard_version === order.expected_guard_version &&
-    Boolean(optionalString(config.serial_no)) &&
-    Boolean(optionalString(config.encrypted_config_ref));
-  if (!ready) throw paymentContextInvalid();
-}
-
-function canCloseNonexistentWechatOrder(
-  order: BrandingAddonExpirationOrderRecord,
-  error: unknown,
-) {
-  if (optionalString(order.prepay_id)) return false;
-  if (!error || typeof error !== "object") return false;
-  const candidate = error as { code?: unknown; details?: unknown };
-  if (candidate.code !== "WECHAT_PAY_TRANSACTION_QUERY_FAILED") return false;
-  if (!candidate.details || typeof candidate.details !== "object") return false;
-  const details = candidate.details as { status?: unknown; code?: unknown };
-  return details.status === 404 && details.code === "ORDER_NOT_EXIST";
-}
-
-function paymentContextInvalid() {
-  return Errors.business(
-    409,
-    "品牌权益订单支付配置不匹配",
-    "BRANDING_ADDON_PAYMENT_CONTEXT_INVALID",
-  );
-}
-
 function emptyTelemetry(): BrandingAddonExpirationTelemetry {
   return {
     claimed: 0,
@@ -481,10 +468,6 @@ function emptyTelemetry(): BrandingAddonExpirationTelemetry {
     failed: 0,
     release_failed: 0,
   };
-}
-
-function optionalString(value: unknown) {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function clampInteger(value: number, minimum: number, maximum: number) {

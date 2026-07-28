@@ -56,7 +56,10 @@ describe("WechatPayGateway query transaction", () => {
       expect(String(url)).toBe(`${secretBundle.baseUrl}${path}`);
       expect(init?.method).toBe("GET");
       expectSignature(init, path);
-      return signedJsonResponse({ trade_state: "NOTPAY" });
+      return signedJsonResponse({
+        appid: directConfig.app_id,
+        trade_state: "NOTPAY",
+      });
     }) as unknown as typeof fetch;
     const gateway = await createGateway(fetchImpl);
 
@@ -67,6 +70,7 @@ describe("WechatPayGateway query transaction", () => {
     });
 
     expect(result.trade_state).toBe("NOTPAY");
+    expect(result.appid).toBe(directConfig.app_id);
   });
 
   test("queries a service provider sub-merchant transaction", async () => {

@@ -92,6 +92,7 @@ function makeOrder(
 
 function successQuery(order: BrandingAddonExpirationOrderRecord) {
   return {
+    appid: order.payment_appid,
     mchid: order.payment_mchid,
     out_trade_no: order.out_trade_no,
     transaction_id: `4200000000-${order.id}`,
@@ -101,7 +102,6 @@ function successQuery(order: BrandingAddonExpirationOrderRecord) {
     requestId: "wechat-request-id",
   };
 }
-
 function closedResult(
   order: BrandingAddonExpirationOrderRecord,
 ): BrandingAddonCloseResultRecord {

@@ -13,6 +13,7 @@ import {
 } from "@/services/billing-recharge-payment-confirmation";
 import { requireMatchingPlatformPaymentSecretBundle } from "@/services/platform-payment-secret-bundle-revision";
 import { canCloseNonexistentWechatOrder } from "@/services/billing-recharge-expiration-query-error";
+import { classifyLeaseRenewal } from "@/services/lease-renewal-result";
 import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import {
   wechatPaySecretBundleService,
@@ -25,8 +26,8 @@ import {
   type WechatPayValidatedSuccessTransaction,
   type WechatPayValidatedTransaction,
 } from "@/services/wechat-pay-transaction-contract";
-type RepositoryPort = Pick<
-  typeof billingRechargeRepository,
+
+type RepositoryPort = Pick<typeof billingRechargeRepository,
   | "claimExpiredOrders"
   | "renewCloseClaim"
   | "markOrderClosed"
@@ -258,19 +259,19 @@ export class BillingRechargeExpirationService {
       return "retried";
     }
 
-    let renewed: TenantCreditOrderRecord | null;
-    try {
-      renewed = await this.repository.renewCloseClaim({
+    const renewal = await classifyLeaseRenewal(() =>
+      this.repository.renewCloseClaim({
         orderId: input.order.id,
         claimToken: input.claimToken,
         leaseSeconds: this.leaseSeconds,
-      });
-    } catch {
+      })
+    );
+    if (renewal.status === "failed") {
       this.defer(input, DIAGNOSTIC.claimRenewFailed);
       return "failed";
     }
-    if (!renewed) return "retried";
-    const ownedInput = { ...input, order: renewed };
+    if (renewal.status === "lost") return "retried";
+    const ownedInput = { ...input, order: renewal.value };
 
     try {
       await this.wechatPayGateway.closeTransactionByOutTradeNo({
@@ -495,5 +496,4 @@ function clampInteger(value: number, minimum: number, maximum: number) {
   return Math.max(minimum, Math.min(Math.floor(value), maximum));
 }
 
-export const billingRechargeExpirationService =
-  new BillingRechargeExpirationService();
+export const billingRechargeExpirationService = new BillingRechargeExpirationService();

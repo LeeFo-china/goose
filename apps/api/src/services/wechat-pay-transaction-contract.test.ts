@@ -27,6 +27,7 @@ const partnerExpected = {
 } satisfies WechatPayTransactionExpectedBinding;
 
 const directSuccess = {
+  appid: "wx-direct-app",
   mchid: directExpected.merchantId,
   out_trade_no: directExpected.outTradeNo,
   transaction_id: "4200000000001",
@@ -99,6 +100,7 @@ describe("WeChat payment transaction source converters", () => {
       payer: { openid: "must-not-leak" },
       amount: { ...directSuccess.amount, discount_refund: 99 },
     }, "request-id-1")).toEqual({
+      appid: "wx-direct-app",
       mchid: directExpected.merchantId,
       sp_mchid: undefined,
       sub_mchid: undefined,
@@ -116,6 +118,7 @@ describe("WeChat payment transaction source converters", () => {
       ...partnerSuccess,
       attach: "must-not-leak",
     })).toEqual({
+      appid: undefined,
       mchid: undefined,
       sp_mchid: partnerExpected.merchantId,
       sub_mchid: partnerExpected.subMerchantId,
@@ -134,6 +137,7 @@ describe("parseAndAssertWechatPayTransactionQuery", () => {
       convertWechatPayTransactionQueryPayload(directSuccess, "direct-request-id"),
       directExpected,
     )).toEqual({
+      appid: "wx-direct-app",
       merchantMode: "direct_merchant",
       merchantId: directExpected.merchantId,
       subMerchantId: null,
