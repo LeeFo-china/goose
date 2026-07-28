@@ -18,6 +18,9 @@
 - Modify: `apps/api/src/services/effective-branding-platform.test.ts`
 - Modify: `apps/api/src/controllers/branding/routes.test.ts`
 - Modify: `apps/api/src/services/branding-contracts.ts`
+- Modify: `scripts/verify-branding-tenant-isolation-contracts.ts`
+- Modify: `scripts/verify-branding-tenant-isolation-contracts.test.ts`
+- Modify: `scripts/verify-branding-tenant-isolation-runner.test.ts`
 
 - [ ] **Step 1: 将契约测试改为期望原始名称**
 
@@ -55,6 +58,26 @@ export function buildSupportText(displayName: string): string {
 Run 同 Step 2。
 
 Expected: 所有相关测试 PASS，0 fail。
+
+- [ ] **Step 5: 对齐部署隔离 smoke**
+
+将平台与租户 fixture 的 `support_text` 改为原始 `display_name`，并让生产
+smoke 严格校验：
+
+```ts
+value.support_text === expectedDisplayName
+```
+
+增加回归断言，证明旧的 `${display_name}提供技术支持` 会被拒绝。
+
+- [ ] **Step 6: 运行 smoke 契约测试**
+
+```bash
+bun test scripts/verify-branding-tenant-isolation-contracts.test.ts \
+  scripts/verify-branding-tenant-isolation-runner.test.ts
+```
+
+Expected: 所有 smoke 契约与 runner 测试 PASS，0 fail。
 
 ### Task 2: 更新契约文档并验证交付
 

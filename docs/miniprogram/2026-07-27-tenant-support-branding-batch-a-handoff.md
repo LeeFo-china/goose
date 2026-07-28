@@ -2,7 +2,8 @@
 
 日期：2026-07-27  
 适用仓库：`gooes` 后端 / `orange` 小程序  
-状态：Batch A 已部署 dev，后端与租户隔离 smoke 已通过
+状态：Batch A 已部署 dev；2026-07-28 `support_text` 原样返回变更待部署与
+新版租户隔离 smoke 验证
 
 ## 1. 联调信息
 
