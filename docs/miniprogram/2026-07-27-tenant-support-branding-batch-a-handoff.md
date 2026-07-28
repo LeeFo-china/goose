@@ -1,21 +1,22 @@
 # 租户自定义品牌技术支持：后端批次 A 联调契约
 
 日期：2026-07-27  
+更新：2026-07-28
 适用仓库：`gooes` 后端 / `orange` 小程序  
-状态：Batch A 已部署 dev；2026-07-28 `support_text` 原样返回变更待部署与
-新版租户隔离 smoke 验证
+状态：Batch A 已部署 dev；`support_text` 原样返回变更已部署，新版租户隔离
+smoke 13 pass / 0 fail
 
 ## 1. 联调信息
 
 | 项目 | 当前值 |
 | --- | --- |
 | API Base URL | `https://api-dev.goodcms.cn` |
-| 后端 Commit | `8734884ef2936100fe2783abb54dbbb858766eb2` |
+| 后端 API Commit | `afe531d57a15db84c2ae0565e613efc51c2282a3` |
 | 有权益租户账号 | `19907270001`（`branding_batch_a_with`） |
 | 无权益租户账号 | `19907270002`（`branding_batch_a_without`） |
 | 平台联调账号 | `19900000001` |
 | 平台品牌联调名称 | `品牌联调平台` |
-| 有权益租户品牌联调名称 | `品牌联调有权益租户` |
+| 有权益租户品牌联调名称 | `大象无形技术开发公司` |
 | 凭证 | dev 登录接口使用空 `code`；token 按登录响应实时获取 |
 
 Token 不写入仓库或本文档。使用上述手机号请求
@@ -750,7 +751,7 @@ Content-Type: application/json
 | 真实 Logo 上传 | 平台和有权益租户各 complete 成功；相同 key 第二次 PUT 均返回 409 |
 | 有/无权益账号 smoke | 本机 13 pass / 0 fail；dev 远程 13 pass / 0 fail |
 | 跨作用域 Logo 404 | 租户绑定平台 Logo 时，dev 返回 `404 BRANDING_LOGO_FILE_NOT_FOUND`，响应未泄漏文件或租户 ID |
-| 部署健康检查 | [Release Dev 30270087844](https://github.com/LeeFo-china/goose/actions/runs/30270087844)：`gooes-api-dev` running / healthy，revision `8734884ef2936100fe2783abb54dbbb858766eb2` |
+| 部署健康检查 | [Release Dev 30330487925](https://github.com/LeeFo-china/goose/actions/runs/30330487925)：`gooes-api-dev` running / healthy，revision `afe531d57a15db84c2ae0565e613efc51c2282a3` |
 
 自动隔离 smoke：
 
@@ -788,7 +789,7 @@ profile、active entitlement、`can_customize=true` 和本租户
 effective；无权益租户必须返回 null profile/entitlement、
 `can_customize=false` 和平台 effective；平台 fixture 必须已有
 已发布 profile。平台 profile/display 必须使用 `品牌联调平台`，
-有权益租户必须使用 `品牌联调有权益租户`；两者都必须无未发布
+有权益租户必须使用 `大象无形技术开发公司`；两者都必须无未发布
 变更，且 effective 的名称、Logo、版本必须与已发布快照一致，
 `support_text` 必须原样等于 `display_name`。结构合法但属于第三租户的品牌
 资料也不能通过。错误响应缺少安全的非空 `request_id`

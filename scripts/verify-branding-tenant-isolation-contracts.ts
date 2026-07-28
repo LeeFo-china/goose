@@ -6,7 +6,7 @@ import {
 
 export const BRANDING_PLATFORM_FIXTURE_DISPLAY_NAME = "品牌联调平台";
 export const BRANDING_ENTITLED_TENANT_FIXTURE_DISPLAY_NAME =
-  "品牌联调有权益租户";
+  "大象无形技术开发公司";
 
 const EFFECTIVE_KEYS = [
   "source",
