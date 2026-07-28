@@ -29,6 +29,25 @@ function extractFunction(sql: string, functionName: string): string {
   );
 }
 
+function extractTable(sql: string, tableName: string): string {
+  return (
+    sql.match(
+      new RegExp(
+        `CREATE TABLE IF NOT EXISTS public\\.${tableName}\\s*\\([\\s\\S]*?\\n\\);`,
+        "i",
+      ),
+    )?.[0] ?? ""
+  );
+}
+
+function extractConstraint(tableSql: string, constraintName: string): string {
+  const normalized = normalizeSql(tableSql);
+  const start = normalized.indexOf(`constraint ${constraintName} `);
+  if (start < 0) return "";
+  const end = normalized.indexOf(" constraint ", start + 1);
+  return normalized.slice(start, end < 0 ? undefined : end);
+}
+
 function expectServiceRoleOnly(functionName: string, signature: string): void {
   const normalized = normalizeSql(migrationSql);
   const qualifiedFunction = `public.${functionName}(${signature})`;
@@ -100,7 +119,10 @@ describe("branding add-on commerce migration contract", () => {
   });
 
   test("enforces tenant-scoped order idempotency, snapshots, and state consistency", () => {
-    const normalized = normalizeSql(migrationSql);
+    const orderTable = extractTable(migrationSql, "tenant_addon_orders");
+    const normalized = normalizeSql(orderTable);
+
+    expect(orderTable).not.toBe("");
 
     for (const column of [
       "tenant_id uuid not null",
@@ -140,18 +162,106 @@ describe("branding add-on commerce migration contract", () => {
     expect(normalized).toContain("check (paid_amount_fen >= 0)");
     expect(normalized).toContain("check (expected_guard_version > 0)");
     expect(normalized).toContain("jsonb_typeof(metadata) = 'object'");
-    expect(normalized).toMatch(
-      /status <> 'pending'[\s\S]*transaction_id is null[\s\S]*entitlement_event_id is null/,
+
+    const stateContracts = {
+      pending: {
+        required: [],
+        forbidden: [
+          "transaction_id", "paid_amount_fen", "paid_at", "closed_at",
+          "failure_code", "failure_message", "entitlement_event_id",
+        ],
+      },
+      paid: {
+        required: [
+          "transaction_id", "paid_amount_fen = amount_fen", "paid_at",
+          "entitlement_event_id",
+        ],
+        forbidden: ["closed_at", "failure_code", "failure_message"],
+      },
+      closed: {
+        required: ["closed_at"],
+        forbidden: [
+          "transaction_id", "paid_amount_fen", "paid_at", "failure_code",
+          "failure_message", "entitlement_event_id",
+        ],
+      },
+      failed: {
+        required: ["failure_code", "failure_message"],
+        forbidden: [
+          "transaction_id", "paid_amount_fen", "paid_at", "closed_at",
+          "entitlement_event_id",
+        ],
+      },
+    } as const;
+
+    for (const [status, contract] of Object.entries(stateContracts)) {
+      const constraint = extractConstraint(
+        orderTable,
+        `tenant_addon_orders_${status}_state_check`,
+      );
+      expect(constraint).toContain(`status <> '${status}'`);
+      for (const field of contract.required) {
+        expect(constraint).toContain(
+          field.includes("=") ? field : `${field} is not null`,
+        );
+      }
+      for (const field of contract.forbidden) {
+        expect(constraint).toContain(`${field} is null`);
+      }
+    }
+  });
+
+  test("prevents service-role rewrites of immutable order snapshots", () => {
+    const guard = normalizeSql(
+      extractFunction(migrationSql, "guard_tenant_addon_order_snapshot"),
     );
-    expect(normalized).toMatch(
-      /status <> 'paid'[\s\S]*transaction_id is not null[\s\S]*paid_amount_fen = amount_fen[\s\S]*entitlement_event_id is not null/,
-    );
-    expect(normalized).toMatch(
-      /status <> 'closed'[\s\S]*closed_at is not null/,
-    );
-    expect(normalized).toMatch(
-      /status <> 'failed'[\s\S]*failure_code is not null/,
-    );
+    const normalized = normalizeSql(migrationSql);
+    const protectedFields = [
+      "tenant_id",
+      "order_no",
+      "out_trade_no",
+      "idempotency_key",
+      "product_id",
+      "product_code",
+      "entitlement_code",
+      "product_name",
+      "amount_fen",
+      "term_years",
+      "purchase_notes",
+      "refund_policy",
+      "channel",
+      "payer_openid",
+      "payment_config_id",
+      "expected_guard_version",
+      "payment_mchid",
+      "payment_appid",
+      "payment_expires_at",
+      "created_by",
+    ] as const;
+
+    expect(guard).not.toBe("");
+    expect(guard).toContain("returns trigger");
+    expect(guard).toContain("set search_path = public, pg_temp");
+    expect(guard).toContain("branding_addon_order_snapshot_immutable");
+    for (const field of protectedFields) {
+      expect(guard).toContain(`old.${field}`);
+      expect(guard).toContain(`new.${field}`);
+    }
+    for (const mutableField of [
+      "status", "prepay_id", "transaction_id", "paid_at", "closed_at",
+      "metadata", "close_claim_token",
+    ]) {
+      expect(guard).not.toContain(`old.${mutableField}`);
+    }
+
+    const trigger =
+      normalized.match(
+        /create trigger tr_tenant_addon_orders_snapshot_immutable before update of [\s\S]*?execute function public\.guard_tenant_addon_order_snapshot\(\)/,
+      )?.[0] ?? "";
+    expect(trigger).not.toBe("");
+    for (const field of protectedFields) {
+      expect(trigger).toContain(field);
+    }
   });
 
   test("adds bounded order uniqueness and list plus close-worker indexes", () => {
@@ -332,6 +442,44 @@ describe("branding add-on commerce migration contract", () => {
     expect(idempotentReturn).toBeLessThan(termExtension);
     expect(command).toMatch(
       /if v_order\.status = 'paid'[\s\S]*v_order\.transaction_id is distinct from p_transaction_id[\s\S]*branding_addon_transaction_conflict[\s\S]*'idempotent', true/,
+    );
+  });
+
+  test("applies natural-year terms without clearing risk-controlled starts", () => {
+    const command = normalizeSql(
+      extractFunction(migrationSql, "branding_confirm_addon_purchase"),
+    );
+
+    expect(command).toMatch(
+      /values \(v_order\.tenant_id,[\s\S]*?'active', p_paid_at, p_paid_at \+ make_interval\(years => v_order\.term_years\)/,
+    );
+
+    const riskBranch =
+      command.match(
+        /if v_entitlement\.status in \('suspended', 'revoked'\) then[\s\S]*?elsif v_entitlement\.status = 'active'/,
+      )?.[0] ?? "";
+    expect(riskBranch).toContain("status = v_entitlement.status");
+    expect(riskBranch).toContain("starts_at = v_entitlement.starts_at");
+    expect(riskBranch).toContain(
+      "expires_at = greatest(v_entitlement.expires_at, p_paid_at) + make_interval(years => v_order.term_years)",
+    );
+
+    const activeBranch =
+      command.match(
+        /elsif v_entitlement\.status = 'active'[\s\S]*?else update public\.tenant_entitlements/,
+      )?.[0] ?? "";
+    expect(activeBranch).toContain(
+      "expires_at = v_entitlement.expires_at + make_interval(years => v_order.term_years)",
+    );
+    expect(activeBranch).not.toContain("starts_at =");
+
+    const expiredBranch =
+      command.match(
+        /else update public\.tenant_entitlements set status = 'active'[\s\S]*?returning tenant_entitlements\.\* into v_entitlement/,
+      )?.[0] ?? "";
+    expect(expiredBranch).toContain("starts_at = p_paid_at");
+    expect(expiredBranch).toContain(
+      "expires_at = p_paid_at + make_interval(years => v_order.term_years)",
     );
   });
 

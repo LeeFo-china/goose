@@ -206,6 +206,8 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
         AND transaction_id IS NULL
         AND paid_amount_fen IS NULL
         AND paid_at IS NULL
+        AND failure_code IS NULL
+        AND failure_message IS NULL
         AND entitlement_event_id IS NULL
       )
     ),
@@ -218,10 +220,99 @@ CREATE TABLE IF NOT EXISTS public.tenant_addon_orders (
         AND transaction_id IS NULL
         AND paid_amount_fen IS NULL
         AND paid_at IS NULL
+        AND closed_at IS NULL
         AND entitlement_event_id IS NULL
       )
     )
 );
+
+CREATE OR REPLACE FUNCTION public.guard_tenant_addon_order_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF ROW(
+    OLD.tenant_id,
+    OLD.order_no,
+    OLD.out_trade_no,
+    OLD.idempotency_key,
+    OLD.product_id,
+    OLD.product_code,
+    OLD.entitlement_code,
+    OLD.product_name,
+    OLD.amount_fen,
+    OLD.term_years,
+    OLD.purchase_notes,
+    OLD.refund_policy,
+    OLD.channel,
+    OLD.payer_openid,
+    OLD.payment_config_id,
+    OLD.expected_guard_version,
+    OLD.payment_mchid,
+    OLD.payment_appid,
+    OLD.payment_expires_at,
+    OLD.created_by
+  ) IS DISTINCT FROM ROW(
+    NEW.tenant_id,
+    NEW.order_no,
+    NEW.out_trade_no,
+    NEW.idempotency_key,
+    NEW.product_id,
+    NEW.product_code,
+    NEW.entitlement_code,
+    NEW.product_name,
+    NEW.amount_fen,
+    NEW.term_years,
+    NEW.purchase_notes,
+    NEW.refund_policy,
+    NEW.channel,
+    NEW.payer_openid,
+    NEW.payment_config_id,
+    NEW.expected_guard_version,
+    NEW.payment_mchid,
+    NEW.payment_appid,
+    NEW.payment_expires_at,
+    NEW.created_by
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Branding add-on order snapshot is immutable',
+      DETAIL = 'BRANDING_ADDON_ORDER_SNAPSHOT_IMMUTABLE';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.guard_tenant_addon_order_snapshot()
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER tr_tenant_addon_orders_snapshot_immutable
+BEFORE UPDATE OF
+  tenant_id,
+  order_no,
+  out_trade_no,
+  idempotency_key,
+  product_id,
+  product_code,
+  entitlement_code,
+  product_name,
+  amount_fen,
+  term_years,
+  purchase_notes,
+  refund_policy,
+  channel,
+  payer_openid,
+  payment_config_id,
+  expected_guard_version,
+  payment_mchid,
+  payment_appid,
+  payment_expires_at,
+  created_by
+ON public.tenant_addon_orders
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_tenant_addon_order_snapshot();
 
 CREATE UNIQUE INDEX tenant_addon_orders_order_no_unique_idx
 ON public.tenant_addon_orders(order_no);
@@ -405,7 +496,6 @@ DECLARE
   v_event public.tenant_entitlement_events%ROWTYPE;
   v_old_value jsonb := '{}'::jsonb;
   v_event_type text;
-  v_effective_paid_at timestamptz;
 BEGIN
   IF p_order_id IS NULL
      OR p_out_trade_no IS NULL
@@ -541,8 +631,6 @@ BEGIN
     END IF;
   END IF;
 
-  v_effective_paid_at := p_paid_at;
-
   SELECT entitlement.*
   INTO v_entitlement
   FROM public.tenant_entitlements AS entitlement
@@ -566,8 +654,8 @@ BEGIN
       v_order.tenant_id,
       v_order.entitlement_code,
       'active',
-      v_effective_paid_at,
-      v_effective_paid_at + make_interval(years => v_order.term_years),
+      p_paid_at,
+      p_paid_at + make_interval(years => v_order.term_years),
       'purchase',
       v_order.id,
       1,
@@ -584,18 +672,9 @@ BEGIN
       UPDATE public.tenant_entitlements
       SET
         status = v_entitlement.status,
-        starts_at = CASE
-          WHEN v_entitlement.expires_at > v_effective_paid_at
-            THEN v_entitlement.starts_at
-          ELSE v_effective_paid_at
-        END,
-        expires_at = CASE
-          WHEN v_entitlement.expires_at > v_effective_paid_at
-            THEN v_entitlement.expires_at
-              + make_interval(years => v_order.term_years)
-          ELSE v_effective_paid_at
-            + make_interval(years => v_order.term_years)
-        END,
+        starts_at = v_entitlement.starts_at,
+        expires_at = GREATEST(v_entitlement.expires_at, p_paid_at)
+          + make_interval(years => v_order.term_years),
         source_type = 'purchase',
         source_id = v_order.id,
         version = version + 1,
@@ -603,7 +682,7 @@ BEGIN
       WHERE id = v_entitlement.id
       RETURNING tenant_entitlements.* INTO v_entitlement;
     ELSIF v_entitlement.status = 'active'
-      AND v_entitlement.expires_at > v_effective_paid_at
+      AND v_entitlement.expires_at > p_paid_at
     THEN
       UPDATE public.tenant_entitlements
       SET
@@ -619,8 +698,8 @@ BEGIN
       UPDATE public.tenant_entitlements
       SET
         status = 'active',
-        starts_at = v_effective_paid_at,
-        expires_at = v_effective_paid_at
+        starts_at = p_paid_at,
+        expires_at = p_paid_at
           + make_interval(years => v_order.term_years),
         source_type = 'purchase',
         source_id = v_order.id,
@@ -666,7 +745,7 @@ BEGIN
     status = 'paid',
     transaction_id = p_transaction_id,
     paid_amount_fen = p_paid_amount_fen,
-    paid_at = v_effective_paid_at,
+    paid_at = p_paid_at,
     entitlement_event_id = v_event.id,
     close_claim_token = NULL,
     close_claim_expires_at = NULL,
