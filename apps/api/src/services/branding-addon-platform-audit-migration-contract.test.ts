@@ -18,8 +18,8 @@ function normalizeSql(sql: string): string {
     .toLowerCase();
 }
 
-function extractFunction(functionName: string): string {
-  return migrationSql.match(
+function extractFunction(sql: string, functionName: string): string {
+  return sql.match(
     new RegExp(
       `CREATE(?: OR REPLACE)? FUNCTION public\\.${functionName}\\([\\s\\S]*?\\$\\$;`,
       "i",
@@ -27,10 +27,33 @@ function extractFunction(functionName: string): string {
   )?.[0] ?? "";
 }
 
+const AUDIT_BINDING_PREDICATES = [
+  "entitlement.tenant_id = addon_order.tenant_id",
+  "entitlement.entitlement_code = addon_order.entitlement_code",
+  "entitlement.source_type = 'purchase'",
+  "source_order.id = entitlement.source_id",
+  "source_order.tenant_id = entitlement.tenant_id",
+  "entitlement_event.id = addon_order.entitlement_event_id",
+  "entitlement_event.tenant_id = addon_order.tenant_id",
+  "entitlement_event.entitlement_code = addon_order.entitlement_code",
+  "entitlement_event.source_type = 'purchase'",
+  "entitlement_event.source_id = addon_order.id",
+  "audit_log.resource_type = 'tenant_addon_order'",
+  "audit_log.resource_id = addon_order.id",
+  "audit_log.action = 'branding_addon_purchase.confirm'",
+] as const;
+
+function expectAuditBindingContract(commandSql: string): void {
+  const command = normalizeSql(commandSql);
+  for (const predicate of AUDIT_BINDING_PREDICATES) {
+    expect(command).toContain(predicate);
+  }
+}
+
 describe("branding add-on platform audit detail migration contract", () => {
   test("uses one private security-definer RPC with stable not-found null", () => {
     const functionName = "branding_get_platform_addon_order_audit";
-    const command = normalizeSql(extractFunction(functionName));
+    const command = normalizeSql(extractFunction(migrationSql, functionName));
     const normalizedMigration = normalizeSql(migrationSql);
 
     expect(command).not.toBe("");
@@ -52,7 +75,10 @@ describe("branding add-on platform audit detail migration contract", () => {
 
   test("joins the current entitlement, purchase event, and latest audit once", () => {
     const command = normalizeSql(
-      extractFunction("branding_get_platform_addon_order_audit"),
+      extractFunction(
+        migrationSql,
+        "branding_get_platform_addon_order_audit",
+      ),
     );
 
     expect(command).toContain(
@@ -74,11 +100,20 @@ describe("branding add-on platform audit detail migration contract", () => {
     expect(command).toContain(
       "order by audit_log.created_at desc, audit_log.id desc limit 1",
     );
+    expectAuditBindingContract(
+      extractFunction(
+        migrationSql,
+        "branding_get_platform_addon_order_audit",
+      ),
+    );
   });
 
   test("builds explicit public summaries without internal payment data", () => {
     const command = normalizeSql(
-      extractFunction("branding_get_platform_addon_order_audit"),
+      extractFunction(
+        migrationSql,
+        "branding_get_platform_addon_order_audit",
+      ),
     );
 
     for (const publicField of [
@@ -112,4 +147,17 @@ describe("branding add-on platform audit detail migration contract", () => {
       expect(command).not.toContain(privateField);
     }
   });
+
+  test.each([...AUDIT_BINDING_PREDICATES])(
+    "mutation fixture rejects missing binding: %s",
+    (predicate) => {
+      const command = extractFunction(
+        migrationSql,
+        "branding_get_platform_addon_order_audit",
+      );
+      const mutated = command.replace(predicate, "TRUE");
+      expect(mutated).not.toBe(command);
+      expect(() => expectAuditBindingContract(mutated)).toThrow();
+    },
+  );
 });

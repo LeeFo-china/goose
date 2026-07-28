@@ -917,6 +917,37 @@ supabase migration list
 
 Expected: `20260728120000` 的 Local/Remote 对齐。禁止手工远端 DDL/DML。
 
+- [ ] **Step 3a: 验证平台订单查询执行计划**
+
+在 dev 使用真实租户和订单关键词执行 `EXPLAIN (ANALYZE, BUFFERS)`：
+
+```sql
+SELECT id
+FROM public.tenant_addon_orders
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+
+SELECT id
+FROM public.tenant_addon_orders
+WHERE tenant_id = '<真实 dev tenant UUID>'
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+
+SELECT id
+FROM public.tenant_addon_orders
+WHERE order_no ILIKE '%<真实订单关键词>%'
+   OR out_trade_no ILIKE '%<真实订单关键词>%'
+   OR transaction_id ILIKE '%<真实订单关键词>%'
+ORDER BY created_at DESC, id DESC
+LIMIT 20;
+```
+
+记录自然规划器选择、实际行数和耗时。若 dev 数据量小而选择顺序
+扫描，仅在事务内临时执行 `SET LOCAL enable_seqscan = off` 后重跑，
+确认默认、租户筛选可使用对应 B-tree，关键词查询可使用三个 trigram
+索引的 BitmapOr；不得修改数据库全局规划器配置。把两组计划记录到
+交接文档。
+
 - [ ] **Step 4: 部署 API**
 
 推送 feature 分支并触发既有 dev workflow。等待 workflow 成功，记录

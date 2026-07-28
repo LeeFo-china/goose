@@ -12,7 +12,13 @@
 -- guard_tenant_addon_order_snapshot; drop
 -- tenant_entitlement_events_purchase_source_unique_idx; drop the
 -- tenant_addon_orders_entitlement_event_identity_fkey before
--- tenant_entitlement_events_identity_key; remove the four scoped permissions;
+-- tenant_entitlement_events_identity_key; drop
+-- tenant_addon_orders_platform_created_idx,
+-- tenant_addon_orders_platform_tenant_created_idx,
+-- tenant_addon_orders_order_no_trgm_idx,
+-- tenant_addon_orders_out_trade_no_trgm_idx, and
+-- tenant_addon_orders_transaction_id_trgm_idx; remove the four scoped
+-- permissions;
 -- preserve paid audit data until in-flight orders resolve, then drop the
 -- notification, order, and product tables in that dependency order.
 
@@ -400,6 +406,24 @@ ON public.tenant_addon_orders(tenant_id, status, created_at DESC, id DESC);
 
 CREATE INDEX tenant_addon_orders_status_created_idx
 ON public.tenant_addon_orders(status, created_at DESC, id DESC);
+
+CREATE INDEX tenant_addon_orders_platform_created_idx
+ON public.tenant_addon_orders(created_at DESC, id DESC);
+
+CREATE INDEX tenant_addon_orders_platform_tenant_created_idx
+ON public.tenant_addon_orders(tenant_id, created_at DESC, id DESC);
+
+CREATE INDEX tenant_addon_orders_order_no_trgm_idx
+ON public.tenant_addon_orders
+USING gin (order_no extensions.gin_trgm_ops);
+
+CREATE INDEX tenant_addon_orders_out_trade_no_trgm_idx
+ON public.tenant_addon_orders
+USING gin (out_trade_no extensions.gin_trgm_ops);
+
+CREATE INDEX tenant_addon_orders_transaction_id_trgm_idx
+ON public.tenant_addon_orders
+USING gin (transaction_id extensions.gin_trgm_ops);
 
 CREATE INDEX tenant_addon_orders_pending_expiry_idx
 ON public.tenant_addon_orders(payment_expires_at ASC, id)
@@ -1305,6 +1329,8 @@ BEGIN
     ON entitlement_event.id = addon_order.entitlement_event_id
    AND entitlement_event.tenant_id = addon_order.tenant_id
    AND entitlement_event.entitlement_code = addon_order.entitlement_code
+   AND entitlement_event.source_type = 'purchase'
+   AND entitlement_event.source_id = addon_order.id
   LEFT JOIN LATERAL (
     SELECT
       audit_log.id,
