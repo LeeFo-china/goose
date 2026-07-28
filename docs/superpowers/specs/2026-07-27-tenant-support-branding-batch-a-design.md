@@ -332,11 +332,14 @@ GET /branding/effective
   "tenant_id": "00000000-0000-4000-8000-000000000001",
   "display_name": "晴天装饰",
   "logo_url": "https://cdn.example.com/tenant-logo.png",
-  "support_text": "晴天装饰提供技术支持",
+  "support_text": "晴天装饰",
   "version": 4,
   "updated_at": "2026-07-27T10:00:00.000Z"
 }
 ```
+
+`support_text` 是只读兼容别名，必须原样等于 `display_name`。请求体不接受
+独立的 `support_text`，后端和客户端均不得追加固定文案。
 
 解析顺序：
 
@@ -400,7 +403,7 @@ GET/PATCH/publish 返回：
     "tenant_id": null,
     "display_name": "字节跳动",
     "logo_url": "https://cdn.example.com/platform-logo.png",
-    "support_text": "字节跳动提供技术支持",
+    "support_text": "字节跳动",
     "version": 4,
     "updated_at": "2026-07-27T10:00:00.000Z"
   }
@@ -513,7 +516,7 @@ POST /tenant/branding/publish
     "tenant_id": null,
     "display_name": "字节跳动",
     "logo_url": "https://cdn.example.com/platform-logo.png",
-    "support_text": "字节跳动提供技术支持",
+    "support_text": "字节跳动",
     "version": 3,
     "updated_at": "2026-07-27T09:00:00.000Z"
   }

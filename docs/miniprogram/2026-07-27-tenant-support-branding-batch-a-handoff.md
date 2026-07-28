@@ -82,11 +82,15 @@ canary；已按原文创建并发布，不使用真实客户品牌名称。
   "tenant_id": "10000000-0000-4000-8000-000000000001",
   "display_name": "晴天装饰",
   "logo_url": "https://cdn.example.com/tenant-logo.png",
-  "support_text": "晴天装饰提供技术支持",
+  "support_text": "晴天装饰",
   "version": 4,
   "updated_at": "2026-07-27T10:00:00.000Z"
 }
 ```
+
+`support_text` 是只读兼容字段，值始终原样等于 `display_name`。
+PATCH 请求不接受独立的 `support_text`，客户端也不得再次追加固定文本或将其
+作为单独配置项。
 
 管理接口中的 `profile`：
 
@@ -140,7 +144,7 @@ Logo 文件异常时，均返回 `source=platform`：
     "tenant_id": null,
     "display_name": "字节跳动",
     "logo_url": "https://cdn.example.com/platform-logo.png",
-    "support_text": "字节跳动提供技术支持",
+    "support_text": "字节跳动",
     "version": 3,
     "updated_at": "2026-07-27T09:00:00.000Z"
   },
@@ -166,7 +170,7 @@ Body：GET 客户端不发送请求体；服务端不定义 body schema。
       "tenant_id": null,
       "display_name": "字节跳动",
       "logo_url": "https://cdn.example.com/platform-logo.png",
-      "support_text": "字节跳动提供技术支持",
+      "support_text": "字节跳动",
       "version": 0,
       "updated_at": "1970-01-01T00:00:00.000Z"
     }
@@ -217,7 +221,7 @@ Body：
       "tenant_id": null,
       "display_name": "字节跳动",
       "logo_url": "https://cdn.example.com/previous-platform-logo.png",
-      "support_text": "字节跳动提供技术支持",
+      "support_text": "字节跳动",
       "version": 3,
       "updated_at": "2026-07-27T09:00:00.000Z"
     }
@@ -261,7 +265,7 @@ Body：
       "tenant_id": null,
       "display_name": "字节跳动",
       "logo_url": "https://cdn.example.com/platform-logo.png",
-      "support_text": "字节跳动提供技术支持",
+      "support_text": "字节跳动",
       "version": 1,
       "updated_at": "2026-07-27T10:01:00.000Z"
     }
@@ -429,7 +433,7 @@ Body：GET 客户端不发送请求体；服务端不定义 body schema。
       "tenant_id": null,
       "display_name": "字节跳动",
       "logo_url": "https://cdn.example.com/platform-logo.png",
-      "support_text": "字节跳动提供技术支持",
+      "support_text": "字节跳动",
       "version": 3,
       "updated_at": "2026-07-27T09:00:00.000Z"
     }
@@ -486,7 +490,7 @@ Body：
       "tenant_id": null,
       "display_name": "字节跳动",
       "logo_url": "https://cdn.example.com/platform-logo.png",
-      "support_text": "字节跳动提供技术支持",
+      "support_text": "字节跳动",
       "version": 3,
       "updated_at": "2026-07-27T09:00:00.000Z"
     }
@@ -785,8 +789,8 @@ effective；无权益租户必须返回 null profile/entitlement、
 已发布 profile。平台 profile/display 必须使用 `品牌联调平台`，
 有权益租户必须使用 `品牌联调有权益租户`；两者都必须无未发布
 变更，且 effective 的名称、Logo、版本必须与已发布快照一致，
-`support_text` 必须为“名称 + 提供技术支持”。结构合法但属于第三
-租户的品牌资料也不能通过。错误响应缺少安全的非空 `request_id`
+`support_text` 必须原样等于 `display_name`。结构合法但属于第三租户的品牌
+资料也不能通过。错误响应缺少安全的非空 `request_id`
 时整项失败。
 
 仓库边界：本文档和 Batch A 代码只写入 `gooes`；Orange 原始契约和

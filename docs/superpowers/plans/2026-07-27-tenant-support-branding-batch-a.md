@@ -249,7 +249,8 @@ input types.
 
 Test:
 
-- `buildSupportText('晴天装饰') === '晴天装饰提供技术支持'`
+- `buildSupportText('晴天装饰') === '晴天装饰'`
+- `buildSupportText` 仅保留为兼容字段构造入口，不追加或格式化名称
 - active requires status/time/active tenant
 - every suspended/revoked/expired row is ineffective
 - `serializeEntitlement` exposes `code`, not internal `entitlement_code`
