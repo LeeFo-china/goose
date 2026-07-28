@@ -86,7 +86,7 @@ type EntitlementActivityRecord = Pick<
 >;
 
 export function buildSupportText(displayName: string): string {
-  return `${displayName}提供技术支持`;
+  return displayName;
 }
 
 export function isEntitlementActive(

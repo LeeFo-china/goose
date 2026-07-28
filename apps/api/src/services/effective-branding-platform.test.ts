@@ -110,7 +110,7 @@ describe("EffectiveBrandingService platform fallback", () => {
       tenant_id: null,
       display_name: "字节跳动",
       logo_url: expect.stringMatching(/^data:image\/png;base64,/),
-      support_text: "字节跳动提供技术支持",
+      support_text: "字节跳动",
       version: 0,
       updated_at: "1970-01-01T00:00:00.000Z",
     });

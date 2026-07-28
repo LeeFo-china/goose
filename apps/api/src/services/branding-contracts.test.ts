@@ -40,7 +40,7 @@ describe("branding display contracts", () => {
   test("exports stable branding constants and builds support text", () => {
     expect(CUSTOM_SUPPORT_BRANDING).toBe("custom_support_branding");
     expect(PLATFORM_FALLBACK_DISPLAY_NAME).toBe("字节跳动");
-    expect(buildSupportText("晴天装饰")).toBe("晴天装饰提供技术支持");
+    expect(buildSupportText("晴天装饰")).toBe("晴天装饰");
   });
 });
 

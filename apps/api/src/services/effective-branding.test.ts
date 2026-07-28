@@ -193,7 +193,7 @@ const expectedPlatform = {
   tenant_id: null,
   display_name: "字节跳动",
   logo_url: platformLogo.public_url ?? "",
-  support_text: "字节跳动提供技术支持",
+  support_text: "字节跳动",
   version: 4,
   updated_at: platformProfile.published_at ?? "",
 } satisfies EffectiveBranding;
@@ -202,7 +202,7 @@ const expectedTenant = {
   tenant_id: TENANT_ID,
   display_name: "晴天装饰",
   logo_url: tenantLogo.public_url ?? "",
-  support_text: "晴天装饰提供技术支持",
+  support_text: "晴天装饰",
   version: 6,
   updated_at: tenantProfile.published_at ?? "",
 } satisfies EffectiveBranding;

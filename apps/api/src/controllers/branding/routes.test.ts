@@ -89,7 +89,7 @@ const platformEffective = {
   tenant_id: null,
   display_name: "平台品牌",
   logo_url: "https://cdn.example.com/platform.png",
-  support_text: "平台品牌提供技术支持",
+  support_text: "平台品牌",
   version: 2,
   updated_at: "2026-07-27T10:00:00.000Z",
 };
@@ -99,7 +99,7 @@ const tenantEffective = {
   source: "tenant" as const,
   tenant_id: TENANT_ID,
   display_name: "租户品牌",
-  support_text: "租户品牌提供技术支持",
+  support_text: "租户品牌",
 };
 
 describe("BrandingController routes", () => {
