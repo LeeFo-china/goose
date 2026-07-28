@@ -2,6 +2,7 @@
 -- entry points, then restore guard_pending_recharge_payment_config and
 -- guard_pending_recharge_payment_secret from 20260720224000. Restore both
 -- before dropping the tenant_addon_orders table. Revoke/drop
+-- branding_get_platform_addon_order_audit and
 -- branding_confirm_addon_purchase; revoke and drop branding_claim_expired_addon_orders
 -- and
 -- branding_renew_addon_close_claim; drop
@@ -1209,6 +1210,131 @@ GRANT EXECUTE ON FUNCTION public.branding_confirm_addon_purchase(
   uuid, text, text, integer, timestamptz, text, text, uuid, jsonb
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.branding_get_platform_addon_order_audit(
+  p_order_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  SELECT jsonb_build_object(
+    'order',
+    jsonb_build_object(
+      'id', addon_order.id,
+      'tenant_id', addon_order.tenant_id,
+      'order_no', addon_order.order_no,
+      'out_trade_no', addon_order.out_trade_no,
+      'product_code', addon_order.product_code,
+      'entitlement_code', addon_order.entitlement_code,
+      'product_name', addon_order.product_name,
+      'amount_fen', addon_order.amount_fen,
+      'term_years', addon_order.term_years,
+      'purchase_notes', addon_order.purchase_notes,
+      'refund_policy', addon_order.refund_policy,
+      'status', addon_order.status,
+      'channel', addon_order.channel,
+      'payment_expires_at', addon_order.payment_expires_at,
+      'transaction_id', addon_order.transaction_id,
+      'paid_amount_fen', addon_order.paid_amount_fen,
+      'paid_at', addon_order.paid_at,
+      'closed_at', addon_order.closed_at,
+      'failure_code', addon_order.failure_code,
+      'failure_message', addon_order.failure_message,
+      'entitlement_event_id', addon_order.entitlement_event_id,
+      'created_by', addon_order.created_by,
+      'created_at', addon_order.created_at,
+      'updated_at', addon_order.updated_at,
+      'tenant',
+      jsonb_build_object(
+        'id', tenant.id,
+        'name', tenant.name,
+        'slug', tenant.slug
+      )
+    ),
+    'entitlement',
+    CASE
+      WHEN entitlement.id IS NULL THEN NULL
+      ELSE jsonb_build_object(
+        'starts_at', entitlement.starts_at,
+        'expires_at', entitlement.expires_at,
+        'status', entitlement.status,
+        'source', entitlement.source_type,
+        'order_no', source_order.order_no
+      )
+    END,
+    'entitlement_event',
+    CASE
+      WHEN entitlement_event.id IS NULL THEN NULL
+      ELSE jsonb_build_object(
+        'id', entitlement_event.id,
+        'event_type', entitlement_event.event_type,
+        'source_type', entitlement_event.source_type,
+        'source_id', entitlement_event.source_id,
+        'reason', entitlement_event.reason,
+        'created_at', entitlement_event.created_at
+      )
+    END,
+    'audit',
+    CASE
+      WHEN audit.id IS NULL THEN NULL
+      ELSE jsonb_build_object(
+        'id', audit.id,
+        'action', audit.action,
+        'status', audit.status,
+        'summary', audit.summary,
+        'created_at', audit.created_at
+      )
+    END
+  )
+  INTO v_result
+  FROM public.tenant_addon_orders AS addon_order
+  JOIN public.tenants AS tenant
+    ON tenant.id = addon_order.tenant_id
+  LEFT JOIN public.tenant_entitlements AS entitlement
+    ON entitlement.tenant_id = addon_order.tenant_id
+   AND entitlement.entitlement_code = addon_order.entitlement_code
+  LEFT JOIN public.tenant_addon_orders AS source_order
+    ON entitlement.source_type = 'purchase'
+   AND source_order.id = entitlement.source_id
+   AND source_order.tenant_id = entitlement.tenant_id
+  LEFT JOIN public.tenant_entitlement_events AS entitlement_event
+    ON entitlement_event.id = addon_order.entitlement_event_id
+   AND entitlement_event.tenant_id = addon_order.tenant_id
+   AND entitlement_event.entitlement_code = addon_order.entitlement_code
+  LEFT JOIN LATERAL (
+    SELECT
+      audit_log.id,
+      audit_log.action,
+      audit_log.status,
+      audit_log.summary,
+      audit_log.created_at
+    FROM public.platform_audit_logs AS audit_log
+    WHERE audit_log.resource_type = 'tenant_addon_order'
+      AND audit_log.resource_id = addon_order.id
+      AND audit_log.action = 'branding_addon_purchase.confirm'
+    ORDER BY audit_log.created_at DESC, audit_log.id DESC
+    LIMIT 1
+  ) AS audit ON TRUE
+  WHERE addon_order.id = p_order_id;
+
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.branding_get_platform_addon_order_audit(uuid)
+FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.branding_get_platform_addon_order_audit(uuid)
+FROM anon;
+REVOKE ALL ON FUNCTION public.branding_get_platform_addon_order_audit(uuid)
+FROM authenticated;
+GRANT EXECUTE
+ON FUNCTION public.branding_get_platform_addon_order_audit(uuid)
+TO service_role;
+
 ALTER TABLE public.platform_addon_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.platform_addon_products FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.tenant_addon_orders ENABLE ROW LEVEL SECURITY;
@@ -1255,5 +1381,7 @@ COMMENT ON FUNCTION public.branding_confirm_addon_purchase(
   uuid, text, text, integer, timestamptz, text, text, uuid, jsonb
 )
 IS 'Atomically confirms one branding add-on payment and applies its natural-year entitlement term exactly once.';
+COMMENT ON FUNCTION public.branding_get_platform_addon_order_audit(uuid)
+IS 'Returns one redacted platform order, entitlement, event, and audit graph.';
 
 COMMIT;

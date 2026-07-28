@@ -110,11 +110,13 @@ function replaceMethod(
 }
 
 describe("BrandingAddonController routes", () => {
-  test("registers the seven Task 6 product and tenant order routes", async () => {
+  test("registers product, tenant order, and platform audit order routes", async () => {
     const { controller } = await loadHarness();
     expect([...registeredHandlers(controller).keys()]).toEqual([
       "GET /platform/branding/entitlement-product",
       "PATCH /platform/branding/entitlement-product",
+      "GET /platform/branding/entitlement-orders",
+      "GET /platform/branding/entitlement-orders/:id",
       "GET /tenant/branding/entitlement-product",
       "POST /tenant/branding/entitlement-orders",
       "POST /tenant/branding/entitlement-orders/:id/payment-request",

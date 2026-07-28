@@ -11,6 +11,7 @@ import {
   PAYMENT_ORDER_COLUMNS,
   PLATFORM_ORDER_DETAIL_COLUMNS,
   PLATFORM_ORDER_LIST_COLUMNS,
+  type PlatformBrandingAddonOrderAuditRecord,
   type PlatformBrandingAddonOrderDetailRecord,
   type PlatformBrandingAddonOrderListRecord,
   TENANT_ORDER_DETAIL_COLUMNS,
@@ -37,6 +38,7 @@ export type {
   BrandingAddonPaymentOrderRecord,
   BrandingAddonWechatNotificationRecord,
   PlatformBrandingAddonOrderDetailRecord,
+  PlatformBrandingAddonOrderAuditRecord,
   PlatformBrandingAddonOrderListRecord,
   TenantBrandingAddonOrderDetailRecord,
   TenantBrandingAddonOrderListRecord,
@@ -66,7 +68,9 @@ type AddonClient = {
     table: "tenant_addon_orders" | "tenant_addon_wechat_notifications",
   ): AddonQuery;
   rpc(
-    name: "branding_confirm_addon_purchase",
+    name:
+      | "branding_confirm_addon_purchase"
+      | "branding_get_platform_addon_order_audit",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -248,6 +252,17 @@ export class BrandingAddonOrderRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("查询平台品牌权益订单失败");
     return (data as PlatformBrandingAddonOrderDetailRecord | null) ?? null;
+  }
+
+  async findPlatformOrderAuditById(orderId: string) {
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_get_platform_addon_order_audit",
+      { p_order_id: orderId },
+    );
+    if (error) {
+      throw Errors.dbError("查询平台品牌权益订单审计详情失败");
+    }
+    return (data as PlatformBrandingAddonOrderAuditRecord | null) ?? null;
   }
 
   async findByOutTradeNo(outTradeNo: string) {

@@ -73,15 +73,12 @@ export type PlatformBrandingAddonOrderListRecord = Pick<
   | "id"
   | "tenant_id"
   | "order_no"
-  | "out_trade_no"
   | "product_code"
   | "product_name"
   | "amount_fen"
   | "term_years"
   | "status"
   | "payment_expires_at"
-  | "transaction_id"
-  | "paid_amount_fen"
   | "paid_at"
   | "closed_at"
   | "failure_code"
@@ -99,6 +96,9 @@ export type PlatformBrandingAddonOrderDetailRecord =
   PlatformBrandingAddonOrderListRecord & Pick<
     BrandingAddonOrderRecord,
     | "entitlement_code"
+    | "out_trade_no"
+    | "transaction_id"
+    | "paid_amount_fen"
     | "purchase_notes"
     | "refund_policy"
     | "channel"
@@ -106,6 +106,38 @@ export type PlatformBrandingAddonOrderDetailRecord =
     | "entitlement_event_id"
     | "created_by"
   >;
+
+export type PlatformBrandingAddonOrderAuditRecord = {
+  order: PlatformBrandingAddonOrderDetailRecord;
+  entitlement: {
+    starts_at: string;
+    expires_at: string;
+    status: "active" | "suspended" | "expired" | "revoked";
+    source: "manual_grant" | "purchase";
+    order_no: string | null;
+  } | null;
+  entitlement_event: {
+    id: string;
+    event_type:
+      | "granted"
+      | "renewed"
+      | "suspended"
+      | "resumed"
+      | "expired"
+      | "revoked";
+    source_type: "manual_grant" | "purchase" | "system";
+    source_id: string | null;
+    reason: string | null;
+    created_at: string;
+  } | null;
+  audit: {
+    id: string;
+    action: string;
+    status: "success" | "failure";
+    summary: string | null;
+    created_at: string;
+  } | null;
+};
 
 export type BrandingAddonPaymentOrderRecord = Pick<
   BrandingAddonOrderRecord,
@@ -280,13 +312,12 @@ export const TENANT_ORDER_DETAIL_COLUMNS = [
 ].join(",");
 
 export const PLATFORM_ORDER_LIST_COLUMNS = [
-  "id,tenant_id,order_no,out_trade_no,product_code,product_name,amount_fen",
-  "term_years,status,payment_expires_at,transaction_id,paid_amount_fen,paid_at",
-  "closed_at,failure_code,created_at,updated_at",
+  "id,tenant_id,order_no,product_code,product_name,amount_fen,term_years,status",
+  "payment_expires_at,paid_at,closed_at,failure_code,created_at,updated_at",
 ].join(",");
 
 export const PLATFORM_ORDER_DETAIL_COLUMNS = [
-  PLATFORM_ORDER_LIST_COLUMNS,
+  PLATFORM_ORDER_LIST_COLUMNS, "out_trade_no,transaction_id,paid_amount_fen",
   "entitlement_code,purchase_notes,refund_policy,channel,failure_message",
   "entitlement_event_id,created_by",
 ].join(",");

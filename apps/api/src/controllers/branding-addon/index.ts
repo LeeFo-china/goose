@@ -7,10 +7,14 @@ import {
   BrandingAddonOrderListQuerySchema,
   BrandingAddonOrderParamsSchema,
   BrandingAddonProductPatchSchema,
+  PlatformBrandingAddonOrderListQuerySchema,
 } from "@/schema/branding-addon";
 import {
   platformBrandingAddonProductService,
 } from "@/services/platform-branding-addon-product";
+import {
+  platformBrandingAddonOrdersService,
+} from "@/services/platform-branding-addon-orders";
 import {
   tenantBrandingAddonOrderService,
 } from "@/services/tenant-branding-addon-orders";
@@ -62,6 +66,28 @@ class PlatformBrandingAddonController extends PlatformBaseController {
     const input = parse(BrandingAddonProductPatchSchema, request.body);
     return ResponseHandler.success(
       await platformBrandingAddonProductService.update(authContext, input),
+    );
+  }
+
+  @Get("/platform/branding/entitlement-orders")
+  async listOrders(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const query = parse(
+      PlatformBrandingAddonOrderListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await platformBrandingAddonOrdersService.list(authContext, query),
+    );
+  }
+
+  @Get("/platform/branding/entitlement-orders/:id")
+  async getOrder(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const { id } = parse(BrandingAddonOrderParamsSchema, request.params);
+    parse(BrandingAddonEmptySchema, request.query);
+    return ResponseHandler.success(
+      await platformBrandingAddonOrdersService.get(authContext, id),
     );
   }
 }
