@@ -17,6 +17,44 @@ describe("BrandingAddonProductPatchSchema", () => {
     }).amount_fen).toBe(1);
   });
 
+  test("accepts a patch containing any single mutable field", () => {
+    for (const patch of [
+      { name: "年度品牌技术支持" },
+      { amount_fen: 1 },
+      { purchase_notes: "支付成功后自动开通一年" },
+      { enabled: true },
+    ]) {
+      expect(BrandingAddonProductPatchSchema.parse({
+        ...patch,
+        version: 1,
+      })).toEqual({
+        ...patch,
+        version: 1,
+      });
+    }
+  });
+
+  test("rejects a patch containing only the version", () => {
+    const result = BrandingAddonProductPatchSchema.safeParse({
+      version: 1,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(
+        expect.objectContaining({
+          message: "至少提交一个可修改字段",
+        }),
+      );
+    }
+  });
+
+  test("rejects a mutable field patch without the version", () => {
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      name: "年度品牌技术支持",
+    })).toThrow();
+  });
+
   test("rejects immutable product contract fields", () => {
     const input = {
       name: "年度品牌技术支持",
@@ -48,6 +86,25 @@ describe("BrandingAddonProductPatchSchema", () => {
         version: 1,
       })).toThrow();
     }
+  });
+
+  test("enforces product name and purchase notes length boundaries", () => {
+    expect(BrandingAddonProductPatchSchema.parse({
+      name: "品".repeat(100),
+      purchase_notes: "说".repeat(500),
+      version: 1,
+    })).toMatchObject({
+      name: "品".repeat(100),
+      purchase_notes: "说".repeat(500),
+    });
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      name: "品".repeat(101),
+      version: 1,
+    })).toThrow();
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      purchase_notes: "说".repeat(501),
+      version: 1,
+    })).toThrow();
   });
 });
 
@@ -81,6 +138,19 @@ describe("BrandingAddonCreateOrderSchema", () => {
     expect(() => BrandingAddonCreateOrderSchema.parse({
       product_code: "custom_support_branding_annual",
       payer_openid: "   ",
+      idempotency_key: "00000000-0000-4000-8000-000000000001",
+    })).toThrow();
+  });
+
+  test("enforces the OpenID length boundary", () => {
+    expect(BrandingAddonCreateOrderSchema.parse({
+      product_code: "custom_support_branding_annual",
+      payer_openid: "o".repeat(128),
+      idempotency_key: "00000000-0000-4000-8000-000000000001",
+    }).payer_openid).toHaveLength(128);
+    expect(() => BrandingAddonCreateOrderSchema.parse({
+      product_code: "custom_support_branding_annual",
+      payer_openid: "o".repeat(129),
       idempotency_key: "00000000-0000-4000-8000-000000000001",
     })).toThrow();
   });
