@@ -120,6 +120,10 @@ git add apps/api/src/services/branding-contracts.ts \
   apps/api/src/services/effective-branding.test.ts \
   apps/api/src/services/effective-branding-platform.test.ts \
   apps/api/src/controllers/branding/routes.test.ts \
+  scripts/verify-branding-tenant-isolation-contracts.ts \
+  scripts/verify-branding-tenant-isolation-contracts.test.ts \
+  scripts/verify-branding-tenant-isolation-runner.test.ts \
+  scripts/verify-branding-tenant-isolation.test.ts \
   docs/miniprogram/2026-07-27-tenant-support-branding-batch-a-handoff.md \
   docs/superpowers/plans/2026-07-28-branding-support-text-verbatim.md
 git commit -m "fix(branding): 品牌文案按输入原样返回"

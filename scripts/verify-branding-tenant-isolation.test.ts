@@ -45,7 +45,7 @@ describe("branding tenant isolation smoke helpers", () => {
           tenant_id: null,
           display_name: "字节跳动",
           logo_url: "https://cdn.example.com/logo.png",
-          support_text: "字节跳动提供技术支持",
+          support_text: "字节跳动",
           version: 1,
           updated_at: "2026-07-27T10:00:00.000Z",
         },
@@ -62,7 +62,7 @@ describe("branding tenant isolation smoke helpers", () => {
       tenant_id: null,
       display_name: "字节跳动",
       logo_url: "https://cdn.example.com/logo.png",
-      support_text: "字节跳动提供技术支持",
+      support_text: "字节跳动",
       version: 1,
       updated_at: "2026-07-27T10:00:00.000Z",
     });
