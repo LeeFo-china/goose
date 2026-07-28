@@ -124,48 +124,34 @@ describe("BrandingAddonProductPatchSchema", () => {
 });
 
 describe("BrandingAddonCreateOrderSchema", () => {
-  test("accepts only the fixed product code, a non-empty OpenID and UUID v4", () => {
+  test("accepts only the fixed product code and UUID v4", () => {
     expect(BrandingAddonCreateOrderSchema.parse({
       product_code: "custom_support_branding_annual",
-      payer_openid: "openid",
       idempotency_key: "00000000-0000-4000-8000-000000000001",
     })).toEqual({
       product_code: "custom_support_branding_annual",
-      payer_openid: "openid",
       idempotency_key: "00000000-0000-4000-8000-000000000001",
     });
 
     expect(() => BrandingAddonCreateOrderSchema.parse({
       product_code: "custom_support_branding_annual",
-      payer_openid: "openid",
       idempotency_key: "not-uuid-v4",
     })).toThrow();
     expect(() => BrandingAddonCreateOrderSchema.parse({
       product_code: "custom_support_branding_annual",
-      payer_openid: "openid",
       idempotency_key: "00000000-0000-1000-8000-000000000001",
     })).toThrow();
     expect(() => BrandingAddonCreateOrderSchema.parse({
       product_code: "another-product",
-      payer_openid: "openid",
-      idempotency_key: "00000000-0000-4000-8000-000000000001",
-    })).toThrow();
-    expect(() => BrandingAddonCreateOrderSchema.parse({
-      product_code: "custom_support_branding_annual",
-      payer_openid: "   ",
       idempotency_key: "00000000-0000-4000-8000-000000000001",
     })).toThrow();
   });
 
-  test("enforces the OpenID length boundary", () => {
-    expect(BrandingAddonCreateOrderSchema.parse({
-      product_code: "custom_support_branding_annual",
-      payer_openid: "o".repeat(128),
-      idempotency_key: "00000000-0000-4000-8000-000000000001",
-    }).payer_openid).toHaveLength(128);
+  test("rejects client-supplied payer and tenant identity", () => {
     expect(() => BrandingAddonCreateOrderSchema.parse({
       product_code: "custom_support_branding_annual",
-      payer_openid: "o".repeat(129),
+      payer_openid: "client-controlled-openid",
+      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       idempotency_key: "00000000-0000-4000-8000-000000000001",
     })).toThrow();
   });
@@ -190,6 +176,12 @@ describe("BrandingAddonOrderListQuerySchema", () => {
     expect(() => BrandingAddonOrderListQuerySchema.parse({
       page: 1,
       pageSize: 101,
+    })).toThrow();
+  });
+
+  test("rejects client-supplied tenant identity", () => {
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     })).toThrow();
   });
 

@@ -13,6 +13,7 @@ import { BRANDING_ADDON_REFUND_POLICY } from "@/services/branding-addon-contract
 export function buildBrandingAddonOrderCreateInput(input: {
   actor: { tenantId: string; employeeId: string };
   input: BrandingAddonCreateOrderInput;
+  payerOpenid: string;
   product: BrandingAddonProductRecord & { amount_fen: number };
   config: PlatformPaymentConfigRecord & {
     merchant_id: string;
@@ -37,7 +38,7 @@ export function buildBrandingAddonOrderCreateInput(input: {
     refund_policy: BRANDING_ADDON_REFUND_POLICY,
     status: "pending",
     channel: "wechat_pay",
-    payer_openid: input.input.payer_openid,
+    payer_openid: input.payerOpenid,
     payment_config_id: input.config.id,
     expected_guard_version: input.guardVersion,
     payment_mchid: input.config.merchant_id,

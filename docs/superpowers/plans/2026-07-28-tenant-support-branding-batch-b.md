@@ -51,7 +51,6 @@ expect(BrandingAddonProductPatchSchema.parse({
 
 expect(() => BrandingAddonCreateOrderSchema.parse({
   product_code: 'custom_support_branding_annual',
-  payer_openid: 'openid',
   idempotency_key: 'not-uuid-v4',
 })).toThrow();
 ```
@@ -91,9 +90,10 @@ export const BRANDING_ADDON_ORDER_STATUSES = [
 ] as const;
 ```
 
-Schema 只接受固定商品编码、UUID v4 幂等键、非空 OpenID、正整数分
-和有界分页。平台 PATCH 不允许修改 `code`、`entitlement_code` 或
-`term_years`。
+公开创建 Schema 只接受固定商品编码和 UUID v4 幂等键，不接受
+`payer_openid` 或 `tenant_id`；付款 OpenID 只允许 controller 从
+已验微信 JWT 传给 service。金额使用正整数分，分页有界。平台 PATCH
+不允许修改 `code`、`entitlement_code` 或 `term_years`。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -446,7 +446,7 @@ git add apps/api/src/services/branding-addon-order-views.ts \
 git commit -m "feat(branding): 支持租户创建年度权益订单"
 ```
 
-### Task 6: 实现平台和租户 HTTP 接口
+### Task 6: 实现平台商品和租户 HTTP 接口
 
 **Files:**
 - Create: `apps/api/src/controllers/branding-addon/index.ts`
@@ -465,12 +465,14 @@ POST  /tenant/branding/entitlement-orders
 POST  /tenant/branding/entitlement-orders/:id/payment-request
 GET   /tenant/branding/entitlement-orders
 GET   /tenant/branding/entitlement-orders/:id
-GET   /platform/branding/entitlement-orders
-GET   /platform/branding/entitlement-orders/:id
 ```
 
 断言 controller 只 parse request、调用 service、返回
-`ResponseHandler.success`，不从 body/query 读取 `tenant_id`。
+`ResponseHandler.success`，不从 body/query 读取 `tenant_id` 或
+`payer_openid`。创建订单和 payment-request 必须同时满足
+`request.user.login_channel === "wechat"` 和非空
+`request.user.openid`，并将该 OpenID 作为独立 service 参数传入。
+`admin_web`、缺失 OpenID 和订单付款人错配都必须稳定拒绝。
 
 - [ ] **Step 2: 运行测试确认失败**
 
@@ -495,6 +497,9 @@ return ResponseHandler.success(await service.method(authContext, input));
 
 平台方法使用 `getRequiredPlatformAdminContext`。所有错误由 service
 和 `error-factory.ts` 返回。
+
+平台订单列表和详情需要 Task 9 的专用查询、脱敏及审计 service，
+明确不在本任务提前注册。
 
 - [ ] **Step 4: 运行测试确认通过**
 
@@ -695,6 +700,12 @@ git commit -m "feat(branding): 自动核对并关闭超时权益订单"
 - 详情包含 entitlement/event/audit 摘要。
 - 不返回 `payer_openid`、原始通知密文、密钥引用。
 - 关联查询由 repository 单次 RPC/视图查询完成，禁止列表 N+1。
+- 在本任务新增并注册：
+
+```text
+GET /platform/branding/entitlement-orders
+GET /platform/branding/entitlement-orders/:id
+```
 
 - [ ] **Step 2: 运行测试确认失败**
 

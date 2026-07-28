@@ -32,11 +32,32 @@ async function createService(
 }
 
 describe("TenantBrandingAddonOrderService payment requests", () => {
+  test("rejects a payment request bound to another authenticated OpenID", async () => {
+    const fixture = await createService();
+
+    await expect(
+      fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        "another-openid",
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
+    });
+    expect(fixture.dependencies.wechatPayGateway.createMiniProgramPaymentRequest)
+      .not.toHaveBeenCalled();
+  });
+
   test("re-signs an existing prepay only after tenant, status, expiry and guard checks", async () => {
     const fixture = await createService();
 
     await expect(
-      fixture.service.createPaymentRequest(authContext, ORDER_ID),
+      fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        order.payer_openid,
+      ),
     ).resolves.toMatchObject({
       order: {
         id: ORDER_ID,
@@ -76,6 +97,7 @@ describe("TenantBrandingAddonOrderService payment requests", () => {
     const result = await fixture.service.createPaymentRequest(
       authContext,
       ORDER_ID,
+      order.payer_openid,
     );
 
     expect(dependencies.wechatPayGateway.createJsapiPrepay)
@@ -111,7 +133,11 @@ describe("TenantBrandingAddonOrderService payment requests", () => {
       const fixture = await createService(dependencies);
 
       await expect(
-        fixture.service.createPaymentRequest(authContext, ORDER_ID),
+        fixture.service.createPaymentRequest(
+          authContext,
+          ORDER_ID,
+          order.payer_openid,
+        ),
       ).rejects.toMatchObject({ statusCode: 409, code });
       expect(dependencies.paymentConfigRepository.findWechatPayConfigById)
         .not.toHaveBeenCalled();
@@ -128,7 +154,11 @@ describe("TenantBrandingAddonOrderService payment requests", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createPaymentRequest(authContext, ORDER_ID),
+      fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        order.payer_openid,
+      ),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_EXPIRED",
@@ -145,6 +175,7 @@ describe("TenantBrandingAddonOrderService payment requests", () => {
       fixture.service.createPaymentRequest(
         { ...authContext, tenantId: OTHER_TENANT_ID },
         ORDER_ID,
+        order.payer_openid,
       ),
     ).rejects.toMatchObject({
       statusCode: 404,
@@ -162,7 +193,11 @@ describe("TenantBrandingAddonOrderService payment requests", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createPaymentRequest(authContext, ORDER_ID),
+      fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        order.payer_openid,
+      ),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",

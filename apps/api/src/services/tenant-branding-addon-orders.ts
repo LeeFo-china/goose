@@ -130,12 +130,13 @@ export class TenantBrandingAddonOrderService {
   }
 
   /**
-   * payer_openid is payment payer data, never a tenant selector. The HTTP
-   * controller must bind it to the authenticated mini-program OpenID.
+   * payerOpenid is payment payer data, never a tenant selector. The HTTP
+   * controller binds it to the verified mini-program JWT.
    */
   async createOrder(
     authContext: AuthContext,
     input: BrandingAddonCreateOrderInput,
+    payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
     const entitlement = await this.findEntitlement(actor.tenantId);
@@ -149,7 +150,7 @@ export class TenantBrandingAddonOrderService {
       return this.buildCreateResult(
         replay,
         entitlement,
-        input.payer_openid,
+        payerOpenid,
         true,
         false,
       );
@@ -163,7 +164,7 @@ export class TenantBrandingAddonOrderService {
       return this.buildCreateResult(
         pending,
         entitlement,
-        input.payer_openid,
+        payerOpenid,
         false,
         true,
       );
@@ -179,6 +180,7 @@ export class TenantBrandingAddonOrderService {
     const createInput = buildBrandingAddonOrderCreateInput({
       actor,
       input,
+      payerOpenid,
       product,
       config: preflight.config,
       guardVersion: preflight.guardVersion,
@@ -194,6 +196,7 @@ export class TenantBrandingAddonOrderService {
         error,
         actor.tenantId,
         input,
+        payerOpenid,
         entitlement,
       );
       if (recovered) return recovered;
@@ -231,7 +234,11 @@ export class TenantBrandingAddonOrderService {
     };
   }
 
-  async createPaymentRequest(authContext: AuthContext, orderId: string) {
+  async createPaymentRequest(
+    authContext: AuthContext,
+    orderId: string,
+    payerOpenid: string,
+  ) {
     const actor = this.requirePurchaser(authContext);
     const entitlement = await this.findEntitlement(actor.tenantId);
     assertEntitlementAllowsPurchase(entitlement);
@@ -240,6 +247,7 @@ export class TenantBrandingAddonOrderService {
       orderId,
     });
     if (!order) throw orderNotFound();
+    assertBrandingAddonOrderPayerMatches(order, payerOpenid);
     this.payment.assertPayable(order, this.nowFactory());
 
     const paymentRequest = await this.payment.preparePaymentRequest(order);
@@ -380,6 +388,7 @@ export class TenantBrandingAddonOrderService {
     error: unknown,
     tenantId: string,
     input: BrandingAddonCreateOrderInput,
+    payerOpenid: string,
     entitlement: TenantEntitlementRecord | null,
   ) {
     const code = readErrorCode(error);
@@ -392,7 +401,7 @@ export class TenantBrandingAddonOrderService {
         ? this.buildCreateResult(
           existing,
           entitlement,
-          input.payer_openid,
+          payerOpenid,
           true,
           false,
         )
@@ -407,7 +416,7 @@ export class TenantBrandingAddonOrderService {
         ? this.buildCreateResult(
           pending,
           entitlement,
-          input.payer_openid,
+          payerOpenid,
           false,
           true,
         )

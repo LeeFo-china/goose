@@ -19,9 +19,9 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const createInput = {
   product_code: "custom_support_branding_annual" as const,
-  payer_openid: "openid-from-login",
   idempotency_key: IDEMPOTENCY_KEY,
 };
+const PAYER_OPENID = "openid-from-login";
 
 async function createService(
   dependencies = createDependencies(),
@@ -56,7 +56,7 @@ describe("TenantBrandingAddonOrderService purchase access", () => {
       const fixture = await createService();
 
       await expect(
-        fixture.service.createOrder(context, createInput),
+        fixture.service.createOrder(context, createInput, PAYER_OPENID),
       ).rejects.toMatchObject({ statusCode: 403 });
       expect(
         fixture.dependencies.entitlementRepository.findByCode,
@@ -69,7 +69,7 @@ describe("TenantBrandingAddonOrderService purchase access", () => {
   test("uses only the authenticated tenant and treats payer_openid as payer data", async () => {
     const fixture = await createService();
 
-    await fixture.service.createOrder(authContext, createInput);
+    await fixture.service.createOrder(authContext, createInput, PAYER_OPENID);
 
     expect(fixture.dependencies.orderRepository.createOrder)
       .toHaveBeenCalledWith(expect.objectContaining({
@@ -94,7 +94,7 @@ describe("TenantBrandingAddonOrderService purchase access", () => {
       const fixture = await createService(dependencies);
 
       await expect(
-        fixture.service.createOrder(authContext, createInput),
+        fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
       ).rejects.toMatchObject({ statusCode: 409, code });
       expect(dependencies.orderRepository.findByIdempotencyKey)
         .not.toHaveBeenCalled();
@@ -107,7 +107,11 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
   test("creates a snapshot order after payment config preflight and post-insert guard check", async () => {
     const fixture = await createService();
 
-    const result = await fixture.service.createOrder(authContext, createInput);
+    const result = await fixture.service.createOrder(
+      authContext,
+      createInput,
+      PAYER_OPENID,
+    );
 
     expect(fixture.dependencies.orderRepository.createOrder)
       .toHaveBeenCalledWith({
@@ -170,7 +174,11 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     dependencies.orderRepository.findByIdempotencyKey.mockResolvedValue(order);
     const fixture = await createService(dependencies);
 
-    const result = await fixture.service.createOrder(authContext, createInput);
+    const result = await fixture.service.createOrder(
+      authContext,
+      createInput,
+      PAYER_OPENID,
+    );
 
     expect(result).toMatchObject({
       idempotent: true,
@@ -187,10 +195,11 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     dependencies.orderRepository.findByIdempotencyKey.mockResolvedValue(order);
     const fixture = await createService(dependencies);
 
-    await expect(fixture.service.createOrder(authContext, {
-      ...createInput,
-      payer_openid: "another-openid",
-    })).rejects.toMatchObject({
+    await expect(fixture.service.createOrder(
+      authContext,
+      createInput,
+      "another-openid",
+    )).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
       details: undefined,
@@ -206,10 +215,14 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       .mockResolvedValue(order);
     const fixture = await createService(dependencies);
 
-    const result = await fixture.service.createOrder(authContext, {
-      ...createInput,
-      idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    });
+    const result = await fixture.service.createOrder(
+      authContext,
+      {
+        ...createInput,
+        idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+      PAYER_OPENID,
+    );
 
     expect(result).toMatchObject({
       idempotent: false,
@@ -225,11 +238,14 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       .mockResolvedValue(order);
     const fixture = await createService(dependencies);
 
-    await expect(fixture.service.createOrder(authContext, {
-      ...createInput,
-      payer_openid: "another-openid",
-      idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-    })).rejects.toMatchObject({
+    await expect(fixture.service.createOrder(
+      authContext,
+      {
+        ...createInput,
+        idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      },
+      "another-openid",
+    )).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
     });
@@ -252,7 +268,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, createInput),
+      fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
     ).resolves.toMatchObject({
       idempotent: false,
       reused_pending: true,
@@ -274,7 +290,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, createInput),
+      fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
     ).resolves.toMatchObject({
       idempotent: true,
       reused_pending: false,
@@ -306,10 +322,11 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
         .mockResolvedValueOnce(order);
       const fixture = await createService(dependencies);
 
-      await expect(fixture.service.createOrder(authContext, {
-        ...createInput,
-        payer_openid: "another-openid",
-      })).rejects.toMatchObject({
+      await expect(fixture.service.createOrder(
+        authContext,
+        createInput,
+        "another-openid",
+      )).rejects.toMatchObject({
         statusCode: 409,
         code: "BRANDING_ADDON_ORDER_PAYER_MISMATCH",
       });
@@ -334,7 +351,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, createInput),
+      fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
@@ -372,7 +389,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, createInput),
+      fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "WECHAT_PAY_SECRET_BUNDLE_REVISION_MISMATCH",
@@ -397,7 +414,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, createInput),
+      fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED",
@@ -415,10 +432,14 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
     const fixture = await createService(dependencies);
 
     await expect(
-      fixture.service.createOrder(authContext, {
-        ...createInput,
-        idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      }),
+      fixture.service.createOrder(
+        authContext,
+        {
+          ...createInput,
+          idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+        PAYER_OPENID,
+      ),
     ).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_ORDER_EXPIRED",
@@ -439,7 +460,7 @@ describe("TenantBrandingAddonOrderService create and replay", () => {
       );
 
       await expect(
-        fixture.service.createOrder(authContext, createInput),
+        fixture.service.createOrder(authContext, createInput, PAYER_OPENID),
       ).rejects.toMatchObject({
         statusCode: 404,
         code: "BRANDING_ADDON_PRODUCT_NOT_FOUND",

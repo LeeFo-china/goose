@@ -9,7 +9,6 @@ import { PaginationQuerySchema } from "./request";
 
 const PRODUCT_NAME_MAX_LENGTH = 100;
 const PURCHASE_NOTES_MAX_LENGTH = 500;
-const PAYER_OPENID_MAX_LENGTH = 128;
 const ORDER_KEYWORD_PATTERN = /^[\p{L}\p{N} .-]+$/u;
 const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "name",
@@ -46,11 +45,13 @@ export const BrandingAddonProductPatchSchema = z.object({
 
 export const BrandingAddonCreateOrderSchema = z.object({
   product_code: z.literal(BRANDING_ADDON_PRODUCT_CODE),
-  payer_openid: z.string()
-    .trim()
-    .min(1, "OpenID 不能为空")
-    .max(PAYER_OPENID_MAX_LENGTH, "OpenID 不能超过 128 个字符"),
   idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
+}).strict();
+
+export const BrandingAddonEmptySchema = z.object({}).strict();
+
+export const BrandingAddonOrderParamsSchema = z.object({
+  id: z.uuid("订单 ID 格式不正确"),
 }).strict();
 
 export const BrandingAddonOrderStatusSchema = z.enum(
@@ -65,7 +66,7 @@ export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
     .max(120, "关键词不能超过 120 个字符")
     .regex(ORDER_KEYWORD_PATTERN, "关键词包含不支持的字符")
     .optional(),
-});
+}).strict();
 
 export const PlatformBrandingAddonOrderListQuerySchema =
   BrandingAddonOrderListQuerySchema.extend({

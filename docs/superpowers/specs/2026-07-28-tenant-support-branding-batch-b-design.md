@@ -278,10 +278,15 @@ GET  /tenant/branding/entitlement-orders/:id
 ```json
 {
   "product_code": "custom_support_branding_annual",
-  "payer_openid": "openid",
   "idempotency_key": "UUID v4"
 }
 ```
+
+客户端不得提交 `payer_openid`。创建订单和重新获取支付参数都要求
+当前 JWT 满足 `login_channel=wechat` 且包含非空 `openid`；controller
+将该已验登录 OpenID 作为独立 service 参数传入。后台
+`admin_web` 登录、缺失 OpenID 或订单已绑定其他 OpenID 时拒绝支付，
+不能退回使用 body、query 或数据库外的客户端字段。
 
 创建响应包含：
 
@@ -356,9 +361,11 @@ GET /platform/branding/entitlement-orders/:id
 | 409 | `BRANDING_ADDON_PRODUCT_VERSION_CONFLICT` | 商品配置版本冲突 |
 | 409 | `BRANDING_ADDON_PRODUCT_PRICE_REQUIRED` | 启用前尚未配置正整数分价格 |
 | 403 | `BRANDING_ENTITLEMENT_PURCHASE_FORBIDDEN` | 非当前租户管理员 |
+| 403 | `BRANDING_ADDON_WECHAT_LOGIN_REQUIRED` | 非微信小程序登录或缺少 OpenID |
 | 409 | `BRANDING_ENTITLEMENT_SUSPENDED` | 权益暂停，不能购买 |
 | 409 | `BRANDING_ENTITLEMENT_REVOKED` | 权益撤销，不能购买 |
 | 404 | `BRANDING_ADDON_ORDER_NOT_FOUND` | 当前租户订单不存在 |
+| 409 | `BRANDING_ADDON_ORDER_PAYER_MISMATCH` | 订单与当前微信付款人不一致 |
 | 409 | `BRANDING_ADDON_ORDER_NOT_PENDING` | 订单不可继续支付 |
 | 409 | `BRANDING_ADDON_ORDER_EXPIRED` | 支付窗口已过 |
 | 409 | `BRANDING_ADDON_ORDER_PAYMENT_CONFIG_CHANGED` | 支付配置并发变更 |
