@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const calls: Array<[string, ...unknown[]]> = [];
 let listResult: { data: unknown; error: unknown; count: number | null } = {
   data: [],
@@ -23,7 +21,6 @@ let rpcResult: { data: unknown; error: unknown } = {
   error: null,
 };
 type QueryResult = typeof listResult;
-
 const query = {
   select(columns: string, options?: unknown) {
     calls.push(["select", columns, options]);
@@ -43,6 +40,14 @@ const query = {
   },
   gt(column: string, value: unknown) {
     calls.push(["gt", column, value]);
+    return query;
+  },
+  gte(column: string, value: unknown) {
+    calls.push(["gte", column, value]);
+    return query;
+  },
+  lte(column: string, value: unknown) {
+    calls.push(["lte", column, value]);
     return query;
   },
   or(filter: string) {
@@ -74,7 +79,6 @@ const query = {
     return Promise.resolve(listResult).then(onfulfilled, onrejected);
   },
 };
-
 const client = {
   from(table: string) {
     calls.push(["from", table]);
@@ -84,6 +88,30 @@ const client = {
     calls.push(["rpc", name, params]);
     return rpcResult;
   }),
+};
+const orderCreateInput = {
+  tenant_id: "tenant-a",
+  order_no: "order-no-1",
+  out_trade_no: "trade-no-1",
+  idempotency_key: "00000000-0000-4000-8000-000000000001",
+  product_id: "product-1",
+  product_code: "custom_support_branding_annual" as const,
+  entitlement_code: "custom_support_branding" as const,
+  product_name: "年度品牌技术支持",
+  amount_fen: 1,
+  term_years: 1 as const,
+  purchase_notes: "自动开通一年",
+  refund_policy: "数字权益支付成功并开通后不支持退款",
+  status: "pending" as const,
+  channel: "wechat_pay" as const,
+  payer_openid: "openid-1",
+  payment_config_id: "config-1",
+  expected_guard_version: 2,
+  payment_mchid: "mchid-1",
+  payment_appid: "appid-1",
+  payment_expires_at: "2026-07-28T08:05:00.000Z",
+  created_by: "employee-1",
+  metadata: {},
 };
 
 describe("BrandingAddonOrderRepository", () => {
@@ -108,6 +136,7 @@ describe("BrandingAddonOrderRepository", () => {
       tenantId: "tenant-a",
       page: 2,
       pageSize: 20,
+      keyword: "BA,1",
     });
 
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-a"]);
@@ -115,6 +144,14 @@ describe("BrandingAddonOrderRepository", () => {
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).toContain("payment_expires_at");
     expect(selectCall?.[1]).not.toBe("*");
+    expect(selectCall?.[1]).not.toContain("payer_openid");
+    expect(selectCall?.[1]).not.toContain("payment_config_id");
+    expect(selectCall?.[1]).not.toContain("metadata");
+    expect(selectCall?.[1]).not.toContain("close_claim_token");
+    expect(calls).toContainEqual([
+      "or",
+      "order_no.ilike.%BA\\,1%",
+    ]);
   });
 
   test("clamps platform pagination and applies filters", async () => {
@@ -129,6 +166,8 @@ describe("BrandingAddonOrderRepository", () => {
       tenantId: "tenant-a",
       status: "paid",
       keyword: "ORDER,1",
+      createdFrom: "2026-07-01T00:00:00.000Z",
+      createdTo: "2026-07-31T23:59:59.999Z",
     });
 
     expect(calls).toContainEqual(["range", 0, 99]);
@@ -138,6 +177,30 @@ describe("BrandingAddonOrderRepository", () => {
       "or",
       "order_no.ilike.%ORDER\\,1%,out_trade_no.ilike.%ORDER\\,1%,transaction_id.ilike.%ORDER\\,1%",
     ]);
+    expect(calls).toContainEqual([
+      "gte",
+      "created_at",
+      "2026-07-01T00:00:00.000Z",
+    ]);
+    expect(calls).toContainEqual([
+      "lte",
+      "created_at",
+      "2026-07-31T23:59:59.999Z",
+    ]);
+    const selectCall = calls.find(([method]) => method === "select");
+    for (const internalField of [
+      "payer_openid",
+      "payment_config_id",
+      "expected_guard_version",
+      "payment_mchid",
+      "payment_appid",
+      "metadata",
+      "close_claim_token",
+      "close_claim_expires_at",
+      "close_last_error",
+    ]) {
+      expect(selectCall?.[1]).not.toContain(internalField);
+    }
     expect(page.pagination).toMatchObject({ page: 1, pageSize: 100 });
   });
 
@@ -153,6 +216,10 @@ describe("BrandingAddonOrderRepository", () => {
     });
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-a"]);
     expect(calls).toContainEqual(["eq", "id", "order-1"]);
+    const tenantDetailSelect = calls.find(([method]) => method === "select");
+    expect(tenantDetailSelect?.[1]).toContain("refund_policy");
+    expect(tenantDetailSelect?.[1]).not.toContain("payer_openid");
+    expect(tenantDetailSelect?.[1]).not.toContain("metadata");
 
     calls.length = 0;
     await repository.findByIdempotencyKey({
@@ -174,6 +241,37 @@ describe("BrandingAddonOrderRepository", () => {
       "product_code",
       "custom_support_branding_annual",
     ]);
+    const internalSelect = calls.find(([method]) => method === "select");
+    expect(internalSelect?.[1]).toContain("payer_openid");
+    expect(internalSelect?.[1]).toContain("payment_config_id");
+    expect(internalSelect?.[1]).not.toContain("metadata");
+    expect(internalSelect?.[1]).not.toContain("close_claim_token");
+  });
+
+  test("keeps platform detail free of OpenID and close-worker fields", async () => {
+    const { BrandingAddonOrderRepository } = await import(
+      "./branding-addon-orders"
+    );
+    const repository = new BrandingAddonOrderRepository(() => client);
+
+    await repository.findPlatformOrderById("order-1");
+
+    const selectCall = calls.find(([method]) => method === "select");
+    expect(selectCall?.[1]).toContain("refund_policy");
+    expect(selectCall?.[1]).toContain("transaction_id");
+    for (const internalField of [
+      "payer_openid",
+      "payment_config_id",
+      "expected_guard_version",
+      "payment_mchid",
+      "payment_appid",
+      "metadata",
+      "close_claim_token",
+      "close_claim_expires_at",
+      "close_last_error",
+    ]) {
+      expect(selectCall?.[1]).not.toContain(internalField);
+    }
   });
 
   test("creates the immutable order snapshot and conditionally stores prepay", async () => {
@@ -181,33 +279,8 @@ describe("BrandingAddonOrderRepository", () => {
       "./branding-addon-orders"
     );
     const repository = new BrandingAddonOrderRepository(() => client);
-    const order = {
-      tenant_id: "tenant-a",
-      order_no: "order-no-1",
-      out_trade_no: "trade-no-1",
-      idempotency_key: "00000000-0000-4000-8000-000000000001",
-      product_id: "product-1",
-      product_code: "custom_support_branding_annual" as const,
-      entitlement_code: "custom_support_branding" as const,
-      product_name: "年度品牌技术支持",
-      amount_fen: 1,
-      term_years: 1 as const,
-      purchase_notes: "自动开通一年",
-      refund_policy: "数字权益支付成功并开通后不支持退款",
-      status: "pending" as const,
-      channel: "wechat_pay" as const,
-      payer_openid: "openid-1",
-      payment_config_id: "config-1",
-      expected_guard_version: 2,
-      payment_mchid: "mchid-1",
-      payment_appid: "appid-1",
-      payment_expires_at: "2026-07-28T08:05:00.000Z",
-      created_by: "employee-1",
-      metadata: {},
-    };
-
-    await repository.createOrder(order);
-    expect(calls).toContainEqual(["insert", order]);
+    await repository.createOrder(orderCreateInput);
+    expect(calls).toContainEqual(["insert", orderCreateInput]);
 
     calls.length = 0;
     await repository.markPrepayCreated({
@@ -240,30 +313,7 @@ describe("BrandingAddonOrderRepository", () => {
     );
     const repository = new BrandingAddonOrderRepository(() => client);
 
-    await expect(repository.createOrder({
-      tenant_id: "tenant-a",
-      order_no: "order-no-1",
-      out_trade_no: "trade-no-1",
-      idempotency_key: "00000000-0000-4000-8000-000000000001",
-      product_id: "product-1",
-      product_code: "custom_support_branding_annual",
-      entitlement_code: "custom_support_branding",
-      product_name: "年度品牌技术支持",
-      amount_fen: 1,
-      term_years: 1,
-      purchase_notes: "自动开通一年",
-      refund_policy: "数字权益支付成功并开通后不支持退款",
-      status: "pending",
-      channel: "wechat_pay",
-      payer_openid: "openid-1",
-      payment_config_id: "config-1",
-      expected_guard_version: 2,
-      payment_mchid: "mchid-1",
-      payment_appid: "appid-1",
-      payment_expires_at: "2026-07-28T08:05:00.000Z",
-      created_by: "employee-1",
-      metadata: {},
-    })).rejects.toMatchObject({
+    await expect(repository.createOrder(orderCreateInput)).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_ADDON_PENDING_ORDER_EXISTS",
     });
@@ -283,6 +333,10 @@ describe("BrandingAddonOrderRepository", () => {
     await expect(repository.findByOutTradeNo("trade-no-1")).rejects
       .toMatchObject({ code: "BRANDING_ADDON_OUT_TRADE_NO_DUPLICATED" });
     expect(calls).toContainEqual(["limit", 2]);
+    const callbackSelect = calls.find(([method]) => method === "select");
+    expect(callbackSelect?.[1]).toContain("payment_mchid");
+    expect(callbackSelect?.[1]).not.toContain("payer_openid");
+    expect(callbackSelect?.[1]).not.toContain("metadata");
 
     calls.length = 0;
     await expect(repository.findByTransactionId("transaction-1")).rejects

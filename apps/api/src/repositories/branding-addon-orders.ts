@@ -1,7 +1,35 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  type BrandingAddonNotificationCreateInput,
+  type BrandingAddonOrderCreateInput,
+  type BrandingAddonOrderRecord,
+  type BrandingAddonWechatNotificationRecord,
+  CALLBACK_ORDER_COLUMNS,
+  NOTIFICATION_COLUMNS,
+  PAYMENT_ORDER_COLUMNS,
+  PLATFORM_ORDER_DETAIL_COLUMNS,
+  PLATFORM_ORDER_LIST_COLUMNS,
+  type PlatformBrandingAddonOrderDetailRecord,
+  type PlatformBrandingAddonOrderListRecord,
+  TENANT_ORDER_DETAIL_COLUMNS,
+  TENANT_ORDER_LIST_COLUMNS,
+  type TenantBrandingAddonOrderDetailRecord,
+  type TenantBrandingAddonOrderListRecord,
+} from "@/repositories/branding-addon-order-records";
 import { isPostgresUniqueViolation } from "@/repositories/repository-errors";
 import type { BrandingAddonOrderStatus } from "@/services/branding-addon-contracts";
 import { SupabaseDB } from "@/utils/supabase";
+
+export type {
+  BrandingAddonNotificationCreateInput,
+  BrandingAddonOrderCreateInput,
+  BrandingAddonOrderRecord,
+  BrandingAddonWechatNotificationRecord,
+  PlatformBrandingAddonOrderDetailRecord,
+  PlatformBrandingAddonOrderListRecord,
+  TenantBrandingAddonOrderDetailRecord,
+  TenantBrandingAddonOrderListRecord,
+} from "@/repositories/branding-addon-order-records";
 
 type QueryResult = {
   data: unknown;
@@ -14,6 +42,8 @@ type AddonQuery = PromiseLike<QueryResult> & {
   update(patch: Record<string, unknown>): AddonQuery;
   eq(column: string, value: unknown): AddonQuery;
   gt(column: string, value: unknown): AddonQuery;
+  gte(column: string, value: unknown): AddonQuery;
+  lte(column: string, value: unknown): AddonQuery;
   or(filter: string): AddonQuery;
   order(column: string, options: { ascending: boolean }): AddonQuery;
   range(from: number, to: number): AddonQuery;
@@ -31,94 +61,6 @@ type AddonClient = {
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
-
-export type BrandingAddonOrderRecord = {
-  id: string;
-  tenant_id: string;
-  order_no: string;
-  out_trade_no: string;
-  idempotency_key: string;
-  product_id: string;
-  product_code: "custom_support_branding_annual";
-  entitlement_code: "custom_support_branding";
-  product_name: string;
-  amount_fen: number;
-  term_years: 1;
-  purchase_notes: string;
-  refund_policy: string;
-  status: BrandingAddonOrderStatus;
-  channel: "wechat_pay";
-  payer_openid: string;
-  payment_config_id: string;
-  expected_guard_version: number;
-  payment_mchid: string;
-  payment_appid: string;
-  prepay_id: string | null;
-  payment_expires_at: string;
-  transaction_id: string | null;
-  paid_amount_fen: number | null;
-  paid_at: string | null;
-  closed_at: string | null;
-  failure_code: string | null;
-  failure_message: string | null;
-  entitlement_event_id: string | null;
-  created_by: string;
-  metadata: Record<string, unknown>;
-  close_claim_token: string | null;
-  close_claim_expires_at: string | null;
-  close_attempt_count: number;
-  close_last_error: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type BrandingAddonWechatNotificationRecord = {
-  id: string;
-  notify_id: string;
-  tenant_id: string;
-  order_id: string;
-  event_type: string;
-  resource_type: string;
-  raw_payload: Record<string, unknown>;
-  signature_valid: boolean;
-  processed: boolean;
-  processed_at: string | null;
-  error_message: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type PlatformBrandingAddonOrderRecord = BrandingAddonOrderRecord & {
-  tenant?: {
-    id: string;
-    name: string | null;
-    slug: string | null;
-  } | null;
-};
-
-export type BrandingAddonOrderCreateInput = Omit<
-  BrandingAddonOrderRecord,
-  | "id"
-  | "prepay_id"
-  | "transaction_id"
-  | "paid_amount_fen"
-  | "paid_at"
-  | "closed_at"
-  | "failure_code"
-  | "failure_message"
-  | "entitlement_event_id"
-  | "close_claim_token"
-  | "close_claim_expires_at"
-  | "close_attempt_count"
-  | "close_last_error"
-  | "created_at"
-  | "updated_at"
->;
-
-export type BrandingAddonNotificationCreateInput = Omit<
-  BrandingAddonWechatNotificationRecord,
-  "id" | "processed_at" | "error_message" | "created_at" | "updated_at"
->;
 
 export type BrandingConfirmPurchaseInput = {
   orderId: string;
@@ -140,20 +82,6 @@ export type BrandingConfirmPurchaseResult = {
   source_type: "purchase";
 };
 
-const ORDER_COLUMNS = [
-  "id,tenant_id,order_no,out_trade_no,idempotency_key,product_id,product_code",
-  "entitlement_code,product_name,amount_fen,term_years,purchase_notes,refund_policy",
-  "status,channel,payer_openid,payment_config_id,expected_guard_version",
-  "payment_mchid,payment_appid,prepay_id,payment_expires_at,transaction_id",
-  "paid_amount_fen,paid_at,closed_at,failure_code,failure_message",
-  "entitlement_event_id,created_by,metadata,close_claim_token",
-  "close_claim_expires_at,close_attempt_count,close_last_error,created_at,updated_at",
-].join(",");
-
-const NOTIFICATION_COLUMNS =
-  "id,notify_id,tenant_id,order_id,event_type,resource_type,raw_payload," +
-  "signature_valid,processed,processed_at,error_message,created_at,updated_at";
-
 export class BrandingAddonOrderRepository {
   constructor(
     private readonly clientProvider: () => AddonClient = () =>
@@ -164,7 +92,7 @@ export class BrandingAddonOrderRepository {
     tenantId: string;
     idempotencyKey: string;
   }) {
-    return this.findTenantOrder([
+    return this.findInternalOrder([
       ["tenant_id", input.tenantId],
       ["idempotency_key", input.idempotencyKey],
     ]);
@@ -174,7 +102,7 @@ export class BrandingAddonOrderRepository {
     tenantId: string;
     productCode: string;
   }) {
-    return this.findTenantOrder([
+    return this.findInternalOrder([
       ["tenant_id", input.tenantId],
       ["product_code", input.productCode],
       ["status", "pending"],
@@ -184,7 +112,7 @@ export class BrandingAddonOrderRepository {
   async createOrder(input: BrandingAddonOrderCreateInput) {
     const { data, error } = await this.orders()
       .insert(input)
-      .select(ORDER_COLUMNS)
+      .select(PAYMENT_ORDER_COLUMNS)
       .single();
     if (error) {
       const conflict = orderConflict(error);
@@ -206,14 +134,27 @@ export class BrandingAddonOrderRepository {
       .eq("id", input.orderId)
       .eq("status", "pending")
       .gt("payment_expires_at", input.now.toISOString())
-      .select(ORDER_COLUMNS)
+      .select(PAYMENT_ORDER_COLUMNS)
       .maybeSingle();
     if (error) throw Errors.dbError("保存年度品牌权益预支付单失败", error);
     return (data as BrandingAddonOrderRecord | null) ?? null;
   }
 
   async findTenantOrderById(input: { tenantId: string; orderId: string }) {
-    return this.findTenantOrder([
+    const { data, error } = await this.orders()
+      .select(TENANT_ORDER_DETAIL_COLUMNS)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询年度品牌权益订单失败", error);
+    return (data as TenantBrandingAddonOrderDetailRecord | null) ?? null;
+  }
+
+  async findInternalTenantOrderById(input: {
+    tenantId: string;
+    orderId: string;
+  }) {
+    return this.findInternalOrder([
       ["tenant_id", input.tenantId],
       ["id", input.orderId],
     ]);
@@ -224,18 +165,27 @@ export class BrandingAddonOrderRepository {
     page?: number;
     pageSize?: number;
     status?: BrandingAddonOrderStatus;
+    keyword?: string;
   }) {
     const pagination = normalizePagination(input.page, input.pageSize);
     let query = this.orders()
-      .select(ORDER_COLUMNS, { count: "exact" })
+      .select(TENANT_ORDER_LIST_COLUMNS, { count: "exact" })
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(pagination.from, pagination.to);
     if (input.status) query = query.eq("status", input.status);
+    if (input.keyword) {
+      const escaped = input.keyword.replaceAll(",", "\\,");
+      query = query.or(`order_no.ilike.%${escaped}%`);
+    }
     const { data, error, count } = await query;
     if (error) throw Errors.dbError("查询年度品牌权益订单列表失败", error);
-    return pageResult<BrandingAddonOrderRecord>(data, count, pagination);
+    return pageResult<TenantBrandingAddonOrderListRecord>(
+      data,
+      count,
+      pagination,
+    );
   }
 
   async listPlatformOrders(input: {
@@ -244,11 +194,13 @@ export class BrandingAddonOrderRepository {
     tenantId?: string;
     status?: BrandingAddonOrderStatus;
     keyword?: string;
+    createdFrom?: string;
+    createdTo?: string;
   }) {
     const pagination = normalizePagination(input.page, input.pageSize);
     let query = this.orders()
       .select(
-        `${ORDER_COLUMNS},tenant:tenants!tenant_addon_orders_tenant_id_fkey(id,name,slug)`,
+        `${PLATFORM_ORDER_LIST_COLUMNS},tenant:tenants!tenant_addon_orders_tenant_id_fkey(id,name,slug)`,
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -256,6 +208,8 @@ export class BrandingAddonOrderRepository {
       .range(pagination.from, pagination.to);
     if (input.tenantId) query = query.eq("tenant_id", input.tenantId);
     if (input.status) query = query.eq("status", input.status);
+    if (input.createdFrom) query = query.gte("created_at", input.createdFrom);
+    if (input.createdTo) query = query.lte("created_at", input.createdTo);
     if (input.keyword) {
       const escaped = input.keyword.replaceAll(",", "\\,");
       query = query.or(
@@ -264,7 +218,7 @@ export class BrandingAddonOrderRepository {
     }
     const { data, error, count } = await query;
     if (error) throw Errors.dbError("查询平台品牌权益订单失败", error);
-    return pageResult<PlatformBrandingAddonOrderRecord>(
+    return pageResult<PlatformBrandingAddonOrderListRecord>(
       data,
       count,
       pagination,
@@ -274,13 +228,14 @@ export class BrandingAddonOrderRepository {
   async findPlatformOrderById(orderId: string) {
     const { data, error } = await this.orders()
       .select(
-        `${ORDER_COLUMNS},tenant:tenants!tenant_addon_orders_tenant_id_fkey(id,name,slug)`,
+        `${PLATFORM_ORDER_DETAIL_COLUMNS},tenant:tenants!tenant_addon_orders_tenant_id_fkey(id,name,slug)`,
       )
       .eq("id", orderId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询平台品牌权益订单失败", error);
-  return (data as PlatformBrandingAddonOrderRecord | null) ?? null;
+    return (data as PlatformBrandingAddonOrderDetailRecord | null) ?? null;
   }
+
   async findByOutTradeNo(outTradeNo: string) {
     return this.findUniquePaymentIdentifier(
       "out_trade_no",
@@ -376,8 +331,8 @@ export class BrandingAddonOrderRepository {
     return this.clientProvider().from("tenant_addon_wechat_notifications");
   }
 
-  private async findTenantOrder(filters: Array<[string, unknown]>) {
-    let query = this.orders().select(ORDER_COLUMNS);
+  private async findInternalOrder(filters: Array<[string, unknown]>) {
+    let query = this.orders().select(PAYMENT_ORDER_COLUMNS);
     for (const [column, value] of filters) query = query.eq(column, value);
     const { data, error } = await query.maybeSingle();
     if (error) throw Errors.dbError("查询年度品牌权益订单失败", error);
@@ -391,7 +346,7 @@ export class BrandingAddonOrderRepository {
     message: string,
   ) {
     const { data, error } = await this.orders()
-      .select(ORDER_COLUMNS)
+      .select(CALLBACK_ORDER_COLUMNS)
       .eq(column, value)
       .limit(2);
     if (error) throw Errors.dbError("查询年度品牌权益支付订单失败", error);

@@ -4,6 +4,7 @@ import {
   BrandingAddonCreateOrderSchema,
   BrandingAddonOrderListQuerySchema,
   BrandingAddonProductPatchSchema,
+  PlatformBrandingAddonOrderListQuerySchema,
 } from "./branding-addon";
 
 describe("BrandingAddonProductPatchSchema", () => {
@@ -175,6 +176,45 @@ describe("BrandingAddonOrderListQuerySchema", () => {
     expect(() => BrandingAddonOrderListQuerySchema.parse({
       page: 1,
       pageSize: 101,
+    })).toThrow();
+  });
+
+  test("accepts a bounded tenant keyword", () => {
+    expect(BrandingAddonOrderListQuerySchema.parse({
+      keyword: "BA20260728",
+    }).keyword).toBe("BA20260728");
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      keyword: "x".repeat(121),
+    })).toThrow();
+  });
+});
+
+describe("PlatformBrandingAddonOrderListQuerySchema", () => {
+  test("freezes tenant, status, keyword and created-time filters", () => {
+    expect(PlatformBrandingAddonOrderListQuerySchema.parse({
+      tenant_id: "00000000-0000-4000-8000-000000000001",
+      status: "paid",
+      keyword: "BA20260728",
+      created_from: "2026-07-01T00:00:00.000Z",
+      created_to: "2026-07-31T23:59:59.999Z",
+    })).toMatchObject({
+      tenant_id: "00000000-0000-4000-8000-000000000001",
+      status: "paid",
+      keyword: "BA20260728",
+      created_from: "2026-07-01T00:00:00.000Z",
+      created_to: "2026-07-31T23:59:59.999Z",
+    });
+  });
+
+  test("rejects invalid tenant and time filters", () => {
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      tenant_id: "tenant-a",
+    })).toThrow();
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      created_from: "2026-07-01",
+    })).toThrow();
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      created_to: "not-a-time",
     })).toThrow();
   });
 });

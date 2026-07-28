@@ -56,6 +56,18 @@ export const BrandingAddonOrderStatusSchema = z.enum(
 
 export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
   status: BrandingAddonOrderStatusSchema.optional(),
+  keyword: z.string()
+    .trim()
+    .min(1, "关键词不能为空")
+    .max(120, "关键词不能超过 120 个字符")
+    .optional(),
+});
+
+export const PlatformBrandingAddonOrderListQuerySchema =
+  BrandingAddonOrderListQuerySchema.extend({
+    tenant_id: z.uuid("租户 ID 格式不正确").optional(),
+    created_from: z.iso.datetime("开始时间格式不正确").optional(),
+    created_to: z.iso.datetime("结束时间格式不正确").optional(),
 });
 
 export type BrandingAddonProductPatchInput =
@@ -64,3 +76,5 @@ export type BrandingAddonCreateOrderInput =
   z.infer<typeof BrandingAddonCreateOrderSchema>;
 export type BrandingAddonOrderListQuery =
   z.infer<typeof BrandingAddonOrderListQuerySchema>;
+export type PlatformBrandingAddonOrderListQuery =
+  z.infer<typeof PlatformBrandingAddonOrderListQuerySchema>;
