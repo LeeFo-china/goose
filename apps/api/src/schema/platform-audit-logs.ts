@@ -77,6 +77,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "tenant_supplier_blacklist",
   "supplier_contract_activate",
   "supplier_contract_terminate",
+  "branding_addon_product.update",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

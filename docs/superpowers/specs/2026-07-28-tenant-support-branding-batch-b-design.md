@@ -57,9 +57,11 @@ term_years = 1
 - `purchase_notes`
 - `enabled`
 
-商品编码、权益编码和周期不可通过配置接口修改。价格必须为正整数
-分。商品下架后不允许新建订单；既有订单和订单快照不受商品后续
-修改影响。
+商品编码、权益编码和周期不可通过配置接口修改。初始化商品保持
+`enabled=false` 且 `amount_fen=NULL`，禁止在 migration 中猜测价格；
+平台配置正整数分价格后才能启用。商品关闭时允许价格继续未配置。
+商品下架后不允许新建订单；既有订单和订单快照不受商品后续修改
+影响。
 
 ### 3.2 订单有效期与重复提交
 
@@ -117,7 +119,7 @@ source_id = tenant_addon_orders.id
 | `code` | text | 商品编码，唯一 |
 | `entitlement_code` | text | 权益编码 |
 | `name` | text | 商品名称 |
-| `amount_fen` | integer | 价格，正整数分 |
+| `amount_fen` | integer nullable | 关闭状态允许未配置；启用时必须为正整数分 |
 | `term_years` | integer | 本商品固定 1 |
 | `purchase_notes` | text | 购买说明 |
 | `refund_policy` | text | 固定“不支持退款”政策 |
@@ -126,9 +128,9 @@ source_id = tenant_addon_orders.id
 | `updated_by_employee_id` | uuid nullable | 最近操作人 |
 | `created_at` / `updated_at` | timestamptz | 时间 |
 
-初始化 migration 创建一条关闭状态的正式商品。dev 部署后通过平台
-配置接口将测试价格调整为 1 分并启用，避免 migration 将测试价格
-带入其他环境。
+初始化 migration 创建一条 `enabled=false`、`amount_fen=NULL` 的
+正式商品。dev 部署后通过平台配置接口将测试价格调整为 1 分并启用，
+避免 migration 猜测价格或将测试价格带入其他环境。
 
 ### 4.2 `tenant_addon_orders`
 
@@ -352,6 +354,7 @@ GET /platform/branding/entitlement-orders/:id
 | --- | --- | --- |
 | 404 | `BRANDING_ADDON_PRODUCT_NOT_FOUND` | 商品不存在或未上架 |
 | 409 | `BRANDING_ADDON_PRODUCT_VERSION_CONFLICT` | 商品配置版本冲突 |
+| 409 | `BRANDING_ADDON_PRODUCT_PRICE_REQUIRED` | 启用前尚未配置正整数分价格 |
 | 403 | `BRANDING_ENTITLEMENT_PURCHASE_FORBIDDEN` | 非当前租户管理员 |
 | 409 | `BRANDING_ENTITLEMENT_SUSPENDED` | 权益暂停，不能购买 |
 | 409 | `BRANDING_ENTITLEMENT_REVOKED` | 权益撤销，不能购买 |
