@@ -18,6 +18,7 @@ describe("platform branding addon product admin contract", () => {
     expect(page).toContain("getAdminToken");
     expect(page).toContain("parseBackendJson");
     expect(page).toContain("PlatformBrandingAddonProductForm");
+    expect(page).toContain("key={result.product.version}");
   });
 
   test("patches editable fields with optimistic version handling", () => {

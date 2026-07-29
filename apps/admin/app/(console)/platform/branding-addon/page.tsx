@@ -74,7 +74,12 @@ export default async function PlatformBrandingAddonPage() {
 
       {result.error ? <StatusAlert>{result.error}</StatusAlert> : null}
       {result.product
-        ? <PlatformBrandingAddonProductForm initialProduct={result.product} />
+        ? (
+          <PlatformBrandingAddonProductForm
+            key={result.product.version}
+            initialProduct={result.product}
+          />
+        )
         : null}
     </div>
   );
