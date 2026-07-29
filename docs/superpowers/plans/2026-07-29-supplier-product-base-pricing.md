@@ -346,6 +346,8 @@ for (const fn of [
   "publish_supplier_price_list",
   "create_supplier_price_list_version",
   "retire_supplier_price_list",
+  "upsert_supplier_price_list_item",
+  "delete_supplier_price_list_item",
 ]) {
   expect(sql).toContain(`CREATE FUNCTION public.${fn}(`);
   expect(sql).toContain(`GRANT EXECUTE ON FUNCTION public.${fn}`);

@@ -2357,6 +2357,528 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION public.upsert_supplier_price_list_item(
+  p_item_id uuid,
+  p_price_list_id uuid,
+  p_tenant_id uuid,
+  p_supplier_id uuid,
+  p_sku_id uuid,
+  p_unit_price numeric,
+  p_tax_rate numeric,
+  p_tax_inclusive boolean,
+  p_expected_version integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text,
+  p_proxy_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_price_list public.supplier_price_lists%ROWTYPE;
+  v_item public.supplier_price_list_items%ROWTYPE;
+  v_before_item jsonb := NULL;
+  v_before_list jsonb;
+  v_request jsonb;
+  v_item_snapshot jsonb;
+  v_to_state jsonb;
+  v_purchase_unit_id uuid;
+  v_base_unit_id uuid;
+  v_base_unit_conversion numeric(18, 6);
+BEGIN
+  IF p_item_id IS NULL OR p_price_list_id IS NULL
+    OR p_tenant_id IS NULL OR p_supplier_id IS NULL OR p_sku_id IS NULL
+    OR p_unit_price IS NULL OR p_unit_price < 0
+    OR p_tax_rate IS NULL OR p_tax_rate < 0 OR p_tax_rate > 1
+    OR p_tax_inclusive IS NULL
+    OR p_expected_version IS NULL OR p_expected_version < 1
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_proxy_reason IS NULL OR btrim(p_proxy_reason) = ''
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_PRICE_LIST_INVALID_ACTION';
+  END IF;
+
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'supplier_id', p_supplier_id,
+    'price_list_id', p_price_list_id,
+    'item_id', p_item_id,
+    'sku_id', p_sku_id,
+    'unit_price', p_unit_price::text,
+    'tax_rate', p_tax_rate::text,
+    'tax_inclusive', p_tax_inclusive,
+    'expected_version', p_expected_version,
+    'actor_employee_id', p_actor_employee_id,
+    'proxy_reason', p_proxy_reason
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_price_list'
+      OR v_event.resource_id <> p_price_list_id
+      OR v_event.command <>
+        'upsert_supplier_price_list_item:' || p_item_id::text
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'updated',
+      'idempotent', true,
+      'price_list', v_event.to_state -> 'price_list',
+      'item', v_event.to_state -> 'item',
+      'version', v_event.result_version
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_proxy_scope(
+    p_tenant_id,
+    p_supplier_id,
+    p_actor_employee_id
+  );
+
+  SELECT price_list.*
+  INTO v_price_list
+  FROM public.supplier_price_lists AS price_list
+  WHERE price_list.id = p_price_list_id
+    AND price_list.supplier_id = p_supplier_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PRICE_LIST_NOT_FOUND'
+    );
+  END IF;
+
+  IF v_price_list.row_version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PRICE_LIST_VERSION_CONFLICT',
+      'version', v_price_list.row_version,
+      'current_status', v_price_list.lifecycle_status
+    );
+  END IF;
+
+  IF v_price_list.lifecycle_status <> 'draft' THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PRICE_LIST_INVALID_ACTION'
+    );
+  END IF;
+
+  SELECT
+    sku.purchase_unit_id,
+    sku.base_unit_id,
+    sku.base_unit_conversion
+  INTO
+    v_purchase_unit_id,
+    v_base_unit_id,
+    v_base_unit_conversion
+  FROM public.supplier_skus AS sku
+  WHERE sku.id = p_sku_id
+    AND sku.supplier_id = p_supplier_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_SKU_NOT_FOUND'
+    );
+  END IF;
+
+  SELECT item.*
+  INTO v_item
+  FROM public.supplier_price_list_items AS item
+  WHERE item.id = p_item_id
+  FOR UPDATE;
+
+  IF FOUND AND (
+    v_item.supplier_price_list_id <> p_price_list_id
+    OR v_item.supplier_id <> p_supplier_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PRICE_LIST_INVALID_ACTION'
+    );
+  END IF;
+
+  IF FOUND THEN
+    v_before_item := to_jsonb(v_item);
+  END IF;
+  v_before_list := to_jsonb(v_price_list);
+
+  BEGIN
+    IF v_before_item IS NULL THEN
+      INSERT INTO public.supplier_price_list_items (
+        id,
+        supplier_id,
+        supplier_price_list_id,
+        supplier_sku_id,
+        minimum_quantity,
+        maximum_quantity,
+        purchase_unit_id,
+        base_unit_id,
+        base_unit_conversion,
+        unit_price,
+        tax_rate,
+        tax_inclusive,
+        acting_tenant_id,
+        acting_employee_id,
+        operation_source,
+        proxy_reason,
+        created_by_employee_id,
+        updated_by_employee_id
+      )
+      VALUES (
+        p_item_id,
+        p_supplier_id,
+        p_price_list_id,
+        p_sku_id,
+        1,
+        NULL,
+        v_purchase_unit_id,
+        v_base_unit_id,
+        v_base_unit_conversion,
+        p_unit_price::numeric(14, 2),
+        p_tax_rate::numeric(7, 6),
+        p_tax_inclusive,
+        p_tenant_id,
+        p_actor_employee_id,
+        'tenant_proxy',
+        btrim(p_proxy_reason),
+        p_actor_employee_id,
+        p_actor_employee_id
+      )
+      RETURNING * INTO v_item;
+    ELSE
+      UPDATE public.supplier_price_list_items AS item
+      SET
+        supplier_sku_id = p_sku_id,
+        unit_price = p_unit_price::numeric(14, 2),
+        tax_rate = p_tax_rate::numeric(7, 6),
+        tax_inclusive = p_tax_inclusive,
+        acting_tenant_id = p_tenant_id,
+        acting_employee_id = p_actor_employee_id,
+        operation_source = 'tenant_proxy',
+        proxy_reason = btrim(p_proxy_reason),
+        updated_by_employee_id = p_actor_employee_id,
+        updated_at = now()
+      WHERE item.id = p_item_id
+      RETURNING * INTO v_item;
+    END IF;
+  EXCEPTION
+    WHEN unique_violation THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PRICE_LIST_INVALID_ACTION',
+        'reason', 'duplicate_sku'
+      );
+  END;
+
+  UPDATE public.supplier_price_lists AS price_list
+  SET
+    row_version = price_list.row_version + 1,
+    acting_tenant_id = p_tenant_id,
+    acting_employee_id = p_actor_employee_id,
+    operation_source = 'tenant_proxy',
+    proxy_reason = btrim(p_proxy_reason),
+    updated_by_employee_id = p_actor_employee_id,
+    updated_at = now()
+  WHERE price_list.id = p_price_list_id
+  RETURNING * INTO v_price_list;
+
+  v_item_snapshot := to_jsonb(v_item) || jsonb_build_object(
+    'minimum_quantity', v_item.minimum_quantity::text,
+    'maximum_quantity',
+      CASE
+        WHEN v_item.maximum_quantity IS NULL THEN NULL
+        ELSE to_jsonb(v_item.maximum_quantity::text)
+      END,
+    'base_unit_conversion', v_item.base_unit_conversion::text,
+    'unit_price', v_item.unit_price::text,
+    'tax_rate', v_item.tax_rate::text
+  );
+  v_to_state := jsonb_build_object(
+    'price_list', to_jsonb(v_price_list),
+    'item', v_item_snapshot
+  );
+
+  INSERT INTO public.supplier_command_events (
+    tenant_id,
+    resource_type,
+    resource_id,
+    command,
+    from_state,
+    to_state,
+    reason,
+    actor_user_id,
+    actor_employee_id,
+    idempotency_key,
+    result_version
+  )
+  VALUES (
+    p_tenant_id,
+    'supplier_price_list',
+    p_price_list_id,
+    'upsert_supplier_price_list_item:' || p_item_id::text,
+    jsonb_build_object(
+      '_request', v_request,
+      'price_list', v_before_list,
+      'item', v_before_item
+    ),
+    v_to_state,
+    btrim(p_proxy_reason),
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    v_price_list.row_version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'updated',
+    'idempotent', false,
+    'price_list', to_jsonb(v_price_list),
+    'item', v_item_snapshot,
+    'version', v_price_list.row_version
+  );
+END;
+$$;
+
+CREATE FUNCTION public.delete_supplier_price_list_item(
+  p_item_id uuid,
+  p_price_list_id uuid,
+  p_tenant_id uuid,
+  p_supplier_id uuid,
+  p_expected_version integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text,
+  p_proxy_reason text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_price_list public.supplier_price_lists%ROWTYPE;
+  v_item public.supplier_price_list_items%ROWTYPE;
+  v_before_list jsonb;
+  v_request jsonb;
+BEGIN
+  IF p_item_id IS NULL OR p_price_list_id IS NULL
+    OR p_tenant_id IS NULL OR p_supplier_id IS NULL
+    OR p_expected_version IS NULL OR p_expected_version < 1
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_proxy_reason IS NULL OR btrim(p_proxy_reason) = ''
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_PRICE_LIST_INVALID_ACTION';
+  END IF;
+
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'supplier_id', p_supplier_id,
+    'price_list_id', p_price_list_id,
+    'item_id', p_item_id,
+    'expected_version', p_expected_version,
+    'actor_employee_id', p_actor_employee_id,
+    'proxy_reason', p_proxy_reason
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_price_list'
+      OR v_event.resource_id <> p_price_list_id
+      OR v_event.command <>
+        'delete_supplier_price_list_item:' || p_item_id::text
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'deleted',
+      'idempotent', true,
+      'price_list', v_event.to_state -> 'price_list',
+      'version', v_event.result_version
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_proxy_scope(
+    p_tenant_id,
+    p_supplier_id,
+    p_actor_employee_id
+  );
+
+  SELECT price_list.*
+  INTO v_price_list
+  FROM public.supplier_price_lists AS price_list
+  WHERE price_list.id = p_price_list_id
+    AND price_list.supplier_id = p_supplier_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PRICE_LIST_NOT_FOUND'
+    );
+  END IF;
+
+  IF v_price_list.row_version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PRICE_LIST_VERSION_CONFLICT',
+      'version', v_price_list.row_version,
+      'current_status', v_price_list.lifecycle_status
+    );
+  END IF;
+
+  IF v_price_list.lifecycle_status <> 'draft' THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PRICE_LIST_INVALID_ACTION'
+    );
+  END IF;
+
+  SELECT item.*
+  INTO v_item
+  FROM public.supplier_price_list_items AS item
+  WHERE item.id = p_item_id
+    AND item.supplier_price_list_id = p_price_list_id
+    AND item.supplier_id = p_supplier_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PRICE_ITEM_NOT_FOUND'
+    );
+  END IF;
+
+  v_before_list := to_jsonb(v_price_list);
+
+  DELETE FROM public.supplier_price_list_items AS item
+  WHERE item.id = p_item_id;
+
+  UPDATE public.supplier_price_lists AS price_list
+  SET
+    row_version = price_list.row_version + 1,
+    acting_tenant_id = p_tenant_id,
+    acting_employee_id = p_actor_employee_id,
+    operation_source = 'tenant_proxy',
+    proxy_reason = btrim(p_proxy_reason),
+    updated_by_employee_id = p_actor_employee_id,
+    updated_at = now()
+  WHERE price_list.id = p_price_list_id
+  RETURNING * INTO v_price_list;
+
+  INSERT INTO public.supplier_command_events (
+    tenant_id,
+    resource_type,
+    resource_id,
+    command,
+    from_state,
+    to_state,
+    reason,
+    actor_user_id,
+    actor_employee_id,
+    idempotency_key,
+    result_version
+  )
+  VALUES (
+    p_tenant_id,
+    'supplier_price_list',
+    p_price_list_id,
+    'delete_supplier_price_list_item:' || p_item_id::text,
+    jsonb_build_object(
+      '_request', v_request,
+      'price_list', v_before_list,
+      'item', to_jsonb(v_item)
+    ),
+    jsonb_build_object('price_list', to_jsonb(v_price_list)),
+    btrim(p_proxy_reason),
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    v_price_list.row_version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'deleted',
+    'idempotent', false,
+    'price_list', to_jsonb(v_price_list),
+    'version', v_price_list.row_version
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.upsert_supplier_price_list_item(
+  uuid, uuid, uuid, uuid, uuid, numeric, numeric, boolean, integer, uuid,
+  uuid, text, text
+)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.upsert_supplier_price_list_item(
+  uuid, uuid, uuid, uuid, uuid, numeric, numeric, boolean, integer, uuid,
+  uuid, text, text
+)
+TO service_role;
+
+REVOKE ALL ON FUNCTION public.delete_supplier_price_list_item(
+  uuid, uuid, uuid, uuid, integer, uuid, uuid, text, text
+)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_supplier_price_list_item(
+  uuid, uuid, uuid, uuid, integer, uuid, uuid, text, text
+)
+TO service_role;
+
 REVOKE ALL ON FUNCTION public.create_supplier_product(
   uuid, uuid, uuid, text, text, uuid, uuid, text, uuid, uuid, text, text
 )

@@ -23,6 +23,8 @@ const COMMAND_FUNCTIONS = [
   "publish_supplier_price_list",
   "create_supplier_price_list_version",
   "retire_supplier_price_list",
+  "upsert_supplier_price_list_item",
+  "delete_supplier_price_list_item",
 ] as const;
 
 function extractFunction(name: string) {
