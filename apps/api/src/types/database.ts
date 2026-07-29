@@ -9731,6 +9731,406 @@ export type Database = {
           },
         ]
       }
+      supplier_price_list_items: {
+        Row: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          base_unit_conversion: number
+          base_unit_id: string
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          maximum_quantity: number | null
+          minimum_quantity: number
+          operation_source: string
+          proxy_reason: string
+          purchase_unit_id: string
+          supplier_id: string
+          supplier_price_list_id: string
+          supplier_sku_id: string
+          tax_inclusive: boolean
+          tax_rate: number
+          unit_price: number
+          updated_at: string
+          updated_by_employee_id: string
+        }
+        Insert: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          base_unit_conversion: number
+          base_unit_id: string
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          maximum_quantity?: number | null
+          minimum_quantity?: number
+          operation_source?: string
+          proxy_reason: string
+          purchase_unit_id: string
+          supplier_id: string
+          supplier_price_list_id: string
+          supplier_sku_id: string
+          tax_inclusive?: boolean
+          tax_rate?: number
+          unit_price: number
+          updated_at?: string
+          updated_by_employee_id: string
+        }
+        Update: {
+          acting_employee_id?: string
+          acting_tenant_id?: string
+          base_unit_conversion?: number
+          base_unit_id?: string
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          maximum_quantity?: number | null
+          minimum_quantity?: number
+          operation_source?: string
+          proxy_reason?: string
+          purchase_unit_id?: string
+          supplier_id?: string
+          supplier_price_list_id?: string
+          supplier_sku_id?: string
+          tax_inclusive?: boolean
+          tax_rate?: number
+          unit_price?: number
+          updated_at?: string
+          updated_by_employee_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_price_items_list_supplier_fkey"
+            columns: ["supplier_price_list_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_lists"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_price_items_sku_supplier_fkey"
+            columns: ["supplier_sku_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_acting_employee_id_fkey"
+            columns: ["acting_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_base_unit_id_fkey"
+            columns: ["base_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_purchase_unit_id_fkey"
+            columns: ["purchase_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_list_items_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_price_lists: {
+        Row: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          effective_from: string
+          effective_until: string | null
+          id: string
+          lifecycle_status: string
+          name: string
+          operation_source: string
+          price_list_code: string
+          proxy_reason: string
+          published_at: string | null
+          row_version: number
+          scope_type: string
+          supersedes_price_list_id: string | null
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version_number: number
+        }
+        Insert: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          effective_from: string
+          effective_until?: string | null
+          id?: string
+          lifecycle_status?: string
+          name: string
+          operation_source?: string
+          price_list_code: string
+          proxy_reason: string
+          published_at?: string | null
+          row_version?: number
+          scope_type?: string
+          supersedes_price_list_id?: string | null
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version_number: number
+        }
+        Update: {
+          acting_employee_id?: string
+          acting_tenant_id?: string
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          effective_from?: string
+          effective_until?: string | null
+          id?: string
+          lifecycle_status?: string
+          name?: string
+          operation_source?: string
+          price_list_code?: string
+          proxy_reason?: string
+          published_at?: string | null
+          row_version?: number
+          scope_type?: string
+          supersedes_price_list_id?: string | null
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_price_lists_acting_employee_id_fkey"
+            columns: ["acting_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_supersedes_supplier_fkey"
+            columns: ["supersedes_price_list_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_lists"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_price_lists_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_products: {
+        Row: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          brand_id: string
+          category_id: string
+          created_at: string
+          created_by_employee_id: string
+          description: string | null
+          id: string
+          name: string
+          operation_source: string
+          product_code: string
+          proxy_reason: string
+          status: string
+          supplier_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          brand_id: string
+          category_id: string
+          created_at?: string
+          created_by_employee_id: string
+          description?: string | null
+          id?: string
+          name: string
+          operation_source?: string
+          product_code: string
+          proxy_reason: string
+          status?: string
+          supplier_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          acting_employee_id?: string
+          acting_tenant_id?: string
+          brand_id?: string
+          category_id?: string
+          created_at?: string
+          created_by_employee_id?: string
+          description?: string | null
+          id?: string
+          name?: string
+          operation_source?: string
+          product_code?: string
+          proxy_reason?: string
+          status?: string
+          supplier_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_products_acting_employee_id_fkey"
+            columns: ["acting_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_products_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_brands"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_qualification_types: {
         Row: {
           applicable_supplier_types: string[]
@@ -9950,6 +10350,155 @@ export type Database = {
           },
           {
             foreignKeyName: "supplier_service_regions_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_skus: {
+        Row: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          base_unit_conversion: number
+          base_unit_id: string
+          batch_managed: boolean
+          color_managed: boolean
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          model: string | null
+          name: string
+          operation_source: string
+          proxy_reason: string
+          purchase_unit_id: string
+          serial_managed: boolean
+          sku_code: string
+          specification: string | null
+          status: string
+          supplier_id: string
+          supplier_product_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          acting_employee_id: string
+          acting_tenant_id: string
+          base_unit_conversion: number
+          base_unit_id: string
+          batch_managed?: boolean
+          color_managed?: boolean
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          model?: string | null
+          name: string
+          operation_source?: string
+          proxy_reason: string
+          purchase_unit_id: string
+          serial_managed?: boolean
+          sku_code: string
+          specification?: string | null
+          status?: string
+          supplier_id: string
+          supplier_product_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          acting_employee_id?: string
+          acting_tenant_id?: string
+          base_unit_conversion?: number
+          base_unit_id?: string
+          batch_managed?: boolean
+          color_managed?: boolean
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          model?: string | null
+          name?: string
+          operation_source?: string
+          proxy_reason?: string
+          purchase_unit_id?: string
+          serial_managed?: boolean
+          sku_code?: string
+          specification?: string | null
+          status?: string
+          supplier_id?: string
+          supplier_product_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_skus_acting_employee_id_fkey"
+            columns: ["acting_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_acting_tenant_id_fkey"
+            columns: ["acting_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_base_unit_id_fkey"
+            columns: ["base_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_product_supplier_fkey"
+            columns: ["supplier_product_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_products"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_purchase_unit_id_fkey"
+            columns: ["purchase_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_updated_by_employee_id_fkey"
             columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
@@ -15206,6 +15755,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assert_supplier_proxy_scope: {
+        Args: {
+          p_actor_employee_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
       assign_platform_lead: {
         Args: {
           p_assigned_note?: string
@@ -16482,6 +17039,54 @@ export type Database = {
         }
         Returns: Json
       }
+      create_supplier_price_list: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_currency: string
+          p_effective_from: string
+          p_effective_until: string
+          p_idempotency_key: string
+          p_name: string
+          p_price_list_code: string
+          p_price_list_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_price_list_version: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_new_price_list_id: string
+          p_proxy_reason: string
+          p_source_price_list_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_product: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_brand_id: string
+          p_category_id: string
+          p_description: string
+          p_idempotency_key: string
+          p_name: string
+          p_product_code: string
+          p_product_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_supplier_qualification: {
         Args: {
           p_actor_employee_id: string
@@ -16526,6 +17131,27 @@ export type Database = {
           p_supplier_id: string
           p_valid_from: string
           p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_supplier_sku: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_batch_managed: boolean
+          p_color_managed: boolean
+          p_idempotency_key: string
+          p_model: string
+          p_name: string
+          p_product_id: string
+          p_proxy_reason: string
+          p_purchase_unit_id: string
+          p_serial_managed: boolean
+          p_sku_code: string
+          p_sku_id: string
+          p_specification: string
+          p_supplier_id: string
+          p_tenant_id: string
         }
         Returns: Json
       }
@@ -16574,6 +17200,20 @@ export type Database = {
       create_tenant_wechat_pay_applyment: {
         Args: { p_applyment: Json; p_audit_metadata: Json }
         Returns: string
+      }
+      delete_supplier_price_list_item: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_item_id: string
+          p_price_list_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       enable_douyin_miniapp_installation: {
         Args: { p_installation_id: string }
@@ -17253,6 +17893,34 @@ export type Database = {
         }
         Returns: Json
       }
+      mutate_supplier_product: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_product_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      mutate_supplier_sku: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_proxy_reason: string
+          p_sku_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       mutate_tenant_onboarding_platform_review: {
         Args: {
           p_action: string
@@ -17366,6 +18034,19 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      publish_supplier_price_list: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_price_list_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       publish_tenant_service_provider: {
         Args: {
@@ -17569,6 +18250,19 @@ export type Database = {
           tenant_status: string
           user_id: string
         }[]
+      }
+      retire_supplier_price_list: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_price_list_id: string
+          p_proxy_reason: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       return_tenant_service_provider_to_draft: {
         Args: {
@@ -17847,6 +18541,24 @@ export type Database = {
         }
         Returns: string
       }
+      upsert_supplier_price_list_item: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_item_id: string
+          p_price_list_id: string
+          p_proxy_reason: string
+          p_sku_id: string
+          p_supplier_id: string
+          p_tax_inclusive: boolean
+          p_tax_rate: number
+          p_tenant_id: string
+          p_unit_price: number
+        }
+        Returns: Json
+      }
       upsert_tenant_service_provider_area: {
         Args: {
           p_area: Json
@@ -17979,12 +18691,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -18006,13 +18718,12 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -18031,13 +18742,12 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -18056,13 +18766,12 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -18075,11 +18784,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
