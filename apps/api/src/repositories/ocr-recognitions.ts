@@ -185,7 +185,7 @@ export class OcrRecognitionRepository {
       .eq("scope_type", "tenant")
       .eq("tenant_id", tenantId)
       .eq("dedupe_key", dedupeKey)
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询OCR去重记录失败", error);
@@ -203,7 +203,7 @@ export class OcrRecognitionRepository {
       .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .eq("dedupe_key", input.dedupeKey)
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .lte("expires_at", input.before)
       .select("id");
 
