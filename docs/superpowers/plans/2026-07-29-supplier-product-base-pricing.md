@@ -381,7 +381,8 @@ WHERE event.actor_user_id = p_actor_user_id
 `create_supplier_price_list`、`publish_supplier_price_list`、
 `create_supplier_price_list_version`、`retire_supplier_price_list`。
 重复键参数不一致返回 `SUPPLIER_IDEMPOTENCY_CONFLICT`。启用商品前检查启用
-SKU；启用 SKU 前检查商品启用；停用商品不覆盖 SKU 历史状态。
+SKU；SKU 可在草稿商品下先启用，但商品停用时不能启用 SKU；只有商品与 SKU
+都启用时才能发布价格。停用商品不覆盖 SKU 历史状态。
 
 - [ ] **Step 4：实现价格簿创建、发布、新版本和退役**
 
