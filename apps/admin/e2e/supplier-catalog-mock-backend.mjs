@@ -53,6 +53,8 @@ function paginate(records, url) {
   const filtered = records.filter((record) =>
     matchesKeyword(record, keyword) &&
     (!status || record.status === status)
+  ).sort((left, right) =>
+    left.sort_order - right.sort_order || left.id.localeCompare(right.id)
   );
   const start = (page - 1) * pageSize;
   return {

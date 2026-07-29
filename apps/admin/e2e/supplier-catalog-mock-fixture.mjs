@@ -16,7 +16,6 @@ export const mockCatalogSession = {
   roles: ["platform_admin"],
   permissions: [{ code: "platform.catalog.manage", scope: "all" }],
   token: "supplier-catalog-mock-token",
-  expires_at: "2026-12-31T23:59:59+08:00",
 };
 
 const now = "2026-07-29T10:00:00+08:00";

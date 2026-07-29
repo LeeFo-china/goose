@@ -96,11 +96,13 @@ test.describe("供应标准目录确定性工作流", () => {
     expect(mutations).toHaveLength(4);
     expect(mutations.map((entry) => ({
       method: entry.method,
+      path: entry.path,
       idempotencyKey: entry.idempotencyKey,
       payload: entry.payload,
     }))).toEqual([
       {
         method: "POST",
+        path: "/platform/catalog/categories",
         idempotencyKey: expect.stringMatching(/^catalog-category:/),
         payload: {
           parent_id: null,
@@ -113,6 +115,7 @@ test.describe("供应标准目录确定性工作流", () => {
       },
       {
         method: "PATCH",
+        path: "/platform/catalog/categories/11000000-0000-4000-8000-000000000002",
         idempotencyKey: null,
         payload: {
           expected_version: 1,
@@ -123,6 +126,7 @@ test.describe("供应标准目录确定性工作流", () => {
       },
       {
         method: "PATCH",
+        path: "/platform/catalog/categories/11000000-0000-4000-8000-000000000002",
         idempotencyKey: null,
         payload: {
           expected_version: 2,
@@ -131,6 +135,7 @@ test.describe("供应标准目录确定性工作流", () => {
       },
       {
         method: "PATCH",
+        path: "/platform/catalog/categories/11000000-0000-4000-8000-000000000002",
         idempotencyKey: null,
         payload: {
           expected_version: 3,
@@ -183,11 +188,29 @@ test.describe("供应标准目录确定性工作流", () => {
       name: /^停用/,
     });
     await expect(statusDialog.getByText("数据版本已变化")).toBeVisible();
+
+    const secondConflictResponse = await request.post(
+      `${mockBackendBaseUrl}/__test/conflict-next`,
+      {
+        data: {
+          kind: "brand",
+          id: "12000000-0000-4000-8000-000000000002",
+        },
+      },
+    );
+    expect(secondConflictResponse.ok()).toBe(true);
+
     await statusDialog.getByRole("button", {
       name: "重试本次操作",
     }).click();
     await expect.poll(async () => (await readMutations(request)).length)
       .toBe(4);
+    await expect(statusDialog.getByText("数据版本已变化")).toBeVisible();
+    await statusDialog.getByRole("button", {
+      name: "重试本次操作",
+    }).click();
+    await expect.poll(async () => (await readMutations(request)).length)
+      .toBe(5);
     await expect(page.getByText("E2E 编辑品牌已停用")).toBeVisible();
 
     row = page.getByRole("row").filter({ hasText: "E2E 编辑品牌" });
@@ -196,9 +219,10 @@ test.describe("供应标准目录确定性工作流", () => {
     await expect(page.getByText("E2E 编辑品牌已启用")).toBeVisible();
 
     const mutations = await readMutations(request);
-    expect(mutations).toHaveLength(5);
+    expect(mutations).toHaveLength(6);
     expect(mutations[0]).toMatchObject({
       method: "POST",
+      path: "/platform/catalog/brands",
       idempotencyKey: expect.stringMatching(/^catalog-brand:/),
       payload: {
         status: "active",
@@ -208,17 +232,36 @@ test.describe("供应标准目录确定性工作流", () => {
         sort_order: 100,
       },
     });
-    expect(mutations.slice(1).map(({ payload }) => payload)).toEqual([
+    expect(mutations.slice(1).map(({ path, payload }) => ({
+      path,
+      payload,
+    }))).toEqual([
       {
-        expected_version: 1,
-        code: "E2E-BRAND",
-        name: "E2E 编辑品牌",
-        legal_name: "E2E 编辑品牌有限公司",
-        sort_order: 100,
+        path: "/platform/catalog/brands/12000000-0000-4000-8000-000000000002",
+        payload: {
+          expected_version: 1,
+          code: "E2E-BRAND",
+          name: "E2E 编辑品牌",
+          legal_name: "E2E 编辑品牌有限公司",
+          sort_order: 100,
+        },
       },
-      { expected_version: 2, status: "inactive" },
-      { expected_version: 3, status: "inactive" },
-      { expected_version: 4, status: "active" },
+      {
+        path: "/platform/catalog/brands/12000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 2, status: "inactive" },
+      },
+      {
+        path: "/platform/catalog/brands/12000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 3, status: "inactive" },
+      },
+      {
+        path: "/platform/catalog/brands/12000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 4, status: "inactive" },
+      },
+      {
+        path: "/platform/catalog/brands/12000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 5, status: "active" },
+      },
     ]);
   });
 
@@ -263,6 +306,7 @@ test.describe("供应标准目录确定性工作流", () => {
     expect(mutations).toHaveLength(4);
     expect(mutations[0]).toMatchObject({
       method: "POST",
+      path: "/platform/catalog/units",
       idempotencyKey: expect.stringMatching(/^catalog-unit:/),
       payload: {
         status: "active",
@@ -274,18 +318,30 @@ test.describe("供应标准目录确定性工作流", () => {
         sort_order: 100,
       },
     });
-    expect(mutations.slice(1).map(({ payload }) => payload)).toEqual([
+    expect(mutations.slice(1).map(({ path, payload }) => ({
+      path,
+      payload,
+    }))).toEqual([
       {
-        expected_version: 1,
-        code: "E2E-UNIT",
-        name: "E2E 编辑单位",
-        symbol: "E2UE",
-        base_unit_id: null,
-        conversion_factor: "1",
-        sort_order: 100,
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        payload: {
+          expected_version: 1,
+          code: "E2E-UNIT",
+          name: "E2E 编辑单位",
+          symbol: "E2UE",
+          base_unit_id: null,
+          conversion_factor: "1",
+          sort_order: 100,
+        },
       },
-      { expected_version: 2, status: "inactive" },
-      { expected_version: 3, status: "active" },
+      {
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 2, status: "inactive" },
+      },
+      {
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        payload: { expected_version: 3, status: "active" },
+      },
     ]);
   });
 });
