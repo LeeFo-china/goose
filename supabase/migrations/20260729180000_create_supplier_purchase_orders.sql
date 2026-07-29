@@ -245,6 +245,26 @@ ON public.supplier_price_list_items(
   supplier_price_list_id
 );
 
+CREATE FUNCTION public.supplier_purchase_order_snapshot(
+  p_order public.supplier_purchase_orders
+)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT to_jsonb(p_order) || jsonb_build_object(
+    'subtotal_amount', p_order.subtotal_amount::text,
+    'tax_amount', p_order.tax_amount::text,
+    'total_amount', p_order.total_amount::text
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.supplier_purchase_order_snapshot(
+  public.supplier_purchase_orders
+)
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.validate_supplier_purchase_order_scope()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -490,9 +510,9 @@ BEGIN
       base_unit.code AS base_unit_code,
       base_unit.name AS base_unit_name,
       base_unit.symbol AS base_unit_symbol,
-      price_item.base_unit_conversion,
-      price_item.unit_price,
-      price_item.tax_rate,
+      price_item.base_unit_conversion::text AS base_unit_conversion,
+      price_item.unit_price::text AS unit_price,
+      price_item.tax_rate::text AS tax_rate,
       price_item.tax_inclusive
     FROM public.supplier_price_list_items AS price_item
     JOIN public.supplier_price_lists AS price_list
@@ -1028,7 +1048,7 @@ BEGIN
         'version', v_order.version
       );
     END IF;
-    v_before := to_jsonb(v_order);
+    v_before := public.supplier_purchase_order_snapshot(v_order);
   END IF;
 
   DELETE FROM public.supplier_purchase_order_items AS item
@@ -1175,7 +1195,7 @@ BEGIN
     p_order_id,
     'save_supplier_purchase_order_draft',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_order),
+    public.supplier_purchase_order_snapshot(v_order),
     p_actor_user_id,
     p_actor_employee_id,
     p_idempotency_key,
@@ -1185,7 +1205,7 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'saved',
     'idempotent', false,
-    'purchase_order', to_jsonb(v_order),
+    'purchase_order', public.supplier_purchase_order_snapshot(v_order),
     'version', v_order.version
   );
 END;
@@ -1428,7 +1448,7 @@ BEGIN
     );
   END IF;
 
-  v_before := to_jsonb(v_order);
+  v_before := public.supplier_purchase_order_snapshot(v_order);
   UPDATE public.supplier_purchase_orders AS purchase_order
   SET status = 'submitted',
       submitted_by_employee_id = p_actor_employee_id,
@@ -1457,7 +1477,7 @@ BEGIN
     p_order_id,
     'submit_supplier_purchase_order',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_order),
+    public.supplier_purchase_order_snapshot(v_order),
     p_actor_user_id,
     p_actor_employee_id,
     p_idempotency_key,
@@ -1467,7 +1487,7 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'submitted',
     'idempotent', false,
-    'purchase_order', to_jsonb(v_order),
+    'purchase_order', public.supplier_purchase_order_snapshot(v_order),
     'version', v_order.version
   );
 END;
@@ -1597,7 +1617,7 @@ BEGIN
     );
   END IF;
 
-  v_before := to_jsonb(v_order);
+  v_before := public.supplier_purchase_order_snapshot(v_order);
   UPDATE public.supplier_purchase_orders AS purchase_order
   SET status = 'cancelled',
       cancelled_by_employee_id = p_actor_employee_id,
@@ -1628,7 +1648,7 @@ BEGIN
     p_order_id,
     'cancel_supplier_purchase_order',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_order),
+    public.supplier_purchase_order_snapshot(v_order),
     btrim(p_reason),
     p_actor_user_id,
     p_actor_employee_id,
@@ -1639,7 +1659,7 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'cancelled',
     'idempotent', false,
-    'purchase_order', to_jsonb(v_order),
+    'purchase_order', public.supplier_purchase_order_snapshot(v_order),
     'version', v_order.version
   );
 END;

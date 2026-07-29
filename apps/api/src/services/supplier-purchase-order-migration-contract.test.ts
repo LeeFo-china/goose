@@ -54,6 +54,9 @@ describe("supplier purchase order migration contract", () => {
       /tax_rate numeric\(7, 6\) NOT NULL/,
       /UNIQUE \(supplier_purchase_order_id, supplier_sku_id\)/,
     ]);
+    expect(sql).toMatch(
+      /CREATE FUNCTION public\.supplier_purchase_order_snapshot\([\s\S]*subtotal_amount::text[\s\S]*tax_amount::text[\s\S]*total_amount::text/,
+    );
   });
 
   test("enforces tenant and supplier ownership with database constraints", () => {
@@ -114,6 +117,8 @@ describe("supplier purchase order migration contract", () => {
       /price_list\.scope_type = 'default'/,
       /price_list\.currency = 'CNY'/,
       /relationship\.default_currency = 'CNY'/,
+      /price_item\.unit_price::text AS unit_price/,
+      /price_item\.tax_rate::text AS tax_rate/,
       /price_list\.effective_from <= p_priced_at/,
       /price_list\.effective_until IS NULL[\s\S]*price_list\.effective_until > p_priced_at/,
       /product\.status = 'active'/,
@@ -165,7 +170,8 @@ describe("supplier purchase order migration contract", () => {
         /SUPPLIER_IDEMPOTENCY_CONFLICT/,
         /'idempotent', true/,
         /INSERT INTO public\.supplier_command_events/,
-        /jsonb_build_object\('_request', v_request\)/,
+      /jsonb_build_object\('_request', v_request\)/,
+      /supplier_purchase_order_snapshot\(v_order\)/,
       ]);
     }
   });
