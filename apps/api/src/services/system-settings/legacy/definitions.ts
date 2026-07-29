@@ -5,6 +5,7 @@ import { DEFINITIONS_WECHAT_NOTIFY } from './definitions-wechat-notify';
 import { DEFINITIONS_PICTURE_LIBRARY } from './definitions-picture-library';
 import { DEFINITIONS_VISITOR } from './definitions-visitor';
 import { DEFINITIONS_PAYMENT } from './definitions-payment';
+import { DEFINITIONS_OCR_VISITOR } from './definitions-ocr-visitor';
 import type { SettingDefinition } from './shared';
 
 export const SETTING_DEFINITIONS: SettingDefinition[] = [
@@ -15,6 +16,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
   ...DEFINITIONS_PICTURE_LIBRARY,
   ...DEFINITIONS_VISITOR,
   ...DEFINITIONS_PAYMENT,
+  ...DEFINITIONS_OCR_VISITOR,
 ];
 
 export const definitionByKey = new Map(SETTING_DEFINITIONS.map((item) => [item.key, item]));
