@@ -40,13 +40,15 @@ import type {
   SupplierSku,
 } from "./supplier-product-types";
 
-type MutationTarget = {
-  kind: "product" | "sku";
+type MutationTarget = ({
   id: string;
   name: string;
   action: "activate" | "deactivate";
   version: number;
-} | null;
+} & (
+  | { kind: "product" }
+  | { kind: "sku"; supplierProductId: string }
+)) | null;
 
 export function SupplierProductList({
   tenantSupplierId,
@@ -291,6 +293,7 @@ function SkuTable({
           onClick={() => onMutate({
             kind: "sku",
             id: row.original.id,
+            supplierProductId: row.original.supplier_product_id,
             name: row.original.name,
             action: nextSkuAction(row.original),
             version: row.original.version,
@@ -334,7 +337,7 @@ function StatusMutationDialog({
     setSaving(true);
     const base = target.kind === "product"
       ? `/supplier-products/${target.id}`
-      : `/supplier-products/ignored/skus/${target.id}`;
+      : `/supplier-products/${target.supplierProductId}/skus/${target.id}`;
     try {
       await mutateSupplierResource(
         `${base}/${target.action}`,

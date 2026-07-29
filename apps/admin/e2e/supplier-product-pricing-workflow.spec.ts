@@ -106,7 +106,12 @@ test("SPU、SKU 和默认基础供货价可完整发布", async ({ page, request
   expect(mutations.map(({ method, path }) => ({ method, path }))).toEqual([
     { method: "POST", path: expect.stringMatching(/^\/supplier-products\/[^/]+$/) },
     { method: "POST", path: expect.stringMatching(/^\/supplier-products\/[^/]+\/skus\/[^/]+$/) },
-    { method: "POST", path: expect.stringMatching(/^\/supplier-products\/ignored\/skus\/[^/]+\/activate$/) },
+    {
+      method: "POST",
+      path: expect.stringMatching(
+        /^\/supplier-products\/[^/]+\/skus\/[^/]+\/activate$/,
+      ),
+    },
     { method: "POST", path: expect.stringMatching(/^\/supplier-products\/[^/]+\/activate$/) },
     { method: "POST", path: expect.stringMatching(/^\/supplier-price-lists\/[^/]+$/) },
     { method: "PUT", path: expect.stringMatching(/^\/supplier-price-lists\/[^/]+\/items\/[^/]+$/) },

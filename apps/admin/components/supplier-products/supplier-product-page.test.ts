@@ -39,11 +39,14 @@ describe("供应商品与供货价工作区", () => {
   test("商品和 SKU 代录要求原因并使用独立权限", () => {
     const productDialog = readSource("./supplier-product-dialog.tsx");
     const skuDialog = readSource("./supplier-sku-dialog.tsx");
+    const productList = readSource("./supplier-product-list.tsx");
 
     expect(productDialog).toContain("proxy_reason");
     expect(productDialog).toContain("代录原因");
     expect(skuDialog).toContain("proxy_reason");
     expect(skuDialog).toContain("代录原因");
+    expect(productList).toContain("supplier_product_id");
+    expect(productList).not.toContain("/ignored/");
   });
 
   test("只有成本价查看权限且已选供应商时才加载价格", async () => {
