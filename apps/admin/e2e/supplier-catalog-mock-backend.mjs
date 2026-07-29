@@ -86,6 +86,81 @@ function listUnits(url) {
   return paginate(records, url);
 }
 
+function nextCategoryId() {
+  return `11000000-0000-4000-8000-${
+    String(catalogState.categories.length + 1).padStart(12, "0")
+  }`;
+}
+
+function recordMutation(request, url, payload) {
+  const header = request.headers["idempotency-key"];
+  const idempotencyKey = Array.isArray(header) ? header[0] : header ?? null;
+  mutations.push({
+    method: request.method,
+    path: url.pathname,
+    idempotencyKey,
+    payload: structuredClone(payload),
+  });
+}
+
+async function createCategory(request, response, url) {
+  const header = request.headers["idempotency-key"];
+  const idempotencyKey = Array.isArray(header) ? header[0] : header;
+  const payload = JSON.parse(await readBody(request) || "{}");
+  if (!idempotencyKey?.trim()) {
+    sendJson(response, 400, {
+      success: false,
+      code: "IDEMPOTENCY_KEY_REQUIRED",
+      message: "缺少 Idempotency-Key",
+    });
+    return;
+  }
+  const now = new Date().toISOString();
+  const record = {
+    id: nextCategoryId(),
+    code: payload.code,
+    name: payload.name,
+    parent_id: payload.parent_id ?? null,
+    level: payload.level,
+    status: payload.status,
+    sort_order: payload.sort_order,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+  catalogState.categories.push(record);
+  recordMutation(request, url, payload);
+  sendJson(response, 201, { success: true, data: record });
+}
+
+async function updateCategory(request, response, url, categoryId) {
+  const payload = JSON.parse(await readBody(request) || "{}");
+  const record = catalogState.categories.find(({ id }) => id === categoryId);
+  if (!record) {
+    sendJson(response, 404, {
+      success: false,
+      code: "CATALOG_CATEGORY_NOT_FOUND",
+      message: "标准类目不存在",
+    });
+    return;
+  }
+  if (payload.expected_version !== record.version) {
+    sendJson(response, 409, {
+      success: false,
+      code: "SUPPLIER_VERSION_CONFLICT",
+      message: "目录数据版本已变化",
+    });
+    return;
+  }
+  for (const field of ["code", "name", "sort_order", "status"]) {
+    if (field in payload) record[field] = payload[field];
+  }
+  record.version += 1;
+  record.updated_at = new Date().toISOString();
+  recordMutation(request, url, payload);
+  sendJson(response, 200, { success: true, data: record });
+}
+
 const server = createServer(async (request, response) => {
   const url = new URL(
     request.url || "/",
@@ -144,6 +219,25 @@ const server = createServer(async (request, response) => {
     url.pathname === "/platform/catalog/units"
   ) {
     sendJson(response, 200, { success: true, data: listUnits(url) });
+    return;
+  }
+  if (
+    request.method === "POST" &&
+    url.pathname === "/platform/catalog/categories"
+  ) {
+    await createCategory(request, response, url);
+    return;
+  }
+  const categoryMatch = url.pathname.match(
+    /^\/platform\/catalog\/categories\/([^/]+)$/,
+  );
+  if (request.method === "PATCH" && categoryMatch) {
+    await updateCategory(
+      request,
+      response,
+      url,
+      decodeURIComponent(categoryMatch[1]),
+    );
     return;
   }
   if (
