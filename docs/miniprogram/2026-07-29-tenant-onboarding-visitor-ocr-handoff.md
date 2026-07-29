@@ -10,7 +10,8 @@
   `20242565..9e284d46`）。
 - `@gooes/domain` 版本：`1.13.0`。
 - dev API：`http://127.0.0.1:3000` 对应的 `local.gooes.api` 已重启。
-- dev 数据库 migration `20260729120000` 已应用，Local/Remote 对齐。
+- dev 数据库 migration `20260729120000` 已应用，该 OCR migration 的
+  Local/Remote 行一致。
 - dev 专项开关 `TENCENT_OCR_TENANT_ONBOARDING_ENABLED=true`。
 - 生产默认值仍由 migration 保持为 `false`，dev 联调通过前不要在生产开启。
 - Orange 仓库在本次交付中保持只读，没有修改、格式化、生成、提交或推送任何文件。
@@ -328,6 +329,11 @@ Orange 团队可按原对接单修改：
 - tarball 的 `dist/ocr.d.ts` 已包含 `tenant_onboarding_license`。
 - dev migration `20260729120000`：Local/Remote 对齐。
 - RPC 权限：anon 被拒绝（SQLSTATE `42501`），service role 可达参数校验。
+
+最终复核时 dev 远端另出现 `20260729160000`，来源是独立的
+`feature/supplier-catalog-hardening` 工作树
+`create_supplier_products_and_base_prices` migration；它不修改 OCR 表、函数或配置，
+也不属于本交付范围。为避免越权合并供应商功能，本任务没有把该分支带入 `main`。
 
 仓库完整 `bun test` 仍存在与本功能无关的历史失败；例如
 `sensitive-service-role-tables-rls-contract.test.ts` 在改动前的 `main`
