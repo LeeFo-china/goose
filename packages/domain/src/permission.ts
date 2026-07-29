@@ -140,6 +140,8 @@ export const PERMISSION_CODE_VALUES = [
   'supplier.product.manage',
   'supplier.cost-price.view',
   'supplier.cost-price.manage',
+  'supplier.purchase-order.view',
+  'supplier.purchase-order.manage',
   'project_referral.read',
   'project_referral.manage',
   'marketing_page.read',
@@ -574,6 +576,14 @@ export const PermissionCodeConfig: Record<
   },
   'supplier.cost-price.manage': {
     label: '管理供应商供货价',
+    module: 'supplier',
+  },
+  'supplier.purchase-order.view': {
+    label: '查看供应商采购单',
+    module: 'supplier',
+  },
+  'supplier.purchase-order.manage': {
+    label: '管理供应商采购单',
     module: 'supplier',
   },
   'project_referral.read': {
