@@ -252,7 +252,11 @@ export class TenantOnboardingOcrService {
         durationMs: elapsed(this.clockMsFactory(), startedAt),
         processedAt: this.nowFactory().toISOString(),
       });
-      return { recognition: this.toRecognition(succeeded), idempotent: false };
+      return {
+        recognition: this.toRecognition(succeeded),
+        idempotent: false,
+        cached: false,
+      };
     } catch (error) {
       await this.repository.markFailed({
         id: input.recognition.id,
@@ -308,6 +312,7 @@ export class TenantOnboardingOcrService {
     return {
       recognition: this.toRecognition(recognition),
       idempotent: true,
+      cached: false,
     };
   }
 

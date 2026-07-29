@@ -16,6 +16,11 @@ describe("isVisitorSessionRoute", () => {
       ["GET", "/tenant-onboarding/applications/application-id"],
       ["PATCH", "/tenant-onboarding/applications/application-id/supplement"],
       ["POST", "/tenant-onboarding/applications/application-id/withdraw"],
+      ["GET", "/tenant-onboarding/ocr/capabilities"],
+      ["HEAD", "/tenant-onboarding/ocr/capabilities"],
+      ["POST", "/tenant-onboarding/ocr/recognitions"],
+      ["GET", "/tenant-onboarding/ocr/recognitions/recognition-id"],
+      ["HEAD", "/tenant-onboarding/ocr/recognitions/recognition-id"],
       ["GET", "/visitor/local-service-providers"],
     ] as const;
 
@@ -28,6 +33,14 @@ describe("isVisitorSessionRoute", () => {
       .toBe(false);
     expect(isVisitorSessionRoute("GET", "/tenant-onboarding/applications"))
       .toBe(false);
+    expect(isVisitorSessionRoute("GET", "/tenant-onboarding/ocr/recognitions"))
+      .toBe(false);
+    expect(isVisitorSessionRoute("POST", "/tenant-onboarding/ocr/capabilities"))
+      .toBe(false);
+    expect(isVisitorSessionRoute(
+      "GET",
+      "/tenant-onboarding/ocr/recognitions/recognition-id/extra",
+    )).toBe(false);
   });
 
   test("allows visitor sessions to submit wechat rebind requests only", () => {

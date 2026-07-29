@@ -1,4 +1,5 @@
 import type { VerifiedJwtPayload } from "./types";
+import { isTenantOnboardingOcrRoute } from "./tenant-onboarding-routes";
 
 const publicRoutes = new Set([
   "/",
@@ -285,6 +286,10 @@ export function isVisitorSessionRoute(method: string, url: string) {
   if (isEffectiveBrandingRoute(method, url)) return true;
 
   if (isTenantOnboardingApplicantRoute(method, url)) {
+    return true;
+  }
+
+  if (isTenantOnboardingOcrRoute(method, url)) {
     return true;
   }
 

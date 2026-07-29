@@ -290,6 +290,7 @@ describe("TenantOnboardingOcrService recognition", () => {
     );
     expect(result).toMatchObject({
       idempotent: false,
+      cached: false,
       recognition: { status: "succeeded", fields: normalized.fields },
     });
   });
@@ -308,6 +309,7 @@ describe("TenantOnboardingOcrService recognition", () => {
       const result = await recognize(service);
       expect(result).toMatchObject({
         idempotent: true,
+        cached: false,
         recognition: { status },
       });
       expect(gateway.recognize).not.toHaveBeenCalled();
