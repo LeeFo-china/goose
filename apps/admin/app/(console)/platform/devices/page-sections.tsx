@@ -1,8 +1,5 @@
 import Link from "next/link";
 import { buildPlatformDevicesHref } from "@/components/platform-devices/platform-device-href";
-import {
-  PlatformDeviceFilters,
-} from "@/components/platform-devices/platform-device-list-actions";
 import { PlatformDevicesTable } from "@/components/platform-devices/platform-devices-table";
 import {
   PlatformTencentDeviceFilters,
@@ -101,16 +98,9 @@ export function PlatformDevicesContent({
               </TabsTrigger>
             </TabsList>
           }
-          filters={activeTab === "ownership" ? (
-            <PlatformDeviceFilters
-              vendor={vendor}
-              status={status}
-              onlyUnbound={onlyUnbound}
-              keyword={keyword}
-            />
-          ) : (
+          filters={activeTab === "tencent" ? (
             <PlatformTencentDeviceFilters status={status} keyword={keyword} />
-          )}
+          ) : null}
           pagination={activeTab === "ownership" ? ownershipData.pagination : tencentData.pagination}
           currentCount={activeTab === "ownership" ? ownershipData.list.length : tencentData.list.length}
           tableViewportTestId="platform-device-list-table-viewport"

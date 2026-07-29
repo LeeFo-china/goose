@@ -354,6 +354,7 @@ describe("Platform list page layout", () => {
     expect(source).not.toContain("全部绑定");
     expect(source).not.toContain("包含设备基本信息与通道归属");
     expect(source).not.toContain('activeTab === "ownership" ? "个" : "台"');
+    expect(source).not.toContain("PlatformDeviceFilters");
   });
 
   test("removes the tenant account header copy from the billing tenant tab", () => {
