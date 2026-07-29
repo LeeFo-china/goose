@@ -137,7 +137,7 @@ class SupplierProductsController extends TenantBaseController {
   @Patch("/supplier-products/:id/skus/:skuId")
   async updateSku(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { skuId } = this.parse(SupplierSkuParamSchema, request.params);
+    const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
     const { tenantSupplierId } = this.parse(
       SupplierScopeQuerySchema,
       request.query,
@@ -147,6 +147,7 @@ class SupplierProductsController extends TenantBaseController {
       await supplierProductsService.updateSku(
         auth,
         tenantSupplierId,
+        id,
         skuId,
         input,
       ),
@@ -193,7 +194,7 @@ class SupplierProductsController extends TenantBaseController {
   ) {
     const auth = await this.getRequiredTenantContext(request);
     const key = requireSupplierIdempotencyKey(request);
-    const { skuId } = this.parse(SupplierSkuParamSchema, request.params);
+    const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
     const { tenantSupplierId } = this.parse(
       SupplierScopeQuerySchema,
       request.query,
@@ -203,6 +204,7 @@ class SupplierProductsController extends TenantBaseController {
       await supplierProductsService.mutateSku(
         auth,
         tenantSupplierId,
+        id,
         skuId,
         action,
         input,

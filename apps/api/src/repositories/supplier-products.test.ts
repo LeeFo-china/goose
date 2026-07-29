@@ -104,16 +104,48 @@ describe("SupplierProductsRepository", () => {
   });
 
   test("reports a SKU-specific conflict when an optimistic update misses", async () => {
-    const { repository } = await repositoryFor(() => ({ body: null }));
+    const { repository, requests } = await repositoryFor(() => ({ body: null }));
 
     await expect(repository.updateSku({
       supplier_id: SUPPLIER_ID,
+      supplier_product_id: PRODUCT_ID,
       sku_id: SKU_ID,
       expected_version: 2,
       name: "新 SKU 名称",
     })).rejects.toMatchObject({
       statusCode: 409,
       code: "SUPPLIER_SKU_VERSION_CONFLICT",
+    });
+    expect(
+      new URL(requests[0]!.url).searchParams.get("supplier_product_id"),
+    ).toBe(`eq.${PRODUCT_ID}`);
+  });
+
+  test("mutates a SKU through the parent-validating command", async () => {
+    const { repository, requests } = await repositoryFor(() => ({
+      body: { status: "updated", idempotent: false, version: 2 },
+    }));
+
+    await repository.mutateSku({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      product_id: PRODUCT_ID,
+      sku_id: SKU_ID,
+      action: "activate",
+      expected_version: 1,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "sku:activate",
+      proxy_reason: "供应商确认启用",
+    });
+
+    const request = requests[0]!;
+    expect(new URL(request.url).pathname).toEndWith(
+      "/rpc/mutate_supplier_sku_for_product",
+    );
+    expect(await request.clone().json()).toMatchObject({
+      p_product_id: PRODUCT_ID,
+      p_sku_id: SKU_ID,
     });
   });
 });

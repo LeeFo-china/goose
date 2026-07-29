@@ -180,6 +180,7 @@ export class SupplierProductsService {
   async updateSku(
     auth: AuthContext,
     tenantSupplierId: string,
+    productId: string,
     skuId: string,
     input: SupplierSkuUpdateInput,
   ) {
@@ -195,6 +196,7 @@ export class SupplierProductsService {
     return this.repository.updateSku({
       ...fields,
       supplier_id: scope.supplierId,
+      supplier_product_id: productId,
       sku_id: skuId,
       expected_version,
       ...updateAudit(scope, proxy_reason),
@@ -204,6 +206,7 @@ export class SupplierProductsService {
   async mutateSku(
     auth: AuthContext,
     tenantSupplierId: string,
+    productId: string,
     skuId: string,
     action: "activate" | "deactivate",
     input: SupplierProductCommandInput,
@@ -214,6 +217,7 @@ export class SupplierProductsService {
       tenantSupplierId,
     );
     return requireCommand(await this.repository.mutateSku({
+      product_id: productId,
       sku_id: skuId,
       action,
       expected_version: input.expected_version,

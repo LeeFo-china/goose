@@ -2,6 +2,7 @@ import { SUPPLIER_PRICE_LIST_STATUS_VALUES } from "@gooes/domain";
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import { SupabaseDB } from "@/utils/supabase";
 
 const PRICE_LIST_SELECT = [
@@ -291,7 +292,9 @@ export class SupplierPriceListsRepository {
       .eq("row_version", expected_version)
       .select(PRICE_LIST_SELECT)
       .maybeSingle();
-    if (error) throw Errors.dbError("更新供应商价格簿失败", error);
+    if (error) {
+      throwSupplierCommandDatabaseError(error, "更新供应商价格簿失败");
+    }
     if (data === null) {
       throw Errors.business(
         409,
@@ -308,7 +311,7 @@ export class SupplierPriceListsRepository {
     message: string,
   ) {
     const { data, error } = await this.client.rpc(name, params);
-    if (error) throw Errors.dbError(message, error);
+    if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(PriceCommandResultSchema, data, message);
   }
 }

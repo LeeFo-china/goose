@@ -5,6 +5,7 @@ import {
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import { SupabaseDB } from "@/utils/supabase";
 
 const PRODUCT_LIST_SELECT = [
@@ -294,7 +295,7 @@ export class SupplierProductsRepository {
 
   mutateSku(input: SupplierCommandContext & Record<string, unknown>) {
     return this.command(
-      "mutate_supplier_sku",
+      "mutate_supplier_sku_for_product",
       rpcParams(input),
       "变更供应商 SKU 状态失败",
     );
@@ -318,7 +319,9 @@ export class SupplierProductsRepository {
       .eq("version", expected_version)
       .select(PRODUCT_RECORD_SELECT)
       .maybeSingle();
-    if (error) throw Errors.dbError("更新供应商商品失败", error);
+    if (error) {
+      throwSupplierCommandDatabaseError(error, "更新供应商商品失败");
+    }
     if (data === null) {
       throw versionConflict(
         "供应商商品版本已变化",
@@ -330,18 +333,28 @@ export class SupplierProductsRepository {
 
   async updateSku(input: Record<string, unknown> & {
     supplier_id: string;
+    supplier_product_id: string;
     sku_id: string;
     expected_version: number;
   }) {
-    const { supplier_id, sku_id, expected_version, ...fields } = input;
+    const {
+      supplier_id,
+      supplier_product_id,
+      sku_id,
+      expected_version,
+      ...fields
+    } = input;
     const { data, error } = await this.client.from("supplier_skus")
       .update({ ...fields, version: expected_version + 1 })
       .eq("supplier_id", supplier_id)
+      .eq("supplier_product_id", supplier_product_id)
       .eq("id", sku_id)
       .eq("version", expected_version)
       .select(SKU_RECORD_SELECT)
       .maybeSingle();
-    if (error) throw Errors.dbError("更新供应商 SKU 失败", error);
+    if (error) {
+      throwSupplierCommandDatabaseError(error, "更新供应商 SKU 失败");
+    }
     if (data === null) {
       throw versionConflict(
         "供应商 SKU 版本已变化",
@@ -357,7 +370,7 @@ export class SupplierProductsRepository {
     message: string,
   ) {
     const { data, error } = await this.client.rpc(name, params);
-    if (error) throw Errors.dbError(message, error);
+    if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(ProductCommandResultSchema, data, message);
   }
 }

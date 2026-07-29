@@ -12,7 +12,9 @@ const USER_ID = "50000000-0000-4000-8000-000000000004";
 const EMPLOYEE_ID = "50000000-0000-4000-8000-000000000005";
 
 async function repositoryFor(
-  responder: (request: Request) => { body: unknown; count?: number },
+  responder: (
+    request: Request,
+  ) => { body: unknown; count?: number; status?: number },
 ) {
   const requests: Request[] = [];
   const fetchStub = (async (
@@ -25,7 +27,7 @@ async function repositoryFor(
     requests.push(request);
     const response = responder(request);
     return new Response(JSON.stringify(response.body), {
-      status: 200,
+      status: response.status ?? 200,
       headers: {
         "content-type": "application/json",
         ...(response.count === undefined
@@ -94,6 +96,32 @@ describe("SupplierPriceListsRepository", () => {
       p_price_list_id: PRICE_LIST_ID,
       p_supplier_id: SUPPLIER_ID,
       p_expected_version: 1,
+    });
+  });
+
+  test("maps a deterministic RPC conflict to a business response", async () => {
+    const { repository } = await repositoryFor(() => ({
+      status: 400,
+      body: {
+        code: "P0001",
+        message: "SUPPLIER_IDEMPOTENCY_CONFLICT",
+        details: null,
+        hint: null,
+      },
+    }));
+
+    await expect(repository.publish({
+      price_list_id: PRICE_LIST_ID,
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      expected_version: 1,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "price:publish",
+      proxy_reason: "供应商确认发布",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
     });
   });
 });

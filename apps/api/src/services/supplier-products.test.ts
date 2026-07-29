@@ -8,6 +8,7 @@ const EMPLOYEE_ID = "60000000-0000-4000-8000-000000000005";
 const PRODUCT_ID = "60000000-0000-4000-8000-000000000006";
 const CATEGORY_ID = "60000000-0000-4000-8000-000000000007";
 const BRAND_ID = "60000000-0000-4000-8000-000000000008";
+const SKU_ID = "60000000-0000-4000-8000-000000000009";
 
 function dependencies() {
   return {
@@ -114,6 +115,56 @@ describe("SupplierProductsService", () => {
       proxy_reason: "供应商书面变更",
       updated_by_employee_id: EMPLOYEE_ID,
       updated_at: expect.any(String),
+    });
+  });
+
+  test("keeps the parent product id in SKU update and lifecycle commands", async () => {
+    const deps = dependencies();
+    const { SupplierProductsService } = await import("./supplier-products");
+    const service = new SupplierProductsService(deps as never);
+
+    await service.updateSku(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      SKU_ID,
+      {
+        expected_version: 2,
+        name: "防滑瓷砖 SKU",
+        proxy_reason: "供应商书面变更",
+      },
+    );
+    await service.mutateSku(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      SKU_ID,
+      "activate",
+      {
+        expected_version: 3,
+        proxy_reason: "供应商确认启用",
+      },
+      "sku:activate",
+    );
+
+    expect(deps.repository.updateSku).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplier_id: SUPPLIER_ID,
+        supplier_product_id: PRODUCT_ID,
+        sku_id: SKU_ID,
+      }),
+    );
+    expect(deps.repository.mutateSku).toHaveBeenCalledWith({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      product_id: PRODUCT_ID,
+      sku_id: SKU_ID,
+      action: "activate",
+      expected_version: 3,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "sku:activate",
+      proxy_reason: "供应商确认启用",
     });
   });
 });

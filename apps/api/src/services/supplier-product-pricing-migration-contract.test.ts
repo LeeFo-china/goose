@@ -1,11 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const migrationPath = new URL(
   "../../../../supabase/migrations/20260729160000_create_supplier_products_and_base_prices.sql",
   import.meta.url,
 );
 const sql = readFileSync(migrationPath, "utf8");
+const hardeningMigrationPath = new URL(
+  "../../../../supabase/migrations/20260729170000_harden_supplier_product_pricing_commands.sql",
+  import.meta.url,
+);
+const hardeningSql = existsSync(hardeningMigrationPath)
+  ? readFileSync(hardeningMigrationPath, "utf8")
+  : "";
 
 const TABLES = [
   "supplier_products",
@@ -196,6 +203,30 @@ describe("supplier product pricing migration contract", () => {
     );
     expect(publish).toContain("product.status <> 'active'");
     expect(publish).toContain("sku.status <> 'active'");
+  });
+
+  test("serializes product status changes with publication and validates SKU parents", () => {
+    expect(hardeningSql).toContain(
+      "CREATE FUNCTION public.lock_supplier_price_publication",
+    );
+    expect(hardeningSql).toContain(
+      "'supplier-price-publish:' || NEW.supplier_id::text",
+    );
+    expect(hardeningSql).toContain(
+      "CREATE TRIGGER supplier_products_price_publication_lock",
+    );
+    expect(hardeningSql).toContain(
+      "CREATE TRIGGER supplier_skus_price_publication_lock",
+    );
+    expect(hardeningSql).toContain(
+      "CREATE FUNCTION public.mutate_supplier_sku_for_product",
+    );
+    expect(hardeningSql).toMatch(
+      /supplier_product_id = p_product_id[\s\S]*FOR UPDATE/,
+    );
+    expect(hardeningSql).toContain(
+      "RETURN public.mutate_supplier_sku(",
+    );
   });
 
   test("documents a forward rollback that preserves referenced history", () => {
