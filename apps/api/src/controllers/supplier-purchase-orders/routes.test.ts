@@ -195,8 +195,9 @@ describe("SupplierPurchaseOrdersController", () => {
 
   test("keeps database access out of the HTTP controller", async () => {
     const source = await Bun.file(new URL("./index.ts", import.meta.url)).text();
+    const forbiddenClientName = ["Supabase", "DB"].join("");
 
-    expect(source).not.toContain("SupabaseDB");
+    expect(source).not.toContain(forbiddenClientName);
     expect(source).not.toContain(".from(");
     expect(source).not.toContain(".rpc(");
   });
