@@ -70,6 +70,15 @@ export const SupplierPriceListListQuerySchema =
 export const SupplierPriceItemListQuerySchema =
   PaginationQuerySchema.strict();
 
+export const SupplierPriceScopeQuerySchema = z.object({
+  tenantSupplierId: uuid("无效的租户供应商关系 ID"),
+}).strict();
+
+export const SupplierPriceItemHttpListQuerySchema =
+  SupplierPriceItemListQuerySchema.extend({
+    tenantSupplierId: uuid("无效的租户供应商关系 ID"),
+  }).strict();
+
 export const SupplierPriceListParamSchema = z.object({
   id: uuid("无效的供应商价格簿 ID"),
 }).strict();

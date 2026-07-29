@@ -244,6 +244,34 @@ export class SupplierPriceListsRepository {
     );
   }
 
+  upsertItem(input: PriceCommandContext & {
+    item_id: string;
+    price_list_id: string;
+    sku_id: string;
+    unit_price: number;
+    tax_rate: number;
+    tax_inclusive: boolean;
+    expected_version: number;
+  }) {
+    return this.command(
+      "upsert_supplier_price_list_item",
+      rpcParams(input),
+      "保存供应商价格条目失败",
+    );
+  }
+
+  deleteItem(input: PriceCommandContext & {
+    item_id: string;
+    price_list_id: string;
+    expected_version: number;
+  }) {
+    return this.command(
+      "delete_supplier_price_list_item",
+      rpcParams(input),
+      "删除供应商价格条目失败",
+    );
+  }
+
   async updateDraft(input: Record<string, unknown> & {
     supplier_id: string;
     price_list_id: string;

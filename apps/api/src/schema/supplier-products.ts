@@ -51,6 +51,15 @@ export const SupplierSkuListQuerySchema = PaginationQuerySchema.extend({
   status: SupplierSkuStatusSchema.optional(),
 }).strict();
 
+export const SupplierScopeQuerySchema = z.object({
+  tenantSupplierId: uuid("无效的租户供应商关系 ID"),
+}).strict();
+
+export const SupplierSkuHttpListQuerySchema =
+  SupplierSkuListQuerySchema.extend({
+    tenantSupplierId: uuid("无效的租户供应商关系 ID"),
+  }).strict();
+
 export const SupplierProductParamSchema = z.object({
   id: uuid("无效的供应商商品 ID"),
 }).strict();
