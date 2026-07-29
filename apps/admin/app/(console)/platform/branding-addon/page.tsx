@@ -62,8 +62,8 @@ export default async function PlatformBrandingAddonPage() {
     };
 
   return (
-    <div className="flex max-w-5xl flex-col gap-5">
-      <div>
+    <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
+      <div className="shrink-0">
         <h1 className="text-2xl font-semibold tracking-normal">
           品牌权益商品
         </h1>
@@ -72,7 +72,11 @@ export default async function PlatformBrandingAddonPage() {
         </p>
       </div>
 
-      {result.error ? <StatusAlert>{result.error}</StatusAlert> : null}
+      {result.error ? (
+        <div className="shrink-0">
+          <StatusAlert>{result.error}</StatusAlert>
+        </div>
+      ) : null}
       {result.product
         ? (
           <PlatformBrandingAddonProductForm

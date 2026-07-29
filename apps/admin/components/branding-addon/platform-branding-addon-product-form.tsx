@@ -127,8 +127,8 @@ export function PlatformBrandingAddonProductForm({
   }
 
   return (
-    <form onSubmit={submit}>
-      <Card>
+    <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+      <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="flex-row items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-1.5">
             <CardTitle>{product.name}</CardTitle>
@@ -141,7 +141,8 @@ export function PlatformBrandingAddonProductForm({
           </Badge>
         </CardHeader>
 
-        <CardContent className="flex flex-col gap-5">
+        <CardContent className="min-h-0 flex-1 overflow-auto">
+          <div className="flex flex-col gap-5">
           <dl className="grid gap-3 rounded-md border bg-muted/20 p-4 text-sm sm:grid-cols-3">
             <div className="flex min-w-0 flex-col gap-1">
               <dt className="text-xs text-muted-foreground">商品编码</dt>
@@ -265,9 +266,10 @@ export function PlatformBrandingAddonProductForm({
             价格修改只影响新订单，历史订单保留创建时的商品快照。数字权益支付
             成功并开通后不支持退款。
           </div>
+          </div>
         </CardContent>
 
-        <CardFooter className="flex flex-wrap justify-end gap-2 border-t pt-5">
+        <CardFooter className="shrink-0 flex flex-wrap justify-end gap-2 border-t pt-5">
           {hasVersionConflict ? (
             <Button
               type="button"

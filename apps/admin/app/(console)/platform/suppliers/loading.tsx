@@ -12,8 +12,10 @@ export default function PlatformSuppliersLoading() {
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-card">
         <div className="space-y-3 border-b bg-muted/20 p-3">
-          <Skeleton className="h-9 w-56" />
-          <Skeleton className="h-5 w-24" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+          </div>
           <div className="flex gap-3">
             <Skeleton className="h-9 flex-1" />
             <Skeleton className="h-9 w-32" />

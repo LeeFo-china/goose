@@ -176,6 +176,18 @@ describe("平台供应标准目录工作台", () => {
     }
   });
 
+  test("移除 tabs 下方的目录标题和同步骨架屏", () => {
+    const page = readSource("../../app/(console)/platform/catalog/page.tsx");
+    const loading = readSource("../../app/(console)/platform/catalog/loading.tsx");
+
+    expect(page).not.toContain("listHeader=");
+    expect(page).not.toContain("标准类目当前位置");
+    expect(page).not.toContain("<CardTitle>");
+    expect(loading).toContain("flex flex-wrap gap-2");
+    expect(loading).not.toContain('Skeleton className="h-8 w-64"');
+    expect(loading).toContain("min-h-0 flex-1 overflow-hidden");
+  });
+
   test("新建编辑对话框使用Field并提供冲突恢复", () => {
     const dialogs = [
       readSource("./supplier-catalog-dialogs.tsx"),

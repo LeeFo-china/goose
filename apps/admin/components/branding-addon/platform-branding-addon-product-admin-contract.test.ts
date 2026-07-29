@@ -21,6 +21,23 @@ describe("platform branding addon product admin contract", () => {
     expect(page).toContain("key={result.product.version}");
   });
 
+  test("keeps the product card filling the fixed admin workspace", () => {
+    const page = readSource("../../app/(console)/platform/branding-addon/page.tsx");
+    const form = readSource("./platform-branding-addon-product-form.tsx");
+    const loading = readSource("../../app/(console)/platform/branding-addon/loading.tsx");
+
+    for (const source of [page, loading]) {
+      expect(source).toContain("h-[calc(100vh-6.5625rem)]");
+      expect(source).toContain("min-h-0 flex-col gap-5 overflow-hidden");
+      expect(source).not.toContain("max-w-5xl");
+    }
+    expect(form).toContain('className="flex min-h-0 flex-1 flex-col"');
+    expect(form).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
+    expect(form).toContain('CardContent className="min-h-0 flex-1 overflow-auto"');
+    expect(loading).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
+    expect(loading).toContain('CardContent className="min-h-0 flex-1 overflow-hidden"');
+  });
+
   test("patches editable fields with optimistic version handling", () => {
     const form = readSource(
       "./platform-branding-addon-product-form.tsx",

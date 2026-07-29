@@ -13,13 +13,19 @@ export default function PlatformCatalogLoading() {
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="flex shrink-0 flex-col gap-3 border-b p-3">
-          <Skeleton className="h-8 w-64" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+          </div>
           <Skeleton className="h-9 w-full max-w-xl" />
         </CardHeader>
-        <CardContent className="flex flex-col gap-3 p-4">
+        <CardContent className="min-h-0 flex-1 overflow-hidden p-4">
+          <div className="flex flex-col gap-3">
           {Array.from({ length: 6 }, (_, index) => (
             <Skeleton key={index} className="h-14 w-full" />
           ))}
+          </div>
         </CardContent>
       </Card>
     </div>

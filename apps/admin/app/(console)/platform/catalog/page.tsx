@@ -18,11 +18,9 @@ import { SupplierCatalogLoadError } from "@/components/supplier-catalog/supplier
 import {
   buildCatalogListPath,
   catalogViewHref,
-  categoryTrailHref,
   currentCategoryParent,
   decodeCategoryTrail,
   normalizeCatalogPage,
-  parentCategoryHref,
 } from "@/components/supplier-catalog/supplier-catalog-rules";
 import { SupplierCatalogTable } from "@/components/supplier-catalog/supplier-catalog-table";
 import type {
@@ -34,8 +32,6 @@ import type {
   CatalogView,
   CategoryReturnState,
 } from "@/components/supplier-catalog/supplier-catalog-types";
-import { Button } from "@/components/ui/button";
-import { CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -177,14 +173,6 @@ export default async function PlatformCatalogPage({
               </TabsList>
             </div>
           }
-          listHeader={
-            <div className="flex flex-col gap-2">
-              <CardTitle>{view === "categories" ? "标准类目" : view === "brands" ? "品牌" : "单位"}</CardTitle>
-              {view === "categories" ? (
-                <CategoryLocation trail={categoryTrail} />
-              ) : null}
-            </div>
-          }
           filters={<SupplierCatalogFilters keyword={keyword} status={status} />}
           pagination={currentPage.pagination}
           currentCount={currentPage.list.length}
@@ -226,40 +214,5 @@ function CatalogTab({
     >
       <Link href={catalogViewHref(value)}>{label}</Link>
     </TabsTrigger>
-  );
-}
-
-function CategoryLocation({
-  trail,
-}: {
-  trail: ReturnType<typeof decodeCategoryTrail>;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-sm">
-      {trail.length ? (
-        <Button type="button" size="sm" variant="outline" asChild>
-          <Link href={parentCategoryHref(trail)}>返回上级</Link>
-        </Button>
-      ) : null}
-      <nav
-        aria-label="标准类目当前位置"
-        className="flex flex-wrap items-center gap-1 text-muted-foreground"
-      >
-        <Link className="hover:text-foreground" href="/platform/catalog">
-          根级
-        </Link>
-        {trail.map((item, index) => (
-          <span key={item.id} className="flex items-center gap-1">
-            <span aria-hidden="true">/</span>
-            <Link
-              className="hover:text-foreground"
-              href={categoryTrailHref(trail.slice(0, index + 1))}
-            >
-              {item.name}
-            </Link>
-          </span>
-        ))}
-      </nav>
-    </div>
   );
 }

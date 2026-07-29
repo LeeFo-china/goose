@@ -44,6 +44,16 @@ describe("平台供应商工作台", () => {
     expect(source).toContain("PlatformListPageShell");
   });
 
+  test("移除列表 tabs 下方的冗余标题并同步骨架屏", () => {
+    const page = readSource("../../app/(console)/platform/suppliers/page.tsx");
+    const loading = readSource("../../app/(console)/platform/suppliers/loading.tsx");
+
+    expect(page).not.toContain("listHeader=");
+    expect(page).not.toContain("CardTitle");
+    expect(loading).toContain("flex flex-wrap gap-2");
+    expect(loading).not.toContain('Skeleton className="h-5 w-24"');
+  });
+
   test("供应商表格保留运营扫描所需列", () => {
     const source = readSource("./platform-supplier-table.tsx");
 

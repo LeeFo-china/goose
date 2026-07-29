@@ -26,7 +26,6 @@ import {
 import { SupplierQualificationTypeFilters } from "@/components/platform-suppliers/supplier-qualification-type-filters";
 import { SupplierQualificationTypeFormButton } from "@/components/platform-suppliers/supplier-qualification-type-form";
 import { SupplierQualificationTypeTable } from "@/components/platform-suppliers/supplier-qualification-type-table";
-import { CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -255,11 +254,6 @@ export default async function PlatformSuppliersPage({
               ) : null}
               </TabsList>
             </div>
-          }
-          listHeader={
-            <CardTitle>
-              {view === "suppliers" ? "供应商列表" : "资质类型"}
-            </CardTitle>
           }
           filters={
             view === "suppliers" ? (
