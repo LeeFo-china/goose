@@ -67,14 +67,14 @@ export function createSupplierResource(
   path: string,
   tenantSupplierId: string,
   payload: unknown,
-  idempotencyScope: string,
+  idempotencyKey: string,
 ) {
   return requestBackendJson<SupplierCommandResult>(
     `${path}?${scopeOnly(tenantSupplierId)}`,
     {
       method: "POST",
       headers: {
-        "Idempotency-Key": `${idempotencyScope}:${crypto.randomUUID()}`,
+        "Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(payload),
     },
@@ -85,7 +85,7 @@ export function mutateSupplierResource(
   path: string,
   tenantSupplierId: string,
   payload: unknown,
-  idempotencyScope: string,
+  idempotencyKey: string,
   method: "POST" | "PUT" | "DELETE" = "POST",
 ) {
   return requestBackendJson<SupplierCommandResult>(
@@ -93,7 +93,7 @@ export function mutateSupplierResource(
     {
       method,
       headers: {
-        "Idempotency-Key": `${idempotencyScope}:${crypto.randomUUID()}`,
+        "Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(payload),
     },

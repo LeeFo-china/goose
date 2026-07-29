@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +29,10 @@ import {
   createSupplierResource,
   loadCatalogOptions,
 } from "./supplier-product-api";
+import {
+  resolveSupplierCommandAttempt,
+  type SupplierCommandAttempt,
+} from "./supplier-command-attempt";
 import type { CatalogOption } from "./supplier-product-types";
 
 export function SupplierProductDialog({
@@ -51,6 +55,7 @@ export function SupplierProductDialog({
   const [brandId, setBrandId] = useState("");
   const [description, setDescription] = useState("");
   const [proxyReason, setProxyReason] = useState("");
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -84,20 +89,28 @@ export function SupplierProductDialog({
     if (invalid) return;
     setSaving(true);
     try {
-      const productId = crypto.randomUUID();
+      const payload = {
+        product_code: productCode.trim(),
+        name: name.trim(),
+        category_id: categoryId,
+        brand_id: brandId,
+        description: description.trim() || null,
+        proxy_reason: proxyReason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: "supplier-product-create",
+        resourcePath: "/supplier-products/:productId",
+        payload,
+        allocateResourceId: true,
+      });
+      attemptRef.current = attempt;
       await createSupplierResource(
-        `/supplier-products/${productId}`,
+        `/supplier-products/${attempt.resourceId}`,
         tenantSupplierId,
-        {
-          product_code: productCode.trim(),
-          name: name.trim(),
-          category_id: categoryId,
-          brand_id: brandId,
-          description: description.trim() || null,
-          proxy_reason: proxyReason.trim(),
-        },
-        "supplier-product-create",
+        payload,
+        attempt.idempotencyKey,
       );
+      attemptRef.current = null;
       toast.success("供应商商品已创建");
       setOpen(false);
       reset();

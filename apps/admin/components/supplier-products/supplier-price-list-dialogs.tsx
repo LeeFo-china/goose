@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -31,6 +31,10 @@ import {
   createSupplierResource,
   mutateSupplierResource,
 } from "./supplier-product-api";
+import {
+  resolveSupplierCommandAttempt,
+  type SupplierCommandAttempt,
+} from "./supplier-command-attempt";
 import type {
   SupplierPriceList,
   SupplierSku,
@@ -51,6 +55,7 @@ export function CreatePriceListDialog({
   const [name, setName] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [reason, setReason] = useState("");
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const invalid = !code.trim() || !name.trim() || !effectiveFrom ||
     reason.trim().length < 2;
 
@@ -58,20 +63,28 @@ export function CreatePriceListDialog({
     if (invalid) return;
     setSaving(true);
     try {
-      const id = crypto.randomUUID();
+      const payload = {
+        price_list_code: code.trim(),
+        name: name.trim(),
+        currency: "CNY",
+        effective_from: new Date(effectiveFrom).toISOString(),
+        effective_until: null,
+        proxy_reason: reason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: "supplier-price-create",
+        resourcePath: "/supplier-price-lists/:priceListId",
+        payload,
+        allocateResourceId: true,
+      });
+      attemptRef.current = attempt;
       await createSupplierResource(
-        `/supplier-price-lists/${id}`,
+        `/supplier-price-lists/${attempt.resourceId}`,
         tenantSupplierId,
-        {
-          price_list_code: code.trim(),
-          name: name.trim(),
-          currency: "CNY",
-          effective_from: new Date(effectiveFrom).toISOString(),
-          effective_until: null,
-          proxy_reason: reason.trim(),
-        },
-        "supplier-price-create",
+        payload,
+        attempt.idempotencyKey,
       );
+      attemptRef.current = null;
       toast.success("基础供货价草稿已创建");
       setOpen(false);
       await onCreated();
@@ -147,6 +160,7 @@ export function PriceItemDialog({
   const [taxRate, setTaxRate] = useState("0.13");
   const [taxInclusive, setTaxInclusive] = useState(true);
   const [reason, setReason] = useState("");
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const invalid = !skuId || !unitPrice ||
     Number(unitPrice) < 0 || Number(taxRate) < 0 ||
     Number(taxRate) > 1 || reason.trim().length < 2;
@@ -155,22 +169,31 @@ export function PriceItemDialog({
     if (invalid) return;
     setSaving(true);
     try {
+      const payload = {
+        supplier_sku_id: skuId,
+        minimum_quantity: 1,
+        maximum_quantity: null,
+        unit_price: Number(unitPrice),
+        tax_rate: Number(taxRate),
+        tax_inclusive: taxInclusive,
+        expected_version: priceList.row_version,
+        proxy_reason: reason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: "supplier-price-item-upsert",
+        resourcePath: `/supplier-price-lists/${priceList.id}/items/:itemId`,
+        payload,
+        allocateResourceId: true,
+      });
+      attemptRef.current = attempt;
       await mutateSupplierResource(
-        `/supplier-price-lists/${priceList.id}/items/${crypto.randomUUID()}`,
+        `/supplier-price-lists/${priceList.id}/items/${attempt.resourceId}`,
         tenantSupplierId,
-        {
-          supplier_sku_id: skuId,
-          minimum_quantity: 1,
-          maximum_quantity: null,
-          unit_price: Number(unitPrice),
-          tax_rate: Number(taxRate),
-          tax_inclusive: taxInclusive,
-          expected_version: priceList.row_version,
-          proxy_reason: reason.trim(),
-        },
-        "supplier-price-item-upsert",
+        payload,
+        attempt.idempotencyKey,
         "PUT",
       );
+      attemptRef.current = null;
       toast.success("基础供货价条目已保存");
       setOpen(false);
       await onChanged();
@@ -273,20 +296,30 @@ export function PublishPriceDialog({
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [reason, setReason] = useState("");
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   async function submit() {
     if (reason.trim().length < 2) return;
     setSaving(true);
     try {
+      const path = `/supplier-price-lists/${priceList.id}/publish`;
+      const payload = {
+        expected_version: priceList.row_version,
+        proxy_reason: reason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: "supplier-price-publish",
+        resourcePath: path,
+        payload,
+      });
+      attemptRef.current = attempt;
       await mutateSupplierResource(
-        `/supplier-price-lists/${priceList.id}/publish`,
+        path,
         tenantSupplierId,
-        {
-          expected_version: priceList.row_version,
-          proxy_reason: reason.trim(),
-        },
-        "supplier-price-publish",
+        payload,
+        attempt.idempotencyKey,
       );
+      attemptRef.current = null;
       toast.success("基础供货价已发布");
       setOpen(false);
       await onChanged();

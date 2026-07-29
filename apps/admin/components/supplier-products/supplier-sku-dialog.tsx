@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -32,6 +32,10 @@ import {
   createSupplierResource,
   loadCatalogOptions,
 } from "./supplier-product-api";
+import {
+  resolveSupplierCommandAttempt,
+  type SupplierCommandAttempt,
+} from "./supplier-command-attempt";
 import type { CatalogOption } from "./supplier-product-types";
 
 export function SupplierSkuDialog({
@@ -57,6 +61,7 @@ export function SupplierSkuDialog({
   const [colorManaged, setColorManaged] = useState(false);
   const [serialManaged, setSerialManaged] = useState(false);
   const [proxyReason, setProxyReason] = useState("");
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -80,23 +85,31 @@ export function SupplierSkuDialog({
     if (invalid) return;
     setSaving(true);
     try {
-      const skuId = crypto.randomUUID();
+      const payload = {
+        sku_code: skuCode.trim(),
+        name: name.trim(),
+        specification: specification.trim() || null,
+        model: model.trim() || null,
+        purchase_unit_id: purchaseUnitId,
+        batch_managed: batchManaged,
+        color_managed: colorManaged,
+        serial_managed: serialManaged,
+        proxy_reason: proxyReason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: "supplier-sku-create",
+        resourcePath: `/supplier-products/${productId}/skus/:skuId`,
+        payload,
+        allocateResourceId: true,
+      });
+      attemptRef.current = attempt;
       await createSupplierResource(
-        `/supplier-products/${productId}/skus/${skuId}`,
+        `/supplier-products/${productId}/skus/${attempt.resourceId}`,
         tenantSupplierId,
-        {
-          sku_code: skuCode.trim(),
-          name: name.trim(),
-          specification: specification.trim() || null,
-          model: model.trim() || null,
-          purchase_unit_id: purchaseUnitId,
-          batch_managed: batchManaged,
-          color_managed: colorManaged,
-          serial_managed: serialManaged,
-          proxy_reason: proxyReason.trim(),
-        },
-        "supplier-sku-create",
+        payload,
+        attempt.idempotencyKey,
       );
+      attemptRef.current = null;
       toast.success("供应商 SKU 已创建");
       setOpen(false);
       await onCreated();

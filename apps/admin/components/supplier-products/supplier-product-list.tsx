@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +29,10 @@ import {
   loadSupplierSkus,
   mutateSupplierResource,
 } from "./supplier-product-api";
+import {
+  resolveSupplierCommandAttempt,
+  type SupplierCommandAttempt,
+} from "./supplier-command-attempt";
 import {
   nextProductAction,
   nextSkuAction,
@@ -330,6 +334,7 @@ function StatusMutationDialog({
 }) {
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
+  const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   if (!target) return null;
 
   async function submit() {
@@ -339,15 +344,24 @@ function StatusMutationDialog({
       ? `/supplier-products/${target.id}`
       : `/supplier-products/${target.supplierProductId}/skus/${target.id}`;
     try {
+      const path = `${base}/${target.action}`;
+      const payload = {
+        expected_version: target.version,
+        proxy_reason: reason.trim(),
+      };
+      const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
+        scope: `supplier-${target.kind}-${target.action}`,
+        resourcePath: path,
+        payload,
+      });
+      attemptRef.current = attempt;
       await mutateSupplierResource(
-        `${base}/${target.action}`,
+        path,
         tenantSupplierId,
-        {
-          expected_version: target.version,
-          proxy_reason: reason.trim(),
-        },
-        `supplier-${target.kind}-${target.action}`,
+        payload,
+        attempt.idempotencyKey,
       );
+      attemptRef.current = null;
       toast.success(target.action === "activate" ? "已启用" : "已停用");
       onOpenChange(false);
       setReason("");
