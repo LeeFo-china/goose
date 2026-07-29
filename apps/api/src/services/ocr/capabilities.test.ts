@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import { OCR_SCENE_VALUES } from "@gooes/domain";
 
 import {
   getOcrCapability,
   listPlatformOcrCapabilities,
   listPublicOcrCapabilities,
   listTenantOcrCapabilities,
+  listVisitorOcrCapabilities,
 } from "./capabilities";
 
 describe("OCR capability catalog", () => {
@@ -69,5 +71,25 @@ describe("OCR capability catalog", () => {
 
   test("returns no capability for Phase 1 unsupported combinations", () => {
     expect(getOcrCapability("expense_request", "general_invoice")).toBeNull();
+  });
+
+  test("exposes a purpose-limited tenant onboarding capability only to visitors", () => {
+    expect(OCR_SCENE_VALUES).toContain("tenant_onboarding_license");
+    expect(listVisitorOcrCapabilities("tenant_onboarding_license")).toEqual([
+      expect.objectContaining({
+        scene: "tenant_onboarding_license",
+        document_type: "business_license",
+        attachment_categories: ["tenant_onboarding_license"],
+        supported_mime_types: ["image/jpeg", "image/png"],
+        max_size_bytes: 5 * 1024 * 1024,
+        mode: "sync",
+      }),
+    ]);
+    expect(listTenantOcrCapabilities()).not.toContainEqual(
+      expect.objectContaining({ scene: "tenant_onboarding_license" }),
+    );
+    expect(listPlatformOcrCapabilities()).not.toContainEqual(
+      expect.objectContaining({ scene: "tenant_onboarding_license" }),
+    );
   });
 });

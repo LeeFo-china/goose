@@ -45,6 +45,10 @@ export type OcrResultCryptoContext = {
 } | {
   scopeType: 'platform';
   recognitionId: string;
+} | {
+  scopeType: 'visitor';
+  actorVisitorId: string;
+  recognitionId: string;
 };
 
 export type OcrNormalizedResult = {
@@ -152,6 +156,13 @@ function buildAad(context: OcrResultCryptoContext): Buffer {
     throw invalidResultError();
   }
   if ('scopeType' in context) {
+    if (context.scopeType === 'visitor') {
+      if (!context.actorVisitorId.trim()) throw invalidResultError();
+      return Buffer.from(
+        `ocr:visitor:${context.actorVisitorId}:${context.recognitionId}:v1`,
+        'utf8',
+      );
+    }
     return Buffer.from(`ocr:platform:${context.recognitionId}:v1`, 'utf8');
   }
   if (!context.tenantId.trim()) throw invalidResultError();

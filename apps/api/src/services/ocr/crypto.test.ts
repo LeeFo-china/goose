@@ -74,6 +74,30 @@ describe('OCR result crypto', () => {
     })).toThrow(expect.objectContaining({ code: 'OCR_RESULT_INVALID' }));
   });
 
+  test('round-trips visitor results with actor ownership in AAD', () => {
+    const visitorContext = {
+      scopeType: 'visitor' as const,
+      actorVisitorId: 'wechat_visitor_123',
+      recognitionId: 'recognition-1',
+    };
+    const ciphertext = encryptOcrResult({
+      context: visitorContext,
+      result,
+      rootSecret,
+    });
+
+    expect(decryptOcrResult({
+      context: visitorContext,
+      ciphertext,
+      rootSecret,
+    })).toEqual(result);
+    expect(() => decryptOcrResult({
+      context: { ...visitorContext, actorVisitorId: 'wechat_visitor_456' },
+      ciphertext,
+      rootSecret,
+    })).toThrow(expect.objectContaining({ code: 'OCR_RESULT_INVALID' }));
+  });
+
   test('does not include identity number or address plaintext', () => {
     const ciphertext = encryptOcrResult({ context, result, rootSecret });
 

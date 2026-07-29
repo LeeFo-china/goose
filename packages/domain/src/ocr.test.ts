@@ -15,6 +15,7 @@ describe('OCR domain contracts', () => {
       'expense_request',
       'merchant_material',
       'supplier_onboarding',
+      'tenant_onboarding_license',
     ]);
     expect(OCR_DOCUMENT_TYPE_VALUES).toEqual([
       'business_license',
@@ -38,6 +39,10 @@ describe('OCR domain contracts', () => {
 
   test('exposes supplier onboarding as a platform OCR scene', () => {
     expect(OCR_SCENE_VALUES).toContain('supplier_onboarding');
+  });
+
+  test('exposes tenant onboarding as a visitor OCR scene', () => {
+    expect(OCR_SCENE_VALUES).toContain('tenant_onboarding_license');
   });
 
   test('marks identity, address, and settlement account fields sensitive', () => {
