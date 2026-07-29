@@ -237,6 +237,11 @@ git commit -m "test(admin): 覆盖标准类目完整操作"
 **Files:**
 - Modify: `apps/admin/e2e/supplier-catalog-workflow.spec.ts`
 - Modify: `apps/admin/e2e/supplier-catalog-mock-backend.mjs`
+- Modify: `apps/api/src/repositories/supplier-catalog.test.ts`
+- Modify: `apps/api/src/repositories/supplier-catalog.ts`
+- Modify: `apps/admin/components/supplier-catalog/supplier-catalog-page.test.ts`
+- Modify: `apps/admin/components/supplier-catalog/supplier-catalog-rules.ts`
+- Modify: `apps/admin/components/supplier-catalog/supplier-catalog-actions.tsx`
 
 - [ ] **Step 1: 先增加品牌与单位测试**
 
@@ -286,7 +291,47 @@ await request.post("http://127.0.0.1:3997/__test/conflict-next", {
 第一次停用返回 409，Mock 同时将服务端版本加一。页面必须显示
 “数据版本已变化”，点击“重试本次操作”后按最新版本再次 PATCH 并成功停用。
 
-- [ ] **Step 5: 运行并确认 GREEN**
+- [ ] **Step 5: 先增加并发快照失败测试**
+
+Repository 测试令第一次 PATCH 返回空记录、随后主键 GET 返回：
+
+```json
+{ "version": 3, "status": "active" }
+```
+
+断言抛出的 `SUPPLIER_VERSION_CONFLICT` 包含：
+
+```json
+{
+  "details": {
+    "current_version": 3,
+    "current_status": "active"
+  }
+}
+```
+
+前端规则测试断言只接受正整数版本和 `active` / `inactive` 状态。
+
+- [ ] **Step 6: 运行并确认 API/规则 RED**
+
+Run:
+
+```bash
+cd apps/api
+bun test src/repositories/supplier-catalog.test.ts
+cd ../admin
+bun test components/supplier-catalog/supplier-catalog-page.test.ts
+```
+
+Expected: Repository 尚未读取并发快照，前端规则函数尚不存在。
+
+- [ ] **Step 7: 实现冲突快照和无刷新重试**
+
+Repository 更新未命中时按主键读取 `version,status`，错误 `details` 返回
+`current_version` 与 `current_status`。前端从错误 payload 中校验快照，
+不再依赖 `router.refresh()` 后的 `useEffect` 保留局部状态。
+
+- [ ] **Step 8: 运行并确认 GREEN**
 
 Run:
 
@@ -296,11 +341,16 @@ pnpm --dir apps/admin test:e2e:supplier-catalog
 
 Expected: 类目、品牌、单位全部通过。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/admin/e2e/supplier-catalog-workflow.spec.ts \
-  apps/admin/e2e/supplier-catalog-mock-backend.mjs
+  apps/admin/e2e/supplier-catalog-mock-backend.mjs \
+  apps/admin/components/supplier-catalog/supplier-catalog-actions.tsx \
+  apps/admin/components/supplier-catalog/supplier-catalog-rules.ts \
+  apps/admin/components/supplier-catalog/supplier-catalog-page.test.ts \
+  apps/api/src/repositories/supplier-catalog.ts \
+  apps/api/src/repositories/supplier-catalog.test.ts
 git commit -m "test(admin): 覆盖品牌单位及版本冲突"
 ```
 
