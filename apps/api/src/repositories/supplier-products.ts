@@ -319,7 +319,12 @@ export class SupplierProductsRepository {
       .select(PRODUCT_RECORD_SELECT)
       .maybeSingle();
     if (error) throw Errors.dbError("更新供应商商品失败", error);
-    if (data === null) throw versionConflict("供应商商品版本已变化");
+    if (data === null) {
+      throw versionConflict(
+        "供应商商品版本已变化",
+        "SUPPLIER_PRODUCT_VERSION_CONFLICT",
+      );
+    }
     return parse(ProductRecordSchema, data, "更新供应商商品失败");
   }
 
@@ -337,7 +342,12 @@ export class SupplierProductsRepository {
       .select(SKU_RECORD_SELECT)
       .maybeSingle();
     if (error) throw Errors.dbError("更新供应商 SKU 失败", error);
-    if (data === null) throw versionConflict("供应商 SKU 版本已变化");
+    if (data === null) {
+      throw versionConflict(
+        "供应商 SKU 版本已变化",
+        "SUPPLIER_SKU_VERSION_CONFLICT",
+      );
+    }
     return parse(SkuRecordSchema, data, "更新供应商 SKU 失败");
   }
 
@@ -415,11 +425,11 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
   throw Errors.dbError(message, result.error.issues);
 }
 
-function versionConflict(message: string) {
+function versionConflict(message: string, code: string) {
   return Errors.business(
     409,
     message,
-    "SUPPLIER_PRODUCT_VERSION_CONFLICT",
+    code,
   );
 }
 

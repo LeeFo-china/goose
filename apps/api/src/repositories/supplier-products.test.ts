@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const SUPPLIER_ID = "40000000-0000-4000-8000-000000000001";
 const PRODUCT_ID = "40000000-0000-4000-8000-000000000002";
+const SKU_ID = "40000000-0000-4000-8000-000000000012";
 const USER_ID = "40000000-0000-4000-8000-000000000003";
 const EMPLOYEE_ID = "40000000-0000-4000-8000-000000000004";
 const TENANT_ID = "40000000-0000-4000-8000-000000000005";
@@ -99,6 +100,20 @@ describe("SupplierProductsRepository", () => {
       p_supplier_id: SUPPLIER_ID,
       p_product_id: PRODUCT_ID,
       p_idempotency_key: "product:create",
+    });
+  });
+
+  test("reports a SKU-specific conflict when an optimistic update misses", async () => {
+    const { repository } = await repositoryFor(() => ({ body: null }));
+
+    await expect(repository.updateSku({
+      supplier_id: SUPPLIER_ID,
+      sku_id: SKU_ID,
+      expected_version: 2,
+      name: "新 SKU 名称",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_SKU_VERSION_CONFLICT",
     });
   });
 });
