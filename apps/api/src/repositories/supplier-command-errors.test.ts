@@ -7,6 +7,7 @@ describe("mapSupplierCommandDatabaseError", () => {
     ["SUPPLIER_IDEMPOTENCY_CONFLICT", 409],
     ["SUPPLIER_PRODUCT_NOT_FOUND", 404],
     ["SUPPLIER_PROXY_ACTOR_INVALID", 403],
+    ["SUPPLIER_ORDER_NOT_ELIGIBLE", 409],
     ["SUPPLIER_PRICE_LIST_INVALID_ACTION", 409],
   ])("maps %s to a business response", (code, statusCode) => {
     expect(mapSupplierCommandDatabaseError({

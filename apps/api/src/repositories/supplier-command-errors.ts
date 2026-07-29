@@ -25,6 +25,10 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商模块未启用",
   },
+  SUPPLIER_ORDER_NOT_ELIGIBLE: {
+    statusCode: 409,
+    message: "当前供应商关系不允许继续该操作",
+  },
   SUPPLIER_CATALOG_REFERENCE_INVALID: {
     statusCode: 409,
     message: "供应标准目录引用无效",
