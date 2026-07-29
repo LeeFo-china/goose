@@ -17921,6 +17921,21 @@ export type Database = {
         }
         Returns: Json
       }
+      mutate_supplier_sku_for_product: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_product_id: string
+          p_proxy_reason: string
+          p_sku_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       mutate_tenant_onboarding_platform_review: {
         Args: {
           p_action: string
