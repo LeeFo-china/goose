@@ -24,6 +24,8 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
+  if (isEffectiveBrandingRoute(method, url)) return true;
+
   if (
     (method === "GET" || method === "HEAD")
     && url === "/ai/decoration-qa/suggestions"
@@ -280,6 +282,8 @@ function isPartnerOnboardingAssistRoute(method: string, url: string) {
 }
 
 export function isVisitorSessionRoute(method: string, url: string) {
+  if (isEffectiveBrandingRoute(method, url)) return true;
+
   if (isTenantOnboardingApplicantRoute(method, url)) {
     return true;
   }
@@ -471,6 +475,11 @@ function isTenantOnboardingApplicantRoute(method: string, url: string) {
     method === "POST" &&
     /^\/tenant-onboarding\/applications\/[^/]+\/withdraw$/.test(url)
   );
+}
+
+function isEffectiveBrandingRoute(method: string, url: string) {
+  return (method === "GET" || method === "HEAD") &&
+    url === "/branding/effective";
 }
 
 export function isPureVisitorPayload(payload: VerifiedJwtPayload) {

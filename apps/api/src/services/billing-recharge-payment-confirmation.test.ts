@@ -30,6 +30,7 @@ const order = {
 } satisfies TenantCreditOrderRecord;
 
 const transaction = {
+  appid: null,
   merchantMode: "direct_merchant",
   merchantId: "1900000001",
   subMerchantId: null,

@@ -3,7 +3,7 @@ import type {
   DirectUploadInput,
   RegisterExistingCosObjectInput,
 } from "./shared";
-import { buildSupplierBusinessLicenseEmployeePrefix } from "./paths";
+import { buildSupplierBusinessLicenseEmployeePrefix } from "./object-owner-prefixes";
 import { normalizePrivateUploadMimeType } from "./private-upload-intent";
 import { getSupplierBusinessLicenseUploadPolicy } from "./direct-upload-scene-policy";
 import { verifySupplierLicenseUploadIntent } from "./supplier-license-upload-intent";

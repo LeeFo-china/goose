@@ -47,3 +47,40 @@ describe("tenant onboarding license object paths", () => {
     expect(objectKey).not.toContain(".exe");
   });
 });
+
+describe("brand logo object paths", () => {
+  test.each([
+    [null, "public/brand-logo/"],
+    ["tenant-1", "tenants/tenant-1/brand-logo/"],
+  ] as const)("uses a scoped path without an unassigned segment", async (
+    tenantId,
+    prefix,
+  ) => {
+    const { buildCosObjectKey } = await import("./paths");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename: "logo.png",
+      mimetype: "image/png",
+      scene: "brand_logo",
+      tenantId,
+      employeeId: "employee-1",
+    });
+
+    expect(objectKey).toStartWith(prefix);
+    expect(objectKey).not.toContain("/unassigned/");
+    expect(objectKey).toEndWith(".png");
+  });
+
+  test("derives the extension from MIME instead of an untrusted filename", async () => {
+    const { buildCosObjectKey } = await import("./paths");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename: "logo.exe",
+      mimetype: "image/webp",
+      scene: "brand_logo",
+      tenantId: "tenant-1",
+      employeeId: "employee-1",
+    });
+
+    expect(objectKey).toEndWith(".webp");
+    expect(objectKey).not.toContain(".exe");
+  });
+});

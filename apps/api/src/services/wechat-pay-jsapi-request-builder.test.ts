@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { WechatPayConfigRecord } from "@/repositories/wechat-pay-configs";
 import type { WechatPayOrderRecord } from "@/repositories/wechat-pay-orders";
+import { MAX_POSTGRES_INTEGER_FEN } from "@/services/branding-addon-contracts";
 import { buildWechatPayJsapiPrepayRequest } from "./wechat-pay-jsapi-request-builder";
 
 const baseConfig = {
@@ -186,6 +187,26 @@ describe("buildWechatPayJsapiPrepayRequest", () => {
     });
 
     expect(request.body).not.toHaveProperty("time_expire");
+  });
+
+  test.each([
+    ["one fen", 1],
+    ["PostgreSQL integer upper boundary", MAX_POSTGRES_INTEGER_FEN],
+  ])("keeps %s as an exact integer-fen gateway total", (_label, amountFen) => {
+    const request = buildWechatPayJsapiPrepayRequest({
+      config: baseConfig,
+      order: {
+        ...baseOrder,
+        amount: amountFen / 100,
+        payment_expires_at: paymentExpiresAt,
+      },
+      description: "年度品牌技术支持",
+    });
+
+    expect(request.body.amount).toEqual({
+      total: amountFen,
+      currency: "CNY",
+    });
   });
 
   test("rejects a blank direct merchant payment expiration", () => {

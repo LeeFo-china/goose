@@ -101,6 +101,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
     label: "平台配置",
     items: [
       {
+        href: "/platform/branding-addon",
+        label: "品牌权益",
+        icon: BadgeCheck,
+        permission: "platform.branding_product.manage",
+      },
+      {
         href: "/platform/catalog",
         label: "供应标准目录",
         icon: PackageSearch,

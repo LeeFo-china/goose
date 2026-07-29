@@ -86,6 +86,10 @@ export const resolveStoredFileUrl = mock(
   () => "https://example.com/resolved.jpg",
 );
 export const assertDirectUploadAccess = mock(() => undefined);
+export const assertCanCustomize = mock(async () => ({
+  tenantId,
+  entitlement: { code: "custom_support_branding" },
+}));
 
 mock.module("@/services/files/platform-file-storage", () => ({
   platformFileStorageService: { createDirectUpload, completeDirectUpload },
@@ -94,6 +98,9 @@ mock.module("@/services/files/platform-file-storage", () => ({
       ? {
         maxSizeBytes: 2 * 1024 * 1024,
         mimeTypes: new Set(["image/jpeg", "image/png"]),
+        sizeError: "微信支付进件附件大小校验失败",
+        typeError: "微信支付进件附件类型校验失败",
+        checksumError: "进件附件文件校验值不一致",
       }
       : null,
   getSupplierBusinessLicenseUploadPolicy: (scene: string) =>
@@ -101,6 +108,9 @@ mock.module("@/services/files/platform-file-storage", () => ({
       ? {
         maxSizeBytes: 5 * 1024 * 1024,
         mimeTypes: new Set(["image/jpeg", "image/png"]),
+        sizeError: "供应商营业执照文件大小校验失败",
+        typeError: "供应商营业执照仅支持 JPEG 或 PNG",
+        checksumError: "供应商营业执照文件校验值不一致",
       }
       : null,
   buildTenantOnboardingLicenseVisitorPrefix: (value: string) => {
@@ -141,6 +151,18 @@ mock.module("@/services/access-policy", () => ({
       }
       return scope;
     }),
+    assertTenantContext: mock((
+      authContext: { tenantId?: string | null },
+      message = "当前操作必须在租户上下文中执行",
+    ) => {
+      if (!authContext.tenantId) {
+        throw Object.assign(new Error(message), {
+          statusCode: 403,
+          code: "TENANT_CONTEXT_REQUIRED",
+        });
+      }
+      return authContext.tenantId;
+    }),
   },
 }));
 mock.module("@/services/uploads", () => ({
@@ -150,10 +172,14 @@ mock.module("@/services/uploads", () => ({
     assertDirectUploadAccess,
   },
 }));
+mock.module("@/services/tenant-entitlements", () => ({
+  tenantEntitlementsService: { assertCanCustomize },
+}));
 mock.module("@/utils/upload-timing-logger", () => ({ logUploadTiming }));
 mock.module("@/services/files/file-url-resolver", () => ({
   resolveStoredFileUrl,
   resolveStoredFileUrlList: mock((value: unknown) => value),
+  resolveSignedStoredFileUrl: mock(async () => "https://example.com/signed.jpg"),
   refreshPlatformCosPublicBaseUrlCache: mock(async () => undefined),
   setPlatformCosAccessConfigCache: mock(() => undefined),
   setPlatformCosPublicBaseUrlCache: mock(() => undefined),
@@ -169,6 +195,11 @@ export function resetUploadControllerMocks() {
   logUploadTiming.mockClear();
   resolveStoredFileUrl.mockClear();
   assertDirectUploadAccess.mockClear();
+  assertCanCustomize.mockClear();
+  assertCanCustomize.mockImplementation(async () => ({
+    tenantId,
+    entitlement: { code: "custom_support_branding" },
+  }));
 }
 
 export const buildRequest = (
@@ -256,6 +287,30 @@ export function denyPlatformEmployeeIdentity() {
     roleCodes: ["platform_admin"],
     roles: [],
     permissions: [{ code: "platform.supplier.manage", scope: "all" }],
+  }));
+}
+
+export function allowPlatformBrandLogoUpload() {
+  getRequiredAuthContext.mockImplementation(async (): Promise<AuthContext> => ({
+    authUserId: platformAuthUserId,
+    employeeId: platformEmployeeId,
+    tenantId: null,
+    tenantName: null,
+    tenantSlug: null,
+    tenantStatus: null,
+    isPlatformAdmin: true,
+    employeeName: "平台品牌管理员",
+    employeeStatus: "active",
+    departmentId: null,
+    tenantDepartmentId: null,
+    departmentCode: "OPS",
+    departmentName: "运营部",
+    postId: null,
+    postName: null,
+    avatar: null,
+    roleCodes: ["platform_admin"],
+    roles: [],
+    permissions: [{ code: "platform.branding.manage", scope: "all" }],
   }));
 }
 

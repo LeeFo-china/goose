@@ -39,6 +39,7 @@ export type WechatPayTransactionLocalBinding = {
 };
 
 type WhitelistedTransaction = {
+  appid?: unknown;
   mchid?: unknown;
   sp_mchid?: unknown;
   sub_mchid?: unknown;
@@ -59,6 +60,7 @@ export type WechatPayTransactionQueryPayload = WhitelistedTransaction & {
 export type WechatPayTransactionCallbackResource = WhitelistedTransaction;
 
 export type WechatPayValidatedTransaction = {
+  appid: string | null;
   merchantMode: "direct_merchant" | "service_provider_sub_merchant";
   merchantId: string;
   subMerchantId: string | null;
@@ -169,6 +171,7 @@ function parseAndAssertCore(
   expected: WechatPayTransactionExpectedBinding,
   requestId: string | null,
 ): WechatPayValidatedTransaction {
+  const appid = exactString(payload.appid);
   const merchant = assertMerchant(payload, expected);
   const outTradeNo = exactString(payload.out_trade_no);
   assertMatches("out_trade_no", outTradeNo, expected.outTradeNo);
@@ -178,6 +181,7 @@ function parseAndAssertCore(
 
   if (tradeState !== "SUCCESS") {
     return {
+      appid,
       ...merchant,
       outTradeNo,
       transactionId: null,
@@ -203,6 +207,7 @@ function parseAndAssertCore(
   if (!successTime.success) throwMismatch("success_time");
 
   return {
+    appid,
     ...merchant,
     outTradeNo,
     transactionId,
@@ -238,6 +243,7 @@ function assertMerchant(
 function convertTransaction(payload: Record<string, unknown>): WhitelistedTransaction {
   const amount = recordField(payload.amount);
   return {
+    appid: payload.appid,
     mchid: payload.mchid,
     sp_mchid: payload.sp_mchid,
     sub_mchid: payload.sub_mchid,

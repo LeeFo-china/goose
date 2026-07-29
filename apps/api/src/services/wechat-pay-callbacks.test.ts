@@ -139,7 +139,15 @@ const decryptedResource = {
   },
 };
 
-const listCallbackCandidateConfigs = mock(async () => [config]);
+const candidateLoaderCalls: string[] = [];
+const listCallbackCandidateConfigs = mock(async () => {
+  candidateLoaderCalls.push("tenant");
+  return [config];
+});
+const listPlatformCallbackCandidateConfigs = mock(async () => {
+  candidateLoaderCalls.push("platform");
+  return [];
+});
 const loadSecretBundle = mock(async (): Promise<WechatPaySecretBundle> => ({
   privateKeyPem: "private-key",
   apiV3Key: "12345678901234567890123456789012",
@@ -208,6 +216,9 @@ async function createService() {
   const { WechatPayCallbackService } = await import("./wechat-pay-callbacks");
   return new WechatPayCallbackService({
     configRepository: { listCallbackCandidateConfigs },
+    platformConfigRepository: {
+      listCallbackCandidateConfigs: listPlatformCallbackCandidateConfigs,
+    },
     secretBundleService: { load: loadSecretBundle },
     crypto: { verifySignature, decryptResource },
     orderRepository: {
@@ -226,8 +237,10 @@ async function createService() {
 
 describe("WechatPayCallbackService", () => {
   beforeEach(() => {
+    candidateLoaderCalls.length = 0;
     for (const fn of [
       listCallbackCandidateConfigs,
+      listPlatformCallbackCandidateConfigs,
       loadSecretBundle,
       verifySignature,
       decryptResource,
@@ -263,6 +276,7 @@ describe("WechatPayCallbackService", () => {
     });
 
     expect(result).toEqual({ code: "SUCCESS", message: "成功" });
+    expect(candidateLoaderCalls).toEqual(["platform", "tenant"]);
     expect(verifySignature).toHaveBeenCalledWith(expect.objectContaining({
       rawBody,
       publicKeyPem: "public-key",

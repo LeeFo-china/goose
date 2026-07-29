@@ -11,6 +11,42 @@ type QueryTrace = {
   limits?: unknown[];
 };
 
+async function createScopedRepository(
+  existing: Record<string, unknown> | null,
+  error: unknown = null,
+) {
+  const { PlatformFileObjectRepository } = await import(
+    "./platform-file-objects"
+  );
+  const trace: QueryTrace = {
+    equals: [],
+    nullChecks: [],
+    selects: [],
+  };
+  const builder: Record<string, unknown> = {};
+  builder.select = mock((columns: string) => {
+    trace.selects.push(columns);
+    return builder;
+  });
+  builder.eq = mock((field: string, value: unknown) => {
+    trace.equals.push([field, value]);
+    return builder;
+  });
+  builder.is = mock((field: string, value: unknown) => {
+    trace.nullChecks.push([field, value]);
+    return builder;
+  });
+  builder.maybeSingle = mock(async () => ({ data: existing, error }));
+  const client = {
+    from: mock(() => builder),
+  };
+
+  return {
+    repository: new PlatformFileObjectRepository(() => client as never),
+    trace,
+  };
+}
+
 async function loadRepositoryWithExisting(
   existing: Record<string, unknown>,
   trace?: QueryTrace,
@@ -234,4 +270,82 @@ test("findSupplierBusinessLicensePreviewById uses a bounded minimum projection",
   ]));
   expect(trace.nullChecks).toContainEqual(["deleted_at", null]);
   expect(trace.limits).toEqual([1]);
+});
+
+test("platform brand Logo binding lookup filters only by id and null owner", async () => {
+  const { repository, trace } = await createScopedRepository(matchingExisting);
+
+  await expect(repository.findPlatformBrandLogoForBinding("file-1"))
+    .resolves.toMatchObject({ id: "file-1" });
+
+  expect(trace.selects).toEqual([
+    "id,tenant_id,owner_type,owner_id,scene,provider,bucket,region,object_key,mime_type,size_bytes,width,height,checksum,visibility,public_url,status,deleted_at",
+  ]);
+  expect(trace.equals).toEqual([["id", "file-1"]]);
+  expect(trace.nullChecks).toEqual([["tenant_id", null]]);
+});
+
+test("tenant brand Logo binding lookup filters only by id and exact owner", async () => {
+  const { repository, trace } = await createScopedRepository({
+    ...matchingExisting,
+    tenant_id: "tenant-1",
+  });
+
+  await expect(repository.findTenantBrandLogoForBinding("file-1", "tenant-1"))
+    .resolves.toMatchObject({ id: "file-1", tenant_id: "tenant-1" });
+
+  expect(trace.equals).toEqual([
+    ["id", "file-1"],
+    ["tenant_id", "tenant-1"],
+  ]);
+  expect(trace.nullChecks).toEqual([]);
+});
+
+test("binding lookup returns same-scope invalid metadata for policy classification", async () => {
+  const invalid = {
+    ...matchingExisting,
+    tenant_id: "tenant-1",
+    owner_id: null,
+    region: null,
+    scene: "project_attachment",
+    provider: "tencent_cos" as const,
+    status: "failed",
+    visibility: "private" as const,
+    width: 128,
+    height: 128,
+    deleted_at: "2026-07-27T00:00:00.000Z",
+  };
+  const { repository } = await createScopedRepository(invalid);
+
+  await expect(repository.findTenantBrandLogoForBinding(
+    "file-1",
+    "tenant-1",
+  )).resolves.toEqual(invalid);
+});
+
+test("brand Logo lookup maps Supabase failures through the error factory", async () => {
+  const databaseError = { code: "XX000", message: "lookup failed" };
+  const { repository } = await createScopedRepository(null, databaseError);
+
+  await expect(repository.findTenantBrandLogoForBinding("file-1", "tenant-1"))
+    .rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: databaseError,
+    });
+});
+
+test("brand Logo repository exposes only explicit platform and tenant scopes", async () => {
+  const { PlatformFileObjectRepository } = await import(
+    "./platform-file-objects"
+  );
+  const publicMethods = Object.getOwnPropertyNames(
+    PlatformFileObjectRepository.prototype,
+  );
+
+  expect(publicMethods).toContain("findPlatformBrandLogoForBinding");
+  expect(publicMethods).toContain("findTenantBrandLogoForBinding");
+  expect(publicMethods).not.toContain("findActivePlatformBrandLogo");
+  expect(publicMethods).not.toContain("findActiveTenantBrandLogo");
+  expect(publicMethods).not.toContain("findBrandLogoForBinding");
 });

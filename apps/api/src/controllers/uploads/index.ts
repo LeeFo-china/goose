@@ -7,8 +7,6 @@ import { ResponseHandler } from "@/utils/response";
 import { authorizationService } from "@/services/authorization";
 import { accessPolicyService } from "@/services/access-policy";
 import {
-  buildSupplierBusinessLicenseEmployeePrefix,
-  buildTenantOnboardingLicenseVisitorPrefix,
   platformFileStorageService,
 } from "@/services/files/platform-file-storage";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
@@ -24,6 +22,12 @@ import {
 import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
 import { assertDirectUploadFileDeclaration } from "./direct-upload-file-policy";
 import { assertSupplierLicenseUploadSceneAccess } from "./supplier-license-upload-access";
+import { assertBrandLogoUploadSceneAccess } from "./brand-logo-upload-access";
+import {
+  assertDirectObjectKeyBelongsToActor,
+  isProjectRequiredUploadScene,
+  type DirectUploadActorContext,
+} from "./direct-object-key-access";
 
 const IMAGE_MIME_TYPES = [
   "image/jpeg",
@@ -50,11 +54,11 @@ const DIRECT_UPLOAD_SCENES = [
   "picture_comment",
   "tenant_onboarding_license",
   "supplier_business_license",
+  "brand_logo",
 ] as const;
 const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
-const PROJECT_REQUIRED_UPLOAD_SCENES = new Set<UploadScene>(["project_log", "project_acceptance", "project_payment"]);
-const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment"]);
+const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment", "brand_logo"]);
 const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "tenant_onboarding_license",
   "wechat_pay_applyment",
@@ -87,14 +91,17 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
     (
       value.scene === "tenant_onboarding_license" ||
       value.scene === "wechat_pay_applyment" ||
-      value.scene === "supplier_business_license"
+      value.scene === "supplier_business_license" ||
+      value.scene === "brand_logo"
     ) &&
     !value.upload_intent
   ) {
     context.addIssue({
       code: "custom",
       path: ["upload_intent"],
-      message: "缺少私有上传凭证",
+      message: value.scene === "brand_logo"
+        ? "缺少品牌 Logo 上传凭证"
+        : "缺少私有上传凭证",
     });
   }
 });
@@ -109,13 +116,7 @@ const UploadPublicUrlQuerySchema = z.object({
     .refine((value) => !value.includes("\\"), "图片路径不合法"),
 });
 type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
-type UploadActorContext = {
-  tenantId: string | null;
-  employeeId: string | null;
-  customerId: string | null;
-  visitorId: string | null;
-  isPlatformAdmin: boolean;
-};
+type UploadActorContext = DirectUploadActorContext;
 
 function logUploadImagesTiming(
   stage: string,
@@ -174,7 +175,8 @@ class UploadController extends BaseController {
       mimetype: result.data.mimetype,
       sizeBytes: result.data.size_bytes,
     });
-    const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+    const actorContext = await assertBrandLogoUploadSceneAccess(user, scene)
+      ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
@@ -229,7 +231,8 @@ class UploadController extends BaseController {
       mimetype: result.data.mimetype,
       sizeBytes: result.data.size_bytes,
     });
-    const actorContext = await assertApplymentUploadSceneAccess(user, scene)
+    const actorContext = await assertBrandLogoUploadSceneAccess(user, scene)
+      ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
     await this.assertDirectUploadProjectAccess(
@@ -238,12 +241,13 @@ class UploadController extends BaseController {
       result.data.project_id,
       actorContext,
     );
-    this.assertDirectObjectKeyBelongsToActor(
-      result.data.object_key,
+    assertDirectObjectKeyBelongsToActor({
+      objectKey: result.data.object_key,
       scene,
       actorContext,
-      result.data.project_id,
-    );
+      projectId: result.data.project_id,
+      mimetype: result.data.mimetype,
+    });
 
     const uploaded = await platformFileStorageService.completeDirectUpload({
       filename: result.data.filename,
@@ -277,33 +281,6 @@ class UploadController extends BaseController {
     return ResponseHandler.success(uploaded);
   }
 
-  private assertDirectObjectKeyBelongsToActor(
-    objectKey: string,
-    scene: UploadScene,
-    actorContext: UploadActorContext,
-    projectId: string | undefined,
-  ) {
-    const scenePrefix = scene.replace(/_/g, "-");
-    const expectedPrefix = scene === "tenant_onboarding_license"
-      ? buildTenantOnboardingLicenseVisitorPrefix(actorContext.visitorId)
-      : scene === "supplier_business_license"
-      ? buildSupplierBusinessLicenseEmployeePrefix(actorContext.employeeId)
-      : actorContext.tenantId
-      ? `tenants/${actorContext.tenantId}/${scenePrefix}/`
-      : `public/${scenePrefix}/`;
-
-    if (!objectKey.startsWith(expectedPrefix)) {
-      throw Errors.business(403, "上传对象不属于当前登录身份", ErrorCodes.FORBIDDEN);
-    }
-
-    if (PROJECT_REQUIRED_UPLOAD_SCENES.has(scene)) {
-      const expectedProjectSegment = `/projects/${projectId}/`;
-      if (!projectId || !objectKey.includes(expectedProjectSegment)) {
-        throw Errors.business(403, "上传对象不属于当前项目", ErrorCodes.FORBIDDEN);
-      }
-    }
-  }
-
   private async assertDirectUploadProjectAccess(
     user: JwtPayload,
     scene: UploadScene,
@@ -328,7 +305,7 @@ class UploadController extends BaseController {
       throw Errors.forbidden();
     }
 
-    if (!PROJECT_REQUIRED_UPLOAD_SCENES.has(scene)) return;
+    if (!isProjectRequiredUploadScene(scene)) return;
 
     if (!projectId) {
       throw Errors.badRequest("缺少项目ID");

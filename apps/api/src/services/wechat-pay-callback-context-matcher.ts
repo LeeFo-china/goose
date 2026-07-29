@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  brandingAddonOrderRepository,
+} from "@/repositories/branding-addon-orders";
+import {
   billingRechargeRepository,
   type BillingWechatRefundRequestMatch,
   type TenantCreditOrderRecord,
@@ -30,11 +33,14 @@ import {
 } from "@/services/platform-payment-secret-bundle-revision";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 import {
-  buildWechatPayTransactionExpectedBinding,
-  convertWechatPayTransactionCallbackResource,
-  parseAndAssertWechatPayTransactionCallback,
-  type WechatPayValidatedSuccessTransaction,
-} from "@/services/wechat-pay-transaction-contract";
+  type BrandingAddonCallbackContext,
+  type CreditRechargeCallbackContext,
+  WechatPayPlatformPaymentCallbackMatcher,
+} from "@/services/wechat-pay-callback-platform-payment";
+export type {
+  BrandingAddonCallbackContext,
+  CreditRechargeCallbackContext,
+} from "@/services/wechat-pay-callback-platform-payment";
 
 export type CallbackHeaders = Record<string, string | string[] | undefined>;
 
@@ -56,6 +62,10 @@ type CreditRechargeRepositoryPort = Pick<
   typeof billingRechargeRepository,
   "findWechatOrderByOutTradeNo" | "findWechatRefundRequestByOutRefundNo"
 >;
+type BrandingAddonRepositoryPort = Pick<
+  typeof brandingAddonOrderRepository,
+  "findByOutTradeNo"
+>;
 
 export type WechatPayCallbackCrypto = {
   verifySignature: typeof verifyWechatPayCallbackSignature;
@@ -70,6 +80,7 @@ export type WechatPayCallbackContextMatcherDependencies = {
   orderRepository?: ProjectOrderRepositoryPort;
   customerSmokeRepository?: CustomerSmokeRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
+  brandingAddonMatchRepository?: BrandingAddonRepositoryPort;
 };
 
 export type ProjectPaymentCallbackContext = {
@@ -78,14 +89,6 @@ export type ProjectPaymentCallbackContext = {
   payload: Record<string, unknown>;
   resource: Record<string, unknown>;
   order: WechatPayOrderRecord;
-};
-
-export type CreditRechargeCallbackContext = {
-  kind: "credit_recharge";
-  config: PlatformPaymentConfigRecord;
-  payload: Record<string, unknown>;
-  transaction: WechatPayValidatedSuccessTransaction;
-  order: TenantCreditOrderRecord;
 };
 
 export type CustomerWechatPaySmokeCallbackContext = {
@@ -108,6 +111,7 @@ export type CreditRechargeRefundCallbackContext = {
 export type MatchedCallbackContext =
   | ProjectPaymentCallbackContext
   | CustomerWechatPaySmokeCallbackContext
+  | BrandingAddonCallbackContext
   | CreditRechargeCallbackContext
   | CreditRechargeRefundCallbackContext;
 
@@ -119,6 +123,8 @@ export class WechatPayCallbackContextMatcher {
   private readonly orderRepository: ProjectOrderRepositoryPort;
   private readonly customerSmokeRepository: CustomerSmokeRepositoryPort;
   private readonly creditRechargeRepository: CreditRechargeRepositoryPort;
+  private readonly platformPaymentMatcher:
+    WechatPayPlatformPaymentCallbackMatcher;
 
   constructor(dependencies: WechatPayCallbackContextMatcherDependencies = {}) {
     this.configRepository = dependencies.configRepository ??
@@ -137,6 +143,12 @@ export class WechatPayCallbackContextMatcher {
       customerWechatPaySmokeRepository;
     this.creditRechargeRepository = dependencies.creditRechargeRepository ??
       billingRechargeRepository;
+    this.platformPaymentMatcher =
+      new WechatPayPlatformPaymentCallbackMatcher(
+        dependencies.brandingAddonMatchRepository ??
+          brandingAddonOrderRepository,
+        this.creditRechargeRepository,
+      );
   }
 
   async match(input: {
@@ -166,6 +178,16 @@ export class WechatPayCallbackContextMatcher {
       );
     }
 
+    const platformPaymentMatch = await this.matchPlatformPayment({
+      ...input,
+      timestamp,
+      nonce,
+      signature,
+      callbackSerial,
+      resource,
+    });
+    if (platformPaymentMatch) return platformPaymentMatch;
+
     const projectMatch = await this.matchProjectPayment({
       ...input,
       timestamp,
@@ -185,16 +207,6 @@ export class WechatPayCallbackContextMatcher {
       resource,
     });
     if (smokeMatch) return smokeMatch;
-
-    const rechargeMatch = await this.matchCreditRecharge({
-      ...input,
-      timestamp,
-      nonce,
-      signature,
-      callbackSerial,
-      resource,
-    });
-    if (rechargeMatch) return rechargeMatch;
 
     throw Errors.business(
       401,
@@ -286,7 +298,7 @@ export class WechatPayCallbackContextMatcher {
     return null;
   }
 
-  private async matchCreditRecharge(input: MatchInput) {
+  private async matchPlatformPayment(input: MatchInput) {
     const configs =
       await this.platformConfigRepository.listCallbackCandidateConfigs();
     for (const config of configs) {
@@ -296,40 +308,12 @@ export class WechatPayCallbackContextMatcher {
         platformConfig: config,
       });
       if (!decrypted) continue;
-      const resource = convertWechatPayTransactionCallbackResource(decrypted);
-      const outTradeNo = this.requireString(
-        resource as unknown as Record<string, unknown>,
-        "out_trade_no",
-        "微信支付回调缺少商户订单号",
-      );
-      const order =
-        await this.creditRechargeRepository.findWechatOrderByOutTradeNo(
-          outTradeNo,
-        );
-      if (order?.payment_config_id === config.id) {
-        const eventType = typeof input.payload.event_type === "string"
-          ? input.payload.event_type
-          : "";
-        const transaction = parseAndAssertWechatPayTransactionCallback(
-          eventType,
-          resource,
-          buildWechatPayTransactionExpectedBinding({
-            merchantMode: config.merchant_mode,
-            merchantId: config.merchant_id,
-            subMerchantId: config.sub_merchant_id,
-            outTradeNo,
-            amountFen: order.amount_fen,
-            transactionId: order.transaction_id,
-          }),
-        );
-        return {
-          kind: "credit_recharge",
-          config,
-          payload: input.payload,
-          transaction,
-          order,
-        } satisfies CreditRechargeCallbackContext;
-      }
+      const matched = await this.platformPaymentMatcher.match({
+        config,
+        payload: input.payload,
+        decrypted,
+      });
+      if (matched) return matched;
     }
     return null;
   }

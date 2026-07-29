@@ -125,6 +125,7 @@ const decryptResource = mock((): Record<string, unknown> => decryptedResource);
 const findCreditOrderByOutTradeNo = mock(
   async (): Promise<TenantCreditOrderRecord | null> => creditOrder,
 );
+const findBrandingAddonOrderByOutTradeNo = mock(async () => null);
 const findRefundRequestByOutRefundNo = mock(async () => null);
 const findCreditNotificationByNotifyId = mock(
   async (): Promise<TenantCreditWechatNotificationRecord | null> => null,
@@ -182,6 +183,9 @@ async function createService(input: {
     },
     secretBundleService: { load: loadSecretBundle },
     crypto: { verifySignature, decryptResource },
+    brandingAddonMatchRepository: {
+      findByOutTradeNo: findBrandingAddonOrderByOutTradeNo,
+    },
     creditRechargeRepository: {
       findWechatOrderByOutTradeNo: findCreditOrderByOutTradeNo,
       findWechatRefundRequestByOutRefundNo: findRefundRequestByOutRefundNo,
@@ -208,6 +212,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
       verifySignature,
       decryptResource,
       findCreditOrderByOutTradeNo,
+      findBrandingAddonOrderByOutTradeNo,
       findRefundRequestByOutRefundNo,
       findCreditNotificationByNotifyId,
       createCreditNotification,
@@ -225,6 +230,7 @@ describe("WechatPayCallbackService credit recharge callbacks", () => {
     verifySignature.mockImplementation(() => true);
     decryptResource.mockImplementation(() => decryptedResource);
     findCreditOrderByOutTradeNo.mockImplementation(async () => creditOrder);
+    findBrandingAddonOrderByOutTradeNo.mockImplementation(async () => null);
     findRefundRequestByOutRefundNo.mockImplementation(async () => null);
     findCreditNotificationByNotifyId.mockImplementation(async () => null);
   });

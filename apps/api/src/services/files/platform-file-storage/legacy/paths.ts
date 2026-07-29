@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { Errors, getFileExtension, joinPublicUrl, trimSlashes } from "./shared";
 import type {
   PlatformFileProvider,
@@ -6,6 +6,15 @@ import type {
   PlatformUploadScene,
   UploadImageInput,
 } from "./shared";
+import {
+  buildSupplierBusinessLicenseEmployeePrefix,
+  buildTenantOnboardingLicenseVisitorPrefix,
+} from "./object-owner-prefixes";
+
+export {
+  buildSupplierBusinessLicenseEmployeePrefix,
+  buildTenantOnboardingLicenseVisitorPrefix,
+} from "./object-owner-prefixes";
 
 export function buildLegacyObjectPath(this: any, input: {
   scene: PlatformUploadScene;
@@ -38,6 +47,7 @@ export function buildLegacyObjectPath(this: any, input: {
     picture_comment: "picture-comment",
     tenant_onboarding_license: "tenant-onboarding-license",
     supplier_business_license: "supplier-business-license",
+    brand_logo: "brand-logo",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -53,7 +63,8 @@ export function buildCosObjectKey(this: any, input: Pick<
   const day = String(now.getDate()).padStart(2, "0");
   const extension = getFileExtension({
     filename: input.scene === "tenant_onboarding_license" ||
-      input.scene === "supplier_business_license"
+      input.scene === "supplier_business_license" ||
+      input.scene === "brand_logo"
       ? undefined
       : input.filename,
     mimetype: input.mimetype,
@@ -70,37 +81,14 @@ export function buildCosObjectKey(this: any, input: Pick<
     ? `tenants/${input.tenantId}`
     : "public";
   const scene = input.scene.replace(/_/g, "-");
+  if (input.scene === "brand_logo") {
+    return `${tenantPrefix}/${scene}/${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
   const projectSegment = input.projectId?.trim()
     ? `projects/${input.projectId.trim()}`
     : "unassigned";
 
   return `${tenantPrefix}/${scene}/${projectSegment}/${year}/${month}/${day}/${randomUUID()}${extension}`;
-}
-
-export function buildSupplierBusinessLicenseEmployeePrefix(
-  employeeId: string | null | undefined,
-) {
-  const normalizedEmployeeId = employeeId?.trim();
-  if (!normalizedEmployeeId) {
-    throw Errors.forbidden();
-  }
-  const employeeHash = createHash("sha256")
-    .update(normalizedEmployeeId)
-    .digest("hex");
-  return `private/supplier-business-license/employees/${employeeHash}/`;
-}
-
-export function buildTenantOnboardingLicenseVisitorPrefix(
-  visitorId: string | null | undefined,
-) {
-  const normalizedVisitorId = visitorId?.trim();
-  if (!normalizedVisitorId) {
-    throw Errors.forbidden();
-  }
-  const visitorHash = createHash("sha256")
-    .update(normalizedVisitorId)
-    .digest("hex");
-  return `private/tenant-onboarding-license/visitors/${visitorHash}/`;
 }
 
 export function buildCosPublicUrl(this: any, input: {
