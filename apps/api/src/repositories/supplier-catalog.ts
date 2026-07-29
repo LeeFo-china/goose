@@ -31,6 +31,10 @@ const UNIT_LIST_SELECT =
   `${UNIT_SELECT},base_unit:catalog_units!catalog_units_base_unit_id_fkey(id,code,name,symbol,status)`;
 
 const CatalogStatusSchema = z.enum(["active", "inactive"]);
+const CatalogConflictSnapshotSchema = z.object({
+  version: z.number().int().positive(),
+  status: CatalogStatusSchema,
+}).strict();
 const catalogAudit = {
   version: z.number().int().positive(),
   created_at: z.string(),
@@ -309,13 +313,34 @@ export class SupplierCatalogRepository
       .maybeSingle();
     if (error) throw Errors.dbError(message, error);
     if (data === null) {
+      const conflictSnapshot = await this.readConflictSnapshot(table, id);
       throw Errors.business(
         409,
         "目录数据版本已变化，请刷新后重试",
         "SUPPLIER_VERSION_CONFLICT",
+        conflictSnapshot
+          ? {
+              current_version: conflictSnapshot.version,
+              current_status: conflictSnapshot.status,
+            }
+          : undefined,
       );
     }
     return parseRow(schema, data, message);
+  }
+
+  private async readConflictSnapshot(table: string, id: string) {
+    const { data, error } = await this.client.from(table)
+      .select("version,status")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw Errors.dbError("刷新目录数据版本失败", error);
+    if (data === null) return null;
+    return parseRow(
+      CatalogConflictSnapshotSchema,
+      data,
+      "刷新目录数据版本失败",
+    );
   }
 }
 

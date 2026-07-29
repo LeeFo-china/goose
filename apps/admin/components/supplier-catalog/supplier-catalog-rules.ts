@@ -144,6 +144,33 @@ export function isCatalogVersionConflict(error: unknown) {
   return value.status === 409 && value.code === "SUPPLIER_VERSION_CONFLICT";
 }
 
+export function readCatalogConflictSnapshot(
+  error: unknown,
+): { version: number; status: CatalogStatus } | null {
+  if (!isCatalogVersionConflict(error)) return null;
+  const payload = (error as {
+    payload?: { details?: unknown };
+  }).payload;
+  if (
+    typeof payload?.details !== "object" ||
+    payload.details === null
+  ) {
+    return null;
+  }
+  const details = payload.details as Record<string, unknown>;
+  const version = details.current_version;
+  const status = details.current_status;
+  if (
+    typeof version !== "number" ||
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    (status !== "active" && status !== "inactive")
+  ) {
+    return null;
+  }
+  return { version, status };
+}
+
 export function resolveCatalogStatusRetry(input: {
   requestedStatus: CatalogStatus;
   latestStatus: CatalogStatus;

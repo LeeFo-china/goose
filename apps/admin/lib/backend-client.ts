@@ -4,6 +4,7 @@ export type BackendClientPayload<T> = {
   message?: string;
   error?: string;
   code?: string;
+  details?: unknown;
   requestId?: string;
 };
 
