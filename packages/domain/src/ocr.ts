@@ -3,6 +3,7 @@ export const OCR_SCENE_VALUES = [
   'expense_request',
   'merchant_material',
   'supplier_onboarding',
+  'tenant_onboarding_license',
 ] as const;
 
 export type OcrScene = (typeof OCR_SCENE_VALUES)[number];

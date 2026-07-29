@@ -101,6 +101,7 @@ import PlatformUploadPreviewsController from "@/controllers/platform-upload-prev
 import PlatformSupplierOnboardingController from "@/controllers/platform-supplier-onboarding";
 import BrandingController from "@/controllers/branding";
 import BrandingAddonController from "@/controllers/branding-addon";
+import TenantOnboardingOcrController from "@/controllers/tenant-onboarding-ocr";
 
 const fullCrudRoutes = {
   list: true,
@@ -199,6 +200,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformSupplierOnboardingController.registerExtraRoutes(app);
   BrandingController.registerExtraRoutes(app);
   BrandingAddonController.registerExtraRoutes(app);
+  TenantOnboardingOcrController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

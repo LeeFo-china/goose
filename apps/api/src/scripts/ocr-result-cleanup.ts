@@ -52,7 +52,7 @@ export async function runOcrResultCleanup(input: CleanupRunInput) {
   const output = {
     generated_at: new Date().toISOString(),
     mode: apply ? "apply" as const : "dry-run" as const,
-    rule: "status IN (processing,succeeded) AND expires_at<=now",
+    rule: "status IN (processing,succeeded,failed) AND expires_at<=now",
     candidate_count: candidateCount,
     expired_count: expiredCount,
     oldest_expires_at: oldestExpiresAt,

@@ -347,7 +347,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select("id,expires_at")
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .lte("expires_at", input.before)
       .order("expires_at", { ascending: true })
       .limit(limit);
@@ -371,7 +371,7 @@ export class OcrRecognitionRepository {
         result_ciphertext: null,
       })
       .in("id", ids)
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .lte("expires_at", input.before)
       .select("id");
 

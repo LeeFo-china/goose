@@ -9,7 +9,7 @@ export type OcrProviderAction =
   | "RecognizeEncryptedIDCardOCR"
   | "BankCardOCR";
 
-type OcrCapabilityAudience = "tenant" | "platform";
+type OcrCapabilityAudience = "tenant" | "platform" | "visitor";
 
 export type OcrCapabilityDefinition = OcrCapability & {
   readonly audience: OcrCapabilityAudience;
@@ -117,6 +117,26 @@ const CAPABILITIES: readonly OcrCapabilityDefinition[] = [
     providerAction: "BizLicenseOCR",
     concurrencyLimit: 8,
   },
+  {
+    audience: "visitor",
+    scene: "tenant_onboarding_license",
+    document_type: "business_license",
+    label: "识别营业执照",
+    attachment_categories: ["tenant_onboarding_license"],
+    supported_mime_types: IMAGE_MIME_TYPES,
+    max_size_bytes: MAX_IMAGE_SIZE_BYTES,
+    mode: "sync",
+    output_fields: [
+      "license_name",
+      "license_code",
+      "license_address",
+      "license_period_begin",
+      "license_period_end",
+      "legal_representative_name",
+    ],
+    providerAction: "BizLicenseOCR",
+    concurrencyLimit: 8,
+  },
 ];
 
 export function getOcrCapability(
@@ -166,6 +186,12 @@ export function listTenantOcrCapabilities(scene?: OcrScene): OcrCapability[] {
 export function listPlatformOcrCapabilities(scene?: OcrScene): OcrCapability[] {
   return toPublicOcrCapabilities(
     listOcrCapabilityDefinitions(scene, "platform"),
+  );
+}
+
+export function listVisitorOcrCapabilities(scene?: OcrScene): OcrCapability[] {
+  return toPublicOcrCapabilities(
+    listOcrCapabilityDefinitions(scene, "visitor"),
   );
 }
 

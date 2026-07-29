@@ -7,6 +7,28 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const cleanupModulePromise = import("./ocr-result-cleanup");
 
 describe("OCR result cleanup", () => {
+  test("expires processing, succeeded and failed rows without clearing audit fields", async () => {
+    const source = await Bun.file(new URL(
+      "../repositories/ocr-recognitions.ts",
+      import.meta.url,
+    )).text();
+    const cleanupMethod = source.slice(
+      source.indexOf("async expireResultsBefore"),
+      source.indexOf("\n  }\n}", source.indexOf("async expireResultsBefore")),
+    );
+    const visitorLifecycleFilters = cleanupMethod.match(
+      /\.in\("status", \["processing", "succeeded", "failed"\]\)/g,
+    ) ?? [];
+    const update = cleanupMethod.match(
+      /\.update\(\{\s*status: "expired",\s*result_ciphertext: null,\s*\}\)/,
+    );
+
+    expect(visitorLifecycleFilters).toHaveLength(2);
+    expect(update?.[0]).not.toContain("result_summary");
+    expect(update?.[0]).not.toContain("provider_request_id");
+    expect(update?.[0]).not.toContain("billable_units");
+  });
+
   test("defaults to a bounded dry-run", async () => {
     const { runOcrResultCleanup } = await cleanupModulePromise;
     const expireResultsBefore = mock(async () => ({
@@ -30,7 +52,7 @@ describe("OCR result cleanup", () => {
     });
     expect(result).toMatchObject({
       mode: "dry-run",
-      rule: "status IN (processing,succeeded) AND expires_at<=now",
+      rule: "status IN (processing,succeeded,failed) AND expires_at<=now",
       candidate_count: 2,
       expired_count: 0,
       oldest_expires_at: "2026-07-20T00:00:00.000Z",
