@@ -49,6 +49,29 @@ describe("admin nav visibility", () => {
     expect(platformItems.some((item) => item.label === "服务商入驻")).toBe(false);
   });
 
+  test("shows branding addon management only with the product permission", () => {
+    const brandingItem = platformNavGroups
+      .flatMap((group) => group.items)
+      .find((item) => item.href === "/platform/branding-addon");
+
+    expect(brandingItem?.label).toBe("品牌权益");
+    expect(brandingItem?.permission).toBe(
+      "platform.branding_product.manage",
+    );
+    expect(
+      hasMenuItemAccess(
+        createSession([
+          {
+            code: "platform.branding_product.manage",
+            scope: "all",
+          },
+        ]),
+        brandingItem!,
+      ),
+    ).toBe(true);
+    expect(hasMenuItemAccess(createSession([]), brandingItem!)).toBe(false);
+  });
+
   test("keeps project list and risk under one tenant project nav item", () => {
     const businessItems = tenantNavGroups.find((group) => group.label === "业务")
       ?.items ?? [];
