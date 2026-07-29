@@ -63,7 +63,7 @@ test.describe("供应商 Phase 0 平台工作台", () => {
     await expect(dialog.getByRole("button", { name: "创建供应商" })).toBeVisible();
   });
 
-  test("供应标准目录可在类目、品牌和单位之间切换", async ({ page }) => {
+  test("供应标准目录可切换视图并打开三个新建弹窗", async ({ page }) => {
     await page.goto("/platform/catalog", { waitUntil: "load" });
     await expect(
       page.getByRole("heading", { name: "供应标准目录", level: 1 }),
@@ -74,6 +74,14 @@ test.describe("供应商 Phase 0 平台工作台", () => {
 
     const tablist = page.getByRole("tablist");
     await expect(tablist.getByRole("tab", { name: "标准类目" })).toBeVisible();
+    await page.getByRole("button", { name: "新建类目" }).click();
+    const categoryDialog = page.getByRole("dialog", {
+      name: "新建标准类目",
+    });
+    await expect(categoryDialog).toBeVisible();
+    await categoryDialog.getByRole("button", { name: "取消编辑" }).click();
+    await expect(categoryDialog).toBeHidden();
+
     await tablist.getByRole("tab", { name: "品牌" }).click();
     await expect.poll(() =>
       new URL(page.url()).searchParams.get("view")
@@ -82,6 +90,11 @@ test.describe("供应商 Phase 0 平台工作台", () => {
       "data-state",
       "active",
     );
+    await page.getByRole("button", { name: "新建品牌" }).click();
+    const brandDialog = page.getByRole("dialog", { name: "新建品牌" });
+    await expect(brandDialog).toBeVisible();
+    await brandDialog.getByRole("button", { name: "取消编辑" }).click();
+    await expect(brandDialog).toBeHidden();
 
     await page.getByRole("tab", { name: "单位" }).click();
     await expect.poll(() =>
@@ -91,6 +104,11 @@ test.describe("供应商 Phase 0 平台工作台", () => {
       "data-state",
       "active",
     );
+    await page.getByRole("button", { name: "新建单位" }).click();
+    const unitDialog = page.getByRole("dialog", { name: "新建单位" });
+    await expect(unitDialog).toBeVisible();
+    await unitDialog.getByRole("button", { name: "取消编辑" }).click();
+    await expect(unitDialog).toBeHidden();
 
     await page.getByRole("tab", { name: "标准类目" }).click();
     await expect.poll(() => ({

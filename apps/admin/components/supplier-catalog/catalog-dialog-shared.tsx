@@ -1,30 +1,37 @@
 "use client";
 
+import * as React from "react";
 import { Pencil, Plus } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-export function CatalogDialogTrigger({
-  editing,
-  label,
-}: {
+type CatalogDialogTriggerProps = Omit<
+  React.ComponentPropsWithoutRef<typeof Button>,
+  "children"
+> & {
   editing: boolean;
   label: string;
-}) {
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant={editing ? "ghost" : "default"}
-    >
-      {editing
-        ? <Pencil data-icon="inline-start" />
-        : <Plus data-icon="inline-start" />}
-      {label}
-    </Button>
-  );
-}
+};
+
+export const CatalogDialogTrigger = React.forwardRef<
+  HTMLButtonElement,
+  CatalogDialogTriggerProps
+>(({ editing, label, ...props }, ref) => (
+  <Button
+    ref={ref}
+    type="button"
+    size="sm"
+    variant={editing ? "ghost" : "default"}
+    {...props}
+  >
+    {editing
+      ? <Pencil data-icon="inline-start" />
+      : <Plus data-icon="inline-start" />}
+    {label}
+  </Button>
+));
+CatalogDialogTrigger.displayName = "CatalogDialogTrigger";
 
 export function CatalogConflictAlert({
   onRefresh,
