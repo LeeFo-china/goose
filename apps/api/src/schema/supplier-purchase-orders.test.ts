@@ -20,6 +20,7 @@ const purchaseOrderItemId = "30000000-0000-4000-8000-000000000004";
 const secondPurchaseOrderItemId = "30000000-0000-4000-8000-000000000005";
 const shipmentId = "30000000-0000-4000-8000-000000000006";
 const receiptId = "30000000-0000-4000-8000-000000000007";
+const caseVariantItemId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
 
 function draft(overrides: Record<string, unknown> = {}) {
   return {
@@ -289,6 +290,35 @@ describe("supplier purchase order fulfillment schemas", () => {
         items: [{ purchase_order_item_id: purchaseOrderItemId, quantity }],
       }).success).toBe(false);
     }
+  });
+
+  test("treats UUID casing as identical for shipment and receipt lines", () => {
+    expect(SupplierPurchaseOrderShipmentCreateSchema.safeParse({
+      ...shipmentInput(),
+      items: [
+        { purchase_order_item_id: caseVariantItemId, quantity: 1 },
+        {
+          purchase_order_item_id: caseVariantItemId.toUpperCase(),
+          quantity: 1,
+        },
+      ],
+    }).success).toBe(false);
+    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
+      items: [
+        {
+          purchase_order_item_id: caseVariantItemId,
+          accepted_quantity: 1,
+          rejected_quantity: 0,
+          variance_reason: null,
+        },
+        {
+          purchase_order_item_id: caseVariantItemId.toUpperCase(),
+          accepted_quantity: 1,
+          rejected_quantity: 0,
+          variance_reason: null,
+        },
+      ],
+    })).success).toBe(false);
   });
 
   test("accepts receipt quantities and enforces variance reasons", () => {

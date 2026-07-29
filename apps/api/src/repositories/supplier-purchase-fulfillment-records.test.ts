@@ -240,6 +240,23 @@ describe("supplier purchase fulfillment records", () => {
     }).success).toBe(false);
   });
 
+  test("allows event records with no embedded lines", () => {
+    expect(SupplierPurchaseOrderShipmentSchema.parse({
+      ...shipment,
+      items: [],
+    })).toEqual({
+      ...shipment,
+      items: [],
+    });
+    expect(SupplierPurchaseOrderReceiptSchema.parse({
+      ...receipt,
+      items: [],
+    })).toEqual({
+      ...receipt,
+      items: [],
+    });
+  });
+
   test("strictly parses fulfillment details including an unconfirmed order", () => {
     const detail = {
       fulfillment,

@@ -140,7 +140,7 @@ export const SupplierPurchaseOrderShipmentHeaderSchema = z.object({
 
 export const SupplierPurchaseOrderShipmentSchema =
   SupplierPurchaseOrderShipmentHeaderSchema.extend({
-    items: z.array(SupplierPurchaseOrderShipmentItemSchema).min(1).max(100),
+    items: z.array(SupplierPurchaseOrderShipmentItemSchema).max(100),
   }).strict();
 
 export const SupplierPurchaseOrderReceiptItemSchema = z.object({
@@ -165,7 +165,7 @@ export const SupplierPurchaseOrderReceiptHeaderSchema = z.object({
 
 export const SupplierPurchaseOrderReceiptSchema =
   SupplierPurchaseOrderReceiptHeaderSchema.extend({
-    items: z.array(SupplierPurchaseOrderReceiptItemSchema).min(1).max(100),
+    items: z.array(SupplierPurchaseOrderReceiptItemSchema).max(100),
   }).strict();
 
 export const SupplierPurchaseOrderFulfillmentDetailSchema = z.object({

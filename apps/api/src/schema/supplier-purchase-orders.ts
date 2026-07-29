@@ -155,7 +155,7 @@ export const SupplierPurchaseOrderShipmentCreateSchema = z.object({
     .min(1, "发货至少需要一个明细")
     .max(100, "发货明细不能超过 100 行"),
 }).strict().superRefine((input, context) => {
-  addDuplicateItemIssues(input.items, context);
+  uniquePurchaseOrderItemIds(input.items, context);
 });
 
 export const SupplierPurchaseOrderReceiptCreateSchema = z.object({
@@ -169,7 +169,7 @@ export const SupplierPurchaseOrderReceiptCreateSchema = z.object({
     .min(1, "收货至少需要一个明细")
     .max(100, "收货明细不能超过 100 行"),
 }).strict().superRefine((input, context) => {
-  addDuplicateItemIssues(input.items, context);
+  uniquePurchaseOrderItemIds(input.items, context);
   input.items.forEach((item, index) => {
     if (item.accepted_quantity + item.rejected_quantity <= 0) {
       context.addIssue({
@@ -195,20 +195,21 @@ export const SupplierPurchaseOrderReceiptCreateSchema = z.object({
   });
 });
 
-function addDuplicateItemIssues(
+function uniquePurchaseOrderItemIds(
   items: readonly { purchase_order_item_id: string }[],
   context: z.RefinementCtx,
 ) {
   const seen = new Set<string>();
   items.forEach((item, index) => {
-    if (seen.has(item.purchase_order_item_id)) {
+    const normalizedId = item.purchase_order_item_id.toLowerCase();
+    if (seen.has(normalizedId)) {
       context.addIssue({
         code: "custom",
         path: ["items", index, "purchase_order_item_id"],
         message: "同一采购单明细不能重复添加",
       });
     }
-    seen.add(item.purchase_order_item_id);
+    seen.add(normalizedId);
   });
 }
 
