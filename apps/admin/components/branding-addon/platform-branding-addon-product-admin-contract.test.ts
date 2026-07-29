@@ -49,4 +49,25 @@ describe("platform branding addon product admin contract", () => {
     expect(form).toContain("product.entitlement_code");
     expect(form).toContain("product.term_years");
   });
+
+  test("associates validation feedback with fields and clears stale success", () => {
+    const form = readSource(
+      "./platform-branding-addon-product-form.tsx",
+    );
+
+    expect(form).toContain("ProductFormValidationError");
+    expect(form).toContain("FieldError");
+    expect(form).toContain(
+      "data-invalid={Boolean(fieldErrors.name)}",
+    );
+    expect(form).toContain(
+      "aria-invalid={Boolean(fieldErrors.amountYuan)}",
+    );
+    expect(form).toContain(
+      "data-invalid={Boolean(fieldErrors.purchaseNotes)}",
+    );
+    expect(form).toContain("required={values.enabled}");
+    expect(form).toContain("function editValues");
+    expect(form).toContain("setSaved(false)");
+  });
 });

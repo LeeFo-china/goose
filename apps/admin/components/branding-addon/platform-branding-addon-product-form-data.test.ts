@@ -5,6 +5,7 @@ import {
   createProductFormValues,
   formatFenAsYuanInput,
   parseYuanInputToFen,
+  ProductFormValidationError,
 } from "./platform-branding-addon-product-form-data";
 import type { PlatformBrandingAddonProduct } from "./platform-branding-addon-product-types";
 
@@ -18,6 +19,21 @@ const product: PlatformBrandingAddonProduct = {
   enabled: true,
   version: 2,
 };
+
+function expectValidationError(
+  callback: () => unknown,
+  field: ProductFormValidationError["field"],
+  message: string,
+) {
+  try {
+    callback();
+    throw new Error("expected validation error");
+  } catch (error) {
+    expect(error).toBeInstanceOf(ProductFormValidationError);
+    expect((error as ProductFormValidationError).field).toBe(field);
+    expect((error as Error).message).toBe(message);
+  }
+}
 
 describe("platform branding addon product form data", () => {
   test("formats integer fen as an exact yuan input value", () => {
@@ -90,41 +106,89 @@ describe("platform branding addon product form data", () => {
     });
   });
 
-  test("returns field validation errors before building a patch", () => {
-    expect(() =>
+  test("allows an unconfigured disabled product to save without a price", () => {
+    expect(
+      buildProductPatch(
+        { ...product, amount_fen: null, enabled: false },
+        {
+          name: "年度品牌技术支持",
+          amountYuan: "",
+          purchaseNotes: "开通一年",
+          enabled: false,
+        },
+      ),
+    ).toEqual({
+      name: "年度品牌技术支持",
+      purchase_notes: "开通一年",
+      enabled: false,
+      version: 2,
+    });
+  });
+
+  test("requires a configured price before enabling the product", () => {
+    expectValidationError(
+      () =>
+      buildProductPatch(
+        { ...product, amount_fen: null, enabled: false },
+        {
+          name: "年度品牌技术支持",
+          amountYuan: "",
+          purchaseNotes: "开通一年",
+          enabled: true,
+        },
+      ),
+      "amountYuan",
+      "请填写年度价格",
+    );
+  });
+
+  test("returns field-specific validation errors before building a patch", () => {
+    expectValidationError(
+      () =>
       buildProductPatch(product, {
         name: " ",
         amountYuan: "1.00",
         purchaseNotes: "开通一年",
         enabled: true,
-      })
-    ).toThrow("请填写商品名称");
+      }),
+      "name",
+      "请填写商品名称",
+    );
 
-    expect(() =>
+    expectValidationError(
+      () =>
       buildProductPatch(product, {
         name: "年度品牌技术支持",
         amountYuan: "1.00",
         purchaseNotes: " ",
         enabled: true,
-      })
-    ).toThrow("请填写购买说明");
+      }),
+      "purchaseNotes",
+      "请填写购买说明",
+    );
 
-    expect(() =>
+    expectValidationError(
+      () =>
       buildProductPatch(product, {
         name: "品".repeat(101),
         amountYuan: "1.00",
         purchaseNotes: "开通一年",
         enabled: true,
-      })
-    ).toThrow("商品名称不能超过 100 个字符");
+      }),
+      "name",
+      "商品名称不能超过 100 个字符",
+    );
 
-    expect(() =>
+    expectValidationError(
+      () =>
       buildProductPatch(product, {
         name: "年度品牌技术支持",
         amountYuan: "1.00",
         purchaseNotes: "说".repeat(501),
         enabled: true,
-      })
-    ).toThrow("购买说明不能超过 500 个字符");
+      }),
+      "purchaseNotes",
+      "购买说明不能超过 500 个字符",
+    );
   });
 });

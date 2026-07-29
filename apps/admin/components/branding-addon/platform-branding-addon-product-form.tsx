@@ -8,9 +8,12 @@ import { StatusAlert } from "@/components/admin/status-alert";
 import {
   buildProductPatch,
   createProductFormValues,
+  type ProductFormField,
+  ProductFormValidationError,
 } from "@/components/branding-addon/platform-branding-addon-product-form-data";
 import type {
   PlatformBrandingAddonProduct,
+  PlatformBrandingAddonProductFormValues,
   PlatformBrandingAddonProductResult,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +29,7 @@ import {
 import {
   Field,
   FieldDescription,
+  FieldError,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
@@ -50,18 +54,38 @@ export function PlatformBrandingAddonProductForm({
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [hasVersionConflict, setHasVersionConflict] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<
+    Partial<Record<ProductFormField, string>>
+  >({});
   const [pending, startTransition] = useTransition();
+
+  function editValues(
+    patch: Partial<PlatformBrandingAddonProductFormValues>,
+  ) {
+    setValues((current) => ({ ...current, ...patch }));
+    setError("");
+    setSaved(false);
+    setHasVersionConflict(false);
+    setFieldErrors({});
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     setSaved(false);
     setHasVersionConflict(false);
+    setFieldErrors({});
 
     let payload;
     try {
       payload = buildProductPatch(product, values);
     } catch (validationError) {
+      if (validationError instanceof ProductFormValidationError) {
+        setFieldErrors({
+          [validationError.field]: validationError.message,
+        });
+        return;
+      }
       setError(
         validationError instanceof Error
           ? validationError.message
@@ -81,6 +105,7 @@ export function PlatformBrandingAddonProductForm({
         });
         setProduct(result.product);
         setValues(createProductFormValues(result.product));
+        setFieldErrors({});
         setSaved(true);
       } catch (submitError) {
         const code = submitError && typeof submitError === "object" &&
@@ -153,7 +178,7 @@ export function PlatformBrandingAddonProductForm({
           ) : null}
 
           <FieldGroup className="grid gap-4 md:grid-cols-2">
-            <Field>
+            <Field data-invalid={Boolean(fieldErrors.name)}>
               <FieldLabel htmlFor="branding-addon-product-name">
                 商品名称
               </FieldLabel>
@@ -161,17 +186,16 @@ export function PlatformBrandingAddonProductForm({
                 id="branding-addon-product-name"
                 value={values.name}
                 onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    name: event.target.value,
-                  }))}
+                  editValues({ name: event.target.value })}
                 maxLength={100}
                 disabled={pending}
+                aria-invalid={Boolean(fieldErrors.name)}
                 required
               />
+              <FieldError>{fieldErrors.name}</FieldError>
             </Field>
 
-            <Field>
+            <Field data-invalid={Boolean(fieldErrors.amountYuan)}>
               <FieldLabel htmlFor="branding-addon-product-amount">
                 年度价格（元）
               </FieldLabel>
@@ -181,20 +205,23 @@ export function PlatformBrandingAddonProductForm({
                 inputMode="decimal"
                 value={values.amountYuan}
                 onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    amountYuan: event.target.value,
-                  }))}
+                  editValues({ amountYuan: event.target.value })}
                 placeholder="例如 99.00"
                 disabled={pending}
-                required
+                aria-invalid={Boolean(fieldErrors.amountYuan)}
+                required={values.enabled}
               />
               <FieldDescription>
-                最低 0.01 元，最多两位小数；接口按整数分保存。
+                最低 0.01 元，最多两位小数。下架且尚未配置价格时可留空；
+                已配置价格不能清空。
               </FieldDescription>
+              <FieldError>{fieldErrors.amountYuan}</FieldError>
             </Field>
 
-            <Field className="md:col-span-2">
+            <Field
+              className="md:col-span-2"
+              data-invalid={Boolean(fieldErrors.purchaseNotes)}
+            >
               <FieldLabel htmlFor="branding-addon-product-notes">
                 购买说明
               </FieldLabel>
@@ -202,17 +229,16 @@ export function PlatformBrandingAddonProductForm({
                 id="branding-addon-product-notes"
                 value={values.purchaseNotes}
                 onChange={(event) =>
-                  setValues((current) => ({
-                    ...current,
-                    purchaseNotes: event.target.value,
-                  }))}
+                  editValues({ purchaseNotes: event.target.value })}
                 maxLength={500}
                 disabled={pending}
+                aria-invalid={Boolean(fieldErrors.purchaseNotes)}
                 required
               />
               <FieldDescription>
                 将随商品展示；订单创建后保存当时的购买说明快照。
               </FieldDescription>
+              <FieldError>{fieldErrors.purchaseNotes}</FieldError>
             </Field>
 
             <Field className="md:col-span-2">
@@ -228,8 +254,7 @@ export function PlatformBrandingAddonProductForm({
                 <Switch
                   id="branding-addon-product-enabled"
                   checked={values.enabled}
-                  onCheckedChange={(enabled) =>
-                    setValues((current) => ({ ...current, enabled }))}
+                  onCheckedChange={(enabled) => editValues({ enabled })}
                   disabled={pending}
                 />
               </div>

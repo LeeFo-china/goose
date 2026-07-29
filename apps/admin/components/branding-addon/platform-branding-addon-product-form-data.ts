@@ -10,6 +10,18 @@ type PriceParseResult =
   | { ok: true; amountFen: number }
   | { ok: false; message: string };
 
+export type ProductFormField = "name" | "amountYuan" | "purchaseNotes";
+
+export class ProductFormValidationError extends Error {
+  constructor(
+    readonly field: ProductFormField,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ProductFormValidationError";
+  }
+}
+
 export function formatFenAsYuanInput(amountFen: number | null): string {
   if (amountFen === null) return "";
 
@@ -62,25 +74,53 @@ export function buildProductPatch(
   values: PlatformBrandingAddonProductFormValues,
 ): PlatformBrandingAddonProductPatch {
   const name = values.name.trim();
-  if (!name) throw new Error("请填写商品名称");
+  if (!name) {
+    throw new ProductFormValidationError("name", "请填写商品名称");
+  }
   if (name.length > 100) {
-    throw new Error("商品名称不能超过 100 个字符");
+    throw new ProductFormValidationError(
+      "name",
+      "商品名称不能超过 100 个字符",
+    );
   }
 
   const purchaseNotes = values.purchaseNotes.trim();
-  if (!purchaseNotes) throw new Error("请填写购买说明");
+  if (!purchaseNotes) {
+    throw new ProductFormValidationError(
+      "purchaseNotes",
+      "请填写购买说明",
+    );
+  }
   if (purchaseNotes.length > 500) {
-    throw new Error("购买说明不能超过 500 个字符");
+    throw new ProductFormValidationError(
+      "purchaseNotes",
+      "购买说明不能超过 500 个字符",
+    );
   }
 
-  const price = parseYuanInputToFen(values.amountYuan);
-  if (!price.ok) throw new Error(price.message);
+  const amountYuan = values.amountYuan.trim();
+  let amountFen: number | undefined;
+  if (amountYuan) {
+    const price = parseYuanInputToFen(amountYuan);
+    if (!price.ok) {
+      throw new ProductFormValidationError(
+        "amountYuan",
+        price.message,
+      );
+    }
+    amountFen = price.amountFen;
+  } else if (values.enabled) {
+    throw new ProductFormValidationError(
+      "amountYuan",
+      "请填写年度价格",
+    );
+  }
 
   return {
     name,
-    amount_fen: price.amountFen,
     purchase_notes: purchaseNotes,
     enabled: values.enabled,
     version: product.version,
+    ...(amountFen === undefined ? {} : { amount_fen: amountFen }),
   };
 }

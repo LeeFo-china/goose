@@ -22,7 +22,7 @@ export interface PlatformBrandingAddonProductFormValues {
 
 export interface PlatformBrandingAddonProductPatch {
   name: string;
-  amount_fen: number;
+  amount_fen?: number;
   purchase_notes: string;
   enabled: boolean;
   version: number;
