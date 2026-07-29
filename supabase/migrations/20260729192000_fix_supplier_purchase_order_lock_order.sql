@@ -1,0 +1,153 @@
+-- Keep every supplier purchase-order command on the same lock order:
+-- actor/idempotency command, order id, then purchase-order row.
+--
+-- Rollback strategy: keep the unified lock order and preserve submitted facts.
+-- If draft saving must be withdrawn, revoke API/UI access in a forward
+-- migration instead of restoring the deadlock-prone wrapper.
+
+CREATE OR REPLACE FUNCTION public.save_supplier_purchase_order_draft(
+  p_order_id uuid,
+  p_tenant_id uuid,
+  p_project_id uuid,
+  p_tenant_supplier_id uuid,
+  p_expected_version integer,
+  p_expected_delivery_date date,
+  p_remark text,
+  p_items jsonb,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_tenant_order_version integer;
+  v_global_order_exists boolean;
+BEGIN
+  IF p_order_id IS NULL
+    OR p_tenant_id IS NULL
+    OR p_project_id IS NULL
+    OR p_tenant_supplier_id IS NULL
+    OR p_expected_version IS NULL
+    OR p_expected_version < 0
+    OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_items IS NULL
+    OR jsonb_typeof(p_items) <> 'array'
+    OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
+    OR (p_remark IS NOT NULL AND btrim(p_remark) = '')
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR'
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id,
+    p_actor_user_id,
+    p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-order-id:' || p_order_id::text,
+      6720240729190000
+    )
+  );
+
+  SELECT purchase_order.version
+  INTO v_tenant_order_version
+  FROM public.supplier_purchase_orders AS purchase_order
+  WHERE purchase_order.id = p_order_id
+    AND purchase_order.tenant_id = p_tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.supplier_purchase_orders AS purchase_order
+      WHERE purchase_order.id = p_order_id
+    )
+    INTO v_global_order_exists;
+
+    IF v_global_order_exists THEN
+      IF p_expected_version = 0 THEN
+        RETURN jsonb_build_object(
+          'status', 'state_conflict',
+          'error_code', 'SUPPLIER_PURCHASE_ORDER_ID_CONFLICT'
+        );
+      END IF;
+      RETURN jsonb_build_object(
+        'status', 'not_found',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_NOT_FOUND'
+      );
+    END IF;
+  END IF;
+
+  BEGIN
+    RETURN public.save_supplier_purchase_order_draft_v1(
+      p_order_id,
+      p_tenant_id,
+      p_project_id,
+      p_tenant_supplier_id,
+      p_expected_version,
+      p_expected_delivery_date,
+      p_remark,
+      p_items,
+      p_actor_user_id,
+      p_actor_employee_id,
+      p_idempotency_key
+    );
+  EXCEPTION
+    WHEN numeric_value_out_of_range THEN
+      RETURN jsonb_build_object(
+        'status', 'validation_error',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED',
+        'reason', '采购单行金额或汇总金额超过 numeric(18,2) 上限'
+      );
+  END;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.save_supplier_purchase_order_draft(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  integer,
+  date,
+  text,
+  jsonb,
+  uuid,
+  uuid,
+  text
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.save_supplier_purchase_order_draft(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  integer,
+  date,
+  text,
+  jsonb,
+  uuid,
+  uuid,
+  text
+) TO service_role;

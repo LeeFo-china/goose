@@ -120,6 +120,8 @@ describe("SupplierPurchaseOrdersService", () => {
       pageSize: 10,
     });
 
+    expect(deps.access.requireManage).toHaveBeenCalledWith(auth);
+    expect(deps.access.requireRead).not.toHaveBeenCalled();
     expect(deps.repository.listCatalog).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
       tenant_supplier_id: RELATIONSHIP_ID,

@@ -65,6 +65,20 @@ describe("供应商采购单页面边界", () => {
     expect(editor).toContain("catalogFactFromSnapshot(item)");
   });
 
+  test("选项分页更新不会重新水合并覆盖未保存草稿", () => {
+    const editor = readSource("./purchase-order-editor.tsx");
+
+    expect(editor).toContain("const projectsRef = useRef(projects)");
+    expect(editor).toContain(
+      "const relationshipsRef = useRef(relationships)",
+    );
+    expect(editor).toContain("projectsRef.current = projects");
+    expect(editor).toContain("relationshipsRef.current = relationships");
+    expect(editor).toMatch(
+      /const hydrateDraft = useCallback\([\s\S]+?\}, \[existingOrderId\]\);/,
+    );
+  });
+
   test("提交与取消在不确定重试时复用命令身份", () => {
     const detail = readSource("./purchase-order-detail.tsx");
 

@@ -112,7 +112,7 @@ export class SupplierPurchaseOrdersService {
     auth: AuthContext,
     query: SupplierPurchaseOrderCatalogQuery,
   ) {
-    const scope = await this.access.requireRead(auth);
+    const scope = await this.access.requireManage(auth);
     return this.repository.listCatalog({
       tenant_id: scope.tenantId,
       tenant_supplier_id: query.tenantSupplierId,

@@ -514,7 +514,15 @@ const server = createServer(async (request, response) => {
       request.method === "GET" &&
       url.pathname === "/supplier-purchase-order-project-options"
     ) {
-      return sendPage(response, url, [project], ["name"]);
+      const projectOptions = [
+        project,
+        ...Array.from({ length: 100 }, (_, index) => ({
+          ...project,
+          id: `23000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+          name: `E2E 分页项目 ${index + 1}`,
+        })),
+      ];
+      return sendPage(response, url, projectOptions, ["name"]);
     }
     if (
       request.method === "GET" &&

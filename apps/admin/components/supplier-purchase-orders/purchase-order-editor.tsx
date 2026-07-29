@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { FormSelect } from "@/components/admin/form-select";
@@ -115,13 +115,19 @@ export function PurchaseOrderEditor({
   const [savedFacts, setSavedFacts] = useState<Partial<PurchaseOrder> | null>(
     null,
   );
+  const projectsRef = useRef(projects);
+  const relationshipsRef = useRef(relationships);
+  const existingOrderId = order?.id;
+
+  projectsRef.current = projects;
+  relationshipsRef.current = relationships;
 
   const hydrateDraft = useCallback(async () => {
     setError(null);
-    if (!order) {
-      setProjectId(projects[0]?.id ?? "");
+    if (!existingOrderId) {
+      setProjectId(projectsRef.current[0]?.id ?? "");
       setTenantSupplierId(
-        relationships.find(({ relationship_status }) =>
+        relationshipsRef.current.find(({ relationship_status }) =>
           relationship_status === "active"
         )?.tenant_supplier_id ?? "",
       );
@@ -136,8 +142,8 @@ export function PurchaseOrderEditor({
     setLoadingDraft(true);
     try {
       const [latest, itemPage] = await Promise.all([
-        loadPurchaseOrder(order.id),
-        loadPurchaseOrderItems(order.id),
+        loadPurchaseOrder(existingOrderId),
+        loadPurchaseOrderItems(existingOrderId),
       ]);
       setProjectId(latest.project_id);
       setTenantSupplierId(latest.tenant_supplier_id);
@@ -160,7 +166,7 @@ export function PurchaseOrderEditor({
     } finally {
       setLoadingDraft(false);
     }
-  }, [order, projects, relationships]);
+  }, [existingOrderId]);
 
   useEffect(() => {
     if (!open) return;

@@ -60,6 +60,12 @@ test("采购单可完成计价、价格变化恢复、提交与取消", async ({
   await dialog.getByLabel("采购数量 E2E 抛釉砖 800x800").fill("2");
   await dialog.getByLabel("采购数量 E2E 美缝剂 2kg").fill("3");
   await dialog.getByLabel("备注").fill("E2E 首次计价");
+  await dialog.getByRole("button", { name: "加载更多项目" }).click();
+  await expect(dialog.getByLabel("备注")).toHaveValue("E2E 首次计价");
+  await expect(dialog.getByLabel("采购数量 E2E 抛釉砖 800x800"))
+    .toHaveValue("2");
+  await expect(dialog.getByLabel("采购数量 E2E 美缝剂 2kg"))
+    .toHaveValue("3");
   await dialog.getByRole("button", { name: "保存草稿" }).click();
   await expect(dialog.getByText("¥80.00", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭" }).click();
