@@ -20,6 +20,7 @@ import {
   Newspaper,
   PackageOpen,
   PackageSearch,
+  Palette,
   ScrollText,
   ScanText,
   SearchCheck,
@@ -101,6 +102,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
   {
     label: "平台配置",
     items: [
+      {
+        href: "/platform/branding",
+        label: "平台品牌",
+        icon: Palette,
+        permission: "platform.branding.manage",
+      },
       {
         href: "/platform/branding-addon",
         label: "品牌权益",

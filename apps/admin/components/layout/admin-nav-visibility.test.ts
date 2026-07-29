@@ -72,6 +72,33 @@ describe("admin nav visibility", () => {
     expect(hasMenuItemAccess(createSession([]), brandingItem!)).toBe(false);
   });
 
+  test("shows platform branding separately with the platform branding permission", () => {
+    const platformItems = platformNavGroups.flatMap((group) => group.items);
+    const brandingItem = platformItems.find(
+      (item) => item.href === "/platform/branding",
+    );
+    const addonItem = platformItems.find(
+      (item) => item.href === "/platform/branding-addon",
+    );
+
+    expect(brandingItem?.label).toBe("平台品牌");
+    expect(brandingItem?.permission).toBe("platform.branding.manage");
+    expect(addonItem?.label).toBe("品牌权益");
+    expect(addonItem?.permission).toBe("platform.branding_product.manage");
+    expect(
+      hasMenuItemAccess(
+        createSession([
+          {
+            code: "platform.branding.manage",
+            scope: "all",
+          },
+        ]),
+        brandingItem!,
+      ),
+    ).toBe(true);
+    expect(hasMenuItemAccess(createSession([]), brandingItem!)).toBe(false);
+  });
+
   test("keeps project list and risk under one tenant project nav item", () => {
     const businessItems = tenantNavGroups.find((group) => group.label === "业务")
       ?.items ?? [];
