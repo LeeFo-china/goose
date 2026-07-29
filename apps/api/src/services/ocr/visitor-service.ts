@@ -356,9 +356,11 @@ export class TenantOnboardingOcrService {
       throw Errors.business(
         503,
         "装企入驻OCR尚未启用",
-        ErrorCodes.OCR_TENANT_NOT_ENABLED,
+        ErrorCodes.OCR_CAPABILITY_UNAVAILABLE,
       );
     }
+    const resultEncryptionKey = this.encryptionKeyFactory();
+    assertOcrResultEncryptionKey(resultEncryptionKey);
     if (!availability.secretId || !availability.secretKey) {
       throw Errors.business(
         503,
@@ -366,8 +368,6 @@ export class TenantOnboardingOcrService {
         ErrorCodes.OCR_CONFIG_MISSING,
       );
     }
-    const resultEncryptionKey = this.encryptionKeyFactory();
-    assertOcrResultEncryptionKey(resultEncryptionKey);
     return resultEncryptionKey;
   }
 

@@ -101,7 +101,9 @@ function file(
   };
 }
 
-async function createHarness() {
+async function createHarness(
+  options: { encryptionKey?: string | null } = {},
+) {
   const { TenantOnboardingOcrService } = await serviceModulePromise;
   const settingsValues: Record<string, boolean | number | string> = {
     TENCENT_OCR_ENABLED: true,
@@ -170,7 +172,10 @@ async function createHarness() {
       warnings: normalized.warnings,
       quality: normalized.quality,
     })),
-    encryptionKeyFactory: () => ENCRYPTION_KEY,
+    encryptionKeyFactory: () =>
+      options.encryptionKey === undefined
+        ? ENCRYPTION_KEY
+        : options.encryptionKey,
     nowFactory: () => new Date(NOW),
     clockMsFactory: () => NOW.getTime(),
   });
@@ -221,6 +226,29 @@ describe("TenantOnboardingOcrService capabilities", () => {
 });
 
 describe("TenantOnboardingOcrService recognition", () => {
+  test("maps the visitor switch to capability unavailable", async () => {
+    const { service, settingsValues } = await createHarness();
+    settingsValues.TENCENT_OCR_TENANT_ONBOARDING_ENABLED = false;
+
+    await expect(recognize(service)).rejects.toMatchObject({
+      code: "OCR_CAPABILITY_UNAVAILABLE",
+      statusCode: 503,
+    });
+  });
+
+  test("checks result encryption before provider credentials", async () => {
+    const { service, settingsValues } = await createHarness({
+      encryptionKey: null,
+    });
+    settingsValues.TENCENT_OCR_SECRET_ID = "";
+    settingsValues.TENCENT_OCR_SECRET_KEY = "";
+
+    await expect(recognize(service)).rejects.toMatchObject({
+      code: "OCR_RESULT_ENCRYPTION_KEY_MISSING",
+      statusCode: 503,
+    });
+  });
+
   test("returns 404 for missing or cross-visitor files", async () => {
     const { service, fileRepository, repository } = await createHarness();
     fileRepository.findActiveLicenseById.mockImplementationOnce(async () => null);

@@ -1,8 +1,8 @@
 # 装企入驻 Visitor 营业执照 OCR 设计
 
-日期：2026-07-29  
-状态：已批准，待实施  
-后端仓库：`/Users/leefo/Public/work/gooes`  
+日期：2026-07-29
+状态：已批准，待实施
+后端仓库：`/Users/leefo/Public/work/gooes`
 前端只读仓库：`/Users/leefo/Public/work/orange`
 
 ## 1. 目标
