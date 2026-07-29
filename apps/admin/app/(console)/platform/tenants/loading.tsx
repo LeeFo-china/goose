@@ -23,12 +23,10 @@ export default function PlatformTenantsLoading() {
       </div>
       <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
         <CardHeader className="shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3">
-          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-            <div>
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="mt-2 h-4 w-44" />
-            </div>
-            <Skeleton className="h-6 w-24" />
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
           </div>
           <div className="grid gap-3 md:grid-cols-[180px_1fr_72px]">
             <Skeleton className="h-10" />

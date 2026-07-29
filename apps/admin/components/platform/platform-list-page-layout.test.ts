@@ -328,7 +328,8 @@ describe("Platform list page layout", () => {
   test("removes the platform tenant list header filter and total copy", () => {
     const source = readSource("../../app/(console)/platform/tenants/page.tsx");
 
-    expect(source).toContain("<CardTitle>租户列表</CardTitle>");
+    expect(source).not.toContain("listHeader=");
+    expect(source).not.toContain("<CardTitle>租户列表</CardTitle>");
     expect(source).not.toContain("当前筛选：");
     expect(source).not.toContain('<Badge variant="outline">全部状态</Badge>');
     expect(source).not.toContain("共 {pagination.total} 个");
@@ -448,8 +449,9 @@ describe("Platform list page layout", () => {
     expect(loading).toContain("min-h-0 flex-col gap-5 overflow-hidden");
     expect(loading).toContain("flex min-h-0 flex-1 flex-col overflow-hidden shadow-none");
     expect(loading).toContain("shrink-0 flex flex-col gap-3 border-b bg-muted/20 p-3");
-    expect(loading).toContain("min-h-0 flex-1 overflow-hidden");
+    expect(loading).toContain("flex flex-wrap gap-2"); expect(loading).toContain("min-h-0 flex-1 overflow-hidden");
     expect(loading).toContain("shrink-0 flex flex-col gap-3 border-t bg-card px-4 py-3");
+    expect(loading).not.toContain("flex flex-col justify-between gap-3 md:flex-row md:items-center"); expect(loading).not.toContain('Skeleton className="h-5 w-24"'); expect(loading).not.toContain('Skeleton className="mt-2 h-4 w-44"');
     expect(loading).not.toContain("<Card>");
   });
 

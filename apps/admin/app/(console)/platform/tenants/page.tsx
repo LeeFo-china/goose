@@ -178,7 +178,6 @@ export default async function PlatformTenantsPage({
               pageSize={pageSize}
             />
           }
-          listHeader={<CardTitle>租户列表</CardTitle>}
           filters={<PlatformTenantFilters status={status} keyword={keyword} />}
           pagination={pagination}
           currentCount={list.length}
