@@ -359,6 +359,14 @@ describe("domain permissions", () => {
         label: "管理供应商供货价",
         module: "supplier",
       },
+      "supplier.purchase-order.view": {
+        label: "查看供应商采购单",
+        module: "supplier",
+      },
+      "supplier.purchase-order.manage": {
+        label: "管理供应商采购单",
+        module: "supplier",
+      },
     } as const;
 
     for (const code of Object.keys(expectedPermissions) as Array<

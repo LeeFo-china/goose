@@ -190,6 +190,22 @@ describe("TenantSuppliersService relationship rules", () => {
 });
 
 describe("TenantSuppliersService eligibility and contract independence", () => {
+  test("tenant-scoped purchase-order eligibility does not require supplier.view", async () => {
+    const { service, dependencies } = await createService();
+
+    await service.assertCanCreatePurchaseOrderForTenant(
+      TENANT_ID,
+      TENANT_SUPPLIER_ID,
+    );
+
+    expect(dependencies.accessPolicy.assertTenantContext).not.toHaveBeenCalled();
+    expect(dependencies.accessPolicy.assertPermission).not.toHaveBeenCalled();
+    expect(dependencies.repository.getOrderEligibility).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      id: TENANT_SUPPLIER_ID,
+    });
+  });
+
   test("assertCanCreatePurchaseOrder reuses one eligibility query and returns all reasons", async () => {
     const reasons = [
       "required_qualification_expired",

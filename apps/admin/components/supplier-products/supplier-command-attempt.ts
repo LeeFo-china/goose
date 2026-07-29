@@ -27,7 +27,11 @@ export function resolveSupplierCommandAttempt(
   current: SupplierCommandAttempt | null,
   input: CommandAttemptInput,
 ): SupplierCommandAttempt {
-  const fingerprint = JSON.stringify([input.resourcePath, input.payload]);
+  const fingerprint = JSON.stringify([
+    input.scope,
+    input.resourcePath,
+    input.payload,
+  ]);
   if (current?.fingerprint === fingerprint) return current;
   return {
     fingerprint,
