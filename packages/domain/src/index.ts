@@ -18,6 +18,7 @@ export * from './project';
 export * from './referral';
 export * from './site-content';
 export * from './supplier';
+export * from './supplier-product';
 export * from './tenant';
 export * from './location';
 export * from './workflow';
