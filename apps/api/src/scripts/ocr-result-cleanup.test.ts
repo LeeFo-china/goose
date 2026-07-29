@@ -12,10 +12,14 @@ describe("OCR result cleanup", () => {
       "../repositories/ocr-recognitions.ts",
       import.meta.url,
     )).text();
-    const visitorLifecycleFilters = source.match(
+    const cleanupMethod = source.slice(
+      source.indexOf("async expireResultsBefore"),
+      source.indexOf("\n  }\n}", source.indexOf("async expireResultsBefore")),
+    );
+    const visitorLifecycleFilters = cleanupMethod.match(
       /\.in\("status", \["processing", "succeeded", "failed"\]\)/g,
     ) ?? [];
-    const update = source.match(
+    const update = cleanupMethod.match(
       /\.update\(\{\s*status: "expired",\s*result_ciphertext: null,\s*\}\)/,
     );
 

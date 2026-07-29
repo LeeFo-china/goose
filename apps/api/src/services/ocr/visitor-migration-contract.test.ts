@@ -63,6 +63,8 @@ describe("tenant onboarding visitor OCR migration contract", () => {
     expect(fn).toContain("FOR UPDATE");
     expect(fn).toContain("provider_started_at IS NOT NULL");
     expect(fn).toContain("processing_deadline_at > p_now");
+    expect(fn).toContain("EXTRACT(EPOCH FROM");
+    expect(fn).not.toContain("pg_catalog.extract");
     expect(fn).toContain("'created'");
     expect(fn).toContain("'existing'");
     expect(fn).toContain("'in_progress'");

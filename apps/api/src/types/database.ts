@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       _backup_departments_20260527: {
@@ -402,6 +377,93 @@ export type Database = {
             columns: ["primary_model_id"]
             isOneToOne: false
             referencedRelation: "ai_models"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_profiles: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          logo_file_id: string
+          published_at: string | null
+          published_display_name: string | null
+          published_logo_file_id: string | null
+          published_version: number | null
+          scope: string
+          status: string
+          tenant_id: string | null
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          logo_file_id: string
+          published_at?: string | null
+          published_display_name?: string | null
+          published_logo_file_id?: string | null
+          published_version?: number | null
+          scope: string
+          status?: string
+          tenant_id?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          logo_file_id?: string
+          published_at?: string | null
+          published_display_name?: string | null
+          published_logo_file_id?: string | null
+          published_version?: number | null
+          scope?: string
+          status?: string
+          tenant_id?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_profiles_logo_file_id_fkey"
+            columns: ["logo_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_profiles_published_logo_file_id_fkey"
+            columns: ["published_logo_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "brand_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "brand_profiles_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -1514,6 +1576,183 @@ export type Database = {
           },
         ]
       }
+      customer_wechat_pay_smoke_notifications: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          notify_id: string
+          processed: boolean
+          processed_at: string | null
+          raw_payload: Json
+          resource_type: string | null
+          signature_valid: boolean
+          smoke_order_id: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          notify_id: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          smoke_order_id?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          notify_id?: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string | null
+          signature_valid?: boolean
+          smoke_order_id?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_notifications_smoke_order_id_fkey"
+            columns: ["smoke_order_id"]
+            isOneToOne: false
+            referencedRelation: "customer_wechat_pay_smoke_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      customer_wechat_pay_smoke_orders: {
+        Row: {
+          amount_fen: number
+          closed_at: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          idempotency_key: string | null
+          latest_notification_id: string | null
+          metadata: Json
+          out_trade_no: string
+          paid_amount_fen: number
+          paid_at: string | null
+          payer_openid: string
+          payment_config_id: string | null
+          prepay_id: string | null
+          status: string
+          tenant_id: string
+          trade_state: string | null
+          trade_state_desc: string | null
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_fen?: number
+          closed_at?: string | null
+          created_at?: string
+          currency?: string
+          customer_id: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          latest_notification_id?: string | null
+          metadata?: Json
+          out_trade_no: string
+          paid_amount_fen?: number
+          paid_at?: string | null
+          payer_openid: string
+          payment_config_id?: string | null
+          prepay_id?: string | null
+          status?: string
+          tenant_id: string
+          trade_state?: string | null
+          trade_state_desc?: string | null
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_fen?: number
+          closed_at?: string | null
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          idempotency_key?: string | null
+          latest_notification_id?: string | null
+          metadata?: Json
+          out_trade_no?: string
+          paid_amount_fen?: number
+          paid_at?: string | null
+          payer_openid?: string
+          payment_config_id?: string | null
+          prepay_id?: string | null
+          status?: string
+          tenant_id?: string
+          trade_state?: string | null
+          trade_state_desc?: string | null
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_orders_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "customer_wechat_pay_smoke_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
           avatar: string | null
@@ -1741,6 +1980,7 @@ export type Database = {
       }
       douyin_authorization_event_deliveries: {
         Row: {
+          authorization_code_digest: string | null
           authorizer_appid: string | null
           claim_expires_at: string | null
           claim_token: string | null
@@ -1754,6 +1994,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          authorization_code_digest?: string | null
           authorizer_appid?: string | null
           claim_expires_at?: string | null
           claim_token?: string | null
@@ -1767,6 +2008,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          authorization_code_digest?: string | null
           authorizer_appid?: string | null
           claim_expires_at?: string | null
           claim_token?: string | null
@@ -1830,6 +2072,83 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "douyin_third_party_components"
             referencedColumns: ["component_appid"]
+          },
+        ]
+      }
+      douyin_miniapp_authorization_intents: {
+        Row: {
+          authorization_code_digest: string | null
+          authorizer_appid: string | null
+          completed_at: string | null
+          component_appid: string
+          created_at: string
+          expires_at: string
+          failure_code: string | null
+          id: string
+          intent_digest: string
+          requested_by_employee_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          authorization_code_digest?: string | null
+          authorizer_appid?: string | null
+          completed_at?: string | null
+          component_appid: string
+          created_at?: string
+          expires_at: string
+          failure_code?: string | null
+          id?: string
+          intent_digest: string
+          requested_by_employee_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          authorization_code_digest?: string | null
+          authorizer_appid?: string | null
+          completed_at?: string | null
+          component_appid?: string
+          created_at?: string
+          expires_at?: string
+          failure_code?: string | null
+          id?: string
+          intent_digest?: string
+          requested_by_employee_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_miniapp_authorization_inte_requested_by_employee_id_fkey"
+            columns: ["requested_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_authorization_intents_component_appid_fkey"
+            columns: ["component_appid"]
+            isOneToOne: false
+            referencedRelation: "douyin_third_party_components"
+            referencedColumns: ["component_appid"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_authorization_intents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_miniapp_authorization_intents_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -4202,6 +4521,7 @@ export type Database = {
       ocr_recognitions: {
         Row: {
           actor_employee_id: string | null
+          actor_visitor_id: string | null
           billable_units: number
           created_at: string
           dedupe_key: string
@@ -4213,12 +4533,15 @@ export type Database = {
           id: string
           idempotency_key: string
           processed_at: string | null
+          processing_deadline_at: string | null
           provider: string
           provider_action: string
           provider_error_code: string | null
           provider_error_message_safe: string | null
           provider_request_id: string | null
+          provider_started_at: string | null
           quality: Json
+          request_ip_hash: string | null
           result_ciphertext: string | null
           result_summary: Json
           scene: string
@@ -4232,6 +4555,7 @@ export type Database = {
         }
         Insert: {
           actor_employee_id?: string | null
+          actor_visitor_id?: string | null
           billable_units?: number
           created_at?: string
           dedupe_key: string
@@ -4243,12 +4567,15 @@ export type Database = {
           id?: string
           idempotency_key: string
           processed_at?: string | null
+          processing_deadline_at?: string | null
           provider?: string
           provider_action: string
           provider_error_code?: string | null
           provider_error_message_safe?: string | null
           provider_request_id?: string | null
+          provider_started_at?: string | null
           quality?: Json
+          request_ip_hash?: string | null
           result_ciphertext?: string | null
           result_summary?: Json
           scene: string
@@ -4262,6 +4589,7 @@ export type Database = {
         }
         Update: {
           actor_employee_id?: string | null
+          actor_visitor_id?: string | null
           billable_units?: number
           created_at?: string
           dedupe_key?: string
@@ -4273,12 +4601,15 @@ export type Database = {
           id?: string
           idempotency_key?: string
           processed_at?: string | null
+          processing_deadline_at?: string | null
           provider?: string
           provider_action?: string
           provider_error_code?: string | null
           provider_error_message_safe?: string | null
           provider_request_id?: string | null
+          provider_started_at?: string | null
           quality?: Json
+          request_ip_hash?: string | null
           result_ciphertext?: string | null
           result_summary?: Json
           scene?: string
@@ -5285,6 +5616,62 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "picture_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_addon_products: {
+        Row: {
+          amount_fen: number | null
+          code: string
+          created_at: string
+          enabled: boolean
+          entitlement_code: string
+          id: string
+          name: string
+          purchase_notes: string
+          refund_policy: string
+          term_years: number
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          amount_fen?: number | null
+          code: string
+          created_at?: string
+          enabled?: boolean
+          entitlement_code: string
+          id?: string
+          name: string
+          purchase_notes: string
+          refund_policy: string
+          term_years?: number
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          amount_fen?: number | null
+          code?: string
+          created_at?: string
+          enabled?: boolean
+          entitlement_code?: string
+          id?: string
+          name?: string
+          purchase_notes?: string
+          refund_policy?: string
+          term_years?: number
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_addon_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -9793,6 +10180,242 @@ export type Database = {
           },
         ]
       }
+      tenant_addon_orders: {
+        Row: {
+          amount_fen: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          expected_guard_version: number
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status: string
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_fen: number
+          channel?: string
+          close_attempt_count?: number
+          close_claim_expires_at?: string | null
+          close_claim_token?: string | null
+          close_last_error?: string | null
+          close_reason?: string | null
+          closed_at?: string | null
+          created_at?: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id?: string | null
+          expected_guard_version: number
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          idempotency_key: string
+          metadata?: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id?: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status?: string
+          tenant_id: string
+          term_years: number
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_fen?: number
+          channel?: string
+          close_attempt_count?: number
+          close_claim_expires_at?: string | null
+          close_claim_token?: string | null
+          close_last_error?: string | null
+          close_reason?: string | null
+          closed_at?: string | null
+          created_at?: string
+          created_by?: string
+          entitlement_code?: string
+          entitlement_event_id?: string | null
+          expected_guard_version?: number
+          failure_code?: string | null
+          failure_message?: string | null
+          id?: string
+          idempotency_key?: string
+          metadata?: Json
+          order_no?: string
+          out_trade_no?: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid?: string
+          payment_appid?: string
+          payment_config_id?: string
+          payment_expires_at?: string
+          payment_mchid?: string
+          prepay_id?: string | null
+          product_code?: string
+          product_id?: string
+          product_name?: string
+          purchase_notes?: string
+          refund_policy?: string
+          status?: string
+          tenant_id?: string
+          term_years?: number
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_addon_orders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_addon_orders_entitlement_event_identity_fkey"
+            columns: ["entitlement_event_id", "tenant_id", "entitlement_code"]
+            isOneToOne: false
+            referencedRelation: "tenant_entitlement_events"
+            referencedColumns: ["id", "tenant_id", "entitlement_code"]
+          },
+          {
+            foreignKeyName: "tenant_addon_orders_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "platform_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_addon_orders_product_identity_fkey"
+            columns: ["product_id", "product_code"]
+            isOneToOne: false
+            referencedRelation: "platform_addon_products"
+            referencedColumns: ["id", "code"]
+          },
+          {
+            foreignKeyName: "tenant_addon_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_addon_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_addon_wechat_notifications: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          event_type: string
+          id: string
+          notify_id: string
+          order_id: string
+          processed: boolean
+          processed_at: string | null
+          raw_payload: Json
+          resource_type: string
+          signature_valid: boolean
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          event_type: string
+          id?: string
+          notify_id: string
+          order_id: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type: string
+          signature_valid?: boolean
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          notify_id?: string
+          order_id?: string
+          processed?: boolean
+          processed_at?: string | null
+          raw_payload?: Json
+          resource_type?: string
+          signature_valid?: boolean
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_addon_wechat_notifications_order_identity_fkey"
+            columns: ["order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_addon_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_addon_wechat_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_addon_wechat_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_billing_events: {
         Row: {
           billable_units: number
@@ -10667,6 +11290,142 @@ export type Database = {
           {
             foreignKeyName: "tenant_devices_updated_by_fkey"
             columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_entitlement_events: {
+        Row: {
+          actor_employee_id: string | null
+          actor_user_id: string | null
+          created_at: string
+          entitlement_code: string
+          entitlement_id: string
+          event_type: string
+          id: string
+          new_value: Json
+          old_value: Json
+          reason: string | null
+          source_id: string | null
+          source_type: string
+          tenant_id: string
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          entitlement_code: string
+          entitlement_id: string
+          event_type: string
+          id?: string
+          new_value: Json
+          old_value: Json
+          reason?: string | null
+          source_id?: string | null
+          source_type: string
+          tenant_id: string
+        }
+        Update: {
+          actor_employee_id?: string | null
+          actor_user_id?: string | null
+          created_at?: string
+          entitlement_code?: string
+          entitlement_id?: string
+          event_type?: string
+          id?: string
+          new_value?: Json
+          old_value?: Json
+          reason?: string | null
+          source_id?: string | null
+          source_type?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_entitlement_events_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_entitlement_events_entitlement_identity_fkey"
+            columns: ["entitlement_id", "tenant_id", "entitlement_code"]
+            isOneToOne: false
+            referencedRelation: "tenant_entitlements"
+            referencedColumns: ["id", "tenant_id", "entitlement_code"]
+          },
+        ]
+      }
+      tenant_entitlements: {
+        Row: {
+          created_at: string
+          entitlement_code: string
+          expires_at: string
+          id: string
+          source_id: string | null
+          source_type: string
+          starts_at: string
+          status: string
+          suspend_reason: string | null
+          suspended_at: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          entitlement_code: string
+          expires_at: string
+          id?: string
+          source_id?: string | null
+          source_type: string
+          starts_at: string
+          status?: string
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          entitlement_code?: string
+          expires_at?: string
+          id?: string
+          source_id?: string | null
+          source_type?: string
+          starts_at?: string
+          status?: string
+          suspend_reason?: string | null
+          suspended_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_entitlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_entitlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_entitlements_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
             referencedColumns: ["id"]
@@ -13020,6 +13779,54 @@ export type Database = {
           },
         ]
       }
+      wechat_pay_settlement_rules: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          qualification_type: string
+          rate_label: string
+          requires_special_qualification: boolean
+          settlement_cycle_label: string
+          settlement_id: string
+          sort_order: number
+          status: string
+          subject_type: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          qualification_type: string
+          rate_label?: string
+          requires_special_qualification?: boolean
+          settlement_cycle_label?: string
+          settlement_id: string
+          sort_order?: number
+          status?: string
+          subject_type: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          qualification_type?: string
+          rate_label?: string
+          requires_special_qualification?: boolean
+          settlement_cycle_label?: string
+          settlement_id?: string
+          sort_order?: number
+          status?: string
+          subject_type?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       wechat_payment_notifications: {
         Row: {
           created_at: string
@@ -13089,54 +13896,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      wechat_pay_settlement_rules: {
-        Row: {
-          created_at: string
-          id: string
-          label: string
-          qualification_type: string
-          rate_label: string
-          requires_special_qualification: boolean
-          settlement_cycle_label: string
-          settlement_id: string
-          sort_order: number
-          status: string
-          subject_type: string
-          updated_at: string
-          version: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          label: string
-          qualification_type: string
-          rate_label?: string
-          requires_special_qualification?: boolean
-          settlement_cycle_label?: string
-          settlement_id: string
-          sort_order?: number
-          status?: string
-          subject_type: string
-          updated_at?: string
-          version?: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          label?: string
-          qualification_type?: string
-          rate_label?: string
-          requires_special_qualification?: boolean
-          settlement_cycle_label?: string
-          settlement_id?: string
-          sort_order?: number
-          status?: string
-          subject_type?: string
-          updated_at?: string
-          version?: number
-        }
-        Relationships: []
       }
       wechat_payment_orders: {
         Row: {
@@ -14371,6 +15130,40 @@ export type Database = {
         }
         Returns: string
       }
+      apply_tenant_entitlement_action: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_entitlement_code: string
+          p_expected_version: number
+          p_reason: string
+          p_tenant_id: string
+          p_term_years: number
+        }
+        Returns: {
+          created_at: string
+          entitlement_code: string
+          expires_at: string
+          id: string
+          source_id: string | null
+          source_type: string
+          starts_at: string
+          status: string
+          suspend_reason: string | null
+          suspended_at: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_entitlements"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       approve_platform_partner_member_rebind_request: {
         Args: {
           p_comment?: string
@@ -14421,6 +15214,10 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      attach_douyin_authorization_event_code_digest: {
+        Args: { p_authorization_code_digest: string; p_event_key: string }
+        Returns: boolean
       }
       begin_phone_identity_selection: {
         Args: {
@@ -14827,6 +15624,200 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      branding_claim_expired_addon_orders: {
+        Args: {
+          p_excluded_ids?: string[]
+          p_lease_seconds: number
+          p_limit: number
+        }
+        Returns: {
+          amount_fen: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          expected_guard_version: number
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status: string
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_addon_orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      branding_confirm_addon_purchase: {
+        Args: {
+          p_appid: string
+          p_mchid: string
+          p_metadata?: Json
+          p_notification_id: string
+          p_order_id: string
+          p_out_trade_no: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      branding_create_addon_order: {
+        Args: {
+          p_amount_fen: number
+          p_created_by: string
+          p_entitlement_code: string
+          p_expected_guard_version: number
+          p_idempotency_key: string
+          p_metadata?: Json
+          p_order_no: string
+          p_out_trade_no: string
+          p_payer_openid: string
+          p_payment_appid: string
+          p_payment_config_id: string
+          p_payment_expires_at: string
+          p_payment_mchid: string
+          p_product_code: string
+          p_product_id: string
+          p_product_name: string
+          p_purchase_notes: string
+          p_refund_policy: string
+          p_tenant_id: string
+          p_term_years: number
+        }
+        Returns: {
+          amount_fen: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          expected_guard_version: number
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status: string
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_get_platform_addon_order_audit: {
+        Args: { p_order_id: string }
+        Returns: Json
+      }
+      branding_renew_addon_close_claim: {
+        Args: {
+          p_claim_token: string
+          p_lease_seconds: number
+          p_order_id: string
+        }
+        Returns: {
+          amount_fen: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          expected_guard_version: number
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status: string
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cancel_workflow_instance: {
         Args: {
           p_actor_employee_id: string
@@ -15010,6 +16001,17 @@ export type Database = {
         Returns: {
           member_id: string
           status: string
+        }[]
+      }
+      claim_tenant_douyin_authorization_intent: {
+        Args: { p_authorization_code_digest: string; p_intent_digest: string }
+        Returns: {
+          authorizer_appid: string
+          claim_state: string
+          component_appid: string
+          expires_at: string
+          intent_id: string
+          tenant_id: string
         }[]
       }
       claim_tenant_onboarding_notification: {
@@ -15208,6 +16210,47 @@ export type Database = {
       complete_douyin_unsupported_event: {
         Args: { p_claim_token: string; p_event_key: string }
         Returns: boolean
+      }
+      complete_tenant_douyin_authorization_intent: {
+        Args: {
+          p_access_token_ciphertext?: string
+          p_access_token_expires_at?: string
+          p_access_token_iv?: string
+          p_access_token_key_version?: string
+          p_access_token_tag?: string
+          p_authorization_code_digest: string
+          p_authorizer_appid: string
+          p_deployment_key: string
+          p_intent_id: string
+          p_permissions?: Json
+          p_refresh_token_ciphertext?: string
+          p_refresh_token_expires_at?: string
+          p_refresh_token_iv?: string
+          p_refresh_token_key_version?: string
+          p_refresh_token_tag?: string
+          p_runtime_config: Json
+        }
+        Returns: {
+          authorization_code_digest: string | null
+          authorizer_appid: string | null
+          completed_at: string | null
+          component_appid: string
+          created_at: string
+          expires_at: string
+          failure_code: string | null
+          id: string
+          intent_digest: string
+          requested_by_employee_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_authorization_intents"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       complete_workflow_instance_node: {
         Args: {
@@ -15486,6 +16529,36 @@ export type Database = {
         }
         Returns: Json
       }
+      create_tenant_douyin_authorization_intent: {
+        Args: {
+          p_component_appid: string
+          p_expires_at: string
+          p_intent_digest: string
+          p_requested_by_employee_id: string
+          p_tenant_id: string
+        }
+        Returns: {
+          authorization_code_digest: string | null
+          authorizer_appid: string | null
+          completed_at: string | null
+          component_appid: string
+          created_at: string
+          expires_at: string
+          failure_code: string | null
+          id: string
+          intent_digest: string
+          requested_by_employee_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "douyin_miniapp_authorization_intents"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_tenant_supplier: {
         Args: {
           p_actor_employee_id: string
@@ -15545,6 +16618,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      expire_tenant_entitlement_if_due: {
+        Args: { p_entitlement_code: string; p_now: string; p_tenant_id: string }
+        Returns: {
+          created_at: string
+          entitlement_code: string
+          expires_at: string
+          id: string
+          source_id: string | null
+          source_type: string
+          starts_at: string
+          status: string
+          suspend_reason: string | null
+          suspended_at: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_entitlements"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       expire_tenant_onboarding_partner_assists: {
         Args: { p_cutoff: string; p_partner_id?: string }
         Returns: {
@@ -15565,6 +16663,10 @@ export type Database = {
           p_component_appid: string
           p_last_refresh_error_code: string
         }
+        Returns: boolean
+      }
+      fail_tenant_douyin_authorization_intent: {
+        Args: { p_failure_code: string; p_intent_id: string }
         Returns: boolean
       }
       finalize_phone_identity_selection: {
@@ -16178,6 +17280,24 @@ export type Database = {
         }
         Returns: Json
       }
+      ocr_claim_visitor_recognition: {
+        Args: {
+          p_actor_visitor_id: string
+          p_daily_limit: number
+          p_expires_at: string
+          p_file_checksum: string
+          p_file_object_id: string
+          p_global_concurrency_limit: number
+          p_idempotency_key: string
+          p_ip_window_limit: number
+          p_ip_window_seconds: number
+          p_now: string
+          p_processing_deadline_at: string
+          p_request_ip_hash: string
+          p_visitor_concurrency_limit: number
+        }
+        Returns: Json
+      }
       picture_asset_set_favorite: {
         Args: { p_asset_id: string; p_favorited: boolean; p_visitor_id: string }
         Returns: {
@@ -16197,6 +17317,36 @@ export type Database = {
       prune_douyin_authorization_event_deliveries: {
         Args: { p_before: string; p_limit?: number }
         Returns: number
+      }
+      publish_brand_profile: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_scope: string
+          p_tenant_id: string
+        }
+        Returns: {
+          created_at: string
+          display_name: string
+          id: string
+          logo_file_id: string
+          published_at: string | null
+          published_display_name: string | null
+          published_logo_file_id: string | null
+          published_version: number | null
+          scope: string
+          status: string
+          tenant_id: string | null
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "brand_profiles"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       publish_site_content: {
         Args: { p_actor_id: string; p_entry_id: string; p_version_id: string }
@@ -16300,6 +17450,44 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      require_valid_brand_logo_file: {
+        Args: { p_logo_file_id: string; p_tenant_id: string }
+        Returns: {
+          bucket: string
+          checksum: string | null
+          created_at: string
+          created_by_auth_user_id: string | null
+          created_by_employee_id: string | null
+          deleted_at: string | null
+          height: number | null
+          id: string
+          legacy_path: string | null
+          legacy_url: string | null
+          metadata: Json
+          mime_type: string
+          object_key: string
+          original_name: string | null
+          owner_id: string | null
+          owner_type: string
+          owner_visitor_id: string | null
+          provider: string
+          public_url: string | null
+          region: string | null
+          scene: string
+          size_bytes: number
+          status: string
+          tenant_id: string | null
+          updated_at: string
+          visibility: string
+          width: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_file_objects"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       reserve_phone_identity_selection: {
         Args: {
@@ -16419,6 +17607,38 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "site_content_entries"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      save_brand_profile_draft: {
+        Args: {
+          p_actor_employee_id: string
+          p_display_name: string
+          p_expected_version: number
+          p_logo_file_id: string
+          p_scope: string
+          p_tenant_id: string
+        }
+        Returns: {
+          created_at: string
+          display_name: string
+          id: string
+          logo_file_id: string
+          published_at: string | null
+          published_display_name: string | null
+          published_logo_file_id: string | null
+          published_version: number | null
+          scope: string
+          status: string
+          tenant_id: string | null
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "brand_profiles"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -16759,12 +17979,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -16786,12 +18006,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -16810,12 +18031,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -16834,12 +18056,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -16852,11 +18075,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -16866,9 +18089,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

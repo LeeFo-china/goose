@@ -185,7 +185,7 @@ export class OcrRecognitionRepository {
       .eq("scope_type", "tenant")
       .eq("tenant_id", tenantId)
       .eq("dedupe_key", dedupeKey)
-      .in("status", ["processing", "succeeded", "failed"])
+      .in("status", ["processing", "succeeded"])
       .maybeSingle();
 
     if (error) throw Errors.dbError("查询OCR去重记录失败", error);
@@ -203,7 +203,7 @@ export class OcrRecognitionRepository {
       .eq("scope_type", "tenant")
       .eq("tenant_id", input.tenantId)
       .eq("dedupe_key", input.dedupeKey)
-      .in("status", ["processing", "succeeded", "failed"])
+      .in("status", ["processing", "succeeded"])
       .lte("expires_at", input.before)
       .select("id");
 
@@ -347,7 +347,7 @@ export class OcrRecognitionRepository {
     const { data, error } = await this.getAdminClient()
       .from("ocr_recognitions")
       .select("id,expires_at")
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .lte("expires_at", input.before)
       .order("expires_at", { ascending: true })
       .limit(limit);
@@ -371,7 +371,7 @@ export class OcrRecognitionRepository {
         result_ciphertext: null,
       })
       .in("id", ids)
-      .in("status", ["processing", "succeeded"])
+      .in("status", ["processing", "succeeded", "failed"])
       .lte("expires_at", input.before)
       .select("id");
 

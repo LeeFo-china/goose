@@ -125,12 +125,6 @@ const VISITOR_OCR_COLUMNS = [
 ].join(",");
 
 type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
-type UntypedRpcClient = {
-  rpc(
-    name: string,
-    params: Record<string, unknown>,
-  ): Promise<{ data: unknown; error: unknown }>;
-};
 
 export class VisitorOcrRecognitionRepository {
   constructor(
@@ -139,22 +133,24 @@ export class VisitorOcrRecognitionRepository {
   ) {}
 
   async claim(input: VisitorOcrClaimInput): Promise<VisitorOcrClaimResult> {
-    const client = this.getAdminClient() as unknown as UntypedRpcClient;
-    const { data, error } = await client.rpc("ocr_claim_visitor_recognition", {
-      p_actor_visitor_id: input.actorVisitorId,
-      p_file_object_id: input.fileObjectId,
-      p_file_checksum: input.fileChecksum,
-      p_idempotency_key: input.idempotencyKey,
-      p_request_ip_hash: input.requestIpHash,
-      p_now: input.now,
-      p_expires_at: input.expiresAt,
-      p_processing_deadline_at: input.processingDeadlineAt,
-      p_daily_limit: input.dailyLimit,
-      p_ip_window_seconds: input.ipWindowSeconds,
-      p_ip_window_limit: input.ipWindowLimit,
-      p_visitor_concurrency_limit: input.visitorConcurrencyLimit,
-      p_global_concurrency_limit: input.globalConcurrencyLimit,
-    });
+    const { data, error } = await this.getAdminClient().rpc(
+      "ocr_claim_visitor_recognition",
+      {
+        p_actor_visitor_id: input.actorVisitorId,
+        p_file_object_id: input.fileObjectId,
+        p_file_checksum: input.fileChecksum,
+        p_idempotency_key: input.idempotencyKey,
+        p_request_ip_hash: input.requestIpHash,
+        p_now: input.now,
+        p_expires_at: input.expiresAt,
+        p_processing_deadline_at: input.processingDeadlineAt,
+        p_daily_limit: input.dailyLimit,
+        p_ip_window_seconds: input.ipWindowSeconds,
+        p_ip_window_limit: input.ipWindowLimit,
+        p_visitor_concurrency_limit: input.visitorConcurrencyLimit,
+        p_global_concurrency_limit: input.globalConcurrencyLimit,
+      },
+    );
     if (error) throw Errors.dbError("创建访客OCR识别记录失败", error);
     return parseClaimResult(data);
   }

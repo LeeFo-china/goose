@@ -303,12 +303,12 @@ BEGIN
     AND recognition.provider_started_at >= v_utc_day_start;
 
   IF v_count >= p_daily_limit THEN
-    v_retry_after_seconds := pg_catalog.greatest(
+    v_retry_after_seconds := GREATEST(
       1,
-      pg_catalog.ceil(
-        pg_catalog.extract(
-          epoch FROM (v_utc_day_start + interval '1 day' - p_now)
-        )
+      CEIL(
+        EXTRACT(EPOCH FROM (
+          v_utc_day_start + interval '1 day' - p_now
+        ))
       )::integer
     );
     RETURN pg_catalog.jsonb_build_object(
