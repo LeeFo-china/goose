@@ -14,6 +14,17 @@ const TABLES = [
   "supplier_price_list_items",
 ] as const;
 
+const COMMAND_FUNCTIONS = [
+  "create_supplier_product",
+  "create_supplier_sku",
+  "mutate_supplier_product",
+  "mutate_supplier_sku",
+  "create_supplier_price_list",
+  "publish_supplier_price_list",
+  "create_supplier_price_list_version",
+  "retire_supplier_price_list",
+] as const;
+
 function extractFunction(name: string) {
   return sql.match(
     new RegExp(
@@ -138,6 +149,51 @@ describe("supplier product pricing migration contract", () => {
     ]) {
       expect(sql).toContain(`CREATE INDEX ${index}`);
     }
+  });
+
+  test("adds protected idempotent commands for product and price lifecycles", () => {
+    for (const functionName of COMMAND_FUNCTIONS) {
+      const fn = extractFunction(functionName);
+      expect(fn).toContain("SECURITY DEFINER");
+      expect(fn).toContain("SET search_path = pg_catalog, public");
+      expect(fn).toContain("supplier_command_events");
+      expect(fn).toContain("idempotency_key");
+      expect(sql).toMatch(
+        new RegExp(
+          `REVOKE ALL ON FUNCTION public\\.${functionName}\\([\\s\\S]*?` +
+            "FROM PUBLIC, anon, authenticated;",
+        ),
+      );
+      expect(sql).toMatch(
+        new RegExp(
+          `GRANT EXECUTE ON FUNCTION public\\.${functionName}\\([\\s\\S]*?` +
+            "TO service_role;",
+        ),
+      );
+    }
+
+    expect(sql).toMatch(
+      /supplier_command_events_resource_type_check[\s\S]*'supplier_product'[\s\S]*'supplier_sku'[\s\S]*'supplier_price_list'/,
+    );
+  });
+
+  test("serializes publication and rejects overlapping effective periods", () => {
+    const publish = extractFunction("publish_supplier_price_list");
+    const compactPublish = publish.replace(/\s+/g, " ");
+
+    expect(publish).toContain("pg_advisory_xact_lock");
+    expect(publish).toContain("hashtextextended");
+    expect(publish).toContain("SUPPLIER_PRICE_PERIOD_CONFLICT");
+    expect(compactPublish).toContain(
+      "published.effective_from < " +
+        "COALESCE(draft.effective_until, 'infinity'::timestamptz)",
+    );
+    expect(compactPublish).toContain(
+      "COALESCE( published.effective_until, 'infinity'::timestamptz ) > " +
+        "draft.effective_from",
+    );
+    expect(publish).toContain("product.status <> 'active'");
+    expect(publish).toContain("sku.status <> 'active'");
   });
 
   test("documents a forward rollback that preserves referenced history", () => {
