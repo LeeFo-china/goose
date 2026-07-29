@@ -17,6 +17,10 @@ const BUSINESS_ERRORS = {
     statusCode: 404,
     message: "供应商价格簿不存在",
   },
+  SUPPLIER_PURCHASE_ORDER_NOT_FOUND: {
+    statusCode: 404,
+    message: "供应商采购单不存在",
+  },
   SUPPLIER_PROXY_ACTOR_INVALID: {
     statusCode: 403,
     message: "供应商代录身份无效",
@@ -48,6 +52,26 @@ const BUSINESS_ERRORS = {
   SUPPLIER_PRICE_LIST_INVALID_ACTION: {
     statusCode: 409,
     message: "供应商价格簿当前状态不允许该操作",
+  },
+  SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID: {
+    statusCode: 409,
+    message: "项目不存在或不属于当前租户",
+  },
+  SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: "采购单版本已变化，请刷新后重试",
+  },
+  SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT: {
+    statusCode: 409,
+    message: "采购单当前状态不允许该操作",
+  },
+  SUPPLIER_PURCHASE_ORDER_PRICE_MISSING: {
+    statusCode: 409,
+    message: "部分采购商品缺少当前有效价格",
+  },
+  SUPPLIER_PURCHASE_ORDER_PRICE_CHANGED: {
+    statusCode: 409,
+    message: "采购价格已变化，请重新确认采购单",
   },
 } as const;
 
