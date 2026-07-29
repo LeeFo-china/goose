@@ -199,6 +199,32 @@ export const SupplierPurchaseOrderCatalogResultSchema = z.object({
   page_size: z.number().int().positive().max(100),
 }).strict();
 
+export const SupplierPurchaseOrderProjectOptionSchema = z.object({
+  id: uuid,
+  name: z.string(),
+  status: z.string().nullable(),
+}).strict();
+
+export const SupplierPurchaseOrderSupplierOptionSchema = z.object({
+  tenant_supplier_id: uuid,
+  supplier_id: uuid,
+  relationship_status: z.literal("active"),
+  default_currency: z.literal("CNY"),
+  supplier: z.object({
+    id: uuid,
+    code: z.string(),
+    name: z.string(),
+    legal_name: z.string(),
+  }).strict(),
+}).strict();
+
+export const SupplierPurchaseOrderSupplierOptionResultSchema = z.object({
+  items: z.array(SupplierPurchaseOrderSupplierOptionSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  page_size: z.number().int().positive().max(100),
+}).strict();
+
 export const SupplierPurchaseOrderCommandEnvelopeSchema = z.object({
   status: z.enum([
     "saved",
@@ -218,6 +244,7 @@ export const SupplierPurchaseOrderCommandEnvelopeSchema = z.object({
   version: z.number().int().nonnegative().optional(),
   error_code: z.string().optional(),
   reason: z.string().optional(),
+  blocking_reasons: z.array(z.string()).optional(),
 }).strict();
 
 export type SupplierPurchaseOrder =
@@ -228,3 +255,7 @@ export type SupplierPurchaseOrderItem =
   z.infer<typeof SupplierPurchaseOrderItemSchema>;
 export type SupplierPurchaseOrderCatalogItem =
   z.infer<typeof SupplierPurchaseOrderCatalogItemSchema>;
+export type SupplierPurchaseOrderProjectOption =
+  z.infer<typeof SupplierPurchaseOrderProjectOptionSchema>;
+export type SupplierPurchaseOrderSupplierOption =
+  z.infer<typeof SupplierPurchaseOrderSupplierOptionSchema>;

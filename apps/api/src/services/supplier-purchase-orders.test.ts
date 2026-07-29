@@ -47,12 +47,14 @@ function dependencies(orderOverrides: Record<string, unknown> = {}) {
       findOrder: mock(async () => purchaseOrder),
       listItems: mock(async (input: unknown) => ({ input })),
       listCatalog: mock(async (input: unknown) => ({ input })),
+      listProjectOptions: mock(async (input: unknown) => ({ input })),
+      listSupplierOptions: mock(async (input: unknown) => ({ input })),
       saveDraft: mock(async (input: unknown) => ({ input })),
       submit: mock(async (input: unknown) => ({ input })),
       cancel: mock(async (input: unknown) => ({ input })),
     },
     tenantSuppliers: {
-      assertCanCreatePurchaseOrder: mock(async () => undefined),
+      assertCanCreatePurchaseOrderForTenant: mock(async () => undefined),
     },
     nowFactory: () => new Date("2026-07-29T08:00:00.000Z"),
   };
@@ -128,6 +130,40 @@ describe("SupplierPurchaseOrdersService", () => {
     });
   });
 
+  test("paginates project and eligible supplier options under purchase-order permissions", async () => {
+    const deps = dependencies();
+    const { SupplierPurchaseOrdersService } = await import(
+      "./supplier-purchase-orders"
+    );
+    const service = new SupplierPurchaseOrdersService(deps as never);
+
+    await service.listProjectOptions(auth, {
+      keyword: "示范",
+      page: 2,
+      pageSize: 100,
+    });
+    await service.listSupplierOptions(auth, {
+      keyword: "建材",
+      page: 3,
+      pageSize: 20,
+    });
+
+    expect(deps.repository.listProjectOptions).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
+      keyword: "示范",
+      page: 2,
+      pageSize: 100,
+    });
+    expect(deps.repository.listSupplierOptions).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      checked_at: "2026-07-29T08:00:00.000Z",
+      keyword: "建材",
+      page: 3,
+      pageSize: 20,
+    });
+  });
+
   test("checks project update and supplier eligibility before save and submit", async () => {
     const deps = dependencies();
     const { SupplierPurchaseOrdersService } = await import(
@@ -158,10 +194,10 @@ describe("SupplierPurchaseOrdersService", () => {
       auth,
       PROJECT_ID,
     );
-    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrder)
-      .toHaveBeenNthCalledWith(1, auth, RELATIONSHIP_ID);
-    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrder)
-      .toHaveBeenNthCalledWith(2, auth, RELATIONSHIP_ID);
+    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrderForTenant)
+      .toHaveBeenNthCalledWith(1, TENANT_ID, RELATIONSHIP_ID);
+    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrderForTenant)
+      .toHaveBeenNthCalledWith(2, TENANT_ID, RELATIONSHIP_ID);
     expect(deps.repository.saveDraft).toHaveBeenCalledWith(
       expect.objectContaining({
         tenant_id: TENANT_ID,
@@ -189,7 +225,7 @@ describe("SupplierPurchaseOrdersService", () => {
       auth,
       PROJECT_ID,
     );
-    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrder)
+    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrderForTenant)
       .not.toHaveBeenCalled();
     expect(deps.repository.cancel).toHaveBeenCalledWith(
       expect.objectContaining({

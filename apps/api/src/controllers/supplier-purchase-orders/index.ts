@@ -7,6 +7,7 @@ import {
   SupplierPurchaseOrderDraftSchema,
   SupplierPurchaseOrderItemListQuerySchema,
   SupplierPurchaseOrderListQuerySchema,
+  SupplierPurchaseOrderOptionQuerySchema,
   SupplierPurchaseOrderParamSchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "@/schema/supplier-purchase-orders";
@@ -70,6 +71,30 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPurchaseOrdersService.listCatalog(auth, query),
+    );
+  }
+
+  @Get("/supplier-purchase-order-project-options")
+  async listProjectOptions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseOrderOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrdersService.listProjectOptions(auth, query),
+    );
+  }
+
+  @Get("/supplier-purchase-order-supplier-options")
+  async listSupplierOptions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseOrderOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrdersService.listSupplierOptions(auth, query),
     );
   }
 

@@ -55,8 +55,8 @@ import type {
   PurchaseOrderCatalogItem,
   PurchaseOrderCatalogPage,
   PurchaseOrderDraftLine,
+  PurchaseOrderSupplierOption,
   PurchaseOrderWithReferences,
-  TenantSupplierRelationship,
 } from "./purchase-order-types";
 
 const emptyCatalog: PurchaseOrderCatalogPage = {
@@ -70,6 +70,11 @@ export function PurchaseOrderEditor({
   order,
   projects,
   relationships,
+  canLoadMoreProjects,
+  canLoadMoreSuppliers,
+  loadingMoreOptions,
+  onLoadMoreProjects,
+  onLoadMoreSuppliers,
   onOpenChange,
   onSaved,
 }: {
@@ -77,7 +82,12 @@ export function PurchaseOrderEditor({
   orderId: string;
   order: PurchaseOrderWithReferences | null;
   projects: ProjectOption[];
-  relationships: TenantSupplierRelationship[];
+  relationships: PurchaseOrderSupplierOption[];
+  canLoadMoreProjects: boolean;
+  canLoadMoreSuppliers: boolean;
+  loadingMoreOptions: boolean;
+  onLoadMoreProjects: () => void;
+  onLoadMoreSuppliers: () => void;
   onOpenChange: (open: boolean) => void;
   onSaved: (order: PurchaseOrder) => void;
 }) {
@@ -113,7 +123,7 @@ export function PurchaseOrderEditor({
       setTenantSupplierId(
         relationships.find(({ relationship_status }) =>
           relationship_status === "active"
-        )?.id ?? "",
+        )?.tenant_supplier_id ?? "",
       );
       setExpectedVersion(0);
       setExpectedDeliveryDate("");
@@ -209,7 +219,7 @@ export function PurchaseOrderEditor({
     () => relationships
       .filter(({ relationship_status }) => relationship_status === "active")
       .map((relationship) => ({
-        value: relationship.id,
+        value: relationship.tenant_supplier_id,
         label: `${relationship.supplier.name} · ${relationship.supplier.code}`,
       })),
     [relationships],
@@ -238,17 +248,29 @@ export function PurchaseOrderEditor({
     setSaving(true);
     setError(null);
     try {
-      const result = await savePurchaseOrderDraft(
+      await savePurchaseOrderDraft(
         orderId,
         payload,
         nextAttempt.idempotencyKey,
       );
-      setExpectedVersion(result.version);
-      setSavedFacts((current) =>
-        replaceSavedFacts(current, result.purchase_order)
-      );
+      const [latest, itemPage] = await Promise.all([
+        loadPurchaseOrder(orderId),
+        loadPurchaseOrderItems(orderId),
+      ]);
+      setExpectedVersion(latest.version);
+      setLines(itemPage.list.map((item) => ({
+        supplierSkuId: item.supplier_sku_id,
+        quantity: Number(item.quantity),
+      })));
+      setFacts(Object.fromEntries(
+        itemPage.list.map((item) => [
+          item.supplier_sku_id,
+          catalogFactFromSnapshot(item),
+        ]),
+      ));
+      setSavedFacts(replaceSavedFacts(null, latest));
       setAttempt(null);
-      onSaved(result.purchase_order);
+      onSaved(latest);
       toast.success("采购单草稿已保存");
     } catch (caught) {
       const code = errorCode(caught);
@@ -289,6 +311,17 @@ export function PurchaseOrderEditor({
               invalid={Boolean(validation.projectId)}
               onChange={setProjectId}
             />
+            {canLoadMoreProjects ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={loadingMoreOptions}
+                onClick={onLoadMoreProjects}
+              >
+                加载更多项目
+              </Button>
+            ) : null}
             <FieldError>{validation.projectId}</FieldError>
           </Field>
           <Field data-invalid={Boolean(validation.tenantSupplierId)}>
@@ -308,6 +341,17 @@ export function PurchaseOrderEditor({
                 setCatalogPage(1);
               }}
             />
+            {canLoadMoreSuppliers ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={loadingMoreOptions}
+                onClick={onLoadMoreSuppliers}
+              >
+                加载更多合作供应商
+              </Button>
+            ) : null}
             <FieldError>{validation.tenantSupplierId}</FieldError>
           </Field>
           <Field>

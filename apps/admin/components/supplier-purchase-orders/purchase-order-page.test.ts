@@ -48,4 +48,29 @@ describe("供应商采购单页面边界", () => {
     expect(rules).not.toContain("tax_rate:");
     expect(rules).not.toContain("total_amount:");
   });
+
+  test("采购单权限下分页加载选项并在保存后刷新服务端快照", () => {
+    const api = readSource("./purchase-order-api.ts");
+    const workspace = readSource("./purchase-order-workspace.tsx");
+    const editor = readSource("./purchase-order-editor.tsx");
+
+    expect(api).toContain("/supplier-purchase-order-project-options");
+    expect(api).toContain("/supplier-purchase-order-supplier-options");
+    expect(api).not.toContain('"/suppliers?page=1&pageSize=100"');
+    expect(workspace).toContain("loadMoreProjects");
+    expect(workspace).toContain("loadMoreSuppliers");
+    expect(editor).toContain("加载更多项目");
+    expect(editor).toContain("加载更多合作供应商");
+    expect(editor).toContain("loadPurchaseOrderItems(orderId)");
+    expect(editor).toContain("catalogFactFromSnapshot(item)");
+  });
+
+  test("提交与取消在不确定重试时复用命令身份", () => {
+    const detail = readSource("./purchase-order-detail.tsx");
+
+    expect(detail).toContain("resolveSupplierCommandAttempt");
+    expect(detail).toContain("nextAttempt.idempotencyKey");
+    expect(detail).toContain("setCommandAttempt(null)");
+    expect(detail).not.toContain("crypto.randomUUID()");
+  });
 });

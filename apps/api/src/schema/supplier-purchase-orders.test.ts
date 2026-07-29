@@ -5,6 +5,7 @@ import {
   SupplierPurchaseOrderCatalogQuerySchema,
   SupplierPurchaseOrderDraftSchema,
   SupplierPurchaseOrderListQuerySchema,
+  SupplierPurchaseOrderOptionQuerySchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "./supplier-purchase-orders";
 
@@ -49,6 +50,22 @@ describe("supplier purchase order schemas", () => {
     });
     expect(SupplierPurchaseOrderListQuerySchema.safeParse({
       project_id: projectId,
+    }).success).toBe(false);
+  });
+
+  test("bounds project and supplier option pagination", () => {
+    expect(SupplierPurchaseOrderOptionQuerySchema.parse({
+      page: "2",
+      pageSize: "100",
+      keyword: " 建材 ",
+    })).toEqual({
+      page: 2,
+      pageSize: 100,
+      keyword: "建材",
+    });
+    expect(SupplierPurchaseOrderOptionQuerySchema.safeParse({
+      page: 1,
+      pageSize: 101,
     }).success).toBe(false);
   });
 

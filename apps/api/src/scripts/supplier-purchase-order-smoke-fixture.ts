@@ -13,6 +13,10 @@ export const SMOKE_IDS = {
   replacementPriceList: "23000000-0000-4000-8000-000000000012",
   replacementPriceItem: "23000000-0000-4000-8000-000000000013",
   qualification: "23000000-0000-4000-8000-000000000014",
+  otherRelationship: "23000000-0000-4000-8000-000000000015",
+  overflowOrder: "23000000-0000-4000-8000-000000000016",
+  overflowPriceList: "23000000-0000-4000-8000-000000000017",
+  overflowPriceItem: "23000000-0000-4000-8000-000000000018",
 } as const;
 
 export type SmokeSql = Bun.SQL & {
@@ -27,6 +31,9 @@ export type FixtureReferences = {
   qualification_type_id: string;
   file_id: string;
   other_tenant_id: string;
+  other_employee_id: string;
+  other_user_id: string;
+  other_project_id: string;
 };
 
 class SupplierPurchaseOrderSmokeFixtureError extends Error {}
@@ -42,7 +49,10 @@ export async function selectFixtureReferences(
       project.id as project_id,
       qualification_type.id as qualification_type_id,
       file_record.id as file_id,
-      other_tenant.id as other_tenant_id
+      other_actor.other_tenant_id,
+      other_actor.other_employee_id,
+      other_actor.other_user_id,
+      other_actor.other_project_id
     from public.employees as employee
     join public.projects as project
       on project.tenant_id = employee.tenant_id
@@ -59,11 +69,20 @@ export async function selectFixtureReferences(
       limit 1
     ) as file_record
     cross join lateral (
-      select tenant.id
-      from public.tenants as tenant
-      where tenant.id <> employee.tenant_id
+      select
+        other_employee.tenant_id as other_tenant_id,
+        other_employee.id as other_employee_id,
+        other_employee.user_id as other_user_id,
+        other_project.id as other_project_id
+      from public.employees as other_employee
+      join public.projects as other_project
+        on other_project.tenant_id = other_employee.tenant_id
+      where other_employee.tenant_id <> employee.tenant_id
+        and other_employee.status = 'active'
+        and other_employee.user_id is not null
+      order by other_employee.tenant_id, other_employee.id, other_project.id
       limit 1
-    ) as other_tenant
+    ) as other_actor
     where employee.status = 'active'
       and employee.user_id is not null
     order by employee.tenant_id, employee.id, project.id
@@ -148,6 +167,20 @@ export async function seedSupplierFixture(
       enabled_at = excluded.enabled_at;
   `;
   await sql`
+    insert into public.tenant_supplier_settings (
+      tenant_id, module_enabled, require_active_contract_for_new_order,
+      enabled_by_employee_id, enabled_at
+    ) values (
+      ${fixture.other_tenant_id}::uuid, true, false,
+      ${fixture.other_employee_id}::uuid, now()
+    )
+    on conflict (tenant_id) do update set
+      module_enabled = true,
+      require_active_contract_for_new_order = false,
+      enabled_by_employee_id = excluded.enabled_by_employee_id,
+      enabled_at = excluded.enabled_at;
+  `;
+  await sql`
     insert into public.tenant_suppliers (
       id, tenant_id, supplier_id, relationship_status, default_currency,
       started_at, created_by_employee_id, updated_by_employee_id
@@ -155,6 +188,17 @@ export async function seedSupplierFixture(
       ${SMOKE_IDS.relationship}::uuid, ${fixture.tenant_id}::uuid,
       ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY', current_date,
       ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
+    );
+  `;
+  await sql`
+    insert into public.tenant_suppliers (
+      id, tenant_id, supplier_id, relationship_status, default_currency,
+      started_at, created_by_employee_id, updated_by_employee_id
+    ) values (
+      ${SMOKE_IDS.otherRelationship}::uuid,
+      ${fixture.other_tenant_id}::uuid,
+      ${SMOKE_IDS.supplier}::uuid, 'active', 'CNY', current_date,
+      ${fixture.other_employee_id}::uuid, ${fixture.other_employee_id}::uuid
     );
   `;
   await sql`

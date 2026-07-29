@@ -12,6 +12,8 @@ const listOrders = mock(async () => emptyPage);
 const getOrder = mock(async () => ({ id: ORDER_ID }));
 const listItems = mock(async () => emptyPage);
 const listCatalog = mock(async () => emptyPage);
+const listProjectOptions = mock(async () => emptyPage);
+const listSupplierOptions = mock(async () => emptyPage);
 const saveDraft = mock(async () => ({ status: "saved" }));
 const submit = mock(async () => ({ status: "submitted" }));
 const cancel = mock(async () => ({ status: "cancelled" }));
@@ -22,6 +24,8 @@ mock.module("@/services/supplier-purchase-orders", () => ({
     getOrder,
     listItems,
     listCatalog,
+    listProjectOptions,
+    listSupplierOptions,
     saveDraft,
     submit,
     cancel,
@@ -55,6 +59,8 @@ describe("SupplierPurchaseOrdersController", () => {
         getOrder,
         listItems,
         listCatalog,
+        listProjectOptions,
+        listSupplierOptions,
         saveDraft,
         submit,
         cancel,
@@ -64,7 +70,7 @@ describe("SupplierPurchaseOrdersController", () => {
     }
   });
 
-  test("registers all seven purchase order routes", async () => {
+  test("registers all nine purchase order routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -78,6 +84,8 @@ describe("SupplierPurchaseOrdersController", () => {
       { method: "GET", path: "/supplier-purchase-orders/:id" },
       { method: "GET", path: "/supplier-purchase-orders/:id/items" },
       { method: "GET", path: "/supplier-purchase-order-catalog" },
+      { method: "GET", path: "/supplier-purchase-order-project-options" },
+      { method: "GET", path: "/supplier-purchase-order-supplier-options" },
       { method: "POST", path: "/supplier-purchase-orders/:id/save-draft" },
       { method: "POST", path: "/supplier-purchase-orders/:id/submit" },
       { method: "POST", path: "/supplier-purchase-orders/:id/cancel" },
@@ -112,6 +120,28 @@ describe("SupplierPurchaseOrdersController", () => {
     expect(catalogResponse).toEqual({
       data: emptyPage,
       message: "success",
+    });
+  });
+
+  test("parses paginated project and supplier option queries", async () => {
+    const value = await controller();
+
+    await value.listProjectOptions({
+      query: { page: "2", pageSize: "100", keyword: "示范" },
+    } as never);
+    await value.listSupplierOptions({
+      query: { page: "3", pageSize: "20", keyword: "建材" },
+    } as never);
+
+    expect(listProjectOptions).toHaveBeenCalledWith(auth, {
+      page: 2,
+      pageSize: 100,
+      keyword: "示范",
+    });
+    expect(listSupplierOptions).toHaveBeenCalledWith(auth, {
+      page: 3,
+      pageSize: 20,
+      keyword: "建材",
     });
   });
 

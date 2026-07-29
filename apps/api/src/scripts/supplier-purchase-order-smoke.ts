@@ -3,9 +3,14 @@ import {
   createPublishedPrice,
   seedSupplierFixture,
   selectFixtureReferences,
-  type FixtureReferences,
   type SmokeSql,
 } from "./supplier-purchase-order-smoke-fixture";
+import {
+  expectDatabaseError,
+  orderCommand,
+  runRolledBackSavepoint,
+  saveDraft,
+} from "./supplier-purchase-order-smoke-commands";
 
 export { SMOKE_IDS };
 
@@ -132,87 +137,45 @@ type SmokeSummary = {
   price_changed: boolean;
   repriced_and_submitted: boolean;
   submitted_cancelled: boolean;
+  draft_cancelled: boolean;
+  submitted_facts_immutable: boolean;
+  amount_limit_enforced: boolean;
+  cross_tenant_id_collision_safe: boolean;
+  supplier_options_paginated: boolean;
   tenant_isolation: boolean;
   transaction_rolled_back: boolean;
 };
-
-type ResultRow = { result: unknown };
-
-async function saveDraft(
-  sql: SmokeSql,
-  fixture: FixtureReferences,
-  expectedVersion: number,
-  quantity: number,
-  idempotencyKey: string,
-) {
-  const items = [
-    { supplier_sku_id: SMOKE_IDS.sku, quantity },
-  ];
-  const rows = await sql<ResultRow[]>`
-    select public.save_supplier_purchase_order_draft(
-      ${SMOKE_IDS.order}::uuid, ${fixture.tenant_id}::uuid,
-      ${fixture.project_id}::uuid, ${SMOKE_IDS.relationship}::uuid,
-      ${expectedVersion}::integer, null::date, '数据库 smoke',
-      ${items}::jsonb, ${fixture.user_id}::uuid,
-      ${fixture.employee_id}::uuid, ${idempotencyKey}
-    ) as result;
-  `;
-  return rows[0]?.result;
-}
-
-async function orderCommand(
-  sql: SmokeSql,
-  fixture: FixtureReferences,
-  action: "submit" | "cancel",
-  expectedVersion: number,
-  tenantId = fixture.tenant_id,
-) {
-  const rows = action === "submit"
-    ? await sql<ResultRow[]>`
-      select public.submit_supplier_purchase_order(
-        ${SMOKE_IDS.order}::uuid, ${tenantId}::uuid,
-        ${expectedVersion}::integer, ${fixture.user_id}::uuid,
-        ${fixture.employee_id}::uuid, ${`smoke-submit-${expectedVersion}`}
-      ) as result;
-    `
-    : await sql<ResultRow[]>`
-      select public.cancel_supplier_purchase_order(
-        ${SMOKE_IDS.order}::uuid, ${tenantId}::uuid,
-        ${expectedVersion}::integer, '数据库 smoke 取消',
-        ${fixture.user_id}::uuid, ${fixture.employee_id}::uuid,
-        ${`smoke-cancel-${expectedVersion}-${tenantId}`}
-      ) as result;
-    `;
-  return rows[0]?.result;
-}
-
-async function expectDatabaseError(
-  sql: SmokeSql,
-  callback: (savepoint: SmokeSql) => Promise<unknown>,
-  message: string,
-) {
-  try {
-    await sql.savepoint(callback);
-  } catch (error) {
-    if (
-      error instanceof Bun.SQL.PostgresError &&
-      error.errno === "P0001" &&
-      error.message === message
-    ) {
-      return;
-    }
-    throw error;
-  }
-  throw new SupplierPurchaseOrderSmokeAssertionError(
-    `expected database error ${message}`,
-  );
-}
 
 async function executeSmoke(
   sql: SmokeSql,
 ): Promise<Omit<SmokeSummary, "transaction_rolled_back">> {
   const fixture = await selectFixtureReferences(sql);
   await seedSupplierFixture(sql, fixture);
+  const optionRows = await sql<{ result: unknown }[]>`
+    select public.list_supplier_purchase_order_supplier_options(
+      ${fixture.tenant_id}::uuid,
+      now(),
+      '采购单 Smoke',
+      1,
+      1
+    ) as result;
+  `;
+  const optionResult = requireRecord(
+    optionRows[0]?.result,
+    "supplier options",
+  );
+  if (
+    !Array.isArray(optionResult.items) ||
+    optionResult.items.length !== 1 ||
+    requireRecord(optionResult.items[0], "supplier option")
+        .tenant_supplier_id !== SMOKE_IDS.relationship ||
+    optionResult.page !== 1 ||
+    optionResult.page_size !== 1
+  ) {
+    throw new SupplierPurchaseOrderSmokeAssertionError(
+      "supplier options must be eligible and paginated",
+    );
+  }
 
   const first = assertCommandResult(
     await saveDraft(sql, fixture, 0, 2, "smoke-save-1"),
@@ -237,6 +200,122 @@ async function executeSmoke(
     await saveDraft(sql, fixture, 0, 2, "smoke-save-stale"),
     "version conflict",
   );
+  const crossTenantIdCollision = requireRecord(
+    await saveDraft(
+      sql,
+      fixture,
+      0,
+      2,
+      "smoke-other-tenant-id-collision",
+      {
+        tenantId: fixture.other_tenant_id,
+        projectId: fixture.other_project_id,
+        relationshipId: SMOKE_IDS.otherRelationship,
+        userId: fixture.other_user_id,
+        employeeId: fixture.other_employee_id,
+      },
+    ),
+    "cross tenant id collision",
+  );
+  assertEqual(
+    crossTenantIdCollision.status,
+    "state_conflict",
+    "cross tenant id collision status",
+  );
+  assertEqual(
+    crossTenantIdCollision.error_code,
+    "SUPPLIER_PURCHASE_ORDER_ID_CONFLICT",
+    "cross tenant id collision error code",
+  );
+  if ("version" in crossTenantIdCollision) {
+    throw new SupplierPurchaseOrderSmokeAssertionError(
+      "cross tenant id collision must not reveal a version",
+    );
+  }
+
+  assertCommandResult(
+    await saveDraft(
+      sql,
+      fixture,
+      0,
+      2,
+      "smoke-other-tenant-save",
+      {
+        orderId: SMOKE_IDS.otherOrder,
+        tenantId: fixture.other_tenant_id,
+        projectId: fixture.other_project_id,
+        relationshipId: SMOKE_IDS.otherRelationship,
+        userId: fixture.other_user_id,
+        employeeId: fixture.other_employee_id,
+      },
+    ),
+    { status: "saved", idempotent: false, version: 1, totalAmount: "20.00" },
+  );
+
+  const primaryTenantRows = await sql<{ id: string }[]>`
+    select purchase_order.id
+    from public.supplier_purchase_orders AS purchase_order
+    where purchase_order.tenant_id = ${fixture.tenant_id}::uuid
+      and purchase_order.id in (
+        ${SMOKE_IDS.order}::uuid,
+        ${SMOKE_IDS.otherOrder}::uuid
+      )
+    order by purchase_order.id;
+  `;
+  const otherTenantRows = await sql<{ id: string }[]>`
+    select purchase_order.id
+    from public.supplier_purchase_orders AS purchase_order
+    where purchase_order.tenant_id = ${fixture.other_tenant_id}::uuid
+      and purchase_order.id in (
+        ${SMOKE_IDS.order}::uuid,
+        ${SMOKE_IDS.otherOrder}::uuid
+      )
+    order by purchase_order.id;
+  `;
+  assertCommandResult(
+    await orderCommand(sql, fixture, "cancel", 1, {
+      orderId: SMOKE_IDS.otherOrder,
+      tenantId: fixture.other_tenant_id,
+      userId: fixture.other_user_id,
+      employeeId: fixture.other_employee_id,
+    }),
+    { status: "cancelled", idempotent: false, version: 2, totalAmount: "20.00" },
+  );
+
+  let amountLimitEnforced = false;
+  await runRolledBackSavepoint(sql, async (savepoint) => {
+    await savepoint`
+      update public.supplier_price_lists
+      set lifecycle_status = 'retired', row_version = row_version + 1
+      where id = ${SMOKE_IDS.priceList}::uuid;
+    `;
+    await createPublishedPrice(
+      savepoint,
+      fixture,
+      SMOKE_IDS.overflowPriceList,
+      SMOKE_IDS.overflowPriceItem,
+      2,
+      "1000.00",
+    );
+    const overflow = requireRecord(
+      await saveDraft(
+        savepoint,
+        fixture,
+        0,
+        10_000_000_000_000,
+        "smoke-amount-overflow",
+        { orderId: SMOKE_IDS.overflowOrder },
+      ),
+      "amount overflow",
+    );
+    assertEqual(overflow.status, "validation_error", "amount overflow status");
+    assertEqual(
+      overflow.error_code,
+      "SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED",
+      "amount overflow error code",
+    );
+    amountLimitEnforced = true;
+  });
 
   await sql`
     update public.supplier_price_lists
@@ -265,27 +344,51 @@ async function executeSmoke(
     await orderCommand(sql, fixture, "submit", 2),
     { status: "submitted", idempotent: false, version: 3, totalAmount: "24.00" },
   );
+  await expectDatabaseError(
+    sql,
+    (savepoint) => savepoint`
+      update public.supplier_purchase_orders
+      set status = 'draft',
+          submitted_by_employee_id = null,
+          submitted_at = null
+      where id = ${SMOKE_IDS.order}::uuid;
+    `,
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+  );
+  await expectDatabaseError(
+    sql,
+    (savepoint) => savepoint`
+      update public.supplier_purchase_order_items
+      set supplier_purchase_order_id = ${SMOKE_IDS.otherOrder}::uuid
+      where supplier_purchase_order_id = ${SMOKE_IDS.order}::uuid;
+    `,
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+  );
+  await expectDatabaseError(
+    sql,
+    (savepoint) => savepoint`
+      delete from public.supplier_purchase_order_items
+      where supplier_purchase_order_id = ${SMOKE_IDS.order}::uuid;
+    `,
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+  );
   assertCommandResult(
     await orderCommand(sql, fixture, "cancel", 3),
     { status: "cancelled", idempotent: false, version: 4, totalAmount: "24.00" },
   );
 
-  const crossTenantRows = await sql<{ count: number }[]>`
-    select count(*)::integer as count
-    from public.supplier_purchase_orders
-    where id = ${SMOKE_IDS.order}::uuid
-      and tenant_id = ${fixture.other_tenant_id}::uuid;
-  `;
-  await expectDatabaseError(
-    sql,
-    (savepoint) => orderCommand(
-      savepoint,
-      fixture,
-      "cancel",
-      4,
-      fixture.other_tenant_id,
-    ),
-    "SUPPLIER_PROXY_ACTOR_INVALID",
+  const crossTenantMutation = requireRecord(
+    await orderCommand(sql, fixture, "cancel", 4, {
+      tenantId: fixture.other_tenant_id,
+      userId: fixture.other_user_id,
+      employeeId: fixture.other_employee_id,
+    }),
+    "cross tenant mutation",
+  );
+  assertEqual(
+    crossTenantMutation.status,
+    "not_found",
+    "cross tenant mutation status",
   );
   return {
     draft_saved: first.version === 1,
@@ -297,7 +400,17 @@ async function executeSmoke(
     price_changed: priceChanged.status === "price_changed",
     repriced_and_submitted: true,
     submitted_cancelled: true,
-    tenant_isolation: crossTenantRows[0]?.count === 0,
+    draft_cancelled: true,
+    submitted_facts_immutable: true,
+    amount_limit_enforced: amountLimitEnforced,
+    cross_tenant_id_collision_safe: true,
+    supplier_options_paginated: true,
+    tenant_isolation:
+      primaryTenantRows.length === 1 &&
+      primaryTenantRows[0]?.id === SMOKE_IDS.order &&
+      otherTenantRows.length === 1 &&
+      otherTenantRows[0]?.id === SMOKE_IDS.otherOrder &&
+      crossTenantMutation.status === "not_found",
   };
 }
 
@@ -313,7 +426,11 @@ export async function runSupplierPurchaseOrderSmoke(
     const rows = await db<{ count: number }[]>`
       select count(*)::integer as count
       from public.supplier_purchase_orders
-      where id in (${SMOKE_IDS.order}::uuid, ${SMOKE_IDS.otherOrder}::uuid);
+      where id in (
+        ${SMOKE_IDS.order}::uuid,
+        ${SMOKE_IDS.otherOrder}::uuid,
+        ${SMOKE_IDS.overflowOrder}::uuid
+      );
     `;
     const summary = {
       ...result,

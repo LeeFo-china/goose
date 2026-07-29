@@ -9,6 +9,7 @@ import type {
   SupplierPurchaseOrderDraftInput,
   SupplierPurchaseOrderItemListQuery,
   SupplierPurchaseOrderListQuery,
+  SupplierPurchaseOrderOptionQuery,
   SupplierPurchaseOrderSubmitInput,
 } from "@/schema/supplier-purchase-orders";
 import type { AuthContext } from "@/services/authorization";
@@ -31,13 +32,15 @@ type PurchaseOrderRepositoryPort = Pick<
   | "findOrder"
   | "listItems"
   | "listCatalog"
+  | "listProjectOptions"
+  | "listSupplierOptions"
   | "saveDraft"
   | "submit"
   | "cancel"
 >;
 type TenantSupplierEligibilityPort = Pick<
   typeof tenantSuppliersService,
-  "assertCanCreatePurchaseOrder"
+  "assertCanCreatePurchaseOrderForTenant"
 >;
 
 export type SupplierPurchaseOrdersServiceDependencies = {
@@ -120,6 +123,35 @@ export class SupplierPurchaseOrdersService {
     });
   }
 
+  async listProjectOptions(
+    auth: AuthContext,
+    query: SupplierPurchaseOrderOptionQuery,
+  ) {
+    const scope = await this.access.requireRead(auth);
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.listProjectOptions({
+      tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
+      page: query.page,
+      pageSize: query.pageSize,
+      ...(query.keyword ? { keyword: query.keyword } : {}),
+    });
+  }
+
+  async listSupplierOptions(
+    auth: AuthContext,
+    query: SupplierPurchaseOrderOptionQuery,
+  ) {
+    const scope = await this.access.requireRead(auth);
+    return this.repository.listSupplierOptions({
+      tenant_id: scope.tenantId,
+      checked_at: this.nowFactory().toISOString(),
+      page: query.page,
+      pageSize: query.pageSize,
+      ...(query.keyword ? { keyword: query.keyword } : {}),
+    });
+  }
+
   async saveDraft(
     auth: AuthContext,
     orderId: string,
@@ -134,8 +166,8 @@ export class SupplierPurchaseOrdersService {
     } else {
       await this.access.assertProjectUpdate(auth, input.project_id);
     }
-    await this.tenantSuppliers.assertCanCreatePurchaseOrder(
-      auth,
+    await this.tenantSuppliers.assertCanCreatePurchaseOrderForTenant(
+      scope.tenantId,
       input.tenant_supplier_id,
     );
     return this.repository.saveDraft({
@@ -162,8 +194,8 @@ export class SupplierPurchaseOrdersService {
     const scope = await this.access.requireManage(auth);
     const order = await this.requireOrder(scope.tenantId, orderId);
     await this.access.assertProjectUpdate(auth, order.project_id);
-    await this.tenantSuppliers.assertCanCreatePurchaseOrder(
-      auth,
+    await this.tenantSuppliers.assertCanCreatePurchaseOrderForTenant(
+      scope.tenantId,
       order.tenant_supplier_id,
     );
     return this.repository.submit({

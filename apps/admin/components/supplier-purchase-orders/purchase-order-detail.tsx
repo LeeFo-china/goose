@@ -5,6 +5,10 @@ import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
+  resolveSupplierCommandAttempt,
+  type SupplierCommandAttempt,
+} from "@/components/supplier-products/supplier-command-attempt";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -74,6 +78,8 @@ export function PurchaseOrderDetail({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [commandAttempt, setCommandAttempt] =
+    useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -97,6 +103,7 @@ export function PurchaseOrderDetail({
   useEffect(() => {
     setCurrent(order);
     setCancelReason("");
+    setCommandAttempt(null);
     if (open) void reload();
   }, [open, order, reload]);
 
@@ -104,12 +111,24 @@ export function PurchaseOrderDetail({
     if (!current || busy) return;
     setBusy(true);
     setError(null);
+    const payload = action === "submit"
+      ? { expected_version: current.version }
+      : {
+        expected_version: current.version,
+        reason: cancelReason.trim(),
+      };
+    const nextAttempt = resolveSupplierCommandAttempt(commandAttempt, {
+      scope: `purchase-order:${action}`,
+      resourcePath: current.id,
+      payload,
+    });
+    setCommandAttempt(nextAttempt);
     try {
       if (action === "submit") {
         await submitPurchaseOrder(
           current.id,
           current.version,
-          `purchase-order:submit:${crypto.randomUUID()}`,
+          nextAttempt.idempotencyKey,
         );
         toast.success("采购单已提交");
       } else {
@@ -117,11 +136,12 @@ export function PurchaseOrderDetail({
           current.id,
           current.version,
           cancelReason.trim(),
-          `purchase-order:cancel:${crypto.randomUUID()}`,
+          nextAttempt.idempotencyKey,
         );
         toast.success("采购单已取消");
       }
       await reload();
+      setCommandAttempt(null);
       onChanged();
     } catch (caught) {
       const code = errorCode(caught);

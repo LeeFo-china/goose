@@ -28,8 +28,8 @@ import { PurchaseOrderList } from "./purchase-order-list";
 import type {
   ProjectOption,
   PurchaseOrderPage,
+  PurchaseOrderSupplierOption,
   PurchaseOrderWithReferences,
-  TenantSupplierRelationship,
 } from "./purchase-order-types";
 
 const emptyOrders: PurchaseOrderPage = {
@@ -53,8 +53,13 @@ export function PurchaseOrderWorkspace({
   const [orders, setOrders] = useState(emptyOrders);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [relationships, setRelationships] = useState<
-    TenantSupplierRelationship[]
+    PurchaseOrderSupplierOption[]
   >([]);
+  const [projectOptionPage, setProjectOptionPage] = useState(1);
+  const [projectOptionTotalPages, setProjectOptionTotalPages] = useState(1);
+  const [supplierOptionPage, setSupplierOptionPage] = useState(1);
+  const [supplierOptionTotalPages, setSupplierOptionTotalPages] = useState(1);
+  const [loadingMoreOptions, setLoadingMoreOptions] = useState(false);
   const [page, setPage] = useState(1);
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
@@ -79,12 +84,20 @@ export function PurchaseOrderWorkspace({
     }
     let active = true;
     void Promise.all([
-      loadPurchaseOrderProjects(),
-      loadPurchaseOrderRelationships(),
-    ]).then(([projectOptions, relationshipPage]) => {
+      loadPurchaseOrderProjects(1),
+      loadPurchaseOrderRelationships(1),
+    ]).then(([projectPage, relationshipPage]) => {
       if (!active) return;
-      setProjects(projectOptions);
+      setProjects(projectPage.list);
       setRelationships(relationshipPage.list);
+      setProjectOptionPage(projectPage.pagination.page);
+      setProjectOptionTotalPages(
+        Math.max(1, projectPage.pagination.totalPages || 1),
+      );
+      setSupplierOptionPage(relationshipPage.pagination.page);
+      setSupplierOptionTotalPages(
+        Math.max(1, relationshipPage.pagination.totalPages || 1),
+      );
     }).catch((caught) => {
       if (active) setError(errorMessage(caught, "采购单选项加载失败"));
     }).finally(() => {
@@ -94,6 +107,52 @@ export function PurchaseOrderWorkspace({
       active = false;
     };
   }, [canViewPurchaseOrders]);
+
+  async function loadMoreProjects() {
+    if (
+      loadingMoreOptions ||
+      projectOptionPage >= projectOptionTotalPages
+    ) return;
+    setLoadingMoreOptions(true);
+    setError(null);
+    try {
+      const next = await loadPurchaseOrderProjects(projectOptionPage + 1);
+      setProjects((current) => mergeOptions(current, next.list, "id"));
+      setProjectOptionPage(next.pagination.page);
+      setProjectOptionTotalPages(
+        Math.max(1, next.pagination.totalPages || 1),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught, "更多项目加载失败"));
+    } finally {
+      setLoadingMoreOptions(false);
+    }
+  }
+
+  async function loadMoreSuppliers() {
+    if (
+      loadingMoreOptions ||
+      supplierOptionPage >= supplierOptionTotalPages
+    ) return;
+    setLoadingMoreOptions(true);
+    setError(null);
+    try {
+      const next = await loadPurchaseOrderRelationships(
+        supplierOptionPage + 1,
+      );
+      setRelationships((current) =>
+        mergeOptions(current, next.list, "tenant_supplier_id")
+      );
+      setSupplierOptionPage(next.pagination.page);
+      setSupplierOptionTotalPages(
+        Math.max(1, next.pagination.totalPages || 1),
+      );
+    } catch (caught) {
+      setError(errorMessage(caught, "更多合作供应商加载失败"));
+    } finally {
+      setLoadingMoreOptions(false);
+    }
+  }
 
   const loadOrders = useCallback(async () => {
     if (!canViewPurchaseOrders) return;
@@ -134,7 +193,7 @@ export function PurchaseOrderWorkspace({
   const relationshipOptions = useMemo(() => [
     { value: "all", label: "全部供应商" },
     ...relationships.map((relationship) => ({
-      value: relationship.id,
+      value: relationship.tenant_supplier_id,
       label: relationship.supplier.name,
     })),
   ], [relationships]);
@@ -289,6 +348,11 @@ export function PurchaseOrderWorkspace({
           order={editorOrder}
           projects={projects}
           relationships={relationships}
+          canLoadMoreProjects={projectOptionPage < projectOptionTotalPages}
+          canLoadMoreSuppliers={supplierOptionPage < supplierOptionTotalPages}
+          loadingMoreOptions={loadingMoreOptions}
+          onLoadMoreProjects={loadMoreProjects}
+          onLoadMoreSuppliers={loadMoreSuppliers}
           onOpenChange={setEditorOpen}
           onSaved={() => {
             void loadOrders();
@@ -308,4 +372,16 @@ export function PurchaseOrderWorkspace({
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function mergeOptions<RecordType, Key extends keyof RecordType>(
+  current: RecordType[],
+  next: RecordType[],
+  key: Key,
+) {
+  const values = new Map(
+    current.map((record) => [record[key], record]),
+  );
+  for (const record of next) values.set(record[key], record);
+  return Array.from(values.values());
 }

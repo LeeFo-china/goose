@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test";
 import { createClient } from "@supabase/supabase-js";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -186,6 +185,62 @@ describe("SupplierPurchaseOrdersRepository", () => {
     });
   });
 
+  test("lists paginated project and eligible supplier options", async () => {
+    const { repository, requests } = await repositoryFor((_request, index) =>
+      index === 0
+        ? { body: [projectOption], count: 101 }
+        : {
+          body: {
+            items: [supplierOption],
+            total: 101,
+            page: 2,
+            page_size: 100,
+          },
+        }
+    );
+
+    const projects = await repository.listProjectOptions({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
+      keyword: "示范",
+      page: 2,
+      pageSize: 100,
+    });
+    const suppliers = await repository.listSupplierOptions({
+      tenant_id: TENANT_ID,
+      checked_at: "2026-07-29T08:00:00.000Z",
+      keyword: "示范",
+      page: 2,
+      pageSize: 100,
+    });
+
+    expect(projects.pagination).toEqual({
+      page: 2,
+      pageSize: 100,
+      total: 101,
+      totalPages: 2,
+    });
+    const projectUrl = new URL(requests[0]!.url);
+    expect(projectUrl.pathname).toEndWith("/rest/v1/projects");
+    expect(projectUrl.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
+    expect(projectUrl.searchParams.get("id")).toContain(PROJECT_ID);
+    expect(projectUrl.searchParams.get("offset")).toBe("100");
+    expect(projectUrl.searchParams.get("limit")).toBe("100");
+    expect(projectUrl.searchParams.get("select")).toBe("id,name,status");
+
+    expect(suppliers.list).toEqual([supplierOption]);
+    expect(new URL(requests[1]!.url).pathname).toEndWith(
+      "/rpc/list_supplier_purchase_order_supplier_options",
+    );
+    expect(await requests[1]!.clone().json()).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_checked_at: "2026-07-29T08:00:00.000Z",
+      p_keyword: "示范",
+      p_page: 2,
+      p_page_size: 100,
+    });
+  });
+
   test("uses p-prefixed parameters for all purchase order commands", async () => {
     const statuses = ["saved", "submitted", "cancelled"] as const;
     const { repository, requests } = await repositoryFor((_request, index) => ({
@@ -271,6 +326,34 @@ describe("SupplierPurchaseOrdersRepository", () => {
     });
   });
 
+  test("preserves supplier eligibility reasons from a command race", async () => {
+    const { repository } = await repositoryFor(() => ({
+      body: {
+        status: "supplier_not_eligible",
+        error_code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+        blocking_reasons: ["supplier_suspended", "active_contract_required"],
+      },
+    }));
+
+    await expect(repository.submit({
+      tenant_id: TENANT_ID,
+      order_id: ORDER_ID,
+      expected_version: 1,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "purchase-order:submit",
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      details: {
+        blocking_reasons: [
+          "supplier_suspended",
+          "active_contract_required",
+        ],
+      },
+    });
+  });
+
   test("maps RPC database business tokens before using the DB fallback", async () => {
     const { repository } = await repositoryFor(() => ({
       body: {
@@ -336,7 +419,16 @@ const order = {
 } as const;
 
 const { project: _project, supplier: _supplier, ...orderSnapshot } = order;
-
+const projectOption = { id: PROJECT_ID, name: "示范项目", status: "active" };
+const supplierOption = {
+  tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
+  relationship_status: "active",
+  default_currency: "CNY",
+  supplier: {
+    id: SUPPLIER_ID, code: "SUP-001", name: "示范供应商",
+    legal_name: "示范供应商有限公司",
+  },
+} as const;
 const item = {
   id: "50000000-0000-4000-8000-000000000009",
   tenant_id: TENANT_ID,

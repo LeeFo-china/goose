@@ -8,10 +8,14 @@ import {
   SupplierPurchaseOrderCatalogResultSchema,
   SupplierPurchaseOrderCommandEnvelopeSchema,
   SupplierPurchaseOrderItemSchema,
+  SupplierPurchaseOrderProjectOptionSchema,
+  SupplierPurchaseOrderSupplierOptionResultSchema,
   SupplierPurchaseOrderWithReferencesSchema,
   type SupplierPurchaseOrder,
   type SupplierPurchaseOrderCatalogItem,
   type SupplierPurchaseOrderItem,
+  type SupplierPurchaseOrderProjectOption,
+  type SupplierPurchaseOrderSupplierOption,
   type SupplierPurchaseOrderWithReferences,
 } from "@/repositories/supplier-purchase-order-records";
 import { SupabaseDB } from "@/utils/supabase";
@@ -27,6 +31,10 @@ export type SupplierPurchaseOrderPage = Page<SupplierPurchaseOrderWithReferences
 export type SupplierPurchaseOrderItemPage = Page<SupplierPurchaseOrderItem>;
 export type SupplierPurchaseOrderCatalogPage =
   Page<SupplierPurchaseOrderCatalogItem>;
+export type SupplierPurchaseOrderProjectOptionPage =
+  Page<SupplierPurchaseOrderProjectOption>;
+export type SupplierPurchaseOrderSupplierOptionPage =
+  Page<SupplierPurchaseOrderSupplierOption>;
 
 type Page<T> = {
   list: T[];
@@ -54,6 +62,16 @@ export type SupplierPurchaseOrderCatalogInput = PageInput & {
   tenant_id: string;
   tenant_supplier_id: string;
   priced_at: string;
+  keyword?: string;
+};
+export type SupplierPurchaseOrderProjectOptionInput = PageInput & {
+  tenant_id: string;
+  visible_project_ids: string[] | null;
+  keyword?: string;
+};
+export type SupplierPurchaseOrderSupplierOptionInput = PageInput & {
+  tenant_id: string;
+  checked_at: string;
   keyword?: string;
 };
 export type SupplierPurchaseOrderCommandContext = {
@@ -214,6 +232,61 @@ export class SupplierPurchaseOrdersRepository {
     );
   }
 
+  async listProjectOptions(input: SupplierPurchaseOrderProjectOptionInput) {
+    const pagination = normalizePage(input);
+    if (input.visible_project_ids?.length === 0) {
+      return toPage([], pagination, 0);
+    }
+    let request = this.client.from("projects")
+      .select("id,name,status", { count: "exact" })
+      .eq("tenant_id", input.tenant_id);
+    if (input.visible_project_ids) {
+      request = request.in("id", input.visible_project_ids);
+    }
+    request = applyProjectKeyword(request, input.keyword);
+    const { data, error, count } = await request
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(...pageRange(pagination));
+    if (error) throw Errors.dbError("查询采购单项目选项失败", error);
+    return toPage(
+      parseRows(
+        SupplierPurchaseOrderProjectOptionSchema,
+        data,
+        "查询采购单项目选项失败",
+      ),
+      pagination,
+      count,
+    );
+  }
+
+  async listSupplierOptions(input: SupplierPurchaseOrderSupplierOptionInput) {
+    const pagination = normalizePage(input);
+    const { data, error } = await this.client.rpc(
+      "list_supplier_purchase_order_supplier_options",
+      {
+        p_tenant_id: input.tenant_id,
+        p_checked_at: input.checked_at,
+        p_keyword: input.keyword?.trim() || null,
+        p_page: pagination.page,
+        p_page_size: pagination.pageSize,
+      },
+    );
+    if (error) {
+      throwSupplierCommandDatabaseError(error, "查询采购单供应商选项失败");
+    }
+    const result = parse(
+      SupplierPurchaseOrderSupplierOptionResultSchema,
+      data,
+      "查询采购单供应商选项失败",
+    );
+    return toPage(
+      result.items,
+      { page: result.page, pageSize: result.page_size },
+      result.total,
+    );
+  }
+
   saveDraft(
     input: SupplierPurchaseOrderCommandContext & {
       project_id: string;
@@ -295,6 +368,11 @@ function pageRange(input: PageInput): [number, number] {
 function applyKeyword(request: Query, keyword?: string) {
   const safe = keyword?.trim().replace(/[%_,().]/g, "");
   return safe ? request.or(`order_no.ilike.%${safe}%`) : request;
+}
+
+function applyProjectKeyword(request: Query, keyword?: string) {
+  const safe = keyword?.trim().replace(/[%_,().]/g, "");
+  return safe ? request.or(`name.ilike.%${safe}%`) : request;
 }
 
 function rpcParams(input: Record<string, unknown>) {

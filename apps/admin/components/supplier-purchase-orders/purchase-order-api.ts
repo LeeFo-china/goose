@@ -1,8 +1,4 @@
-import type { ProjectRecord } from "@/components/projects/project-mutations";
-import type {
-  PageData,
-  TenantSupplierRelationship,
-} from "@/components/suppliers/supplier-types";
+import type { PageData } from "@/components/suppliers/supplier-types";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import type {
@@ -11,6 +7,7 @@ import type {
   PurchaseOrderCommandResult,
   PurchaseOrderItemPage,
   PurchaseOrderPage,
+  PurchaseOrderSupplierOption,
   PurchaseOrderWithReferences,
 } from "./purchase-order-types";
 
@@ -73,23 +70,20 @@ export function loadPurchaseOrderCatalog(
   );
 }
 
-export function loadPurchaseOrderRelationships() {
-  return requestBackendJson<PageData<TenantSupplierRelationship>>(
-    "/suppliers?page=1&pageSize=100",
+export function loadPurchaseOrderRelationships(page: number, keyword = "") {
+  const query = optionQuery(page, keyword);
+  return requestBackendJson<PageData<PurchaseOrderSupplierOption>>(
+    `/supplier-purchase-order-supplier-options?${query}`,
     { fallbackMessage: "合作供应商加载失败" },
   );
 }
 
-export async function loadPurchaseOrderProjects() {
-  const data = await requestBackendJson<PageData<ProjectRecord>>(
-    "/projects?page=1&pageSize=100",
+export async function loadPurchaseOrderProjects(page: number, keyword = "") {
+  const query = optionQuery(page, keyword);
+  return requestBackendJson<PageData<ProjectOption>>(
+    `/supplier-purchase-order-project-options?${query}`,
     { fallbackMessage: "项目选项加载失败" },
   );
-  return data.list.map<ProjectOption>(({ id, name, status }) => ({
-    id,
-    name,
-    status,
-  }));
 }
 
 export function savePurchaseOrderDraft(
@@ -144,4 +138,13 @@ function purchaseOrderCommand(
     body: JSON.stringify(payload),
     fallbackMessage,
   });
+}
+
+function optionQuery(page: number, keyword: string) {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: "100",
+  });
+  if (keyword.trim()) query.set("keyword", keyword.trim());
+  return query;
 }

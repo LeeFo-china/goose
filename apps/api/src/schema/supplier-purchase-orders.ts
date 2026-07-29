@@ -46,6 +46,11 @@ export const SupplierPurchaseOrderCatalogQuerySchema =
     keyword: keyword.optional(),
   }).strict();
 
+export const SupplierPurchaseOrderOptionQuerySchema =
+  PaginationQuerySchema.extend({
+    keyword: keyword.optional(),
+  }).strict();
+
 export const SupplierPurchaseOrderParamSchema = z.object({
   id: uuid("无效的供应商采购单 ID"),
 }).strict();
@@ -99,6 +104,8 @@ export type SupplierPurchaseOrderListQuery =
   z.infer<typeof SupplierPurchaseOrderListQuerySchema>;
 export type SupplierPurchaseOrderCatalogQuery =
   z.infer<typeof SupplierPurchaseOrderCatalogQuerySchema>;
+export type SupplierPurchaseOrderOptionQuery =
+  z.infer<typeof SupplierPurchaseOrderOptionQuerySchema>;
 export type SupplierPurchaseOrderItemListQuery =
   z.infer<typeof SupplierPurchaseOrderItemListQuerySchema>;
 export type SupplierPurchaseOrderDraftInput =

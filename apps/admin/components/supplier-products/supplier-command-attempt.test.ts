@@ -42,4 +42,19 @@ describe("resolveSupplierCommandAttempt", () => {
     expect(next.idempotencyKey).not.toBe(current.idempotencyKey);
     expect(next.resourceId).not.toBe(current.resourceId);
   });
+
+  test("treats different command scopes as different intents", () => {
+    const submit = resolveSupplierCommandAttempt(null, {
+      scope: "purchase-order:submit",
+      resourcePath: "order-1",
+      payload: { expected_version: 2 },
+    });
+    const cancel = resolveSupplierCommandAttempt(submit, {
+      scope: "purchase-order:cancel",
+      resourcePath: "order-1",
+      payload: { expected_version: 2 },
+    });
+
+    expect(cancel.idempotencyKey).not.toBe(submit.idempotencyKey);
+  });
 });

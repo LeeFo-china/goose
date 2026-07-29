@@ -510,11 +510,28 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/admin/auth/me") {
       return sendData(response, session);
     }
-    if (request.method === "GET" && url.pathname === "/projects") {
+    if (
+      request.method === "GET" &&
+      url.pathname === "/supplier-purchase-order-project-options"
+    ) {
       return sendPage(response, url, [project], ["name"]);
     }
-    if (request.method === "GET" && url.pathname === "/suppliers") {
-      return sendPage(response, url, [relationship]);
+    if (
+      request.method === "GET" &&
+      url.pathname === "/supplier-purchase-order-supplier-options"
+    ) {
+      return sendPage(response, url, [{
+        tenant_supplier_id: relationship.id,
+        supplier_id: relationship.supplier_id,
+        relationship_status: relationship.relationship_status,
+        default_currency: relationship.default_currency,
+        supplier: {
+          id: relationship.supplier.id,
+          code: relationship.supplier.code,
+          name: relationship.supplier.name,
+          legal_name: relationship.supplier.legal_name,
+        },
+      }]);
     }
     if (
       request.method === "GET" &&

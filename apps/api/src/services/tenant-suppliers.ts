@@ -181,6 +181,16 @@ export class TenantSuppliersService {
     tenantSupplierId: string,
   ): Promise<void> {
     const tenantId = this.requireTenant(authContext, "view");
+    return this.assertCanCreatePurchaseOrderForTenant(
+      tenantId,
+      tenantSupplierId,
+    );
+  }
+
+  async assertCanCreatePurchaseOrderForTenant(
+    tenantId: string,
+    tenantSupplierId: string,
+  ): Promise<void> {
     const eligibility = await this.repository.getOrderEligibility({
       tenant_id: tenantId,
       id: tenantSupplierId,

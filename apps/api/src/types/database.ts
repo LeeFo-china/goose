@@ -16006,6 +16006,16 @@ export type Database = {
         }
         Returns: Json
       }
+      list_supplier_purchase_order_supplier_options: {
+        Args: {
+          p_checked_at: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       resolve_supplier_purchase_order_catalog: {
         Args: {
           p_keyword?: string

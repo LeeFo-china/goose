@@ -1,9 +1,8 @@
 import type {
   PageData,
-  TenantSupplierRelationship,
 } from "@/components/suppliers/supplier-types";
 
-export type { PageData, TenantSupplierRelationship };
+export type { PageData };
 
 export type PurchaseOrderStatus = "draft" | "submitted" | "cancelled";
 
@@ -123,6 +122,19 @@ export type ProjectOption = {
   id: string;
   name: string;
   status: string | null;
+};
+
+export type PurchaseOrderSupplierOption = {
+  tenant_supplier_id: string;
+  supplier_id: string;
+  relationship_status: "active";
+  default_currency: "CNY";
+  supplier: {
+    id: string;
+    code: string;
+    name: string;
+    legal_name: string;
+  };
 };
 
 export type PurchaseOrderDraftLine = {
