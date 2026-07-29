@@ -121,6 +121,31 @@ describe("平台供应标准目录工作台", () => {
       requestedStatus: "inactive",
       latestStatus: "active",
     })).toBe("retry");
+    expect(rules.readCatalogConflictSnapshot({
+      status: 409,
+      code: "SUPPLIER_VERSION_CONFLICT",
+      payload: {
+        details: {
+          current_version: 8,
+          current_status: "inactive",
+        },
+      },
+    })).toEqual({
+      version: 8,
+      status: "inactive",
+    });
+    for (const details of [
+      { current_version: 0, current_status: "inactive" },
+      { current_version: 8.5, current_status: "inactive" },
+      { current_version: 8, current_status: "paused" },
+      null,
+    ]) {
+      expect(rules.readCatalogConflictSnapshot({
+        status: 409,
+        code: "SUPPLIER_VERSION_CONFLICT",
+        payload: { details },
+      })).toBeNull();
+    }
   });
 
   test("单位表单保持十进制字符串并区分基准与派生单位", async () => {

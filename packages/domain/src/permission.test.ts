@@ -343,6 +343,22 @@ describe("domain permissions", () => {
         label: "管理供应商合同",
         module: "supplier",
       },
+      "supplier.product.view": {
+        label: "查看供应商商品",
+        module: "supplier",
+      },
+      "supplier.product.manage": {
+        label: "管理供应商商品",
+        module: "supplier",
+      },
+      "supplier.cost-price.view": {
+        label: "查看供应商供货价",
+        module: "supplier",
+      },
+      "supplier.cost-price.manage": {
+        label: "管理供应商供货价",
+        module: "supplier",
+      },
     } as const;
 
     for (const code of Object.keys(expectedPermissions) as Array<

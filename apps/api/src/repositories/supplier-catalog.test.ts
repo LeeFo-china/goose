@@ -313,6 +313,39 @@ describe("SupplierCatalogRepository writes", () => {
       .toContain("conversion_factor::text");
   });
 
+  test("returns the latest status and version after an optimistic conflict", async () => {
+    const { repository, requests } = await createRepository((request) => {
+      if (request.method === "PATCH") return { body: null };
+      return {
+        body: {
+          version: 3,
+          status: "active",
+        },
+      };
+    });
+
+    await expect(repository.updateBrand({
+      brand_id: BRAND_ID,
+      expected_version: 2,
+      status: "inactive",
+      updated_by_employee_id: EMPLOYEE_ID,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_VERSION_CONFLICT",
+      details: {
+        current_version: 3,
+        current_status: "active",
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(requests[0]?.method).toBe("PATCH");
+    const refreshUrl = new URL(requests[1]!.url);
+    expect(requests[1]?.method).toBe("GET");
+    expect(refreshUrl.searchParams.get("id")).toBe(`eq.${BRAND_ID}`);
+    expect(refreshUrl.searchParams.get("select")).toBe("version,status");
+  });
+
   test("wraps invalid rows and Supabase failures as database errors", async () => {
     const invalid = await createRepository(() => ({ body: [{}], count: 1 }));
     await expect(invalid.repository.listBrands({

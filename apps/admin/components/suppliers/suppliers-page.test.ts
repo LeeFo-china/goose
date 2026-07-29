@@ -16,6 +16,8 @@ describe("租户合作供应商工作台", () => {
     expect(source).toContain('href: "/suppliers"');
     expect(source).toContain('label: "合作供应商"');
     expect(source).toContain('permission: "supplier.view"');
+    expect(source).toContain('href: "/supplier-products"');
+    expect(source).toContain('permission: "supplier.product.view"');
   });
 
   test("模块禁用时只显示只读空态且不加载供应商资源", () => {

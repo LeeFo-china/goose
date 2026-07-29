@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -19,6 +19,7 @@ import { requestBackendJson } from "@/lib/backend-client";
 import {
   buildCatalogStatusRequest,
   isCatalogVersionConflict,
+  readCatalogConflictSnapshot,
   resolveCatalogStatusRetry,
 } from "./supplier-catalog-rules";
 import type {
@@ -33,6 +34,11 @@ type StatusRecord = {
   version: number;
 };
 
+type ConflictSnapshot = {
+  version: number;
+  status: CatalogStatus;
+};
+
 export function SupplierCatalogStatusAction({
   kind,
   record,
@@ -44,8 +50,8 @@ export function SupplierCatalogStatusAction({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [conflict, setConflict] = useState(false);
-  const [conflictVersion, setConflictVersion] = useState<number | null>(null);
-  const [waitingForRefresh, setWaitingForRefresh] = useState(false);
+  const [conflictSnapshot, setConflictSnapshot] =
+    useState<ConflictSnapshot | null>(null);
   const [requestedStatus, setRequestedStatus] = useState<CatalogStatus | null>(
     null,
   );
@@ -72,14 +78,13 @@ export function SupplierCatalogStatusAction({
       });
       toast.success(`${record.name}已${label}`);
       setOpen(false);
-      setConflictVersion(null);
-      setWaitingForRefresh(false);
+      setConflictSnapshot(null);
       setRequestedStatus(null);
       router.refresh();
     } catch (error) {
       if (isCatalogVersionConflict(error)) {
         setConflict(true);
-        setConflictVersion(expectedVersion);
+        setConflictSnapshot(readCatalogConflictSnapshot(error));
         setRequestedStatus(status);
       } else {
         toast.error(
@@ -91,36 +96,21 @@ export function SupplierCatalogStatusAction({
     }
   }
 
-  useEffect(() => {
-    if (
-      !waitingForRefresh ||
-      conflictVersion === null ||
-      record.version === conflictVersion
-    ) {
-      return;
-    }
-    if (!requestedStatus) return;
+  async function retryStatus() {
+    if (!requestedStatus || !conflictSnapshot) return;
     if (resolveCatalogStatusRetry({
       requestedStatus,
-      latestStatus: record.status,
+      latestStatus: conflictSnapshot.status,
     }) === "already-applied") {
       toast.success(`${record.name}已${label}`);
       setOpen(false);
-      setConflictVersion(null);
-      setWaitingForRefresh(false);
+      setConflictSnapshot(null);
       setRequestedStatus(null);
+      router.refresh();
       return;
     }
-    setConflictVersion(null);
-    setWaitingForRefresh(false);
-    void submitStatus(record.version, requestedStatus);
-  }, [
-    conflictVersion,
-    record.status,
-    record.version,
-    requestedStatus,
-    waitingForRefresh,
-  ]);
+    await submitStatus(conflictSnapshot.version, requestedStatus);
+  }
 
   return (
     <>
@@ -130,8 +120,7 @@ export function SupplierCatalogStatusAction({
         variant="ghost"
         onClick={() => {
           setConflict(false);
-          setConflictVersion(null);
-          setWaitingForRefresh(false);
+          setConflictSnapshot(null);
           setRequestedStatus(nextStatus);
           setOpen(true);
         }}
@@ -165,8 +154,7 @@ export function SupplierCatalogStatusAction({
                     variant="outline"
                     onClick={() => {
                       setOpen(false);
-                      setConflictVersion(null);
-                      setWaitingForRefresh(false);
+                      setConflictSnapshot(null);
                       setRequestedStatus(null);
                       router.refresh();
                     }}
@@ -176,14 +164,11 @@ export function SupplierCatalogStatusAction({
                   <Button
                     type="button"
                     size="sm"
-                    disabled={pending || waitingForRefresh}
-                    onClick={() => {
-                      setWaitingForRefresh(true);
-                      router.refresh();
-                    }}
+                    disabled={pending || !conflictSnapshot}
+                    onClick={() => void retryStatus()}
                   >
-                    {waitingForRefresh
-                      ? "正在刷新"
+                    {pending
+                      ? "正在重试"
                       : "重试本次操作"}
                   </Button>
                 </div>
