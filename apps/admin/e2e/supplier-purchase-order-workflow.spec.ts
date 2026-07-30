@@ -306,7 +306,25 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   await orderRow.getByRole("button", { name: "查看" }).click();
   dialog = page.getByRole("dialog", { name: "采购单详情" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole("button", { name: "关闭" })).toBeVisible();
+  await expect(dialog.getByText("有差异已收货", { exact: true })).toBeVisible();
+  const closeButton = dialog.getByRole("button", { name: "关闭" });
+  const detailFooter = closeButton.locator("..");
+  await detailFooter.scrollIntoViewIfNeeded();
+  await expect(closeButton).toBeInViewport();
+  await expect(detailFooter).toBeInViewport();
+  const closeButtonBox = await closeButton.boundingBox();
+  const viewport = page.viewportSize();
+  expect(closeButtonBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  if (!closeButtonBox || !viewport) {
+    throw new TypeError("无法读取窄屏详情关闭操作或 viewport 边界");
+  }
+  expect(closeButtonBox.x).toBeGreaterThanOrEqual(0);
+  expect(closeButtonBox.y).toBeGreaterThanOrEqual(0);
+  expect(closeButtonBox.x + closeButtonBox.width)
+    .toBeLessThanOrEqual(viewport.width);
+  expect(closeButtonBox.y + closeButtonBox.height)
+    .toBeLessThanOrEqual(viewport.height);
   expect(await page.evaluate(() =>
     document.documentElement.scrollWidth <= window.innerWidth
   )).toBe(true);
