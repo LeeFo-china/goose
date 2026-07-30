@@ -37,11 +37,11 @@ const quantity = z.number().finite()
   .refine((value) => hasScale(value, 4), "采购数量最多保留 4 位小数");
 const positiveFulfillmentQuantity = z.number().finite()
   .positive("履约数量必须大于 0")
-  .max(99_999_999_999_999.9999, "履约数量超过数据库上限")
+  .lt(100_000_000_000_000, "采购数量超过数据库上限")
   .refine((value) => hasScale(value, 4), "履约数量最多保留 4 位小数");
 const nonnegativeFulfillmentQuantity = z.number().finite()
   .nonnegative("履约数量不能小于 0")
-  .max(99_999_999_999_999.9999, "履约数量超过数据库上限")
+  .lt(100_000_000_000_000, "采购数量超过数据库上限")
   .refine((value) => hasScale(value, 4), "履约数量最多保留 4 位小数");
 const fulfillmentDateTime = z.iso.datetime({
   offset: true,

@@ -292,30 +292,45 @@ describe("supplier purchase order fulfillment schemas", () => {
     }
   });
 
+  test("rejects fulfillment quantities at the numeric database limit", () => {
+    expect(SupplierPurchaseOrderShipmentCreateSchema.safeParse({
+      ...shipmentInput(),
+      items: [{
+        purchase_order_item_id: purchaseOrderItemId, quantity: 100_000_000_000_000,
+      }],
+    }).success).toBe(false);
+    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
+      items: [{
+        purchase_order_item_id: purchaseOrderItemId, accepted_quantity: 100_000_000_000_000,
+        rejected_quantity: 0,
+        variance_reason: null,
+      }],
+    })).success).toBe(false);
+    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
+      items: [{
+        purchase_order_item_id: purchaseOrderItemId, accepted_quantity: 0,
+        rejected_quantity: 100_000_000_000_000,
+        variance_reason: "数量差异",
+      }],
+    })).success).toBe(false);
+  });
   test("treats UUID casing as identical for shipment and receipt lines", () => {
     expect(SupplierPurchaseOrderShipmentCreateSchema.safeParse({
       ...shipmentInput(),
       items: [
         { purchase_order_item_id: caseVariantItemId, quantity: 1 },
-        {
-          purchase_order_item_id: caseVariantItemId.toUpperCase(),
-          quantity: 1,
-        },
+        { purchase_order_item_id: caseVariantItemId.toUpperCase(), quantity: 1 },
       ],
     }).success).toBe(false);
     expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
       items: [
         {
-          purchase_order_item_id: caseVariantItemId,
-          accepted_quantity: 1,
-          rejected_quantity: 0,
-          variance_reason: null,
+          purchase_order_item_id: caseVariantItemId, accepted_quantity: 1,
+          rejected_quantity: 0, variance_reason: null,
         },
         {
-          purchase_order_item_id: caseVariantItemId.toUpperCase(),
-          accepted_quantity: 1,
-          rejected_quantity: 0,
-          variance_reason: null,
+          purchase_order_item_id: caseVariantItemId.toUpperCase(), accepted_quantity: 1,
+          rejected_quantity: 0, variance_reason: null,
         },
       ],
     })).success).toBe(false);
@@ -431,33 +446,23 @@ describe("supplier purchase order fulfillment schemas", () => {
     expect(SupplierPurchaseOrderFulfillmentEventListQuerySchema.safeParse({
       status: "received",
     }).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      receipt_no: " ",
-    })).success).toBe(false);
     expect(SupplierPurchaseOrderReceiptCreateSchema.parse(receiptInput({
       receipt_no: " RCV-001 ",
     })).receipt_no).toBe("RCV-001");
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      id: "invalid",
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      expected_fulfillment_version: 0,
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      expected_fulfillment_version: 1.5,
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      receipt_no: "a".repeat(81),
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      received_at: "2026-07-30T04:00:00",
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      remark: "a".repeat(501),
-    })).success).toBe(false);
-    expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(receiptInput({
-      unknown: true,
-    })).success).toBe(false);
+    for (const overrides of [
+      { receipt_no: " " },
+      { id: "invalid" },
+      { expected_fulfillment_version: 0 },
+      { expected_fulfillment_version: 1.5 },
+      { receipt_no: "a".repeat(81) },
+      { received_at: "2026-07-30T04:00:00" },
+      { remark: "a".repeat(501) },
+      { unknown: true },
+    ]) {
+      expect(SupplierPurchaseOrderReceiptCreateSchema.safeParse(
+        receiptInput(overrides),
+      ).success).toBe(false);
+    }
   });
 });
 
@@ -482,10 +487,8 @@ function receiptInput(overrides: Record<string, unknown> = {}) {
     received_at: "2026-07-30T04:00:00.000Z",
     remark: null,
     items: [{
-      purchase_order_item_id: purchaseOrderItemId,
-      accepted_quantity: 2.5,
-      rejected_quantity: 0,
-      variance_reason: null,
+      purchase_order_item_id: purchaseOrderItemId, accepted_quantity: 2.5,
+      rejected_quantity: 0, variance_reason: null,
     }],
     ...overrides,
   };
