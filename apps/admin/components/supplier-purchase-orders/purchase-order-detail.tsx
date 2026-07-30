@@ -50,6 +50,9 @@ import {
   submitPurchaseOrder,
 } from "./purchase-order-api";
 import {
+  PurchaseOrderFulfillmentPanel,
+} from "./purchase-order-fulfillment-panel";
+import {
   commandErrorMessage,
   formatPurchaseMoney,
   purchaseOrderActions,
@@ -106,6 +109,11 @@ export function PurchaseOrderDetail({
     setCommandAttempt(null);
     if (open) void reload();
   }, [open, order, reload]);
+
+  const handleFulfillmentChanged = useCallback(async () => {
+    await reload();
+    await onChanged();
+  }, [onChanged, reload]);
 
   async function runCommand(action: "submit" | "cancel") {
     if (!current || busy) return;
@@ -248,6 +256,12 @@ export function PurchaseOrderDetail({
                 </TableBody>
               </Table>
             </div>
+            <PurchaseOrderFulfillmentPanel
+              order={current}
+              purchaseOrderItems={items}
+              canManage={canManage}
+              onOrderChanged={handleFulfillmentChanged}
+            />
           </>
         )}
         <DialogFooter>

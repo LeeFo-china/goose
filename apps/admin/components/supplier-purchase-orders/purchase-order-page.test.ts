@@ -225,6 +225,76 @@ describe("供应商采购单页面边界", () => {
         code: "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
       });
   });
+
+  test("采购单详情挂载履约面板并把最新订单、明细和刷新入口下传", () => {
+    const detail = readSource("./purchase-order-detail.tsx");
+
+    expect(detail).toContain("PurchaseOrderFulfillmentPanel");
+    expect(detail).toContain("order={current}");
+    expect(detail).toContain("purchaseOrderItems={items}");
+    expect(detail).toContain("canManage={canManage}");
+    expect(detail).toContain("onOrderChanged={handleFulfillmentChanged}");
+  });
+
+  test("履约面板并行分页加载事实并覆盖加载失败空态和只读状态", () => {
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+
+    expect(panel).toContain('"use client"');
+    expect(panel).toContain("Promise.all([");
+    expect(panel).toContain("loadPurchaseOrderFulfillment(order.id)");
+    expect(panel).toContain("loadPurchaseOrderShipments(order.id, 1, 20)");
+    expect(panel).toContain("loadPurchaseOrderReceipts(order.id, 1, 20)");
+    expect(panel).toContain("<Skeleton");
+    expect(panel).toContain("<StatusAlert");
+    expect(panel).toContain("<Empty");
+    expect(panel).toContain("当前账号仅可查看履约事实");
+    expect(panel).toContain("fulfillmentActions(");
+  });
+
+  test("确认、发货和收货操作保留无歧义的弹窗与幂等重试语义", () => {
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+
+    expect(panel).toContain("<AlertDialogTitle>确认采购履约？</AlertDialogTitle>");
+    expect(panel).toContain("expected_version: order.version");
+    expect(panel).toContain("setConfirmedAt(new Date().toISOString())");
+    expect(panel).toContain("confirmed_at: confirmedAt");
+    expect(panel).toContain("resolveSupplierCommandAttempt");
+    expect(panel).toContain("nextAttempt.idempotencyKey");
+    expect(panel).toContain("setConfirmAttempt(null)");
+    expect(shipment).toContain("<DialogTitle>登记采购发货</DialogTitle>");
+    expect(shipment).toContain("<DialogDescription>");
+    expect(shipment).toContain("shipmentRemaining(item)");
+    expect(shipment).toContain("remaining_quantity");
+    expect(shipment).toContain("toShipmentPayload");
+    expect(shipment).toContain("if (!result.ok)");
+    expect(shipment).toContain("resolveSupplierCommandAttempt");
+    expect(receipt).toContain("<DialogTitle>登记采购收货</DialogTitle>");
+    expect(receipt).toContain("<DialogDescription>");
+    expect(receipt).toContain("receiptRemaining(item)");
+    expect(receipt).toContain("remaining_quantity");
+    expect(receipt).toContain("toReceiptPayload");
+    expect(receipt).toContain("if (!result.ok)");
+    expect(receipt).toContain("resolveSupplierCommandAttempt");
+  });
+
+  test("履约汇总以紧凑表格展示数量金额和倒序业务时间线", () => {
+    const summary = readSource("./purchase-order-fulfillment-summary.tsx");
+
+    expect(summary).toContain("<Badge");
+    expect(summary).toContain("<Table");
+    expect(summary).toContain("<Separator");
+    expect(summary).toContain("ordered_quantity");
+    expect(summary).toContain("shipped_quantity");
+    expect(summary).toContain("received_quantity");
+    expect(summary).toContain("accepted_quantity");
+    expect(summary).toContain("rejected_quantity");
+    expect(summary).toContain("accepted_total_amount");
+    expect(summary).toContain("businessTime");
+    expect(summary).toContain(".sort(");
+    expect(summary).toContain("truncate");
+  });
 });
 
 function jsonResponse(payload: unknown, status = 200) {
