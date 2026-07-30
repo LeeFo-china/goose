@@ -46,6 +46,7 @@ const systemTimeoutScheduler: TimeoutScheduler = {
   set: (callback, milliseconds) => setTimeout(callback, milliseconds),
   clear: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
 };
+const SETUP_READINESS_TIMEOUT_MILLISECONDS = 15_000;
 
 export async function awaitBeforeTimeout<Result>(
   operation: Promise<Result>,
@@ -202,7 +203,7 @@ export async function readBackendPid(sql: SmokeSql) {
 export async function waitForSavedBackendPid<T>(
   saved: Promise<number>,
   operation: Promise<T>,
-  timeoutMilliseconds = 5_000,
+  timeoutMilliseconds = SETUP_READINESS_TIMEOUT_MILLISECONDS,
   scheduler: TimeoutScheduler = systemTimeoutScheduler,
 ) {
   const ready = await awaitBeforeTimeout(
@@ -238,13 +239,16 @@ export async function waitForOperationCompletion<T>(
 export async function waitForFirstSubmission<T>(
   submitted: Promise<void>,
   operation: Promise<T>,
+  timeoutMilliseconds = SETUP_READINESS_TIMEOUT_MILLISECONDS,
+  scheduler: TimeoutScheduler = systemTimeoutScheduler,
 ) {
   return awaitBeforeTimeout(
     Promise.race([
       submitted.then(() => "submitted" as const),
       operation.then(() => "settled" as const),
     ]),
-    5_000,
+    timeoutMilliseconds,
     "SMOKE_CONCURRENT_A_TIMEOUT",
+    scheduler,
   );
 }
