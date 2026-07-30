@@ -150,7 +150,7 @@ export function PurchaseOrderShipmentDialog({
       const message = errorMessage(caught, "登记采购发货失败");
       setCommandError(message);
       toast.error(retryMessage(caught, message));
-      if (!isUncertainFailure(caught)) setAttempt(null);
+      if (shouldClearAttempt(caught)) setAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
         await onSaved();
@@ -174,7 +174,7 @@ export function PurchaseOrderShipmentDialog({
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
           <FieldGroup>
-            <div className="grid gap-4 md:grid-cols-2">
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(errors, "shipment_no"))}>
                 <FieldLabel htmlFor="purchase-order-shipment-no">
                   发货编号
@@ -229,7 +229,7 @@ export function PurchaseOrderShipmentDialog({
                   onChange={(event) => setTrackingNo(event.target.value)}
                 />
               </Field>
-            </div>
+            </FieldGroup>
             <Field>
               <FieldLabel htmlFor="purchase-order-shipment-remark">
                 发货备注
@@ -394,6 +394,10 @@ function isUncertainFailure(error: unknown) {
     return true;
   }
   return typeof error.status !== "number" || error.status >= 500;
+}
+
+function shouldClearAttempt(error: unknown) {
+  return !isUncertainFailure(error);
 }
 
 function errorCode(error: unknown) {

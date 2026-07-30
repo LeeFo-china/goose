@@ -29,10 +29,12 @@ const statusMeta = {
 
 type TimelineEvent = {
   id: string;
-  kind: "发货" | "收货";
+  kind: "confirmed" | "shipment" | "receipt";
+  label: "供应商确认" | "发货" | "收货";
   number: string;
   businessTime: string;
   detail: string;
+  stableKey: string;
 };
 
 export function PurchaseOrderFulfillmentSummary({
@@ -51,7 +53,7 @@ export function PurchaseOrderFulfillmentSummary({
   const itemById = new Map(
     purchaseOrderItems.map((item) => [item.id, item]),
   );
-  const timeline = buildTimeline(shipments, receipts);
+  const timeline = buildTimeline(detail, shipments, receipts);
 
   return (
     <div className="flex flex-col gap-4">
@@ -59,7 +61,8 @@ export function PurchaseOrderFulfillmentSummary({
         <div>
           <h4 className="text-sm font-medium">履约汇总</h4>
           <p className="mt-1 text-xs text-muted-foreground">
-            数量和金额均以后端累计事实为准。
+            供应商已确认 ·{" "}
+            {formatDateTime(detail.fulfillment.confirmed_at)}
           </p>
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>
@@ -133,9 +136,9 @@ export function PurchaseOrderFulfillmentSummary({
               </TableHeader>
               <TableBody>
                 {timeline.map((event) => (
-                  <TableRow key={`${event.kind}-${event.id}`}>
+                  <TableRow key={event.stableKey}>
                     <TableCell>
-                      <Badge variant="outline">{event.kind}</Badge>
+                      <Badge variant="outline">{event.label}</Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap tabular-nums">
                       {formatDateTime(event.businessTime)}
@@ -173,13 +176,29 @@ function QuantityCell({ value }: { value: string }) {
 }
 
 function buildTimeline(
+  detail: PurchaseOrderFulfillmentDetail,
   shipments: PurchaseOrderShipment[],
   receipts: PurchaseOrderReceipt[],
 ): TimelineEvent[] {
+  if (!detail.fulfillment) return [];
+  const confirmation: TimelineEvent = {
+    id: detail.fulfillment.id,
+    kind: "confirmed",
+    label: "供应商确认",
+    number: "供应商已确认",
+    businessTime: detail.fulfillment.confirmed_at,
+    detail: [
+      `确认人：${detail.fulfillment.confirmed_by_employee_id}`,
+      detail.fulfillment.confirmation_remark,
+    ].filter(Boolean).join(" · "),
+    stableKey: `confirmed-${detail.fulfillment.id}`,
+  };
   return [
+    confirmation,
     ...shipments.map((shipment): TimelineEvent => ({
       id: shipment.id,
-      kind: "发货",
+      kind: "shipment",
+      label: "发货",
       number: shipment.shipment_no,
       businessTime: shipment.shipped_at,
       detail: [
@@ -188,19 +207,23 @@ function buildTimeline(
         shipment.tracking_no,
         shipment.remark,
       ].filter(Boolean).join(" · "),
+      stableKey: `shipment-${shipment.id}`,
     })),
     ...receipts.map((receipt): TimelineEvent => ({
       id: receipt.id,
-      kind: "收货",
+      kind: "receipt",
+      label: "收货",
       number: receipt.receipt_no,
       businessTime: receipt.received_at,
       detail: [
         `${receipt.items.length} 个明细`,
         receipt.remark,
       ].filter(Boolean).join(" · "),
+      stableKey: `receipt-${receipt.id}`,
     })),
   ].sort((left, right) =>
-    timestamp(right.businessTime) - timestamp(left.businessTime)
+    timestamp(right.businessTime) - timestamp(left.businessTime) ||
+    left.stableKey.localeCompare(right.stableKey)
   );
 }
 

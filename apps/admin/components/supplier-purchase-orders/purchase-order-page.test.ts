@@ -251,18 +251,28 @@ describe("供应商采购单页面边界", () => {
     expect(panel).toContain("fulfillmentActions(");
   });
 
-  test("确认、发货和收货操作保留无歧义的弹窗与幂等重试语义", () => {
+  test("供应商确认、发货和收货操作使用准确文案与点击时业务时间", () => {
     const panel = readSource("./purchase-order-fulfillment-panel.tsx");
     const shipment = readSource("./purchase-order-shipment-dialog.tsx");
     const receipt = readSource("./purchase-order-receipt-dialog.tsx");
 
-    expect(panel).toContain("<AlertDialogTitle>确认采购履约？</AlertDialogTitle>");
+    expect(panel).toContain("<AlertDialogTitle>记录供应商确认？</AlertDialogTitle>");
+    expect(panel).toContain("租户员工代供应商录入");
+    expect(panel).toContain('toast.success("供应商确认事实已记录")');
     expect(panel).toContain("expected_version: order.version");
-    expect(panel).toContain("setConfirmedAt(new Date().toISOString())");
-    expect(panel).toContain("confirmed_at: confirmedAt");
+    expect(panel).toMatch(
+      /async function handleConfirm\(\)[\s\S]*?new Date\(\)\.toISOString\(\)/,
+    );
+    expect(panel).toMatch(
+      /async function handleConfirm\(\)[\s\S]*?confirmed_at: confirmedAt/,
+    );
+    const openHandler = panel.match(
+      /function handleConfirmOpen[\s\S]*?\n  }\n\n  return \(/,
+    );
+    expect(openHandler).not.toBeNull();
+    expect(openHandler?.[0]).not.toContain("new Date().toISOString()");
     expect(panel).toContain("resolveSupplierCommandAttempt");
     expect(panel).toContain("nextAttempt.idempotencyKey");
-    expect(panel).toContain("setConfirmAttempt(null)");
     expect(shipment).toContain("<DialogTitle>登记采购发货</DialogTitle>");
     expect(shipment).toContain("<DialogDescription>");
     expect(shipment).toContain("shipmentRemaining(item)");
@@ -279,7 +289,39 @@ describe("供应商采购单页面边界", () => {
     expect(receipt).toContain("resolveSupplierCommandAttempt");
   });
 
-  test("履约汇总以紧凑表格展示数量金额和倒序业务时间线", () => {
+  test("三类履约命令仅在确定失败时清理尝试并让下一次使用新身份", () => {
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+
+    expect(panel).toContain(
+      "resolveSupplierCommandAttempt(confirmAttempt",
+    );
+    expect(panel).toContain("setConfirmAttempt(nextAttempt)");
+    expect(panel).toContain(
+      "if (shouldClearAttempt(caught)) setConfirmAttempt(null)",
+    );
+    expect(shipment).toContain("resolveSupplierCommandAttempt(attempt");
+    expect(shipment).toContain("setAttempt(nextAttempt)");
+    expect(shipment).toContain(
+      "if (shouldClearAttempt(caught)) setAttempt(null)",
+    );
+    expect(receipt).toContain("resolveSupplierCommandAttempt(attempt");
+    expect(receipt).toContain("setAttempt(nextAttempt)");
+    expect(receipt).toContain(
+      "if (shouldClearAttempt(caught)) setAttempt(null)",
+    );
+    for (const source of [panel, shipment, receipt]) {
+      expect(source).toContain(
+        "return !isUncertainFailure(error)",
+      );
+      expect(source).toContain(
+        "系统会复用本次请求标识",
+      );
+    }
+  });
+
+  test("履约汇总包含确认事实并以业务时间稳定倒序合并时间线", () => {
     const summary = readSource("./purchase-order-fulfillment-summary.tsx");
 
     expect(summary).toContain("<Badge");
@@ -291,9 +333,30 @@ describe("供应商采购单页面边界", () => {
     expect(summary).toContain("accepted_quantity");
     expect(summary).toContain("rejected_quantity");
     expect(summary).toContain("accepted_total_amount");
+    expect(summary).toContain('kind: "confirmed"');
+    expect(summary).toContain(
+      "businessTime: detail.fulfillment.confirmed_at",
+    );
+    expect(summary).toContain("confirmed_by_employee_id");
+    expect(summary).toContain("confirmation_remark");
+    expect(summary).toContain("供应商已确认");
     expect(summary).toContain("businessTime");
     expect(summary).toContain(".sort(");
     expect(summary).toContain("truncate");
+  });
+
+  test("发货和收货头字段使用标准 FieldGroup 组合", () => {
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+
+    for (const source of [shipment, receipt]) {
+      expect(source).toContain(
+        '<FieldGroup className="grid gap-4 md:grid-cols-2">',
+      );
+      expect(source).not.toContain(
+        '<div className="grid gap-4 md:grid-cols-2">',
+      );
+    }
   });
 });
 

@@ -102,12 +102,13 @@ export function PurchaseOrderReceiptDialog({
     () => new Map(purchaseOrderItems.map((item) => [item.id, item])),
     [purchaseOrderItems],
   );
+  const enteredLines = selectedLines(availableItems, lineInputs);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     const headerErrors = validateHeader(receiptNo, receivedAt);
-    const lines = selectedLines(availableItems, lineInputs);
+    const lines = enteredLines;
     const receivedAtIso = toIsoDateTime(receivedAt);
     const result = toReceiptPayload({
       id: VALIDATION_ID,
@@ -150,7 +151,7 @@ export function PurchaseOrderReceiptDialog({
       const message = errorMessage(caught, "登记采购收货失败");
       setCommandError(message);
       toast.error(retryMessage(caught, message));
-      if (!isUncertainFailure(caught)) setAttempt(null);
+      if (shouldClearAttempt(caught)) setAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
         await onSaved();
@@ -174,7 +175,7 @@ export function PurchaseOrderReceiptDialog({
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
           <FieldGroup>
-            <div className="grid gap-4 md:grid-cols-2">
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(errors, "receipt_no"))}>
                 <FieldLabel htmlFor="purchase-order-receipt-no">
                   收货编号
@@ -205,7 +206,7 @@ export function PurchaseOrderReceiptDialog({
                 />
                 <FieldError>{fieldError(errors, "received_at")}</FieldError>
               </Field>
-            </div>
+            </FieldGroup>
             <Field>
               <FieldLabel htmlFor="purchase-order-receipt-remark">
                 收货备注
@@ -239,6 +240,12 @@ export function PurchaseOrderReceiptDialog({
                       const purchaseItem = purchaseItemById.get(itemId);
                       const remaining_quantity = receiptRemaining(item);
                       const values = lineInputs[itemId] ?? emptyLineInputs();
+                      const varianceError = lineError(
+                        errors,
+                        enteredLines,
+                        itemId,
+                        "variance_reason",
+                      );
                       return (
                         <TableRow key={itemId}>
                           <TableCell>
@@ -261,7 +268,7 @@ export function PurchaseOrderReceiptDialog({
                             maximum={remaining_quantity}
                             disabled={busy}
                             errors={errors}
-                            lines={selectedLines(availableItems, lineInputs)}
+                            lines={enteredLines}
                             onChange={(value) =>
                               updateLine(setLineInputs, itemId, {
                                 acceptedQuantity: value,
@@ -275,42 +282,27 @@ export function PurchaseOrderReceiptDialog({
                             maximum={remaining_quantity}
                             disabled={busy}
                             errors={errors}
-                            lines={selectedLines(availableItems, lineInputs)}
+                            lines={enteredLines}
                             onChange={(value) =>
                               updateLine(setLineInputs, itemId, {
                                 rejectedQuantity: value,
                               })}
                           />
                           <TableCell>
-                            <Field data-invalid={Boolean(lineError(
-                              errors,
-                              selectedLines(availableItems, lineInputs),
-                              itemId,
-                              "variance_reason",
-                            ))}>
+                            <Field data-invalid={Boolean(varianceError)}>
                               <Input
                                 aria-label={`差异原因 ${index + 1}`}
                                 value={values.varianceReason}
                                 maxLength={500}
                                 disabled={busy}
-                                aria-invalid={Boolean(lineError(
-                                  errors,
-                                  selectedLines(availableItems, lineInputs),
-                                  itemId,
-                                  "variance_reason",
-                                ))}
+                                aria-invalid={Boolean(varianceError)}
                                 onChange={(event) =>
                                   updateLine(setLineInputs, itemId, {
                                     varianceReason: event.target.value,
                                   })}
                               />
                               <FieldError>
-                                {lineError(
-                                  errors,
-                                  selectedLines(availableItems, lineInputs),
-                                  itemId,
-                                  "variance_reason",
-                                )}
+                                {varianceError}
                               </FieldError>
                             </Field>
                           </TableCell>
@@ -469,6 +461,10 @@ function isUncertainFailure(error: unknown) {
     return true;
   }
   return typeof error.status !== "number" || error.status >= 500;
+}
+
+function shouldClearAttempt(error: unknown) {
+  return !isUncertainFailure(error);
 }
 
 function errorCode(error: unknown) {

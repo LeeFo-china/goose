@@ -86,7 +86,7 @@ export function PurchaseOrderFulfillmentPanel({
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmRemark, setConfirmRemark] = useState("");
-  const [confirmedAt, setConfirmedAt] = useState("");
+  const [confirmSubmittedAt, setConfirmSubmittedAt] = useState("");
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmAttempt, setConfirmAttempt] =
     useState<SupplierCommandAttempt | null>(null);
@@ -127,6 +127,8 @@ export function PurchaseOrderFulfillmentPanel({
 
   async function handleConfirm() {
     if (confirmBusy) return;
+    const confirmedAt = confirmSubmittedAt || new Date().toISOString();
+    setConfirmSubmittedAt(confirmedAt);
     const payload = {
       expected_version: order.version,
       confirmed_at: confirmedAt,
@@ -148,13 +150,13 @@ export function PurchaseOrderFulfillmentPanel({
       );
       setConfirmAttempt(null);
       setConfirmOpen(false);
-      toast.success("采购履约已确认");
+      toast.success("供应商确认事实已记录");
       await handleSaved();
     } catch (caught) {
-      const message = errorMessage(caught, "确认采购履约失败");
+      const message = errorMessage(caught, "记录供应商确认失败");
       setError(message);
       toast.error(retryMessage(caught, message));
-      if (!isUncertainFailure(caught)) setConfirmAttempt(null);
+      if (shouldClearAttempt(caught)) setConfirmAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         await Promise.all([reload(), onOrderChanged()]);
       }
@@ -168,7 +170,7 @@ export function PurchaseOrderFulfillmentPanel({
     setConfirmOpen(nextOpen);
     if (nextOpen) {
       setConfirmRemark("");
-      setConfirmedAt(new Date().toISOString());
+      setConfirmSubmittedAt("");
       setConfirmAttempt(null);
     }
   }
@@ -187,7 +189,7 @@ export function PurchaseOrderFulfillmentPanel({
             采购履约
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            确认采购事实，并按实际业务时间登记发货与收货。
+            由租户员工代供应商录入确认事实，再登记发货与收货。
           </p>
         </div>
         <Button
@@ -235,15 +237,15 @@ export function PurchaseOrderFulfillmentPanel({
       ) : (
         <Empty className="min-h-44 border">
           <EmptyHeader>
-            <EmptyTitle>采购履约尚未确认</EmptyTitle>
+            <EmptyTitle>尚未记录供应商确认</EmptyTitle>
             <EmptyDescription>
-              确认后才能登记发货，采购单价格与数量快照不会在此修改。
+              租户员工代供应商记录确认后才能登记发货，不修改采购快照。
             </EmptyDescription>
           </EmptyHeader>
           {actions.includes("confirm") ? (
             <EmptyContent>
               <Button type="button" onClick={() => handleConfirmOpen(true)}>
-                确认采购履约
+                记录供应商确认
               </Button>
             </EmptyContent>
           ) : null}
@@ -270,16 +272,16 @@ export function PurchaseOrderFulfillmentPanel({
       <AlertDialog open={confirmOpen} onOpenChange={handleConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认采购履约？</AlertDialogTitle>
+            <AlertDialogTitle>记录供应商确认？</AlertDialogTitle>
             <AlertDialogDescription>
-              将以当前采购单版本创建履约快照，后续按发货、收货记录累计。
+              租户员工代供应商录入该事实，并以当前采购单版本创建履约快照。
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="purchase-order-confirm-remark">
-                确认备注
+                供应商确认备注
               </FieldLabel>
               <Textarea
                 id="purchase-order-confirm-remark"
@@ -294,14 +296,14 @@ export function PurchaseOrderFulfillmentPanel({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={confirmBusy}>返回</AlertDialogCancel>
             <AlertDialogAction
-              disabled={confirmBusy || !confirmedAt}
+              disabled={confirmBusy}
               onClick={(event) => {
                 event.preventDefault();
                 void handleConfirm();
               }}
             >
               {confirmBusy ? <Spinner data-icon="inline-start" /> : null}
-              确认履约
+              记录供应商确认
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -348,6 +350,10 @@ function isUncertainFailure(error: unknown) {
     return true;
   }
   return typeof error.status !== "number" || error.status >= 500;
+}
+
+function shouldClearAttempt(error: unknown) {
+  return !isUncertainFailure(error);
 }
 
 function retryMessage(error: unknown, message: string) {
