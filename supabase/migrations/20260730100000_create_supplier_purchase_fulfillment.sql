@@ -773,19 +773,14 @@ DECLARE
   v_request jsonb;
   v_result jsonb;
   v_item_count integer;
+  v_remark text := NULLIF(btrim(p_remark), '');
 BEGIN
   IF p_order_id IS NULL
     OR p_tenant_id IS NULL
     OR p_expected_order_version IS NULL
     OR p_expected_order_version <= 0
     OR p_confirmed_at IS NULL
-    OR (
-      p_remark IS NOT NULL
-      AND (
-        btrim(p_remark) = ''
-        OR char_length(btrim(p_remark)) > 500
-      )
-    )
+    OR char_length(v_remark) > 500
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -810,10 +805,7 @@ BEGIN
     'order_id', p_order_id,
     'expected_order_version', p_expected_order_version,
     'confirmed_at', p_confirmed_at,
-    'remark', CASE
-      WHEN p_remark IS NULL THEN NULL
-      ELSE btrim(p_remark)
-    END,
+    'remark', v_remark,
     'actor_employee_id', p_actor_employee_id
   );
 
@@ -935,7 +927,7 @@ BEGIN
     p_confirmed_at,
     p_actor_user_id,
     p_actor_employee_id,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_remark,
     1,
     p_actor_employee_id
   )
@@ -998,7 +990,7 @@ BEGIN
         public.supplier_purchase_order_snapshot(v_order)
       ),
     v_result,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_remark,
     p_actor_user_id,
     p_actor_employee_id,
     p_idempotency_key,
@@ -1043,6 +1035,9 @@ DECLARE
   v_invalid_quantity boolean;
   v_over_shipped boolean;
   v_global_event_exists boolean;
+  v_carrier_name text := NULLIF(btrim(p_carrier_name), '');
+  v_tracking_no text := NULLIF(btrim(p_tracking_no), '');
+  v_remark text := NULLIF(btrim(p_remark), '');
 BEGIN
   IF p_order_id IS NULL
     OR p_shipment_id IS NULL
@@ -1053,27 +1048,9 @@ BEGIN
     OR btrim(p_shipment_no) = ''
     OR char_length(btrim(p_shipment_no)) > 80
     OR p_shipped_at IS NULL
-    OR (
-      p_carrier_name IS NOT NULL
-      AND (
-        btrim(p_carrier_name) = ''
-        OR char_length(btrim(p_carrier_name)) > 100
-      )
-    )
-    OR (
-      p_tracking_no IS NOT NULL
-      AND (
-        btrim(p_tracking_no) = ''
-        OR char_length(btrim(p_tracking_no)) > 120
-      )
-    )
-    OR (
-      p_remark IS NOT NULL
-      AND (
-        btrim(p_remark) = ''
-        OR char_length(btrim(p_remark)) > 500
-      )
-    )
+    OR char_length(v_carrier_name) > 100
+    OR char_length(v_tracking_no) > 120
+    OR char_length(v_remark) > 500
     OR p_items IS NULL
     OR jsonb_typeof(p_items) <> 'array'
     OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
@@ -1150,18 +1127,9 @@ BEGIN
     'expected_fulfillment_version', p_expected_fulfillment_version,
     'shipment_no', btrim(p_shipment_no),
     'shipped_at', p_shipped_at,
-    'carrier_name', CASE
-      WHEN p_carrier_name IS NULL THEN NULL
-      ELSE btrim(p_carrier_name)
-    END,
-    'tracking_no', CASE
-      WHEN p_tracking_no IS NULL THEN NULL
-      ELSE btrim(p_tracking_no)
-    END,
-    'remark', CASE
-      WHEN p_remark IS NULL THEN NULL
-      ELSE btrim(p_remark)
-    END,
+    'carrier_name', v_carrier_name,
+    'tracking_no', v_tracking_no,
+    'remark', v_remark,
     'items', v_normalized_items,
     'actor_employee_id', p_actor_employee_id
   );
@@ -1345,15 +1313,9 @@ BEGIN
     v_fulfillment.id,
     btrim(p_shipment_no),
     p_shipped_at,
-    CASE
-      WHEN p_carrier_name IS NULL THEN NULL
-      ELSE btrim(p_carrier_name)
-    END,
-    CASE
-      WHEN p_tracking_no IS NULL THEN NULL
-      ELSE btrim(p_tracking_no)
-    END,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_carrier_name,
+    v_tracking_no,
+    v_remark,
     p_actor_user_id,
     p_actor_employee_id
   );
@@ -1441,7 +1403,7 @@ BEGIN
         p_expected_fulfillment_version
       ),
     v_result,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_remark,
     p_actor_user_id,
     p_actor_employee_id,
     p_idempotency_key,
@@ -1497,6 +1459,7 @@ DECLARE
   v_variance_reason_required boolean;
   v_over_received boolean;
   v_global_event_exists boolean;
+  v_remark text := NULLIF(btrim(p_remark), '');
 BEGIN
   IF p_order_id IS NULL
     OR p_receipt_id IS NULL
@@ -1507,13 +1470,7 @@ BEGIN
     OR btrim(p_receipt_no) = ''
     OR char_length(btrim(p_receipt_no)) > 80
     OR p_received_at IS NULL
-    OR (
-      p_remark IS NOT NULL
-      AND (
-        btrim(p_remark) = ''
-        OR char_length(btrim(p_remark)) > 500
-      )
-    )
+    OR char_length(v_remark) > 500
     OR p_items IS NULL
     OR jsonb_typeof(p_items) <> 'array'
     OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
@@ -1541,10 +1498,7 @@ BEGIN
       item.purchase_order_item_id,
       item.accepted_quantity,
       item.rejected_quantity,
-      CASE
-        WHEN item.variance_reason IS NULL THEN NULL
-        ELSE btrim(item.variance_reason)
-      END AS variance_reason
+      NULLIF(btrim(item.variance_reason), '') AS variance_reason
     FROM jsonb_to_recordset(p_items) AS item(
       purchase_order_item_id uuid,
       accepted_quantity numeric,
@@ -1574,7 +1528,6 @@ BEGIN
         rejected_quantity > 0
         AND (
           variance_reason IS NULL
-          OR variance_reason = ''
           OR char_length(variance_reason) > 500
         )
       )
@@ -1628,10 +1581,7 @@ BEGIN
     'expected_fulfillment_version', p_expected_fulfillment_version,
     'receipt_no', btrim(p_receipt_no),
     'received_at', p_received_at,
-    'remark', CASE
-      WHEN p_remark IS NULL THEN NULL
-      ELSE btrim(p_remark)
-    END,
+    'remark', v_remark,
     'items', v_normalized_items,
     'actor_employee_id', p_actor_employee_id
   );
@@ -1819,7 +1769,7 @@ BEGIN
     v_fulfillment.id,
     btrim(p_receipt_no),
     p_received_at,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_remark,
     p_actor_user_id,
     p_actor_employee_id
   );
@@ -1923,7 +1873,7 @@ BEGIN
         p_expected_fulfillment_version
       ),
     v_result,
-    CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    v_remark,
     p_actor_user_id,
     p_actor_employee_id,
     p_idempotency_key,
