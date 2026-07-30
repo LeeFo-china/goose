@@ -9,6 +9,9 @@ import {
   observeBlockedUntilRelease,
   runWithForcedRollback,
 } from "./supplier-purchase-requisition-smoke";
+import {
+  assertConcurrentBudgetEvidence,
+} from "./supplier-purchase-requisition-smoke-concurrency";
 
 type FakeTransaction = { marker: string };
 
@@ -58,6 +61,9 @@ describe("supplier purchase requisition database smoke helpers", () => {
   test("uses stable, unique UUIDs for rollback-only fixtures", () => {
     expect(SMOKE_IDS.requisition).toBe(
       "35000000-0000-4000-8000-000000000001",
+    );
+    expect(SMOKE_IDS.purchaseOrderConflict).toBe(
+      "35000000-0000-4000-8000-000000000009",
     );
     expect(new Set(Object.values(SMOKE_IDS)).size).toBe(
       Object.values(SMOKE_IDS).length,
@@ -127,12 +133,75 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(assertExplainUsesIndex([
       {
         "QUERY PLAN":
-          "Bitmap Index Scan on project_cost_commitments_active_lookup_idx",
+          "Bitmap Index Scan on project_cost_commitments_active_lookup_idx " +
+          "(actual time=0.010..0.011 rows=1 loops=1)",
       },
+      { "QUERY PLAN": "Buffers: shared hit=2" },
     ])).toBe(true);
     expect(() => assertExplainUsesIndex([
       { "QUERY PLAN": "Seq Scan on project_cost_commitments" },
     ])).toThrow("project_cost_commitments_active_lookup_idx");
+    expect(() => assertExplainUsesIndex([
+      {
+        "QUERY PLAN":
+          "Index Scan using project_cost_commitments_active_lookup_idx",
+      },
+    ])).toThrow("runtime");
+  });
+
+  test("proves two individually affordable submissions contend for one budget", () => {
+    expect(assertConcurrentBudgetEvidence({
+      a: {
+        requisition: {
+          supplier_id: "supplier-a",
+          budget_status: "within_budget",
+          total_amount: "600.00",
+        },
+        commitments: [{
+          status: "reserved",
+          amount: "600.00",
+          available_amount_snapshot: "1000.00",
+        }],
+      },
+      b: {
+        requisition: {
+          supplier_id: "supplier-b",
+          budget_status: "within_budget",
+          total_amount: "600.00",
+        },
+        commitments: [{
+          status: "reserved",
+          amount: "600.00",
+          available_amount_snapshot: "1000.00",
+        }],
+      },
+    })).toBe(true);
+    expect(() => assertConcurrentBudgetEvidence({
+      a: {
+        requisition: {
+          supplier_id: "same-supplier",
+          budget_status: "within_budget",
+          total_amount: "400.00",
+        },
+        commitments: [{
+          status: "reserved",
+          amount: "400.00",
+          available_amount_snapshot: "1000.00",
+        }],
+      },
+      b: {
+        requisition: {
+          supplier_id: "same-supplier",
+          budget_status: "within_budget",
+          total_amount: "400.00",
+        },
+        commitments: [{
+          status: "reserved",
+          amount: "400.00",
+          available_amount_snapshot: "1000.00",
+        }],
+      },
+    })).toThrow("distinct suppliers");
   });
 
   test("holds the second operation until release and rolls back both transactions", async () => {
@@ -188,6 +257,10 @@ describe("supplier purchase requisition database smoke helpers", () => {
       "./supplier-purchase-requisition-smoke-concurrency.ts",
       import.meta.url,
     )).text();
+    const planSource = await Bun.file(new URL(
+      "./supplier-purchase-requisition-smoke-plan.ts",
+      import.meta.url,
+    )).text();
 
     for (const rpc of [
       REQUISITION_SMOKE_SQL_CONTRACTS.save,
@@ -209,6 +282,17 @@ describe("supplier purchase requisition database smoke helpers", () => {
       "const bResult = await observe(operationB",
     );
     expect(concurrencySource).toContain("assertSubmitted(bResult");
+    expect(concurrencySource).toContain("bSaved");
+    expect(concurrencySource).toContain("seedConcurrentSupplier");
+    expect(concurrencySource).toContain("countConcurrentFixtureRows");
+    expect(sqlSource).toContain("remaining_fixture_count");
+    expect(`${mainSource}\n${planSource}`).not.toContain("enable_seqscan");
+    expect(planSource).toContain("explain (analyze, buffers, format text)");
+    expect(mainSource).toContain("remaining_explain_fixture_count");
+    expect(mainSource).toContain("purchaseOrderConflict");
+    expect(mainSource).toContain(
+      "SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED",
+    );
     for (const key of Object.keys(passingSummary)) {
       expect(mainSource).not.toMatch(new RegExp(`${key}:\\s*true`));
     }

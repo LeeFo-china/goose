@@ -47,6 +47,9 @@ export function RequisitionBudgetSummary({
   );
   const isOverBudget =
     detail.requisition.budget_status === "over_budget";
+  const isCommitmentReleased = snapshots.every(
+    ({ status }) => status === "released",
+  );
   const categoryNames = Object.fromEntries(
     categories.map((category) => [category.id, category.name]),
   );
@@ -60,7 +63,9 @@ export function RequisitionBudgetSummary({
             以下金额来自提交时的项目预算与承诺快照。
           </p>
         </div>
-        {isOverBudget ? (
+        {isCommitmentReleased ? (
+          <Badge variant="success">预算承诺已释放</Badge>
+        ) : isOverBudget ? (
           <Badge variant="danger">
             <AlertTriangle />
             超出预算 {formatRequisitionMoney(facts.shortfallAmount)}

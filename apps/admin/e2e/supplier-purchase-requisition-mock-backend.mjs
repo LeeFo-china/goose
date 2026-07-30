@@ -65,8 +65,8 @@ function readBody(request) {
 }
 
 function pagination(url, maximum = 100) {
-  const page = Number(url.searchParams.get("page") ?? "1");
-  const pageSize = Number(url.searchParams.get("pageSize") ?? "20");
+  const page = Number(url.searchParams.get("page"));
+  const pageSize = Number(url.searchParams.get("pageSize"));
   if (!Number.isSafeInteger(page) || page < 1 ||
     !Number.isSafeInteger(pageSize) || pageSize < 1 || pageSize > maximum) {
     return null;
@@ -81,6 +81,11 @@ function sendPage(
   fields = [],
   maximum = 100,
 ) {
+  state.listGets.push({
+    path: url.pathname,
+    page: url.searchParams.get("page"),
+    pageSize: url.searchParams.get("pageSize"),
+  });
   const page = pagination(url, maximum);
   if (!page) {
     sendError(response, 400, "VALIDATION_ERROR",
@@ -195,6 +200,11 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/__test/mutations") {
       return sendJson(response, 200, {
         mutations: structuredClone(state.mutations),
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/__test/list-gets") {
+      return sendJson(response, 200, {
+        requests: structuredClone(state.listGets),
       });
     }
     if (request.method === "GET" && url.pathname === "/__test/state") {

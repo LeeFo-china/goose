@@ -105,6 +105,7 @@ export function createState() {
     purchaseOrders: [],
     purchaseOrderItems: new Map(),
     mutations: [],
+    listGets: [],
     idempotency: new Map(),
     requestSequence: 2,
   };

@@ -215,3 +215,83 @@ export async function commitmentStatus(
   `;
   return rows.map(({ status }) => status);
 }
+
+export async function commitmentEvidence(
+  sql: SmokeSql,
+  tenantId: string,
+  requisitionId: string,
+) {
+  return sql<Array<{
+    status: string;
+    amount: string;
+    available_amount_snapshot: string;
+  }>>`
+    select commitment.status, commitment.amount::text,
+      commitment.available_amount_snapshot::text
+    from public.project_cost_commitments as commitment
+    where commitment.tenant_id = ${tenantId}::uuid
+      and commitment.source_id = ${requisitionId}::uuid
+    order by commitment.cost_category_id;
+  `;
+}
+
+type ConcurrentFixtureIds = {
+  concurrentA: string; concurrentB: string;
+  concurrentSupplierA: string; concurrentSupplierB: string;
+  concurrentRelationshipA: string; concurrentRelationshipB: string;
+  concurrentProductA: string; concurrentProductB: string;
+  concurrentSkuA: string; concurrentSkuB: string;
+  concurrentPriceListA: string; concurrentPriceListB: string;
+  concurrentPriceItemA: string; concurrentPriceItemB: string;
+};
+
+export async function countConcurrentFixtureRows(
+  sql: SmokeSql,
+  ids: ConcurrentFixtureIds,
+) {
+  const rows = await sql<{ remaining_fixture_count: number }[]>`
+    select sum(residual.count)::integer as remaining_fixture_count
+    from (
+      select count(*) from public.supplier_purchase_requisitions
+      where id in (${ids.concurrentA}::uuid, ${ids.concurrentB}::uuid)
+      union all
+      select count(*) from public.project_cost_commitments
+      where source_id in (${ids.concurrentA}::uuid, ${ids.concurrentB}::uuid)
+      union all
+      select count(*) from public.suppliers
+      where id in (
+        ${ids.concurrentSupplierA}::uuid, ${ids.concurrentSupplierB}::uuid
+      )
+      union all
+      select count(*) from public.supplier_qualifications
+      where supplier_id in (
+        ${ids.concurrentSupplierA}::uuid, ${ids.concurrentSupplierB}::uuid
+      )
+      union all
+      select count(*) from public.tenant_suppliers
+      where id in (
+        ${ids.concurrentRelationshipA}::uuid,
+        ${ids.concurrentRelationshipB}::uuid
+      )
+      union all
+      select count(*) from public.supplier_products
+      where id in (
+        ${ids.concurrentProductA}::uuid, ${ids.concurrentProductB}::uuid
+      )
+      union all
+      select count(*) from public.supplier_skus
+      where id in (${ids.concurrentSkuA}::uuid, ${ids.concurrentSkuB}::uuid)
+      union all
+      select count(*) from public.supplier_price_lists
+      where id in (
+        ${ids.concurrentPriceListA}::uuid, ${ids.concurrentPriceListB}::uuid
+      )
+      union all
+      select count(*) from public.supplier_price_list_items
+      where id in (
+        ${ids.concurrentPriceItemA}::uuid, ${ids.concurrentPriceItemB}::uuid
+      )
+    ) as residual;
+  `;
+  return rows[0]?.remaining_fixture_count ?? -1;
+}

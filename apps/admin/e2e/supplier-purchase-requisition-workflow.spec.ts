@@ -12,6 +12,12 @@ type Mutation = {
   payload: Record<string, unknown>;
 };
 
+type ListGet = {
+  path: string;
+  page: string | null;
+  pageSize: string | null;
+};
+
 const serverFactKeys = new Set([
   "unit_price",
   "tax_rate",
@@ -218,6 +224,9 @@ test("采购申请完成预算承诺、分权审批、转换与释放闭环", as
   await cancel.getByRole("button", { name: "确认取消" }).click();
   sheet = page.getByRole("dialog", { name: "采购申请详情" });
   await expect(sheet.getByText("已取消", { exact: true })).toBeVisible();
+  await expect(
+    sheet.getByText("预算承诺已释放", { exact: true }),
+  ).toBeVisible();
   await closeSheet(sheet);
 
   const stateResponse = await request.get(
@@ -235,6 +244,38 @@ test("采购申请完成预算承诺、分权审批、转换与释放闭环", as
   expect(state.commitments.filter(
     ({ source_id }) => source_id === cancelled?.id,
   ).every(({ status }) => status === "released")).toBe(true);
+
+  const listGetResponse = await request.get(
+    `${mockBackendBaseUrl}/__test/list-gets`,
+  );
+  expect(listGetResponse.ok()).toBe(true);
+  const listGets = (await listGetResponse.json() as {
+    requests: ListGet[];
+  }).requests;
+  const requiredListPaths = [
+    /^\/supplier-purchase-requisitions$/,
+    /^\/supplier-purchase-requisitions\/[^/]+\/items$/,
+    /^\/supplier-purchase-requisition-project-options$/,
+    /^\/supplier-purchase-requisition-supplier-options$/,
+    /^\/supplier-purchase-requisition-cost-categories$/,
+    /^\/supplier-purchase-requisition-catalog$/,
+  ];
+  for (const pattern of requiredListPaths) {
+    expect(listGets.some(({ path }) => pattern.test(path))).toBe(true);
+  }
+  for (const requestEntry of listGets) {
+    const pageNumber = Number(requestEntry.page);
+    const pageSize = Number(requestEntry.pageSize);
+    expect(requestEntry.page).not.toBeNull();
+    expect(requestEntry.pageSize).not.toBeNull();
+    expect(Number.isSafeInteger(pageNumber) && pageNumber >= 1).toBe(true);
+    expect(
+      Number.isSafeInteger(pageSize) && pageSize >= 1 && pageSize <= 100,
+    ).toBe(true);
+    if (requestEntry.path === "/supplier-purchase-requisition-catalog") {
+      expect(pageSize).toBeLessThanOrEqual(20);
+    }
+  }
 
   const mutationResponse = await request.get(
     `${mockBackendBaseUrl}/__test/mutations`,

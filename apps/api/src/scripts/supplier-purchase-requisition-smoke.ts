@@ -12,11 +12,11 @@ import {
   reviewRequisition,
   saveRequisition,
   submitRequisition,
-  type RequisitionSmokeFixture,
 } from "./supplier-purchase-requisition-smoke-sql";
 import {
   runConcurrentBudgetSmoke,
 } from "./supplier-purchase-requisition-smoke-concurrency";
+import { explainActiveCommitments } from "./supplier-purchase-requisition-smoke-plan";
 
 export const SMOKE_IDS = {
   requisition: "35000000-0000-4000-8000-000000000001",
@@ -27,6 +27,19 @@ export const SMOKE_IDS = {
   purchaseOrder: "35000000-0000-4000-8000-000000000006",
   costCategory: "35000000-0000-4000-8000-000000000007",
   budget: "35000000-0000-4000-8000-000000000008",
+  purchaseOrderConflict: "35000000-0000-4000-8000-000000000009",
+  concurrentSupplierA: "35000000-0000-4000-8000-000000000010",
+  concurrentSupplierB: "35000000-0000-4000-8000-000000000011",
+  concurrentRelationshipA: "35000000-0000-4000-8000-000000000012",
+  concurrentRelationshipB: "35000000-0000-4000-8000-000000000013",
+  concurrentProductA: "35000000-0000-4000-8000-000000000014",
+  concurrentProductB: "35000000-0000-4000-8000-000000000015",
+  concurrentSkuA: "35000000-0000-4000-8000-000000000016",
+  concurrentSkuB: "35000000-0000-4000-8000-000000000017",
+  concurrentPriceListA: "35000000-0000-4000-8000-000000000018",
+  concurrentPriceListB: "35000000-0000-4000-8000-000000000019",
+  concurrentPriceItemA: "35000000-0000-4000-8000-000000000020",
+  concurrentPriceItemB: "35000000-0000-4000-8000-000000000021",
 } as const;
 
 export const REQUISITION_SMOKE_SQL_CONTRACTS = {
@@ -120,7 +133,7 @@ export function assertRequisitionCommandResult(
       );
     }
   }
-  return result;
+  return Object.assign(result, { requisition });
 }
 
 export function assertSmokeSummary(value: unknown): SmokeSummary {
@@ -157,6 +170,11 @@ export function assertExplainUsesIndex(
       `EXPLAIN must use ${
         REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex
       }`,
+    );
+  }
+  if (!plan.includes("actual time=") || !plan.includes("Buffers:")) {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      "EXPLAIN runtime evidence is required",
     );
   }
   return true;
@@ -217,23 +235,6 @@ async function seedFixture(sql: SmokeSql) {
   const base = await selectFixtureReferences(sql);
   await seedSupplierFixture(sql, base);
   return extendFixture(sql, base, SMOKE_IDS.costCategory, SMOKE_IDS.budget);
-}
-
-async function explainActiveCommitments(
-  sql: SmokeSql,
-  fixture: RequisitionSmokeFixture,
-) {
-  await sql`set local enable_seqscan = off;`;
-  const rows = await sql<{ "QUERY PLAN": string }[]>`
-    explain
-    select sum(commitment.amount)
-    from public.project_cost_commitments as commitment
-    where commitment.tenant_id = ${fixture.tenant_id}::uuid
-      and commitment.project_id = ${fixture.project_id}::uuid
-      and commitment.cost_category_id = ${fixture.cost_category_id}::uuid
-      and commitment.status in ('reserved', 'converted');
-  `;
-  return assertExplainUsesIndex(rows);
 }
 
 async function executeTransactionalSmoke(sql: SmokeSql) {
@@ -333,12 +334,30 @@ async function executeTransactionalSmoke(sql: SmokeSql) {
     ),
     { status: "converted", idempotent: true, version: 4 },
   );
-  const orderRows = await sql<{ count: number }[]>`
-    select count(*)::integer as count
+  const convertedConflict = expectResult(
+    await convertRequisition(
+      sql, fixture, SMOKE_IDS.conversion,
+      SMOKE_IDS.purchaseOrderConflict, 3,
+      "requisition-smoke-convert-conflict",
+    ),
+    "state_conflict",
+    "SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED",
+  );
+  const orderRows = await sql<Array<{
+    requisition_count: number;
+    conflicting_id_count: number;
+  }>>`
+    select count(*) filter (
+      where purchase_order.purchase_requisition_id =
+        ${SMOKE_IDS.conversion}::uuid
+    )::integer as requisition_count,
+    count(*) filter (
+      where purchase_order.id = ${SMOKE_IDS.purchaseOrderConflict}::uuid
+    )::integer as conflicting_id_count
     from public.supplier_purchase_orders as purchase_order
     where purchase_order.purchase_requisition_id =
-      ${SMOKE_IDS.conversion}::uuid
-      and purchase_order.id = ${SMOKE_IDS.purchaseOrder}::uuid;
+        ${SMOKE_IDS.conversion}::uuid
+      or purchase_order.id = ${SMOKE_IDS.purchaseOrderConflict}::uuid;
   `;
   const crossTenant = expectResult(
     await cancelRequisition(
@@ -363,11 +382,15 @@ async function executeTransactionalSmoke(sql: SmokeSql) {
     conversion_unique:
       converted.purchase_order_id === SMOKE_IDS.purchaseOrder &&
       convertedReplay.idempotent === true &&
-      orderRows[0]?.count === 1,
+      convertedConflict.error_code ===
+        "SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED" &&
+      orderRows[0]?.requisition_count === 1 &&
+      orderRows[0]?.conflicting_id_count === 0,
     cross_tenant_hidden:
       crossTenant.error_code === "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND" &&
       !("version" in crossTenant),
-    explain_uses_index: await explainActiveCommitments(sql, fixture),
+    explain_uses_index:
+      await explainActiveCommitments(sql, fixture, assertExplainUsesIndex),
   };
 }
 
@@ -380,16 +403,33 @@ export async function runSupplierPurchaseRequisitionSmoke(
       database,
       (transaction) => executeTransactionalSmoke(transaction as SmokeSql),
     );
-    const rollbackRows = await database<{ count: number }[]>`
-      select count(*)::integer as count
-      from public.supplier_purchase_requisitions
-      where id in (
-        ${SMOKE_IDS.requisition}::uuid,
-        ${SMOKE_IDS.cancellation}::uuid,
-        ${SMOKE_IDS.conversion}::uuid
-      );
+    const rollbackRows = await database<{
+      remaining_explain_fixture_count: number;
+    }[]>`
+      select sum(residual.count)::integer as remaining_explain_fixture_count
+      from (
+        select count(*) from public.supplier_purchase_requisitions
+        where id in (
+          ${SMOKE_IDS.requisition}::uuid,
+          ${SMOKE_IDS.cancellation}::uuid,
+          ${SMOKE_IDS.conversion}::uuid
+        ) or request_no like 'PR-20990101-%'
+        union all
+        select count(*) from public.project_cost_commitments
+        where source_id in (
+          ${SMOKE_IDS.requisition}::uuid,
+          ${SMOKE_IDS.cancellation}::uuid,
+          ${SMOKE_IDS.conversion}::uuid
+        )
+        union all
+        select count(*) from public.supplier_purchase_orders
+        where id in (
+          ${SMOKE_IDS.purchaseOrder}::uuid,
+          ${SMOKE_IDS.purchaseOrderConflict}::uuid
+        )
+      ) as residual;
     `;
-    if (rollbackRows[0]?.count !== 0) {
+    if (rollbackRows[0]?.remaining_explain_fixture_count !== 0) {
       throw new SupplierPurchaseRequisitionSmokeAssertionError(
         "transaction fixture was not rolled back",
       );
