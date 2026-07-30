@@ -10,10 +10,14 @@ export default async function SupplierPurchaseOrdersPage() {
   const permissions = new Set(session.permissions.map(({ code }) => code));
   const canViewPurchaseOrders = permissions.has("supplier.purchase-order.view");
   const canManagePurchaseOrders = permissions.has("supplier.purchase-order.manage");
+  const canManagePurchaseRequisitions = permissions.has(
+    "supplier.purchase-requisition.manage",
+  );
   return (
     <PurchaseOrderWorkspace
       canViewPurchaseOrders={canViewPurchaseOrders}
       canManagePurchaseOrders={canManagePurchaseOrders}
+      canManagePurchaseRequisitions={canManagePurchaseRequisitions}
     />
   );
 }

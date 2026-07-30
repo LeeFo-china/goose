@@ -2,6 +2,11 @@ import type {
   PageData,
 } from "@/components/suppliers/supplier-types";
 
+import type {
+  RequisitionBudgetStatus,
+  RequisitionStatus,
+} from "../supplier-purchase-requisitions/requisition-types";
+
 export type { PageData };
 
 export type PurchaseOrderStatus = "draft" | "submitted" | "cancelled";
@@ -21,6 +26,7 @@ export type PurchaseOrder = {
   subtotal_amount: string;
   tax_amount: string;
   total_amount: string;
+  purchase_requisition_id: string | null;
   version: number;
   created_by_employee_id: string;
   updated_by_employee_id: string;
@@ -47,6 +53,17 @@ export type PurchaseOrderWithReferences = PurchaseOrder & {
     onboarding_status: string;
     operational_status: string;
   };
+  purchase_requisition: {
+    id: string;
+    request_no: string;
+    status: RequisitionStatus;
+    budget_status: RequisitionBudgetStatus;
+  } | null;
+};
+
+export type EditablePurchaseOrder = PurchaseOrderWithReferences & {
+  status: "draft";
+  purchase_requisition_id: string;
 };
 
 export type PurchaseOrderItem = {

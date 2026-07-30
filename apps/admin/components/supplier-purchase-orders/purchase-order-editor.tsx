@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { FormSelect } from "@/components/admin/form-select";
@@ -50,13 +50,13 @@ import {
   SelectedPurchaseOrderLines,
 } from "./purchase-order-editor-tables";
 import type {
+  EditablePurchaseOrder,
   ProjectOption,
   PurchaseOrder,
   PurchaseOrderCatalogItem,
   PurchaseOrderCatalogPage,
   PurchaseOrderDraftLine,
   PurchaseOrderSupplierOption,
-  PurchaseOrderWithReferences,
 } from "./purchase-order-types";
 
 const emptyCatalog: PurchaseOrderCatalogPage = {
@@ -66,7 +66,6 @@ const emptyCatalog: PurchaseOrderCatalogPage = {
 
 export function PurchaseOrderEditor({
   open,
-  orderId,
   order,
   projects,
   relationships,
@@ -79,8 +78,7 @@ export function PurchaseOrderEditor({
   onSaved,
 }: {
   open: boolean;
-  orderId: string;
-  order: PurchaseOrderWithReferences | null;
+  order: EditablePurchaseOrder;
   projects: ProjectOption[];
   relationships: PurchaseOrderSupplierOption[];
   canLoadMoreProjects: boolean;
@@ -115,30 +113,11 @@ export function PurchaseOrderEditor({
   const [savedFacts, setSavedFacts] = useState<Partial<PurchaseOrder> | null>(
     null,
   );
-  const projectsRef = useRef(projects);
-  const relationshipsRef = useRef(relationships);
-  const existingOrderId = order?.id;
-
-  projectsRef.current = projects;
-  relationshipsRef.current = relationships;
+  const existingOrderId = order.id;
 
   const hydrateDraft = useCallback(async () => {
     setError(null);
-    if (!existingOrderId) {
-      setProjectId(projectsRef.current[0]?.id ?? "");
-      setTenantSupplierId(
-        relationshipsRef.current.find(({ relationship_status }) =>
-          relationship_status === "active"
-        )?.tenant_supplier_id ?? "",
-      );
-      setExpectedVersion(0);
-      setExpectedDeliveryDate("");
-      setRemark("");
-      setLines([]);
-      setFacts({});
-      setSavedFacts(null);
-      return;
-    }
+    setSavedFacts(null);
     setLoadingDraft(true);
     try {
       const [latest, itemPage] = await Promise.all([
@@ -232,6 +211,10 @@ export function PurchaseOrderEditor({
   );
 
   async function handleSave() {
+    if (savedFacts?.id !== existingOrderId) {
+      setError("采购单草稿尚未加载完成");
+      return;
+    }
     const draft = {
       projectId,
       tenantSupplierId,
@@ -247,7 +230,7 @@ export function PurchaseOrderEditor({
     const payload = toDraftPayload(draft);
     const nextAttempt = resolveSupplierCommandAttempt(attempt, {
       scope: "purchase-order:save",
-      resourcePath: orderId,
+      resourcePath: existingOrderId,
       payload,
     });
     setAttempt(nextAttempt);
@@ -255,13 +238,13 @@ export function PurchaseOrderEditor({
     setError(null);
     try {
       await savePurchaseOrderDraft(
-        orderId,
+        existingOrderId,
         payload,
         nextAttempt.idempotencyKey,
       );
       const [latest, itemPage] = await Promise.all([
-        loadPurchaseOrder(orderId),
-        loadPurchaseOrderItems(orderId),
+        loadPurchaseOrder(existingOrderId),
+        loadPurchaseOrderItems(existingOrderId),
       ]);
       setExpectedVersion(latest.version);
       setLines(itemPage.list.map((item) => ({
@@ -300,9 +283,9 @@ export function PurchaseOrderEditor({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{order ? "编辑采购单草稿" : "新建采购单"}</DialogTitle>
+          <DialogTitle>编辑采购单草稿</DialogTitle>
           <DialogDescription>
-            选择项目与合作供应商，从当前有效基础供货价目录添加商品。
+            复核申请生成的项目与供应商，并按当前有效价格调整商品和交期。
           </DialogDescription>
         </DialogHeader>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
@@ -468,7 +451,15 @@ export function PurchaseOrderEditor({
           >
             关闭
           </Button>
-          <Button type="button" disabled={saving} onClick={handleSave}>
+          <Button
+            type="button"
+            disabled={
+              saving ||
+              loadingDraft ||
+              savedFacts?.id !== existingOrderId
+            }
+            onClick={handleSave}
+          >
             {saving ? <Spinner data-icon="inline-start" /> : null}
             保存草稿
           </Button>

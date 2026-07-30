@@ -21,11 +21,15 @@ import {
 import { ClipboardList } from "lucide-react";
 
 import {
+  canEditPurchaseOrderDraft,
   formatPurchaseMoney,
   purchaseOrderActions,
   purchaseOrderStatusMeta,
 } from "./purchase-order-rules";
-import type { PurchaseOrderWithReferences } from "./purchase-order-types";
+import type {
+  EditablePurchaseOrder,
+  PurchaseOrderWithReferences,
+} from "./purchase-order-types";
 
 export function PurchaseOrderList({
   orders,
@@ -38,7 +42,7 @@ export function PurchaseOrderList({
   loading: boolean;
   canManage: boolean;
   onOpen: (order: PurchaseOrderWithReferences) => void;
-  onEdit: (order: PurchaseOrderWithReferences) => void;
+  onEdit: (order: EditablePurchaseOrder) => void;
 }) {
   if (loading) {
     return (
@@ -59,7 +63,7 @@ export function PurchaseOrderList({
           </EmptyMedia>
           <EmptyTitle>暂无采购单</EmptyTitle>
           <EmptyDescription>
-            调整筛选条件，或新建一张项目采购单。
+            调整筛选条件，或先发起采购申请并在批准后生成采购单。
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -82,7 +86,7 @@ export function PurchaseOrderList({
       <TableBody>
         {orders.map((order) => {
           const status = purchaseOrderStatusMeta[order.status];
-          const actions = purchaseOrderActions(order.status, canManage);
+          const canEdit = canEditPurchaseOrderDraft(order, canManage);
           return (
             <TableRow key={order.id}>
               <TableCell className="font-mono font-medium">
@@ -113,7 +117,7 @@ export function PurchaseOrderList({
                   >
                     查看
                   </Button>
-                  {actions.includes("edit") ? (
+                  {canEdit ? (
                     <Button
                       type="button"
                       size="sm"

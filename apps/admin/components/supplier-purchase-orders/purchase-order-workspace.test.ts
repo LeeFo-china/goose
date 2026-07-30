@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   addDraftLine,
+  canEditPurchaseOrderDraft,
   commandErrorMessage,
   purchaseOrderActions,
   removeDraftLine,
@@ -23,6 +24,25 @@ describe("采购单工作台规则", () => {
     expect(purchaseOrderActions("submitted", true)).toEqual(["cancel"]);
     expect(purchaseOrderActions("cancelled", true)).toEqual([]);
     expect(purchaseOrderActions("draft", false)).toEqual([]);
+  });
+
+  test("只有申请转换生成的草稿可以进入采购单编辑器", () => {
+    expect(canEditPurchaseOrderDraft({
+      status: "draft",
+      purchase_requisition_id: "requisition-1",
+    }, true)).toBe(true);
+    expect(canEditPurchaseOrderDraft({
+      status: "draft",
+      purchase_requisition_id: null,
+    }, true)).toBe(false);
+    expect(canEditPurchaseOrderDraft({
+      status: "submitted",
+      purchase_requisition_id: "requisition-1",
+    }, true)).toBe(false);
+    expect(canEditPurchaseOrderDraft({
+      status: "draft",
+      purchase_requisition_id: "requisition-1",
+    }, false)).toBe(false);
   });
 
   test("要求项目、供应商和至少一行有效商品", () => {

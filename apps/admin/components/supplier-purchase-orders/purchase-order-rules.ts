@@ -1,11 +1,19 @@
 import type {
+  EditablePurchaseOrder,
   PurchaseOrder,
   PurchaseOrderDraftLine,
   PurchaseOrderDraftState,
   PurchaseOrderStatus,
+  PurchaseOrderWithReferences,
 } from "./purchase-order-types";
 
 export type PurchaseOrderAction = "edit" | "submit" | "cancel";
+
+export type RequisitionCreationEntry = {
+  href: "/supplier-purchase-requisitions?create=1";
+  label: "发起采购申请";
+  description: "采购单由已批准的采购申请转换生成";
+};
 
 export const purchaseOrderStatusMeta: Record<
   PurchaseOrderStatus,
@@ -27,6 +35,29 @@ export function purchaseOrderActions(
   if (status === "draft") return ["edit", "submit", "cancel"];
   if (status === "submitted") return ["cancel"];
   return [];
+}
+
+export function requisitionCreationEntry(
+  canManagePurchaseRequisitions: boolean,
+): RequisitionCreationEntry | null {
+  if (!canManagePurchaseRequisitions) return null;
+  return {
+    href: "/supplier-purchase-requisitions?create=1",
+    label: "发起采购申请",
+    description: "采购单由已批准的采购申请转换生成",
+  };
+}
+
+export function canEditPurchaseOrderDraft(
+  order: Pick<
+    PurchaseOrderWithReferences,
+    "status" | "purchase_requisition_id"
+  >,
+  canManage: boolean,
+): order is EditablePurchaseOrder {
+  return canManage &&
+    order.status === "draft" &&
+    order.purchase_requisition_id !== null;
 }
 
 export function validatePurchaseOrderDraft(input: Pick<

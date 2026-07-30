@@ -58,6 +58,39 @@ describe("供应商采购单页面边界", () => {
     expect(workspace).toContain("<PurchaseOrderDetail");
   });
 
+  test("采购单页面只按采购申请管理权限提供申请入口", () => {
+    const page = readSource(
+      "../../app/(console)/supplier-purchase-orders/page.tsx",
+    );
+    const workspace = readSource("./purchase-order-workspace.tsx");
+    const rules = readSource("./purchase-order-rules.ts");
+    const list = readSource("./purchase-order-list.tsx");
+
+    expect(page).toMatch(
+      /permissions\.has\(\s*"supplier\.purchase-requisition\.manage"/,
+    );
+    expect(page).toContain("canManagePurchaseRequisitions");
+    expect(workspace).toContain("href={creationEntry.href}");
+    expect(workspace).toContain("{creationEntry.label}");
+    expect(workspace).toContain("requisitionCreationEntry(");
+    expect(workspace).not.toContain("newOrderId");
+    expect(workspace).not.toContain("crypto.randomUUID()");
+    expect(workspace).not.toContain("新建采购单");
+    expect(rules).toContain("requisitionCreationEntry");
+    expect(rules).toContain('href: "/supplier-purchase-requisitions?create=1"');
+    expect(rules).toContain('label: "发起采购申请"');
+    expect(list).not.toContain("或新建一张项目采购单");
+  });
+
+  test("采购单编辑器只接受已转换生成的现有草稿", () => {
+    const editor = readSource("./purchase-order-editor.tsx");
+
+    expect(editor).toContain("order: EditablePurchaseOrder;");
+    expect(editor).not.toContain('"新建采购单"');
+    expect(editor).not.toContain("setExpectedVersion(0)");
+    expect(editor).not.toContain("if (!existingOrderId)");
+  });
+
   test("保存接口只发送 SKU、数量和草稿头字段", () => {
     const api = readSource("./purchase-order-api.ts");
     const rules = readSource("./purchase-order-rules.ts");
@@ -82,19 +115,13 @@ describe("供应商采购单页面边界", () => {
     expect(workspace).toContain("loadMoreSuppliers");
     expect(editor).toContain("加载更多项目");
     expect(editor).toContain("加载更多合作供应商");
-    expect(editor).toContain("loadPurchaseOrderItems(orderId)");
+    expect(editor).toContain("loadPurchaseOrderItems(existingOrderId)");
     expect(editor).toContain("catalogFactFromSnapshot(item)");
   });
 
   test("选项分页更新不会重新水合并覆盖未保存草稿", () => {
     const editor = readSource("./purchase-order-editor.tsx");
 
-    expect(editor).toContain("const projectsRef = useRef(projects)");
-    expect(editor).toContain(
-      "const relationshipsRef = useRef(relationships)",
-    );
-    expect(editor).toContain("projectsRef.current = projects");
-    expect(editor).toContain("relationshipsRef.current = relationships");
     expect(editor).toMatch(
       /const hydrateDraft = useCallback\([\s\S]+?\}, \[existingOrderId\]\);/,
     );

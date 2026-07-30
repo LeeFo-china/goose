@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardPlus, Search } from "lucide-react";
+import Link from "next/link";
 
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -25,7 +26,9 @@ import {
 import { PurchaseOrderDetail } from "./purchase-order-detail";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
 import { PurchaseOrderList } from "./purchase-order-list";
+import { requisitionCreationEntry } from "./purchase-order-rules";
 import type {
+  EditablePurchaseOrder,
   ProjectOption,
   PurchaseOrderPage,
   PurchaseOrderSupplierOption,
@@ -46,9 +49,11 @@ const statusOptions = [
 export function PurchaseOrderWorkspace({
   canViewPurchaseOrders,
   canManagePurchaseOrders,
+  canManagePurchaseRequisitions,
 }: {
   canViewPurchaseOrders: boolean;
   canManagePurchaseOrders: boolean;
+  canManagePurchaseRequisitions: boolean;
 }) {
   const [orders, setOrders] = useState(emptyOrders);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -71,8 +76,7 @@ export function PurchaseOrderWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorOrder, setEditorOrder] =
-    useState<PurchaseOrderWithReferences | null>(null);
-  const [newOrderId, setNewOrderId] = useState("");
+    useState<EditablePurchaseOrder | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailOrder, setDetailOrder] =
     useState<PurchaseOrderWithReferences | null>(null);
@@ -197,6 +201,9 @@ export function PurchaseOrderWorkspace({
       label: relationship.supplier.name,
     })),
   ], [relationships]);
+  const creationEntry = requisitionCreationEntry(
+    canManagePurchaseRequisitions,
+  );
 
   if (!canViewPurchaseOrders) {
     return (
@@ -222,20 +229,16 @@ export function PurchaseOrderWorkspace({
         <div>
           <h1 className="text-xl font-semibold tracking-normal">采购单</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            按项目向合作供应商创建采购单，提交前自动复核当前有效基础供货价。
+            {creationEntry?.description ??
+              "查看由已批准采购申请生成的采购单，并跟进提交与履约。"}
           </p>
         </div>
-        {canManagePurchaseOrders ? (
-          <Button
-            type="button"
-            onClick={() => {
-              setEditorOrder(null);
-              setNewOrderId(crypto.randomUUID());
-              setEditorOpen(true);
-            }}
-          >
-            <ClipboardPlus data-icon="inline-start" />
-            新建采购单
+        {creationEntry ? (
+          <Button asChild>
+            <Link href={creationEntry.href}>
+              <ClipboardPlus data-icon="inline-start" />
+              {creationEntry.label}
+            </Link>
           </Button>
         ) : null}
       </div>
@@ -310,7 +313,6 @@ export function PurchaseOrderWorkspace({
             }}
             onEdit={(order) => {
               setEditorOrder(order);
-              setNewOrderId("");
               setEditorOpen(true);
             }}
           />
@@ -341,10 +343,9 @@ export function PurchaseOrderWorkspace({
           </div>
         </CardContent>
       </Card>
-      {canManagePurchaseOrders && (editorOrder || newOrderId) ? (
+      {canManagePurchaseOrders && editorOrder ? (
         <PurchaseOrderEditor
           open={editorOpen}
-          orderId={editorOrder?.id ?? newOrderId}
           order={editorOrder}
           projects={projects}
           relationships={relationships}
