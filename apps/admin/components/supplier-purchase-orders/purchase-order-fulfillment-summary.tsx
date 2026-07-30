@@ -66,7 +66,7 @@ export function PurchaseOrderFulfillmentSummary({
   const timeline = buildTimeline(detail, shipments.list, receipts.list);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="min-w-0 max-w-full flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h4 className="text-sm font-medium">履约汇总</h4>
@@ -77,8 +77,8 @@ export function PurchaseOrderFulfillmentSummary({
         </div>
         <Badge variant={status.variant}>{status.label}</Badge>
       </div>
-      <div className="overflow-x-auto rounded-md border">
-        <Table>
+      <div className="min-w-0 max-w-full rounded-md border">
+        <Table containerClassName="min-w-0 max-w-full overflow-x-auto">
           <TableHeader>
             <TableRow>
               <TableHead className="min-w-52">采购明细</TableHead>
@@ -131,7 +131,7 @@ export function PurchaseOrderFulfillmentSummary({
         </Table>
       </div>
       <Separator />
-      <div className="flex flex-col gap-2">
+      <div className="min-w-0 max-w-full flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h4 className="text-sm font-medium">履约时间线</h4>
           <p className="text-xs text-muted-foreground">
@@ -140,8 +140,8 @@ export function PurchaseOrderFulfillmentSummary({
             {receipts.list.length} / {receipts.pagination.total} 条
           </p>
         </div>
-        <div className="overflow-x-auto rounded-md border">
-          <Table>
+        <div className="min-w-0 max-w-full rounded-md border">
+          <Table containerClassName="min-w-0 max-w-full overflow-x-auto">
             <TableHeader>
               <TableRow>
                 <TableHead>类型</TableHead>

@@ -296,7 +296,7 @@ export function PurchaseOrderFulfillmentPanel({
 
   return (
     <section
-      className="flex flex-col gap-4 rounded-md border p-4"
+      className="min-w-0 max-w-full flex flex-col gap-4 rounded-md border p-4"
       aria-labelledby="purchase-order-fulfillment-title"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">

@@ -197,7 +197,7 @@ export function PurchaseOrderDetail({
   const status = current ? purchaseOrderStatusMeta[current.status] : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] min-w-0 max-w-5xl grid-cols-[minmax(0,1fr)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>采购单详情</DialogTitle>
           <DialogDescription>
@@ -212,7 +212,7 @@ export function PurchaseOrderDetail({
           </div>
         ) : (
           <>
-            <div className="grid gap-3 rounded-md border p-4 md:grid-cols-3">
+            <div className="min-w-0 max-w-full grid gap-3 rounded-md border p-4 md:grid-cols-3">
               <Fact label="采购单号" value={current.order_no} mono />
               <Fact label="项目" value={current.project.name} />
               <Fact label="供应商" value={current.supplier.name} />
@@ -243,8 +243,10 @@ export function PurchaseOrderDetail({
                 mono
               />
             </div>
-            <div className="rounded-md border">
-              <Table>
+            <div className="min-w-0 max-w-full rounded-md border">
+              <Table
+                containerClassName="min-w-0 max-w-full overflow-x-auto"
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>商品 / SKU</TableHead>
@@ -291,7 +293,7 @@ export function PurchaseOrderDetail({
             />
           </>
         )}
-        <DialogFooter>
+        <DialogFooter className="min-w-0 max-w-full">
           <Button
             type="button"
             variant="outline"
@@ -379,7 +381,7 @@ function Fact({
   mono?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={cn(
         "mt-1 text-sm",

@@ -232,14 +232,17 @@ describe("供应商采购单页面边界", () => {
       });
   });
 
-  test("采购单详情挂载履约面板并把最新订单、明细和刷新入口下传", () => {
+  test("采购单详情窄屏只在表格区域横向滚动", () => {
     const detail = readSource("./purchase-order-detail.tsx");
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const summary = readSource("./purchase-order-fulfillment-summary.tsx");
+    const tableScroll = 'containerClassName="min-w-0 max-w-full overflow-x-auto"';
 
-    expect(detail).toContain("PurchaseOrderFulfillmentPanel");
-    expect(detail).toContain("order={current}");
-    expect(detail).toContain("purchaseOrderItems={items}");
-    expect(detail).toContain("canManage={canManage}");
-    expect(detail).toContain("onOrderChanged={handleFulfillmentChanged}");
+    expect(detail).toContain("grid-cols-[minmax(0,1fr)]");
+    expect(detail).toContain('<DialogFooter className="min-w-0 max-w-full">');
+    expect(detail).toContain(tableScroll);
+    expect(panel).toContain("min-w-0 max-w-full");
+    expect(summary.split(tableScroll)).toHaveLength(3);
   });
 
   test("履约面板并行分页加载事实并覆盖加载失败空态和只读状态", () => {
@@ -436,11 +439,8 @@ describe("供应商采购单页面边界", () => {
       expect(source).toContain("<FieldLegend");
       expect(source).toContain("aria-describedby=");
     }
-    expect(readSource("./purchase-order-fulfillment-summary.tsx"))
-      .toContain("有差异已收货");
   });
 });
-
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
