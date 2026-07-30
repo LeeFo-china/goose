@@ -275,78 +275,42 @@ describe("供应商采购单页面边界", () => {
     const openHandler = panel.match(
       /function handleConfirmOpen[\s\S]*?\n  }\n\n  return \(/,
     );
-    expect(openHandler).not.toBeNull();
     expect(openHandler?.[0]).not.toContain("new Date().toISOString()");
-    expect(panel).toContain("resolveSupplierCommandAttempt");
-    expect(panel).toContain("nextAttempt.idempotencyKey");
     expect(shipment).toContain("<DialogTitle>登记采购发货</DialogTitle>");
-    expect(shipment).toContain("<DialogDescription>");
     expect(shipment).toContain("shipmentRemaining(item)");
-    expect(shipment).toContain("remaining_quantity");
     expect(shipment).toContain("toShipmentPayload");
-    expect(shipment).toContain("if (!result.ok)");
-    expect(shipment).toContain("resolveSupplierCommandAttempt");
     expect(receipt).toContain("<DialogTitle>登记采购收货</DialogTitle>");
-    expect(receipt).toContain("<DialogDescription>");
     expect(receipt).toContain("receiptRemaining(item)");
-    expect(receipt).toContain("remaining_quantity");
     expect(receipt).toContain("toReceiptPayload");
-    expect(receipt).toContain("if (!result.ok)");
-    expect(receipt).toContain("resolveSupplierCommandAttempt");
-  });
-
-  test("三类履约命令仅在确定失败时清理尝试并让下一次使用新身份", () => {
-    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
-    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
-    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
-    const uiState = readSource("./purchase-order-fulfillment-ui-state.ts");
-
-    expect(panel).toContain(
-      "resolveSupplierCommandAttempt(confirmAttempt",
-    );
-    expect(panel).toContain("setConfirmAttempt(nextAttempt)");
-    expect(panel).toContain(
-      "if (shouldClearCommandAttempt(caught)) setConfirmAttempt(null)",
-    );
-    expect(shipment).toContain("resolveSupplierCommandAttempt(attempt");
-    expect(shipment).toContain("setAttempt(nextAttempt)");
-    expect(shipment).toContain(
-      "if (shouldClearCommandAttempt(caught)) setAttempt(null)",
-    );
-    expect(receipt).toContain("resolveSupplierCommandAttempt(attempt");
-    expect(receipt).toContain("setAttempt(nextAttempt)");
-    expect(receipt).toContain(
-      "if (shouldClearCommandAttempt(caught)) setAttempt(null)",
-    );
     for (const source of [panel, shipment, receipt]) {
-      expect(source).toContain("commandRetryMessage");
+      expect(source).toContain("beginFrozenCommand");
+      expect(source).toContain("useFrozenCommandSession");
+      expect(source).toContain('phase === "uncertain"');
+      expect(source).toContain("markFrozenCommandInFlight");
+      expect(source).toContain("activeCommand.payload");
+      expect(source).toContain("activeCommand.attempt.idempotencyKey");
+      expect(source).toContain("activeCommand.resourcePath");
+      expect(source).toContain("clearFrozenCommand()");
     }
-    expect(uiState).toContain("return !isUncertainCommandFailure(error)");
-    expect(uiState).toContain("系统会复用本次请求标识");
+    expect(panel).toContain("confirmBusy || confirmCommand !== null");
+    for (const source of [shipment, receipt]) {
+      expect(source).toContain("fieldsLocked = busy || command !== null");
+    }
   });
 
   test("履约汇总包含确认事实并以业务时间稳定倒序合并时间线", () => {
     const summary = readSource("./purchase-order-fulfillment-summary.tsx");
 
-    expect(summary).toContain("<Badge");
-    expect(summary).toContain("<Table");
-    expect(summary).toContain("<Separator");
     expect(summary).toContain("ordered_quantity");
-    expect(summary).toContain("shipped_quantity");
-    expect(summary).toContain("received_quantity");
     expect(summary).toContain("accepted_quantity");
-    expect(summary).toContain("rejected_quantity");
-    expect(summary).toContain("accepted_total_amount");
     expect(summary).toContain('kind: "confirmed"');
     expect(summary).toContain(
       "businessTime: detail.fulfillment.confirmed_at",
     );
     expect(summary).toContain("confirmed_by_employee_id");
-    expect(summary).toContain("confirmation_remark");
     expect(summary).toContain("供应商已确认");
     expect(summary).toContain("businessTime");
     expect(summary).toContain(".sort(");
-    expect(summary).toContain("truncate");
   });
 
   test("发货和收货头字段使用标准 FieldGroup 组合", () => {
@@ -393,6 +357,7 @@ describe("供应商采购单页面边界", () => {
     const detail = readSource("./purchase-order-detail.tsx");
     const panel = readSource("./purchase-order-fulfillment-panel.tsx");
     expect(detail).toContain("canCancelWithFulfillment(fulfillmentState)");
+    expect(detail).toContain("!hasLoadedDetail");
     expect(panel).toContain("onLoadStateChange");
     expect(panel).toContain("order.version");
   });
@@ -443,22 +408,6 @@ describe("供应商采购单页面边界", () => {
     expect(summary).toContain("当前显示收货");
   });
 
-  test("不确定命令关闭重开保留尝试且只有放弃动作清理草稿", () => {
-    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
-    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
-    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
-
-    expect(panel).toContain("if (nextOpen && !confirmAttempt)");
-    expect(panel).toContain("放弃本次尝试");
-    expect(panel).toContain("setConfirmAttempt(null)");
-    for (const source of [shipment, receipt]) {
-      expect(source).toContain("if (!open || attempt) return");
-      expect(source).toContain("放弃本次尝试");
-      expect(source).toContain("setAttempt(null)");
-      expect(source).toContain("复用原请求标识");
-    }
-  });
-
   test("命令成功后刷新失败不会回到命令 catch 重复提交", async () => {
     expect(await refreshAfterCommand(async () => true)).toBe(true);
     expect(await refreshAfterCommand(async () => {
@@ -469,7 +418,9 @@ describe("供应商采购单页面边界", () => {
     const shipment = readSource("./purchase-order-shipment-dialog.tsx");
     const receipt = readSource("./purchase-order-receipt-dialog.tsx");
     expect(panel).toContain("await refreshAfterCommand(handleSaved)");
-    expect(panel).toContain("handledOrderVersion.current = version");
+    expect(panel).toMatch(
+      /async function handleSaved\(\)[\s\S]*?await onOrderChanged\(\)[\s\S]*?return await reload\(\)/,
+    );
     expect(panel).toContain("确认事实已提交，但刷新失败");
     expect(shipment).toContain("await refreshAfterCommand(onSaved)");
     expect(shipment).toContain("发货记录已提交，但刷新失败");

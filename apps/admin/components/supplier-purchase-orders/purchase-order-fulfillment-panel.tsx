@@ -45,13 +45,20 @@ import { fulfillmentActions } from "./purchase-order-fulfillment-rules";
 import { PurchaseOrderFulfillmentSummary } from "./purchase-order-fulfillment-summary";
 import {
   appendPageById,
+  beginFrozenCommand,
+  canAbandonFrozenCommand,
+  clearFrozenCommand,
   commandRetryMessage,
   createLatestRequestGuard,
   type FulfillmentLoadState,
+  isUncertainCommandFailure,
+  markFrozenCommandInFlight,
+  markFrozenCommandUncertain,
   refreshAfterCommand,
-  shouldClearCommandAttempt,
 } from "./purchase-order-fulfillment-ui-state";
+import { useFrozenCommandSession } from "./purchase-order-fulfillment-command-state";
 import type {
+  PurchaseOrderFulfillmentConfirmPayload,
   PurchaseOrderFulfillmentDetail,
   PurchaseOrderReceiptPage,
   PurchaseOrderShipmentPage,
@@ -97,10 +104,14 @@ export function PurchaseOrderFulfillmentPanel({
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmRemark, setConfirmRemark] = useState("");
-  const [confirmSubmittedAt, setConfirmSubmittedAt] = useState("");
   const [confirmBusy, setConfirmBusy] = useState(false);
-  const [confirmAttempt, setConfirmAttempt] =
-    useState<SupplierCommandAttempt | null>(null);
+  const [confirmCommand, saveConfirmCommand] = useFrozenCommandSession<
+    PurchaseOrderFulfillmentConfirmPayload,
+    SupplierCommandAttempt
+  >(
+    order.id,
+    "confirm",
+  );
   const [shipmentOpen, setShipmentOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [historyBusy, setHistoryBusy] =
@@ -148,6 +159,7 @@ export function PurchaseOrderFulfillmentPanel({
       handledOrderVersion.current = null;
       return;
     }
+    handledOrderVersion.current = null;
     requestGuard.current.invalidate();
     historyRequestGuard.current.invalidate();
     setDetail(emptyDetail);
@@ -170,6 +182,12 @@ export function PurchaseOrderFulfillmentPanel({
     handledOrderVersion.current = version;
     return await reload();
   }
+
+  useEffect(() => {
+    if (confirmCommand) {
+      setConfirmRemark(confirmCommand.payload.remark ?? "");
+    }
+  }, [confirmCommand]);
 
   async function loadMoreHistory(kind: "shipments" | "receipts") {
     if (historyBusy) return;
@@ -211,35 +229,42 @@ export function PurchaseOrderFulfillmentPanel({
 
   async function handleConfirm() {
     if (confirmBusy) return;
-    const confirmedAt = confirmSubmittedAt || new Date().toISOString();
-    setConfirmSubmittedAt(confirmedAt);
-    const payload = {
-      expected_version: order.version,
-      confirmed_at: confirmedAt,
-      remark: confirmRemark.trim() || null,
-    };
-    const nextAttempt = resolveSupplierCommandAttempt(confirmAttempt, {
-      scope: "purchase-order:confirm-fulfillment",
-      resourcePath: order.id,
-      payload,
-    });
-    setConfirmAttempt(nextAttempt);
+    let activeCommand = confirmCommand?.phase === "uncertain"
+      ? markFrozenCommandInFlight(confirmCommand)
+      : null;
+    if (!activeCommand) {
+      const confirmedAt = new Date().toISOString();
+      const payload: PurchaseOrderFulfillmentConfirmPayload = {
+        expected_version: order.version,
+        confirmed_at: confirmedAt,
+        remark: confirmRemark.trim() || null,
+      };
+      const attempt = resolveSupplierCommandAttempt(null, {
+        scope: "purchase-order:confirm-fulfillment",
+        resourcePath: order.id,
+        payload,
+      });
+      activeCommand = beginFrozenCommand(attempt, payload, order.id);
+    }
+    saveConfirmCommand(activeCommand);
     setConfirmBusy(true);
     setError(null);
     try {
       await confirmPurchaseOrderFulfillment(
-        order.id,
-        payload,
-        nextAttempt.idempotencyKey,
+        activeCommand.resourcePath,
+        activeCommand.payload,
+        activeCommand.attempt.idempotencyKey,
       );
-      setConfirmAttempt(null);
+      saveConfirmCommand(clearFrozenCommand(), activeCommand.resourcePath);
       setConfirmOpen(false);
       toast.success("供应商确认事实已记录");
     } catch (caught) {
       const message = errorMessage(caught, "记录供应商确认失败");
       setError(message);
       toast.error(commandRetryMessage(caught, message));
-      if (shouldClearCommandAttempt(caught)) setConfirmAttempt(null);
+      saveConfirmCommand(isUncertainCommandFailure(caught)
+        ? markFrozenCommandUncertain(activeCommand)
+        : clearFrozenCommand(), activeCommand.resourcePath);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         await Promise.all([reload(), onOrderChanged()]);
       }
@@ -254,15 +279,14 @@ export function PurchaseOrderFulfillmentPanel({
   function handleConfirmOpen(nextOpen: boolean) {
     if (confirmBusy) return;
     setConfirmOpen(nextOpen);
-    if (nextOpen && !confirmAttempt) {
+    if (nextOpen && !confirmCommand) {
       setConfirmRemark("");
-      setConfirmSubmittedAt("");
     }
   }
 
   function abandonConfirmAttempt() {
-    setConfirmAttempt(null);
-    setConfirmSubmittedAt("");
+    if (!canAbandonFrozenCommand(confirmCommand)) return;
+    saveConfirmCommand(clearFrozenCommand(), confirmCommand.resourcePath);
     setConfirmRemark("");
     setError(null);
   }
@@ -374,9 +398,9 @@ export function PurchaseOrderFulfillmentPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
-          {confirmAttempt ? (
+          {confirmCommand?.phase === "uncertain" ? (
             <StatusAlert tone="warning">
-              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              上次请求结果不确定，重试会复用原请求；放弃后将创建新请求。
               <Button
                 type="button"
                 variant="outline"
@@ -397,7 +421,7 @@ export function PurchaseOrderFulfillmentPanel({
                 id="purchase-order-confirm-remark"
                 value={confirmRemark}
                 maxLength={500}
-                disabled={confirmBusy}
+                disabled={confirmBusy || confirmCommand !== null}
                 placeholder="可选"
                 onChange={(event) => setConfirmRemark(event.target.value)}
               />

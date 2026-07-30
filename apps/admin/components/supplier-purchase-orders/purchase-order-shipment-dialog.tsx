@@ -38,19 +38,26 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 import { createPurchaseOrderShipment } from "./purchase-order-fulfillment-api";
+import { useFrozenCommandSession } from "./purchase-order-fulfillment-command-state";
 import {
   shipmentRemaining,
   toShipmentPayload,
 } from "./purchase-order-fulfillment-rules";
 import {
+  beginFrozenCommand,
+  canAbandonFrozenCommand,
+  clearFrozenCommand,
   commandRetryMessage,
+  isUncertainCommandFailure,
+  markFrozenCommandInFlight,
+  markFrozenCommandUncertain,
   refreshAfterCommand,
-  shouldClearCommandAttempt,
 } from "./purchase-order-fulfillment-ui-state";
 import type {
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
   PurchaseOrderItemFulfillment,
+  PurchaseOrderShipmentPayload,
 } from "./purchase-order-fulfillment-types";
 import type { PurchaseOrderItem } from "./purchase-order-types";
 
@@ -85,9 +92,15 @@ export function PurchaseOrderShipmentDialog({
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<FulfillmentValidationError[]>([]);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [attempt, setAttempt] =
-    useState<SupplierResourceCommandAttempt | null>(null);
+  const [command, saveCommand] = useFrozenCommandSession<
+    PurchaseOrderShipmentPayload,
+    SupplierResourceCommandAttempt
+  >(
+    orderId,
+    "shipment",
+  );
   const [busy, setBusy] = useState(false);
+  const fieldsLocked = busy || command !== null;
 
   function resetDraft() {
     setShipmentNo("");
@@ -101,14 +114,29 @@ export function PurchaseOrderShipmentDialog({
   }
 
   useEffect(() => {
-    if (!open || attempt) return;
+    if (!open || command) return;
     resetDraft();
   }, [open]);
 
   function abandonAttempt() {
-    setAttempt(null);
+    if (!canAbandonFrozenCommand(command)) return;
+    saveCommand(clearFrozenCommand(), command.resourcePath);
     resetDraft();
   }
+
+  useEffect(() => {
+    if (!command) return;
+    setShipmentNo(command.payload.shipment_no);
+    setShippedAt(toLocalDateTime(new Date(command.payload.shipped_at)));
+    setCarrierName(command.payload.carrier_name ?? "");
+    setTrackingNo(command.payload.tracking_no ?? "");
+    setRemark(command.payload.remark ?? "");
+    setQuantities(Object.fromEntries(
+      command.payload.items.map((item) =>
+        [item.purchase_order_item_id, String(item.quantity)]
+      ),
+    ));
+  }, [command]);
 
   const purchaseItemById = useMemo(
     () => new Map(purchaseOrderItems.map((item) => [item.id, item])),
@@ -119,52 +147,62 @@ export function PurchaseOrderShipmentDialog({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const headerErrors = validateHeader(shipmentNo, shippedAt);
-    const lines = enteredLines;
-    const shippedAtIso = toIsoDateTime(shippedAt);
-    const result = toShipmentPayload({
-      id: VALIDATION_ID,
-      expectedFulfillmentVersion: fulfillment.version,
-      shipmentNo,
-      carrierName,
-      trackingNo,
-      shippedAt: shippedAtIso ?? "",
-      remark,
-      lines,
-    }, items);
-    if (!result.ok) {
-      setErrors([...headerErrors, ...result.errors]);
-      return;
+    let activeCommand = command?.phase === "uncertain"
+      ? markFrozenCommandInFlight(command)
+      : null;
+    if (!activeCommand) {
+      const headerErrors = validateHeader(shipmentNo, shippedAt);
+      const shippedAtIso = toIsoDateTime(shippedAt);
+      const result = toShipmentPayload({
+        id: VALIDATION_ID,
+        expectedFulfillmentVersion: fulfillment.version,
+        shipmentNo,
+        carrierName,
+        trackingNo,
+        shippedAt: shippedAtIso ?? "",
+        remark,
+        lines: enteredLines,
+      }, items);
+      if (!result.ok) {
+        setErrors([...headerErrors, ...result.errors]);
+        return;
+      }
+      if (headerErrors.length || !shippedAtIso) {
+        setErrors(headerErrors);
+        return;
+      }
+      const { id: _validationId, ...attemptPayload } = result.payload;
+      const attempt = resolveSupplierCommandAttempt(null, {
+        scope: "purchase-order:create-shipment",
+        resourcePath: orderId,
+        payload: attemptPayload,
+        allocateResourceId: true,
+      });
+      activeCommand = beginFrozenCommand(attempt, {
+        ...result.payload,
+        id: attempt.resourceId,
+      }, orderId);
     }
-    if (headerErrors.length || !shippedAtIso) {
-      setErrors(headerErrors);
-      return;
-    }
-
-    const { id: _validationId, ...attemptPayload } = result.payload;
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope: "purchase-order:create-shipment",
-      resourcePath: orderId,
-      payload: attemptPayload,
-      allocateResourceId: true,
-    });
-    setAttempt(nextAttempt);
+    saveCommand(activeCommand);
     setErrors([]);
     setCommandError(null);
     setBusy(true);
     try {
-      await createPurchaseOrderShipment(orderId, {
-        ...result.payload,
-        id: nextAttempt.resourceId,
-      }, nextAttempt.idempotencyKey);
-      setAttempt(null);
+      await createPurchaseOrderShipment(
+        activeCommand.resourcePath,
+        activeCommand.payload,
+        activeCommand.attempt.idempotencyKey,
+      );
+      saveCommand(clearFrozenCommand(), activeCommand.resourcePath);
       toast.success("采购发货记录已登记");
       onOpenChange(false);
     } catch (caught) {
       const message = errorMessage(caught, "登记采购发货失败");
       setCommandError(message);
       toast.error(commandRetryMessage(caught, message));
-      if (shouldClearCommandAttempt(caught)) setAttempt(null);
+      saveCommand(isUncertainCommandFailure(caught)
+        ? markFrozenCommandUncertain(activeCommand)
+        : clearFrozenCommand(), activeCommand.resourcePath);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
         await refreshAfterCommand(onSaved);
@@ -179,7 +217,7 @@ export function PurchaseOrderShipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!busy) onOpenChange(nextOpen);
+      if (!busy && command?.phase !== "in_flight") onOpenChange(nextOpen);
     }}>
       <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -190,9 +228,9 @@ export function PurchaseOrderShipmentDialog({
             </DialogDescription>
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
-          {attempt ? (
+          {command?.phase === "uncertain" ? (
             <StatusAlert tone="warning">
-              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              上次请求结果不确定，重试会复用原请求；放弃后将创建新请求。
               <Button type="button" variant="outline" size="sm"
                 className="mt-2" onClick={abandonAttempt}>
                 放弃本次尝试
@@ -212,7 +250,7 @@ export function PurchaseOrderShipmentDialog({
                   value={shipmentNo}
                   maxLength={80}
                   required
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   aria-invalid={Boolean(fieldError(errors, "shipment_no"))}
                   aria-describedby="purchase-order-shipment-no-error"
                   onChange={(event) => setShipmentNo(event.target.value)}
@@ -230,7 +268,7 @@ export function PurchaseOrderShipmentDialog({
                   type="datetime-local"
                   value={shippedAt}
                   required
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   aria-invalid={Boolean(fieldError(errors, "shipped_at"))}
                   aria-describedby="purchase-order-shipped-at-error"
                   onChange={(event) => setShippedAt(event.target.value)}
@@ -247,7 +285,7 @@ export function PurchaseOrderShipmentDialog({
                   id="purchase-order-carrier-name"
                   value={carrierName}
                   maxLength={100}
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   onChange={(event) => setCarrierName(event.target.value)}
                 />
               </Field>
@@ -259,7 +297,7 @@ export function PurchaseOrderShipmentDialog({
                   id="purchase-order-tracking-no"
                   value={trackingNo}
                   maxLength={120}
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   onChange={(event) => setTrackingNo(event.target.value)}
                 />
               </Field>
@@ -273,7 +311,7 @@ export function PurchaseOrderShipmentDialog({
                 id="purchase-order-shipment-remark"
                 value={remark}
                 maxLength={500}
-                disabled={busy}
+                disabled={fieldsLocked}
                 onChange={(event) => setRemark(event.target.value)}
               />
             </Field>
@@ -327,7 +365,7 @@ export function PurchaseOrderShipmentDialog({
                                 step="0.0001"
                                 value={quantities[itemId] ?? ""}
                                 placeholder="0"
-                                disabled={busy}
+                                disabled={fieldsLocked}
                                 aria-invalid={Boolean(quantityError)}
                                 onChange={(event) =>
                                   setQuantities((current) => ({
@@ -360,7 +398,10 @@ export function PurchaseOrderShipmentDialog({
             >
               取消
             </Button>
-            <Button type="submit" disabled={busy || !availableItems.length}>
+            <Button
+              type="submit"
+              disabled={busy || (!command && !availableItems.length)}
+            >
               {busy ? <Spinner data-icon="inline-start" /> : null}
               登记发货
             </Button>

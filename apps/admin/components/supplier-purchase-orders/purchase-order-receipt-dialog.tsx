@@ -39,28 +39,37 @@ import { Textarea } from "@/components/ui/textarea";
 
 import { createPurchaseOrderReceipt } from "./purchase-order-fulfillment-api";
 import {
+  emptyReceiptLineInputs,
+  PurchaseOrderReceiptQuantityField,
+  receiptDraftFromFrozenCommand,
+  receiptLineError,
+  type ReceiptLineInputs,
+  useFrozenCommandSession,
+} from "./purchase-order-fulfillment-command-state";
+import {
   receiptRemaining,
   toReceiptPayload,
 } from "./purchase-order-fulfillment-rules";
 import {
+  beginFrozenCommand,
+  canAbandonFrozenCommand,
+  clearFrozenCommand,
   commandRetryMessage,
+  isUncertainCommandFailure,
+  markFrozenCommandInFlight,
+  markFrozenCommandUncertain,
   refreshAfterCommand,
-  shouldClearCommandAttempt,
 } from "./purchase-order-fulfillment-ui-state";
 import type {
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
   PurchaseOrderItemFulfillment,
+  PurchaseOrderReceiptPayload,
   ReceiptLineDraft,
 } from "./purchase-order-fulfillment-types";
 import type { PurchaseOrderItem } from "./purchase-order-types";
 
 const VALIDATION_ID = "00000000-0000-4000-8000-000000000000";
-type ReceiptLineInputs = {
-  acceptedQuantity: string;
-  rejectedQuantity: string;
-  varianceReason: string;
-};
 
 export function PurchaseOrderReceiptDialog({
   open,
@@ -90,9 +99,12 @@ export function PurchaseOrderReceiptDialog({
     useState<Record<string, ReceiptLineInputs>>({});
   const [errors, setErrors] = useState<FulfillmentValidationError[]>([]);
   const [commandError, setCommandError] = useState<string | null>(null);
-  const [attempt, setAttempt] =
-    useState<SupplierResourceCommandAttempt | null>(null);
+  const [command, saveCommand] = useFrozenCommandSession<
+    PurchaseOrderReceiptPayload,
+    SupplierResourceCommandAttempt
+  >(orderId, "receipt");
   const [busy, setBusy] = useState(false);
+  const fieldsLocked = busy || command !== null;
   function resetDraft() {
     setReceiptNo("");
     setReceivedAt(toLocalDateTime(new Date()));
@@ -102,13 +114,22 @@ export function PurchaseOrderReceiptDialog({
     setCommandError(null);
   }
   useEffect(() => {
-    if (!open || attempt) return;
+    if (!open || command) return;
     resetDraft();
   }, [open]);
   function abandonAttempt() {
-    setAttempt(null);
+    if (!canAbandonFrozenCommand(command)) return;
+    saveCommand(clearFrozenCommand(), command.resourcePath);
     resetDraft();
   }
+  useEffect(() => {
+    const draft = receiptDraftFromFrozenCommand(command);
+    if (!draft) return;
+    setReceiptNo(draft.receiptNo);
+    setReceivedAt(toLocalDateTime(new Date(draft.receivedAt)));
+    setRemark(draft.remark);
+    setLineInputs(draft.lineInputs);
+  }, [command]);
   const purchaseItemById = useMemo(
     () => new Map(purchaseOrderItems.map((item) => [item.id, item])),
     [purchaseOrderItems],
@@ -117,49 +138,60 @@ export function PurchaseOrderReceiptDialog({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
-    const headerErrors = validateHeader(receiptNo, receivedAt);
-    const lines = enteredLines;
-    const receivedAtIso = toIsoDateTime(receivedAt);
-    const result = toReceiptPayload({
-      id: VALIDATION_ID,
-      expectedFulfillmentVersion: fulfillment.version,
-      receiptNo,
-      receivedAt: receivedAtIso ?? "",
-      remark,
-      lines,
-    }, items);
-    if (!result.ok) {
-      setErrors([...headerErrors, ...result.errors]);
-      return;
-    }
-    if (headerErrors.length || !receivedAtIso) {
+    let activeCommand = command?.phase === "uncertain"
+      ? markFrozenCommandInFlight(command)
+      : null;
+    if (!activeCommand) {
+      const headerErrors = validateHeader(receiptNo, receivedAt);
+      const receivedAtIso = toIsoDateTime(receivedAt);
+      const result = toReceiptPayload({
+        id: VALIDATION_ID,
+        expectedFulfillmentVersion: fulfillment.version,
+        receiptNo,
+        receivedAt: receivedAtIso ?? "",
+        remark,
+        lines: enteredLines,
+      }, items);
+      if (!result.ok) {
+        setErrors([...headerErrors, ...result.errors]);
+        return;
+      }
+      if (headerErrors.length || !receivedAtIso) {
       setErrors(headerErrors);
       return;
     }
-    const { id: _validationId, ...attemptPayload } = result.payload;
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope: "purchase-order:create-receipt",
-      resourcePath: orderId,
-      payload: attemptPayload,
-      allocateResourceId: true,
-    });
-    setAttempt(nextAttempt);
+      const { id: _validationId, ...attemptPayload } = result.payload;
+      const attempt = resolveSupplierCommandAttempt(null, {
+        scope: "purchase-order:create-receipt",
+        resourcePath: orderId,
+        payload: attemptPayload,
+        allocateResourceId: true,
+      });
+      activeCommand = beginFrozenCommand(attempt, {
+        ...result.payload,
+        id: attempt.resourceId,
+      }, orderId);
+    }
+    saveCommand(activeCommand);
     setErrors([]);
     setCommandError(null);
     setBusy(true);
     try {
-      await createPurchaseOrderReceipt(orderId, {
-        ...result.payload,
-        id: nextAttempt.resourceId,
-      }, nextAttempt.idempotencyKey);
-      setAttempt(null);
+      await createPurchaseOrderReceipt(
+        activeCommand.resourcePath,
+        activeCommand.payload,
+        activeCommand.attempt.idempotencyKey,
+      );
+      saveCommand(clearFrozenCommand(), activeCommand.resourcePath);
       toast.success("采购收货记录已登记");
       onOpenChange(false);
     } catch (caught) {
       const message = errorMessage(caught, "登记采购收货失败");
       setCommandError(message);
       toast.error(commandRetryMessage(caught, message));
-      if (shouldClearCommandAttempt(caught)) setAttempt(null);
+      saveCommand(isUncertainCommandFailure(caught)
+        ? markFrozenCommandUncertain(activeCommand)
+        : clearFrozenCommand(), activeCommand.resourcePath);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
         await refreshAfterCommand(onSaved);
@@ -174,7 +206,7 @@ export function PurchaseOrderReceiptDialog({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
-      if (!busy) onOpenChange(nextOpen);
+      if (!busy && command?.phase !== "in_flight") onOpenChange(nextOpen);
     }}>
       <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
@@ -185,9 +217,9 @@ export function PurchaseOrderReceiptDialog({
             </DialogDescription>
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
-          {attempt ? (
+          {command?.phase === "uncertain" ? (
             <StatusAlert tone="warning">
-              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              上次请求结果不确定，重试会复用原请求；放弃后将创建新请求。
               <Button type="button" variant="outline" size="sm" className="mt-2"
                 onClick={abandonAttempt}>
                 放弃本次尝试
@@ -207,7 +239,7 @@ export function PurchaseOrderReceiptDialog({
                   value={receiptNo}
                   maxLength={80}
                   required
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   aria-invalid={Boolean(fieldError(errors, "receipt_no"))}
                   aria-describedby="purchase-order-receipt-no-error"
                   onChange={(event) => setReceiptNo(event.target.value)}
@@ -224,7 +256,7 @@ export function PurchaseOrderReceiptDialog({
                   type="datetime-local"
                   value={receivedAt}
                   required
-                  disabled={busy}
+                  disabled={fieldsLocked}
                   aria-invalid={Boolean(fieldError(errors, "received_at"))}
                   aria-describedby="purchase-order-received-at-error"
                   onChange={(event) => setReceivedAt(event.target.value)}
@@ -242,7 +274,7 @@ export function PurchaseOrderReceiptDialog({
                 id="purchase-order-receipt-remark"
                 value={remark}
                 maxLength={500}
-                disabled={busy}
+                disabled={fieldsLocked}
                 onChange={(event) => setRemark(event.target.value)}
               />
             </Field>
@@ -266,8 +298,9 @@ export function PurchaseOrderReceiptDialog({
                       const itemId = item.supplier_purchase_order_item_id;
                       const purchaseItem = purchaseItemById.get(itemId);
                       const remaining_quantity = receiptRemaining(item);
-                      const values = lineInputs[itemId] ?? emptyLineInputs();
-                      const varianceError = lineError(
+                      const values = lineInputs[itemId] ??
+                        emptyReceiptLineInputs();
+                      const varianceError = receiptLineError(
                         errors,
                         enteredLines,
                         itemId,
@@ -287,13 +320,13 @@ export function PurchaseOrderReceiptDialog({
                           <TableCell className="text-right tabular-nums">
                             {remaining_quantity}
                           </TableCell>
-                          <ReceiptQuantityField
+                          <PurchaseOrderReceiptQuantityField
                             label={`接受数量 ${index + 1}`}
                             itemId={itemId}
                             path="accepted_quantity"
                             value={values.acceptedQuantity}
                             maximum={remaining_quantity}
-                            disabled={busy}
+                            disabled={fieldsLocked}
                             errors={errors}
                             lines={enteredLines}
                             onChange={(value) =>
@@ -301,13 +334,13 @@ export function PurchaseOrderReceiptDialog({
                                 acceptedQuantity: value,
                               })}
                           />
-                          <ReceiptQuantityField
+                          <PurchaseOrderReceiptQuantityField
                             label={`拒收数量 ${index + 1}`}
                             itemId={itemId}
                             path="rejected_quantity"
                             value={values.rejectedQuantity}
                             maximum={remaining_quantity}
-                            disabled={busy}
+                            disabled={fieldsLocked}
                             errors={errors}
                             lines={enteredLines}
                             onChange={(value) =>
@@ -322,7 +355,7 @@ export function PurchaseOrderReceiptDialog({
                                 aria-describedby={`receipt-variance-error-${itemId}`}
                                 value={values.varianceReason}
                                 maxLength={500}
-                                disabled={busy}
+                                disabled={fieldsLocked}
                                 aria-invalid={Boolean(varianceError)}
                                 onChange={(event) =>
                                   updateLine(setLineInputs, itemId, {
@@ -352,7 +385,10 @@ export function PurchaseOrderReceiptDialog({
             >
               取消
             </Button>
-            <Button type="submit" disabled={busy || !availableItems.length}>
+            <Button
+              type="submit"
+              disabled={busy || (!command && !availableItems.length)}
+            >
               {busy ? <Spinner data-icon="inline-start" /> : null}
               登记收货
             </Button>
@@ -360,52 +396,6 @@ export function PurchaseOrderReceiptDialog({
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ReceiptQuantityField({
-  label,
-  itemId,
-  path,
-  value,
-  maximum,
-  disabled,
-  errors,
-  lines,
-  onChange,
-}: {
-  label: string;
-  itemId: string;
-  path: "accepted_quantity" | "rejected_quantity";
-  value: string;
-  maximum: string;
-  disabled: boolean;
-  errors: FulfillmentValidationError[];
-  lines: ReceiptLineDraft[];
-  onChange: (value: string) => void;
-}) {
-  const error = lineError(errors, lines, itemId, path);
-  const errorId = `receipt-${path}-error-${itemId}`;
-  return (
-    <TableCell>
-      <Field data-invalid={Boolean(error)}>
-        <Input
-          aria-label={label}
-          aria-describedby={errorId}
-          type="number"
-          inputMode="decimal"
-          min="0"
-          max={maximum}
-          step="0.0001"
-          value={value}
-          placeholder="0"
-          disabled={disabled}
-          aria-invalid={Boolean(error)}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <FieldError id={errorId}>{error}</FieldError>
-      </Field>
-    </TableCell>
   );
 }
 
@@ -434,12 +424,11 @@ function updateLine(
 ) {
   setter((current) => ({
     ...current,
-    [itemId]: { ...(current[itemId] ?? emptyLineInputs()), ...patch },
+    [itemId]: {
+      ...(current[itemId] ?? emptyReceiptLineInputs()),
+      ...patch,
+    },
   }));
-}
-
-function emptyLineInputs(): ReceiptLineInputs {
-  return { acceptedQuantity: "", rejectedQuantity: "", varianceReason: "" };
 }
 
 function validateHeader(receiptNo: string, receivedAt: string) {
@@ -455,20 +444,6 @@ function validateHeader(receiptNo: string, receivedAt: string) {
 
 function fieldError(errors: FulfillmentValidationError[], path: string) {
   return errors.find((error) => error.path === path)?.message;
-}
-
-function lineError(
-  errors: FulfillmentValidationError[],
-  lines: ReceiptLineDraft[],
-  itemId: string,
-  suffix: string,
-) {
-  const index = lines.findIndex((line) => line.purchaseOrderItemId === itemId);
-  if (index < 0) return undefined;
-  return errors.find((error) =>
-    error.path === `items.${index}.${suffix}` ||
-    error.path === `items.${index}`
-  )?.message;
 }
 
 function toLocalDateTime(date: Date) {

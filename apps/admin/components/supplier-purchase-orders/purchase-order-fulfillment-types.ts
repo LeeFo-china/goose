@@ -114,7 +114,7 @@ export type PurchaseOrderShipmentPayload = {
   tracking_no?: string | null;
   shipped_at: string;
   remark?: string | null;
-  items: PurchaseOrderShipmentLinePayload[];
+  items: readonly PurchaseOrderShipmentLinePayload[];
 };
 
 export type PurchaseOrderReceiptLinePayload = {
@@ -130,7 +130,7 @@ export type PurchaseOrderReceiptPayload = {
   receipt_no: string;
   received_at: string;
   remark?: string | null;
-  items: PurchaseOrderReceiptLinePayload[];
+  items: readonly PurchaseOrderReceiptLinePayload[];
 };
 
 export type FulfillmentQuantityInput = string | number;

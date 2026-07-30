@@ -85,6 +85,7 @@ export function PurchaseOrderDetail({
   const [current, setCurrent] = useState(order);
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedDetail, setHasLoadedDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [commandAttempt, setCommandAttempt] =
@@ -108,6 +109,7 @@ export function PurchaseOrderDetail({
       if (!isLatest()) return null;
       setCurrent(latest);
       setItems(itemPage.list);
+      setHasLoadedDetail(true);
       return latest.version;
     } catch (caught) {
       if (!isLatest()) return null;
@@ -122,6 +124,7 @@ export function PurchaseOrderDetail({
     requestGuard.current.invalidate();
     setCurrent(order);
     setItems([]);
+    setHasLoadedDetail(false);
     setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
@@ -202,7 +205,7 @@ export function PurchaseOrderDetail({
           </DialogDescription>
         </DialogHeader>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        {loading || !current ? (
+        {!current || !hasLoadedDetail ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
