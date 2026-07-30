@@ -264,6 +264,19 @@ describe("supplier purchase requisition database smoke helpers", () => {
     });
   });
 
+  test("exposes only the planned Task10 requisition smoke command", async () => {
+    const packageJson = await Bun.file(new URL(
+      "../../package.json",
+      import.meta.url,
+    )).json() as { scripts: Record<string, string> };
+    expect(packageJson.scripts["supplier:purchase-requisition:smoke"]).toBe(
+      "bun src/scripts/supplier-purchase-requisition-smoke.ts",
+    );
+    expect(packageJson.scripts).not.toHaveProperty(
+      "supplier:purchase-requisition-smoke",
+    );
+  });
+
   test("binds every summary field to executable SQL evidence", async () => {
     const mainSource = await Bun.file(new URL(
       "./supplier-purchase-requisition-smoke.ts",
