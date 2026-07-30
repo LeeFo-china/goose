@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClipboardPlus, Search } from "lucide-react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -19,6 +20,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import {
+  loadPurchaseOrder,
   loadPurchaseOrderProjects,
   loadPurchaseOrderRelationships,
   loadPurchaseOrders,
@@ -55,6 +57,10 @@ export function PurchaseOrderWorkspace({
   canManagePurchaseOrders: boolean;
   canManagePurchaseRequisitions: boolean;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const deepLinkedOrderId = searchParams.get("purchase_order_id");
+  const deepLinkRequestVersion = useRef(0);
   const [orders, setOrders] = useState(emptyOrders);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [relationships, setRelationships] = useState<
@@ -80,6 +86,43 @@ export function PurchaseOrderWorkspace({
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailOrder, setDetailOrder] =
     useState<PurchaseOrderWithReferences | null>(null);
+
+  const clearPurchaseOrderDeepLink = useCallback(() => {
+    const query = new URLSearchParams(searchParams.toString());
+    query.delete("purchase_order_id");
+    const encoded = query.toString();
+    router.replace(`/supplier-purchase-orders${encoded ? `?${encoded}` : ""}`);
+  }, [router, searchParams]);
+
+  useEffect(() => {
+    if (!deepLinkedOrderId) return;
+    if (!canViewPurchaseOrders) {
+      clearPurchaseOrderDeepLink();
+      return;
+    }
+    const version = ++deepLinkRequestVersion.current;
+    setError(null);
+    void loadPurchaseOrder(deepLinkedOrderId).then((order) => {
+      if (deepLinkRequestVersion.current !== version) return;
+      setDetailOrder(order);
+      setDetailOpen(true);
+    }).catch((caught) => {
+      if (deepLinkRequestVersion.current !== version) return;
+      setDetailOrder(null);
+      setDetailOpen(false);
+      setError(errorMessage(caught, "采购单详情加载失败"));
+      if (errorStatus(caught) === 403 || errorStatus(caught) === 404) {
+        clearPurchaseOrderDeepLink();
+      }
+    });
+    return () => {
+      deepLinkRequestVersion.current += 1;
+    };
+  }, [
+    canViewPurchaseOrders,
+    clearPurchaseOrderDeepLink,
+    deepLinkedOrderId,
+  ]);
 
   useEffect(() => {
     if (!canViewPurchaseOrders) {
@@ -364,7 +407,12 @@ export function PurchaseOrderWorkspace({
         open={detailOpen}
         order={detailOrder}
         canManage={canManagePurchaseOrders}
-        onOpenChange={setDetailOpen}
+        onOpenChange={(nextOpen) => {
+          setDetailOpen(nextOpen);
+          if (!nextOpen && deepLinkedOrderId) {
+            clearPurchaseOrderDeepLink();
+          }
+        }}
         onChanged={loadOrders}
       />
     </div>
@@ -373,6 +421,13 @@ export function PurchaseOrderWorkspace({
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function errorStatus(error: unknown) {
+  return typeof error === "object" && error !== null && "status" in error &&
+      typeof error.status === "number"
+    ? error.status
+    : undefined;
 }
 
 function mergeOptions<RecordType, Key extends keyof RecordType>(

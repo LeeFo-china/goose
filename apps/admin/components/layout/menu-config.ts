@@ -8,6 +8,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
+  ClipboardPlus,
   CircleDollarSign,
   Clapperboard,
   FileCheck2,
@@ -185,6 +186,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "商品与价格",
         icon: PackageOpen,
         permission: "supplier.product.view",
+      },
+      {
+        href: "/supplier-purchase-requisitions",
+        label: "采购申请",
+        icon: ClipboardPlus,
+        permission: "supplier.purchase-requisition.view",
       },
       {
         href: "/supplier-purchase-orders",

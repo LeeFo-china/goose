@@ -10,7 +10,11 @@ import {
   convertRequisition,
   createRequisitionDraft,
   loadRequisition,
+  loadRequisitionCatalog,
+  loadRequisitionCostCategories,
   loadRequisitionItems,
+  loadRequisitionProjects,
+  loadRequisitionRelationships,
   loadRequisitions,
   reviewRequisition,
   submitRequisition,
@@ -89,6 +93,22 @@ describe("采购申请 API 契约", () => {
     expect(calls.map(({ input }) => String(input))).toEqual([
       "/api/backend/supplier-purchase-requisitions/request%2Fid%20%3F",
       "/api/backend/supplier-purchase-requisitions/request%2Fid%20%3F/items?page=1&pageSize=100",
+    ]);
+  });
+
+  test("项目供应商目录和成本分类都使用受限分页 client API", async () => {
+    const calls = installSuccessFetch();
+
+    await loadRequisitionProjects(0, "项目 A");
+    await loadRequisitionRelationships(2, "供应商 B");
+    await loadRequisitionCatalog("relationship/id", 3, "SKU C");
+    await loadRequisitionCostCategories(0);
+
+    expect(calls.map(({ input }) => String(input))).toEqual([
+      "/api/backend/supplier-purchase-requisition-project-options?page=1&pageSize=100&keyword=%E9%A1%B9%E7%9B%AE+A",
+      "/api/backend/supplier-purchase-requisition-supplier-options?page=2&pageSize=100&keyword=%E4%BE%9B%E5%BA%94%E5%95%86+B",
+      "/api/backend/supplier-purchase-requisition-catalog?tenantSupplierId=relationship%2Fid&page=3&pageSize=20&keyword=SKU+C",
+      "/api/backend/supplier-purchase-requisition-cost-categories?page=1&pageSize=100&status=active",
     ]);
   });
 

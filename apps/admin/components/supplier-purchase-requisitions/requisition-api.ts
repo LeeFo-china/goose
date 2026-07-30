@@ -1,4 +1,13 @@
 import type {
+  FinanceCostCategoryListData,
+} from "@/components/finance/finance-cost-budget-requests";
+import type {
+  ProjectOption,
+  PurchaseOrderCatalogPage,
+  PurchaseOrderSupplierOption,
+} from "@/components/supplier-purchase-orders/purchase-order-types";
+import type { PageData } from "@/components/suppliers/supplier-types";
+import type {
   SupplierCommandAttempt,
   SupplierResourceCommandAttempt,
 } from "@/components/supplier-products/supplier-command-attempt";
@@ -75,6 +84,51 @@ export function loadRequisitionItems(
   return requestBackendJson<RequisitionItemPage>(
     `${requisitionPath(requisitionId)}/items?${query}`,
     { fallbackMessage: "采购申请明细加载失败" },
+  );
+}
+
+export function loadRequisitionProjects(page: number, keyword = "") {
+  return requestBackendJson<PageData<ProjectOption>>(
+    `/supplier-purchase-requisition-project-options?${optionQuery(page, keyword)}`,
+    { fallbackMessage: "项目选项加载失败" },
+  );
+}
+
+export function loadRequisitionRelationships(page: number, keyword = "") {
+  return requestBackendJson<PageData<PurchaseOrderSupplierOption>>(
+    `/supplier-purchase-requisition-supplier-options?${
+      optionQuery(page, keyword)
+    }`,
+    { fallbackMessage: "合作供应商加载失败" },
+  );
+}
+
+export function loadRequisitionCatalog(
+  tenantSupplierId: string,
+  page: number,
+  keyword = "",
+) {
+  const query = new URLSearchParams({
+    tenantSupplierId,
+    page: String(normalizePage(page)),
+    pageSize: "20",
+  });
+  if (keyword.trim()) query.set("keyword", keyword.trim());
+  return requestBackendJson<PurchaseOrderCatalogPage>(
+    `/supplier-purchase-requisition-catalog?${query}`,
+    { fallbackMessage: "可采购目录加载失败" },
+  );
+}
+
+export function loadRequisitionCostCategories(page: number) {
+  const query = new URLSearchParams({
+    page: String(normalizePage(page)),
+    pageSize: "100",
+    status: "active",
+  });
+  return requestBackendJson<FinanceCostCategoryListData>(
+    `/supplier-purchase-requisition-cost-categories?${query}`,
+    { fallbackMessage: "成本分类加载失败" },
   );
 }
 
@@ -202,4 +256,13 @@ function normalizePage(page: number) {
 function normalizeItemPageSize(pageSize: number) {
   if (!Number.isInteger(pageSize)) return MAX_ITEM_PAGE_SIZE;
   return Math.min(MAX_ITEM_PAGE_SIZE, Math.max(1, pageSize));
+}
+
+function optionQuery(page: number, keyword: string) {
+  const query = new URLSearchParams({
+    page: String(normalizePage(page)),
+    pageSize: "100",
+  });
+  if (keyword.trim()) query.set("keyword", keyword.trim());
+  return query;
 }

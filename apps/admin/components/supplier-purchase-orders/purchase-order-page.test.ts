@@ -58,6 +58,16 @@ describe("供应商采购单页面边界", () => {
     expect(workspace).toContain("<PurchaseOrderDetail");
   });
 
+  test("详情深链独立加载目标采购单并在关闭或失败时清理参数", () => {
+    const workspace = readSource("./purchase-order-workspace.tsx");
+
+    expect(workspace).toContain("useSearchParams");
+    expect(workspace).toContain('searchParams.get("purchase_order_id")');
+    expect(workspace).toContain("loadPurchaseOrder(deepLinkedOrderId)");
+    expect(workspace).toContain("clearPurchaseOrderDeepLink");
+    expect(workspace).toContain("采购单详情加载失败");
+  });
+
   test("采购单页面只按采购申请管理权限提供申请入口", () => {
     const page = readSource(
       "../../app/(console)/supplier-purchase-orders/page.tsx",
