@@ -38,6 +38,8 @@ export const SupplierListRowSchema = SupplierCoreSchema.extend({
 });
 
 export const SupplierDetailSchema = SupplierCoreSchema.extend({
+  legal_representative_name: nullableString,
+  registered_address_text: nullableString,
   review_remark: nullableString,
   reviewed_by_employee_id: z.uuid().nullable(),
   reviewed_at: nullableString,

@@ -415,8 +415,8 @@ const supplierListRow = {
   created_at: NOW,
   updated_at: NOW,
 };
-const supplierDetailRow = {
-  ...supplierListRow,
+const supplierDetailRow = { ...supplierListRow,
+  legal_representative_name: null, registered_address_text: null,
   review_remark: null,
   reviewed_by_employee_id: null,
   reviewed_at: null,

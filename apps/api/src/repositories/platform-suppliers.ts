@@ -60,7 +60,7 @@ import {
 } from "./supplier-repository-utils";
 const CORE_SELECT = "id,code,name,legal_name,unified_social_credit_code,supplier_type,onboarding_status,operational_status,version,created_at,updated_at";
 const LIST_SELECT = `${CORE_SELECT},qualification_health`;
-const DETAIL_SELECT = `${CORE_SELECT},review_remark,reviewed_by_employee_id,reviewed_at,blacklisted_by_employee_id,blacklisted_at,blacklist_reason,created_by_employee_id,updated_by_employee_id`;
+const DETAIL_SELECT = `${CORE_SELECT},legal_representative_name,registered_address_text,review_remark,reviewed_by_employee_id,reviewed_at,blacklisted_by_employee_id,blacklisted_at,blacklist_reason,created_by_employee_id,updated_by_employee_id`;
 const TYPE_SELECT = "id,code,name,applicable_supplier_types,warning_days,is_required,blocks_new_orders,status,sort_order,version,created_at,updated_at";
 const QUALIFICATION_SELECT = "id,supplier_id,qualification_type_id,document_file_id,certificate_no,valid_from,valid_until,verification_status,verified_by_employee_id,verified_at,rejection_reason,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const REGION_SELECT = "id,supplier_id,region_code,region_level,status,valid_from,valid_until,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
