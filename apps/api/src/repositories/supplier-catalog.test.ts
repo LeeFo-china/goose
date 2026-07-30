@@ -10,6 +10,8 @@ const PARENT_ID = "00000000-0000-4000-8000-000000000102";
 const BRAND_ID = "00000000-0000-4000-8000-000000000201";
 const UNIT_ID = "00000000-0000-4000-8000-000000000301";
 const BASE_UNIT_ID = "00000000-0000-4000-8000-000000000302";
+const SECOND_UNIT_ID = "00000000-0000-4000-8000-000000000303";
+const SECOND_BASE_UNIT_ID = "00000000-0000-4000-8000-000000000304";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000401";
 const USER_ID = "00000000-0000-4000-8000-000000000402";
 const NOW = "2026-07-24T00:00:00.000Z";
@@ -115,10 +117,19 @@ describe("SupplierCatalogRepository paginated reads", () => {
   });
 
   test("paginates brand and unit rows with explicit filters", async () => {
-    const { repository, requests } = await createRepository((request) => ({
-      body: request.url.includes("catalog_brands") ? [brand] : [unitListItem],
-      count: request.url.includes("catalog_brands") ? 21 : 35,
-    }));
+    const { repository, requests } = await createRepository((request) => {
+      const url = new URL(request.url);
+      if (request.url.includes("catalog_brands")) {
+        return { body: [brand], count: 21 };
+      }
+      if (url.searchParams.get("id")?.startsWith("in.")) {
+        return { body: [baseUnitProjection, secondBaseUnitProjection] };
+      }
+      return {
+        body: [unitListItem, secondUnitListItem],
+        count: 35,
+      };
+    });
 
     const brands = await repository.listBrands({
       status: "active",
@@ -141,6 +152,7 @@ describe("SupplierCatalogRepository paginated reads", () => {
     });
     expect(units.list[0]?.conversion_factor).toBe(PRECISE_FACTOR);
     expect(units.list[0]?.base_unit).toEqual(baseUnitProjection);
+    expect(units.list[1]?.base_unit).toEqual(secondBaseUnitProjection);
     const brandUrl = new URL(requests[0]!.url);
     expect(brandUrl.searchParams.get("status")).toBe("eq.active");
     expect(brandUrl.searchParams.get("offset")).toBe("20");
@@ -151,19 +163,30 @@ describe("SupplierCatalogRepository paginated reads", () => {
     expect(unitUrl.searchParams.get("limit")).toBe("10");
     expect(unitUrl.searchParams.get("select"))
       .toContain("conversion_factor::text");
-    expect(unitUrl.searchParams.get("select")).toContain(
-      "base_unit:catalog_units!catalog_units_base_unit_id_fkey" +
-        "(id,code,name,symbol,status)",
+    expect(unitUrl.searchParams.get("select")).not.toContain("base_unit:");
+    const baseUnitUrl = new URL(requests[2]!.url);
+    expect(baseUnitUrl.searchParams.get("select"))
+      .toBe("id,code,name,symbol,status");
+    expect(baseUnitUrl.searchParams.get("id")).toBe(
+      `in.(${BASE_UNIT_ID},${SECOND_BASE_UNIT_ID})`,
     );
+    expect(baseUnitUrl.searchParams.get("limit")).toBe("2");
+    expect(requests).toHaveLength(3);
   });
 
   test("filters base and derived unit pages without losing exact counts", async () => {
-    const { repository, requests } = await createRepository((request) => ({
-      body: new URL(request.url).searchParams.get("base_unit_id") === "is.null"
-        ? [baseUnitListItem]
-        : [unitListItem],
-      count: 41,
-    }));
+    const { repository, requests } = await createRepository((request) => {
+      const url = new URL(request.url);
+      if (url.searchParams.get("id")?.startsWith("in.")) {
+        return { body: [baseUnitProjection] };
+      }
+      return {
+        body: url.searchParams.get("base_unit_id") === "is.null"
+          ? [baseUnitListItem]
+          : [unitListItem],
+        count: 41,
+      };
+    });
 
     const base = await repository.listUnits({
       unit_kind: "base",
@@ -189,9 +212,12 @@ describe("SupplierCatalogRepository paginated reads", () => {
       .toBe("is.null");
     expect(new URL(requests[1]!.url).searchParams.get("base_unit_id"))
       .toBe("not.is.null");
-    for (const request of requests) {
+    expect(new URL(requests[2]!.url).searchParams.get("id"))
+      .toBe(`in.(${BASE_UNIT_ID})`);
+    for (const request of requests.slice(0, 2)) {
       expect(request.headers.get("prefer")).toContain("count=exact");
     }
+    expect(requests).toHaveLength(3);
   });
 });
 
@@ -434,14 +460,27 @@ const baseUnitProjection = {
   symbol: "件",
   status: "active" as const,
 };
+const secondBaseUnitProjection = {
+  id: SECOND_BASE_UNIT_ID,
+  code: "UNIT-KG",
+  name: "千克",
+  symbol: "kg",
+  status: "active" as const,
+};
 const unitListItem = {
   ...unit,
-  base_unit: baseUnitProjection,
+};
+const secondUnitListItem = {
+  ...unit,
+  id: SECOND_UNIT_ID,
+  code: "UNIT-BAG",
+  name: "袋",
+  symbol: "袋",
+  base_unit_id: SECOND_BASE_UNIT_ID,
 };
 const baseUnitListItem = {
   ...unit,
   id: BASE_UNIT_ID,
   base_unit_id: null,
   conversion_factor: "1.000000",
-  base_unit: null,
 };

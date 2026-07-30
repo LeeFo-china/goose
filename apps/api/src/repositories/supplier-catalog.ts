@@ -27,8 +27,7 @@ const BRAND_SELECT =
   "id,code,name,legal_name,logo_file_id,status,sort_order,version,created_at,updated_at";
 const UNIT_SELECT =
   "id,code,name,symbol,base_unit_id,conversion_factor::text,status,sort_order,version,created_at,updated_at";
-const UNIT_LIST_SELECT =
-  `${UNIT_SELECT},base_unit:catalog_units!catalog_units_base_unit_id_fkey(id,code,name,symbol,status)`;
+const UNIT_BASE_SELECT = "id,code,name,symbol,status";
 
 const CatalogStatusSchema = z.enum(["active", "inactive"]);
 const CatalogConflictSnapshotSchema = z.object({
@@ -178,7 +177,7 @@ export class SupplierCatalogRepository
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_units")
-      .select(UNIT_LIST_SELECT, { count: "exact" });
+      .select(UNIT_SELECT, { count: "exact" });
     if (input.status) request = request.eq("status", input.status);
     if (input.base_unit_id === null) {
       request = request.is("base_unit_id", null);
@@ -195,11 +194,46 @@ export class SupplierCatalogRepository
       .order("id", { ascending: true })
       .range(start, end);
     if (error) throw Errors.dbError("查询标准单位失败", error);
+    const units = parseRows(
+      CatalogUnitSchema,
+      data,
+      "查询标准单位失败",
+    );
     return toPage(
-      parseRows(CatalogUnitListSchema, data, "查询标准单位失败"),
+      await this.hydrateUnitBaseUnits(units),
       pagination,
       count,
     );
+  }
+
+  private async hydrateUnitBaseUnits(
+    units: CatalogUnitRecord[],
+  ): Promise<CatalogUnit[]> {
+    const baseUnitIds = Array.from(new Set(
+      units.flatMap((unit) => unit.base_unit_id ? [unit.base_unit_id] : []),
+    ));
+    if (baseUnitIds.length === 0) {
+      return units.map((unit) => ({ ...unit, base_unit: null }));
+    }
+
+    const { data, error } = await this.client.from("catalog_units")
+      .select(UNIT_BASE_SELECT)
+      .in("id", baseUnitIds)
+      .limit(baseUnitIds.length);
+    if (error) throw Errors.dbError("查询标准单位失败", error);
+    const baseUnits = parseRows(
+      CatalogUnitBaseSchema,
+      data,
+      "查询标准单位失败",
+    );
+    const baseUnitById = new Map(baseUnits.map((unit) => [unit.id, unit]));
+
+    return units.map((unit) => ({
+      ...unit,
+      base_unit: unit.base_unit_id
+        ? baseUnitById.get(unit.base_unit_id) ?? null
+        : null,
+    }));
   }
 
   createCategory(input: CatalogCategoryCreateCommand) {
