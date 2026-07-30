@@ -4,10 +4,15 @@
 
 BEGIN;
 
--- Existing-table constraint validation needs strong locks. Bound the wait:
--- timeout failure rolls back the whole migration; retry in a maintenance window
--- instead of allowing a long-running deployment to block production traffic.
+-- Run this migration only in a maintenance window. Existing-table DDL needs
+-- strong locks, so bound both lock waits and each statement's execution time.
+-- If an existing composite unique index build or validation exceeds 30 seconds,
+-- the timeout aborts and rolls back the whole transaction. Do not retry by
+-- raising limits: use an independent forward preflight migration with
+-- CREATE UNIQUE INDEX CONCURRENTLY, then a short transaction with
+-- ADD CONSTRAINT USING INDEX, and rerun after adapting this pending migration.
 SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
 
 ALTER TABLE public.supplier_command_events
 DROP CONSTRAINT supplier_command_events_resource_type_check;
@@ -32,7 +37,10 @@ ADD CONSTRAINT supplier_command_events_resource_type_check CHECK (
     'supplier_purchase_order',
     'supplier_purchase_requisition'
   )
-);
+) NOT VALID;
+
+ALTER TABLE public.supplier_command_events
+VALIDATE CONSTRAINT supplier_command_events_resource_type_check;
 
 -- Global eight-digit sequence cap allows fewer than 100,000,000 requisitions
 -- over the system lifetime. Expand it with a forward migration before exhaustion.
@@ -619,9 +627,6 @@ TO service_role;
 
 REVOKE ALL ON SEQUENCE public.supplier_purchase_requisition_number_seq
 FROM PUBLIC, anon, authenticated, service_role;
-
-GRANT USAGE ON SEQUENCE public.supplier_purchase_requisition_number_seq
-TO service_role;
 
 INSERT INTO public.permissions (
   code,

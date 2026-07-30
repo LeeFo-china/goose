@@ -421,11 +421,8 @@ describe("supplier purchase requisition migration contract", () => {
     expect(sql).toMatch(
       /REVOKE ALL ON SEQUENCE public\.supplier_purchase_requisition_number_seq[\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
     );
-    expect(sql).toMatch(
-      /GRANT USAGE ON SEQUENCE public\.supplier_purchase_requisition_number_seq[\s\S]*TO service_role/,
-    );
     expect(sql).not.toMatch(
-      /GRANT[^;]*SELECT[^;]*ON SEQUENCE public\.supplier_purchase_requisition_number_seq/i,
+      /GRANT[^;]*ON SEQUENCE public\.supplier_purchase_requisition_number_seq/i,
     );
     expect(sql).not.toMatch(/^\s*CREATE POLICY\b/im);
   });
@@ -469,13 +466,18 @@ describe("supplier purchase requisition migration contract", () => {
     ]) {
       expect(constraint).toContain(`'${resourceType}'`);
     }
+    expect(constraint).toMatch(/NOT VALID;$/);
+    expect(sql).toMatch(
+      /ALTER TABLE public\.supplier_command_events\s+VALIDATE CONSTRAINT supplier_command_events_resource_type_check;/,
+    );
   });
 
   test("is transactional, adds no commands, and documents forward rollback", () => {
     expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
     expectContracts(sql, [
       /SET LOCAL lock_timeout = '5s';/,
-      /timeout failure rolls back the whole migration[\s\S]*maintenance window[\s\S]*long-running deployment.*block/i,
+      /SET LOCAL statement_timeout = '30s';/,
+      /maintenance window[\s\S]*existing composite unique index[\s\S]*30 seconds[\s\S]*whole transaction[\s\S]*do not retry[\s\S]*forward preflight migration[\s\S]*CREATE UNIQUE INDEX CONCURRENTLY[\s\S]*ADD CONSTRAINT USING INDEX[\s\S]*rerun/i,
       /Global eight-digit sequence cap[\s\S]*100,000,000[\s\S]*forward migration/i,
     ]);
     expect(sql).not.toMatch(
