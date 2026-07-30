@@ -112,6 +112,7 @@ const purchaseOrder = {
   subtotal_amount: "100.00",
   tax_amount: "13.00",
   total_amount: "113.00",
+  purchase_requisition_id: null,
   version: 2,
   created_by_employee_id: EMPLOYEE_ID,
   updated_by_employee_id: EMPLOYEE_ID,

@@ -96,7 +96,7 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
   subtotal_amount: decimal,
   tax_amount: decimal,
   total_amount: decimal,
-  purchase_requisition_id: uuid.nullable().optional(),
+  purchase_requisition_id: uuid.nullable(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,
@@ -134,7 +134,7 @@ export const SupplierPurchaseOrderWithReferencesSchema =
       request_no: z.string().regex(/^PR-\d{8}-\d{8}$/),
       status: SupplierPurchaseRequisitionStatusSchema,
       budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
-    }).strict().nullable().optional(),
+    }).strict().nullable(),
   }).strict();
 
 export const SupplierPurchaseOrderItemSchema = z.object({

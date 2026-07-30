@@ -366,6 +366,15 @@ export class SupplierPurchaseRequisitionsRepository {
     ) {
       throw Errors.dbError(message, data);
     }
+    if (
+      successStatus !== "converted" &&
+      (
+        envelope.purchase_order_id !== undefined ||
+        envelope.requisition.purchase_order_id !== null
+      )
+    ) {
+      throw Errors.dbError(message, data);
+    }
     return {
       status: successStatus,
       idempotent: envelope.idempotent ?? false,

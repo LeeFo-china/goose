@@ -257,7 +257,6 @@ const REQUISITION_ENVELOPE_CODES: Readonly<
     "SUPPLIER_PURCHASE_REQUISITION_AMOUNT_LIMIT_EXCEEDED",
     "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR",
     "SUPPLIER_PURCHASE_ORDER_DUPLICATE_SKU",
-    "SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED",
   ],
   not_found: [
     "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND",
@@ -278,20 +277,16 @@ const REQUISITION_ENVELOPE_CODES: Readonly<
     "SUPPLIER_PURCHASE_ORDER_ID_CONFLICT",
   ],
   price_missing: [
-    "SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED",
     "SUPPLIER_PURCHASE_ORDER_PRICE_MISSING",
   ],
   price_changed: [
     "SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED",
-    "SUPPLIER_PURCHASE_ORDER_PRICE_CHANGED",
   ],
   supplier_not_eligible: ["SUPPLIER_ORDER_NOT_ELIGIBLE"],
   project_invalid: [
     "SUPPLIER_PURCHASE_REQUISITION_PROJECT_INVALID",
     "SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID",
   ],
-  self_review: ["SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW"],
-  idempotency_conflict: ["SUPPLIER_IDEMPOTENCY_CONFLICT"],
 };
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
@@ -344,7 +339,9 @@ export function throwSupplierCommandDatabaseError(
 }
 
 function containsToken(value: unknown, token: string): boolean {
-  if (typeof value === "string") return value.includes(token);
+  if (typeof value === "string") {
+    return new RegExp(`(^|[^A-Z0-9_])${token}($|[^A-Z0-9_])`).test(value);
+  }
   if (Array.isArray(value)) {
     return value.some((item) => containsToken(item, token));
   }

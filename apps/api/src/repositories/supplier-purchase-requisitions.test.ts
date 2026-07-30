@@ -6,29 +6,26 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-const TENANT_ID = "60000000-0000-4000-8000-000000000001";
-const REQUISITION_ID = "60000000-0000-4000-8000-000000000002";
-const PROJECT_ID = "60000000-0000-4000-8000-000000000003";
-const RELATIONSHIP_ID = "60000000-0000-4000-8000-000000000004";
-const SUPPLIER_ID = "60000000-0000-4000-8000-000000000005";
-const SKU_ID = "60000000-0000-4000-8000-000000000006";
-const COST_CATEGORY_ID = "60000000-0000-4000-8000-000000000007";
-const USER_ID = "60000000-0000-4000-8000-000000000008";
-const EMPLOYEE_ID = "60000000-0000-4000-8000-000000000009";
-const PURCHASE_ORDER_ID = "60000000-0000-4000-8000-000000000010";
+const TENANT_ID = "60000000-0000-4000-8000-000000000001",
+  REQUISITION_ID = "60000000-0000-4000-8000-000000000002";
+const PROJECT_ID = "60000000-0000-4000-8000-000000000003",
+  RELATIONSHIP_ID = "60000000-0000-4000-8000-000000000004";
+const SUPPLIER_ID = "60000000-0000-4000-8000-000000000005",
+  SKU_ID = "60000000-0000-4000-8000-000000000006";
+const COST_CATEGORY_ID = "60000000-0000-4000-8000-000000000007",
+  USER_ID = "60000000-0000-4000-8000-000000000008";
+const EMPLOYEE_ID = "60000000-0000-4000-8000-000000000009",
+  PURCHASE_ORDER_ID = "60000000-0000-4000-8000-000000000010";
 const OTHER_PURCHASE_ORDER_ID = "60000000-0000-4000-8000-000000000099";
 const AT = "2026-07-30T08:00:00.000Z";
 
 type ResponseSpec = { body: unknown; count?: number; status?: number };
 
 async function repositoryFor(
-  responder: (request: Request, index: number) => ResponseSpec,
-) {
+  responder: (request: Request, index: number) => ResponseSpec) {
   const requests: Request[] = [];
   const fetchStub = (async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+    input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request
       ? input
       : new Request(input.toString(), init);
@@ -47,13 +44,10 @@ async function repositoryFor(
     global: { fetch: fetchStub },
   });
   const { SupplierPurchaseRequisitionsRepository } = await import(
-    "./supplier-purchase-requisitions"
-  );
+    "./supplier-purchase-requisitions");
   return {
     repository: new SupplierPurchaseRequisitionsRepository(
-      () => client as never,
-    ),
-    requests,
+      () => client as never), requests,
   };
 }
 
@@ -363,16 +357,8 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
     );
     const { repository } = await repositoryFor(() => ({
       body: {
-        status: "converted",
-        requisition: {
-          ...requisition,
-          status: "converted",
-          purchase_order_id: PURCHASE_ORDER_ID,
-          version: 3,
-        },
+        ...convertedEnvelope(PURCHASE_ORDER_ID),
         purchase_order: { id: PURCHASE_ORDER_ID },
-        purchase_order_id: PURCHASE_ORDER_ID,
-        version: 3,
       },
     }));
     await expect(repository.convert({
@@ -383,17 +369,7 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
 
   test("rejects converted success for a different requested order id", async () => {
     const { repository } = await repositoryFor(() => ({
-      body: {
-        status: "converted",
-        requisition: {
-          ...requisition,
-          status: "converted",
-          purchase_order_id: OTHER_PURCHASE_ORDER_ID,
-          version: 3,
-        },
-        purchase_order_id: OTHER_PURCHASE_ORDER_ID,
-        version: 3,
-      },
+      body: convertedEnvelope(OTHER_PURCHASE_ORDER_ID),
     }));
 
     await expect(repository.convert({
@@ -401,6 +377,17 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
       purchase_order_id: PURCHASE_ORDER_ID,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
+
+  test.each(["top-level", "nested"] as const)(
+    "rejects %s order id on non-converted success",
+    async (location) => {
+      const { repository } = await repositoryFor(() => ({
+        body: invalidSubmittedEnvelope(location),
+      }));
+      await expect(repository.submit(commandContext))
+        .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    },
+  );
 
   test("maps command envelope and database errors without swallowing unknown failures", async () => {
     const { repository: envelopeRepository } = await repositoryFor(() => ({
@@ -469,18 +456,15 @@ const item = {
   id: "60000000-0000-4000-8000-000000000012", tenant_id: TENANT_ID,
   purchase_requisition_id: REQUISITION_ID, line_no: 1,
   cost_category_id: COST_CATEGORY_ID,
-  supplier_product_id: "60000000-0000-4000-8000-000000000013",
-  supplier_sku_id: SKU_ID,
-  supplier_price_list_id: "60000000-0000-4000-8000-000000000014",
-  supplier_price_list_item_id: "60000000-0000-4000-8000-000000000015",
+  supplier_product_id: "60000000-0000-4000-8000-000000000013", supplier_sku_id: SKU_ID,
+  supplier_price_list_id: "60000000-0000-4000-8000-000000000014", supplier_price_list_item_id: "60000000-0000-4000-8000-000000000015",
   product_code_snapshot: "MAT-001", product_name_snapshot: "乳胶漆",
   sku_code_snapshot: "MAT-001-WHITE", sku_name_snapshot: "乳胶漆白色",
   specification_snapshot: "20L", model_snapshot: null,
   purchase_unit_id: "60000000-0000-4000-8000-000000000016",
   purchase_unit_code_snapshot: "BUCKET", purchase_unit_name_snapshot: "桶",
   purchase_unit_symbol_snapshot: "桶",
-  base_unit_id: "60000000-0000-4000-8000-000000000017",
-  base_unit_code_snapshot: "L", base_unit_name_snapshot: "升",
+  base_unit_id: "60000000-0000-4000-8000-000000000017", base_unit_code_snapshot: "L", base_unit_name_snapshot: "升",
   base_unit_symbol_snapshot: "L", base_unit_conversion: "20.00000000",
   price_list_code_snapshot: "PL-001", price_list_version_snapshot: 3,
   price_effective_from_snapshot: AT, price_effective_until_snapshot: null,
@@ -490,10 +474,26 @@ const item = {
 } as const;
 
 const commandContext = {
-  tenant_id: TENANT_ID,
-  requisition_id: REQUISITION_ID,
-  expected_version: 2,
-  actor_user_id: USER_ID,
-  actor_employee_id: EMPLOYEE_ID,
-  idempotency_key: "purchase-requisition:command",
+  tenant_id: TENANT_ID, requisition_id: REQUISITION_ID,
+  expected_version: 2, actor_user_id: USER_ID,
+  actor_employee_id: EMPLOYEE_ID, idempotency_key: "purchase-requisition:command",
 };
+
+function convertedEnvelope(purchaseOrderId: string) {
+  return {
+    status: "converted",
+    requisition: { ...requisition, status: "converted",
+      purchase_order_id: purchaseOrderId, version: 3 },
+    purchase_order_id: purchaseOrderId, version: 3,
+  };
+}
+
+function invalidSubmittedEnvelope(location: "top-level" | "nested") {
+  return {
+    status: "submitted",
+    requisition: { ...requisition, purchase_order_id:
+      location === "nested" ? PURCHASE_ORDER_ID : null },
+    ...(location === "top-level" ? { purchase_order_id: PURCHASE_ORDER_ID } : {}),
+    version: requisition.version,
+  };
+}
