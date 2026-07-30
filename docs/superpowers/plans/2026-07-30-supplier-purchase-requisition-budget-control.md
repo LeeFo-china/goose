@@ -1061,8 +1061,8 @@ Expected: 0 failure。
   `save_replay`、`idempotency_conflict`、`version_conflict`、
   `self_review_rejected`、`rejection_released`、`cancellation_released`、
   `conversion_unique`、`cross_tenant_hidden`、`explain_uses_index`、
-  `concurrent_budget_serialized`。smoke 后采购申请、承诺、采购单、预算分类、预算及
-  并发 supplier fixture 的残留计数全部为 `0`。
+  `concurrent_budget_serialized`。预算分类与预算随事务回滚；smoke 后采购申请、
+  承诺、采购单及并发 supplier fixture 的显式残留计数全部为 `0`。
 - 全量验证结果：API supplier 测试 `500 pass / 0 fail`（62 files）；
   Admin 指定组件测试 `108 pass / 0 fail`（10 files）；
   采购申请 Playwright `1 passed`；既有采购单 Playwright `2 passed`；
