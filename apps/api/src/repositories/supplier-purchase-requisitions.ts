@@ -360,6 +360,7 @@ export class SupplierPurchaseRequisitionsRepository {
       successStatus === "converted" &&
       (
         !envelope.purchase_order_id ||
+        envelope.purchase_order_id !== params.p_purchase_order_id ||
         envelope.requisition.purchase_order_id !== envelope.purchase_order_id
       )
     ) {

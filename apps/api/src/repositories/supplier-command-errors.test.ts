@@ -7,6 +7,20 @@ import {
   mapSupplierPurchaseFulfillmentEnvelopeError,
 } from "./supplier-command-errors";
 
+const CONVERTED_ORDER_ERROR_PAIRS = [
+  ["validation_error", "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR", 400],
+  ["validation_error", "SUPPLIER_PURCHASE_ORDER_DUPLICATE_SKU", 400],
+  ["validation_error", "SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED", 400],
+  ["not_found", "SUPPLIER_PURCHASE_ORDER_NOT_FOUND", 404],
+  ["version_conflict", "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT", 409],
+  ["state_conflict", "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT", 409],
+  ["state_conflict", "SUPPLIER_PURCHASE_ORDER_ID_CONFLICT", 409],
+  ["price_missing", "SUPPLIER_PURCHASE_ORDER_PRICE_MISSING", 409],
+  ["price_changed", "SUPPLIER_PURCHASE_ORDER_PRICE_CHANGED", 409],
+  ["supplier_not_eligible", "SUPPLIER_ORDER_NOT_ELIGIBLE", 409],
+  ["project_invalid", "SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID", 409],
+] as const;
+
 describe("mapSupplierCommandDatabaseError", () => {
   test.each([
     ["SUPPLIER_IDEMPOTENCY_CONFLICT", 409],
@@ -179,20 +193,31 @@ describe("mapSupplierCommandDatabaseError", () => {
   });
 
   test("maps every public purchase requisition envelope code by status", () => {
-    const sql = readFileSync(
+    const requisitionSql = readFileSync(
       new URL(
         "../../../../supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql",
         import.meta.url,
       ),
       "utf8",
     );
-    const pairs = [...sql.matchAll(
+    const purchaseOrderSql = readFileSync(
+      new URL(
+        "../../../../supabase/migrations/20260729180000_create_supplier_purchase_orders.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const commandSources = [
+      extractFunction(requisitionSql, "convert_supplier_purchase_requisition"),
+      extractFunction(
+        requisitionSql,
+        "create_supplier_purchase_order_from_requisition",
+      ),
+      extractFunction(purchaseOrderSql, "save_supplier_purchase_order_draft"),
+    ].join("\n");
+    const pairs = [...commandSources.matchAll(
       /'status',\s*'([^']+)',\s*'error_code',\s*'([^']+)'/g,
-    )].map((match) => [match[1]!, match[2]!] as const)
-      .filter(([, code]) =>
-        code.startsWith("SUPPLIER_PURCHASE_REQUISITION_") ||
-        code === "SUPPLIER_ORDER_NOT_ELIGIBLE"
-      );
+    )].map((match) => [match[1]!, match[2]!] as const);
 
     expect(pairs.length).toBeGreaterThan(0);
     for (const [status, code] of pairs) {
@@ -203,6 +228,14 @@ describe("mapSupplierCommandDatabaseError", () => {
       expect(mapSupplierCommandDatabaseError(code), code).not.toBeNull();
     }
   });
+
+  test.each(CONVERTED_ORDER_ERROR_PAIRS)(
+    "maps converted order passthrough %s + %s",
+    (status, code, statusCode) => {
+      expect(mapSupplierPurchaseRequisitionEnvelopeError(status, code))
+        .toMatchObject({ code, statusCode });
+    },
+  );
 
   test("rejects mismatched or unknown purchase requisition envelope codes", () => {
     expect(mapSupplierPurchaseRequisitionEnvelopeError(
@@ -215,3 +248,14 @@ describe("mapSupplierCommandDatabaseError", () => {
     )).toBeNull();
   });
 });
+
+function extractFunction(sql: string, name: string) {
+  const start = sql.indexOf(`FUNCTION public.${name}(`);
+  if (start < 0) throw new Error(`missing SQL function ${name}`);
+  const bodyStart = sql.indexOf("AS $$", start);
+  const end = sql.indexOf("\n$$;", bodyStart);
+  if (bodyStart < 0 || end < 0) {
+    throw new Error(`incomplete SQL function ${name}`);
+  }
+  return sql.slice(start, end + 4);
+}

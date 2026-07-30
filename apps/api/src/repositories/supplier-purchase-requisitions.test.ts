@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { createClient } from "@supabase/supabase-js";
+import { readFileSync } from "node:fs";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -15,6 +16,7 @@ const COST_CATEGORY_ID = "60000000-0000-4000-8000-000000000007";
 const USER_ID = "60000000-0000-4000-8000-000000000008";
 const EMPLOYEE_ID = "60000000-0000-4000-8000-000000000009";
 const PURCHASE_ORDER_ID = "60000000-0000-4000-8000-000000000010";
+const OTHER_PURCHASE_ORDER_ID = "60000000-0000-4000-8000-000000000099";
 const AT = "2026-07-30T08:00:00.000Z";
 
 type ResponseSpec = { body: unknown; count?: number; status?: number };
@@ -346,6 +348,58 @@ describe("SupplierPurchaseRequisitionsRepository", () => {
 
     await expect(repository.submit(commandContext))
       .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
+  test("keeps converted success purchase-order-id-only and rejects the old fixture", async () => {
+    const sql = readFileSync(
+      new URL(
+        "../../../../supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(sql).not.toContain(
+      "'purchase_order', v_order_result -> 'purchase_order'",
+    );
+    const { repository } = await repositoryFor(() => ({
+      body: {
+        status: "converted",
+        requisition: {
+          ...requisition,
+          status: "converted",
+          purchase_order_id: PURCHASE_ORDER_ID,
+          version: 3,
+        },
+        purchase_order: { id: PURCHASE_ORDER_ID },
+        purchase_order_id: PURCHASE_ORDER_ID,
+        version: 3,
+      },
+    }));
+    await expect(repository.convert({
+      ...commandContext,
+      purchase_order_id: PURCHASE_ORDER_ID,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
+  test("rejects converted success for a different requested order id", async () => {
+    const { repository } = await repositoryFor(() => ({
+      body: {
+        status: "converted",
+        requisition: {
+          ...requisition,
+          status: "converted",
+          purchase_order_id: OTHER_PURCHASE_ORDER_ID,
+          version: 3,
+        },
+        purchase_order_id: OTHER_PURCHASE_ORDER_ID,
+        version: 3,
+      },
+    }));
+
+    await expect(repository.convert({
+      ...commandContext,
+      purchase_order_id: PURCHASE_ORDER_ID,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
   test("maps command envelope and database errors without swallowing unknown failures", async () => {
