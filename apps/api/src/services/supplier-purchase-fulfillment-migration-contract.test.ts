@@ -48,6 +48,58 @@ function envelope(source: string, status: string, errorCode: string) {
   );
 }
 
+function sqlSection(source: string, startToken: string, endToken: string) {
+  const start = source.indexOf(startToken);
+  if (start < 0) return "";
+  const end = source.indexOf(endToken, start);
+  return end < 0 ? source.slice(start) : source.slice(start, end + endToken.length);
+}
+
+function validationBeforeLocks(
+  source: string,
+  errorCode: string,
+  required: RegExp,
+) {
+  const beforeActor = sqlSection(
+    source,
+    "BEGIN",
+    "PERFORM public.assert_supplier_purchase_order_actor",
+  );
+  contracts(beforeActor, [
+    required,
+    new RegExp(`'status', 'validation_error'[\\s\\S]{0,180}'${errorCode}'`),
+  ]);
+  ordered(source, [
+    /PERFORM public\.assert_supplier_purchase_order_actor\(/,
+    /pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\(\s*'supplier-command:'/,
+  ]);
+}
+
+function idempotency(
+  source: string,
+  request: RegExp,
+  command: string,
+  replay: RegExp,
+) {
+  contracts(source, [
+    request,
+    /SELECT event\.\*[\s\S]*event\.actor_user_id = p_actor_user_id[\s\S]*event\.idempotency_key = p_idempotency_key/,
+    new RegExp(`v_event\\.command\\s*<>\\s*'${command}'`),
+    /v_event\.from_state -> '_request' IS DISTINCT FROM v_request[\s\S]*THEN\s*RAISE EXCEPTION USING[\s\S]*MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT'/,
+    replay,
+  ]);
+}
+
+function sqlstate22023Fallback(source: string, errorCode: string) {
+  const exception = source.slice(source.indexOf("\nEXCEPTION"));
+  contracts(exception, [
+    /WHEN invalid_parameter_value OR invalid_text_representation OR numeric_value_out_of_range THEN/,
+    new RegExp(
+      `'status', 'validation_error'[\\s\\S]{0,180}'error_code',\\s*'${errorCode}'`,
+    ),
+  ]);
+}
+
 function lockOrder(
   source: string,
   itemTable: string,
@@ -86,10 +138,6 @@ describe("supplier purchase fulfillment migration contract", () => {
     }
     contracts(migration, [
       /UNIQUE \(supplier_purchase_order_id\)/,
-      /CHECK \(status IN \([\s\S]*'confirmed'[\s\S]*'partially_shipped'[\s\S]*'shipped'[\s\S]*'partially_received'[\s\S]*'received'[\s\S]*'received_with_variance'[\s\S]*'cancelled'/,
-      /ordered_quantity numeric\(18, 4\) NOT NULL/,
-      /received_quantity <= shipped_quantity[\s\S]*shipped_quantity <= ordered_quantity/,
-      /accepted_quantity \+ rejected_quantity = received_quantity/,
       /UNIQUE \(supplier_purchase_order_id, shipment_no\)/,
       /UNIQUE \(supplier_purchase_order_id, receipt_no\)/,
       /supplier_purchase_order_fulfillments_tenant_status_updated_idx/,
@@ -121,6 +169,39 @@ describe("supplier purchase fulfillment migration contract", () => {
       ],
     };
     for (const [table, patterns] of Object.entries(edges)) {
+      contracts(sqlObject("CREATE TABLE public.", table, "\n);"), patterns);
+    }
+    const checks: Record<string, RegExp[]> = {
+      supplier_purchase_order_fulfillments: [
+        /CHECK \(status IN \([\s\S]*'confirmed'[\s\S]*'partially_shipped'[\s\S]*'shipped'[\s\S]*'partially_received'[\s\S]*'received'[\s\S]*'received_with_variance'[\s\S]*'cancelled'/,
+        /ordered_quantity numeric\(18, 4\)[\s\S]*shipped_quantity numeric\(18, 4\)[\s\S]*received_quantity numeric\(18, 4\)[\s\S]*accepted_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
+        /accepted_subtotal_amount numeric\(18, 2\)[\s\S]*accepted_tax_amount numeric\(18, 2\)[\s\S]*accepted_total_amount numeric\(18, 2\)/,
+        /received_quantity <= shipped_quantity[\s\S]*shipped_quantity <= ordered_quantity[\s\S]*accepted_quantity \+ rejected_quantity = received_quantity/,
+        /accepted_subtotal_amount >= 0[\s\S]*accepted_tax_amount >= 0[\s\S]*accepted_total_amount >= 0[\s\S]*accepted_total_amount =\s*accepted_subtotal_amount \+ accepted_tax_amount/,
+        /CHECK \(version > 0\)/,
+      ],
+      supplier_purchase_order_item_fulfillments: [
+        /ordered_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
+        /ordered_quantity > 0[\s\S]*received_quantity <= shipped_quantity[\s\S]*shipped_quantity <= ordered_quantity[\s\S]*accepted_quantity \+ rejected_quantity = received_quantity/,
+        /accepted_subtotal_amount >= 0[\s\S]*accepted_total_amount =\s*accepted_subtotal_amount \+ accepted_tax_amount/,
+      ],
+      supplier_purchase_order_shipments: [
+        /shipment_no = btrim\(shipment_no\)[\s\S]*char_length\(shipment_no\) <= 80/,
+      ],
+      supplier_purchase_order_shipment_items: [
+        /quantity numeric\(18, 4\) NOT NULL/,
+        /CHECK \(quantity > 0\)/,
+      ],
+      supplier_purchase_order_receipts: [
+        /receipt_no = btrim\(receipt_no\)[\s\S]*char_length\(receipt_no\) <= 80/,
+      ],
+      supplier_purchase_order_receipt_items: [
+        /accepted_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
+        /accepted_quantity >= 0[\s\S]*rejected_quantity >= 0[\s\S]*accepted_quantity \+ rejected_quantity > 0/,
+        /rejected_quantity > 0[\s\S]*variance_reason IS NOT NULL[\s\S]*variance_reason = btrim\(variance_reason\)[\s\S]*variance_reason <> ''[\s\S]*rejected_quantity = 0[\s\S]*variance_reason IS NULL/,
+      ],
+    };
+    for (const [table, patterns] of Object.entries(checks)) {
       contracts(sqlObject("CREATE TABLE public.", table, "\n);"), patterns);
     }
   });
@@ -179,6 +260,11 @@ describe("supplier purchase fulfillment migration contract", () => {
     contracts(fn, branches);
     ordered(fn, branches);
     contracts(fn, [
+      /SUM\(item_fulfillment\.ordered_quantity\)/,
+      /SUM\(item_fulfillment\.shipped_quantity\)/,
+      /SUM\(item_fulfillment\.received_quantity\)/,
+      /SUM\(item_fulfillment\.accepted_quantity\)/,
+      /SUM\(item_fulfillment\.rejected_quantity\)/,
       /purchase_item\.unit_price/,
       /purchase_item\.tax_rate/,
       /purchase_item\.tax_inclusive/,
@@ -208,6 +294,12 @@ describe("supplier purchase fulfillment migration contract", () => {
     envelope(fn, "state_conflict", "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT");
     envelope(fn, "version_conflict", "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT");
     envelope(fn, "state_conflict", "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED");
+    validationBeforeLocks(fn, "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VALIDATION_ERROR",
+      /IF p_order_id IS NULL[\s\S]*p_tenant_id IS NULL[\s\S]*p_expected_order_version IS NULL[\s\S]*p_confirmed_at IS NULL[\s\S]*p_actor_user_id IS NULL[\s\S]*p_actor_employee_id IS NULL[\s\S]*p_idempotency_key IS NULL/);
+    idempotency(fn,
+      /v_request := jsonb_build_object\(\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_order_version', p_expected_order_version,\s*'confirmed_at', p_confirmed_at,\s*'remark', v_remark,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
+      "confirm_supplier_purchase_order_fulfillment",
+      /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
     lockOrder(
       fn,
       "supplier_purchase_order_items",
@@ -232,6 +324,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_event\.from_state -> '_request' IS DISTINCT FROM v_request/,
       /'shipment_no', btrim\(p_shipment_no\)[\s\S]*'carrier_name', v_carrier_name[\s\S]*'tracking_no', v_tracking_no[\s\S]*'remark', v_remark[\s\S]*'items', v_normalized_items[\s\S]*'actor_employee_id', p_actor_employee_id/,
       /jsonb_build_object\('_request', v_request\)/,
+      /jsonb_agg\([\s\S]*ORDER BY requested\.purchase_order_item_id/,
       /'status', 'shipment_created'/,
     ]);
     for (const [status, code] of [
@@ -245,6 +338,13 @@ describe("supplier purchase fulfillment migration contract", () => {
       ["over_shipped", "OVER_SHIPPED"],
       ["state_conflict", "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT"],
     ] as const) envelope(fn, status, code);
+    validationBeforeLocks(fn, "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR",
+      /IF p_order_id IS NULL[\s\S]*p_shipment_id IS NULL[\s\S]*p_tenant_id IS NULL[\s\S]*p_expected_fulfillment_version IS NULL[\s\S]*p_shipment_no IS NULL[\s\S]*p_shipped_at IS NULL[\s\S]*p_items IS NULL[\s\S]*p_actor_user_id IS NULL[\s\S]*p_actor_employee_id IS NULL[\s\S]*p_idempotency_key IS NULL/);
+    idempotency(fn,
+      /v_request := jsonb_build_object\(\s*'event_id', p_shipment_id,\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_fulfillment_version', p_expected_fulfillment_version,\s*'shipment_no', btrim\(p_shipment_no\),\s*'shipped_at', p_shipped_at,\s*'carrier_name', v_carrier_name,\s*'tracking_no', v_tracking_no,\s*'remark', v_remark,\s*'items', v_normalized_items,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
+      "create_supplier_purchase_order_shipment",
+      /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
+    sqlstate22023Fallback(fn, "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR");
     lockOrder(
       fn,
       "supplier_purchase_order_item_fulfillments",
@@ -273,6 +373,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /'receipt_no', btrim\(p_receipt_no\)[\s\S]*'remark', v_remark[\s\S]*'items', v_normalized_items[\s\S]*'actor_employee_id', p_actor_employee_id/,
       /SELECT EXISTS \([\s\S]*receipt\.id = p_receipt_id[\s\S]*INTO v_global_event_exists/,
       /IF v_global_event_exists[\s\S]*'status', 'state_conflict'[\s\S]*SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT/,
+      /jsonb_agg\([\s\S]*ORDER BY requested\.purchase_order_item_id/,
       /'status', 'receipt_created'/,
     ]);
     expect(fn).not.toMatch(/NULLIF\(btrim\(item\.variance_reason\), ''\)/);
@@ -288,6 +389,13 @@ describe("supplier purchase fulfillment migration contract", () => {
       ["variance_reason_required", "VARIANCE_REASON_REQUIRED"],
       ["state_conflict", "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT"],
     ] as const) envelope(fn, status, code);
+    validationBeforeLocks(fn, "SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR",
+      /IF p_order_id IS NULL[\s\S]*p_receipt_id IS NULL[\s\S]*p_tenant_id IS NULL[\s\S]*p_expected_fulfillment_version IS NULL[\s\S]*p_receipt_no IS NULL[\s\S]*p_received_at IS NULL[\s\S]*p_items IS NULL[\s\S]*p_actor_user_id IS NULL[\s\S]*p_actor_employee_id IS NULL[\s\S]*p_idempotency_key IS NULL/);
+    idempotency(fn,
+      /v_request := jsonb_build_object\(\s*'event_id', p_receipt_id,\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_fulfillment_version', p_expected_fulfillment_version,\s*'receipt_no', btrim\(p_receipt_no\),\s*'received_at', p_received_at,\s*'remark', v_remark,\s*'items', v_normalized_items,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
+      "create_supplier_purchase_order_receipt",
+      /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
+    sqlstate22023Fallback(fn, "SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR");
     lockOrder(
       fn,
       "supplier_purchase_order_item_fulfillments",
@@ -300,9 +408,7 @@ describe("supplier purchase fulfillment migration contract", () => {
     const fn = sqlFunction("public", "cancel_supplier_purchase_order");
     contracts(fn, [
       /v_request := jsonb_build_object\(\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_version', p_expected_version,\s*'reason', btrim\(p_reason\),\s*'actor_employee_id', p_actor_employee_id\s*\)/,
-      /v_event\.from_state -> '_request' IS DISTINCT FROM v_request/,
       /v_before \|\| jsonb_build_object\('_request', v_request\)/,
-      /RETURN jsonb_build_object\(\s*'status', 'cancelled',\s*'idempotent', true,\s*'purchase_order', v_event\.to_state,\s*'version', v_event\.result_version\s*\)/,
       /v_order\.status NOT IN \('draft', 'submitted'\)/,
       /v_order\.version <> p_expected_version/,
       /IF v_has_shipment THEN[\s\S]*SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED/,
@@ -317,6 +423,12 @@ describe("supplier purchase fulfillment migration contract", () => {
       ["state_conflict", "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED"],
       ["project_invalid", "SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID"],
     ] as const) envelope(fn, status, code);
+    validationBeforeLocks(fn, "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR",
+      /IF p_order_id IS NULL[\s\S]*p_tenant_id IS NULL[\s\S]*p_expected_version IS NULL[\s\S]*p_reason IS NULL[\s\S]*p_actor_user_id IS NULL[\s\S]*p_actor_employee_id IS NULL[\s\S]*p_idempotency_key IS NULL/);
+    idempotency(fn,
+      /v_request := jsonb_build_object\(\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_version', p_expected_version,\s*'reason', btrim\(p_reason\),\s*'actor_employee_id', p_actor_employee_id\s*\)/,
+      "cancel_supplier_purchase_order",
+      /RETURN jsonb_build_object\(\s*'status', 'cancelled',\s*'idempotent', true,\s*'purchase_order', v_event\.to_state,\s*'version', v_event\.result_version\s*\)/);
     lockOrder(
       fn,
       "supplier_purchase_order_item_fulfillments",
@@ -342,6 +454,24 @@ describe("supplier purchase fulfillment migration contract", () => {
         new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${name}\\([^;]+\\) TO service_role;`),
       );
     }
+    const tableAcl = [
+      sqlSection(migration, "REVOKE ALL ON TABLE", "FROM PUBLIC, anon, authenticated, service_role;"),
+      sqlSection(migration, "GRANT SELECT ON TABLE", "TO service_role;"),
+      sqlSection(migration, "REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE", "FROM PUBLIC, anon, authenticated, service_role;"),
+    ];
+    for (const table of [
+      "supplier_purchase_order_fulfillments",
+      "supplier_purchase_order_item_fulfillments",
+      "supplier_purchase_order_shipments",
+      "supplier_purchase_order_shipment_items",
+      "supplier_purchase_order_receipts",
+      "supplier_purchase_order_receipt_items",
+    ]) {
+      for (const acl of tableAcl) expect(acl).toContain(`public.${table}`);
+    }
+    expect(migration.match(/GRANT SELECT ON TABLE/g)).toHaveLength(1);
+    expect(migration).not.toMatch(/GRANT [^;]*(?:UPDATE|DELETE)[^;]*ON TABLE[^;]*supplier_purchase_order_(?:fulfillments|shipments|receipts)/);
+    expect(migration).toMatch(/REVOKE ALL ON FUNCTION private\.recalculate_supplier_purchase_order_fulfillment\(uuid\) FROM PUBLIC, anon, authenticated, service_role/);
     expect(migration).toContain("jsonb_to_recordset(v_normalized_items)");
     expect(migration).not.toMatch(/\bLOOP\b/);
     expect(migration).toMatch(
