@@ -225,7 +225,7 @@ describe("supplier purchase requisition migration contract", () => {
 
     expectContracts(extractTable("supplier_purchase_requisition_items"), [
       /line_no integer NOT NULL/,
-      /CHECK \(line_no > 0\)/,
+      /CHECK \(line_no BETWEEN 1 AND 100\)/,
       /quantity numeric\(18, 4\) NOT NULL/,
       /CHECK \(quantity > 0\)/,
       /unit_price numeric\(14, 2\) NOT NULL/,
@@ -331,6 +331,12 @@ describe("supplier purchase requisition migration contract", () => {
       /supplier_price_list_id uuid NOT NULL[\s\S]*REFERENCES public\.supplier_price_lists\(id\)/,
       /supplier_price_list_item_id uuid NOT NULL[\s\S]*REFERENCES public\.supplier_price_list_items\(id\)/,
     ]);
+    expect(sql).toMatch(
+      /Task 3 set-based SECURITY DEFINER[\s\S]*supplier -> product -> sku -> price list -> price item[\s\S]*direct writes are revoked/i,
+    );
+    expect(sql).not.toMatch(
+      /CREATE TRIGGER[\s\S]{0,120}supplier_purchase_requisition_items/i,
+    );
 
     const commitments = extractTable("project_cost_commitments");
     expectContracts(commitments, [
@@ -345,9 +351,17 @@ describe("supplier purchase requisition migration contract", () => {
       /ALTER TABLE public\.supplier_purchase_orders\s+ADD COLUMN purchase_requisition_id uuid NULL;/,
       /CREATE UNIQUE INDEX supplier_purchase_orders_purchase_requisition_unique_idx[\s\S]*purchase_requisition_id\)[\s\S]*WHERE purchase_requisition_id IS NOT NULL;/,
       /CREATE UNIQUE INDEX supplier_purchase_requisitions_purchase_order_unique_idx[\s\S]*purchase_order_id\)[\s\S]*WHERE purchase_order_id IS NOT NULL;/,
-      /FOREIGN KEY \(purchase_requisition_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_requisitions\(id, tenant_id\)/,
-      /FOREIGN KEY \(purchase_order_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_orders\(id, tenant_id\)/,
+      /ADD CONSTRAINT supplier_purchase_orders_id_tenant_requisition_key\s+UNIQUE \(id, tenant_id, purchase_requisition_id\)/,
+      /ADD CONSTRAINT supplier_purchase_requisitions_id_tenant_order_key\s+UNIQUE \(id, tenant_id, purchase_order_id\)/,
+      /FOREIGN KEY \(purchase_requisition_id, tenant_id, id\)\s+REFERENCES public\.supplier_purchase_requisitions\(\s*id,\s*tenant_id,\s*purchase_order_id\s*\)\s+ON DELETE RESTRICT\s+DEFERRABLE INITIALLY DEFERRED/,
+      /FOREIGN KEY \(purchase_order_id, tenant_id, id\)\s+REFERENCES public\.supplier_purchase_orders\(\s*id,\s*tenant_id,\s*purchase_requisition_id\s*\)\s+ON DELETE RESTRICT\s+DEFERRABLE INITIALLY DEFERRED/,
     ]);
+    expect(sql).not.toMatch(
+      /ADD CONSTRAINT supplier_purchase_orders_requisition_tenant_fkey\s+FOREIGN KEY \(purchase_requisition_id, tenant_id\)\s/,
+    );
+    expect(sql).not.toMatch(
+      /ADD CONSTRAINT supplier_purchase_requisitions_order_tenant_fkey\s+FOREIGN KEY \(purchase_order_id, tenant_id\)\s/,
+    );
   });
 
   test("generates tenant-unique request numbers and bounded query indexes", () => {
@@ -358,24 +372,27 @@ describe("supplier purchase requisition migration contract", () => {
     ]);
     for (const index of [
       "supplier_purchase_requisitions_tenant_status_updated_idx",
+      "supplier_purchase_requisitions_tenant_updated_idx",
+      "supplier_purchase_requisitions_tenant_budget_updated_idx",
       "supplier_purchase_requisitions_tenant_project_updated_idx",
       "supplier_purchase_requisitions_pending_approval_idx",
       "supplier_purchase_requisitions_tenant_supplier_updated_idx",
       "supplier_purchase_requisition_items_parent_line_idx",
       "project_cost_commitments_active_lookup_idx",
-      "project_cost_commitments_source_lookup_idx",
     ]) {
       expect(sql).toContain(`CREATE INDEX ${index}`);
     }
     expectContracts(sql, [
       /supplier_purchase_requisitions_tenant_status_updated_idx[\s\S]*\(\s*tenant_id,\s*status,\s*updated_at DESC,\s*id DESC\s*\)/,
+      /supplier_purchase_requisitions_tenant_updated_idx[\s\S]*\(\s*tenant_id,\s*updated_at DESC,\s*id DESC\s*\)/,
+      /supplier_purchase_requisitions_tenant_budget_updated_idx[\s\S]*\(\s*tenant_id,\s*budget_status,\s*updated_at DESC,\s*id DESC\s*\)/,
       /supplier_purchase_requisitions_tenant_project_updated_idx[\s\S]*\(\s*tenant_id,\s*project_id,\s*updated_at DESC,\s*id DESC\s*\)/,
       /supplier_purchase_requisitions_pending_approval_idx[\s\S]*\(\s*tenant_id,\s*status,\s*submitted_at,\s*id\s*\)[\s\S]*WHERE status = 'pending_approval'/,
       /supplier_purchase_requisitions_tenant_supplier_updated_idx[\s\S]*\(\s*tenant_id,\s*tenant_supplier_id,\s*updated_at DESC,\s*id DESC\s*\)/,
       /supplier_purchase_requisition_items_parent_line_idx[\s\S]*\(\s*purchase_requisition_id,\s*line_no,\s*id\s*\)/,
       /project_cost_commitments_active_lookup_idx[\s\S]*\(\s*tenant_id,\s*project_id,\s*cost_category_id,\s*status\s*\)[\s\S]*WHERE status IN \('reserved', 'converted'\)/,
-      /project_cost_commitments_source_lookup_idx[\s\S]*\(\s*tenant_id,\s*source_type,\s*source_id,\s*cost_category_id\s*\)/,
     ]);
+    expect(sql).not.toContain("project_cost_commitments_source_lookup_idx");
   });
 
   test("forces RLS and leaves direct writes for later definer commands", () => {
@@ -456,6 +473,11 @@ describe("supplier purchase requisition migration contract", () => {
 
   test("is transactional, adds no commands, and documents forward rollback", () => {
     expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expectContracts(sql, [
+      /SET LOCAL lock_timeout = '5s';/,
+      /timeout failure rolls back the whole migration[\s\S]*maintenance window[\s\S]*long-running deployment.*block/i,
+      /Global eight-digit sequence cap[\s\S]*100,000,000[\s\S]*forward migration/i,
+    ]);
     expect(sql).not.toMatch(
       /CREATE (?:OR REPLACE )?FUNCTION public\.(?:save|submit|approve|reject|cancel|convert)_supplier_purchase_requisition/,
     );

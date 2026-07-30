@@ -4,6 +4,11 @@
 
 BEGIN;
 
+-- Existing-table constraint validation needs strong locks. Bound the wait:
+-- timeout failure rolls back the whole migration; retry in a maintenance window
+-- instead of allowing a long-running deployment to block production traffic.
+SET LOCAL lock_timeout = '5s';
+
 ALTER TABLE public.supplier_command_events
 DROP CONSTRAINT supplier_command_events_resource_type_check;
 
@@ -29,6 +34,8 @@ ADD CONSTRAINT supplier_command_events_resource_type_check CHECK (
   )
 );
 
+-- Global eight-digit sequence cap allows fewer than 100,000,000 requisitions
+-- over the system lifetime. Expand it with a forward migration before exhaustion.
 CREATE SEQUENCE public.supplier_purchase_requisition_number_seq
 AS bigint
 START WITH 1
@@ -293,6 +300,9 @@ CREATE TABLE public.supplier_purchase_requisitions (
     UNIQUE (tenant_id, request_no)
 );
 
+-- Item-chain consistency stays set-based: the Task 3 set-based SECURITY DEFINER
+-- draft command validates supplier -> product -> sku -> price list -> price item.
+-- Direct writes are revoked below; do not add a per-row constraint trigger.
 CREATE TABLE public.supplier_purchase_requisition_items (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL
@@ -346,7 +356,7 @@ CREATE TABLE public.supplier_purchase_requisition_items (
     REFERENCES public.finance_cost_categories(id, tenant_id)
     ON DELETE RESTRICT,
   CONSTRAINT supplier_purchase_requisition_items_line_no_check
-    CHECK (line_no > 0),
+    CHECK (line_no BETWEEN 1 AND 100),
   CONSTRAINT supplier_purchase_requisition_items_required_text_check
     CHECK (
       product_code_snapshot = btrim(product_code_snapshot)
@@ -498,21 +508,54 @@ ON public.supplier_purchase_requisitions(purchase_order_id)
 WHERE purchase_order_id IS NOT NULL;
 
 ALTER TABLE public.supplier_purchase_orders
+ADD CONSTRAINT supplier_purchase_orders_id_tenant_requisition_key
+UNIQUE (id, tenant_id, purchase_requisition_id);
+
+ALTER TABLE public.supplier_purchase_requisitions
+ADD CONSTRAINT supplier_purchase_requisitions_id_tenant_order_key
+UNIQUE (id, tenant_id, purchase_order_id);
+
+ALTER TABLE public.supplier_purchase_orders
 ADD CONSTRAINT supplier_purchase_orders_requisition_tenant_fkey
-FOREIGN KEY (purchase_requisition_id, tenant_id)
-REFERENCES public.supplier_purchase_requisitions(id, tenant_id)
-ON DELETE RESTRICT;
+FOREIGN KEY (purchase_requisition_id, tenant_id, id)
+REFERENCES public.supplier_purchase_requisitions(
+  id,
+  tenant_id,
+  purchase_order_id
+)
+ON DELETE RESTRICT
+DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE public.supplier_purchase_requisitions
 ADD CONSTRAINT supplier_purchase_requisitions_order_tenant_fkey
-FOREIGN KEY (purchase_order_id, tenant_id)
-REFERENCES public.supplier_purchase_orders(id, tenant_id)
-ON DELETE RESTRICT;
+FOREIGN KEY (purchase_order_id, tenant_id, id)
+REFERENCES public.supplier_purchase_orders(
+  id,
+  tenant_id,
+  purchase_requisition_id
+)
+ON DELETE RESTRICT
+DEFERRABLE INITIALLY DEFERRED;
+
+CREATE INDEX supplier_purchase_requisitions_tenant_updated_idx
+ON public.supplier_purchase_requisitions(
+  tenant_id,
+  updated_at DESC,
+  id DESC
+);
 
 CREATE INDEX supplier_purchase_requisitions_tenant_status_updated_idx
 ON public.supplier_purchase_requisitions(
   tenant_id,
   status,
+  updated_at DESC,
+  id DESC
+);
+
+CREATE INDEX supplier_purchase_requisitions_tenant_budget_updated_idx
+ON public.supplier_purchase_requisitions(
+  tenant_id,
+  budget_status,
   updated_at DESC,
   id DESC
 );
@@ -554,14 +597,6 @@ ON public.project_cost_commitments(
   tenant_id, project_id, cost_category_id, status
 )
 WHERE status IN ('reserved', 'converted');
-
-CREATE INDEX project_cost_commitments_source_lookup_idx
-ON public.project_cost_commitments(
-  tenant_id,
-  source_type,
-  source_id,
-  cost_category_id
-);
 
 ALTER TABLE public.supplier_purchase_requisitions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.supplier_purchase_requisitions FORCE ROW LEVEL SECURITY;
