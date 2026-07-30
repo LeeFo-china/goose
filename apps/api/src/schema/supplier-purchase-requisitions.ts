@@ -21,6 +21,7 @@ const uuid = (message: string) => z.uuid(message);
 const expectedVersion = z.number().int()
   .positive("版本号必须是正整数");
 const optionalRemark = z.string().trim()
+  .min(1, "备注不能为空")
   .max(500, "备注不能超过 500 个字符")
   .nullable()
   .optional();

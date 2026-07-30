@@ -7,6 +7,7 @@ import {
   ProjectCostCommitmentRecordSchema,
   SupplierPurchaseRequisitionCommandEnvelopeSchema,
   SupplierPurchaseRequisitionDetailSchema,
+  SupplierPurchaseRequisitionItemPageSchema,
   SupplierPurchaseRequisitionItemSchema,
   SupplierPurchaseRequisitionRecordSchema,
 } from "./supplier-purchase-requisition-records";
@@ -171,20 +172,32 @@ describe("supplier purchase requisition database records", () => {
     }
   });
 
-  test("requires header amounts to remain numeric strings", () => {
+  test("enforces numeric eighteen scale two header money", () => {
     for (const field of [
       "subtotal_amount",
       "tax_amount",
       "total_amount",
     ] as const) {
-      expect(SupplierPurchaseRequisitionRecordSchema.safeParse({
+      expect(SupplierPurchaseRequisitionRecordSchema.parse({
         ...requisition,
-        [field]: 1,
-      }).success).toBe(false);
-      expect(SupplierPurchaseRequisitionRecordSchema.safeParse({
+        [field]: "0.00",
+      })[field]).toBe("0.00");
+      expect(SupplierPurchaseRequisitionRecordSchema.parse({
         ...requisition,
-        [field]: "not-numeric",
-      }).success).toBe(false);
+        [field]: "9999999999999999.99",
+      })[field]).toBe("9999999999999999.99");
+      for (const value of [
+        1,
+        "-0.01",
+        "1.001",
+        "10000000000000000",
+        "not-numeric",
+      ]) {
+        expect(SupplierPurchaseRequisitionRecordSchema.safeParse({
+          ...requisition,
+          [field]: value,
+        }).success).toBe(false);
+      }
     }
   });
 
@@ -204,20 +217,73 @@ describe("supplier purchase requisition database records", () => {
     }).success).toBe(false);
   });
 
-  test("requires every item quantity and amount to remain a string", () => {
+  test("enforces precise string quantity, conversion, price and tax domains", () => {
+    const boundaries = {
+      quantity: "99999999999999.9999",
+      base_unit_conversion: "9999999999.99999999",
+      unit_price: "999999999999.99",
+      tax_rate: "1.000000",
+    } as const;
+    for (const [field, value] of Object.entries(boundaries)) {
+      expect(SupplierPurchaseRequisitionItemSchema.parse({
+        ...item,
+        [field]: value,
+      })[field as keyof typeof item]).toBe(value);
+    }
+    expect(SupplierPurchaseRequisitionItemSchema.parse({
+      ...item,
+      unit_price: "0.00",
+      tax_rate: "0.000000",
+    })).toMatchObject({
+      unit_price: "0.00",
+      tax_rate: "0.000000",
+    });
+    for (const [field, values] of Object.entries({
+      quantity: [1, "0", "-0.0001", "1.00001", "100000000000000"],
+      base_unit_conversion: [
+        1,
+        "0",
+        "-0.00000001",
+        "1.000000001",
+        "10000000000",
+      ],
+      unit_price: [1, "-0.01", "1.001", "1000000000000"],
+      tax_rate: [1, "-0.000001", "1.000001", "2", "0.0000001"],
+    })) {
+      for (const value of values) {
+        expect(SupplierPurchaseRequisitionItemSchema.safeParse({
+          ...item,
+          [field]: value,
+        }).success).toBe(false);
+      }
+    }
+  });
+
+  test("enforces numeric eighteen scale two line money", () => {
     for (const field of [
-      "base_unit_conversion",
-      "quantity",
-      "unit_price",
-      "tax_rate",
       "line_subtotal_amount",
       "line_tax_amount",
       "line_total_amount",
     ] as const) {
-      expect(SupplierPurchaseRequisitionItemSchema.safeParse({
+      expect(SupplierPurchaseRequisitionItemSchema.parse({
         ...item,
-        [field]: 1,
-      }).success).toBe(false);
+        [field]: "0.00",
+      })[field]).toBe("0.00");
+      expect(SupplierPurchaseRequisitionItemSchema.parse({
+        ...item,
+        [field]: "9999999999999999.99",
+      })[field]).toBe("9999999999999999.99");
+      for (const value of [
+        1,
+        "-0.01",
+        "1.001",
+        "10000000000000000",
+      ]) {
+        expect(SupplierPurchaseRequisitionItemSchema.safeParse({
+          ...item,
+          [field]: value,
+        }).success).toBe(false);
+      }
     }
   });
 
@@ -239,19 +305,47 @@ describe("supplier purchase requisition database records", () => {
       "budget_amount_snapshot",
       "expense_amount_snapshot",
       "other_commitment_amount_snapshot",
-      "available_amount_snapshot",
     ] as const) {
+      expect(ProjectCostCommitmentRecordSchema.parse({
+        ...commitment,
+        [field]: "0.00",
+      })[field]).toBe("0.00");
+      expect(ProjectCostCommitmentRecordSchema.parse({
+        ...commitment,
+        [field]: "9999999999999999.99",
+      })[field]).toBe("9999999999999999.99");
+      for (const value of [
+        1,
+        "-0.01",
+        "1.001",
+        "10000000000000000",
+      ]) {
+        expect(ProjectCostCommitmentRecordSchema.safeParse({
+          ...commitment,
+          [field]: value,
+        }).success).toBe(false);
+      }
+    }
+    expect(ProjectCostCommitmentRecordSchema.parse({
+      ...commitment,
+      available_amount_snapshot: "-9999999999999999.99",
+    }).available_amount_snapshot).toBe("-9999999999999999.99");
+    for (const value of [
+      1,
+      "-1.001",
+      "-10000000000000000",
+      "10000000000000000",
+    ]) {
       expect(ProjectCostCommitmentRecordSchema.safeParse({
         ...commitment,
-        [field]: 1,
+        available_amount_snapshot: value,
       }).success).toBe(false);
     }
   });
 
-  test("strictly parses requisition details", () => {
+  test("keeps detail free of unpaginated item arrays", () => {
     const detail = {
       requisition,
-      items: [item],
       budget_snapshots: [commitment],
     };
     expect(SupplierPurchaseRequisitionDetailSchema.parse(detail))
@@ -263,6 +357,35 @@ describe("supplier purchase requisition database records", () => {
     expect(SupplierPurchaseRequisitionDetailSchema.safeParse({
       ...detail,
       budget_snapshots: [{ ...commitment, amount: 113 }],
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionDetailSchema.safeParse({
+      ...detail,
+      items: [item],
+    }).success).toBe(false);
+  });
+
+  test("strictly parses a paginated requisition item page", () => {
+    const page = {
+      list: [item],
+      pagination: {
+        page: 1,
+        pageSize: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    };
+    expect(SupplierPurchaseRequisitionItemPageSchema.parse(page)).toEqual(page);
+    expect(SupplierPurchaseRequisitionItemPageSchema.safeParse({
+      ...page,
+      pagination: { ...page.pagination, pageSize: 101 },
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionItemPageSchema.safeParse({
+      ...page,
+      pagination: { ...page.pagination, extra: true },
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionItemPageSchema.safeParse({
+      ...page,
+      unknown: true,
     }).success).toBe(false);
   });
 });

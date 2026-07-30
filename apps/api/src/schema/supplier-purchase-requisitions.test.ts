@@ -79,6 +79,21 @@ describe("supplier purchase requisition query schemas", () => {
     }
   });
 
+  test("trims and bounds list keywords", () => {
+    expect(SupplierPurchaseRequisitionListQuerySchema.parse({
+      keyword: " 临时采购 ",
+    }).keyword).toBe("临时采购");
+    expect(SupplierPurchaseRequisitionListQuerySchema.parse({
+      keyword: "a".repeat(80),
+    }).keyword).toBe("a".repeat(80));
+    expect(SupplierPurchaseRequisitionListQuerySchema.safeParse({
+      keyword: "a".repeat(81),
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionListQuerySchema.parse({
+      keyword: "   ",
+    }).keyword).toBe("");
+  });
+
   test("exports exact status and budget status domains", () => {
     for (const status of [
       "draft",
@@ -162,6 +177,10 @@ describe("supplier purchase requisition draft schema", () => {
     expect(SupplierPurchaseRequisitionDraftSchema.safeParse(draft({
       remark: "a".repeat(501),
     })).success).toBe(false);
+    for (const remark of ["", " "]) {
+      expect(SupplierPurchaseRequisitionDraftSchema.safeParse(draft({ remark }))
+        .success).toBe(false);
+    }
   });
 
   test("requires valid project, supplier, SKU and cost category ids", () => {
@@ -303,6 +322,8 @@ describe("supplier purchase requisition command schemas", () => {
     for (const input of [
       { expected_version: 0, action: "approve" },
       { expected_version: 2, action: "return" },
+      { expected_version: 2, action: "approve", remark: "" },
+      { expected_version: 2, action: "approve", remark: " " },
       { expected_version: 2, action: "reject", remark: "a".repeat(501) },
       { expected_version: 2, action: "approve", unknown: true },
     ]) {

@@ -101,10 +101,53 @@ export const PROJECT_COST_COMMITMENT_SELECT = [
 const uuid = z.uuid();
 const date = z.iso.date();
 const dateTime = z.iso.datetime({ offset: true });
-const decimal = z.string().regex(/^\d+(?:\.\d+)?$/);
-const signedDecimal = z.string().regex(/^-?\d+(?:\.\d+)?$/);
 const nullableEmployeeId = uuid.nullable();
 const nullableDateTime = dateTime.nullable();
+
+function decimalString(input: {
+  integerDigits: number;
+  scale: number;
+  signed?: boolean;
+  positive?: boolean;
+}) {
+  const sign = input.signed ? "-?" : "";
+  const pattern = new RegExp(
+    `^${sign}\\d+(?:\\.\\d{1,${input.scale}})?$`,
+  );
+  return z.string().regex(pattern).refine((value) => {
+    const unsigned = value.startsWith("-") ? value.slice(1) : value;
+    const [integerPart = "0"] = unsigned.split(".");
+    const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+    return normalizedInteger.length <= input.integerDigits;
+  }, "数值超过数据库上限").refine(
+    (value) => !input.positive || /[1-9]/.test(value),
+    "数值必须大于 0",
+  );
+}
+
+const money = decimalString({ integerDigits: 16, scale: 2 });
+const signedMoney = decimalString({
+  integerDigits: 16,
+  scale: 2,
+  signed: true,
+});
+const quantity = decimalString({
+  integerDigits: 14,
+  scale: 4,
+  positive: true,
+});
+const conversion = decimalString({
+  integerDigits: 10,
+  scale: 8,
+  positive: true,
+});
+const unitPrice = decimalString({ integerDigits: 12, scale: 2 });
+const taxRate = decimalString({ integerDigits: 1, scale: 6 }).refine((value) => {
+  const [integerPart = "0", fractionPart] = value.split(".");
+  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, "");
+  return normalizedInteger === "0" ||
+    (normalizedInteger === "1" && !/[1-9]/.test(fractionPart ?? ""));
+}, "税率必须在 0 到 1 之间");
 
 export const SupplierPurchaseRequisitionRecordSchema = z.object({
   id: uuid,
@@ -120,9 +163,9 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   expected_delivery_date: date.nullable(),
   remark: z.string().max(500).nullable(),
   priced_at: dateTime,
-  subtotal_amount: decimal,
-  tax_amount: decimal,
-  total_amount: decimal,
+  subtotal_amount: money,
+  tax_amount: money,
+  total_amount: money,
   purchase_order_id: uuid.nullable(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
@@ -163,18 +206,18 @@ export const SupplierPurchaseRequisitionItemSchema = z.object({
   base_unit_code_snapshot: z.string(),
   base_unit_name_snapshot: z.string(),
   base_unit_symbol_snapshot: z.string(),
-  base_unit_conversion: decimal,
+  base_unit_conversion: conversion,
   price_list_code_snapshot: z.string(),
   price_list_version_snapshot: z.number().int().positive(),
   price_effective_from_snapshot: dateTime,
   price_effective_until_snapshot: nullableDateTime,
-  quantity: decimal,
-  unit_price: decimal,
-  tax_rate: decimal,
+  quantity,
+  unit_price: unitPrice,
+  tax_rate: taxRate,
   tax_inclusive: z.boolean(),
-  line_subtotal_amount: decimal,
-  line_tax_amount: decimal,
-  line_total_amount: decimal,
+  line_subtotal_amount: money,
+  line_tax_amount: money,
+  line_total_amount: money,
   created_at: dateTime,
 }).strict();
 
@@ -191,12 +234,12 @@ export const ProjectCostCommitmentRecordSchema = z.object({
   cost_category_id: uuid,
   source_type: z.literal("supplier_purchase_requisition"),
   source_id: uuid,
-  amount: decimal,
+  amount: money,
   status: ProjectCostCommitmentStatusSchema,
-  budget_amount_snapshot: decimal,
-  expense_amount_snapshot: decimal,
-  other_commitment_amount_snapshot: decimal,
-  available_amount_snapshot: signedDecimal,
+  budget_amount_snapshot: money,
+  expense_amount_snapshot: money,
+  other_commitment_amount_snapshot: money,
+  available_amount_snapshot: signedMoney,
   created_by_employee_id: uuid,
   released_by_employee_id: nullableEmployeeId,
   released_at: nullableDateTime,
@@ -210,8 +253,17 @@ export const SupplierPurchaseRequisitionBudgetSnapshotSchema =
 
 export const SupplierPurchaseRequisitionDetailSchema = z.object({
   requisition: SupplierPurchaseRequisitionRecordSchema,
-  items: z.array(SupplierPurchaseRequisitionItemSchema).max(100),
   budget_snapshots: z.array(ProjectCostCommitmentRecordSchema).max(100),
+}).strict();
+
+export const SupplierPurchaseRequisitionItemPageSchema = z.object({
+  list: z.array(SupplierPurchaseRequisitionItemSchema).max(100),
+  pagination: z.object({
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive().max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  }).strict(),
 }).strict();
 
 export const SupplierPurchaseRequisitionCommandStatusSchema = z.enum([
@@ -255,6 +307,8 @@ export type SupplierPurchaseRequisitionBudgetSnapshot =
   z.infer<typeof SupplierPurchaseRequisitionBudgetSnapshotSchema>;
 export type SupplierPurchaseRequisitionDetail =
   z.infer<typeof SupplierPurchaseRequisitionDetailSchema>;
+export type SupplierPurchaseRequisitionItemPage =
+  z.infer<typeof SupplierPurchaseRequisitionItemPageSchema>;
 export type SupplierPurchaseRequisitionCommandStatus =
   z.infer<typeof SupplierPurchaseRequisitionCommandStatusSchema>;
 export type SupplierPurchaseRequisitionCommandEnvelope =
