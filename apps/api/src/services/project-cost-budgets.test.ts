@@ -7,7 +7,7 @@ const findProject = mock(async () => ({
   name: "测试项目",
 }));
 
-const listActiveBudgets = mock(async () => [
+const activeBudgetRows = [
   {
     id: "budget-1",
     tenant_id: "tenant-1",
@@ -46,16 +46,18 @@ const listActiveBudgets = mock(async () => [
       sort_order: 20,
     },
   },
-]);
+];
+const listActiveBudgets = mock(async () => activeBudgetRows);
 
-const listExpenseTotals = mock(async () => ({
+const defaultExpenseTotals = {
   totalExpenseAmount: 36000,
   unallocatedExpenseAmount: 1000,
   byCategory: new Map([
     ["category-1", 12000],
     ["category-2", 23000],
   ]),
-}));
+};
+const listExpenseTotals = mock(async () => defaultExpenseTotals);
 
 const listCommitmentTotals = mock(async () => ({
   sourceRowCount: 2,
@@ -163,6 +165,8 @@ describe("projectCostBudgetService", () => {
       tenant_id: "tenant-1",
       name: "测试项目",
     }));
+    listActiveBudgets.mockImplementation(async () => activeBudgetRows);
+    listExpenseTotals.mockImplementation(async () => defaultExpenseTotals);
     listCommitmentTotals.mockImplementation(async () => ({
       sourceRowCount: 2,
       totalCommitmentAmount: 14000,
@@ -299,6 +303,49 @@ describe("projectCostBudgetService", () => {
       commitment_amount: 2000,
       remaining_amount: 0,
       available_amount: -2000,
+      risk_level: "danger",
+    });
+  });
+
+  test("keeps synthetic-only projects unconfigured and preserves remaining semantics", async () => {
+    listActiveBudgets.mockImplementation(async () => []);
+    listExpenseTotals.mockImplementation(async () => ({
+      totalExpenseAmount: 100,
+      unallocatedExpenseAmount: 0,
+      byCategory: new Map([["category-3", 100]]),
+    }));
+    listCommitmentTotals.mockImplementation(async () => ({
+      sourceRowCount: 1,
+      totalCommitmentAmount: 50,
+      byCategory: new Map([["category-3", 50]]),
+      categoryDetails: new Map([
+        ["category-3", { code: "equipment", name: "设备" }],
+      ]),
+    }));
+    const { projectCostBudgetService } = await import("./project-cost-budgets");
+
+    const result = await projectCostBudgetService.listProjectBudgets(
+      authContextWithPermissions([{ code: "finance.budget.view", scope: "all" }]),
+      "project-1",
+    );
+
+    expect(result.summary).toMatchObject({
+      budget_configured: false,
+      budget_amount: 0,
+      expense_amount: 100,
+      commitment_amount: 50,
+      remaining_amount: 0,
+      available_amount: -150,
+      usage_ratio: null,
+      risk_level: "danger",
+    });
+    expect(result.list[0]).toMatchObject({
+      cost_category_id: "category-3",
+      budget_amount: 0,
+      expense_amount: 100,
+      commitment_amount: 50,
+      remaining_amount: -100,
+      available_amount: -150,
       risk_level: "danger",
     });
   });

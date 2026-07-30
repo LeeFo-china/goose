@@ -222,7 +222,7 @@ function buildProjectCostBudgetResult(input: {
   const budgetAmount = roundMoney(
     list.reduce((sum, item) => sum + item.budget_amount, 0),
   );
-  const budgetConfigured = list.length > 0;
+  const budgetConfigured = input.budgets.length > 0;
   const expenseAmount = roundMoney(input.expenseTotals.totalExpenseAmount);
   const commitmentAmount = roundMoney(
     input.commitmentTotals.totalCommitmentAmount,

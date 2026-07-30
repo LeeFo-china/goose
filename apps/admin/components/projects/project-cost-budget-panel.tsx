@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestProject } from "@/components/projects/project-mutation-utils";
 import {
   buildEditableRows,
+  buildSaveBudgetItems,
   calculateBudgetAvailability,
   categoryName,
   type EditableBudgetRow,
@@ -27,7 +28,6 @@ import {
   isNegativeBudgetAvailability,
   normalizeBudgetData,
   parseOptionalMoney,
-  parseOptionalThreshold,
   riskLabel,
   riskVariant,
   validateEditRows,
@@ -128,19 +128,7 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
       return;
     }
 
-    const items = editRows
-      .filter((row) => {
-        const amount = parseOptionalMoney(row.budget_amount);
-        return row.has_existing_budget || amount > 0 || row.remark.trim();
-      })
-      .map((row) => ({
-        cost_category_id: row.cost_category_id,
-        budget_amount: parseOptionalMoney(row.budget_amount),
-        warning_threshold_percent: parseOptionalThreshold(
-          row.warning_threshold_percent,
-        ),
-        remark: row.remark.trim() || null,
-      }));
+    const items = buildSaveBudgetItems(editRows);
 
     if (items.length === 0) {
       setError("请至少填写一个预算金额。");

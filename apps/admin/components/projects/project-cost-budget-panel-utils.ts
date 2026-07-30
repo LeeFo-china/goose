@@ -3,6 +3,7 @@ import type {
   ProjectCostBudgetListData,
   ProjectCostBudgetListItem,
   ProjectCostBudgetRiskLevel,
+  SaveProjectCostBudgetItem,
 } from "@/components/finance/finance-cost-budget-requests";
 import { formatFinanceMoney } from "@/components/finance/finance-ledger-utils";
 
@@ -77,6 +78,24 @@ export function validateEditRows(rows: EditableBudgetRow[]) {
     }
   }
   return "";
+}
+
+export function buildSaveBudgetItems(
+  rows: EditableBudgetRow[],
+): SaveProjectCostBudgetItem[] {
+  return rows
+    .filter((row) => {
+      const amount = parseOptionalMoney(row.budget_amount);
+      return row.has_existing_budget || amount > 0 || Boolean(row.remark.trim());
+    })
+    .map((row) => ({
+      cost_category_id: row.cost_category_id,
+      budget_amount: parseOptionalMoney(row.budget_amount),
+      warning_threshold_percent: parseOptionalThreshold(
+        row.warning_threshold_percent,
+      ),
+      remark: row.remark.trim() || null,
+    }));
 }
 
 export function parseOptionalMoney(value: string) {

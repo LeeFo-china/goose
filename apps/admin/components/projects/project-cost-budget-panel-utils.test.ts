@@ -1,6 +1,24 @@
 import { describe, expect, test } from "bun:test";
 
+import type { EditableBudgetRow } from "./project-cost-budget-panel-utils";
 import * as budgetUtils from "./project-cost-budget-panel-utils";
+
+function editableRow(
+  overrides: Partial<EditableBudgetRow>,
+): EditableBudgetRow {
+  return {
+    cost_category_id: "category-1",
+    category_code: "labor",
+    category_name: "人工",
+    budget_amount: "0",
+    warning_threshold_percent: "100",
+    remark: "",
+    expense_amount: 0,
+    commitment_amount: 0,
+    has_existing_budget: false,
+    ...overrides,
+  };
+}
 
 describe("project cost budget availability", () => {
   test("preserves commitment amounts while building editable rows", () => {
@@ -57,6 +75,44 @@ describe("project cost budget availability", () => {
       commitment_amount: 50,
       has_existing_budget: false,
     });
+  });
+
+  test("builds save items without persisting an untouched synthetic row", () => {
+    const buildSaveBudgetItems = Reflect.get(
+      budgetUtils,
+      "buildSaveBudgetItems",
+    );
+    expect(buildSaveBudgetItems).toBeFunction();
+
+    expect(buildSaveBudgetItems([
+      editableRow({
+        cost_category_id: "synthetic-untouched",
+        commitment_amount: 50,
+      }),
+      editableRow({
+        cost_category_id: "active-budget",
+        has_existing_budget: true,
+      }),
+      editableRow({
+        cost_category_id: "synthetic-filled",
+        budget_amount: "250.50",
+        warning_threshold_percent: "90",
+        commitment_amount: 50,
+      }),
+    ])).toEqual([
+      {
+        cost_category_id: "active-budget",
+        budget_amount: 0,
+        warning_threshold_percent: 100,
+        remark: null,
+      },
+      {
+        cost_category_id: "synthetic-filled",
+        budget_amount: 250.5,
+        warning_threshold_percent: 90,
+        remark: null,
+      },
+    ]);
   });
 
   test("formats committed and available amounts without hiding a negative balance", () => {
