@@ -250,9 +250,11 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(cancel).toMatch(/status = 'cancelled'/);
     expect(cancel).toMatch(/cancel_reason = btrim\(p_reason\)/);
   });
-
   test("converts one approved request using frozen price facts", () => {
     const convert = extractFunction("convert_supplier_purchase_requisition");
+    const success = convert.slice(convert.lastIndexOf("RETURN jsonb_build_object("));
+    expect(success).toMatch(/'purchase_order_id', p_purchase_order_id/);
+    expect(success).not.toMatch(/'purchase_order',/);
     expect(convert).toMatch(/p_purchase_order_id uuid/);
     expect(convert).toMatch(/v_requisition\.status <> 'approved'/);
     expect(convert).toMatch(/purchase_order_id IS NOT NULL/);

@@ -2956,7 +2956,6 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'converted', 'idempotent', false,
     'requisition', v_snapshot,
-    'purchase_order', v_order_result -> 'purchase_order',
     'purchase_order_id', p_purchase_order_id,
     'version', v_requisition.version
   );
