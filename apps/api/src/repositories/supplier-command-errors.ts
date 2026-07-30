@@ -65,6 +65,10 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "采购单当前状态不允许该操作",
   },
+  SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购单参数校验失败",
+  },
   SUPPLIER_PURCHASE_ORDER_PRICE_MISSING: {
     statusCode: 409,
     message: "部分采购商品缺少当前有效价格",
@@ -121,35 +125,51 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "采购履约已开始，不能取消采购单",
   },
-  FULFILLMENT_NOT_CONFIRMED: {
-    statusCode: 409,
-    message: "供应商采购单尚未确认履约",
-  },
-  FULFILLMENT_VERSION_CONFLICT: {
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT: {
     statusCode: 409,
     message: "采购履约版本已变化，请刷新后重试",
   },
-  OVER_SHIPPED: {
+  SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED: {
     statusCode: 409,
     message: "本次发货数量超过采购数量",
   },
-  OVER_RECEIVED: {
+  SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED: {
     statusCode: 409,
     message: "本次收货数量超过累计发货数量",
   },
-  VARIANCE_REASON_REQUIRED: {
+  SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED: {
     statusCode: 400,
     message: "存在拒收数量时必须填写差异原因",
   },
 } as const;
 
 type SupplierBusinessCode = keyof typeof BUSINESS_ERRORS;
+const TOKEN_ALIASES = {
+  FULFILLMENT_NOT_CONFIRMED:
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
+  FULFILLMENT_VERSION_CONFLICT:
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+  OVER_SHIPPED: "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
+  OVER_RECEIVED: "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED",
+  VARIANCE_REASON_REQUIRED:
+    "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
+} as const satisfies Record<string, SupplierBusinessCode>;
+type SupplierCommandToken =
+  SupplierBusinessCode | keyof typeof TOKEN_ALIASES;
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
-  const code = (Object.keys(BUSINESS_ERRORS) as SupplierBusinessCode[])
+  const token = [
+    ...Object.keys(BUSINESS_ERRORS) as SupplierBusinessCode[],
+    ...Object.keys(TOKEN_ALIASES) as Array<keyof typeof TOKEN_ALIASES>,
+  ]
     .sort((left, right) => right.length - left.length)
-    .find((candidate) => containsToken(error, candidate));
-  if (!code) return null;
+    .find((candidate) => containsToken(error, candidate)) as
+      | SupplierCommandToken
+      | undefined;
+  if (!token) return null;
+  const code = token in TOKEN_ALIASES
+    ? TOKEN_ALIASES[token as keyof typeof TOKEN_ALIASES]
+    : token as SupplierBusinessCode;
   const definition = BUSINESS_ERRORS[code];
   return Errors.business(
     definition.statusCode,

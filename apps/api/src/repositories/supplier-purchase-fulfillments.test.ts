@@ -153,7 +153,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     expect(shipmentUrl.searchParams.get("offset")).toBe("0");
     expect(shipmentUrl.searchParams.get("limit")).toBe("100");
     expect(shipmentUrl.searchParams.get("order")).toBe(
-      "shipped_at.desc,id.desc",
+      "created_at.desc,id.desc",
     );
     expect(shipmentUrl.searchParams.get("select")).toContain(
       "items:supplier_purchase_order_shipment_items",
@@ -162,7 +162,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     expect(receiptUrl.searchParams.get("offset")).toBe("20");
     expect(receiptUrl.searchParams.get("limit")).toBe("20");
     expect(receiptUrl.searchParams.get("order")).toBe(
-      "received_at.desc,id.desc",
+      "created_at.desc,id.desc",
     );
     for (const request of requests) {
       const url = new URL(request.url);
@@ -172,6 +172,22 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       );
       expect(request.headers.get("prefer")).toContain("count=exact");
     }
+  });
+
+  test.each([
+    ["listShipments", null],
+    ["listShipments", [{ ...shipment, extra: true }]],
+    ["listReceipts", null],
+    ["listReceipts", [{ ...receipt, extra: true }]],
+  ] as const)("strictly rejects malformed %s data", async (method, body) => {
+    const { repository } = await repositoryFor(() => ({ body, count: 0 }));
+
+    await expect(repository[method]({
+      tenant_id: TENANT_ID,
+      order_id: ORDER_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
   test("uses every SQL p-parameter for fulfillment commands", async () => {
@@ -332,7 +348,10 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       actor_user_id: USER_ID,
       actor_employee_id: EMPLOYEE_ID,
       idempotency_key: "fulfillment:shipment",
-    })).rejects.toMatchObject({ statusCode: 409, code: "OVER_SHIPPED" });
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
+    });
 
     const databaseFailure = await repositoryFor(() => ({
       body: {

@@ -152,7 +152,6 @@ export class SupplierPurchaseFulfillmentsRepository {
       "supplier_purchase_order_shipments",
       SUPPLIER_PURCHASE_ORDER_SHIPMENT_SELECT,
       SupplierPurchaseOrderShipmentSchema,
-      "shipped_at",
       "查询采购发货记录失败",
       input,
     );
@@ -163,7 +162,6 @@ export class SupplierPurchaseFulfillmentsRepository {
       "supplier_purchase_order_receipts",
       SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT,
       SupplierPurchaseOrderReceiptSchema,
-      "received_at",
       "查询采购收货记录失败",
       input,
     );
@@ -235,7 +233,6 @@ export class SupplierPurchaseFulfillmentsRepository {
     table: string,
     columns: string,
     schema: z.ZodType<T>,
-    timeColumn: string,
     message: string,
     input: SupplierPurchaseOrderFulfillmentEventListInput,
   ): Promise<Page<T>> {
@@ -244,7 +241,7 @@ export class SupplierPurchaseFulfillmentsRepository {
       .select(columns, { count: "exact" })
       .eq("tenant_id", input.tenant_id)
       .eq("supplier_purchase_order_id", input.order_id)
-      .order(timeColumn, { ascending: false })
+      .order("created_at", { ascending: false })
       .order("id", { ascending: false })
       .range(...pageRange(pagination));
     if (error) throw Errors.dbError(message, error);
@@ -335,7 +332,7 @@ function toPage<T>(
 }
 
 function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
-  return parse(z.array(schema), data ?? [], message);
+  return parse(z.array(schema), data, message);
 }
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
