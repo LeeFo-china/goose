@@ -30,29 +30,87 @@ const itemFulfillment = {
 };
 
 describe("采购履约动作", () => {
+  test("未确认时提供确认动作，已确认但无累计行时保守禁用操作", () => {
+    expect(fulfillmentActions({
+      fulfillment: null,
+      item_fulfillments: [],
+    }, true, "submitted")).toEqual(["confirm"]);
+    expect(fulfillmentActions(
+      fulfillmentDetail("confirmed", []),
+      true,
+      "submitted",
+    )).toEqual([]);
+  });
+
+  test("按同一累计行的真实剩余量提供发货或收货动作", () => {
+    expect(fulfillmentActions(
+      fulfillmentDetail("partially_received", [{
+        ordered_quantity: "10",
+        shipped_quantity: "10",
+        received_quantity: "5",
+      }]),
+      true,
+      "submitted",
+    )).toEqual(["receive"]);
+    expect(fulfillmentActions(
+      fulfillmentDetail("partially_received", [{
+        ordered_quantity: "10",
+        shipped_quantity: "5",
+        received_quantity: "5",
+      }]),
+      true,
+      "submitted",
+    )).toEqual(["ship"]);
+  });
+
+  test("不同累计行分别存在可发和可收数量时同时提供两个动作", () => {
+    expect(fulfillmentActions(
+      fulfillmentDetail("partially_received", [
+        {
+          ordered_quantity: "10",
+          shipped_quantity: "5",
+          received_quantity: "5",
+        },
+        {
+          ordered_quantity: "10",
+          shipped_quantity: "10",
+          received_quantity: "5",
+        },
+      ]),
+      true,
+      "submitted",
+    )).toEqual(["ship", "receive"]);
+  });
+
   test.each([
-    [null, ["confirm"]],
-    ["confirmed", ["ship"]],
-    ["partially_shipped", ["ship", "receive"]],
-    ["shipped", ["receive"]],
-    ["partially_received", ["ship", "receive"]],
-    ["received", []],
-    ["received_with_variance", []],
-    ["cancelled", []],
-  ] as const)("精确映射状态 %s", (status, expected) => {
-    const fulfillment = status === null ? null : { status };
-    expect(fulfillmentActions(fulfillment, true, "submitted")).toEqual(
-      [...expected],
-    );
+    ["received", "10", "5", "5"],
+    ["received_with_variance", "10", "5", "5"],
+    ["cancelled", "10", "5", "5"],
+  ] as const)("终态 %s 不再提供动作", (status, ordered, shipped, received) => {
+    expect(fulfillmentActions(
+      fulfillmentDetail(status, [{
+        ordered_quantity: ordered,
+        shipped_quantity: shipped,
+        received_quantity: received,
+      }]),
+      true,
+      "submitted",
+    )).toEqual([]);
   });
 
   test("无管理权限或采购单不是已提交时不提供动作", () => {
     expect(
-      fulfillmentActions({ status: "confirmed" }, false, "submitted"),
+      fulfillmentActions(
+        fulfillmentDetail("confirmed"),
+        false,
+        "submitted",
+      ),
     ).toEqual([]);
-    expect(fulfillmentActions(null, true, "draft")).toEqual([]);
     expect(
-      fulfillmentActions({ status: "confirmed" }, true, "cancelled"),
+      fulfillmentActions(fulfillmentDetail("confirmed"), true, "draft"),
+    ).toEqual([]);
+    expect(
+      fulfillmentActions(fulfillmentDetail("confirmed"), true, "cancelled"),
     ).toEqual([]);
   });
 });
@@ -286,3 +344,47 @@ describe("收货 payload", () => {
     });
   });
 });
+
+function fulfillmentDetail(
+  status:
+    | "confirmed"
+    | "partially_shipped"
+    | "shipped"
+    | "partially_received"
+    | "received"
+    | "received_with_variance"
+    | "cancelled",
+  quantities: {
+    ordered_quantity: string;
+    shipped_quantity: string;
+    received_quantity: string;
+  }[] = [{
+    ordered_quantity: "10",
+    shipped_quantity: "0",
+    received_quantity: "0",
+  }],
+) {
+  return {
+    fulfillment: {
+      id: "60000000-0000-4000-8000-000000000004",
+      tenant_id: itemFulfillment.tenant_id,
+      supplier_purchase_order_id:
+        "60000000-0000-4000-8000-000000000005",
+      status,
+      confirmed_at: "2026-07-30T03:00:00.000Z",
+      confirmed_by_employee_id:
+        "60000000-0000-4000-8000-000000000006",
+      confirmation_remark: null,
+      version: 1,
+      created_at: "2026-07-30T03:00:00.000Z",
+      updated_at: "2026-07-30T03:00:00.000Z",
+    },
+    item_fulfillments: quantities.map((quantity, index) => ({
+      ...itemFulfillment,
+      ...quantity,
+      supplier_purchase_order_item_id: index === 0
+        ? ITEM_ID
+        : OTHER_ITEM_ID,
+    })),
+  };
+}

@@ -2,6 +2,7 @@ import type { PurchaseOrderStatus } from "./purchase-order-types";
 import type {
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
+  PurchaseOrderFulfillmentDetail,
   PurchaseOrderItemFulfillment,
   PurchaseOrderReceiptPayload,
   PurchaseOrderShipmentPayload,
@@ -19,26 +20,36 @@ const ZERO_QUANTITY = BigInt(0);
 const MAX_QUANTITY_UNITS = BigInt("999999999999999999");
 const MAX_EVENT_LINES = 100;
 
-const actionByStatus: Record<
-  PurchaseOrderFulfillment["status"],
-  PurchaseOrderFulfillmentAction[]
-> = {
-  confirmed: ["ship"],
-  partially_shipped: ["ship", "receive"],
-  shipped: ["receive"],
-  partially_received: ["ship", "receive"],
-  received: [],
-  received_with_variance: [],
-  cancelled: [],
-};
+const TERMINAL_FULFILLMENT_STATUSES = new Set<
+  PurchaseOrderFulfillment["status"]
+>(["received", "received_with_variance", "cancelled"]);
 
 export function fulfillmentActions(
-  fulfillment: Pick<PurchaseOrderFulfillment, "status"> | null,
+  detail: Pick<
+    PurchaseOrderFulfillmentDetail,
+    "fulfillment" | "item_fulfillments"
+  >,
   canManage: boolean,
   orderStatus: PurchaseOrderStatus,
 ): PurchaseOrderFulfillmentAction[] {
   if (!canManage || orderStatus !== "submitted") return [];
-  return fulfillment ? [...actionByStatus[fulfillment.status]] : ["confirm"];
+  if (!detail.fulfillment) return ["confirm"];
+  if (TERMINAL_FULFILLMENT_STATUSES.has(detail.fulfillment.status)) return [];
+
+  const actions: PurchaseOrderFulfillmentAction[] = [];
+  if (detail.item_fulfillments.some((item) =>
+    remainingUnits(item.ordered_quantity, item.shipped_quantity) >
+      ZERO_QUANTITY
+  )) {
+    actions.push("ship");
+  }
+  if (detail.item_fulfillments.some((item) =>
+    remainingUnits(item.shipped_quantity, item.received_quantity) >
+      ZERO_QUANTITY
+  )) {
+    actions.push("receive");
+  }
+  return actions;
 }
 
 export function shipmentRemaining(
@@ -311,12 +322,16 @@ function fulfillmentItemMap(items: readonly PurchaseOrderItemFulfillment[]) {
 }
 
 function remainingQuantity(total: string, used: string): string {
+  return formatQuantity(remainingUnits(total, used));
+}
+
+function remainingUnits(total: string, used: string): bigint {
   const totalUnits = parseStoredQuantity(total);
   const usedUnits = parseStoredQuantity(used);
   if (totalUnits === null || usedUnits === null || usedUnits >= totalUnits) {
-    return ZERO_QUANTITY.toString();
+    return ZERO_QUANTITY;
   }
-  return formatQuantity(totalUnits - usedUnits);
+  return totalUnits - usedUnits;
 }
 
 function parseStoredQuantity(value: string): bigint | null {
