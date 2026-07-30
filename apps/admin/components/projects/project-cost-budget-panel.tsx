@@ -83,9 +83,6 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
   const projectedRows = useMemo(() => (
     editRows.map((row) => {
       const budgetAmount = parseOptionalMoney(row.budget_amount);
-      const usageRatio = budgetAmount > 0
-        ? row.expense_amount / budgetAmount
-        : null;
       return {
         ...row,
         budgetAmount,
@@ -94,7 +91,6 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
           expenseAmount: row.expense_amount,
           commitmentAmount: row.commitment_amount,
         }),
-        usageRatio,
       };
     })
   ), [editRows]);

@@ -869,6 +869,96 @@ GRANT EXECUTE ON FUNCTION
   public.list_project_cost_commitment_totals(uuid, uuid)
 TO service_role;
 
+CREATE FUNCTION public.list_project_cost_expense_totals(
+  p_tenant_id uuid,
+  p_project_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_source_row_count bigint;
+  v_total_expense_amount numeric;
+  v_unallocated_expense_amount numeric;
+  v_categories jsonb;
+BEGIN
+  SELECT COUNT(*)
+  INTO v_source_row_count
+  FROM public.finance_ledger_entries AS ledger
+  WHERE ledger.tenant_id = p_tenant_id
+    AND ledger.project_id = p_project_id
+    AND ledger.direction = 'out';
+
+  IF v_source_row_count > 10000 THEN
+    RETURN jsonb_build_object(
+      'source_row_count', v_source_row_count,
+      'total_expense_amount', 0,
+      'unallocated_expense_amount', 0,
+      'categories', '[]'::jsonb
+    );
+  END IF;
+
+  WITH scoped AS MATERIALIZED (
+    SELECT ledger.cost_category_id, ledger.amount
+    FROM public.finance_ledger_entries AS ledger
+    WHERE ledger.tenant_id = p_tenant_id
+      AND ledger.project_id = p_project_id
+      AND ledger.direction = 'out'
+  ),
+  summary AS (
+    SELECT
+      COALESCE(SUM(scoped.amount), 0) AS total_expense_amount,
+      COALESCE(
+        SUM(scoped.amount) FILTER (
+          WHERE scoped.cost_category_id IS NULL
+        ),
+        0
+      ) AS unallocated_expense_amount
+    FROM scoped
+  ),
+  category_totals AS (
+    SELECT scoped.cost_category_id,
+      SUM(scoped.amount) AS expense_amount
+    FROM scoped
+    WHERE scoped.cost_category_id IS NOT NULL
+    GROUP BY scoped.cost_category_id
+  )
+  SELECT summary.total_expense_amount,
+    summary.unallocated_expense_amount,
+    COALESCE(
+      (
+        SELECT jsonb_agg(
+          jsonb_build_object(
+            'cost_category_id', total.cost_category_id,
+            'expense_amount', total.expense_amount::text
+          )
+          ORDER BY total.cost_category_id
+        )
+        FROM category_totals AS total
+      ),
+      '[]'::jsonb
+    )
+  INTO v_total_expense_amount, v_unallocated_expense_amount, v_categories
+  FROM summary;
+
+  RETURN jsonb_build_object(
+    'source_row_count', v_source_row_count,
+    'total_expense_amount', v_total_expense_amount::text,
+    'unallocated_expense_amount', v_unallocated_expense_amount::text,
+    'categories', v_categories
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.list_project_cost_expense_totals(uuid, uuid)
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION
+  public.list_project_cost_expense_totals(uuid, uuid)
+TO service_role;
+
 CREATE FUNCTION public.lock_finance_ledger_project_budget()
 RETURNS trigger
 LANGUAGE plpgsql

@@ -43,6 +43,7 @@ type ProjectCostBudgetRawRecord = Omit<ProjectCostBudgetRecord, "cost_category">
 };
 
 export type ProjectCostBudgetExpenseTotals = {
+  sourceRowCount: number;
   totalExpenseAmount: number;
   unallocatedExpenseAmount: number;
   byCategory: Map<string, number>;
@@ -56,23 +57,6 @@ export type ProjectCostBudgetCommitmentTotals = {
     code: string | null;
     name: string | null;
   }>;
-};
-
-type FinanceLedgerExpenseRow = {
-  cost_category_id: string | null;
-  amount: number | string | null;
-};
-
-type ProjectCostCommitmentCategoryTotal = {
-  cost_category_id: string;
-  category_code: string | null;
-  category_name: string | null;
-  commitment_amount: number | string | null;
-};
-
-type ProjectCostCommitmentAggregate = {
-  source_row_count: number | string;
-  categories: ProjectCostCommitmentCategoryTotal[];
 };
 
 class ProjectCostBudgetRepository {
@@ -118,45 +102,67 @@ class ProjectCostBudgetRepository {
     tenantId: string;
     projectId: string;
   }): Promise<ProjectCostBudgetExpenseTotals> {
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("finance_ledger_entries")
-      .select("cost_category_id, amount", { count: "exact" })
-      .eq("tenant_id", input.tenantId)
-      .eq("project_id", input.projectId)
-      .eq("direction", "out")
-      .limit(10_000);
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "list_project_cost_expense_totals",
+      {
+        p_tenant_id: input.tenantId,
+        p_project_id: input.projectId,
+      },
+    );
 
     if (error) {
       throw Errors.dbError("查询项目成本支出失败", error);
     }
-    if ((count ?? 0) > 10_000) {
-      throw Errors.business(
-        422,
-        "项目支出流水过多，请使用成本汇总任务",
-        "PROJECT_COST_LEDGER_TOO_MANY_ROWS",
-      );
+
+    const { aggregate, sourceRowCount } = parseBoundedAggregate({
+      data,
+      parseErrorMessage: "解析项目成本支出失败",
+      tooManyMessage: "项目支出流水过多，请使用成本汇总任务",
+      tooManyCode: "PROJECT_COST_LEDGER_TOO_MANY_ROWS",
+    });
+    const categories = aggregate.categories;
+    if (!Array.isArray(categories)) {
+      throw Errors.dbError("解析项目成本支出失败", data);
     }
-
+    const totalExpenseAmount = parseNonNegativeAggregateMoney(
+      aggregate.total_expense_amount,
+      "解析项目成本支出失败",
+      data,
+    );
+    const unallocatedExpenseAmount = parseNonNegativeAggregateMoney(
+      aggregate.unallocated_expense_amount,
+      "解析项目成本支出失败",
+      data,
+    );
     const byCategory = new Map<string, number>();
-    let totalExpenseAmount = 0;
-    let unallocatedExpenseAmount = 0;
-    for (const row of ((data as FinanceLedgerExpenseRow[] | null) || [])) {
-      const amount = normalizeMoney(row.amount);
-      totalExpenseAmount += amount;
-      if (!row.cost_category_id) {
-        unallocatedExpenseAmount += amount;
-        continue;
+    let categorizedExpenseAmount = 0;
+    for (const value of categories) {
+      const row = asRecord(value);
+      if (!row || typeof row.cost_category_id !== "string") {
+        throw Errors.dbError("解析项目成本支出失败", data);
       }
-
+      const amount = parseNonNegativeAggregateMoney(
+        row.expense_amount,
+        "解析项目成本支出失败",
+        data,
+      );
+      categorizedExpenseAmount += amount;
       byCategory.set(
         row.cost_category_id,
         (byCategory.get(row.cost_category_id) ?? 0) + amount,
       );
     }
+    if (
+      roundMoney(categorizedExpenseAmount + unallocatedExpenseAmount) !==
+        totalExpenseAmount
+    ) {
+      throw Errors.dbError("解析项目成本支出失败", data);
+    }
 
     return {
-      totalExpenseAmount: roundMoney(totalExpenseAmount),
-      unallocatedExpenseAmount: roundMoney(unallocatedExpenseAmount),
+      sourceRowCount,
+      totalExpenseAmount,
+      unallocatedExpenseAmount,
       byCategory,
     };
   }
@@ -177,19 +183,14 @@ class ProjectCostBudgetRepository {
       throw Errors.dbError("查询项目采购预算承诺失败", error);
     }
 
-    const aggregate = data as ProjectCostCommitmentAggregate | null;
-    const sourceRowCount = Number(aggregate?.source_row_count);
-    if (!Number.isSafeInteger(sourceRowCount) || sourceRowCount < 0) {
-      throw Errors.dbError("解析项目采购预算承诺失败", data);
-    }
-    if (sourceRowCount > 10_000) {
-      throw Errors.business(
-        422,
-        "项目采购预算承诺过多，请使用成本汇总任务",
-        "PROJECT_COST_COMMITMENTS_TOO_MANY_ROWS",
-      );
-    }
-    if (!Array.isArray(aggregate?.categories)) {
+    const { aggregate, sourceRowCount } = parseBoundedAggregate({
+      data,
+      parseErrorMessage: "解析项目采购预算承诺失败",
+      tooManyMessage: "项目采购预算承诺过多，请使用成本汇总任务",
+      tooManyCode: "PROJECT_COST_COMMITMENTS_TOO_MANY_ROWS",
+    });
+    const categories = aggregate.categories;
+    if (!Array.isArray(categories)) {
       throw Errors.dbError("解析项目采购预算承诺失败", data);
     }
 
@@ -199,15 +200,21 @@ class ProjectCostBudgetRepository {
       name: string | null;
     }>();
     let totalCommitmentAmount = 0;
-    for (const row of aggregate.categories) {
+    for (const value of categories) {
+      const row = asRecord(value);
       if (
+        !row ||
         typeof row.cost_category_id !== "string" ||
         (row.category_code !== null && typeof row.category_code !== "string") ||
         (row.category_name !== null && typeof row.category_name !== "string")
       ) {
         throw Errors.dbError("解析项目采购预算承诺失败", data);
       }
-      const amount = normalizeMoney(row.commitment_amount);
+      const amount = parseNonNegativeAggregateMoney(
+        row.commitment_amount,
+        "解析项目采购预算承诺失败",
+        data,
+      );
       totalCommitmentAmount += amount;
       byCategory.set(
         row.cost_category_id,
@@ -285,9 +292,62 @@ class ProjectCostBudgetRepository {
   }
 }
 
-function normalizeMoney(value: unknown) {
-  const amount = Number(value ?? 0);
-  return Number.isFinite(amount) ? roundMoney(amount) : 0;
+function parseBoundedAggregate(input: {
+  data: unknown;
+  parseErrorMessage: string;
+  tooManyMessage: string;
+  tooManyCode: string;
+}) {
+  const aggregate = asRecord(input.data);
+  const rawCount = aggregate?.source_row_count;
+  const isValidNumber = typeof rawCount === "number" &&
+    Number.isInteger(rawCount) && rawCount >= 0;
+  const isValidString = typeof rawCount === "string" &&
+    /^(0|[1-9]\d*)$/.test(rawCount);
+  if (!aggregate || (!isValidNumber && !isValidString)) {
+    throw Errors.dbError(input.parseErrorMessage, input.data);
+  }
+
+  const normalizedCount = String(rawCount);
+  const exceedsLimit = typeof rawCount === "number"
+    ? rawCount > 10_000
+    : normalizedCount.length > 5 ||
+      (normalizedCount.length === 5 && normalizedCount > "10000");
+  if (exceedsLimit) {
+    throw Errors.business(
+      422,
+      input.tooManyMessage,
+      input.tooManyCode,
+    );
+  }
+  return {
+    aggregate,
+    sourceRowCount: Number(normalizedCount),
+  };
+}
+
+function parseNonNegativeAggregateMoney(
+  value: unknown,
+  errorMessage: string,
+  details: unknown,
+) {
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    (typeof value === "string" && value.trim() === "")
+  ) {
+    throw Errors.dbError(errorMessage, details);
+  }
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw Errors.dbError(errorMessage, details);
+  }
+  return roundMoney(amount);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
 function normalizeProjectCostBudgetRecord(

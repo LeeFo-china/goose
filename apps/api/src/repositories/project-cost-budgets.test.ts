@@ -26,6 +26,21 @@ let commitmentRpcResponse: {
   },
   error: null,
 };
+let expenseRpcResponse: {
+  data: unknown;
+  error: unknown;
+} = {
+  data: {
+    source_row_count: 1001,
+    total_expense_amount: "2000.00",
+    unallocated_expense_amount: "200.00",
+    categories: [
+      { cost_category_id: "category-1", expense_amount: "1500.00" },
+      { cost_category_id: "category-2", expense_amount: 300 },
+    ],
+  },
+  error: null,
+};
 
 const activeBudgetRows = [
   {
@@ -136,6 +151,9 @@ mock.module("@/utils/supabase/index", () => ({
         if (name === "list_project_cost_commitment_totals") {
           return commitmentRpcResponse;
         }
+        if (name === "list_project_cost_expense_totals") {
+          return expenseRpcResponse;
+        }
         return { data: null, error: null };
       },
     }),
@@ -143,6 +161,128 @@ mock.module("@/utils/supabase/index", () => ({
 }));
 
 describe("projectCostBudgetRepository", () => {
+  test("loads 1001 expense rows and unallocated totals through one aggregate RPC", async () => {
+    rpcCalls.length = 0;
+    expenseRpcResponse = {
+      data: {
+        source_row_count: 1001,
+        total_expense_amount: "2000.00",
+        unallocated_expense_amount: "200.00",
+        categories: [
+          { cost_category_id: "category-1", expense_amount: "1500.00" },
+          { cost_category_id: "category-2", expense_amount: 300 },
+        ],
+      },
+      error: null,
+    };
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+
+    const result = await projectCostBudgetRepository.listExpenseTotals({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
+
+    expect(rpcCalls).toEqual([{
+      name: "list_project_cost_expense_totals",
+      params: {
+        p_tenant_id: "tenant-1",
+        p_project_id: "project-1",
+      },
+    }]);
+    expect(result).toMatchObject({
+      sourceRowCount: 1001,
+      totalExpenseAmount: 2000,
+      unallocatedExpenseAmount: 200,
+    });
+    expect([...result.byCategory.entries()]).toEqual([
+      ["category-1", 1500],
+      ["category-2", 300],
+    ]);
+  });
+
+  test("accepts 10000 expense rows and rejects 10001", async () => {
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+    expenseRpcResponse = {
+      data: {
+        source_row_count: 10_000,
+        total_expense_amount: "0",
+        unallocated_expense_amount: "0",
+        categories: [],
+      },
+      error: null,
+    };
+
+    const accepted = await projectCostBudgetRepository.listExpenseTotals({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
+    expect(accepted.sourceRowCount).toBe(10_000);
+
+    expenseRpcResponse = {
+      data: {
+        source_row_count: 10_001,
+        total_expense_amount: "0",
+        unallocated_expense_amount: "0",
+        categories: [],
+      },
+      error: null,
+    };
+    await expect(
+      projectCostBudgetRepository.listExpenseTotals({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 422,
+      code: "PROJECT_COST_LEDGER_TOO_MANY_ROWS",
+    });
+  });
+
+  test("wraps expense RPC and malformed aggregate failures as database errors", async () => {
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+    expenseRpcResponse = {
+      data: null,
+      error: { message: "query failed" },
+    };
+    await expect(
+      projectCostBudgetRepository.listExpenseTotals({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询项目成本支出失败",
+    });
+
+    for (const invalidAmount of ["NaN", "Infinity", -1, null]) {
+      expenseRpcResponse = {
+        data: {
+          source_row_count: 1,
+          total_expense_amount: invalidAmount,
+          unallocated_expense_amount: "0",
+          categories: [],
+        },
+        error: null,
+      };
+      await expect(
+        projectCostBudgetRepository.listExpenseTotals({
+          tenantId: "tenant-1",
+          projectId: "project-1",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+      });
+    }
+  });
+
   test("loads more than PostgREST max_rows through one aggregate RPC", async () => {
     rpcCalls.length = 0;
     commitmentRpcResponse = {
@@ -260,6 +400,36 @@ describe("projectCostBudgetRepository", () => {
       code: "DB_ERROR",
       message: "查询项目采购预算承诺失败",
     });
+  });
+
+  test("rejects invalid or negative commitment aggregate amounts", async () => {
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+
+    for (const invalidAmount of ["NaN", "Infinity", -1, null]) {
+      commitmentRpcResponse = {
+        data: {
+          source_row_count: 1,
+          categories: [{
+            cost_category_id: "category-1",
+            category_code: "labor",
+            category_name: "人工",
+            commitment_amount: invalidAmount,
+          }],
+        },
+        error: null,
+      };
+      await expect(
+        projectCostBudgetRepository.listCommitmentTotals({
+          tenantId: "tenant-1",
+          projectId: "project-1",
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+      });
+    }
   });
 
   test("saves all budget rows through one database RPC", async () => {

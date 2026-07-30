@@ -50,6 +50,7 @@ const activeBudgetRows = [
 const listActiveBudgets = mock(async () => activeBudgetRows);
 
 const defaultExpenseTotals = {
+  sourceRowCount: 3,
   totalExpenseAmount: 36000,
   unallocatedExpenseAmount: 1000,
   byCategory: new Map([
@@ -310,6 +311,7 @@ describe("projectCostBudgetService", () => {
   test("keeps synthetic-only projects unconfigured and preserves remaining semantics", async () => {
     listActiveBudgets.mockImplementation(async () => []);
     listExpenseTotals.mockImplementation(async () => ({
+      sourceRowCount: 1,
       totalExpenseAmount: 100,
       unallocatedExpenseAmount: 0,
       byCategory: new Map([["category-3", 100]]),
