@@ -18,6 +18,13 @@ const lockScopeFixPath = new URL(
 const lockScopeFixSql = existsSync(lockScopeFixPath)
   ? readFileSync(lockScopeFixPath, "utf8")
   : "";
+const submitLockFixPath = new URL(
+  "20260730180000_fix_supplier_purchase_requisition_submit_category_lock.sql",
+  migrationRoot,
+);
+const submitLockFixSql = existsSync(submitLockFixPath)
+  ? readFileSync(submitLockFixPath, "utf8")
+  : "";
 
 describe("supplier purchase requisition draft lock scope fix migration", () => {
   test("keeps applied migrations immutable and removes only the draft category row lock", () => {
@@ -41,6 +48,26 @@ describe("supplier purchase requisition draft lock scope fix migration", () => {
     );
     expect(lockScopeFixSql).toMatch(
       /forward migration[\s\S]*do not restore[\s\S]*draft category row lock/i,
+    );
+  });
+
+  test("keeps the applied lock fix immutable and uses a key-compatible submit lock", () => {
+    expect(createHash("sha256").update(readFileSync(lockScopeFixPath)).digest("hex"))
+      .toBe("6a2f90581b939964cc7e53e51e31bf8fb662a9c60d292a7464384d704c6d55f9");
+    expect(existsSync(submitLockFixPath)).toBe(true);
+    expect(submitLockFixSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expect(submitLockFixSql.match(
+      /CREATE OR REPLACE FUNCTION public\.submit_supplier_purchase_requisition/g,
+    )).toHaveLength(1);
+    expect(submitLockFixSql).toContain("FOR UPDATE OF finance_category");
+    expect(submitLockFixSql).toContain(
+      "FOR NO KEY UPDATE OF finance_category",
+    );
+    expect(submitLockFixSql).not.toMatch(
+      /^\s*(?:CREATE TABLE|ALTER TABLE|INSERT INTO|UPDATE public\.|DELETE FROM)\b/m,
+    );
+    expect(submitLockFixSql).toMatch(
+      /forward migration[\s\S]*do not restore[\s\S]*exclusive category row lock/i,
     );
   });
 });
