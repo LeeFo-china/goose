@@ -16,6 +16,7 @@ export const ids = {
   skuGrout: "22000000-0000-4000-8000-000000000013",
   priceListGrout: "22000000-0000-4000-8000-000000000014",
   priceItemGrout: "22000000-0000-4000-8000-000000000015",
+  fulfillment: "22000000-0000-4000-8000-000000000017",
 };
 
 export const session = {

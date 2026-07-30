@@ -22,6 +22,10 @@ function reset() {
     catalog: initialCatalog(),
     order: null,
     items: [],
+    fulfillment: null,
+    itemFulfillments: [],
+    shipments: [],
+    receipts: [],
     journal: [],
     idempotency: new Map(),
     priceChangeTriggered: false,
@@ -119,12 +123,12 @@ function idempotencyKey(request) {
 
 function requireIdempotency(request, response) {
   const key = idempotencyKey(request);
-  if (key?.trim()) return key.trim();
+  if (key?.trim() && key.trim().length <= 120) return key.trim();
   sendError(
     response,
     400,
     "IDEMPOTENCY_KEY_REQUIRED",
-    "缺少 Idempotency-Key",
+    "Idempotency-Key 必须为 1 到 120 个字符",
   );
   return null;
 }
@@ -133,7 +137,7 @@ function fingerprint(url, payload) {
   return `${url.pathname}:${JSON.stringify(payload)}`;
 }
 
-function replayIdempotent(response, key, fingerprintValue) {
+function replayIdempotent(response, key, fingerprintValue, markReplay = false) {
   const previous = state.idempotency.get(key);
   if (!previous) return false;
   if (previous.fingerprint !== fingerprintValue) {
@@ -145,7 +149,11 @@ function replayIdempotent(response, key, fingerprintValue) {
     );
     return true;
   }
-  sendJson(response, previous.status, previous.payload);
+  const payload = structuredClone(previous.payload);
+  if (markReplay && payload?.success && payload.data) {
+    payload.data.idempotent = true;
+  }
+  sendJson(response, previous.status, payload);
   return true;
 }
 
@@ -198,6 +206,109 @@ function computeAmounts(catalogItem, quantity) {
     tax: money(tax),
     total: money(catalogItem.tax_inclusive ? total : subtotal + tax),
   };
+}
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TERMINAL_FULFILLMENT_STATUSES = new Set([
+  "received",
+  "received_with_variance",
+  "cancelled",
+]);
+
+function hasExactKeys(value, expected) {
+  return value && typeof value === "object" && !Array.isArray(value) &&
+    Object.keys(value).sort().join(",") === [...expected].sort().join(",");
+}
+
+function hasAllowedKeys(value, required, optional = []) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  const allowed = new Set([...required, ...optional]);
+  return required.every((key) => keys.includes(key)) &&
+    keys.every((key) => allowed.has(key));
+}
+
+function optionalText(value, maximum) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  if (normalized.length > maximum) return undefined;
+  return normalized || null;
+}
+
+function requiredText(value, maximum) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized && normalized.length <= maximum ? normalized : null;
+}
+
+function validDateTime(value) {
+  return typeof value === "string" && value.trim() &&
+    !Number.isNaN(new Date(value).getTime());
+}
+
+function quantityUnits(value, allowZero) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const text = String(value);
+  const match = /^(\d{1,14})(?:\.(\d{1,4}))?$/.exec(text);
+  if (!match) return null;
+  const units = BigInt(match[1]) * 10_000n +
+    BigInt((match[2] || "").padEnd(4, "0") || "0");
+  if ((!allowZero && units === 0n) || units >= 1_000_000_000_000_000_000n) {
+    return null;
+  }
+  return units;
+}
+
+function storedUnits(value) {
+  const match = /^(\d+)(?:\.(\d{1,4}))?$/.exec(String(value));
+  if (!match) throw new Error(`Invalid fixture quantity: ${value}`);
+  return BigInt(match[1]) * 10_000n +
+    BigInt((match[2] || "").padEnd(4, "0") || "0");
+}
+
+function quantityText(units) {
+  const whole = units / 10_000n;
+  const decimal = String(units % 10_000n).padStart(4, "0")
+    .replace(/0+$/, "");
+  return decimal ? `${whole}.${decimal}` : String(whole);
+}
+
+function deriveFulfillmentStatus() {
+  const items = state.itemFulfillments;
+  if (items.every((item) =>
+    storedUnits(item.received_quantity) === storedUnits(item.ordered_quantity)
+  )) {
+    return items.some((item) => storedUnits(item.rejected_quantity) > 0n)
+      ? "received_with_variance"
+      : "received";
+  }
+  if (items.some((item) => storedUnits(item.received_quantity) > 0n)) {
+    return "partially_received";
+  }
+  if (items.every((item) =>
+    storedUnits(item.shipped_quantity) === storedUnits(item.ordered_quantity)
+  )) {
+    return "shipped";
+  }
+  return items.some((item) => storedUnits(item.shipped_quantity) > 0n)
+    ? "partially_shipped"
+    : "confirmed";
+}
+
+function fulfillmentCommandData(status, idempotent = false) {
+  return {
+    status,
+    idempotent,
+    purchase_order: structuredClone(state.order),
+    fulfillment: structuredClone(state.fulfillment),
+    version: state.fulfillment.version,
+  };
+}
+
+function fulfillmentFailure(response, message, code = "VALIDATION_ERROR") {
+  sendError(response, code === "VALIDATION_ERROR" ? 400 : 409, code, message);
 }
 
 function buildItem(catalogItem, quantity, lineNo, orderId) {
@@ -461,6 +572,14 @@ async function cancelOrder(request, response, url, orderId) {
     );
   }
   if (!validateExpectedVersion(response, payload.expected_version)) return;
+  if (state.shipments.length > 0) {
+    return sendError(
+      response,
+      409,
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+      "采购履约已经开始，不能取消采购单",
+    );
+  }
   if (typeof payload.reason !== "string" || payload.reason.trim().length < 2) {
     return sendError(response, 400, "VALIDATION_ERROR", "请填写取消原因");
   }
@@ -470,6 +589,11 @@ async function cancelOrder(request, response, url, orderId) {
   state.order.cancelled_at = now;
   state.order.cancel_reason = payload.reason.trim();
   state.order.updated_at = now;
+  if (state.fulfillment) {
+    state.fulfillment.status = "cancelled";
+    state.fulfillment.version += 1;
+    state.fulfillment.updated_at = now;
+  }
   recordCommand(request, url, payload, "cancelled");
   const responsePayload = {
     success: true,
@@ -482,6 +606,398 @@ async function cancelOrder(request, response, url, orderId) {
   };
   rememberIdempotent(key, fingerprintValue, 200, responsePayload);
   sendJson(response, 200, responsePayload);
+}
+
+async function confirmFulfillment(request, response, url, orderId) {
+  const key = requireIdempotency(request, response);
+  if (!key) return;
+  const payload = await readBody(request);
+  const fingerprintValue = fingerprint(url, payload);
+  if (replayIdempotent(response, key, fingerprintValue, true)) return;
+  if (!state.order || state.order.id !== orderId) {
+    return sendError(response, 404, "NOT_FOUND", "采购单不存在");
+  }
+  if (state.order.tenant_id !== ids.tenant || state.order.status !== "submitted") {
+    return fulfillmentFailure(
+      response,
+      "只有已提交采购单可以记录供应商确认",
+      "SUPPLIER_PURCHASE_ORDER_INVALID_STATE",
+    );
+  }
+  if (state.fulfillment) {
+    return fulfillmentFailure(
+      response,
+      "供应商确认已经记录",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_EXISTS",
+    );
+  }
+  if (
+    !hasAllowedKeys(
+      payload,
+      ["expected_version", "confirmed_at"],
+      ["remark"],
+    ) ||
+    !Number.isSafeInteger(payload.expected_version) ||
+    !validDateTime(payload.confirmed_at)
+  ) {
+    return fulfillmentFailure(response, "供应商确认参数无效");
+  }
+  if (payload.expected_version !== state.order.version) {
+    return fulfillmentFailure(
+      response,
+      "采购单版本已变化",
+      "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT",
+    );
+  }
+  const remark = optionalText(payload.remark, 500);
+  if (remark === undefined) {
+    return fulfillmentFailure(response, "供应商确认备注无效");
+  }
+
+  state.fulfillment = {
+    id: ids.fulfillment,
+    tenant_id: ids.tenant,
+    supplier_purchase_order_id: orderId,
+    status: "confirmed",
+    confirmed_at: new Date(payload.confirmed_at).toISOString(),
+    confirmed_by_employee_id: ids.employee,
+    confirmation_remark: remark,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+  state.itemFulfillments = state.items.map((item) => ({
+    tenant_id: ids.tenant,
+    supplier_purchase_order_fulfillment_id: ids.fulfillment,
+    supplier_purchase_order_item_id: item.id,
+    ordered_quantity: item.quantity,
+    shipped_quantity: "0",
+    received_quantity: "0",
+    accepted_quantity: "0",
+    rejected_quantity: "0",
+    accepted_subtotal_amount: "0.00",
+    accepted_tax_amount: "0.00",
+    accepted_total_amount: "0.00",
+    updated_at: now,
+  }));
+  recordCommand(request, url, payload, "confirmed");
+  const responsePayload = {
+    success: true,
+    data: fulfillmentCommandData("confirmed"),
+  };
+  rememberIdempotent(key, fingerprintValue, 200, responsePayload);
+  sendJson(response, 200, responsePayload);
+}
+
+function requireActiveFulfillment(response, orderId, expectedVersion) {
+  if (
+    !state.order ||
+    state.order.id !== orderId ||
+    state.order.tenant_id !== ids.tenant
+  ) {
+    sendError(response, 404, "NOT_FOUND", "采购单不存在");
+    return false;
+  }
+  if (!state.fulfillment || state.fulfillment.version !== expectedVersion) {
+    fulfillmentFailure(
+      response,
+      "采购履约版本已变化",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+    );
+    return false;
+  }
+  if (TERMINAL_FULFILLMENT_STATUSES.has(state.fulfillment.status)) {
+    fulfillmentFailure(
+      response,
+      "当前采购履约状态不允许继续登记",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_INVALID_STATE",
+    );
+    return false;
+  }
+  return true;
+}
+
+function parseShipmentPayload(payload, response) {
+  if (
+    !hasAllowedKeys(
+      payload,
+      [
+        "id",
+        "expected_fulfillment_version",
+        "shipment_no",
+        "shipped_at",
+        "items",
+      ],
+      ["carrier_name", "tracking_no", "remark"],
+    ) ||
+    !UUID_PATTERN.test(payload.id) ||
+    !Number.isSafeInteger(payload.expected_fulfillment_version) ||
+    !requiredText(payload.shipment_no, 80) ||
+    optionalText(payload.carrier_name, 100) === undefined ||
+    optionalText(payload.tracking_no, 120) === undefined ||
+    optionalText(payload.remark, 500) === undefined ||
+    !validDateTime(payload.shipped_at) ||
+    !Array.isArray(payload.items) ||
+    payload.items.length < 1 ||
+    payload.items.length > 100
+  ) {
+    fulfillmentFailure(response, "发货参数无效");
+    return null;
+  }
+  if (
+    state.shipments.some((shipment) =>
+      shipment.id === payload.id ||
+      shipment.shipment_no === payload.shipment_no.trim()
+    )
+  ) {
+    fulfillmentFailure(
+      response,
+      "发货记录 ID 或发货编号重复",
+      "SUPPLIER_PURCHASE_ORDER_SHIPMENT_CONFLICT",
+    );
+    return null;
+  }
+  const itemById = new Map(state.itemFulfillments.map((item) =>
+    [item.supplier_purchase_order_item_id.toLowerCase(), item]
+  ));
+  const seen = new Set();
+  const lines = [];
+  for (const line of payload.items) {
+    const itemId = typeof line?.purchase_order_item_id === "string"
+      ? line.purchase_order_item_id.toLowerCase()
+      : "";
+    const quantity = quantityUnits(line?.quantity, false);
+    const item = itemById.get(itemId);
+    if (
+      !hasExactKeys(line, ["purchase_order_item_id", "quantity"]) ||
+      !UUID_PATTERN.test(itemId) ||
+      seen.has(itemId) ||
+      !item ||
+      quantity === null ||
+      quantity >
+        storedUnits(item.ordered_quantity) - storedUnits(item.shipped_quantity)
+    ) {
+      fulfillmentFailure(response, "发货明细无效或超过剩余可发数量");
+      return null;
+    }
+    seen.add(itemId);
+    lines.push({ item, quantity });
+  }
+  return lines;
+}
+
+async function createShipment(request, response, url, orderId) {
+  const key = requireIdempotency(request, response);
+  if (!key) return;
+  const payload = await readBody(request);
+  const fingerprintValue = fingerprint(url, payload);
+  if (replayIdempotent(response, key, fingerprintValue, true)) return;
+  const lines = parseShipmentPayload(payload, response);
+  if (!lines || !requireActiveFulfillment(
+    response,
+    orderId,
+    payload.expected_fulfillment_version,
+  )) return;
+
+  const shipmentItems = lines.map(({ item, quantity }) => {
+    item.shipped_quantity = quantityText(
+      storedUnits(item.shipped_quantity) + quantity,
+    );
+    item.updated_at = now;
+    return {
+      tenant_id: ids.tenant,
+      shipment_id: payload.id,
+      supplier_purchase_order_item_id:
+        item.supplier_purchase_order_item_id,
+      quantity: quantityText(quantity),
+    };
+  });
+  state.shipments.push({
+    id: payload.id,
+    tenant_id: ids.tenant,
+    supplier_purchase_order_id: orderId,
+    shipment_no: payload.shipment_no.trim(),
+    carrier_name: optionalText(payload.carrier_name, 100),
+    tracking_no: optionalText(payload.tracking_no, 120),
+    shipped_at: new Date(payload.shipped_at).toISOString(),
+    remark: optionalText(payload.remark, 500),
+    created_by_employee_id: ids.employee,
+    created_at: now,
+    items: shipmentItems,
+  });
+  state.fulfillment.status = deriveFulfillmentStatus();
+  state.fulfillment.version += 1;
+  state.fulfillment.updated_at = now;
+  recordCommand(request, url, payload, "shipment_created");
+  const responsePayload = {
+    success: true,
+    data: fulfillmentCommandData("shipment_created"),
+  };
+  rememberIdempotent(key, fingerprintValue, 200, responsePayload);
+  sendJson(response, 200, responsePayload);
+}
+
+function parseReceiptPayload(payload, response) {
+  if (
+    !hasAllowedKeys(
+      payload,
+      [
+        "id",
+        "expected_fulfillment_version",
+        "receipt_no",
+        "received_at",
+        "items",
+      ],
+      ["remark"],
+    ) ||
+    !UUID_PATTERN.test(payload.id) ||
+    !Number.isSafeInteger(payload.expected_fulfillment_version) ||
+    !requiredText(payload.receipt_no, 80) ||
+    optionalText(payload.remark, 500) === undefined ||
+    !validDateTime(payload.received_at) ||
+    !Array.isArray(payload.items) ||
+    payload.items.length < 1 ||
+    payload.items.length > 100
+  ) {
+    fulfillmentFailure(response, "收货参数无效");
+    return null;
+  }
+  if (
+    state.receipts.some((receipt) =>
+      receipt.id === payload.id ||
+      receipt.receipt_no === payload.receipt_no.trim()
+    )
+  ) {
+    fulfillmentFailure(
+      response,
+      "收货记录 ID 或收货编号重复",
+      "SUPPLIER_PURCHASE_ORDER_RECEIPT_CONFLICT",
+    );
+    return null;
+  }
+  const itemById = new Map(state.itemFulfillments.map((item) =>
+    [item.supplier_purchase_order_item_id.toLowerCase(), item]
+  ));
+  const seen = new Set();
+  const lines = [];
+  for (const line of payload.items) {
+    const itemId = typeof line?.purchase_order_item_id === "string"
+      ? line.purchase_order_item_id.toLowerCase()
+      : "";
+    const accepted = quantityUnits(line?.accepted_quantity, true);
+    const rejected = quantityUnits(line?.rejected_quantity, true);
+    const reason = optionalText(line?.variance_reason, 500);
+    const item = itemById.get(itemId);
+    const total = accepted === null || rejected === null
+      ? null
+      : accepted + rejected;
+    if (
+      !hasAllowedKeys(
+        line,
+        [
+          "purchase_order_item_id",
+          "accepted_quantity",
+          "rejected_quantity",
+        ],
+        ["variance_reason"],
+      ) ||
+      !UUID_PATTERN.test(itemId) ||
+      seen.has(itemId) ||
+      !item ||
+      accepted === null ||
+      rejected === null ||
+      total === null ||
+      total === 0n ||
+      total >
+        storedUnits(item.shipped_quantity) - storedUnits(item.received_quantity) ||
+      reason === undefined ||
+      (rejected > 0n && reason === null) ||
+      (rejected === 0n && reason !== null)
+    ) {
+      fulfillmentFailure(
+        response,
+        "收货明细无效、超过剩余可收数量或拒收原因无效",
+      );
+      return null;
+    }
+    seen.add(itemId);
+    lines.push({ item, accepted, rejected, reason });
+  }
+  return lines;
+}
+
+async function createReceipt(request, response, url, orderId) {
+  const key = requireIdempotency(request, response);
+  if (!key) return;
+  const payload = await readBody(request);
+  const fingerprintValue = fingerprint(url, payload);
+  if (replayIdempotent(response, key, fingerprintValue, true)) return;
+  const lines = parseReceiptPayload(payload, response);
+  if (!lines || !requireActiveFulfillment(
+    response,
+    orderId,
+    payload.expected_fulfillment_version,
+  )) return;
+
+  const receiptItems = lines.map(({ item, accepted, rejected, reason }) => {
+    item.accepted_quantity = quantityText(
+      storedUnits(item.accepted_quantity) + accepted,
+    );
+    item.rejected_quantity = quantityText(
+      storedUnits(item.rejected_quantity) + rejected,
+    );
+    item.received_quantity = quantityText(
+      storedUnits(item.received_quantity) + accepted + rejected,
+    );
+    const orderItem = state.items.find(({ id }) =>
+      id === item.supplier_purchase_order_item_id
+    );
+    const amounts = computeAmounts(
+      orderItem,
+      Number(item.accepted_quantity),
+    );
+    item.accepted_subtotal_amount = amounts.subtotal;
+    item.accepted_tax_amount = amounts.tax;
+    item.accepted_total_amount = amounts.total;
+    item.updated_at = now;
+    return {
+      tenant_id: ids.tenant,
+      receipt_id: payload.id,
+      supplier_purchase_order_item_id:
+        item.supplier_purchase_order_item_id,
+      accepted_quantity: quantityText(accepted),
+      rejected_quantity: quantityText(rejected),
+      variance_reason: reason,
+    };
+  });
+  state.receipts.push({
+    id: payload.id,
+    tenant_id: ids.tenant,
+    supplier_purchase_order_id: orderId,
+    receipt_no: payload.receipt_no.trim(),
+    received_at: new Date(payload.received_at).toISOString(),
+    remark: optionalText(payload.remark, 500),
+    received_by_employee_id: ids.employee,
+    created_at: now,
+    items: receiptItems,
+  });
+  state.fulfillment.status = deriveFulfillmentStatus();
+  state.fulfillment.version += 1;
+  state.fulfillment.updated_at = now;
+  recordCommand(request, url, payload, "receipt_created");
+  const responsePayload = {
+    success: true,
+    data: fulfillmentCommandData("receipt_created"),
+  };
+  rememberIdempotent(key, fingerprintValue, 200, responsePayload);
+  sendJson(response, 200, responsePayload);
+}
+
+function orderedEvents(records, field) {
+  return [...records].sort((left, right) =>
+    new Date(right[field]).getTime() - new Date(left[field]).getTime() ||
+    right.id.localeCompare(left.id)
+  );
 }
 
 const server = createServer(async (request, response) => {
@@ -501,6 +1017,15 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/__test/journal") {
       return sendJson(response, 200, {
         journal: structuredClone(state.journal),
+      });
+    }
+    if (request.method === "GET" && url.pathname === "/__test/state") {
+      return sendJson(response, 200, {
+        order: orderWithReferences(),
+        fulfillment: structuredClone(state.fulfillment),
+        item_fulfillments: structuredClone(state.itemFulfillments),
+        shipments: structuredClone(state.shipments),
+        receipts: structuredClone(state.receipts),
       });
     }
     if (request.method === "POST" && url.pathname === "/admin/auth/login") {
@@ -578,6 +1103,80 @@ const server = createServer(async (request, response) => {
         );
       }
       return sendPage(response, url, records, ["order_no"]);
+    }
+    const fulfillmentDetail = url.pathname.match(
+      /^\/supplier-purchase-orders\/([^/]+)\/fulfillment$/,
+    );
+    if (request.method === "GET" && fulfillmentDetail) {
+      if (
+        !state.order ||
+        decodeURIComponent(fulfillmentDetail[1]) !== state.order.id
+      ) {
+        return sendError(response, 404, "NOT_FOUND", "采购单不存在");
+      }
+      return sendData(response, {
+        fulfillment: structuredClone(state.fulfillment),
+        item_fulfillments: structuredClone(state.itemFulfillments),
+      });
+    }
+    const confirmation = url.pathname.match(
+      /^\/supplier-purchase-orders\/([^/]+)\/confirm-fulfillment$/,
+    );
+    if (request.method === "POST" && confirmation) {
+      return confirmFulfillment(
+        request,
+        response,
+        url,
+        decodeURIComponent(confirmation[1]),
+      );
+    }
+    const shipmentEvents = url.pathname.match(
+      /^\/supplier-purchase-orders\/([^/]+)\/shipments$/,
+    );
+    if (request.method === "GET" && shipmentEvents) {
+      if (
+        !state.order ||
+        decodeURIComponent(shipmentEvents[1]) !== state.order.id
+      ) {
+        return sendError(response, 404, "NOT_FOUND", "采购单不存在");
+      }
+      return sendPage(
+        response,
+        url,
+        orderedEvents(state.shipments, "shipped_at"),
+      );
+    }
+    if (request.method === "POST" && shipmentEvents) {
+      return createShipment(
+        request,
+        response,
+        url,
+        decodeURIComponent(shipmentEvents[1]),
+      );
+    }
+    const receiptEvents = url.pathname.match(
+      /^\/supplier-purchase-orders\/([^/]+)\/receipts$/,
+    );
+    if (request.method === "GET" && receiptEvents) {
+      if (
+        !state.order ||
+        decodeURIComponent(receiptEvents[1]) !== state.order.id
+      ) {
+        return sendError(response, 404, "NOT_FOUND", "采购单不存在");
+      }
+      return sendPage(
+        response,
+        url,
+        orderedEvents(state.receipts, "received_at"),
+      );
+    }
+    if (request.method === "POST" && receiptEvents) {
+      return createReceipt(
+        request,
+        response,
+        url,
+        decodeURIComponent(receiptEvents[1]),
+      );
     }
     const itemList = url.pathname.match(
       /^\/supplier-purchase-orders\/([^/]+)\/items$/,

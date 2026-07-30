@@ -29,7 +29,7 @@ async function readJournal(request: APIRequestContext) {
   return (await response.json() as { journal: JournalEntry[] }).journal;
 }
 
-test("采购单可完成计价、价格变化恢复、提交与取消", async ({
+test("采购单可完成计价、价格变化恢复、提交与完整履约", async ({
   page,
   request,
 }) => {
@@ -98,12 +98,86 @@ test("采购单可完成计价、价格变化恢复、提交与取消", async ({
     .click();
   await expect(dialog.getByText("已提交", { exact: true })).toBeVisible();
 
-  await dialog.getByRole("button", { name: "取消采购单" }).click();
-  const alert = page.getByRole("alertdialog", { name: "确认取消采购单？" });
-  await alert.getByLabel("取消原因").fill("项目方案调整，取消采购");
-  await alert.getByRole("button", { name: "确认取消" }).click();
-  await expect(dialog.getByText("已取消", { exact: true })).toBeVisible();
-  await expect(dialog.getByText("PO-E2E-0001", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "记录供应商确认" }).click();
+  const confirmAlert = page.getByRole("alertdialog", {
+    name: "记录供应商确认？",
+  });
+  await confirmAlert.getByLabel("供应商确认备注").fill("供应商已确认排产");
+  await confirmAlert.getByRole("button", { name: "记录供应商确认" }).click();
+  await expect(dialog.getByText("已确认", { exact: true })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "登记发货" }).click();
+  let shipmentDialog = page.getByRole("dialog", { name: "登记采购发货" });
+  await shipmentDialog.getByRole("button", { name: "登记发货" }).click();
+  await expect(shipmentDialog.getByLabel("发货编号")).toBeFocused();
+  await shipmentDialog.getByLabel("发货编号").fill("SHP-E2E-0001");
+  await shipmentDialog.getByLabel("发货时间").fill("2030-01-01T09:00");
+  await shipmentDialog.getByLabel("承运方").fill("E2E 物流");
+  await shipmentDialog.getByLabel("运单号").fill("TRACK-E2E-0001");
+  await shipmentDialog.getByLabel("本次发货数量 1").fill("1");
+  await shipmentDialog.getByLabel("本次发货数量 2").fill("1");
+  await shipmentDialog.getByRole("button", { name: "登记发货" }).click();
+  await expect(shipmentDialog).toBeHidden();
+  await expect(dialog.getByText("部分发货", { exact: true })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "登记收货" }).click();
+  let receiptDialog = page.getByRole("dialog", { name: "登记采购收货" });
+  await receiptDialog.getByLabel("收货编号").fill("REC-E2E-0001");
+  await receiptDialog.getByLabel("收货时间").fill("2030-01-01T10:00");
+  await receiptDialog.getByLabel("接受数量 1").fill("1");
+  await receiptDialog.getByLabel("拒收数量 1").fill("0");
+  await receiptDialog.getByLabel("接受数量 2").fill("1");
+  await receiptDialog.getByLabel("拒收数量 2").fill("0");
+  await receiptDialog.getByRole("button", { name: "登记收货" }).click();
+  await expect(receiptDialog).toBeHidden();
+  await expect(dialog.getByText("部分收货", { exact: true })).toBeVisible();
+
+  await dialog.getByRole("button", { name: "登记发货" }).click();
+  shipmentDialog = page.getByRole("dialog", { name: "登记采购发货" });
+  await shipmentDialog.getByLabel("发货编号").fill("SHP-E2E-0002");
+  await shipmentDialog.getByLabel("发货时间").fill("2030-01-01T11:00");
+  await shipmentDialog.getByLabel("本次发货数量 1").fill("1");
+  await shipmentDialog.getByLabel("本次发货数量 2").fill("2");
+  await shipmentDialog.getByRole("button", { name: "登记发货" }).click();
+  await expect(shipmentDialog).toBeHidden();
+
+  await dialog.getByRole("button", { name: "登记收货" }).click();
+  receiptDialog = page.getByRole("dialog", { name: "登记采购收货" });
+  await receiptDialog.getByLabel("收货编号").fill("REC-E2E-0002");
+  await receiptDialog.getByLabel("收货时间").fill("2030-01-01T12:00");
+  await receiptDialog.getByLabel("接受数量 1").fill("1");
+  await receiptDialog.getByLabel("拒收数量 1").fill("0");
+  await receiptDialog.getByLabel("接受数量 2").fill("1");
+  await receiptDialog.getByLabel("拒收数量 2").fill("1");
+  await receiptDialog.getByRole("button", { name: "登记收货" }).click();
+  await expect(receiptDialog.getByText("存在拒收数量时必须填写差异原因"))
+    .toBeVisible();
+  await receiptDialog.getByLabel("差异原因 2").fill("包装破损拒收");
+  await receiptDialog.getByRole("button", { name: "登记收货" }).click();
+  await expect(receiptDialog).toBeHidden();
+
+  const fulfillment = dialog.getByRole("region", { name: "采购履约" });
+  await expect(fulfillment.getByText("有差异已收货", { exact: true }))
+    .toBeVisible();
+  const summaryTable = fulfillment.getByRole("table").first();
+  const tileSummaryRow = summaryTable.getByRole("row").filter({
+    hasText: "E2E 抛釉砖",
+  });
+  const groutSummaryRow = summaryTable.getByRole("row").filter({
+    hasText: "E2E 美缝剂",
+  });
+  await expect(tileSummaryRow.getByRole("cell").nth(6)).toHaveText("¥24.00");
+  await expect(groutSummaryRow.getByRole("cell").nth(5)).toHaveText("1");
+  await expect(groutSummaryRow.getByRole("cell").nth(6)).toHaveText("¥40.00");
+
+  const timelineRows = fulfillment.getByRole("table").filter({
+    hasText: "业务时间",
+  }).getByRole("row");
+  await expect(timelineRows.nth(1)).toContainText("REC-E2E-0002");
+  await expect(timelineRows.nth(2)).toContainText("SHP-E2E-0002");
+  await expect(timelineRows.nth(3)).toContainText("REC-E2E-0001");
+  await expect(timelineRows.nth(4)).toContainText("SHP-E2E-0001");
+  await expect(timelineRows.nth(5)).toContainText("供应商已确认");
 
   const journal = await readJournal(request);
   expect(journal.map(({ outcome }) => outcome)).toEqual([
@@ -111,10 +185,17 @@ test("采购单可完成计价、价格变化恢复、提交与取消", async ({
     "price_changed",
     "saved",
     "submitted",
-    "cancelled",
+    "confirmed",
+    "shipment_created",
+    "receipt_created",
+    "shipment_created",
+    "receipt_created",
   ]);
-  expect(journal.every(({ idempotencyKey }) => Boolean(idempotencyKey)))
-    .toBe(true);
+  expect(journal.every(({ idempotencyKey }) =>
+    typeof idempotencyKey === "string" &&
+    idempotencyKey.trim().length > 0 &&
+    idempotencyKey.length <= 120
+  )).toBe(true);
 
   const saveEntries = journal.filter(({ path }) => path.endsWith("/save-draft"));
   expect(saveEntries).toHaveLength(2);
@@ -128,4 +209,105 @@ test("采购单可完成计价、价格变化恢复、提交与取消", async ({
       /unit_price|tax_rate|subtotal_amount|total_amount|price_list/i,
     );
   }
+
+  const fulfillmentEntries = journal.filter(({ path }) =>
+    /\/(confirm-fulfillment|shipments|receipts)$/.test(path)
+  );
+  expect(fulfillmentEntries).toHaveLength(5);
+  for (const { payload } of fulfillmentEntries) {
+    expect(JSON.stringify(payload)).not.toMatch(
+      /unit_price|tax_rate|accepted_amount|subtotal_amount|tax_amount|total_amount/i,
+    );
+  }
+  const shipmentEntries = fulfillmentEntries.filter(({ path }) =>
+    path.endsWith("/shipments")
+  );
+  const receiptEntries = fulfillmentEntries.filter(({ path }) =>
+    path.endsWith("/receipts")
+  );
+  expect(shipmentEntries).toHaveLength(2);
+  expect(receiptEntries).toHaveLength(2);
+  for (const { payload } of shipmentEntries) {
+    expect(Object.keys(payload).sort()).toEqual([
+      "carrier_name",
+      "expected_fulfillment_version",
+      "id",
+      "items",
+      "remark",
+      "shipment_no",
+      "shipped_at",
+      "tracking_no",
+    ]);
+    expect((payload.items as Record<string, unknown>[]).every((item) =>
+      Object.keys(item).sort().join(",") ===
+        "purchase_order_item_id,quantity"
+    )).toBe(true);
+  }
+  for (const { payload } of receiptEntries) {
+    expect(Object.keys(payload).sort()).toEqual([
+      "expected_fulfillment_version",
+      "id",
+      "items",
+      "receipt_no",
+      "received_at",
+      "remark",
+    ]);
+    expect((payload.items as Record<string, unknown>[]).every((item) =>
+      Object.keys(item).sort().join(",") ===
+        "accepted_quantity,purchase_order_item_id,rejected_quantity,variance_reason"
+    )).toBe(true);
+  }
+
+  const finalReceipt = receiptEntries.at(-1);
+  if (!finalReceipt?.idempotencyKey) {
+    throw new TypeError("最终收货 journal 缺少幂等键");
+  }
+  const replay = await request.post(
+    `${mockBackendBaseUrl}${finalReceipt.path}`,
+    {
+      headers: { "Idempotency-Key": finalReceipt.idempotencyKey },
+      data: finalReceipt.payload,
+    },
+  );
+  expect(replay.ok()).toBe(true);
+  expect((await replay.json() as { data: { idempotent: boolean } }).data
+    .idempotent).toBe(true);
+  const conflict = await request.post(
+    `${mockBackendBaseUrl}${finalReceipt.path}`,
+    {
+      headers: { "Idempotency-Key": finalReceipt.idempotencyKey },
+      data: { ...finalReceipt.payload, receipt_no: "REC-E2E-CONFLICT" },
+    },
+  );
+  expect(conflict.status()).toBe(409);
+  expect((await conflict.json() as { code: string }).code)
+    .toBe("IDEMPOTENCY_KEY_REUSED");
+  const invalidPage = await request.get(
+    `${mockBackendBaseUrl}${finalReceipt.path}?page=1&pageSize=101`,
+  );
+  expect(invalidPage.status()).toBe(400);
+
+  const cancelAfterShipment = await request.post(
+    `${mockBackendBaseUrl}${finalReceipt.path.replace(/\/receipts$/, "/cancel")}`,
+    {
+      headers: { "Idempotency-Key": "e2e-cancel-after-shipment" },
+      data: {
+        expected_version: 3,
+        reason: "已有发货后禁止取消",
+      },
+    },
+  );
+  expect(cancelAfterShipment.status()).toBe(409);
+  expect((await cancelAfterShipment.json() as { code: string }).code)
+    .toBe("SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED");
+
+  await dialog.getByRole("button", { name: "关闭" }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await orderRow.getByRole("button", { name: "查看" }).click();
+  dialog = page.getByRole("dialog", { name: "采购单详情" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "关闭" })).toBeVisible();
+  expect(await page.evaluate(() =>
+    document.documentElement.scrollWidth <= window.innerWidth
+  )).toBe(true);
 });
