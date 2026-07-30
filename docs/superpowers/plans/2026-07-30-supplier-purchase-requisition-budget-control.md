@@ -1081,7 +1081,7 @@ git add apps/api/src/types/database.ts \
 git commit -m "chore(api): 更新采购申请数据库类型"
 ```
 
-- [ ] **Step 8: 请求代码审查并收口分支**
+- [x] **Step 8: 请求代码审查并收口分支**
 
 使用 `requesting-code-review` 技能审查需求覆盖、安全、并发、性能、API/Admin 和
 测试证据。修复所有阻断问题后，再使用 `finishing-a-development-branch` 技能决定
