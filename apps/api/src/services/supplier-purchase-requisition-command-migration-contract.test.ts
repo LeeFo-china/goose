@@ -90,6 +90,19 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(save.indexOf("FROM public.tenant_suppliers")).toBeLessThan(
       save.indexOf("FROM public.supplier_price_list_items"),
     );
+    expect(save).toMatch(
+      /jsonb_array_elements\(p_items\)[\s\S]*jsonb_typeof\(item\.value\) <> 'object'/,
+    );
+    expect(save.indexOf("jsonb_typeof(item.value) <> 'object'")).toBeLessThan(
+      save.indexOf("jsonb_to_recordset(p_items)"),
+    );
+    expect(save).toMatch(
+      /invalid_text_representation OR invalid_parameter_value\s+OR numeric_value_out_of_range[\s\S]*SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR/,
+    );
+    expect(save).toMatch(
+      /jsonb_to_recordset\(p_items\)[\s\S]*supplier_sku_id uuid[\s\S]*quantity numeric/,
+    );
+    expect(save).toMatch(/quantity <= 0[\s\S]*scale\(quantity\) > 4/);
   });
 
   test("saves immutable priced facts with one set-based catalog read", () => {
@@ -121,6 +134,14 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(save).toMatch(/row_number\(\) OVER/);
     expect(save).toMatch(/tax_inclusive[\s\S]*line_total_amount/);
     expect(save).toMatch(/version = requisition\.version \+ 1/);
+    expect(count(save, /get_tenant_supplier_order_eligibility_set/)).toBe(1);
+    expectOrdered(save, [
+      /requested_items AS MATERIALIZED/,
+      /eligibility AS MATERIALIZED[\s\S]*get_tenant_supplier_order_eligibility_set/,
+      /price_candidates AS MATERIALIZED/,
+      /JOIN eligibility/,
+      /resolved_items AS MATERIALIZED/,
+    ]);
   });
 
   test("fingerprints every command and returns stable idempotent replays", () => {
@@ -162,6 +183,28 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(submit).toMatch(/available_amount_snapshot/);
     expect(submit).toMatch(/'within_budget'[\s\S]*'over_budget'/);
     expect(submit).toContain("SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED");
+    expect(submit).toMatch(
+      /JOIN public\.catalog_categories[\s\S]*catalog_category\.status = 'active'/,
+    );
+    expect(count(submit, /JOIN public\.catalog_units/))
+      .toBeGreaterThanOrEqual(2);
+    expect(submit).toMatch(/purchase_unit\.status = 'active'/);
+    expect(submit).toMatch(/base_unit\.status = 'active'/);
+    expect(submit).toMatch(
+      /current_prices\.product_code IS DISTINCT FROM\s+frozen\.product_code_snapshot/,
+    );
+    expect(submit).toMatch(
+      /current_prices\.purchase_unit_symbol IS DISTINCT FROM\s+frozen\.purchase_unit_symbol_snapshot/,
+    );
+    expect(submit).toMatch(
+      /current_prices\.line_subtotal_amount IS DISTINCT FROM\s+frozen\.line_subtotal_amount/,
+    );
+    expect(submit).toMatch(
+      /current_prices\.line_tax_amount IS DISTINCT FROM\s+frozen\.line_tax_amount/,
+    );
+    expect(submit).toMatch(
+      /current_prices\.line_total_amount IS DISTINCT FROM\s+frozen\.line_total_amount/,
+    );
   });
 
   test("reviews without self approval and releases rejected reservations", () => {
@@ -217,6 +260,20 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(convert).toMatch(
       /status = 'converted'[\s\S]*purchase_order_id = p_purchase_order_id/,
     );
+    for (const contract of [
+      /current_prices\.product_code IS DISTINCT FROM\s+frozen\.product_code_snapshot/,
+      /current_prices\.product_name IS DISTINCT FROM\s+frozen\.product_name_snapshot/,
+      /current_prices\.sku_code IS DISTINCT FROM frozen\.sku_code_snapshot/,
+      /current_prices\.specification IS DISTINCT FROM\s+frozen\.specification_snapshot/,
+      /current_prices\.purchase_unit_code IS DISTINCT FROM\s+frozen\.purchase_unit_code_snapshot/,
+      /current_prices\.base_unit_symbol IS DISTINCT FROM\s+frozen\.base_unit_symbol_snapshot/,
+      /line_subtotal_amount IS DISTINCT FROM\s+frozen\.line_subtotal_amount/,
+      /line_tax_amount IS DISTINCT FROM\s+frozen\.line_tax_amount/,
+      /line_total_amount IS DISTINCT FROM\s+frozen\.line_total_amount/,
+      /v_current_subtotal_amount IS DISTINCT FROM\s+v_requisition\.subtotal_amount/,
+      /v_current_tax_amount IS DISTINCT FROM v_requisition\.tax_amount/,
+      /v_current_total_amount IS DISTINCT FROM v_requisition\.total_amount/,
+    ]) expect(convert).toMatch(contract);
   });
 
   test("blocks direct order creation and preserves linked draft provenance", () => {
@@ -230,6 +287,22 @@ describe("supplier purchase requisition command migration contract", () => {
     );
     expect(saveOrder).toMatch(
       /p_expected_version > 0[\s\S]*purchase_requisition_id IS DISTINCT FROM\s+p_purchase_requisition_id/,
+    );
+    const commandLock = saveOrder.indexOf("supplier-command:");
+    const orderLock = saveOrder.indexOf("supplier-purchase-order-id:");
+    const tenantRow = saveOrder.indexOf(
+      "SELECT purchase_order.* INTO v_order",
+    );
+    const globalCheck = saveOrder.indexOf("SELECT EXISTS (", tenantRow);
+    const idConflict = saveOrder.indexOf(
+      "SUPPLIER_PURCHASE_ORDER_ID_CONFLICT",
+    );
+    expect(commandLock).toBeLessThan(orderLock);
+    expect(orderLock).toBeLessThan(tenantRow);
+    expect(tenantRow).toBeLessThan(globalCheck);
+    expect(globalCheck).toBeLessThan(idConflict);
+    expect(saveOrder).toMatch(
+      /WHEN numeric_value_out_of_range[\s\S]*SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED/,
     );
     expect(sql).toMatch(
       /DROP FUNCTION public\.save_supplier_purchase_order_draft\(\s*uuid,\s*uuid,\s*uuid,\s*uuid,\s*integer,\s*date,\s*text,\s*jsonb,\s*uuid,\s*uuid,\s*text\s*\)/,
@@ -290,11 +363,32 @@ describe("supplier purchase requisition command migration contract", () => {
     );
   });
 
+  test("locks commitments deterministically before every bulk release or conversion", () => {
+    for (const [name, finalStatus] of [
+      ["review_supplier_purchase_requisition", "released"],
+      ["cancel_supplier_purchase_requisition", "released"],
+      ["convert_supplier_purchase_requisition", "converted"],
+      ["cancel_supplier_purchase_order", "released"],
+    ] as const) {
+      const fn = extractFunction(name);
+      expectOrdered(fn, [
+        /FROM public\.project_cost_commitments AS commitment/,
+        /ORDER BY commitment\.cost_category_id, commitment\.id/,
+        /FOR UPDATE/,
+        /UPDATE public\.project_cost_commitments AS commitment/,
+        new RegExp(`status = '${finalStatus}'`),
+      ]);
+    }
+  });
+
   test("documents set-query plans and retains the active commitment index", () => {
     expect(sql).toMatch(/EXPLAIN[\s\S]*requisition draft catalog/i);
     expect(sql).toMatch(/EXPLAIN[\s\S]*requisition budget reservation/i);
     expect(sql).toMatch(
       /project_cost_commitments_active_lookup_idx[\s\S]*WHERE status IN \('reserved', 'converted'\)/,
+    );
+    expect(sql).toMatch(
+      /project_cost_commitments_active_lookup_idx[\s\S]*tenant\/project\/category\/status[\s\S]*(?:Index Scan|Bitmap Index Scan)[\s\S]*no unbounded full table scan/i,
     );
   });
 

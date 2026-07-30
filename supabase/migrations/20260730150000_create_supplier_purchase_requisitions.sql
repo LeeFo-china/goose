@@ -702,6 +702,9 @@ ON CONFLICT (role_id, permission_id) DO UPDATE SET
 -- lookups without a per-item nested application query.
 -- EXPLAIN smoke (Task 9/10): requisition budget reservation must aggregate
 -- items, outgoing ledger entries, and active commitments once per category.
+-- The active commitment query is tenant/project/category/status bounded and
+-- must use project_cost_commitments_active_lookup_idx through an Index Scan
+-- or Bitmap Index Scan; no unbounded full table scan is acceptable.
 
 CREATE FUNCTION public.save_supplier_purchase_requisition_draft(
   p_requisition_id uuid,
@@ -727,7 +730,7 @@ DECLARE
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb := '{}'::jsonb;
   v_request jsonb;
-  v_eligibility record;
+  v_eligible boolean;
   v_supplier_id uuid;
   v_priced_at timestamptz;
   v_resolved_items jsonb;
@@ -766,6 +769,17 @@ BEGIN
     );
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(p_items) AS item(value)
+    WHERE jsonb_typeof(item.value) <> 'object'
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+
   BEGIN
     WITH requested_items AS MATERIALIZED (
       SELECT
@@ -795,7 +809,8 @@ BEGIN
     INTO v_requested_count, v_duplicate_count, v_invalid_count
     FROM requested_items;
   EXCEPTION
-    WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+    WHEN invalid_text_representation OR invalid_parameter_value
+      OR numeric_value_out_of_range THEN
       RETURN jsonb_build_object(
         'status', 'validation_error',
         'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
@@ -922,27 +937,6 @@ BEGIN
     );
   END IF;
 
-  SELECT eligibility.*
-  INTO v_eligibility
-  FROM public.get_tenant_supplier_order_eligibility_set(
-    p_tenant_id,
-    v_priced_at,
-    p_tenant_supplier_id
-  ) AS eligibility;
-  IF NOT FOUND
-    OR NOT v_eligibility.eligible
-    OR v_eligibility.supplier_id <> v_supplier_id
-  THEN
-    RETURN jsonb_build_object(
-      'status', 'supplier_not_eligible',
-      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE',
-      'blocking_reasons', COALESCE(
-        to_jsonb(v_eligibility.blocking_reasons),
-        '["tenant_supplier_not_found"]'::jsonb
-      )
-    );
-  END IF;
-
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-price-publish:' || v_supplier_id::text,
@@ -962,6 +956,16 @@ BEGIN
       quantity numeric,
       ordinality bigint
     )
+  ),
+  eligibility AS MATERIALIZED (
+    SELECT eligible.*
+    FROM public.get_tenant_supplier_order_eligibility_set(
+      p_tenant_id,
+      v_priced_at,
+      p_tenant_supplier_id
+    ) AS eligible
+    WHERE eligible.eligible
+      AND eligible.supplier_id = v_supplier_id
   ),
   price_candidates AS MATERIALIZED (
     SELECT
@@ -994,6 +998,9 @@ BEGIN
     FROM public.supplier_price_list_items AS price_item
     JOIN requested_items AS requested
       ON requested.supplier_sku_id = price_item.supplier_sku_id
+    JOIN eligibility
+      ON eligibility.tenant_supplier_id = p_tenant_supplier_id
+      AND eligibility.supplier_id = price_item.supplier_id
     JOIN public.supplier_price_lists AS price_list
       ON price_list.id = price_item.supplier_price_list_id
       AND price_list.supplier_id = price_item.supplier_id
@@ -1073,18 +1080,27 @@ BEGIN
     FROM price_candidates AS candidate
   )
   SELECT
+    EXISTS (SELECT 1 FROM eligibility),
     COUNT(*),
     COALESCE(jsonb_agg(to_jsonb(resolved) ORDER BY resolved.line_no), '[]'),
     COALESCE(SUM(resolved.line_subtotal_amount), 0),
     COALESCE(SUM(resolved.line_tax_amount), 0),
     COALESCE(SUM(resolved.line_total_amount), 0)
   INTO
+    v_eligible,
     v_resolved_count,
     v_resolved_items,
     v_subtotal_amount,
     v_tax_amount,
     v_total_amount
   FROM resolved_items AS resolved;
+
+  IF NOT v_eligible THEN
+    RETURN jsonb_build_object(
+      'status', 'supplier_not_eligible',
+      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE'
+    );
+  END IF;
 
   IF v_resolved_count <> v_requested_count THEN
     RETURN jsonb_build_object(
@@ -1373,7 +1389,50 @@ BEGIN
       price_list.price_list_code,
       price_list.version_number,
       price_list.effective_from,
-      price_list.effective_until
+      price_list.effective_until,
+      product.id AS supplier_product_id,
+      product.product_code,
+      product.name AS product_name,
+      sku.sku_code,
+      sku.name AS sku_name,
+      sku.specification,
+      sku.model,
+      purchase_unit.code AS purchase_unit_code,
+      purchase_unit.name AS purchase_unit_name,
+      purchase_unit.symbol AS purchase_unit_symbol,
+      base_unit.code AS base_unit_code,
+      base_unit.name AS base_unit_name,
+      base_unit.symbol AS base_unit_symbol,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(frozen.quantity * price_item.unit_price, 2)
+      ELSE round(frozen.quantity * price_item.unit_price, 2) +
+        round(
+          round(frozen.quantity * price_item.unit_price, 2) *
+            price_item.tax_rate,
+          2
+        )
+      END::numeric(18, 2) AS line_total_amount,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(
+          round(frozen.quantity * price_item.unit_price, 2) /
+            (1 + price_item.tax_rate),
+          2
+        )
+      ELSE round(frozen.quantity * price_item.unit_price, 2)
+      END::numeric(18, 2) AS line_subtotal_amount,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(frozen.quantity * price_item.unit_price, 2) -
+          round(
+            round(frozen.quantity * price_item.unit_price, 2) /
+              (1 + price_item.tax_rate),
+            2
+          )
+      ELSE round(
+        round(frozen.quantity * price_item.unit_price, 2) *
+          price_item.tax_rate,
+        2
+      )
+      END::numeric(18, 2) AS line_tax_amount
     FROM public.supplier_price_list_items AS price_item
     JOIN frozen ON frozen.supplier_sku_id = price_item.supplier_sku_id
     JOIN public.supplier_price_lists AS price_list
@@ -1387,6 +1446,15 @@ BEGIN
       ON product.id = sku.supplier_product_id
       AND product.supplier_id = v_requisition.supplier_id
       AND product.status = 'active'
+    JOIN public.catalog_categories AS catalog_category
+      ON catalog_category.id = product.category_id
+      AND catalog_category.status = 'active'
+    JOIN public.catalog_units AS purchase_unit
+      ON purchase_unit.id = price_item.purchase_unit_id
+      AND purchase_unit.status = 'active'
+    JOIN public.catalog_units AS base_unit
+      ON base_unit.id = price_item.base_unit_id
+      AND base_unit.status = 'active'
     WHERE price_item.supplier_id = v_requisition.supplier_id
       AND price_list.lifecycle_status = 'published'
       AND price_list.scope_type = 'default'
@@ -1396,8 +1464,12 @@ BEGIN
         price_list.effective_until IS NULL
         OR price_list.effective_until > v_checked_at
       )
+      AND sku.purchase_unit_id = price_item.purchase_unit_id
+      AND sku.base_unit_id = price_item.base_unit_id
+      AND sku.base_unit_conversion = price_item.base_unit_conversion
     ORDER BY sku.id, price_item.id
-    FOR SHARE OF price_item, price_list, sku, product
+    FOR SHARE OF price_item, price_list, sku, product,
+      catalog_category, purchase_unit, base_unit
   )
   SELECT
     COUNT(*),
@@ -1423,6 +1495,36 @@ BEGIN
           frozen.price_effective_from_snapshot
         OR current_prices.effective_until IS DISTINCT FROM
           frozen.price_effective_until_snapshot
+        OR current_prices.supplier_product_id IS DISTINCT FROM
+          frozen.supplier_product_id
+        OR current_prices.product_code IS DISTINCT FROM
+          frozen.product_code_snapshot
+        OR current_prices.product_name IS DISTINCT FROM
+          frozen.product_name_snapshot
+        OR current_prices.sku_code IS DISTINCT FROM
+          frozen.sku_code_snapshot
+        OR current_prices.sku_name IS DISTINCT FROM frozen.sku_name_snapshot
+        OR current_prices.specification IS DISTINCT FROM
+          frozen.specification_snapshot
+        OR current_prices.model IS DISTINCT FROM frozen.model_snapshot
+        OR current_prices.purchase_unit_code IS DISTINCT FROM
+          frozen.purchase_unit_code_snapshot
+        OR current_prices.purchase_unit_name IS DISTINCT FROM
+          frozen.purchase_unit_name_snapshot
+        OR current_prices.purchase_unit_symbol IS DISTINCT FROM
+          frozen.purchase_unit_symbol_snapshot
+        OR current_prices.base_unit_code IS DISTINCT FROM
+          frozen.base_unit_code_snapshot
+        OR current_prices.base_unit_name IS DISTINCT FROM
+          frozen.base_unit_name_snapshot
+        OR current_prices.base_unit_symbol IS DISTINCT FROM
+          frozen.base_unit_symbol_snapshot
+        OR current_prices.line_subtotal_amount IS DISTINCT FROM
+          frozen.line_subtotal_amount
+        OR current_prices.line_tax_amount IS DISTINCT FROM
+          frozen.line_tax_amount
+        OR current_prices.line_total_amount IS DISTINCT FROM
+          frozen.line_total_amount
     )
   INTO v_item_count, v_changed_count
   FROM frozen
@@ -1742,6 +1844,13 @@ BEGIN
     WHERE requisition.id = p_requisition_id
     RETURNING * INTO v_requisition;
   ELSE
+    PERFORM commitment.id
+    FROM public.project_cost_commitments AS commitment
+    WHERE commitment.tenant_id = p_tenant_id
+      AND commitment.source_id = p_requisition_id
+      AND commitment.status = 'reserved'
+    ORDER BY commitment.cost_category_id, commitment.id
+    FOR UPDATE;
     UPDATE public.project_cost_commitments AS commitment
     SET status = 'released',
         released_by_employee_id = p_actor_employee_id,
@@ -1890,6 +1999,13 @@ BEGIN
     );
   END IF;
   v_before := to_jsonb(v_requisition);
+  PERFORM commitment.id
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_id = p_requisition_id
+    AND commitment.status = 'reserved'
+  ORDER BY commitment.cost_category_id, commitment.id
+  FOR UPDATE;
   UPDATE public.project_cost_commitments AS commitment
   SET status = 'released',
       released_by_employee_id = p_actor_employee_id,
@@ -2004,6 +2120,7 @@ DECLARE
   v_purchase_requisition_id uuid := p_purchase_requisition_id;
   v_order_items jsonb := p_items;
   v_result jsonb;
+  v_global_order_exists boolean;
 BEGIN
   IF p_order_id IS NULL OR p_tenant_id IS NULL
     OR p_project_id IS NULL OR p_tenant_supplier_id IS NULL
@@ -2042,6 +2159,37 @@ BEGIN
     )
   );
 
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-order-id:' || p_order_id::text,
+      6720240729190000
+    )
+  );
+  SELECT purchase_order.* INTO v_order
+  FROM public.supplier_purchase_orders AS purchase_order
+  WHERE purchase_order.id = p_order_id
+    AND purchase_order.tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.supplier_purchase_orders AS purchase_order
+      WHERE purchase_order.id = p_order_id
+    )
+    INTO v_global_order_exists;
+    IF v_global_order_exists AND p_expected_version = 0 THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_ID_CONFLICT'
+      );
+    ELSIF p_expected_version > 0 THEN
+      RETURN jsonb_build_object(
+        'status', 'not_found',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_NOT_FOUND'
+      );
+    END IF;
+  END IF;
+
   SELECT event.* INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
@@ -2070,17 +2218,6 @@ BEGIN
   END IF;
 
   IF p_expected_version > 0 THEN
-    SELECT purchase_order.* INTO v_order
-    FROM public.supplier_purchase_orders AS purchase_order
-    WHERE purchase_order.id = p_order_id
-      AND purchase_order.tenant_id = p_tenant_id
-    FOR UPDATE;
-    IF NOT FOUND THEN
-      RETURN jsonb_build_object(
-        'status', 'not_found',
-        'error_code', 'SUPPLIER_PURCHASE_ORDER_NOT_FOUND'
-      );
-    END IF;
     IF p_purchase_requisition_id IS NOT NULL
       AND v_order.purchase_requisition_id IS DISTINCT FROM
         p_purchase_requisition_id
@@ -2156,11 +2293,21 @@ BEGIN
       v_order_items, p_actor_user_id, p_actor_employee_id,
       p_idempotency_key
     );
-  EXCEPTION WHEN OTHERS THEN
-    PERFORM pg_catalog.set_config(
-      'private.supplier_purchase_requisition_source', '', true
-    );
-    RAISE;
+  EXCEPTION
+    WHEN numeric_value_out_of_range THEN
+      PERFORM pg_catalog.set_config(
+        'private.supplier_purchase_requisition_source', '', true
+      );
+      RETURN jsonb_build_object(
+        'status', 'validation_error',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED',
+        'reason', '采购单行金额或汇总金额超过 numeric(18,2) 上限'
+      );
+    WHEN OTHERS THEN
+      PERFORM pg_catalog.set_config(
+        'private.supplier_purchase_requisition_source', '', true
+      );
+      RAISE;
   END;
   PERFORM pg_catalog.set_config(
     'private.supplier_purchase_requisition_source', '', true
@@ -2193,6 +2340,9 @@ DECLARE
   v_items jsonb;
   v_order_result jsonb;
   v_derived_key text;
+  v_current_subtotal_amount numeric(18, 2);
+  v_current_tax_amount numeric(18, 2);
+  v_current_total_amount numeric(18, 2);
 BEGIN
   IF p_requisition_id IS NULL OR p_tenant_id IS NULL
     OR p_expected_version IS NULL OR p_expected_version <= 0
@@ -2314,6 +2464,19 @@ BEGIN
       price_list.id AS supplier_price_list_id,
       price_list.price_list_code, price_list.version_number,
       price_list.effective_from, price_list.effective_until,
+      product.id AS supplier_product_id,
+      product.product_code,
+      product.name AS product_name,
+      sku.sku_code,
+      sku.name AS sku_name,
+      sku.specification,
+      sku.model,
+      purchase_unit.code AS purchase_unit_code,
+      purchase_unit.name AS purchase_unit_name,
+      purchase_unit.symbol AS purchase_unit_symbol,
+      base_unit.code AS base_unit_code,
+      base_unit.name AS base_unit_name,
+      base_unit.symbol AS base_unit_symbol,
       CASE WHEN price_item.tax_inclusive THEN
         round(frozen.quantity * price_item.unit_price, 2)
       ELSE round(frozen.quantity * price_item.unit_price, 2) +
@@ -2357,6 +2520,15 @@ BEGIN
       ON product.id = sku.supplier_product_id
       AND product.supplier_id = v_requisition.supplier_id
       AND product.status = 'active'
+    JOIN public.catalog_categories AS catalog_category
+      ON catalog_category.id = product.category_id
+      AND catalog_category.status = 'active'
+    JOIN public.catalog_units AS purchase_unit
+      ON purchase_unit.id = price_item.purchase_unit_id
+      AND purchase_unit.status = 'active'
+    JOIN public.catalog_units AS base_unit
+      ON base_unit.id = price_item.base_unit_id
+      AND base_unit.status = 'active'
     WHERE price_item.supplier_id = v_requisition.supplier_id
       AND price_list.lifecycle_status = 'published'
       AND price_list.scope_type = 'default'
@@ -2366,10 +2538,15 @@ BEGIN
         price_list.effective_until IS NULL
         OR price_list.effective_until > v_checked_at
       )
+      AND sku.purchase_unit_id = price_item.purchase_unit_id
+      AND sku.base_unit_id = price_item.base_unit_id
+      AND sku.base_unit_conversion = price_item.base_unit_conversion
     ORDER BY sku.id, price_item.id
-    FOR SHARE OF price_item, price_list, sku, product
+    FOR SHARE OF price_item, price_list, sku, product,
+      catalog_category, purchase_unit, base_unit
   )
-  SELECT COUNT(*) FILTER (
+  SELECT
+    COUNT(*) FILTER (
     WHERE current_prices.frozen_id IS NULL
       OR current_prices.supplier_price_list_item_id IS DISTINCT FROM
         frozen.supplier_price_list_item_id
@@ -2397,11 +2574,43 @@ BEGIN
         frozen.line_subtotal_amount
       OR current_prices.line_tax_amount IS DISTINCT FROM
         frozen.line_tax_amount
-  )
-  INTO v_changed_count
+      OR current_prices.supplier_product_id IS DISTINCT FROM
+        frozen.supplier_product_id
+      OR current_prices.product_code IS DISTINCT FROM
+        frozen.product_code_snapshot
+      OR current_prices.product_name IS DISTINCT FROM
+        frozen.product_name_snapshot
+      OR current_prices.sku_code IS DISTINCT FROM frozen.sku_code_snapshot
+      OR current_prices.sku_name IS DISTINCT FROM frozen.sku_name_snapshot
+      OR current_prices.specification IS DISTINCT FROM
+        frozen.specification_snapshot
+      OR current_prices.model IS DISTINCT FROM frozen.model_snapshot
+      OR current_prices.purchase_unit_code IS DISTINCT FROM
+        frozen.purchase_unit_code_snapshot
+      OR current_prices.purchase_unit_name IS DISTINCT FROM
+        frozen.purchase_unit_name_snapshot
+      OR current_prices.purchase_unit_symbol IS DISTINCT FROM
+        frozen.purchase_unit_symbol_snapshot
+      OR current_prices.base_unit_code IS DISTINCT FROM
+        frozen.base_unit_code_snapshot
+      OR current_prices.base_unit_name IS DISTINCT FROM
+        frozen.base_unit_name_snapshot
+      OR current_prices.base_unit_symbol IS DISTINCT FROM
+        frozen.base_unit_symbol_snapshot
+    ),
+    COALESCE(SUM(current_prices.line_subtotal_amount), 0),
+    COALESCE(SUM(current_prices.line_tax_amount), 0),
+    COALESCE(SUM(current_prices.line_total_amount), 0)
+  INTO v_changed_count, v_current_subtotal_amount,
+    v_current_tax_amount, v_current_total_amount
   FROM frozen
   LEFT JOIN current_prices ON current_prices.frozen_id = frozen.id;
-  IF v_changed_count > 0 THEN
+  IF v_changed_count > 0
+    OR v_current_subtotal_amount IS DISTINCT FROM
+      v_requisition.subtotal_amount
+    OR v_current_tax_amount IS DISTINCT FROM v_requisition.tax_amount
+    OR v_current_total_amount IS DISTINCT FROM v_requisition.total_amount
+  THEN
     RETURN jsonb_build_object(
       'status', 'state_conflict',
       'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED'
@@ -2462,6 +2671,13 @@ BEGIN
     RETURN v_order_result;
   END IF;
 
+  PERFORM commitment.id
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_id = p_requisition_id
+    AND commitment.status = 'reserved'
+  ORDER BY commitment.cost_category_id, commitment.id
+  FOR UPDATE;
   UPDATE public.project_cost_commitments AS commitment
   SET status = 'converted', updated_at = now()
   WHERE commitment.tenant_id = p_tenant_id
@@ -2562,6 +2778,13 @@ BEGIN
     AND purchase_order.tenant_id = p_tenant_id;
 
   IF v_purchase_requisition_id IS NOT NULL THEN
+    PERFORM commitment.id
+    FROM public.project_cost_commitments AS commitment
+    WHERE commitment.tenant_id = p_tenant_id
+      AND commitment.source_id = v_purchase_requisition_id
+      AND commitment.status = 'converted'
+    ORDER BY commitment.cost_category_id, commitment.id
+    FOR UPDATE;
     UPDATE public.project_cost_commitments AS commitment
     SET status = 'released',
         released_by_employee_id = p_actor_employee_id,
