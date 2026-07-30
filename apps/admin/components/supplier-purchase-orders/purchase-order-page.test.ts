@@ -1,5 +1,20 @@
 import { existsSync, readFileSync } from "node:fs";
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+
+import {
+  confirmPurchaseOrderFulfillment,
+  createPurchaseOrderReceipt,
+  createPurchaseOrderShipment,
+  loadPurchaseOrderFulfillment,
+  loadPurchaseOrderReceipts,
+  loadPurchaseOrderShipments,
+} from "./purchase-order-fulfillment-api";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
@@ -125,4 +140,96 @@ describe("供应商采购单页面边界", () => {
     expect(rules).not.toContain("accepted_amount:");
     expect(rules).not.toContain("accepted_total_amount:");
   });
+
+  test("六个履约 API 经过真实 backend client 保留编码、分页和幂等语义", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({ input, init });
+      return jsonResponse({ success: true, data: {} });
+    }) as typeof fetch;
+    const orderId = "order/id ?";
+    const confirmPayload = {
+      expected_version: 2,
+      confirmed_at: "2026-07-30T02:00:00.000Z",
+      remark: null,
+    };
+    const shipmentPayload = {
+      id: "60000000-0000-4000-8000-000000000001",
+      expected_fulfillment_version: 1,
+      shipment_no: "SHIP-001",
+      shipped_at: "2026-07-30T03:00:00.000Z",
+      items: [{
+        purchase_order_item_id:
+          "60000000-0000-4000-8000-000000000002",
+        quantity: 1,
+      }],
+    };
+    const receiptPayload = {
+      id: "60000000-0000-4000-8000-000000000003",
+      expected_fulfillment_version: 2,
+      receipt_no: "RCV-001",
+      received_at: "2026-07-30T04:00:00.000Z",
+      items: [{
+        purchase_order_item_id:
+          "60000000-0000-4000-8000-000000000002",
+        accepted_quantity: 1,
+        rejected_quantity: 0,
+        variance_reason: null,
+      }],
+    };
+
+    await loadPurchaseOrderFulfillment(orderId);
+    await loadPurchaseOrderShipments(orderId, 0, 200);
+    await loadPurchaseOrderReceipts(orderId, 2);
+    await confirmPurchaseOrderFulfillment(orderId, confirmPayload, "key-1");
+    await createPurchaseOrderShipment(orderId, shipmentPayload, "key-2");
+    await createPurchaseOrderReceipt(orderId, receiptPayload, "key-3");
+
+    expect(calls.map(({ input }) => String(input))).toEqual([
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/fulfillment",
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/shipments?page=1&pageSize=100",
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/receipts?page=2&pageSize=20",
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/confirm-fulfillment",
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/shipments",
+      "/api/backend/supplier-purchase-orders/order%2Fid%20%3F/receipts",
+    ]);
+    expect(calls.slice(0, 3).every(({ init }) => !init?.method)).toBe(true);
+    expect(calls.slice(3).map(({ init }) => init?.method)).toEqual([
+      "POST",
+      "POST",
+      "POST",
+    ]);
+    expect(calls.slice(3).map(({ init }) =>
+      new Headers(init?.headers).get("Idempotency-Key")
+    )).toEqual(["key-1", "key-2", "key-3"]);
+    expect(calls.slice(3).map(({ init }) =>
+      JSON.parse(String(init?.body))
+    )).toEqual([confirmPayload, shipmentPayload, receiptPayload]);
+  });
+
+  test("履约 API 保留 backend client 的非 2xx 错误信息", async () => {
+    globalThis.fetch = (async (
+      _input: RequestInfo | URL,
+      _init?: RequestInit,
+    ) =>
+      jsonResponse({
+        success: false,
+        message: "履约版本已变化",
+        code: "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+      }, 409)) as typeof fetch;
+
+    await expect(loadPurchaseOrderFulfillment("order-1")).rejects
+      .toMatchObject({
+        message: "履约版本已变化",
+        status: 409,
+        code: "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+      });
+  });
 });
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}

@@ -137,7 +137,7 @@ describe("采购履约剩余量", () => {
 
 describe("发货 payload", () => {
   test("只发送采购行 ID 和数量，并规范化头字段", () => {
-    const payload = toShipmentPayload({
+    const result = toShipmentPayload({
       id: "60000000-0000-4000-8000-000000000005",
       expectedFulfillmentVersion: 2,
       shipmentNo: " SHIP-001 ",
@@ -146,21 +146,20 @@ describe("发货 payload", () => {
       shippedAt: "2026-07-30T05:00:00.000Z",
       remark: " 首批 ",
       lines: [{ purchaseOrderItemId: ITEM_ID, quantity: "2.1001" }],
-    });
+    }, [itemFulfillment]);
 
-    expect(payload).toEqual({
-      id: "60000000-0000-4000-8000-000000000005",
-      expected_fulfillment_version: 2,
-      shipment_no: "SHIP-001",
-      carrier_name: "顺丰",
-      tracking_no: null,
-      shipped_at: "2026-07-30T05:00:00.000Z",
-      remark: "首批",
-      items: [{ purchase_order_item_id: ITEM_ID, quantity: 2.1001 }],
-    });
-    expect(payload.items[0]).toEqual({
-      purchase_order_item_id: ITEM_ID,
-      quantity: 2.1001,
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        id: "60000000-0000-4000-8000-000000000005",
+        expected_fulfillment_version: 2,
+        shipment_no: "SHIP-001",
+        carrier_name: "顺丰",
+        tracking_no: null,
+        shipped_at: "2026-07-30T05:00:00.000Z",
+        remark: "首批",
+        items: [{ purchase_order_item_id: ITEM_ID, quantity: 2.1001 }],
+      },
     });
   });
 
@@ -215,6 +214,27 @@ describe("发货 payload", () => {
     });
   });
 
+  test.each([
+    ["1e2", "履约数量必须是有效数字"],
+    ["", "履约数量必须是有效数字"],
+    [Number.NaN, "履约数量必须是有效数字"],
+    ["-1", "履约数量必须大于 0"],
+    ["1.00001", "履约数量最多保留 4 位小数"],
+    ["100000000000000", "履约数量超过数据库上限"],
+    ["99999999999999.99", "履约数量无法按 4 位小数安全提交"],
+  ])("builder 对非法数量 %s fail-closed", (quantity, message) => {
+    const input = shipmentDraft(quantity);
+    const items = [{
+      ...itemFulfillment,
+      ordered_quantity: "99999999999999.9999",
+      shipped_quantity: "0",
+    }];
+    const errors = validateShipmentLines(input.lines, items);
+
+    expect(errors).toContainEqual({ path: "items.0.quantity", message });
+    expect(toShipmentPayload(input, items)).toEqual({ ok: false, errors });
+  });
+
   test("限制单次发货为一至一百行", () => {
     const lines = Array.from({ length: 101 }, (_, index) => ({
       purchaseOrderItemId: `${index}`,
@@ -229,7 +249,7 @@ describe("发货 payload", () => {
 
 describe("收货 payload", () => {
   test("只发送采购行 ID、接受拒收数量和差异原因", () => {
-    const payload = toReceiptPayload({
+    const result = toReceiptPayload({
       id: "60000000-0000-4000-8000-000000000006",
       expectedFulfillmentVersion: 3,
       receiptNo: " RCV-001 ",
@@ -241,20 +261,23 @@ describe("收货 payload", () => {
         rejectedQuantity: "0.5",
         varianceReason: " 外箱破损 ",
       }],
-    });
+    }, [itemFulfillment]);
 
-    expect(payload).toEqual({
-      id: "60000000-0000-4000-8000-000000000006",
-      expected_fulfillment_version: 3,
-      receipt_no: "RCV-001",
-      received_at: "2026-07-30T06:00:00.000Z",
-      remark: "到货",
-      items: [{
-        purchase_order_item_id: ITEM_ID,
-        accepted_quantity: 1.5,
-        rejected_quantity: 0.5,
-        variance_reason: "外箱破损",
-      }],
+    expect(result).toEqual({
+      ok: true,
+      payload: {
+        id: "60000000-0000-4000-8000-000000000006",
+        expected_fulfillment_version: 3,
+        receipt_no: "RCV-001",
+        received_at: "2026-07-30T06:00:00.000Z",
+        remark: "到货",
+        items: [{
+          purchase_order_item_id: ITEM_ID,
+          accepted_quantity: 1.5,
+          rejected_quantity: 0.5,
+          variance_reason: "外箱破损",
+        }],
+      },
     });
   });
 
@@ -318,6 +341,30 @@ describe("收货 payload", () => {
     }], [itemFulfillment])).toEqual([]);
   });
 
+  test("builder 与校验共享收货数量和差异原因边界", () => {
+    const input = receiptDraft({
+      acceptedQuantity: "1e2",
+      rejectedQuantity: "0",
+      varianceReason: "不应提供",
+    });
+    const errors = validateReceiptLines(input.lines, [itemFulfillment]);
+
+    expect(errors).toEqual(expect.arrayContaining([
+      {
+        path: "items.0.accepted_quantity",
+        message: "履约数量必须是有效数字",
+      },
+      {
+        path: "items.0.variance_reason",
+        message: "无拒收数量时差异原因必须为空",
+      },
+    ]));
+    expect(toReceiptPayload(input, [itemFulfillment])).toEqual({
+      ok: false,
+      errors,
+    });
+  });
+
   test("收货行必须唯一且数量限制为一至一百行", () => {
     const duplicate = {
       purchaseOrderItemId: ITEM_ID,
@@ -344,6 +391,33 @@ describe("收货 payload", () => {
     });
   });
 });
+
+function shipmentDraft(quantity: string | number) {
+  return {
+    id: "60000000-0000-4000-8000-000000000005",
+    expectedFulfillmentVersion: 2,
+    shipmentNo: "SHIP-001",
+    shippedAt: "2026-07-30T05:00:00.000Z",
+    lines: [{ purchaseOrderItemId: ITEM_ID, quantity }],
+  };
+}
+
+function receiptDraft(overrides: {
+  acceptedQuantity: string | number;
+  rejectedQuantity: string | number;
+  varianceReason?: string | null;
+}) {
+  return {
+    id: "60000000-0000-4000-8000-000000000006",
+    expectedFulfillmentVersion: 3,
+    receiptNo: "RCV-001",
+    receivedAt: "2026-07-30T06:00:00.000Z",
+    lines: [{
+      purchaseOrderItemId: ITEM_ID,
+      ...overrides,
+    }],
+  };
+}
 
 function fulfillmentDetail(
   status:

@@ -133,15 +133,17 @@ export type PurchaseOrderReceiptPayload = {
   items: PurchaseOrderReceiptLinePayload[];
 };
 
+export type FulfillmentQuantityInput = string | number;
+
 export type ShipmentLineDraft = {
   purchaseOrderItemId: string;
-  quantity: string;
+  quantity: FulfillmentQuantityInput;
 };
 
 export type ReceiptLineDraft = {
   purchaseOrderItemId: string;
-  acceptedQuantity: string;
-  rejectedQuantity: string;
+  acceptedQuantity: FulfillmentQuantityInput;
+  rejectedQuantity: FulfillmentQuantityInput;
   varianceReason?: string | null;
 };
 
@@ -169,3 +171,7 @@ export type FulfillmentValidationError = {
   path: string;
   message: string;
 };
+
+export type FulfillmentPayloadBuildResult<Payload> =
+  | { ok: true; payload: Payload }
+  | { ok: false; errors: FulfillmentValidationError[] };

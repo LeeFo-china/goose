@@ -1,4 +1,4 @@
-import { requestBackendJson } from "@/lib/backend-client";
+import { requestBackendJson } from "../../lib/backend-client";
 
 import type {
   PurchaseOrderFulfillmentCommandResult,

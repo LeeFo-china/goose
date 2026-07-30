@@ -1,10 +1,14 @@
 import type { PurchaseOrderStatus } from "./purchase-order-types";
 import type {
+  FulfillmentPayloadBuildResult,
+  FulfillmentQuantityInput,
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
   PurchaseOrderFulfillmentDetail,
   PurchaseOrderItemFulfillment,
+  PurchaseOrderReceiptLinePayload,
   PurchaseOrderReceiptPayload,
+  PurchaseOrderShipmentLinePayload,
   PurchaseOrderShipmentPayload,
   ReceiptDraft,
   ReceiptLineDraft,
@@ -74,12 +78,72 @@ export function validateShipmentLines(
   lines: readonly ShipmentLineDraft[],
   items: readonly PurchaseOrderItemFulfillment[],
 ): FulfillmentValidationError[] {
+  return inspectShipmentLines(lines, items).errors;
+}
+
+export function validateReceiptLines(
+  lines: readonly ReceiptLineDraft[],
+  items: readonly PurchaseOrderItemFulfillment[],
+): FulfillmentValidationError[] {
+  return inspectReceiptLines(lines, items).errors;
+}
+
+export function toShipmentPayload(
+  input: ShipmentDraft,
+  items: readonly PurchaseOrderItemFulfillment[],
+): FulfillmentPayloadBuildResult<PurchaseOrderShipmentPayload> {
+  const inspected = inspectShipmentLines(input.lines, items);
+  if (inspected.errors.length) {
+    return { ok: false, errors: inspected.errors };
+  }
+  return {
+    ok: true,
+    payload: {
+      id: input.id,
+      expected_fulfillment_version: input.expectedFulfillmentVersion,
+      shipment_no: input.shipmentNo.trim(),
+      carrier_name: optionalText(input.carrierName),
+      tracking_no: optionalText(input.trackingNo),
+      shipped_at: input.shippedAt,
+      remark: optionalText(input.remark),
+      items: inspected.payloadItems,
+    },
+  };
+}
+
+export function toReceiptPayload(
+  input: ReceiptDraft,
+  items: readonly PurchaseOrderItemFulfillment[],
+): FulfillmentPayloadBuildResult<PurchaseOrderReceiptPayload> {
+  const inspected = inspectReceiptLines(input.lines, items);
+  if (inspected.errors.length) {
+    return { ok: false, errors: inspected.errors };
+  }
+  return {
+    ok: true,
+    payload: {
+      id: input.id,
+      expected_fulfillment_version: input.expectedFulfillmentVersion,
+      receipt_no: input.receiptNo.trim(),
+      received_at: input.receivedAt,
+      remark: optionalText(input.remark),
+      items: inspected.payloadItems,
+    },
+  };
+}
+
+function inspectShipmentLines(
+  lines: readonly ShipmentLineDraft[],
+  items: readonly PurchaseOrderItemFulfillment[],
+) {
   const errors = lineCountErrors(lines.length, "发货");
-  if (lines.length > MAX_EVENT_LINES) return errors;
+  const payloadItems: PurchaseOrderShipmentLinePayload[] = [];
+  if (lines.length > MAX_EVENT_LINES) return { errors, payloadItems };
 
   const itemById = fulfillmentItemMap(items);
   const seen = new Set<string>();
   lines.forEach((line, index) => {
+    const errorCount = errors.length;
     const path = `items.${index}`;
     const normalizedId = line.purchaseOrderItemId.toLowerCase();
     addDuplicateError(errors, seen, normalizedId, path);
@@ -106,64 +170,47 @@ export function validateShipmentLines(
         "发货",
       );
     }
+    if (quantity !== null && errors.length === errorCount) {
+      payloadItems.push({
+        purchase_order_item_id: line.purchaseOrderItemId,
+        quantity: quantityNumber(quantity),
+      });
+    }
   });
-  return errors;
+  return { errors, payloadItems };
 }
 
-export function validateReceiptLines(
+function inspectReceiptLines(
   lines: readonly ReceiptLineDraft[],
   items: readonly PurchaseOrderItemFulfillment[],
-): FulfillmentValidationError[] {
+) {
   const errors = lineCountErrors(lines.length, "收货");
-  if (lines.length > MAX_EVENT_LINES) return errors;
+  const payloadItems: PurchaseOrderReceiptLinePayload[] = [];
+  if (lines.length > MAX_EVENT_LINES) return { errors, payloadItems };
 
   const itemById = fulfillmentItemMap(items);
   const seen = new Set<string>();
   lines.forEach((line, index) => {
-    validateReceiptLine(line, index, itemById, seen, errors);
+    const payloadItem = inspectReceiptLine(
+      line,
+      index,
+      itemById,
+      seen,
+      errors,
+    );
+    if (payloadItem) payloadItems.push(payloadItem);
   });
-  return errors;
+  return { errors, payloadItems };
 }
 
-export function toShipmentPayload(input: ShipmentDraft): PurchaseOrderShipmentPayload {
-  return {
-    id: input.id,
-    expected_fulfillment_version: input.expectedFulfillmentVersion,
-    shipment_no: input.shipmentNo.trim(),
-    carrier_name: optionalText(input.carrierName),
-    tracking_no: optionalText(input.trackingNo),
-    shipped_at: input.shippedAt,
-    remark: optionalText(input.remark),
-    items: input.lines.map((line) => ({
-      purchase_order_item_id: line.purchaseOrderItemId,
-      quantity: Number(line.quantity),
-    })),
-  };
-}
-
-export function toReceiptPayload(input: ReceiptDraft): PurchaseOrderReceiptPayload {
-  return {
-    id: input.id,
-    expected_fulfillment_version: input.expectedFulfillmentVersion,
-    receipt_no: input.receiptNo.trim(),
-    received_at: input.receivedAt,
-    remark: optionalText(input.remark),
-    items: input.lines.map((line) => ({
-      purchase_order_item_id: line.purchaseOrderItemId,
-      accepted_quantity: Number(line.acceptedQuantity),
-      rejected_quantity: Number(line.rejectedQuantity),
-      variance_reason: optionalText(line.varianceReason),
-    })),
-  };
-}
-
-function validateReceiptLine(
+function inspectReceiptLine(
   line: ReceiptLineDraft,
   index: number,
   itemById: Map<string, PurchaseOrderItemFulfillment>,
   seen: Set<string>,
   errors: FulfillmentValidationError[],
-) {
+): PurchaseOrderReceiptLinePayload | null {
+  const errorCount = errors.length;
   const path = `items.${index}`;
   const normalizedId = line.purchaseOrderItemId.toLowerCase();
   addDuplicateError(errors, seen, normalizedId, path);
@@ -186,7 +233,10 @@ function validateReceiptLine(
       message: "采购单明细不存在",
     });
   }
-  if (accepted === null || rejected === null) return;
+  const varianceReason = rejected === null
+    ? optionalText(line.varianceReason)
+    : validateVarianceReason(line, rejected, path, errors);
+  if (accepted === null || rejected === null) return null;
 
   const total = accepted + rejected;
   if (total === ZERO_QUANTITY) {
@@ -194,7 +244,13 @@ function validateReceiptLine(
   } else if (item) {
     addRemainingError(errors, total, receiptRemaining(item), path, "收货");
   }
-  validateVarianceReason(line, rejected, path, errors);
+  if (errors.length !== errorCount) return null;
+  return {
+    purchase_order_item_id: line.purchaseOrderItemId,
+    accepted_quantity: quantityNumber(accepted),
+    rejected_quantity: quantityNumber(rejected),
+    variance_reason: varianceReason,
+  };
 }
 
 function validateVarianceReason(
@@ -202,7 +258,7 @@ function validateVarianceReason(
   rejected: bigint,
   path: string,
   errors: FulfillmentValidationError[],
-) {
+): string | null {
   const reason = line.varianceReason;
   const trimmedReason = reason?.trim() ?? "";
   if (rejected > ZERO_QUANTITY && !trimmedReason) {
@@ -222,15 +278,16 @@ function validateVarianceReason(
       message: "差异原因不能超过 500 个字符",
     });
   }
+  return trimmedReason || null;
 }
 
 function parseQuantity(
-  value: string,
+  value: FulfillmentQuantityInput,
   allowZero: boolean,
   path: string,
   errors: FulfillmentValidationError[],
 ): bigint | null {
-  const text = value.trim();
+  const text = String(value).trim();
   if (/^-/.test(text)) {
     errors.push({
       path,
@@ -347,6 +404,10 @@ function formatQuantity(units: bigint): string {
     .padStart(QUANTITY_SCALE, "0")
     .replace(/0+$/, "");
   return decimals ? `${integer}.${decimals}` : integer.toString();
+}
+
+function quantityNumber(units: bigint): number {
+  return Number(formatQuantity(units));
 }
 
 function optionalText(value: string | null | undefined): string | null {
