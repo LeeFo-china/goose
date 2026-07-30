@@ -122,8 +122,8 @@ describe("supplier purchase fulfillment migration contract", () => {
       /UNIQUE \(supplier_purchase_order_id, shipment_no\)/,
       /UNIQUE \(supplier_purchase_order_id, receipt_no\)/,
       /supplier_purchase_order_fulfillments_tenant_status_updated_idx/,
-      /supplier_purchase_order_shipments_tenant_order_shipped_idx/,
-      /supplier_purchase_order_receipts_tenant_order_received_idx/,
+      /CREATE INDEX supplier_purchase_order_shipments_tenant_order_shipped_idx\s*ON public\.supplier_purchase_order_shipments\(\s*tenant_id,\s*supplier_purchase_order_id,\s*shipped_at DESC,\s*id DESC\s*\)/,
+      /CREATE INDEX supplier_purchase_order_receipts_tenant_order_received_idx\s*ON public\.supplier_purchase_order_receipts\(\s*tenant_id,\s*supplier_purchase_order_id,\s*received_at DESC,\s*id DESC\s*\)/,
       /ADD CONSTRAINT supplier_purchase_order_items_id_tenant_order_key[\s\S]*UNIQUE \(id, tenant_id, supplier_purchase_order_id\)/,
     ]);
     const edges: Record<string, RegExp[]> = {
@@ -149,14 +149,14 @@ describe("supplier purchase fulfillment migration contract", () => {
     const checks: Record<string, RegExp[]> = {
       supplier_purchase_order_fulfillments: [
         /CHECK \(status IN \([\s\S]*'confirmed'[\s\S]*'partially_shipped'[\s\S]*'shipped'[\s\S]*'partially_received'[\s\S]*'received'[\s\S]*'received_with_variance'[\s\S]*'cancelled'/,
-        /ordered_quantity numeric\(18, 4\)[\s\S]*shipped_quantity numeric\(18, 4\)[\s\S]*received_quantity numeric\(18, 4\)[\s\S]*accepted_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
+        /ordered_quantity numeric\(20, 4\)[\s\S]*shipped_quantity numeric\(20, 4\)[\s\S]*received_quantity numeric\(20, 4\)[\s\S]*accepted_quantity numeric\(20, 4\)[\s\S]*rejected_quantity numeric\(20, 4\)/,
         /accepted_subtotal_amount numeric\(18, 2\)[\s\S]*accepted_tax_amount numeric\(18, 2\)[\s\S]*accepted_total_amount numeric\(18, 2\)/,
         /received_quantity <= shipped_quantity[\s\S]*shipped_quantity <= ordered_quantity[\s\S]*accepted_quantity \+ rejected_quantity = received_quantity/,
         /accepted_subtotal_amount >= 0[\s\S]*accepted_tax_amount >= 0[\s\S]*accepted_total_amount >= 0[\s\S]*accepted_total_amount =\s*accepted_subtotal_amount \+ accepted_tax_amount/,
         /CHECK \(version > 0\)/,
       ],
       supplier_purchase_order_item_fulfillments: [
-        /ordered_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
+        /ordered_quantity numeric\(18, 4\)[\s\S]*shipped_quantity numeric\(18, 4\)[\s\S]*received_quantity numeric\(18, 4\)[\s\S]*accepted_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
         /ordered_quantity > 0[\s\S]*received_quantity <= shipped_quantity[\s\S]*shipped_quantity <= ordered_quantity[\s\S]*accepted_quantity \+ rejected_quantity = received_quantity/,
         /accepted_subtotal_amount >= 0[\s\S]*accepted_total_amount =\s*accepted_subtotal_amount \+ accepted_tax_amount/,
       ],
@@ -166,6 +166,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       supplier_purchase_order_shipment_items: [
         /quantity numeric\(18, 4\) NOT NULL/,
         /CHECK \(quantity > 0\)/,
+        /CONSTRAINT supplier_purchase_order_shipment_items_parent_item_key\s*UNIQUE \(\s*shipment_id,\s*supplier_purchase_order_item_id\s*\)/,
       ],
       supplier_purchase_order_receipts: [
         /receipt_no = btrim\(receipt_no\)[\s\S]*char_length\(receipt_no\) <= 80/,
@@ -174,11 +175,17 @@ describe("supplier purchase fulfillment migration contract", () => {
         /accepted_quantity numeric\(18, 4\)[\s\S]*rejected_quantity numeric\(18, 4\)/,
         /accepted_quantity >= 0[\s\S]*rejected_quantity >= 0[\s\S]*accepted_quantity \+ rejected_quantity > 0/,
         /rejected_quantity > 0[\s\S]*variance_reason IS NOT NULL[\s\S]*variance_reason = btrim\(variance_reason\)[\s\S]*variance_reason <> ''[\s\S]*rejected_quantity = 0[\s\S]*variance_reason IS NULL/,
+        /CONSTRAINT supplier_purchase_order_receipt_items_parent_item_key\s*UNIQUE \(\s*receipt_id,\s*supplier_purchase_order_item_id\s*\)/,
       ],
     };
     for (const [table, patterns] of Object.entries(checks)) {
       contracts(sqlObject("CREATE TABLE public.", table, "\n);"), patterns);
     }
+    const lineIntegerDigits = 18 - 4;
+    const requiredHeaderIntegerDigits = lineIntegerDigits + Math.ceil(Math.log10(100));
+    expect(requiredHeaderIntegerDigits).toBeLessThanOrEqual(20 - 4);
+    expect(migration).not.toContain("CREATE INDEX supplier_purchase_order_shipment_items_parent_item_idx");
+    expect(migration).not.toContain("CREATE INDEX supplier_purchase_order_receipt_items_parent_item_idx");
   });
 
   test("binds all six mutation guards to the exact table and function", () => {
@@ -236,6 +243,11 @@ describe("supplier purchase fulfillment migration contract", () => {
       /SUM\(item_fulfillment\.received_quantity\)/,
       /SUM\(item_fulfillment\.accepted_quantity\)/,
       /SUM\(item_fulfillment\.rejected_quantity\)/,
+      /COALESCE\(SUM\(item_fulfillment\.ordered_quantity\), 0\)::numeric\(20, 4\)/,
+      /COALESCE\(SUM\(item_fulfillment\.shipped_quantity\), 0\)::numeric\(20, 4\)/,
+      /COALESCE\(SUM\(item_fulfillment\.received_quantity\), 0\)::numeric\(20, 4\)/,
+      /COALESCE\(SUM\(item_fulfillment\.accepted_quantity\), 0\)::numeric\(20, 4\)/,
+      /COALESCE\(SUM\(item_fulfillment\.rejected_quantity\), 0\)::numeric\(20, 4\)/,
       /purchase_item\.unit_price/,
       /purchase_item\.tax_rate/,
       /purchase_item\.tax_inclusive/,

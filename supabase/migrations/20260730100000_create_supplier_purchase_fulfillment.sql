@@ -19,11 +19,11 @@ CREATE TABLE public.supplier_purchase_order_fulfillments (
     REFERENCES public.tenants(id) ON DELETE RESTRICT,
   supplier_purchase_order_id uuid NOT NULL,
   status text NOT NULL DEFAULT 'confirmed',
-  ordered_quantity numeric(18, 4) NOT NULL DEFAULT 0,
-  shipped_quantity numeric(18, 4) NOT NULL DEFAULT 0,
-  received_quantity numeric(18, 4) NOT NULL DEFAULT 0,
-  accepted_quantity numeric(18, 4) NOT NULL DEFAULT 0,
-  rejected_quantity numeric(18, 4) NOT NULL DEFAULT 0,
+  ordered_quantity numeric(20, 4) NOT NULL DEFAULT 0,
+  shipped_quantity numeric(20, 4) NOT NULL DEFAULT 0,
+  received_quantity numeric(20, 4) NOT NULL DEFAULT 0,
+  accepted_quantity numeric(20, 4) NOT NULL DEFAULT 0,
+  rejected_quantity numeric(20, 4) NOT NULL DEFAULT 0,
   accepted_subtotal_amount numeric(18, 2) NOT NULL DEFAULT 0,
   accepted_tax_amount numeric(18, 2) NOT NULL DEFAULT 0,
   accepted_total_amount numeric(18, 2) NOT NULL DEFAULT 0,
@@ -398,18 +398,6 @@ ON public.supplier_purchase_order_receipts(
   id DESC
 );
 
-CREATE INDEX supplier_purchase_order_shipment_items_parent_item_idx
-ON public.supplier_purchase_order_shipment_items(
-  shipment_id,
-  supplier_purchase_order_item_id
-);
-
-CREATE INDEX supplier_purchase_order_receipt_items_parent_item_idx
-ON public.supplier_purchase_order_receipt_items(
-  receipt_id,
-  supplier_purchase_order_item_id
-);
-
 CREATE FUNCTION public.prevent_supplier_purchase_fulfillment_direct_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -614,15 +602,15 @@ BEGIN
 
   WITH amounts AS MATERIALIZED (
     SELECT
-      COALESCE(SUM(item_fulfillment.ordered_quantity), 0)::numeric(18, 4)
+      COALESCE(SUM(item_fulfillment.ordered_quantity), 0)::numeric(20, 4)
         AS ordered_quantity,
-      COALESCE(SUM(item_fulfillment.shipped_quantity), 0)::numeric(18, 4)
+      COALESCE(SUM(item_fulfillment.shipped_quantity), 0)::numeric(20, 4)
         AS shipped_quantity,
-      COALESCE(SUM(item_fulfillment.received_quantity), 0)::numeric(18, 4)
+      COALESCE(SUM(item_fulfillment.received_quantity), 0)::numeric(20, 4)
         AS received_quantity,
-      COALESCE(SUM(item_fulfillment.accepted_quantity), 0)::numeric(18, 4)
+      COALESCE(SUM(item_fulfillment.accepted_quantity), 0)::numeric(20, 4)
         AS accepted_quantity,
-      COALESCE(SUM(item_fulfillment.rejected_quantity), 0)::numeric(18, 4)
+      COALESCE(SUM(item_fulfillment.rejected_quantity), 0)::numeric(20, 4)
         AS rejected_quantity,
       COALESCE(SUM(
         CASE
