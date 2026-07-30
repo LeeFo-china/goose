@@ -7512,6 +7512,119 @@ export type Database = {
           },
         ]
       }
+      project_cost_commitments: {
+        Row: {
+          amount: number
+          available_amount_snapshot: number
+          budget_amount_snapshot: number
+          cost_category_id: string
+          created_at: string
+          created_by_employee_id: string
+          expense_amount_snapshot: number
+          id: string
+          other_commitment_amount_snapshot: number
+          project_id: string
+          release_reason: string | null
+          released_at: string | null
+          released_by_employee_id: string | null
+          source_id: string
+          source_type: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          available_amount_snapshot: number
+          budget_amount_snapshot: number
+          cost_category_id: string
+          created_at?: string
+          created_by_employee_id: string
+          expense_amount_snapshot: number
+          id?: string
+          other_commitment_amount_snapshot: number
+          project_id: string
+          release_reason?: string | null
+          released_at?: string | null
+          released_by_employee_id?: string | null
+          source_id: string
+          source_type?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          available_amount_snapshot?: number
+          budget_amount_snapshot?: number
+          cost_category_id?: string
+          created_at?: string
+          created_by_employee_id?: string
+          expense_amount_snapshot?: number
+          id?: string
+          other_commitment_amount_snapshot?: number
+          project_id?: string
+          release_reason?: string | null
+          released_at?: string | null
+          released_by_employee_id?: string | null
+          source_id?: string
+          source_type?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_cost_commitments_category_tenant_fkey"
+            columns: ["cost_category_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_project_tenant_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_released_by_employee_id_fkey"
+            columns: ["released_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_source_tenant_fkey"
+            columns: ["source_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_requisitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cost_commitments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_cost_budgets: {
         Row: {
           budget_amount: number
@@ -10858,6 +10971,7 @@ export type Database = {
           order_no: string
           priced_at: string
           project_id: string
+          purchase_requisition_id: string | null
           remark: string | null
           status: string
           submitted_at: string | null
@@ -10884,6 +10998,7 @@ export type Database = {
           order_no: string
           priced_at: string
           project_id: string
+          purchase_requisition_id?: string | null
           remark?: string | null
           status?: string
           submitted_at?: string | null
@@ -10910,6 +11025,7 @@ export type Database = {
           order_no?: string
           priced_at?: string
           project_id?: string
+          purchase_requisition_id?: string | null
           remark?: string | null
           status?: string
           submitted_at?: string | null
@@ -10954,6 +11070,13 @@ export type Database = {
             referencedColumns: ["id", "tenant_id"]
           },
           {
+            foreignKeyName: "supplier_purchase_orders_requisition_tenant_fkey"
+            columns: ["purchase_requisition_id", "tenant_id", "id"]
+            isOneToOne: true
+            referencedRelation: "supplier_purchase_requisitions"
+            referencedColumns: ["id", "tenant_id", "purchase_order_id"]
+          },
+          {
             foreignKeyName: "supplier_purchase_orders_submitted_by_employee_id_fkey"
             columns: ["submitted_by_employee_id"]
             isOneToOne: false
@@ -10990,6 +11113,378 @@ export type Database = {
           },
           {
             foreignKeyName: "supplier_purchase_orders_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_requisition_items: {
+        Row: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          cost_category_id: string
+          created_at: string
+          id: string
+          line_no: number
+          line_subtotal_amount: number
+          line_tax_amount: number
+          line_total_amount: number
+          model_snapshot: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_requisition_id: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot: string | null
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_sku_id: string
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          unit_price: number
+        }
+        Insert: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          cost_category_id: string
+          created_at?: string
+          id?: string
+          line_no: number
+          line_subtotal_amount: number
+          line_tax_amount: number
+          line_total_amount: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_requisition_id: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot?: string | null
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_sku_id: string
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          unit_price: number
+        }
+        Update: {
+          base_unit_code_snapshot?: string
+          base_unit_conversion?: number
+          base_unit_id?: string
+          base_unit_name_snapshot?: string
+          base_unit_symbol_snapshot?: string
+          cost_category_id?: string
+          created_at?: string
+          id?: string
+          line_no?: number
+          line_subtotal_amount?: number
+          line_tax_amount?: number
+          line_total_amount?: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot?: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot?: string
+          price_list_version_snapshot?: number
+          product_code_snapshot?: string
+          product_name_snapshot?: string
+          purchase_requisition_id?: string
+          purchase_unit_code_snapshot?: string
+          purchase_unit_id?: string
+          purchase_unit_name_snapshot?: string
+          purchase_unit_symbol_snapshot?: string
+          quantity?: number
+          sku_code_snapshot?: string
+          sku_name_snapshot?: string
+          specification_snapshot?: string | null
+          supplier_price_list_id?: string
+          supplier_price_list_item_id?: string
+          supplier_product_id?: string
+          supplier_sku_id?: string
+          tax_inclusive?: boolean
+          tax_rate?: number
+          tenant_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_requisition__supplier_price_list_item_id_fkey"
+            columns: ["supplier_price_list_item_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_list_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_base_unit_id_fkey"
+            columns: ["base_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_category_tenant_fkey"
+            columns: ["cost_category_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_parent_tenant_fkey"
+            columns: ["purchase_requisition_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_requisitions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_purchase_unit_id_fkey"
+            columns: ["purchase_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_supplier_price_list_id_fkey"
+            columns: ["supplier_price_list_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_supplier_product_id_fkey"
+            columns: ["supplier_product_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_supplier_sku_id_fkey"
+            columns: ["supplier_sku_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisition_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_requisitions: {
+        Row: {
+          budget_status: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_employee_id: string | null
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          expected_delivery_date: string | null
+          id: string
+          priced_at: string
+          project_id: string
+          purchase_order_id: string | null
+          reason: string
+          remark: string | null
+          request_no: string
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by_employee_id: string | null
+          subtotal_amount: number
+          supplier_id: string
+          tax_amount: number
+          tenant_id: string
+          tenant_supplier_id: string
+          total_amount: number
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          budget_status?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id?: string
+          priced_at: string
+          project_id: string
+          purchase_order_id?: string | null
+          reason: string
+          remark?: string | null
+          request_no?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_id: string
+          tax_amount?: number
+          tenant_id: string
+          tenant_supplier_id: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          budget_status?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id?: string
+          priced_at?: string
+          project_id?: string
+          purchase_order_id?: string | null
+          reason?: string
+          remark?: string | null
+          request_no?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_id?: string
+          tax_amount?: number
+          tenant_id?: string
+          tenant_supplier_id?: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_requisitions_cancelled_by_employee_id_fkey"
+            columns: ["cancelled_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_order_tenant_fkey"
+            columns: ["purchase_order_id", "tenant_id", "id"]
+            isOneToOne: true
+            referencedRelation: "supplier_purchase_orders"
+            referencedColumns: ["id", "tenant_id", "purchase_requisition_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_project_tenant_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_relationship_tenant_fkey"
+            columns: ["tenant_supplier_id", "tenant_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id", "tenant_id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_submitted_by_employee_id_fkey"
+            columns: ["submitted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_requisitions_updated_by_employee_id_fkey"
             columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
@@ -17261,6 +17756,18 @@ export type Database = {
         }
         Returns: Json
       }
+      cancel_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       cancel_workflow_instance: {
         Args: {
           p_actor_employee_id: string
@@ -17716,6 +18223,18 @@ export type Database = {
           p_idempotency_key: string
           p_order_id: string
           p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      convert_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_purchase_order_id: string
+          p_requisition_id: string
           p_tenant_id: string
         }
         Returns: Json
@@ -18713,6 +19232,14 @@ export type Database = {
           tenant_id: string
         }[]
       }
+      list_project_cost_commitment_totals: {
+        Args: { p_project_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      list_project_cost_expense_totals: {
+        Args: { p_project_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       list_supplier_purchase_order_supplier_options: {
         Args: {
           p_checked_at: string
@@ -19242,6 +19769,19 @@ export type Database = {
         }
         Returns: Json
       }
+      review_supplier_purchase_requisition: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_remark: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       review_supplier_qualification: {
         Args: {
           p_actor_employee_id: string
@@ -19325,6 +19865,7 @@ export type Database = {
           p_items: Json
           p_order_id: string
           p_project_id: string
+          p_purchase_requisition_id?: string
           p_remark: string
           p_tenant_id: string
           p_tenant_supplier_id: string
@@ -19342,6 +19883,23 @@ export type Database = {
           p_order_id: string
           p_project_id: string
           p_remark: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      save_supplier_purchase_requisition_draft: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_delivery_date: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_project_id: string
+          p_reason: string
+          p_remark: string
+          p_requisition_id: string
           p_tenant_id: string
           p_tenant_supplier_id: string
         }
@@ -19426,6 +19984,17 @@ export type Database = {
           p_expected_version: number
           p_idempotency_key: string
           p_order_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      submit_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_requisition_id: string
           p_tenant_id: string
         }
         Returns: Json

@@ -20,7 +20,7 @@
 - Create: `apps/api/src/repositories/supplier-purchase-requisition-records.ts`
 - Create: `apps/api/src/repositories/supplier-purchase-requisition-records.test.ts`
 
-- [ ] **Step 1: 写 HTTP schema RED 测试**
+- [x] **Step 1: 写 HTTP schema RED 测试**
 
 覆盖分页、过滤、草稿、提交、审核、取消和转换：
 
@@ -60,7 +60,7 @@ expect(() => SupplierPurchaseRequisitionReviewSchema.parse({
 - 原因必填且最多 500 字；备注、审核意见和取消原因边界明确。
 - 未知字段全部拒绝。
 
-- [ ] **Step 2: 运行 schema 测试确认 RED**
+- [x] **Step 2: 运行 schema 测试确认 RED**
 
 Run:
 
@@ -71,7 +71,7 @@ bun test src/schema/supplier-purchase-requisitions.test.ts
 
 Expected: 模块不存在。
 
-- [ ] **Step 3: 实现最小 HTTP schema**
+- [x] **Step 3: 实现最小 HTTP schema**
 
 导出：
 
@@ -115,7 +115,7 @@ export const SupplierPurchaseRequisitionConvertSchema = z.object({
 }).strict();
 ```
 
-- [ ] **Step 4: 写数据库记录 RED 测试**
+- [x] **Step 4: 写数据库记录 RED 测试**
 
 严格解析：
 
@@ -131,7 +131,7 @@ expect(SupplierPurchaseRequisitionCommandEnvelopeSchema.parse(envelope))
 
 numeric 数量和金额必须是字符串；状态、时间和 nullable 审计字段必须严格。
 
-- [ ] **Step 5: 运行记录测试确认 RED**
+- [x] **Step 5: 运行记录测试确认 RED**
 
 Run:
 
@@ -142,7 +142,7 @@ bun test src/repositories/supplier-purchase-requisition-records.test.ts
 
 Expected: 模块不存在。
 
-- [ ] **Step 6: 实现记录 schema 并运行 GREEN**
+- [x] **Step 6: 实现记录 schema 并运行 GREEN**
 
 定义申请头、申请行、预算承诺、预算分类快照、详情和命令 envelope。所有数据库
 记录使用 `.strict()`，命令 envelope 只允许设计中的稳定状态。
@@ -157,7 +157,7 @@ bun test src/schema/supplier-purchase-requisitions.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交契约**
+- [x] **Step 7: 提交契约**
 
 ```bash
 git add apps/api/src/schema/supplier-purchase-requisitions.ts \
@@ -173,7 +173,7 @@ git commit -m "feat(supplier): 定义采购申请预算契约"
 - Create: `apps/api/src/services/supplier-purchase-requisition-migration-contract.test.ts`
 - Create: `supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql`
 
-- [ ] **Step 1: 写 migration 契约 RED 测试**
+- [x] **Step 1: 写 migration 契约 RED 测试**
 
 固定读取 migration 并断言：
 
@@ -204,7 +204,7 @@ expect(sql).toContain(
   `supplier_purchase_requisition`。
 - migration 末尾包含只撤销执行权限、保留审计事实的前向回滚说明。
 
-- [ ] **Step 2: 运行 migration 测试确认 RED**
+- [x] **Step 2: 运行 migration 测试确认 RED**
 
 Run:
 
@@ -215,7 +215,7 @@ bun test src/services/supplier-purchase-requisition-migration-contract.test.ts
 
 Expected: migration 不存在。
 
-- [ ] **Step 3: 建立表、外键和约束**
+- [x] **Step 3: 建立表、外键和约束**
 
 申请状态约束：
 
@@ -244,7 +244,7 @@ ON public.supplier_purchase_orders(purchase_requisition_id)
 WHERE purchase_requisition_id IS NOT NULL;
 ```
 
-- [ ] **Step 4: 建立索引、RLS 和权限**
+- [x] **Step 4: 建立索引、RLS 和权限**
 
 为申请状态/项目/供应商列表、明细分页和有效承诺汇总建立设计中的索引。三表
 `ENABLE ROW LEVEL SECURITY`、`FORCE ROW LEVEL SECURITY`，撤销 PUBLIC/anon/
@@ -256,7 +256,7 @@ supplier.purchase-requisition.manage
 supplier.purchase-requisition.approve
 ```
 
-- [ ] **Step 5: 运行 migration 契约 GREEN**
+- [x] **Step 5: 运行 migration 契约 GREEN**
 
 Run:
 
@@ -267,7 +267,7 @@ bun test src/services/supplier-purchase-requisition-migration-contract.test.ts
 
 Expected: 表、安全和权限契约 PASS。
 
-- [ ] **Step 6: 提交数据基础**
+- [x] **Step 6: 提交数据基础**
 
 ```bash
 git add supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql \
@@ -281,7 +281,7 @@ git commit -m "feat(db): 建立采购申请预算事实"
 - Modify: `apps/api/src/services/supplier-purchase-requisition-migration-contract.test.ts`
 - Modify: `supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql`
 
-- [ ] **Step 1: 写命令契约 RED 测试**
+- [x] **Step 1: 写命令契约 RED 测试**
 
 检查五个命令：
 
@@ -306,7 +306,7 @@ convert_supplier_purchase_requisition
 - 新建采购单缺少已批准的 `purchase_requisition_id` 时数据库拒绝，API 不能绕过。
 - 价格变化、版本、状态、自审和幂等错误码稳定。
 
-- [ ] **Step 2: 运行契约确认 RED**
+- [x] **Step 2: 运行契约确认 RED**
 
 Run:
 
@@ -317,7 +317,7 @@ bun test src/services/supplier-purchase-requisition-migration-contract.test.ts
 
 Expected: 命令函数不存在。
 
-- [ ] **Step 3: 实现草稿保存命令**
+- [x] **Step 3: 实现草稿保存命令**
 
 使用与采购单相同的价格筛选和金额公式。请求指纹只包含客户端可提交字段与
 actor employee。成功 envelope：
@@ -333,7 +333,7 @@ actor employee。成功 envelope：
 
 更新草稿整单替换明细，不能更换租户、项目或合作供应商。
 
-- [ ] **Step 4: 实现预算预占命令**
+- [x] **Step 4: 实现预算预占命令**
 
 提交函数按分类建立临时汇总：
 
@@ -350,7 +350,7 @@ ORDER BY item.cost_category_id;
 在锁定预算后，用集合查询获得已支出和其他 `reserved | converted` 承诺。写入
 预算快照、完整申请金额和 `budget_status`，禁止逐分类循环查询。
 
-- [ ] **Step 5: 实现审核、取消和转换**
+- [x] **Step 5: 实现审核、取消和转换**
 
 审核命令只处理状态和承诺，权限由 Service 负责。
 
@@ -370,7 +370,7 @@ ORDER BY item.cost_category_id;
 扩展 `cancel_supplier_purchase_order`：关联订单尚未开始履约时取消，原子释放
 `converted` 承诺。
 
-- [ ] **Step 6: 用 EXPLAIN 验证查询计划契约**
+- [x] **Step 6: 用 EXPLAIN 验证查询计划契约**
 
 在 migration 注释中记录以下查询的索引预期，并在数据库 smoke 中执行：
 
@@ -386,7 +386,7 @@ WHERE tenant_id = $1
 
 Expected: 使用有效承诺索引，不出现无界全表扫描。
 
-- [ ] **Step 7: 运行契约 GREEN 并提交**
+- [x] **Step 7: 运行契约 GREEN 并提交**
 
 Run:
 
@@ -416,7 +416,7 @@ git commit -m "feat(db): 实现采购申请预算命令"
 - Modify: `apps/api/src/repositories/supplier-purchase-orders.ts`
 - Modify: `apps/api/src/repositories/supplier-purchase-orders.test.ts`
 
-- [ ] **Step 1: 写 Repository RED 测试**
+- [x] **Step 1: 写 Repository RED 测试**
 
 覆盖：
 
@@ -436,7 +436,7 @@ await repository.list({
 五个命令断言完整 `p_` 参数、字符串 numeric、幂等键和严格 envelope；错误码
 必须经 `mapSupplierCommandDatabaseError` 或 `Errors.dbError`。
 
-- [ ] **Step 2: 运行 Repository 测试确认 RED**
+- [x] **Step 2: 运行 Repository 测试确认 RED**
 
 Run:
 
@@ -447,7 +447,7 @@ bun test src/repositories/supplier-purchase-requisitions.test.ts
 
 Expected: Repository 模块不存在。
 
-- [ ] **Step 3: 实现分页读取和命令调用**
+- [x] **Step 3: 实现分页读取和命令调用**
 
 Repository 输入明确包含服务端派生的 `tenant_id` 和项目范围：
 
@@ -467,7 +467,7 @@ export type SupplierPurchaseRequisitionListInput = {
 
 空项目范围直接返回空页。所有列表最多 100，所有响应经 Zod 严格解析。
 
-- [ ] **Step 4: 扩展采购单来源投影**
+- [x] **Step 4: 扩展采购单来源投影**
 
 采购单选择字段增加申请 ID 和申请编号关系：
 
@@ -480,11 +480,11 @@ purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_pur
 若 PostgREST schema cache 不能稳定解析该关系，改用一次批量 ID hydration，
 不得按行查询。
 
-- [ ] **Step 5: 扩展稳定错误映射**
+- [x] **Step 5: 扩展稳定错误映射**
 
 映射设计中的九个申请错误码，未知数据库错误继续由 DB_ERROR 包装，不吞异常。
 
-- [ ] **Step 6: 运行 GREEN 并提交**
+- [x] **Step 6: 运行 GREEN 并提交**
 
 Run:
 
@@ -517,7 +517,7 @@ git commit -m "feat(api): 实现采购申请数据访问"
 - Create: `apps/api/src/controllers/supplier-purchase-requisitions/routes.test.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
-- [ ] **Step 1: 写 Service RED 测试**
+- [x] **Step 1: 写 Service RED 测试**
 
 依赖注入 fake access/repository，覆盖：
 
@@ -531,7 +531,7 @@ git commit -m "feat(api): 实现采购申请数据访问"
 - 预算内批准不要求预算管理权限。
 - 所有错误经过 `Errors`。
 
-- [ ] **Step 2: 运行 Service 测试确认 RED**
+- [x] **Step 2: 运行 Service 测试确认 RED**
 
 Run:
 
@@ -542,7 +542,7 @@ bun test src/services/supplier-purchase-requisitions.test.ts
 
 Expected: Service 模块不存在。
 
-- [ ] **Step 3: 实现 Service 边界**
+- [x] **Step 3: 实现 Service 边界**
 
 使用现有 `supplierPurchaseOrderAccessService` 的项目范围语义和
 `TenantSuppliersService.assertCanCreatePurchaseOrder()`。审批逻辑：
@@ -560,7 +560,7 @@ if (requisition.created_by_employee_id === scope.employeeId) {
 }
 ```
 
-- [ ] **Step 4: 写 Controller RED 测试**
+- [x] **Step 4: 写 Controller RED 测试**
 
 断言八条路由、query/params/body 解析、`Idempotency-Key` 必填、Service 参数和
 `ResponseHandler.success`：
@@ -576,12 +576,12 @@ POST /supplier-purchase-requisitions/:id/cancel
 POST /supplier-purchase-requisitions/:id/convert
 ```
 
-- [ ] **Step 5: 实现 Controller 并注册**
+- [x] **Step 5: 实现 Controller 并注册**
 
 Controller 只处理 HTTP；复用采购单 Controller 已确认的幂等键提取模式，不复制
 业务逻辑。
 
-- [ ] **Step 6: 运行 GREEN 并提交**
+- [x] **Step 6: 运行 GREEN 并提交**
 
 Run:
 
@@ -614,7 +614,7 @@ git commit -m "feat(api): 暴露采购申请预算接口"
 - Create: `apps/admin/components/projects/project-cost-budget-panel-utils.test.ts`
 - Modify: `apps/admin/components/projects/project-cost-budget-panel.tsx`
 
-- [ ] **Step 1: 写 API RED 测试**
+- [x] **Step 1: 写 API RED 测试**
 
 Repository 必须用一条集合查询读取项目有效承诺，限定必要字段和 `.limit(10_000)`，
 超出边界返回 `PROJECT_COST_COMMITMENTS_TOO_MANY_ROWS`。
@@ -633,7 +633,7 @@ Service 结果增加：
 
 分类行也返回 `commitment_amount` 和 `available_amount`。
 
-- [ ] **Step 2: 运行 API 测试确认 RED**
+- [x] **Step 2: 运行 API 测试确认 RED**
 
 Run:
 
@@ -645,7 +645,7 @@ bun test src/repositories/project-cost-budgets.test.ts \
 
 Expected: 承诺字段不存在。
 
-- [ ] **Step 3: 实现集合查询和汇总**
+- [x] **Step 3: 实现集合查询和汇总**
 
 并行加载预算、支出和承诺：
 
@@ -660,7 +660,7 @@ const [budgets, expenseTotals, commitmentTotals] = await Promise.all([
 `remaining_amount` 保持“预算 - 已支出”的历史语义，
 `available_amount = budget - expense - commitment`。
 
-- [ ] **Step 4: 写 Admin 工具 RED 测试**
+- [x] **Step 4: 写 Admin 工具 RED 测试**
 
 断言金额展示、风险文案和负可用预算：
 
@@ -673,11 +673,11 @@ expect(formatBudgetAvailability({
 })).toContain("已承诺");
 ```
 
-- [ ] **Step 5: 扩展预算面板**
+- [x] **Step 5: 扩展预算面板**
 
 总览卡和分类行增加“已承诺”“可用预算”，保持现有中后台密度和响应式布局。
 
-- [ ] **Step 6: 运行 GREEN 并提交**
+- [x] **Step 6: 运行 GREEN 并提交**
 
 Run:
 
@@ -712,7 +712,7 @@ git commit -m "feat(finance): 展示项目采购预算承诺"
 - Modify: `apps/admin/components/supplier-purchase-orders/purchase-order-rules.ts`
 - Modify: `apps/admin/components/supplier-purchase-orders/purchase-order-page.test.ts`
 
-- [ ] **Step 1: 写规则 RED 测试**
+- [x] **Step 1: 写规则 RED 测试**
 
 覆盖状态动作：
 
@@ -731,7 +731,7 @@ expect(actionsFor({ status: "approved", canManage: true }))
 自审不显示审批动作；超预算缺少预算管理权限不显示批准但保留驳回；只读用户不显示
 mutation。
 
-- [ ] **Step 2: 运行规则测试确认 RED**
+- [x] **Step 2: 运行规则测试确认 RED**
 
 Run:
 
@@ -742,7 +742,7 @@ bun test components/supplier-purchase-requisitions/requisition-rules.test.ts
 
 Expected: 模块不存在。
 
-- [ ] **Step 3: 实现严格类型、API 和规则**
+- [x] **Step 3: 实现严格类型、API 和规则**
 
 API mutation 统一生成冻结幂等意图：
 
@@ -756,12 +756,12 @@ requestBackendJson(`/supplier-purchase-requisitions/${id}/review`, {
 
 响应类型只包含后端字段；任何价格、税率和金额不能进入草稿请求类型。
 
-- [ ] **Step 4: 禁止直接新建采购单**
+- [x] **Step 4: 禁止直接新建采购单**
 
 采购订单列表“新建采购单”替换为跳转采购申请的“发起采购申请”。采购单编辑器仍可
 编辑转换产生的草稿。
 
-- [ ] **Step 5: 运行 GREEN 并提交**
+- [x] **Step 5: 运行 GREEN 并提交**
 
 Run:
 
@@ -794,7 +794,7 @@ git commit -m "feat(admin): 建立采购申请交互契约"
 - Create: `apps/admin/components/supplier-purchase-requisitions/requisition-page.test.ts`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: 写页面 RED 测试**
+- [x] **Step 1: 写页面 RED 测试**
 
 静态和规则测试必须覆盖：
 
@@ -807,7 +807,7 @@ git commit -m "feat(admin): 建立采购申请交互契约"
 - 无权限、加载、空和错误状态。
 - 500px 文件上限；超限前先按职责拆分。
 
-- [ ] **Step 2: 运行页面测试确认 RED**
+- [x] **Step 2: 运行页面测试确认 RED**
 
 Run:
 
@@ -818,17 +818,17 @@ bun test components/supplier-purchase-requisitions/requisition-page.test.ts
 
 Expected: 组件不存在。
 
-- [ ] **Step 3: 实现列表和工作区**
+- [x] **Step 3: 实现列表和工作区**
 
 页面初始查询和用户交互都通过 `requestBackendJson`；URL 保存过滤和分页状态。
 列表每行只有一个主要动作，其余放操作菜单。
 
-- [ ] **Step 4: 实现编辑器和预算详情**
+- [x] **Step 4: 实现编辑器和预算详情**
 
 复用采购单的项目、供应商和分页商品目录选择模式，但每行增加成本分类。客户端金额
 只展示最近一次后端保存结果，不自行形成事实。
 
-- [ ] **Step 5: 实现审批、取消和转换**
+- [x] **Step 5: 实现审批、取消和转换**
 
 所有 mutation：
 
@@ -837,7 +837,7 @@ Expected: 组件不存在。
 - 成功后刷新详情、列表和版本。
 - 409 冲突不自动重放，展示明确恢复操作。
 
-- [ ] **Step 6: 注册导航并运行 GREEN**
+- [x] **Step 6: 注册导航并运行 GREEN**
 
 Run:
 
@@ -850,7 +850,7 @@ bun run check
 
 Expected: PASS。
 
-- [ ] **Step 7: 提交 Admin**
+- [x] **Step 7: 提交 Admin**
 
 ```bash
 git add 'apps/admin/app/(console)/supplier-purchase-requisitions' \
@@ -872,7 +872,7 @@ git commit -m "feat(admin): 实现采购申请预算工作区"
 - Create: `apps/api/src/scripts/supplier-purchase-requisition-smoke.test.ts`
 - Modify: `apps/api/package.json`
 
-- [ ] **Step 1: 写 Playwright RED 工作流**
+- [x] **Step 1: 写 Playwright RED 工作流**
 
 一个确定性场景完成：
 
@@ -886,12 +886,12 @@ git commit -m "feat(admin): 实现采购申请预算工作区"
 8. 取消另一待审批申请并看到承诺释放。
 9. mutation journal 证明客户端没有提交价格和金额。
 
-- [ ] **Step 2: 实现独立 Mock Backend**
+- [x] **Step 2: 实现独立 Mock Backend**
 
 使用端口 `3994`，仅实现该 E2E 需要的路由、分页和 mutation journal。状态机和预算
 金额固定可预测，不访问真实数据库。
 
-- [ ] **Step 3: 运行 Playwright GREEN**
+- [x] **Step 3: 运行 Playwright GREEN**
 
 Run:
 
@@ -903,7 +903,7 @@ bunx playwright test \
 
 Expected: PASS。
 
-- [ ] **Step 4: 写数据库 smoke helper RED 测试**
+- [x] **Step 4: 写数据库 smoke helper RED 测试**
 
 验证 fixture 使用稳定 UUID、所有操作包在事务中且最终强制回滚；结果严格包含：
 
@@ -922,7 +922,7 @@ Expected: PASS。
 }
 ```
 
-- [ ] **Step 5: 实现 smoke 并运行本地 helper GREEN**
+- [x] **Step 5: 实现 smoke 并运行本地 helper GREEN**
 
 Run:
 
@@ -933,7 +933,7 @@ bun test src/scripts/supplier-purchase-requisition-smoke.test.ts
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交 E2E 和 smoke**
+- [x] **Step 6: 提交 E2E 和 smoke**
 
 ```bash
 git add apps/admin/e2e/supplier-purchase-requisition-* \
@@ -950,7 +950,7 @@ git commit -m "test(supplier): 覆盖采购申请预算闭环"
 - Modify: `apps/api/src/types/database.ts`
 - Modify: `docs/superpowers/plans/2026-07-30-supplier-purchase-requisition-budget-control.md`
 
-- [ ] **Step 1: migration 应用前检查**
+- [x] **Step 1: migration 应用前检查**
 
 Run:
 
@@ -962,7 +962,7 @@ Expected: 仅 `20260730150000` 为 Local pending，其他 Local/Remote 对齐。
 
 先在事务回滚环境执行 migration 和 smoke。不得手工执行远端 DDL/DML。
 
-- [ ] **Step 2: 正式应用 migration**
+- [x] **Step 2: 正式应用 migration**
 
 使用仓库 `Migrate Dev Database` 工作流：
 
@@ -970,7 +970,7 @@ Expected: 仅 `20260730150000` 为 Local pending，其他 Local/Remote 对齐。
 2. `mode=apply`，确认 applied version 为 `20260730150000`。
 3. 再运行 `supabase migration list`，确认 Local/Remote 对齐。
 
-- [ ] **Step 3: 生成数据库类型**
+- [x] **Step 3: 生成数据库类型**
 
 使用项目约定的 Supabase project ref 生成：
 
@@ -981,7 +981,7 @@ supabase gen types typescript --project-id "$DEV_PROJECT_REF" \
 
 只接受新表、函数、权限相关的预期类型差异。
 
-- [ ] **Step 4: 运行真实数据库 smoke**
+- [x] **Step 4: 运行真实数据库 smoke**
 
 Run:
 
@@ -992,7 +992,7 @@ bun run supplier:purchase-requisition:smoke
 
 Expected: 十个布尔检查全部为 `true`，事务回滚。
 
-- [ ] **Step 5: 运行全量验证**
+- [x] **Step 5: 运行全量验证**
 
 Run:
 
@@ -1011,7 +1011,7 @@ bunx playwright test \
 
 Expected: 0 failure。
 
-- [ ] **Step 6: 做完成审计**
+- [x] **Step 6: 做完成审计**
 
 逐条对照设计：
 
@@ -1024,7 +1024,56 @@ Expected: 0 failure。
 - migration Local/Remote 对齐。
 - Orange 仓库没有任何改动。
 
-- [ ] **Step 7: 提交类型和计划勾选**
+**发布证据（2026-07-31）：**
+
+- Task 1–9 的提交链已逐项覆盖契约、数据基础、原子命令、Repository、Service /
+  Controller、预算汇总、采购单来源约束、Admin 工作区与 E2E / smoke：
+  `ba64d805`、`84a680b0`、`4d2fa67a`、`d1ef8ce8`、`17b853e2`、
+  `922cbd08`、`4820f9d8`、`fd8407ca`、`b093082a`，其后的修复提交收紧了
+  权限、并发、幂等、精度、深链和 smoke 边界。
+- 正式 migration 采用只前进策略。`20260730150000` 建立采购申请预算控制；
+  `20260730160000` 修复草稿 RPC 的 `WITH ORDINALITY` 运行时语法；
+  `20260730170000` 移除草稿保存对成本分类的显式共享行锁；
+  `20260730180000` 将提交阶段分类锁调整为 `FOR NO KEY UPDATE`，在保留分类状态
+  保护的同时允许并发草稿外键校验。四版均先完成事务回滚预检，没有手工修改远端数据库。
+- Dev 工作流全部成功，且每版均先 plan 后 apply：
+  `150000` 为
+  [plan 30574184255](https://github.com/LeeFo-china/goose/actions/runs/30574184255) /
+  [apply 30574250158](https://github.com/LeeFo-china/goose/actions/runs/30574250158)；
+  `160000` 为
+  [plan 30575104522](https://github.com/LeeFo-china/goose/actions/runs/30575104522) /
+  [apply 30575160634](https://github.com/LeeFo-china/goose/actions/runs/30575160634)；
+  `170000` 为
+  [plan 30577353384](https://github.com/LeeFo-china/goose/actions/runs/30577353384) /
+  [apply 30577407283](https://github.com/LeeFo-china/goose/actions/runs/30577407283)；
+  `180000` 为
+  [plan 30577865544](https://github.com/LeeFo-china/goose/actions/runs/30577865544) /
+  [apply 30577896300](https://github.com/LeeFo-china/goose/actions/runs/30577896300)。
+  最终 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"` 显示
+  Local / Remote 全量对齐，远端历史最新版本为 `20260730180000`。
+- `supabase gen types --project-id` 返回了缺失既有 supplier 表 / RPC 且未包含新对象的
+  异常不完整 schema，因此没有接受该破坏性输出；`--db-url` 路径依赖本机 Docker，
+  但当前环境没有 Docker 命令或运行时。最终以现有 `database.ts` 为基线，直接查询 Dev
+  PostgreSQL catalog 核对列、空值、默认值、外键、唯一约束、函数签名与授权后，只追加
+  3 张表、7 个 service-role 可见 RPC，并补充采购单来源字段 / 参数；diff 为纯新增
+  `+569/-0`，契约测试同时引用既有 supplier 表和 RPC，防止类型回退。
+- 真实数据库 smoke 返回十项全部为 `true`：
+  `save_replay`、`idempotency_conflict`、`version_conflict`、
+  `self_review_rejected`、`rejection_released`、`cancellation_released`、
+  `conversion_unique`、`cross_tenant_hidden`、`explain_uses_index`、
+  `concurrent_budget_serialized`。smoke 后采购申请、承诺、采购单、预算分类、预算及
+  并发 supplier fixture 的残留计数全部为 `0`。
+- 全量验证结果：API supplier 测试 `500 pass / 0 fail`（62 files）；
+  Admin 指定组件测试 `108 pass / 0 fail`（10 files）；
+  采购申请 Playwright `1 passed`；既有采购单 Playwright `2 passed`；
+  `bun run api:typecheck`、`bun run api:build`、`bun run admin:check`、
+  Admin production build、API / Admin 文件大小检查和 `git diff --check` 全部通过。
+- 完成审计确认：直接新建采购单由来源约束阻断；提交在预算锁内原子预占且并发序列化；
+  超预算审批要求双权限；驳回、申请取消和未履约订单取消均释放承诺；转换由唯一约束保证
+  一张订单；列表接口均分页且查询受 `.range()` / `.limit()` 或等价边界限制。
+  Orange 仓库只读状态与启动基线完全一致，本任务对其零写入。
+
+- [x] **Step 7: 提交类型和计划勾选**
 
 ```bash
 git add apps/api/src/types/database.ts \
