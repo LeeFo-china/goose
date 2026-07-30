@@ -392,6 +392,12 @@ describe("supplier purchase requisition database smoke helpers", () => {
       import.meta.url,
     )).text();
 
+    expect(mainSource.match(
+      /new Bun\.SQL\(databaseUrl, \{ max: 1, prepare: false \}\)/g,
+    )).toHaveLength(1);
+    expect(concurrencySource.match(
+      /new Bun\.SQL\(databaseUrl, \{ max: 1, prepare: false \}\)/g,
+    )).toHaveLength(3);
     for (const rpc of [
       REQUISITION_SMOKE_SQL_CONTRACTS.save,
       REQUISITION_SMOKE_SQL_CONTRACTS.submit,

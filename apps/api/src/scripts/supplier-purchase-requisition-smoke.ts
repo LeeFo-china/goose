@@ -361,7 +361,7 @@ async function executeTransactionalSmoke(sql: SmokeSql) {
 export async function runSupplierPurchaseRequisitionSmoke(
   databaseUrl: string,
 ): Promise<SmokeSummary> {
-  const database = new Bun.SQL(databaseUrl, { prepare: false });
+  const database = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
   try {
     const transactional = await runWithForcedRollback(
       database,

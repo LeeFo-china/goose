@@ -371,9 +371,9 @@ export async function runConcurrentBudgetSmoke(
   rollback: typeof runWithForcedRollback,
   assertSubmitted: typeof assertRequisitionCommandResult,
 ) {
-  const lookup = new Bun.SQL(databaseUrl, { prepare: false });
-  const databaseA = new Bun.SQL(databaseUrl, { prepare: false });
-  const databaseB = new Bun.SQL(databaseUrl, { prepare: false });
+  const lookup = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const databaseA = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const databaseB = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
   let releaseA: (() => void) | undefined;
   let activeOperationA: Promise<SubmittedBudgetEvidence> | undefined;
   let activeOperationB: Promise<SubmittedBudgetEvidence> | undefined;
