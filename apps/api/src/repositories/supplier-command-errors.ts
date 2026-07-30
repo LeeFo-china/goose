@@ -156,6 +156,38 @@ const TOKEN_ALIASES = {
 } as const satisfies Record<string, SupplierBusinessCode>;
 type SupplierCommandToken =
   SupplierBusinessCode | keyof typeof TOKEN_ALIASES;
+const FULFILLMENT_ENVELOPE_CODES: Readonly<
+  Record<string, readonly SupplierCommandToken[]>
+> = {
+  validation_error: [
+    "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR",
+  ],
+  not_found: [
+    "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
+    "SUPPLIER_PURCHASE_ORDER_ITEM_NOT_FOUND",
+  ],
+  version_conflict: [
+    "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT",
+    "FULFILLMENT_VERSION_CONFLICT",
+  ],
+  state_conflict: [
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED",
+    "FULFILLMENT_NOT_CONFIRMED",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+  ],
+  project_invalid: ["SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID"],
+  idempotency_conflict: ["SUPPLIER_IDEMPOTENCY_CONFLICT"],
+  over_shipped: ["OVER_SHIPPED"],
+  over_received: ["OVER_RECEIVED"],
+  variance_reason_required: ["VARIANCE_REASON_REQUIRED"],
+};
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
   const token = [
@@ -176,6 +208,16 @@ export function mapSupplierCommandDatabaseError(error: unknown) {
     definition.message,
     code,
   );
+}
+
+export function mapSupplierPurchaseFulfillmentEnvelopeError(
+  status: string,
+  errorCode: unknown,
+) {
+  if (typeof errorCode !== "string") return null;
+  const allowedCodes = FULFILLMENT_ENVELOPE_CODES[status];
+  if (!allowedCodes?.some((code) => code === errorCode)) return null;
+  return mapSupplierCommandDatabaseError(errorCode);
 }
 
 export function throwSupplierCommandDatabaseError(

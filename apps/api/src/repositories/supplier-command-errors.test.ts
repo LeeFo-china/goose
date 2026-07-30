@@ -1,7 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
-import { mapSupplierCommandDatabaseError } from "./supplier-command-errors";
+import {
+  mapSupplierCommandDatabaseError,
+  mapSupplierPurchaseFulfillmentEnvelopeError,
+} from "./supplier-command-errors";
 
 describe("mapSupplierCommandDatabaseError", () => {
   test.each([
@@ -122,16 +125,35 @@ describe("mapSupplierCommandDatabaseError", () => {
       ),
       "utf8",
     );
-    const codes = [
-      ...sql.matchAll(/'error_code',\s*'([^']+)'/g),
-    ].map((match) => match[1]!);
+    const pairs = [...sql.matchAll(
+      /'status',\s*'([^']+)',\s*'error_code',\s*'([^']+)'/g,
+    )].map((match) => [match[1]!, match[2]!] as const);
 
-    expect(codes.length).toBeGreaterThan(0);
-    for (const code of new Set(codes)) {
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const [status, code] of pairs) {
+      expect(
+        mapSupplierPurchaseFulfillmentEnvelopeError(status, code),
+        `${status}:${code}`,
+      ).not.toBeNull();
       expect(mapSupplierCommandDatabaseError(code), code).not.toBeNull();
     }
     expect(mapSupplierCommandDatabaseError(
       "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR",
     )).toMatchObject({ statusCode: 400 });
+  });
+
+  test.each([
+    ["validation_error", "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR"],
+    ["not_found", "SUPPLIER_PURCHASE_ORDER_ITEM_NOT_FOUND"],
+    ["version_conflict", "FULFILLMENT_VERSION_CONFLICT"],
+    ["state_conflict", "FULFILLMENT_NOT_CONFIRMED"],
+    ["project_invalid", "SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID"],
+    ["idempotency_conflict", "SUPPLIER_IDEMPOTENCY_CONFLICT"],
+    ["over_shipped", "OVER_SHIPPED"],
+    ["over_received", "OVER_RECEIVED"],
+    ["variance_reason_required", "VARIANCE_REASON_REQUIRED"],
+  ])("accepts a known %s envelope code", (status, code) => {
+    expect(mapSupplierPurchaseFulfillmentEnvelopeError(status, code))
+      .not.toBeNull();
   });
 });

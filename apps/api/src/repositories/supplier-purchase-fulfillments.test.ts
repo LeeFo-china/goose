@@ -153,7 +153,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     expect(shipmentUrl.searchParams.get("offset")).toBe("0");
     expect(shipmentUrl.searchParams.get("limit")).toBe("100");
     expect(shipmentUrl.searchParams.get("order")).toBe(
-      "created_at.desc,id.desc",
+      "shipped_at.desc,id.desc",
     );
     expect(shipmentUrl.searchParams.get("select")).toContain(
       "items:supplier_purchase_order_shipment_items",
@@ -162,7 +162,7 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     expect(receiptUrl.searchParams.get("offset")).toBe("20");
     expect(receiptUrl.searchParams.get("limit")).toBe("20");
     expect(receiptUrl.searchParams.get("order")).toBe(
-      "created_at.desc,id.desc",
+      "received_at.desc,id.desc",
     );
     for (const request of requests) {
       const url = new URL(request.url);
@@ -199,45 +199,9 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     const { repository, requests } = await repositoryFor((_request, index) => ({
       body: commandResult(statuses[index]!, index + 1),
     }));
-    const context = {
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:command",
-    };
-
-    await repository.confirm({
-      ...context,
-      expected_version: 2,
-      confirmed_at: "2026-07-30T02:00:00.000Z",
-      remark: null,
-    });
-    await repository.createShipment({
-      ...context,
-      id: SHIPMENT_ID,
-      expected_fulfillment_version: 1,
-      shipment_no: "SHIP-001",
-      shipped_at: "2026-07-30T03:00:00.000Z",
-      carrier_name: "顺丰",
-      tracking_no: "SF001",
-      remark: null,
-      items: [{ purchase_order_item_id: ITEM_ID, quantity: 6 }],
-    });
-    await repository.createReceipt({
-      ...context,
-      id: RECEIPT_ID,
-      expected_fulfillment_version: 2,
-      receipt_no: "RCV-001",
-      received_at: "2026-07-30T04:00:00.000Z",
-      remark: null,
-      items: [{
-        purchase_order_item_id: ITEM_ID,
-        accepted_quantity: 5,
-        rejected_quantity: 1,
-        variance_reason: "破损",
-      }],
-    });
+    await repository.confirm(confirmCommand);
+    await repository.createShipment(shipmentCommand);
+    await repository.createReceipt(receiptCommand);
 
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/confirm_supplier_purchase_order_fulfillment",
@@ -305,29 +269,26 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
     const malformedCommand = await repositoryFor(() => ({
       body: { ...commandResult("confirmed", 1), extra: true },
     }));
-    await expect(malformedCommand.repository.confirm({
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      expected_version: 2,
-      confirmed_at: "2026-07-30T02:00:00.000Z",
-      remark: null,
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:confirm",
-    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    await expect(malformedCommand.repository.confirm(confirmCommand))
+      .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
 
     const wrongSuccess = await repositoryFor(() => ({
       body: commandResult("receipt_created", 1),
     }));
-    await expect(wrongSuccess.repository.confirm({
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      expected_version: 2,
-      confirmed_at: "2026-07-30T02:00:00.000Z",
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:confirm",
-    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    await expect(wrongSuccess.repository.confirm(confirmCommand))
+      .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
+  test.each([
+    { status: "state_conflict" },
+    { status: "state_conflict", error_code: "UNKNOWN_COMMAND_ERROR" },
+    { status: "state_conflict", error_code: "OVER_SHIPPED" },
+  ] as const)("rejects invalid error envelopes as DB failures", async (body) => {
+    const { repository } = await repositoryFor(() => ({ body }));
+    await expect(repository.confirm(confirmCommand)).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+    });
   });
 
   test("maps command envelopes and RPC failures through stable errors", async () => {
@@ -337,18 +298,8 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
         error_code: "OVER_SHIPPED",
       },
     }));
-    await expect(envelopeFailure.repository.createShipment({
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      id: SHIPMENT_ID,
-      expected_fulfillment_version: 1,
-      shipment_no: "SHIP-001",
-      shipped_at: "2026-07-30T03:00:00.000Z",
-      items: [{ purchase_order_item_id: ITEM_ID, quantity: 6 }],
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:shipment",
-    })).rejects.toMatchObject({
+    await expect(envelopeFailure.repository.createShipment(shipmentCommand))
+      .rejects.toMatchObject({
       statusCode: 409,
       code: "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
     });
@@ -360,15 +311,8 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       },
       status: 400,
     }));
-    await expect(databaseFailure.repository.confirm({
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      expected_version: 2,
-      confirmed_at: "2026-07-30T02:00:00.000Z",
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:confirm",
-    })).rejects.toMatchObject({
+    await expect(databaseFailure.repository.confirm(confirmCommand))
+      .rejects.toMatchObject({
       statusCode: 409,
       code: "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
     });
@@ -377,15 +321,8 @@ describe("SupplierPurchaseFulfillmentsRepository", () => {
       body: { code: "XX000", message: "internal database error" },
       status: 500,
     }));
-    await expect(unknownDatabaseFailure.repository.confirm({
-      tenant_id: TENANT_ID,
-      order_id: ORDER_ID,
-      expected_version: 2,
-      confirmed_at: "2026-07-30T02:00:00.000Z",
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "fulfillment:confirm",
-    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    await expect(unknownDatabaseFailure.repository.confirm(confirmCommand))
+      .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 });
 
@@ -477,6 +414,35 @@ const purchaseOrder = {
   created_at: "2026-07-30T01:00:00.000Z",
   updated_at: "2026-07-30T01:30:00.000Z",
 } as const;
+const commandContext = {
+  tenant_id: TENANT_ID, order_id: ORDER_ID,
+  actor_user_id: USER_ID, actor_employee_id: EMPLOYEE_ID,
+  idempotency_key: "fulfillment:command",
+};
+const confirmCommand = {
+  ...commandContext,
+  expected_version: 2, confirmed_at: "2026-07-30T02:00:00.000Z",
+  remark: null,
+};
+const shipmentCommand = {
+  ...commandContext,
+  id: SHIPMENT_ID, expected_fulfillment_version: 1,
+  shipment_no: "SHIP-001", shipped_at: "2026-07-30T03:00:00.000Z",
+  carrier_name: "顺丰", tracking_no: "SF001", remark: null,
+  items: [{ purchase_order_item_id: ITEM_ID, quantity: 6 }],
+};
+const receiptCommand = {
+  ...commandContext,
+  id: RECEIPT_ID, expected_fulfillment_version: 2,
+  receipt_no: "RCV-001", received_at: "2026-07-30T04:00:00.000Z",
+  remark: null,
+  items: [{
+    purchase_order_item_id: ITEM_ID,
+    accepted_quantity: 5,
+    rejected_quantity: 1,
+    variance_reason: "破损",
+  }],
+};
 
 function commandResult(
   status: "confirmed" | "shipment_created" | "receipt_created",

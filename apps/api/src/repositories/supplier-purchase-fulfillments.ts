@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
 import {
-  mapSupplierCommandDatabaseError,
+  mapSupplierPurchaseFulfillmentEnvelopeError,
   throwSupplierCommandDatabaseError,
 } from "@/repositories/supplier-command-errors";
 import {
@@ -152,6 +152,7 @@ export class SupplierPurchaseFulfillmentsRepository {
       "supplier_purchase_order_shipments",
       SUPPLIER_PURCHASE_ORDER_SHIPMENT_SELECT,
       SupplierPurchaseOrderShipmentSchema,
+      "shipped_at",
       "查询采购发货记录失败",
       input,
     );
@@ -162,6 +163,7 @@ export class SupplierPurchaseFulfillmentsRepository {
       "supplier_purchase_order_receipts",
       SUPPLIER_PURCHASE_ORDER_RECEIPT_SELECT,
       SupplierPurchaseOrderReceiptSchema,
+      "received_at",
       "查询采购收货记录失败",
       input,
     );
@@ -233,6 +235,7 @@ export class SupplierPurchaseFulfillmentsRepository {
     table: string,
     columns: string,
     schema: z.ZodType<T>,
+    sortColumn: "shipped_at" | "received_at",
     message: string,
     input: SupplierPurchaseOrderFulfillmentEventListInput,
   ): Promise<Page<T>> {
@@ -241,7 +244,7 @@ export class SupplierPurchaseFulfillmentsRepository {
       .select(columns, { count: "exact" })
       .eq("tenant_id", input.tenant_id)
       .eq("supplier_purchase_order_id", input.order_id)
-      .order("created_at", { ascending: false })
+      .order(sortColumn, { ascending: false })
       .order("id", { ascending: false })
       .range(...pageRange(pagination));
     if (error) throw Errors.dbError(message, error);
@@ -295,22 +298,11 @@ function commandEnvelopeError(
     { purchase_order: SupplierPurchaseOrder }
   >,
 ) {
-  const mapped = envelope.error_code
-    ? mapSupplierCommandDatabaseError(envelope.error_code)
-    : null;
-  if (mapped) return mapped;
-  const code = envelope.error_code ??
-    `SUPPLIER_PURCHASE_ORDER_FULFILLMENT_${envelope.status.toUpperCase()}`;
-  const statusCode = envelope.status === "validation_error" ||
-      envelope.status === "variance_reason_required"
-    ? 400
-    : envelope.status === "not_found"
-    ? 404
-    : 409;
-  return Errors.business(
-    statusCode,
-    envelope.reason ?? "采购履约命令执行失败",
-    code,
+  return mapSupplierPurchaseFulfillmentEnvelopeError(
+    envelope.status,
+    envelope.error_code,
+  ) ?? Errors.dbError(
+    "采购履约命令响应无效",
     envelope,
   );
 }
