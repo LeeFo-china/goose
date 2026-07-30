@@ -55,21 +55,23 @@ describe("supplier purchase requisition query schemas", () => {
   test("strictly accepts supported list filters", () => {
     expect(SupplierPurchaseRequisitionListQuerySchema.parse({
       status: "pending_approval",
-      budgetStatus: "over_budget",
-      projectId: PROJECT_ID,
-      tenantSupplierId: TENANT_SUPPLIER_ID,
+      budget_status: "over_budget",
+      project_id: PROJECT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
     })).toMatchObject({
       status: "pending_approval",
-      budgetStatus: "over_budget",
-      projectId: PROJECT_ID,
-      tenantSupplierId: TENANT_SUPPLIER_ID,
+      budget_status: "over_budget",
+      project_id: PROJECT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
     });
     for (const input of [
       { status: "submitted" },
-      { budgetStatus: "unknown" },
-      { projectId: "not-a-uuid" },
-      { tenantSupplierId: "not-a-uuid" },
-      { project_id: PROJECT_ID },
+      { budget_status: "unknown" },
+      { project_id: "not-a-uuid" },
+      { tenant_supplier_id: "not-a-uuid" },
+      { budgetStatus: "over_budget" },
+      { projectId: PROJECT_ID },
+      { tenantSupplierId: TENANT_SUPPLIER_ID },
       { unknown: true },
     ]) {
       expect(SupplierPurchaseRequisitionListQuerySchema.safeParse(input).success)

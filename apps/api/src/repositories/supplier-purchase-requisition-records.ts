@@ -237,6 +237,7 @@ export const SupplierPurchaseRequisitionCommandEnvelopeSchema = z.object({
   status: SupplierPurchaseRequisitionCommandStatusSchema,
   idempotent: z.boolean().optional(),
   requisition: SupplierPurchaseRequisitionRecordSchema.optional(),
+  purchase_order_id: uuid.optional(),
   version: z.number().int().positive().optional(),
   error_code: z.string().optional(),
   reason: z.string().optional(),

@@ -58,9 +58,9 @@ export const SupplierPurchaseRequisitionListQuerySchema =
   PaginationQuerySchema.extend({
     keyword: keyword.optional(),
     status: SupplierPurchaseRequisitionStatusSchema.optional(),
-    budgetStatus: SupplierPurchaseRequisitionBudgetStatusSchema.optional(),
-    projectId: uuid("无效的项目 ID").optional(),
-    tenantSupplierId: uuid("无效的租户供应商关系 ID").optional(),
+    budget_status: SupplierPurchaseRequisitionBudgetStatusSchema.optional(),
+    project_id: uuid("无效的项目 ID").optional(),
+    tenant_supplier_id: uuid("无效的租户供应商关系 ID").optional(),
   }).strict();
 
 export const SupplierPurchaseRequisitionParamSchema = z.object({

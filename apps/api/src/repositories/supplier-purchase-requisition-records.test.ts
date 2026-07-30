@@ -304,17 +304,19 @@ describe("supplier purchase requisition command envelope", () => {
         status: "converted",
         purchase_order_id: PURCHASE_ORDER_ID,
       },
+      purchase_order_id: PURCHASE_ORDER_ID,
       version: 3,
       error_code: "ALREADY_CONVERTED",
       reason: "幂等重放",
     })).toMatchObject({
       status: "converted",
       idempotent: true,
+      purchase_order_id: PURCHASE_ORDER_ID,
       version: 3,
     });
     expect(SupplierPurchaseRequisitionCommandEnvelopeSchema.safeParse({
       status: "saved",
-      purchase_order_id: PURCHASE_ORDER_ID,
+      unknown: PURCHASE_ORDER_ID,
     }).success).toBe(false);
     expect(SupplierPurchaseRequisitionCommandEnvelopeSchema.safeParse({
       status: "saved",
