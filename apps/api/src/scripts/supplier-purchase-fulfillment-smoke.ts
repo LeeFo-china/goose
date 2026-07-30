@@ -13,6 +13,7 @@ import {
   confirmFulfillment,
   createReceipt,
   createShipment,
+  createStaleVersionShipment,
   expectIdempotencyConflict,
   SupplierPurchaseFulfillmentSmokeAssertionError,
 } from "./supplier-purchase-fulfillment-smoke-commands";
@@ -45,6 +46,10 @@ type PreRollbackSummary = Omit<
 type TransactionExecutor<Transaction> = {
   begin<T>(callback: (transaction: Transaction) => Promise<T>): Promise<T>;
 };
+type CloseableDatabase = { close(): Promise<void> };
+type PrimaryFailure =
+  | { failed: false }
+  | { failed: true; value: unknown };
 
 class RollbackSentinel extends Error {}
 
@@ -56,6 +61,7 @@ export async function runRollbackOnly<Transaction, Result>(
   let callbackResult: Result | undefined;
   let callbackError: unknown;
   let callbackCompleted = false;
+  let callbackFailed = false;
   let rollbackObserved = false;
 
   try {
@@ -64,6 +70,7 @@ export async function runRollbackOnly<Transaction, Result>(
         callbackResult = await callback(transaction);
         callbackCompleted = true;
       } catch (error) {
+        callbackFailed = true;
         callbackError = error;
       }
       throw sentinel;
@@ -78,13 +85,25 @@ export async function runRollbackOnly<Transaction, Result>(
       "transaction executor did not propagate the rollback sentinel",
     );
   }
-  if (callbackError !== undefined) throw callbackError;
+  if (callbackFailed) throw callbackError;
   if (!callbackCompleted) {
     throw new SupplierPurchaseFulfillmentSmokeAssertionError(
       "smoke assertions did not complete before rollback",
     );
   }
   return callbackResult as Result;
+}
+
+export async function closeDatabasePreservingPrimaryFailure(
+  database: CloseableDatabase,
+  primaryFailure: PrimaryFailure,
+) {
+  try {
+    await database.close();
+  } catch (closeError) {
+    if (!primaryFailure.failed) throw closeError;
+  }
+  if (primaryFailure.failed) throw primaryFailure.value;
 }
 
 export function assertSupplierPurchaseFulfillmentSmokeSummary(
@@ -191,6 +210,11 @@ async function executeSmoke(
       version: 2,
       fulfillmentStatus: "shipped",
     },
+  );
+  assertErrorEnvelope(
+    await createStaleVersionShipment(sql, fixture),
+    "version_conflict",
+    "FULFILLMENT_VERSION_CONFLICT",
   );
   await expectIdempotencyConflict(sql, (savepoint) =>
     createShipment(savepoint, fixture, {
@@ -332,6 +356,9 @@ export async function runSupplierPurchaseFulfillmentSmoke(
   databaseUrl: string,
 ): Promise<SupplierPurchaseFulfillmentSmokeSummary> {
   const database = new Bun.SQL(databaseUrl, { prepare: false });
+  let summary: SupplierPurchaseFulfillmentSmokeSummary | undefined;
+  let completed = false;
+  let primaryFailure: PrimaryFailure = { failed: false };
   try {
     const checks = await runRollbackOnly<
       TransactionSQL,
@@ -360,13 +387,21 @@ export async function runSupplierPurchaseFulfillmentSmoke(
         )
       ) as smoke_facts;
     `;
-    return assertSupplierPurchaseFulfillmentSmokeSummary({
+    summary = assertSupplierPurchaseFulfillmentSmokeSummary({
       ...checks,
       transaction_rolled_back: rows[0]?.count === 0,
     });
-  } finally {
-    await database.close();
+    completed = true;
+  } catch (error) {
+    primaryFailure = { failed: true, value: error };
   }
+  await closeDatabasePreservingPrimaryFailure(database, primaryFailure);
+  if (!completed || summary === undefined) {
+    throw new SupplierPurchaseFulfillmentSmokeAssertionError(
+      "smoke did not complete before database close",
+    );
+  }
+  return summary;
 }
 
 async function main() {

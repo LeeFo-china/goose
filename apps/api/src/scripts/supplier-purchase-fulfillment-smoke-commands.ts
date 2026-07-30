@@ -27,6 +27,14 @@ type ReceiptInput = {
   idempotencyKey: string;
 };
 
+export const STALE_VERSION_SHIPMENT_INPUT = {
+  id: FULFILLMENT_SMOKE_IDS.staleVersionShipment,
+  version: 1,
+  number: "SMOKE-SHIPMENT-STALE-VERSION",
+  quantity: 1,
+  idempotencyKey: "fulfillment-smoke-stale-version-shipment",
+} satisfies ShipmentInput;
+
 export type FulfillmentCommandExpectation = {
   status: "confirmed" | "shipment_created" | "receipt_created";
   idempotent: boolean;
@@ -210,6 +218,13 @@ export async function createShipment(
     ) as result;
   `;
   return rows[0]?.result;
+}
+
+export function createStaleVersionShipment(
+  sql: FulfillmentSmokeSql,
+  fixture: FulfillmentSmokeFixture,
+) {
+  return createShipment(sql, fixture, STALE_VERSION_SHIPMENT_INPUT);
 }
 
 export async function createReceipt(

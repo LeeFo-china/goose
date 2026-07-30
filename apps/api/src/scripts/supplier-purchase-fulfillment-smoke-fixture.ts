@@ -19,6 +19,7 @@ export const FULFILLMENT_SMOKE_IDS = {
   overReceipt: "24000000-0000-4000-8000-000000000006",
   missingVarianceReceipt: "24000000-0000-4000-8000-000000000007",
   finalReceipt: "24000000-0000-4000-8000-000000000008",
+  staleVersionShipment: "24000000-0000-4000-8000-000000000009",
 } as const;
 
 export type FulfillmentSmokeSql = SmokeSql;

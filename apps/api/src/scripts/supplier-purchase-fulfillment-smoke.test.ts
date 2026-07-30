@@ -4,11 +4,13 @@ import {
   FULFILLMENT_SMOKE_IDS,
 } from "./supplier-purchase-fulfillment-smoke-fixture";
 import {
+  STALE_VERSION_SHIPMENT_INPUT,
   assertFulfillmentFacts,
   assertFulfillmentCommandResult,
 } from "./supplier-purchase-fulfillment-smoke-commands";
 import {
   assertSupplierPurchaseFulfillmentSmokeSummary,
+  closeDatabasePreservingPrimaryFailure,
   runRollbackOnly,
   type SupplierPurchaseFulfillmentSmokeSummary,
 } from "./supplier-purchase-fulfillment-smoke";
@@ -54,6 +56,9 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
     expect(FULFILLMENT_SMOKE_IDS.order).toBe(
       "24000000-0000-4000-8000-000000000001",
     );
+    expect(FULFILLMENT_SMOKE_IDS.staleVersionShipment).toBe(
+      "24000000-0000-4000-8000-000000000009",
+    );
     expect(new Set(Object.values(FULFILLMENT_SMOKE_IDS)).size).toBe(
       Object.values(FULFILLMENT_SMOKE_IDS).length,
     );
@@ -73,6 +78,19 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
     expect(
       packageJson.scripts["supplier:purchase-fulfillment-smoke"],
     ).toBe("bun src/scripts/supplier-purchase-fulfillment-smoke.ts");
+  });
+
+  test("locks the stale fulfillment version shipment command", () => {
+    expect(STALE_VERSION_SHIPMENT_INPUT).toEqual({
+      id: FULFILLMENT_SMOKE_IDS.staleVersionShipment,
+      version: 1,
+      number: "SMOKE-SHIPMENT-STALE-VERSION",
+      quantity: 1,
+      idempotencyKey: "fulfillment-smoke-stale-version-shipment",
+    });
+    expect(STALE_VERSION_SHIPMENT_INPUT.id).not.toBe(
+      FULFILLMENT_SMOKE_IDS.shipment,
+    );
   });
 
   test("returns only after the transaction executor rolls back", async () => {
@@ -97,6 +115,22 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
         throw failure;
       }),
     ).rejects.toBe(failure);
+    expect(database.rollbacks).toBe(1);
+    expect(database.commits).toBe(0);
+  });
+
+  test("preserves an undefined callback rejection after rollback", async () => {
+    const database = new FakeRollbackExecutor();
+    let rejected = false;
+
+    try {
+      await runRollbackOnly(database, async () => Promise.reject(undefined));
+    } catch (error) {
+      rejected = true;
+      expect(error).toBeUndefined();
+    }
+
+    expect(rejected).toBe(true);
     expect(database.rollbacks).toBe(1);
     expect(database.commits).toBe(0);
   });
@@ -261,5 +295,31 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
         unexpected_check: true,
       })
     ).toThrow("exactly 14 checks");
+  });
+
+  test("keeps the primary smoke failure when closing also fails", async () => {
+    const primaryFailure = new Error("primary smoke failure");
+    const closeFailure = new Error("database close failure");
+
+    await expect(
+      closeDatabasePreservingPrimaryFailure(
+        {
+          async close() {
+            throw closeFailure;
+          },
+        },
+        { failed: true, value: primaryFailure },
+      ),
+    ).rejects.toBe(primaryFailure);
+    await expect(
+      closeDatabasePreservingPrimaryFailure(
+        {
+          async close() {
+            throw closeFailure;
+          },
+        },
+        { failed: false },
+      ),
+    ).rejects.toBe(closeFailure);
   });
 });
