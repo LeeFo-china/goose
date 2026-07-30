@@ -3,27 +3,22 @@ import { createClient } from "@supabase/supabase-js";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+const TENANT_ID = "50000000-0000-4000-8000-000000000001",
+  ORDER_ID = "50000000-0000-4000-8000-000000000002";
+const PROJECT_ID = "50000000-0000-4000-8000-000000000003",
+  RELATIONSHIP_ID = "50000000-0000-4000-8000-000000000004";
+const SUPPLIER_ID = "50000000-0000-4000-8000-000000000005",
+  SKU_ID = "50000000-0000-4000-8000-000000000006";
+const USER_ID = "50000000-0000-4000-8000-000000000007",
+  EMPLOYEE_ID = "50000000-0000-4000-8000-000000000008";
+const REQUISITION_ID = "50000000-0000-4000-8000-000000000015";
 
-const TENANT_ID = "50000000-0000-4000-8000-000000000001";
-const ORDER_ID = "50000000-0000-4000-8000-000000000002";
-const PROJECT_ID = "50000000-0000-4000-8000-000000000003";
-const RELATIONSHIP_ID = "50000000-0000-4000-8000-000000000004";
-const SUPPLIER_ID = "50000000-0000-4000-8000-000000000005";
-const SKU_ID = "50000000-0000-4000-8000-000000000006";
-const USER_ID = "50000000-0000-4000-8000-000000000007";
-const EMPLOYEE_ID = "50000000-0000-4000-8000-000000000008";
-
-async function repositoryFor(
-  responder: (
-    request: Request,
-    index: number,
-  ) => { body: unknown; count?: number; status?: number },
-) {
+async function repositoryFor(responder: (
+  request: Request,
+  index: number,
+) => { body: unknown; count?: number; status?: number }) {
   const requests: Request[] = [];
-  const fetchStub = (async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => {
+  const fetchStub = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request
       ? input
       : new Request(input.toString(), init);
@@ -50,7 +45,6 @@ async function repositoryFor(
     requests,
   };
 }
-
 describe("SupplierPurchaseOrdersRepository", () => {
   test("lists tenant orders in the visible project scope with bounded pagination", async () => {
     const { repository, requests } = await repositoryFor(() => ({
@@ -68,7 +62,6 @@ describe("SupplierPurchaseOrdersRepository", () => {
       tenant_supplier_id: RELATIONSHIP_ID,
       keyword: " PO-1,() ",
     });
-
     expect(result.pagination).toEqual({
       page: 2,
       pageSize: 20,
@@ -94,6 +87,9 @@ describe("SupplierPurchaseOrdersRepository", () => {
     expect(url.searchParams.get("select")).toContain(
       "supplier:suppliers!supplier_id",
     );
+    expect(url.searchParams.get("select")).toContain(
+      "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
+    );
     expect(url.searchParams.get("select")).not.toContain("*");
     expect(url.searchParams.get("or")).not.toContain(",");
     expect(request.headers.get("prefer")).toContain("count=exact");
@@ -110,7 +106,6 @@ describe("SupplierPurchaseOrdersRepository", () => {
       page: 1,
       pageSize: 20,
     });
-
     expect(result.list).toEqual([]);
     expect(result.pagination.total).toBe(0);
     expect(requests).toHaveLength(0);
@@ -130,7 +125,6 @@ describe("SupplierPurchaseOrdersRepository", () => {
       page: 1,
       pageSize: 20,
     });
-
     const detailUrl = new URL(requests[0]!.url);
     expect(detailUrl.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
     expect(detailUrl.searchParams.get("id")).toBe(`eq.${ORDER_ID}`);
@@ -164,7 +158,6 @@ describe("SupplierPurchaseOrdersRepository", () => {
       page: 2,
       pageSize: 10,
     });
-
     expect(result.list).toEqual([catalogItem]);
     expect(result.pagination).toEqual({
       page: 2,
@@ -213,7 +206,6 @@ describe("SupplierPurchaseOrdersRepository", () => {
       page: 2,
       pageSize: 100,
     });
-
     expect(projects.pagination).toEqual({
       page: 2,
       pageSize: 100,
@@ -393,6 +385,7 @@ const order = {
   subtotal_amount: "20.00",
   tax_amount: "2.60",
   total_amount: "22.60",
+  purchase_requisition_id: REQUISITION_ID,
   version: 1,
   created_by_employee_id: EMPLOYEE_ID,
   updated_by_employee_id: EMPLOYEE_ID,
@@ -416,9 +409,16 @@ const order = {
     onboarding_status: "approved",
     operational_status: "active",
   },
+  purchase_requisition: {
+    id: REQUISITION_ID, request_no: "PR-20260730-00000001",
+    status: "approved", budget_status: "within_budget",
+  },
 } as const;
 
-const { project: _project, supplier: _supplier, ...orderSnapshot } = order;
+const {
+  project: _project, supplier: _supplier,
+  purchase_requisition: _purchaseRequisition, ...orderSnapshot
+} = order;
 const projectOption = { id: PROJECT_ID, name: "示范项目", status: "active" };
 const supplierOption = {
   tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,

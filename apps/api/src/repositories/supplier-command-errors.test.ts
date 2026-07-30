@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   mapSupplierCommandDatabaseError,
+  mapSupplierPurchaseRequisitionEnvelopeError,
   mapSupplierPurchaseFulfillmentEnvelopeError,
 } from "./supplier-command-errors";
 
@@ -69,6 +70,26 @@ describe("mapSupplierCommandDatabaseError", () => {
       code: "XX000",
       message: "internal database error",
     })).toBeNull();
+  });
+
+  test.each([
+    ["SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR", 400],
+    ["SUPPLIER_PURCHASE_REQUISITION_DUPLICATE_SKU", 400],
+    ["SUPPLIER_PURCHASE_REQUISITION_AMOUNT_LIMIT_EXCEEDED", 400],
+    ["SUPPLIER_PURCHASE_REQUISITION_ID_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND", 404],
+    ["SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_PROJECT_INVALID", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_BUDGET_CHANGED", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW", 409],
+    ["SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED", 409],
+    ["SUPPLIER_PURCHASE_ORDER_ID_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED", 400],
+  ])("maps purchase requisition command code %s", (code, statusCode) => {
+    expect(mapSupplierCommandDatabaseError(code))
+      .toMatchObject({ code, statusCode });
   });
 
   test("maps every P0001 supplier command raised by the pricing migration", () => {
@@ -155,5 +176,42 @@ describe("mapSupplierCommandDatabaseError", () => {
   ])("accepts a known %s envelope code", (status, code) => {
     expect(mapSupplierPurchaseFulfillmentEnvelopeError(status, code))
       .not.toBeNull();
+  });
+
+  test("maps every public purchase requisition envelope code by status", () => {
+    const sql = readFileSync(
+      new URL(
+        "../../../../supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const pairs = [...sql.matchAll(
+      /'status',\s*'([^']+)',\s*'error_code',\s*'([^']+)'/g,
+    )].map((match) => [match[1]!, match[2]!] as const)
+      .filter(([, code]) =>
+        code.startsWith("SUPPLIER_PURCHASE_REQUISITION_") ||
+        code === "SUPPLIER_ORDER_NOT_ELIGIBLE"
+      );
+
+    expect(pairs.length).toBeGreaterThan(0);
+    for (const [status, code] of pairs) {
+      expect(
+        mapSupplierPurchaseRequisitionEnvelopeError(status, code),
+        `${status}:${code}`,
+      ).not.toBeNull();
+      expect(mapSupplierCommandDatabaseError(code), code).not.toBeNull();
+    }
+  });
+
+  test("rejects mismatched or unknown purchase requisition envelope codes", () => {
+    expect(mapSupplierPurchaseRequisitionEnvelopeError(
+      "not_found",
+      "SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW",
+    )).toBeNull();
+    expect(mapSupplierPurchaseRequisitionEnvelopeError(
+      "state_conflict",
+      "SUPPLIER_PURCHASE_REQUISITION_UNKNOWN",
+    )).toBeNull();
   });
 });

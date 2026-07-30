@@ -69,6 +69,14 @@ const BUSINESS_ERRORS = {
     statusCode: 400,
     message: "采购单参数校验失败",
   },
+  SUPPLIER_PURCHASE_ORDER_AMOUNT_LIMIT_EXCEEDED: {
+    statusCode: 400,
+    message: "采购单金额超过数据库上限",
+  },
+  SUPPLIER_PURCHASE_ORDER_ID_CONFLICT: {
+    statusCode: 409,
+    message: "采购单编号已存在",
+  },
   SUPPLIER_PURCHASE_ORDER_PRICE_MISSING: {
     statusCode: 409,
     message: "部分采购商品缺少当前有效价格",
@@ -141,6 +149,54 @@ const BUSINESS_ERRORS = {
     statusCode: 400,
     message: "存在拒收数量时必须填写差异原因",
   },
+  SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购申请参数校验失败",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_DUPLICATE_SKU: {
+    statusCode: 400,
+    message: "同一 SKU 不能重复添加",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_AMOUNT_LIMIT_EXCEEDED: {
+    statusCode: 400,
+    message: "采购申请金额超过数据库上限",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_ID_CONFLICT: {
+    statusCode: 409,
+    message: "采购申请编号已存在",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND: {
+    statusCode: 404,
+    message: "供应商采购申请不存在",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: "采购申请版本已变化，请刷新后重试",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT: {
+    statusCode: 409,
+    message: "采购申请当前状态不允许该操作",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_PROJECT_INVALID: {
+    statusCode: 409,
+    message: "项目不存在或不属于当前租户",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED: {
+    statusCode: 409,
+    message: "采购申请价格已变化，请重新确认",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_BUDGET_CHANGED: {
+    statusCode: 409,
+    message: "采购申请预算事实已变化，请重新提交",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW: {
+    statusCode: 409,
+    message: "申请人不能审批自己提交的采购申请",
+  },
+  SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED: {
+    statusCode: 409,
+    message: "采购申请已转换为采购单",
+  },
 } as const;
 
 type SupplierBusinessCode = keyof typeof BUSINESS_ERRORS;
@@ -188,6 +244,31 @@ const FULFILLMENT_ENVELOPE_CODES: Readonly<
   over_received: ["OVER_RECEIVED"],
   variance_reason_required: ["VARIANCE_REASON_REQUIRED"],
 };
+const REQUISITION_ENVELOPE_CODES: Readonly<
+  Record<string, readonly SupplierCommandToken[]>
+> = {
+  validation_error: [
+    "SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_REQUISITION_DUPLICATE_SKU",
+    "SUPPLIER_PURCHASE_REQUISITION_AMOUNT_LIMIT_EXCEEDED",
+  ],
+  not_found: ["SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND"],
+  version_conflict: ["SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT"],
+  state_conflict: [
+    "SUPPLIER_PURCHASE_REQUISITION_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED",
+    "SUPPLIER_PURCHASE_REQUISITION_BUDGET_CHANGED",
+    "SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW",
+    "SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED",
+  ],
+  price_missing: ["SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED"],
+  price_changed: ["SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED"],
+  supplier_not_eligible: ["SUPPLIER_ORDER_NOT_ELIGIBLE"],
+  project_invalid: ["SUPPLIER_PURCHASE_REQUISITION_PROJECT_INVALID"],
+  self_review: ["SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW"],
+  idempotency_conflict: ["SUPPLIER_IDEMPOTENCY_CONFLICT"],
+};
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
   const token = [
@@ -216,6 +297,16 @@ export function mapSupplierPurchaseFulfillmentEnvelopeError(
 ) {
   if (typeof errorCode !== "string") return null;
   const allowedCodes = FULFILLMENT_ENVELOPE_CODES[status];
+  if (!allowedCodes?.some((code) => code === errorCode)) return null;
+  return mapSupplierCommandDatabaseError(errorCode);
+}
+
+export function mapSupplierPurchaseRequisitionEnvelopeError(
+  status: string,
+  errorCode: unknown,
+) {
+  if (typeof errorCode !== "string") return null;
+  const allowedCodes = REQUISITION_ENVELOPE_CODES[status];
   if (!allowedCodes?.some((code) => code === errorCode)) return null;
   return mapSupplierCommandDatabaseError(errorCode);
 }

@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  SupplierPurchaseRequisitionBudgetStatusSchema,
+  SupplierPurchaseRequisitionStatusSchema,
+} from "@/schema/supplier-purchase-requisitions";
+
 export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "id",
   "tenant_id",
@@ -15,6 +20,7 @@ export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "subtotal_amount::text",
   "tax_amount::text",
   "total_amount::text",
+  "purchase_requisition_id",
   "version",
   "created_by_employee_id",
   "updated_by_employee_id",
@@ -27,6 +33,7 @@ export const SUPPLIER_PURCHASE_ORDER_SELECT = [
   "updated_at",
   "project:projects!project_id(id,name,status)",
   "supplier:suppliers!supplier_id(id,code,name,legal_name,onboarding_status,operational_status)",
+  "purchase_requisition:supplier_purchase_requisitions!supplier_purchase_orders_requisition_tenant_fkey(id,request_no,status,budget_status)",
 ].join(",");
 
 export const SUPPLIER_PURCHASE_ORDER_ITEM_SELECT = [
@@ -89,6 +96,7 @@ export const SupplierPurchaseOrderRecordSchema = z.object({
   subtotal_amount: decimal,
   tax_amount: decimal,
   total_amount: decimal,
+  purchase_requisition_id: uuid.nullable().optional(),
   version: z.number().int().positive(),
   created_by_employee_id: uuid,
   updated_by_employee_id: uuid,
@@ -121,6 +129,12 @@ export const SupplierPurchaseOrderWithReferencesSchema =
       ]),
       operational_status: z.enum(["active", "suspended", "blacklisted"]),
     }).strict(),
+    purchase_requisition: z.object({
+      id: uuid,
+      request_no: z.string().regex(/^PR-\d{8}-\d{8}$/),
+      status: SupplierPurchaseRequisitionStatusSchema,
+      budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
+    }).strict().nullable().optional(),
   }).strict();
 
 export const SupplierPurchaseOrderItemSchema = z.object({
