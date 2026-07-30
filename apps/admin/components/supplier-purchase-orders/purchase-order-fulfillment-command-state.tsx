@@ -6,6 +6,7 @@ import type {
   SupplierCommandAttempt,
   SupplierResourceCommandAttempt,
 } from "@/components/supplier-products/supplier-command-attempt";
+import { useAdminSessionScope } from "@/components/layout/admin-session-scope";
 import { Field, FieldError } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { TableCell } from "@/components/ui/table";
@@ -31,26 +32,54 @@ export function useFrozenCommandSession<
   orderId: string,
   kind: FrozenCommandKind,
 ) {
-  const [command, setCommand] =
-    useState<FrozenCommand<Payload, Attempt> | null>(null);
+  const sessionScope = useAdminSessionScope();
+  const identity = sessionScope
+    ? `${sessionScope.storageScope}:${kind}:${orderId}`
+    : null;
+  const [storedState, setStoredState] = useState<{
+    identity: string;
+    command: FrozenCommand<Payload, Attempt> | null;
+  } | null>(null);
+  const command = identity && storedState?.identity === identity
+    ? storedState.command
+    : null;
 
   useEffect(() => {
-    setCommand(restoreFrozenCommand(
-      getBrowserFrozenCommandStorage(),
-      orderId,
-      kind,
-    ));
-  }, [kind, orderId]);
+    if (!identity || !sessionScope) {
+      setStoredState(null);
+      return;
+    }
+    setStoredState({
+      identity,
+      command: restoreFrozenCommand(
+        getBrowserFrozenCommandStorage(),
+        sessionScope,
+        orderId,
+        kind,
+      ),
+    });
+  }, [identity, kind, orderId, sessionScope]);
 
   const saveCommand = useCallback((
     next: FrozenCommand<Payload, Attempt> | null,
     resourcePath = orderId,
   ) => {
+    if (!identity || !sessionScope) {
+      setStoredState(null);
+      return;
+    }
     const storage = getBrowserFrozenCommandStorage();
-    if (next) persistFrozenCommand(storage, kind, next);
-    else clearPersistedFrozenCommand(storage, resourcePath, kind);
-    setCommand(next);
-  }, [kind, orderId]);
+    if (next) persistFrozenCommand(storage, sessionScope, kind, next);
+    else {
+      clearPersistedFrozenCommand(
+        storage,
+        sessionScope,
+        resourcePath,
+        kind,
+      );
+    }
+    setStoredState({ identity, command: next });
+  }, [identity, kind, orderId, sessionScope]);
 
   return [command, saveCommand] as const;
 }

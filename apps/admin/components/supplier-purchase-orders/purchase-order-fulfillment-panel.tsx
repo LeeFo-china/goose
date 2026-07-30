@@ -138,6 +138,9 @@ export function PurchaseOrderFulfillmentPanel({
       setDetail(nextDetail);
       setShipments(nextShipments);
       setReceipts(nextReceipts);
+      if (nextDetail.fulfillment) {
+        saveConfirmCommand(clearFrozenCommand(), order.id);
+      }
       onLoadStateChange({
         loaded: true,
         error: false,
@@ -152,7 +155,7 @@ export function PurchaseOrderFulfillmentPanel({
     } finally {
       if (isLatest()) setLoading(false);
     }
-  }, [onLoadStateChange, order.id, order.version]);
+  }, [onLoadStateChange, order.id, order.version, saveConfirmCommand]);
 
   useEffect(() => {
     if (handledOrderVersion.current === order.version) {

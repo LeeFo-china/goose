@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
+import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
 import {
   AdminPreferencesMenu,
   applyThemeTone,
@@ -73,7 +74,11 @@ export function AdminShell({
   }, [preferences]);
 
   return (
-    <div className="goose-workbench-bg h-screen overflow-hidden">
+    <AdminSessionScopeProvider
+      tenantId={session.tenant?.id ?? null}
+      userId={session.user_id}
+    >
+      <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
         "fixed inset-y-0 left-0 hidden flex-col border-r border-black/10 bg-white transition-[width] duration-200 lg:flex",
         preferences.sidebarCollapsed ? "w-20" : "w-64",
@@ -153,6 +158,7 @@ export function AdminShell({
           {children}
         </main>
       </div>
-    </div>
+      </div>
+    </AdminSessionScopeProvider>
   );
 }

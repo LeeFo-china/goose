@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  ADMIN_SESSION_STORAGE_PREFIX,
+  clearAdminSessionScopedStorage,
+  createAdminSessionScope,
+} from "../layout/admin-session-scope";
+import {
   beginFrozenCommand,
   canAbandonFrozenCommand,
   clearPersistedFrozenCommand,
@@ -10,6 +15,8 @@ import {
   persistFrozenCommand,
   restoreFrozenCommand,
 } from "./purchase-order-fulfillment-ui-state";
+
+const sessionScope = createAdminSessionScope("tenant-1", "user-1")!;
 
 describe("采购履约冻结命令", () => {
   test("首次提交克隆并深冻结 payload 与 attempt", () => {
@@ -104,9 +111,10 @@ describe("采购履约冻结命令", () => {
       items: [{ purchase_order_item_id: "item-1", quantity: 1 }],
     }, "order-1");
 
-    persistFrozenCommand(storage, "shipment", command);
+    persistFrozenCommand(storage, sessionScope, "shipment", command);
     const restored = restoreFrozenCommand(
       storage,
+      sessionScope,
       "order-1",
       "shipment",
     );
@@ -116,8 +124,18 @@ describe("采购履约冻结命令", () => {
     expect(restored?.attempt).toEqual(command.attempt);
     expect(restored?.resourcePath).toBe("order-1");
     expect(Object.isFrozen(restored?.payload)).toBe(true);
-    expect(restoreFrozenCommand(storage, "order-2", "shipment")).toBeNull();
-    expect(restoreFrozenCommand(storage, "order-1", "receipt")).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-2",
+      "shipment",
+    )).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "receipt",
+    )).toBeNull();
   });
 
   test("成功、确定失败或明确放弃后清理，损坏数据 fail-closed", () => {
@@ -129,21 +147,37 @@ describe("采购履约冻结命令", () => {
       expected_version: 5,
       confirmed_at: "2026-07-30T05:06:07.000Z",
     }, "order-1");
-    persistFrozenCommand(storage, "confirm", command);
-    clearPersistedFrozenCommand(storage, "order-1", "confirm");
-    expect(restoreFrozenCommand(storage, "order-1", "confirm")).toBeNull();
+    persistFrozenCommand(storage, sessionScope, "confirm", command);
+    clearPersistedFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "confirm",
+    );
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "confirm",
+    )).toBeNull();
 
     storage.setItem(
-      "purchase-order-fulfillment:confirm:order-1",
+      frozenCommandKey(sessionScope.storageScope, "confirm", "order-1"),
       "{broken-json",
     );
-    expect(restoreFrozenCommand(storage, "order-1", "confirm")).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "confirm",
+    )).toBeNull();
     expect(storage.length).toBe(0);
 
     storage.setItem(
-      "purchase-order-fulfillment:shipment:order-1",
+      frozenCommandKey(sessionScope.storageScope, "shipment", "order-1"),
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        sessionScope: sessionScope.storageScope,
         kind: "shipment",
         phase: "uncertain",
         resourcePath: "order-1",
@@ -155,8 +189,72 @@ describe("采购履约冻结命令", () => {
         payload: {},
       }),
     );
-    expect(restoreFrozenCommand(storage, "order-1", "shipment")).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "shipment",
+    )).toBeNull();
     expect(storage.length).toBe(0);
+  });
+
+  test("只恢复当前租户与用户共同作用域内的命令", () => {
+    const storage = new FakeStorage();
+    const command = beginFrozenCommand({
+      fingerprint: "confirm-fingerprint",
+      idempotencyKey: "confirm-key",
+    }, {
+      expected_version: 6,
+      confirmed_at: "2026-07-30T06:07:08.000Z",
+    }, "order-1");
+    const sameTenantOtherUser = createAdminSessionScope(
+      "tenant-1",
+      "user-2",
+    )!;
+    const otherTenantSameUser = createAdminSessionScope(
+      "tenant-2",
+      "user-1",
+    )!;
+
+    persistFrozenCommand(storage, sessionScope, "confirm", command);
+
+    expect(restoreFrozenCommand(
+      storage,
+      sessionScope,
+      "order-1",
+      "confirm",
+    )).not.toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      sameTenantOtherUser,
+      "order-1",
+      "confirm",
+    )).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      otherTenantSameUser,
+      "order-1",
+      "confirm",
+    )).toBeNull();
+    expect(restoreFrozenCommand(
+      storage,
+      null,
+      "order-1",
+      "confirm",
+    )).toBeNull();
+  });
+
+  test("退出只清理后台会话前缀，不删除其他 sessionStorage 数据", () => {
+    const storage = new FakeStorage();
+    storage.setItem(`${ADMIN_SESSION_STORAGE_PREFIX}tenant-command`, "1");
+    storage.setItem("unrelated:preference", "keep");
+
+    clearAdminSessionScopedStorage(storage);
+
+    expect(storage.getItem(
+      `${ADMIN_SESSION_STORAGE_PREFIX}tenant-command`,
+    )).toBeNull();
+    expect(storage.getItem("unrelated:preference")).toBe("keep");
   });
 });
 
@@ -174,4 +272,15 @@ class FakeStorage {
   removeItem(key: string) {
     this.records.delete(key);
   }
+  key(index: number) {
+    return Array.from(this.records.keys())[index] ?? null;
+  }
+}
+
+function frozenCommandKey(
+  scope: string,
+  kind: string,
+  orderId: string,
+) {
+  return `${ADMIN_SESSION_STORAGE_PREFIX}${scope}:purchase-order-fulfillment:${kind}:${orderId}`;
 }

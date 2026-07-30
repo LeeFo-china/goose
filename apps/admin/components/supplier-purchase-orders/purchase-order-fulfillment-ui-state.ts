@@ -5,6 +5,10 @@ import type { PageData } from "./purchase-order-types";
 import type {
   SupplierCommandAttempt,
 } from "../supplier-products/supplier-command-attempt";
+import {
+  ADMIN_SESSION_STORAGE_PREFIX,
+  type AdminSessionScope,
+} from "../layout/admin-session-scope";
 
 export type DeepReadonly<Value> = Value extends (...args: never[]) => unknown
   ? Value
@@ -98,15 +102,21 @@ export function persistFrozenCommand<
   Attempt extends SupplierCommandAttempt,
 >(
   storage: FrozenCommandStorage | null,
+  sessionScope: AdminSessionScope | null,
   kind: FrozenCommandKind,
   command: FrozenCommand<Payload, Attempt>,
 ) {
-  if (!storage) return;
+  if (!storage || !sessionScope) return;
   try {
     storage.setItem(
-      frozenCommandStorageKey(command.resourcePath, kind),
+      frozenCommandStorageKey(
+        sessionScope.storageScope,
+        command.resourcePath,
+        kind,
+      ),
       JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
+        sessionScope: sessionScope.storageScope,
         kind,
         attempt: command.attempt,
         payload: command.payload,
@@ -124,16 +134,26 @@ export function restoreFrozenCommand<
   Attempt extends SupplierCommandAttempt = SupplierCommandAttempt,
 >(
   storage: FrozenCommandStorage | null,
+  sessionScope: AdminSessionScope | null,
   orderId: string,
   kind: FrozenCommandKind,
 ): FrozenCommand<Payload, Attempt> | null {
-  if (!storage) return null;
-  const key = frozenCommandStorageKey(orderId, kind);
+  if (!storage || !sessionScope) return null;
+  const key = frozenCommandStorageKey(
+    sessionScope.storageScope,
+    orderId,
+    kind,
+  );
   try {
     const serialized = storage.getItem(key);
     if (!serialized) return null;
     const stored = JSON.parse(serialized) as unknown;
-    if (!isStoredFrozenCommand(stored, orderId, kind)) {
+    if (!isStoredFrozenCommand(
+      stored,
+      sessionScope.storageScope,
+      orderId,
+      kind,
+    )) {
       safeRemoveStoredCommand(storage, key);
       return null;
     }
@@ -151,11 +171,15 @@ export function restoreFrozenCommand<
 
 export function clearPersistedFrozenCommand(
   storage: FrozenCommandStorage | null,
+  sessionScope: AdminSessionScope | null,
   orderId: string,
   kind: FrozenCommandKind,
 ) {
-  if (!storage) return;
-  safeRemoveStoredCommand(storage, frozenCommandStorageKey(orderId, kind));
+  if (!storage || !sessionScope) return;
+  safeRemoveStoredCommand(
+    storage,
+    frozenCommandStorageKey(sessionScope.storageScope, orderId, kind),
+  );
 }
 
 export type FulfillmentLoadState = {
@@ -235,14 +259,16 @@ function deepFreeze<Value>(value: Value): DeepReadonly<Value> {
 }
 
 function frozenCommandStorageKey(
+  sessionScope: string,
   orderId: string,
   kind: FrozenCommandKind,
 ) {
-  return `purchase-order-fulfillment:${kind}:${orderId}`;
+  return `${ADMIN_SESSION_STORAGE_PREFIX}${sessionScope}:purchase-order-fulfillment:${kind}:${orderId}`;
 }
 
 function isStoredFrozenCommand(
   value: unknown,
+  sessionScope: string,
   orderId: string,
   kind: FrozenCommandKind,
 ): value is {
@@ -255,7 +281,8 @@ function isStoredFrozenCommand(
   const stored = value as Record<string, unknown>;
   if (!stored.attempt || typeof stored.attempt !== "object") return false;
   const attempt = stored.attempt as Record<string, unknown>;
-  return stored.schemaVersion === 1 &&
+  return stored.schemaVersion === 2 &&
+    stored.sessionScope === sessionScope &&
     stored.kind === kind &&
     stored.resourcePath === orderId &&
     (stored.phase === "in_flight" || stored.phase === "uncertain") &&
