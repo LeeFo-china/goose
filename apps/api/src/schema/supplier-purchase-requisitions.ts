@@ -1,6 +1,11 @@
 import { z } from "zod";
 
 import { PaginationQuerySchema } from "./request";
+import { FinanceCostCategoryListQuerySchema } from "./finance-costs";
+import {
+  SupplierPurchaseOrderCatalogQuerySchema,
+  SupplierPurchaseOrderOptionQuerySchema,
+} from "./supplier-purchase-orders";
 
 export const SUPPLIER_PURCHASE_REQUISITION_STATUS_VALUES = [
   "draft",
@@ -71,6 +76,20 @@ export const SupplierPurchaseRequisitionParamSchema = z.object({
 export const SupplierPurchaseRequisitionItemListQuerySchema =
   PaginationQuerySchema.strict();
 
+export const SupplierPurchaseRequisitionOptionQuerySchema =
+  SupplierPurchaseOrderOptionQuerySchema;
+
+export const SupplierPurchaseRequisitionCatalogQuerySchema =
+  SupplierPurchaseOrderCatalogQuerySchema.extend({
+    pageSize: z.coerce.number().int()
+      .min(1, "每页条数必须大于 0")
+      .max(20, "采购申请目录每页条数不能超过 20")
+      .default(20),
+  });
+
+export const SupplierPurchaseRequisitionCostCategoryListQuerySchema =
+  FinanceCostCategoryListQuerySchema;
+
 export const SupplierPurchaseRequisitionDraftItemSchema = z.object({
   supplier_sku_id: uuid("无效的供应商 SKU ID"),
   cost_category_id: uuid("无效的成本分类 ID"),
@@ -135,6 +154,12 @@ export type SupplierPurchaseRequisitionParam =
   z.infer<typeof SupplierPurchaseRequisitionParamSchema>;
 export type SupplierPurchaseRequisitionItemListQuery =
   z.infer<typeof SupplierPurchaseRequisitionItemListQuerySchema>;
+export type SupplierPurchaseRequisitionOptionQuery =
+  z.infer<typeof SupplierPurchaseRequisitionOptionQuerySchema>;
+export type SupplierPurchaseRequisitionCatalogQuery =
+  z.infer<typeof SupplierPurchaseRequisitionCatalogQuerySchema>;
+export type SupplierPurchaseRequisitionCostCategoryListQuery =
+  z.infer<typeof SupplierPurchaseRequisitionCostCategoryListQuerySchema>;
 export type SupplierPurchaseRequisitionDraftItem =
   z.infer<typeof SupplierPurchaseRequisitionDraftItemSchema>;
 export type SupplierPurchaseRequisitionDraftInput =

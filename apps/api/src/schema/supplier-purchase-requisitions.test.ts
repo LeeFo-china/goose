@@ -2,12 +2,15 @@ import { describe, expect, test } from "bun:test";
 
 import {
   SupplierPurchaseRequisitionBudgetStatusSchema,
+  SupplierPurchaseRequisitionCatalogQuerySchema,
   SupplierPurchaseRequisitionCancelSchema,
+  SupplierPurchaseRequisitionCostCategoryListQuerySchema,
   SupplierPurchaseRequisitionConvertSchema,
   SupplierPurchaseRequisitionDraftSchema,
   SupplierPurchaseRequisitionItemListQuerySchema,
   SupplierPurchaseRequisitionListQuerySchema,
   SupplierPurchaseRequisitionParamSchema,
+  SupplierPurchaseRequisitionOptionQuerySchema,
   SupplierPurchaseRequisitionReviewSchema,
   SupplierPurchaseRequisitionStatusSchema,
   SupplierPurchaseRequisitionSubmitSchema,
@@ -129,6 +132,36 @@ describe("supplier purchase requisition query schemas", () => {
     });
     expect(SupplierPurchaseRequisitionItemListQuerySchema.safeParse({
       pageSize: 101,
+    }).success).toBe(false);
+  });
+
+  test("reuses bounded option, catalog and active cost category queries", () => {
+    expect(SupplierPurchaseRequisitionOptionQuerySchema.parse({
+      page: "2",
+      pageSize: "100",
+      keyword: " 水泥 ",
+    })).toEqual({ page: 2, pageSize: 100, keyword: "水泥" });
+    expect(SupplierPurchaseRequisitionCatalogQuerySchema.parse({
+      tenantSupplierId: TENANT_SUPPLIER_ID,
+    })).toEqual({
+      page: 1,
+      pageSize: 20,
+      tenantSupplierId: TENANT_SUPPLIER_ID,
+    });
+    expect(SupplierPurchaseRequisitionCostCategoryListQuerySchema.parse({
+      page: "3",
+      pageSize: "100",
+      status: "active",
+    })).toEqual({ page: 3, pageSize: 100, status: "active" });
+    expect(SupplierPurchaseRequisitionOptionQuerySchema.safeParse({
+      pageSize: "101",
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionCatalogQuerySchema.safeParse({
+      tenantSupplierId: "bad",
+    }).success).toBe(false);
+    expect(SupplierPurchaseRequisitionCatalogQuerySchema.safeParse({
+      tenantSupplierId: TENANT_SUPPLIER_ID,
+      pageSize: "21",
     }).success).toBe(false);
   });
 });

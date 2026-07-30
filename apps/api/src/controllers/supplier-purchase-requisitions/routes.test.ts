@@ -23,6 +23,10 @@ const emptyPage = {
 const listRequisitions = mock(async () => emptyPage);
 const getRequisition = mock(async () => ({ id: REQUISITION_ID }));
 const listItems = mock(async () => emptyPage);
+const listProjectOptions = mock(async () => emptyPage);
+const listSupplierOptions = mock(async () => emptyPage);
+const listCatalog = mock(async () => emptyPage);
+const listCostCategories = mock(async () => emptyPage);
 const saveDraft = mock(async () => ({ status: "saved" }));
 const submit = mock(async () => ({ status: "submitted" }));
 const review = mock(async () => ({ status: "approved" }));
@@ -37,6 +41,10 @@ mock.module("@/services/supplier-purchase-requisitions", () => ({
     listRequisitions,
     getRequisition,
     listItems,
+    listProjectOptions,
+    listSupplierOptions,
+    listCatalog,
+    listCostCategories,
     saveDraft,
     submit,
     review,
@@ -61,6 +69,10 @@ describe("SupplierPurchaseRequisitionsController", () => {
         listRequisitions,
         getRequisition,
         listItems,
+        listProjectOptions,
+        listSupplierOptions,
+        listCatalog,
+        listCostCategories,
         saveDraft,
         submit,
         review,
@@ -72,7 +84,7 @@ describe("SupplierPurchaseRequisitionsController", () => {
     }
   });
 
-  test("registers exactly eight purchase requisition routes", async () => {
+  test("registers exactly twelve purchase requisition routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -87,6 +99,22 @@ describe("SupplierPurchaseRequisitionsController", () => {
       {
         method: "GET",
         path: "/supplier-purchase-requisitions/:id/items",
+      },
+      {
+        method: "GET",
+        path: "/supplier-purchase-requisition-project-options",
+      },
+      {
+        method: "GET",
+        path: "/supplier-purchase-requisition-supplier-options",
+      },
+      {
+        method: "GET",
+        path: "/supplier-purchase-requisition-catalog",
+      },
+      {
+        method: "GET",
+        path: "/supplier-purchase-requisition-cost-categories",
       },
       {
         method: "POST",
@@ -160,6 +188,55 @@ describe("SupplierPurchaseRequisitionsController", () => {
       page: 3,
       pageSize: 20,
     });
+  });
+
+  test("parses and wraps four requisition-specific auxiliary pages", async () => {
+    const value = await controller();
+
+    await value.listProjectOptions({
+      query: { page: "2", pageSize: "100", keyword: "项目" },
+    } as never);
+    await value.listSupplierOptions({
+      query: { page: "3", pageSize: "20", keyword: "供应商" },
+    } as never);
+    await value.listCatalog({
+      query: {
+        tenantSupplierId: RELATIONSHIP_ID,
+        page: "4",
+        pageSize: "20",
+        keyword: "SKU",
+      },
+    } as never);
+    const response = await value.listCostCategories({
+      query: { page: "2", pageSize: "100", status: "active" },
+    } as never);
+
+    expect(listProjectOptions).toHaveBeenCalledWith(auth, {
+      page: 2,
+      pageSize: 100,
+      keyword: "项目",
+    });
+    expect(listSupplierOptions).toHaveBeenCalledWith(auth, {
+      page: 3,
+      pageSize: 20,
+      keyword: "供应商",
+    });
+    expect(listCatalog).toHaveBeenCalledWith(auth, {
+      tenantSupplierId: RELATIONSHIP_ID,
+      page: 4,
+      pageSize: 20,
+      keyword: "SKU",
+    });
+    expect(listCostCategories).toHaveBeenCalledWith(auth, {
+      page: 2,
+      pageSize: 100,
+      status: "active",
+    });
+    expect(response).toEqual({ data: emptyPage, message: "success" });
+
+    await expect(value.listCatalog({
+      query: { tenantSupplierId: "bad" },
+    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 
   test("passes strictly validated bodies, request id, order id, and key", async () => {

@@ -3,10 +3,13 @@ import { requireSupplierIdempotencyKey } from "@/controllers/supplier-command-ht
 import { Errors } from "@/errors/error-factory";
 import {
   SupplierPurchaseRequisitionCancelSchema,
+  SupplierPurchaseRequisitionCatalogQuerySchema,
   SupplierPurchaseRequisitionConvertSchema,
+  SupplierPurchaseRequisitionCostCategoryListQuerySchema,
   SupplierPurchaseRequisitionDraftSchema,
   SupplierPurchaseRequisitionItemListQuerySchema,
   SupplierPurchaseRequisitionListQuerySchema,
+  SupplierPurchaseRequisitionOptionQuerySchema,
   SupplierPurchaseRequisitionParamSchema,
   SupplierPurchaseRequisitionReviewSchema,
   SupplierPurchaseRequisitionSubmitSchema,
@@ -64,6 +67,63 @@ class SupplierPurchaseRequisitionsController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPurchaseRequisitionsService.listItems(auth, id, query),
+    );
+  }
+
+  @Get("/supplier-purchase-requisition-project-options")
+  async listProjectOptions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseRequisitionOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseRequisitionsService.listProjectOptions(
+        auth,
+        query,
+      ),
+    );
+  }
+
+  @Get("/supplier-purchase-requisition-supplier-options")
+  async listSupplierOptions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseRequisitionOptionQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseRequisitionsService.listSupplierOptions(
+        auth,
+        query,
+      ),
+    );
+  }
+
+  @Get("/supplier-purchase-requisition-catalog")
+  async listCatalog(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseRequisitionCatalogQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseRequisitionsService.listCatalog(auth, query),
+    );
+  }
+
+  @Get("/supplier-purchase-requisition-cost-categories")
+  async listCostCategories(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(
+      SupplierPurchaseRequisitionCostCategoryListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseRequisitionsService.listCostCategories(
+        auth,
+        query,
+      ),
     );
   }
 

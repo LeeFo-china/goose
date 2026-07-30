@@ -1,15 +1,24 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  financeCostCategoryRepository,
+} from "@/repositories/finance-cost-categories";
+import {
+  supplierPurchaseOrdersRepository,
+} from "@/repositories/supplier-purchase-orders";
+import {
   supplierPurchaseRequisitionsRepository,
   type SupplierPurchaseRequisitionDetail,
   type SupplierPurchaseRequisitionScope,
 } from "@/repositories/supplier-purchase-requisitions";
 import type {
   SupplierPurchaseRequisitionCancelInput,
+  SupplierPurchaseRequisitionCatalogQuery,
   SupplierPurchaseRequisitionConvertInput,
+  SupplierPurchaseRequisitionCostCategoryListQuery,
   SupplierPurchaseRequisitionDraftInput,
   SupplierPurchaseRequisitionItemListQuery,
   SupplierPurchaseRequisitionListQuery,
+  SupplierPurchaseRequisitionOptionQuery,
   SupplierPurchaseRequisitionReviewInput,
   SupplierPurchaseRequisitionSubmitInput,
 } from "@/schema/supplier-purchase-requisitions";
@@ -45,17 +54,32 @@ type TenantSupplierEligibilityPort = Pick<
   typeof tenantSuppliersService,
   "assertCanCreatePurchaseOrderForTenant"
 >;
+type RequisitionOptionsRepositoryPort = Pick<
+  typeof supplierPurchaseOrdersRepository,
+  "listProjectOptions" | "listSupplierOptions" | "listCatalog"
+>;
+type RequisitionCostCategoryRepositoryPort = Pick<
+  typeof financeCostCategoryRepository,
+  "list"
+>;
 
 export type SupplierPurchaseRequisitionsServiceDependencies = {
   access?: RequisitionAccessPort;
   repository?: RequisitionRepositoryPort;
+  optionsRepository?: RequisitionOptionsRepositoryPort;
+  costCategoryRepository?: RequisitionCostCategoryRepositoryPort;
   tenantSuppliers?: TenantSupplierEligibilityPort;
+  nowFactory?: () => Date;
 };
 
 export class SupplierPurchaseRequisitionsService {
   private readonly access: RequisitionAccessPort;
   private readonly repository: RequisitionRepositoryPort;
+  private readonly optionsRepository: RequisitionOptionsRepositoryPort;
+  private readonly costCategoryRepository:
+    RequisitionCostCategoryRepositoryPort;
   private readonly tenantSuppliers: TenantSupplierEligibilityPort;
+  private readonly nowFactory: () => Date;
 
   constructor(
     dependencies: SupplierPurchaseRequisitionsServiceDependencies = {},
@@ -64,8 +88,13 @@ export class SupplierPurchaseRequisitionsService {
       supplierPurchaseRequisitionAccessService;
     this.repository = dependencies.repository ??
       supplierPurchaseRequisitionsRepository;
+    this.optionsRepository = dependencies.optionsRepository ??
+      supplierPurchaseOrdersRepository;
+    this.costCategoryRepository = dependencies.costCategoryRepository ??
+      financeCostCategoryRepository;
     this.tenantSuppliers = dependencies.tenantSuppliers ??
       tenantSuppliersService;
+    this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
   async listRequisitions(
@@ -123,6 +152,58 @@ export class SupplierPurchaseRequisitionsService {
       page: query.page,
       pageSize: query.pageSize,
     });
+  }
+
+  async listProjectOptions(
+    auth: AuthContext,
+    query: SupplierPurchaseRequisitionOptionQuery,
+  ) {
+    const scope = await this.access.requireView(auth);
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.optionsRepository.listProjectOptions({
+      tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
+      page: query.page,
+      pageSize: query.pageSize,
+      ...(query.keyword ? { keyword: query.keyword } : {}),
+    });
+  }
+
+  async listSupplierOptions(
+    auth: AuthContext,
+    query: SupplierPurchaseRequisitionOptionQuery,
+  ) {
+    const scope = await this.access.requireView(auth);
+    return this.optionsRepository.listSupplierOptions({
+      tenant_id: scope.tenantId,
+      checked_at: this.nowFactory().toISOString(),
+      page: query.page,
+      pageSize: query.pageSize,
+      ...(query.keyword ? { keyword: query.keyword } : {}),
+    });
+  }
+
+  async listCatalog(
+    auth: AuthContext,
+    query: SupplierPurchaseRequisitionCatalogQuery,
+  ) {
+    const scope = await this.access.requireManage(auth);
+    return this.optionsRepository.listCatalog({
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: query.tenantSupplierId,
+      priced_at: this.nowFactory().toISOString(),
+      page: query.page,
+      pageSize: query.pageSize,
+      ...(query.keyword ? { keyword: query.keyword } : {}),
+    });
+  }
+
+  async listCostCategories(
+    auth: AuthContext,
+    query: SupplierPurchaseRequisitionCostCategoryListQuery,
+  ) {
+    const scope = await this.access.requireManage(auth);
+    return this.costCategoryRepository.list(scope.tenantId, query);
   }
 
   async saveDraft(
