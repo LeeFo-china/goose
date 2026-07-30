@@ -99,6 +99,7 @@ function catalogItem({
   priceListCode,
   priceItemId,
   unitPrice,
+  taxInclusive = true,
 }) {
   return {
     supplier_product_id: productId,
@@ -126,7 +127,7 @@ function catalogItem({
     base_unit_conversion: "1.000000",
     unit_price: unitPrice,
     tax_rate: "0.130000",
-    tax_inclusive: true,
+    tax_inclusive: taxInclusive,
   };
 }
 
@@ -155,6 +156,254 @@ export function initialCatalog() {
       priceListCode: "E2E-BASE-GROUT",
       priceItemId: ids.priceItemGrout,
       unitPrice: "20.00",
+      taxInclusive: false,
     }),
   ];
+}
+
+export function directContractScenario() {
+  const orderId = "33000000-0000-4000-8000-000000000099";
+  const itemTile = "33000000-0000-4000-8000-000000000001";
+  const itemGrout = "33000000-0000-4000-8000-000000000002";
+  const shipmentA = "33000000-0000-4000-8000-000000000101";
+  const shipmentB = "33000000-0000-4000-8000-000000000102";
+  const receiptA = "33000000-0000-4000-8000-000000000201";
+  const orderPath = `/supplier-purchase-orders/${orderId}`;
+  const shipmentPath = `${orderPath}/shipments`;
+  const receiptPath = `${orderPath}/receipts`;
+  const draft = {
+    expected_version: 0,
+    project_id: ids.project,
+    tenant_supplier_id: ids.relationship,
+    expected_delivery_date: null,
+    remark: "错误契约测试采购单",
+    items: [
+      { supplier_sku_id: ids.skuTile, quantity: 2 },
+      { supplier_sku_id: ids.skuGrout, quantity: 3 },
+    ],
+  };
+  const confirmation = {
+    expected_version: 3,
+    confirmed_at: "2029-12-31T08:00:00.000Z",
+    remark: null,
+  };
+  const shipment = {
+    id: shipmentA,
+    expected_fulfillment_version: 1,
+    shipment_no: "SHP-CONTRACT-A",
+    shipped_at: "2030-01-01T01:00:00.000Z",
+    items: [
+      { purchase_order_item_id: itemTile, quantity: 1 },
+      { purchase_order_item_id: itemGrout, quantity: 1 },
+    ],
+  };
+  const shipmentBPayload = {
+    ...shipment,
+    id: shipmentB,
+    expected_fulfillment_version: 3,
+    shipment_no: "SHP-CONTRACT-B",
+    items: [{ purchase_order_item_id: itemTile, quantity: 0.5 }],
+  };
+  const receipt = {
+    id: receiptA,
+    expected_fulfillment_version: 2,
+    receipt_no: "REC-CONTRACT-A",
+    received_at: "2030-01-01T02:00:00.000Z",
+    items: [{
+      purchase_order_item_id: itemTile,
+      accepted_quantity: 0.5,
+      rejected_quantity: 0.5,
+      variance_reason: "抽检破损",
+    }],
+  };
+  const error = (path, key, payload, status, code) => ({
+    path,
+    key,
+    payload,
+    status,
+    code,
+  });
+  const success = (path, key, payload, idempotent = false) => ({
+    path,
+    key,
+    payload,
+    status: 200,
+    idempotent,
+  });
+
+  return {
+    expectedAttempts: 21,
+    requiredOutcomes: [
+      "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
+      "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+      "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
+      "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED",
+      "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
+      "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT",
+      "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
+      "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+      "idempotent_replay",
+    ],
+    commands: [
+      success(`${orderPath}/save-draft`, "contract-save-1", draft),
+      error(
+        `${orderPath}/submit`,
+        "contract-submit-price-change",
+        { expected_version: 1 },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_PRICE_CHANGED",
+      ),
+      success(
+        `${orderPath}/save-draft`,
+        "contract-save-2",
+        { ...draft, expected_version: 1 },
+      ),
+      success(
+        `${orderPath}/submit`,
+        "contract-submit",
+        { expected_version: 2 },
+      ),
+      error(
+        "/supplier-purchase-orders/33000000-0000-4000-8000-000000000404/confirm-fulfillment",
+        "contract-order-not-found",
+        confirmation,
+        404,
+        "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
+      ),
+      error(
+        shipmentPath,
+        "contract-not-confirmed",
+        shipment,
+        409,
+        "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
+      ),
+      error(
+        `${orderPath}/confirm-fulfillment`,
+        "contract-order-version",
+        { ...confirmation, expected_version: 2 },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT",
+      ),
+      success(
+        `${orderPath}/confirm-fulfillment`,
+        "contract-confirm",
+        confirmation,
+      ),
+      error(
+        `${orderPath}/confirm-fulfillment`,
+        "contract-already-confirmed",
+        confirmation,
+        409,
+        "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED",
+      ),
+      error(
+        shipmentPath,
+        "contract-fulfillment-version",
+        { ...shipment, expected_fulfillment_version: 9 },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+      ),
+      error(
+        shipmentPath,
+        "contract-over-shipped",
+        {
+          ...shipment,
+          id: shipmentB,
+          shipment_no: "SHP-CONTRACT-OVER",
+          items: [{ purchase_order_item_id: itemTile, quantity: 2.0001 }],
+        },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
+      ),
+      success(shipmentPath, "contract-shipment-a", shipment),
+      error(
+        shipmentPath,
+        "contract-shipment-id",
+        {
+          ...shipment,
+          expected_fulfillment_version: 2,
+          shipment_no: "SHP-CONTRACT-ID-DUPLICATE",
+          items: [{ purchase_order_item_id: itemTile, quantity: 0.5 }],
+        },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT",
+      ),
+      error(
+        receiptPath,
+        "contract-over-received",
+        {
+          ...receipt,
+          receipt_no: "REC-CONTRACT-OVER",
+          items: [{
+            purchase_order_item_id: itemTile,
+            accepted_quantity: 1.0001,
+            rejected_quantity: 0,
+            variance_reason: null,
+          }],
+        },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED",
+      ),
+      error(
+        receiptPath,
+        "contract-variance-required",
+        {
+          ...receipt,
+          receipt_no: "REC-CONTRACT-VARIANCE",
+          items: [{
+            purchase_order_item_id: itemTile,
+            accepted_quantity: 0,
+            rejected_quantity: 0.5,
+            variance_reason: null,
+          }],
+        },
+        400,
+        "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
+      ),
+      success(receiptPath, "contract-receipt-a", receipt),
+      success(shipmentPath, "contract-shipment-b", shipmentBPayload),
+      success(
+        shipmentPath,
+        "contract-shipment-b",
+        shipmentBPayload,
+        true,
+      ),
+      error(
+        shipmentPath,
+        "contract-shipment-b",
+        { ...shipmentBPayload, shipment_no: "SHP-CONTRACT-CONFLICT" },
+        409,
+        "SUPPLIER_IDEMPOTENCY_CONFLICT",
+      ),
+      error(
+        receiptPath,
+        "contract-receipt-id",
+        {
+          ...receipt,
+          expected_fulfillment_version: 4,
+          receipt_no: "REC-CONTRACT-ID-DUPLICATE",
+          received_at: "2030-01-01T04:00:00.000Z",
+          items: [{
+            purchase_order_item_id: itemTile,
+            accepted_quantity: 0.5,
+            rejected_quantity: 0,
+            variance_reason: null,
+          }],
+        },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
+      ),
+      error(
+        `${orderPath}/cancel`,
+        "contract-cancel-started",
+        { expected_version: 3, reason: "已有发货" },
+        409,
+        "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+      ),
+    ],
+  };
 }

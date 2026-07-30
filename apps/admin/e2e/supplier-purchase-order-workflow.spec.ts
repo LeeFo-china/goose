@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, Page } from "@playwright/test";
 
+import {
+  directContractScenario,
+} from "./supplier-purchase-order-mock-fixture.mjs";
+
 const mockBackendBaseUrl = "http://127.0.0.1:3997";
 
 type JournalEntry = {
@@ -29,11 +33,112 @@ async function readJournal(request: APIRequestContext) {
   return (await response.json() as { journal: JournalEntry[] }).journal;
 }
 
+async function readState(request: APIRequestContext) {
+  const response = await request.get(`${mockBackendBaseUrl}/__test/state`);
+  expect(response.ok()).toBe(true);
+  return response.json();
+}
+
+async function postMockCommand(
+  request: APIRequestContext,
+  path: string,
+  idempotencyKey: string,
+  payload: Record<string, unknown>,
+) {
+  return request.post(`${mockBackendBaseUrl}${path}`, {
+    headers: { "Idempotency-Key": idempotencyKey },
+    data: payload,
+  });
+}
+
+async function expectBusinessError(
+  response: Awaited<ReturnType<typeof postMockCommand>>,
+  status: number,
+  code: string,
+) {
+  expect(response.status()).toBe(status);
+  const payload = await response.json() as Record<string, unknown>;
+  expect(payload.code).toBe(code);
+  expect(Object.keys(payload).sort()).toEqual([
+    "code",
+    "message",
+    "requestId",
+    "success",
+  ]);
+  expect(payload).toMatchObject({
+    success: false,
+    message: expect.any(String),
+    requestId: expect.any(String),
+  });
+}
+
+function expectSafeCommandAttempts(attempts: JournalEntry[]) {
+  expect(attempts.every(({ method, idempotencyKey }) =>
+    method === "POST" &&
+    typeof idempotencyKey === "string" &&
+    idempotencyKey.trim().length > 0 &&
+    idempotencyKey.length <= 120
+  )).toBe(true);
+  for (const { path, payload } of attempts) {
+    expect(JSON.stringify(payload)).not.toMatch(
+      /unit_price|tax_rate|accepted_amount|subtotal_amount|tax_amount|total_amount|price_list/i,
+    );
+    if (path.endsWith("/save-draft")) {
+      expect((payload.items as Record<string, unknown>[]).every((item) =>
+        Object.keys(item).sort().join(",") === "quantity,supplier_sku_id"
+      )).toBe(true);
+    }
+    if (path.endsWith("/shipments")) {
+      expect((payload.items as Record<string, unknown>[]).every((item) =>
+        Object.keys(item).sort().join(",") ===
+          "purchase_order_item_id,quantity"
+      )).toBe(true);
+    }
+    if (path.endsWith("/receipts")) {
+      expect((payload.items as Record<string, unknown>[]).every((item) =>
+        Object.keys(item).sort().join(",") ===
+          "accepted_quantity,purchase_order_item_id,rejected_quantity,variance_reason"
+      )).toBe(true);
+    }
+  }
+}
+
+test("mock公开采购履约业务错误并记录每次命令尝试", async ({ request }) => {
+  await resetMock(request);
+  const scenario = directContractScenario();
+
+  for (const command of scenario.commands) {
+    const response = await postMockCommand(
+      request,
+      command.path,
+      command.key,
+      command.payload,
+    );
+    if ("code" in command) {
+      await expectBusinessError(response, command.status, command.code);
+      continue;
+    }
+    expect(response.status()).toBe(command.status);
+    if (command.idempotent) {
+      expect((await response.json() as { data: { idempotent: boolean } }).data
+        .idempotent).toBe(true);
+    }
+  }
+
+  const attempts = await readJournal(request);
+  expect(attempts).toHaveLength(scenario.expectedAttempts);
+  expectSafeCommandAttempts(attempts);
+  expect(attempts.map(({ outcome }) => outcome)).toEqual(
+    expect.arrayContaining(scenario.requiredOutcomes),
+  );
+});
+
 test("采购单可完成计价、价格变化恢复、提交与完整履约", async ({
   page,
   request,
 }) => {
   await resetMock(request);
+  await page.clock.setFixedTime("2029-12-31T00:00:00.000Z");
   await login(page);
   await page.goto("/supplier-purchase-orders", { waitUntil: "networkidle" });
 
@@ -57,17 +162,17 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   const groutRow = dialog.getByRole("row").filter({ hasText: "E2E 美缝剂" });
   await groutRow.getByRole("button", { name: "添加" }).click();
 
-  await dialog.getByLabel("采购数量 E2E 抛釉砖 800x800").fill("2");
-  await dialog.getByLabel("采购数量 E2E 美缝剂 2kg").fill("3");
+  await dialog.getByLabel("采购数量 E2E 抛釉砖 800x800").fill("2.5");
+  await dialog.getByLabel("采购数量 E2E 美缝剂 2kg").fill("1.3333");
   await dialog.getByLabel("备注").fill("E2E 首次计价");
   await dialog.getByRole("button", { name: "加载更多项目" }).click();
   await expect(dialog.getByLabel("备注")).toHaveValue("E2E 首次计价");
   await expect(dialog.getByLabel("采购数量 E2E 抛釉砖 800x800"))
-    .toHaveValue("2");
+    .toHaveValue("2.5");
   await expect(dialog.getByLabel("采购数量 E2E 美缝剂 2kg"))
-    .toHaveValue("3");
+    .toHaveValue("1.3333");
   await dialog.getByRole("button", { name: "保存草稿" }).click();
-  await expect(dialog.getByText("¥80.00", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("¥55.14", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭" }).click();
 
   const orderRow = page.getByRole("row").filter({ hasText: "PO-E2E-0001" });
@@ -88,7 +193,7 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
     .toBeVisible();
   await dialog.getByLabel("备注").fill("E2E 价格复核后重计价");
   await dialog.getByRole("button", { name: "保存草稿" }).click();
-  await expect(dialog.getByText("¥84.00", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("¥60.14", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭" }).click();
 
   await orderRow.getByRole("button", { name: "查看" }).click();
@@ -114,8 +219,8 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   await shipmentDialog.getByLabel("发货时间").fill("2030-01-01T09:00");
   await shipmentDialog.getByLabel("承运方").fill("E2E 物流");
   await shipmentDialog.getByLabel("运单号").fill("TRACK-E2E-0001");
-  await shipmentDialog.getByLabel("本次发货数量 1").fill("1");
-  await shipmentDialog.getByLabel("本次发货数量 2").fill("1");
+  await shipmentDialog.getByLabel("本次发货数量 1").fill("1.25");
+  await shipmentDialog.getByLabel("本次发货数量 2").fill("0.3333");
   await shipmentDialog.getByRole("button", { name: "登记发货" }).click();
   await expect(shipmentDialog).toBeHidden();
   await expect(dialog.getByText("部分发货", { exact: true })).toBeVisible();
@@ -124,9 +229,9 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   let receiptDialog = page.getByRole("dialog", { name: "登记采购收货" });
   await receiptDialog.getByLabel("收货编号").fill("REC-E2E-0001");
   await receiptDialog.getByLabel("收货时间").fill("2030-01-01T10:00");
-  await receiptDialog.getByLabel("接受数量 1").fill("1");
+  await receiptDialog.getByLabel("接受数量 1").fill("1.25");
   await receiptDialog.getByLabel("拒收数量 1").fill("0");
-  await receiptDialog.getByLabel("接受数量 2").fill("1");
+  await receiptDialog.getByLabel("接受数量 2").fill("0.3333");
   await receiptDialog.getByLabel("拒收数量 2").fill("0");
   await receiptDialog.getByRole("button", { name: "登记收货" }).click();
   await expect(receiptDialog).toBeHidden();
@@ -136,8 +241,8 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   shipmentDialog = page.getByRole("dialog", { name: "登记采购发货" });
   await shipmentDialog.getByLabel("发货编号").fill("SHP-E2E-0002");
   await shipmentDialog.getByLabel("发货时间").fill("2030-01-01T11:00");
-  await shipmentDialog.getByLabel("本次发货数量 1").fill("1");
-  await shipmentDialog.getByLabel("本次发货数量 2").fill("2");
+  await shipmentDialog.getByLabel("本次发货数量 1").fill("1.25");
+  await shipmentDialog.getByLabel("本次发货数量 2").fill("1");
   await shipmentDialog.getByRole("button", { name: "登记发货" }).click();
   await expect(shipmentDialog).toBeHidden();
 
@@ -145,10 +250,10 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   receiptDialog = page.getByRole("dialog", { name: "登记采购收货" });
   await receiptDialog.getByLabel("收货编号").fill("REC-E2E-0002");
   await receiptDialog.getByLabel("收货时间").fill("2030-01-01T12:00");
-  await receiptDialog.getByLabel("接受数量 1").fill("1");
+  await receiptDialog.getByLabel("接受数量 1").fill("1.25");
   await receiptDialog.getByLabel("拒收数量 1").fill("0");
-  await receiptDialog.getByLabel("接受数量 2").fill("1");
-  await receiptDialog.getByLabel("拒收数量 2").fill("1");
+  await receiptDialog.getByLabel("接受数量 2").fill("0.5");
+  await receiptDialog.getByLabel("拒收数量 2").fill("0.5");
   await receiptDialog.getByRole("button", { name: "登记收货" }).click();
   await expect(receiptDialog.getByText("存在拒收数量时必须填写差异原因"))
     .toBeVisible();
@@ -166,9 +271,9 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   const groutSummaryRow = summaryTable.getByRole("row").filter({
     hasText: "E2E 美缝剂",
   });
-  await expect(tileSummaryRow.getByRole("cell").nth(6)).toHaveText("¥24.00");
-  await expect(groutSummaryRow.getByRole("cell").nth(5)).toHaveText("1");
-  await expect(groutSummaryRow.getByRole("cell").nth(6)).toHaveText("¥40.00");
+  await expect(tileSummaryRow.getByRole("cell").nth(6)).toHaveText("¥30.00");
+  await expect(groutSummaryRow.getByRole("cell").nth(5)).toHaveText("0.5");
+  await expect(groutSummaryRow.getByRole("cell").nth(6)).toHaveText("¥18.84");
 
   const timelineRows = fulfillment.getByRole("table").filter({
     hasText: "业务时间",
@@ -179,51 +284,46 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   await expect(timelineRows.nth(4)).toContainText("SHP-E2E-0001");
   await expect(timelineRows.nth(5)).toContainText("供应商已确认");
 
-  const journal = await readJournal(request);
-  expect(journal.map(({ outcome }) => outcome)).toEqual([
-    "saved",
-    "price_changed",
-    "saved",
-    "submitted",
-    "confirmed",
-    "shipment_created",
-    "receipt_created",
-    "shipment_created",
-    "receipt_created",
-  ]);
-  expect(journal.every(({ idempotencyKey }) =>
-    typeof idempotencyKey === "string" &&
-    idempotencyKey.trim().length > 0 &&
-    idempotencyKey.length <= 120
-  )).toBe(true);
-
-  const saveEntries = journal.filter(({ path }) => path.endsWith("/save-draft"));
-  expect(saveEntries).toHaveLength(2);
-  for (const { payload } of saveEntries) {
-    const items = payload.items as Record<string, unknown>[];
-    expect(items).toHaveLength(2);
-    expect(items.every((item) =>
-      Object.keys(item).sort().join(",") === "quantity,supplier_sku_id"
-    )).toBe(true);
-    expect(JSON.stringify(payload)).not.toMatch(
-      /unit_price|tax_rate|subtotal_amount|total_amount|price_list/i,
-    );
+  const successfulJournal = await readJournal(request);
+  const receiptEntries = successfulJournal.filter(({ path }) =>
+    path.endsWith("/receipts")
+  );
+  const finalReceipt = receiptEntries.at(-1);
+  if (!finalReceipt?.idempotencyKey) {
+    throw new TypeError("最终收货 journal 缺少幂等键");
   }
+  const state = await readState(request) as {
+    item_fulfillments: {
+      accepted_subtotal_amount: string;
+      accepted_tax_amount: string;
+      accepted_total_amount: string;
+    }[];
+    accepted_amounts: {
+      subtotal_amount: string;
+      tax_amount: string;
+      total_amount: string;
+    };
+  };
+  expect(state.item_fulfillments.map((item) => [
+    item.accepted_subtotal_amount,
+    item.accepted_tax_amount,
+    item.accepted_total_amount,
+  ])).toEqual([
+    ["26.55", "3.45", "30.00"],
+    ["16.67", "2.17", "18.84"],
+  ]);
+  expect(state.accepted_amounts).toEqual({
+    subtotal_amount: "43.22",
+    tax_amount: "5.62",
+    total_amount: "48.84",
+  });
 
-  const fulfillmentEntries = journal.filter(({ path }) =>
+  const fulfillmentEntries = successfulJournal.filter(({ path }) =>
     /\/(confirm-fulfillment|shipments|receipts)$/.test(path)
   );
   expect(fulfillmentEntries).toHaveLength(5);
-  for (const { payload } of fulfillmentEntries) {
-    expect(JSON.stringify(payload)).not.toMatch(
-      /unit_price|tax_rate|accepted_amount|subtotal_amount|tax_amount|total_amount/i,
-    );
-  }
   const shipmentEntries = fulfillmentEntries.filter(({ path }) =>
     path.endsWith("/shipments")
-  );
-  const receiptEntries = fulfillmentEntries.filter(({ path }) =>
-    path.endsWith("/receipts")
   );
   expect(shipmentEntries).toHaveLength(2);
   expect(receiptEntries).toHaveLength(2);
@@ -258,10 +358,6 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
     )).toBe(true);
   }
 
-  const finalReceipt = receiptEntries.at(-1);
-  if (!finalReceipt?.idempotencyKey) {
-    throw new TypeError("最终收货 journal 缺少幂等键");
-  }
   const replay = await request.post(
     `${mockBackendBaseUrl}${finalReceipt.path}`,
     {
@@ -279,9 +375,11 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
       data: { ...finalReceipt.payload, receipt_no: "REC-E2E-CONFLICT" },
     },
   );
-  expect(conflict.status()).toBe(409);
-  expect((await conflict.json() as { code: string }).code)
-    .toBe("IDEMPOTENCY_KEY_REUSED");
+  await expectBusinessError(
+    conflict,
+    409,
+    "SUPPLIER_IDEMPOTENCY_CONFLICT",
+  );
   const invalidPage = await request.get(
     `${mockBackendBaseUrl}${finalReceipt.path}?page=1&pageSize=101`,
   );
@@ -297,9 +395,32 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
       },
     },
   );
-  expect(cancelAfterShipment.status()).toBe(409);
-  expect((await cancelAfterShipment.json() as { code: string }).code)
-    .toBe("SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED");
+  await expectBusinessError(
+    cancelAfterShipment,
+    409,
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+  );
+
+  const attempts = await readJournal(request);
+  expect(attempts.map(({ outcome }) => outcome)).toEqual([
+    "saved",
+    "price_changed",
+    "saved",
+    "submitted",
+    "confirmed",
+    "shipment_created",
+    "receipt_created",
+    "shipment_created",
+    "receipt_created",
+    "idempotent_replay",
+    "SUPPLIER_IDEMPOTENCY_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+  ]);
+  expectSafeCommandAttempts(attempts);
+  const fulfillmentAttempts = attempts.filter(({ path }) =>
+    /\/(confirm-fulfillment|shipments|receipts)$/.test(path)
+  );
+  expect(fulfillmentAttempts).toHaveLength(7);
 
   await dialog.getByRole("button", { name: "关闭" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
