@@ -249,7 +249,7 @@ describe("supplier purchase requisition command migration contract", () => {
       "SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED",
     );
     expect(convert).toMatch(
-      /save_supplier_purchase_order_draft\([\s\S]*p_requisition_id/,
+      /create_supplier_purchase_order_from_requisition\([\s\S]*p_requisition_id/,
     );
     expect(sql).toMatch(
       /inject_supplier_purchase_requisition_order_source[\s\S]*NEW\.purchase_requisition_id := v_source::uuid/,
@@ -280,7 +280,7 @@ describe("supplier purchase requisition command migration contract", () => {
     const saveOrder = extractFunction("save_supplier_purchase_order_draft");
     expect(saveOrder).toMatch(/p_purchase_requisition_id uuid DEFAULT NULL/);
     expect(saveOrder).toMatch(
-      /p_expected_version = 0[\s\S]*p_purchase_requisition_id IS NULL[\s\S]*SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT/,
+      /p_expected_version = 0[\s\S]*SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT/,
     );
     expect(saveOrder).toMatch(
       /v_requisition\.status <> 'approved'[\s\S]*v_requisition\.purchase_order_id IS NOT NULL/,
@@ -335,26 +335,28 @@ describe("supplier purchase requisition command migration contract", () => {
     );
   });
 
-  test("contains source in the PO fingerprint and clears both local guards", () => {
+  test("contains source in the PO fingerprint and clears the local source guard", () => {
     const saveOrder = extractFunction("save_supplier_purchase_order_draft");
-    const convert = extractFunction("convert_supplier_purchase_requisition");
+    const createOrder = extractFunction(
+      "create_supplier_purchase_order_from_requisition",
+    );
     expect(saveOrder).toMatch(
       /item\.value \|\| jsonb_build_object\(\s*'_purchase_requisition_id'/,
     );
-    expect(saveOrder).toMatch(
-      /SUPPLIER_IDEMPOTENCY_CONFLICT/,
+    expect(saveOrder).toMatch(/SUPPLIER_IDEMPOTENCY_CONFLICT/);
+    expect(createOrder).toMatch(
+      /item\.value \|\| jsonb_build_object\(\s*'_purchase_requisition_id'/,
     );
-    expect(saveOrder).toMatch(
-      /current_setting\(\s*'private\.supplier_purchase_requisition_conversion'/,
+    expect(createOrder).toMatch(
+      /'supplier-internal:' \|\| gen_random_uuid\(\)::text/,
     );
     expect(count(
-      saveOrder,
+      createOrder,
       /set_config\(\s*'private\.supplier_purchase_requisition_source'/,
     )).toBeGreaterThanOrEqual(3);
-    expect(count(
-      convert,
-      /set_config\(\s*'private\.supplier_purchase_requisition_conversion'/,
-    )).toBeGreaterThanOrEqual(3);
+    expect(saveOrder).not.toMatch(
+      /private\.supplier_purchase_requisition_conversion/,
+    );
     expect(sql).toMatch(
       /REVOKE ALL ON FUNCTION\s+public\.inject_supplier_purchase_requisition_order_source\(\)[\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
     );
@@ -390,6 +392,75 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(sql).toMatch(
       /project_cost_commitments_active_lookup_idx[\s\S]*tenant\/project\/category\/status[\s\S]*(?:Index Scan|Bitmap Index Scan)[\s\S]*no unbounded full table scan/i,
     );
+  });
+
+  test("hardens event writes and serializes every project budget mutation", () => {
+    expect(sql).toMatch(
+      /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE\s+public\.supplier_command_events\s+FROM service_role/,
+    );
+    expect(sql).toMatch(
+      /GRANT SELECT ON TABLE public\.supplier_command_events TO service_role/,
+    );
+    const lock = extractFunction("lock_project_cost_budget_scope");
+    expect(lock).toMatch(/pg_advisory_xact_lock/);
+    expect(lock).toMatch(/supplier-project-budget:/);
+    const submit = extractFunction("submit_supplier_purchase_requisition");
+    expect(submit).toMatch(
+      /lock_project_cost_budget_scope\(\s*p_tenant_id,\s*v_requisition\.project_id\s*\)/,
+    );
+    expect(submit.indexOf("lock_project_cost_budget_scope")).toBeLessThan(
+      submit.indexOf("FROM public.project_cost_budgets"),
+    );
+    const saveBudgets = extractFunction("save_project_cost_budgets");
+    expect(saveBudgets).toContain("SECURITY DEFINER");
+    expect(saveBudgets).toContain("SET search_path = pg_catalog, public");
+    expect(saveBudgets).toMatch(/lock_project_cost_budget_scope/);
+    const ledgerGuard = extractFunction("lock_finance_ledger_project_budget");
+    expect(ledgerGuard).toContain("SECURITY DEFINER");
+    expect(ledgerGuard).toMatch(/lock_project_cost_budget_scope/g);
+    expect(sql).toMatch(
+      /CREATE TRIGGER finance_ledger_entries_project_budget_lock[\s\S]*BEFORE INSERT OR UPDATE OR DELETE/,
+    );
+    expect(sql).toMatch(
+      /REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE\s+public\.project_cost_budgets\s+FROM service_role/,
+    );
+    expect(sql).toMatch(
+      /finance_ledger_entries_out_project_category_amount_idx[\s\S]*INCLUDE \(amount\)[\s\S]*WHERE direction = 'out' AND project_id IS NOT NULL/,
+    );
+  });
+
+  test("uses an owner-only unpredictable PO creation channel", () => {
+    const publicSave = extractFunction("save_supplier_purchase_order_draft");
+    expect(publicSave).toMatch(
+      /p_expected_version = 0[\s\S]*SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT/,
+    );
+    const helper = extractFunction(
+      "create_supplier_purchase_order_from_requisition",
+    );
+    expect(helper).toContain("SECURITY DEFINER");
+    expect(helper).toMatch(/gen_random_uuid\(\)/);
+    expect(helper).toMatch(/save_supplier_purchase_order_draft_v1/);
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION\s+public\.create_supplier_purchase_order_from_requisition\([\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
+    );
+    const convert = extractFunction("convert_supplier_purchase_requisition");
+    expect(convert).toMatch(
+      /create_supplier_purchase_order_from_requisition\(/,
+    );
+    expect(convert).not.toMatch(/requisition-order:/);
+    expect(convert).not.toMatch(
+      /private\.supplier_purchase_requisition_conversion/,
+    );
+  });
+
+  test("returns a stable conflict for globally occupied requisition ids", () => {
+    const save = extractFunction("save_supplier_purchase_requisition_draft");
+    expectOrdered(save, [
+      /supplier-purchase-requisition-id:/,
+      /FROM public\.supplier_purchase_requisitions[\s\S]*FOR UPDATE/,
+      /SELECT EXISTS \([\s\S]*FROM public\.supplier_purchase_requisitions/,
+      /SUPPLIER_PURCHASE_REQUISITION_ID_CONFLICT/,
+    ]);
   });
 
   test("keeps the command contract file under the repository limit", () => {

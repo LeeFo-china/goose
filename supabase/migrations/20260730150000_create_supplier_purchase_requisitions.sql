@@ -697,6 +697,147 @@ ON CONFLICT (role_id, permission_id) DO UPDATE SET
 
 -- Task 3: atomic purchase requisition commands
 
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE
+  public.supplier_command_events
+FROM service_role;
+GRANT SELECT ON TABLE public.supplier_command_events TO service_role;
+
+CREATE FUNCTION public.lock_project_cost_budget_scope(
+  p_tenant_id uuid,
+  p_project_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_tenant_id IS NOT NULL AND p_project_id IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'supplier-project-budget:' || p_tenant_id::text || ':' ||
+          p_project_id::text,
+        6720240730150000
+      )
+    );
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.lock_project_cost_budget_scope(uuid, uuid)
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.save_project_cost_budgets(
+  p_tenant_id uuid,
+  p_project_id uuid,
+  p_employee_id uuid,
+  p_items jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_items IS NULL OR jsonb_typeof(p_items) <> 'array' THEN
+    RAISE EXCEPTION USING ERRCODE = '22023',
+      MESSAGE = 'PROJECT_COST_BUDGET_VALIDATION_ERROR';
+  END IF;
+  PERFORM public.lock_project_cost_budget_scope(
+    p_tenant_id, p_project_id
+  );
+  INSERT INTO public.project_cost_budgets (
+    tenant_id, project_id, cost_category_id, budget_amount,
+    warning_threshold_percent, status, remark, created_by, updated_by
+  )
+  SELECT p_tenant_id, p_project_id, item.cost_category_id,
+    item.budget_amount, COALESCE(item.warning_threshold_percent, 100),
+    'active', NULLIF(btrim(item.remark), ''), p_employee_id, p_employee_id
+  FROM jsonb_to_recordset(p_items) AS item(
+    cost_category_id uuid, budget_amount numeric,
+    warning_threshold_percent numeric, remark text
+  )
+  ON CONFLICT (tenant_id, project_id, cost_category_id)
+  WHERE status = 'active'
+  DO UPDATE SET budget_amount = EXCLUDED.budget_amount,
+    warning_threshold_percent = EXCLUDED.warning_threshold_percent,
+    remark = EXCLUDED.remark, updated_by = EXCLUDED.updated_by,
+    updated_at = now();
+  RETURN jsonb_build_object('ok', true);
+END;
+$$;
+
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE
+  public.project_cost_budgets
+FROM service_role;
+GRANT SELECT ON TABLE public.project_cost_budgets TO service_role;
+REVOKE ALL ON FUNCTION public.save_project_cost_budgets(
+  uuid, uuid, uuid, jsonb
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_project_cost_budgets(
+  uuid, uuid, uuid, jsonb
+) TO service_role;
+
+CREATE FUNCTION public.lock_finance_ledger_project_budget()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_old_key text;
+  v_new_key text;
+BEGIN
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    IF OLD.project_id IS NOT NULL THEN
+      v_old_key := OLD.tenant_id::text || ':' || OLD.project_id::text;
+    END IF;
+  END IF;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    IF NEW.project_id IS NOT NULL THEN
+      v_new_key := NEW.tenant_id::text || ':' || NEW.project_id::text;
+    END IF;
+  END IF;
+  -- Row triggers run inside the writer transaction. Transaction advisory
+  -- locks are reentrant; project moves lock both scopes in lexical order.
+  IF v_old_key IS NOT NULL
+    AND (v_new_key IS NULL OR v_old_key <= v_new_key)
+  THEN
+    PERFORM public.lock_project_cost_budget_scope(
+      OLD.tenant_id, OLD.project_id
+    );
+  END IF;
+  IF v_new_key IS NOT NULL AND v_new_key IS DISTINCT FROM v_old_key THEN
+    PERFORM public.lock_project_cost_budget_scope(
+      NEW.tenant_id, NEW.project_id
+    );
+  END IF;
+  IF v_old_key IS NOT NULL AND v_new_key IS NOT NULL
+    AND v_old_key > v_new_key
+  THEN
+    PERFORM public.lock_project_cost_budget_scope(
+      OLD.tenant_id, OLD.project_id
+    );
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.lock_finance_ledger_project_budget()
+FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER finance_ledger_entries_project_budget_lock
+BEFORE INSERT OR UPDATE OR DELETE ON public.finance_ledger_entries
+FOR EACH ROW EXECUTE FUNCTION
+  public.lock_finance_ledger_project_budget();
+
+CREATE INDEX finance_ledger_entries_out_project_category_amount_idx
+ON public.finance_ledger_entries(
+  tenant_id, project_id, cost_category_id
+)
+INCLUDE (amount)
+WHERE direction = 'out' AND project_id IS NOT NULL;
+
 -- EXPLAIN smoke (Task 9/10): requisition draft catalog must use the requested
 -- SKU set, supplier_price_items_sku_list_idx, and primary-key unit/category
 -- lookups without a per-item nested application query.
@@ -741,6 +882,8 @@ DECLARE
   v_subtotal_amount numeric(18, 2);
   v_tax_amount numeric(18, 2);
   v_total_amount numeric(18, 2);
+  v_global_requisition_exists boolean;
+  v_tenant_requisition_exists boolean;
 BEGIN
   IF p_requisition_id IS NULL
     OR p_tenant_id IS NULL
@@ -893,14 +1036,30 @@ BEGIN
   WHERE requisition.id = p_requisition_id
     AND requisition.tenant_id = p_tenant_id
   FOR UPDATE;
+  v_tenant_requisition_exists := FOUND;
 
-  IF p_expected_version = 0 AND FOUND THEN
+  IF NOT v_tenant_requisition_exists AND p_expected_version = 0 THEN
+    SELECT EXISTS (
+      SELECT 1
+      FROM public.supplier_purchase_requisitions AS requisition
+      WHERE requisition.id = p_requisition_id
+    )
+    INTO v_global_requisition_exists;
+    IF v_global_requisition_exists THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_REQUISITION_ID_CONFLICT'
+      );
+    END IF;
+  END IF;
+
+  IF p_expected_version = 0 AND v_tenant_requisition_exists THEN
     RETURN jsonb_build_object(
       'status', 'version_conflict',
       'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
       'version', v_requisition.version
     );
-  ELSIF p_expected_version > 0 AND NOT FOUND THEN
+  ELSIF p_expected_version > 0 AND NOT v_tenant_requisition_exists THEN
     RETURN jsonb_build_object(
       'status', 'not_found',
       'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
@@ -1537,6 +1696,11 @@ BEGIN
     );
   END IF;
 
+  PERFORM public.lock_project_cost_budget_scope(
+    p_tenant_id,
+    v_requisition.project_id
+  );
+
   WITH requested_by_category AS MATERIALIZED (
     SELECT item.cost_category_id, SUM(item.line_total_amount) AS amount
     FROM public.supplier_purchase_requisition_items AS item
@@ -2125,23 +2289,13 @@ BEGIN
   IF p_order_id IS NULL OR p_tenant_id IS NULL
     OR p_project_id IS NULL OR p_tenant_supplier_id IS NULL
     OR p_expected_version IS NULL OR p_expected_version < 0
+    OR p_expected_version = 0
     OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
     OR char_length(p_idempotency_key) > 120
     OR p_items IS NULL OR jsonb_typeof(p_items) <> 'array'
     OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
     OR (p_remark IS NOT NULL AND btrim(p_remark) = '')
-    OR (
-      p_expected_version = 0
-      AND p_purchase_requisition_id IS NULL
-    )
-    OR (
-      p_expected_version = 0
-      AND pg_catalog.current_setting(
-        'private.supplier_purchase_requisition_conversion',
-        true
-      ) IS DISTINCT FROM p_purchase_requisition_id::text
-    )
   THEN
     RETURN jsonb_build_object(
       'status', 'state_conflict',
@@ -2316,6 +2470,67 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION public.create_supplier_purchase_order_from_requisition(
+  p_order_id uuid,
+  p_tenant_id uuid,
+  p_project_id uuid,
+  p_tenant_supplier_id uuid,
+  p_expected_delivery_date date,
+  p_remark text,
+  p_items jsonb,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_purchase_requisition_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_items jsonb;
+  v_result jsonb;
+  v_reserved_key text :=
+    'supplier-internal:' || gen_random_uuid()::text;
+BEGIN
+  SELECT jsonb_agg(
+    item.value || jsonb_build_object(
+      '_purchase_requisition_id', p_purchase_requisition_id
+    )
+    ORDER BY item.ordinality
+  )
+  INTO v_items
+  FROM jsonb_array_elements(p_items)
+    WITH ORDINALITY AS item(value, ordinality);
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_source',
+    p_purchase_requisition_id::text,
+    true
+  );
+  BEGIN
+    v_result := public.save_supplier_purchase_order_draft_v1(
+      p_order_id, p_tenant_id, p_project_id, p_tenant_supplier_id,
+      0, p_expected_delivery_date, p_remark, v_items,
+      p_actor_user_id, p_actor_employee_id, v_reserved_key
+    );
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_catalog.set_config(
+      'private.supplier_purchase_requisition_source', '', true
+    );
+    RAISE;
+  END;
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_source', '', true
+  );
+  RETURN v_result;
+END;
+$$;
+REVOKE ALL ON FUNCTION
+  public.create_supplier_purchase_order_from_requisition(
+    uuid, uuid, uuid, uuid, date, text, jsonb, uuid, uuid, uuid
+  )
+FROM PUBLIC, anon, authenticated, service_role;
+
 CREATE FUNCTION public.convert_supplier_purchase_requisition(
   p_requisition_id uuid,
   p_tenant_id uuid,
@@ -2339,7 +2554,6 @@ DECLARE
   v_changed_count integer;
   v_items jsonb;
   v_order_result jsonb;
-  v_derived_key text;
   v_current_subtotal_amount numeric(18, 2);
   v_current_tax_amount numeric(18, 2);
   v_current_total_amount numeric(18, 2);
@@ -2632,40 +2846,18 @@ BEGIN
     );
   END IF;
 
-  v_derived_key := left(
-    'requisition-order:' || p_requisition_id::text || ':' ||
-      p_purchase_order_id::text,
-    120
-  );
   v_before := to_jsonb(v_requisition);
-  PERFORM pg_catalog.set_config(
-    'private.supplier_purchase_requisition_conversion',
-    p_requisition_id::text,
-    true
-  );
-  BEGIN
-    v_order_result := public.save_supplier_purchase_order_draft(
-      p_order_id => p_purchase_order_id,
-      p_tenant_id => p_tenant_id,
-      p_project_id => v_requisition.project_id,
-      p_tenant_supplier_id => v_requisition.tenant_supplier_id,
-      p_expected_version => 0,
-      p_expected_delivery_date => v_requisition.expected_delivery_date,
-      p_remark => v_requisition.remark,
-      p_items => v_items,
-      p_actor_user_id => p_actor_user_id,
-      p_actor_employee_id => p_actor_employee_id,
-      p_idempotency_key => v_derived_key,
-      p_purchase_requisition_id => p_requisition_id
-    );
-  EXCEPTION WHEN OTHERS THEN
-    PERFORM pg_catalog.set_config(
-      'private.supplier_purchase_requisition_conversion', '', true
-    );
-    RAISE;
-  END;
-  PERFORM pg_catalog.set_config(
-    'private.supplier_purchase_requisition_conversion', '', true
+  v_order_result := public.create_supplier_purchase_order_from_requisition(
+    p_purchase_order_id,
+    p_tenant_id,
+    v_requisition.project_id,
+    v_requisition.tenant_supplier_id,
+    v_requisition.expected_delivery_date,
+    v_requisition.remark,
+    v_items,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_requisition_id
   );
   IF v_order_result ->> 'status' <> 'saved' THEN
     RETURN v_order_result;
