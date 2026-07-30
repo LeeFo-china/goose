@@ -25,6 +25,7 @@
     "finance:receivables-phase2-smoke": "bun src/scripts/finance-receivables-phase2-smoke.ts",
     "branding:addon:batch-b-smoke": "bun --env-file=/dev/null src/scripts/branding-addon-batch-b-smoke.ts",
     "supplier:purchase-order-smoke": "bun src/scripts/supplier-purchase-order-smoke.ts",
+    "smoke:supplier-purchase-fulfillment": "bun src/scripts/supplier-purchase-fulfillment-smoke.ts",
     "billing:subscription-lock": "bun --env-file=.env src/scripts/tenant-subscription-billing-lock.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",
     "workflow:runtime-consistency-check": "bun src/scripts/workflow-runtime-consistency-check.ts",
