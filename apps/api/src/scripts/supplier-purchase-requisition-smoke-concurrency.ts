@@ -1,7 +1,9 @@
 import type { SmokeSql } from "./supplier-purchase-order-smoke-fixture";
 import {
+  cleanupConcurrentBudgetResources,
   readBackendPid,
   waitForBudgetAdvisoryLock,
+  waitForFirstSubmission,
   waitForOperationCompletion,
   waitForSavedBackendPid,
 } from "./supplier-purchase-requisition-smoke-budget-lock";
@@ -249,7 +251,8 @@ async function seedConcurrentSupplier(
     from public.supplier_qualification_types as type
     where type.status = 'active'
       and type.blocks_new_orders
-      and 'manufacturer' = any(type.applicable_supplier_types);
+      and (cardinality(type.applicable_supplier_types) = 0
+        or 'manufacturer' = any(type.applicable_supplier_types));
   `;
   await sql`
     insert into public.tenant_suppliers (
@@ -374,6 +377,7 @@ export async function runConcurrentBudgetSmoke(
   let releaseA: (() => void) | undefined;
   let activeOperationA: Promise<SubmittedBudgetEvidence> | undefined;
   let activeOperationB: Promise<SubmittedBudgetEvidence> | undefined;
+  let primaryFailure: unknown;
   try {
     const base = await findConcurrentFixture(lookup as SmokeSql);
     let markASubmitted!: () => void;
@@ -416,12 +420,7 @@ export async function runConcurrentBudgetSmoke(
         evidence: { requisition: submitted.requisition, commitments },
       };
     });
-    const aReady = await Promise.race([
-      aSubmitted.then(() => "submitted" as const),
-      operationA.then(() => "settled" as const),
-      new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), 5_000)),
-    ]);
+    const aReady = await waitForFirstSubmission(aSubmitted, operationA);
     if (aReady !== "submitted") {
       throw new SupplierPurchaseRequisitionConcurrencyError(
         `SMOKE_CONCURRENT_A_${aReady.toUpperCase()}`,
@@ -484,16 +483,15 @@ export async function runConcurrentBudgetSmoke(
       a: aResult.evidence,
       b: bResult.evidence,
     });
+  } catch (error) {
+    primaryFailure = error;
+    throw error;
   } finally {
     releaseA?.();
-    await Promise.allSettled([
-      ...(activeOperationA ? [activeOperationA] : []),
-      ...(activeOperationB ? [activeOperationB] : []),
-    ]);
-    await Promise.all([
-      lookup.close(),
-      databaseA.close(),
-      databaseB.close(),
-    ]);
+    await cleanupConcurrentBudgetResources({
+      operations: [activeOperationA, activeOperationB],
+      connections: [lookup, databaseA, databaseB],
+      primaryFailure,
+    });
   }
 }

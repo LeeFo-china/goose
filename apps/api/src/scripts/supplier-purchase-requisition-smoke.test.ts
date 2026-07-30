@@ -12,7 +12,9 @@ import {
   assertConcurrentBudgetEvidence,
 } from "./supplier-purchase-requisition-smoke-concurrency";
 import {
+  cleanupConcurrentBudgetResources,
   pollForBudgetAdvisoryLock,
+  waitForOperationCompletion,
 } from "./supplier-purchase-requisition-smoke-budget-lock";
 
 type FakeTransaction = { marker: string };
@@ -50,6 +52,35 @@ const passingSummary = {
   cross_tenant_hidden: true,
   explain_uses_index: true,
 };
+
+function manualTimeoutScheduler() {
+  let nextToken = 1;
+  const callbacks = new Map<unknown, () => void>();
+  const cleared: unknown[] = [];
+  return {
+    scheduler: {
+      set(callback: () => void) {
+        const token = nextToken;
+        nextToken += 1;
+        callbacks.set(token, callback);
+        return token;
+      },
+      clear(token: unknown) {
+        callbacks.delete(token);
+        cleared.push(token);
+      },
+    },
+    fireNext() {
+      const next = callbacks.entries().next().value;
+      if (!next) throw new Error("no pending timeout");
+      const [token, callback] = next;
+      callbacks.delete(token);
+      callback();
+    },
+    pendingCount: () => callbacks.size,
+    cleared,
+  };
+}
 
 describe("supplier purchase requisition database smoke helpers", () => {
   test("uses stable, unique UUIDs for rollback-only fixtures", () => {
@@ -250,6 +281,68 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(probes).toBe(3);
   });
 
+  test("bounds never-settling cleanup, closes pools, and preserves the primary failure", async () => {
+    const neverSettles = new Promise<never>(() => {});
+    const primaryFailure = new Error("primary smoke failure");
+    const timers = manualTimeoutScheduler();
+    const closeOptions: Array<{ timeout?: number } | undefined> = [];
+    const neverCloses = new Promise<void>(() => {});
+    const connections = Array.from({ length: 3 }, (_, index) => ({
+      close(options?: { timeout?: number }) {
+        closeOptions.push(options);
+        return index === 0 ? neverCloses : Promise.resolve();
+      },
+    }));
+    const cleanup = cleanupConcurrentBudgetResources({
+      operations: [neverSettles],
+      connections,
+      primaryFailure,
+      operationTimeoutMilliseconds: 5_000,
+      closeWaitMilliseconds: 2_000,
+      closeTimeoutSeconds: 1,
+      scheduler: timers.scheduler,
+    });
+    await Promise.resolve();
+    expect(closeOptions).toHaveLength(0);
+
+    timers.fireNext();
+    for (let turn = 0; turn < 10 && closeOptions.length === 0; turn += 1) {
+      await Promise.resolve();
+    }
+
+    expect(closeOptions).toEqual([
+      { timeout: 1 },
+      { timeout: 1 },
+      { timeout: 1 },
+    ]);
+    timers.fireNext();
+
+    await expect(cleanup).rejects.toBe(primaryFailure);
+    expect(timers.pendingCount()).toBe(0);
+    expect(timers.cleared).toHaveLength(2);
+  });
+
+  test("clears the timeout when an operation completes or fails early", async () => {
+    const timers = manualTimeoutScheduler();
+    await expect(waitForOperationCompletion(
+      Promise.resolve("submitted"),
+      5_000,
+      timers.scheduler,
+    )).resolves.toBe("submitted");
+    expect(timers.pendingCount()).toBe(0);
+    expect(timers.cleared).toHaveLength(1);
+
+    const failure = new Error("operation failed");
+    const failedTimers = manualTimeoutScheduler();
+    await expect(waitForOperationCompletion(
+      Promise.reject(failure),
+      5_000,
+      failedTimers.scheduler,
+    )).rejects.toBe(failure);
+    expect(failedTimers.pendingCount()).toBe(0);
+    expect(failedTimers.cleared).toHaveLength(1);
+  });
+
   test("pins the migration RPC, table and index contract", () => {
     expect(REQUISITION_SMOKE_SQL_CONTRACTS).toEqual({
       save: "public.save_supplier_purchase_requisition_draft",
@@ -318,6 +411,14 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(budgetLockSource).toContain("pg_backend_pid()");
     expect(concurrencySource).toContain("waitForBudgetAdvisoryLock");
     expect(concurrencySource).toContain("waitForOperationCompletion");
+    expect(concurrencySource).toContain(
+      "cleanupConcurrentBudgetResources",
+    );
+    expect(concurrencySource).not.toContain("await Promise.allSettled");
+    expect(concurrencySource).not.toContain("setTimeout(");
+    expect(concurrencySource).toContain(
+      "cardinality(type.applicable_supplier_types) = 0",
+    );
     expect(concurrencySource).toContain(
       "markBSaved(await readBackendPid(sql))",
     );

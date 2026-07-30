@@ -23,6 +23,92 @@ type BudgetLockTarget = {
 
 class BudgetAdvisoryLockEvidenceError extends Error {}
 
+export type TimeoutScheduler = {
+  set(callback: () => void, milliseconds: number): unknown;
+  clear(token: unknown): void;
+};
+
+type ClosableSql = {
+  close(options?: { timeout?: number }): Promise<void>;
+};
+
+type CleanupInput = {
+  operations: Array<Promise<unknown> | undefined>;
+  connections: ClosableSql[];
+  primaryFailure?: unknown;
+  operationTimeoutMilliseconds?: number;
+  closeWaitMilliseconds?: number;
+  closeTimeoutSeconds?: number;
+  scheduler?: TimeoutScheduler;
+};
+
+const systemTimeoutScheduler: TimeoutScheduler = {
+  set: (callback, milliseconds) => setTimeout(callback, milliseconds),
+  clear: (token) => clearTimeout(token as ReturnType<typeof setTimeout>),
+};
+
+export async function awaitBeforeTimeout<Result>(
+  operation: Promise<Result>,
+  timeoutMilliseconds: number,
+  timeoutMessage: string,
+  scheduler: TimeoutScheduler = systemTimeoutScheduler,
+) {
+  let timeoutToken: unknown;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timeoutToken = scheduler.set(() => {
+      reject(new BudgetAdvisoryLockEvidenceError(timeoutMessage));
+    }, timeoutMilliseconds);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    scheduler.clear(timeoutToken);
+  }
+}
+
+function firstRejected(
+  results: PromiseSettledResult<unknown>[],
+): unknown {
+  return results.find((result) => result.status === "rejected")?.reason;
+}
+
+export async function cleanupConcurrentBudgetResources(
+  input: CleanupInput,
+) {
+  const scheduler = input.scheduler ?? systemTimeoutScheduler;
+  const operations = input.operations.filter(
+    (operation): operation is Promise<unknown> => operation !== undefined,
+  );
+  let cleanupFailure: unknown;
+  try {
+    const settled = await awaitBeforeTimeout(
+      Promise.allSettled(operations),
+      input.operationTimeoutMilliseconds ?? 5_000,
+      "concurrent budget operations did not settle during cleanup",
+      scheduler,
+    );
+    cleanupFailure = firstRejected(settled);
+  } catch (error) {
+    cleanupFailure = error;
+  }
+  const closeOperations = input.connections.map(async (connection) => {
+    await connection.close({ timeout: input.closeTimeoutSeconds ?? 1 });
+  });
+  try {
+    const closed = await awaitBeforeTimeout(
+      Promise.allSettled(closeOperations),
+      input.closeWaitMilliseconds ?? 2_000,
+      "concurrent budget connections did not close in time",
+      scheduler,
+    );
+    cleanupFailure ??= firstRejected(closed);
+  } catch (error) {
+    cleanupFailure ??= error;
+  }
+  if (input.primaryFailure !== undefined) throw input.primaryFailure;
+  if (cleanupFailure !== undefined) throw cleanupFailure;
+}
+
 function isWaitingForBudgetAdvisoryLock(
   evidence: BudgetAdvisoryLockEvidence | undefined,
 ): evidence is BudgetAdvisoryLockEvidence {
@@ -117,14 +203,17 @@ export async function waitForSavedBackendPid<T>(
   saved: Promise<number>,
   operation: Promise<T>,
   timeoutMilliseconds = 5_000,
+  scheduler: TimeoutScheduler = systemTimeoutScheduler,
 ) {
-  const ready = await Promise.race([
-    saved.then((pid) => ({ kind: "saved" as const, pid })),
-    operation.then(() => ({ kind: "settled" as const })),
-    new Promise<{ kind: "timeout" }>((resolve) => {
-      setTimeout(() => resolve({ kind: "timeout" }), timeoutMilliseconds);
-    }),
-  ]);
+  const ready = await awaitBeforeTimeout(
+    Promise.race([
+      saved.then((pid) => ({ kind: "saved" as const, pid })),
+      operation.then(() => ({ kind: "settled" as const })),
+    ]),
+    timeoutMilliseconds,
+    "second budget backend timed out before PID capture",
+    scheduler,
+  );
   if (ready.kind !== "saved") {
     throw new BudgetAdvisoryLockEvidenceError(
       `second budget backend ${ready.kind} before PID capture`,
@@ -136,17 +225,26 @@ export async function waitForSavedBackendPid<T>(
 export async function waitForOperationCompletion<T>(
   operation: Promise<T>,
   timeoutMilliseconds = 5_000,
+  scheduler: TimeoutScheduler = systemTimeoutScheduler,
 ) {
-  const completed = await Promise.race([
-    operation.then((value) => ({ kind: "completed" as const, value })),
-    new Promise<{ kind: "timeout" }>((resolve) => {
-      setTimeout(() => resolve({ kind: "timeout" }), timeoutMilliseconds);
-    }),
-  ]);
-  if (completed.kind !== "completed") {
-    throw new BudgetAdvisoryLockEvidenceError(
-      "second budget operation did not complete after lock release",
-    );
-  }
-  return completed.value;
+  return awaitBeforeTimeout(
+    operation,
+    timeoutMilliseconds,
+    "second budget operation did not complete after lock release",
+    scheduler,
+  );
+}
+
+export async function waitForFirstSubmission<T>(
+  submitted: Promise<void>,
+  operation: Promise<T>,
+) {
+  return awaitBeforeTimeout(
+    Promise.race([
+      submitted.then(() => "submitted" as const),
+      operation.then(() => "settled" as const),
+    ]),
+    5_000,
+    "SMOKE_CONCURRENT_A_TIMEOUT",
+  );
 }
