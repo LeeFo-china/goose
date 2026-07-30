@@ -1457,6 +1457,7 @@ DECLARE
   v_matched_count integer;
   v_invalid_quantity boolean;
   v_variance_reason_required boolean;
+  v_variance_reason_forbidden boolean;
   v_over_received boolean;
   v_global_event_exists boolean;
   v_remark text := NULLIF(btrim(p_remark), '');
@@ -1498,7 +1499,8 @@ BEGIN
       item.purchase_order_item_id,
       item.accepted_quantity,
       item.rejected_quantity,
-      NULLIF(btrim(item.variance_reason), '') AS variance_reason
+      btrim(item.variance_reason) AS variance_reason,
+      item.variance_reason IS NOT NULL AS variance_reason_provided
     FROM jsonb_to_recordset(p_items) AS item(
       purchase_order_item_id uuid,
       accepted_quantity numeric,
@@ -1524,17 +1526,16 @@ BEGIN
       OR rejected_quantity >= 100000000000000
     ), true),
     COALESCE(bool_or(
-      (
-        rejected_quantity > 0
-        AND (
-          variance_reason IS NULL
-          OR char_length(variance_reason) > 500
-        )
+      rejected_quantity > 0
+      AND (
+        variance_reason IS NULL
+        OR variance_reason = ''
+        OR char_length(variance_reason) > 500
       )
-      OR (
-        rejected_quantity = 0
-        AND variance_reason IS NOT NULL
-      )
+    ), true),
+    COALESCE(bool_or(
+      rejected_quantity = 0
+      AND variance_reason_provided
     ), true),
     jsonb_agg(
       jsonb_build_object(
@@ -1554,6 +1555,7 @@ BEGIN
     v_has_duplicates,
     v_invalid_quantity,
     v_variance_reason_required,
+    v_variance_reason_forbidden,
     v_normalized_items
   FROM requested;
 
@@ -1561,6 +1563,13 @@ BEGIN
     OR v_requested_count <> v_distinct_count
     OR v_invalid_quantity
   THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code',
+        'SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR'
+    );
+  END IF;
+  IF v_variance_reason_forbidden THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
       'error_code',
