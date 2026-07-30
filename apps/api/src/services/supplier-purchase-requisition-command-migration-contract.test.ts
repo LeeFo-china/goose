@@ -78,6 +78,8 @@ describe("supplier purchase requisition command migration contract", () => {
     }
     const snapshot = extractFunction("supplier_purchase_requisition_to_jsonb");
     expect(snapshot).toMatch(/SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/);
+    expect(snapshot).toMatch(/LANGUAGE sql[\s\S]*STABLE/);
+    expect(snapshot).not.toContain("IMMUTABLE");
     for (const field of ["subtotal_amount", "tax_amount", "total_amount"]) {
       expect(snapshot).toMatch(new RegExp(`'${field}',\\s*p_requisition\\.${field}::text`));
     }

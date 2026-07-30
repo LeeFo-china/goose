@@ -702,7 +702,7 @@ CREATE FUNCTION public.supplier_purchase_requisition_to_jsonb(
 )
 RETURNS jsonb
 LANGUAGE sql
-IMMUTABLE
+STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
