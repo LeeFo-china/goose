@@ -414,6 +414,15 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(concurrencySource).toContain(
       "get_tenant_supplier_order_eligibility_set",
     );
+    expect(concurrencySource).toContain(
+      "catalog_brand.id as catalog_brand_id",
+    );
+    expect(concurrencySource).toContain(
+      "from public.catalog_brands",
+    );
+    expect(concurrencySource).toContain(
+      "${fixture.catalog_brand_id}::uuid",
+    );
     expect(budgetLockSource).toContain("pg_backend_pid()");
     expect(concurrencySource).toContain("waitForBudgetAdvisoryLock");
     expect(concurrencySource).toContain("waitForOperationCompletion");

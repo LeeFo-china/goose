@@ -37,7 +37,7 @@ type ConcurrentSupplierIds = {
 type ConcurrentBase = Omit<
   RequisitionSmokeFixture, "relationship_id" | "sku_id"
 > & {
-  catalog_category_id: string; catalog_unit_id: string;
+  catalog_brand_id: string; catalog_category_id: string; catalog_unit_id: string;
   file_id: string; requisition_amount: string;
 };
 
@@ -134,6 +134,7 @@ async function findConcurrentFixture(
         project.id as other_project_id,
         gen_random_uuid()::text as qualification_type_id,
         file_record.id as file_id,
+        catalog_brand.id as catalog_brand_id,
         catalog_category.id as catalog_category_id,
         catalog_unit.id as catalog_unit_id,
         budget.budget_amount -
@@ -164,6 +165,7 @@ async function findConcurrentFixture(
         order by candidate.id
         limit 1
       ) as reviewer on true
+      join lateral (select id from public.catalog_brands where status = 'active' order by id limit 1) as catalog_brand on true
       join lateral (
         select id
         from public.catalog_categories
@@ -266,13 +268,13 @@ async function seedConcurrentSupplier(
   `;
   await sql`
     insert into public.supplier_products (
-      id, supplier_id, product_code, name, category_id, status,
+      id, supplier_id, product_code, name, category_id, brand_id, status,
       acting_tenant_id, acting_employee_id, proxy_reason,
       created_by_employee_id, updated_by_employee_id
     ) values (
       ${ids.product}::uuid, ${ids.supplier}::uuid,
       ${`SMOKE-REQ-PRODUCT-${label}`}, ${`采购申请并发商品 ${label}`},
-      ${fixture.catalog_category_id}::uuid, 'draft',
+      ${fixture.catalog_category_id}::uuid, ${fixture.catalog_brand_id}::uuid, 'draft',
       ${fixture.tenant_id}::uuid, ${fixture.employee_id}::uuid,
       '采购申请并发 smoke',
       ${fixture.employee_id}::uuid, ${fixture.employee_id}::uuid
