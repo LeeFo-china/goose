@@ -697,6 +697,28 @@ ON CONFLICT (role_id, permission_id) DO UPDATE SET
 
 -- Task 3: atomic purchase requisition commands
 
+CREATE FUNCTION public.supplier_purchase_requisition_to_jsonb(
+  p_requisition public.supplier_purchase_requisitions
+)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT pg_catalog.to_jsonb(p_requisition) ||
+    pg_catalog.jsonb_build_object(
+      'subtotal_amount', p_requisition.subtotal_amount::text,
+      'tax_amount', p_requisition.tax_amount::text,
+      'total_amount', p_requisition.total_amount::text
+    );
+$$;
+REVOKE ALL ON FUNCTION
+  public.supplier_purchase_requisition_to_jsonb(
+    public.supplier_purchase_requisitions
+  )
+FROM PUBLIC, anon, authenticated, service_role;
+
 REVOKE INSERT, UPDATE, DELETE, TRUNCATE ON TABLE
   public.supplier_command_events
 FROM service_role;
@@ -870,6 +892,7 @@ DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb := '{}'::jsonb;
+  v_snapshot jsonb;
   v_request jsonb;
   v_eligible boolean;
   v_supplier_id uuid;
@@ -1370,6 +1393,8 @@ BEGIN
     WHERE requisition.id = p_requisition_id
     RETURNING * INTO v_requisition;
   END IF;
+  v_snapshot :=
+    public.supplier_purchase_requisition_to_jsonb(v_requisition);
 
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
@@ -1379,14 +1404,14 @@ BEGIN
     p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
     'save_supplier_purchase_requisition_draft',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    v_snapshot, p_actor_user_id, p_actor_employee_id,
     p_idempotency_key, v_requisition.version
   );
 
   RETURN jsonb_build_object(
     'status', 'saved',
     'idempotent', false,
-    'requisition', to_jsonb(v_requisition),
+    'requisition', v_snapshot,
     'version', v_requisition.version
   );
 EXCEPTION
@@ -1415,6 +1440,7 @@ DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb;
+  v_snapshot jsonb;
   v_request jsonb;
   v_checked_at timestamptz := clock_timestamp();
   v_eligibility record;
@@ -1862,6 +1888,8 @@ BEGIN
       updated_at = now()
   WHERE requisition.id = p_requisition_id
   RETURNING * INTO v_requisition;
+  v_snapshot :=
+    public.supplier_purchase_requisition_to_jsonb(v_requisition);
 
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
@@ -1871,12 +1899,12 @@ BEGIN
     p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
     'submit_supplier_purchase_requisition',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    v_snapshot, p_actor_user_id, p_actor_employee_id,
     p_idempotency_key, v_requisition.version
   );
   RETURN jsonb_build_object(
     'status', 'submitted', 'idempotent', false,
-    'requisition', to_jsonb(v_requisition),
+    'requisition', v_snapshot,
     'version', v_requisition.version
   );
 END;
@@ -1901,6 +1929,7 @@ DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb;
+  v_snapshot jsonb;
   v_request jsonb;
   v_reviewed_at timestamptz := clock_timestamp();
 BEGIN
@@ -2040,6 +2069,8 @@ BEGIN
     WHERE requisition.id = p_requisition_id
     RETURNING * INTO v_requisition;
   END IF;
+  v_snapshot :=
+    public.supplier_purchase_requisition_to_jsonb(v_requisition);
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
     reason, actor_user_id, actor_employee_id, idempotency_key, result_version
@@ -2048,13 +2079,13 @@ BEGIN
     p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
     'review_supplier_purchase_requisition:' || p_action,
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_requisition), p_remark, p_actor_user_id,
+    v_snapshot, p_remark, p_actor_user_id,
     p_actor_employee_id, p_idempotency_key, v_requisition.version
   );
   RETURN jsonb_build_object(
     'status', CASE WHEN p_action = 'approve' THEN 'approved'
       ELSE 'rejected' END,
-    'idempotent', false, 'requisition', to_jsonb(v_requisition),
+    'idempotent', false, 'requisition', v_snapshot,
     'version', v_requisition.version
   );
 END;
@@ -2078,6 +2109,7 @@ DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb;
+  v_snapshot jsonb;
   v_request jsonb;
   v_cancelled_at timestamptz := clock_timestamp();
 BEGIN
@@ -2189,6 +2221,8 @@ BEGIN
       updated_at = now()
   WHERE requisition.id = p_requisition_id
   RETURNING * INTO v_requisition;
+  v_snapshot :=
+    public.supplier_purchase_requisition_to_jsonb(v_requisition);
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
     reason, actor_user_id, actor_employee_id, idempotency_key, result_version
@@ -2197,12 +2231,12 @@ BEGIN
     p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
     'cancel_supplier_purchase_requisition',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_requisition), btrim(p_reason), p_actor_user_id,
+    v_snapshot, btrim(p_reason), p_actor_user_id,
     p_actor_employee_id, p_idempotency_key, v_requisition.version
   );
   RETURN jsonb_build_object(
     'status', 'cancelled', 'idempotent', false,
-    'requisition', to_jsonb(v_requisition),
+    'requisition', v_snapshot,
     'version', v_requisition.version
   );
 END;
@@ -2569,6 +2603,7 @@ DECLARE
   v_event public.supplier_command_events%ROWTYPE;
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_before jsonb;
+  v_snapshot jsonb;
   v_request jsonb;
   v_checked_at timestamptz := clock_timestamp();
   v_changed_count integer;
@@ -2904,6 +2939,8 @@ BEGIN
       updated_at = now()
   WHERE requisition.id = p_requisition_id
   RETURNING * INTO v_requisition;
+  v_snapshot :=
+    public.supplier_purchase_requisition_to_jsonb(v_requisition);
 
   INSERT INTO public.supplier_command_events (
     tenant_id, resource_type, resource_id, command, from_state, to_state,
@@ -2913,12 +2950,12 @@ BEGIN
     p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
     'convert_supplier_purchase_requisition',
     v_before || jsonb_build_object('_request', v_request),
-    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    v_snapshot, p_actor_user_id, p_actor_employee_id,
     p_idempotency_key, v_requisition.version
   );
   RETURN jsonb_build_object(
     'status', 'converted', 'idempotent', false,
-    'requisition', to_jsonb(v_requisition),
+    'requisition', v_snapshot,
     'purchase_order', v_order_result -> 'purchase_order',
     'purchase_order_id', p_purchase_order_id,
     'version', v_requisition.version

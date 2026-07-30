@@ -55,12 +55,18 @@ const commands = [
 ] as const;
 
 describe("supplier purchase requisition command migration contract", () => {
-  test("creates five private fixed-search-path commands", () => {
+  test("creates five private commands with lossless success snapshots", () => {
     for (const name of commands) {
       const fn = extractFunction(name);
       expect(fn).not.toBe("");
       expect(fn).toContain("SECURITY DEFINER");
       expect(fn).toMatch(/SET search_path = (?:''|pg_catalog, public)/);
+      expect(fn).toMatch(/'requisition', v_event\.to_state/);
+      expectOrdered(fn, [
+        /v_snapshot :=\s*public\.supplier_purchase_requisition_to_jsonb\(v_requisition\)/,
+        /to_state[\s\S]*?v_snapshot/,
+        /'requisition', v_snapshot/,
+      ]);
       expect(sql).toMatch(new RegExp(
         `REVOKE ALL ON FUNCTION public\\.${name}\\([^;]+\\) ` +
           "FROM PUBLIC, anon, authenticated;",
@@ -70,6 +76,14 @@ describe("supplier purchase requisition command migration contract", () => {
           "TO service_role;",
       ));
     }
+    const snapshot = extractFunction("supplier_purchase_requisition_to_jsonb");
+    expect(snapshot).toMatch(/SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/);
+    for (const field of ["subtotal_amount", "tax_amount", "total_amount"]) {
+      expect(snapshot).toMatch(new RegExp(`'${field}',\\s*p_requisition\\.${field}::text`));
+    }
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION\s+public\.supplier_purchase_requisition_to_jsonb\(\s*public\.supplier_purchase_requisitions\s*\)[\s\S]*?service_role/,
+    );
   });
 
   test("validates before the command and resource locks", () => {
