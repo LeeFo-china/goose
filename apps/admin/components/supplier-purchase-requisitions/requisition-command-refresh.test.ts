@@ -95,5 +95,8 @@ describe("采购申请命令成功后的刷新边界", () => {
     expect(lines).toContain('className="sr-only"');
     expect(lines).toContain("requisition-quantity-error-");
     expect(lines).not.toContain("aria-invalid={Boolean(error)}");
+    expect(lines).not.toContain('<Field data-invalid={Boolean(error)}>');
+    expect(lines).toContain("<Field data-invalid={quantityInvalid}>");
+    expect(lines).toContain("<FieldError>{error}</FieldError>");
   });
 });

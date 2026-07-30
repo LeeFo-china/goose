@@ -64,7 +64,7 @@ export function SelectedRequisitionLines({
     label: `${category.name} · ${category.code}`,
   }));
   return (
-    <Field data-invalid={Boolean(error)}>
+    <Field>
       <FieldLabel>采购明细（{lines.length}/100）</FieldLabel>
       <div className="rounded-md border">
         <Table containerClassName="max-w-full overflow-x-auto">
@@ -108,29 +108,31 @@ export function SelectedRequisitionLines({
                     />
                   </TableCell>
                   <TableCell>
-                    <Input
-                      aria-label={`采购数量 ${
-                        fact?.sku_name ?? line.supplierSkuId
-                      }`}
-                      type="text"
-                      inputMode="decimal"
-                      pattern="\d+(?:\.\d{1,4})?"
-                      value={line.quantity}
-                      aria-invalid={quantityInvalid}
-                      aria-describedby={quantityInvalid
-                        ? quantityErrorId
-                        : undefined}
-                      disabled={disabled}
-                      onChange={(event) =>
-                        onChange(line.supplierSkuId, {
-                          quantity: event.target.value,
-                        })}
-                    />
-                    {quantityInvalid ? (
-                      <span id={quantityErrorId} className="sr-only">
-                        {REQUISITION_QUANTITY_ERROR}
-                      </span>
-                    ) : null}
+                    <Field data-invalid={quantityInvalid}>
+                      <Input
+                        aria-label={`采购数量 ${
+                          fact?.sku_name ?? line.supplierSkuId
+                        }`}
+                        type="text"
+                        inputMode="decimal"
+                        pattern="\d+(?:\.\d{1,4})?"
+                        value={line.quantity}
+                        aria-invalid={quantityInvalid}
+                        aria-describedby={quantityInvalid
+                          ? quantityErrorId
+                          : undefined}
+                        disabled={disabled}
+                        onChange={(event) =>
+                          onChange(line.supplierSkuId, {
+                            quantity: event.target.value,
+                          })}
+                      />
+                      {quantityInvalid ? (
+                        <span id={quantityErrorId} className="sr-only">
+                          {REQUISITION_QUANTITY_ERROR}
+                        </span>
+                      ) : null}
+                    </Field>
                   </TableCell>
                   <TableCell>
                     {fact?.purchase_unit_symbol ?? "-"}
