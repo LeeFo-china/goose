@@ -41,7 +41,7 @@ export function H5PageEditor({
   const aiTargetBlock = editor.aiTargetBlock;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pb-6">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
         <div>
           <Button type="button" variant="ghost" className="mb-2 px-0" onClick={editor.goBack}>
