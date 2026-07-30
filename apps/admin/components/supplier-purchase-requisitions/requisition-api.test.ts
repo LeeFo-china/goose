@@ -108,7 +108,7 @@ describe("采购申请 API 契约", () => {
       "/api/backend/supplier-purchase-requisition-project-options?page=1&pageSize=100&keyword=%E9%A1%B9%E7%9B%AE+A",
       "/api/backend/supplier-purchase-requisition-supplier-options?page=2&pageSize=100&keyword=%E4%BE%9B%E5%BA%94%E5%95%86+B",
       "/api/backend/supplier-purchase-requisition-catalog?tenantSupplierId=relationship%2Fid&page=3&pageSize=20&keyword=SKU+C",
-      "/api/backend/supplier-purchase-requisition-cost-categories?page=1&pageSize=100&status=active",
+      "/api/backend/supplier-purchase-requisition-cost-categories?page=1&pageSize=100",
     ]);
   });
 

@@ -208,7 +208,7 @@ describe("SupplierPurchaseRequisitionsController", () => {
       },
     } as never);
     const response = await value.listCostCategories({
-      query: { page: "2", pageSize: "100", status: "active" },
+      query: { page: "2", pageSize: "100" },
     } as never);
 
     expect(listProjectOptions).toHaveBeenCalledWith(auth, {
@@ -230,12 +230,14 @@ describe("SupplierPurchaseRequisitionsController", () => {
     expect(listCostCategories).toHaveBeenCalledWith(auth, {
       page: 2,
       pageSize: 100,
-      status: "active",
     });
     expect(response).toEqual({ data: emptyPage, message: "success" });
 
     await expect(value.listCatalog({
       query: { tenantSupplierId: "bad" },
+    } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(value.listCostCategories({
+      query: { status: "inactive" },
     } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
   });
 

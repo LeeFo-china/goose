@@ -124,7 +124,6 @@ export function loadRequisitionCostCategories(page: number) {
   const query = new URLSearchParams({
     page: String(normalizePage(page)),
     pageSize: "100",
-    status: "active",
   });
   return requestBackendJson<FinanceCostCategoryListData>(
     `/supplier-purchase-requisition-cost-categories?${query}`,

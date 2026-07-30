@@ -119,7 +119,6 @@ describe("SupplierPurchaseRequisitionsService option endpoints", () => {
     await service.listCostCategories(auth, {
       page: 2,
       pageSize: 100,
-      status: "active",
     });
 
     expect(deps.access.requireManage).toHaveBeenCalledTimes(2);
@@ -151,7 +150,6 @@ describe("SupplierPurchaseRequisitionsService option endpoints", () => {
     await expect(service.listCostCategories(auth, {
       page: 1,
       pageSize: 20,
-      status: "active",
     })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(deps.optionsRepository.listCatalog).not.toHaveBeenCalled();
     expect(deps.costCategoryRepository.list).not.toHaveBeenCalled();

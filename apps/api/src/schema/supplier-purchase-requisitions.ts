@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { PaginationQuerySchema } from "./request";
-import { FinanceCostCategoryListQuerySchema } from "./finance-costs";
 import {
   SupplierPurchaseOrderCatalogQuerySchema,
   SupplierPurchaseOrderOptionQuerySchema,
@@ -88,7 +87,7 @@ export const SupplierPurchaseRequisitionCatalogQuerySchema =
   });
 
 export const SupplierPurchaseRequisitionCostCategoryListQuerySchema =
-  FinanceCostCategoryListQuerySchema;
+  PaginationQuerySchema.strict();
 
 export const SupplierPurchaseRequisitionDraftItemSchema = z.object({
   supplier_sku_id: uuid("无效的供应商 SKU ID"),

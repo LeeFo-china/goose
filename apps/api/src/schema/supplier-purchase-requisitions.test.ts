@@ -151,8 +151,10 @@ describe("supplier purchase requisition query schemas", () => {
     expect(SupplierPurchaseRequisitionCostCategoryListQuerySchema.parse({
       page: "3",
       pageSize: "100",
-      status: "active",
-    })).toEqual({ page: 3, pageSize: 100, status: "active" });
+    })).toEqual({ page: 3, pageSize: 100 });
+    expect(SupplierPurchaseRequisitionCostCategoryListQuerySchema.safeParse({
+      status: "inactive",
+    }).success).toBe(false);
     expect(SupplierPurchaseRequisitionOptionQuerySchema.safeParse({
       pageSize: "101",
     }).success).toBe(false);

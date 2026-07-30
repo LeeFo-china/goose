@@ -203,7 +203,10 @@ export class SupplierPurchaseRequisitionsService {
     query: SupplierPurchaseRequisitionCostCategoryListQuery,
   ) {
     const scope = await this.access.requireManage(auth);
-    return this.costCategoryRepository.list(scope.tenantId, query);
+    return this.costCategoryRepository.list(scope.tenantId, {
+      ...query,
+      status: "active",
+    });
   }
 
   async saveDraft(
