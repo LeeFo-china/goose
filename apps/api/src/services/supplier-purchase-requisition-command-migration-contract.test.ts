@@ -439,7 +439,12 @@ describe("supplier purchase requisition command migration contract", () => {
     );
     expect(helper).toContain("SECURITY DEFINER");
     expect(helper).toMatch(/gen_random_uuid\(\)/);
-    expect(helper).toMatch(/save_supplier_purchase_order_draft_v1/);
+    expectOrdered(helper, [
+      /pg_advisory_xact_lock\([\s\S]*'supplier-purchase-order-id:' \|\| p_order_id::text[\s\S]*6720240729190000/,
+      /SELECT EXISTS \([\s\S]*FROM public\.supplier_purchase_orders[\s\S]*purchase_order\.id = p_order_id/,
+      /SUPPLIER_PURCHASE_ORDER_ID_CONFLICT/,
+      /save_supplier_purchase_order_draft_v1/,
+    ]);
     expect(sql).toMatch(
       /REVOKE ALL ON FUNCTION\s+public\.create_supplier_purchase_order_from_requisition\([\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
     );
@@ -447,6 +452,12 @@ describe("supplier purchase requisition command migration contract", () => {
     expect(convert).toMatch(
       /create_supplier_purchase_order_from_requisition\(/,
     );
+    expectOrdered(convert, [
+      /create_supplier_purchase_order_from_requisition\(/,
+      /IF v_order_result ->> 'status' <> 'saved' THEN[\s\S]*RETURN v_order_result/,
+      /UPDATE public\.project_cost_commitments/,
+      /UPDATE public\.supplier_purchase_requisitions/,
+    ]);
     expect(convert).not.toMatch(/requisition-order:/);
     expect(convert).not.toMatch(
       /private\.supplier_purchase_requisition_conversion/,

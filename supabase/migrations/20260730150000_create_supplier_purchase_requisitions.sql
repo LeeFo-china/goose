@@ -2490,9 +2490,29 @@ AS $$
 DECLARE
   v_items jsonb;
   v_result jsonb;
+  v_global_order_exists boolean;
   v_reserved_key text :=
     'supplier-internal:' || gen_random_uuid()::text;
 BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-order-id:' || p_order_id::text,
+      6720240729190000
+    )
+  );
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.supplier_purchase_orders AS purchase_order
+    WHERE purchase_order.id = p_order_id
+  )
+  INTO v_global_order_exists;
+  IF v_global_order_exists THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_ORDER_ID_CONFLICT'
+    );
+  END IF;
+
   SELECT jsonb_agg(
     item.value || jsonb_build_object(
       '_purchase_requisition_id', p_purchase_requisition_id
