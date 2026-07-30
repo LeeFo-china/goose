@@ -87,4 +87,42 @@ describe("供应商采购单页面边界", () => {
     expect(detail).toContain("setCommandAttempt(null)");
     expect(detail).not.toContain("crypto.randomUUID()");
   });
+
+  test("履约 API 暴露六个分页和幂等接口", () => {
+    const api = readSource("./purchase-order-fulfillment-api.ts");
+
+    expect(api).toContain(
+      "/supplier-purchase-orders/${encodedOrderId}/fulfillment",
+    );
+    expect(api).toContain(
+      "/supplier-purchase-orders/${encodedOrderId}/shipments",
+    );
+    expect(api).toContain(
+      "/supplier-purchase-orders/${encodedOrderId}/receipts",
+    );
+    expect(api).toContain(
+      "/supplier-purchase-orders/${encodedOrderId}/confirm-fulfillment",
+    );
+    expect(api).toContain("encodeURIComponent(orderId)");
+    expect(api).toContain('pageSize: String(normalizedPageSize)');
+    expect(api).toContain('headers: { "Idempotency-Key": idempotencyKey }');
+    expect(api).toMatch(
+      /confirmPurchaseOrderFulfillment[\s\S]*?fulfillmentCommand\([\s\S]*?confirm-fulfillment/,
+    );
+    expect(api).toMatch(
+      /createPurchaseOrderShipment[\s\S]*?fulfillmentCommand\([\s\S]*?shipments/,
+    );
+    expect(api).toMatch(
+      /createPurchaseOrderReceipt[\s\S]*?fulfillmentCommand\([\s\S]*?receipts/,
+    );
+  });
+
+  test("履约 payload 不接受价格、税率或金额字段", () => {
+    const rules = readSource("./purchase-order-fulfillment-rules.ts");
+
+    expect(rules).not.toContain("unit_price:");
+    expect(rules).not.toContain("tax_rate:");
+    expect(rules).not.toContain("accepted_amount:");
+    expect(rules).not.toContain("accepted_total_amount:");
+  });
 });
