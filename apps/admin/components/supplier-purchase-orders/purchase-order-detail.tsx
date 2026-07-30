@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -50,6 +50,15 @@ import {
   submitPurchaseOrder,
 } from "./purchase-order-api";
 import {
+  PurchaseOrderFulfillmentPanel,
+} from "./purchase-order-fulfillment-panel";
+import {
+  canCancelWithFulfillment,
+  createLatestRequestGuard,
+  type FulfillmentLoadState,
+  unloadedFulfillmentState,
+} from "./purchase-order-fulfillment-ui-state";
+import {
   commandErrorMessage,
   formatPurchaseMoney,
   purchaseOrderActions,
@@ -76,36 +85,58 @@ export function PurchaseOrderDetail({
   const [current, setCurrent] = useState(order);
   const [items, setItems] = useState<PurchaseOrderItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [hasLoadedDetail, setHasLoadedDetail] = useState(false);
   const [busy, setBusy] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [commandAttempt, setCommandAttempt] =
     useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fulfillmentState, setFulfillmentState] =
+    useState<FulfillmentLoadState>(unloadedFulfillmentState);
+  const requestGuard = useRef(createLatestRequestGuard());
 
   const reload = useCallback(async () => {
-    if (!order) return;
+    const isLatest = requestGuard.current.start();
+    if (!order) return null;
     setLoading(true);
     setError(null);
+    setFulfillmentState(unloadedFulfillmentState);
     try {
       const [latest, itemPage] = await Promise.all([
         loadPurchaseOrder(order.id),
         loadPurchaseOrderItems(order.id),
       ]);
+      if (!isLatest()) return null;
       setCurrent(latest);
       setItems(itemPage.list);
+      setHasLoadedDetail(true);
+      return latest.version;
     } catch (caught) {
+      if (!isLatest()) return null;
       setError(errorMessage(caught, "采购单详情加载失败"));
+      return null;
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, [order]);
 
   useEffect(() => {
+    requestGuard.current.invalidate();
     setCurrent(order);
+    setItems([]);
+    setHasLoadedDetail(false);
+    setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
     if (open) void reload();
+    return () => requestGuard.current.invalidate();
   }, [open, order, reload]);
+
+  const handleFulfillmentChanged = useCallback(async () => {
+    const version = await reload();
+    onChanged();
+    return version;
+  }, [onChanged, reload]);
 
   async function runCommand(action: "submit" | "cancel") {
     if (!current || busy) return;
@@ -160,10 +191,13 @@ export function PurchaseOrderDetail({
   const actions = current
     ? purchaseOrderActions(current.status, canManage)
     : [];
+  const visibleActions = actions.filter((action) =>
+    action !== "cancel" || canCancelWithFulfillment(fulfillmentState)
+  );
   const status = current ? purchaseOrderStatusMeta[current.status] : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-2rem)] min-w-0 max-w-5xl grid-cols-[minmax(0,1fr)] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>采购单详情</DialogTitle>
           <DialogDescription>
@@ -171,14 +205,14 @@ export function PurchaseOrderDetail({
           </DialogDescription>
         </DialogHeader>
         {error ? <StatusAlert>{error}</StatusAlert> : null}
-        {loading || !current ? (
+        {!current || !hasLoadedDetail ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-24 w-full" />
             <Skeleton className="h-64 w-full" />
           </div>
         ) : (
           <>
-            <div className="grid gap-3 rounded-md border p-4 md:grid-cols-3">
+            <div className="min-w-0 max-w-full grid gap-3 rounded-md border p-4 md:grid-cols-3">
               <Fact label="采购单号" value={current.order_no} mono />
               <Fact label="项目" value={current.project.name} />
               <Fact label="供应商" value={current.supplier.name} />
@@ -209,8 +243,10 @@ export function PurchaseOrderDetail({
                 mono
               />
             </div>
-            <div className="rounded-md border">
-              <Table>
+            <div className="min-w-0 max-w-full rounded-md border">
+              <Table
+                containerClassName="min-w-0 max-w-full overflow-x-auto"
+              >
                 <TableHeader>
                   <TableRow>
                     <TableHead>商品 / SKU</TableHead>
@@ -248,9 +284,16 @@ export function PurchaseOrderDetail({
                 </TableBody>
               </Table>
             </div>
+            <PurchaseOrderFulfillmentPanel
+              order={current}
+              purchaseOrderItems={items}
+              canManage={canManage}
+              onOrderChanged={handleFulfillmentChanged}
+              onLoadStateChange={setFulfillmentState}
+            />
           </>
         )}
-        <DialogFooter>
+        <DialogFooter className="min-w-0 max-w-full">
           <Button
             type="button"
             variant="outline"
@@ -259,7 +302,7 @@ export function PurchaseOrderDetail({
           >
             关闭
           </Button>
-          {actions.includes("submit") ? (
+          {visibleActions.includes("submit") ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" disabled={busy}>提交采购单</Button>
@@ -284,7 +327,7 @@ export function PurchaseOrderDetail({
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
-          {actions.includes("cancel") ? (
+          {visibleActions.includes("cancel") ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={busy}>
@@ -338,7 +381,7 @@ function Fact({
   mono?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={cn(
         "mt-1 text-sm",

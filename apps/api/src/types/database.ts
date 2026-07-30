@@ -9731,321 +9731,6 @@ export type Database = {
           },
         ]
       }
-      supplier_purchase_order_items: {
-        Row: {
-          base_unit_code_snapshot: string
-          base_unit_conversion: number
-          base_unit_id: string
-          base_unit_name_snapshot: string
-          base_unit_symbol_snapshot: string
-          created_at: string
-          id: string
-          line_no: number
-          model_snapshot: string | null
-          price_effective_from_snapshot: string
-          price_effective_until_snapshot: string | null
-          price_list_code_snapshot: string
-          price_list_version_snapshot: number
-          product_code_snapshot: string
-          product_name_snapshot: string
-          purchase_unit_code_snapshot: string
-          purchase_unit_id: string
-          purchase_unit_name_snapshot: string
-          purchase_unit_symbol_snapshot: string
-          quantity: number
-          sku_code_snapshot: string
-          sku_name_snapshot: string
-          specification_snapshot: string | null
-          subtotal_amount: number
-          supplier_id: string
-          supplier_price_list_id: string
-          supplier_price_list_item_id: string
-          supplier_product_id: string
-          supplier_purchase_order_id: string
-          supplier_sku_id: string
-          tax_amount: number
-          tax_inclusive: boolean
-          tax_rate: number
-          tenant_id: string
-          total_amount: number
-          unit_price: number
-          updated_at: string
-        }
-        Insert: {
-          base_unit_code_snapshot: string
-          base_unit_conversion: number
-          base_unit_id: string
-          base_unit_name_snapshot: string
-          base_unit_symbol_snapshot: string
-          created_at?: string
-          id?: string
-          line_no: number
-          model_snapshot?: string | null
-          price_effective_from_snapshot: string
-          price_effective_until_snapshot?: string | null
-          price_list_code_snapshot: string
-          price_list_version_snapshot: number
-          product_code_snapshot: string
-          product_name_snapshot: string
-          purchase_unit_code_snapshot: string
-          purchase_unit_id: string
-          purchase_unit_name_snapshot: string
-          purchase_unit_symbol_snapshot: string
-          quantity: number
-          sku_code_snapshot: string
-          sku_name_snapshot: string
-          specification_snapshot?: string | null
-          subtotal_amount: number
-          supplier_id: string
-          supplier_price_list_id: string
-          supplier_price_list_item_id: string
-          supplier_product_id: string
-          supplier_purchase_order_id: string
-          supplier_sku_id: string
-          tax_amount: number
-          tax_inclusive: boolean
-          tax_rate: number
-          tenant_id: string
-          total_amount: number
-          unit_price: number
-          updated_at?: string
-        }
-        Update: {
-          base_unit_code_snapshot?: string
-          base_unit_conversion?: number
-          base_unit_id?: string
-          base_unit_name_snapshot?: string
-          base_unit_symbol_snapshot?: string
-          created_at?: string
-          id?: string
-          line_no?: number
-          model_snapshot?: string | null
-          price_effective_from_snapshot?: string
-          price_effective_until_snapshot?: string | null
-          price_list_code_snapshot?: string
-          price_list_version_snapshot?: number
-          product_code_snapshot?: string
-          product_name_snapshot?: string
-          purchase_unit_code_snapshot?: string
-          purchase_unit_id?: string
-          purchase_unit_name_snapshot?: string
-          purchase_unit_symbol_snapshot?: string
-          quantity?: number
-          sku_code_snapshot?: string
-          sku_name_snapshot?: string
-          specification_snapshot?: string | null
-          subtotal_amount?: number
-          supplier_id?: string
-          supplier_price_list_id?: string
-          supplier_price_list_item_id?: string
-          supplier_product_id?: string
-          supplier_purchase_order_id?: string
-          supplier_sku_id?: string
-          tax_amount?: number
-          tax_inclusive?: boolean
-          tax_rate?: number
-          tenant_id?: string
-          total_amount?: number
-          unit_price?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "supplier_purchase_order_items_order_supplier_fkey"
-            columns: ["supplier_purchase_order_id", "tenant_id", "supplier_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_purchase_orders"
-            referencedColumns: ["id", "tenant_id", "supplier_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_order_tenant_fkey"
-            columns: ["supplier_purchase_order_id", "tenant_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_purchase_orders"
-            referencedColumns: ["id", "tenant_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_price_list_supplier_fkey"
-            columns: ["supplier_price_list_id", "supplier_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_price_lists"
-            referencedColumns: ["id", "supplier_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_supplier_price_list_item_id_fkey"
-            columns: ["supplier_price_list_item_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_price_list_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_product_supplier_fkey"
-            columns: ["supplier_product_id", "supplier_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_products"
-            referencedColumns: ["id", "supplier_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_sku_supplier_fkey"
-            columns: ["supplier_sku_id", "supplier_id"]
-            isOneToOne: false
-            referencedRelation: "supplier_skus"
-            referencedColumns: ["id", "supplier_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_supplier_id_fkey"
-            columns: ["supplier_id"]
-            isOneToOne: false
-            referencedRelation: "suppliers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_order_items_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      supplier_purchase_orders: {
-        Row: {
-          cancel_reason: string | null
-          cancelled_at: string | null
-          cancelled_by_employee_id: string | null
-          created_at: string
-          created_by_employee_id: string
-          currency: string
-          expected_delivery_date: string | null
-          id: string
-          order_no: string
-          priced_at: string
-          project_id: string
-          remark: string | null
-          status: string
-          submitted_at: string | null
-          submitted_by_employee_id: string | null
-          subtotal_amount: number
-          supplier_id: string
-          tax_amount: number
-          tenant_id: string
-          tenant_supplier_id: string
-          total_amount: number
-          updated_at: string
-          updated_by_employee_id: string
-          version: number
-        }
-        Insert: {
-          cancel_reason?: string | null
-          cancelled_at?: string | null
-          cancelled_by_employee_id?: string | null
-          created_at?: string
-          created_by_employee_id: string
-          currency?: string
-          expected_delivery_date?: string | null
-          id: string
-          order_no: string
-          priced_at: string
-          project_id: string
-          remark?: string | null
-          status?: string
-          submitted_at?: string | null
-          submitted_by_employee_id?: string | null
-          subtotal_amount?: number
-          supplier_id: string
-          tax_amount?: number
-          tenant_id: string
-          tenant_supplier_id: string
-          total_amount?: number
-          updated_at?: string
-          updated_by_employee_id: string
-          version?: number
-        }
-        Update: {
-          cancel_reason?: string | null
-          cancelled_at?: string | null
-          cancelled_by_employee_id?: string | null
-          created_at?: string
-          created_by_employee_id?: string
-          currency?: string
-          expected_delivery_date?: string | null
-          id?: string
-          order_no?: string
-          priced_at?: string
-          project_id?: string
-          remark?: string | null
-          status?: string
-          submitted_at?: string | null
-          submitted_by_employee_id?: string | null
-          subtotal_amount?: number
-          supplier_id?: string
-          tax_amount?: number
-          tenant_id?: string
-          tenant_supplier_id?: string
-          total_amount?: number
-          updated_at?: string
-          updated_by_employee_id?: string
-          version?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "supplier_purchase_orders_cancelled_by_employee_id_fkey"
-            columns: ["cancelled_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_created_by_employee_id_fkey"
-            columns: ["created_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_submitted_by_employee_id_fkey"
-            columns: ["submitted_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_supplier_id_fkey"
-            columns: ["supplier_id"]
-            isOneToOne: false
-            referencedRelation: "suppliers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_relationship_tenant_fkey"
-            columns: ["tenant_supplier_id", "tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenant_suppliers"
-            referencedColumns: ["id", "tenant_id"]
-          },
-          {
-            foreignKeyName: "supplier_purchase_orders_updated_by_employee_id_fkey"
-            columns: ["updated_by_employee_id"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       supplier_price_list_items: {
         Row: {
           acting_employee_id: string
@@ -10439,6 +10124,872 @@ export type Database = {
           },
           {
             foreignKeyName: "supplier_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_fulfillments: {
+        Row: {
+          accepted_quantity: number
+          accepted_subtotal_amount: number
+          accepted_tax_amount: number
+          accepted_total_amount: number
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_employee_id: string | null
+          cancelled_by_user_id: string | null
+          confirmation_remark: string | null
+          confirmed_at: string
+          confirmed_by_employee_id: string
+          confirmed_by_user_id: string
+          created_at: string
+          id: string
+          ordered_quantity: number
+          received_quantity: number
+          rejected_quantity: number
+          shipped_quantity: number
+          status: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          accepted_quantity?: number
+          accepted_subtotal_amount?: number
+          accepted_tax_amount?: number
+          accepted_total_amount?: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          cancelled_by_user_id?: string | null
+          confirmation_remark?: string | null
+          confirmed_at: string
+          confirmed_by_employee_id: string
+          confirmed_by_user_id: string
+          created_at?: string
+          id?: string
+          ordered_quantity?: number
+          received_quantity?: number
+          rejected_quantity?: number
+          shipped_quantity?: number
+          status?: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          accepted_quantity?: number
+          accepted_subtotal_amount?: number
+          accepted_tax_amount?: number
+          accepted_total_amount?: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          cancelled_by_user_id?: string | null
+          confirmation_remark?: string | null
+          confirmed_at?: string
+          confirmed_by_employee_id?: string
+          confirmed_by_user_id?: string
+          created_at?: string
+          id?: string
+          ordered_quantity?: number
+          received_quantity?: number
+          rejected_quantity?: number
+          shipped_quantity?: number
+          status?: string
+          supplier_purchase_order_id?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillme_cancelled_by_employee_id_fkey"
+            columns: ["cancelled_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillme_confirmed_by_employee_id_fkey"
+            columns: ["confirmed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillment_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillments_order_tenant_fkey"
+            columns: ["supplier_purchase_order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_fulfillments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_item_fulfillments: {
+        Row: {
+          accepted_quantity: number
+          accepted_subtotal_amount: number
+          accepted_tax_amount: number
+          accepted_total_amount: number
+          created_at: string
+          id: string
+          ordered_quantity: number
+          received_quantity: number
+          rejected_quantity: number
+          shipped_quantity: number
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_quantity?: number
+          accepted_subtotal_amount?: number
+          accepted_tax_amount?: number
+          accepted_total_amount?: number
+          created_at?: string
+          id?: string
+          ordered_quantity: number
+          received_quantity?: number
+          rejected_quantity?: number
+          shipped_quantity?: number
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_quantity?: number
+          accepted_subtotal_amount?: number
+          accepted_tax_amount?: number
+          accepted_total_amount?: number
+          created_at?: string
+          id?: string
+          ordered_quantity?: number
+          received_quantity?: number
+          rejected_quantity?: number
+          shipped_quantity?: number
+          supplier_purchase_order_fulfillment_id?: string
+          supplier_purchase_order_id?: string
+          supplier_purchase_order_item_id?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_item_fulfillments_item_fkey"
+            columns: [
+              "supplier_purchase_order_item_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_items"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_item_fulfillments_parent_fkey"
+            columns: [
+              "supplier_purchase_order_fulfillment_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_fulfillments"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_item_fulfillments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_item_fulfillments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_items: {
+        Row: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          created_at: string
+          id: string
+          line_no: number
+          model_snapshot: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot: string | null
+          subtotal_amount: number
+          supplier_id: string
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_purchase_order_id: string
+          supplier_sku_id: string
+          tax_amount: number
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+          updated_at: string
+        }
+        Insert: {
+          base_unit_code_snapshot: string
+          base_unit_conversion: number
+          base_unit_id: string
+          base_unit_name_snapshot: string
+          base_unit_symbol_snapshot: string
+          created_at?: string
+          id?: string
+          line_no: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot: string
+          price_list_version_snapshot: number
+          product_code_snapshot: string
+          product_name_snapshot: string
+          purchase_unit_code_snapshot: string
+          purchase_unit_id: string
+          purchase_unit_name_snapshot: string
+          purchase_unit_symbol_snapshot: string
+          quantity: number
+          sku_code_snapshot: string
+          sku_name_snapshot: string
+          specification_snapshot?: string | null
+          subtotal_amount: number
+          supplier_id: string
+          supplier_price_list_id: string
+          supplier_price_list_item_id: string
+          supplier_product_id: string
+          supplier_purchase_order_id: string
+          supplier_sku_id: string
+          tax_amount: number
+          tax_inclusive: boolean
+          tax_rate: number
+          tenant_id: string
+          total_amount: number
+          unit_price: number
+          updated_at?: string
+        }
+        Update: {
+          base_unit_code_snapshot?: string
+          base_unit_conversion?: number
+          base_unit_id?: string
+          base_unit_name_snapshot?: string
+          base_unit_symbol_snapshot?: string
+          created_at?: string
+          id?: string
+          line_no?: number
+          model_snapshot?: string | null
+          price_effective_from_snapshot?: string
+          price_effective_until_snapshot?: string | null
+          price_list_code_snapshot?: string
+          price_list_version_snapshot?: number
+          product_code_snapshot?: string
+          product_name_snapshot?: string
+          purchase_unit_code_snapshot?: string
+          purchase_unit_id?: string
+          purchase_unit_name_snapshot?: string
+          purchase_unit_symbol_snapshot?: string
+          quantity?: number
+          sku_code_snapshot?: string
+          sku_name_snapshot?: string
+          specification_snapshot?: string | null
+          subtotal_amount?: number
+          supplier_id?: string
+          supplier_price_list_id?: string
+          supplier_price_list_item_id?: string
+          supplier_product_id?: string
+          supplier_purchase_order_id?: string
+          supplier_sku_id?: string
+          tax_amount?: number
+          tax_inclusive?: boolean
+          tax_rate?: number
+          tenant_id?: string
+          total_amount?: number
+          unit_price?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_items_order_supplier_fkey"
+            columns: ["supplier_purchase_order_id", "tenant_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_orders"
+            referencedColumns: ["id", "tenant_id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_order_tenant_fkey"
+            columns: ["supplier_purchase_order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_price_list_supplier_fkey"
+            columns: ["supplier_price_list_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_lists"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_product_supplier_fkey"
+            columns: ["supplier_product_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_products"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_sku_supplier_fkey"
+            columns: ["supplier_sku_id", "supplier_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_skus"
+            referencedColumns: ["id", "supplier_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_supplier_price_list_item_id_fkey"
+            columns: ["supplier_price_list_item_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_price_list_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_receipt_items: {
+        Row: {
+          accepted_quantity: number
+          created_at: string
+          id: string
+          receipt_id: string
+          rejected_quantity: number
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+          variance_reason: string | null
+        }
+        Insert: {
+          accepted_quantity?: number
+          created_at?: string
+          id?: string
+          receipt_id: string
+          rejected_quantity?: number
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+          variance_reason?: string | null
+        }
+        Update: {
+          accepted_quantity?: number
+          created_at?: string
+          id?: string
+          receipt_id?: string
+          rejected_quantity?: number
+          supplier_purchase_order_fulfillment_id?: string
+          supplier_purchase_order_id?: string
+          supplier_purchase_order_item_id?: string
+          tenant_id?: string
+          variance_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_receipt_items_item_fkey"
+            columns: [
+              "supplier_purchase_order_item_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_items"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipt_items_parent_fkey"
+            columns: [
+              "receipt_id",
+              "tenant_id",
+              "supplier_purchase_order_fulfillment_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_receipts"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "supplier_purchase_order_fulfillment_id",
+              "supplier_purchase_order_id",
+            ]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipt_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipt_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_receipts: {
+        Row: {
+          created_at: string
+          created_by_user_id: string
+          id: string
+          receipt_no: string
+          received_at: string
+          received_by_employee_id: string
+          remark: string | null
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_user_id: string
+          id: string
+          receipt_no: string
+          received_at: string
+          received_by_employee_id: string
+          remark?: string | null
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by_user_id?: string
+          id?: string
+          receipt_no?: string
+          received_at?: string
+          received_by_employee_id?: string
+          remark?: string | null
+          supplier_purchase_order_fulfillment_id?: string
+          supplier_purchase_order_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_receipts_parent_fkey"
+            columns: [
+              "supplier_purchase_order_fulfillment_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_fulfillments"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipts_received_by_employee_id_fkey"
+            columns: ["received_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_receipts_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_shipment_items: {
+        Row: {
+          created_at: string
+          id: string
+          quantity: number
+          shipment_id: string
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          quantity: number
+          shipment_id: string
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          quantity?: number
+          shipment_id?: string
+          supplier_purchase_order_fulfillment_id?: string
+          supplier_purchase_order_id?: string
+          supplier_purchase_order_item_id?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_shipment_items_item_fkey"
+            columns: [
+              "supplier_purchase_order_item_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_items"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipment_items_parent_fkey"
+            columns: [
+              "shipment_id",
+              "tenant_id",
+              "supplier_purchase_order_fulfillment_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_shipments"
+            referencedColumns: [
+              "id",
+              "tenant_id",
+              "supplier_purchase_order_fulfillment_id",
+              "supplier_purchase_order_id",
+            ]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipment_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipment_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_order_shipments: {
+        Row: {
+          carrier_name: string | null
+          created_at: string
+          created_by_employee_id: string
+          created_by_user_id: string
+          id: string
+          remark: string | null
+          shipment_no: string
+          shipped_at: string
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+          tracking_no: string | null
+        }
+        Insert: {
+          carrier_name?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          created_by_user_id: string
+          id: string
+          remark?: string | null
+          shipment_no: string
+          shipped_at: string
+          supplier_purchase_order_fulfillment_id: string
+          supplier_purchase_order_id: string
+          tenant_id: string
+          tracking_no?: string | null
+        }
+        Update: {
+          carrier_name?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          created_by_user_id?: string
+          id?: string
+          remark?: string | null
+          shipment_no?: string
+          shipped_at?: string
+          supplier_purchase_order_fulfillment_id?: string
+          supplier_purchase_order_id?: string
+          tenant_id?: string
+          tracking_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_order_shipments_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipments_parent_fkey"
+            columns: [
+              "supplier_purchase_order_fulfillment_id",
+              "tenant_id",
+              "supplier_purchase_order_id",
+            ]
+            isOneToOne: false
+            referencedRelation: "supplier_purchase_order_fulfillments"
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_order_shipments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      supplier_purchase_orders: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by_employee_id: string | null
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          expected_delivery_date: string | null
+          id: string
+          order_no: string
+          priced_at: string
+          project_id: string
+          remark: string | null
+          status: string
+          submitted_at: string | null
+          submitted_by_employee_id: string | null
+          subtotal_amount: number
+          supplier_id: string
+          tax_amount: number
+          tenant_id: string
+          tenant_supplier_id: string
+          total_amount: number
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id: string
+          order_no: string
+          priced_at: string
+          project_id: string
+          remark?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_id: string
+          tax_amount?: number
+          tenant_id: string
+          tenant_supplier_id: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          expected_delivery_date?: string | null
+          id?: string
+          order_no?: string
+          priced_at?: string
+          project_id?: string
+          remark?: string | null
+          status?: string
+          submitted_at?: string | null
+          submitted_by_employee_id?: string | null
+          subtotal_amount?: number
+          supplier_id?: string
+          tax_amount?: number
+          tenant_id?: string
+          tenant_supplier_id?: string
+          total_amount?: number
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_purchase_orders_cancelled_by_employee_id_fkey"
+            columns: ["cancelled_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_relationship_tenant_fkey"
+            columns: ["tenant_supplier_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_submitted_by_employee_id_fkey"
+            columns: ["submitted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "platform_supplier_directory"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_purchase_orders_updated_by_employee_id_fkey"
             columns: ["updated_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
@@ -15994,66 +16545,6 @@ export type Database = {
         }
         Returns: string
       }
-      cancel_supplier_purchase_order: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_order_id: string
-          p_reason: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      list_supplier_purchase_order_supplier_options: {
-        Args: {
-          p_checked_at: string
-          p_keyword?: string
-          p_page?: number
-          p_page_size?: number
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      resolve_supplier_purchase_order_catalog: {
-        Args: {
-          p_keyword?: string
-          p_page?: number
-          p_page_size?: number
-          p_priced_at: string
-          p_tenant_id: string
-          p_tenant_supplier_id: string
-        }
-        Returns: Json
-      }
-      save_supplier_purchase_order_draft: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_delivery_date: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_items: Json
-          p_order_id: string
-          p_project_id: string
-          p_remark: string
-          p_tenant_id: string
-          p_tenant_supplier_id: string
-        }
-        Returns: Json
-      }
-      submit_supplier_purchase_order: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_order_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
       apply_tenant_entitlement_action: {
         Args: {
           p_action: string
@@ -16134,6 +16625,14 @@ export type Database = {
         Args: {
           p_actor_employee_id: string
           p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      assert_supplier_purchase_order_actor: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
           p_tenant_id: string
         }
         Returns: undefined
@@ -16750,6 +17249,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_supplier_purchase_order: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       cancel_workflow_instance: {
         Args: {
           p_actor_employee_id: string
@@ -17196,6 +17707,19 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_supplier_purchase_order_fulfillment: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_confirmed_at: string
+          p_expected_order_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_catalog_brand: {
         Args: {
           p_actor_employee_id: string
@@ -17459,6 +17983,40 @@ export type Database = {
           p_proxy_reason: string
           p_supplier_id: string
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_purchase_order_receipt: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_fulfillment_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_receipt_id: string
+          p_receipt_no: string
+          p_received_at: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_purchase_order_shipment: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_carrier_name: string
+          p_expected_fulfillment_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_remark: string
+          p_shipment_id: string
+          p_shipment_no: string
+          p_shipped_at: string
+          p_tenant_id: string
+          p_tracking_no: string
         }
         Returns: Json
       }
@@ -18155,6 +18713,16 @@ export type Database = {
           tenant_id: string
         }[]
       }
+      list_supplier_purchase_order_supplier_options: {
+        Args: {
+          p_checked_at: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       list_tenant_service_provider_publications: {
         Args: { p_keyword: string; p_status: string }
         Returns: {
@@ -18597,6 +19165,17 @@ export type Database = {
           reserved: boolean
         }[]
       }
+      resolve_supplier_purchase_order_catalog: {
+        Args: {
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_priced_at: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       resolve_tenant_onboarding_region_paths: {
         Args: { p_service_region_codes: string[] }
         Returns: {
@@ -18736,6 +19315,38 @@ export type Database = {
         }
         Returns: Json
       }
+      save_supplier_purchase_order_draft: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_delivery_date: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_project_id: string
+          p_remark: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      save_supplier_purchase_order_draft_v1: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_delivery_date: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_project_id: string
+          p_remark: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       search_finance_project_risk_ids: {
         Args: {
           p_budget_configured?: boolean
@@ -18808,6 +19419,17 @@ export type Database = {
           updated_existing: boolean
         }[]
       }
+      submit_supplier_purchase_order: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       submit_tenant_onboarding_application: {
         Args: {
           p_application: Json
@@ -18865,6 +19487,12 @@ export type Database = {
         Returns: {
           application_id: string
         }[]
+      }
+      supplier_purchase_order_snapshot: {
+        Args: {
+          p_order: Database["public"]["Tables"]["supplier_purchase_orders"]["Row"]
+        }
+        Returns: Json
       }
       suspend_tenant_service_provider: {
         Args: {

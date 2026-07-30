@@ -65,6 +65,10 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "采购单当前状态不允许该操作",
   },
+  SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购单参数校验失败",
+  },
   SUPPLIER_PURCHASE_ORDER_PRICE_MISSING: {
     statusCode: 409,
     message: "部分采购商品缺少当前有效价格",
@@ -73,20 +77,147 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "采购价格已变化，请重新确认采购单",
   },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_DIRECT_WRITE_FORBIDDEN: {
+    statusCode: 409,
+    message: "采购履约数据只能通过履约命令变更",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_EVENT_IMMUTABLE: {
+    statusCode: 409,
+    message: "采购履约事件不可修改或删除",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED: {
+    statusCode: 409,
+    message: "供应商采购单尚未确认履约",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购履约确认参数校验失败",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED: {
+    statusCode: 409,
+    message: "供应商采购单已确认履约",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STATE_CONFLICT: {
+    statusCode: 409,
+    message: "采购履约当前状态不允许该操作",
+  },
+  SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购发货参数校验失败",
+  },
+  SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT: {
+    statusCode: 409,
+    message: "采购发货记录编号已存在",
+  },
+  SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR: {
+    statusCode: 400,
+    message: "采购收货参数校验失败",
+  },
+  SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT: {
+    statusCode: 409,
+    message: "采购收货记录编号已存在",
+  },
+  SUPPLIER_PURCHASE_ORDER_ITEM_NOT_FOUND: {
+    statusCode: 404,
+    message: "供应商采购单明细不存在",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED: {
+    statusCode: 409,
+    message: "采购履约已开始，不能取消采购单",
+  },
+  SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: "采购履约版本已变化，请刷新后重试",
+  },
+  SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED: {
+    statusCode: 409,
+    message: "本次发货数量超过采购数量",
+  },
+  SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED: {
+    statusCode: 409,
+    message: "本次收货数量超过累计发货数量",
+  },
+  SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED: {
+    statusCode: 400,
+    message: "存在拒收数量时必须填写差异原因",
+  },
 } as const;
 
 type SupplierBusinessCode = keyof typeof BUSINESS_ERRORS;
+const TOKEN_ALIASES = {
+  FULFILLMENT_NOT_CONFIRMED:
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
+  FULFILLMENT_VERSION_CONFLICT:
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
+  OVER_SHIPPED: "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
+  OVER_RECEIVED: "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED",
+  VARIANCE_REASON_REQUIRED:
+    "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
+} as const satisfies Record<string, SupplierBusinessCode>;
+type SupplierCommandToken =
+  SupplierBusinessCode | keyof typeof TOKEN_ALIASES;
+const FULFILLMENT_ENVELOPE_CODES: Readonly<
+  Record<string, readonly SupplierCommandToken[]>
+> = {
+  validation_error: [
+    "SUPPLIER_PURCHASE_ORDER_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR",
+    "SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR",
+  ],
+  not_found: [
+    "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
+    "SUPPLIER_PURCHASE_ORDER_ITEM_NOT_FOUND",
+  ],
+  version_conflict: [
+    "SUPPLIER_PURCHASE_ORDER_VERSION_CONFLICT",
+    "FULFILLMENT_VERSION_CONFLICT",
+  ],
+  state_conflict: [
+    "SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_ALREADY_CONFIRMED",
+    "FULFILLMENT_NOT_CONFIRMED",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STATE_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
+    "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED",
+  ],
+  project_invalid: ["SUPPLIER_PURCHASE_ORDER_PROJECT_INVALID"],
+  idempotency_conflict: ["SUPPLIER_IDEMPOTENCY_CONFLICT"],
+  over_shipped: ["OVER_SHIPPED"],
+  over_received: ["OVER_RECEIVED"],
+  variance_reason_required: ["VARIANCE_REASON_REQUIRED"],
+};
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
-  const code = (Object.keys(BUSINESS_ERRORS) as SupplierBusinessCode[])
-    .find((candidate) => containsToken(error, candidate));
-  if (!code) return null;
+  const token = [
+    ...Object.keys(BUSINESS_ERRORS) as SupplierBusinessCode[],
+    ...Object.keys(TOKEN_ALIASES) as Array<keyof typeof TOKEN_ALIASES>,
+  ]
+    .sort((left, right) => right.length - left.length)
+    .find((candidate) => containsToken(error, candidate)) as
+      | SupplierCommandToken
+      | undefined;
+  if (!token) return null;
+  const code = token in TOKEN_ALIASES
+    ? TOKEN_ALIASES[token as keyof typeof TOKEN_ALIASES]
+    : token as SupplierBusinessCode;
   const definition = BUSINESS_ERRORS[code];
   return Errors.business(
     definition.statusCode,
     definition.message,
     code,
   );
+}
+
+export function mapSupplierPurchaseFulfillmentEnvelopeError(
+  status: string,
+  errorCode: unknown,
+) {
+  if (typeof errorCode !== "string") return null;
+  const allowedCodes = FULFILLMENT_ENVELOPE_CODES[status];
+  if (!allowedCodes?.some((code) => code === errorCode)) return null;
+  return mapSupplierCommandDatabaseError(errorCode);
 }
 
 export function throwSupplierCommandDatabaseError(

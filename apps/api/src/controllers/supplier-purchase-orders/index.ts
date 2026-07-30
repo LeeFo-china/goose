@@ -5,12 +5,17 @@ import {
   SupplierPurchaseOrderCancelSchema,
   SupplierPurchaseOrderCatalogQuerySchema,
   SupplierPurchaseOrderDraftSchema,
+  SupplierPurchaseOrderFulfillmentConfirmSchema,
+  SupplierPurchaseOrderFulfillmentEventListQuerySchema,
   SupplierPurchaseOrderItemListQuerySchema,
   SupplierPurchaseOrderListQuerySchema,
   SupplierPurchaseOrderOptionQuerySchema,
   SupplierPurchaseOrderParamSchema,
+  SupplierPurchaseOrderReceiptCreateSchema,
+  SupplierPurchaseOrderShipmentCreateSchema,
   SupplierPurchaseOrderSubmitSchema,
 } from "@/schema/supplier-purchase-orders";
+import { supplierPurchaseFulfillmentsService } from "@/services/supplier-purchase-fulfillments";
 import { supplierPurchaseOrdersService } from "@/services/supplier-purchase-orders";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -59,6 +64,58 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPurchaseOrdersService.listItems(auth, id, query),
+    );
+  }
+
+  @Get("/supplier-purchase-orders/:id/fulfillment")
+  async getFulfillment(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.getDetail(auth, id),
+    );
+  }
+
+  @Get("/supplier-purchase-orders/:id/shipments")
+  async listFulfillmentShipments(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const query = this.parse(
+      SupplierPurchaseOrderFulfillmentEventListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.listShipments(
+        auth,
+        id,
+        query,
+      ),
+    );
+  }
+
+  @Get("/supplier-purchase-orders/:id/receipts")
+  async listFulfillmentReceipts(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const query = this.parse(
+      SupplierPurchaseOrderFulfillmentEventListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.listReceipts(
+        auth,
+        id,
+        query,
+      ),
     );
   }
 
@@ -151,6 +208,72 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPurchaseOrdersService.cancel(auth, id, input, key),
+    );
+  }
+
+  @Post("/supplier-purchase-orders/:id/confirm-fulfillment")
+  async confirmFulfillment(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const input = this.parse(
+      SupplierPurchaseOrderFulfillmentConfirmSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.confirm(
+        auth,
+        id,
+        input,
+        key,
+      ),
+    );
+  }
+
+  @Post("/supplier-purchase-orders/:id/shipments")
+  async createFulfillmentShipment(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const input = this.parse(
+      SupplierPurchaseOrderShipmentCreateSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.createShipment(
+        auth,
+        id,
+        input,
+        key,
+      ),
+    );
+  }
+
+  @Post("/supplier-purchase-orders/:id/receipts")
+  async createFulfillmentReceipt(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    const input = this.parse(
+      SupplierPurchaseOrderReceiptCreateSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseFulfillmentsService.createReceipt(
+        auth,
+        id,
+        input,
+        key,
+      ),
     );
   }
 
