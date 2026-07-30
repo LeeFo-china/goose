@@ -27,6 +27,8 @@ function dependencies(options: {
   updateProjects?: string[] | null;
   scopeFound?: boolean;
   budgetStatus?: "within_budget" | "over_budget";
+  status?: "draft" | "pending_approval";
+  version?: number;
 } = {}) {
   const events: string[] = [];
   const actorScope = {
@@ -40,6 +42,8 @@ function dependencies(options: {
     tenant_supplier_id: RELATIONSHIP_ID,
     created_by_employee_id: REQUESTER_ID,
     budget_status: options.budgetStatus ?? "within_budget",
+    status: options.status ?? "pending_approval",
+    version: options.version ?? 2,
   };
   const detail = {
     requisition: {
@@ -209,6 +213,80 @@ describe("SupplierPurchaseRequisitionsService scoped authorization", () => {
     ]);
     expect(deps.repository.findRequisition).not.toHaveBeenCalled();
   });
+
+  test("rejects a non-pending snapshot before finance or review RPC", async () => {
+    const { deps, service } = await serviceFor({
+      status: "draft",
+      version: 1,
+    });
+
+    await expect(service.review(auth, REQUISITION_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "requisition:review")).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT",
+    });
+    expect(deps.access.requireFinanceBudgetManage).not.toHaveBeenCalled();
+    expect(deps.repository.review).not.toHaveBeenCalled();
+  });
+
+  test("rejects a future requested version before finance or review RPC", async () => {
+    const { deps, service } = await serviceFor({
+      budgetStatus: "over_budget",
+      version: 1,
+    });
+
+    await expect(service.review(auth, REQUISITION_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "requisition:review")).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT",
+    });
+    expect(deps.access.requireFinanceBudgetManage).not.toHaveBeenCalled();
+    expect(deps.repository.review).not.toHaveBeenCalled();
+  });
+
+  test("keeps finance mandatory for a matching over-budget snapshot", async () => {
+    const { deps, service } = await serviceFor({
+      budgetStatus: "over_budget",
+      version: 2,
+    });
+    deps.access.requireFinanceBudgetManage.mockImplementation(async () => {
+      throw Errors.forbidden();
+    });
+
+    await expect(service.review(auth, REQUISITION_ID, {
+      expected_version: 2,
+      action: "approve",
+    }, "requisition:review")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(deps.repository.review).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["within_budget", false],
+    ["over_budget", true],
+  ] as const)(
+    "passes matching %s version unchanged to review RPC",
+    async (budgetStatus, requiresFinance) => {
+      const { deps, service } = await serviceFor({
+        budgetStatus,
+        version: 2,
+      });
+
+      await service.review(auth, REQUISITION_ID, {
+        expected_version: 2,
+        action: "approve",
+      }, "requisition:review");
+
+      expect(deps.access.requireFinanceBudgetManage)
+        .toHaveBeenCalledTimes(requiresFinance ? 1 : 0);
+      expect(deps.repository.review).toHaveBeenCalledWith(
+        expect.objectContaining({ expected_version: 2 }),
+      );
+    },
+  );
 
   test("scopes existing save, cancel, and convert without full detail", async () => {
     const { deps, service } = await serviceFor();

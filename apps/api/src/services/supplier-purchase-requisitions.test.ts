@@ -57,6 +57,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     tenant_supplier_id: RELATIONSHIP_ID,
     created_by_employee_id: EMPLOYEE_ID,
     budget_status: "within_budget",
+    status: "pending_approval",
+    version: 2,
     ...overrides,
   };
   return {

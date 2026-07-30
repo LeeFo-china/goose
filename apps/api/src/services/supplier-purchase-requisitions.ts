@@ -196,6 +196,22 @@ export class SupplierPurchaseRequisitionsService {
       requisitionId,
       visibleProjectIds,
     );
+    // 所有公开状态和预算状态变更都会原子递增 version；RPC 锁行后会再次
+    // 校验 expected_version，因此 scope 查询后的并发变化只能形成版本冲突。
+    if (requisition.status !== "pending_approval") {
+      throw Errors.business(
+        409,
+        "采购申请当前状态不允许审批",
+        "SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT",
+      );
+    }
+    if (requisition.version !== input.expected_version) {
+      throw Errors.business(
+        409,
+        "采购申请版本已变化，请刷新后重试",
+        "SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT",
+      );
+    }
     if (requisition.created_by_employee_id === scope.employeeId) {
       throw Errors.business(
         409,

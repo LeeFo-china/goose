@@ -53,6 +53,8 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
       tenant_supplier_id: RELATIONSHIP_ID,
       created_by_employee_id: EMPLOYEE_ID,
       budget_status: "over_budget",
+      status: "pending_approval",
+      version: 2,
     } as const;
     const { repository, requests } = await repositoryFor(() => ({
       body: scope,
@@ -76,6 +78,8 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
       "tenant_supplier_id",
       "created_by_employee_id",
       "budget_status",
+      "status",
+      "version",
     ].join(","));
     expect(url.searchParams.get("select")).not.toContain("total_amount");
     expect(url.searchParams.get("select")).not.toContain("remark");
@@ -88,6 +92,8 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
       tenant_supplier_id: RELATIONSHIP_ID,
       created_by_employee_id: EMPLOYEE_ID,
       budget_status: "within_budget",
+      status: "pending_approval",
+      version: 2,
     } as const;
     const { repository, requests } = await repositoryFor(() => ({
       body: scope,
@@ -127,10 +133,28 @@ describe("SupplierPurchaseRequisitionsRepository scope lookup", () => {
         tenant_supplier_id: RELATIONSHIP_ID,
         created_by_employee_id: EMPLOYEE_ID,
         budget_status: "within_budget",
+        status: "pending_approval",
+        version: 2,
         remark: "不应读取",
       },
     }));
     await expect(malformed.findRequisitionScope({
+      tenant_id: TENANT_ID,
+      requisition_id: REQUISITION_ID,
+      visible_project_ids: [PROJECT_ID],
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+
+    const { repository: missingVersion } = await repositoryFor(() => ({
+      body: {
+        id: REQUISITION_ID,
+        project_id: PROJECT_ID,
+        tenant_supplier_id: RELATIONSHIP_ID,
+        created_by_employee_id: EMPLOYEE_ID,
+        budget_status: "within_budget",
+        status: "pending_approval",
+      },
+    }));
+    await expect(missingVersion.findRequisitionScope({
       tenant_id: TENANT_ID,
       requisition_id: REQUISITION_ID,
       visible_project_ids: [PROJECT_ID],

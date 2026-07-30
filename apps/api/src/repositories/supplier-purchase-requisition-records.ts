@@ -44,6 +44,8 @@ export const SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT = [
   "tenant_supplier_id",
   "created_by_employee_id",
   "budget_status",
+  "status",
+  "version",
 ].join(",");
 
 export const SUPPLIER_PURCHASE_REQUISITION_ITEM_SELECT = [
@@ -196,6 +198,8 @@ export const SupplierPurchaseRequisitionScopeSchema = z.object({
   tenant_supplier_id: uuid,
   created_by_employee_id: uuid,
   budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
+  status: SupplierPurchaseRequisitionStatusSchema,
+  version: z.number().int().positive(),
 }).strict();
 
 export const SupplierPurchaseRequisitionItemSchema = z.object({
