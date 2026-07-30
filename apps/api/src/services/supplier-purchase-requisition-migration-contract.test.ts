@@ -8,6 +8,8 @@ const migrationPath = new URL(
 const sql = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const task3Marker = "-- Task 3: atomic purchase requisition commands";
+const schemaFoundationSql = sql.slice(0, sql.indexOf(task3Marker));
 
 function extractStatement(startPattern: RegExp) {
   const start = sql.search(startPattern);
@@ -480,7 +482,8 @@ describe("supplier purchase requisition migration contract", () => {
       /maintenance window[\s\S]*existing composite unique index[\s\S]*30 seconds[\s\S]*whole transaction[\s\S]*do not retry[\s\S]*forward preflight migration[\s\S]*CREATE UNIQUE INDEX CONCURRENTLY[\s\S]*ADD CONSTRAINT USING INDEX[\s\S]*rerun/i,
       /Global eight-digit sequence cap[\s\S]*100,000,000[\s\S]*forward migration/i,
     ]);
-    expect(sql).not.toMatch(
+    expect(sql).toContain(task3Marker);
+    expect(schemaFoundationSql).not.toMatch(
       /CREATE (?:OR REPLACE )?FUNCTION public\.(?:save|submit|approve|reject|cancel|convert)_supplier_purchase_requisition/,
     );
     expectContracts(sql, [

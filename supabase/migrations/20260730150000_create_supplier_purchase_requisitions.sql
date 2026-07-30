@@ -695,4 +695,1941 @@ ON CONFLICT (role_id, permission_id) DO UPDATE SET
 -- before hiding API/UI entry points. Preserve requisition audit and financial facts.
 -- A destructive rollback must be an explicit reviewed migration.
 
+-- Task 3: atomic purchase requisition commands
+
+-- EXPLAIN smoke (Task 9/10): requisition draft catalog must use the requested
+-- SKU set, supplier_price_items_sku_list_idx, and primary-key unit/category
+-- lookups without a per-item nested application query.
+-- EXPLAIN smoke (Task 9/10): requisition budget reservation must aggregate
+-- items, outgoing ledger entries, and active commitments once per category.
+
+CREATE FUNCTION public.save_supplier_purchase_requisition_draft(
+  p_requisition_id uuid,
+  p_tenant_id uuid,
+  p_project_id uuid,
+  p_tenant_supplier_id uuid,
+  p_expected_version integer,
+  p_expected_delivery_date date,
+  p_reason text,
+  p_remark text,
+  p_items jsonb,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_before jsonb := '{}'::jsonb;
+  v_request jsonb;
+  v_eligibility record;
+  v_supplier_id uuid;
+  v_priced_at timestamptz;
+  v_resolved_items jsonb;
+  v_requested_count integer;
+  v_resolved_count integer;
+  v_duplicate_count integer;
+  v_invalid_count integer;
+  v_subtotal_amount numeric(18, 2);
+  v_tax_amount numeric(18, 2);
+  v_total_amount numeric(18, 2);
+BEGIN
+  IF p_requisition_id IS NULL
+    OR p_tenant_id IS NULL
+    OR p_project_id IS NULL
+    OR p_tenant_supplier_id IS NULL
+    OR p_expected_version IS NULL
+    OR p_expected_version < 0
+    OR p_reason IS NULL
+    OR btrim(p_reason) = ''
+    OR char_length(btrim(p_reason)) > 500
+    OR (p_remark IS NOT NULL AND (
+      btrim(p_remark) = '' OR char_length(btrim(p_remark)) > 500
+    ))
+    OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_items IS NULL
+    OR jsonb_typeof(p_items) <> 'array'
+    OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+
+  BEGIN
+    WITH requested_items AS MATERIALIZED (
+      SELECT
+        item.supplier_sku_id,
+        item.cost_category_id,
+        item.quantity
+      FROM jsonb_to_recordset(p_items) AS item(
+        supplier_sku_id uuid,
+        cost_category_id uuid,
+        quantity numeric
+      )
+    )
+    SELECT
+      COUNT(*),
+      CASE
+        WHEN COUNT(*) <> COUNT(DISTINCT supplier_sku_id) THEN 1
+        ELSE 0
+      END,
+      COUNT(*) FILTER (
+        WHERE supplier_sku_id IS NULL
+          OR cost_category_id IS NULL
+          OR quantity IS NULL
+          OR quantity <= 0
+          OR quantity > 99999999999999.9999
+          OR scale(quantity) > 4
+      )
+    INTO v_requested_count, v_duplicate_count, v_invalid_count
+    FROM requested_items;
+  EXCEPTION
+    WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+      RETURN jsonb_build_object(
+        'status', 'validation_error',
+        'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+      );
+  END;
+
+  IF v_requested_count <> jsonb_array_length(p_items)
+    OR v_duplicate_count > 0
+    OR v_invalid_count > 0
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_DUPLICATE_SKU'
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id,
+    p_actor_user_id,
+    p_actor_employee_id
+  );
+
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'project_id', p_project_id,
+    'tenant_supplier_id', p_tenant_supplier_id,
+    'expected_version', p_expected_version,
+    'expected_delivery_date', p_expected_delivery_date,
+    'reason', btrim(p_reason),
+    'remark', CASE
+      WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark)
+    END,
+    'items', p_items,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_requisition'
+      OR v_event.resource_id <> p_requisition_id
+      OR v_event.command <> 'save_supplier_purchase_requisition_draft'
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'saved',
+      'idempotent', true,
+      'requisition', v_event.to_state,
+      'version', v_event.result_version
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-requisition-id:' || p_requisition_id::text,
+      6720240730150000
+    )
+  );
+
+  SELECT requisition.*
+  INTO v_requisition
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.id = p_requisition_id
+    AND requisition.tenant_id = p_tenant_id
+  FOR UPDATE;
+
+  IF p_expected_version = 0 AND FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+      'version', v_requisition.version
+    );
+  ELSIF p_expected_version > 0 AND NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+    );
+  END IF;
+
+  PERFORM project.id
+  FROM public.projects AS project
+  WHERE project.id = p_project_id
+    AND project.tenant_id = p_tenant_id
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'project_invalid',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PROJECT_INVALID'
+    );
+  END IF;
+
+  v_priced_at := clock_timestamp();
+
+  SELECT relationship.supplier_id
+  INTO v_supplier_id
+  FROM public.tenant_suppliers AS relationship
+  JOIN public.suppliers AS supplier
+    ON supplier.id = relationship.supplier_id
+  WHERE relationship.id = p_tenant_supplier_id
+    AND relationship.tenant_id = p_tenant_id
+    AND relationship.default_currency = 'CNY'
+  FOR SHARE OF relationship, supplier;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'supplier_not_eligible',
+      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE'
+    );
+  END IF;
+
+  SELECT eligibility.*
+  INTO v_eligibility
+  FROM public.get_tenant_supplier_order_eligibility_set(
+    p_tenant_id,
+    v_priced_at,
+    p_tenant_supplier_id
+  ) AS eligibility;
+  IF NOT FOUND
+    OR NOT v_eligibility.eligible
+    OR v_eligibility.supplier_id <> v_supplier_id
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'supplier_not_eligible',
+      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE',
+      'blocking_reasons', COALESCE(
+        to_jsonb(v_eligibility.blocking_reasons),
+        '["tenant_supplier_not_found"]'::jsonb
+      )
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-price-publish:' || v_supplier_id::text,
+      6720240729160000
+    )
+  );
+
+  WITH requested_items AS MATERIALIZED (
+    SELECT
+      item.supplier_sku_id,
+      item.cost_category_id,
+      item.quantity::numeric(18, 4) AS quantity,
+      item.ordinality
+    FROM jsonb_to_recordset(p_items) WITH ORDINALITY AS item(
+      supplier_sku_id uuid,
+      cost_category_id uuid,
+      quantity numeric,
+      ordinality bigint
+    )
+  ),
+  price_candidates AS MATERIALIZED (
+    SELECT
+      requested.*,
+      product.id AS supplier_product_id,
+      product.product_code,
+      product.name AS product_name,
+      sku.sku_code,
+      sku.name AS sku_name,
+      sku.specification,
+      sku.model,
+      price_list.id AS supplier_price_list_id,
+      price_list.price_list_code,
+      price_list.version_number AS price_list_version,
+      price_list.effective_from,
+      price_list.effective_until,
+      price_item.id AS supplier_price_list_item_id,
+      price_item.purchase_unit_id,
+      purchase_unit.code AS purchase_unit_code,
+      purchase_unit.name AS purchase_unit_name,
+      purchase_unit.symbol AS purchase_unit_symbol,
+      price_item.base_unit_id,
+      base_unit.code AS base_unit_code,
+      base_unit.name AS base_unit_name,
+      base_unit.symbol AS base_unit_symbol,
+      price_item.base_unit_conversion,
+      price_item.unit_price,
+      price_item.tax_rate,
+      price_item.tax_inclusive
+    FROM public.supplier_price_list_items AS price_item
+    JOIN requested_items AS requested
+      ON requested.supplier_sku_id = price_item.supplier_sku_id
+    JOIN public.supplier_price_lists AS price_list
+      ON price_list.id = price_item.supplier_price_list_id
+      AND price_list.supplier_id = price_item.supplier_id
+    JOIN public.supplier_skus AS sku
+      ON sku.id = price_item.supplier_sku_id
+      AND sku.supplier_id = price_item.supplier_id
+    JOIN public.supplier_products AS product
+      ON product.id = sku.supplier_product_id
+      AND product.supplier_id = sku.supplier_id
+    JOIN public.catalog_categories AS catalog_category
+      ON catalog_category.id = product.category_id
+      AND catalog_category.status = 'active'
+    JOIN public.catalog_units AS purchase_unit
+      ON purchase_unit.id = price_item.purchase_unit_id
+      AND purchase_unit.status = 'active'
+    JOIN public.catalog_units AS base_unit
+      ON base_unit.id = price_item.base_unit_id
+      AND base_unit.status = 'active'
+    JOIN public.finance_cost_categories AS finance_category
+      ON finance_category.id = requested.cost_category_id
+      AND finance_category.tenant_id = p_tenant_id
+      AND finance_category.status = 'active'
+    WHERE price_item.supplier_id = v_supplier_id
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.effective_from <= v_priced_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_priced_at
+      )
+      AND product.status = 'active'
+      AND sku.status = 'active'
+    ORDER BY sku.id, price_item.id, finance_category.id
+    FOR SHARE OF price_item, price_list, sku, product,
+      catalog_category, purchase_unit, base_unit, finance_category
+  ),
+  resolved_items AS MATERIALIZED (
+    SELECT
+      candidate.*,
+      row_number() OVER (
+        ORDER BY candidate.ordinality
+      )::integer AS line_no,
+      CASE
+        WHEN candidate.tax_inclusive THEN
+          round(
+            round(candidate.quantity * candidate.unit_price, 2) /
+              (1 + candidate.tax_rate),
+            2
+          )
+        ELSE round(candidate.quantity * candidate.unit_price, 2)
+      END::numeric(18, 2) AS line_subtotal_amount,
+      CASE
+        WHEN candidate.tax_inclusive THEN
+          round(candidate.quantity * candidate.unit_price, 2) -
+            round(
+              round(candidate.quantity * candidate.unit_price, 2) /
+                (1 + candidate.tax_rate),
+              2
+            )
+        ELSE round(
+          round(candidate.quantity * candidate.unit_price, 2) *
+            candidate.tax_rate,
+          2
+        )
+      END::numeric(18, 2) AS line_tax_amount,
+      CASE
+        WHEN candidate.tax_inclusive THEN
+          round(candidate.quantity * candidate.unit_price, 2)
+        ELSE round(candidate.quantity * candidate.unit_price, 2) +
+          round(
+            round(candidate.quantity * candidate.unit_price, 2) *
+              candidate.tax_rate,
+            2
+          )
+      END::numeric(18, 2) AS line_total_amount
+    FROM price_candidates AS candidate
+  )
+  SELECT
+    COUNT(*),
+    COALESCE(jsonb_agg(to_jsonb(resolved) ORDER BY resolved.line_no), '[]'),
+    COALESCE(SUM(resolved.line_subtotal_amount), 0),
+    COALESCE(SUM(resolved.line_tax_amount), 0),
+    COALESCE(SUM(resolved.line_total_amount), 0)
+  INTO
+    v_resolved_count,
+    v_resolved_items,
+    v_subtotal_amount,
+    v_tax_amount,
+    v_total_amount
+  FROM resolved_items AS resolved;
+
+  IF v_resolved_count <> v_requested_count THEN
+    RETURN jsonb_build_object(
+      'status', 'price_changed',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED'
+    );
+  END IF;
+
+  IF p_expected_version = 0 THEN
+    INSERT INTO public.supplier_purchase_requisitions (
+      id, tenant_id, project_id, tenant_supplier_id, supplier_id,
+      reason, expected_delivery_date, remark, priced_at,
+      subtotal_amount, tax_amount, total_amount,
+      created_by_employee_id, updated_by_employee_id
+    )
+    VALUES (
+      p_requisition_id, p_tenant_id, p_project_id,
+      p_tenant_supplier_id, v_supplier_id, btrim(p_reason),
+      p_expected_delivery_date,
+      CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+      v_priced_at, v_subtotal_amount, v_tax_amount, v_total_amount,
+      p_actor_employee_id, p_actor_employee_id
+    )
+    RETURNING * INTO v_requisition;
+  ELSE
+    IF v_requisition.status <> 'draft'
+      OR v_requisition.project_id <> p_project_id
+      OR v_requisition.tenant_supplier_id <> p_tenant_supplier_id
+      OR v_requisition.supplier_id <> v_supplier_id
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT'
+      );
+    END IF;
+    IF v_requisition.version <> p_expected_version THEN
+      RETURN jsonb_build_object(
+        'status', 'version_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+        'version', v_requisition.version
+      );
+    END IF;
+    v_before := to_jsonb(v_requisition);
+  END IF;
+
+  DELETE FROM public.supplier_purchase_requisition_items AS item
+  WHERE item.purchase_requisition_id = p_requisition_id;
+
+  INSERT INTO public.supplier_purchase_requisition_items (
+    tenant_id, purchase_requisition_id, line_no, cost_category_id,
+    supplier_product_id, supplier_sku_id, supplier_price_list_id,
+    supplier_price_list_item_id, product_code_snapshot,
+    product_name_snapshot, sku_code_snapshot, sku_name_snapshot,
+    specification_snapshot, model_snapshot, purchase_unit_id,
+    purchase_unit_code_snapshot, purchase_unit_name_snapshot,
+    purchase_unit_symbol_snapshot, base_unit_id,
+    base_unit_code_snapshot, base_unit_name_snapshot,
+    base_unit_symbol_snapshot, base_unit_conversion,
+    price_list_code_snapshot, price_list_version_snapshot,
+    price_effective_from_snapshot, price_effective_until_snapshot,
+    quantity, unit_price, tax_rate, tax_inclusive,
+    line_subtotal_amount, line_tax_amount, line_total_amount
+  )
+  SELECT
+    p_tenant_id, p_requisition_id, item.line_no, item.cost_category_id,
+    item.supplier_product_id, item.supplier_sku_id,
+    item.supplier_price_list_id, item.supplier_price_list_item_id,
+    item.product_code, item.product_name, item.sku_code, item.sku_name,
+    item.specification, item.model, item.purchase_unit_id,
+    item.purchase_unit_code, item.purchase_unit_name,
+    item.purchase_unit_symbol, item.base_unit_id, item.base_unit_code,
+    item.base_unit_name, item.base_unit_symbol,
+    item.base_unit_conversion, item.price_list_code,
+    item.price_list_version, item.effective_from, item.effective_until,
+    item.quantity, item.unit_price, item.tax_rate, item.tax_inclusive,
+    item.line_subtotal_amount, item.line_tax_amount, item.line_total_amount
+  FROM jsonb_to_recordset(v_resolved_items) AS item(
+    supplier_sku_id uuid, cost_category_id uuid, quantity numeric(18, 4),
+    supplier_product_id uuid, product_code text, product_name text,
+    sku_code text, sku_name text, specification text, model text,
+    supplier_price_list_id uuid, price_list_code text,
+    price_list_version integer, effective_from timestamptz,
+    effective_until timestamptz, supplier_price_list_item_id uuid,
+    purchase_unit_id uuid, purchase_unit_code text,
+    purchase_unit_name text, purchase_unit_symbol text,
+    base_unit_id uuid, base_unit_code text, base_unit_name text,
+    base_unit_symbol text, base_unit_conversion numeric(18, 8),
+    unit_price numeric(14, 2), tax_rate numeric(7, 6),
+    tax_inclusive boolean, line_no integer,
+    line_subtotal_amount numeric(18, 2),
+    line_tax_amount numeric(18, 2), line_total_amount numeric(18, 2)
+  );
+
+  IF p_expected_version > 0 THEN
+    UPDATE public.supplier_purchase_requisitions AS requisition
+    SET reason = btrim(p_reason),
+        expected_delivery_date = p_expected_delivery_date,
+        remark = CASE
+          WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark)
+        END,
+        priced_at = v_priced_at,
+        subtotal_amount = v_subtotal_amount,
+        tax_amount = v_tax_amount,
+        total_amount = v_total_amount,
+        version = requisition.version + 1,
+        updated_by_employee_id = p_actor_employee_id,
+        updated_at = now()
+    WHERE requisition.id = p_requisition_id
+    RETURNING * INTO v_requisition;
+  END IF;
+
+  INSERT INTO public.supplier_command_events (
+    tenant_id, resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  )
+  VALUES (
+    p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
+    'save_supplier_purchase_requisition_draft',
+    v_before || jsonb_build_object('_request', v_request),
+    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    p_idempotency_key, v_requisition.version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'saved',
+    'idempotent', false,
+    'requisition', to_jsonb(v_requisition),
+    'version', v_requisition.version
+  );
+EXCEPTION
+  WHEN numeric_value_out_of_range THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_AMOUNT_LIMIT_EXCEEDED'
+    );
+END;
+$$;
+
+CREATE FUNCTION public.submit_supplier_purchase_requisition(
+  p_requisition_id uuid,
+  p_tenant_id uuid,
+  p_expected_version integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_before jsonb;
+  v_request jsonb;
+  v_checked_at timestamptz := clock_timestamp();
+  v_eligibility record;
+  v_item_count integer;
+  v_changed_count integer;
+  v_category_count integer;
+  v_locked_category_count integer;
+  v_budget_status text;
+BEGIN
+  IF p_requisition_id IS NULL
+    OR p_tenant_id IS NULL
+    OR p_expected_version IS NULL
+    OR p_expected_version <= 0
+    OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id, p_actor_user_id, p_actor_employee_id
+  );
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id,
+    'requisition_id', p_requisition_id,
+    'expected_version', p_expected_version,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key, 0
+    )
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_requisition'
+      OR v_event.resource_id <> p_requisition_id
+      OR v_event.command <> 'submit_supplier_purchase_requisition'
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'submitted', 'idempotent', true,
+      'requisition', v_event.to_state, 'version', v_event.result_version
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-requisition-id:' || p_requisition_id::text,
+      6720240730150000
+    )
+  );
+  SELECT requisition.* INTO v_requisition
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.id = p_requisition_id
+    AND requisition.tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+    );
+  END IF;
+  IF v_requisition.status <> 'draft' THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT'
+    );
+  END IF;
+  IF v_requisition.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+      'version', v_requisition.version
+    );
+  END IF;
+
+  SELECT eligibility.* INTO v_eligibility
+  FROM public.get_tenant_supplier_order_eligibility_set(
+    p_tenant_id, v_checked_at, v_requisition.tenant_supplier_id
+  ) AS eligibility;
+  IF NOT FOUND OR NOT v_eligibility.eligible
+    OR v_eligibility.supplier_id <> v_requisition.supplier_id
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'supplier_not_eligible',
+      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE'
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-price-publish:' || v_requisition.supplier_id::text,
+      6720240729160000
+    )
+  );
+
+  WITH frozen AS MATERIALIZED (
+    SELECT item.*
+    FROM public.supplier_purchase_requisition_items AS item
+    WHERE item.purchase_requisition_id = p_requisition_id
+      AND item.tenant_id = p_tenant_id
+  ),
+  current_prices AS MATERIALIZED (
+    SELECT
+      frozen.id AS frozen_id,
+      price_item.id AS supplier_price_list_item_id,
+      price_item.unit_price,
+      price_item.tax_rate,
+      price_item.tax_inclusive,
+      price_item.purchase_unit_id,
+      price_item.base_unit_id,
+      price_item.base_unit_conversion,
+      price_list.id AS supplier_price_list_id,
+      price_list.price_list_code,
+      price_list.version_number,
+      price_list.effective_from,
+      price_list.effective_until
+    FROM public.supplier_price_list_items AS price_item
+    JOIN frozen ON frozen.supplier_sku_id = price_item.supplier_sku_id
+    JOIN public.supplier_price_lists AS price_list
+      ON price_list.id = price_item.supplier_price_list_id
+      AND price_list.supplier_id = v_requisition.supplier_id
+    JOIN public.supplier_skus AS sku
+      ON sku.id = price_item.supplier_sku_id
+      AND sku.supplier_id = v_requisition.supplier_id
+      AND sku.status = 'active'
+    JOIN public.supplier_products AS product
+      ON product.id = sku.supplier_product_id
+      AND product.supplier_id = v_requisition.supplier_id
+      AND product.status = 'active'
+    WHERE price_item.supplier_id = v_requisition.supplier_id
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.effective_from <= v_checked_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_checked_at
+      )
+    ORDER BY sku.id, price_item.id
+    FOR SHARE OF price_item, price_list, sku, product
+  )
+  SELECT
+    COUNT(*),
+    COUNT(*) FILTER (
+      WHERE current_prices.frozen_id IS NULL
+        OR current_prices.supplier_price_list_item_id IS DISTINCT FROM
+          frozen.supplier_price_list_item_id
+        OR current_prices.supplier_price_list_id IS DISTINCT FROM
+          frozen.supplier_price_list_id
+        OR current_prices.unit_price IS DISTINCT FROM frozen.unit_price
+        OR current_prices.tax_rate IS DISTINCT FROM frozen.tax_rate
+        OR current_prices.tax_inclusive IS DISTINCT FROM frozen.tax_inclusive
+        OR current_prices.purchase_unit_id IS DISTINCT FROM
+          frozen.purchase_unit_id
+        OR current_prices.base_unit_id IS DISTINCT FROM frozen.base_unit_id
+        OR current_prices.base_unit_conversion IS DISTINCT FROM
+          frozen.base_unit_conversion
+        OR current_prices.price_list_code IS DISTINCT FROM
+          frozen.price_list_code_snapshot
+        OR current_prices.version_number IS DISTINCT FROM
+          frozen.price_list_version_snapshot
+        OR current_prices.effective_from IS DISTINCT FROM
+          frozen.price_effective_from_snapshot
+        OR current_prices.effective_until IS DISTINCT FROM
+          frozen.price_effective_until_snapshot
+    )
+  INTO v_item_count, v_changed_count
+  FROM frozen
+  LEFT JOIN current_prices ON current_prices.frozen_id = frozen.id;
+
+  IF v_item_count = 0 OR v_changed_count > 0 THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED'
+    );
+  END IF;
+
+  WITH requested_by_category AS MATERIALIZED (
+    SELECT item.cost_category_id, SUM(item.line_total_amount) AS amount
+    FROM public.supplier_purchase_requisition_items AS item
+    WHERE item.purchase_requisition_id = p_requisition_id
+      AND item.tenant_id = p_tenant_id
+    GROUP BY item.cost_category_id
+  )
+  SELECT COUNT(*) INTO v_category_count FROM requested_by_category;
+
+  WITH requested_by_category AS MATERIALIZED (
+    SELECT DISTINCT item.cost_category_id
+    FROM public.supplier_purchase_requisition_items AS item
+    WHERE item.purchase_requisition_id = p_requisition_id
+      AND item.tenant_id = p_tenant_id
+  ),
+  locked_categories AS MATERIALIZED (
+    SELECT finance_category.id
+    FROM public.finance_cost_categories AS finance_category
+    JOIN requested_by_category AS requested
+      ON requested.cost_category_id = finance_category.id
+    WHERE finance_category.tenant_id = p_tenant_id
+      AND finance_category.status = 'active'
+    ORDER BY finance_category.id
+    FOR UPDATE OF finance_category
+  )
+  SELECT COUNT(*) INTO v_locked_category_count FROM locked_categories;
+  IF v_locked_category_count <> v_category_count THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_BUDGET_CHANGED'
+    );
+  END IF;
+
+  PERFORM budget.id
+  FROM public.project_cost_budgets AS budget
+  WHERE budget.tenant_id = p_tenant_id
+    AND budget.project_id = v_requisition.project_id
+    AND budget.status = 'active'
+    AND budget.cost_category_id IN (
+      SELECT item.cost_category_id
+      FROM public.supplier_purchase_requisition_items AS item
+      WHERE item.purchase_requisition_id = p_requisition_id
+    )
+  ORDER BY budget.cost_category_id, budget.id
+  FOR UPDATE;
+
+  PERFORM commitment.id
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.project_id = v_requisition.project_id
+    AND commitment.status IN ('reserved', 'converted')
+    AND commitment.cost_category_id IN (
+      SELECT item.cost_category_id
+      FROM public.supplier_purchase_requisition_items AS item
+      WHERE item.purchase_requisition_id = p_requisition_id
+    )
+  ORDER BY commitment.cost_category_id, commitment.id
+  FOR UPDATE;
+
+  WITH requested_by_category AS MATERIALIZED (
+    SELECT item.cost_category_id, SUM(item.line_total_amount) AS amount
+    FROM public.supplier_purchase_requisition_items AS item
+    WHERE item.purchase_requisition_id = p_requisition_id
+      AND item.tenant_id = p_tenant_id
+    GROUP BY item.cost_category_id
+  ),
+  budget_totals AS MATERIALIZED (
+    SELECT requested.cost_category_id,
+      COALESCE(MAX(budget.budget_amount), 0)::numeric(18, 2)
+        AS budget_amount
+    FROM requested_by_category AS requested
+    LEFT JOIN public.project_cost_budgets AS budget
+      ON budget.tenant_id = p_tenant_id
+      AND budget.project_id = v_requisition.project_id
+      AND budget.cost_category_id = requested.cost_category_id
+      AND budget.status = 'active'
+    GROUP BY requested.cost_category_id
+  ),
+  expense_totals AS MATERIALIZED (
+    SELECT requested.cost_category_id,
+      COALESCE(SUM(ledger.amount), 0)::numeric(18, 2) AS expense_amount
+    FROM requested_by_category AS requested
+    LEFT JOIN public.finance_ledger_entries AS ledger
+      ON ledger.tenant_id = p_tenant_id
+      AND ledger.project_id = v_requisition.project_id
+      AND ledger.cost_category_id = requested.cost_category_id
+      AND ledger.direction = 'out'
+    GROUP BY requested.cost_category_id
+  ),
+  other_commitment_totals AS MATERIALIZED (
+    SELECT requested.cost_category_id,
+      COALESCE(SUM(commitment.amount), 0)::numeric(18, 2)
+        AS other_commitment_amount
+    FROM requested_by_category AS requested
+    LEFT JOIN public.project_cost_commitments AS commitment
+      ON commitment.tenant_id = p_tenant_id
+      AND commitment.project_id = v_requisition.project_id
+      AND commitment.cost_category_id = requested.cost_category_id
+      AND commitment.status IN ('reserved', 'converted')
+      AND commitment.source_id <> p_requisition_id
+    GROUP BY requested.cost_category_id
+  ),
+  snapshots AS MATERIALIZED (
+    SELECT requested.cost_category_id, requested.amount,
+      budget.budget_amount, expense.expense_amount,
+      other.other_commitment_amount,
+      budget.budget_amount - expense.expense_amount -
+        other.other_commitment_amount AS available_amount
+    FROM requested_by_category AS requested
+    JOIN budget_totals AS budget USING (cost_category_id)
+    JOIN expense_totals AS expense USING (cost_category_id)
+    JOIN other_commitment_totals AS other USING (cost_category_id)
+  )
+  INSERT INTO public.project_cost_commitments (
+    tenant_id, project_id, cost_category_id, source_type, source_id,
+    amount, status, budget_amount_snapshot, expense_amount_snapshot,
+    other_commitment_amount_snapshot, available_amount_snapshot,
+    created_by_employee_id
+  )
+  SELECT p_tenant_id, v_requisition.project_id, snapshot.cost_category_id,
+    'supplier_purchase_requisition', p_requisition_id, snapshot.amount,
+    'reserved', snapshot.budget_amount, snapshot.expense_amount,
+    snapshot.other_commitment_amount, snapshot.available_amount,
+    p_actor_employee_id
+  FROM snapshots AS snapshot
+  ON CONFLICT (tenant_id, source_type, source_id, cost_category_id)
+  DO UPDATE SET
+    amount = EXCLUDED.amount,
+    status = 'reserved',
+    budget_amount_snapshot = EXCLUDED.budget_amount_snapshot,
+    expense_amount_snapshot = EXCLUDED.expense_amount_snapshot,
+    other_commitment_amount_snapshot =
+      EXCLUDED.other_commitment_amount_snapshot,
+    available_amount_snapshot = EXCLUDED.available_amount_snapshot,
+    released_by_employee_id = NULL,
+    released_at = NULL,
+    release_reason = NULL,
+    updated_at = now();
+
+  SELECT CASE
+    WHEN bool_and(commitment.amount <= commitment.available_amount_snapshot)
+      THEN 'within_budget'
+    ELSE 'over_budget'
+  END
+  INTO v_budget_status
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_id = p_requisition_id
+    AND commitment.status = 'reserved';
+
+  v_before := to_jsonb(v_requisition);
+  UPDATE public.supplier_purchase_requisitions AS requisition
+  SET status = 'pending_approval',
+      budget_status = v_budget_status,
+      submitted_by_employee_id = p_actor_employee_id,
+      submitted_at = v_checked_at,
+      version = requisition.version + 1,
+      updated_by_employee_id = p_actor_employee_id,
+      updated_at = now()
+  WHERE requisition.id = p_requisition_id
+  RETURNING * INTO v_requisition;
+
+  INSERT INTO public.supplier_command_events (
+    tenant_id, resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  )
+  VALUES (
+    p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
+    'submit_supplier_purchase_requisition',
+    v_before || jsonb_build_object('_request', v_request),
+    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    p_idempotency_key, v_requisition.version
+  );
+  RETURN jsonb_build_object(
+    'status', 'submitted', 'idempotent', false,
+    'requisition', to_jsonb(v_requisition),
+    'version', v_requisition.version
+  );
+END;
+$$;
+
+CREATE FUNCTION public.review_supplier_purchase_requisition(
+  p_requisition_id uuid,
+  p_tenant_id uuid,
+  p_expected_version integer,
+  p_action text,
+  p_remark text,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_before jsonb;
+  v_request jsonb;
+  v_reviewed_at timestamptz := clock_timestamp();
+BEGIN
+  IF p_requisition_id IS NULL OR p_tenant_id IS NULL
+    OR p_expected_version IS NULL OR p_expected_version <= 0
+    OR p_action IS NULL OR p_action NOT IN ('approve', 'reject')
+    OR (p_remark IS NOT NULL AND (
+      btrim(p_remark) = '' OR char_length(btrim(p_remark)) > 500
+    ))
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id, p_actor_user_id, p_actor_employee_id
+  );
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id, 'requisition_id', p_requisition_id,
+    'expected_version', p_expected_version, 'action', p_action,
+    'remark', CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key, 0
+    )
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_requisition'
+      OR v_event.resource_id <> p_requisition_id
+      OR v_event.command <> 'review_supplier_purchase_requisition:' ||
+        p_action
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', CASE WHEN p_action = 'approve' THEN 'approved'
+        ELSE 'rejected' END,
+      'idempotent', true, 'requisition', v_event.to_state,
+      'version', v_event.result_version
+    );
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-requisition-id:' || p_requisition_id::text,
+      6720240730150000
+    )
+  );
+  SELECT requisition.* INTO v_requisition
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.id = p_requisition_id
+    AND requisition.tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+    );
+  END IF;
+  IF v_requisition.status <> 'pending_approval' THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT'
+    );
+  END IF;
+  IF v_requisition.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+      'version', v_requisition.version
+    );
+  END IF;
+  IF v_requisition.created_by_employee_id = p_actor_employee_id THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW'
+    );
+  END IF;
+  v_before := to_jsonb(v_requisition);
+  IF p_action = 'approve' THEN
+    UPDATE public.supplier_purchase_requisitions AS requisition
+    SET status = 'approved',
+        reviewed_by_employee_id = p_actor_employee_id,
+        reviewed_at = v_reviewed_at,
+        review_remark = CASE
+          WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark)
+        END,
+        version = requisition.version + 1,
+        updated_by_employee_id = p_actor_employee_id,
+        updated_at = now()
+    WHERE requisition.id = p_requisition_id
+    RETURNING * INTO v_requisition;
+  ELSE
+    UPDATE public.project_cost_commitments AS commitment
+    SET status = 'released',
+        released_by_employee_id = p_actor_employee_id,
+        released_at = v_reviewed_at,
+        release_reason = COALESCE(
+          NULLIF(btrim(p_remark), ''),
+          'requisition_rejected'
+        ),
+        updated_at = now()
+    WHERE commitment.tenant_id = p_tenant_id
+      AND commitment.source_id = p_requisition_id
+      AND commitment.status = 'reserved';
+    UPDATE public.supplier_purchase_requisitions AS requisition
+    SET status = 'rejected',
+        reviewed_by_employee_id = p_actor_employee_id,
+        reviewed_at = v_reviewed_at,
+        review_remark = CASE
+          WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark)
+        END,
+        version = requisition.version + 1,
+        updated_by_employee_id = p_actor_employee_id,
+        updated_at = now()
+    WHERE requisition.id = p_requisition_id
+    RETURNING * INTO v_requisition;
+  END IF;
+  INSERT INTO public.supplier_command_events (
+    tenant_id, resource_type, resource_id, command, from_state, to_state,
+    reason, actor_user_id, actor_employee_id, idempotency_key, result_version
+  )
+  VALUES (
+    p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
+    'review_supplier_purchase_requisition:' || p_action,
+    v_before || jsonb_build_object('_request', v_request),
+    to_jsonb(v_requisition), p_remark, p_actor_user_id,
+    p_actor_employee_id, p_idempotency_key, v_requisition.version
+  );
+  RETURN jsonb_build_object(
+    'status', CASE WHEN p_action = 'approve' THEN 'approved'
+      ELSE 'rejected' END,
+    'idempotent', false, 'requisition', to_jsonb(v_requisition),
+    'version', v_requisition.version
+  );
+END;
+$$;
+
+CREATE FUNCTION public.cancel_supplier_purchase_requisition(
+  p_requisition_id uuid,
+  p_tenant_id uuid,
+  p_expected_version integer,
+  p_reason text,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_before jsonb;
+  v_request jsonb;
+  v_cancelled_at timestamptz := clock_timestamp();
+BEGIN
+  IF p_requisition_id IS NULL OR p_tenant_id IS NULL
+    OR p_expected_version IS NULL OR p_expected_version <= 0
+    OR p_reason IS NULL OR btrim(p_reason) = ''
+    OR char_length(btrim(p_reason)) > 500
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id, p_actor_user_id, p_actor_employee_id
+  );
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id, 'requisition_id', p_requisition_id,
+    'expected_version', p_expected_version, 'reason', btrim(p_reason),
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key, 0
+    )
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_requisition'
+      OR v_event.resource_id <> p_requisition_id
+      OR v_event.command <> 'cancel_supplier_purchase_requisition'
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'cancelled', 'idempotent', true,
+      'requisition', v_event.to_state, 'version', v_event.result_version
+    );
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-requisition-id:' || p_requisition_id::text,
+      6720240730150000
+    )
+  );
+  SELECT requisition.* INTO v_requisition
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.id = p_requisition_id
+    AND requisition.tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+    );
+  END IF;
+  IF v_requisition.status NOT IN (
+      'draft', 'pending_approval', 'approved'
+    )
+    OR v_requisition.purchase_order_id IS NOT NULL
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT'
+    );
+  END IF;
+  IF v_requisition.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+      'version', v_requisition.version
+    );
+  END IF;
+  v_before := to_jsonb(v_requisition);
+  UPDATE public.project_cost_commitments AS commitment
+  SET status = 'released',
+      released_by_employee_id = p_actor_employee_id,
+      released_at = v_cancelled_at,
+      release_reason = btrim(p_reason),
+      updated_at = now()
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_id = p_requisition_id
+    AND commitment.status = 'reserved';
+  UPDATE public.supplier_purchase_requisitions AS requisition
+  SET status = 'cancelled',
+      cancelled_by_employee_id = p_actor_employee_id,
+      cancelled_at = v_cancelled_at,
+      cancel_reason = btrim(p_reason),
+      version = requisition.version + 1,
+      updated_by_employee_id = p_actor_employee_id,
+      updated_at = now()
+  WHERE requisition.id = p_requisition_id
+  RETURNING * INTO v_requisition;
+  INSERT INTO public.supplier_command_events (
+    tenant_id, resource_type, resource_id, command, from_state, to_state,
+    reason, actor_user_id, actor_employee_id, idempotency_key, result_version
+  )
+  VALUES (
+    p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
+    'cancel_supplier_purchase_requisition',
+    v_before || jsonb_build_object('_request', v_request),
+    to_jsonb(v_requisition), btrim(p_reason), p_actor_user_id,
+    p_actor_employee_id, p_idempotency_key, v_requisition.version
+  );
+  RETURN jsonb_build_object(
+    'status', 'cancelled', 'idempotent', false,
+    'requisition', to_jsonb(v_requisition),
+    'version', v_requisition.version
+  );
+END;
+$$;
+
+CREATE FUNCTION public.inject_supplier_purchase_requisition_order_source()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_source text;
+BEGIN
+  v_source := NULLIF(
+    pg_catalog.current_setting(
+      'private.supplier_purchase_requisition_source',
+      true
+    ),
+    ''
+  );
+  IF NEW.status = 'draft'
+    AND NEW.purchase_requisition_id IS NULL
+    AND v_source IS NOT NULL
+  THEN
+    NEW.purchase_requisition_id := v_source::uuid;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.inject_supplier_purchase_requisition_order_source()
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER tr_00_supplier_purchase_order_requisition_source
+BEFORE INSERT ON public.supplier_purchase_orders
+FOR EACH ROW
+EXECUTE FUNCTION
+  public.inject_supplier_purchase_requisition_order_source();
+
+DROP FUNCTION public.save_supplier_purchase_order_draft(
+  uuid,
+  uuid,
+  uuid,
+  uuid,
+  integer,
+  date,
+  text,
+  jsonb,
+  uuid,
+  uuid,
+  text
+);
+
+CREATE FUNCTION public.save_supplier_purchase_order_draft(
+  p_order_id uuid,
+  p_tenant_id uuid,
+  p_project_id uuid,
+  p_tenant_supplier_id uuid,
+  p_expected_version integer,
+  p_expected_delivery_date date,
+  p_remark text,
+  p_items jsonb,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text,
+  p_purchase_requisition_id uuid DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_order public.supplier_purchase_orders%ROWTYPE;
+  v_event public.supplier_command_events%ROWTYPE;
+  v_purchase_requisition_id uuid := p_purchase_requisition_id;
+  v_order_items jsonb := p_items;
+  v_result jsonb;
+BEGIN
+  IF p_order_id IS NULL OR p_tenant_id IS NULL
+    OR p_project_id IS NULL OR p_tenant_supplier_id IS NULL
+    OR p_expected_version IS NULL OR p_expected_version < 0
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_items IS NULL OR jsonb_typeof(p_items) <> 'array'
+    OR NOT jsonb_array_length(p_items) BETWEEN 1 AND 100
+    OR (p_remark IS NOT NULL AND btrim(p_remark) = '')
+    OR (
+      p_expected_version = 0
+      AND p_purchase_requisition_id IS NULL
+    )
+    OR (
+      p_expected_version = 0
+      AND pg_catalog.current_setting(
+        'private.supplier_purchase_requisition_conversion',
+        true
+      ) IS DISTINCT FROM p_purchase_requisition_id::text
+    )
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT'
+    );
+  END IF;
+
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id, p_actor_user_id, p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key, 0
+    )
+  );
+
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND AND (
+      v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_order'
+      OR v_event.resource_id <> p_order_id
+      OR v_event.command <> 'save_supplier_purchase_order_draft'
+      OR (
+        p_purchase_requisition_id IS NOT NULL
+        AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(
+          v_event.from_state -> '_request' -> 'items'
+        ) AS item(value)
+        WHERE item.value ->> '_purchase_requisition_id'
+          IS DISTINCT FROM p_purchase_requisition_id::text
+      )
+      )
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+  END IF;
+
+  IF p_expected_version > 0 THEN
+    SELECT purchase_order.* INTO v_order
+    FROM public.supplier_purchase_orders AS purchase_order
+    WHERE purchase_order.id = p_order_id
+      AND purchase_order.tenant_id = p_tenant_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object(
+        'status', 'not_found',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_NOT_FOUND'
+      );
+    END IF;
+    IF p_purchase_requisition_id IS NOT NULL
+      AND v_order.purchase_requisition_id IS DISTINCT FROM
+        p_purchase_requisition_id
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT'
+      );
+    END IF;
+    v_purchase_requisition_id := v_order.purchase_requisition_id;
+  END IF;
+
+  IF v_purchase_requisition_id IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        'supplier-purchase-requisition-id:' ||
+          v_purchase_requisition_id::text,
+        6720240730150000
+      )
+    );
+    SELECT requisition.* INTO v_requisition
+    FROM public.supplier_purchase_requisitions AS requisition
+    WHERE requisition.id = v_purchase_requisition_id
+      AND requisition.tenant_id = p_tenant_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object(
+        'status', 'not_found',
+        'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+      );
+    END IF;
+    IF p_expected_version = 0 AND (
+        v_requisition.status <> 'approved'
+        OR v_requisition.purchase_order_id IS NOT NULL
+        OR v_requisition.project_id <> p_project_id
+        OR v_requisition.tenant_supplier_id <> p_tenant_supplier_id
+      )
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT'
+      );
+    END IF;
+    IF p_expected_version > 0
+      AND v_order.purchase_requisition_id IS DISTINCT FROM
+        v_purchase_requisition_id
+    THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT'
+      );
+    END IF;
+    SELECT jsonb_agg(
+      item.value || jsonb_build_object(
+        '_purchase_requisition_id', v_purchase_requisition_id
+      )
+      ORDER BY item.ordinality
+    )
+    INTO v_order_items
+    FROM jsonb_array_elements(p_items)
+      WITH ORDINALITY AS item(value, ordinality);
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_source',
+    COALESCE(v_purchase_requisition_id::text, ''),
+    true
+  );
+  BEGIN
+    v_result := public.save_supplier_purchase_order_draft_v1(
+      p_order_id, p_tenant_id, p_project_id, p_tenant_supplier_id,
+      p_expected_version, p_expected_delivery_date, p_remark,
+      v_order_items, p_actor_user_id, p_actor_employee_id,
+      p_idempotency_key
+    );
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_catalog.set_config(
+      'private.supplier_purchase_requisition_source', '', true
+    );
+    RAISE;
+  END;
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_source', '', true
+  );
+  RETURN v_result;
+END;
+$$;
+
+CREATE FUNCTION public.convert_supplier_purchase_requisition(
+  p_requisition_id uuid,
+  p_tenant_id uuid,
+  p_expected_version integer,
+  p_purchase_order_id uuid,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_requisition public.supplier_purchase_requisitions%ROWTYPE;
+  v_before jsonb;
+  v_request jsonb;
+  v_checked_at timestamptz := clock_timestamp();
+  v_changed_count integer;
+  v_items jsonb;
+  v_order_result jsonb;
+  v_derived_key text;
+BEGIN
+  IF p_requisition_id IS NULL OR p_tenant_id IS NULL
+    OR p_expected_version IS NULL OR p_expected_version <= 0
+    OR p_purchase_order_id IS NULL
+    OR p_actor_user_id IS NULL OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VALIDATION_ERROR'
+    );
+  END IF;
+  PERFORM public.assert_supplier_purchase_order_actor(
+    p_tenant_id, p_actor_user_id, p_actor_employee_id
+  );
+  v_request := jsonb_build_object(
+    'tenant_id', p_tenant_id, 'requisition_id', p_requisition_id,
+    'expected_version', p_expected_version,
+    'purchase_order_id', p_purchase_order_id,
+    'actor_employee_id', p_actor_employee_id
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key, 0
+    )
+  );
+  SELECT event.* INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_purchase_requisition'
+      OR v_event.resource_id <> p_requisition_id
+      OR v_event.command <> 'convert_supplier_purchase_requisition'
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'converted', 'idempotent', true,
+      'requisition', v_event.to_state,
+      'purchase_order_id', p_purchase_order_id,
+      'version', v_event.result_version
+    );
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-purchase-requisition-id:' || p_requisition_id::text,
+      6720240730150000
+    )
+  );
+  SELECT requisition.* INTO v_requisition
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.id = p_requisition_id
+    AND requisition.tenant_id = p_tenant_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object(
+      'status', 'not_found',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND'
+    );
+  END IF;
+  IF v_requisition.purchase_order_id IS NOT NULL
+    OR v_requisition.status = 'converted'
+  THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code',
+        'SUPPLIER_PURCHASE_REQUISITION_ALREADY_CONVERTED'
+    );
+  END IF;
+  IF v_requisition.status <> 'approved' THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT'
+    );
+  END IF;
+  IF v_requisition.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'status', 'version_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT',
+      'version', v_requisition.version
+    );
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.supplier_purchase_orders AS purchase_order
+    WHERE purchase_order.id = p_purchase_order_id
+  ) THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_ORDER_ID_CONFLICT'
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-price-publish:' || v_requisition.supplier_id::text,
+      6720240729160000
+    )
+  );
+  WITH frozen AS MATERIALIZED (
+    SELECT item.*
+    FROM public.supplier_purchase_requisition_items AS item
+    WHERE item.purchase_requisition_id = p_requisition_id
+      AND item.tenant_id = p_tenant_id
+  ),
+  current_prices AS MATERIALIZED (
+    SELECT frozen.id AS frozen_id,
+      price_item.id AS supplier_price_list_item_id,
+      price_item.unit_price, price_item.tax_rate,
+      price_item.tax_inclusive, price_item.purchase_unit_id,
+      price_item.base_unit_id, price_item.base_unit_conversion,
+      price_list.id AS supplier_price_list_id,
+      price_list.price_list_code, price_list.version_number,
+      price_list.effective_from, price_list.effective_until,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(frozen.quantity * price_item.unit_price, 2)
+      ELSE round(frozen.quantity * price_item.unit_price, 2) +
+        round(
+          round(frozen.quantity * price_item.unit_price, 2) *
+            price_item.tax_rate,
+          2
+        )
+      END::numeric(18, 2) AS line_total_amount,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(
+          round(frozen.quantity * price_item.unit_price, 2) /
+            (1 + price_item.tax_rate),
+          2
+        )
+      ELSE round(frozen.quantity * price_item.unit_price, 2)
+      END::numeric(18, 2) AS line_subtotal_amount,
+      CASE WHEN price_item.tax_inclusive THEN
+        round(frozen.quantity * price_item.unit_price, 2) -
+          round(
+            round(frozen.quantity * price_item.unit_price, 2) /
+              (1 + price_item.tax_rate),
+            2
+          )
+      ELSE round(
+        round(frozen.quantity * price_item.unit_price, 2) *
+          price_item.tax_rate,
+        2
+      )
+      END::numeric(18, 2) AS line_tax_amount
+    FROM public.supplier_price_list_items AS price_item
+    JOIN frozen ON frozen.supplier_sku_id = price_item.supplier_sku_id
+    JOIN public.supplier_price_lists AS price_list
+      ON price_list.id = price_item.supplier_price_list_id
+      AND price_list.supplier_id = v_requisition.supplier_id
+    JOIN public.supplier_skus AS sku
+      ON sku.id = price_item.supplier_sku_id
+      AND sku.supplier_id = v_requisition.supplier_id
+      AND sku.status = 'active'
+    JOIN public.supplier_products AS product
+      ON product.id = sku.supplier_product_id
+      AND product.supplier_id = v_requisition.supplier_id
+      AND product.status = 'active'
+    WHERE price_item.supplier_id = v_requisition.supplier_id
+      AND price_list.lifecycle_status = 'published'
+      AND price_list.scope_type = 'default'
+      AND price_list.currency = 'CNY'
+      AND price_list.effective_from <= v_checked_at
+      AND (
+        price_list.effective_until IS NULL
+        OR price_list.effective_until > v_checked_at
+      )
+    ORDER BY sku.id, price_item.id
+    FOR SHARE OF price_item, price_list, sku, product
+  )
+  SELECT COUNT(*) FILTER (
+    WHERE current_prices.frozen_id IS NULL
+      OR current_prices.supplier_price_list_item_id IS DISTINCT FROM
+        frozen.supplier_price_list_item_id
+      OR current_prices.supplier_price_list_id IS DISTINCT FROM
+        frozen.supplier_price_list_id
+      OR current_prices.unit_price IS DISTINCT FROM frozen.unit_price
+      OR current_prices.tax_rate IS DISTINCT FROM frozen.tax_rate
+      OR current_prices.tax_inclusive IS DISTINCT FROM frozen.tax_inclusive
+      OR current_prices.purchase_unit_id IS DISTINCT FROM
+        frozen.purchase_unit_id
+      OR current_prices.base_unit_id IS DISTINCT FROM frozen.base_unit_id
+      OR current_prices.base_unit_conversion IS DISTINCT FROM
+        frozen.base_unit_conversion
+      OR current_prices.price_list_code IS DISTINCT FROM
+        frozen.price_list_code_snapshot
+      OR current_prices.version_number IS DISTINCT FROM
+        frozen.price_list_version_snapshot
+      OR current_prices.effective_from IS DISTINCT FROM
+        frozen.price_effective_from_snapshot
+      OR current_prices.effective_until IS DISTINCT FROM
+        frozen.price_effective_until_snapshot
+      OR current_prices.line_total_amount IS DISTINCT FROM
+        frozen.line_total_amount
+      OR current_prices.line_subtotal_amount IS DISTINCT FROM
+        frozen.line_subtotal_amount
+      OR current_prices.line_tax_amount IS DISTINCT FROM
+        frozen.line_tax_amount
+  )
+  INTO v_changed_count
+  FROM frozen
+  LEFT JOIN current_prices ON current_prices.frozen_id = frozen.id;
+  IF v_changed_count > 0 THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED'
+    );
+  END IF;
+
+  SELECT jsonb_agg(jsonb_build_object(
+    'supplier_sku_id', item.supplier_sku_id,
+    'quantity', item.quantity
+  ) ORDER BY item.line_no)
+  INTO v_items
+  FROM public.supplier_purchase_requisition_items AS item
+  WHERE item.purchase_requisition_id = p_requisition_id
+    AND item.tenant_id = p_tenant_id;
+  IF v_items IS NULL THEN
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'error_code', 'SUPPLIER_PURCHASE_REQUISITION_PRICE_CHANGED'
+    );
+  END IF;
+
+  v_derived_key := left(
+    'requisition-order:' || p_requisition_id::text || ':' ||
+      p_purchase_order_id::text,
+    120
+  );
+  v_before := to_jsonb(v_requisition);
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_conversion',
+    p_requisition_id::text,
+    true
+  );
+  BEGIN
+    v_order_result := public.save_supplier_purchase_order_draft(
+      p_order_id => p_purchase_order_id,
+      p_tenant_id => p_tenant_id,
+      p_project_id => v_requisition.project_id,
+      p_tenant_supplier_id => v_requisition.tenant_supplier_id,
+      p_expected_version => 0,
+      p_expected_delivery_date => v_requisition.expected_delivery_date,
+      p_remark => v_requisition.remark,
+      p_items => v_items,
+      p_actor_user_id => p_actor_user_id,
+      p_actor_employee_id => p_actor_employee_id,
+      p_idempotency_key => v_derived_key,
+      p_purchase_requisition_id => p_requisition_id
+    );
+  EXCEPTION WHEN OTHERS THEN
+    PERFORM pg_catalog.set_config(
+      'private.supplier_purchase_requisition_conversion', '', true
+    );
+    RAISE;
+  END;
+  PERFORM pg_catalog.set_config(
+    'private.supplier_purchase_requisition_conversion', '', true
+  );
+  IF v_order_result ->> 'status' <> 'saved' THEN
+    RETURN v_order_result;
+  END IF;
+
+  UPDATE public.project_cost_commitments AS commitment
+  SET status = 'converted', updated_at = now()
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_id = p_requisition_id
+    AND commitment.status = 'reserved';
+
+  UPDATE public.supplier_purchase_requisitions AS requisition
+  SET status = 'converted',
+      purchase_order_id = p_purchase_order_id,
+      version = requisition.version + 1,
+      updated_by_employee_id = p_actor_employee_id,
+      updated_at = now()
+  WHERE requisition.id = p_requisition_id
+  RETURNING * INTO v_requisition;
+
+  INSERT INTO public.supplier_command_events (
+    tenant_id, resource_type, resource_id, command, from_state, to_state,
+    actor_user_id, actor_employee_id, idempotency_key, result_version
+  )
+  VALUES (
+    p_tenant_id, 'supplier_purchase_requisition', p_requisition_id,
+    'convert_supplier_purchase_requisition',
+    v_before || jsonb_build_object('_request', v_request),
+    to_jsonb(v_requisition), p_actor_user_id, p_actor_employee_id,
+    p_idempotency_key, v_requisition.version
+  );
+  RETURN jsonb_build_object(
+    'status', 'converted', 'idempotent', false,
+    'requisition', to_jsonb(v_requisition),
+    'purchase_order', v_order_result -> 'purchase_order',
+    'purchase_order_id', p_purchase_order_id,
+    'version', v_requisition.version
+  );
+END;
+$$;
+
+ALTER FUNCTION public.cancel_supplier_purchase_order(
+  uuid,
+  uuid,
+  integer,
+  text,
+  uuid,
+  uuid,
+  text
+) RENAME TO cancel_supplier_purchase_order_fulfillment_v1;
+
+REVOKE ALL ON FUNCTION
+  public.cancel_supplier_purchase_order_fulfillment_v1(
+    uuid,
+    uuid,
+    integer,
+    text,
+    uuid,
+    uuid,
+    text
+  )
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE FUNCTION public.cancel_supplier_purchase_order(
+  p_order_id uuid,
+  p_tenant_id uuid,
+  p_expected_version integer,
+  p_reason text,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_result jsonb;
+  v_purchase_requisition_id uuid;
+BEGIN
+  -- The renamed fulfillment implementation remains the single owner of all
+  -- order, fulfillment, item-fulfillment and shipment locks. In particular it
+  -- returns SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED before cancellation
+  -- when supplier_purchase_order_shipments exist.
+  v_result := public.cancel_supplier_purchase_order_fulfillment_v1(
+    p_order_id,
+    p_tenant_id,
+    p_expected_version,
+    p_reason,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key
+  );
+  IF v_result ->> 'status' <> 'cancelled' THEN
+    RETURN v_result;
+  END IF;
+
+  SELECT purchase_order.purchase_requisition_id
+  INTO v_purchase_requisition_id
+  FROM public.supplier_purchase_orders AS purchase_order
+  WHERE purchase_order.id = p_order_id
+    AND purchase_order.tenant_id = p_tenant_id;
+
+  IF v_purchase_requisition_id IS NOT NULL THEN
+    UPDATE public.project_cost_commitments AS commitment
+    SET status = 'released',
+        released_by_employee_id = p_actor_employee_id,
+        released_at = clock_timestamp(),
+        release_reason = left(
+          'order_cancel:' || btrim(p_reason),
+          500
+        ),
+        updated_at = now()
+    WHERE commitment.tenant_id = p_tenant_id
+      AND commitment.source_id = v_purchase_requisition_id
+      AND commitment.status = 'converted';
+  END IF;
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.save_supplier_purchase_requisition_draft(
+  uuid, uuid, uuid, uuid, integer, date, text, text, jsonb,
+  uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_supplier_purchase_requisition_draft(
+  uuid, uuid, uuid, uuid, integer, date, text, text, jsonb,
+  uuid, uuid, text
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.submit_supplier_purchase_requisition(
+  uuid, uuid, integer, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_supplier_purchase_requisition(
+  uuid, uuid, integer, uuid, uuid, text
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.review_supplier_purchase_requisition(
+  uuid, uuid, integer, text, text, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.review_supplier_purchase_requisition(
+  uuid, uuid, integer, text, text, uuid, uuid, text
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.cancel_supplier_purchase_requisition(
+  uuid, uuid, integer, text, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_supplier_purchase_requisition(
+  uuid, uuid, integer, text, uuid, uuid, text
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.convert_supplier_purchase_requisition(
+  uuid, uuid, integer, uuid, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.convert_supplier_purchase_requisition(
+  uuid, uuid, integer, uuid, uuid, uuid, text
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.save_supplier_purchase_order_draft(
+  uuid, uuid, uuid, uuid, integer, date, text, jsonb,
+  uuid, uuid, text, uuid
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.save_supplier_purchase_order_draft(
+  uuid, uuid, uuid, uuid, integer, date, text, jsonb,
+  uuid, uuid, text, uuid
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.cancel_supplier_purchase_order(
+  uuid, uuid, integer, text, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.cancel_supplier_purchase_order(
+  uuid, uuid, integer, text, uuid, uuid, text
+) TO service_role;
+
 COMMIT;
