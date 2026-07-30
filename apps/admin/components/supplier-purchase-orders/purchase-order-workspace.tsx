@@ -25,6 +25,9 @@ import {
   loadPurchaseOrderRelationships,
   loadPurchaseOrders,
 } from "./purchase-order-api";
+import {
+  PurchaseOrderDeepLinkRequestGate,
+} from "./purchase-order-deep-link-request";
 import { PurchaseOrderDetail } from "./purchase-order-detail";
 import { PurchaseOrderEditor } from "./purchase-order-editor";
 import { PurchaseOrderList } from "./purchase-order-list";
@@ -59,8 +62,9 @@ export function PurchaseOrderWorkspace({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamString = searchParams.toString();
   const deepLinkedOrderId = searchParams.get("purchase_order_id");
-  const deepLinkRequestVersion = useRef(0);
+  const deepLinkRequests = useRef(new PurchaseOrderDeepLinkRequestGate());
   const [orders, setOrders] = useState(emptyOrders);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [relationships, setRelationships] = useState<
@@ -88,41 +92,63 @@ export function PurchaseOrderWorkspace({
     useState<PurchaseOrderWithReferences | null>(null);
 
   const clearPurchaseOrderDeepLink = useCallback(() => {
-    const query = new URLSearchParams(searchParams.toString());
+    const query = new URLSearchParams(searchParamString);
     query.delete("purchase_order_id");
     const encoded = query.toString();
     router.replace(`/supplier-purchase-orders${encoded ? `?${encoded}` : ""}`);
-  }, [router, searchParams]);
+  }, [router, searchParamString]);
+
+  const leavePurchaseOrderDeepLink = useCallback(() => {
+    deepLinkRequests.current.invalidate();
+    if (deepLinkedOrderId) clearPurchaseOrderDeepLink();
+  }, [clearPurchaseOrderDeepLink, deepLinkedOrderId]);
 
   useEffect(() => {
     if (!deepLinkedOrderId) return;
     if (!canViewPurchaseOrders) {
-      clearPurchaseOrderDeepLink();
+      leavePurchaseOrderDeepLink();
       return;
     }
-    const version = ++deepLinkRequestVersion.current;
+    const generation = deepLinkRequests.current.begin();
     setError(null);
     void loadPurchaseOrder(deepLinkedOrderId).then((order) => {
-      if (deepLinkRequestVersion.current !== version) return;
+      if (!deepLinkRequests.current.isCurrent(generation)) return;
       setDetailOrder(order);
       setDetailOpen(true);
     }).catch((caught) => {
-      if (deepLinkRequestVersion.current !== version) return;
+      if (!deepLinkRequests.current.isCurrent(generation)) return;
       setDetailOrder(null);
       setDetailOpen(false);
       setError(errorMessage(caught, "采购单详情加载失败"));
       if (errorStatus(caught) === 403 || errorStatus(caught) === 404) {
-        clearPurchaseOrderDeepLink();
+        leavePurchaseOrderDeepLink();
       }
     });
     return () => {
-      deepLinkRequestVersion.current += 1;
+      deepLinkRequests.current.invalidate();
     };
   }, [
     canViewPurchaseOrders,
-    clearPurchaseOrderDeepLink,
     deepLinkedOrderId,
+    leavePurchaseOrderDeepLink,
   ]);
+
+  function openOrderDetail(order: PurchaseOrderWithReferences) {
+    leavePurchaseOrderDeepLink();
+    setDetailOrder(order);
+    setDetailOpen(true);
+  }
+
+  function openOrderEditor(order: EditablePurchaseOrder) {
+    leavePurchaseOrderDeepLink();
+    setEditorOrder(order);
+    setEditorOpen(true);
+  }
+
+  function handleDetailOpenChange(nextOpen: boolean) {
+    if (!nextOpen) leavePurchaseOrderDeepLink();
+    setDetailOpen(nextOpen);
+  }
 
   useEffect(() => {
     if (!canViewPurchaseOrders) {
@@ -350,14 +376,8 @@ export function PurchaseOrderWorkspace({
             orders={orders.list}
             loading={loadingOrders}
             canManage={canManagePurchaseOrders}
-            onOpen={(order) => {
-              setDetailOrder(order);
-              setDetailOpen(true);
-            }}
-            onEdit={(order) => {
-              setEditorOrder(order);
-              setEditorOpen(true);
-            }}
+            onOpen={openOrderDetail}
+            onEdit={openOrderEditor}
           />
           <Separator />
           <div className="flex flex-col gap-3 px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -407,12 +427,7 @@ export function PurchaseOrderWorkspace({
         open={detailOpen}
         order={detailOrder}
         canManage={canManagePurchaseOrders}
-        onOpenChange={(nextOpen) => {
-          setDetailOpen(nextOpen);
-          if (!nextOpen && deepLinkedOrderId) {
-            clearPurchaseOrderDeepLink();
-          }
-        }}
+        onOpenChange={handleDetailOpenChange}
         onChanged={loadOrders}
       />
     </div>

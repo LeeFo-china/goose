@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import type {
@@ -13,10 +12,6 @@ import type {
   PurchaseOrderCatalogPage,
   PurchaseOrderSupplierOption,
 } from "@/components/supplier-purchase-orders/purchase-order-types";
-import {
-  resolveSupplierCommandAttempt,
-  type SupplierCommandAttempt,
-} from "@/components/supplier-products/supplier-command-attempt";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -29,19 +24,13 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 
 import {
-  createRequisitionDraft,
   loadRequisition,
   loadRequisitionCatalog,
   loadRequisitionItems,
-  updateRequisitionDraft,
 } from "./requisition-api";
 import {
-  commandConflictMessage,
-  errorCode,
   errorMessage,
   errorStatus,
-  toRequisitionDraftPayload,
-  validateRequisitionDraft,
   type RequisitionDraftErrors,
   type RequisitionDraftLine,
 } from "./requisition-page-utils";
@@ -56,10 +45,11 @@ import {
   RequisitionHeaderFields,
 } from "./requisition-editor-fields";
 import type {
-  RequisitionCreateDraftInput,
+  RequisitionDetail,
+  RequisitionItemPage,
   RequisitionRecord,
-  RequisitionUpdateDraftInput,
 } from "./requisition-types";
+import { useRequisitionDraftSave } from "./use-requisition-draft-save";
 
 const emptyCatalog: PurchaseOrderCatalogPage = {
   list: [],
@@ -117,23 +107,83 @@ export function RequisitionEditor({
   const [appliedCatalogKeyword, setAppliedCatalogKeyword] = useState("");
   const [loadingDraft, setLoadingDraft] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [attempt, setAttempt] = useState<SupplierCommandAttempt | null>(null);
   const [validation, setValidation] = useState<RequisitionDraftErrors>({});
-  const [error, setError] = useState<string | null>(null);
-  const [conflict, setConflict] = useState<string | null>(null);
   const draftRequestVersion = useRef(0);
   const catalogRequestVersion = useRef(0);
   const activeSupplierId = useRef("");
+  const activeDraftId = useRef<string | null>(null);
+  const recordId = record?.id ?? null;
+
+  const applyLoadedDraft = useCallback((
+    detail: RequisitionDetail,
+    itemPage: RequisitionItemPage,
+  ) => {
+    const requisition = detail.requisition;
+    activeDraftId.current = requisition.id;
+    const supplierChanged =
+      activeSupplierId.current !== requisition.tenant_supplier_id;
+    setEditingId(requisition.id);
+    setProjectId(requisition.project_id);
+    activeSupplierId.current = requisition.tenant_supplier_id;
+    setTenantSupplierId(requisition.tenant_supplier_id);
+    if (supplierChanged) setCatalog(emptyCatalog);
+    setReason(requisition.reason);
+    setExpectedDeliveryDate(requisition.expected_delivery_date ?? "");
+    setRemark(requisition.remark ?? "");
+    setExpectedVersion(requisition.version);
+    setLines(itemPage.list.map((item) => ({
+      supplierSkuId: item.supplier_sku_id,
+      costCategoryId: item.cost_category_id,
+      quantity: item.quantity,
+    })));
+    setFacts(Object.fromEntries(itemPage.list.map((item) => [
+      item.supplier_sku_id,
+      catalogFactFromRequisitionItem(item),
+    ])));
+    setSavedRecord(requisition);
+  }, []);
+
+  const {
+    attempt,
+    conflict,
+    error,
+    refreshRequired,
+    refreshing,
+    saving,
+    invalidateRefresh,
+    refreshSavedDraft,
+    saveDraft,
+    setAttempt,
+    setConflict,
+    setError,
+    setRefreshRequired,
+  } = useRequisitionDraftSave({
+    editingId,
+    loadingDraft,
+    onValidation: setValidation,
+    onCommandAccepted: (requisition) => {
+      activeDraftId.current = requisition.id;
+      setEditingId(requisition.id);
+      setExpectedVersion(requisition.version);
+      setSavedRecord(requisition);
+      onSaved(requisition);
+    },
+    onRefreshAccepted: (detail, itemPage) => {
+      applyLoadedDraft(detail, itemPage);
+      onSaved(detail.requisition);
+    },
+    onRefreshFailed: () => setFacts({}),
+  });
 
   const hydrateDraft = useCallback(async (
-    targetId = record?.id ?? null,
+    targetId = recordId,
   ) => {
     const version = ++draftRequestVersion.current;
     setConflict(null);
     setValidation({});
     setError(null);
     if (!targetId) {
+      activeDraftId.current = null;
       setEditingId(null);
       setProjectId("");
       activeSupplierId.current = "";
@@ -146,6 +196,7 @@ export function RequisitionEditor({
       setLines([]);
       setFacts({});
       setSavedRecord(null);
+      setRefreshRequired(false);
       return "empty" as const;
     }
     setLoadingDraft(true);
@@ -155,29 +206,9 @@ export function RequisitionEditor({
         loadRequisitionItems(targetId),
       ]);
       if (draftRequestVersion.current !== version) return null;
-      const requisition = detail.requisition;
-      const supplierChanged =
-        activeSupplierId.current !== requisition.tenant_supplier_id;
-      setEditingId(requisition.id);
-      setProjectId(requisition.project_id);
-      activeSupplierId.current = requisition.tenant_supplier_id;
-      setTenantSupplierId(requisition.tenant_supplier_id);
-      if (supplierChanged) setCatalog(emptyCatalog);
-      setReason(requisition.reason);
-      setExpectedDeliveryDate(requisition.expected_delivery_date ?? "");
-      setRemark(requisition.remark ?? "");
-      setExpectedVersion(requisition.version);
-      setLines(itemPage.list.map((item) => ({
-        supplierSkuId: item.supplier_sku_id,
-        costCategoryId: item.cost_category_id,
-        quantity: item.quantity,
-      })));
-      setFacts(Object.fromEntries(itemPage.list.map((item) => [
-        item.supplier_sku_id,
-        catalogFactFromRequisitionItem(item),
-      ])));
-      setSavedRecord(requisition);
-      return requisition;
+      applyLoadedDraft(detail, itemPage);
+      setRefreshRequired(false);
+      return detail.requisition;
     } catch (caught) {
       if (draftRequestVersion.current === version) {
         setError(errorMessage(caught, "采购申请草稿加载失败"));
@@ -187,18 +218,21 @@ export function RequisitionEditor({
     } finally {
       if (draftRequestVersion.current === version) setLoadingDraft(false);
     }
-  }, [record]);
+  }, [applyLoadedDraft, recordId]);
 
   useEffect(() => {
     if (!open) {
       draftRequestVersion.current += 1;
       catalogRequestVersion.current += 1;
+      activeDraftId.current = null;
+      invalidateRefresh();
       return;
     }
+    if (recordId && recordId === activeDraftId.current) return;
     setCatalogPage(1);
     setAppliedCatalogKeyword("");
     void hydrateDraft();
-  }, [hydrateDraft, open]);
+  }, [hydrateDraft, invalidateRefresh, open]);
 
   const loadCatalog = useCallback(async () => {
     const version = ++catalogRequestVersion.current;
@@ -241,10 +275,11 @@ export function RequisitionEditor({
     void loadCatalog();
   }, [loadCatalog]);
 
-  const fieldsLocked = loadingDraft || saving || attempt !== null;
+  const fieldsLocked = loadingDraft || refreshing || saving ||
+    attempt !== null || refreshRequired;
 
   async function abandonAttempt() {
-    const targetId = editingId ?? attempt?.resourceId ?? record?.id ?? null;
+    const targetId = editingId ?? attempt?.resourceId ?? recordId;
     const result = await hydrateDraft(targetId);
     if (result === "not_found") {
       setAttempt(null);
@@ -260,78 +295,8 @@ export function RequisitionEditor({
 
   function handleOpenChange(nextOpen: boolean) {
     if (!nextOpen && (saving || attempt)) return;
+    if (!nextOpen) invalidateRefresh();
     onOpenChange(nextOpen);
-  }
-
-  async function handleSave() {
-    const draft = {
-      projectId,
-      tenantSupplierId,
-      reason,
-      expectedDeliveryDate,
-      remark,
-      expectedVersion,
-      items: lines,
-    };
-    const errors = validateRequisitionDraft(draft);
-    setValidation(errors);
-    if (Object.keys(errors).length > 0 || saving || loadingDraft) return;
-    const payload = toRequisitionDraftPayload(draft);
-    const scope = editingId
-      ? "purchase-requisition:update"
-      : "purchase-requisition:create";
-    const nextAttempt = resolveSupplierCommandAttempt(attempt, {
-      scope,
-      resourcePath: editingId ?? "new",
-      payload,
-      ...(!editingId ? { allocateResourceId: true as const } : {}),
-    });
-    setAttempt(nextAttempt);
-    setSaving(true);
-    setError(null);
-    setConflict(null);
-    try {
-      const id = editingId ?? nextAttempt.resourceId;
-      if (!id) throw new Error("采购申请资源编号生成失败");
-      if (editingId) {
-        await updateRequisitionDraft(
-          id,
-          payload as RequisitionUpdateDraftInput,
-          nextAttempt,
-        );
-      } else {
-        if (!nextAttempt.resourceId) throw new Error("采购申请编号生成失败");
-        await createRequisitionDraft(
-          payload as RequisitionCreateDraftInput,
-          { ...nextAttempt, resourceId: nextAttempt.resourceId },
-        );
-      }
-      const [detail, itemPage] = await Promise.all([
-        loadRequisition(id),
-        loadRequisitionItems(id),
-      ]);
-      setExpectedVersion(detail.requisition.version);
-      setEditingId(detail.requisition.id);
-      setLines(itemPage.list.map((item) => ({
-        supplierSkuId: item.supplier_sku_id,
-        costCategoryId: item.cost_category_id,
-        quantity: item.quantity,
-      })));
-      setFacts(Object.fromEntries(itemPage.list.map((item) => [
-        item.supplier_sku_id,
-        catalogFactFromRequisitionItem(item),
-      ])));
-      setSavedRecord(detail.requisition);
-      setAttempt(null);
-      onSaved(detail.requisition);
-      toast.success("采购申请草稿已保存");
-    } catch (caught) {
-      const nextConflict = commandConflictMessage(errorCode(caught));
-      setConflict(nextConflict);
-      setError(nextConflict ?? errorMessage(caught, "采购申请草稿保存失败"));
-    } finally {
-      setSaving(false);
-    }
   }
 
   return (
@@ -366,6 +331,16 @@ export function RequisitionEditor({
                 onClick={() => void abandonAttempt()}
               >
                 放弃本次重试并刷新
+              </Button>
+            ) : null}
+            {refreshRequired && editingId ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={loadingDraft || refreshing || saving}
+                onClick={() => void refreshSavedDraft(editingId)}
+              >
+                刷新最新数据
               </Button>
             ) : null}
             <RequisitionHeaderFields
@@ -458,8 +433,19 @@ export function RequisitionEditor({
           >
             关闭
           </Button>
-          <Button type="button" disabled={saving || loadingDraft}
-            onClick={() => void handleSave()}>
+          <Button
+            type="button"
+            disabled={saving || loadingDraft || refreshing || refreshRequired}
+            onClick={() =>
+              void saveDraft({
+                projectId,
+                tenantSupplierId,
+                reason,
+                expectedDeliveryDate,
+                remark,
+                expectedVersion,
+                items: lines,
+              })}>
             {saving ? <Spinner data-icon="inline-start" /> : null}
             {attempt && !saving ? "重试保存" : "保存草稿"}
           </Button>

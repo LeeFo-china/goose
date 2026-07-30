@@ -32,6 +32,8 @@ import {
 import {
   formatRequisitionDateTime,
   formatRequisitionMoney,
+  isValidRequisitionQuantity,
+  REQUISITION_QUANTITY_ERROR,
   shortBusinessId,
   type RequisitionDraftLine,
 } from "./requisition-page-utils";
@@ -78,6 +80,10 @@ export function SelectedRequisitionLines({
           <TableBody>
             {lines.map((line) => {
               const fact = facts[line.supplierSkuId];
+              const quantityInvalid =
+                !isValidRequisitionQuantity(line.quantity);
+              const quantityErrorId =
+                `requisition-quantity-error-${line.supplierSkuId}`;
               return (
                 <TableRow key={line.supplierSkuId}>
                   <TableCell>
@@ -110,12 +116,21 @@ export function SelectedRequisitionLines({
                       inputMode="decimal"
                       pattern="\d+(?:\.\d{1,4})?"
                       value={line.quantity}
+                      aria-invalid={quantityInvalid}
+                      aria-describedby={quantityInvalid
+                        ? quantityErrorId
+                        : undefined}
                       disabled={disabled}
                       onChange={(event) =>
                         onChange(line.supplierSkuId, {
                           quantity: event.target.value,
                         })}
                     />
+                    {quantityInvalid ? (
+                      <span id={quantityErrorId} className="sr-only">
+                        {REQUISITION_QUANTITY_ERROR}
+                      </span>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     {fact?.purchase_unit_symbol ?? "-"}

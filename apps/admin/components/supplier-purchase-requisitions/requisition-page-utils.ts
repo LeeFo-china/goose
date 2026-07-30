@@ -7,6 +7,8 @@ import type {
 
 const CENTS_PER_UNIT = BigInt(100);
 const ZERO_CENTS = BigInt(0);
+export const REQUISITION_QUANTITY_ERROR =
+  "采购数量必须大于 0、整数位不超过 14 位且最多保留 4 位小数";
 
 export type RequisitionWorkspaceState = {
   page: number;
@@ -123,13 +125,9 @@ export function validateRequisitionDraft(
   } else if (draft.items.some(({ costCategoryId }) => !costCategoryId)) {
     errors.items = "请为每行选择成本分类";
   } else if (
-    draft.items.some(({ quantity }) => {
-      const normalized = normalizeRequisitionQuantity(quantity);
-      return normalized === null || !/[1-9]/.test(normalized);
-    })
+    draft.items.some(({ quantity }) => !isValidRequisitionQuantity(quantity))
   ) {
-    errors.items =
-      "采购数量必须大于 0、整数位不超过 14 位且最多保留 4 位小数";
+    errors.items = REQUISITION_QUANTITY_ERROR;
   }
   return errors;
 }
@@ -221,6 +219,11 @@ export function normalizeRequisitionQuantity(value: string) {
   const integer = (match[1] ?? "").replace(/^0+(?=\d)/, "");
   if (integer.length > 14) return null;
   return match[2] === undefined ? integer : `${integer}.${match[2]}`;
+}
+
+export function isValidRequisitionQuantity(value: string) {
+  const normalized = normalizeRequisitionQuantity(value);
+  return normalized !== null && /[1-9]/.test(normalized);
 }
 
 export function formatRequisitionDateTime(value: string | null) {

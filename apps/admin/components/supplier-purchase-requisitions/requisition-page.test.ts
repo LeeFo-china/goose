@@ -362,7 +362,8 @@ describe("采购申请页面边界", () => {
     const editor = readSource("./requisition-editor.tsx");
     const editorFields = readSource("./requisition-editor-fields.tsx");
     const editorLines = readSource("./requisition-editor-lines.tsx");
-    const editorSurface = editor + editorFields + editorLines;
+    const saveFlow = readSource("./use-requisition-draft-save.ts");
+    const editorSurface = editor + editorFields + editorLines + saveFlow;
     const api = readSource("./requisition-api.ts");
 
     expect(editor).toContain("<SheetTitle>");
@@ -376,8 +377,8 @@ describe("采购申请页面边界", () => {
     expect(editorSurface).toContain("期望到货日期");
     expect(editor).toContain("loadRequisitionCatalog");
     expect(editor).toContain("onLoadMoreCostCategories");
-    expect(editor).toContain("resolveSupplierCommandAttempt");
-    expect(editor).toContain("allocateResourceId: true");
+    expect(saveFlow).toContain("resolveSupplierCommandAttempt");
+    expect(saveFlow).toContain("allocateResourceId: true");
     expect(editor).toContain("draftRequestVersion");
     expect(editor).toContain("catalogRequestVersion");
     expect(editor).toContain("saving || attempt");
@@ -392,8 +393,8 @@ describe("采购申请页面边界", () => {
     );
     expect(editorLines).toContain('type="text"');
     expect(editorLines).toContain('inputMode="decimal"');
-    expect(editor).toContain("createRequisitionDraft");
-    expect(editor).toContain("updateRequisitionDraft");
+    expect(saveFlow).toContain("createRequisitionDraft");
+    expect(saveFlow).toContain("updateRequisitionDraft");
     expect(api).toContain("loadRequisitionCostCategories");
     expect(api).not.toMatch(
       /unit_price\\s*:|tax_rate\\s*:|amount\\s*:/,
@@ -469,7 +470,9 @@ describe("采购申请页面边界", () => {
       "requisition-filters.tsx",
       "requisition-review-dialog.tsx",
       "requisition-budget-summary.tsx",
+      "requisition-command-refresh.ts",
       "requisition-page-utils.ts",
+      "use-requisition-draft-save.ts",
       "use-requisition-list.ts",
     ]) {
       const source = readSource(`./${name}`);

@@ -44,11 +44,15 @@ import {
   errorStatus,
 } from "./requisition-page-utils";
 import {
+  refreshRequisitionAfterCommand,
+} from "./requisition-command-refresh";
+import {
   RequisitionReviewDialog,
   type RequisitionConfirmAction,
 } from "./requisition-review-dialog";
 import type {
   RequisitionAction,
+  RequisitionCommandResult,
   RequisitionDetail as RequisitionDetailData,
   RequisitionItem,
   RequisitionRecord,
@@ -108,52 +112,61 @@ export function RequisitionDetail({
   const [error, setError] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<string | null>(null);
+  const [refreshRequired, setRefreshRequired] = useState(false);
   const requestVersion = useRef(0);
+  const recordId = record?.id ?? null;
+  const recordRef = useRef(record);
+  recordRef.current = record;
 
-  const reload = useCallback(async () => {
-    if (!record) return null;
+  const reload = useCallback(async (refreshFailureMessage?: string) => {
+    if (!recordId) return null;
     const version = ++requestVersion.current;
     setLoading(true);
     setHasLoaded(false);
     setError(null);
-    try {
-      const [nextDetail, itemPage] = await Promise.all([
-        loadRequisition(record.id),
-        loadRequisitionItems(record.id),
-      ]);
-      if (requestVersion.current !== version) return null;
-      setDetail(nextDetail);
-      setItems(itemPage.list);
-      setHasLoaded(true);
-      return nextDetail.requisition;
-    } catch (caught) {
-      if (requestVersion.current === version) {
-        setError(errorMessage(caught, "采购申请详情加载失败"));
-        if (errorStatus(caught) === 404) return "not_found" as const;
-      }
+    const refreshed = await refreshRequisitionAfterCommand(() =>
+      Promise.all([
+        loadRequisition(recordId),
+        loadRequisitionItems(recordId),
+      ])
+    );
+    if (requestVersion.current !== version) return null;
+    if (refreshed.status === "refresh_failed") {
+      setError(refreshFailureMessage ??
+        errorMessage(refreshed.error, "采购申请详情加载失败"));
+      setLoading(false);
+      if (errorStatus(refreshed.error) === 404) return "not_found" as const;
       return null;
-    } finally {
-      if (requestVersion.current === version) setLoading(false);
     }
-  }, [record]);
+    const [nextDetail, itemPage] = refreshed.value;
+    setDetail(nextDetail);
+    setItems(itemPage.list);
+    setHasLoaded(true);
+    setRefreshRequired(false);
+    setLoading(false);
+    return nextDetail.requisition;
+  }, [recordId]);
 
   useEffect(() => {
     requestVersion.current += 1;
-    setDetail(record
-      ? { requisition: record, budget_snapshots: [] }
+    const baseline = recordRef.current;
+    setDetail(baseline
+      ? { requisition: baseline, budget_snapshots: [] }
       : null);
     setItems([]);
+    setLoading(false);
     setHasLoaded(false);
     setAttempt(null);
     setConflict(null);
     setCommandError(null);
+    setRefreshRequired(false);
     setConfirmOpen(false);
     setConfirmValue("");
     if (open) void reload();
     return () => {
       requestVersion.current += 1;
     };
-  }, [open, record, reload]);
+  }, [open, recordId, reload]);
 
   const current = detail?.requisition ?? null;
   const actions = current && hasLoaded
@@ -201,6 +214,7 @@ export function RequisitionDetail({
     setError(null);
     setCommandError(null);
     setConflict(null);
+    let commandResult: RequisitionCommandResult;
     try {
       if (confirmAction === "convert") {
         const payload = { expected_version: current.version };
@@ -211,7 +225,7 @@ export function RequisitionDetail({
           allocateResourceId: true,
         });
         setAttempt(nextAttempt);
-        await convertRequisition(
+        commandResult = await convertRequisition(
           current.id,
           payload,
           nextAttempt,
@@ -224,7 +238,11 @@ export function RequisitionDetail({
           payload,
         });
         setAttempt(nextAttempt);
-        await submitRequisition(current.id, payload, nextAttempt);
+        commandResult = await submitRequisition(
+          current.id,
+          payload,
+          nextAttempt,
+        );
       } else if (confirmAction === "cancel") {
         const payload = {
           expected_version: current.version,
@@ -236,7 +254,11 @@ export function RequisitionDetail({
           payload,
         });
         setAttempt(nextAttempt);
-        await cancelRequisition(current.id, payload, nextAttempt);
+        commandResult = await cancelRequisition(
+          current.id,
+          payload,
+          nextAttempt,
+        );
       } else {
         const payload = {
           expected_version: current.version,
@@ -249,15 +271,11 @@ export function RequisitionDetail({
           payload,
         });
         setAttempt(nextAttempt);
-        await reviewRequisition(current.id, payload, nextAttempt);
-      }
-      const latest = await reload();
-      if (latest && latest !== "not_found") {
-        setAttempt(null);
-        setConfirmOpen(false);
-        setConfirmValue("");
-        onChanged(latest);
-        toast.success(commandSuccess[confirmAction]);
+        commandResult = await reviewRequisition(
+          current.id,
+          payload,
+          nextAttempt,
+        );
       }
     } catch (caught) {
       const nextConflict = commandConflictMessage(errorCode(caught));
@@ -266,9 +284,27 @@ export function RequisitionDetail({
       setConflict(nextConflict);
       setCommandError(message);
       setError(message);
-    } finally {
       setBusy(false);
+      return;
     }
+    setAttempt(null);
+    setConfirmOpen(false);
+    setConfirmValue("");
+    setDetail((currentDetail) => ({
+      requisition: commandResult.requisition,
+      budget_snapshots: currentDetail?.budget_snapshots ?? [],
+    }));
+    setHasLoaded(false);
+    setRefreshRequired(true);
+    onChanged(commandResult.requisition);
+    toast.success(commandSuccess[confirmAction]);
+    const latest = await reload(
+      "操作已成功，但最新详情刷新失败，请手动刷新。",
+    );
+    if (latest && latest !== "not_found") {
+      onChanged(latest);
+    }
+    setBusy(false);
   }
 
   async function refreshLatest() {
@@ -306,7 +342,7 @@ export function RequisitionDetail({
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             <div className="flex flex-col gap-4">
               {error ? <StatusAlert>{error}</StatusAlert> : null}
-              {conflict ? (
+              {conflict || refreshRequired ? (
                 <Button
                   type="button"
                   variant="outline"
