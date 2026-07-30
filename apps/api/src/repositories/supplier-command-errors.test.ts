@@ -10,6 +10,12 @@ describe("mapSupplierCommandDatabaseError", () => {
     ["SUPPLIER_PROXY_ACTOR_INVALID", 403],
     ["SUPPLIER_ORDER_NOT_ELIGIBLE", 409],
     ["SUPPLIER_PRICE_LIST_INVALID_ACTION", 409],
+    ["FULFILLMENT_NOT_CONFIRMED", 409],
+    ["FULFILLMENT_VERSION_CONFLICT", 409],
+    ["OVER_SHIPPED", 409],
+    ["OVER_RECEIVED", 409],
+    ["VARIANCE_REASON_REQUIRED", 400],
+    ["SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED", 409],
   ])("maps %s to a business response", (code, statusCode) => {
     expect(mapSupplierCommandDatabaseError({
       code: "P0001",
@@ -29,6 +35,29 @@ describe("mapSupplierCommandDatabaseError", () => {
     const sql = readFileSync(
       new URL(
         "../../../../supabase/migrations/20260729160000_create_supplier_products_and_base_prices.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    const codes = [
+      ...sql.matchAll(
+        /ERRCODE = 'P0001',\s*MESSAGE = '([^']+)'/g,
+      ),
+    ].map((match) => match[1]!);
+
+    expect(codes.length).toBeGreaterThan(0);
+    for (const code of new Set(codes)) {
+      expect(mapSupplierCommandDatabaseError({
+        code: "P0001",
+        message: code,
+      }), code).not.toBeNull();
+    }
+  });
+
+  test("maps every P0001 raised by the fulfillment migration", () => {
+    const sql = readFileSync(
+      new URL(
+        "../../../../supabase/migrations/20260730100000_create_supplier_purchase_fulfillment.sql",
         import.meta.url,
       ),
       "utf8",
