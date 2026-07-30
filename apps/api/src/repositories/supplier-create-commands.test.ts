@@ -428,7 +428,13 @@ function platformRows() {
 }
 
 function catalogRows() {
-  const audit = { version: 1, created_at: NOW, updated_at: NOW };
+  const audit = {
+    version: 1,
+    created_by_employee_id: EMPLOYEE_ID,
+    updated_by_employee_id: EMPLOYEE_ID,
+    created_at: NOW,
+    updated_at: NOW,
+  };
   return {
     category: {
       id: RESOURCE_ID,

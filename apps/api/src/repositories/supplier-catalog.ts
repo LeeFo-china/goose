@@ -36,6 +36,8 @@ const CatalogConflictSnapshotSchema = z.object({
 }).strict();
 const catalogAudit = {
   version: z.number().int().positive(),
+  created_by_employee_id: z.uuid().optional(),
+  updated_by_employee_id: z.uuid().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 };
