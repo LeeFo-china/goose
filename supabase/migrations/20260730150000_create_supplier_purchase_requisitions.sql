@@ -799,6 +799,76 @@ GRANT EXECUTE ON FUNCTION public.save_project_cost_budgets(
   uuid, uuid, uuid, jsonb
 ) TO service_role;
 
+CREATE FUNCTION public.list_project_cost_commitment_totals(
+  p_tenant_id uuid,
+  p_project_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_source_row_count bigint;
+  v_categories jsonb;
+BEGIN
+  SELECT COUNT(*)
+  INTO v_source_row_count
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.project_id = p_project_id
+    AND commitment.source_type = 'supplier_purchase_requisition'
+    AND commitment.status IN ('reserved', 'converted');
+
+  IF v_source_row_count > 10000 THEN
+    RETURN jsonb_build_object(
+      'source_row_count', v_source_row_count,
+      'categories', '[]'::jsonb
+    );
+  END IF;
+
+  SELECT COALESCE(
+    jsonb_agg(
+      jsonb_build_object(
+        'cost_category_id', total.cost_category_id,
+        'category_code', category.code,
+        'category_name', category.name,
+        'commitment_amount', total.commitment_amount::text
+      )
+      ORDER BY category.sort_order NULLS LAST, category.code,
+        total.cost_category_id
+    ),
+    '[]'::jsonb
+  )
+  INTO v_categories
+  FROM (
+    SELECT commitment.cost_category_id,
+      SUM(commitment.amount) AS commitment_amount
+    FROM public.project_cost_commitments AS commitment
+    WHERE commitment.tenant_id = p_tenant_id
+      AND commitment.project_id = p_project_id
+      AND commitment.source_type = 'supplier_purchase_requisition'
+      AND commitment.status IN ('reserved', 'converted')
+    GROUP BY commitment.cost_category_id
+  ) AS total
+  JOIN public.finance_cost_categories AS category
+    ON category.id = total.cost_category_id
+    AND category.tenant_id = p_tenant_id;
+
+  RETURN jsonb_build_object(
+    'source_row_count', v_source_row_count,
+    'categories', v_categories
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.list_project_cost_commitment_totals(uuid, uuid)
+FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION
+  public.list_project_cost_commitment_totals(uuid, uuid)
+TO service_role;
+
 CREATE FUNCTION public.lock_finance_ledger_project_budget()
 RETURNS trigger
 LANGUAGE plpgsql

@@ -3,23 +3,28 @@ import { describe, expect, mock, test } from "bun:test";
 const rpcCalls: Array<{ name: string; params: Record<string, unknown> }> = [];
 const updateCalls: unknown[] = [];
 const insertCalls: unknown[] = [];
-const commitmentQueryCalls: Array<{
-  operation: string;
-  args: unknown[];
-}> = [];
-let commitmentFromCount = 0;
-let commitmentResponse: {
-  data: unknown[] | null;
+let commitmentRpcResponse: {
+  data: unknown;
   error: unknown;
-  count: number | null;
 } = {
-  data: [
-    { cost_category_id: "category-1", amount: "1250.25" },
-    { cost_category_id: "category-1", amount: "249.75" },
-    { cost_category_id: "category-2", amount: 500 },
-  ],
+  data: {
+    source_row_count: 1001,
+    categories: [
+      {
+        cost_category_id: "category-1",
+        category_code: "labor",
+        category_name: "人工",
+        commitment_amount: "1500.00",
+      },
+      {
+        cost_category_id: "category-2",
+        category_code: "main_material",
+        category_name: "主材",
+        commitment_amount: 500,
+      },
+    ],
+  },
   error: null,
-  count: 3,
 };
 
 const activeBudgetRows = [
@@ -119,60 +124,18 @@ class ProjectCostBudgetsQuery {
   }
 }
 
-class ProjectCostCommitmentsQuery {
-  select(columns: string, options?: unknown) {
-    commitmentQueryCalls.push({
-      operation: "select",
-      args: [columns, options],
-    });
-    return this;
-  }
-
-  eq(column: string, value: unknown) {
-    commitmentQueryCalls.push({
-      operation: "eq",
-      args: [column, value],
-    });
-    return this;
-  }
-
-  in(column: string, values: unknown[]) {
-    commitmentQueryCalls.push({
-      operation: "in",
-      args: [column, values],
-    });
-    return this;
-  }
-
-  limit(value: number) {
-    commitmentQueryCalls.push({
-      operation: "limit",
-      args: [value],
-    });
-    return this;
-  }
-
-  then<TResult1 = unknown, TResult2 = never>(
-    onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-  ): Promise<TResult1 | TResult2> {
-    return Promise.resolve(commitmentResponse).then(onfulfilled, onrejected);
-  }
-}
-
 mock.module("@/utils/supabase/index", () => ({
   SupabaseDB: {
     getAdminClient: () => ({
       from: (table: string) => {
-        if (table === "project_cost_commitments") {
-          commitmentFromCount += 1;
-          return new ProjectCostCommitmentsQuery();
-        }
         expect(table).toBe("project_cost_budgets");
         return new ProjectCostBudgetsQuery();
       },
       rpc: async (name: string, params: Record<string, unknown>) => {
         rpcCalls.push({ name, params });
+        if (name === "list_project_cost_commitment_totals") {
+          return commitmentRpcResponse;
+        }
         return { data: null, error: null };
       },
     }),
@@ -180,17 +143,27 @@ mock.module("@/utils/supabase/index", () => ({
 }));
 
 describe("projectCostBudgetRepository", () => {
-  test("aggregates active purchase requisition commitments with one bounded query", async () => {
-    commitmentQueryCalls.length = 0;
-    commitmentFromCount = 0;
-    commitmentResponse = {
-      data: [
-        { cost_category_id: "category-1", amount: "1250.25" },
-        { cost_category_id: "category-1", amount: "249.75" },
-        { cost_category_id: "category-2", amount: 500 },
-      ],
+  test("loads more than PostgREST max_rows through one aggregate RPC", async () => {
+    rpcCalls.length = 0;
+    commitmentRpcResponse = {
+      data: {
+        source_row_count: 1001,
+        categories: [
+          {
+            cost_category_id: "category-1",
+            category_code: "labor",
+            category_name: "人工",
+            commitment_amount: "1500.00",
+          },
+          {
+            cost_category_id: "category-2",
+            category_code: "main_material",
+            category_name: "主材",
+            commitment_amount: 500,
+          },
+        ],
+      },
       error: null,
-      count: 3,
     };
     const { projectCostBudgetRepository } = await import(
       "./project-cost-budgets"
@@ -201,37 +174,56 @@ describe("projectCostBudgetRepository", () => {
       projectId: "project-1",
     });
 
-    expect(commitmentFromCount).toBe(1);
-    expect(commitmentQueryCalls).toEqual([
+    expect(rpcCalls).toEqual([
       {
-        operation: "select",
-        args: ["cost_category_id, amount", { count: "exact" }],
+        name: "list_project_cost_commitment_totals",
+        params: {
+          p_tenant_id: "tenant-1",
+          p_project_id: "project-1",
+        },
       },
-      { operation: "eq", args: ["tenant_id", "tenant-1"] },
-      { operation: "eq", args: ["project_id", "project-1"] },
-      {
-        operation: "eq",
-        args: ["source_type", "supplier_purchase_requisition"],
-      },
-      {
-        operation: "in",
-        args: ["status", ["reserved", "converted"]],
-      },
-      { operation: "limit", args: [10_000] },
     ]);
+    expect(result.sourceRowCount).toBe(1001);
     expect(result.totalCommitmentAmount).toBe(2000);
     expect([...result.byCategory.entries()]).toEqual([
       ["category-1", 1500],
       ["category-2", 500],
     ]);
+    expect(result.categoryDetails.get("category-2")).toEqual({
+      code: "main_material",
+      name: "主材",
+    });
+  });
+
+  test("accepts the exact 10000 source row boundary", async () => {
+    rpcCalls.length = 0;
+    commitmentRpcResponse = {
+      data: {
+        source_row_count: 10_000,
+        categories: [],
+      },
+      error: null,
+    };
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+
+    const result = await projectCostBudgetRepository.listCommitmentTotals({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
+
+    expect(result.sourceRowCount).toBe(10_000);
   });
 
   test("rejects commitment aggregation beyond the bounded row count", async () => {
-    commitmentQueryCalls.length = 0;
-    commitmentResponse = {
-      data: [],
+    rpcCalls.length = 0;
+    commitmentRpcResponse = {
+      data: {
+        source_row_count: 10_001,
+        categories: [],
+      },
       error: null,
-      count: 10_001,
     };
     const { projectCostBudgetRepository } = await import(
       "./project-cost-budgets"
@@ -249,11 +241,10 @@ describe("projectCostBudgetRepository", () => {
   });
 
   test("wraps commitment query failures as database errors", async () => {
-    commitmentQueryCalls.length = 0;
-    commitmentResponse = {
+    rpcCalls.length = 0;
+    commitmentRpcResponse = {
       data: null,
       error: { message: "query failed" },
-      count: null,
     };
     const { projectCostBudgetRepository } = await import(
       "./project-cost-budgets"

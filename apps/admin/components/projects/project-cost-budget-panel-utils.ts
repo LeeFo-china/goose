@@ -157,6 +157,6 @@ function buildEditableRow(input: {
     remark: budget?.remark || "",
     expense_amount: budget?.expense_amount || 0,
     commitment_amount: budget?.commitment_amount || 0,
-    has_existing_budget: Boolean(budget),
+    has_existing_budget: budget?.status === "active",
   };
 }

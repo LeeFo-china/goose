@@ -58,10 +58,15 @@ const listExpenseTotals = mock(async () => ({
 }));
 
 const listCommitmentTotals = mock(async () => ({
+  sourceRowCount: 2,
   totalCommitmentAmount: 14000,
   byCategory: new Map([
     ["category-1", 5000],
     ["category-2", 9000],
+  ]),
+  categoryDetails: new Map([
+    ["category-1", { code: "labor", name: "人工" }],
+    ["category-2", { code: "main_material", name: "主材" }],
   ]),
 }));
 
@@ -158,6 +163,18 @@ describe("projectCostBudgetService", () => {
       tenant_id: "tenant-1",
       name: "测试项目",
     }));
+    listCommitmentTotals.mockImplementation(async () => ({
+      sourceRowCount: 2,
+      totalCommitmentAmount: 14000,
+      byCategory: new Map([
+        ["category-1", 5000],
+        ["category-2", 9000],
+      ]),
+      categoryDetails: new Map([
+        ["category-1", { code: "labor", name: "人工" }],
+        ["category-2", { code: "main_material", name: "主材" }],
+      ]),
+    }));
     canAccessProject.mockImplementation(async () => true);
   });
 
@@ -223,6 +240,69 @@ describe("projectCostBudgetService", () => {
     );
   });
 
+  test("marks negative category availability as danger before expenses exceed budget", async () => {
+    listCommitmentTotals.mockImplementation(async () => ({
+      sourceRowCount: 2,
+      totalCommitmentAmount: 29000,
+      byCategory: new Map([
+        ["category-1", 20000],
+        ["category-2", 9000],
+      ]),
+      categoryDetails: new Map([
+        ["category-1", { code: "labor", name: "人工" }],
+        ["category-2", { code: "main_material", name: "主材" }],
+      ]),
+    }));
+    const { projectCostBudgetService } = await import("./project-cost-budgets");
+
+    const result = await projectCostBudgetService.listProjectBudgets(
+      authContextWithPermissions([{ code: "finance.budget.view", scope: "all" }]),
+      "project-1",
+    );
+
+    expect(result.list[0]).toMatchObject({
+      remaining_amount: 18000,
+      available_amount: -2000,
+      risk_level: "danger",
+    });
+  });
+
+  test("adds a danger row when an active commitment category has no budget", async () => {
+    listCommitmentTotals.mockImplementation(async () => ({
+      sourceRowCount: 3,
+      totalCommitmentAmount: 16000,
+      byCategory: new Map([
+        ["category-1", 5000],
+        ["category-2", 9000],
+        ["category-3", 2000],
+      ]),
+      categoryDetails: new Map([
+        ["category-1", { code: "labor", name: "人工" }],
+        ["category-2", { code: "main_material", name: "主材" }],
+        ["category-3", { code: "equipment", name: "设备" }],
+      ]),
+    }));
+    const { projectCostBudgetService } = await import("./project-cost-budgets");
+
+    const result = await projectCostBudgetService.listProjectBudgets(
+      authContextWithPermissions([{ code: "finance.budget.view", scope: "all" }]),
+      "project-1",
+    );
+
+    expect(result.list).toHaveLength(3);
+    expect(result.list[2]).toMatchObject({
+      cost_category_id: "category-3",
+      category_code: "equipment",
+      category_name: "设备",
+      budget_amount: 0,
+      expense_amount: 0,
+      commitment_amount: 2000,
+      remaining_amount: 0,
+      available_amount: -2000,
+      risk_level: "danger",
+    });
+  });
+
   test("upserts project budgets for finance budget managers", async () => {
     const { projectCostBudgetService } = await import("./project-cost-budgets");
 
@@ -260,13 +340,25 @@ describe("projectCostBudgetService", () => {
         },
       ],
     });
-    expect(result.list).toHaveLength(1);
+    expect(result.list).toHaveLength(2);
+    expect(result.list[1]).toMatchObject({
+      cost_category_id: "category-2",
+      budget_amount: 0,
+      commitment_amount: 9000,
+      available_amount: -32000,
+      risk_level: "danger",
+    });
     expect(result.summary).toMatchObject({
       budget_configured: true,
       budget_amount: 30000,
       commitment_amount: 14000,
       available_amount: -20000,
+      remaining_amount: -6000,
+      risk_level: "danger",
     });
+    expect(saveBudgets).toHaveBeenCalledTimes(1);
+    expect(listExpenseTotals).toHaveBeenCalledTimes(1);
+    expect(listCommitmentTotals).toHaveBeenCalledTimes(1);
   });
 
   test("rejects budget updates without manage permission", async () => {

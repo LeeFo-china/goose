@@ -79,6 +79,7 @@ export class ProjectCostBudgetService {
     ]);
 
     return buildProjectCostBudgetResult({
+      projectId,
       budgets,
       expenseTotals,
       commitmentTotals,
@@ -112,6 +113,7 @@ export class ProjectCostBudgetService {
     ]);
 
     return buildProjectCostBudgetResult({
+      projectId,
       budgets,
       expenseTotals,
       commitmentTotals,
@@ -186,6 +188,7 @@ export class ProjectCostBudgetService {
 }
 
 function buildProjectCostBudgetResult(input: {
+  projectId: string;
   budgets: ProjectCostBudgetRecord[];
   expenseTotals: ProjectCostBudgetExpenseTotals;
   commitmentTotals: ProjectCostBudgetCommitmentTotals;
@@ -201,6 +204,20 @@ function buildProjectCostBudgetResult(input: {
         budget.cost_category_id,
       ) ?? 0,
     }));
+  const budgetCategoryIds = new Set(
+    input.budgets.map((budget) => budget.cost_category_id),
+  );
+  for (const [costCategoryId, commitmentAmount] of
+    input.commitmentTotals.byCategory) {
+    if (budgetCategoryIds.has(costCategoryId)) continue;
+    list.push(buildUnbudgetedCommitmentListItem({
+      projectId: input.projectId,
+      costCategoryId,
+      category: input.commitmentTotals.categoryDetails.get(costCategoryId),
+      expenseAmount: input.expenseTotals.byCategory.get(costCategoryId) ?? 0,
+      commitmentAmount,
+    }));
+  }
 
   const budgetAmount = roundMoney(
     list.reduce((sum, item) => sum + item.budget_amount, 0),
@@ -237,6 +254,7 @@ function buildProjectCostBudgetResult(input: {
         budgetConfigured,
         budgetAmount,
         expenseAmount,
+        availableAmount,
       }),
     } satisfies ProjectCostBudgetSummary,
   };
@@ -275,10 +293,48 @@ function buildProjectCostBudgetListItem(input: {
     risk_level: resolveCategoryRiskLevel({
       budgetAmount,
       expenseAmount,
+      availableAmount: roundMoney(
+        budgetAmount - expenseAmount - commitmentAmount,
+      ),
       warningThresholdPercent,
     }),
     remark: input.budget.remark,
     status: input.budget.status,
+  };
+}
+
+function buildUnbudgetedCommitmentListItem(input: {
+  projectId: string;
+  costCategoryId: string;
+  category?: { code: string | null; name: string | null };
+  expenseAmount: number;
+  commitmentAmount: number;
+}): ProjectCostBudgetListItem {
+  const expenseAmount = roundMoney(input.expenseAmount);
+  const commitmentAmount = roundMoney(input.commitmentAmount);
+  const remainingAmount = expenseAmount === 0 ? 0 : roundMoney(-expenseAmount);
+  const availableAmount = roundMoney(-expenseAmount - commitmentAmount);
+  return {
+    id: `commitment:${input.costCategoryId}`,
+    project_id: input.projectId,
+    cost_category_id: input.costCategoryId,
+    category_code: input.category?.code ?? null,
+    category_name: input.category?.name ?? null,
+    budget_amount: 0,
+    expense_amount: expenseAmount,
+    commitment_amount: commitmentAmount,
+    available_amount: availableAmount,
+    remaining_amount: remainingAmount,
+    usage_ratio: null,
+    warning_threshold_percent: 100,
+    risk_level: resolveCategoryRiskLevel({
+      budgetAmount: 0,
+      expenseAmount,
+      availableAmount,
+      warningThresholdPercent: 100,
+    }),
+    remark: null,
+    status: null,
   };
 }
 
@@ -299,8 +355,12 @@ function compareBudgetRecords(
 function resolveCategoryRiskLevel(input: {
   budgetAmount: number;
   expenseAmount: number;
+  availableAmount: number;
   warningThresholdPercent: number;
 }): ProjectCostBudgetRiskLevel {
+  if (input.availableAmount < 0) {
+    return "danger";
+  }
   if (input.budgetAmount <= 0) {
     return input.expenseAmount > 0 ? "warning" : "normal";
   }
@@ -314,7 +374,11 @@ function resolveProjectRiskLevel(input: {
   budgetConfigured: boolean;
   budgetAmount: number;
   expenseAmount: number;
+  availableAmount: number;
 }): ProjectCostBudgetRiskLevel {
+  if (input.availableAmount < 0) {
+    return "danger";
+  }
   if (!input.budgetConfigured) {
     return "normal";
   }

@@ -49,8 +49,13 @@ export type ProjectCostBudgetExpenseTotals = {
 };
 
 export type ProjectCostBudgetCommitmentTotals = {
+  sourceRowCount: number;
   totalCommitmentAmount: number;
   byCategory: Map<string, number>;
+  categoryDetails: Map<string, {
+    code: string | null;
+    name: string | null;
+  }>;
 };
 
 type FinanceLedgerExpenseRow = {
@@ -58,9 +63,16 @@ type FinanceLedgerExpenseRow = {
   amount: number | string | null;
 };
 
-type ProjectCostCommitmentRow = {
+type ProjectCostCommitmentCategoryTotal = {
   cost_category_id: string;
-  amount: number | string | null;
+  category_code: string | null;
+  category_name: string | null;
+  commitment_amount: number | string | null;
+};
+
+type ProjectCostCommitmentAggregate = {
+  source_row_count: number | string;
+  categories: ProjectCostCommitmentCategoryTotal[];
 };
 
 class ProjectCostBudgetRepository {
@@ -153,42 +165,65 @@ class ProjectCostBudgetRepository {
     tenantId: string;
     projectId: string;
   }): Promise<ProjectCostBudgetCommitmentTotals> {
-    const { data, error, count } = await SupabaseDB.getAdminClient()
-      .from("project_cost_commitments")
-      .select("cost_category_id, amount", { count: "exact" })
-      .eq("tenant_id", input.tenantId)
-      .eq("project_id", input.projectId)
-      .eq("source_type", "supplier_purchase_requisition")
-      .in("status", ["reserved", "converted"])
-      .limit(10_000);
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "list_project_cost_commitment_totals",
+      {
+        p_tenant_id: input.tenantId,
+        p_project_id: input.projectId,
+      },
+    );
 
     if (error) {
       throw Errors.dbError("查询项目采购预算承诺失败", error);
     }
-    if ((count ?? 0) > 10_000) {
+
+    const aggregate = data as ProjectCostCommitmentAggregate | null;
+    const sourceRowCount = Number(aggregate?.source_row_count);
+    if (!Number.isSafeInteger(sourceRowCount) || sourceRowCount < 0) {
+      throw Errors.dbError("解析项目采购预算承诺失败", data);
+    }
+    if (sourceRowCount > 10_000) {
       throw Errors.business(
         422,
         "项目采购预算承诺过多，请使用成本汇总任务",
         "PROJECT_COST_COMMITMENTS_TOO_MANY_ROWS",
       );
     }
+    if (!Array.isArray(aggregate?.categories)) {
+      throw Errors.dbError("解析项目采购预算承诺失败", data);
+    }
 
     const byCategory = new Map<string, number>();
+    const categoryDetails = new Map<string, {
+      code: string | null;
+      name: string | null;
+    }>();
     let totalCommitmentAmount = 0;
-    for (
-      const row of ((data as ProjectCostCommitmentRow[] | null) || [])
-    ) {
-      const amount = normalizeMoney(row.amount);
+    for (const row of aggregate.categories) {
+      if (
+        typeof row.cost_category_id !== "string" ||
+        (row.category_code !== null && typeof row.category_code !== "string") ||
+        (row.category_name !== null && typeof row.category_name !== "string")
+      ) {
+        throw Errors.dbError("解析项目采购预算承诺失败", data);
+      }
+      const amount = normalizeMoney(row.commitment_amount);
       totalCommitmentAmount += amount;
       byCategory.set(
         row.cost_category_id,
         (byCategory.get(row.cost_category_id) ?? 0) + amount,
       );
+      categoryDetails.set(row.cost_category_id, {
+        code: row.category_code,
+        name: row.category_name,
+      });
     }
 
     return {
+      sourceRowCount,
       totalCommitmentAmount: roundMoney(totalCommitmentAmount),
       byCategory,
+      categoryDetails,
     };
   }
 
