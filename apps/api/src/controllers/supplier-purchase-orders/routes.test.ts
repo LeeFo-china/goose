@@ -17,6 +17,15 @@ const listSupplierOptions = mock(async () => emptyPage);
 const saveDraft = mock(async () => ({ status: "saved" }));
 const submit = mock(async () => ({ status: "submitted" }));
 const cancel = mock(async () => ({ status: "cancelled" }));
+const getFulfillmentDetail = mock(async () => ({
+  fulfillment: null,
+  item_fulfillments: [],
+}));
+const listShipments = mock(async () => emptyPage);
+const listReceipts = mock(async () => emptyPage);
+const confirmFulfillment = mock(async () => ({ status: "confirmed" }));
+const createShipment = mock(async () => ({ status: "shipment_created" }));
+const createReceipt = mock(async () => ({ status: "receipt_created" }));
 
 mock.module("@/services/supplier-purchase-orders", () => ({
   supplierPurchaseOrdersService: {
@@ -29,6 +38,17 @@ mock.module("@/services/supplier-purchase-orders", () => ({
     saveDraft,
     submit,
     cancel,
+  },
+}));
+
+mock.module("@/services/supplier-purchase-fulfillments", () => ({
+  supplierPurchaseFulfillmentsService: {
+    getDetail: getFulfillmentDetail,
+    listShipments,
+    listReceipts,
+    confirm: confirmFulfillment,
+    createShipment,
+    createReceipt,
   },
 }));
 
@@ -64,13 +84,19 @@ describe("SupplierPurchaseOrdersController", () => {
         saveDraft,
         submit,
         cancel,
+        getFulfillmentDetail,
+        listShipments,
+        listReceipts,
+        confirmFulfillment,
+        createShipment,
+        createReceipt,
       ]
     ) {
       fn.mockClear();
     }
   });
 
-  test("registers all nine purchase order routes", async () => {
+  test("registers all fifteen purchase order routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -83,12 +109,21 @@ describe("SupplierPurchaseOrdersController", () => {
       { method: "GET", path: "/supplier-purchase-orders" },
       { method: "GET", path: "/supplier-purchase-orders/:id" },
       { method: "GET", path: "/supplier-purchase-orders/:id/items" },
+      { method: "GET", path: "/supplier-purchase-orders/:id/fulfillment" },
+      { method: "GET", path: "/supplier-purchase-orders/:id/shipments" },
+      { method: "GET", path: "/supplier-purchase-orders/:id/receipts" },
       { method: "GET", path: "/supplier-purchase-order-catalog" },
       { method: "GET", path: "/supplier-purchase-order-project-options" },
       { method: "GET", path: "/supplier-purchase-order-supplier-options" },
       { method: "POST", path: "/supplier-purchase-orders/:id/save-draft" },
       { method: "POST", path: "/supplier-purchase-orders/:id/submit" },
       { method: "POST", path: "/supplier-purchase-orders/:id/cancel" },
+      {
+        method: "POST",
+        path: "/supplier-purchase-orders/:id/confirm-fulfillment",
+      },
+      { method: "POST", path: "/supplier-purchase-orders/:id/shipments" },
+      { method: "POST", path: "/supplier-purchase-orders/:id/receipts" },
     ]);
   });
 
@@ -161,6 +196,36 @@ describe("SupplierPurchaseOrdersController", () => {
     });
   });
 
+  test("passes validated ids and pagination to fulfillment reads", async () => {
+    const value = await controller();
+
+    const detailResponse = await value.getFulfillment({
+      params: { id: ORDER_ID },
+    } as never);
+    await value.listFulfillmentShipments({
+      params: { id: ORDER_ID },
+      query: { page: "2", pageSize: "10" },
+    } as never);
+    await value.listFulfillmentReceipts({
+      params: { id: ORDER_ID },
+      query: { page: "3", pageSize: "20" },
+    } as never);
+
+    expect(getFulfillmentDetail).toHaveBeenCalledWith(auth, ORDER_ID);
+    expect(listShipments).toHaveBeenCalledWith(auth, ORDER_ID, {
+      page: 2,
+      pageSize: 10,
+    });
+    expect(listReceipts).toHaveBeenCalledWith(auth, ORDER_ID, {
+      page: 3,
+      pageSize: 20,
+    });
+    expect(detailResponse).toEqual({
+      data: { fulfillment: null, item_fulfillments: [] },
+      message: "success",
+    });
+  });
+
   test("passes validated command bodies and idempotency keys", async () => {
     const value = await controller();
     const headers = { "idempotency-key": "purchase-order:command" };
@@ -209,6 +274,80 @@ describe("SupplierPurchaseOrdersController", () => {
     );
   });
 
+  test("passes validated fulfillment commands and idempotency keys", async () => {
+    const value = await controller();
+    const headers = { "idempotency-key": "fulfillment:command" };
+
+    await value.confirmFulfillment({
+      params: { id: ORDER_ID },
+      headers,
+      body: {
+        expected_version: 2,
+        confirmed_at: "2026-07-30T02:00:00.000Z",
+        remark: "供应商已确认",
+      },
+    } as never);
+    await value.createFulfillmentShipment({
+      params: { id: ORDER_ID },
+      headers,
+      body: {
+        id: "62000000-0000-4000-8000-000000000008",
+        expected_fulfillment_version: 1,
+        shipment_no: "SHIP-001",
+        shipped_at: "2026-07-30T03:00:00.000Z",
+        items: [{ purchase_order_item_id: SKU_ID, quantity: 6 }],
+      },
+    } as never);
+    await value.createFulfillmentReceipt({
+      params: { id: ORDER_ID },
+      headers,
+      body: {
+        id: "62000000-0000-4000-8000-000000000009",
+        expected_fulfillment_version: 2,
+        receipt_no: "RCV-001",
+        received_at: "2026-07-30T04:00:00.000Z",
+        items: [{
+          purchase_order_item_id: SKU_ID,
+          accepted_quantity: 5,
+          rejected_quantity: 1,
+          variance_reason: "破损",
+        }],
+      },
+    } as never);
+
+    expect(confirmFulfillment).toHaveBeenCalledWith(
+      auth,
+      ORDER_ID,
+      {
+        expected_version: 2,
+        confirmed_at: "2026-07-30T02:00:00.000Z",
+        remark: "供应商已确认",
+      },
+      "fulfillment:command",
+    );
+    expect(createShipment).toHaveBeenCalledWith(
+      auth,
+      ORDER_ID,
+      expect.objectContaining({
+        shipment_no: "SHIP-001",
+        items: [{ purchase_order_item_id: SKU_ID, quantity: 6 }],
+      }),
+      "fulfillment:command",
+    );
+    expect(createReceipt).toHaveBeenCalledWith(
+      auth,
+      ORDER_ID,
+      expect.objectContaining({
+        receipt_no: "RCV-001",
+        items: [expect.objectContaining({
+          accepted_quantity: 5,
+          rejected_quantity: 1,
+        })],
+      }),
+      "fulfillment:command",
+    );
+  });
+
   test("rejects mutation without a valid idempotency key", async () => {
     const value = await controller();
 
@@ -221,6 +360,48 @@ describe("SupplierPurchaseOrdersController", () => {
       code: "VALIDATION_ERROR",
     });
     expect(submit).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["confirmFulfillment", {
+      expected_version: 2,
+      confirmed_at: "2026-07-30T02:00:00.000Z",
+    }, confirmFulfillment],
+    ["createFulfillmentShipment", {
+      id: "62000000-0000-4000-8000-000000000008",
+      expected_fulfillment_version: 1,
+      shipment_no: "SHIP-001",
+      shipped_at: "2026-07-30T03:00:00.000Z",
+      items: [{ purchase_order_item_id: SKU_ID, quantity: 6 }],
+    }, createShipment],
+    ["createFulfillmentReceipt", {
+      id: "62000000-0000-4000-8000-000000000009",
+      expected_fulfillment_version: 2,
+      receipt_no: "RCV-001",
+      received_at: "2026-07-30T04:00:00.000Z",
+      items: [{
+        purchase_order_item_id: SKU_ID,
+        accepted_quantity: 5,
+        rejected_quantity: 1,
+        variance_reason: "破损",
+      }],
+    }, createReceipt],
+  ] as const)("rejects %s without idempotency before its service", async (
+    method,
+    body,
+    service,
+  ) => {
+    const value = await controller();
+
+    await expect(value[method]({
+      params: { id: ORDER_ID },
+      headers: {},
+      body,
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    expect(service).not.toHaveBeenCalled();
   });
 
   test("keeps database access out of the HTTP controller", async () => {
