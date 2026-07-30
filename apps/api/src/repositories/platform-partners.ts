@@ -1,181 +1,34 @@
 import { Errors } from "@/errors/error-factory";
+import type {
+  PlatformPartnerCreateRecordInput,
+  PlatformPartnerInviteCodeCounterDeltaInput,
+  PlatformPartnerInviteCodeCreateRecordInput,
+  PlatformPartnerInviteCodeRecord,
+  PlatformPartnerInviteCodeWithPartnerRecord,
+  PlatformPartnerLevelRecord,
+  PlatformPartnerMemberCreateRecordInput,
+  PlatformPartnerMemberRecord,
+  PlatformPartnerMemberStatusRecordInput,
+  PlatformPartnerRecord,
+  PlatformPartnerRegionsRecordInput,
+  PlatformPartnerStatusRecordInput,
+  PlatformPartnerUpdateRecordInput,
+  TenantPartnerBindingCreateRecordInput,
+  TenantPartnerBindingRecord,
+} from "@/repositories/platform-partners-types";
 import { SupabaseDB } from "@/utils/supabase/index";
 
-export type PlatformPartnerStatus =
-  | "pending"
-  | "active"
-  | "suspended"
-  | "terminated";
-
-export type PlatformPartnerMemberStatus =
-  | "pending_bind"
-  | "active"
-  | "disabled";
-
-export type PlatformPartnerLevelRecord = {
-  id: string;
-  code: string;
-  name: string;
-  status: "active" | "inactive";
-  tenant_recharge_commission_bps: number;
-  lead_service_fee_commission_bps: number;
-  lead_service_fee_default_rate_bps: number;
-  settlement_cycle: "monthly";
-  settlement_method: "manual";
-  requirements: Record<string, unknown>;
-  sort_order: number;
-  version: number;
-  effective_at: string;
-  expired_at: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type PlatformPartnerRecord = {
-  id: string;
-  name: string;
-  subject_type: "personal" | "individual_business" | "company";
-  contact_name: string;
-  phone: string;
-  status: PlatformPartnerStatus;
-  level_id: string;
-  region_codes: string[];
-  contract_status: string;
-  settlement_account_status: string;
-  settlement_account: Record<string, unknown>;
-  remark: string | null;
-  created_by_employee_id: string | null;
-  updated_by_employee_id: string | null;
-  created_at: string;
-  updated_at: string;
-  level?: PlatformPartnerLevelRecord | null;
-};
-
-export type PlatformPartnerCreateRecordInput = Omit<
-  PlatformPartnerRecord,
-  "id" | "created_at" | "updated_at" | "level"
->;
-
-export type PlatformPartnerUpdateRecordInput = Partial<
-  Omit<PlatformPartnerCreateRecordInput, "created_by_employee_id">
-> & {
-  updated_by_employee_id: string;
-};
-
-export type PlatformPartnerStatusRecordInput = {
-  status: PlatformPartnerStatus;
-  updated_by_employee_id: string;
-  change_reason: string;
-};
-
-export type PlatformPartnerMemberRecord = {
-  id: string;
-  partner_id: string;
-  auth_user_id: string | null;
-  name: string;
-  phone: string;
-  role: "owner" | "operator";
-  status: PlatformPartnerMemberStatus;
-  remark: string | null;
-  created_by_employee_id: string | null;
-  updated_by_employee_id: string | null;
-  created_at: string;
-  updated_at: string;
-  partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
-};
-
-export type PlatformPartnerMemberCreateRecordInput = {
-  partner_id: string;
-  name: string;
-  phone: string;
-  role: "owner" | "operator";
-  status: "pending_bind";
-  created_by_employee_id: string;
-  updated_by_employee_id: string;
-};
-
-export type PlatformPartnerMemberStatusRecordInput = {
-  status: PlatformPartnerMemberStatus;
-  updated_by_employee_id: string;
-  remark: string;
-};
-
-export type PlatformPartnerInviteCodeRecord = {
-  id: string;
-  partner_id: string;
-  code: string;
-  region_code: string | null;
-  campaign_code: string | null;
-  status: "active" | "disabled" | "expired";
-  scan_count: number;
-  submitted_count: number;
-  approved_count: number;
-  expires_at: string | null;
-  created_by_employee_id: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type PlatformPartnerInviteCodeWithPartnerRecord =
-  PlatformPartnerInviteCodeRecord & {
-    partner?: (
-      Pick<PlatformPartnerRecord, "id" | "name" | "status" | "region_codes"> & {
-        level?: Pick<PlatformPartnerLevelRecord, "code" | "name"> | null;
-      }
-    ) | null;
-  };
-
-export type PlatformPartnerInviteCodeCreateRecordInput = {
-  partner_id: string;
-  code: string;
-  region_code?: string | null;
-  campaign_code?: string | null;
-  expires_at?: string | null;
-  created_by_employee_id: string | null;
-};
-
-export type PlatformPartnerInviteCodeCounterDeltaInput = {
-  inviteCodeId: string;
-  scan_count?: number;
-  submitted_count?: number;
-  approved_count?: number;
-};
-
-export type TenantPartnerBindingRecord = {
-  id: string;
-  tenant_id: string;
-  partner_id: string;
-  invite_code_id: string | null;
-  source_type: "invite_code" | "manual" | "lead_source";
-  source_id: string | null;
-  status: "active" | "pending_transfer" | "ended";
-  bound_at: string;
-  unbound_at: string | null;
-  changed_by_employee_id: string | null;
-  change_reason: string | null;
-  created_at: string;
-  updated_at: string;
-  partner?: Pick<PlatformPartnerRecord, "id" | "name" | "status"> | null;
-  tenant?: { id: string; name: string | null; slug: string | null } | null;
-};
-
-export type TenantPartnerBindingCreateRecordInput = {
-  tenant_id: string;
-  partner_id: string;
-  invite_code_id?: string | null;
-  source_type: "invite_code" | "manual" | "lead_source";
-  source_id?: string | null;
-  changed_by_employee_id: string | null;
-  change_reason: string;
-};
+export type * from "@/repositories/platform-partners-types";
 
 type UntypedTable = {
   select: (...args: unknown[]) => UntypedTable;
   insert: (...args: unknown[]) => UntypedTable;
   update: (...args: unknown[]) => UntypedTable;
   eq: (...args: unknown[]) => UntypedTable;
+  neq: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;
   contains: (...args: unknown[]) => UntypedTable;
+  overlaps: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
   limit: (...args: unknown[]) => UntypedTable;
@@ -270,6 +123,27 @@ class PlatformPartnersRepository {
     return (data as PlatformPartnerRecord | null) ?? null;
   }
 
+  async findActiveRegionConflict(input: {
+    regionCodes: string[];
+    excludePartnerId?: string;
+  }) {
+    let request = this.from("platform_partners")
+      .select("id,name,region_codes")
+      .eq("status", "active")
+      .overlaps("region_codes", input.regionCodes);
+
+    if (input.excludePartnerId) {
+      request = request.neq("id", input.excludePartnerId);
+    }
+
+    const { data, error } = await request.limit(1).maybeSingle();
+    if (error) throw Errors.dbError("检查城市合伙人区域冲突失败", error);
+    return (data as Pick<
+      PlatformPartnerRecord,
+      "id" | "name" | "region_codes"
+    > | null) ?? null;
+  }
+
   async listLevels() {
     const { data, error } = await this.from("platform_partner_levels")
       .select("*")
@@ -299,6 +173,25 @@ class PlatformPartnersRepository {
 
     if (error) throw Errors.dbError("更新城市合伙人失败", error);
     return data as PlatformPartnerRecord;
+  }
+
+  async updatePartnerRegions(
+    partnerId: string,
+    input: PlatformPartnerRegionsRecordInput,
+  ) {
+    const { data, error } = await this.from("platform_partners")
+      .update({
+        region_codes: input.region_codes,
+        region_version: input.expected_version + 1,
+        updated_by_employee_id: input.updated_by_employee_id,
+      })
+      .eq("id", partnerId)
+      .eq("region_version", input.expected_version)
+      .select(PARTNER_SELECT)
+      .maybeSingle();
+
+    if (error) throw Errors.dbError("更新城市合伙人运营区县失败", error);
+    return (data as PlatformPartnerRecord | null) ?? null;
   }
 
   async updatePartnerStatus(

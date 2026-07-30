@@ -9,6 +9,13 @@ export const PlatformPartnerStatusSchema = z.enum([
   "terminated",
 ]);
 
+const PlatformPartnerRegionCodesSchema = z
+  .array(
+    z.string().trim().min(1, "区域编码不能为空").max(20, "区域编码不能超过 20 个字符"),
+  )
+  .min(1, "请至少选择一个运营区县")
+  .max(100, "单个合伙人最多选择 100 个运营区县");
+
 export const PlatformPartnerListQuerySchema = PaginationQuerySchema.extend({
   status: PlatformPartnerStatusSchema.optional(),
   keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
@@ -21,7 +28,7 @@ export const PlatformPartnerCreateSchema = z.object({
   contact_name: z.string().trim().min(1, "联系人不能为空").max(60, "联系人不能超过 60 个字符"),
   phone: PlatformPartnerPhoneSchema,
   level_id: z.uuid("无效的合伙人等级 ID"),
-  region_codes: z.array(z.string().trim().min(1).max(12)).default([]),
+  region_codes: PlatformPartnerRegionCodesSchema,
   contract_status: z.string().trim().max(40).default("pending"),
   settlement_account_status: z.string().trim().max(40).default("pending"),
   settlement_account: z.record(z.string(), z.unknown()).default({}),
@@ -29,7 +36,20 @@ export const PlatformPartnerCreateSchema = z.object({
 }).strict();
 
 export const PlatformPartnerUpdateSchema =
-  PlatformPartnerCreateSchema.partial().strict();
+  PlatformPartnerCreateSchema.omit({ region_codes: true }).partial().strict();
+
+export const PlatformPartnerRegionsUpdateSchema = z.object({
+  region_codes: PlatformPartnerRegionCodesSchema,
+  change_reason: z
+    .string()
+    .trim()
+    .min(1, "区域变更原因不能为空")
+    .max(300, "区域变更原因不能超过 300 个字符"),
+  expected_version: z.coerce
+    .number("区域版本必须是数字")
+    .int("区域版本必须是整数")
+    .positive("区域版本必须大于 0"),
+}).strict();
 
 export const PlatformPartnerIdParamSchema = z.object({
   id: z.uuid("无效的合伙人 ID"),
@@ -148,6 +168,8 @@ export type PlatformPartnerCreateInput =
   z.infer<typeof PlatformPartnerCreateSchema>;
 export type PlatformPartnerUpdateInput =
   z.infer<typeof PlatformPartnerUpdateSchema>;
+export type PlatformPartnerRegionsUpdateInput =
+  z.infer<typeof PlatformPartnerRegionsUpdateSchema>;
 export type PlatformPartnerStatusUpdateInput =
   z.infer<typeof PlatformPartnerStatusUpdateSchema>;
 export type PlatformPartnerMemberCreateInput =

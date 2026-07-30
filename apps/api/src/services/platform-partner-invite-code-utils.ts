@@ -1,4 +1,5 @@
 import { Errors } from "@/errors/error-factory";
+import type { PlatformPartnerInviteCodeWithPartnerRecord } from "@/repositories/platform-partners";
 
 const WECHAT_SCENE_MAX_LENGTH = 32;
 
@@ -45,4 +46,43 @@ export function buildPartnerInviteCodeScene(code: string) {
   }
 
   return normalizedCode;
+}
+
+export function buildPartnerInviteCodeOnboardingPayload(
+  inviteCode: PlatformPartnerInviteCodeWithPartnerRecord,
+) {
+  const partner = inviteCode.partner;
+  if (!partner) {
+    throw Errors.business(
+      409,
+      "城市合伙人当前不可绑定",
+      "PARTNER_INVITE_PARTNER_UNAVAILABLE",
+    );
+  }
+
+  return {
+    invite_code: {
+      id: inviteCode.id,
+      code: inviteCode.code,
+      region_code: inviteCode.region_code,
+      campaign_code: inviteCode.campaign_code,
+      expires_at: inviteCode.expires_at,
+    },
+    partner: {
+      id: partner.id,
+      name: partner.name,
+      status: partner.status,
+      region_codes: partner.region_codes,
+      level: partner.level
+        ? {
+          code: partner.level.code,
+          name: partner.level.name,
+        }
+        : null,
+    },
+    onboarding: {
+      can_bind: true,
+      binding_source_type: "invite_code" as const,
+    },
+  };
 }

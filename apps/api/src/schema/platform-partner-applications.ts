@@ -32,10 +32,21 @@ const SourceUrlSchema = z.preprocess(
   z.string().trim().url("来源页面 URL 格式无效").max(500, "来源页面 URL 不能超过 500 个字符").optional(),
 );
 
+const RegionCodeSchema = z
+  .string()
+  .trim()
+  .min(1, "区域编码不能为空")
+  .max(20, "区域编码不能超过 20 个字符");
+
 const RegionCodesSchema = z
-  .array(z.string().trim().min(1, "区域编码不能为空").max(12, "区域编码不能超过 12 个字符"))
+  .array(RegionCodeSchema)
   .max(20, "意向区域不能超过 20 个")
   .default([]);
+
+const OperatingDistrictCodesSchema = z
+  .array(RegionCodeSchema)
+  .min(1, "请至少选择一个运营区县")
+  .max(100, "单个合伙人最多选择 100 个运营区县");
 
 export const PlatformPartnerApplicationSendCodeSchema = z.object({
   phone: PlatformPartnerPhoneSchema,
@@ -85,7 +96,7 @@ export const UpdatePlatformPartnerApplicationStatusSchema = z.object({
 export const ApprovePlatformPartnerApplicationSchema = z.object({
   level_id: z.uuid("无效的合伙人等级 ID"),
   partner_name: z.string().trim().min(1, "合伙人名称不能为空").max(120, "合伙人名称不能超过 120 个字符").optional(),
-  region_codes: RegionCodesSchema.optional(),
+  region_codes: OperatingDistrictCodesSchema,
   review_remark: z.string().trim().max(500, "审核备注不能超过 500 个字符").optional(),
 }).strict();
 

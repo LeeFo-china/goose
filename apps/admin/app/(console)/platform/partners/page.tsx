@@ -26,6 +26,10 @@ import {
 import { PlatformPartnerApplicationsTable } from "@/components/platform-partners/platform-partner-application-table";
 import { PlatformPartnerMemberRebindTable } from "@/components/platform-partners/platform-partner-member-rebind-table";
 import {
+  attachRegionAreas,
+  collectPartnerRegionCodes,
+} from "@/components/platform-partners/platform-partner-region-data";
+import {
   PartnerCommissionLedgersTable,
   PartnerSettlementBatchesTable,
   PlatformPartnerMembersTable,
@@ -34,6 +38,7 @@ import {
   TenantPartnerBindingsTable,
 } from "@/components/platform-partners/platform-partner-tables";
 import type {
+  AdministrativeAreaOption,
   ListData,
   PartnerCommissionLedgerRecord,
   PartnerSettlementBatchRecord,
@@ -124,6 +129,21 @@ async function fetchBackend<T>(path: string, fallback: T) {
       error: error instanceof Error ? error.message : "城市合伙人数据加载失败",
     };
   }
+}
+
+async function fetchAdministrativeAreasByCodes(regionCodes: string[]) {
+  const areas: AdministrativeAreaOption[] = [];
+  let error: string | null = null;
+  for (let offset = 0; offset < regionCodes.length; offset += 100) {
+    const adcodes = regionCodes.slice(offset, offset + 100).join(",");
+    const result = await fetchBackend<{ list: AdministrativeAreaOption[] }>(
+      `/platform/administrative-areas?${buildQuery({ adcodes })}`,
+      { list: [] },
+    );
+    areas.push(...result.data.list);
+    error ||= result.error;
+  }
+  return { data: areas, error };
 }
 
 export default async function PlatformPartnersPage({
@@ -272,6 +292,25 @@ export default async function PlatformPartnersPage({
     )
     : { data: emptyList<PlatformPartnerMemberRebindRecord>(rebindPage, rebindPageSize), error: null };
 
+  const visibleRegionCodes = collectPartnerRegionCodes(
+    applicationResult.data.list,
+    partnerResult.data.list,
+  );
+  const regionAreasResult = hasPlatformAccess && visibleRegionCodes.length > 0
+    ? await fetchAdministrativeAreasByCodes(visibleRegionCodes)
+    : { data: [], error: null };
+  const regionAreaByCode = new Map(
+    regionAreasResult.data.map((area) => [area.adcode, area]),
+  );
+  const applicationsWithRegions = attachRegionAreas(
+    applicationResult.data.list,
+    regionAreaByCode,
+  );
+  const partnersWithRegions = attachRegionAreas(
+    partnerResult.data.list,
+    regionAreaByCode,
+  );
+
   const activePagination = activeList(tab, {
     applications: applicationResult.data,
     partners: partnerResult.data,
@@ -302,7 +341,8 @@ export default async function PlatformPartnersPage({
     || revenueResult.error
     || commissionResult.error
     || settlementResult.error
-    || rebindResult.error;
+    || rebindResult.error
+    || regionAreasResult.error;
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -348,12 +388,12 @@ export default async function PlatformPartnersPage({
         >
           <TabsContent value="applications" className="m-0 min-h-full">
             <PlatformPartnerApplicationsTable
-              list={applicationResult.data.list}
+              list={applicationsWithRegions}
               levels={levelsResult.data}
             />
           </TabsContent>
           <TabsContent value="partners" className="m-0 min-h-full">
-            <PlatformPartnersTable list={partnerResult.data.list} />
+            <PlatformPartnersTable list={partnersWithRegions} />
           </TabsContent>
           <TabsContent value="members" className="m-0 min-h-full">
             <PlatformPartnerMembersTable list={memberResult.data.list} />

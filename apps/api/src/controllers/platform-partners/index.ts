@@ -6,6 +6,7 @@ import {
   PlatformPartnerInviteCodeParamSchema,
   PlatformPartnerInviteCodeCreateSchema,
   PlatformPartnerListQuerySchema,
+  PlatformPartnerRegionsUpdateSchema,
   PlatformPartnerMemberCreateSchema,
   PlatformPartnerMemberIdParamSchema,
   PlatformPartnerMemberListQuerySchema,
@@ -156,6 +157,26 @@ class PlatformPartnersController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await platformPartnersService.updatePartner(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Patch("/platform/partners/:id/regions")
+  async updatePartnerRegions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformPartnerIdParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = PlatformPartnerRegionsUpdateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformPartnersService.updatePartnerRegions(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

@@ -41,6 +41,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "wechat_rebind_reject",
   "platform_partner_member_rebind_approve",
   "platform_partner_member_rebind_reject",
+  "platform_partner_regions_update",
   "site_content_create",
   "site_content_publish",
   "site_content_rollback",

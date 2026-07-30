@@ -31,6 +31,7 @@ describe("PlatformPartnersController routes", () => {
       { method: "GET", path: "/platform/partners/levels" },
       { method: "GET", path: "/platform/partners/:id" },
       { method: "PATCH", path: "/platform/partners/:id" },
+      { method: "PATCH", path: "/platform/partners/:id/regions" },
       { method: "PATCH", path: "/platform/partners/:id/status" },
       { method: "GET", path: "/platform/partners/:id/members" },
       { method: "POST", path: "/platform/partners/:id/members" },

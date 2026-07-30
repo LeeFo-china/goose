@@ -84,6 +84,7 @@ class AdministrativeAreaService {
   private filterPublicRows(rows: PublicAdministrativeAreaRecord[], query: AdministrativeAreaListQuery) {
     const keyword = query.keyword?.trim().toLowerCase();
     return rows.filter((row) => {
+      if (query.adcodes?.length && !query.adcodes.includes(row.adcode)) return false;
       if (query.level && row.level !== query.level) return false;
       if (query.parent_adcode && row.parent_adcode !== query.parent_adcode) return false;
       if (!query.parent_adcode && query.level === "province" && row.parent_adcode !== null) return false;

@@ -78,7 +78,7 @@ Expected: FAIL，原因是 migration 尚不存在。
 - [ ] **Step 3: 编写 migration**
 
 migration 只增加版本字段、检查约束、验证函数和触发器；不更新存量 `region_codes`。
-触发器只在新增记录或区域发生变化时要求区县级编码，在启用状态下通过事务锁阻止并发区域重叠。
+触发器在新增记录、区域发生变化或状态切换为启用时要求区县级编码，并在启用状态下通过事务锁阻止并发区域重叠。
 
 - [ ] **Step 4: 验证 migration 契约转绿**
 
@@ -211,4 +211,3 @@ git status --short
 
 确认 migration 未包含存量区域 UPDATE，API 区域更新未操作
 `tenant_partner_bindings`，且所有显式验收项均有测试或代码证据。
-

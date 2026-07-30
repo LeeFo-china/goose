@@ -18,6 +18,8 @@ import type {
   UpdatePlatformPartnerApplicationStatusInput,
 } from "@/schema/platform-partner-applications";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformPartnerRegionPolicyService } from "@/services/platform-partner-regions";
 import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 
 type PlatformPartnerApplicationsRepositoryPort = Pick<
@@ -42,6 +44,11 @@ type PlatformPartnerApplicationsServiceDependencies = {
     typeof smsVerificationCodeService,
     "sendCode" | "findValidPending" | "markVerified"
   >;
+  regionPolicy?: Pick<
+    typeof platformPartnerRegionPolicyService,
+    "assertAssignableDistricts"
+  >;
+  audit?: Pick<typeof platformAuditLogService, "recordBestEffort">;
 };
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
@@ -59,6 +66,12 @@ export class PlatformPartnerApplicationsService {
     typeof smsVerificationCodeService,
     "sendCode" | "findValidPending" | "markVerified"
   >;
+  private readonly regionPolicy: NonNullable<
+    PlatformPartnerApplicationsServiceDependencies["regionPolicy"]
+  >;
+  private readonly audit: NonNullable<
+    PlatformPartnerApplicationsServiceDependencies["audit"]
+  >;
 
   constructor(
     dependencies: PlatformPartnerApplicationsServiceDependencies = {},
@@ -68,6 +81,9 @@ export class PlatformPartnerApplicationsService {
     this.partnerRepository =
       dependencies.partnerRepository ?? platformPartnersRepository;
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
+    this.regionPolicy =
+      dependencies.regionPolicy ?? platformPartnerRegionPolicyService;
+    this.audit = dependencies.audit ?? platformAuditLogService;
   }
 
   async sendPublicApplicationCode(input: {
@@ -191,6 +207,9 @@ export class PlatformPartnerApplicationsService {
     }
 
     const reviewRemark = input.review_remark ?? "官网申请审核通过";
+    const regionCodes = await this.regionPolicy.assertAssignableDistricts(
+      input.region_codes,
+    );
     const partner = await this.partnerRepository.createPartner({
       name: input.partner_name ?? application.applicant_name,
       subject_type: application.subject_type,
@@ -198,9 +217,7 @@ export class PlatformPartnerApplicationsService {
       phone: application.phone,
       status: "active",
       level_id: input.level_id,
-      region_codes: input.region_codes?.length
-        ? input.region_codes
-        : application.region_codes,
+      region_codes: regionCodes,
       contract_status: "pending",
       settlement_account_status: "pending",
       settlement_account: {},
@@ -228,6 +245,24 @@ export class PlatformPartnerApplicationsService {
           review_remark: reviewRemark,
         } satisfies PlatformPartnerApplicationApprovedRecordInput,
       );
+
+    await this.audit.recordBestEffort({
+      action: "platform_partner_regions_update",
+      actorEmployeeId: employeeId,
+      actorUserId: authContext.authUserId,
+      resourceType: "platform_partner",
+      resourceId: partner.id,
+      resourceLabel: partner.name,
+      summary: `设置城市合伙人「${partner.name}」运营区县`,
+      metadata: {
+        reason: reviewRemark,
+        previous_region_codes: [],
+        current_region_codes: partner.region_codes,
+        previous_version: 0,
+        current_version: partner.region_version ?? 1,
+        source_application_id: application.id,
+      },
+    });
 
     return {
       application: approvedApplication,

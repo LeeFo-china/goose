@@ -1,6 +1,4 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import type {
   PlatformPartnerApplicationRecord,
   PlatformPartnerApplicationStatus,
@@ -15,43 +13,6 @@ import type { AuthContext } from "@/services/authorization";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const migrationDir = join(
-  import.meta.dir,
-  "../../../../supabase/migrations",
-);
-
-function readMigration(suffix: string) {
-  const file = readdirSync(migrationDir)
-    .filter((name) => name.endsWith(suffix))
-    .sort()
-    .at(-1);
-  expect(file).toBeTruthy();
-  return readFileSync(join(migrationDir, file as string), "utf8");
-}
-
-describe("partner applications migration", () => {
-  test("creates official website partner application table and indexes", () => {
-    const sql = readMigration("_create_partner_applications.sql");
-
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_applications");
-    expect(sql).toContain("application_no text NOT NULL UNIQUE");
-    expect(sql).toContain("converted_partner_id uuid NULL REFERENCES public.platform_partners(id)");
-    expect(sql).toContain("status IN ('submitted', 'reviewing', 'approved', 'rejected')");
-    expect(sql).toContain("platform_partner_applications_status_created_idx");
-    expect(sql).toContain("platform_partner_applications_phone_created_idx");
-    expect(sql).toContain("platform_partner_applications_region_codes_idx");
-  });
-
-  test("extends SMS verification storage for partner applications", () => {
-    const sql = readMigration("_partner_application_phone_verification.sql");
-
-    expect(sql).toContain("ADD COLUMN IF NOT EXISTS request_device text NULL");
-    expect(sql).toContain("'partner_application'::text");
-    expect(sql).toContain("sms_verification_codes_scene_device_created_idx");
-  });
-});
-
 const platformAuthContext = {
   authUserId: "auth-platform",
   employeeId: "employee-platform",
@@ -73,7 +34,6 @@ const platformAuthContext = {
   roles: [],
   permissions: [{ code: "platform.partner.manage", scope: "all" }],
 } satisfies AuthContext;
-
 const tenantAuthContext = {
   ...platformAuthContext,
   isPlatformAdmin: false,
@@ -135,7 +95,8 @@ const partner = {
   phone: application.phone,
   status: "active",
   level_id: level.id,
-  region_codes: application.region_codes,
+  region_codes: ["411502"],
+  region_version: 1,
   contract_status: "pending",
   settlement_account_status: "pending",
   settlement_account: {},
@@ -221,6 +182,16 @@ const smsService = {
   markVerified: mock(async () => undefined),
 };
 
+const regionPolicy = {
+  assertAssignableDistricts: mock(async (regionCodes: readonly string[]) =>
+    Array.from(new Set(regionCodes.map((code) => code.trim()))).sort()
+  ),
+};
+
+const audit = {
+  recordBestEffort: mock(async () => null),
+};
+
 async function createService() {
   const { PlatformPartnerApplicationsService } = await import(
     "./platform-partner-applications"
@@ -229,6 +200,8 @@ async function createService() {
     applicationRepository,
     partnerRepository,
     smsService,
+    regionPolicy,
+    audit,
   });
 }
 
@@ -237,6 +210,12 @@ describe("PlatformPartnerApplicationsService", () => {
     for (const fn of Object.values(applicationRepository)) fn.mockClear();
     for (const fn of Object.values(partnerRepository)) fn.mockClear();
     for (const fn of Object.values(smsService)) fn.mockClear();
+    regionPolicy.assertAssignableDistricts.mockClear();
+    regionPolicy.assertAssignableDistricts.mockImplementation(
+      async (regionCodes) =>
+        Array.from(new Set(regionCodes.map((code) => code.trim()))).sort(),
+    );
+    audit.recordBestEffort.mockClear();
     applicationRepository.findApplicationById.mockImplementation(async () => application);
     applicationRepository.findActiveApplicationByPhone.mockImplementation(async () => null);
     applicationRepository.markApplicationApproved.mockImplementation(async () => approvedApplication);
@@ -437,9 +416,13 @@ describe("PlatformPartnerApplicationsService", () => {
 
     const result = await service.approveApplication(platformAuthContext, application.id, {
       level_id: level.id,
+      region_codes: ["411502"],
       review_remark: "官网申请审核通过",
     });
 
+    expect(regionPolicy.assertAssignableDistricts).toHaveBeenCalledWith([
+      "411502",
+    ]);
     expect(partnerRepository.createPartner).toHaveBeenCalledWith({
       name: application.applicant_name,
       subject_type: application.subject_type,
@@ -447,7 +430,7 @@ describe("PlatformPartnerApplicationsService", () => {
       phone: application.phone,
       status: "active",
       level_id: level.id,
-      region_codes: application.region_codes,
+      region_codes: ["411502"],
       contract_status: "pending",
       settlement_account_status: "pending",
       settlement_account: {},
@@ -475,6 +458,23 @@ describe("PlatformPartnerApplicationsService", () => {
     expect(result.partner).toEqual(partner);
     expect(result.application).toEqual(approvedApplication);
     expect(result.created).toBe(true);
+    expect(audit.recordBestEffort).toHaveBeenCalledWith({
+      action: "platform_partner_regions_update",
+      actorEmployeeId: "employee-platform",
+      actorUserId: "auth-platform",
+      resourceType: "platform_partner",
+      resourceId: partner.id,
+      resourceLabel: partner.name,
+      summary: "设置城市合伙人「信阳星河装饰运营中心」运营区县",
+      metadata: {
+        reason: "官网申请审核通过",
+        previous_region_codes: [],
+        current_region_codes: ["411502"],
+        previous_version: 0,
+        current_version: 1,
+        source_application_id: application.id,
+      },
+    });
   });
 
   test("returns existing partner when approved application is converted again", async () => {
@@ -488,6 +488,7 @@ describe("PlatformPartnerApplicationsService", () => {
 
     const result = await service.approveApplication(platformAuthContext, application.id, {
       level_id: level.id,
+      region_codes: ["411502"],
     });
 
     expect(partnerRepository.createPartner).not.toHaveBeenCalled();

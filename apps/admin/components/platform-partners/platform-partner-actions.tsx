@@ -44,8 +44,11 @@ import type {
   PlatformPartnerLevel,
   PlatformPartnerRecord,
 } from "@/components/platform-partners/platform-partner-types";
+import { PlatformPartnerRegionPicker } from "@/components/platform-partners/platform-partner-region-picker";
 import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
+
+export { EditPartnerRegionsButton } from "@/components/platform-partners/platform-partner-region-actions";
 
 type Option = { value: string; label: string };
 export type FieldConfig = {
@@ -72,6 +75,9 @@ type MutationDialogButtonProps = {
   endpoint: string | ((formData: FormData) => string);
   method?: "POST" | "PATCH";
   buildPayload?: (formData: FormData) => Record<string, unknown>;
+  extraFields?: ReactNode;
+  submitDisabled?: boolean;
+  onSuccess?: () => void;
 };
 
 export function CreatePartnerButton({
@@ -79,6 +85,8 @@ export function CreatePartnerButton({
 }: {
   levels: PlatformPartnerLevel[];
 }) {
+  const [selectedRegionCodes, setSelectedRegionCodes] = useState<string[]>([]);
+
   return (
     <MutationDialogButton
       title="新建城市合伙人"
@@ -116,16 +124,23 @@ export function CreatePartnerButton({
           required: true,
           options: levels.map((level) => ({ value: level.id, label: level.name })),
         },
-        { name: "region_codes", label: "区域编码", placeholder: "多个区域用逗号分隔" },
         { name: "remark", label: "备注", type: "textarea" },
       ]}
+      extraFields={
+        <PlatformPartnerRegionPicker
+          value={selectedRegionCodes}
+          onChange={setSelectedRegionCodes}
+        />
+      }
+      submitDisabled={selectedRegionCodes.length === 0}
+      onSuccess={() => setSelectedRegionCodes([])}
       buildPayload={(formData) => ({
         name: stringField(formData, "name"),
         subject_type: stringField(formData, "subject_type"),
         contact_name: stringField(formData, "contact_name"),
         phone: stringField(formData, "phone"),
         level_id: stringField(formData, "level_id"),
-        region_codes: splitCsv(stringField(formData, "region_codes")),
+        region_codes: selectedRegionCodes,
         remark: optionalString(formData, "remark"),
       })}
     />
@@ -301,6 +316,9 @@ export function MutationDialogButton({
   endpoint,
   method = "POST",
   buildPayload = () => ({}),
+  extraFields,
+  submitDisabled = false,
+  onSuccess,
 }: MutationDialogButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -321,6 +339,7 @@ export function MutationDialogButton({
             fallbackMessage,
           },
         );
+        onSuccess?.();
         setOpen(false);
         refreshAfterDialogClose(router);
       } catch (submitError) {
@@ -342,6 +361,7 @@ export function MutationDialogButton({
             {fields.map((field) => (
               <DialogField key={field.name} field={field} />
             ))}
+            {extraFields}
           </FieldGroup>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <FieldError />
@@ -349,7 +369,7 @@ export function MutationDialogButton({
             <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || submitDisabled}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {submitLabel}
             </Button>
@@ -440,10 +460,6 @@ function optionalString(formData: FormData, key: string) {
 function optionalDateTime(formData: FormData, key: string) {
   const value = stringField(formData, key);
   return value ? new Date(value).toISOString() : undefined;
-}
-
-function splitCsv(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function splitLoose(value: string) {

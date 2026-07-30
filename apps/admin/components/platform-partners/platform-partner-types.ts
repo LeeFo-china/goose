@@ -36,6 +36,14 @@ export type PlatformPartnerLevel = {
   sort_order: number;
 };
 
+export type AdministrativeAreaOption = {
+  adcode: string;
+  name: string;
+  level: "province" | "city" | "district";
+  parent_adcode: string | null;
+  full_name: string;
+};
+
 export type PlatformPartnerRecord = {
   id: string;
   name: string;
@@ -45,6 +53,8 @@ export type PlatformPartnerRecord = {
   status: PlatformPartnerStatus;
   level_id: string;
   region_codes: string[];
+  region_version?: number;
+  region_areas?: AdministrativeAreaOption[];
   contract_status: string;
   settlement_account_status: string;
   settlement_account: Record<string, unknown>;
@@ -62,6 +72,7 @@ export type PlatformPartnerApplicationRecord = {
   contact_name: string;
   phone: string;
   region_codes: string[];
+  region_areas?: AdministrativeAreaOption[];
   region_name: string | null;
   business_description: string | null;
   resource_description: string | null;

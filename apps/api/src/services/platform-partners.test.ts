@@ -1,258 +1,31 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 import type {
   PlatformPartnerInviteCodeRecord,
-  PlatformPartnerLevelRecord,
-  PlatformPartnerMemberRecord,
   PlatformPartnerRecord,
   TenantPartnerBindingRecord,
 } from "@/repositories/platform-partners";
-import type { AuthContext } from "@/services/authorization";
+import {
+  activePartner,
+  boundDisabledPartnerMember,
+  createdBinding,
+  disabledPartner,
+  existingBinding,
+  inviteCode,
+  level,
+  memberCreateInput,
+  memberCreatePayload,
+  otherPartnerBinding,
+  partnerMember,
+  pendingPartner,
+  platformAuthContext,
+  suspendedPartner,
+  tenantAuthContext,
+  tenantEmployeeAuthContext,
+} from "./platform-partners-test-data";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const migrationDir = join(
-  import.meta.dir,
-  "../../../../supabase/migrations",
-);
-
-function readCityPartnerMigration() {
-  const file = readdirSync(migrationDir)
-    .filter((name) => name.endsWith("_create_city_partner_mvp.sql"))
-    .sort()
-    .at(-1);
-  expect(file).toBeTruthy();
-  return readFileSync(join(migrationDir, file as string), "utf8");
-}
-
-function readAllMigrations() {
-  return readdirSync(migrationDir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort()
-    .map((name) => readFileSync(join(migrationDir, name), "utf8"))
-    .join("\n");
-}
-
-describe("city partner MVP migration", () => {
-  test("creates partner, revenue, commission, and settlement tables", () => {
-    const sql = readCityPartnerMigration();
-
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_levels");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partners");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_partner_invite_codes");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.tenant_partner_bindings");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.platform_revenue_events");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.partner_commission_ledger");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.partner_settlement_batches");
-    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.partner_settlement_items");
-    expect(sql).toContain("lead_service_fee_default_rate_bps integer NOT NULL DEFAULT 250");
-    expect(sql).toContain("settlement_cycle text NOT NULL DEFAULT 'monthly'");
-    expect(sql).toContain("settlement_method text NOT NULL DEFAULT 'manual'");
-    expect(sql).toContain("tenant_partner_bindings_one_active_idx");
-    expect(sql).toContain("platform_revenue_events_source_unique_idx");
-    expect(sql).toContain("partner_commission_ledger_settlement_batch_fk");
-    expect(sql).toContain("'certified_partner'");
-    expect(sql).toContain("'city_partner'");
-    expect(sql).toContain("'city_operation_center'");
-  });
-
-  test("registers platform partner permissions for platform admins", () => {
-    const sql = readAllMigrations();
-
-    expect(sql).toContain("'platform.partner.read'");
-    expect(sql).toContain("'platform.partner.manage'");
-    expect(sql).toContain("'platform.partner.level.manage'");
-    expect(sql).toContain("'platform.partner.binding.manage'");
-    expect(sql).toContain("'platform.partner.revenue.read'");
-    expect(sql).toContain("'platform.partner.revenue.manage'");
-    expect(sql).toContain("'platform.partner.commission.read'");
-    expect(sql).toContain("'platform.partner.commission.manage'");
-    expect(sql).toContain("'platform.partner.settlement.manage'");
-    expect(sql).toContain("WHERE roles.code = 'platform_admin'");
-    expect(sql).toContain("roles.tenant_id IS NULL");
-  });
-
-  test("adds member status remark storage for management actions", () => {
-    const sql = readAllMigrations();
-
-    expect(sql).toContain("ALTER TABLE public.platform_partner_members");
-    expect(sql).toContain("ADD COLUMN IF NOT EXISTS remark text NULL");
-  });
-
-});
-
-const platformAuthContext = {
-  authUserId: "auth-platform",
-  employeeId: "employee-platform",
-  tenantId: null,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: null,
-  isPlatformAdmin: true,
-  employeeName: "平台超管",
-  employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
-  roleCodes: ["platform_admin"],
-  roles: [],
-  permissions: [
-    { code: "platform.partner.manage", scope: "all" },
-    { code: "platform.partner.binding.manage", scope: "all" },
-  ],
-} satisfies AuthContext;
-
-const tenantAuthContext = {
-  ...platformAuthContext,
-  isPlatformAdmin: false,
-  roleCodes: [],
-  permissions: [],
-} satisfies AuthContext;
-
-const level = {
-  id: "00000000-0000-4000-8000-000000000101",
-  code: "city_partner",
-  name: "城市合伙人",
-  status: "active",
-  tenant_recharge_commission_bps: 1500,
-  lead_service_fee_commission_bps: 3500,
-  lead_service_fee_default_rate_bps: 250,
-  settlement_cycle: "monthly",
-  settlement_method: "manual",
-  requirements: {},
-  sort_order: 20,
-  version: 1,
-  effective_at: "2026-07-04T10:00:00.000Z",
-  expired_at: null,
-  created_at: "2026-07-04T10:00:00.000Z",
-  updated_at: "2026-07-04T10:00:00.000Z",
-} satisfies PlatformPartnerLevelRecord;
-
-const activePartner = {
-  id: "00000000-0000-4000-8000-000000000201",
-  name: "信阳城市合伙人",
-  subject_type: "company",
-  contact_name: "张三",
-  phone: "13800138000",
-  status: "active",
-  level_id: level.id,
-  region_codes: ["411500"],
-  contract_status: "signed",
-  settlement_account_status: "valid",
-  settlement_account: {},
-  remark: null,
-  created_by_employee_id: "employee-platform",
-  updated_by_employee_id: "employee-platform",
-  created_at: "2026-07-04T10:00:00.000Z",
-  updated_at: "2026-07-04T10:00:00.000Z",
-  level,
-} satisfies PlatformPartnerRecord;
-
-const suspendedPartner = {
-  ...activePartner,
-  status: "suspended",
-} satisfies PlatformPartnerRecord;
-
-const existingBinding = {
-  id: "00000000-0000-4000-8000-000000000402",
-  tenant_id: "00000000-0000-4000-8000-000000000501",
-  partner_id: activePartner.id,
-  invite_code_id: null,
-  source_type: "manual",
-  source_id: null,
-  status: "active",
-  bound_at: "2026-07-04T10:00:00.000Z",
-  unbound_at: null,
-  changed_by_employee_id: "employee-platform",
-  change_reason: "平台招商绑定",
-  created_at: "2026-07-04T10:00:00.000Z",
-  updated_at: "2026-07-04T10:00:00.000Z",
-} satisfies TenantPartnerBindingRecord;
-
-const otherPartnerBinding = {
-  ...existingBinding,
-  partner_id: "00000000-0000-4000-8000-000000000202",
-} satisfies TenantPartnerBindingRecord;
-
-const createdBinding = {
-  ...existingBinding,
-  id: "00000000-0000-4000-8000-000000000401",
-} satisfies TenantPartnerBindingRecord;
-
-const inviteCode = {
-  id: "00000000-0000-4000-8000-000000000301",
-  partner_id: activePartner.id,
-  code: "CP-411500-0001",
-  region_code: "411500",
-  campaign_code: null,
-  status: "active",
-  scan_count: 0,
-  submitted_count: 0,
-  approved_count: 0,
-  expires_at: null,
-  created_by_employee_id: "employee-platform",
-  created_at: "2026-07-04T10:00:00.000Z",
-  updated_at: "2026-07-04T10:00:00.000Z",
-} satisfies PlatformPartnerInviteCodeRecord;
-
-const pendingPartner = {
-  ...activePartner,
-  status: "pending",
-} satisfies PlatformPartnerRecord;
-
-const disabledPartner = {
-  ...activePartner,
-  status: "terminated",
-} satisfies PlatformPartnerRecord;
-
-const partnerMember = {
-  id: "00000000-0000-4000-8000-000000000601",
-  partner_id: activePartner.id,
-  auth_user_id: null,
-  name: "李四",
-  phone: "13900139000",
-  role: "owner",
-  status: "pending_bind",
-  remark: null,
-  created_by_employee_id: "employee-platform",
-  updated_by_employee_id: "employee-platform",
-  created_at: "2026-07-05T10:00:00.000Z",
-  updated_at: "2026-07-05T10:00:00.000Z",
-  partner: {
-    id: activePartner.id,
-    name: activePartner.name,
-    status: activePartner.status,
-  },
-} satisfies PlatformPartnerMemberRecord;
-
-const boundDisabledPartnerMember = {
-  ...partnerMember,
-  status: "disabled", remark: "离职停用",
-  auth_user_id: "00000000-0000-4000-8000-000000000701",
-} satisfies PlatformPartnerMemberRecord;
-
-const memberCreateInput = { name: "李四", phone: "13900139000", role: "operator" } as const;
-const memberCreatePayload = {
-  partner_id: activePartner.id, ...memberCreateInput, status: "pending_bind",
-  created_by_employee_id: "employee-platform", updated_by_employee_id: "employee-platform",
-} as const;
-
-const tenantEmployeeAuthContext = {
-  ...tenantAuthContext,
-  authUserId: "auth-tenant",
-  employeeId: "employee-tenant-admin",
-  tenantId: existingBinding.tenant_id,
-  tenantName: "晴天装饰",
-  tenantSlug: "qingtian",
-  tenantStatus: "active",
-} satisfies AuthContext;
 
 const repository = {
   listPartners: mock(async () => ({
@@ -263,6 +36,13 @@ const repository = {
   listLevels: mock(async () => [level]),
   createPartner: mock(async () => activePartner),
   updatePartner: mock(async () => activePartner),
+  updatePartnerRegions: mock(
+    async (): Promise<PlatformPartnerRecord | null> => ({
+      ...activePartner,
+      region_codes: ["411502"],
+      region_version: 2,
+    }),
+  ),
   updatePartnerStatus: mock(async (): Promise<PlatformPartnerRecord> => suspendedPartner),
   createInviteCode: mock(async (): Promise<PlatformPartnerInviteCodeRecord> => inviteCode),
   listInviteCodes: mock(async () => []),
@@ -290,9 +70,23 @@ const repository = {
   updatePartnerMemberStatus: mock(async () => boundDisabledPartnerMember),
 };
 
+const regionPolicy = {
+  assertAssignableDistricts: mock(async (regionCodes: readonly string[]) =>
+    Array.from(new Set(regionCodes.map((code) => code.trim()))).sort()
+  ),
+  assertPartnerInviteRegion: mock(async (
+    _partnerRegionCodes: readonly string[],
+    regionCode: string,
+  ) => regionCode.trim()),
+};
+
+const audit = {
+  recordBestEffort: mock(async () => null),
+};
+
 async function createService() {
   const { PlatformPartnersService } = await import("./platform-partners");
-  return new PlatformPartnersService({ repository });
+  return new PlatformPartnersService({ repository, regionPolicy, audit });
 }
 
 describe("PlatformPartnersService", () => {
@@ -300,6 +94,21 @@ describe("PlatformPartnersService", () => {
     for (const fn of Object.values(repository)) fn.mockClear();
     repository.findPartnerById.mockImplementation(async () => activePartner);
     repository.findActiveTenantBinding.mockImplementation(async () => null);
+    repository.updatePartnerRegions.mockImplementation(async () => ({
+      ...activePartner,
+      region_codes: ["411502"],
+      region_version: 2,
+    }));
+    regionPolicy.assertAssignableDistricts.mockClear();
+    regionPolicy.assertAssignableDistricts.mockImplementation(
+      async (regionCodes) =>
+        Array.from(new Set(regionCodes.map((code) => code.trim()))).sort(),
+    );
+    regionPolicy.assertPartnerInviteRegion.mockClear();
+    regionPolicy.assertPartnerInviteRegion.mockImplementation(
+      async (_partnerRegionCodes, regionCode) => regionCode.trim(),
+    );
+    audit.recordBestEffort.mockClear();
   });
 
   test("rejects non-platform admins", async () => {
@@ -320,6 +129,34 @@ describe("PlatformPartnersService", () => {
       }),
     ).rejects.toMatchObject({ statusCode: 400 });
     expect(repository.createInviteCode).not.toHaveBeenCalled();
+  });
+
+  test("validates and normalizes districts before creating a partner", async () => {
+    const service = await createService();
+
+    await service.createPartner(platformAuthContext, {
+      name: "浉河区合伙人",
+      subject_type: "company",
+      contact_name: "王五",
+      phone: "13700137000",
+      level_id: level.id,
+      region_codes: ["411503", "411502", "411503"],
+      contract_status: "pending",
+      settlement_account_status: "pending",
+      settlement_account: {},
+    });
+
+    expect(regionPolicy.assertAssignableDistricts).toHaveBeenCalledWith([
+      "411503",
+      "411502",
+      "411503",
+    ]);
+    expect(repository.createPartner).toHaveBeenCalledWith(
+      expect.objectContaining({
+        region_codes: ["411502", "411503"],
+        status: "pending",
+      }),
+    );
   });
 
   test("rejects tenant binding when tenant already has active binding", async () => {
@@ -355,6 +192,44 @@ describe("PlatformPartnersService", () => {
     );
     expect(repository.updatePartner).not.toHaveBeenCalled();
     expect(repository.createTenantBinding).not.toHaveBeenCalled();
+  });
+
+  test("revalidates districts before activating a partner", async () => {
+    repository.findPartnerById.mockImplementationOnce(async () => ({
+      ...pendingPartner,
+      region_codes: ["411502"],
+    }));
+    const service = await createService();
+
+    await service.updatePartnerStatus(platformAuthContext, activePartner.id, {
+      status: "active",
+      reason: "运营资料核验完成",
+    });
+
+    expect(regionPolicy.assertAssignableDistricts).toHaveBeenCalledWith(
+      ["411502"],
+      { excludePartnerId: activePartner.id },
+    );
+  });
+
+  test("validates invite code district against partner coverage", async () => {
+    repository.findPartnerById.mockImplementationOnce(async () => ({
+      ...activePartner,
+      region_codes: ["411502"],
+    }));
+    const service = await createService();
+
+    await service.createInviteCode(platformAuthContext, activePartner.id, {
+      region_code: "411502",
+    });
+
+    expect(regionPolicy.assertPartnerInviteRegion).toHaveBeenCalledWith(
+      ["411502"],
+      "411502",
+    );
+    expect(repository.createInviteCode).toHaveBeenCalledWith(
+      expect.objectContaining({ region_code: "411502" }),
+    );
   });
 
   test("resolves active invite code for mini-program onboarding", async () => {

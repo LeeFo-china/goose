@@ -78,6 +78,32 @@ class AdministrativeAreaRepository {
     return rows;
   }
 
+  async findActiveByAdcodes(adcodes: string[]) {
+    if (adcodes.length === 0) return [];
+
+    const { data, error } = await this.table()
+      .select("adcode,name,level,parent_adcode,full_name,status")
+      .in("adcode", adcodes)
+      .eq("status", "active")
+      .order("adcode", { ascending: true });
+
+    if (error) {
+      throw Errors.dbError("查询行政区划失败", error);
+    }
+
+    return (data || []) as Array<
+      Pick<
+        AdministrativeAreaRecord,
+        | "adcode"
+        | "name"
+        | "level"
+        | "parent_adcode"
+        | "full_name"
+        | "status"
+      >
+    >;
+  }
+
   private buildListRequest(query: AdministrativeAreaListQuery) {
     let request = this.table()
       .select("adcode,name,level,parent_adcode,full_name,source,source_version,sort_order,status,synced_at,created_at,updated_at")
@@ -85,6 +111,7 @@ class AdministrativeAreaRepository {
 
     if (query.level) request = request.eq("level", query.level);
     if (query.parent_adcode) request = request.eq("parent_adcode", query.parent_adcode);
+    if (query.adcodes?.length) request = request.in("adcode", query.adcodes);
     if (!query.parent_adcode && query.level === "province") request = request.is("parent_adcode", null);
     if (query.keyword?.trim()) {
       const keyword = `%${query.keyword.trim()}%`;

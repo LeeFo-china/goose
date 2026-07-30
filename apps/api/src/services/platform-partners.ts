@@ -2,7 +2,6 @@ import { Errors } from "@/errors/error-factory";
 import {
   platformPartnersRepository,
   type PlatformPartnerCreateRecordInput,
-  type PlatformPartnerInviteCodeWithPartnerRecord,
   type PlatformPartnerMemberCreateRecordInput,
   type PlatformPartnerMemberStatusRecordInput,
   type PlatformPartnerRecord,
@@ -18,6 +17,7 @@ import type {
   PlatformPartnerInviteCodeResolveInput,
   PlatformPartnerInviteCodeCreateInput,
   PlatformPartnerListQuery,
+  PlatformPartnerRegionsUpdateInput,
   PlatformPartnerStatusUpdateInput,
   PlatformPartnerUpdateInput,
   TenantPartnerBindingCreateInput,
@@ -25,14 +25,18 @@ import type {
   TenantPartnerBindingListQuery,
 } from "@/schema/platform-partners";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { PlatformPartnerRegionManagementService } from "@/services/platform-partner-region-management";
+import { platformPartnerRegionPolicyService } from "@/services/platform-partner-regions";
 import {
   buildPartnerInviteCampaignCode,
+  buildPartnerInviteCodeOnboardingPayload,
   buildPartnerInviteCodeScene,
   normalizePartnerInviteCode,
 } from "@/services/platform-partner-invite-code-utils";
 import { generatePartnerInviteCodeQrcode } from "@/services/platform-partner-invite-qrcode";
 
-export type PlatformPartnersRepositoryPort = Pick<
+type PlatformPartnersRepositoryRequiredPort = Pick<
   typeof platformPartnersRepository,
   | "listPartners"
   | "findPartnerById"
@@ -53,8 +57,17 @@ export type PlatformPartnersRepositoryPort = Pick<
   | "listTenantBindings"
 >;
 
+export type PlatformPartnersRepositoryPort =
+  PlatformPartnersRepositoryRequiredPort &
+  Partial<Pick<typeof platformPartnersRepository, "updatePartnerRegions">>;
+
 type PlatformPartnersServiceDependencies = {
   repository?: PlatformPartnersRepositoryPort;
+  regionPolicy?: Pick<
+    typeof platformPartnerRegionPolicyService,
+    "assertAssignableDistricts" | "assertPartnerInviteRegion"
+  >;
+  audit?: Pick<typeof platformAuditLogService, "recordBestEffort">;
 };
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
@@ -63,9 +76,20 @@ const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
 
 export class PlatformPartnersService {
   private readonly repository: PlatformPartnersRepositoryPort;
+  private readonly regionPolicy: NonNullable<
+    PlatformPartnersServiceDependencies["regionPolicy"]
+  >;
+  private readonly regionManagement: PlatformPartnerRegionManagementService;
 
   constructor(dependencies: PlatformPartnersServiceDependencies = {}) {
     this.repository = dependencies.repository ?? platformPartnersRepository;
+    this.regionPolicy =
+      dependencies.regionPolicy ?? platformPartnerRegionPolicyService;
+    this.regionManagement = new PlatformPartnerRegionManagementService({
+      repository: this.repository,
+      regionPolicy: this.regionPolicy,
+      audit: dependencies.audit ?? platformAuditLogService,
+    });
   }
 
   async listPartners(authContext: AuthContext, query: PlatformPartnerListQuery) {
@@ -95,9 +119,13 @@ export class PlatformPartnersService {
   ) {
     this.assertCanManagePartners(authContext);
     const employeeId = this.requireEmployeeId(authContext);
+    const regionCodes = await this.regionPolicy.assertAssignableDistricts(
+      input.region_codes,
+    );
 
     return this.repository.createPartner({
       ...input,
+      region_codes: regionCodes,
       status: "pending",
       remark: input.remark ?? null,
       created_by_employee_id: employeeId,
@@ -120,6 +148,14 @@ export class PlatformPartnersService {
     } satisfies PlatformPartnerUpdateRecordInput);
   }
 
+  async updatePartnerRegions(
+    authContext: AuthContext,
+    partnerId: string,
+    input: PlatformPartnerRegionsUpdateInput,
+  ) {
+    return this.regionManagement.update(authContext, partnerId, input);
+  }
+
   async updatePartnerStatus(
     authContext: AuthContext,
     partnerId: string,
@@ -127,6 +163,12 @@ export class PlatformPartnersService {
   ) {
     this.assertCanManagePartners(authContext);
     const employeeId = this.requireEmployeeId(authContext);
+    if (input.status === "active") {
+      const partner = await this.requirePartner(partnerId);
+      await this.regionPolicy.assertAssignableDistricts(partner.region_codes, {
+        excludePartnerId: partnerId,
+      });
+    }
 
     return this.repository.updatePartnerStatus(partnerId, {
       status: input.status,
@@ -207,11 +249,23 @@ export class PlatformPartnersService {
       throw Errors.badRequest("只有启用状态的合伙人可以生成邀请码");
     }
 
-    const code = this.buildInviteCode(partner, input.region_code);
+    const requestedRegionCode = input.region_code ?? partner.region_codes[0];
+    if (!requestedRegionCode) {
+      throw Errors.business(
+        422,
+        "该合伙人尚未配置运营区县",
+        "PLATFORM_PARTNER_REGION_REQUIRED",
+      );
+    }
+    const regionCode = await this.regionPolicy.assertPartnerInviteRegion(
+      partner.region_codes,
+      requestedRegionCode,
+    );
+    const code = this.buildInviteCode(partner, regionCode);
     return this.repository.createInviteCode({
       partner_id: partnerId,
       code,
-      region_code: input.region_code ?? null,
+      region_code: regionCode,
       campaign_code: buildPartnerInviteCampaignCode(code),
       expires_at: input.expires_at ?? null,
       created_by_employee_id: employeeId,
@@ -238,7 +292,7 @@ export class PlatformPartnersService {
       inviteCodeId: inviteCode.id,
       scan_count: 1,
     });
-    return this.buildInviteCodeOnboardingPayload(inviteCode);
+    return buildPartnerInviteCodeOnboardingPayload(inviteCode);
   }
 
   async createTenantBinding(
@@ -279,7 +333,7 @@ export class PlatformPartnersService {
     if (existingBinding) {
       if (existingBinding.partner_id === inviteCode.partner_id) {
         return {
-          ...this.buildInviteCodeOnboardingPayload(inviteCode),
+          ...buildPartnerInviteCodeOnboardingPayload(inviteCode),
           binding: existingBinding,
           created: false,
           idempotent: true,
@@ -314,7 +368,7 @@ export class PlatformPartnersService {
     });
 
     return {
-      ...this.buildInviteCodeOnboardingPayload(inviteCode),
+      ...buildPartnerInviteCodeOnboardingPayload(inviteCode),
       binding,
       created: true,
       idempotent: false,
@@ -365,45 +419,6 @@ export class PlatformPartnersService {
     }
 
     return inviteCode;
-  }
-
-  private buildInviteCodeOnboardingPayload(
-    inviteCode: PlatformPartnerInviteCodeWithPartnerRecord,
-  ) {
-    const partner = inviteCode.partner;
-    if (!partner) {
-      throw Errors.business(
-        409,
-        "城市合伙人当前不可绑定",
-        "PARTNER_INVITE_PARTNER_UNAVAILABLE",
-      );
-    }
-
-    return {
-      invite_code: {
-        id: inviteCode.id,
-        code: inviteCode.code,
-        region_code: inviteCode.region_code,
-        campaign_code: inviteCode.campaign_code,
-        expires_at: inviteCode.expires_at,
-      },
-      partner: {
-        id: partner.id,
-        name: partner.name,
-        status: partner.status,
-        region_codes: partner.region_codes,
-        level: partner.level
-          ? {
-            code: partner.level.code,
-            name: partner.level.name,
-          }
-          : null,
-      },
-      onboarding: {
-        can_bind: true,
-        binding_source_type: "invite_code" as const,
-      },
-    };
   }
 
   private async requirePartner(partnerId: string) {
@@ -460,10 +475,6 @@ export class PlatformPartnersService {
       );
     }
     return authContext.tenantId;
-  }
-
-  private normalizeInviteCode(code: string) {
-    return code.trim().toUpperCase();
   }
 
   private buildInviteCode(

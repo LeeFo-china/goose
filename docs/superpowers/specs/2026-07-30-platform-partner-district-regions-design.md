@@ -32,7 +32,7 @@
 
 新增数据库触发器：
 
-1. 新增合伙人或修改 `region_codes` 时，区域不能为空，且每个编码必须对应启用中的 `administrative_areas.level = 'district'`。
+1. 新增合伙人、修改 `region_codes` 或将状态切换为 `active` 时，区域不能为空，且每个编码必须对应启用中的 `administrative_areas.level = 'district'`。
 2. 合伙人处于 `active` 时，对排序后的区域编码获取事务级 advisory lock。
 3. 在同一事务中检查其他启用合伙人的 `region_codes` 是否重叠；存在重叠时拒绝写入。
 4. migration 不修改任何存量 `region_codes`，因此不会擅自扩大或收缩历史经营范围。
@@ -100,4 +100,3 @@
 - 区域调整前后的 `tenant_partner_bindings` 数量和归属不发生变化。
 - 管理端不再要求用户手工输入逗号分隔编码。
 - 存量城市级记录可见且明确提示迁移，但 migration 不自动改写。
-

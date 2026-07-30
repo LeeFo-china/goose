@@ -45,6 +45,7 @@ import {
   applicationStatusOptions,
   optionLabel,
 } from "@/components/platform-partners/platform-partner-types";
+import { PlatformPartnerRegionPicker } from "@/components/platform-partners/platform-partner-region-picker";
 import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
@@ -70,6 +71,9 @@ type ApplicationMutationDialogButtonProps = {
   endpoint: string;
   method?: "POST" | "PATCH";
   buildPayload: (formData: FormData) => Record<string, unknown>;
+  extraFields?: ReactNode;
+  submitDisabled?: boolean;
+  onSuccess?: () => void;
 };
 
 export function ApplicationDetailButton({
@@ -125,6 +129,9 @@ export function ApprovePartnerApplicationButton({
   application: PlatformPartnerApplicationRecord;
   levels: PlatformPartnerLevel[];
 }) {
+  const [selectedRegionCodes, setSelectedRegionCodes] = useState(
+    application.region_codes,
+  );
   const disabled = application.status === "approved" ||
     application.status === "rejected" ||
     levels.length === 0;
@@ -157,22 +164,25 @@ export function ApprovePartnerApplicationButton({
           defaultValue: application.applicant_name,
         },
         {
-          name: "region_codes",
-          label: "区域编码",
-          defaultValue: application.region_codes.join(","),
-          description: "多个区域用逗号分隔。",
-        },
-        {
           name: "review_remark",
           label: "审核备注",
           type: "textarea",
           defaultValue: "官网申请审核通过",
         },
       ]}
+      extraFields={
+        <PlatformPartnerRegionPicker
+          value={selectedRegionCodes}
+          initialAreas={application.region_areas}
+          onChange={setSelectedRegionCodes}
+        />
+      }
+      submitDisabled={selectedRegionCodes.length === 0}
+      onSuccess={() => setSelectedRegionCodes(application.region_codes)}
       buildPayload={(formData) => ({
         level_id: stringField(formData, "level_id"),
         partner_name: optionalString(formData, "partner_name"),
-        region_codes: splitCsv(stringField(formData, "region_codes")),
+        region_codes: selectedRegionCodes,
         review_remark: optionalString(formData, "review_remark"),
       })}
     />
@@ -227,6 +237,9 @@ function ApplicationMutationDialogButton({
   endpoint,
   method = "POST",
   buildPayload,
+  extraFields,
+  submitDisabled = false,
+  onSuccess,
 }: ApplicationMutationDialogButtonProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -244,6 +257,7 @@ function ApplicationMutationDialogButton({
           body: JSON.stringify(cleanPayload(buildPayload(formData))),
           fallbackMessage,
         });
+        onSuccess?.();
         setOpen(false);
         refreshAfterDialogClose(router);
       } catch (submitError) {
@@ -265,6 +279,7 @@ function ApplicationMutationDialogButton({
             {fields.map((field) => (
               <DialogField key={field.name} field={field} />
             ))}
+            {extraFields}
           </FieldGroup>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
           <FieldError />
@@ -272,7 +287,7 @@ function ApplicationMutationDialogButton({
             <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || submitDisabled}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               {submitLabel}
             </Button>
@@ -380,10 +395,6 @@ function stringField(formData: FormData, key: string) {
 function optionalString(formData: FormData, key: string) {
   const value = stringField(formData, key);
   return value || undefined;
-}
-
-function splitCsv(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
 function cleanPayload(payload: Record<string, unknown>) {

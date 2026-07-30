@@ -4,7 +4,10 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
-import { MarkSettlementPaidButton } from "@/components/platform-partners/platform-partner-actions";
+import {
+  EditPartnerRegionsButton,
+  MarkSettlementPaidButton,
+} from "@/components/platform-partners/platform-partner-actions";
 import { CreateInviteCodeButton } from "@/components/platform-partners/platform-partner-invite-actions";
 import { UpdatePartnerMemberStatusButton } from "@/components/platform-partners/platform-partner-member-actions";
 import {
@@ -54,8 +57,9 @@ const partnerColumns: ColumnDef<PlatformPartnerRecord>[] = [
   },
   {
     id: "region",
-    header: "区域",
-    cell: ({ row }) => row.original.region_codes.join(" / ") || "未限定",
+    header: "运营区县",
+    cell: ({ row }) => <PartnerRegionSummary partner={row.original} />,
+    meta: { cellClassName: "min-w-[220px]" },
   },
   {
     id: "commission",
@@ -73,13 +77,49 @@ const partnerColumns: ColumnDef<PlatformPartnerRecord>[] = [
     id: "actions",
     header: "操作",
     cell: ({ row }) => (
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-1">
+        <EditPartnerRegionsButton partner={row.original} />
         <CreateInviteCodeButton partner={row.original} />
       </div>
     ),
     meta: { headerClassName: "text-right", cellClassName: "text-right" },
   },
 ];
+
+function PartnerRegionSummary({
+  partner,
+}: {
+  partner: PlatformPartnerRecord;
+}) {
+  if (partner.region_codes.length === 0) {
+    return <span className="text-muted-foreground">未配置</span>;
+  }
+
+  const areaByCode = new Map(
+    (partner.region_areas ?? []).map((area) => [area.adcode, area]),
+  );
+  return (
+    <div className="flex flex-col gap-1">
+      {partner.region_codes.slice(0, 3).map((code) => {
+        const area = areaByCode.get(code);
+        return (
+          <div key={code} className="min-w-0">
+            <div className="truncate">{area?.full_name ?? code}</div>
+            <div className="truncate text-xs text-muted-foreground">
+              {code}
+              {area && area.level !== "district" ? " · 待迁移" : ""}
+            </div>
+          </div>
+        );
+      })}
+      {partner.region_codes.length > 3 ? (
+        <div className="text-xs text-muted-foreground">
+          另有 {partner.region_codes.length - 3} 个区县
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const bindingColumns: ColumnDef<TenantPartnerBindingRecord>[] = [
   {
