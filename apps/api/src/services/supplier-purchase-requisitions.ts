@@ -196,16 +196,20 @@ export class SupplierPurchaseRequisitionsService {
       requisitionId,
       visibleProjectIds,
     );
-    // 所有公开状态和预算状态变更都会原子递增 version；RPC 锁行后会再次
-    // 校验 expected_version，因此 scope 查询后的并发变化只能形成版本冲突。
-    if (requisition.status !== "pending_approval") {
+    // draft 尚不可能存在审核事件，始终阻断；pending 必须绑定当前版本。
+    // 终态可能是相同 actor/key/fingerprint 的历史重放，数据库会先查命令事件，
+    // 再锁行校验状态和版本，因此保留权限检查后交给 event-first RPC 判定。
+    if (requisition.status === "draft") {
       throw Errors.business(
         409,
         "采购申请当前状态不允许审批",
         "SUPPLIER_PURCHASE_REQUISITION_STATE_CONFLICT",
       );
     }
-    if (requisition.version !== input.expected_version) {
+    if (
+      requisition.status === "pending_approval" &&
+      requisition.version !== input.expected_version
+    ) {
       throw Errors.business(
         409,
         "采购申请版本已变化，请刷新后重试",
