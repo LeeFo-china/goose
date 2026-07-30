@@ -57,6 +57,14 @@ const listExpenseTotals = mock(async () => ({
   ]),
 }));
 
+const listCommitmentTotals = mock(async () => ({
+  totalCommitmentAmount: 14000,
+  byCategory: new Map([
+    ["category-1", 5000],
+    ["category-2", 9000],
+  ]),
+}));
+
 const listActiveCategoriesByIds = mock(async () => [
   { id: "category-1", code: "labor", name: "人工", status: "active" },
 ]);
@@ -90,6 +98,7 @@ mock.module("@/repositories/project-cost-budgets", () => ({
     findProject,
     listActiveBudgets,
     listExpenseTotals,
+    listCommitmentTotals,
     listActiveCategoriesByIds,
     saveBudgets,
   },
@@ -140,6 +149,7 @@ describe("projectCostBudgetService", () => {
     findProject.mockClear();
     listActiveBudgets.mockClear();
     listExpenseTotals.mockClear();
+    listCommitmentTotals.mockClear();
     listActiveCategoriesByIds.mockClear();
     saveBudgets.mockClear();
     canAccessProject.mockClear();
@@ -151,7 +161,7 @@ describe("projectCostBudgetService", () => {
     canAccessProject.mockImplementation(async () => true);
   });
 
-  test("returns project budget summary with category expense totals", async () => {
+  test("returns project budget summary with expense and commitment totals", async () => {
     const { projectCostBudgetService } = await import("./project-cost-budgets");
 
     const result = await projectCostBudgetService.listProjectBudgets(
@@ -171,10 +181,16 @@ describe("projectCostBudgetService", () => {
       tenantId: "tenant-1",
       projectId: "project-1",
     });
+    expect(listCommitmentTotals).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
     expect(result.summary).toMatchObject({
       budget_configured: true,
       budget_amount: 80000,
       expense_amount: 36000,
+      commitment_amount: 14000,
+      available_amount: 30000,
       remaining_amount: 44000,
       usage_ratio: 0.45,
       unallocated_expense_amount: 1000,
@@ -184,6 +200,8 @@ describe("projectCostBudgetService", () => {
       category_name: "人工",
       budget_amount: 30000,
       expense_amount: 12000,
+      commitment_amount: 5000,
+      available_amount: 13000,
       remaining_amount: 18000,
       usage_ratio: 0.4,
       risk_level: "normal",
@@ -246,6 +264,8 @@ describe("projectCostBudgetService", () => {
     expect(result.summary).toMatchObject({
       budget_configured: true,
       budget_amount: 30000,
+      commitment_amount: 14000,
+      available_amount: -20000,
     });
   });
 

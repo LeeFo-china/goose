@@ -38,6 +38,8 @@ export type ProjectCostBudgetListItem = {
   category_name: string | null;
   budget_amount: number;
   expense_amount: number;
+  commitment_amount: number;
+  available_amount: number;
   remaining_amount: number;
   usage_ratio: number | null;
   warning_threshold_percent: number;
@@ -51,6 +53,8 @@ export type ProjectCostBudgetSummary = {
   budget_configured: boolean;
   budget_amount: number;
   expense_amount: number;
+  commitment_amount: number;
+  available_amount: number;
   remaining_amount: number;
   usage_ratio: number | null;
   unallocated_expense_amount: number;
@@ -233,6 +237,8 @@ function emptyProjectCostBudgetSummary(): ProjectCostBudgetSummary {
     budget_configured: false,
     budget_amount: 0,
     expense_amount: 0,
+    commitment_amount: 0,
+    available_amount: 0,
     remaining_amount: 0,
     usage_ratio: null,
     unallocated_expense_amount: 0,

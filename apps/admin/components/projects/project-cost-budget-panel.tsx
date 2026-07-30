@@ -19,9 +19,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestProject } from "@/components/projects/project-mutation-utils";
 import {
   buildEditableRows,
+  calculateBudgetAvailability,
   categoryName,
   type EditableBudgetRow,
   emptyBudgetData,
+  formatBudgetAvailability,
+  isNegativeBudgetAvailability,
   normalizeBudgetData,
   parseOptionalMoney,
   parseOptionalThreshold,
@@ -86,7 +89,11 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
       return {
         ...row,
         budgetAmount,
-        remainingAmount: budgetAmount - row.expense_amount,
+        availableAmount: calculateBudgetAvailability({
+          budgetAmount,
+          expenseAmount: row.expense_amount,
+          commitmentAmount: row.commitment_amount,
+        }),
         usageRatio,
       };
     })
@@ -225,7 +232,7 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
         </div>
       ) : null}
 
-      <dl className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <dl className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric
           label="预算成本"
           value={loading ? "加载中..." : formatFinanceMoney(summary.budget_amount)}
@@ -233,6 +240,20 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
         <Metric
           label="已归集支出"
           value={loading ? "加载中..." : formatFinanceMoney(summary.expense_amount)}
+        />
+        <Metric
+          label="已承诺"
+          value={loading
+            ? "加载中..."
+            : formatFinanceMoney(summary.commitment_amount)}
+        />
+        <Metric
+          label="可用预算"
+          value={loading
+            ? "加载中..."
+            : formatFinanceMoney(summary.available_amount)}
+          danger={isNegativeBudgetAvailability(summary.available_amount)}
+          title={formatBudgetAvailability(summary)}
         />
         <Metric
           label="预算剩余"
@@ -252,12 +273,14 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
 
       <div className="mt-4 overflow-x-auto rounded-md border">
         {editing ? (
-          <div className="min-w-[760px]">
-            <div className="grid grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_minmax(12rem,1fr)] gap-3 border-b bg-muted/60 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="min-w-[1060px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_7.5rem_7.5rem_7.5rem_minmax(11rem,1fr)] gap-3 border-b bg-muted/60 px-3 py-2 text-xs font-medium text-muted-foreground">
               <span>成本分类</span>
               <span className="text-right">预算金额</span>
               <span className="text-right">预警阈值</span>
-              <span className="text-right">当前使用</span>
+              <span className="text-right">已支出</span>
+              <span className="text-right">已承诺</span>
+              <span className="text-right">可用预算</span>
               <span>备注</span>
             </div>
             {loading ? (
@@ -268,7 +291,7 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
               projectedRows.map((row) => (
                 <div
                   key={row.cost_category_id}
-                  className="grid grid-cols-[minmax(0,1fr)_8rem_7rem_7rem_minmax(12rem,1fr)] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                  className="grid grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_7.5rem_7.5rem_7.5rem_minmax(11rem,1fr)] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
                 >
                   <CategoryCell row={row} />
                   <Input
@@ -301,12 +324,27 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
                     className="h-8 text-right tabular-nums"
                     aria-label={`${categoryName(row)}预警阈值`}
                   />
-                  <div className="text-right text-muted-foreground tabular-nums">
-                    <div>{formatFinanceMoney(row.expense_amount)}</div>
-                    <div className="mt-1 text-xs">
-                      {formatFinancePercent(row.usageRatio)}
-                    </div>
-                  </div>
+                  <span className="text-right text-muted-foreground tabular-nums">
+                    {formatFinanceMoney(row.expense_amount)}
+                  </span>
+                  <span className="text-right text-muted-foreground tabular-nums">
+                    {formatFinanceMoney(row.commitment_amount)}
+                  </span>
+                  <span
+                    className={`text-right font-medium tabular-nums ${
+                      isNegativeBudgetAvailability(row.availableAmount)
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }`}
+                    title={formatBudgetAvailability({
+                      budget_amount: row.budgetAmount,
+                      expense_amount: row.expense_amount,
+                      commitment_amount: row.commitment_amount,
+                      available_amount: row.availableAmount,
+                    })}
+                  >
+                    {formatFinanceMoney(row.availableAmount)}
+                  </span>
                   <Textarea
                     value={row.remark}
                     maxLength={200}
@@ -324,11 +362,13 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
             )}
           </div>
         ) : (
-          <div className="min-w-[760px]">
-            <div className="grid grid-cols-[minmax(0,1fr)_8rem_8rem_7rem_7rem_minmax(8rem,1fr)] gap-3 border-b bg-muted/60 px-3 py-2 text-xs font-medium text-muted-foreground">
+          <div className="min-w-[1040px]">
+            <div className="grid grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_7.5rem_7.5rem_6.5rem_6.5rem_minmax(8rem,1fr)] gap-3 border-b bg-muted/60 px-3 py-2 text-xs font-medium text-muted-foreground">
               <span>成本分类</span>
               <span className="text-right">预算</span>
               <span className="text-right">已支出</span>
+              <span className="text-right">已承诺</span>
+              <span className="text-right">可用预算</span>
               <span className="text-right">使用率</span>
               <span>风险</span>
               <span>备注</span>
@@ -341,7 +381,7 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
               displayRows.map((row) => (
                 <div
                   key={row.id}
-                  className="grid grid-cols-[minmax(0,1fr)_8rem_8rem_7rem_7rem_minmax(8rem,1fr)] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
+                  className="grid grid-cols-[minmax(0,1fr)_7.5rem_7.5rem_7.5rem_7.5rem_6.5rem_6.5rem_minmax(8rem,1fr)] gap-3 border-b px-3 py-2 text-sm last:border-b-0"
                 >
                   <CategoryCell row={row} />
                   <span className="text-right tabular-nums">
@@ -349,6 +389,19 @@ export function ProjectCostBudgetPanel({ projectId }: { projectId: string }) {
                   </span>
                   <span className="text-right tabular-nums">
                     {formatFinanceMoney(row.expense_amount)}
+                  </span>
+                  <span className="text-right text-muted-foreground tabular-nums">
+                    {formatFinanceMoney(row.commitment_amount)}
+                  </span>
+                  <span
+                    className={`text-right font-medium tabular-nums ${
+                      isNegativeBudgetAvailability(row.available_amount)
+                        ? "text-destructive"
+                        : "text-foreground"
+                    }`}
+                    title={formatBudgetAvailability(row)}
+                  >
+                    {formatFinanceMoney(row.available_amount)}
                   </span>
                   <span className="text-right text-muted-foreground tabular-nums">
                     {formatFinancePercent(row.usage_ratio)}
@@ -400,11 +453,28 @@ function CategoryCell({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  danger = false,
+  title,
+}: {
+  label: string;
+  value: string;
+  danger?: boolean;
+  title?: string;
+}) {
   return (
     <div className="rounded-md border bg-background px-3 py-2">
       <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="mt-1 truncate text-sm font-semibold tabular-nums">{value}</dd>
+      <dd
+        className={`mt-1 truncate text-sm font-semibold tabular-nums ${
+          danger ? "text-destructive" : "text-foreground"
+        }`}
+        title={title}
+      >
+        {value}
+      </dd>
     </div>
   );
 }

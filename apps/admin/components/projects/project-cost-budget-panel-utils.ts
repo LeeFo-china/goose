@@ -4,6 +4,7 @@ import type {
   ProjectCostBudgetListItem,
   ProjectCostBudgetRiskLevel,
 } from "@/components/finance/finance-cost-budget-requests";
+import { formatFinanceMoney } from "@/components/finance/finance-ledger-utils";
 
 export const emptyBudgetData: ProjectCostBudgetListData = {
   list: [],
@@ -11,6 +12,8 @@ export const emptyBudgetData: ProjectCostBudgetListData = {
     budget_configured: false,
     budget_amount: 0,
     expense_amount: 0,
+    commitment_amount: 0,
+    available_amount: 0,
     remaining_amount: 0,
     usage_ratio: null,
     unallocated_expense_amount: 0,
@@ -26,6 +29,7 @@ export type EditableBudgetRow = {
   warning_threshold_percent: string;
   remark: string;
   expense_amount: number;
+  commitment_amount: number;
   has_existing_budget: boolean;
 };
 
@@ -108,6 +112,35 @@ export function riskVariant(level: ProjectCostBudgetRiskLevel) {
   return "success" as const;
 }
 
+export function formatBudgetAvailability(input: {
+  budget_amount: number;
+  expense_amount: number;
+  commitment_amount: number;
+  available_amount: number;
+}) {
+  return `已承诺 ${formatFinanceMoney(input.commitment_amount)}，可用预算 ${
+    formatFinanceMoney(input.available_amount)
+  }`;
+}
+
+export function calculateBudgetAvailability(input: {
+  budgetAmount: number;
+  expenseAmount: number;
+  commitmentAmount: number;
+}) {
+  return Math.round(
+    (
+      input.budgetAmount -
+      input.expenseAmount -
+      input.commitmentAmount
+    ) * 100,
+  ) / 100;
+}
+
+export function isNegativeBudgetAvailability(availableAmount: number) {
+  return availableAmount < 0;
+}
+
 function buildEditableRow(input: {
   category?: FinanceCostCategoryRecord;
   budget?: ProjectCostBudgetListItem;
@@ -123,6 +156,7 @@ function buildEditableRow(input: {
       : "100",
     remark: budget?.remark || "",
     expense_amount: budget?.expense_amount || 0,
+    commitment_amount: budget?.commitment_amount || 0,
     has_existing_budget: Boolean(budget),
   };
 }

@@ -48,8 +48,18 @@ export type ProjectCostBudgetExpenseTotals = {
   byCategory: Map<string, number>;
 };
 
+export type ProjectCostBudgetCommitmentTotals = {
+  totalCommitmentAmount: number;
+  byCategory: Map<string, number>;
+};
+
 type FinanceLedgerExpenseRow = {
   cost_category_id: string | null;
+  amount: number | string | null;
+};
+
+type ProjectCostCommitmentRow = {
+  cost_category_id: string;
   amount: number | string | null;
 };
 
@@ -135,6 +145,49 @@ class ProjectCostBudgetRepository {
     return {
       totalExpenseAmount: roundMoney(totalExpenseAmount),
       unallocatedExpenseAmount: roundMoney(unallocatedExpenseAmount),
+      byCategory,
+    };
+  }
+
+  async listCommitmentTotals(input: {
+    tenantId: string;
+    projectId: string;
+  }): Promise<ProjectCostBudgetCommitmentTotals> {
+    const { data, error, count } = await SupabaseDB.getAdminClient()
+      .from("project_cost_commitments")
+      .select("cost_category_id, amount", { count: "exact" })
+      .eq("tenant_id", input.tenantId)
+      .eq("project_id", input.projectId)
+      .eq("source_type", "supplier_purchase_requisition")
+      .in("status", ["reserved", "converted"])
+      .limit(10_000);
+
+    if (error) {
+      throw Errors.dbError("查询项目采购预算承诺失败", error);
+    }
+    if ((count ?? 0) > 10_000) {
+      throw Errors.business(
+        422,
+        "项目采购预算承诺过多，请使用成本汇总任务",
+        "PROJECT_COST_COMMITMENTS_TOO_MANY_ROWS",
+      );
+    }
+
+    const byCategory = new Map<string, number>();
+    let totalCommitmentAmount = 0;
+    for (
+      const row of ((data as ProjectCostCommitmentRow[] | null) || [])
+    ) {
+      const amount = normalizeMoney(row.amount);
+      totalCommitmentAmount += amount;
+      byCategory.set(
+        row.cost_category_id,
+        (byCategory.get(row.cost_category_id) ?? 0) + amount,
+      );
+    }
+
+    return {
+      totalCommitmentAmount: roundMoney(totalCommitmentAmount),
       byCategory,
     };
   }
