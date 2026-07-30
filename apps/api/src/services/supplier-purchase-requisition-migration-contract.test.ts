@@ -82,6 +82,11 @@ function extractColumnNames(table: string) {
     ));
 }
 
+function extractConstraint(table: string, constraint: string) {
+  return splitTopLevelClauses(extractTable(table))
+    .find((clause) => clause.startsWith(`CONSTRAINT ${constraint}`)) ?? "";
+}
+
 function expectContracts(source: string, contracts: readonly RegExp[]) {
   for (const contract of contracts) expect(source).toMatch(contract);
 }
@@ -129,17 +134,25 @@ const itemColumns = [
   "supplier_sku_id",
   "supplier_price_list_id",
   "supplier_price_list_item_id",
-  "product_code",
-  "product_name",
-  "sku_code",
-  "sku_name",
-  "specification",
-  "model",
+  "product_code_snapshot",
+  "product_name_snapshot",
+  "sku_code_snapshot",
+  "sku_name_snapshot",
+  "specification_snapshot",
+  "model_snapshot",
   "purchase_unit_id",
-  "purchase_unit_code",
-  "purchase_unit_name",
+  "purchase_unit_code_snapshot",
+  "purchase_unit_name_snapshot",
+  "purchase_unit_symbol_snapshot",
   "base_unit_id",
+  "base_unit_code_snapshot",
+  "base_unit_name_snapshot",
+  "base_unit_symbol_snapshot",
   "base_unit_conversion",
+  "price_list_code_snapshot",
+  "price_list_version_snapshot",
+  "price_effective_from_snapshot",
+  "price_effective_until_snapshot",
   "quantity",
   "unit_price",
   "tax_rate",
@@ -199,6 +212,7 @@ describe("supplier purchase requisition migration contract", () => {
       /char_length\(reason\) BETWEEN 1 AND 500/,
       /request_no ~ '\^PR-\[0-9\]\{8\}-\[0-9\]\{8\}\$'/,
       /remark IS NULL[\s\S]*char_length\(remark\) BETWEEN 1 AND 500/,
+      /priced_at timestamptz NOT NULL/,
       /subtotal_amount numeric\(18, 2\) NOT NULL DEFAULT 0/,
       /tax_amount numeric\(18, 2\) NOT NULL DEFAULT 0/,
       /total_amount numeric\(18, 2\) NOT NULL DEFAULT 0/,
@@ -220,6 +234,23 @@ describe("supplier purchase requisition migration contract", () => {
       /CHECK \(tax_rate BETWEEN 0 AND 1\)/,
       /base_unit_conversion numeric\(18, 8\) NOT NULL/,
       /CHECK \(base_unit_conversion > 0\)/,
+      /product_code_snapshot text NOT NULL/,
+      /product_name_snapshot text NOT NULL/,
+      /sku_code_snapshot text NOT NULL/,
+      /sku_name_snapshot text NOT NULL/,
+      /specification_snapshot text NULL/,
+      /model_snapshot text NULL/,
+      /purchase_unit_code_snapshot text NOT NULL/,
+      /purchase_unit_name_snapshot text NOT NULL/,
+      /purchase_unit_symbol_snapshot text NOT NULL/,
+      /base_unit_code_snapshot text NOT NULL/,
+      /base_unit_name_snapshot text NOT NULL/,
+      /base_unit_symbol_snapshot text NOT NULL/,
+      /price_list_code_snapshot text NOT NULL/,
+      /price_list_version_snapshot integer NOT NULL/,
+      /CHECK \(price_list_version_snapshot > 0\)/,
+      /price_effective_from_snapshot timestamptz NOT NULL/,
+      /price_effective_until_snapshot timestamptz NULL/,
       /line_subtotal_amount numeric\(18, 2\) NOT NULL/,
       /line_tax_amount numeric\(18, 2\) NOT NULL/,
       /line_total_amount numeric\(18, 2\) NOT NULL/,
@@ -252,7 +283,21 @@ describe("supplier purchase requisition migration contract", () => {
       /status = 'converted'[\s\S]*budget_status IN \('within_budget', 'over_budget'\)[\s\S]*submitted_by_employee_id IS NOT NULL[\s\S]*reviewed_by_employee_id IS NOT NULL[\s\S]*cancelled_by_employee_id IS NULL[\s\S]*purchase_order_id IS NOT NULL/,
       /\(\s*submitted_by_employee_id IS NULL\s+AND submitted_at IS NULL\s*\)[\s\S]*\(\s*submitted_by_employee_id IS NOT NULL\s+AND submitted_at IS NOT NULL\s*\)/,
       /\(\s*reviewed_by_employee_id IS NULL\s+AND reviewed_at IS NULL[\s\S]*\)[\s\S]*\(\s*reviewed_by_employee_id IS NOT NULL\s+AND reviewed_at IS NOT NULL\s+AND submitted_by_employee_id IS NOT NULL\s*\)/,
-      /\(\s*budget_status = 'unchecked'\s+AND priced_at IS NULL\s*\)[\s\S]*\(\s*budget_status IN \('within_budget', 'over_budget'\)\s+AND priced_at IS NOT NULL\s*\)/,
+    ]);
+    expect(requisition).not.toContain(
+      "supplier_purchase_requisitions_budget_pricing_check",
+    );
+    expect(requisition).not.toContain("priced_at IS NULL");
+
+    const stateConstraint = extractConstraint(
+      "supplier_purchase_requisitions",
+      "supplier_purchase_requisitions_state_metadata_check",
+    );
+    expect(stateConstraint.match(/status = 'cancelled'/g) ?? []).toHaveLength(3);
+    expectContracts(stateConstraint, [
+      /status = 'cancelled'\s+AND budget_status = 'unchecked'\s+AND submitted_by_employee_id IS NULL\s+AND submitted_at IS NULL\s+AND reviewed_by_employee_id IS NULL\s+AND reviewed_at IS NULL\s+AND review_remark IS NULL\s+AND cancelled_by_employee_id IS NOT NULL\s+AND cancelled_at IS NOT NULL\s+AND cancel_reason IS NOT NULL\s+AND purchase_order_id IS NULL/,
+      /status = 'cancelled'\s+AND budget_status IN \('within_budget', 'over_budget'\)\s+AND submitted_by_employee_id IS NOT NULL\s+AND submitted_at IS NOT NULL\s+AND reviewed_by_employee_id IS NULL\s+AND reviewed_at IS NULL\s+AND review_remark IS NULL\s+AND cancelled_by_employee_id IS NOT NULL\s+AND cancelled_at IS NOT NULL\s+AND cancel_reason IS NOT NULL\s+AND purchase_order_id IS NULL/,
+      /status = 'cancelled'\s+AND budget_status IN \('within_budget', 'over_budget'\)\s+AND submitted_by_employee_id IS NOT NULL\s+AND submitted_at IS NOT NULL\s+AND reviewed_by_employee_id IS NOT NULL\s+AND reviewed_at IS NOT NULL\s+AND cancelled_by_employee_id IS NOT NULL\s+AND cancelled_at IS NOT NULL\s+AND cancel_reason IS NOT NULL\s+AND purchase_order_id IS NULL/,
     ]);
 
     const commitments = extractTable("project_cost_commitments");
@@ -299,6 +344,7 @@ describe("supplier purchase requisition migration contract", () => {
     expectContracts(sql, [
       /ALTER TABLE public\.supplier_purchase_orders\s+ADD COLUMN purchase_requisition_id uuid NULL;/,
       /CREATE UNIQUE INDEX supplier_purchase_orders_purchase_requisition_unique_idx[\s\S]*purchase_requisition_id\)[\s\S]*WHERE purchase_requisition_id IS NOT NULL;/,
+      /CREATE UNIQUE INDEX supplier_purchase_requisitions_purchase_order_unique_idx[\s\S]*purchase_order_id\)[\s\S]*WHERE purchase_order_id IS NOT NULL;/,
       /FOREIGN KEY \(purchase_requisition_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_requisitions\(id, tenant_id\)/,
       /FOREIGN KEY \(purchase_order_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_orders\(id, tenant_id\)/,
     ]);
@@ -359,7 +405,10 @@ describe("supplier purchase requisition migration contract", () => {
       /REVOKE ALL ON SEQUENCE public\.supplier_purchase_requisition_number_seq[\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
     );
     expect(sql).toMatch(
-      /GRANT USAGE, SELECT ON SEQUENCE public\.supplier_purchase_requisition_number_seq[\s\S]*TO service_role/,
+      /GRANT USAGE ON SEQUENCE public\.supplier_purchase_requisition_number_seq[\s\S]*TO service_role/,
+    );
+    expect(sql).not.toMatch(
+      /GRANT[^;]*SELECT[^;]*ON SEQUENCE public\.supplier_purchase_requisition_number_seq/i,
     );
     expect(sql).not.toMatch(/^\s*CREATE POLICY\b/im);
   });

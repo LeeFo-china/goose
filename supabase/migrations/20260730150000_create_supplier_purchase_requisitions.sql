@@ -71,7 +71,7 @@ CREATE TABLE public.supplier_purchase_requisitions (
   reason text NOT NULL,
   expected_delivery_date date NULL,
   remark text NULL,
-  priced_at timestamptz NULL,
+  priced_at timestamptz NOT NULL,
   subtotal_amount numeric(18, 2) NOT NULL DEFAULT 0,
   tax_amount numeric(18, 2) NOT NULL DEFAULT 0,
   total_amount numeric(18, 2) NOT NULL DEFAULT 0,
@@ -196,17 +196,6 @@ CREATE TABLE public.supplier_purchase_requisitions (
         AND cancel_reason IS NOT NULL
       )
     ),
-  CONSTRAINT supplier_purchase_requisitions_budget_pricing_check
-    CHECK (
-      (
-        budget_status = 'unchecked'
-        AND priced_at IS NULL
-      )
-      OR (
-        budget_status IN ('within_budget', 'over_budget')
-        AND priced_at IS NOT NULL
-      )
-    ),
   CONSTRAINT supplier_purchase_requisitions_state_metadata_check
     CHECK (
       (
@@ -249,6 +238,37 @@ CREATE TABLE public.supplier_purchase_requisitions (
       )
       OR (
         status = 'cancelled'
+        AND budget_status = 'unchecked'
+        AND submitted_by_employee_id IS NULL
+        AND submitted_at IS NULL
+        AND reviewed_by_employee_id IS NULL
+        AND reviewed_at IS NULL
+        AND review_remark IS NULL
+        AND cancelled_by_employee_id IS NOT NULL
+        AND cancelled_at IS NOT NULL
+        AND cancel_reason IS NOT NULL
+        AND purchase_order_id IS NULL
+      )
+      OR (
+        status = 'cancelled'
+        AND budget_status IN ('within_budget', 'over_budget')
+        AND submitted_by_employee_id IS NOT NULL
+        AND submitted_at IS NOT NULL
+        AND reviewed_by_employee_id IS NULL
+        AND reviewed_at IS NULL
+        AND review_remark IS NULL
+        AND cancelled_by_employee_id IS NOT NULL
+        AND cancelled_at IS NOT NULL
+        AND cancel_reason IS NOT NULL
+        AND purchase_order_id IS NULL
+      )
+      OR (
+        status = 'cancelled'
+        AND budget_status IN ('within_budget', 'over_budget')
+        AND submitted_by_employee_id IS NOT NULL
+        AND submitted_at IS NOT NULL
+        AND reviewed_by_employee_id IS NOT NULL
+        AND reviewed_at IS NOT NULL
         AND cancelled_by_employee_id IS NOT NULL
         AND cancelled_at IS NOT NULL
         AND cancel_reason IS NOT NULL
@@ -288,19 +308,27 @@ CREATE TABLE public.supplier_purchase_requisition_items (
     REFERENCES public.supplier_price_lists(id) ON DELETE RESTRICT,
   supplier_price_list_item_id uuid NOT NULL
     REFERENCES public.supplier_price_list_items(id) ON DELETE RESTRICT,
-  product_code text NOT NULL,
-  product_name text NOT NULL,
-  sku_code text NOT NULL,
-  sku_name text NOT NULL,
-  specification text NULL,
-  model text NULL,
+  product_code_snapshot text NOT NULL,
+  product_name_snapshot text NOT NULL,
+  sku_code_snapshot text NOT NULL,
+  sku_name_snapshot text NOT NULL,
+  specification_snapshot text NULL,
+  model_snapshot text NULL,
   purchase_unit_id uuid NOT NULL
     REFERENCES public.catalog_units(id) ON DELETE RESTRICT,
-  purchase_unit_code text NOT NULL,
-  purchase_unit_name text NOT NULL,
+  purchase_unit_code_snapshot text NOT NULL,
+  purchase_unit_name_snapshot text NOT NULL,
+  purchase_unit_symbol_snapshot text NOT NULL,
   base_unit_id uuid NOT NULL
     REFERENCES public.catalog_units(id) ON DELETE RESTRICT,
+  base_unit_code_snapshot text NOT NULL,
+  base_unit_name_snapshot text NOT NULL,
+  base_unit_symbol_snapshot text NOT NULL,
   base_unit_conversion numeric(18, 8) NOT NULL,
+  price_list_code_snapshot text NOT NULL,
+  price_list_version_snapshot integer NOT NULL,
+  price_effective_from_snapshot timestamptz NOT NULL,
+  price_effective_until_snapshot timestamptz NULL,
   quantity numeric(18, 4) NOT NULL,
   unit_price numeric(14, 2) NOT NULL,
   tax_rate numeric(7, 6) NOT NULL,
@@ -321,33 +349,44 @@ CREATE TABLE public.supplier_purchase_requisition_items (
     CHECK (line_no > 0),
   CONSTRAINT supplier_purchase_requisition_items_required_text_check
     CHECK (
-      product_code = btrim(product_code)
-      AND product_code <> ''
-      AND product_name = btrim(product_name)
-      AND product_name <> ''
-      AND sku_code = btrim(sku_code)
-      AND sku_code <> ''
-      AND sku_name = btrim(sku_name)
-      AND sku_name <> ''
-      AND purchase_unit_code = btrim(purchase_unit_code)
-      AND purchase_unit_code <> ''
-      AND purchase_unit_name = btrim(purchase_unit_name)
-      AND purchase_unit_name <> ''
+      product_code_snapshot = btrim(product_code_snapshot)
+      AND product_code_snapshot <> ''
+      AND product_name_snapshot = btrim(product_name_snapshot)
+      AND product_name_snapshot <> ''
+      AND sku_code_snapshot = btrim(sku_code_snapshot)
+      AND sku_code_snapshot <> ''
+      AND sku_name_snapshot = btrim(sku_name_snapshot)
+      AND sku_name_snapshot <> ''
+      AND purchase_unit_code_snapshot = btrim(purchase_unit_code_snapshot)
+      AND purchase_unit_code_snapshot <> ''
+      AND purchase_unit_name_snapshot = btrim(purchase_unit_name_snapshot)
+      AND purchase_unit_name_snapshot <> ''
+      AND purchase_unit_symbol_snapshot =
+        btrim(purchase_unit_symbol_snapshot)
+      AND purchase_unit_symbol_snapshot <> ''
+      AND base_unit_code_snapshot = btrim(base_unit_code_snapshot)
+      AND base_unit_code_snapshot <> ''
+      AND base_unit_name_snapshot = btrim(base_unit_name_snapshot)
+      AND base_unit_name_snapshot <> ''
+      AND base_unit_symbol_snapshot = btrim(base_unit_symbol_snapshot)
+      AND base_unit_symbol_snapshot <> ''
+      AND price_list_code_snapshot = btrim(price_list_code_snapshot)
+      AND price_list_code_snapshot <> ''
     ),
   CONSTRAINT supplier_purchase_requisition_items_optional_text_check
     CHECK (
       (
-        specification IS NULL
+        specification_snapshot IS NULL
         OR (
-          specification = btrim(specification)
-          AND specification <> ''
+          specification_snapshot = btrim(specification_snapshot)
+          AND specification_snapshot <> ''
         )
       )
       AND (
-        model IS NULL
+        model_snapshot IS NULL
         OR (
-          model = btrim(model)
-          AND model <> ''
+          model_snapshot = btrim(model_snapshot)
+          AND model_snapshot <> ''
         )
       )
     ),
@@ -359,6 +398,8 @@ CREATE TABLE public.supplier_purchase_requisition_items (
     CHECK (tax_rate BETWEEN 0 AND 1),
   CONSTRAINT supplier_purchase_requisition_items_conversion_check
     CHECK (base_unit_conversion > 0),
+  CONSTRAINT supplier_purchase_requisition_items_price_version_check
+    CHECK (price_list_version_snapshot > 0),
   CONSTRAINT supplier_purchase_requisition_items_amount_check
     CHECK (
       line_subtotal_amount >= 0
@@ -452,6 +493,10 @@ CREATE UNIQUE INDEX supplier_purchase_orders_purchase_requisition_unique_idx
 ON public.supplier_purchase_orders(purchase_requisition_id)
 WHERE purchase_requisition_id IS NOT NULL;
 
+CREATE UNIQUE INDEX supplier_purchase_requisitions_purchase_order_unique_idx
+ON public.supplier_purchase_requisitions(purchase_order_id)
+WHERE purchase_order_id IS NOT NULL;
+
 ALTER TABLE public.supplier_purchase_orders
 ADD CONSTRAINT supplier_purchase_orders_requisition_tenant_fkey
 FOREIGN KEY (purchase_requisition_id, tenant_id)
@@ -540,7 +585,7 @@ TO service_role;
 REVOKE ALL ON SEQUENCE public.supplier_purchase_requisition_number_seq
 FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT USAGE, SELECT ON SEQUENCE public.supplier_purchase_requisition_number_seq
+GRANT USAGE ON SEQUENCE public.supplier_purchase_requisition_number_seq
 TO service_role;
 
 INSERT INTO public.permissions (
