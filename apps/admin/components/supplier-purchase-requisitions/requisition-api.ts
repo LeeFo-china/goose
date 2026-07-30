@@ -9,13 +9,14 @@ import type {
   RequisitionCancelInput,
   RequisitionCommandResult,
   RequisitionConvertInput,
+  RequisitionCreateDraftInput,
   RequisitionDetail,
-  RequisitionDraftInput,
   RequisitionItemPage,
   RequisitionPage,
   RequisitionReviewInput,
   RequisitionStatus,
   RequisitionSubmitInput,
+  RequisitionUpdateDraftInput,
 } from "./requisition-types";
 
 const REQUISITION_PATH = "/supplier-purchase-requisitions";
@@ -77,17 +78,39 @@ export function loadRequisitionItems(
   );
 }
 
-export function saveRequisitionDraft(
+export function createRequisitionDraft(
+  payload: RequisitionCreateDraftInput,
+  attempt: SupplierResourceCommandAttempt,
+) {
+  if (payload.expected_version !== 0) {
+    throw new RangeError("新建采购申请草稿版本号必须为 0");
+  }
+  return requisitionCommand(
+    attempt.resourceId,
+    "save-draft",
+    payload,
+    attempt,
+    "采购申请草稿创建失败",
+  );
+}
+
+export function updateRequisitionDraft(
   requisitionId: string,
-  payload: RequisitionDraftInput,
+  payload: RequisitionUpdateDraftInput,
   attempt: SupplierCommandAttempt,
 ) {
+  if (
+    !Number.isSafeInteger(payload.expected_version) ||
+    payload.expected_version <= 0
+  ) {
+    throw new RangeError("更新采购申请草稿需要正整数版本号");
+  }
   return requisitionCommand(
     requisitionId,
     "save-draft",
     payload,
     attempt,
-    "采购申请草稿保存失败",
+    "采购申请草稿更新失败",
   );
 }
 

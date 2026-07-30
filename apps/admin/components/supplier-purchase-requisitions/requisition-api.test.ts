@@ -8,16 +8,19 @@ import type {
 import {
   cancelRequisition,
   convertRequisition,
+  createRequisitionDraft,
   loadRequisition,
   loadRequisitionItems,
   loadRequisitions,
   reviewRequisition,
-  saveRequisitionDraft,
   submitRequisition,
+  updateRequisitionDraft,
 } from "./requisition-api";
 import type {
+  RequisitionCreateDraftInput,
   RequisitionDraftInput,
   RequisitionDraftItemInput,
+  RequisitionUpdateDraftInput,
 } from "./requisition-types";
 
 const originalFetch = globalThis.fetch;
@@ -89,13 +92,18 @@ describe("采购申请 API 契约", () => {
     ]);
   });
 
-  test("五类 mutation 使用 POST、冻结幂等键和严格 body", async () => {
+  test("六类 mutation 使用 POST、冻结幂等键和严格 body", async () => {
     const calls = installSuccessFetch();
     const attempt = (scope: string): SupplierCommandAttempt => ({
       fingerprint: `${scope}-intent`,
       idempotencyKey: `requisition:${scope}-key`,
     });
-    const saveAttempt = attempt("save");
+    const createAttempt: SupplierResourceCommandAttempt = {
+      fingerprint: "create-intent",
+      idempotencyKey: "requisition:create-key",
+      resourceId: "created-request-id",
+    };
+    const updateAttempt = attempt("update");
     const submitAttempt = attempt("submit");
     const reviewAttempt = attempt("review");
     const cancelAttempt = attempt("cancel");
@@ -104,7 +112,7 @@ describe("采购申请 API 契约", () => {
       idempotencyKey: "requisition:convert-key",
       resourceId: "purchase-order-id",
     };
-    const draft: RequisitionDraftInput = {
+    const createDraft: RequisitionCreateDraftInput = {
       project_id: "project-1",
       tenant_supplier_id: "relationship-1",
       expected_version: 0,
@@ -117,8 +125,19 @@ describe("采购申请 API 契约", () => {
         quantity: "2.5000",
       }],
     };
+    const updateDraft: RequisitionUpdateDraftInput = {
+      ...createDraft,
+      expected_version: 1,
+      remark: "调整数量",
+    };
 
-    await saveRequisitionDraft("request/id", draft, saveAttempt);
+    await createRequisitionDraft(createDraft, createAttempt);
+    await createRequisitionDraft(createDraft, createAttempt);
+    await updateRequisitionDraft(
+      "request/id",
+      updateDraft,
+      updateAttempt,
+    );
     await submitRequisition(
       "request/id",
       { expected_version: 1 },
@@ -145,12 +164,14 @@ describe("采购申请 API 契约", () => {
     );
 
     expect(calls.map(({ init }) => init?.method)).toEqual(
-      Array(6).fill("POST"),
+      Array(8).fill("POST"),
     );
     expect(calls.map(({ init }) =>
       new Headers(init?.headers).get("Idempotency-Key")
     )).toEqual([
-      saveAttempt.idempotencyKey,
+      createAttempt.idempotencyKey,
+      createAttempt.idempotencyKey,
+      updateAttempt.idempotencyKey,
       submitAttempt.idempotencyKey,
       reviewAttempt.idempotencyKey,
       cancelAttempt.idempotencyKey,
@@ -158,6 +179,8 @@ describe("采购申请 API 契约", () => {
       submitAttempt.idempotencyKey,
     ]);
     expect(calls.map(({ input }) => String(input))).toEqual([
+      "/api/backend/supplier-purchase-requisitions/created-request-id/save-draft",
+      "/api/backend/supplier-purchase-requisitions/created-request-id/save-draft",
       "/api/backend/supplier-purchase-requisitions/request%2Fid/save-draft",
       "/api/backend/supplier-purchase-requisitions/request%2Fid/submit",
       "/api/backend/supplier-purchase-requisitions/request%2Fid/review",
@@ -167,7 +190,9 @@ describe("采购申请 API 契约", () => {
     ]);
     const bodies = calls.map(({ init }) => JSON.parse(String(init?.body)));
     expect(bodies).toEqual([
-      draft,
+      createDraft,
+      createDraft,
+      updateDraft,
       { expected_version: 1 },
       { expected_version: 2, action: "approve", remark: "同意" },
       { expected_version: 2, reason: "需求取消" },
@@ -177,11 +202,36 @@ describe("采购申请 API 契约", () => {
       },
       { expected_version: 1 },
     ]);
-    expect(JSON.stringify(bodies[0])).not.toMatch(
+    expect(calls[0]).toEqual(calls[1]);
+    expect(JSON.stringify(bodies.slice(0, 3))).not.toMatch(
       /unit_price|tax_rate|amount/,
     );
     expect(draftInputKeysAreStrict).toBe(true);
     expect(draftItemKeysAreStrict).toBe(true);
+  });
+
+  test("更新草稿在发请求前拒绝非正版本", () => {
+    const calls = installSuccessFetch();
+    const attempt: SupplierCommandAttempt = {
+      fingerprint: "invalid-update",
+      idempotencyKey: "requisition:invalid-update",
+    };
+    const invalidDraft: RequisitionUpdateDraftInput = {
+      project_id: "project-1",
+      tenant_supplier_id: "relationship-1",
+      expected_version: 0,
+      reason: "无效更新",
+      items: [{
+        supplier_sku_id: "sku-1",
+        cost_category_id: "category-1",
+        quantity: "1",
+      }],
+    };
+
+    expect(() =>
+      updateRequisitionDraft("request-1", invalidDraft, attempt)
+    ).toThrow("更新采购申请草稿需要正整数版本号");
+    expect(calls).toEqual([]);
   });
 
   test("保留 backend client 返回的状态、错误码和请求编号", async () => {

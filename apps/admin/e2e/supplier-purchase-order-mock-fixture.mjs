@@ -17,6 +17,7 @@ export const ids = {
   priceListGrout: "22000000-0000-4000-8000-000000000014",
   priceItemGrout: "22000000-0000-4000-8000-000000000015",
   fulfillment: "22000000-0000-4000-8000-000000000017",
+  legacyOrder: "33000000-0000-4000-8000-000000000099",
 };
 
 export const session = {

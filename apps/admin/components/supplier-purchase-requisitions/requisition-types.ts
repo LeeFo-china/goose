@@ -125,15 +125,26 @@ export type RequisitionDraftItemInput = {
   quantity: string;
 };
 
-export type RequisitionDraftInput = {
+type RequisitionDraftFields = {
   project_id: string;
   tenant_supplier_id: string;
-  expected_version: number;
   reason: string;
   expected_delivery_date?: string | null;
   remark?: string | null;
   items: RequisitionDraftItemInput[];
 };
+
+export type RequisitionCreateDraftInput = RequisitionDraftFields & {
+  expected_version: 0;
+};
+
+export type RequisitionUpdateDraftInput = RequisitionDraftFields & {
+  expected_version: number;
+};
+
+export type RequisitionDraftInput =
+  | RequisitionCreateDraftInput
+  | RequisitionUpdateDraftInput;
 
 export type RequisitionSubmitInput = {
   expected_version: number;

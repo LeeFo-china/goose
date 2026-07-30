@@ -55,9 +55,7 @@ export function canEditPurchaseOrderDraft(
   >,
   canManage: boolean,
 ): order is EditablePurchaseOrder {
-  return canManage &&
-    order.status === "draft" &&
-    order.purchase_requisition_id !== null;
+  return canManage && order.status === "draft";
 }
 
 export function validatePurchaseOrderDraft(input: Pick<

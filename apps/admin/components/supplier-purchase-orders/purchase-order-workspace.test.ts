@@ -26,7 +26,7 @@ describe("采购单工作台规则", () => {
     expect(purchaseOrderActions("draft", false)).toEqual([]);
   });
 
-  test("只有申请转换生成的草稿可以进入采购单编辑器", () => {
+  test("所有已有草稿保持可编辑且非草稿不可进入编辑器", () => {
     expect(canEditPurchaseOrderDraft({
       status: "draft",
       purchase_requisition_id: "requisition-1",
@@ -34,10 +34,14 @@ describe("采购单工作台规则", () => {
     expect(canEditPurchaseOrderDraft({
       status: "draft",
       purchase_requisition_id: null,
-    }, true)).toBe(false);
+    }, true)).toBe(true);
     expect(canEditPurchaseOrderDraft({
       status: "submitted",
       purchase_requisition_id: "requisition-1",
+    }, true)).toBe(false);
+    expect(canEditPurchaseOrderDraft({
+      status: "cancelled",
+      purchase_requisition_id: null,
     }, true)).toBe(false);
     expect(canEditPurchaseOrderDraft({
       status: "draft",

@@ -82,10 +82,14 @@ describe("供应商采购单页面边界", () => {
     expect(list).not.toContain("或新建一张项目采购单");
   });
 
-  test("采购单编辑器只接受已转换生成的现有草稿", () => {
+  test("采购单编辑器只接受现有草稿且不恢复直接创建路径", () => {
     const editor = readSource("./purchase-order-editor.tsx");
+    const types = readSource("./purchase-order-types.ts");
 
     expect(editor).toContain("order: EditablePurchaseOrder;");
+    expect(types).toMatch(
+      /export type EditablePurchaseOrder = PurchaseOrderWithReferences & \{\s+status: "draft";\s+\};/,
+    );
     expect(editor).not.toContain('"新建采购单"');
     expect(editor).not.toContain("setExpectedVersion(0)");
     expect(editor).not.toContain("if (!existingOrderId)");

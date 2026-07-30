@@ -71,7 +71,7 @@ const BUSINESS_ERRORS = {
 let state;
 reset();
 
-function reset() {
+function reset(scenario = "empty") {
   state = {
     catalog: initialCatalog(),
     order: null,
@@ -84,6 +84,7 @@ function reset() {
     idempotency: new Map(),
     priceChangeTriggered: false,
   };
+  if (scenario === "legacy-draft") seedLegacyDraft();
 }
 
 function sendJson(response, status, payload) {
@@ -278,6 +279,7 @@ function orderWithReferences(order = state.order) {
         status: project.status,
       },
       supplier: structuredClone(relationship.supplier),
+      purchase_requisition: null,
     }
     : null;
 }
@@ -800,6 +802,51 @@ function buildItem(catalogItem, quantity, lineNo, orderId) {
   };
 }
 
+function seedLegacyDraft() {
+  const [tile, grout] = state.catalog;
+  if (!tile || !grout) throw new TypeError("Legacy draft catalog is missing");
+  const items = [
+    buildItem(tile, 2.5, 1, ids.legacyOrder),
+    buildItem(grout, 1.3333, 2, ids.legacyOrder),
+  ];
+  const subtotal = items.reduce(
+    (sum, item) => sum + moneyCents(item.subtotal_amount),
+    0n,
+  );
+  const tax = items.reduce(
+    (sum, item) => sum + moneyCents(item.tax_amount),
+    0n,
+  );
+  state.order = {
+    id: ids.legacyOrder,
+    tenant_id: ids.tenant,
+    project_id: project.id,
+    tenant_supplier_id: relationship.id,
+    supplier_id: ids.supplier,
+    order_no: "PO-E2E-0001",
+    status: "draft",
+    currency: "CNY",
+    expected_delivery_date: null,
+    remark: "E2E 历史采购单草稿",
+    priced_at: now,
+    subtotal_amount: moneyText(subtotal),
+    tax_amount: moneyText(tax),
+    total_amount: moneyText(subtotal + tax),
+    purchase_requisition_id: null,
+    version: 1,
+    created_by_employee_id: ids.employee,
+    updated_by_employee_id: ids.employee,
+    submitted_by_employee_id: null,
+    submitted_at: null,
+    cancelled_by_employee_id: null,
+    cancelled_at: null,
+    cancel_reason: null,
+    created_at: now,
+    updated_at: now,
+  };
+  state.items = items;
+}
+
 function validateExpectedVersion(response, expectedVersion) {
   const currentVersion = state.order?.version ?? 0;
   if (expectedVersion === currentVersion) return true;
@@ -898,6 +945,7 @@ async function saveDraft(request, response, url, orderId) {
     subtotal_amount: moneyText(subtotal),
     tax_amount: moneyText(tax),
     total_amount: moneyText(total),
+    purchase_requisition_id: null,
     version,
     created_by_employee_id: ids.employee,
     updated_by_employee_id: ids.employee,
@@ -1456,7 +1504,7 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/__test/reset") {
       await readBody(request);
-      reset();
+      reset(url.searchParams.get("scenario") ?? "empty");
       return sendData(response, {});
     }
     if (request.method === "GET" && url.pathname === "/__test/journal") {

@@ -15,8 +15,14 @@ type JournalEntry = {
   outcome: string;
 };
 
-async function resetMock(request: APIRequestContext) {
-  const response = await request.post(`${mockBackendBaseUrl}/__test/reset`);
+async function resetMock(
+  request: APIRequestContext,
+  scenario?: "legacy-draft",
+) {
+  const query = scenario ? `?scenario=${scenario}` : "";
+  const response = await request.post(
+    `${mockBackendBaseUrl}/__test/reset${query}`,
+  );
   expect(response.ok()).toBe(true);
 }
 
@@ -146,33 +152,26 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   page,
   request,
 }) => {
-  await resetMock(request);
+  await resetMock(request, "legacy-draft");
+  const legacyState = await readState(request) as {
+    order: { purchase_requisition_id: string | null };
+  };
+  expect(legacyState.order.purchase_requisition_id).toBeNull();
   await page.clock.setFixedTime("2029-12-31T00:00:00.000Z");
   await login(page);
   await page.goto("/supplier-purchase-orders", { waitUntil: "networkidle" });
 
   await expect(page.getByRole("heading", { name: "采购单", level: 1 }))
     .toBeVisible();
-  await page.getByRole("button", { name: "新建采购单" }).click();
+  const orderRow = page.getByRole("row").filter({ hasText: "PO-E2E-0001" });
+  await expect(orderRow.getByText("草稿", { exact: true })).toBeVisible();
+  await orderRow.getByRole("button", { name: "编辑" }).click();
 
-  let dialog = page.getByRole("dialog", { name: "新建采购单" });
-  await dialog.getByLabel("项目").click();
-  await page.getByRole("option", { name: "E2E 海棠湾项目" }).click();
-  await dialog.getByLabel("合作供应商").click();
-  await page.getByRole("option", { name: /E2E 建材供应商/ }).click();
-
-  await dialog.getByLabel("搜索可采购目录").fill("抛釉");
-  await dialog.getByRole("button", { name: "搜索目录" }).click();
-  const tileRow = dialog.getByRole("row").filter({ hasText: "E2E 抛釉砖" });
-  await tileRow.getByRole("button", { name: "添加" }).click();
-
-  await dialog.getByLabel("搜索可采购目录").fill("美缝");
-  await dialog.getByRole("button", { name: "搜索目录" }).click();
-  const groutRow = dialog.getByRole("row").filter({ hasText: "E2E 美缝剂" });
-  await groutRow.getByRole("button", { name: "添加" }).click();
-
-  await dialog.getByLabel("采购数量 E2E 抛釉砖 800x800").fill("2.5");
-  await dialog.getByLabel("采购数量 E2E 美缝剂 2kg").fill("1.3333");
+  let dialog = page.getByRole("dialog", { name: "编辑采购单草稿" });
+  await expect(dialog.getByLabel("采购数量 E2E 抛釉砖 800x800"))
+    .toHaveValue("2.5");
+  await expect(dialog.getByLabel("采购数量 E2E 美缝剂 2kg"))
+    .toHaveValue("1.3333");
   await dialog.getByLabel("备注").fill("E2E 首次计价");
   await dialog.getByRole("button", { name: "加载更多项目" }).click();
   await expect(dialog.getByLabel("备注")).toHaveValue("E2E 首次计价");
@@ -184,7 +183,6 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
   await expect(dialog.getByText("¥55.14", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "关闭" }).click();
 
-  const orderRow = page.getByRole("row").filter({ hasText: "PO-E2E-0001" });
   await expect(orderRow.getByText("草稿", { exact: true })).toBeVisible();
   await orderRow.getByRole("button", { name: "查看" }).click();
 
@@ -302,6 +300,7 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
     throw new TypeError("最终收货 journal 缺少幂等键");
   }
   const state = await readState(request) as {
+    order: { version: number };
     item_fulfillments: {
       accepted_subtotal_amount: string;
       accepted_tax_amount: string;
@@ -399,7 +398,7 @@ test("采购单可完成计价、价格变化恢复、提交与完整履约", as
     {
       headers: { "Idempotency-Key": "e2e-cancel-after-shipment" },
       data: {
-        expected_version: 3,
+        expected_version: state.order.version,
         reason: "已有发货后禁止取消",
       },
     },

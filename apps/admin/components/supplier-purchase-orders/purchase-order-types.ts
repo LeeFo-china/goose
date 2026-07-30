@@ -63,7 +63,6 @@ export type PurchaseOrderWithReferences = PurchaseOrder & {
 
 export type EditablePurchaseOrder = PurchaseOrderWithReferences & {
   status: "draft";
-  purchase_requisition_id: string;
 };
 
 export type PurchaseOrderItem = {
