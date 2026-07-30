@@ -55,21 +55,25 @@ async function expectBusinessError(
   response: Awaited<ReturnType<typeof postMockCommand>>,
   status: number,
   code: string,
+  hasDetails = false,
 ) {
   expect(response.status()).toBe(status);
   const payload = await response.json() as Record<string, unknown>;
   expect(payload.code).toBe(code);
-  expect(Object.keys(payload).sort()).toEqual([
+  const expectedKeys = [
     "code",
     "message",
     "requestId",
     "success",
-  ]);
+  ];
+  if (hasDetails) expectedKeys.push("details");
+  expect(Object.keys(payload).sort()).toEqual(expectedKeys.sort());
   expect(payload).toMatchObject({
     success: false,
     message: expect.any(String),
     requestId: expect.any(String),
   });
+  if (hasDetails) expect(payload.details).toEqual(expect.any(Array));
 }
 
 function expectSafeCommandAttempts(attempts: JournalEntry[]) {
@@ -115,7 +119,12 @@ test("mock公开采购履约业务错误并记录每次命令尝试", async ({ r
       command.payload,
     );
     if ("code" in command) {
-      await expectBusinessError(response, command.status, command.code);
+      await expectBusinessError(
+        response,
+        command.status,
+        command.code,
+        command.details,
+      );
       continue;
     }
     expect(response.status()).toBe(command.status);

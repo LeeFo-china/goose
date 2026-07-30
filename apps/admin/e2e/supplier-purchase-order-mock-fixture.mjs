@@ -216,12 +216,13 @@ export function directContractScenario() {
       variance_reason: "抽检破损",
     }],
   };
-  const error = (path, key, payload, status, code) => ({
+  const error = (path, key, payload, status, code, details = false) => ({
     path,
     key,
     payload,
     status,
     code,
+    details,
   });
   const success = (path, key, payload, idempotent = false) => ({
     path,
@@ -232,7 +233,7 @@ export function directContractScenario() {
   });
 
   return {
-    expectedAttempts: 21,
+    expectedAttempts: 20,
     requiredOutcomes: [
       "SUPPLIER_PURCHASE_ORDER_NOT_FOUND",
       "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
@@ -241,7 +242,6 @@ export function directContractScenario() {
       "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_VERSION_CONFLICT",
       "SUPPLIER_PURCHASE_ORDER_OVER_SHIPPED",
       "SUPPLIER_PURCHASE_ORDER_OVER_RECEIVED",
-      "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
       "SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT",
       "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
       "SUPPLIER_IDEMPOTENCY_CONFLICT",
@@ -266,6 +266,53 @@ export function directContractScenario() {
         `${orderPath}/submit`,
         "contract-submit",
         { expected_version: 2 },
+      ),
+      error(
+        `${orderPath}/confirm-fulfillment`,
+        "   ",
+        { unexpected: true },
+        400,
+        "VALIDATION_ERROR",
+      ),
+      error(
+        "/supplier-purchase-orders/not-a-uuid/confirm-fulfillment",
+        "contract-invalid-path",
+        confirmation,
+        400,
+        "VALIDATION_ERROR",
+        true,
+      ),
+      error(
+        `${orderPath}/confirm-fulfillment`,
+        "contract-confirm-invalid-body",
+        { ...confirmation, unexpected: true },
+        400,
+        "VALIDATION_ERROR",
+        true,
+      ),
+      error(
+        shipmentPath,
+        "contract-shipment-invalid-body",
+        { ...shipment, unexpected: true },
+        400,
+        "VALIDATION_ERROR",
+        true,
+      ),
+      error(
+        receiptPath,
+        "contract-receipt-invalid-body",
+        {
+          ...receipt,
+          items: [{
+            purchase_order_item_id: itemTile,
+            accepted_quantity: 0,
+            rejected_quantity: 0.5,
+            variance_reason: null,
+          }],
+        },
+        400,
+        "VALIDATION_ERROR",
+        true,
       ),
       error(
         "/supplier-purchase-orders/33000000-0000-4000-8000-000000000404/confirm-fulfillment",
@@ -362,7 +409,8 @@ export function directContractScenario() {
           }],
         },
         400,
-        "SUPPLIER_PURCHASE_ORDER_VARIANCE_REASON_REQUIRED",
+        "VALIDATION_ERROR",
+        true,
       ),
       success(receiptPath, "contract-receipt-a", receipt),
       success(shipmentPath, "contract-shipment-b", shipmentBPayload),
@@ -396,6 +444,14 @@ export function directContractScenario() {
         },
         409,
         "SUPPLIER_PURCHASE_ORDER_RECEIPT_ID_CONFLICT",
+      ),
+      error(
+        `${orderPath}/cancel`,
+        "contract-cancel-invalid-body",
+        { expected_version: 3, reason: " " },
+        400,
+        "VALIDATION_ERROR",
+        true,
       ),
       error(
         `${orderPath}/cancel`,
