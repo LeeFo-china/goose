@@ -22,9 +22,7 @@ function sqlObject(prefix: string, name: string, terminator: string) {
   const start = migration.indexOf(`${prefix}${name}`);
   if (start < 0) return "";
   const end = migration.indexOf(terminator, start);
-  return end < 0
-    ? migration.slice(start)
-    : migration.slice(start, end + terminator.length);
+  return end < 0 ? migration.slice(start) : migration.slice(start, end + terminator.length);
 }
 
 function contracts(source: string, patterns: readonly RegExp[]) {
@@ -41,11 +39,9 @@ function ordered(source: string, patterns: readonly RegExp[]) {
 }
 
 function envelope(source: string, status: string, errorCode: string) {
-  expect(source).toMatch(
-    new RegExp(
-      `'status', '${status}'[\\s\\S]{0,180}'error_code',\\s*'${errorCode}'`,
-    ),
-  );
+  expect(source).toMatch(new RegExp(
+    `'status', '${status}'[\\s\\S]{0,180}'error_code',\\s*'${errorCode}'`,
+  ));
 }
 
 function sqlSection(source: string, startToken: string, endToken: string) {
@@ -55,48 +51,39 @@ function sqlSection(source: string, startToken: string, endToken: string) {
   return end < 0 ? source.slice(start) : source.slice(start, end + endToken.length);
 }
 
-function validationBeforeLocks(
-  source: string,
-  errorCode: string,
-  required: RegExp,
-) {
-  const beforeActor = sqlSection(
-    source,
-    "BEGIN",
-    "PERFORM public.assert_supplier_purchase_order_actor",
-  );
-  contracts(beforeActor, [
-    required,
-    new RegExp(`'status', 'validation_error'[\\s\\S]{0,180}'${errorCode}'`),
-  ]);
+function validationBeforeLocks(source: string, errorCode: string, required: RegExp) {
+  const beforeActor = sqlSection(source, "BEGIN",
+    "PERFORM public.assert_supplier_purchase_order_actor");
+  contracts(beforeActor, [required,
+    new RegExp(`'status', 'validation_error'[\\s\\S]{0,180}'${errorCode}'`)]);
   ordered(source, [
     /PERFORM public\.assert_supplier_purchase_order_actor\(/,
     /pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\(\s*'supplier-command:'/,
   ]);
 }
 
-function idempotency(
-  source: string,
-  request: RegExp,
-  command: string,
-  replay: RegExp,
-) {
+function idempotency(source: string, request: RegExp, command: string, replay: RegExp) {
   contracts(source, [
     request,
     /SELECT event\.\*[\s\S]*event\.actor_user_id = p_actor_user_id[\s\S]*event\.idempotency_key = p_idempotency_key/,
-    new RegExp(`v_event\\.command\\s*<>\\s*'${command}'`),
+    new RegExp(`v_event\\.tenant_id IS DISTINCT FROM p_tenant_id[\\s\\S]*v_event\\.resource_type <> 'supplier_purchase_order'[\\s\\S]*v_event\\.resource_id <> p_order_id[\\s\\S]*v_event\\.command\\s*<>\\s*'${command}'`),
     /v_event\.from_state -> '_request' IS DISTINCT FROM v_request[\s\S]*THEN\s*RAISE EXCEPTION USING[\s\S]*MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT'/,
     replay,
+    new RegExp(`INSERT INTO public\\.supplier_command_events \\(\\s*tenant_id,\\s*resource_type,\\s*resource_id,\\s*command,[\\s\\S]*?\\)\\s*VALUES \\(\\s*p_tenant_id,\\s*'supplier_purchase_order',\\s*p_order_id,\\s*'${command}'`),
   ]);
+}
+
+function successEnvelope(source: string, status: string, version: string) {
+  expect(source).toMatch(new RegExp(
+    `v_result := jsonb_build_object\\(\\s*'status', '${status}',\\s*'idempotent', false,\\s*'purchase_order', public\\.supplier_purchase_order_snapshot\\(v_order\\),\\s*'fulfillment', private\\.supplier_purchase_order_fulfillment_snapshot\\(\\s*v_fulfillment\\s*\\),\\s*'version', ${version}\\s*\\);`,
+  ));
 }
 
 function sqlstate22023Fallback(source: string, errorCode: string) {
   const exception = source.slice(source.indexOf("\nEXCEPTION"));
   contracts(exception, [
     /WHEN invalid_parameter_value OR invalid_text_representation OR numeric_value_out_of_range THEN/,
-    new RegExp(
-      `'status', 'validation_error'[\\s\\S]{0,180}'error_code',\\s*'${errorCode}'`,
-    ),
+    new RegExp(`'status', 'validation_error'[\\s\\S]{0,180}'error_code',\\s*'${errorCode}'`),
   ]);
 }
 
@@ -111,9 +98,7 @@ function lockOrder(
     /pg_advisory_xact_lock\(\s*pg_catalog\.hashtextextended\(\s*'supplier-purchase-order-id:'[\s\S]*?p_order_id::text,\s*6720240730100000\s*\)\s*\)/,
     /FROM public\.supplier_purchase_orders AS purchase_order[^;]*FOR UPDATE;/,
     /FROM public\.supplier_purchase_order_fulfillments AS fulfillment[^;]*ORDER BY fulfillment\.id\s*FOR UPDATE;/,
-    new RegExp(
-      `FROM public\\.${itemTable}[^;]*ORDER BY ${itemAlias}\\.id\\s*FOR ${itemLock};`,
-    ),
+    new RegExp(`FROM public\\.${itemTable}[^;]*ORDER BY ${itemAlias}\\.id\\s*FOR ${itemLock};`),
   ]);
 }
 
@@ -129,12 +114,8 @@ describe("supplier purchase fulfillment migration contract", () => {
     ];
     for (const table of tables) {
       expect(migration).toContain(`CREATE TABLE public.${table}`);
-      expect(migration).toContain(
-        `ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`,
-      );
-      expect(migration).toContain(
-        `ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY;`,
-      );
+      expect(migration).toContain(`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`);
+      expect(migration).toContain(`ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY;`);
     }
     contracts(migration, [
       /UNIQUE \(supplier_purchase_order_id\)/,
@@ -146,23 +127,17 @@ describe("supplier purchase fulfillment migration contract", () => {
       /ADD CONSTRAINT supplier_purchase_order_items_id_tenant_order_key[\s\S]*UNIQUE \(id, tenant_id, supplier_purchase_order_id\)/,
     ]);
     const edges: Record<string, RegExp[]> = {
-      supplier_purchase_order_fulfillments: [
-        /FOREIGN KEY \(supplier_purchase_order_id, tenant_id\)[\s\S]*supplier_purchase_orders\(id, tenant_id\)/,
-      ],
+      supplier_purchase_order_fulfillments: [/FOREIGN KEY \(supplier_purchase_order_id, tenant_id\)[\s\S]*supplier_purchase_orders\(id, tenant_id\)/],
       supplier_purchase_order_item_fulfillments: [
         /FOREIGN KEY \(supplier_purchase_order_fulfillment_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_fulfillments/,
         /FOREIGN KEY \(supplier_purchase_order_item_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_items/,
       ],
-      supplier_purchase_order_shipments: [
-        /FOREIGN KEY \(supplier_purchase_order_fulfillment_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_fulfillments/,
-      ],
+      supplier_purchase_order_shipments: [/FOREIGN KEY \(supplier_purchase_order_fulfillment_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_fulfillments/],
       supplier_purchase_order_shipment_items: [
         /FOREIGN KEY \([\s\S]*shipment_id,[\s\S]*tenant_id,[\s\S]*supplier_purchase_order_fulfillment_id,[\s\S]*supplier_purchase_order_id[\s\S]*supplier_purchase_order_shipments/,
         /FOREIGN KEY \(supplier_purchase_order_item_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_items/,
       ],
-      supplier_purchase_order_receipts: [
-        /FOREIGN KEY \(supplier_purchase_order_fulfillment_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_fulfillments/,
-      ],
+      supplier_purchase_order_receipts: [/FOREIGN KEY \(supplier_purchase_order_fulfillment_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_fulfillments/],
       supplier_purchase_order_receipt_items: [
         /FOREIGN KEY \([\s\S]*receipt_id,[\s\S]*tenant_id,[\s\S]*supplier_purchase_order_fulfillment_id,[\s\S]*supplier_purchase_order_id[\s\S]*supplier_purchase_order_receipts/,
         /FOREIGN KEY \(supplier_purchase_order_item_id, tenant_id, supplier_purchase_order_id\)[\s\S]*supplier_purchase_order_items/,
@@ -208,30 +183,12 @@ describe("supplier purchase fulfillment migration contract", () => {
 
   test("binds all six mutation guards to the exact table and function", () => {
     const triggers = {
-      supplier_purchase_order_fulfillments_command_only: [
-        "supplier_purchase_order_fulfillments",
-        "prevent_supplier_purchase_fulfillment_direct_mutation",
-      ],
-      supplier_purchase_order_item_fulfillments_command_only: [
-        "supplier_purchase_order_item_fulfillments",
-        "prevent_supplier_purchase_fulfillment_direct_mutation",
-      ],
-      supplier_purchase_order_shipments_immutable: [
-        "supplier_purchase_order_shipments",
-        "prevent_supplier_purchase_fulfillment_event_mutation",
-      ],
-      supplier_purchase_order_shipment_items_immutable: [
-        "supplier_purchase_order_shipment_items",
-        "prevent_supplier_purchase_fulfillment_event_mutation",
-      ],
-      supplier_purchase_order_receipts_immutable: [
-        "supplier_purchase_order_receipts",
-        "prevent_supplier_purchase_fulfillment_event_mutation",
-      ],
-      supplier_purchase_order_receipt_items_immutable: [
-        "supplier_purchase_order_receipt_items",
-        "prevent_supplier_purchase_fulfillment_event_mutation",
-      ],
+      supplier_purchase_order_fulfillments_command_only: ["supplier_purchase_order_fulfillments", "prevent_supplier_purchase_fulfillment_direct_mutation"],
+      supplier_purchase_order_item_fulfillments_command_only: ["supplier_purchase_order_item_fulfillments", "prevent_supplier_purchase_fulfillment_direct_mutation"],
+      supplier_purchase_order_shipments_immutable: ["supplier_purchase_order_shipments", "prevent_supplier_purchase_fulfillment_event_mutation"],
+      supplier_purchase_order_shipment_items_immutable: ["supplier_purchase_order_shipment_items", "prevent_supplier_purchase_fulfillment_event_mutation"],
+      supplier_purchase_order_receipts_immutable: ["supplier_purchase_order_receipts", "prevent_supplier_purchase_fulfillment_event_mutation"],
+      supplier_purchase_order_receipt_items_immutable: ["supplier_purchase_order_receipt_items", "prevent_supplier_purchase_fulfillment_event_mutation"],
     } as const;
     for (const [trigger, [table, fn]] of Object.entries(triggers)) {
       const block = sqlObject("CREATE TRIGGER ", trigger, ";");
@@ -241,6 +198,20 @@ describe("supplier purchase fulfillment migration contract", () => {
         new RegExp(`EXECUTE FUNCTION\\s*public\\.${fn}\\(\\)`),
       ]);
     }
+    const direct = sqlFunction("public", "prevent_supplier_purchase_fulfillment_direct_mutation");
+    contracts(direct, [
+      /v_command text := COALESCE\([\s\S]*private\.supplier_purchase_fulfillment_command/,
+      /IF TG_OP = 'DELETE'/,
+      /TG_TABLE_NAME = 'supplier_purchase_order_fulfillments'[\s\S]*v_command = 'confirm' AND TG_OP IN \('INSERT', 'UPDATE'\)[\s\S]*v_command IN \('shipment', 'receipt', 'cancel'\)[\s\S]*TG_OP = 'UPDATE'/,
+      /TG_TABLE_NAME = 'supplier_purchase_order_item_fulfillments'[\s\S]*v_command = 'confirm' AND TG_OP IN \('INSERT', 'UPDATE'\)[\s\S]*v_command IN \('shipment', 'receipt'\)[\s\S]*TG_OP = 'UPDATE'/,
+      /THEN\s*RAISE EXCEPTION USING[\s\S]*SUPPLIER_PURCHASE_ORDER_FULFILLMENT_DIRECT_WRITE_FORBIDDEN[\s\S]*END IF;\s*RETURN NEW;/,
+    ]);
+    const event = sqlFunction("public", "prevent_supplier_purchase_fulfillment_event_mutation");
+    contracts(event, [
+      /IF TG_OP IN \('UPDATE', 'DELETE'\)/,
+      /private\.supplier_purchase_fulfillment_command[\s\S]*NOT IN \('shipment', 'receipt'\)/,
+      /THEN\s*RAISE EXCEPTION USING[\s\S]*SUPPLIER_PURCHASE_ORDER_FULFILLMENT_EVENT_IMMUTABLE[\s\S]*END IF;\s*RETURN NEW;/,
+    ]);
   });
 
   test("derives all seven statuses with exact conditions and priority", () => {
@@ -273,10 +244,7 @@ describe("supplier purchase fulfillment migration contract", () => {
   });
 
   test("confirms with normalized headers, complete branches, and canonical locks", () => {
-    const fn = sqlFunction(
-      "public",
-      "confirm_supplier_purchase_order_fulfillment",
-    );
+    const fn = sqlFunction("public", "confirm_supplier_purchase_order_fulfillment");
     contracts(fn, [
       /v_remark text := NULLIF\(btrim\(p_remark\), ''\)/,
       /char_length\(v_remark\) > 500/,
@@ -300,12 +268,8 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_request := jsonb_build_object\(\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_order_version', p_expected_order_version,\s*'confirmed_at', p_confirmed_at,\s*'remark', v_remark,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
       "confirm_supplier_purchase_order_fulfillment",
       /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
-    lockOrder(
-      fn,
-      "supplier_purchase_order_items",
-      "purchase_item",
-      "SHARE",
-    );
+    successEnvelope(fn, "confirmed", "1");
+    lockOrder(fn, "supplier_purchase_order_items", "purchase_item", "SHARE");
     expect(fn).not.toMatch(/UPDATE public\.supplier_purchase_orders/);
   });
 
@@ -318,6 +282,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_carrier_name text := NULLIF\(btrim\(p_carrier_name\), ''\)/,
       /v_tracking_no text := NULLIF\(btrim\(p_tracking_no\), ''\)/,
       /v_remark text := NULLIF\(btrim\(p_remark\), ''\)/,
+      /char_length\(v_carrier_name\) > 100[\s\S]*char_length\(v_tracking_no\) > 120[\s\S]*char_length\(v_remark\) > 500/,
       /v_fulfillment\.status IN \([\s\S]*'received'[\s\S]*'received_with_variance'[\s\S]*'cancelled'/,
       /SELECT EXISTS \([\s\S]*shipment\.id = p_shipment_id[\s\S]*INTO v_global_event_exists/,
       /IF v_global_event_exists[\s\S]*'status', 'state_conflict'[\s\S]*SUPPLIER_PURCHASE_ORDER_SHIPMENT_ID_CONFLICT/,
@@ -344,13 +309,9 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_request := jsonb_build_object\(\s*'event_id', p_shipment_id,\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_fulfillment_version', p_expected_fulfillment_version,\s*'shipment_no', btrim\(p_shipment_no\),\s*'shipped_at', p_shipped_at,\s*'carrier_name', v_carrier_name,\s*'tracking_no', v_tracking_no,\s*'remark', v_remark,\s*'items', v_normalized_items,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
       "create_supplier_purchase_order_shipment",
       /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
+    successEnvelope(fn, "shipment_created", "v_fulfillment\\.version");
     sqlstate22023Fallback(fn, "SUPPLIER_PURCHASE_ORDER_SHIPMENT_VALIDATION_ERROR");
-    lockOrder(
-      fn,
-      "supplier_purchase_order_item_fulfillments",
-      "item_fulfillment",
-      "UPDATE",
-    );
+    lockOrder(fn, "supplier_purchase_order_item_fulfillments", "item_fulfillment", "UPDATE");
   });
 
   test("receives numeric(18,4) facts and preserves raw variance presence", () => {
@@ -358,6 +319,7 @@ describe("supplier purchase fulfillment migration contract", () => {
     contracts(fn, [
       /char_length\(btrim\(p_receipt_no\)\) > 80/,
       /v_remark text := NULLIF\(btrim\(p_remark\), ''\)/,
+      /char_length\(v_remark\) > 500/,
       /accepted_quantity \+ rejected_quantity >= 100000000000000/,
       /scale\(accepted_quantity\) > 4/,
       /scale\(rejected_quantity\) > 4/,
@@ -366,6 +328,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /btrim\(item\.variance_reason\) AS variance_reason/,
       /item\.variance_reason IS NOT NULL AS variance_reason_provided/,
       /rejected_quantity > 0[\s\S]*variance_reason = ''/,
+      /char_length\(variance_reason\) > 500/,
       /rejected_quantity = 0\s*AND variance_reason_provided/,
       /IF v_variance_reason_forbidden THEN[\s\S]*'status', 'validation_error'[\s\S]*SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR/,
       /IF v_variance_reason_required THEN[\s\S]*'status', 'variance_reason_required'[\s\S]*VARIANCE_REASON_REQUIRED/,
@@ -395,13 +358,9 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_request := jsonb_build_object\(\s*'event_id', p_receipt_id,\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_fulfillment_version', p_expected_fulfillment_version,\s*'receipt_no', btrim\(p_receipt_no\),\s*'received_at', p_received_at,\s*'remark', v_remark,\s*'items', v_normalized_items,\s*'actor_employee_id', p_actor_employee_id\s*\)/,
       "create_supplier_purchase_order_receipt",
       /RETURN v_event\.to_state \|\| jsonb_build_object\('idempotent', true\)/);
+    successEnvelope(fn, "receipt_created", "v_fulfillment\\.version");
     sqlstate22023Fallback(fn, "SUPPLIER_PURCHASE_ORDER_RECEIPT_VALIDATION_ERROR");
-    lockOrder(
-      fn,
-      "supplier_purchase_order_item_fulfillments",
-      "item_fulfillment",
-      "UPDATE",
-    );
+    lockOrder(fn, "supplier_purchase_order_item_fulfillments", "item_fulfillment", "UPDATE");
   });
 
   test("cancels with an exact fingerprint, replay envelope, branches, and locks", () => {
@@ -411,6 +370,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_before \|\| jsonb_build_object\('_request', v_request\)/,
       /v_order\.status NOT IN \('draft', 'submitted'\)/,
       /v_order\.version <> p_expected_version/,
+      /char_length\(btrim\(p_reason\)\) > 500/,
       /IF v_has_shipment THEN[\s\S]*SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED/,
       /UPDATE public\.supplier_purchase_order_fulfillments AS fulfillment[\s\S]*status = 'cancelled'/,
       /UPDATE public\.supplier_purchase_orders AS purchase_order[\s\S]*status = 'cancelled'/,
@@ -429,12 +389,7 @@ describe("supplier purchase fulfillment migration contract", () => {
       /v_request := jsonb_build_object\(\s*'tenant_id', p_tenant_id,\s*'order_id', p_order_id,\s*'expected_version', p_expected_version,\s*'reason', btrim\(p_reason\),\s*'actor_employee_id', p_actor_employee_id\s*\)/,
       "cancel_supplier_purchase_order",
       /RETURN jsonb_build_object\(\s*'status', 'cancelled',\s*'idempotent', true,\s*'purchase_order', v_event\.to_state,\s*'version', v_event\.result_version\s*\)/);
-    lockOrder(
-      fn,
-      "supplier_purchase_order_item_fulfillments",
-      "item_fulfillment",
-      "UPDATE",
-    );
+    lockOrder(fn, "supplier_purchase_order_item_fulfillments", "item_fulfillment", "UPDATE");
   });
 
   test("keeps command grants narrow, processing set-based, and rollback safe", () => {
