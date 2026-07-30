@@ -22,6 +22,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,6 +42,11 @@ import {
   receiptRemaining,
   toReceiptPayload,
 } from "./purchase-order-fulfillment-rules";
+import {
+  commandRetryMessage,
+  refreshAfterCommand,
+  shouldClearCommandAttempt,
+} from "./purchase-order-fulfillment-ui-state";
 import type {
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
@@ -70,7 +77,7 @@ export function PurchaseOrderReceiptDialog({
   items: PurchaseOrderItemFulfillment[];
   purchaseOrderItems: PurchaseOrderItem[];
   onOpenChange: (open: boolean) => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => Promise<boolean>;
 }) {
   const availableItems = useMemo(
     () => items.filter((item) => receiptRemaining(item) !== "0"),
@@ -86,24 +93,27 @@ export function PurchaseOrderReceiptDialog({
   const [attempt, setAttempt] =
     useState<SupplierResourceCommandAttempt | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!open) return;
+  function resetDraft() {
     setReceiptNo("");
     setReceivedAt(toLocalDateTime(new Date()));
     setRemark("");
     setLineInputs({});
     setErrors([]);
     setCommandError(null);
-    setAttempt(null);
+  }
+  useEffect(() => {
+    if (!open || attempt) return;
+    resetDraft();
   }, [open]);
-
+  function abandonAttempt() {
+    setAttempt(null);
+    resetDraft();
+  }
   const purchaseItemById = useMemo(
     () => new Map(purchaseOrderItems.map((item) => [item.id, item])),
     [purchaseOrderItems],
   );
   const enteredLines = selectedLines(availableItems, lineInputs);
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
@@ -126,7 +136,6 @@ export function PurchaseOrderReceiptDialog({
       setErrors(headerErrors);
       return;
     }
-
     const { id: _validationId, ...attemptPayload } = result.payload;
     const nextAttempt = resolveSupplierCommandAttempt(attempt, {
       scope: "purchase-order:create-receipt",
@@ -146,19 +155,21 @@ export function PurchaseOrderReceiptDialog({
       setAttempt(null);
       toast.success("采购收货记录已登记");
       onOpenChange(false);
-      await onSaved();
     } catch (caught) {
       const message = errorMessage(caught, "登记采购收货失败");
       setCommandError(message);
-      toast.error(retryMessage(caught, message));
-      if (shouldClearAttempt(caught)) setAttempt(null);
+      toast.error(commandRetryMessage(caught, message));
+      if (shouldClearCommandAttempt(caught)) setAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
-        await onSaved();
+        await refreshAfterCommand(onSaved);
       }
-    } finally {
       setBusy(false);
+      return;
     }
+    setBusy(false);
+    const refreshed = await refreshAfterCommand(onSaved);
+    if (!refreshed) toast.error("收货记录已提交，但刷新失败，请手动刷新");
   }
 
   return (
@@ -174,8 +185,19 @@ export function PurchaseOrderReceiptDialog({
             </DialogDescription>
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
+          {attempt ? (
+            <StatusAlert tone="warning">
+              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              <Button type="button" variant="outline" size="sm" className="mt-2"
+                onClick={abandonAttempt}>
+                放弃本次尝试
+              </Button>
+            </StatusAlert>
+          ) : null}
           <FieldGroup>
-            <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <FieldSet>
+              <FieldLegend variant="label">收货信息</FieldLegend>
+              <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(errors, "receipt_no"))}>
                 <FieldLabel htmlFor="purchase-order-receipt-no">
                   收货编号
@@ -187,9 +209,11 @@ export function PurchaseOrderReceiptDialog({
                   required
                   disabled={busy}
                   aria-invalid={Boolean(fieldError(errors, "receipt_no"))}
+                  aria-describedby="purchase-order-receipt-no-error"
                   onChange={(event) => setReceiptNo(event.target.value)}
                 />
-                <FieldError>{fieldError(errors, "receipt_no")}</FieldError>
+                <FieldError id="purchase-order-receipt-no-error">
+                  {fieldError(errors, "receipt_no")}</FieldError>
               </Field>
               <Field data-invalid={Boolean(fieldError(errors, "received_at"))}>
                 <FieldLabel htmlFor="purchase-order-received-at">
@@ -202,11 +226,14 @@ export function PurchaseOrderReceiptDialog({
                   required
                   disabled={busy}
                   aria-invalid={Boolean(fieldError(errors, "received_at"))}
+                  aria-describedby="purchase-order-received-at-error"
                   onChange={(event) => setReceivedAt(event.target.value)}
                 />
-                <FieldError>{fieldError(errors, "received_at")}</FieldError>
+                <FieldError id="purchase-order-received-at-error">
+                  {fieldError(errors, "received_at")}</FieldError>
               </Field>
-            </FieldGroup>
+              </FieldGroup>
+            </FieldSet>
             <Field>
               <FieldLabel htmlFor="purchase-order-receipt-remark">
                 收货备注
@@ -219,8 +246,8 @@ export function PurchaseOrderReceiptDialog({
                 onChange={(event) => setRemark(event.target.value)}
               />
             </Field>
-            <Field data-invalid={Boolean(fieldError(errors, "items"))}>
-              <FieldLabel>本次收货明细</FieldLabel>
+            <FieldSet>
+              <FieldLegend variant="label">本次收货明细</FieldLegend>
               <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
@@ -292,6 +319,7 @@ export function PurchaseOrderReceiptDialog({
                             <Field data-invalid={Boolean(varianceError)}>
                               <Input
                                 aria-label={`差异原因 ${index + 1}`}
+                                aria-describedby={`receipt-variance-error-${itemId}`}
                                 value={values.varianceReason}
                                 maxLength={500}
                                 disabled={busy}
@@ -301,9 +329,8 @@ export function PurchaseOrderReceiptDialog({
                                     varianceReason: event.target.value,
                                   })}
                               />
-                              <FieldError>
-                                {varianceError}
-                              </FieldError>
+                              <FieldError id={`receipt-variance-error-${itemId}`}>
+                                {varianceError}</FieldError>
                             </Field>
                           </TableCell>
                         </TableRow>
@@ -312,8 +339,9 @@ export function PurchaseOrderReceiptDialog({
                   </TableBody>
                 </Table>
               </div>
-              <FieldError>{fieldError(errors, "items")}</FieldError>
-            </Field>
+              <FieldError id="purchase-order-receipt-items-error">
+                {fieldError(errors, "items")}</FieldError>
+            </FieldSet>
           </FieldGroup>
           <DialogFooter>
             <Button
@@ -357,11 +385,13 @@ function ReceiptQuantityField({
   onChange: (value: string) => void;
 }) {
   const error = lineError(errors, lines, itemId, path);
+  const errorId = `receipt-${path}-error-${itemId}`;
   return (
     <TableCell>
       <Field data-invalid={Boolean(error)}>
         <Input
           aria-label={label}
+          aria-describedby={errorId}
           type="number"
           inputMode="decimal"
           min="0"
@@ -373,7 +403,7 @@ function ReceiptQuantityField({
           aria-invalid={Boolean(error)}
           onChange={(event) => onChange(event.target.value)}
         />
-        <FieldError>{error}</FieldError>
+        <FieldError id={errorId}>{error}</FieldError>
       </Field>
     </TableCell>
   );
@@ -456,26 +486,9 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function isUncertainFailure(error: unknown) {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
-    return true;
-  }
-  return typeof error.status !== "number" || error.status >= 500;
-}
-
-function shouldClearAttempt(error: unknown) {
-  return !isUncertainFailure(error);
-}
-
 function errorCode(error: unknown) {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return "";
   }
   return typeof error.code === "string" ? error.code : "";
-}
-
-function retryMessage(error: unknown, message: string) {
-  return isUncertainFailure(error)
-    ? `${message}，可直接重试，系统会复用本次请求标识`
-    : message;
 }

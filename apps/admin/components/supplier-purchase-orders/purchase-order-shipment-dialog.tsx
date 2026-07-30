@@ -22,6 +22,8 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -40,6 +42,11 @@ import {
   shipmentRemaining,
   toShipmentPayload,
 } from "./purchase-order-fulfillment-rules";
+import {
+  commandRetryMessage,
+  refreshAfterCommand,
+  shouldClearCommandAttempt,
+} from "./purchase-order-fulfillment-ui-state";
 import type {
   FulfillmentValidationError,
   PurchaseOrderFulfillment,
@@ -64,7 +71,7 @@ export function PurchaseOrderShipmentDialog({
   items: PurchaseOrderItemFulfillment[];
   purchaseOrderItems: PurchaseOrderItem[];
   onOpenChange: (open: boolean) => void;
-  onSaved: () => Promise<void>;
+  onSaved: () => Promise<boolean>;
 }) {
   const availableItems = useMemo(
     () => items.filter((item) => shipmentRemaining(item) !== "0"),
@@ -82,8 +89,7 @@ export function PurchaseOrderShipmentDialog({
     useState<SupplierResourceCommandAttempt | null>(null);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    if (!open) return;
+  function resetDraft() {
     setShipmentNo("");
     setShippedAt(toLocalDateTime(new Date()));
     setCarrierName("");
@@ -92,8 +98,17 @@ export function PurchaseOrderShipmentDialog({
     setQuantities({});
     setErrors([]);
     setCommandError(null);
-    setAttempt(null);
+  }
+
+  useEffect(() => {
+    if (!open || attempt) return;
+    resetDraft();
   }, [open]);
+
+  function abandonAttempt() {
+    setAttempt(null);
+    resetDraft();
+  }
 
   const purchaseItemById = useMemo(
     () => new Map(purchaseOrderItems.map((item) => [item.id, item])),
@@ -145,19 +160,21 @@ export function PurchaseOrderShipmentDialog({
       setAttempt(null);
       toast.success("采购发货记录已登记");
       onOpenChange(false);
-      await onSaved();
     } catch (caught) {
       const message = errorMessage(caught, "登记采购发货失败");
       setCommandError(message);
-      toast.error(retryMessage(caught, message));
-      if (shouldClearAttempt(caught)) setAttempt(null);
+      toast.error(commandRetryMessage(caught, message));
+      if (shouldClearCommandAttempt(caught)) setAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         onOpenChange(false);
-        await onSaved();
+        await refreshAfterCommand(onSaved);
       }
-    } finally {
       setBusy(false);
+      return;
     }
+    setBusy(false);
+    const refreshed = await refreshAfterCommand(onSaved);
+    if (!refreshed) toast.error("发货记录已提交，但刷新失败，请手动刷新");
   }
 
   return (
@@ -173,8 +190,19 @@ export function PurchaseOrderShipmentDialog({
             </DialogDescription>
           </DialogHeader>
           {commandError ? <StatusAlert>{commandError}</StatusAlert> : null}
+          {attempt ? (
+            <StatusAlert tone="warning">
+              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              <Button type="button" variant="outline" size="sm"
+                className="mt-2" onClick={abandonAttempt}>
+                放弃本次尝试
+              </Button>
+            </StatusAlert>
+          ) : null}
           <FieldGroup>
-            <FieldGroup className="grid gap-4 md:grid-cols-2">
+            <FieldSet>
+              <FieldLegend variant="label">发货信息</FieldLegend>
+              <FieldGroup className="grid gap-4 md:grid-cols-2">
               <Field data-invalid={Boolean(fieldError(errors, "shipment_no"))}>
                 <FieldLabel htmlFor="purchase-order-shipment-no">
                   发货编号
@@ -186,9 +214,12 @@ export function PurchaseOrderShipmentDialog({
                   required
                   disabled={busy}
                   aria-invalid={Boolean(fieldError(errors, "shipment_no"))}
+                  aria-describedby="purchase-order-shipment-no-error"
                   onChange={(event) => setShipmentNo(event.target.value)}
                 />
-                <FieldError>{fieldError(errors, "shipment_no")}</FieldError>
+                <FieldError id="purchase-order-shipment-no-error">
+                  {fieldError(errors, "shipment_no")}
+                </FieldError>
               </Field>
               <Field data-invalid={Boolean(fieldError(errors, "shipped_at"))}>
                 <FieldLabel htmlFor="purchase-order-shipped-at">
@@ -201,9 +232,12 @@ export function PurchaseOrderShipmentDialog({
                   required
                   disabled={busy}
                   aria-invalid={Boolean(fieldError(errors, "shipped_at"))}
+                  aria-describedby="purchase-order-shipped-at-error"
                   onChange={(event) => setShippedAt(event.target.value)}
                 />
-                <FieldError>{fieldError(errors, "shipped_at")}</FieldError>
+                <FieldError id="purchase-order-shipped-at-error">
+                  {fieldError(errors, "shipped_at")}
+                </FieldError>
               </Field>
               <Field>
                 <FieldLabel htmlFor="purchase-order-carrier-name">
@@ -229,7 +263,8 @@ export function PurchaseOrderShipmentDialog({
                   onChange={(event) => setTrackingNo(event.target.value)}
                 />
               </Field>
-            </FieldGroup>
+              </FieldGroup>
+            </FieldSet>
             <Field>
               <FieldLabel htmlFor="purchase-order-shipment-remark">
                 发货备注
@@ -242,8 +277,8 @@ export function PurchaseOrderShipmentDialog({
                 onChange={(event) => setRemark(event.target.value)}
               />
             </Field>
-            <Field data-invalid={Boolean(fieldError(errors, "items"))}>
-              <FieldLabel>本次发货明细</FieldLabel>
+            <FieldSet>
+              <FieldLegend variant="label">本次发货明细</FieldLegend>
               <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <TableHeader>
@@ -284,6 +319,7 @@ export function PurchaseOrderShipmentDialog({
                             <Field data-invalid={Boolean(quantityError)}>
                               <Input
                                 aria-label={`本次发货数量 ${index + 1}`}
+                                aria-describedby={`shipment-quantity-error-${itemId}`}
                                 type="number"
                                 inputMode="decimal"
                                 min="0.0001"
@@ -299,7 +335,9 @@ export function PurchaseOrderShipmentDialog({
                                     [itemId]: event.target.value,
                                   }))}
                               />
-                              <FieldError>{quantityError}</FieldError>
+                              <FieldError id={`shipment-quantity-error-${itemId}`}>
+                                {quantityError}
+                              </FieldError>
                             </Field>
                           </TableCell>
                         </TableRow>
@@ -308,8 +346,10 @@ export function PurchaseOrderShipmentDialog({
                   </TableBody>
                 </Table>
               </div>
-              <FieldError>{fieldError(errors, "items")}</FieldError>
-            </Field>
+              <FieldError id="purchase-order-shipment-items-error">
+                {fieldError(errors, "items")}
+              </FieldError>
+            </FieldSet>
           </FieldGroup>
           <DialogFooter>
             <Button
@@ -389,26 +429,9 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function isUncertainFailure(error: unknown) {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
-    return true;
-  }
-  return typeof error.status !== "number" || error.status >= 500;
-}
-
-function shouldClearAttempt(error: unknown) {
-  return !isUncertainFailure(error);
-}
-
 function errorCode(error: unknown) {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return "";
   }
   return typeof error.code === "string" ? error.code : "";
-}
-
-function retryMessage(error: unknown, message: string) {
-  return isUncertainFailure(error)
-    ? `${message}，可直接重试，系统会复用本次请求标识`
-    : message;
 }

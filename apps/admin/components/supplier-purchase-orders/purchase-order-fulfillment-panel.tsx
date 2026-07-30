@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -43,6 +43,14 @@ import {
 } from "./purchase-order-fulfillment-api";
 import { fulfillmentActions } from "./purchase-order-fulfillment-rules";
 import { PurchaseOrderFulfillmentSummary } from "./purchase-order-fulfillment-summary";
+import {
+  appendPageById,
+  commandRetryMessage,
+  createLatestRequestGuard,
+  type FulfillmentLoadState,
+  refreshAfterCommand,
+  shouldClearCommandAttempt,
+} from "./purchase-order-fulfillment-ui-state";
 import type {
   PurchaseOrderFulfillmentDetail,
   PurchaseOrderReceiptPage,
@@ -73,17 +81,20 @@ export function PurchaseOrderFulfillmentPanel({
   purchaseOrderItems,
   canManage,
   onOrderChanged,
+  onLoadStateChange,
 }: {
   order: PurchaseOrderWithReferences;
   purchaseOrderItems: PurchaseOrderItem[];
   canManage: boolean;
-  onOrderChanged: () => Promise<void>;
+  onOrderChanged: () => Promise<number | null>;
+  onLoadStateChange: (state: FulfillmentLoadState) => void;
 }) {
   const [detail, setDetail] = useState(emptyDetail);
   const [shipments, setShipments] = useState(emptyShipments);
   const [receipts, setReceipts] = useState(emptyReceipts);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmRemark, setConfirmRemark] = useState("");
   const [confirmSubmittedAt, setConfirmSubmittedAt] = useState("");
@@ -92,37 +103,110 @@ export function PurchaseOrderFulfillmentPanel({
     useState<SupplierCommandAttempt | null>(null);
   const [shipmentOpen, setShipmentOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [historyBusy, setHistoryBusy] =
+    useState<"shipments" | "receipts" | null>(null);
+  const requestGuard = useRef(createLatestRequestGuard());
+  const historyRequestGuard = useRef(createLatestRequestGuard());
+  const handledOrderVersion = useRef<number | null>(null);
 
   const reload = useCallback(async () => {
+    const isLatest = requestGuard.current.start();
+    historyRequestGuard.current.invalidate();
     setLoading(true);
+    setHistoryBusy(null);
     setError(null);
+    setHistoryError(null);
+    onLoadStateChange({ loaded: false, error: false, status: null });
     try {
       const [nextDetail, nextShipments, nextReceipts] = await Promise.all([
         loadPurchaseOrderFulfillment(order.id),
         loadPurchaseOrderShipments(order.id, 1, 20),
         loadPurchaseOrderReceipts(order.id, 1, 20),
       ]);
+      if (!isLatest()) return false;
       setDetail(nextDetail);
       setShipments(nextShipments);
       setReceipts(nextReceipts);
+      onLoadStateChange({
+        loaded: true,
+        error: false,
+        status: nextDetail.fulfillment?.status ?? null,
+      });
+      return true;
     } catch (caught) {
+      if (!isLatest()) return false;
       setError(errorMessage(caught, "采购履约事实加载失败"));
+      onLoadStateChange({ loaded: false, error: true, status: null });
+      return false;
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
-  }, [order.id]);
+  }, [onLoadStateChange, order.id, order.version]);
 
   useEffect(() => {
+    if (handledOrderVersion.current === order.version) {
+      handledOrderVersion.current = null;
+      return;
+    }
+    requestGuard.current.invalidate();
+    historyRequestGuard.current.invalidate();
     setDetail(emptyDetail);
     setShipments(emptyShipments);
     setReceipts(emptyReceipts);
+    setHistoryBusy(null);
     void reload();
-  }, [reload]);
+  }, [order.version, reload]);
+
+  useEffect(() => () => {
+    requestGuard.current.invalidate();
+    historyRequestGuard.current.invalidate();
+  }, []);
 
   const actions = fulfillmentActions(detail, canManage, order.status);
 
   async function handleSaved() {
-    await Promise.all([reload(), onOrderChanged()]);
+    const version = await onOrderChanged();
+    if (version === null) return false;
+    handledOrderVersion.current = version;
+    return await reload();
+  }
+
+  async function loadMoreHistory(kind: "shipments" | "receipts") {
+    if (historyBusy) return;
+    const current = kind === "shipments" ? shipments : receipts;
+    if (current.pagination.page >= current.pagination.totalPages) return;
+    const isLatest = historyRequestGuard.current.start();
+    setHistoryBusy(kind);
+    setHistoryError(null);
+    try {
+      const nextPage = kind === "shipments"
+        ? await loadPurchaseOrderShipments(
+          order.id,
+          current.pagination.page + 1,
+          current.pagination.pageSize,
+        )
+        : await loadPurchaseOrderReceipts(
+          order.id,
+          current.pagination.page + 1,
+          current.pagination.pageSize,
+        );
+      if (!isLatest()) return;
+      if (kind === "shipments") {
+        setShipments((value) =>
+          appendPageById(value, nextPage as PurchaseOrderShipmentPage)
+        );
+      } else {
+        setReceipts((value) =>
+          appendPageById(value, nextPage as PurchaseOrderReceiptPage)
+        );
+      }
+    } catch (caught) {
+      if (isLatest()) {
+        setHistoryError(errorMessage(caught, "履约历史加载失败"));
+      }
+    } finally {
+      if (isLatest()) setHistoryBusy(null);
+    }
   }
 
   async function handleConfirm() {
@@ -151,28 +235,36 @@ export function PurchaseOrderFulfillmentPanel({
       setConfirmAttempt(null);
       setConfirmOpen(false);
       toast.success("供应商确认事实已记录");
-      await handleSaved();
     } catch (caught) {
       const message = errorMessage(caught, "记录供应商确认失败");
       setError(message);
-      toast.error(retryMessage(caught, message));
-      if (shouldClearAttempt(caught)) setConfirmAttempt(null);
+      toast.error(commandRetryMessage(caught, message));
+      if (shouldClearCommandAttempt(caught)) setConfirmAttempt(null);
       if (errorCode(caught).includes("VERSION_CONFLICT")) {
         await Promise.all([reload(), onOrderChanged()]);
       }
-    } finally {
       setConfirmBusy(false);
+      return;
     }
+    setConfirmBusy(false);
+    const refreshed = await refreshAfterCommand(handleSaved);
+    if (!refreshed) toast.error("确认事实已提交，但刷新失败，请手动刷新");
   }
 
   function handleConfirmOpen(nextOpen: boolean) {
     if (confirmBusy) return;
     setConfirmOpen(nextOpen);
-    if (nextOpen) {
+    if (nextOpen && !confirmAttempt) {
       setConfirmRemark("");
       setConfirmSubmittedAt("");
-      setConfirmAttempt(null);
     }
+  }
+
+  function abandonConfirmAttempt() {
+    setConfirmAttempt(null);
+    setConfirmSubmittedAt("");
+    setConfirmRemark("");
+    setError(null);
   }
 
   return (
@@ -222,6 +314,7 @@ export function PurchaseOrderFulfillmentPanel({
           当前账号仅可查看履约事实，不能确认、发货或收货。
         </StatusAlert>
       ) : null}
+      {historyError ? <StatusAlert>{historyError}</StatusAlert> : null}
       {error ? null : loading ? (
         <div className="flex flex-col gap-3">
           <Skeleton className="h-16 w-full" />
@@ -230,9 +323,12 @@ export function PurchaseOrderFulfillmentPanel({
       ) : detail.fulfillment ? (
         <PurchaseOrderFulfillmentSummary
           detail={detail}
-          shipments={shipments.list}
-          receipts={receipts.list}
+          shipments={shipments}
+          receipts={receipts}
           purchaseOrderItems={purchaseOrderItems}
+          historyBusy={historyBusy}
+          onLoadMoreShipments={() => void loadMoreHistory("shipments")}
+          onLoadMoreReceipts={() => void loadMoreHistory("receipts")}
         />
       ) : (
         <Empty className="min-h-44 border">
@@ -278,6 +374,20 @@ export function PurchaseOrderFulfillmentPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           {error ? <StatusAlert>{error}</StatusAlert> : null}
+          {confirmAttempt ? (
+            <StatusAlert tone="warning">
+              上次请求结果不确定，草稿与请求标识已保留；重试会复用原请求标识。
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={abandonConfirmAttempt}
+              >
+                放弃本次尝试
+              </Button>
+            </StatusAlert>
+          ) : null}
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="purchase-order-confirm-remark">
@@ -343,21 +453,4 @@ function errorCode(error: unknown) {
 
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function isUncertainFailure(error: unknown) {
-  if (typeof error !== "object" || error === null || !("status" in error)) {
-    return true;
-  }
-  return typeof error.status !== "number" || error.status >= 500;
-}
-
-function shouldClearAttempt(error: unknown) {
-  return !isUncertainFailure(error);
-}
-
-function retryMessage(error: unknown, message: string) {
-  return isUncertainFailure(error)
-    ? `${message}，可直接重试，系统会复用本次请求标识`
-    : message;
 }

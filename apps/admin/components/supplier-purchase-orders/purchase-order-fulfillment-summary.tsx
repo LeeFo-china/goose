@@ -1,5 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Spinner } from "@/components/ui/spinner";
 import {
   Table,
   TableBody,
@@ -12,7 +14,9 @@ import {
 import type {
   PurchaseOrderFulfillmentDetail,
   PurchaseOrderReceipt,
+  PurchaseOrderReceiptPage,
   PurchaseOrderShipment,
+  PurchaseOrderShipmentPage,
 } from "./purchase-order-fulfillment-types";
 import { formatPurchaseMoney } from "./purchase-order-rules";
 import type { PurchaseOrderItem } from "./purchase-order-types";
@@ -23,7 +27,7 @@ const statusMeta = {
   shipped: { label: "已发货", variant: "secondary" },
   partially_received: { label: "部分收货", variant: "outline" },
   received: { label: "已收货", variant: "secondary" },
-  received_with_variance: { label: "有差异收货", variant: "danger" },
+  received_with_variance: { label: "有差异已收货", variant: "danger" },
   cancelled: { label: "已取消", variant: "outline" },
 } as const;
 
@@ -42,18 +46,24 @@ export function PurchaseOrderFulfillmentSummary({
   shipments,
   receipts,
   purchaseOrderItems,
+  historyBusy,
+  onLoadMoreShipments,
+  onLoadMoreReceipts,
 }: {
   detail: PurchaseOrderFulfillmentDetail;
-  shipments: PurchaseOrderShipment[];
-  receipts: PurchaseOrderReceipt[];
+  shipments: PurchaseOrderShipmentPage;
+  receipts: PurchaseOrderReceiptPage;
   purchaseOrderItems: PurchaseOrderItem[];
+  historyBusy: "shipments" | "receipts" | null;
+  onLoadMoreShipments: () => void;
+  onLoadMoreReceipts: () => void;
 }) {
   if (!detail.fulfillment) return null;
   const status = statusMeta[detail.fulfillment.status];
   const itemById = new Map(
     purchaseOrderItems.map((item) => [item.id, item]),
   );
-  const timeline = buildTimeline(detail, shipments, receipts);
+  const timeline = buildTimeline(detail, shipments.list, receipts.list);
 
   return (
     <div className="flex flex-col gap-4">
@@ -122,48 +132,79 @@ export function PurchaseOrderFulfillmentSummary({
       </div>
       <Separator />
       <div className="flex flex-col gap-2">
-        <h4 className="text-sm font-medium">履约时间线</h4>
-        {timeline.length ? (
-          <div className="overflow-x-auto rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>类型</TableHead>
-                  <TableHead>业务时间</TableHead>
-                  <TableHead>单号</TableHead>
-                  <TableHead>摘要</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {timeline.map((event) => (
-                  <TableRow key={event.stableKey}>
-                    <TableCell>
-                      <Badge variant="outline">{event.label}</Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap tabular-nums">
-                      {formatDateTime(event.businessTime)}
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className="block max-w-48 truncate tabular-nums"
-                        title={event.number}
-                      >
-                        {event.number}
-                      </span>
-                    </TableCell>
-                    <TableCell className="min-w-48 text-muted-foreground">
-                      {event.detail}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            尚无发货或收货记录。
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h4 className="text-sm font-medium">履约时间线</h4>
+          <p className="text-xs text-muted-foreground">
+            当前显示发货 {shipments.list.length} /{" "}
+            {shipments.pagination.total} 条，当前显示收货{" "}
+            {receipts.list.length} / {receipts.pagination.total} 条
           </p>
-        )}
+        </div>
+        <div className="overflow-x-auto rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>类型</TableHead>
+                <TableHead>业务时间</TableHead>
+                <TableHead>单号</TableHead>
+                <TableHead>摘要</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {timeline.map((event) => (
+                <TableRow key={event.stableKey}>
+                  <TableCell>
+                    <Badge variant="outline">{event.label}</Badge>
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">
+                    {formatDateTime(event.businessTime)}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className="block max-w-48 truncate tabular-nums"
+                      title={event.number}
+                    >
+                      {event.number}
+                    </span>
+                  </TableCell>
+                  <TableCell className="min-w-48 text-muted-foreground">
+                    {event.detail}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          {shipments.pagination.page < shipments.pagination.totalPages ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={historyBusy !== null}
+              onClick={onLoadMoreShipments}
+            >
+              {historyBusy === "shipments"
+                ? <Spinner data-icon="inline-start" />
+                : null}
+              加载更多发货记录
+            </Button>
+          ) : null}
+          {receipts.pagination.page < receipts.pagination.totalPages ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={historyBusy !== null}
+              onClick={onLoadMoreReceipts}
+            >
+              {historyBusy === "receipts"
+                ? <Spinner data-icon="inline-start" />
+                : null}
+              加载更多收货记录
+            </Button>
+          ) : null}
+        </div>
       </div>
     </div>
   );

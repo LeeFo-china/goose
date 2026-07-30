@@ -9,6 +9,12 @@ import {
   loadPurchaseOrderReceipts,
   loadPurchaseOrderShipments,
 } from "./purchase-order-fulfillment-api";
+import {
+  appendPageById,
+  canCancelWithFulfillment,
+  createLatestRequestGuard,
+  refreshAfterCommand,
+} from "./purchase-order-fulfillment-ui-state";
 
 const originalFetch = globalThis.fetch;
 
@@ -293,32 +299,30 @@ describe("供应商采购单页面边界", () => {
     const panel = readSource("./purchase-order-fulfillment-panel.tsx");
     const shipment = readSource("./purchase-order-shipment-dialog.tsx");
     const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+    const uiState = readSource("./purchase-order-fulfillment-ui-state.ts");
 
     expect(panel).toContain(
       "resolveSupplierCommandAttempt(confirmAttempt",
     );
     expect(panel).toContain("setConfirmAttempt(nextAttempt)");
     expect(panel).toContain(
-      "if (shouldClearAttempt(caught)) setConfirmAttempt(null)",
+      "if (shouldClearCommandAttempt(caught)) setConfirmAttempt(null)",
     );
     expect(shipment).toContain("resolveSupplierCommandAttempt(attempt");
     expect(shipment).toContain("setAttempt(nextAttempt)");
     expect(shipment).toContain(
-      "if (shouldClearAttempt(caught)) setAttempt(null)",
+      "if (shouldClearCommandAttempt(caught)) setAttempt(null)",
     );
     expect(receipt).toContain("resolveSupplierCommandAttempt(attempt");
     expect(receipt).toContain("setAttempt(nextAttempt)");
     expect(receipt).toContain(
-      "if (shouldClearAttempt(caught)) setAttempt(null)",
+      "if (shouldClearCommandAttempt(caught)) setAttempt(null)",
     );
     for (const source of [panel, shipment, receipt]) {
-      expect(source).toContain(
-        "return !isUncertainFailure(error)",
-      );
-      expect(source).toContain(
-        "系统会复用本次请求标识",
-      );
+      expect(source).toContain("commandRetryMessage");
     }
+    expect(uiState).toContain("return !isUncertainCommandFailure(error)");
+    expect(uiState).toContain("系统会复用本次请求标识");
   });
 
   test("履约汇总包含确认事实并以业务时间稳定倒序合并时间线", () => {
@@ -357,6 +361,132 @@ describe("供应商采购单页面边界", () => {
         '<div className="grid gap-4 md:grid-cols-2">',
       );
     }
+  });
+
+  test("取消采购单对履约加载失败和已开始履约 fail-closed", () => {
+    expect(canCancelWithFulfillment({
+      loaded: false,
+      error: false,
+      status: null,
+    })).toBe(false);
+    expect(canCancelWithFulfillment({
+      loaded: false,
+      error: true,
+      status: null,
+    })).toBe(false);
+    expect(canCancelWithFulfillment({
+      loaded: true,
+      error: false,
+      status: null,
+    })).toBe(true);
+    expect(canCancelWithFulfillment({
+      loaded: true,
+      error: false,
+      status: "confirmed",
+    })).toBe(true);
+    expect(canCancelWithFulfillment({
+      loaded: true,
+      error: false,
+      status: "partially_shipped",
+    })).toBe(false);
+
+    const detail = readSource("./purchase-order-detail.tsx");
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    expect(detail).toContain("canCancelWithFulfillment(fulfillmentState)");
+    expect(panel).toContain("onLoadStateChange");
+    expect(panel).toContain("order.version");
+  });
+
+  test("旧详情请求和旧履约请求完成时不能覆盖最新状态", () => {
+    const guard = createLatestRequestGuard();
+    const oldRequest = guard.start();
+    const latestRequest = guard.start();
+    const commits: string[] = [];
+    if (oldRequest()) commits.push("old");
+    if (latestRequest()) commits.push("latest");
+    expect(commits).toEqual(["latest"]);
+    guard.invalidate();
+    expect(latestRequest()).toBe(false);
+
+    const detail = readSource("./purchase-order-detail.tsx");
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    for (const source of [detail, panel]) {
+      expect(source).toContain("createLatestRequestGuard");
+      expect(source).toContain("requestGuard.current.start()");
+      expect(source).toContain("requestGuard.current.invalidate()");
+    }
+    expect(panel).toContain("if (!isLatest()) return false");
+  });
+
+  test("历史分页追加时按 ID 去重并采用下一页分页事实", () => {
+    const appended = appendPageById({
+      list: [{ id: "a" }, { id: "b" }],
+      pagination: { page: 1, pageSize: 20, total: 3, totalPages: 2 },
+    }, {
+      list: [{ id: "b" }, { id: "c" }],
+      pagination: { page: 2, pageSize: 20, total: 3, totalPages: 2 },
+    });
+    expect(appended).toEqual({
+      list: [{ id: "a" }, { id: "b" }, { id: "c" }],
+      pagination: { page: 2, pageSize: 20, total: 3, totalPages: 2 },
+    });
+
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const summary = readSource("./purchase-order-fulfillment-summary.tsx");
+    expect(panel).toContain("current.pagination.page + 1");
+    expect(panel).toContain("appendPageById");
+    expect(panel).toContain("historyRequestGuard.current.invalidate()");
+    expect(panel).toContain("setHistoryBusy(null)");
+    expect(summary).toContain("加载更多发货记录");
+    expect(summary).toContain("加载更多收货记录");
+    expect(summary).toContain("当前显示发货");
+    expect(summary).toContain("当前显示收货");
+  });
+
+  test("不确定命令关闭重开保留尝试且只有放弃动作清理草稿", () => {
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+
+    expect(panel).toContain("if (nextOpen && !confirmAttempt)");
+    expect(panel).toContain("放弃本次尝试");
+    expect(panel).toContain("setConfirmAttempt(null)");
+    for (const source of [shipment, receipt]) {
+      expect(source).toContain("if (!open || attempt) return");
+      expect(source).toContain("放弃本次尝试");
+      expect(source).toContain("setAttempt(null)");
+      expect(source).toContain("复用原请求标识");
+    }
+  });
+
+  test("命令成功后刷新失败不会回到命令 catch 重复提交", async () => {
+    expect(await refreshAfterCommand(async () => true)).toBe(true);
+    expect(await refreshAfterCommand(async () => {
+      throw new Error("refresh failed");
+    })).toBe(false);
+
+    const panel = readSource("./purchase-order-fulfillment-panel.tsx");
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+    expect(panel).toContain("await refreshAfterCommand(handleSaved)");
+    expect(panel).toContain("handledOrderVersion.current = version");
+    expect(panel).toContain("确认事实已提交，但刷新失败");
+    expect(shipment).toContain("await refreshAfterCommand(onSaved)");
+    expect(shipment).toContain("发货记录已提交，但刷新失败");
+    expect(receipt).toContain("await refreshAfterCommand(onSaved)");
+    expect(receipt).toContain("收货记录已提交，但刷新失败");
+  });
+
+  test("履约表单使用语义分组并关联错误描述", () => {
+    const shipment = readSource("./purchase-order-shipment-dialog.tsx");
+    const receipt = readSource("./purchase-order-receipt-dialog.tsx");
+    for (const source of [shipment, receipt]) {
+      expect(source).toContain("<FieldSet>");
+      expect(source).toContain("<FieldLegend");
+      expect(source).toContain("aria-describedby=");
+    }
+    expect(readSource("./purchase-order-fulfillment-summary.tsx"))
+      .toContain("有差异已收货");
   });
 });
 

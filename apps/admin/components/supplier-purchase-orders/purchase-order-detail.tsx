@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -53,6 +53,12 @@ import {
   PurchaseOrderFulfillmentPanel,
 } from "./purchase-order-fulfillment-panel";
 import {
+  canCancelWithFulfillment,
+  createLatestRequestGuard,
+  type FulfillmentLoadState,
+  unloadedFulfillmentState,
+} from "./purchase-order-fulfillment-ui-state";
+import {
   commandErrorMessage,
   formatPurchaseMoney,
   purchaseOrderActions,
@@ -84,35 +90,49 @@ export function PurchaseOrderDetail({
   const [commandAttempt, setCommandAttempt] =
     useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fulfillmentState, setFulfillmentState] =
+    useState<FulfillmentLoadState>(unloadedFulfillmentState);
+  const requestGuard = useRef(createLatestRequestGuard());
 
   const reload = useCallback(async () => {
-    if (!order) return;
+    const isLatest = requestGuard.current.start();
+    if (!order) return null;
     setLoading(true);
     setError(null);
+    setFulfillmentState(unloadedFulfillmentState);
     try {
       const [latest, itemPage] = await Promise.all([
         loadPurchaseOrder(order.id),
         loadPurchaseOrderItems(order.id),
       ]);
+      if (!isLatest()) return null;
       setCurrent(latest);
       setItems(itemPage.list);
+      return latest.version;
     } catch (caught) {
+      if (!isLatest()) return null;
       setError(errorMessage(caught, "采购单详情加载失败"));
+      return null;
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, [order]);
 
   useEffect(() => {
+    requestGuard.current.invalidate();
     setCurrent(order);
+    setItems([]);
+    setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
     if (open) void reload();
+    return () => requestGuard.current.invalidate();
   }, [open, order, reload]);
 
   const handleFulfillmentChanged = useCallback(async () => {
-    await reload();
-    await onChanged();
+    const version = await reload();
+    onChanged();
+    return version;
   }, [onChanged, reload]);
 
   async function runCommand(action: "submit" | "cancel") {
@@ -168,6 +188,9 @@ export function PurchaseOrderDetail({
   const actions = current
     ? purchaseOrderActions(current.status, canManage)
     : [];
+  const visibleActions = actions.filter((action) =>
+    action !== "cancel" || canCancelWithFulfillment(fulfillmentState)
+  );
   const status = current ? purchaseOrderStatusMeta[current.status] : null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -261,6 +284,7 @@ export function PurchaseOrderDetail({
               purchaseOrderItems={items}
               canManage={canManage}
               onOrderChanged={handleFulfillmentChanged}
+              onLoadStateChange={setFulfillmentState}
             />
           </>
         )}
@@ -273,7 +297,7 @@ export function PurchaseOrderDetail({
           >
             关闭
           </Button>
-          {actions.includes("submit") ? (
+          {visibleActions.includes("submit") ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" disabled={busy}>提交采购单</Button>
@@ -298,7 +322,7 @@ export function PurchaseOrderDetail({
               </AlertDialogContent>
             </AlertDialog>
           ) : null}
-          {actions.includes("cancel") ? (
+          {visibleActions.includes("cancel") ? (
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button type="button" variant="destructive" disabled={busy}>
