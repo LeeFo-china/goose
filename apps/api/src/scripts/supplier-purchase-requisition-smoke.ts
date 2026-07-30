@@ -180,42 +180,6 @@ export function assertExplainUsesIndex(
   return true;
 }
 
-function timeoutToken(milliseconds: number) {
-  return new Promise<"timeout">((resolve) => {
-    setTimeout(() => resolve("timeout"), milliseconds);
-  });
-}
-
-export async function observeBlockedUntilRelease<T>(
-  operation: Promise<T>,
-  release: () => Promise<void>,
-  probeMilliseconds = 100,
-  completionMilliseconds = 5_000,
-) {
-  const early = await Promise.race([
-    operation.then(() => "settled" as const),
-    timeoutToken(probeMilliseconds),
-  ]);
-  if (early !== "timeout") {
-    throw new SupplierPurchaseRequisitionSmokeAssertionError(
-      "concurrent budget operation settled before lock release",
-    );
-  }
-  await release();
-  const completed = await Promise.race([
-    operation.then((value) => ({ kind: "completed" as const, value })),
-    timeoutToken(completionMilliseconds).then(() => ({
-      kind: "timeout" as const,
-    })),
-  ]);
-  if (completed.kind !== "completed") {
-    throw new SupplierPurchaseRequisitionSmokeAssertionError(
-      "concurrent budget operation did not complete after lock release",
-    );
-  }
-  return completed.value;
-}
-
 function expectResult(
   value: unknown,
   status: string,
@@ -441,7 +405,6 @@ export async function runSupplierPurchaseRequisitionSmoke(
           databaseUrl,
           SMOKE_IDS,
           runWithForcedRollback,
-          observeBlockedUntilRelease,
           assertRequisitionCommandResult,
         ),
     });

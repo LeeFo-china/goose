@@ -6,12 +6,14 @@ import {
   assertExplainUsesIndex,
   assertRequisitionCommandResult,
   assertSmokeSummary,
-  observeBlockedUntilRelease,
   runWithForcedRollback,
 } from "./supplier-purchase-requisition-smoke";
 import {
   assertConcurrentBudgetEvidence,
 } from "./supplier-purchase-requisition-smoke-concurrency";
+import {
+  pollForBudgetAdvisoryLock,
+} from "./supplier-purchase-requisition-smoke-budget-lock";
 
 type FakeTransaction = { marker: string };
 
@@ -34,14 +36,6 @@ class FakeDatabase {
       throw error;
     }
   }
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((next) => {
-    resolve = next;
-  });
-  return { promise, resolve };
 }
 
 const passingSummary = {
@@ -204,30 +198,56 @@ describe("supplier purchase requisition database smoke helpers", () => {
     })).toThrow("distinct suppliers");
   });
 
-  test("holds the second operation until release and rolls back both transactions", async () => {
-    const databaseA = new FakeDatabase("A");
-    const databaseB = new FakeDatabase("B");
-    const operationStarted = deferred<void>();
-    const releaseA = deferred<void>();
-    const operationB = runWithForcedRollback(databaseB, async () => {
-      operationStarted.resolve();
-      await releaseA.promise;
-      return "B submitted";
-    });
-    await operationStarted.promise;
-
-    const observed = await observeBlockedUntilRelease(
-      operationB,
-      async () => releaseA.resolve(),
-      10,
+  test("polls until the second backend waits on the exact budget advisory lock", async () => {
+    let probes = 0;
+    let retries = 0;
+    const evidence = await pollForBudgetAdvisoryLock(
+      async () => {
+        probes += 1;
+        if (probes === 1) {
+          return {
+            pid: 90210,
+            wait_event_type: "Client",
+            wait_event: "ClientRead",
+            locktype: "advisory",
+            granted: false,
+            objsubid: 1,
+          };
+        }
+        return {
+          pid: 90210,
+          wait_event_type: "Lock",
+          wait_event: "advisory",
+          locktype: "advisory",
+          granted: false,
+          objsubid: 1,
+        };
+      },
+      {
+        maxAttempts: 2,
+        waitForRetry: async () => {
+          retries += 1;
+        },
+      },
     );
-    expect(observed).toBe("B submitted");
-    expect(databaseB.rollbacks).toBe(1);
-    expect(databaseB.commits).toBe(0);
+    expect(evidence.pid).toBe(90210);
+    expect(probes).toBe(2);
+    expect(retries).toBe(1);
+  });
 
-    await runWithForcedRollback(databaseA, async () => "A submitted");
-    expect(databaseA.rollbacks).toBe(1);
-    expect(databaseA.commits).toBe(0);
+  test("fails after bounded probes without direct budget lock evidence", async () => {
+    let probes = 0;
+    await expect(pollForBudgetAdvisoryLock(
+      async () => {
+        probes += 1;
+        return undefined;
+      },
+      {
+        maxAttempts: 3,
+        waitForRetry: async () => {},
+      },
+    )).rejects.toThrow("did not expose");
+    expect(probes).toBe(3);
   });
 
   test("pins the migration RPC, table and index contract", () => {
@@ -257,6 +277,10 @@ describe("supplier purchase requisition database smoke helpers", () => {
       "./supplier-purchase-requisition-smoke-concurrency.ts",
       import.meta.url,
     )).text();
+    const budgetLockSource = await Bun.file(new URL(
+      "./supplier-purchase-requisition-smoke-budget-lock.ts",
+      import.meta.url,
+    )).text();
     const planSource = await Bun.file(new URL(
       "./supplier-purchase-requisition-smoke-plan.ts",
       import.meta.url,
@@ -278,13 +302,34 @@ describe("supplier purchase requisition database smoke helpers", () => {
     expect(concurrencySource).toContain(
       "get_tenant_supplier_order_eligibility_set",
     );
+    expect(budgetLockSource).toContain("pg_backend_pid()");
+    expect(concurrencySource).toContain("waitForBudgetAdvisoryLock");
+    expect(concurrencySource).toContain("waitForOperationCompletion");
     expect(concurrencySource).toContain(
-      "const bResult = await observe(operationB",
+      "markBSaved(await readBackendPid(sql))",
+    );
+    expect(
+      concurrencySource.indexOf("await waitForBudgetAdvisoryLock"),
+    ).toBeLessThan(concurrencySource.indexOf("releaseA?.()"));
+    expect(
+      concurrencySource.indexOf("releaseA?.()"),
+    ).toBeLessThan(
+      concurrencySource.indexOf("await waitForOperationCompletion"),
     );
     expect(concurrencySource).toContain("assertSubmitted(bResult");
     expect(concurrencySource).toContain("bSaved");
     expect(concurrencySource).toContain("seedConcurrentSupplier");
     expect(concurrencySource).toContain("countConcurrentFixtureRows");
+    expect(budgetLockSource).toContain("pg_catalog.pg_stat_activity");
+    expect(budgetLockSource).toContain("pg_catalog.pg_locks");
+    expect(budgetLockSource).toContain("supplier-project-budget:");
+    expect(budgetLockSource).toContain("6720240730150000");
+    expect(budgetLockSource).toContain("activity.wait_event_type = 'Lock'");
+    expect(budgetLockSource).toContain("activity.wait_event = 'advisory'");
+    expect(budgetLockSource).toContain("requested.granted = false");
+    expect(budgetLockSource).toContain("requested.objsubid = 1");
+    expect(budgetLockSource).toContain("requested.classid::bigint << 32");
+    expect(mainSource).not.toContain("observeBlockedUntilRelease");
     expect(sqlSource).toContain("remaining_fixture_count");
     expect(`${mainSource}\n${planSource}`).not.toContain("enable_seqscan");
     expect(planSource).toContain("explain (analyze, buffers, format text)");

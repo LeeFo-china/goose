@@ -1,5 +1,11 @@
 import type { SmokeSql } from "./supplier-purchase-order-smoke-fixture";
 import {
+  readBackendPid,
+  waitForBudgetAdvisoryLock,
+  waitForOperationCompletion,
+  waitForSavedBackendPid,
+} from "./supplier-purchase-requisition-smoke-budget-lock";
+import {
   commitmentEvidence,
   countConcurrentFixtureRows,
   saveRequisition,
@@ -8,7 +14,6 @@ import {
 } from "./supplier-purchase-requisition-smoke-sql";
 import type {
   assertRequisitionCommandResult,
-  observeBlockedUntilRelease,
   runWithForcedRollback,
 } from "./supplier-purchase-requisition-smoke";
 
@@ -361,7 +366,6 @@ export async function runConcurrentBudgetSmoke(
   databaseUrl: string,
   ids: ConcurrentIds,
   rollback: typeof runWithForcedRollback,
-  observe: typeof observeBlockedUntilRelease,
   assertSubmitted: typeof assertRequisitionCommandResult,
 ) {
   const lookup = new Bun.SQL(databaseUrl, { prepare: false });
@@ -373,14 +377,14 @@ export async function runConcurrentBudgetSmoke(
   try {
     const base = await findConcurrentFixture(lookup as SmokeSql);
     let markASubmitted!: () => void;
-    let markBSaved!: () => void;
+    let markBSaved!: (pid: number) => void;
     const holdA = new Promise<void>((resolve) => {
       releaseA = resolve;
     });
     const aSubmitted = new Promise<void>((resolve) => {
       markASubmitted = resolve;
     });
-    const bSaved = new Promise<void>((resolve) => {
+    const bSaved = new Promise<number>((resolve) => {
       markBSaved = resolve;
     });
     const operationA = activeOperationA = rollback(databaseA, async (transaction) => {
@@ -435,7 +439,7 @@ export async function runConcurrentBudgetSmoke(
         ),
         { status: "saved", idempotent: false, version: 1 },
       );
-      markBSaved();
+      markBSaved(await readBackendPid(sql));
       const submitted = assertSubmitted(
         await submitRequisition(
           sql, fixture, ids.concurrentB, 1,
@@ -453,18 +457,14 @@ export async function runConcurrentBudgetSmoke(
         },
       };
     });
-    const bReady = await Promise.race([
-      bSaved.then(() => "saved" as const),
-      operationB.then(() => "settled" as const),
-      new Promise<"timeout">((resolve) =>
-        setTimeout(() => resolve("timeout"), 5_000)),
-    ]);
-    if (bReady !== "saved") {
-      throw new SupplierPurchaseRequisitionConcurrencyError(
-        `SMOKE_CONCURRENT_B_${bReady.toUpperCase()}`,
-      );
-    }
-    const bResult = await observe(operationB, async () => releaseA?.());
+    const bPid = await waitForSavedBackendPid(bSaved, operationB);
+    await waitForBudgetAdvisoryLock(lookup as SmokeSql, {
+      pid: bPid,
+      tenantId: base.tenant_id,
+      projectId: base.project_id,
+    });
+    releaseA?.();
+    const bResult = await waitForOperationCompletion(operationB);
     assertSubmitted(bResult.commandResult, {
       status: "submitted",
       idempotent: false,

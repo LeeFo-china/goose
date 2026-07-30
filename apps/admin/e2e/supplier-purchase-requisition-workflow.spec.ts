@@ -192,7 +192,12 @@ test("采购申请完成预算承诺、分权审批、转换与释放闭环", as
   await expect(page).toHaveURL(
     /\/supplier-purchase-orders\?purchase_order_id=/,
   );
-  await expect(page.getByText("PO-E2E-REQ-0002", { exact: true })).toBeVisible();
+  const purchaseOrderDetail = page.getByRole("dialog", {
+    name: "采购单详情",
+  });
+  await expect(
+    purchaseOrderDetail.getByText("PO-E2E-REQ-0002", { exact: true }),
+  ).toBeVisible();
 
   await switchRole(page, request, "requester");
   await createDraft(page, "超预算应急采购", "200", "¥20,000.00");
