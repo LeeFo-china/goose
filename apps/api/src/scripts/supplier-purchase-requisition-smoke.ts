@@ -1,0 +1,431 @@
+import {
+  seedSupplierFixture,
+  selectFixtureReferences,
+  type SmokeSql,
+} from "./supplier-purchase-order-smoke-fixture";
+import {
+  cancelRequisition,
+  commitmentStatus,
+  convertRequisition,
+  expectIdempotencyConflict,
+  extendFixture,
+  reviewRequisition,
+  saveRequisition,
+  submitRequisition,
+  type RequisitionSmokeFixture,
+} from "./supplier-purchase-requisition-smoke-sql";
+import {
+  runConcurrentBudgetSmoke,
+} from "./supplier-purchase-requisition-smoke-concurrency";
+
+export const SMOKE_IDS = {
+  requisition: "35000000-0000-4000-8000-000000000001",
+  cancellation: "35000000-0000-4000-8000-000000000002",
+  conversion: "35000000-0000-4000-8000-000000000003",
+  concurrentA: "35000000-0000-4000-8000-000000000004",
+  concurrentB: "35000000-0000-4000-8000-000000000005",
+  purchaseOrder: "35000000-0000-4000-8000-000000000006",
+  costCategory: "35000000-0000-4000-8000-000000000007",
+  budget: "35000000-0000-4000-8000-000000000008",
+} as const;
+
+export const REQUISITION_SMOKE_SQL_CONTRACTS = {
+  save: "public.save_supplier_purchase_requisition_draft",
+  submit: "public.submit_supplier_purchase_requisition",
+  review: "public.review_supplier_purchase_requisition",
+  cancel: "public.cancel_supplier_purchase_requisition",
+  convert: "public.convert_supplier_purchase_requisition",
+  requisitions: "public.supplier_purchase_requisitions",
+  commitments: "public.project_cost_commitments",
+  activeCommitmentIndex: "project_cost_commitments_active_lookup_idx",
+} as const;
+
+const SUMMARY_KEYS = [
+  "save_replay",
+  "idempotency_conflict",
+  "version_conflict",
+  "self_review_rejected",
+  "concurrent_budget_serialized",
+  "rejection_released",
+  "cancellation_released",
+  "conversion_unique",
+  "cross_tenant_hidden",
+  "explain_uses_index",
+] as const;
+
+export type SmokeSummary = Record<(typeof SUMMARY_KEYS)[number], boolean>;
+
+type TransactionDatabase<Transaction> = {
+  begin<T>(callback: (transaction: Transaction) => Promise<T>): Promise<T>;
+};
+
+class ForcedRollback extends Error {}
+
+export class SupplierPurchaseRequisitionSmokeAssertionError extends Error {}
+
+export async function runWithForcedRollback<Transaction, Result>(
+  database: TransactionDatabase<Transaction>,
+  callback: (transaction: Transaction) => Promise<Result>,
+): Promise<Result> {
+  const sentinel = new ForcedRollback();
+  let result: Result | undefined;
+  let failure: unknown;
+  let completed = false;
+  try {
+    await database.begin(async (transaction) => {
+      try {
+        result = await callback(transaction);
+        completed = true;
+      } catch (error) {
+        failure = error;
+      }
+      throw sentinel;
+    });
+  } catch (error) {
+    if (error !== sentinel) throw error;
+  }
+  if (failure !== undefined) throw failure;
+  if (!completed) {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      "smoke callback did not complete before rollback",
+    );
+  }
+  return result as Result;
+}
+
+function record(value: unknown, label: string) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      `${label} must be an object`,
+    );
+  }
+  return value as Record<string, unknown>;
+}
+
+export function assertRequisitionCommandResult(
+  value: unknown,
+  expected: { status: string; idempotent: boolean; version: number },
+) {
+  const result = record(value, "requisition command result");
+  const requisition = record(result.requisition, "requisition");
+  if (typeof requisition.total_amount !== "string") {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      "requisition.total_amount must be a string",
+    );
+  }
+  for (const [field, expectedValue] of Object.entries(expected)) {
+    if (result[field] !== expectedValue) {
+      throw new SupplierPurchaseRequisitionSmokeAssertionError(
+        `${field} must equal ${String(expectedValue)}`,
+      );
+    }
+  }
+  return result;
+}
+
+export function assertSmokeSummary(value: unknown): SmokeSummary {
+  const summary = record(value, "smoke summary");
+  const actualKeys = Object.keys(summary).sort();
+  const expectedKeys = [...SUMMARY_KEYS].sort();
+  if (actualKeys.join(",") !== expectedKeys.join(",")) {
+    const unexpected = actualKeys.find((key) => !expectedKeys.includes(
+      key as (typeof SUMMARY_KEYS)[number],
+    ));
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      unexpected ?? "smoke summary fields are incomplete",
+    );
+  }
+  for (const key of SUMMARY_KEYS) {
+    if (summary[key] !== true) {
+      throw new SupplierPurchaseRequisitionSmokeAssertionError(
+        `${key} must be true`,
+      );
+    }
+  }
+  return summary as SmokeSummary;
+}
+
+export function assertExplainUsesIndex(
+  rows: { "QUERY PLAN": string }[],
+) {
+  const plan = rows.map((row) => row["QUERY PLAN"]).join("\n");
+  if (
+    !/Bitmap Index Scan|Index Scan/.test(plan) ||
+    !plan.includes(REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex)
+  ) {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      `EXPLAIN must use ${
+        REQUISITION_SMOKE_SQL_CONTRACTS.activeCommitmentIndex
+      }`,
+    );
+  }
+  return true;
+}
+
+function timeoutToken(milliseconds: number) {
+  return new Promise<"timeout">((resolve) => {
+    setTimeout(() => resolve("timeout"), milliseconds);
+  });
+}
+
+export async function observeBlockedUntilRelease<T>(
+  operation: Promise<T>,
+  release: () => Promise<void>,
+  probeMilliseconds = 100,
+  completionMilliseconds = 5_000,
+) {
+  const early = await Promise.race([
+    operation.then(() => "settled" as const),
+    timeoutToken(probeMilliseconds),
+  ]);
+  if (early !== "timeout") {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      "concurrent budget operation settled before lock release",
+    );
+  }
+  await release();
+  const completed = await Promise.race([
+    operation.then((value) => ({ kind: "completed" as const, value })),
+    timeoutToken(completionMilliseconds).then(() => ({
+      kind: "timeout" as const,
+    })),
+  ]);
+  if (completed.kind !== "completed") {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      "concurrent budget operation did not complete after lock release",
+    );
+  }
+  return completed.value;
+}
+
+function expectResult(
+  value: unknown,
+  status: string,
+  errorCode?: string,
+) {
+  const result = record(value, status);
+  if (result.status !== status ||
+    (errorCode !== undefined && result.error_code !== errorCode)) {
+    throw new SupplierPurchaseRequisitionSmokeAssertionError(
+      `${status} result did not match expected contract`,
+    );
+  }
+  return result;
+}
+
+async function seedFixture(sql: SmokeSql) {
+  const base = await selectFixtureReferences(sql);
+  await seedSupplierFixture(sql, base);
+  return extendFixture(sql, base, SMOKE_IDS.costCategory, SMOKE_IDS.budget);
+}
+
+async function explainActiveCommitments(
+  sql: SmokeSql,
+  fixture: RequisitionSmokeFixture,
+) {
+  await sql`set local enable_seqscan = off;`;
+  const rows = await sql<{ "QUERY PLAN": string }[]>`
+    explain
+    select sum(commitment.amount)
+    from public.project_cost_commitments as commitment
+    where commitment.tenant_id = ${fixture.tenant_id}::uuid
+      and commitment.project_id = ${fixture.project_id}::uuid
+      and commitment.cost_category_id = ${fixture.cost_category_id}::uuid
+      and commitment.status in ('reserved', 'converted');
+  `;
+  return assertExplainUsesIndex(rows);
+}
+
+async function executeTransactionalSmoke(sql: SmokeSql) {
+  const fixture = await seedFixture(sql);
+  const saved = assertRequisitionCommandResult(
+    await saveRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 0, "requisition-smoke-save",
+    ),
+    { status: "saved", idempotent: false, version: 1 },
+  );
+  const replayed = assertRequisitionCommandResult(
+    await saveRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 0, "requisition-smoke-save",
+    ),
+    { status: "saved", idempotent: true, version: 1 },
+  );
+  const idempotencyConflict = await expectIdempotencyConflict(
+    sql,
+    (savepoint) =>
+    saveRequisition(
+      savepoint, fixture, SMOKE_IDS.requisition, 0,
+      "requisition-smoke-save", 21,
+    ),
+  );
+  const versionConflict = expectResult(
+    await saveRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 0,
+      "requisition-smoke-version",
+    ),
+    "version_conflict",
+    "SUPPLIER_PURCHASE_REQUISITION_VERSION_CONFLICT",
+  );
+  assertRequisitionCommandResult(
+    await submitRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 1,
+      "requisition-smoke-submit",
+    ),
+    { status: "submitted", idempotent: false, version: 2 },
+  );
+  const selfReview = expectResult(
+    await reviewRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 2, "approve",
+      "requisition-smoke-self-review", true,
+    ),
+    "state_conflict",
+    "SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW",
+  );
+  assertRequisitionCommandResult(
+    await reviewRequisition(
+      sql, fixture, SMOKE_IDS.requisition, 2, "reject",
+      "requisition-smoke-reject",
+    ),
+    { status: "rejected", idempotent: false, version: 3 },
+  );
+  const rejectedStatuses = await commitmentStatus(
+    sql, fixture.tenant_id, SMOKE_IDS.requisition,
+  );
+
+  await saveRequisition(
+    sql, fixture, SMOKE_IDS.cancellation, 0, "requisition-smoke-cancel-save",
+  );
+  await submitRequisition(
+    sql, fixture, SMOKE_IDS.cancellation, 1,
+    "requisition-smoke-cancel-submit",
+  );
+  await cancelRequisition(
+    sql, fixture, SMOKE_IDS.cancellation, 2,
+    "requisition-smoke-cancel",
+  );
+  const cancelledStatuses = await commitmentStatus(
+    sql, fixture.tenant_id, SMOKE_IDS.cancellation,
+  );
+
+  await saveRequisition(
+    sql, fixture, SMOKE_IDS.conversion, 0,
+    "requisition-smoke-convert-save",
+  );
+  await submitRequisition(
+    sql, fixture, SMOKE_IDS.conversion, 1,
+    "requisition-smoke-convert-submit",
+  );
+  await reviewRequisition(
+    sql, fixture, SMOKE_IDS.conversion, 2, "approve",
+    "requisition-smoke-convert-approve",
+  );
+  const converted = assertRequisitionCommandResult(
+    await convertRequisition(
+      sql, fixture, SMOKE_IDS.conversion, SMOKE_IDS.purchaseOrder, 3,
+      "requisition-smoke-convert",
+    ),
+    { status: "converted", idempotent: false, version: 4 },
+  );
+  const convertedReplay = assertRequisitionCommandResult(
+    await convertRequisition(
+      sql, fixture, SMOKE_IDS.conversion, SMOKE_IDS.purchaseOrder, 3,
+      "requisition-smoke-convert",
+    ),
+    { status: "converted", idempotent: true, version: 4 },
+  );
+  const orderRows = await sql<{ count: number }[]>`
+    select count(*)::integer as count
+    from public.supplier_purchase_orders as purchase_order
+    where purchase_order.purchase_requisition_id =
+      ${SMOKE_IDS.conversion}::uuid
+      and purchase_order.id = ${SMOKE_IDS.purchaseOrder}::uuid;
+  `;
+  const crossTenant = expectResult(
+    await cancelRequisition(
+      sql, fixture, SMOKE_IDS.conversion, 4,
+      "requisition-smoke-cross-tenant", fixture.other_tenant_id,
+    ),
+    "not_found",
+    "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND",
+  );
+  return {
+    save_replay: saved.version === 1 && replayed.idempotent === true,
+    idempotency_conflict: idempotencyConflict,
+    version_conflict: versionConflict.version === 1,
+    self_review_rejected:
+      selfReview.error_code === "SUPPLIER_PURCHASE_REQUISITION_SELF_REVIEW",
+    rejection_released:
+      rejectedStatuses.length > 0 &&
+      rejectedStatuses.every((status) => status === "released"),
+    cancellation_released:
+      cancelledStatuses.length > 0 &&
+      cancelledStatuses.every((status) => status === "released"),
+    conversion_unique:
+      converted.purchase_order_id === SMOKE_IDS.purchaseOrder &&
+      convertedReplay.idempotent === true &&
+      orderRows[0]?.count === 1,
+    cross_tenant_hidden:
+      crossTenant.error_code === "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND" &&
+      !("version" in crossTenant),
+    explain_uses_index: await explainActiveCommitments(sql, fixture),
+  };
+}
+
+export async function runSupplierPurchaseRequisitionSmoke(
+  databaseUrl: string,
+): Promise<SmokeSummary> {
+  const database = new Bun.SQL(databaseUrl, { prepare: false });
+  try {
+    const transactional = await runWithForcedRollback(
+      database,
+      (transaction) => executeTransactionalSmoke(transaction as SmokeSql),
+    );
+    const rollbackRows = await database<{ count: number }[]>`
+      select count(*)::integer as count
+      from public.supplier_purchase_requisitions
+      where id in (
+        ${SMOKE_IDS.requisition}::uuid,
+        ${SMOKE_IDS.cancellation}::uuid,
+        ${SMOKE_IDS.conversion}::uuid
+      );
+    `;
+    if (rollbackRows[0]?.count !== 0) {
+      throw new SupplierPurchaseRequisitionSmokeAssertionError(
+        "transaction fixture was not rolled back",
+      );
+    }
+    return assertSmokeSummary({
+      ...transactional,
+      concurrent_budget_serialized:
+        await runConcurrentBudgetSmoke(
+          databaseUrl,
+          SMOKE_IDS,
+          runWithForcedRollback,
+          observeBlockedUntilRelease,
+          assertRequisitionCommandResult,
+        ),
+    });
+  } finally {
+    await database.close();
+  }
+}
+
+async function main() {
+  const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL ||
+    process.env.SUPABASE_DB_URL;
+  if (!databaseUrl) {
+    console.error("SUPPLIER_PURCHASE_REQUISITION_SMOKE_FAILED");
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    console.log(JSON.stringify(
+      await runSupplierPurchaseRequisitionSmoke(databaseUrl),
+    ));
+  } catch {
+    console.error("SUPPLIER_PURCHASE_REQUISITION_SMOKE_FAILED");
+    process.exitCode = 1;
+  }
+}
+
+if (import.meta.main) void main();
