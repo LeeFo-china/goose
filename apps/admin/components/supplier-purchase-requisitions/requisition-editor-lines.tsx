@@ -106,14 +106,14 @@ export function SelectedRequisitionLines({
                       aria-label={`采购数量 ${
                         fact?.sku_name ?? line.supplierSkuId
                       }`}
-                      type="number"
-                      min="0.0001"
-                      step="0.0001"
+                      type="text"
+                      inputMode="decimal"
+                      pattern="\d+(?:\.\d{1,4})?"
                       value={line.quantity}
                       disabled={disabled}
                       onChange={(event) =>
                         onChange(line.supplierSkuId, {
-                          quantity: Number(event.target.value),
+                          quantity: event.target.value,
                         })}
                     />
                   </TableCell>

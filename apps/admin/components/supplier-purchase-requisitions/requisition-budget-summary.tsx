@@ -16,8 +16,10 @@ import { cn } from "@/lib/utils";
 
 import {
   formatRequisitionMoney,
+  isNegativeRequisitionMoney,
   requisitionBudgetFacts,
   shortBusinessId,
+  subtractRequisitionMoney,
 } from "./requisition-page-utils";
 import type { RequisitionDetail } from "./requisition-types";
 
@@ -43,8 +45,8 @@ export function RequisitionBudgetSummary({
     detail.requisition.total_amount,
     snapshots,
   );
-  const isOverBudget = detail.requisition.budget_status === "over_budget" ||
-    facts.availableAfterApproval < 0;
+  const isOverBudget =
+    detail.requisition.budget_status === "over_budget";
   const categoryNames = Object.fromEntries(
     categories.map((category) => [category.id, category.name]),
   );
@@ -61,9 +63,7 @@ export function RequisitionBudgetSummary({
         {isOverBudget ? (
           <Badge variant="danger">
             <AlertTriangle />
-            超出预算 {formatRequisitionMoney(
-              Math.abs(facts.availableAfterApproval),
-            )}
+            超出预算 {formatRequisitionMoney(facts.shortfallAmount)}
           </Badge>
         ) : (
           <Badge variant="success">预算内</Badge>
@@ -83,7 +83,7 @@ export function RequisitionBudgetSummary({
         <Fact
           label="批准后可用余额"
           amount={facts.availableAfterApproval}
-          danger={facts.availableAfterApproval < 0}
+          danger={isNegativeRequisitionMoney(facts.availableAfterApproval)}
         />
       </div>
       <Table containerClassName="max-w-full overflow-x-auto">
@@ -98,7 +98,10 @@ export function RequisitionBudgetSummary({
         </TableHeader>
         <TableBody>
           {snapshots.map((snapshot) => {
-            const available = Number(snapshot.available_amount_snapshot);
+            const availableAfterApproval = subtractRequisitionMoney(
+              snapshot.available_amount_snapshot,
+              snapshot.amount,
+            );
             return (
               <TableRow key={snapshot.id}>
                 <TableCell>
@@ -111,8 +114,10 @@ export function RequisitionBudgetSummary({
                   value={snapshot.other_commitment_amount_snapshot}
                 />
                 <MoneyCell
-                  value={snapshot.available_amount_snapshot}
-                  danger={Number.isFinite(available) && available < 0}
+                  value={availableAfterApproval}
+                  danger={isNegativeRequisitionMoney(
+                    availableAfterApproval,
+                  )}
                 />
               </TableRow>
             );
@@ -129,7 +134,7 @@ function Fact({
   danger = false,
 }: {
   label: string;
-  amount: number;
+  amount: string;
   danger?: boolean;
 }) {
   return (

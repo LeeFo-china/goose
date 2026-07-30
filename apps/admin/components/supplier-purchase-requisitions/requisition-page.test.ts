@@ -83,12 +83,12 @@ describe("采购申请页面规则", () => {
         {
           supplierSkuId: "sku-1",
           costCategoryId: "",
-          quantity: 1,
+          quantity: "1",
         },
         {
           supplierSkuId: "sku-1",
           costCategoryId: "category-1",
-          quantity: 0,
+          quantity: "0",
         },
       ],
     }).items).toContain("不能重复");
@@ -102,7 +102,7 @@ describe("采购申请页面规则", () => {
         items: Array.from({ length: 101 }, (_, index) => ({
           supplierSkuId: `sku-${index}`,
           costCategoryId: "category-1",
-          quantity: 1,
+          quantity: "1",
         })),
       })
     ).toThrow("采购申请明细不能超过 100 行");
@@ -119,7 +119,7 @@ describe("采购申请页面规则", () => {
       items: [{
         supplierSkuId: "sku-1",
         costCategoryId: "category-1",
-        quantity: 2.5,
+        quantity: "2.5",
         unit_price: "999.00",
         tax_rate: "0.13",
         amount: "2497.50",
@@ -144,32 +144,128 @@ describe("采购申请页面规则", () => {
     );
   });
 
-  test("预算汇总只聚合服务端申请金额和预算快照五项事实", () => {
-    expect(requisitionBudgetFacts("120.00", [
+  test("预算快照可用额扣除本申请后才是批准后可用和分类缺口", () => {
+    expect(requisitionBudgetFacts("70.00", [
       {
         amount: "70.00",
         expense_amount_snapshot: "40.00",
         other_commitment_amount_snapshot: "20.00",
-        available_amount_snapshot: "-10.00",
-      },
-      {
-        amount: "50.00",
-        expense_amount_snapshot: "10.00",
-        other_commitment_amount_snapshot: "5.00",
-        available_amount_snapshot: "35.00",
+        available_amount_snapshot: "50.00",
       },
     ])).toEqual({
-      requisitionAmount: 120,
-      expenseAmount: 50,
-      otherCommitmentAmount: 25,
-      currentCommitmentAmount: 120,
-      availableAfterApproval: 25,
+      requisitionAmount: "70.00",
+      expenseAmount: "40.00",
+      otherCommitmentAmount: "20.00",
+      currentCommitmentAmount: "70.00",
+      availableAfterApproval: "-20.00",
+      shortfallAmount: "20.00",
     });
   });
 
+  test("多分类缺口逐类累加而不是对批准后可用汇总取绝对值", () => {
+    expect(requisitionBudgetFacts("80.00", [
+      {
+        amount: "70.00",
+        expense_amount_snapshot: "40.00",
+        other_commitment_amount_snapshot: "20.00",
+        available_amount_snapshot: "50.00",
+      },
+      {
+        amount: "10.00",
+        expense_amount_snapshot: "10.00",
+        other_commitment_amount_snapshot: "5.00",
+        available_amount_snapshot: "100.00",
+      },
+    ])).toEqual({
+      requisitionAmount: "80.00",
+      expenseAmount: "50.00",
+      otherCommitmentAmount: "25.00",
+      currentCommitmentAmount: "80.00",
+      availableAfterApproval: "70.00",
+      shortfallAmount: "20.00",
+    });
+  });
+
+  test("numeric(18,2) 大额和分币聚合不经过浮点数", () => {
+    expect(requisitionBudgetFacts("9007199254740991.03", [
+      {
+        amount: "9007199254740991.01",
+        expense_amount_snapshot: "9007199254740991.01",
+        other_commitment_amount_snapshot: "0.01",
+        available_amount_snapshot: "9007199254740991.02",
+      },
+      {
+        amount: "0.02",
+        expense_amount_snapshot: "0.02",
+        other_commitment_amount_snapshot: "0.02",
+        available_amount_snapshot: "0.03",
+      },
+    ])).toEqual({
+      requisitionAmount: "9007199254740991.03",
+      expenseAmount: "9007199254740991.03",
+      otherCommitmentAmount: "0.03",
+      currentCommitmentAmount: "9007199254740991.03",
+      availableAfterApproval: "0.02",
+      shortfallAmount: "0.00",
+    });
+    expect(formatRequisitionMoney("9007199254740991.01"))
+      .toBe("¥9,007,199,254,740,991.01");
+  });
+
+  test("数量从水合字符串到 payload 保留 numeric(18,4) 精度", () => {
+    for (const quantity of [
+      "90071992547409.1234",
+      "12345678901234.5678",
+      "0.0001",
+    ]) {
+      const state = {
+        projectId: "project-1",
+        tenantSupplierId: "supplier-1",
+        reason: "现场补料",
+        expectedVersion: 1,
+        items: [{
+          supplierSkuId: "sku-1",
+          costCategoryId: "category-1",
+          quantity,
+        }],
+      };
+      expect(validateRequisitionDraft(state)).toEqual({});
+      expect(toRequisitionDraftPayload(state).items[0]?.quantity)
+        .toBe(quantity);
+    }
+  });
+
+  test("数量拒绝零值、指数、五位小数和十五位整数", () => {
+    for (const quantity of [
+      "0",
+      "0.0000",
+      "1e2",
+      "1.00001",
+      "100000000000000",
+    ]) {
+      expect(validateRequisitionDraft({
+        projectId: "project-1",
+        tenantSupplierId: "supplier-1",
+        reason: "现场补料",
+        expectedVersion: 1,
+        items: [{
+          supplierSkuId: "sku-1",
+          costCategoryId: "category-1",
+          quantity,
+        }],
+      }).items).toContain("采购数量必须大于 0");
+    }
+  });
+
   test("格式化工具覆盖非法金额、日期和缺失名称短 ID", () => {
+    expect(formatRequisitionMoney("-0.01")).toBe("-¥0.01");
     expect(formatRequisitionMoney("12.5")).toBe("¥12.50");
+    expect(formatRequisitionMoney("9999999999999999.99"))
+      .toBe("¥9,999,999,999,999,999.99");
+    expect(formatRequisitionMoney("1.005")).toBe("-");
     expect(formatRequisitionMoney("bad")).toBe("-");
+    expect(() => requisitionBudgetFacts("1.005", []))
+      .toThrow("无效的金额格式");
     expect(formatRequisitionDateTime("2026-07-30T08:00:00.000Z"))
       .not.toBe("-");
     expect(formatRequisitionDateTime("bad")).toBe("-");
@@ -289,6 +385,13 @@ describe("采购申请页面边界", () => {
     expect(editor).toMatch(
       /onSupplierChange=\{\(value\) => \{[\s\S]*?setCatalog\(emptyCatalog\)/,
     );
+    expect(editor).toContain("quantity: item.quantity");
+    expect(editor).not.toContain("quantity: Number(item.quantity)");
+    expect(editor).toContain(
+      '{ supplierSkuId, costCategoryId: "", quantity: "1" }',
+    );
+    expect(editorLines).toContain('type="text"');
+    expect(editorLines).toContain('inputMode="decimal"');
     expect(editor).toContain("createRequisitionDraft");
     expect(editor).toContain("updateRequisitionDraft");
     expect(api).toContain("loadRequisitionCostCategories");
@@ -333,6 +436,11 @@ describe("采购申请页面边界", () => {
     expect(summary).toContain("提交后生成预算快照");
     expect(summary).toContain("text-destructive");
     expect(summary).toContain("超出预算");
+    expect(summary).toContain(
+      'detail.requisition.budget_status === "over_budget"',
+    );
+    expect(summary).not.toContain("Math.abs");
+    expect(summary).not.toContain("Number(");
   });
 
   test("导航位于采购单前并受申请查看权限控制", () => {

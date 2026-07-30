@@ -5,6 +5,9 @@ import type {
   RequisitionUpdateDraftInput,
 } from "./requisition-types";
 
+const CENTS_PER_UNIT = BigInt(100);
+const ZERO_CENTS = BigInt(0);
+
 export type RequisitionWorkspaceState = {
   page: number;
   keyword: string;
@@ -17,7 +20,7 @@ export type RequisitionWorkspaceState = {
 export type RequisitionDraftLine = {
   supplierSkuId: string;
   costCategoryId: string;
-  quantity: number;
+  quantity: string;
 };
 
 export type RequisitionDraftState = {
@@ -120,12 +123,13 @@ export function validateRequisitionDraft(
   } else if (draft.items.some(({ costCategoryId }) => !costCategoryId)) {
     errors.items = "请为每行选择成本分类";
   } else if (
-    draft.items.some(({ quantity }) =>
-      !Number.isFinite(quantity) || quantity <= 0 ||
-      !/^\d+(?:\.\d{1,4})?$/.test(String(quantity))
-    )
+    draft.items.some(({ quantity }) => {
+      const normalized = normalizeRequisitionQuantity(quantity);
+      return normalized === null || !/[1-9]/.test(normalized);
+    })
   ) {
-    errors.items = "采购数量必须大于 0 且最多保留 4 位小数";
+    errors.items =
+      "采购数量必须大于 0、整数位不超过 14 位且最多保留 4 位小数";
   }
   return errors;
 }
@@ -143,7 +147,7 @@ export function toRequisitionDraftPayload(
     items: draft.items.map((item) => ({
       supplier_sku_id: item.supplierSkuId,
       cost_category_id: item.costCategoryId,
-      quantity: String(item.quantity),
+      quantity: normalizeRequisitionQuantity(item.quantity) ?? item.quantity,
     })),
   } as RequisitionCreateDraftInput | RequisitionUpdateDraftInput;
 }
@@ -152,15 +156,27 @@ export function requisitionBudgetFacts(
   requisitionAmount: string,
   snapshots: BudgetSnapshotFact[],
 ) {
+  const availableAfterApproval = snapshots.reduce(
+    (total, snapshot) =>
+      total + moneyCents(snapshot.available_amount_snapshot) -
+      moneyCents(snapshot.amount),
+    ZERO_CENTS,
+  );
+  const shortfallAmount = snapshots.reduce((total, snapshot) => {
+    const shortfall = moneyCents(snapshot.amount) -
+      moneyCents(snapshot.available_amount_snapshot);
+    return total + (shortfall > ZERO_CENTS ? shortfall : ZERO_CENTS);
+  }, ZERO_CENTS);
   return {
-    requisitionAmount: finiteAmount(requisitionAmount),
-    expenseAmount: sum(snapshots, "expense_amount_snapshot"),
-    otherCommitmentAmount: sum(
+    requisitionAmount: decimalFromCents(moneyCents(requisitionAmount)),
+    expenseAmount: sumMoney(snapshots, "expense_amount_snapshot"),
+    otherCommitmentAmount: sumMoney(
       snapshots,
       "other_commitment_amount_snapshot",
     ),
-    currentCommitmentAmount: sum(snapshots, "amount"),
-    availableAfterApproval: sum(snapshots, "available_amount_snapshot"),
+    currentCommitmentAmount: sumMoney(snapshots, "amount"),
+    availableAfterApproval: decimalFromCents(availableAfterApproval),
+    shortfallAmount: decimalFromCents(shortfallAmount),
   };
 }
 
@@ -178,16 +194,33 @@ export function commandConflictMessage(code: string | undefined) {
   return code ? messages[code] ?? null : null;
 }
 
-export function formatRequisitionMoney(value: string | number) {
-  const amount = Number(value);
-  return Number.isFinite(amount)
-    ? new Intl.NumberFormat("zh-CN", {
-      style: "currency",
-      currency: "CNY",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount)
-    : "-";
+export function formatRequisitionMoney(value: string) {
+  const cents = decimalToCents(value);
+  if (cents === null) return "-";
+  const negative = cents < ZERO_CENTS;
+  const absolute = negative ? -cents : cents;
+  const integer = (absolute / CENTS_PER_UNIT).toString().replace(
+    /\B(?=(\d{3})+(?!\d))/g,
+    ",",
+  );
+  const fraction = (absolute % CENTS_PER_UNIT).toString().padStart(2, "0");
+  return `${negative ? "-" : ""}¥${integer}.${fraction}`;
+}
+
+export function subtractRequisitionMoney(left: string, right: string) {
+  return decimalFromCents(moneyCents(left) - moneyCents(right));
+}
+
+export function isNegativeRequisitionMoney(value: string) {
+  return moneyCents(value) < ZERO_CENTS;
+}
+
+export function normalizeRequisitionQuantity(value: string) {
+  const match = /^(\d+)(?:\.(\d{1,4}))?$/.exec(value);
+  if (!match) return null;
+  const integer = (match[1] ?? "").replace(/^0+(?=\d)/, "");
+  if (integer.length > 14) return null;
+  return match[2] === undefined ? integer : `${integer}.${match[2]}`;
 }
 
 export function formatRequisitionDateTime(value: string | null) {
@@ -218,19 +251,37 @@ export function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function sum(
+function sumMoney(
   snapshots: BudgetSnapshotFact[],
   key: keyof BudgetSnapshotFact,
 ) {
-  return snapshots.reduce(
-    (total, snapshot) => total + finiteAmount(snapshot[key]),
-    0,
-  );
+  return decimalFromCents(snapshots.reduce(
+    (total, snapshot) => total + moneyCents(snapshot[key]),
+    ZERO_CENTS,
+  ));
 }
 
-function finiteAmount(value: string) {
-  const amount = Number(value);
-  return Number.isFinite(amount) ? amount : 0;
+function moneyCents(value: string) {
+  const cents = decimalToCents(value);
+  if (cents === null) throw new RangeError("无效的金额格式");
+  return cents;
+}
+
+function decimalToCents(value: string) {
+  const match = /^(-?)(\d+)(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) return null;
+  const fraction = match[3] ?? "";
+  const fractionCents = BigInt((fraction + "00").slice(0, 2));
+  const cents = BigInt(match[2] ?? "0") * CENTS_PER_UNIT + fractionCents;
+  return match[1] === "-" ? -cents : cents;
+}
+
+function decimalFromCents(cents: bigint) {
+  const negative = cents < ZERO_CENTS;
+  const absolute = negative ? -cents : cents;
+  return `${negative ? "-" : ""}${absolute / CENTS_PER_UNIT}.${
+    (absolute % CENTS_PER_UNIT).toString().padStart(2, "0")
+  }`;
 }
 
 function isRequisitionStatus(value: string | null): value is RequisitionStatus {

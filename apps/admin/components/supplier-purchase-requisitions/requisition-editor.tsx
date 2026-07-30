@@ -170,7 +170,7 @@ export function RequisitionEditor({
       setLines(itemPage.list.map((item) => ({
         supplierSkuId: item.supplier_sku_id,
         costCategoryId: item.cost_category_id,
-        quantity: Number(item.quantity),
+        quantity: item.quantity,
       })));
       setFacts(Object.fromEntries(itemPage.list.map((item) => [
         item.supplier_sku_id,
@@ -315,7 +315,7 @@ export function RequisitionEditor({
       setLines(itemPage.list.map((item) => ({
         supplierSkuId: item.supplier_sku_id,
         costCategoryId: item.cost_category_id,
-        quantity: Number(item.quantity),
+        quantity: item.quantity,
       })));
       setFacts(Object.fromEntries(itemPage.list.map((item) => [
         item.supplier_sku_id,
@@ -441,7 +441,7 @@ export function RequisitionEditor({
               onAdd={(supplierSkuId) =>
                 setLines((current) => [
                   ...current,
-                  { supplierSkuId, costCategoryId: "", quantity: 1 },
+                  { supplierSkuId, costCategoryId: "", quantity: "1" },
                 ])}
             />
             {savedRecord ? (
