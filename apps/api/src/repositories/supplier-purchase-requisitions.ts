@@ -8,15 +8,18 @@ import {
 import {
   PROJECT_COST_COMMITMENT_SELECT,
   SUPPLIER_PURCHASE_REQUISITION_ITEM_SELECT,
+  SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT,
   SUPPLIER_PURCHASE_REQUISITION_SELECT,
   ProjectCostCommitmentRecordSchema,
   SupplierPurchaseRequisitionCommandEnvelopeSchema,
   SupplierPurchaseRequisitionDetailSchema,
   SupplierPurchaseRequisitionItemSchema,
   SupplierPurchaseRequisitionRecordSchema,
+  SupplierPurchaseRequisitionScopeSchema,
   type SupplierPurchaseRequisitionDetail,
   type SupplierPurchaseRequisitionItem,
   type SupplierPurchaseRequisitionRecord,
+  type SupplierPurchaseRequisitionScope,
 } from "@/repositories/supplier-purchase-requisition-records";
 import type {
   SupplierPurchaseRequisitionBudgetStatus,
@@ -47,6 +50,11 @@ export type SupplierPurchaseRequisitionListInput = PageInput & {
 export type SupplierPurchaseRequisitionItemListInput = PageInput & {
   tenant_id: string;
   requisition_id: string;
+};
+export type SupplierPurchaseRequisitionScopeInput = {
+  tenant_id: string;
+  requisition_id: string;
+  visible_project_ids: string[] | null;
 };
 export type SupplierPurchaseRequisitionCommandContext = {
   tenant_id: string;
@@ -96,6 +104,7 @@ export type {
   SupplierPurchaseRequisitionDetail,
   SupplierPurchaseRequisitionItem,
   SupplierPurchaseRequisitionRecord,
+  SupplierPurchaseRequisitionScope,
 } from "@/repositories/supplier-purchase-requisition-records";
 
 type QueryResult = {
@@ -225,6 +234,34 @@ export class SupplierPurchaseRequisitionsRepository {
         ),
       },
       "查询供应商采购申请失败",
+    );
+  }
+
+  async findRequisitionScope(
+    input: SupplierPurchaseRequisitionScopeInput,
+  ): Promise<SupplierPurchaseRequisitionScope | null> {
+    if (input.visible_project_ids?.length === 0) return null;
+
+    let request = this.client
+      .from("supplier_purchase_requisitions")
+      .select(SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT)
+      .eq("tenant_id", input.tenant_id)
+      .eq("id", input.requisition_id);
+    if (input.visible_project_ids) {
+      request = request.in("project_id", input.visible_project_ids);
+    }
+    const { data, error } = await request.maybeSingle();
+    if (error) {
+      throw Errors.dbError(
+        "查询供应商采购申请授权范围失败",
+        error,
+      );
+    }
+    if (data === null) return null;
+    return parse(
+      SupplierPurchaseRequisitionScopeSchema,
+      data,
+      "查询供应商采购申请授权范围失败",
     );
   }
 

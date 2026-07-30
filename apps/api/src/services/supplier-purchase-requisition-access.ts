@@ -64,6 +64,10 @@ export class SupplierPurchaseRequisitionAccessService {
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
+  getVisibleProjectUpdateIds(auth: AuthContext) {
+    return this.accessPolicy.getVisibleProjectIds(auth, "project.update");
+  }
+
   assertProjectRead(auth: AuthContext, projectId: string) {
     return this.assertProject(auth, projectId, "project.read");
   }

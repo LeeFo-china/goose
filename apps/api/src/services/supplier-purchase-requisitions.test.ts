@@ -69,6 +69,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
         events.push("finance");
       }),
       getVisibleProjectIds: mock(async () => [PROJECT_ID]),
+      getVisibleProjectUpdateIds: mock(async () => [PROJECT_ID]),
       assertProjectRead: mock(async () => {
         events.push("project-read");
       }),
@@ -78,6 +79,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     },
     repository: {
       listRequisitions: mock(async (input: unknown) => ({ input })),
+      findRequisitionScope: mock(async () => requisition),
       findRequisition: mock(async () => ({
         requisition,
         budget_snapshots: [],
@@ -105,7 +107,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       }),
     },
     tenantSuppliers: {
-      assertCanCreatePurchaseOrder: mock(async () => {
+      assertCanCreatePurchaseOrderForTenant: mock(async () => {
         events.push("supplier");
       }),
     },
@@ -269,7 +271,7 @@ describe("SupplierPurchaseRequisitionsService", () => {
     });
   });
 
-  test("loads tenant detail before project.read and paginates items", async () => {
+  test("scopes detail and item reads before loading their facts", async () => {
     const { deps, service } = await serviceFor();
 
     await service.getRequisition(auth(), REQUISITION_ID);
@@ -282,7 +284,8 @@ describe("SupplierPurchaseRequisitionsService", () => {
       TENANT_ID,
       REQUISITION_ID,
     );
-    expect(deps.access.assertProjectRead).toHaveBeenCalledTimes(2);
+    expect(deps.repository.findRequisitionScope).toHaveBeenCalledTimes(2);
+    expect(deps.access.assertProjectRead).not.toHaveBeenCalled();
     expect(deps.repository.listItems).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
       requisition_id: REQUISITION_ID,
@@ -323,10 +326,9 @@ describe("SupplierPurchaseRequisitionsService", () => {
       expect.anything(),
       PROJECT_ID,
     );
-    expect(deps.access.assertProjectUpdate).toHaveBeenNthCalledWith(
-      2,
-      expect.anything(),
-      PROJECT_ID,
+    expect(deps.access.assertProjectUpdate).toHaveBeenCalledTimes(1);
+    expect(deps.access.getVisibleProjectUpdateIds).toHaveBeenCalledWith(
+      auth(),
     );
     expect(deps.repository.saveDraft).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -370,12 +372,11 @@ describe("SupplierPurchaseRequisitionsService", () => {
     );
 
     expect(deps.events).toEqual([
-      "project-update",
       "supplier",
       "submit",
     ]);
-    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrder)
-      .toHaveBeenCalledWith(auth(), RELATIONSHIP_ID);
+    expect(deps.tenantSuppliers.assertCanCreatePurchaseOrderForTenant)
+      .toHaveBeenCalledWith(TENANT_ID, RELATIONSHIP_ID);
     expect(deps.repository.submit).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
       requisition_id: REQUISITION_ID,
@@ -421,10 +422,7 @@ describe("SupplierPurchaseRequisitionsService", () => {
       }, `requisition:${action}`);
 
       expect(deps.access.requireApprove).toHaveBeenCalledWith(auth());
-      expect(deps.access.assertProjectRead).toHaveBeenCalledWith(
-        auth(),
-        PROJECT_ID,
-      );
+      expect(deps.access.getVisibleProjectIds).toHaveBeenCalledWith(auth());
       if (requiresFinance) {
         expect(deps.access.requireFinanceBudgetManage)
           .toHaveBeenCalledWith(auth());
@@ -468,7 +466,7 @@ describe("SupplierPurchaseRequisitionsService", () => {
     );
   });
 
-  test("returns stable not-found without project checks", async () => {
+  test("returns stable not-found after scoped authorization", async () => {
     const { deps, service } = await serviceFor();
     deps.repository.findRequisition.mockImplementation(
       async () => null as never,
@@ -479,6 +477,6 @@ describe("SupplierPurchaseRequisitionsService", () => {
         statusCode: 404,
         code: "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND",
       });
-    expect(deps.access.assertProjectRead).not.toHaveBeenCalled();
+    expect(deps.repository.findRequisitionScope).toHaveBeenCalled();
   });
 });

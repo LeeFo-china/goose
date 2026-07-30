@@ -38,6 +38,14 @@ export const SUPPLIER_PURCHASE_REQUISITION_SELECT = [
   "updated_at",
 ].join(",");
 
+export const SUPPLIER_PURCHASE_REQUISITION_SCOPE_SELECT = [
+  "id",
+  "project_id",
+  "tenant_supplier_id",
+  "created_by_employee_id",
+  "budget_status",
+].join(",");
+
 export const SUPPLIER_PURCHASE_REQUISITION_ITEM_SELECT = [
   "id",
   "tenant_id",
@@ -182,6 +190,14 @@ export const SupplierPurchaseRequisitionRecordSchema = z.object({
   updated_at: dateTime,
 }).strict();
 
+export const SupplierPurchaseRequisitionScopeSchema = z.object({
+  id: uuid,
+  project_id: uuid,
+  tenant_supplier_id: uuid,
+  created_by_employee_id: uuid,
+  budget_status: SupplierPurchaseRequisitionBudgetStatusSchema,
+}).strict();
+
 export const SupplierPurchaseRequisitionItemSchema = z.object({
   id: uuid,
   tenant_id: uuid,
@@ -297,6 +313,8 @@ export const SupplierPurchaseRequisitionCommandEnvelopeSchema = z.object({
 
 export type SupplierPurchaseRequisitionRecord =
   z.infer<typeof SupplierPurchaseRequisitionRecordSchema>;
+export type SupplierPurchaseRequisitionScope =
+  z.infer<typeof SupplierPurchaseRequisitionScopeSchema>;
 export type SupplierPurchaseRequisitionItem =
   z.infer<typeof SupplierPurchaseRequisitionItemSchema>;
 export type ProjectCostCommitmentStatus =

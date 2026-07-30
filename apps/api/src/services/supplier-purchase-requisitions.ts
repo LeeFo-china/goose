@@ -2,7 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   supplierPurchaseRequisitionsRepository,
   type SupplierPurchaseRequisitionDetail,
-  type SupplierPurchaseRequisitionRecord,
+  type SupplierPurchaseRequisitionScope,
 } from "@/repositories/supplier-purchase-requisitions";
 import type {
   SupplierPurchaseRequisitionCancelInput,
@@ -26,12 +26,13 @@ type RequisitionAccessPort = Pick<
   | "requireApprove"
   | "requireFinanceBudgetManage"
   | "getVisibleProjectIds"
-  | "assertProjectRead"
+  | "getVisibleProjectUpdateIds"
   | "assertProjectUpdate"
 >;
 type RequisitionRepositoryPort = Pick<
   typeof supplierPurchaseRequisitionsRepository,
   | "listRequisitions"
+  | "findRequisitionScope"
   | "findRequisition"
   | "listItems"
   | "saveDraft"
@@ -42,7 +43,7 @@ type RequisitionRepositoryPort = Pick<
 >;
 type TenantSupplierEligibilityPort = Pick<
   typeof tenantSuppliersService,
-  "assertCanCreatePurchaseOrder"
+  "assertCanCreatePurchaseOrderForTenant"
 >;
 
 export type SupplierPurchaseRequisitionsServiceDependencies = {
@@ -95,15 +96,13 @@ export class SupplierPurchaseRequisitionsService {
     requisitionId: string,
   ): Promise<SupplierPurchaseRequisitionDetail> {
     const scope = await this.access.requireView(auth);
-    const detail = await this.requireRequisition(
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
+      visibleProjectIds,
     );
-    await this.access.assertProjectRead(
-      auth,
-      detail.requisition.project_id,
-    );
-    return detail;
+    return this.requireRequisition(scope.tenantId, requisitionId);
   }
 
   async listItems(
@@ -112,13 +111,11 @@ export class SupplierPurchaseRequisitionsService {
     query: SupplierPurchaseRequisitionItemListQuery,
   ) {
     const scope = await this.access.requireView(auth);
-    const detail = await this.requireRequisition(
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
-    );
-    await this.access.assertProjectRead(
-      auth,
-      detail.requisition.project_id,
+      visibleProjectIds,
     );
     return this.repository.listItems({
       tenant_id: scope.tenantId,
@@ -136,11 +133,13 @@ export class SupplierPurchaseRequisitionsService {
   ) {
     const scope = await this.access.requireManage(auth);
     if (input.expected_version > 0) {
-      const requisition = await this.requireRequisitionRecord(
+      const visibleProjectIds = await this.access
+        .getVisibleProjectUpdateIds(auth);
+      const requisition = await this.requireRequisitionScope(
         scope.tenantId,
         requisitionId,
+        visibleProjectIds,
       );
-      await this.access.assertProjectUpdate(auth, requisition.project_id);
       this.assertDraftScopeUnchanged(requisition, input);
     } else {
       await this.access.assertProjectUpdate(auth, input.project_id);
@@ -168,13 +167,15 @@ export class SupplierPurchaseRequisitionsService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireManage(auth);
-    const requisition = await this.requireRequisitionRecord(
+    const visibleProjectIds = await this.access
+      .getVisibleProjectUpdateIds(auth);
+    const requisition = await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
+      visibleProjectIds,
     );
-    await this.access.assertProjectUpdate(auth, requisition.project_id);
-    await this.tenantSuppliers.assertCanCreatePurchaseOrder(
-      auth,
+    await this.tenantSuppliers.assertCanCreatePurchaseOrderForTenant(
+      scope.tenantId,
       requisition.tenant_supplier_id,
     );
     return this.repository.submit(
@@ -189,11 +190,12 @@ export class SupplierPurchaseRequisitionsService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireApprove(auth);
-    const requisition = await this.requireRequisitionRecord(
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    const requisition = await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
+      visibleProjectIds,
     );
-    await this.access.assertProjectRead(auth, requisition.project_id);
     if (requisition.created_by_employee_id === scope.employeeId) {
       throw Errors.business(
         409,
@@ -226,11 +228,13 @@ export class SupplierPurchaseRequisitionsService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireManage(auth);
-    const requisition = await this.requireRequisitionRecord(
+    const visibleProjectIds = await this.access
+      .getVisibleProjectUpdateIds(auth);
+    await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
+      visibleProjectIds,
     );
-    await this.access.assertProjectUpdate(auth, requisition.project_id);
     return this.repository.cancel({
       ...this.commandContext(
         scope,
@@ -249,11 +253,13 @@ export class SupplierPurchaseRequisitionsService {
     idempotencyKey: string,
   ) {
     const scope = await this.access.requireManage(auth);
-    const requisition = await this.requireRequisitionRecord(
+    const visibleProjectIds = await this.access
+      .getVisibleProjectUpdateIds(auth);
+    await this.requireRequisitionScope(
       scope.tenantId,
       requisitionId,
+      visibleProjectIds,
     );
-    await this.access.assertProjectUpdate(auth, requisition.project_id);
     return this.repository.convert({
       ...this.commandContext(
         scope,
@@ -281,12 +287,22 @@ export class SupplierPurchaseRequisitionsService {
     );
   }
 
-  private async requireRequisitionRecord(
+  private async requireRequisitionScope(
     tenantId: string,
     requisitionId: string,
-  ): Promise<SupplierPurchaseRequisitionRecord> {
-    return (await this.requireRequisition(tenantId, requisitionId))
-      .requisition;
+    visibleProjectIds: string[] | null,
+  ): Promise<SupplierPurchaseRequisitionScope> {
+    const requisition = await this.repository.findRequisitionScope({
+      tenant_id: tenantId,
+      requisition_id: requisitionId,
+      visible_project_ids: visibleProjectIds,
+    });
+    if (requisition) return requisition;
+    throw Errors.business(
+      404,
+      "供应商采购申请不存在",
+      "SUPPLIER_PURCHASE_REQUISITION_NOT_FOUND",
+    );
   }
 
   private commandContext(
@@ -310,7 +326,7 @@ export class SupplierPurchaseRequisitionsService {
   }
 
   private assertDraftScopeUnchanged(
-    requisition: SupplierPurchaseRequisitionRecord,
+    requisition: SupplierPurchaseRequisitionScope,
     input: Pick<
       SupplierPurchaseRequisitionDraftInput,
       "project_id" | "tenant_supplier_id"
