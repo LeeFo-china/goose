@@ -4,7 +4,7 @@ import {
   FULFILLMENT_SMOKE_IDS,
 } from "./supplier-purchase-fulfillment-smoke-fixture";
 import {
-  assertAcceptedAmounts,
+  assertFulfillmentFacts,
   assertFulfillmentCommandResult,
 } from "./supplier-purchase-fulfillment-smoke-commands";
 import {
@@ -63,6 +63,16 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
           .test(value)
       ),
     ).toBe(true);
+  });
+
+  test("exposes the canonical package command for the Task9 database run", async () => {
+    const packageJson: { scripts: Record<string, string> } = await Bun.file(
+      new URL("../../package.json", import.meta.url),
+    ).json();
+
+    expect(
+      packageJson.scripts["supplier:purchase-fulfillment-smoke"],
+    ).toBe("bun src/scripts/supplier-purchase-fulfillment-smoke.ts");
   });
 
   test("returns only after the transaction executor rolls back", async () => {
@@ -154,31 +164,80 @@ describe("supplier purchase fulfillment database smoke helpers", () => {
     }
 
     expect(
-      assertAcceptedAmounts(
+      assertFulfillmentFacts(
         {
+          ordered_quantity: "10.0000",
+          shipped_quantity: "10.0000",
+          received_quantity: "10.0000",
+          accepted_quantity: "9.0000",
+          rejected_quantity: "1.0000",
           accepted_subtotal_amount: "79.65",
           accepted_tax_amount: "10.35",
           accepted_total_amount: "90.00",
         },
         {
+          ordered: "10.0000",
+          shipped: "10.0000",
+          received: "10.0000",
+          accepted: "9.0000",
+          rejected: "1.0000",
           subtotal: "79.65",
           tax: "10.35",
           total: "90.00",
         },
       ),
     ).toEqual({
+      ordered_quantity: "10.0000",
+      shipped_quantity: "10.0000",
+      received_quantity: "10.0000",
+      accepted_quantity: "9.0000",
+      rejected_quantity: "1.0000",
       accepted_subtotal_amount: "79.65",
       accepted_tax_amount: "10.35",
       accepted_total_amount: "90.00",
     });
     expect(() =>
-      assertAcceptedAmounts(
+      assertFulfillmentFacts(
         {
+          ordered_quantity: 10,
+          shipped_quantity: "10.0000",
+          received_quantity: "10.0000",
+          accepted_quantity: "9.0000",
+          rejected_quantity: "1.0000",
+          accepted_subtotal_amount: "79.65",
+          accepted_tax_amount: "10.35",
+          accepted_total_amount: "90.00",
+        },
+        {
+          ordered: "10.0000",
+          shipped: "10.0000",
+          received: "10.0000",
+          accepted: "9.0000",
+          rejected: "1.0000",
+          subtotal: "79.65",
+          tax: "10.35",
+          total: "90.00",
+        },
+      )
+    ).toThrow("ordered_quantity");
+    expect(() =>
+      assertFulfillmentFacts(
+        {
+          ordered_quantity: "10.0000",
+          shipped_quantity: "10.0000",
+          received_quantity: "10.0000",
+          accepted_quantity: "9.0000",
+          rejected_quantity: "1.0000",
           accepted_subtotal_amount: 79.65,
           accepted_tax_amount: "10.35",
           accepted_total_amount: "90.00",
         },
         {
+          ordered: "10.0000",
+          shipped: "10.0000",
+          received: "10.0000",
+          accepted: "9.0000",
+          rejected: "1.0000",
           subtotal: "79.65",
           tax: "10.35",
           total: "90.00",

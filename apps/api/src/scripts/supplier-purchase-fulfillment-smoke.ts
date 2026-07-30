@@ -6,8 +6,8 @@ import {
   type FulfillmentSmokeSql,
 } from "./supplier-purchase-fulfillment-smoke-fixture";
 import {
-  assertAcceptedAmounts,
   assertErrorEnvelope,
+  assertFulfillmentFacts,
   assertFulfillmentCommandResult,
   cancelOrderAfterShipment,
   confirmFulfillment,
@@ -274,8 +274,13 @@ async function executeSmoke(
     },
   );
 
-  const amountRows = await sql<Record<string, unknown>[]>`
+  const factRows = await sql<Record<string, unknown>[]>`
     select
+      fulfillment.ordered_quantity::text,
+      fulfillment.shipped_quantity::text,
+      fulfillment.received_quantity::text,
+      fulfillment.accepted_quantity::text,
+      fulfillment.rejected_quantity::text,
       fulfillment.accepted_subtotal_amount::text,
       fulfillment.accepted_tax_amount::text,
       fulfillment.accepted_total_amount::text
@@ -284,12 +289,17 @@ async function executeSmoke(
       and fulfillment.supplier_purchase_order_id =
         ${FULFILLMENT_SMOKE_IDS.order}::uuid;
   `;
-  if (amountRows.length !== 1) {
+  if (factRows.length !== 1) {
     throw new SupplierPurchaseFulfillmentSmokeAssertionError(
-      "accepted amounts must have exactly one row",
+      "fulfillment facts must have exactly one row",
     );
   }
-  assertAcceptedAmounts(amountRows[0], {
+  assertFulfillmentFacts(factRows[0], {
+    ordered: "10.0000",
+    shipped: "10.0000",
+    received: "10.0000",
+    accepted: "9.0000",
+    rejected: "1.0000",
     subtotal: "79.65",
     tax: "10.35",
     total: "90.00",

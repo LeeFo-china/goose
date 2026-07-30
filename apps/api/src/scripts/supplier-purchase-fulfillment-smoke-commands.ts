@@ -122,13 +122,27 @@ export function assertErrorEnvelope(
   return result;
 }
 
-export function assertAcceptedAmounts(
+export function assertFulfillmentFacts(
   value: unknown,
-  expected: { subtotal: string; tax: string; total: string },
+  expected: {
+    ordered: string;
+    shipped: string;
+    received: string;
+    accepted: string;
+    rejected: string;
+    subtotal: string;
+    tax: string;
+    total: string;
+  },
 ) {
-  const result = requireRecord(value, "accepted amounts");
+  const result = requireRecord(value, "fulfillment facts");
   for (
     const [field, expectedValue] of [
+      ["ordered_quantity", expected.ordered],
+      ["shipped_quantity", expected.shipped],
+      ["received_quantity", expected.received],
+      ["accepted_quantity", expected.accepted],
+      ["rejected_quantity", expected.rejected],
       ["accepted_subtotal_amount", expected.subtotal],
       ["accepted_tax_amount", expected.tax],
       ["accepted_total_amount", expected.total],
