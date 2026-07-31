@@ -10,16 +10,23 @@ import {
 import {
   assertSupplierPaymentPrerequisites,
   closeDatabasePreservingPrimaryFailure,
+  countResidualFixtureRows,
   runRollbackOnly,
 } from "./supplier-payment-smoke";
+import {
+  closeThenCheckFreshResidual,
+  type SupplierPaymentFailureState,
+} from "./supplier-payment-smoke-residual";
 
 export const EXPECTED_SUPPLIER_PAYMENT_INDEXES = {
-  payable: "supplier_payable_events_tenant_status_query_idx",
-  request: "supplier_payment_requests_tenant_status_updated_idx",
-  projectCost: "project_cost_events_tenant_project_category_occurred_idx",
-  commitment: "project_cost_commitments_active_remaining_idx",
-  projectPayable: "supplier_payable_events_tenant_project_due_idx",
-  cash: "finance_ledger_entries_tenant_type_occurred_idx",
+  payable: ["supplier_payable_events_tenant_status_query_idx"],
+  request: ["supplier_payment_requests_tenant_status_updated_idx"],
+  projectCost: [
+    "project_cost_events_tenant_project_category_occurred_idx",
+  ],
+  commitment: ["project_cost_commitments_active_remaining_idx"],
+  projectPayable: ["supplier_payable_events_tenant_project_due_idx"],
+  cash: ["finance_ledger_entries_tenant_type_occurred_idx"],
 } as const;
 
 export type ParsedExplainPlan = {
@@ -28,6 +35,7 @@ export type ParsedExplainPlan = {
 };
 
 type ExplainName = keyof typeof EXPECTED_SUPPLIER_PAYMENT_INDEXES;
+type ExplainPlanMap = Record<ExplainName, ParsedExplainPlan>;
 
 class SupplierPaymentExplainError extends Error {}
 
@@ -93,17 +101,31 @@ export function parseExplainPlan(rowsValue: unknown): ParsedExplainPlan {
 }
 
 export function assertExplainUsesIndexes(
-  plans: ParsedExplainPlan[],
+  plans: ExplainPlanMap,
 ): true {
-  if (plans.some((plan) => !plan.hasRuntimeEvidence)) {
-    throw new SupplierPaymentExplainError(
-      "EXPLAIN runtime evidence is required",
-    );
-  }
-  const used = new Set(plans.flatMap((plan) => plan.indexNames));
-  for (const expected of Object.values(EXPECTED_SUPPLIER_PAYMENT_INDEXES)) {
-    if (!used.has(expected)) {
-      throw new SupplierPaymentExplainError(`EXPLAIN must use ${expected}`);
+  for (
+    const name of Object.keys(
+      EXPECTED_SUPPLIER_PAYMENT_INDEXES,
+    ) as ExplainName[]
+  ) {
+    const plan = plans[name];
+    if (!plan) {
+      throw new SupplierPaymentExplainError(
+        `${name} EXPLAIN plan is required`,
+      );
+    }
+    if (!plan.hasRuntimeEvidence) {
+      throw new SupplierPaymentExplainError(
+        `${name} EXPLAIN runtime evidence is required`,
+      );
+    }
+    const used = new Set(plan.indexNames);
+    for (const expected of EXPECTED_SUPPLIER_PAYMENT_INDEXES[name]) {
+      if (!used.has(expected)) {
+        throw new SupplierPaymentExplainError(
+          `${name} EXPLAIN must use ${expected}`,
+        );
+      }
     }
   }
   return true;
@@ -111,14 +133,14 @@ export function assertExplainUsesIndexes(
 
 export async function runExplainChecks(runner: {
   explain(name: ExplainName): Promise<unknown>;
-}): Promise<ParsedExplainPlan[]> {
-  const plans: ParsedExplainPlan[] = [];
+}): Promise<ExplainPlanMap> {
+  const plans = {} as ExplainPlanMap;
   for (
     const name of Object.keys(
       EXPECTED_SUPPLIER_PAYMENT_INDEXES,
     ) as ExplainName[]
   ) {
-    plans.push(parseExplainPlan(await runner.explain(name)));
+    plans[name] = parseExplainPlan(await runner.explain(name));
   }
   return plans;
 }
@@ -222,10 +244,49 @@ async function countExplainResiduals(sql: Bun.SQL): Promise<number> {
       where request_no like 'SPR-20991231-%'
       union all
       select count(*) from public.finance_ledger_entries
-      where source_type = 'supplier_payment_explain'
+      where source_id in (
+        select md5(
+          'supplier-payment-explain-ledger-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
+      select count(*) from public.supplier_purchase_order_receipt_items
+      where id in (
+        select md5(
+          'supplier-payment-explain-receipt-item-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
+      select count(*) from public.project_cost_events
+      where source_id in (
+        select md5(
+          'supplier-payment-explain-receipt-item-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
+      select count(*) from public.supplier_payable_events
+      where source_id in (
+        select md5(
+          'supplier-payment-explain-receipt-item-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
+      select count(*) from public.project_cost_commitments
+      where source_id in (
+        select md5(
+          'supplier-payment-explain-requisition-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
     ) as fact;
   `;
-  return rows[0]?.count ?? -1;
+  const generatedResiduals = rows[0]?.count ?? -1;
+  if (generatedResiduals < 0) return generatedResiduals;
+  return generatedResiduals + await countResidualFixtureRows(sql);
 }
 
 export async function runSupplierPaymentExplain(
@@ -236,15 +297,15 @@ export async function runSupplierPaymentExplain(
     prepare: false,
     connectionTimeout: 10,
   });
-  let primaryFailure:
-    | { failed: false }
-    | { failed: true; value: unknown } = { failed: false };
+  let primaryFailure: SupplierPaymentFailureState = { failed: false };
   let summary: SupplierPaymentExplainSummary | undefined;
+  let mustCheckResidual = false;
   try {
     await assertSupplierPaymentPrerequisites(database);
+    mustCheckResidual = true;
     const plans = await runRollbackOnly<
       TransactionSQL,
-      ParsedExplainPlan[]
+      ExplainPlanMap
     >(database, async (transaction) => {
       const sql = transaction as unknown as SupplierPaymentSmokeSql;
       const fixture = await seedSupplierPaymentSmokeFixture(sql);
@@ -257,19 +318,29 @@ export async function runSupplierPaymentExplain(
     const names = Object.keys(EXPECTED_SUPPLIER_PAYMENT_INDEXES) as ExplainName[];
     summary = {
       indexes: Object.fromEntries(
-        names.map((name, index) => [name, plans[index]?.indexNames ?? []]),
+        names.map((name) => [name, plans[name].indexNames]),
       ) as Record<ExplainName, string[]>,
       transaction_rolled_back: true,
     };
-    if (await countExplainResiduals(database) !== 0) {
-      throw new SupplierPaymentExplainError(
-        "supplier payment EXPLAIN fixture was not rolled back",
-      );
-    }
   } catch (error) {
     primaryFailure = { failed: true, value: error };
   }
-  await closeDatabasePreservingPrimaryFailure(database, primaryFailure);
+  if (!mustCheckResidual) {
+    await closeDatabasePreservingPrimaryFailure(database, primaryFailure);
+  } else {
+    await closeThenCheckFreshResidual({
+      original: database,
+      createFresh: () =>
+        new Bun.SQL(databaseUrl, {
+          max: 1,
+          prepare: false,
+          connectionTimeout: 10,
+        }),
+      countResidual: countExplainResiduals,
+      primaryFailure,
+      label: "supplier payment EXPLAIN rollback fixture",
+    });
+  }
   if (!summary) {
     throw new SupplierPaymentExplainError(
       "supplier payment EXPLAIN did not complete",

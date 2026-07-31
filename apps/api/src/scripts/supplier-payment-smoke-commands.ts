@@ -15,6 +15,7 @@ export const SUPPLIER_PAYMENT_COMMAND_SEQUENCE = [
   "submit_competing_requests",
   "reject_reserved_request",
   "resubmit_released_request",
+  "self_review_rejected",
   "approve_payment_request",
   "partial_payment",
   "partial_payment_replay",
@@ -51,6 +52,11 @@ type PaymentRequestCommand = {
   expectedVersion: number;
   idempotencyKey: string;
 };
+
+export type SupplierPaymentRequestActorFixture = Pick<
+  SupplierPaymentSmokeFixture,
+  "tenant_id" | "project_id" | "relationship_id" | "user_id" | "employee_id"
+>;
 
 function result(rows: ResultRow[], label: string): unknown {
   if (rows.length !== 1 || rows[0]?.result === undefined) {
@@ -142,7 +148,7 @@ export async function listPayableFacts(
 
 export async function savePaymentRequest(
   sql: SupplierPaymentSmokeSql,
-  fixture: SupplierPaymentSmokeFixture,
+  fixture: SupplierPaymentRequestActorFixture,
   input: PaymentRequestCommand & {
     allocations: Array<{
       payable_event_id: string;
@@ -172,7 +178,7 @@ export async function savePaymentRequest(
 
 export async function submitPaymentRequest(
   sql: SupplierPaymentSmokeSql,
-  fixture: SupplierPaymentSmokeFixture,
+  fixture: SupplierPaymentRequestActorFixture,
   input: PaymentRequestCommand,
 ): Promise<SupplierPaymentCommandEnvelope> {
   const rows = await sql<ResultRow[]>`
@@ -197,9 +203,11 @@ export async function reviewPaymentRequest(
     action: "approve" | "reject";
     remark: string | null;
     otherTenant?: boolean;
+    selfReview?: boolean;
   },
 ): Promise<SupplierPaymentCommandEnvelope> {
   const isOtherTenant = input.otherTenant === true;
+  const isSelfReview = input.selfReview === true;
   const rows = await sql<ResultRow[]>`
     select public.review_supplier_payment_request(
       ${input.requestId}::uuid,
@@ -211,9 +219,13 @@ export async function reviewPaymentRequest(
       ${input.remark},
       ${isOtherTenant
         ? fixture.other_user_id
+        : isSelfReview
+        ? fixture.user_id
         : fixture.reviewer_user_id}::uuid,
       ${isOtherTenant
         ? fixture.other_employee_id
+        : isSelfReview
+        ? fixture.employee_id
         : fixture.reviewer_employee_id}::uuid,
       ${input.idempotencyKey}::uuid
     ) as result;

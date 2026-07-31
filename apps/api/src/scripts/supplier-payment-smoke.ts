@@ -1,6 +1,7 @@
 import type { TransactionSQL } from "bun";
 
 import {
+  SUPPLIER_PAYMENT_BASE_IDS,
   SUPPLIER_PAYMENT_SMOKE_IDS,
   seedSupplierPaymentSmokeFixture,
   type SupplierPaymentSmokeSql,
@@ -10,11 +11,25 @@ import { SupplierPaymentSmokeAssertionError } from
 import { executeSupplierPaymentSmokeScenario } from
   "./supplier-payment-smoke-scenario";
 import {
+  assertCommittedConcurrencyConfig,
+  runConcurrentRequestProbe,
+  runConcurrentSubmitOverlap,
+} from "./supplier-payment-smoke-concurrency";
+import {
+  closeThenCheckFreshResidual,
+  type SupplierPaymentFailureState,
+} from "./supplier-payment-smoke-residual";
+import {
   closeDatabasePreservingPrimaryFailure,
   runRollbackOnly,
 } from "./supplier-purchase-fulfillment-smoke";
 
 export { closeDatabasePreservingPrimaryFailure, runRollbackOnly };
+export {
+  assertCommittedConcurrencyConfig,
+  closeThenCheckFreshResidual,
+  runConcurrentSubmitOverlap,
+};
 
 const SUMMARY_KEYS = [
   "receipt_cost_atomic",
@@ -103,16 +118,18 @@ export async function assertSupplierPaymentPrerequisites(
 
 async function executeSmoke(
   sql: SupplierPaymentSmokeSql,
+  concurrentRequestSerialized: true,
 ): Promise<PreRollbackSummary> {
   const fixture = await seedSupplierPaymentSmokeFixture(sql);
   const checks = await executeSupplierPaymentSmokeScenario(sql, fixture);
   return assertSupplierPaymentSmokeSummary({
     ...checks,
+    concurrent_request_serialized: concurrentRequestSerialized,
     transaction_rolled_back: true,
   }) as PreRollbackSummary;
 }
 
-async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
+export async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
   const rows = await sql<{ count: number }[]>`
     select sum(fact.count)::integer as count
     from (
@@ -138,6 +155,65 @@ async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
       union all
       select count(*) from public.platform_file_objects
       where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.contractDocument}::uuid
+      union all
+      select count(*) from public.supplier_purchase_requisitions
+      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.requisition}::uuid
+      union all
+      select count(*) from public.finance_cost_categories
+      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.costCategory}::uuid
+      union all
+      select count(*) from public.project_cost_budgets
+      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.budget}::uuid
+      union all
+      select count(*) from public.supplier_purchase_order_shipments
+      where id in (
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.shipment}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoiceShipment}::uuid
+      )
+      union all
+      select count(*) from public.supplier_purchase_order_receipts
+      where id in (
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.partialReceipt}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.finalReceipt}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoiceReceipt}::uuid
+      )
+      union all
+      select count(*) from public.suppliers
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.supplier}::uuid
+      union all
+      select count(*) from public.tenant_suppliers
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.relationship}::uuid,
+        ${SUPPLIER_PAYMENT_BASE_IDS.otherRelationship}::uuid
+      )
+      union all
+      select count(*) from public.supplier_products
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.product}::uuid
+      union all
+      select count(*) from public.supplier_skus
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.sku}::uuid
+      union all
+      select count(*) from public.supplier_price_lists
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.priceList}::uuid
+      union all
+      select count(*) from public.supplier_price_list_items
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.priceItem}::uuid
+      union all
+      select count(*) from public.catalog_categories
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.category}::uuid
+      union all
+      select count(*) from public.catalog_brands
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.brand}::uuid
+      union all
+      select count(*) from public.catalog_units
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.unit}::uuid
+      union all
+      select count(*) from public.supplier_qualifications
+      where id = ${SUPPLIER_PAYMENT_BASE_IDS.qualification}::uuid
+      union all
+      select count(*) from public.supplier_command_events
+      where resource_id::text like '86000000-%'
+        or resource_id::text like '23000000-%'
     ) as fact;
   `;
   return rows[0]?.count ?? -1;
@@ -145,38 +221,70 @@ async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
 
 export async function runSupplierPaymentSmoke(
   databaseUrl: string,
+  concurrencyConfig: {
+    allowCommittedConcurrency?: string;
+    disposableDatabase?: string;
+    payableId?: string;
+  } = {
+    allowCommittedConcurrency:
+      process.env.SUPPLIER_PAYMENT_SMOKE_ALLOW_COMMITTED_CONCURRENCY,
+    disposableDatabase:
+      process.env.SUPPLIER_PAYMENT_SMOKE_DISPOSABLE_DB,
+    payableId:
+      process.env.SUPPLIER_PAYMENT_SMOKE_CONCURRENCY_PAYABLE_ID,
+  },
 ): Promise<SupplierPaymentSmokeSummary> {
   const database = new Bun.SQL(databaseUrl, {
     max: 1,
     prepare: false,
     connectionTimeout: 10,
   });
-  let primaryFailure:
-    | { failed: false }
-    | { failed: true; value: unknown } = { failed: false };
-  let summary: SupplierPaymentSmokeSummary | undefined;
+  let primaryFailure: SupplierPaymentFailureState = { failed: false };
+  let checks: PreRollbackSummary | undefined;
+  let mustCheckResidual = false;
   try {
     await assertSupplierPaymentPrerequisites(database);
-    const checks = await runRollbackOnly<TransactionSQL, PreRollbackSummary>(
+    const concurrentRequestSerialized = await runConcurrentRequestProbe(
+      databaseUrl,
+      concurrencyConfig,
+    );
+    mustCheckResidual = true;
+    checks = await runRollbackOnly<TransactionSQL, PreRollbackSummary>(
       database,
       (transaction) =>
-        executeSmoke(transaction as unknown as SupplierPaymentSmokeSql),
+        executeSmoke(
+          transaction as unknown as SupplierPaymentSmokeSql,
+          concurrentRequestSerialized,
+        ),
     );
-    summary = assertSupplierPaymentSmokeSummary({
-      ...checks,
-      transaction_rolled_back:
-        await countResidualFixtureRows(database) === 0,
-    });
   } catch (error) {
     primaryFailure = { failed: true, value: error };
   }
-  await closeDatabasePreservingPrimaryFailure(database, primaryFailure);
-  if (!summary) {
+  if (!mustCheckResidual) {
+    await closeDatabasePreservingPrimaryFailure(database, primaryFailure);
+  } else {
+    await closeThenCheckFreshResidual({
+      original: database,
+      createFresh: () =>
+        new Bun.SQL(databaseUrl, {
+          max: 1,
+          prepare: false,
+          connectionTimeout: 10,
+        }),
+      countResidual: countResidualFixtureRows,
+      primaryFailure,
+      label: "supplier payment rollback fixture",
+    });
+  }
+  if (!checks) {
     throw new SupplierPaymentSmokeAssertionError(
       "supplier payment smoke did not complete",
     );
   }
-  return summary;
+  return assertSupplierPaymentSmokeSummary({
+    ...checks,
+    transaction_rolled_back: true,
+  });
 }
 
 async function main(): Promise<void> {

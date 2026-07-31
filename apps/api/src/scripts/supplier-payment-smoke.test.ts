@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import { SupplierPaymentCommandEnvelopeSchema } from
   "../repositories/supplier-payment-records";
+import * as paymentFlowModule from "./supplier-payment-smoke-payment-flow";
+import * as paymentSmokeModule from "./supplier-payment-smoke";
 import {
   SUPPLIER_PAYMENT_COMMAND_SEQUENCE,
   assertSupplierPaymentCommandEnvelope,
@@ -52,6 +54,55 @@ const passingSummary: SupplierPaymentSmokeSummary = {
   supplier_cash_not_double_costed: true,
   tenant_isolation: true,
   transaction_rolled_back: true,
+};
+
+type CommittedConcurrencyConfig = {
+  databaseUrl: string;
+  allowCommittedConcurrency?: string;
+  disposableDatabase?: string;
+  payableId?: string;
+};
+
+type OverlapClient = {
+  clientId: "A" | "B";
+  begin<Result>(
+    callback: (transaction: { clientId: "A" | "B" }) => Promise<Result>,
+  ): Promise<Result>;
+};
+
+const smokeFixes = paymentSmokeModule as typeof paymentSmokeModule & {
+  assertCommittedConcurrencyConfig(
+    input: CommittedConcurrencyConfig,
+  ): { payableId: string };
+  runConcurrentSubmitOverlap<Result>(input: {
+    clients: readonly [OverlapClient, OverlapClient];
+    submit(
+      clientId: "A" | "B",
+      transaction: { clientId: "A" | "B" },
+    ): Promise<Result>;
+    waitForSecondBlocked(): Promise<void>;
+  }): Promise<readonly [Result, Result]>;
+  closeThenCheckFreshResidual<Connection extends { close(): Promise<void> }>(
+    input: {
+      original: Connection;
+      createFresh(): Connection;
+      countResidual(connection: Connection): Promise<number>;
+      primaryFailure:
+        | { failed: false }
+        | { failed: true; value: unknown };
+    },
+  ): Promise<void>;
+};
+
+const paymentFlowFixes = paymentFlowModule as typeof paymentFlowModule & {
+  assertInvoiceGateSnapshotUnchanged(
+    before: unknown,
+    after: unknown,
+  ): true;
+  assertProjectCostSnapshotUnchanged(
+    before: unknown,
+    after: unknown,
+  ): true;
 };
 
 describe("supplier payment database smoke helpers", () => {
@@ -157,6 +208,7 @@ describe("supplier payment database smoke helpers", () => {
       "submit_competing_requests",
       "reject_reserved_request",
       "resubmit_released_request",
+      "self_review_rejected",
       "approve_payment_request",
       "partial_payment",
       "partial_payment_replay",
@@ -179,5 +231,203 @@ describe("supplier payment database smoke helpers", () => {
       ...error,
       reason: "unexpected",
     })).toThrow("payment command envelope");
+    expect(assertSupplierPaymentCommandEnvelope({
+      status: "self_review",
+      error_code: "SUPPLIER_PAYMENT_SELF_REVIEW",
+    })).toEqual({
+      status: "self_review",
+      error_code: "SUPPLIER_PAYMENT_SELF_REVIEW",
+    });
+  });
+
+  test("requires explicit loopback disposable configuration for committed concurrency", () => {
+    const allowed = {
+      databaseUrl: "postgres://postgres:secret@127.0.0.1:54322/postgres",
+      allowCommittedConcurrency: "1",
+      disposableDatabase: "1",
+      payableId: "87000000-0000-4000-8000-000000000001",
+    };
+    expect(smokeFixes.assertCommittedConcurrencyConfig(allowed)).toEqual({
+      payableId: allowed.payableId,
+    });
+    expect(() => smokeFixes.assertCommittedConcurrencyConfig({
+      ...allowed,
+      payableId: undefined,
+    })).toThrow("CONCURRENCY_PAYABLE_ID");
+    expect(() => smokeFixes.assertCommittedConcurrencyConfig({
+      ...allowed,
+      databaseUrl: "postgres://postgres:secret@db.example.supabase.co/db",
+    })).toThrow("LOOPBACK");
+    expect(() => smokeFixes.assertCommittedConcurrencyConfig({
+      ...allowed,
+      disposableDatabase: undefined,
+    })).toThrow("DISPOSABLE");
+  });
+
+  test("locks committed concurrency to an explicit payable without candidate scanning", async () => {
+    const source = await Bun.file(new URL(
+      "./supplier-payment-smoke-concurrency.ts",
+      import.meta.url,
+    )).text();
+    expect(source).toContain(
+      "where payable.id = ${payableId}::uuid;",
+    );
+    expect(source).not.toContain("limit 1");
+    expect(source).not.toContain("order by payable");
+
+    const flowSource = await Bun.file(new URL(
+      "./supplier-payment-smoke-payment-flow.ts",
+      import.meta.url,
+    )).text();
+    expect(flowSource).not.toContain(
+      "state.checks.concurrent_request_serialized",
+    );
+  });
+
+  test("overlaps submissions on two distinguishable clients behind a barrier", async () => {
+    const events: string[] = [];
+    let releaseB!: () => void;
+    const waitForACommit = new Promise<void>((resolve) => {
+      releaseB = resolve;
+    });
+    function client(clientId: "A" | "B"): OverlapClient {
+      return {
+        clientId,
+        async begin<Result>(callback: (
+          transaction: { clientId: "A" | "B" },
+        ) => Promise<Result>) {
+          events.push(`${clientId}:begin`);
+          const result = await callback({ clientId });
+          events.push(`${clientId}:commit`);
+          if (clientId === "A") releaseB();
+          return result;
+        },
+      };
+    }
+    const result = await smokeFixes.runConcurrentSubmitOverlap({
+      clients: [client("A"), client("B")],
+      async submit(clientId, transaction) {
+        expect(transaction.clientId).toBe(clientId);
+        events.push(`${clientId}:submit`);
+        if (clientId === "B") await waitForACommit;
+        return clientId === "A" ? "submitted" : "amount_unavailable";
+      },
+      async waitForSecondBlocked() {
+        events.push("B:blocked");
+        expect(events).toContain("A:submit");
+        expect(events).toContain("B:submit");
+        expect(events).not.toContain("A:commit");
+      },
+    });
+    expect(result).toEqual(["submitted", "amount_unavailable"]);
+    expect(events).toEqual([
+      "A:begin",
+      "A:submit",
+      "B:begin",
+      "B:submit",
+      "B:blocked",
+      "A:commit",
+      "B:commit",
+    ]);
+
+    const sameClient = client("A");
+    await expect(smokeFixes.runConcurrentSubmitOverlap({
+      clients: [sameClient, sameClient],
+      async submit() {
+        return "submitted";
+      },
+      async waitForSecondBlocked() {},
+    })).rejects.toThrow("DISTINCT_CLIENTS");
+  });
+
+  test("keeps invoice request, allocations and cash facts unchanged", () => {
+    const snapshot = {
+      request: {
+        status: "approved",
+        version: 3,
+        paid_amount: "0.00",
+      },
+      allocations: [{
+        id: "allocation-a",
+        paid_amount: "0.00",
+      }],
+      payment_count: 0,
+      payment_allocation_count: 0,
+      ledger_count: 0,
+    };
+    expect(paymentFlowFixes.assertInvoiceGateSnapshotUnchanged(
+      snapshot,
+      structuredClone(snapshot),
+    )).toBe(true);
+    expect(() => paymentFlowFixes.assertInvoiceGateSnapshotUnchanged(
+      snapshot,
+      {
+        ...structuredClone(snapshot),
+        request: { ...snapshot.request, version: 4 },
+      },
+    )).toThrow("invoice gate");
+    expect(() => paymentFlowFixes.assertInvoiceGateSnapshotUnchanged(
+      snapshot,
+      {
+        ...structuredClone(snapshot),
+        allocations: [{
+          id: "allocation-a",
+          paid_amount: "1.00",
+        }],
+      },
+    )).toThrow("invoice gate");
+  });
+
+  test("keeps whole-project cost totals unchanged after supplier cash", () => {
+    const snapshot = {
+      count: 3,
+      amount: "42.50",
+      supplier_payment_source_count: 0,
+    };
+    expect(paymentFlowFixes.assertProjectCostSnapshotUnchanged(
+      snapshot,
+      { ...snapshot },
+    )).toBe(true);
+    expect(() => paymentFlowFixes.assertProjectCostSnapshotUnchanged(
+      snapshot,
+      { ...snapshot, count: 4 },
+    )).toThrow("project cost");
+    expect(() => paymentFlowFixes.assertProjectCostSnapshotUnchanged(
+      snapshot,
+      { ...snapshot, supplier_payment_source_count: 1 },
+    )).toThrow("supplier_payment");
+  });
+
+  test("closes the original pool before checking residuals on a fresh pool", async () => {
+    const primaryFailure = new Error("primary");
+    const events: string[] = [];
+    const original = {
+      async close() {
+        events.push("original:close");
+        throw new Error("original close");
+      },
+    };
+    await expect(smokeFixes.closeThenCheckFreshResidual({
+      original,
+      createFresh() {
+        events.push("fresh:create");
+        return {
+          async close() {
+            events.push("fresh:close");
+          },
+        };
+      },
+      async countResidual() {
+        events.push("fresh:count");
+        return 0;
+      },
+      primaryFailure: { failed: true, value: primaryFailure },
+    })).rejects.toBe(primaryFailure);
+    expect(events).toEqual([
+      "original:close",
+      "fresh:create",
+      "fresh:count",
+      "fresh:close",
+    ]);
   });
 });

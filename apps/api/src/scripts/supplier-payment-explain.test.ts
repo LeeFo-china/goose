@@ -5,6 +5,7 @@ import {
   assertExplainUsesIndexes,
   parseExplainPlan,
   runExplainChecks,
+  type ParsedExplainPlan,
 } from "./supplier-payment-explain";
 
 function plan(indexName: string) {
@@ -24,10 +25,10 @@ function plan(indexName: string) {
 describe("supplier payment EXPLAIN helpers", () => {
   test("strictly parses PostgreSQL JSON plans", () => {
     const parsed = parseExplainPlan([{ "QUERY PLAN": plan(
-      EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable,
+      EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable[0]!,
     ) }]);
     expect(parsed.indexNames).toEqual([
-      EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable,
+      EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable[0]!,
     ]);
     expect(parsed.hasRuntimeEvidence).toBe(true);
 
@@ -40,24 +41,42 @@ describe("supplier payment EXPLAIN helpers", () => {
   });
 
   test("accepts stringified JSON without weakening validation", () => {
-    const indexName = EXPECTED_SUPPLIER_PAYMENT_INDEXES.request;
+    const indexName = EXPECTED_SUPPLIER_PAYMENT_INDEXES.request[0]!;
     expect(parseExplainPlan([{
       "QUERY PLAN": JSON.stringify(plan(indexName)),
     }]).indexNames).toEqual([indexName]);
   });
 
   test("requires every named design index and runtime evidence", () => {
-    const plans = Object.values(EXPECTED_SUPPLIER_PAYMENT_INDEXES).map(
-      (indexName) => parseExplainPlan([{ "QUERY PLAN": plan(indexName) }]),
-    );
+    const plans = Object.fromEntries(
+      Object.entries(EXPECTED_SUPPLIER_PAYMENT_INDEXES).map(
+        ([name, indexNames]) => [
+          name,
+          parseExplainPlan([{ "QUERY PLAN": plan(indexNames[0]!) }]),
+        ],
+      ),
+    ) as Record<
+      keyof typeof EXPECTED_SUPPLIER_PAYMENT_INDEXES,
+      ParsedExplainPlan
+    >;
     expect(assertExplainUsesIndexes(plans)).toBe(true);
-    expect(() => assertExplainUsesIndexes(plans.slice(1)))
-      .toThrow(EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable);
+    expect(() => assertExplainUsesIndexes({
+      ...plans,
+      payable: parseExplainPlan([{ "QUERY PLAN": plan(
+        EXPECTED_SUPPLIER_PAYMENT_INDEXES.request[0]!,
+      ) }]),
+      request: parseExplainPlan([{ "QUERY PLAN": plan(
+        EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable[0]!,
+      ) }]),
+    })).toThrow(EXPECTED_SUPPLIER_PAYMENT_INDEXES.payable[0]!);
     const withoutRuntime = {
-      ...plans[0]!,
+      ...plans.payable,
       hasRuntimeEvidence: false,
     };
-    expect(() => assertExplainUsesIndexes([withoutRuntime, ...plans.slice(1)]))
+    expect(() => assertExplainUsesIndexes({
+      ...plans,
+      payable: withoutRuntime,
+    }))
       .toThrow("runtime");
   });
 
@@ -67,14 +86,15 @@ describe("supplier payment EXPLAIN helpers", () => {
       async explain(name) {
         calls.push(name);
         return [{ "QUERY PLAN": plan(
-          EXPECTED_SUPPLIER_PAYMENT_INDEXES[name],
+          EXPECTED_SUPPLIER_PAYMENT_INDEXES[name][0]!,
         ) }];
       },
     });
 
     expect(calls).toEqual(Object.keys(EXPECTED_SUPPLIER_PAYMENT_INDEXES));
-    expect(plans).toHaveLength(Object.keys(EXPECTED_SUPPLIER_PAYMENT_INDEXES)
-      .length);
+    expect(Object.keys(plans)).toEqual(
+      Object.keys(EXPECTED_SUPPLIER_PAYMENT_INDEXES),
+    );
     expect(assertExplainUsesIndexes(plans)).toBe(true);
   });
 });

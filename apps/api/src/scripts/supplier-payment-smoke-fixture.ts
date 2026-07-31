@@ -17,6 +17,8 @@ import {
   type RequisitionSmokeFixture,
 } from "./supplier-purchase-requisition-smoke-sql";
 
+export { PURCHASE_ORDER_IDS as SUPPLIER_PAYMENT_BASE_IDS };
+
 export const SUPPLIER_PAYMENT_SMOKE_IDS = {
   order: "86000000-0000-4000-8000-000000000001",
   requisition: "86000000-0000-4000-8000-000000000002",
@@ -50,6 +52,8 @@ export const SUPPLIER_PAYMENT_SMOKE_IDS = {
   approveInvoiceRequestKey: "86000000-0000-4000-8000-000000000030",
   invoicePaymentKey: "86000000-0000-4000-8000-000000000031",
   tenantIsolationKey: "86000000-0000-4000-8000-000000000032",
+  selfReviewApproveKey: "86000000-0000-4000-8000-000000000033",
+  selfReviewRejectKey: "86000000-0000-4000-8000-000000000034",
 } as const;
 
 export type SupplierPaymentSmokeSql = SmokeSql;

@@ -19,6 +19,19 @@ import {
 } from "./supplier-payment-smoke-state";
 import { assertFulfillmentCommandResult } from
   "./supplier-purchase-fulfillment-smoke-commands";
+import {
+  assertInvoiceGateSnapshotUnchanged,
+  assertProjectCostSnapshotUnchanged,
+  assertRequestStateSnapshotUnchanged,
+  readInvoiceGateSnapshot,
+  readProjectCostSnapshot,
+  readRequestStateSnapshot,
+} from "./supplier-payment-smoke-assertions";
+
+export {
+  assertInvoiceGateSnapshotUnchanged,
+  assertProjectCostSnapshotUnchanged,
+};
 
 function requestAllocations(state: SupplierPaymentScenarioState) {
   return state.mainPayables.map((payable) => ({
@@ -43,20 +56,19 @@ async function saveCompetingRequests(
     "main order must expose exactly 30.00 payable",
   );
   const allocations = requestAllocations(state);
-  const saved = await Promise.all([
-    savePaymentRequest(sql, state.fixture, {
-      requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestA,
-      expectedVersion: 0,
-      idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.saveRequestAKey,
-      allocations,
-    }),
-    savePaymentRequest(sql, state.fixture, {
-      requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestB,
-      expectedVersion: 0,
-      idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.saveRequestBKey,
-      allocations,
-    }),
-  ]);
+  const saved = [];
+  saved.push(await savePaymentRequest(sql, state.fixture, {
+    requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestA,
+    expectedVersion: 0,
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.saveRequestAKey,
+    allocations,
+  }));
+  saved.push(await savePaymentRequest(sql, state.fixture, {
+    requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestB,
+    expectedVersion: 0,
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.saveRequestBKey,
+    allocations,
+  }));
   assert(saved.every(({ status }) => status === "saved"), "requests save");
 }
 
@@ -64,18 +76,17 @@ async function submitCompetingRequests(
   sql: SupplierPaymentSmokeSql,
   state: SupplierPaymentScenarioState,
 ): Promise<void> {
-  const submitted = await Promise.all([
-    submitPaymentRequest(sql, state.fixture, {
-      requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestA,
-      expectedVersion: 1,
-      idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.submitRequestAKey,
-    }),
-    submitPaymentRequest(sql, state.fixture, {
-      requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestB,
-      expectedVersion: 1,
-      idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.submitRequestBKey,
-    }),
-  ]);
+  const submitted = [];
+  submitted.push(await submitPaymentRequest(sql, state.fixture, {
+    requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestA,
+    expectedVersion: 1,
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.submitRequestAKey,
+  }));
+  submitted.push(await submitPaymentRequest(sql, state.fixture, {
+    requestId: SUPPLIER_PAYMENT_SMOKE_IDS.requestB,
+    expectedVersion: 1,
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.submitRequestBKey,
+  }));
   const winner = submitted.findIndex(({ status }) => status === "submitted");
   const loser = submitted.findIndex(({ status }) =>
     status === "amount_unavailable"
@@ -87,7 +98,6 @@ async function submitCompetingRequests(
   state.activeRequestId = winner === 0
     ? SUPPLIER_PAYMENT_SMOKE_IDS.requestA
     : SUPPLIER_PAYMENT_SMOKE_IDS.requestB;
-  state.checks.concurrent_request_serialized = true;
 }
 
 async function rejectAndRelease(
@@ -136,6 +146,50 @@ async function approveActiveRequest(
     state.activeRequestId,
   );
   assert(state.activeAllocations.length === 2, "two allocations required");
+}
+
+async function assertSelfReviewRejected(
+  sql: SupplierPaymentSmokeSql,
+  state: SupplierPaymentScenarioState,
+): Promise<void> {
+  assert(state.activeRequestId, "active request is required");
+  const before = await readRequestStateSnapshot(
+    sql,
+    state.fixture,
+    state.activeRequestId,
+  );
+  const approve = await reviewPaymentRequest(sql, state.fixture, {
+    requestId: state.activeRequestId,
+    expectedVersion: 2,
+    action: "approve",
+    remark: null,
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.selfReviewApproveKey,
+    selfReview: true,
+  });
+  assert(
+    approve.status === "self_review" &&
+      approve.error_code === "SUPPLIER_PAYMENT_SELF_REVIEW",
+    "submitter approve must match frozen self_review envelope",
+  );
+  const reject = await reviewPaymentRequest(sql, state.fixture, {
+    requestId: state.activeRequestId,
+    expectedVersion: 2,
+    action: "reject",
+    remark: "提交人不得自审",
+    idempotencyKey: SUPPLIER_PAYMENT_SMOKE_IDS.selfReviewRejectKey,
+    selfReview: true,
+  });
+  assert(
+    reject.status === "self_review" &&
+      reject.error_code === "SUPPLIER_PAYMENT_SELF_REVIEW",
+    "submitter reject must match frozen self_review envelope",
+  );
+  const after = await readRequestStateSnapshot(
+    sql,
+    state.fixture,
+    state.activeRequestId,
+  );
+  assertRequestStateSnapshotUnchanged(before, after, "self review");
 }
 
 function paymentAllocations(
@@ -210,15 +264,11 @@ async function assertPaymentFacts(
       rows[0]?.payment_count === 2 && rows[0]?.ledger_count === 2,
     "final payment facts must close with one ledger per payment",
   );
-  const costs = await sql<{ amount: string }[]>`
-    select coalesce(sum(cost.amount), 0)::text as amount
-    from public.project_cost_events as cost
-    where cost.tenant_id = ${state.fixture.tenant_id}::uuid
-      and cost.project_id = ${state.fixture.project_id}::uuid
-      and cost.supplier_purchase_order_id =
-        ${SUPPLIER_PAYMENT_SMOKE_IDS.order}::uuid;
-  `;
-  assert(costs[0]?.amount === "30.00", "cash must not add project cost");
+  assert(state.projectCostBeforePayment, "project cost baseline is required");
+  assertProjectCostSnapshotUnchanged(
+    state.projectCostBeforePayment,
+    await readProjectCostSnapshot(sql, state.fixture),
+  );
   Object.assign(state.checks, {
     final_payment_closed_balance: true,
     supplier_cash_single_ledger: true,
@@ -291,6 +341,12 @@ async function assertInvoiceGate(
     SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequest,
   );
   assert(allocations.length === 1, "invoice allocation required");
+  const before = await readInvoiceGateSnapshot(
+    sql,
+    state.fixture,
+    SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequest,
+    SUPPLIER_PAYMENT_SMOKE_IDS.invoicePayment,
+  );
   const gated = await confirmSupplierPayment(sql, state.fixture, {
     requestId: SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequest,
     expectedVersion: 3,
@@ -304,22 +360,13 @@ async function assertInvoiceGate(
     })),
   });
   assert(gated.status === "invoice_required", "invoice gate must reject cash");
-  const rows = await sql<{ count: number }[]>`
-    select sum(fact.count)::integer as count
-    from (
-      select count(*) from public.supplier_payments
-      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.invoicePayment}::uuid
-      union all
-      select count(*) from public.supplier_payment_allocations
-      where supplier_payment_id =
-        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoicePayment}::uuid
-      union all
-      select count(*) from public.finance_ledger_entries
-      where source_type = 'supplier_payment'
-        and source_id = ${SUPPLIER_PAYMENT_SMOKE_IDS.invoicePayment}::uuid
-    ) as fact;
-  `;
-  assert(rows[0]?.count === 0, "invoice gate must leave zero cash facts");
+  const after = await readInvoiceGateSnapshot(
+    sql,
+    state.fixture,
+    SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequest,
+    SUPPLIER_PAYMENT_SMOKE_IDS.invoicePayment,
+  );
+  assertInvoiceGateSnapshotUnchanged(before, after);
   state.checks.invoice_gate_atomic = true;
 }
 
@@ -354,9 +401,15 @@ export async function executeSupplierPaymentFlowStep(
       return rejectAndRelease(sql, state);
     case "resubmit_released_request":
       return state.activeRequestId;
+    case "self_review_rejected":
+      return assertSelfReviewRejected(sql, state);
     case "approve_payment_request":
       return approveActiveRequest(sql, state);
     case "partial_payment": {
+      state.projectCostBeforePayment = await readProjectCostSnapshot(
+        sql,
+        state.fixture,
+      );
       const payment = await runPayment(sql, state, true);
       assert(payment.status === "partially_paid", "partial payment");
       state.checks.partial_payment_recorded = true;

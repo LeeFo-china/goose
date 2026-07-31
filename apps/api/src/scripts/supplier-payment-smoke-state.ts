@@ -6,6 +6,8 @@ import {
 import type {
   SupplierPaymentSmokeFixture,
 } from "./supplier-payment-smoke-fixture";
+import type { ProjectCostSnapshot } from
+  "./supplier-payment-smoke-assertions";
 
 export type SupplierPaymentScenarioState = {
   fixture: SupplierPaymentSmokeFixture;
@@ -13,6 +15,7 @@ export type SupplierPaymentScenarioState = {
   invoicePayables: PayableFact[];
   activeRequestId?: string;
   activeAllocations: RequestAllocationFact[];
+  projectCostBeforePayment?: ProjectCostSnapshot;
   checks: Record<string, true>;
 };
 
