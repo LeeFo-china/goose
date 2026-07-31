@@ -15,7 +15,10 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 import { formatPaymentMoney } from "./payment-request-page-utils";
-import type { SupplierPaymentRequest } from "./payment-request-types";
+import type {
+  SupplierPaymentRequest,
+  SupplierPaymentRequestDetailAllocation,
+} from "./payment-request-types";
 import { paymentRequestStatusMeta, shortPaymentId } from "./payment-request-ui";
 
 export type PaymentRequestReviewAction =
@@ -61,6 +64,7 @@ export function PaymentRequestReviewDialog({
   open,
   action,
   request,
+  allocations,
   projectName,
   supplierName,
   value,
@@ -75,6 +79,7 @@ export function PaymentRequestReviewDialog({
   open: boolean;
   action: PaymentRequestReviewAction;
   request: SupplierPaymentRequest | null;
+  allocations: SupplierPaymentRequestDetailAllocation[];
   projectName?: string;
   supplierName?: string;
   value: string;
@@ -114,6 +119,30 @@ export function PaymentRequestReviewDialog({
             <Fact label="供应商" value={supplierName ?? shortPaymentId(request.tenant_supplier_id)} />
             <Fact label="申请金额" value={formatPaymentMoney(request.requested_amount)} />
           </dl>
+        ) : null}
+        {allocations.length > 0 ? (
+          <div className="flex max-h-48 flex-col gap-2 overflow-y-auto rounded-md border p-3">
+            <p className="text-sm font-medium">应付来源（{allocations.length} 项）</p>
+            {allocations.map((allocation, index) => (
+              <dl
+                key={allocation.id}
+                className="grid gap-2 border-b pb-2 text-sm last:border-b-0 last:pb-0 sm:grid-cols-3"
+              >
+                <AllocationFact
+                  label={`应付事件 ${index + 1}`}
+                  value={allocation.payable_event_id}
+                />
+                <AllocationFact
+                  label="采购单"
+                  value={allocation.supplier_purchase_order_id}
+                />
+                <AllocationFact
+                  label="收货单"
+                  value={allocation.receipt_id}
+                />
+              </dl>
+            ))}
+          </div>
         ) : null}
         {showTextarea ? (
           <Field data-invalid={invalid}>
@@ -167,6 +196,15 @@ function Fact({ label, value }: { label: string; value: string }) {
     <div className="min-w-0">
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="truncate font-medium">{value}</dd>
+    </div>
+  );
+}
+
+function AllocationFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="break-all font-mono text-xs">{value}</dd>
     </div>
   );
 }

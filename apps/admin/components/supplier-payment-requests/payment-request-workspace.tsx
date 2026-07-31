@@ -17,7 +17,10 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
-import { listSupplierPaymentRequests } from "./payment-request-api";
+import {
+  getSupplierPaymentRequest,
+  listSupplierPaymentRequests,
+} from "./payment-request-api";
 import { PaymentRequestDetail } from "./payment-request-detail";
 import { PaymentRequestEditor } from "./payment-request-editor";
 import { PaymentRequestFilters } from "./payment-request-filters";
@@ -31,6 +34,7 @@ import {
   validateDraftPayables,
 } from "./payment-request-page-utils";
 import { supplierPaymentCommandRefresh } from "./payment-request-command-refresh";
+import { usePaymentRequestFilterOptions } from "./use-payment-request-filter-options";
 import type {
   PaymentRequestAction,
   PaymentRequestPermissions,
@@ -61,11 +65,13 @@ export function PaymentRequestWorkspace({
   canManage,
   canApprove,
   canPay,
+  canViewPayables,
 }: {
   canView: boolean;
   canManage: boolean;
   canApprove: boolean;
   canPay: boolean;
+  canViewPayables: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -106,6 +112,10 @@ export function PaymentRequestWorkspace({
     canApprove,
     canPay,
   }), [canApprove, canManage, canPay]);
+  const filterOptions = usePaymentRequestFilterOptions(
+    canView && canViewPayables,
+    setWorkspaceError,
+  );
 
   useEffect(() => {
     setFilterDraft(state);
@@ -236,6 +246,26 @@ export function PaymentRequestWorkspace({
     }
   }
 
+  async function reloadEditorFacts(
+    requestId: string | null,
+    payableEventIds: string[],
+  ) {
+    const nextDetail = requestId
+      ? await getSupplierPaymentRequest(requestId)
+      : null;
+    if (nextDetail && nextDetail.payment_request.status !== "draft") {
+      return { detail: nextDetail, payables: [] };
+    }
+    const ids = nextDetail
+      ? nextDetail.allocations.map(({ payable_event_id }) => payable_event_id)
+      : payableEventIds;
+    const facts = await listSupplierPayablesByIds(ids);
+    const verified = validateDraftPayables(ids, facts);
+    setCreatePayables(verified);
+    setEditorDetail(nextDetail);
+    return { detail: nextDetail, payables: verified };
+  }
+
   function dispatchPaymentRefresh(requestId: string) {
     window.dispatchEvent(new CustomEvent("supplier-payment-command", {
       detail: { requestId, ...supplierPaymentCommandRefresh() },
@@ -279,6 +309,13 @@ export function PaymentRequestWorkspace({
             state={filterDraft}
             keyword={keyword}
             loading={loading}
+            optionsLoading={filterOptions.loading || !canViewPayables}
+            projectOptions={filterOptions.projectOptions}
+            supplierOptions={filterOptions.supplierOptions}
+            canLoadMoreProjects={filterOptions.canLoadMoreProjects}
+            canLoadMoreSuppliers={filterOptions.canLoadMoreSuppliers}
+            onLoadMoreProjects={() => void filterOptions.loadMore("project")}
+            onLoadMoreSuppliers={() => void filterOptions.loadMore("supplier")}
             onKeywordChange={setKeyword}
             onChange={(patch) => setFilterDraft((current) => ({ ...current, ...patch }))}
             onSearch={() => navigate({ ...filterDraft, keyword: keyword.trim() })}
@@ -344,7 +381,13 @@ export function PaymentRequestWorkspace({
           pending={pendingRequestId !== null}
           onOpenChange={setEditorOpen}
           onPendingChange={setPendingRequestId}
-          onRefresh={() => {
+          onReloadFacts={reloadEditorFacts}
+          onAbandonCreate={() => {
+            setEditorOpen(false);
+            void loadRecords();
+          }}
+          onInvalidated={(message) => {
+            setWorkspaceError(message);
             setEditorOpen(false);
             void loadRecords();
           }}

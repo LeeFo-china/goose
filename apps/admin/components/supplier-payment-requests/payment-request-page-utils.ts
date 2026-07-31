@@ -5,6 +5,7 @@ import type { SupplierPayable } from "../supplier-payables/payable-types";
 import { supplierPaymentCommandRefresh } from "./payment-request-command-refresh";
 import type {
   SupplierPaymentRequest,
+  SupplierPaymentRequestDetail,
   SupplierPaymentRequestListItem,
   SupplierPaymentRequestStatus,
 } from "./payment-request-types";
@@ -13,6 +14,21 @@ const MONEY_PATTERN = /^(?:0|[1-9]\d{0,15})\.\d{2}$/;
 const REQUEST_STATUSES = new Set<string>(
   SUPPLIER_PAYMENT_REQUEST_STATUS_VALUES,
 );
+const DETERMINISTIC_SAVE_CONFLICTS = new Set([
+  "SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT",
+  "SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE",
+  "SUPPLIER_PAYMENT_ALLOCATION_INVALID",
+  "SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT",
+]);
+
+export type PaymentRequestDraftLine = {
+  allocationId?: string;
+  payableEventId: string;
+  source: string;
+  dueAt: string;
+  available: string;
+  amount: string;
+};
 
 export type PaymentRequestWorkspaceState = {
   page: number;
@@ -99,6 +115,49 @@ export function validateDraftPayables(
   return payables;
 }
 
+export function mergePaymentRequestDraftLines(
+  detail: SupplierPaymentRequestDetail,
+  freshFacts: readonly SupplierPayable[],
+): PaymentRequestDraftLine[] {
+  const ids = detail.allocations.map(({ payable_event_id }) =>
+    payable_event_id
+  );
+  const payables = validateDraftPayables(ids, freshFacts);
+  const request = detail.payment_request;
+  if (payables.some((payable) =>
+    payable.project_id !== request.project_id ||
+    payable.tenant_supplier_id !== request.tenant_supplier_id ||
+    payable.currency !== request.currency
+  )) {
+    throw new RangeError("应付事实与付款申请范围不一致，请重新加载");
+  }
+  return detail.allocations.map((allocation, index) => {
+    const payable = payables[index];
+    if (!payable || payable.id.toLowerCase() !==
+        allocation.payable_event_id.toLowerCase()) {
+      throw new RangeError("付款申请应付事实已变化，请重新加载");
+    }
+    return {
+      allocationId: allocation.id,
+      payableEventId: allocation.payable_event_id,
+      source: `${payable.purchase_order_no} / ${payable.receipt_no}`,
+      dueAt: payable.due_at,
+      available: payable.available_to_request_amount,
+      amount: allocation.requested_amount,
+    };
+  });
+}
+
+export function paymentRequestSaveFailureKind(
+  code: string | undefined,
+  status?: number,
+): "reload_facts" | "retry_same_attempt" | "release_attempt" {
+  if (code && DETERMINISTIC_SAVE_CONFLICTS.has(code)) return "reload_facts";
+  return status === undefined || status >= 500
+    ? "retry_same_attempt"
+    : "release_attempt";
+}
+
 export function applyPaymentRequestCommand<
   ListItem extends SupplierPaymentRequestListItem | SupplierPaymentRequest,
 >(
@@ -147,6 +206,13 @@ export function errorCode(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error &&
       typeof error.code === "string"
     ? error.code
+    : undefined;
+}
+
+export function errorStatus(error: unknown) {
+  return typeof error === "object" && error !== null && "status" in error &&
+      typeof error.status === "number"
+    ? error.status
     : undefined;
 }
 

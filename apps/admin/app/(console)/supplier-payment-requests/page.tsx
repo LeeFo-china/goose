@@ -14,6 +14,7 @@ export default async function SupplierPaymentRequestsPage() {
       canManage={permissions.has("supplier.payment-request.manage")}
       canApprove={permissions.has("supplier.payment-request.approve")}
       canPay={permissions.has("supplier.payment-request.pay")}
+      canViewPayables={permissions.has("supplier.payable.view")}
     />
   );
 }

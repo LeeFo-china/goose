@@ -372,6 +372,7 @@ export function PaymentRequestDetail({
         open={reviewOpen}
         action={reviewAction}
         request={current}
+        allocations={detail?.allocations ?? []}
         supplierName={record?.supplier_name}
         value={reviewValue}
         busy={pendingRequestId === recordId && attempt === null}

@@ -109,7 +109,7 @@ export function PaymentRequestList({
         {records.map((record) => {
           const actions = paymentRequestActions({
             status: record.status,
-            invoiceBlocked: false,
+            invoiceBlocked: null,
           }, permissions);
           const pending = pendingRequestId === record.id;
           return (

@@ -215,5 +215,5 @@ export type PaymentRequestPermissions = {
 
 export type PaymentRequestActionContext = {
   status: SupplierPaymentRequestStatus;
-  invoiceBlocked: boolean;
+  invoiceBlocked: boolean | null;
 };

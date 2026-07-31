@@ -35,24 +35,19 @@ import {
   decimalFromCents,
   errorCode,
   errorMessage,
+  errorStatus,
   formatPaymentMoney,
+  mergePaymentRequestDraftLines,
   moneyCents,
   paymentRequestConflictMessage,
+  paymentRequestSaveFailureKind,
+  type PaymentRequestDraftLine,
 } from "./payment-request-page-utils";
 import type {
   SupplierPaymentRequest,
   SupplierPaymentRequestDetail,
 } from "./payment-request-types";
 import { shortPaymentId } from "./payment-request-ui";
-
-type DraftLine = {
-  allocationId?: string;
-  payableEventId: string;
-  source: string;
-  dueAt: string;
-  available: string;
-  amount: string;
-};
 
 export function PaymentRequestEditor({
   open,
@@ -64,7 +59,9 @@ export function PaymentRequestEditor({
   onOpenChange,
   onPendingChange,
   onSaved,
-  onRefresh,
+  onReloadFacts,
+  onAbandonCreate,
+  onInvalidated,
 }: {
   open: boolean;
   payables: SupplierPayable[];
@@ -75,14 +72,26 @@ export function PaymentRequestEditor({
   onOpenChange: (open: boolean) => void;
   onPendingChange: (requestId: string | null) => void;
   onSaved: (request: SupplierPaymentRequest) => void;
-  onRefresh: () => void;
+  onReloadFacts: (
+    requestId: string | null,
+    payableEventIds: string[],
+  ) => Promise<{
+    detail: SupplierPaymentRequestDetail | null;
+    payables: SupplierPayable[];
+  }>;
+  onAbandonCreate: () => void;
+  onInvalidated: (message: string) => void;
 }) {
   const [draftId, setDraftId] = useState("");
   const [reason, setReason] = useState("");
   const [remark, setRemark] = useState("");
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [lines, setLines] = useState<PaymentRequestDraftLine[]>([]);
   const [attempt, setAttempt] = useState<SupplierCommandAttempt | null>(null);
   const [saving, setSaving] = useState(false);
+  const [refreshingFacts, setRefreshingFacts] = useState(false);
+  const [recovery, setRecovery] = useState<
+    "reload_facts" | "retry_same_attempt" | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
   const request = detail?.payment_request ?? null;
   const projectId = request?.project_id ?? payables[0]?.project_id ?? "";
@@ -95,14 +104,7 @@ export function PaymentRequestEditor({
     setReason(request?.reason ?? "");
     setRemark(request?.remark ?? "");
     setLines(request
-      ? detail!.allocations.map((allocation) => ({
-        allocationId: allocation.id,
-        payableEventId: allocation.payable_event_id,
-        source: `${shortPaymentId(allocation.supplier_purchase_order_id)} / ${shortPaymentId(allocation.receipt_id)}`,
-        dueAt: allocation.due_at,
-        available: allocation.payable_amount,
-        amount: allocation.requested_amount,
-      }))
+      ? mergePaymentRequestDraftLines(detail!, payables)
       : payables.map((payable) => ({
         payableEventId: payable.id,
         source: `${payable.purchase_order_no} / ${payable.receipt_no}`,
@@ -110,10 +112,16 @@ export function PaymentRequestEditor({
         available: payable.available_to_request_amount,
         amount: payable.available_to_request_amount,
       })));
+  }, [detail, open, payables, request]);
+
+  useEffect(() => {
+    if (!open) return;
     setAttempt(null);
     setSaving(false);
+    setRefreshingFacts(false);
+    setRecovery(null);
     setError(null);
-  }, [detail, open, payables, request]);
+  }, [open, request?.id]);
 
   const total = useMemo(() => {
     try {
@@ -125,10 +133,11 @@ export function PaymentRequestEditor({
       return "-";
     }
   }, [lines]);
-  const frozen = saving || pending || attempt !== null;
+  const frozen = saving || refreshingFacts || pending || attempt !== null;
 
-  async function saveDraft() {
-    if (frozen || !draftId) return;
+  async function saveDraft(retrySameAttempt = false) {
+    if (!draftId || saving || refreshingFacts) return;
+    if (retrySameAttempt ? !attempt : pending || attempt !== null) return;
     const trimmedReason = reason.trim();
     if (!trimmedReason) {
       setError("申请原因不能为空");
@@ -189,11 +198,77 @@ export function PaymentRequestEditor({
       onSaved(result.payment_request);
       onOpenChange(false);
     } catch (caught) {
-      const conflict = paymentRequestConflictMessage(errorCode(caught));
-      setError(conflict ?? errorMessage(caught, "付款申请草稿保存失败"));
+      const code = errorCode(caught);
+      const conflict = paymentRequestConflictMessage(code);
+      const nextRecovery = paymentRequestSaveFailureKind(
+        code,
+        errorStatus(caught),
+      );
+      if (nextRecovery === "reload_facts") {
+        setRecovery(nextRecovery);
+        const message = conflict ?? "付款申请事实已变化，请重新加载。";
+        setError(`${message} 正在重新加载申请详情与应付事实。`);
+        await reloadFacts(message);
+      } else if (nextRecovery === "retry_same_attempt") {
+        setRecovery(nextRecovery);
+        setError(
+          "保存结果暂未确认。请使用相同请求身份重试保存，避免产生重复申请。",
+        );
+      } else {
+        setAttempt(null);
+        setRecovery(null);
+        onPendingChange(null);
+        setError(errorMessage(caught, "付款申请草稿保存失败"));
+      }
     } finally {
       setSaving(false);
       if (saved) onPendingChange(null);
+    }
+  }
+
+  async function reloadFacts(message: string) {
+    setRefreshingFacts(true);
+    try {
+      const next = await onReloadFacts(
+        request?.id ?? null,
+        lines.map(({ payableEventId }) => payableEventId),
+      );
+      if (request && !next.detail) {
+        throw new RangeError("付款申请详情未返回");
+      }
+      if (next.detail && next.detail.payment_request.status !== "draft") {
+        setAttempt(null);
+        setRecovery(null);
+        onPendingChange(null);
+        onInvalidated(
+          `付款申请状态已变为 ${next.detail.payment_request.status}，已退出草稿编辑。`,
+        );
+        return;
+      }
+      setLines(next.detail
+        ? mergePaymentRequestDraftLines(next.detail, next.payables)
+        : next.payables.map((payable) => ({
+          payableEventId: payable.id,
+          source: `${payable.purchase_order_no} / ${payable.receipt_no}`,
+          dueAt: payable.due_at,
+          available: payable.available_to_request_amount,
+          amount: payable.available_to_request_amount,
+        })));
+      if (next.detail) {
+        setReason(next.detail.payment_request.reason);
+        setRemark(next.detail.payment_request.remark ?? "");
+      }
+      setAttempt(null);
+      setRecovery(null);
+      onPendingChange(null);
+      setError(`${message} 已刷新最新事实，请重新确认金额后保存。`);
+    } catch (caught) {
+      setRecovery("reload_facts");
+      setError(
+        `${message} 自动刷新失败：${errorMessage(caught, "申请详情或应付事实加载失败")}。请手动重试刷新。`,
+      );
+    } finally {
+      setRefreshingFacts(false);
     }
   }
 
@@ -214,18 +289,44 @@ export function PaymentRequestEditor({
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <FieldGroup>
             {error ? <StatusAlert>{error}</StatusAlert> : null}
-            {attempt ? (
+            {attempt && recovery === "retry_same_attempt" ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={saving}
+                  onClick={() => void saveDraft(true)}
+                >
+                  {saving ? <Spinner data-icon="inline-start" /> : null}
+                  使用相同请求身份重试保存
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={saving}
+                  onClick={() => {
+                    if (request) void reloadFacts("已放弃未确认的保存请求。");
+                    else {
+                      setAttempt(null);
+                      setRecovery(null);
+                      onPendingChange(null);
+                      onAbandonCreate();
+                    }
+                  }}
+                >
+                  {request ? "放弃保存并重新加载" : "放弃保存并查看列表"}
+                </Button>
+              </div>
+            ) : null}
+            {attempt && recovery === "reload_facts" ? (
               <Button
                 type="button"
                 variant="outline"
-                disabled={saving}
-                onClick={() => {
-                  setAttempt(null);
-                  onPendingChange(null);
-                  onRefresh();
-                }}
+                disabled={refreshingFacts || saving}
+                onClick={() => void reloadFacts("付款申请事实需要刷新。")}
               >
-                放弃本次重试并刷新
+                {refreshingFacts ? <Spinner data-icon="inline-start" /> : null}
+                重试刷新申请与应付事实
               </Button>
             ) : null}
             <FieldGroup className="grid gap-4 md:grid-cols-2">

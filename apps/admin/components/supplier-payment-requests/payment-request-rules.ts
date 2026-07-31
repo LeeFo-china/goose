@@ -19,13 +19,13 @@ export function paymentRequestActions(
   }
   if (context.status === "approved") {
     const actions: PaymentRequestAction[] = [];
-    if (permissions.canPay && !context.invoiceBlocked) actions.push("pay");
+    if (permissions.canPay && context.invoiceBlocked === false) actions.push("pay");
     if (permissions.canManage) actions.push("cancel");
     return actions;
   }
   if (context.status === "partially_paid") {
     const actions: PaymentRequestAction[] = [];
-    if (permissions.canPay && !context.invoiceBlocked) actions.push("pay");
+    if (permissions.canPay && context.invoiceBlocked === false) actions.push("pay");
     if (permissions.canManage) actions.push("close");
     return actions;
   }

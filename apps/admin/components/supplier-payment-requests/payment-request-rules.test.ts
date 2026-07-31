@@ -47,6 +47,13 @@ describe("供应商付款申请动作规则", () => {
     }
   });
 
+  test("详情未加载时发票门禁未知，不暴露付款动作", () => {
+    expect(paymentRequestActions(
+      context("approved", { invoiceBlocked: null }),
+      permissions,
+    )).not.toContain("pay");
+  });
+
   test("权限按动作独立收敛", () => {
     expect(paymentRequestActions(context("draft"), {
       canManage: false,
