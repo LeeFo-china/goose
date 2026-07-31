@@ -365,6 +365,35 @@ describe("supplier payment data migration contract", () => {
     expect(migration).not.toMatch(/\bLOOP\b/);
   });
 
+  test("prioritizes overdue payables and sorts newest business dates first", () => {
+    const payables = fn("list_supplier_payables");
+    contracts(payables, [
+      /WHEN balances\.open_amount = 0 THEN 'paid'[\s\S]*WHEN balances\.due_at < now\(\) THEN 'overdue'[\s\S]*WHEN balances\.paid_amount > 0 THEN 'partially_paid'[\s\S]*WHEN balances\.reserved_amount > 0 THEN 'reserved'/,
+      /ORDER BY filtered\.due_at DESC, filtered\.id DESC/,
+      /ORDER BY page_rows\.due_at DESC, page_rows\.id DESC/,
+    ]);
+  });
+
+  test("returns the complete tenant-safe purchase order payment summary", () => {
+    const summary = fn("get_supplier_purchase_order_financial_summary");
+    contracts(summary, [
+      /project_cost_events/,
+      /supplier_payable_events/,
+      /supplier_payment_allocations/,
+      /supplier_payment_request_allocations/,
+      /supplier_payment_requests/,
+      /payment_request\.status IN \(\s*'pending_approval',\s*'approved',\s*'partially_paid'\s*\)/,
+      /allocation\.requested_amount - allocation\.paid_amount/,
+      /'purchase_order_id', p_supplier_purchase_order_id/,
+      /'accepted_amount', accepted\.amount::text/,
+      /'payable_amount', payables\.amount::text/,
+      /'reserved_request_amount', reserved\.amount::text/,
+      /'paid_amount', paid\.amount::text/,
+      /'open_amount',\s*GREATEST\([\s\S]*payables\.amount - paid\.amount/,
+      /'available_to_request_amount',[\s\S]*GREATEST\([\s\S]*payables\.amount - paid\.amount - reserved\.amount/,
+    ]);
+  });
+
   test("adds indexes for payable, request, allocation, payment and PO reads", () => {
     for (const index of [
       "supplier_payable_events_tenant_status_query_idx",

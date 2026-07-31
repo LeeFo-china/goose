@@ -760,18 +760,6 @@ DECLARE
 BEGIN
   IF p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 1
-    OR p_action IS NULL
-    OR p_action NOT IN ('approve', 'reject')
-    OR (
-      p_action = 'reject'
-      AND (p_remark IS NULL OR btrim(p_remark) = '')
-    )
-    OR (
-      p_remark IS NOT NULL
-      AND char_length(btrim(p_remark)) > 500
-    )
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -828,6 +816,38 @@ BEGIN
       v_event.to_state
     );
   END IF;
+
+  IF p_expected_version IS NULL
+    OR p_expected_version < 1
+    OR p_action IS NULL
+    OR p_action NOT IN ('approve', 'reject')
+    OR (
+      p_action = 'reject'
+      AND (p_remark IS NULL OR btrim(p_remark) = '')
+    )
+    OR (
+      p_remark IS NOT NULL
+      AND char_length(btrim(p_remark)) > 500
+    )
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment_request', p_payment_request_id,
+      'review_supplier_payment_request', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-payment-request-id:' || p_payment_request_id::text,
+      0
+    )
+  );
 
   SELECT payment_request.*
   INTO v_payment_request
@@ -955,11 +975,6 @@ DECLARE
 BEGIN
   IF p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 1
-    OR p_reason IS NULL
-    OR btrim(p_reason) = ''
-    OR char_length(btrim(p_reason)) > 500
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -1011,6 +1026,31 @@ BEGIN
       v_event.to_state
     );
   END IF;
+
+  IF p_expected_version IS NULL
+    OR p_expected_version < 1
+    OR p_reason IS NULL
+    OR btrim(p_reason) = ''
+    OR char_length(btrim(p_reason)) > 500
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment_request', p_payment_request_id,
+      'cancel_supplier_payment_request', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-payment-request-id:' || p_payment_request_id::text,
+      0
+    )
+  );
 
   SELECT payment_request.*
   INTO v_payment_request
@@ -1107,11 +1147,6 @@ DECLARE
 BEGIN
   IF p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 1
-    OR p_reason IS NULL
-    OR btrim(p_reason) = ''
-    OR char_length(btrim(p_reason)) > 500
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -1163,6 +1198,31 @@ BEGIN
       v_event.to_state
     );
   END IF;
+
+  IF p_expected_version IS NULL
+    OR p_expected_version < 1
+    OR p_reason IS NULL
+    OR btrim(p_reason) = ''
+    OR char_length(btrim(p_reason)) > 500
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment_request', p_payment_request_id,
+      'close_supplier_payment_request', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-payment-request-id:' || p_payment_request_id::text,
+      0
+    )
+  );
 
   SELECT payment_request.*
   INTO v_payment_request
@@ -1263,7 +1323,7 @@ DECLARE
   v_result jsonb;
   v_input_count integer;
   v_resolved_count integer;
-  v_payment_amount numeric(18, 2);
+  v_payment_amount numeric;
   v_invalid_count integer;
   v_ledger_rows integer;
   v_supplier_name text;
@@ -1271,35 +1331,6 @@ BEGIN
   IF p_payment_id IS NULL
     OR p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 1
-    OR p_payment_method IS NULL
-    OR p_payment_method NOT IN (
-      'bank_transfer',
-      'wechat',
-      'alipay',
-      'cash',
-      'other'
-    )
-    OR p_payment_reference IS NULL
-    OR btrim(p_payment_reference) = ''
-    OR char_length(btrim(p_payment_reference)) > 200
-    OR p_paid_at IS NULL
-    OR p_paid_at > clock_timestamp() + interval '5 minutes'
-    OR p_allocations IS NULL
-    OR jsonb_typeof(p_allocations) <> 'array'
-    OR NOT jsonb_array_length(p_allocations) BETWEEN 1 AND 100
-    OR (
-      p_payment_method = 'other'
-      AND (p_remark IS NULL OR btrim(p_remark) = '')
-    )
-    OR (
-      p_remark IS NOT NULL
-      AND (
-        btrim(p_remark) = ''
-        OR char_length(btrim(p_remark)) > 500
-      )
-    )
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -1361,6 +1392,55 @@ BEGIN
       v_event.to_state
     );
   END IF;
+
+  IF p_expected_version IS NULL
+    OR p_expected_version < 1
+    OR p_payment_method IS NULL
+    OR p_payment_method NOT IN (
+      'bank_transfer',
+      'wechat',
+      'alipay',
+      'cash',
+      'other'
+    )
+    OR p_payment_reference IS NULL
+    OR btrim(p_payment_reference) = ''
+    OR char_length(btrim(p_payment_reference)) > 200
+    OR p_paid_at IS NULL
+    OR p_paid_at > clock_timestamp() + interval '5 minutes'
+    OR p_allocations IS NULL
+    OR jsonb_typeof(p_allocations) <> 'array'
+    OR NOT jsonb_array_length(p_allocations) BETWEEN 1 AND 100
+    OR (
+      p_payment_method = 'other'
+      AND (p_remark IS NULL OR btrim(p_remark) = '')
+    )
+    OR (
+      p_remark IS NOT NULL
+      AND (
+        btrim(p_remark) = ''
+        OR char_length(btrim(p_remark)) > 500
+      )
+    )
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment', p_payment_id,
+      'confirm_supplier_payment', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-payment-request-id:' || p_payment_request_id::text,
+      0
+    )
+  );
 
   SELECT payment_request.*
   INTO v_payment_request
@@ -1475,7 +1555,7 @@ BEGIN
       COUNT(DISTINCT input.payment_request_allocation_id),
       COUNT(DISTINCT input.payable_event_id)
     ),
-    SUM(input.amount)::numeric(18, 2)
+    SUM(input.amount)
   INTO v_input_count, v_resolved_count, v_payment_amount
   FROM input;
 
@@ -1483,6 +1563,19 @@ BEGIN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
       'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment', p_payment_id,
+      'confirm_supplier_payment', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      v_payment_request.version
+    );
+  END IF;
+
+  IF v_payment_amount > 9999999999999999.99 THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1810,28 +1903,11 @@ DECLARE
   v_supplier_id uuid;
   v_allocation_count integer;
   v_resolved_count integer;
-  v_requested_amount numeric(18, 2);
+  v_requested_amount numeric;
   v_request_exists boolean;
 BEGIN
   IF p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_project_id IS NULL
-    OR p_tenant_supplier_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 0
-    OR p_reason IS NULL
-    OR btrim(p_reason) = ''
-    OR char_length(btrim(p_reason)) > 500
-    OR (
-      p_remark IS NOT NULL
-      AND (
-        btrim(p_remark) = ''
-        OR char_length(btrim(p_remark)) > 500
-      )
-    )
-    OR p_allocations IS NULL
-    OR jsonb_typeof(p_allocations) <> 'array'
-    OR NOT jsonb_array_length(p_allocations) BETWEEN 1 AND 100
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -1895,6 +1971,42 @@ BEGIN
     );
   END IF;
 
+  IF p_project_id IS NULL
+    OR p_tenant_supplier_id IS NULL
+    OR p_expected_version IS NULL
+    OR p_expected_version < 0
+    OR p_reason IS NULL
+    OR btrim(p_reason) = ''
+    OR char_length(btrim(p_reason)) > 500
+    OR (
+      p_remark IS NOT NULL
+      AND (
+        btrim(p_remark) = ''
+        OR char_length(btrim(p_remark)) > 500
+      )
+    )
+    OR p_allocations IS NULL
+    OR jsonb_typeof(p_allocations) <> 'array'
+    OR NOT jsonb_array_length(p_allocations) BETWEEN 1 AND 100
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id,
+      'supplier_payment_request',
+      p_payment_request_id,
+      'save_supplier_payment_request_draft',
+      v_request,
+      v_result,
+      p_actor_user_id,
+      p_actor_employee_id,
+      p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-payment-request-id:' || p_payment_request_id::text,
@@ -1946,7 +2058,7 @@ BEGIN
   SELECT
     COUNT(*),
     COUNT(DISTINCT input.payable_event_id),
-    SUM(input.requested_amount)::numeric(18, 2)
+    SUM(input.requested_amount)
   INTO
     v_allocation_count,
     v_resolved_count,
@@ -1972,51 +2084,10 @@ BEGIN
     );
   END IF;
 
-  PERFORM payable.id
-  FROM public.supplier_payable_events AS payable
-  JOIN (
-    SELECT
-      (item.value ->> 'payable_event_id')::uuid AS payable_event_id
-    FROM jsonb_array_elements(p_allocations) AS item(value)
-  ) AS input
-    ON input.payable_event_id = payable.id
-  ORDER BY payable.id
-  FOR SHARE OF payable;
-
-  SELECT
-    COUNT(*),
-    MIN(payable.supplier_id::text)::uuid
-  INTO
-    v_resolved_count,
-    v_supplier_id
-  FROM public.supplier_payable_events AS payable
-  JOIN (
-    SELECT
-      (item.value ->> 'payable_event_id')::uuid AS payable_event_id
-    FROM jsonb_array_elements(p_allocations) AS item(value)
-  ) AS input
-    ON input.payable_event_id = payable.id
-  WHERE payable.tenant_id = p_tenant_id
-    AND payable.project_id = p_project_id
-    AND payable.tenant_supplier_id = p_tenant_supplier_id
-    AND payable.currency = 'CNY';
-
-  IF v_resolved_count <> v_allocation_count
-    OR EXISTS (
-      SELECT 1
-      FROM public.supplier_payable_events AS payable
-      JOIN (
-        SELECT
-          (item.value ->> 'payable_event_id')::uuid AS payable_event_id
-        FROM jsonb_array_elements(p_allocations) AS item(value)
-      ) AS input
-        ON input.payable_event_id = payable.id
-      WHERE payable.supplier_id IS DISTINCT FROM v_supplier_id
-    )
-  THEN
+  IF v_requested_amount > 9999999999999999.99 THEN
     v_result := jsonb_build_object(
-      'status', 'scope_mismatch',
-      'error_code', 'SUPPLIER_PAYMENT_SCOPE_MISMATCH'
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -2116,6 +2187,66 @@ BEGIN
       p_actor_employee_id,
       p_idempotency_key,
       1
+    );
+  END IF;
+
+  PERFORM payable.id
+  FROM public.supplier_payable_events AS payable
+  JOIN (
+    SELECT
+      (item.value ->> 'payable_event_id')::uuid AS payable_event_id
+    FROM jsonb_array_elements(p_allocations) AS item(value)
+  ) AS input
+    ON input.payable_event_id = payable.id
+  ORDER BY payable.id
+  FOR SHARE OF payable;
+
+  SELECT
+    COUNT(*),
+    MIN(payable.supplier_id::text)::uuid
+  INTO
+    v_resolved_count,
+    v_supplier_id
+  FROM public.supplier_payable_events AS payable
+  JOIN (
+    SELECT
+      (item.value ->> 'payable_event_id')::uuid AS payable_event_id
+    FROM jsonb_array_elements(p_allocations) AS item(value)
+  ) AS input
+    ON input.payable_event_id = payable.id
+  WHERE payable.tenant_id = p_tenant_id
+    AND payable.project_id = p_project_id
+    AND payable.tenant_supplier_id = p_tenant_supplier_id
+    AND payable.currency = 'CNY';
+
+  IF v_resolved_count <> v_allocation_count
+    OR EXISTS (
+      SELECT 1
+      FROM public.supplier_payable_events AS payable
+      JOIN (
+        SELECT
+          (item.value ->> 'payable_event_id')::uuid AS payable_event_id
+        FROM jsonb_array_elements(p_allocations) AS item(value)
+      ) AS input
+        ON input.payable_event_id = payable.id
+      WHERE payable.supplier_id IS DISTINCT FROM v_supplier_id
+    )
+  THEN
+    v_result := jsonb_build_object(
+      'status', 'scope_mismatch',
+      'error_code', 'SUPPLIER_PAYMENT_SCOPE_MISMATCH'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id,
+      'supplier_payment_request',
+      p_payment_request_id,
+      'save_supplier_payment_request_draft',
+      v_request,
+      v_result,
+      p_actor_user_id,
+      p_actor_employee_id,
+      p_idempotency_key,
+      GREATEST(p_expected_version, 1)
     );
   END IF;
 
@@ -2224,13 +2355,11 @@ DECLARE
   v_payment_request public.supplier_payment_requests%ROWTYPE;
   v_request jsonb;
   v_result jsonb;
-  v_requested_amount numeric(18, 2);
+  v_requested_amount numeric;
   v_unavailable_count integer;
 BEGIN
   IF p_payment_request_id IS NULL
     OR p_tenant_id IS NULL
-    OR p_expected_version IS NULL
-    OR p_expected_version < 1
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
@@ -2282,6 +2411,26 @@ BEGIN
       v_event.to_state
     );
   END IF;
+
+  IF p_expected_version IS NULL OR p_expected_version < 1 THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment_request', p_payment_request_id,
+      'submit_supplier_payment_request', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      GREATEST(COALESCE(p_expected_version, 0), 1)
+    );
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-payment-request-id:' || p_payment_request_id::text,
+      0
+    )
+  );
 
   SELECT payment_request.*
   INTO v_payment_request
@@ -2414,7 +2563,7 @@ BEGIN
           COALESCE(paid.amount, 0) -
           COALESCE(other_reserved.amount, 0)
     ),
-    SUM(current_allocation.requested_amount)::numeric(18, 2)
+    SUM(current_allocation.requested_amount)
   INTO v_unavailable_count, v_requested_amount
   FROM current_allocations AS current_allocation
   JOIN public.supplier_payable_events AS payable
@@ -2430,6 +2579,19 @@ BEGIN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
       'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
+    );
+    RETURN public.record_supplier_payment_command_result(
+      p_tenant_id, 'supplier_payment_request', p_payment_request_id,
+      'submit_supplier_payment_request', v_request, v_result,
+      p_actor_user_id, p_actor_employee_id, p_idempotency_key,
+      v_payment_request.version
+    );
+  END IF;
+
+  IF v_requested_amount > 9999999999999999.99 THEN
+    v_result := jsonb_build_object(
+      'status', 'validation_error',
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2758,8 +2920,8 @@ BEGIN
       balances.*,
       CASE
         WHEN balances.open_amount = 0 THEN 'paid'
-        WHEN balances.paid_amount > 0 THEN 'partially_paid'
         WHEN balances.due_at < now() THEN 'overdue'
+        WHEN balances.paid_amount > 0 THEN 'partially_paid'
         WHEN balances.reserved_amount > 0 THEN 'reserved'
         ELSE 'open'
       END AS payable_status
@@ -2775,7 +2937,7 @@ BEGIN
       filtered.*,
       COUNT(*) OVER () AS total_count
     FROM filtered
-    ORDER BY filtered.due_at ASC, filtered.id DESC
+    ORDER BY filtered.due_at DESC, filtered.id DESC
     LIMIT p_page_size
     OFFSET (p_page - 1) * p_page_size
   )
@@ -2798,7 +2960,7 @@ BEGIN
           'due_at', page_rows.due_at,
           'status', page_rows.payable_status
         )
-        ORDER BY page_rows.due_at ASC, page_rows.id DESC
+        ORDER BY page_rows.due_at DESC, page_rows.id DESC
       ),
       '[]'::jsonb
     ),
@@ -3108,15 +3270,15 @@ STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  WITH costs AS (
-    SELECT COALESCE(SUM(cost.amount), 0)::numeric(18, 2) AS amount
+  WITH accepted AS (
+    SELECT COALESCE(SUM(cost.amount), 0) AS amount
     FROM public.project_cost_events AS cost
     WHERE cost.tenant_id = p_tenant_id
       AND cost.supplier_purchase_order_id =
         p_supplier_purchase_order_id
   ),
   payables AS (
-    SELECT COALESCE(SUM(payable.amount), 0)::numeric(18, 2) AS amount
+    SELECT COALESCE(SUM(payable.amount), 0) AS amount
     FROM public.supplier_payable_events AS payable
     WHERE payable.tenant_id = p_tenant_id
       AND payable.supplier_purchase_order_id =
@@ -3124,8 +3286,7 @@ AS $$
   ),
   paid AS (
     SELECT
-      COALESCE(SUM(payment_allocation.amount), 0)::numeric(18, 2)
-        AS amount
+      COALESCE(SUM(payment_allocation.amount), 0) AS amount
     FROM public.supplier_payment_allocations AS payment_allocation
     JOIN public.supplier_payable_events AS payable
       ON payable.id = payment_allocation.payable_event_id
@@ -3133,16 +3294,51 @@ AS $$
     WHERE payment_allocation.tenant_id = p_tenant_id
       AND payable.supplier_purchase_order_id =
         p_supplier_purchase_order_id
+  ),
+  reserved AS (
+    SELECT COALESCE(
+      SUM(
+        GREATEST(
+          allocation.requested_amount - allocation.paid_amount,
+          0
+        )
+      ),
+      0
+    ) AS amount
+    FROM public.supplier_payment_request_allocations AS allocation
+    JOIN public.supplier_payment_requests AS payment_request
+      ON payment_request.id = allocation.payment_request_id
+      AND payment_request.tenant_id = allocation.tenant_id
+    JOIN public.supplier_payable_events AS payable
+      ON payable.id = allocation.payable_event_id
+      AND payable.tenant_id = allocation.tenant_id
+    WHERE allocation.tenant_id = p_tenant_id
+      AND payable.supplier_purchase_order_id =
+        p_supplier_purchase_order_id
+      AND payment_request.status IN (
+        'pending_approval',
+        'approved',
+        'partially_paid'
+      )
   )
   SELECT jsonb_build_object(
-    'supplier_purchase_order_id', p_supplier_purchase_order_id,
-    'recognized_cost_amount', costs.amount::text,
+    'purchase_order_id', p_supplier_purchase_order_id,
+    'accepted_amount', accepted.amount::text,
     'payable_amount', payables.amount::text,
+    'reserved_request_amount', reserved.amount::text,
     'paid_amount', paid.amount::text,
-    'outstanding_amount',
-      GREATEST(payables.amount - paid.amount, 0)::text
+    'open_amount',
+      GREATEST(payables.amount - paid.amount, 0)::text,
+    'available_to_request_amount',
+      GREATEST(
+        payables.amount - paid.amount - reserved.amount,
+        0
+      )::text
   )
-  FROM costs CROSS JOIN payables CROSS JOIN paid;
+  FROM accepted
+  CROSS JOIN payables
+  CROSS JOIN paid
+  CROSS JOIN reserved;
 $$;
 
 REVOKE ALL ON FUNCTION

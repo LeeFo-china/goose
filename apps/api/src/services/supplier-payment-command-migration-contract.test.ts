@@ -101,6 +101,80 @@ describe("supplier payment atomic command migration contract", () => {
     ]);
   });
 
+  test("persists business validation failures behind idempotency replay", () => {
+    const businessValidation = {
+      save_supplier_payment_request_draft: /p_expected_version < 0/,
+      submit_supplier_payment_request: /p_expected_version < 1/,
+      review_supplier_payment_request:
+        /p_action NOT IN \('approve', 'reject'\)/,
+      cancel_supplier_payment_request: /btrim\(p_reason\) = ''/,
+      close_supplier_payment_request: /btrim\(p_reason\) = ''/,
+      confirm_supplier_payment: /p_payment_method NOT IN/,
+    } as const;
+    for (const name of commands) {
+      const command = fn(name);
+      const eventLookup = command.indexOf(
+        "FROM public.supplier_command_events",
+      );
+      expect(eventLookup).toBeGreaterThan(-1);
+      expect(command.slice(0, eventLookup)).not.toMatch(
+        businessValidation[name],
+      );
+      ordered(command, [
+        /v_request := jsonb_build_object/,
+        /FROM public\.supplier_command_events/,
+        /IF FOUND THEN/,
+        businessValidation[name],
+        /'status', 'validation_error'/,
+        /record_supplier_payment_command_result/,
+      ]);
+    }
+  });
+
+  test("uses one cross-command request lock before canonical row locks", () => {
+    for (const name of commands) {
+      ordered(fn(name), [
+        /supplier-command:/,
+        /supplier-payment-request-id:/,
+        /FROM public\.supplier_payment_requests[\s\S]*?FOR UPDATE/,
+      ]);
+    }
+    for (const name of [
+      "save_supplier_payment_request_draft",
+      "submit_supplier_payment_request",
+      "confirm_supplier_payment",
+    ] as const) {
+      ordered(fn(name), [
+        /FROM public\.supplier_payment_requests[\s\S]*?FOR UPDATE/,
+        /FROM public\.supplier_payable_events[\s\S]*?ORDER BY payable\.id[\s\S]*?FOR (?:SHARE|UPDATE)/,
+      ]);
+    }
+  });
+
+  test("bounds multi-row request and payment totals before database casts", () => {
+    const save = fn("save_supplier_payment_request_draft");
+    contracts(save, [
+      /v_requested_amount numeric;/,
+      /SUM\(input\.requested_amount\)(?!::numeric)/,
+      /v_requested_amount > 9999999999999999[.]99/,
+      /SUPPLIER_PAYMENT_VALIDATION_ERROR/,
+    ]);
+    const submit = fn("submit_supplier_payment_request");
+    contracts(submit, [
+      /v_requested_amount numeric;/,
+      /SUM\(current_allocation\.requested_amount\)(?!::numeric)/,
+      /v_requested_amount > 9999999999999999[.]99/,
+      /SUPPLIER_PAYMENT_VALIDATION_ERROR/,
+    ]);
+    const confirm = fn("confirm_supplier_payment");
+    contracts(confirm, [
+      /v_payment_amount numeric;/,
+      /SUM\(input\.amount\)(?!::numeric)/,
+      /v_payment_amount > 9999999999999999[.]99/,
+      /SUPPLIER_PAYMENT_VALIDATION_ERROR/,
+    ]);
+  });
+
   test("saves only coherent draft allocations and creates at version zero", () => {
     const save = fn("save_supplier_payment_request_draft");
     contracts(save, [
