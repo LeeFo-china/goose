@@ -117,8 +117,8 @@ jobs:
                   migration_changed: true,
                   changed_files: [],
                   classifications: ["fallback-all"],
-                  build_services: ["api", "admin", "web", "social-video-worker"],
-                  deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
+                  build_services: ["api", "admin", "h5", "web", "social-video-worker"],
+                  deploy_services: ["api", "admin", "h5", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"],
                   no_op: false
                 }' > build-plan.json
             else
@@ -152,8 +152,11 @@ jobs:
 
             RAW_BUILD_SERVICES="$(node scripts/resolve-web-deployment.mjs build "${REQUESTED_SERVICE}")"
             RAW_DEPLOY_SERVICES="$(node scripts/resolve-web-deployment.mjs deploy "${REQUESTED_SERVICE}")"
-            BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin web social-video-worker)"
-            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin web social-video-worker cos-reconcile-worker billing-reconcile-worker)"
+            if [ "${TARGET_ENVIRONMENT}" = development ] && [ "${REQUESTED_SERVICE//[[:space:]]/}" = all ]; then
+              RAW_DEPLOY_SERVICES="${RAW_DEPLOY_SERVICES} h5"
+            fi
+            BUILD_SERVICES="$(canonicalize_services "${RAW_BUILD_SERVICES}" api admin h5 web social-video-worker)"
+            DEPLOY_SERVICES="$(canonicalize_services "${RAW_DEPLOY_SERVICES}" api admin h5 web social-video-worker cos-reconcile-worker billing-reconcile-worker)"
             test -n "${BUILD_SERVICES}"
             test -n "${DEPLOY_SERVICES}"
 
@@ -233,6 +236,8 @@ jobs:
             image_repo: goose-social-video-worker
           - service: admin
             image_repo: goose-admin
+          - service: h5
+            image_repo: goose-h5
           - service: web
             image_repo: goose-web
 
@@ -399,6 +404,18 @@ jobs:
                 -t "$RUN_IMAGE" \
                 .
               ;;
+            h5)
+              docker build \
+                -f docker/h5.Dockerfile \
+                --build-arg BUILD_SHA="${GITHUB_SHA}" \
+                --build-arg BUILD_REF="${GITHUB_REF_NAME}" \
+                --build-arg BUILD_RUN_ID="${GITHUB_RUN_ID}" \
+                --build-arg BUILD_CREATED="${BUILD_CREATED}" \
+                -t "$BRANCH_IMAGE" \
+                -t "$SHA_IMAGE" \
+                -t "$RUN_IMAGE" \
+                .
+              ;;
             web)
               docker build \
                 -f docker/web.Dockerfile \
@@ -551,6 +568,7 @@ jobs:
             case "${service}" in
               api) image_repo=goose-api ;;
               admin) image_repo=goose-admin ;;
+              h5) image_repo=goose-h5 ;;
               web) image_repo=goose-web ;;
               social-video-worker) image_repo=goose-social-video-worker ;;
               *) echo "Unsupported build service: ${service}"; exit 1 ;;
