@@ -78,13 +78,18 @@ const baseMapping: BrandingVirtualProductRecord = {
 type ServiceConstructor = typeof import(
   "./branding-virtual-products"
 )["BrandingVirtualProductService"];
+type SecretBundleParser = typeof import(
+  "./branding-virtual-products"
+)["parseWechatVirtualPaymentSecretBundle"];
 
 let BrandingVirtualProductService: ServiceConstructor;
+let parseWechatVirtualPaymentSecretBundle: SecretBundleParser;
 
 beforeAll(async () => {
-  ({ BrandingVirtualProductService } = await import(
-    "./branding-virtual-products"
-  ));
+  const module = await import("./branding-virtual-products");
+  BrandingVirtualProductService = module.BrandingVirtualProductService;
+  parseWechatVirtualPaymentSecretBundle =
+    module.parseWechatVirtualPaymentSecretBundle;
 });
 
 function createService(options: {
@@ -140,6 +145,22 @@ function createService(options: {
     getSecretString,
   };
 }
+
+describe("parseWechatVirtualPaymentSecretBundle", () => {
+  test("accepts 512 AppKey characters and rejects 513", () => {
+    const boundary = "a".repeat(512);
+    const oversized = "sensitive-" + "b".repeat(503);
+
+    expect(parseWechatVirtualPaymentSecretBundle(JSON.stringify({
+      appKey: boundary,
+      revision: 2,
+    }))).toEqual({ appKey: boundary, revision: 2 });
+    expect(parseWechatVirtualPaymentSecretBundle(JSON.stringify({
+      appKey: oversized,
+      revision: 2,
+    }))).toBeNull();
+  });
+});
 
 describe("BrandingVirtualProductService tenant capability", () => {
   test.each([
@@ -218,6 +239,7 @@ describe("BrandingVirtualProductService tenant capability", () => {
       { appKey: "production-app-key", revision: 2, leaked: true },
       { appKey: "", revision: 2 },
       { appKey: "production-app-key", revision: 2.5 },
+      { appKey: "sensitive-" + "x".repeat(503), revision: 2 },
     ]) {
       const fixture = createService({
         secretValues: {

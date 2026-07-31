@@ -16,6 +16,9 @@ import {
   TENANT_SMS_PLATFORM_MODE,
   WECHAT_VIRTUAL_PAYMENT_SECRET_SETTING_KEYS,
 } from './definitions';
+import {
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
+} from '@/services/branding-virtual-payment-contracts';
 import { isTencentOcrEncryptionPublicKeyPem } from '@/services/ocr/tencent-encryption-key';
 
 const TENCENT_OCR_ENCRYPTION_PUBLIC_KEY = 'TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM';
@@ -175,6 +178,7 @@ function isWechatVirtualPaymentSecretBundle(value: string): boolean {
     const bundle = parsed as { appKey?: unknown; revision?: unknown };
     return typeof bundle.appKey === 'string' &&
       Boolean(bundle.appKey.trim()) &&
+      bundle.appKey.length <= MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH &&
       Number.isSafeInteger(bundle.revision) &&
       Number(bundle.revision) > 0;
   } catch {

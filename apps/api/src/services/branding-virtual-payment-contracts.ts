@@ -23,3 +23,6 @@ export const BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED =
 
 export const BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED =
   "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED" as const;
+
+// Shared server-side storage, parsing, validation and gateway boundary.
+export const MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH = 512;

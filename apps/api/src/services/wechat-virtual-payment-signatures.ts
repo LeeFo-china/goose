@@ -1,6 +1,9 @@
 import { createHmac } from "node:crypto";
 
 import { Errors } from "@/errors/error-factory";
+import {
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
+} from "@/services/branding-virtual-payment-contracts";
 import { BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN } from "@gooes/domain";
 import type { BrandingVirtualPaymentEnvironment } from "@gooes/domain";
 
@@ -9,7 +12,6 @@ const OUT_TRADE_NO_PATTERN = /^(?!_)[A-Za-z0-9_|*@-]{8,32}$/;
 
 // Internal defensive limits; they do not claim broader upstream protocol
 // limits beyond the documented order-number rules.
-export const MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH = 512;
 export const MAX_WECHAT_VIRTUAL_PAYMENT_ATTACH_LENGTH = 1_024;
 export const MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN = 2_147_483_647;
 

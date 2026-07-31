@@ -49,7 +49,9 @@ describe("system setting value validation", () => {
       key,
       value_type: "json" as const,
     };
-    const valid = JSON.stringify({ appKey: "app-key", revision: 2 });
+    const boundaryAppKey = "a".repeat(512);
+    const valid = JSON.stringify({ appKey: boundaryAppKey, revision: 2 });
+    const oversizedAppKey = "sensitive-" + "b".repeat(503);
 
     expect(validateSettingValue(paymentRecord, valid)).toBe(valid);
     for (const invalid of [
@@ -58,10 +60,17 @@ describe("system setting value validation", () => {
       JSON.stringify({ appKey: "", revision: 2 }),
       JSON.stringify({ appKey: "app-key", revision: 2, extra: true }),
       JSON.stringify({ app_key: "app-key", revision: 2 }),
+      JSON.stringify({ appKey: oversizedAppKey, revision: 2 }),
     ]) {
-      expect(() => validateSettingValue(paymentRecord, invalid)).toThrow(
-        "微信虚拟支付密钥包格式不正确",
-      );
+      const error = (() => {
+        try {
+          validateSettingValue(paymentRecord, invalid);
+        } catch (caught) {
+          return caught;
+        }
+      })();
+      expect(error).toMatchObject({ message: "微信虚拟支付密钥包格式不正确" });
+      expect(JSON.stringify(error)).not.toContain(oversizedAppKey);
     }
   });
 });

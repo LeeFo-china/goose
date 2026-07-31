@@ -36,7 +36,7 @@
 
 ### API
 
-- `apps/api/src/services/branding-virtual-payment-contracts.ts`：虚拟支付枚举、DTO 和稳定错误码。
+- `apps/api/src/services/branding-virtual-payment-contracts.ts`：虚拟支付枚举、DTO、稳定错误码和服务端共享密钥长度上限。
 - `apps/api/src/repositories/branding-virtual-products.ts`：虚拟商品映射读写。
 - `apps/api/src/services/branding-virtual-products.ts`：商品可售性、金额、环境和密钥版本校验。
 - `apps/api/src/services/wechat-mini-session-crypto.ts`：`session_key` 专用 AES-256-GCM 加解密。

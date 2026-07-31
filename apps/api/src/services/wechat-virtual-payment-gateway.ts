@@ -2,6 +2,7 @@ import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
   BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
 } from "@/services/branding-virtual-payment-contracts";
 
 import type {
@@ -35,7 +36,6 @@ import {
   calculateVirtualPaymentPaySig,
   calculateVirtualPaymentUserSignature,
   MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN,
-  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
   virtualPaymentEnv,
 } from "./wechat-virtual-payment-signatures";
 

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
+} from "@/services/branding-virtual-payment-contracts";
+
+import {
   buildVirtualPaymentRequest,
   calculateVirtualPaymentPaySig,
   calculateVirtualPaymentUserSignature,
@@ -173,9 +177,9 @@ describe("wechat virtual payment signatures", () => {
       ...productionInput,
       signingSecret: {
         environment: "production",
-        appKey: "a".repeat(512),
+        appKey: "a".repeat(MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH),
       },
-      sessionKey: "s".repeat(512),
+      sessionKey: "s".repeat(MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH),
       goodsPrice: 2_147_483_647,
       outTradeNo: "O".repeat(32),
       attach: "x".repeat(1_024),
@@ -185,9 +189,11 @@ describe("wechat virtual payment signatures", () => {
   test.each([
     ["AppKey", { signingSecret: {
       environment: "production" as const,
-      appKey: "a".repeat(513),
+      appKey: "a".repeat(MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH + 1),
     } }],
-    ["sessionKey", { sessionKey: "s".repeat(513) }],
+    ["sessionKey", {
+      sessionKey: "s".repeat(MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH + 1),
+    }],
     ["attach", { attach: "x".repeat(1_025) }],
     ["goodsPrice", { goodsPrice: 2_147_483_648 }],
   ])("rejects %s beyond the internal defensive boundary", (_label, patch) => {

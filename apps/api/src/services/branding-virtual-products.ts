@@ -19,6 +19,9 @@ import {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { toTenantBrandingAddonProductView } from "@/services/branding-addon-order-views";
+import {
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
+} from "@/services/branding-virtual-payment-contracts";
 import { systemSettingsService } from "@/services/system-settings";
 import { BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN } from "@gooes/domain";
 
@@ -238,6 +241,7 @@ export function parseWechatVirtualPaymentSecretBundle(value: string): {
     if (
       typeof bundle.appKey !== "string" ||
       !bundle.appKey.trim() ||
+      bundle.appKey.length > MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH ||
       !Number.isSafeInteger(bundle.revision) ||
       Number(bundle.revision) <= 0
     ) {

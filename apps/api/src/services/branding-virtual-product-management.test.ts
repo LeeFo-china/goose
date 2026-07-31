@@ -292,6 +292,33 @@ describe("BrandingVirtualProductManagementService local validation", () => {
     expect(auditJson).toContain('"configured":false');
   });
 
+  test("rejects an oversized AppKey without exposing it in validation", async () => {
+    const oversizedAppKey = "sensitive-" + "x".repeat(503);
+    const fixture = createFixture({
+      secretValues: {
+        WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE: JSON.stringify({
+          appKey: oversizedAppKey,
+          revision: 2,
+        }),
+      },
+    });
+
+    const error = await fixture.service.validateConfiguration(
+      platformAuth,
+      { environment: "production", version: 3 },
+    ).catch((caught) => caught);
+    expect(error).toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_VIRTUAL_PRODUCT_SECRET_INVALID",
+    });
+    expect(fixture.setConfigurationValidation).toHaveBeenCalledWith(
+      expect.objectContaining({ validationStatus: "invalid" }),
+    );
+    expect(JSON.stringify(error)).not.toContain(oversizedAppKey);
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain(oversizedAppKey);
+  });
+
   test("keeps unknown database failures as 500", async () => {
     const fixture = createFixture({
       validationError: { code: "42P01", message: "private sql" },
