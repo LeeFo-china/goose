@@ -15,6 +15,24 @@ function normalizedSql(): string {
 }
 
 describe("branding virtual product management migration", () => {
+  test("takes the shared config lock before every management product lock", () => {
+    const sql = normalizedSql();
+    for (const rpc of [
+      "branding_get_virtual_product_management_snapshot",
+      "branding_manage_virtual_product_configuration",
+      "branding_set_virtual_product_configuration_validation",
+    ]) {
+      const start = sql.indexOf(`create or replace function public.${rpc}`);
+      const next = sql.indexOf("create or replace function public.", start + 1);
+      const body = sql.slice(start, next < 0 ? sql.length : next);
+      expect(body).toContain(
+        "hashtextextended('branding_virtual_payment_config', 20260801)",
+      );
+      expect(body.indexOf("hashtextextended('branding_virtual_payment_config', 20260801)"))
+        .toBeLessThan(body.indexOf("from public.platform_addon_products"));
+    }
+  });
+
   test("resets validation evidence whenever sensitive coordinates change", () => {
     const sql = normalizedSql();
 

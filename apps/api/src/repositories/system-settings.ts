@@ -96,6 +96,21 @@ export class SystemSettingRepository {
     return Array.isArray(data) ? data as PlatformSecretSettingRecord[] : [];
   }
 
+  async findPlatformSecretByKey(
+    key: string,
+  ): Promise<PlatformSecretSettingRecord | null> {
+    const { data, error } = await this.table()
+      .select("key,value_text,is_secret,status")
+      .eq("key", key)
+      .is("tenant_id", null)
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw Errors.dbError("查询平台支付密钥配置失败");
+    }
+    return (data as PlatformSecretSettingRecord | null) ?? null;
+  }
+
   async updateValue(input: {
     key: string;
     tenantId?: string | null;
@@ -125,30 +140,7 @@ export class SystemSettingRepository {
       .single();
 
     if (error) {
-      if (error instanceof AppError) throw error;
-      if (matchesPostgresError(
-        error,
-        "23514",
-        "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
-      )) {
-        throw Errors.business(
-          409,
-          "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
-          "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
-        );
-      }
-      if (matchesPostgresError(
-        error,
-        "P0001",
-        "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
-      )) {
-        throw Errors.business(
-          409,
-          "存在支付窗口未结束的虚拟支付订单，请等待订单关闭后再轮换密钥",
-          "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
-        );
-      }
-      throw Errors.dbError("更新系统配置失败", error);
+      throwSystemSettingMutationError(error, "更新系统配置失败");
     }
 
     const logResult = await this.changeLogTable()
@@ -196,7 +188,7 @@ export class SystemSettingRepository {
       .single();
 
     if (error) {
-      throw Errors.dbError("创建系统配置失败", error);
+      throwSystemSettingMutationError(error, "创建系统配置失败");
     }
 
     const logResult = await this.changeLogTable()
@@ -214,6 +206,39 @@ export class SystemSettingRepository {
 
     return data as SystemSettingRecord;
   }
+}
+
+const SYSTEM_SETTING_MUTATION_ERRORS = [
+  {
+    postgresCode: "23514",
+    code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+    message: "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
+  },
+  {
+    postgresCode: "P0001",
+    code: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+    message: "存在待签发、签发中或待核对的虚拟支付订单，请完成处理后再变更密钥",
+  },
+  {
+    postgresCode: "P0001",
+    code: "BRANDING_VIRTUAL_PAYMENT_SECRET_IDENTITY_IMMUTABLE",
+    message: "虚拟支付密钥的标识、归属和密钥属性不可修改",
+  },
+  {
+    postgresCode: "P0001",
+    code: "BRANDING_VIRTUAL_PAYMENT_SECRET_SCOPE_INVALID",
+    message: "虚拟支付密钥必须是平台级加密配置",
+  },
+] as const;
+
+function throwSystemSettingMutationError(error: unknown, fallback: string): never {
+  if (error instanceof AppError) throw error;
+  for (const mapped of SYSTEM_SETTING_MUTATION_ERRORS) {
+    if (matchesPostgresError(error, mapped.postgresCode, mapped.code)) {
+      throw Errors.business(409, mapped.message, mapped.code);
+    }
+  }
+  throw Errors.dbError(fallback, error);
 }
 
 export const systemSettingRepository = new SystemSettingRepository();

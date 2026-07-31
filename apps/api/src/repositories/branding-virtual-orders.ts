@@ -61,6 +61,11 @@ const BrandingVirtualOrderRecordSchema = z.object({
   payment_expires_at: z.string(),
   failure_code: NullableBoundedText,
   failure_message: NullableBoundedText,
+  payment_request_claim_token: z.uuid().nullable(),
+  payment_request_claimed_at: z.string().nullable(),
+  payment_request_claim_expires_at: z.string().nullable(),
+  payment_request_issued_at: z.string().nullable(),
+  payment_request_attempt_revision: z.number().int().nonnegative(),
   created_by: z.uuid(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -79,8 +84,21 @@ const ORDER_COLUMNS = [
   "payment_status", "fulfillment_status", "refund_status", "paid_amount_fen",
   "paid_at", "entitlement_event_id", "config_version", "secret_revision",
   "payment_expires_at", "failure_code", "failure_message", "created_by",
+  "payment_request_claim_token", "payment_request_claimed_at",
+  "payment_request_claim_expires_at", "payment_request_issued_at",
+  "payment_request_attempt_revision",
   "created_at", "updated_at",
 ].join(",");
+
+const ProductionMappingSchema = z.object({
+  id: z.uuid(),
+  environment: z.literal("production"),
+  secret_revision: z.number().int().positive(),
+});
+
+export type BrandingVirtualOrderProductionMapping = z.infer<
+  typeof ProductionMappingSchema
+>;
 
 type CreateInput = {
   tenantId: string;
@@ -97,23 +115,29 @@ export class BrandingVirtualOrderRepository {
       SupabaseDB.getAdminClient() as unknown as Client,
   ) {}
 
-  async findProductionMappingId(input: {
+  async findProductionMapping(input: {
     productCode: typeof BRANDING_ADDON_PRODUCT_CODE;
-  }): Promise<string | null> {
+  }): Promise<BrandingVirtualOrderProductionMapping | null> {
     const { data, error } = await this.clientProvider()
       .from("platform_virtual_payment_products")
-      .select("id,platform_addon_products!inner(code)")
+      .select("id,environment,secret_revision,platform_addon_products!inner(code)")
       .eq("environment", "production")
       .eq("platform_addon_products.code", input.productCode)
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.dbError("查询品牌权益虚拟商品映射失败");
     if (data === null) return null;
-    const parsed = z.object({ id: z.uuid() }).safeParse(data);
+    const parsed = ProductionMappingSchema.safeParse(data);
     if (!parsed.success) {
       throw Errors.dbError("查询品牌权益虚拟商品映射失败");
     }
-    return parsed.data.id;
+    return parsed.data;
+  }
+
+  async findProductionMappingId(input: {
+    productCode: typeof BRANDING_ADDON_PRODUCT_CODE;
+  }): Promise<string | null> {
+    return (await this.findProductionMapping(input))?.id ?? null;
   }
 
   async create(input: CreateInput): Promise<BrandingVirtualOrderRecord> {
@@ -148,6 +172,77 @@ export class BrandingVirtualOrderRepository {
       ? null
       : parseOrder(data, "查询品牌权益虚拟支付订单失败");
   }
+
+  async claimPaymentRequest(input: {
+    tenantId: string;
+    orderId: string;
+    payerOpenid: string;
+    createdBy: string;
+  }): Promise<BrandingVirtualOrderRecord> {
+    return this.paymentRequestCommand(
+      "branding_claim_virtual_addon_payment_request",
+      {
+        p_tenant_id: input.tenantId,
+        p_order_id: input.orderId,
+        p_payer_openid: input.payerOpenid,
+        p_created_by: input.createdBy,
+      },
+      "获取虚拟支付请求签发租约失败",
+    );
+  }
+
+  async finalizePaymentRequest(input: {
+    tenantId: string;
+    orderId: string;
+    payerOpenid: string;
+    createdBy: string;
+    claimToken: string;
+  }): Promise<BrandingVirtualOrderRecord> {
+    return this.paymentRequestCommand(
+      "branding_finalize_virtual_addon_payment_request",
+      {
+        p_tenant_id: input.tenantId,
+        p_order_id: input.orderId,
+        p_payer_openid: input.payerOpenid,
+        p_created_by: input.createdBy,
+        p_claim_token: input.claimToken,
+      },
+      "确认虚拟支付请求签发失败",
+    );
+  }
+
+  async releasePaymentRequestClaim(input: {
+    tenantId: string;
+    orderId: string;
+    payerOpenid: string;
+    createdBy: string;
+    claimToken: string;
+  }): Promise<BrandingVirtualOrderRecord> {
+    return this.paymentRequestCommand(
+      "branding_release_virtual_addon_payment_request_claim",
+      {
+        p_tenant_id: input.tenantId,
+        p_order_id: input.orderId,
+        p_payer_openid: input.payerOpenid,
+        p_created_by: input.createdBy,
+        p_claim_token: input.claimToken,
+      },
+      "释放虚拟支付请求签发租约失败",
+    );
+  }
+
+  private async paymentRequestCommand(
+    functionName: string,
+    parameters: Record<string, unknown>,
+    fallbackMessage: string,
+  ): Promise<BrandingVirtualOrderRecord> {
+    const { data, error } = await this.clientProvider().rpc(
+      functionName,
+      parameters,
+    );
+    if (error) throwVirtualOrderCommandError(error, fallbackMessage);
+    return parseOrder(data, fallbackMessage);
+  }
 }
 
 const CREATE_ERRORS: Record<string, { statusCode: number; message: string }> = {
@@ -161,6 +256,15 @@ const CREATE_ERRORS: Record<string, { statusCode: number; message: string }> = {
   BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH: { statusCode: 409, message: "虚拟商品价格与年度权益价格不一致" },
   BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW: { statusCode: 409, message: "虚拟商品价格低于微信要求" },
   BRANDING_VIRTUAL_ORDER_CONFLICT: { statusCode: 409, message: "虚拟支付订单状态冲突，请刷新后重试" },
+  BRANDING_ENTITLEMENT_SUSPENDED: { statusCode: 409, message: "品牌权益已暂停，不能购买或续费" },
+  BRANDING_ENTITLEMENT_REVOKED: { statusCode: 409, message: "品牌权益已撤销，不能购买或续费" },
+  BRANDING_VIRTUAL_ORDER_NOT_FOUND: { statusCode: 404, message: "品牌权益虚拟支付订单不存在" },
+  BRANDING_VIRTUAL_ORDER_NOT_PENDING: { statusCode: 409, message: "虚拟支付订单不是待支付状态" },
+  BRANDING_VIRTUAL_ORDER_EXPIRED: { statusCode: 409, message: "虚拟支付订单支付时间已结束" },
+  BRANDING_VIRTUAL_PAYMENT_REQUEST_IN_PROGRESS: { statusCode: 409, message: "虚拟支付请求正在生成，请稍后重试" },
+  BRANDING_VIRTUAL_PAYMENT_RECONCILIATION_REQUIRED: { statusCode: 409, message: "订单支付结果确认中，请稍后查询" },
+  BRANDING_VIRTUAL_PAYMENT_REQUEST_CLAIM_INVALID: { statusCode: 409, message: "虚拟支付请求签发租约已失效" },
+  BRANDING_VIRTUAL_ORDER_CONFIG_CHANGED: { statusCode: 409, message: "虚拟支付配置已变化，请重新发起购买" },
 };
 
 function throwCreateError(error: unknown): never {
@@ -170,6 +274,18 @@ function throwCreateError(error: unknown): never {
     }
   }
   throw Errors.dbError("创建品牌权益虚拟支付订单失败");
+}
+
+function throwVirtualOrderCommandError(
+  error: unknown,
+  fallbackMessage: string,
+): never {
+  for (const [code, mapped] of Object.entries(CREATE_ERRORS)) {
+    if (matchesPostgresError(error, "P0001", code)) {
+      throw Errors.business(mapped.statusCode, mapped.message, code);
+    }
+  }
+  throw Errors.dbError(fallbackMessage);
 }
 
 function parseOrder(data: unknown, message: string): BrandingVirtualOrderRecord {

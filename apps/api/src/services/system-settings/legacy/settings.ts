@@ -70,6 +70,30 @@ export async function getPlatformSecretStrings(
   }));
 }
 
+export async function getPlatformSecretString(
+  repository: Pick<SystemSettingRepository, "findPlatformSecretByKey">,
+  key: string,
+): Promise<string> {
+  const record = await repository.findPlatformSecretByKey(key);
+  const stored = record?.status === "active"
+    ? normalizeStoredValue(record.value_text)
+    : null;
+  if (stored) {
+    try {
+      return record?.is_secret ? decryptSecretValue(stored) : stored;
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw Errors.business(error.statusCode, error.message, error.code);
+      }
+      throw Errors.dbError("读取平台支付密钥配置失败");
+    }
+  }
+  const definition = definitionByKey.get(key);
+  return readEnvValue(definition?.envNames ?? [key]) ??
+    definition?.defaultValue ??
+    "";
+}
+
 export async function listSettings(this: any, authContext?: AuthContext) {
     const records = await this.listRecords();
     const isTenantContext = Boolean(authContext && !authContext.isPlatformAdmin);

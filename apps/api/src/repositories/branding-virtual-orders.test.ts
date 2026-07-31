@@ -10,6 +10,7 @@ const ORDER_ID = "22222222-2222-4222-8222-222222222222";
 const MAPPING_ID = "33333333-3333-4333-8333-333333333333";
 const EMPLOYEE_ID = "44444444-4444-4444-8444-444444444444";
 const IDEMPOTENCY_KEY = "55555555-5555-4555-8555-555555555555";
+const CLAIM_TOKEN = "77777777-7777-4777-8777-777777777777";
 
 const order = {
   id: ORDER_ID,
@@ -44,6 +45,11 @@ const order = {
   payment_expires_at: "2026-08-01T01:05:00.000Z",
   failure_code: null,
   failure_message: null,
+  payment_request_claim_token: null,
+  payment_request_claimed_at: null,
+  payment_request_claim_expires_at: null,
+  payment_request_issued_at: null,
+  payment_request_attempt_revision: 0,
   created_by: EMPLOYEE_ID,
   created_at: "2026-08-01T01:00:00.000Z",
   updated_at: "2026-08-01T01:00:00.000Z",
@@ -96,7 +102,13 @@ async function repositoryWith(input: {
 
 describe("BrandingVirtualOrderRepository", () => {
   test("looks up one production mapping id for the fixed product", async () => {
-    const f = await repositoryWith({ queryData: { id: MAPPING_ID } });
+    const f = await repositoryWith({
+      queryData: {
+        id: MAPPING_ID,
+        environment: "production",
+        secret_revision: 1,
+      },
+    });
     expect(await f.repository.findProductionMappingId({
       productCode: "custom_support_branding_annual",
     })).toBe(MAPPING_ID);
@@ -132,6 +144,76 @@ describe("BrandingVirtualOrderRepository", () => {
         p_created_by: EMPLOYEE_ID,
       },
     ]);
+  });
+
+  test("uses narrow claim finalize and release RPCs with tenant-bound identity", async () => {
+    const claimed = {
+      ...order,
+      payment_request_claim_token: CLAIM_TOKEN,
+      payment_request_claimed_at: "2026-08-01T01:00:00.000Z",
+      payment_request_claim_expires_at: "2026-08-01T01:00:30.000Z",
+    };
+    const f = await repositoryWith({ rpcData: claimed });
+    const identity = {
+      tenantId: TENANT_ID,
+      orderId: ORDER_ID,
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    };
+
+    expect(await f.repository.claimPaymentRequest(identity)).toEqual(claimed);
+    expect(await f.repository.finalizePaymentRequest({
+      ...identity,
+      claimToken: CLAIM_TOKEN,
+    })).toEqual(claimed);
+    expect(await f.repository.releasePaymentRequestClaim({
+      ...identity,
+      claimToken: CLAIM_TOKEN,
+    })).toEqual(claimed);
+
+    expect(f.calls.filter(([method]) => method === "rpc")).toEqual([
+      ["rpc", "branding_claim_virtual_addon_payment_request", {
+        p_tenant_id: TENANT_ID,
+        p_order_id: ORDER_ID,
+        p_payer_openid: "openid",
+        p_created_by: EMPLOYEE_ID,
+      }],
+      ["rpc", "branding_finalize_virtual_addon_payment_request", {
+        p_tenant_id: TENANT_ID,
+        p_order_id: ORDER_ID,
+        p_payer_openid: "openid",
+        p_created_by: EMPLOYEE_ID,
+        p_claim_token: CLAIM_TOKEN,
+      }],
+      ["rpc", "branding_release_virtual_addon_payment_request_claim", {
+        p_tenant_id: TENANT_ID,
+        p_order_id: ORDER_ID,
+        p_payer_openid: "openid",
+        p_created_by: EMPLOYEE_ID,
+        p_claim_token: CLAIM_TOKEN,
+      }],
+    ]);
+  });
+
+  test.each([
+    ["BRANDING_ENTITLEMENT_SUSPENDED", 409],
+    ["BRANDING_ENTITLEMENT_REVOKED", 409],
+    ["BRANDING_VIRTUAL_ORDER_NOT_FOUND", 404],
+    ["BRANDING_VIRTUAL_ORDER_NOT_PENDING", 409],
+    ["BRANDING_VIRTUAL_PAYMENT_REQUEST_IN_PROGRESS", 409],
+    ["BRANDING_VIRTUAL_PAYMENT_RECONCILIATION_REQUIRED", 409],
+    ["BRANDING_VIRTUAL_PAYMENT_REQUEST_CLAIM_INVALID", 409],
+    ["BRANDING_VIRTUAL_ORDER_CONFIG_CHANGED", 409],
+  ])("maps exact payment-request RPC error %s", async (message, statusCode) => {
+    const f = await repositoryWith({
+      rpcError: { code: "P0001", message },
+    });
+    await expect(f.repository.claimPaymentRequest({
+      tenantId: TENANT_ID,
+      orderId: ORDER_ID,
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    })).rejects.toMatchObject({ statusCode, code: message });
   });
 
   test.each([

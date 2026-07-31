@@ -127,8 +127,26 @@ describe("SystemSettingRepository payment config trigger errors", () => {
       .toMatchObject({
         statusCode: 409,
         code: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
-        message: "存在支付窗口未结束的虚拟支付订单，请等待订单关闭后再轮换密钥",
+        message: "存在待签发、签发中或待核对的虚拟支付订单，请完成处理后再变更密钥",
       });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [
+      "BRANDING_VIRTUAL_PAYMENT_SECRET_IDENTITY_IMMUTABLE",
+      "虚拟支付密钥的标识、归属和密钥属性不可修改",
+    ],
+    [
+      "BRANDING_VIRTUAL_PAYMENT_SECRET_SCOPE_INVALID",
+      "虚拟支付密钥必须是平台级加密配置",
+    ],
+  ])("maps exact virtual secret guard error %s", async (code, message) => {
+    updateResult = { data: null, error: { code: "P0001", message: code } };
+    const systemSettingRepository = await createRepository();
+
+    await expect(systemSettingRepository.updateValue(updateInput)).rejects
+      .toMatchObject({ statusCode: 409, code, message });
     expect(insert).not.toHaveBeenCalled();
   });
 

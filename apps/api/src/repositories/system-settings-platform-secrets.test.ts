@@ -26,6 +26,54 @@ beforeAll(async () => {
 });
 
 describe("bounded platform secret settings query", () => {
+  test("selects one exact platform secret without weakening the two-key query", async () => {
+    const calls: Array<[string, ...unknown[]]> = [];
+    const query = {
+      select(columns: string) {
+        calls.push(["select", columns]);
+        return query;
+      },
+      eq(column: string, value: string) {
+        calls.push(["eq", column, value]);
+        return query;
+      },
+      is(column: string, value: null) {
+        calls.push(["is", column, value]);
+        return query;
+      },
+      limit(value: number) {
+        calls.push(["limit", value]);
+        return query;
+      },
+      maybeSingle: mock(async () => ({
+        data: {
+          key: KEYS[1],
+          value_text: JSON.stringify({ appKey: "production", revision: 3 }),
+          is_secret: true,
+          status: "active",
+        },
+        error: null,
+      })),
+    };
+    const repository = new SystemSettingRepository({
+      from(table: string) {
+        calls.push(["from", table]);
+        return query;
+      },
+    });
+
+    const result = await repository.findPlatformSecretByKey(KEYS[1]);
+
+    expect(result?.key).toBe(KEYS[1]);
+    expect(calls).toContainEqual(["eq", "key", KEYS[1]]);
+    expect(calls).toContainEqual(["is", "tenant_id", null]);
+    expect(calls).toContainEqual(["limit", 1]);
+    expect(calls).toContainEqual([
+      "select",
+      "key,value_text,is_secret,status",
+    ]);
+  });
+
   test("selects exactly two platform keys without a full-table scan", async () => {
     const calls: Array<[string, ...unknown[]]> = [];
     const query = {
@@ -98,6 +146,7 @@ describe("bounded platform secret settings query", () => {
     })));
     const service = new SystemSettingsService({
       findPlatformByKeys,
+      findPlatformSecretByKey: mock(async () => null),
       findByKey: mock(async () => null),
       updateValue: mock(async () => {
         throw new TypeError("not used");
@@ -114,6 +163,33 @@ describe("bounded platform secret settings query", () => {
     expect(result[KEYS[1]]).toContain('"revision":2');
   });
 
+  test("resolves one exact secret without reading the other environment", async () => {
+    const findPlatformSecretByKey = mock(async () => ({
+      key: KEYS[1],
+      value_text: JSON.stringify({ appKey: "production", revision: 3 }),
+      is_secret: false,
+      status: "active" as const,
+    }));
+    const service = new SystemSettingsService({
+      findPlatformSecretByKey,
+      findPlatformByKeys: mock(async () => {
+        throw new TypeError("batch lookup must not run");
+      }),
+      findByKey: mock(async () => null),
+      updateValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+      createValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+    });
+
+    expect(await service.getPlatformSecretString(KEYS[1])).toContain(
+      '"revision":3',
+    );
+    expect(findPlatformSecretByKey).toHaveBeenCalledWith(KEYS[1]);
+  });
+
   test("preserves a sanitized decrypt failure instead of treating it as empty", async () => {
     const previousKey = process.env.APP_CONFIG_ENCRYPTION_KEY;
     delete process.env.APP_CONFIG_ENCRYPTION_KEY;
@@ -125,6 +201,7 @@ describe("bounded platform secret settings query", () => {
     }]);
     const service = new SystemSettingsService({
       findPlatformByKeys,
+      findPlatformSecretByKey: mock(async () => null),
       findByKey: mock(async () => null),
       updateValue: mock(async () => {
         throw new TypeError("not used");

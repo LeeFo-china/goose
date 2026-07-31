@@ -18,14 +18,14 @@ import { buildVirtualPaymentRequest } from "@/services/wechat-virtual-payment-si
 
 const PURCHASE_PERMISSION = "brand.entitlement.purchase";
 const TENANT_ADMIN_ROLE = "system_admin";
-const SECRET_KEYS = [
-  WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.sandbox,
-  WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
-] as const;
 
 type RepositoryPort = Pick<
   typeof brandingVirtualOrderRepository,
-  "findProductionMappingId" | "create" | "findTenantOrderById"
+  | "findProductionMapping"
+  | "create"
+  | "claimPaymentRequest"
+  | "finalizePaymentRequest"
+  | "releasePaymentRequestClaim"
 >;
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
@@ -33,7 +33,7 @@ type AccessPolicyPort = Pick<
 >;
 type SettingsServicePort = Pick<
   typeof systemSettingsService,
-  "getPlatformSecretStrings"
+  "getPlatformSecretString"
 >;
 type CredentialServicePort = Pick<
   typeof wechatMiniSessionCredentialService,
@@ -72,14 +72,15 @@ export class TenantBrandingVirtualOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
-    const virtualProductId = await this.repository.findProductionMappingId({
+    const mapping = await this.repository.findProductionMapping({
       productCode: input.product_code,
     });
-    if (!virtualProductId) throw mappingUnavailable();
+    if (!mapping) throw mappingUnavailable();
+    await this.requireBoundSecret(mapping.environment, mapping.secret_revision);
     const order = await this.repository.create({
       tenantId: actor.tenantId,
       idempotencyKey: input.idempotency_key,
-      virtualProductId,
+      virtualProductId: mapping.id,
       requestedPlatform: input.requested_platform,
       payerOpenid,
       createdBy: actor.employeeId,
@@ -96,46 +97,65 @@ export class TenantBrandingVirtualOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
-    const order = await this.repository.findTenantOrderById({
+    const order = await this.repository.claimPaymentRequest({
       tenantId: actor.tenantId,
       orderId,
+      payerOpenid,
+      createdBy: actor.employeeId,
     });
-    if (!order) throw orderNotFound();
-    assertPayableOrder(order, actor.employeeId, payerOpenid, this.nowFactory());
+    if (order.payment_status === "closed") throw orderExpired();
+    const claimToken = order.payment_request_claim_token;
+    if (!claimToken) throw claimInvalid();
 
-    const secretValues = await this.settingsService.getPlatformSecretStrings(
-      SECRET_KEYS,
-    );
-    const secretKey = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[order.environment];
-    const secret = parseWechatVirtualPaymentSecretBundle(
-      secretValues[secretKey] ?? "",
-    );
-    if (!secret || secret.revision !== order.secret_revision) {
-      throw secretInvalid();
-    }
-    const credential = await this.credentials.getActiveForUser({
-      userId: actor.authUserId,
-      openid: payerOpenid,
-    });
-    const requestPayload = buildVirtualPaymentRequest({
-      environment: order.environment,
-      signingSecret: { environment: order.environment, appKey: secret.appKey },
-      sessionKey: credential.sessionKey,
-      offerId: order.offer_id,
-      productId: order.provider_product_id,
-      goodsPrice: order.amount_fen,
-      outTradeNo: order.out_trade_no,
-      attach: order.id,
-    });
-    return {
-      order: serializeVirtualOrder(order),
-      payment_request: {
-        kind: "wechat_virtual" as const,
+    try {
+      const secret = await this.requireBoundSecret(
+        order.environment,
+        order.secret_revision,
+      );
+      const credential = await this.credentials.getActiveForUser({
+        userId: actor.authUserId,
+        openid: payerOpenid,
+      });
+      const requestPayload = buildVirtualPaymentRequest({
         environment: order.environment,
-        request_payload: requestPayload,
-      },
-      server_time: this.nowFactory().toISOString(),
-    };
+        signingSecret: { environment: order.environment, appKey: secret.appKey },
+        sessionKey: credential.sessionKey,
+        offerId: order.offer_id,
+        productId: order.provider_product_id,
+        goodsPrice: order.amount_fen,
+        outTradeNo: order.out_trade_no,
+        attach: order.id,
+      });
+      const finalized = await this.repository.finalizePaymentRequest({
+        tenantId: actor.tenantId,
+        orderId,
+        payerOpenid,
+        createdBy: actor.employeeId,
+        claimToken,
+      });
+      if (
+        finalized.payment_status === "closed" ||
+        !finalized.payment_request_issued_at
+      ) throw orderExpired();
+      return {
+        order: serializeVirtualOrder(finalized),
+        payment_request: {
+          kind: "wechat_virtual" as const,
+          environment: finalized.environment,
+          request_payload: requestPayload,
+        },
+        server_time: this.nowFactory().toISOString(),
+      };
+    } catch (error) {
+      await this.releaseClaimBestEffort({
+        tenantId: actor.tenantId,
+        orderId,
+        payerOpenid,
+        createdBy: actor.employeeId,
+        claimToken,
+      });
+      throw error;
+    }
   }
 
   private requirePurchaser(authContext: AuthContext) {
@@ -159,26 +179,26 @@ export class TenantBrandingVirtualOrderService {
       authUserId: authContext.authUserId,
     };
   }
-}
 
-function assertPayableOrder(
-  order: BrandingVirtualOrderRecord,
-  employeeId: string,
-  payerOpenid: string,
-  now: Date,
-): void {
-  if (order.payer_openid !== payerOpenid) {
-    throw Errors.business(409, "该订单已绑定其他付款人", "BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH");
+  private async requireBoundSecret(
+    environment: BrandingVirtualOrderRecord["environment"],
+    expectedRevision: number,
+  ) {
+    const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[environment];
+    const value = await this.settingsService.getPlatformSecretString(key);
+    const secret = parseWechatVirtualPaymentSecretBundle(value);
+    if (!secret || secret.revision !== expectedRevision) throw secretInvalid();
+    return secret;
   }
-  if (order.created_by !== employeeId) {
-    throw Errors.business(409, "该订单已绑定其他操作人", "BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH");
-  }
-  if (order.payment_status !== "pending") {
-    throw Errors.business(409, "虚拟支付订单不是待支付状态", "BRANDING_VIRTUAL_ORDER_NOT_PENDING");
-  }
-  const expiresAt = Date.parse(order.payment_expires_at);
-  if (!Number.isFinite(expiresAt) || expiresAt <= now.getTime()) {
-    throw Errors.business(409, "虚拟支付订单支付时间已结束", "BRANDING_VIRTUAL_ORDER_EXPIRED");
+
+  private async releaseClaimBestEffort(
+    input: Parameters<RepositoryPort["releasePaymentRequestClaim"]>[0],
+  ): Promise<void> {
+    try {
+      await this.repository.releasePaymentRequestClaim(input);
+    } catch {
+      // The short database lease recovers a process crash or release failure.
+    }
   }
 }
 
@@ -213,19 +233,27 @@ function mappingUnavailable() {
   );
 }
 
-function orderNotFound() {
-  return Errors.business(
-    404,
-    "品牌权益虚拟支付订单不存在",
-    "BRANDING_VIRTUAL_ORDER_NOT_FOUND",
-  );
-}
-
 function secretInvalid() {
   return Errors.business(
     409,
     "虚拟支付密钥未配置或版本不匹配",
     "BRANDING_VIRTUAL_PAYMENT_SECRET_INVALID",
+  );
+}
+
+function orderExpired() {
+  return Errors.business(
+    409,
+    "虚拟支付订单支付时间已结束",
+    "BRANDING_VIRTUAL_ORDER_EXPIRED",
+  );
+}
+
+function claimInvalid() {
+  return Errors.business(
+    409,
+    "虚拟支付请求签发租约已失效",
+    "BRANDING_VIRTUAL_PAYMENT_REQUEST_CLAIM_INVALID",
   );
 }
 

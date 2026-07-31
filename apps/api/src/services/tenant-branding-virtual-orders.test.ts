@@ -82,6 +82,11 @@ const order = {
   payment_expires_at: "2026-08-01T01:05:00.000Z",
   failure_code: null,
   failure_message: null,
+  payment_request_claim_token: null,
+  payment_request_claimed_at: null,
+  payment_request_claim_expires_at: null,
+  payment_request_issued_at: null,
+  payment_request_attempt_revision: 0,
   created_by: EMPLOYEE_ID,
   created_at: "2026-08-01T01:00:00.000Z",
   updated_at: "2026-08-01T01:00:00.000Z",
@@ -95,9 +100,16 @@ function fixture(overrides: {
     ? order
     : overrides.currentOrder;
   const repository = {
-    findProductionMappingId: mock(
-      async (_input: { productCode: typeof order.product_code }): Promise<string | null> =>
-        MAPPING_ID,
+    findProductionMapping: mock(
+      async (_input: { productCode: typeof order.product_code }): Promise<{
+        id: string;
+        environment: "production";
+        secret_revision: number;
+      } | null> => ({
+          id: MAPPING_ID,
+          environment: "production",
+          secret_revision: 7,
+        }),
     ),
     create: mock(async (_input: {
       tenantId: string;
@@ -111,6 +123,40 @@ function fixture(overrides: {
       tenantId: string;
       orderId: string;
     }): Promise<BrandingVirtualOrderRecord | null> => currentOrder),
+    claimPaymentRequest: mock(async (_input: {
+      tenantId: string;
+      orderId: string;
+      payerOpenid: string;
+      createdBy: string;
+    }): Promise<BrandingVirtualOrderRecord> => {
+      if (!currentOrder) {
+        throw Errors.business(404, "品牌权益虚拟支付订单不存在", "BRANDING_VIRTUAL_ORDER_NOT_FOUND");
+      }
+      if (currentOrder.payer_openid !== OPENID) {
+        throw Errors.business(409, "该订单已绑定其他付款人", "BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH");
+      }
+      if (currentOrder.created_by !== EMPLOYEE_ID) {
+        throw Errors.business(409, "该订单已绑定其他操作人", "BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH");
+      }
+      if (currentOrder.payment_status !== "pending") {
+        throw Errors.business(409, "虚拟支付订单不是待支付状态", "BRANDING_VIRTUAL_ORDER_NOT_PENDING");
+      }
+      if (currentOrder.payment_expires_at <= NOW.toISOString()) {
+        return { ...currentOrder, payment_status: "closed" };
+      }
+      return {
+        ...currentOrder,
+        payment_request_claim_token: "99999999-9999-4999-8999-999999999999",
+        payment_request_claimed_at: NOW.toISOString(),
+        payment_request_claim_expires_at: "2026-08-01T01:00:30.000Z",
+      };
+    }),
+    finalizePaymentRequest: mock(async (): Promise<BrandingVirtualOrderRecord> => ({
+      ...order,
+      payment_request_issued_at: "2026-08-01T01:00:01.000Z",
+      payment_request_attempt_revision: 1,
+    })),
+    releasePaymentRequestClaim: mock(async (): Promise<BrandingVirtualOrderRecord> => order),
   };
   const accessPolicy = {
     assertTenantContext: mock((context: AuthContext) => {
@@ -122,16 +168,19 @@ function fixture(overrides: {
     ),
   };
   const settingsService = {
-    getPlatformSecretStrings: mock(async () => overrides.secretValues ?? ({
-      WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE: JSON.stringify({
-        appKey: "sandbox-app-key",
-        revision: 2,
-      }),
-      WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE: JSON.stringify({
+    getPlatformSecretString: mock(async (key: string) => {
+      const values = overrides.secretValues ?? {
+        WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE: JSON.stringify({
+          appKey: "sandbox-app-key",
+          revision: 2,
+        }),
+        WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE: JSON.stringify({
         appKey: "production-app-key",
         revision: 7,
-      }),
-    })),
+        }),
+      };
+      return values[key] ?? "";
+    }),
   };
   const credentials = {
     getActiveForUser: mock(async () => ({
@@ -162,7 +211,7 @@ describe("TenantBrandingVirtualOrderService createOrder", () => {
     const f = fixture();
     const result = await f.service.createOrder(auth, createInput, OPENID);
 
-    expect(f.repository.findProductionMappingId).toHaveBeenCalledWith({
+    expect(f.repository.findProductionMapping).toHaveBeenCalledWith({
       productCode: createInput.product_code,
     });
     expect(f.repository.create).toHaveBeenCalledWith({
@@ -215,12 +264,12 @@ describe("TenantBrandingVirtualOrderService createOrder", () => {
         statusCode: 403,
         code: "BRANDING_ENTITLEMENT_PURCHASE_FORBIDDEN",
       });
-    expect(f.repository.findProductionMappingId).not.toHaveBeenCalled();
+    expect(f.repository.findProductionMapping).not.toHaveBeenCalled();
   });
 
   test("maps an absent production mapping without calling the create RPC", async () => {
     const f = fixture();
-    f.repository.findProductionMappingId.mockResolvedValueOnce(null);
+    f.repository.findProductionMapping.mockResolvedValueOnce(null);
     await expect(f.service.createOrder(auth, createInput, OPENID)).rejects
       .toMatchObject({
         statusCode: 409,
@@ -235,11 +284,13 @@ describe("TenantBrandingVirtualOrderService createPaymentRequest", () => {
     const f = fixture();
     const result = await f.service.createPaymentRequest(auth, ORDER_ID, OPENID);
 
-    expect(f.repository.findTenantOrderById).toHaveBeenCalledWith({
+    expect(f.repository.claimPaymentRequest).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       orderId: ORDER_ID,
+      payerOpenid: OPENID,
+      createdBy: EMPLOYEE_ID,
     });
-    expect(f.settingsService.getPlatformSecretStrings).toHaveBeenCalledTimes(1);
+    expect(f.settingsService.getPlatformSecretString).toHaveBeenCalledTimes(1);
     expect(f.credentials.getActiveForUser).toHaveBeenCalledWith({
       userId: USER_ID,
       openid: OPENID,
@@ -270,7 +321,7 @@ describe("TenantBrandingVirtualOrderService createPaymentRequest", () => {
     const f = fixture({ currentOrder: null });
     await expect(f.service.createPaymentRequest(auth, ORDER_ID, OPENID)).rejects
       .toMatchObject({ statusCode: 404, code: "BRANDING_VIRTUAL_ORDER_NOT_FOUND" });
-    expect(f.settingsService.getPlatformSecretStrings).not.toHaveBeenCalled();
+    expect(f.settingsService.getPlatformSecretString).not.toHaveBeenCalled();
     expect(f.credentials.getActiveForUser).not.toHaveBeenCalled();
   });
 
@@ -285,7 +336,7 @@ describe("TenantBrandingVirtualOrderService createPaymentRequest", () => {
     const f = fixture({ currentOrder });
     await expect(f.service.createPaymentRequest(auth, ORDER_ID, OPENID)).rejects
       .toMatchObject({ statusCode: 409, code });
-    expect(f.settingsService.getPlatformSecretStrings).not.toHaveBeenCalled();
+    expect(f.settingsService.getPlatformSecretString).not.toHaveBeenCalled();
     expect(f.credentials.getActiveForUser).not.toHaveBeenCalled();
   });
 
@@ -311,7 +362,7 @@ describe("TenantBrandingVirtualOrderService createPaymentRequest", () => {
   test("preserves sanitized infrastructure failures when loading secrets", async () => {
     const f = fixture();
     const failure = Errors.dbError("读取平台支付密钥配置失败");
-    f.settingsService.getPlatformSecretStrings.mockRejectedValueOnce(failure);
+    f.settingsService.getPlatformSecretString.mockRejectedValueOnce(failure);
     await expect(f.service.createPaymentRequest(auth, ORDER_ID, OPENID))
       .rejects.toBe(failure);
     expect(f.credentials.getActiveForUser).not.toHaveBeenCalled();

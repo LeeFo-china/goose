@@ -727,6 +727,7 @@ git commit -m "feat(payments): 实现微信虚拟支付网关"
 - Create: `apps/api/src/repositories/branding-virtual-orders.test.ts`
 - Create: `apps/api/src/services/tenant-branding-virtual-orders.ts`
 - Create: `apps/api/src/services/tenant-branding-virtual-orders.test.ts`
+- Create: `apps/api/src/services/tenant-branding-virtual-orders-claim.test.ts`
 - Create: `apps/api/src/services/branding-virtual-order-payment-window-migration-contract.test.ts`
 - Modify: `apps/api/src/schema/branding-addon.ts`
 - Modify: `apps/api/src/schema/branding-addon.test.ts`
@@ -734,6 +735,10 @@ git commit -m "feat(payments): 实现微信虚拟支付网关"
 - Modify: `apps/api/src/controllers/branding-addon/routes.test.ts`
 - Modify: `apps/api/src/repositories/system-settings.ts`
 - Modify: `apps/api/src/repositories/system-settings.test.ts`
+- Modify: `apps/api/src/repositories/system-settings-platform-secrets.test.ts`
+- Modify: `apps/api/src/services/system-settings/legacy-service.ts`
+- Modify: `apps/api/src/services/system-settings/legacy/settings.ts`
+- Modify: `supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql`
 
 - [ ] **Step 1: 写权限、幂等、OpenID 和会话恢复测试**
 
@@ -798,7 +803,33 @@ async createVirtualPaymentRequest(request: FastifyRequest) {
 
 - [ ] **Step 4: 实现 service 与 repository**
 
-Repository 只调用 `branding_create_virtual_addon_order`、按租户查询单笔订单和更新 `last_used_at`；service 从服务端商品与 mapping 构造快照。支付请求返回固定 shape：
+Repository 创建订单后，通过三个 service-role-only RPC 完成支付请求的短租约签发：
+`branding_claim_virtual_addon_payment_request`、
+`branding_finalize_virtual_addon_payment_request` 和
+`branding_release_virtual_addon_payment_request_claim`。claim 在数据库中原子复核权益、
+付款人、操作人、订单状态、商品与 production mapping 的全部快照坐标，并创建 30 秒
+服务端租约；service 必须按 `claim -> 精确读取当前环境密钥 -> 获取会话凭证 -> 构造签名
+-> finalize` 执行。finalize 成功前不得向客户端返回签名载荷；此前任一步失败都尽力
+release，release 失败由租约自动恢复且不能覆盖原错误。
+
+订单创建和签发统一使用“租户权益锁 -> 全局虚拟支付配置锁 -> 商品 -> mapping -> 订单”
+顺序。只有未签发且没有有效 claim 的过期订单可以本地关闭；一旦
+`payment_request_issued_at` 非空，即使支付窗口已过也必须保持 pending，由 Task 7 主动查单
+后再收敛。暂停或撤销权益只关闭未签发、未 claim 的订单，已签发订单仍进入对账但禁止
+再次 claim/finalize。
+
+创建订单前也必须按 mapping 的 `environment + secret_revision` 精确读取一个 secret key，
+避免先制造注定无法签发的 pending 订单。production 流程不能批量读取 sandbox 密钥，反之
+亦然；损坏的另一环境配置不得影响当前环境。若部署允许从进程环境变量回退密钥，由于
+数据库触发器无法观察环境变量变化，存在 pending、有效 claim 或已签发未对账订单期间
+严禁运维修改对应环境变量，必须先完成对账并停用 mapping。
+
+受保护密钥的 INSERT/UPDATE/DELETE 均在全局配置锁内执行。key、tenant_id、is_secret 不可
+变更，配置必须为 `tenant_id IS NULL AND is_secret = true`；有效值或状态变化在存在可签发、
+签发中或已签发待对账订单时被拒绝。允许的密钥变化会在同一事务内禁用对应环境 mapping
+并将校验状态重置为 pending，必须重新校验后才能恢复销售。
+
+支付请求返回固定 shape：
 
 ```ts
 return {
@@ -824,13 +855,13 @@ return {
 
 - [ ] **Step 5: 验证并提交**
 
-Run from `apps/api`: `bun test src/services/tenant-branding-virtual-orders.test.ts src/repositories/branding-virtual-orders.test.ts src/services/branding-virtual-order-payment-window-migration-contract.test.ts src/schema/branding-addon.test.ts src/controllers/branding-addon/routes.test.ts src/controllers/branding-addon/routes-virtual-payment.test.ts src/repositories/system-settings.test.ts && bun run typecheck`
+Run from `apps/api`: `bun test src/services/tenant-branding-virtual-orders.test.ts src/services/tenant-branding-virtual-orders-claim.test.ts src/repositories/branding-virtual-orders.test.ts src/services/branding-virtual-order-payment-window-migration-contract.test.ts src/services/branding-virtual-product-management-migration.test.ts src/repositories/system-settings-platform-secrets.test.ts src/schema/branding-addon.test.ts src/controllers/branding-addon/routes.test.ts src/controllers/branding-addon/routes-virtual-payment.test.ts src/repositories/system-settings.test.ts && bun run typecheck`
 
 Expected: 全部 PASS，路由响应中不存在 `appKey`、`sessionKey` 或 `encrypted_secret_ref`。
 
 ```bash
-git add supabase/migrations/20260801100000_harden_branding_virtual_order_payment_window.sql apps/api/src/repositories/branding-virtual-orders.ts apps/api/src/repositories/branding-virtual-orders.test.ts apps/api/src/services/tenant-branding-virtual-orders.ts apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/services/branding-virtual-order-payment-window-migration-contract.test.ts apps/api/src/schema/branding-addon.ts apps/api/src/schema/branding-addon.test.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/controllers/branding-addon/routes.test.ts apps/api/src/controllers/branding-addon/routes-virtual-payment.test.ts apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
-git commit -m "feat(payments): 增加品牌权益虚拟支付下单"
+git add supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql supabase/migrations/20260801100000_harden_branding_virtual_order_payment_window.sql apps/api/src/repositories/branding-virtual-orders.ts apps/api/src/repositories/branding-virtual-orders.test.ts apps/api/src/services/tenant-branding-virtual-orders.ts apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/services/tenant-branding-virtual-orders-claim.test.ts apps/api/src/services/branding-virtual-order-payment-window-migration-contract.test.ts apps/api/src/services/branding-virtual-product-management-migration.test.ts apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/repositories/system-settings-platform-secrets.test.ts apps/api/src/services/system-settings/legacy-service.ts apps/api/src/services/system-settings/legacy/settings.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
+git commit -m "fix(payments): 原子化虚拟支付请求签发"
 ```
 
 ## Task 6：接入微信消息并实现原子支付履约
@@ -848,7 +879,7 @@ git commit -m "feat(payments): 增加品牌权益虚拟支付下单"
 
 - [ ] **Step 1: 写重复、伪造、乱序和原子履约测试**
 
-固定覆盖：相同事件稳定键只插入一次；OpenId、OutTradeNo、ProductId、Quantity、OrigPrice、ActualPrice、环境或交易号不匹配时不履约；通知和查单并发只产生一个 purchase event；支付成功但 RPC 暂时失败进入 `grant_failed`；再次处理可恢复为 `granted`。
+固定覆盖：相同事件稳定键只插入一次；OpenId、OutTradeNo、ProductId、Quantity、OrigPrice、ActualPrice、环境或交易号不匹配时不履约；通知和查单并发只产生一个 purchase event；支付成功但 RPC 暂时失败进入 `grant_failed`；再次处理可恢复为 `granted`。本地窗口过期或已关闭后到达的微信成功事实仍必须进入同一原子确认：已签发订单按真实支付成功履约；若订单已被错误关闭则记录显式异常并交由补偿流程恢复，禁止丢弃迟到成功通知。
 
 ```ts
 test("notification and query converge on one confirmation", async () => {
@@ -979,7 +1010,7 @@ async reconcile(input: { batchSize: number }): Promise<BrandingVirtualReconcilia
 }
 ```
 
-pending 到期不能仅本地关闭：先调用微信查单；明确未支付/已关闭才更新本地，成功则履约，未知和网络错误释放 claim。`grant_failed` 已有支付事实时不重复查单即可重试原子确认。
+pending 到期不能仅本地关闭：特别是 `payment_request_issued_at IS NOT NULL` 的订单必须先调用微信查单；明确未支付/已关闭才更新本地，成功则履约，未知和网络错误释放 claim。已签发订单禁止由普通过期清理直接关闭。对于迟到的成功事实，统一调用 confirmation 完成权益授予；若本地状态已异常关闭，记录可检索的显式异常并进入恢复分支，不得将其当作未支付。`grant_failed` 已有支付事实时不重复查单即可重试原子确认。
 
 - [ ] **Step 4: 接入现有单一调度 worker**
 

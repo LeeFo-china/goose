@@ -64,6 +64,10 @@ DECLARE
   v_product_id uuid;
   v_mappings jsonb;
 BEGIN
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('branding_virtual_payment_config', 20260801)
+  );
+
   SELECT product.id,
          jsonb_build_object(
            'id', product.id,
@@ -264,6 +268,10 @@ BEGIN
   ) THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
   END IF;
+
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('branding_virtual_payment_config', 20260801)
+  );
 
   SELECT * INTO v_product
   FROM public.platform_addon_products
@@ -474,6 +482,9 @@ BEGIN
   IF p_validation_status NOT IN ('valid', 'invalid') THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_VALIDATION_STATUS_INVALID';
   END IF;
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('branding_virtual_payment_config', 20260801)
+  );
   SELECT * INTO v_product
   FROM public.platform_addon_products
   WHERE id = p_addon_product_id
