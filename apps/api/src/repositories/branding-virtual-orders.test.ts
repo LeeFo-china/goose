@@ -295,4 +295,108 @@ describe("BrandingVirtualOrderRepository", () => {
     expect(f.calls).toContainEqual(["eq", "idempotency_key", IDEMPOTENCY_KEY]);
     expect(f.calls).toContainEqual(["limit", 1]);
   });
+
+  test("reads one virtual order by exact provider merchant order identity", async () => {
+    const f = await repositoryWith({ queryData: order });
+    expect(await f.repository.findByOutTradeNo(order.out_trade_no)).toEqual(order);
+    expect(f.calls).toContainEqual(["eq", "out_trade_no", order.out_trade_no]);
+    expect(f.calls).toContainEqual(["limit", 1]);
+  });
+
+  test("passes the complete provider fact to the shared confirmation RPC", async () => {
+    const result = {
+      idempotent: false,
+      payment_recorded: true,
+      fulfilled: true,
+      recoverable: false,
+      entitlement_event_id: "88888888-8888-4888-8888-888888888888",
+      entitlement_status: "active",
+      failure_code: null,
+    } as const;
+    const f = await repositoryWith({ rpcData: result });
+    expect(await f.repository.confirmPurchase({
+      orderId: ORDER_ID,
+      notificationId: "99999999-9999-4999-8999-999999999999",
+      source: "notification",
+      allowLateClosedRecovery: false,
+      eventType: "xpay_goods_deliver_notify",
+      successful: true,
+      environment: "production",
+      openid: "openid",
+      outTradeNo: order.out_trade_no,
+      providerProductId: order.provider_product_id,
+      quantity: 1,
+      currency: null,
+      origPriceFen: order.amount_fen,
+      actualPriceFen: order.amount_fen,
+      providerOrderNo: "provider-order-1",
+      transactionId: "transaction-1",
+      paidAt: "2026-08-01T01:01:00.000Z",
+      attach: ORDER_ID,
+    })).toEqual(result);
+    expect(f.calls).toContainEqual([
+      "rpc",
+      "branding_confirm_virtual_addon_purchase",
+      {
+        p_order_id: ORDER_ID,
+        p_notification_id: "99999999-9999-4999-8999-999999999999",
+        p_source: "notification",
+        p_allow_late_closed_recovery: false,
+        p_event_type: "xpay_goods_deliver_notify",
+        p_successful_state: true,
+        p_environment: "production",
+        p_openid: "openid",
+        p_out_trade_no: order.out_trade_no,
+        p_provider_product_id: order.provider_product_id,
+        p_quantity: 1,
+        p_currency: null,
+        p_orig_price_fen: order.amount_fen,
+        p_actual_price_fen: order.amount_fen,
+        p_provider_order_no: "provider-order-1",
+        p_transaction_id: "transaction-1",
+        p_paid_at: "2026-08-01T01:01:00.000Z",
+        p_attach: ORDER_ID,
+      },
+    ]);
+  });
+
+  test("maps exact confirmation mismatches but sanitizes unknown failures", async () => {
+    const mismatch = await repositoryWith({
+      rpcError: {
+        code: "P0001",
+        message: "BRANDING_VIRTUAL_NOTIFICATION_MISMATCH",
+      },
+    });
+    const input = {
+      orderId: ORDER_ID,
+      notificationId: "99999999-9999-4999-8999-999999999999",
+      source: "notification" as const,
+      allowLateClosedRecovery: false,
+      eventType: "xpay_goods_deliver_notify" as const,
+      successful: true as const,
+      environment: "production" as const,
+      openid: "openid",
+      outTradeNo: order.out_trade_no,
+      providerProductId: order.provider_product_id,
+      quantity: 1 as const,
+      currency: null,
+      origPriceFen: order.amount_fen,
+      actualPriceFen: order.amount_fen,
+      providerOrderNo: "provider-order-1",
+      transactionId: "transaction-1",
+      paidAt: "2026-08-01T01:01:00.000Z",
+      attach: ORDER_ID,
+    };
+    await expect(mismatch.repository.confirmPurchase(input)).rejects
+      .toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_VIRTUAL_NOTIFICATION_MISMATCH",
+      });
+
+    const unknown = await repositoryWith({
+      rpcError: { code: "XX000", message: "secret SQL" },
+    });
+    await expect(unknown.repository.confirmPurchase(input)).rejects
+      .toMatchObject({ statusCode: 500, code: "DB_ERROR", details: undefined });
+  });
 });

@@ -229,6 +229,16 @@ const SYSTEM_SETTING_MUTATION_ERRORS = [
     code: "BRANDING_VIRTUAL_PAYMENT_SECRET_SCOPE_INVALID",
     message: "虚拟支付密钥必须是平台级加密配置",
   },
+  {
+    postgresCode: "P0001",
+    code: "WECHAT_VIRTUAL_MESSAGE_TOKEN_IDENTITY_IMMUTABLE",
+    message: "虚拟支付消息令牌的标识、归属和密钥属性不可修改",
+  },
+  {
+    postgresCode: "P0001",
+    code: "WECHAT_VIRTUAL_MESSAGE_TOKEN_SCOPE_INVALID",
+    message: "虚拟支付消息令牌必须是平台级加密配置",
+  },
 ] as const;
 
 function throwSystemSettingMutationError(error: unknown, fallback: string): never {

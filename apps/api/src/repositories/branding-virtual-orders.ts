@@ -75,6 +75,21 @@ export type BrandingVirtualOrderRecord = z.infer<
   typeof BrandingVirtualOrderRecordSchema
 >;
 
+const BrandingVirtualPurchaseConfirmationResultSchema = z.object({
+  idempotent: z.boolean(),
+  payment_recorded: z.boolean(),
+  fulfilled: z.boolean(),
+  recoverable: z.boolean(),
+  entitlement_event_id: z.uuid().nullable(),
+  entitlement_status: z.enum(["active", "suspended", "expired", "revoked"])
+    .nullable(),
+  failure_code: z.string().nullable(),
+});
+
+export type BrandingVirtualPurchaseConfirmationResult = z.infer<
+  typeof BrandingVirtualPurchaseConfirmationResultSchema
+>;
+
 const ORDER_COLUMNS = [
   "id", "tenant_id", "order_no", "out_trade_no", "idempotency_key",
   "product_id", "product_code", "entitlement_code", "product_name",
@@ -190,6 +205,74 @@ export class BrandingVirtualOrderRepository {
       : parseOrder(data, "查询品牌权益虚拟支付订单失败");
   }
 
+  async findByOutTradeNo(
+    outTradeNo: string,
+  ): Promise<BrandingVirtualOrderRecord | null> {
+    const { data, error } = await this.clientProvider()
+      .from("tenant_virtual_addon_orders")
+      .select(ORDER_COLUMNS)
+      .eq("out_trade_no", outTradeNo)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询品牌权益虚拟支付订单失败");
+    return data === null
+      ? null
+      : parseOrder(data, "查询品牌权益虚拟支付订单失败");
+  }
+
+  async confirmPurchase(input: {
+    orderId: string;
+    notificationId: string | null;
+    source: "notification" | "query" | "reconciliation";
+    allowLateClosedRecovery: boolean;
+    eventType: "xpay_goods_deliver_notify" | "query_order";
+    successful: true;
+    environment: "sandbox" | "production";
+    openid: string;
+    outTradeNo: string;
+    providerProductId: string;
+    quantity: 1;
+    currency: "CNY" | null;
+    origPriceFen: number;
+    actualPriceFen: number;
+    providerOrderNo: string;
+    transactionId: string;
+    paidAt: string;
+    attach: string;
+  }): Promise<BrandingVirtualPurchaseConfirmationResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_confirm_virtual_addon_purchase",
+      {
+        p_order_id: input.orderId,
+        p_notification_id: input.notificationId,
+        p_source: input.source,
+        p_allow_late_closed_recovery: input.allowLateClosedRecovery,
+        p_event_type: input.eventType,
+        p_successful_state: input.successful,
+        p_environment: input.environment,
+        p_openid: input.openid,
+        p_out_trade_no: input.outTradeNo,
+        p_provider_product_id: input.providerProductId,
+        p_quantity: input.quantity,
+        p_currency: input.currency,
+        p_orig_price_fen: input.origPriceFen,
+        p_actual_price_fen: input.actualPriceFen,
+        p_provider_order_no: input.providerOrderNo,
+        p_transaction_id: input.transactionId,
+        p_paid_at: input.paidAt,
+        p_attach: input.attach,
+      },
+    );
+    if (error) throwConfirmationError(error);
+    const parsed = BrandingVirtualPurchaseConfirmationResultSchema.safeParse(
+      Array.isArray(data) ? data[0] : data,
+    );
+    if (!parsed.success) {
+      throw Errors.dbError("确认品牌权益虚拟支付履约失败");
+    }
+    return parsed.data;
+  }
+
   async claimPaymentRequest(input: {
     tenantId: string;
     orderId: string;
@@ -284,6 +367,28 @@ const CREATE_ERRORS: Record<string, { statusCode: number; message: string }> = {
   BRANDING_VIRTUAL_ORDER_CONFIG_CHANGED: { statusCode: 409, message: "虚拟支付配置已变化，请重新发起购买" },
 };
 
+const CONFIRMATION_ERRORS: Record<
+  string,
+  { statusCode: number; message: string }
+> = {
+  BRANDING_VIRTUAL_CONFIRM_INPUT_INVALID: { statusCode: 400, message: "虚拟支付确认参数不正确" },
+  BRANDING_VIRTUAL_ORDER_NOT_FOUND: { statusCode: 404, message: "品牌权益虚拟支付订单不存在" },
+  BRANDING_VIRTUAL_PAYMENT_OPENID_MISMATCH: { statusCode: 409, message: "虚拟支付付款人与订单不一致" },
+  BRANDING_VIRTUAL_PAYMENT_OUT_TRADE_NO_MISMATCH: { statusCode: 409, message: "虚拟支付商户订单号不一致" },
+  BRANDING_VIRTUAL_PAYMENT_PRODUCT_MISMATCH: { statusCode: 409, message: "虚拟支付商品不一致" },
+  BRANDING_VIRTUAL_PAYMENT_QUANTITY_MISMATCH: { statusCode: 409, message: "虚拟支付商品数量不一致" },
+  BRANDING_VIRTUAL_PAYMENT_AMOUNT_MISMATCH: { statusCode: 409, message: "虚拟支付金额不一致" },
+  BRANDING_VIRTUAL_PAYMENT_ENVIRONMENT_MISMATCH: { statusCode: 409, message: "虚拟支付环境不一致" },
+  BRANDING_VIRTUAL_PAYMENT_TRANSACTION_CONFLICT: { statusCode: 409, message: "虚拟支付交易标识冲突" },
+  BRANDING_VIRTUAL_PAYMENT_PROVIDER_ORDER_CONFLICT: { statusCode: 409, message: "虚拟支付平台订单标识冲突" },
+  BRANDING_VIRTUAL_PAYMENT_CURRENCY_MISMATCH: { statusCode: 409, message: "虚拟支付币种不一致" },
+  BRANDING_VIRTUAL_PAYMENT_ATTACH_MISMATCH: { statusCode: 409, message: "虚拟支付订单绑定信息不一致" },
+  BRANDING_VIRTUAL_PAYMENT_STATE_INVALID: { statusCode: 409, message: "虚拟支付成功状态不正确" },
+  BRANDING_VIRTUAL_PAYMENT_ORDER_STATUS_INVALID: { statusCode: 409, message: "虚拟支付订单状态不支持确认" },
+  BRANDING_VIRTUAL_PAYMENT_LATE_UNISSUED_ORDER: { statusCode: 409, message: "未签发订单出现支付成功事实" },
+  BRANDING_VIRTUAL_NOTIFICATION_MISMATCH: { statusCode: 409, message: "虚拟支付消息与订单不一致" },
+};
+
 function throwCreateError(error: unknown): never {
   for (const [code, mapped] of Object.entries(CREATE_ERRORS)) {
     if (matchesPostgresError(error, "P0001", code)) {
@@ -303,6 +408,15 @@ function throwVirtualOrderCommandError(
     }
   }
   throw Errors.dbError(fallbackMessage);
+}
+
+function throwConfirmationError(error: unknown): never {
+  for (const [code, mapped] of Object.entries(CONFIRMATION_ERRORS)) {
+    if (matchesPostgresError(error, "P0001", code)) {
+      throw Errors.business(mapped.statusCode, mapped.message, code);
+    }
+  }
+  throw Errors.dbError("确认品牌权益虚拟支付履约失败");
 }
 
 function parseOrder(data: unknown, message: string): BrandingVirtualOrderRecord {

@@ -141,6 +141,14 @@ describe("SystemSettingRepository payment config trigger errors", () => {
       "BRANDING_VIRTUAL_PAYMENT_SECRET_SCOPE_INVALID",
       "虚拟支付密钥必须是平台级加密配置",
     ],
+    [
+      "WECHAT_VIRTUAL_MESSAGE_TOKEN_IDENTITY_IMMUTABLE",
+      "虚拟支付消息令牌的标识、归属和密钥属性不可修改",
+    ],
+    [
+      "WECHAT_VIRTUAL_MESSAGE_TOKEN_SCOPE_INVALID",
+      "虚拟支付消息令牌必须是平台级加密配置",
+    ],
   ])("maps exact virtual secret guard error %s", async (code, message) => {
     updateResult = { data: null, error: { code: "P0001", message: code } };
     const systemSettingRepository = await createRepository();

@@ -106,6 +106,7 @@ import PlatformSupplierOnboardingController from "@/controllers/platform-supplie
 import BrandingController from "@/controllers/branding";
 import BrandingAddonController from "@/controllers/branding-addon";
 import TenantOnboardingOcrController from "@/controllers/tenant-onboarding-ocr";
+import WechatVirtualPaymentController from "@/controllers/wechat-virtual-payment";
 
 const fullCrudRoutes = {
   list: true,
@@ -209,6 +210,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   BrandingController.registerExtraRoutes(app);
   BrandingAddonController.registerExtraRoutes(app);
   TenantOnboardingOcrController.registerExtraRoutes(app);
+  WechatVirtualPaymentController.registerExtraRoutes(app);
   AiConfigController.registerExtraRoutes(app);
   MarketingPagesController.registerExtraRoutes(app);
   DepartmentPostRulesController.registerExtraRoutes(app);

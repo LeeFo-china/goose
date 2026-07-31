@@ -29,7 +29,7 @@
 - `supabase/migrations/20260731130000_create_branding_virtual_payment_foundation.sql`：商品购买模式、虚拟商品映射、虚拟订单、权限、RLS、索引和订单创建 RPC。
 - `supabase/migrations/20260731131000_create_wechat_mini_session_credentials.sql`：加密微信会话凭据、轮换 RPC、撤销触发器和访问边界。
 - `supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql`：虚拟商品验证生命周期、商品与映射原子管理 RPC、验证结果 RPC。
-- `supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql`：虚拟支付消息、支付确认与权益履约原子 RPC、claim RPC。
+- `supabase/migrations/20260801101000_create_branding_virtual_payment_fulfillment.sql`：虚拟支付消息收件箱、支付确认与权益履约原子 RPC。
 - `supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql`：新旧订单统一分页、详情与筛选 RPC。
 - `supabase/migrations/20260731135000_create_branding_virtual_payment_refunds.sql`：人工退款、退款状态、退款补偿事件和原子补偿 RPC。
 - `supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql`：旧普通支付写入数据库保护、旧 pending claim 和切换前置校验。
@@ -50,6 +50,7 @@
 - `apps/api/src/repositories/branding-virtual-orders.ts`：虚拟订单创建、查询、claim 和履约 RPC。
 - `apps/api/src/services/tenant-branding-virtual-orders.ts`：租户订单创建与支付参数编排。
 - `apps/api/src/repositories/wechat-virtual-payment-notifications.ts`：消息幂等落库与处理状态。
+- `apps/api/src/services/wechat-virtual-payment-message.ts`：微信明文消息 SHA-1 验签、64 KiB 限制与严格 JSON/XML 解析。
 - `apps/api/src/services/wechat-virtual-payment-notifications.ts`：微信消息认证、归一化、上下文匹配和派发。
 - `apps/api/src/services/branding-virtual-payment-confirmation.ts`：通知与主动查单共用的支付确认入口。
 - `apps/api/src/controllers/wechat-virtual-payment/index.ts`：微信虚拟支付消息 GET 验证与 POST 接收。
@@ -879,19 +880,27 @@ git commit -m "fix(payments): 原子化虚拟支付请求签发"
 ## Task 6：接入微信消息并实现原子支付履约
 
 **Files:**
-- Create: `supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql`
+- Create: `supabase/migrations/20260801101000_create_branding_virtual_payment_fulfillment.sql`
 - Create: `apps/api/src/repositories/wechat-virtual-payment-notifications.ts`
+- Create: `apps/api/src/repositories/wechat-virtual-payment-notifications.test.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-message.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-message.test.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.test.ts`
 - Create: `apps/api/src/services/branding-virtual-payment-confirmation.ts`
 - Create: `apps/api/src/services/branding-virtual-payment-confirmation.test.ts`
 - Create: `apps/api/src/controllers/wechat-virtual-payment/index.ts`
 - Create: `apps/api/src/controllers/wechat-virtual-payment/routes.test.ts`
+- Create: `apps/api/src/services/branding-virtual-payment-fulfillment-migration.test.ts`
+- Modify: `apps/api/src/repositories/branding-virtual-orders.ts`
+- Modify: `apps/api/src/repositories/branding-virtual-orders.test.ts`
+- Modify: `apps/api/src/repositories/system-settings.ts`
+- Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
-- [ ] **Step 1: 写重复、伪造、乱序和原子履约测试**
+- [x] **Step 1: 写重复、伪造、乱序和原子履约测试**
 
-固定覆盖：相同事件稳定键只插入一次；OpenId、OutTradeNo、ProductId、Quantity、OrigPrice、ActualPrice、环境或交易号不匹配时不履约；通知和查单并发只产生一个 purchase event；支付成功但 RPC 暂时失败进入 `grant_failed`；再次处理可恢复为 `granted`。本地窗口过期或已关闭后到达的微信成功事实仍必须进入同一原子确认：已签发订单按真实支付成功履约；若订单已被错误关闭则记录显式异常并交由补偿流程恢复，禁止丢弃迟到成功通知。
+固定覆盖：伪造签名在查询订单和持久化前拒绝；相同事件稳定键只插入一次；冲突载荷不得覆盖已处理事实；OpenId、OutTradeNo、ProductId、Quantity、OrigPrice、ActualPrice、环境或交易号不匹配时不履约；通知和查单并发汇聚到同一个幂等确认 RPC；支付成功但权益发放暂时失败进入 `grant_failed`；权益事务已提交但收件箱完成标记失败时，微信重试可幂等恢复。本地窗口过期或已关闭后到达的微信成功事实仍必须进入同一原子确认：已签发订单按真实支付成功履约；若订单已关闭则先记录显式支付事实，再仅由补偿流程显式授权恢复，禁止丢弃迟到成功通知。未实际签发过支付请求的订单不得因消息获得权益。
 
 ```ts
 test("notification and query converge on one confirmation", async () => {
@@ -904,13 +913,13 @@ test("notification and query converge on one confirmation", async () => {
 });
 ```
 
-- [ ] **Step 2: 运行失败测试**
+- [x] **Step 2: 运行失败测试**
 
 Run: `bun test apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts`
 
 Expected: FAIL，新模块和路由不存在。
 
-- [ ] **Step 3: 创建消息表和原子确认 RPC**
+- [x] **Step 3: 创建消息表和原子确认 RPC**
 
 ```sql
 CREATE TABLE public.wechat_virtual_payment_notifications (
@@ -942,9 +951,9 @@ ON public.wechat_virtual_payment_notifications(status, received_at, id)
 WHERE status IN ('processing', 'failed');
 ```
 
-同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`，事务顺序固定为：按 order id `FOR UPDATE`；校验完整支付上下文；若已有 `entitlement_event_id` 返回原事实；锁定 `tenant_entitlements`；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；首次开通插入 `tenant_entitlement_events(event_type='granted', source_type='purchase', source_id=order.id)`，未到期顺延或到期续购插入 `event_type='renewed'`；更新权益；更新支付和履约状态。RPC 必须以 order id 和 transaction identity 双重幂等。
+同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`。事务锁顺序固定为：租户权益 advisory lock、微信 transaction/provider order advisory lock、order row、entitlement row；完整比对服务端订单、通知收件箱和微信支付事实。支付事实先落为 `succeeded + grant_failed`，权益更新与 purchase event 位于可回滚子事务；发放失败必须保留真实收款事实供重试。若已有 `entitlement_event_id` 则返回原事实；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；暂停或撤销的权益只延长期限，不静默恢复状态。RPC 以 order、notification、transaction 和 provider order identity 共同约束幂等。
 
-- [ ] **Step 4: 实现独立消息入口**
+- [x] **Step 4: 实现独立消息入口**
 
 `WechatVirtualPaymentController` 注册 `/wechat/virtual-payment/events` 的 GET 验证与 POST 消息；不要复用 `/pay/wechat/callback`：
 
@@ -955,16 +964,18 @@ fastify.post("/wechat/virtual-payment/events", this.handleEvent);
 
 消息 service 先验证微信消息入口，再生成 `sha256(eventType + stableProviderIdentity)` 事件键，落库后派发。成功响应严格按微信官方消息协议返回 `ErrCode=0`；上下文不匹配返回可观测的稳定错误且绝不创建权益。
 
+首期按微信官方明文模式实现：使用独立平台级密钥 `WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN` 对 `token + timestamp + nonce` 排序后执行 SHA-1 验签，并使用非密钥平台配置 `WECHAT_MINIPROGRAM_ORIGINAL_ID` 精确绑定 `ToUserName`。JSON 输入返回 JSON，XML 输入返回 XML；入口限制 64 KiB，认证通过前不保存任何消息。当前契约没有 `EncodingAESKey`，因此带 `encrypt_type`/`msg_signature` 的安全模式请求必须 fail closed；部署微信后台必须先选择明文模式，不得猜测密钥或复用 AppSecret/AppKey。后续启用安全模式须独立补齐 AES 消息解密、验签与轮换设计。
+
 支付确认成功后，通知路径直接按微信消息协议确认发货；主动查单路径必须调用 `/xpay/notify_provide_goods` 告知微信本地权益已交付。`notify_provide_goods` 暂时失败只记录可重试的发货通知状态，不重复延长权益。
 
-- [ ] **Step 5: 验证并提交**
+- [x] **Step 5: 验证并提交**
 
-Run: `bun test apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts && bun run api:typecheck`
+Run from `apps/api`: `bun test src/services/wechat-virtual-payment-message.test.ts src/services/wechat-virtual-payment-notifications.test.ts src/services/branding-virtual-payment-confirmation.test.ts src/repositories/wechat-virtual-payment-notifications.test.ts src/repositories/branding-virtual-orders.test.ts src/services/system-settings/legacy/definitions-wechat-notify.test.ts src/services/branding-virtual-payment-fulfillment-migration.test.ts src/controllers/wechat-virtual-payment/routes.test.ts && bun run typecheck`
 
 Expected: 重复、并发、错误上下文和重试测试 PASS；普通 `/pay/wechat/callback` 测试不变。
 
 ```bash
-git add supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql apps/api/src/repositories/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/controllers/wechat-virtual-payment/index.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts apps/api/src/routes/index.ts
+git add supabase/migrations/20260801101000_create_branding_virtual_payment_fulfillment.sql apps/api/src/repositories/branding-virtual-orders.ts apps/api/src/repositories/branding-virtual-orders.test.ts apps/api/src/repositories/wechat-virtual-payment-notifications.ts apps/api/src/repositories/wechat-virtual-payment-notifications.test.ts apps/api/src/services/wechat-virtual-payment-message.ts apps/api/src/services/wechat-virtual-payment-message.test.ts apps/api/src/services/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/services/branding-virtual-payment-fulfillment-migration.test.ts apps/api/src/controllers/wechat-virtual-payment/index.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/routes/index.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
 git commit -m "feat(payments): 完成虚拟支付通知与权益履约"
 ```
 
