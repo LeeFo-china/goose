@@ -293,7 +293,7 @@ git commit -m "feat(supplier): 定义应付付款领域契约"
 - Create: `apps/api/src/services/supplier-cost-payable-migration-contract.test.ts`
 - Create: `supabase/migrations/20260731100000_create_supplier_cost_payable_facts.sql`
 
-- [ ] **Step 1: 写 migration 契约 RED 测试**
+- [x] **Step 1: 写 migration 契约 RED 测试**
 
 测试读取指定 migration 并断言：
 
@@ -323,7 +323,7 @@ expect(sql).toContain("'consumed'");
 - 两张事件表的列表和项目汇总索引。
 - rollback 注释明确保留经营事实。
 
-- [ ] **Step 2: 运行 migration 测试确认 RED**
+- [x] **Step 2: 运行 migration 测试确认 RED**
 
 Run:
 
@@ -334,7 +334,7 @@ bun test src/services/supplier-cost-payable-migration-contract.test.ts
 
 Expected: FAIL，migration 不存在。
 
-- [ ] **Step 3: 建立订单快照和不可变事实表**
+- [x] **Step 3: 建立订单快照和不可变事实表**
 
 核心约束使用：
 
@@ -356,7 +356,7 @@ CONSTRAINT supplier_payable_events_due_check
 `set_config('app.supplier_accounting_write', 'on', true)` 的受控命令上下文写入，
 service role 不能直接改事件。
 
-- [ ] **Step 4: 扩展预算承诺**
+- [x] **Step 4: 扩展预算承诺**
 
 加入：
 
@@ -377,7 +377,7 @@ CONSTRAINT project_cost_commitments_recognized_check
 - `released` 保留原释放操作人、时间和原因。
 - 活动预算承诺查询只计算未确认余额。
 
-- [ ] **Step 5: 实现订单快照与历史回填**
+- [x] **Step 5: 实现订单快照与历史回填**
 
 扩展采购申请转订单 RPC，使采购行插入包含：
 
@@ -405,7 +405,7 @@ public.list_supplier_accounting_legacy_gaps(
 
 函数分页且最大 100，返回未映射采购行和未财务化收货行。
 
-- [ ] **Step 6: 扩展收货 RPC**
+- [x] **Step 6: 扩展收货 RPC**
 
 在现有 `create_supplier_purchase_order_receipt` 的收货行循环内：
 
@@ -439,7 +439,7 @@ INSERT INTO public.supplier_payable_events (...);
 }
 ```
 
-- [ ] **Step 7: 加固幂等和租户边界**
+- [x] **Step 7: 加固幂等和租户边界**
 
 命令重放必须返回原结果且不重复事件；同幂等键不同请求继续抛
 `SUPPLIER_IDEMPOTENCY_CONFLICT`。所有来源复合外键带 `tenant_id`，所有 SECURITY
@@ -449,7 +449,7 @@ DEFINER 函数固定：
 SET search_path = pg_catalog, public
 ```
 
-- [ ] **Step 8: 运行 migration 契约 GREEN**
+- [x] **Step 8: 运行 migration 契约 GREEN**
 
 Run:
 
@@ -462,7 +462,7 @@ bun test src/services/supplier-cost-payable-migration-contract.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交成本和应付 migration**
+- [x] **Step 9: 提交成本和应付 migration**
 
 ```bash
 git add apps/api/src/services/supplier-cost-payable-migration-contract.test.ts \
