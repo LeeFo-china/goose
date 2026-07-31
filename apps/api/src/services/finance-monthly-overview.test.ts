@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import type { FinanceClosingPeriodRow } from "@/repositories/finance-closing-periods";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -45,7 +46,31 @@ const listLedgerRows = mock(async () => [
     occurred_at: "2026-06-07T10:00:00.000Z",
     metadata: {},
   },
+  {
+    id: "supplier-payment-1",
+    project_id: "project-1",
+    project_name: "A 项目",
+    project_status: "constructing",
+    cost_category_id: null,
+    cost_category_name: null,
+    direction: "out",
+    entry_type: "supplier_payment",
+    amount: 100,
+    occurred_at: "2026-06-08T10:00:00.000Z",
+    metadata: {},
+  },
 ]);
+
+const listSupplierCostRows = mock(async () => [{
+  id: "supplier-cost-1",
+  project_id: "project-1",
+  project_name: "A 项目",
+  project_status: "constructing",
+  cost_category_id: "category-material",
+  cost_category_name: "材料",
+  amount: 100,
+  occurred_at: "2026-06-08T09:00:00.000Z",
+}]);
 
 const listReceivableRows = mock(async () => [
   {
@@ -92,7 +117,9 @@ const listReconciliationCandidateRows = mock(async () => ({
   expenseLedgers: [],
 }));
 
-const findClosingPeriod = mock(async () => ({
+const findClosingPeriod = mock(async (): Promise<
+  FinanceClosingPeriodRow | null
+> => ({
   id: "closing-1",
   tenant_id: "tenant-1",
   period_month: "2026-06",
@@ -166,6 +193,7 @@ async function createService() {
   return new FinanceMonthlyOverviewService({
     operatingReportRepository: {
       listLedgerRows,
+      listSupplierCostRows,
       listReceivableRows,
     },
     reconciliationRepository: {
@@ -181,6 +209,7 @@ async function createService() {
 describe("FinanceMonthlyOverviewService", () => {
   beforeEach(() => {
     listLedgerRows.mockClear();
+    listSupplierCostRows.mockClear();
     listReceivableRows.mockClear();
     listReconciliationCandidateRows.mockClear();
     findClosingPeriod.mockClear();
@@ -207,9 +236,9 @@ describe("FinanceMonthlyOverviewService", () => {
     });
     expect(result.summary).toEqual({
       income_amount: 20000,
-      expense_amount: 9500,
-      gross_profit_amount: 10500,
-      gross_profit_rate: 0.525,
+      expense_amount: 9600,
+      gross_profit_amount: 10400,
+      gross_profit_rate: 0.52,
       receivable_amount: 30000,
       received_amount: 20000,
       receivable_remaining_amount: 10000,
@@ -230,9 +259,9 @@ describe("FinanceMonthlyOverviewService", () => {
       },
       current_summary: {
         income_amount: 20000,
-        expense_amount: 9500,
-        gross_profit_amount: 10500,
-        gross_profit_rate: 0.525,
+        expense_amount: 9600,
+        gross_profit_amount: 10400,
+        gross_profit_rate: 0.52,
         receivable_amount: 30000,
         received_amount: 20000,
         receivable_remaining_amount: 10000,
@@ -242,12 +271,18 @@ describe("FinanceMonthlyOverviewService", () => {
       },
       difference_summary: {
         income_amount: 1000,
-        expense_amount: 500,
-        gross_profit_amount: 500,
+        expense_amount: 600,
+        gross_profit_amount: 400,
       },
       has_snapshot_difference: true,
     });
     expect(listLedgerRows).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      dateFrom: "2026-06-01",
+      dateTo: "2026-06-30",
+      sourceLimit: 10000,
+    });
+    expect(listSupplierCostRows).toHaveBeenCalledWith({
       tenantId: "tenant-1",
       dateFrom: "2026-06-01",
       dateTo: "2026-06-30",
@@ -259,6 +294,31 @@ describe("FinanceMonthlyOverviewService", () => {
       dateTo: "2026-06-30",
       sourceLimit: 10000,
     });
+  });
+
+  test("reports recognized supplier cost before any supplier payment", async () => {
+    listLedgerRows.mockImplementationOnce(async () => []);
+    listReceivableRows.mockImplementationOnce(async () => []);
+    listReconciliationCandidateRows.mockImplementationOnce(async () => ({
+      receivables: [],
+      payments: [],
+      ledgers: [],
+      expenseSettlements: [],
+      expenseLedgers: [],
+    }));
+    findClosingPeriod.mockImplementationOnce(async () => null);
+    const service = await createService();
+
+    const result = await service.getMonthlyOverview(
+      authContextWithPermissions([
+        { code: "finance.reports.read", scope: "all" },
+      ]),
+      { month: "2026-06" },
+    );
+
+    expect(result.summary.expense_amount).toBe(100);
+    expect(result.summary.gross_profit_amount).toBe(-100);
+    expect(result.summary.unallocated_expense_amount).toBe(0);
   });
 
   test("rejects monthly overview without finance report permission", async () => {

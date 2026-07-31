@@ -1,9 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
 
-const select = mock((columns: string) => {
-  selectedColumns = columns;
-  return query;
-});
 let selectedColumns = "";
 const rows = [
   trendRow("in", "project_payment", "50.00", "2026-07-30T08:00:00.000Z"),
@@ -12,10 +8,18 @@ const rows = [
   trendRow("out", "supplier_payment", "5.00", "2026-07-31T10:00:00.000Z"),
 ];
 const query = {
-  select,
+  select: mock((columns: string) => {
+    selectedColumns = columns;
+    return query;
+  }),
   eq: mock(() => query),
   in: mock(() => query),
-  gte: mock(async () => ({ data: rows, error: null })),
+  gte: mock(() => query),
+  order: mock(() => query),
+  range: mock(async (from: number, to: number) => ({
+    data: rows.slice(from, to + 1),
+    error: null,
+  })),
 };
 
 mock.module("@/utils/supabase/index", () => ({
@@ -37,7 +41,7 @@ describe("finance project ledger trend supplier payment", () => {
     });
 
     expect(selectedColumns).toBe(
-      "project_id, direction, entry_type, amount, occurred_at",
+      "id,project_id,direction,entry_type,amount,occurred_at,created_at",
     );
     expect(result).toEqual([
       {
@@ -63,10 +67,12 @@ function trendRow(
   occurredAt: string,
 ) {
   return {
+    id: `${entryType}-${occurredAt}`,
     project_id: "project-1",
     direction,
     entry_type: entryType,
     amount,
     occurred_at: occurredAt,
+    created_at: occurredAt,
   };
 }

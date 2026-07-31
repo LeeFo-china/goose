@@ -4,6 +4,10 @@ import type {
   FinanceProjectSupplierTotals,
 } from "@/repositories/finance-project-summary";
 import { SupabaseDB } from "@/utils/supabase/index";
+import {
+  addMoneyCents,
+  moneyCentsToSafeNumber,
+} from "@/utils/fixed-point-money";
 
 const MAX_BATCH_PROJECTS = 100;
 const MAX_FACT_ROWS = 10_000;
@@ -95,17 +99,11 @@ export async function listFinanceProjectSupplierTotals(input: {
     "项目供应商付款",
   );
 
-  const totals = new Map<string, FinanceProjectSupplierTotals>();
-  aggregateSupplierCosts(costs, totals);
-  aggregateFacts(payables, totals, "supplier_payable_open_amount");
-  aggregateFacts(payments, totals, "supplier_cash_paid_amount");
-  for (const total of totals.values()) {
-    total.supplier_payable_open_amount = roundMoney(Math.max(
-      total.supplier_payable_open_amount - total.supplier_cash_paid_amount,
-      0,
-    ));
-  }
-  return totals;
+  const centsTotals = new Map<string, SupplierCentsTotals>();
+  aggregateSupplierCosts(costs, centsTotals);
+  aggregateFacts(payables, centsTotals, "supplierPayableCents");
+  aggregateFacts(payments, centsTotals, "supplierCashCents");
+  return finalizeSupplierTotals(centsTotals);
 }
 
 async function queryFactPages(
@@ -146,26 +144,23 @@ function parseFactResult(
 
 function aggregateFacts(
   rows: unknown[],
-  totals: Map<string, FinanceProjectSupplierTotals>,
-  field: "supplier_payable_open_amount" | "supplier_cash_paid_amount",
+  totals: Map<string, SupplierCentsTotals>,
+  field: "supplierPayableCents" | "supplierCashCents",
 ) {
   for (const value of rows) {
     const row = asRecord(value);
     if (!row || typeof row.project_id !== "string") {
       throw Errors.dbError("解析项目供应商财务事实失败", rows);
     }
-    const current = totals.get(row.project_id) ?? emptySupplierTotals();
-    current[field] = roundMoney(
-      current[field] +
-        parseMoney(row.amount, "解析项目供应商财务事实失败", rows),
-    );
+    const current = totals.get(row.project_id) ?? emptySupplierCentsTotals();
+    current[field] = addSupplierMoney(current[field], row.amount, rows);
     totals.set(row.project_id, current);
   }
 }
 
 function aggregateSupplierCosts(
   rows: unknown[],
-  totals: Map<string, FinanceProjectSupplierTotals>,
+  totals: Map<string, SupplierCentsTotals>,
 ) {
   for (const value of rows) {
     const row = asRecord(value);
@@ -176,24 +171,61 @@ function aggregateSupplierCosts(
     ) {
       throw Errors.dbError("解析项目供应商财务事实失败", rows);
     }
-    const current = totals.get(row.project_id) ?? emptySupplierTotals();
-    const amount = parseMoney(
+    const current = totals.get(row.project_id) ?? emptySupplierCentsTotals();
+    current.supplierCostCents = addSupplierMoney(
+      current.supplierCostCents,
       row.amount,
-      "解析项目供应商财务事实失败",
       rows,
     );
-    current.supplier_cost_amount = roundMoney(
-      current.supplier_cost_amount + amount,
-    );
-    current.supplier_cost_by_category.set(
+    current.costCentsByCategory.set(
       row.cost_category_id,
-      roundMoney(
-        (current.supplier_cost_by_category.get(row.cost_category_id) ?? 0) +
-          amount,
+      addSupplierMoney(
+        current.costCentsByCategory.get(row.cost_category_id) ?? BigInt(0),
+        row.amount,
+        rows,
       ),
     );
     totals.set(row.project_id, current);
   }
+}
+
+function finalizeSupplierTotals(
+  centsTotals: Map<string, SupplierCentsTotals>,
+): Map<string, FinanceProjectSupplierTotals> {
+  const totals = new Map<string, FinanceProjectSupplierTotals>();
+  for (const [projectId, cents] of centsTotals) {
+    const openCents = cents.supplierPayableCents > cents.supplierCashCents
+      ? cents.supplierPayableCents - cents.supplierCashCents
+      : BigInt(0);
+    totals.set(projectId, {
+      supplier_cost_amount: supplierCentsToNumber(cents.supplierCostCents),
+      supplier_payable_open_amount: supplierCentsToNumber(openCents),
+      supplier_cash_paid_amount: supplierCentsToNumber(cents.supplierCashCents),
+      supplier_cost_by_category: new Map(
+        [...cents.costCentsByCategory].map(([categoryId, amount]) => [
+          categoryId,
+          supplierCentsToNumber(amount),
+        ]),
+      ),
+    });
+  }
+  return totals;
+}
+
+function addSupplierMoney(current: bigint, value: unknown, details: unknown) {
+  return addMoneyCents(current, value, {
+    parseErrorMessage: "解析项目供应商财务事实失败",
+    overflowMessage: "项目供应商财务事实超过安全汇总边界",
+    details,
+  });
+}
+
+function supplierCentsToNumber(cents: bigint) {
+  return moneyCentsToSafeNumber(cents, {
+    parseErrorMessage: "解析项目供应商财务事实失败",
+    overflowMessage: "项目供应商财务事实超过安全汇总边界",
+    details: null,
+  });
 }
 
 function requireProjectBatch(projectIds: string[]) {
@@ -245,12 +277,19 @@ function emptyLedgerTotals(): FinanceProjectLedgerTotals {
   };
 }
 
-function emptySupplierTotals(): FinanceProjectSupplierTotals {
+type SupplierCentsTotals = {
+  supplierCostCents: bigint;
+  supplierPayableCents: bigint;
+  supplierCashCents: bigint;
+  costCentsByCategory: Map<string, bigint>;
+};
+
+function emptySupplierCentsTotals(): SupplierCentsTotals {
   return {
-    supplier_cost_amount: 0,
-    supplier_payable_open_amount: 0,
-    supplier_cash_paid_amount: 0,
-    supplier_cost_by_category: new Map(),
+    supplierCostCents: BigInt(0),
+    supplierPayableCents: BigInt(0),
+    supplierCashCents: BigInt(0),
+    costCentsByCategory: new Map(),
   };
 }
 

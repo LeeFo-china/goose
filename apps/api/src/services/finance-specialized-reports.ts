@@ -3,6 +3,7 @@ import {
   financeOperatingReportRepository,
   type FinanceOperatingReportLedgerRow,
   type FinanceOperatingReportReceivableRow,
+  type FinanceOperatingReportSupplierCostRow,
 } from "@/repositories/finance-operating-report";
 import {
   financeReconciliationRepository,
@@ -41,7 +42,7 @@ const DEFAULT_RANGE_DAYS = 30;
 type FinanceSpecializedReportServiceDependencies = {
   operatingReportRepository: Pick<
     typeof financeOperatingReportRepository,
-    "listLedgerRows" | "listReceivableRows"
+    "listLedgerRows" | "listReceivableRows" | "listSupplierCostRows"
   >;
   reconciliationRepository: Pick<
     typeof financeReconciliationRepository,
@@ -114,9 +115,16 @@ export class FinanceSpecializedReportService {
     this.assertCanReadReports(authContext);
 
     const range = resolveReportRange(query, this.dependencies.now?.());
-    const [ledgerRows, receivableRows, reconciliationCandidates] =
+    const [ledgerRows, supplierCostRows, receivableRows, reconciliationCandidates] =
       await Promise.all([
         this.dependencies.operatingReportRepository.listLedgerRows({
+          tenantId,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          projectStatus: query.project_status,
+          sourceLimit: SOURCE_LIMIT,
+        }),
+        this.dependencies.operatingReportRepository.listSupplierCostRows({
           tenantId,
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
@@ -156,9 +164,15 @@ export class FinanceSpecializedReportService {
       if (row.direction === "in") {
         group.income_amount += row.amount;
         group.received_amount += row.amount;
-      } else if (row.direction === "out") {
+      } else if (
+        row.direction === "out" &&
+        row.entry_type !== "supplier_payment"
+      ) {
         group.expense_amount += row.amount;
       }
+    }
+    for (const row of supplierCostRows) {
+      getProjectGroup(groups, row).expense_amount += row.amount;
     }
 
     for (const row of receivableRows) {
@@ -216,13 +230,20 @@ export class FinanceSpecializedReportService {
     this.assertCanReadReports(authContext);
 
     const range = resolveReportRange(query, this.dependencies.now?.());
-    const ledgerRows = await this.dependencies.operatingReportRepository
-      .listLedgerRows({
+    const [ledgerRows, supplierCostRows] = await Promise.all([
+      this.dependencies.operatingReportRepository.listLedgerRows({
         tenantId,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         sourceLimit: SOURCE_LIMIT,
-      });
+      }),
+      this.dependencies.operatingReportRepository.listSupplierCostRows({
+        tenantId,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        sourceLimit: SOURCE_LIMIT,
+      }),
+    ]);
 
     const groups = new Map<string, FinanceCostCategorySummaryItem & {
       projectIds: Set<string>;
@@ -231,7 +252,9 @@ export class FinanceSpecializedReportService {
     let unallocatedExpenseAmount = 0;
 
     for (const row of ledgerRows) {
-      if (row.direction !== "out") continue;
+      if (row.direction !== "out" || row.entry_type === "supplier_payment") {
+        continue;
+      }
       const key = row.cost_category_id || "unallocated";
       const current = groups.get(key) || {
         cost_category_id: row.cost_category_id,
@@ -250,6 +273,10 @@ export class FinanceSpecializedReportService {
       if (!row.cost_category_id) {
         unallocatedExpenseAmount += row.amount;
       }
+    }
+    for (const row of supplierCostRows) {
+      addCostCategoryRow(groups, row);
+      expenseAmount += row.amount;
     }
 
     const list = Array.from(groups.values()).map((item) => ({
@@ -402,6 +429,27 @@ function getProjectGroup(
   };
   groups.set(key, current);
   return current;
+}
+
+function addCostCategoryRow(
+  groups: Map<string, FinanceCostCategorySummaryItem & {
+    projectIds: Set<string>;
+  }>,
+  row: FinanceOperatingReportSupplierCostRow,
+) {
+  const current = groups.get(row.cost_category_id) || {
+    cost_category_id: row.cost_category_id,
+    cost_category_name: row.cost_category_name || "未归集",
+    expense_amount: 0,
+    expense_percent: 0,
+    ledger_entry_count: 0,
+    project_count: 0,
+    projectIds: new Set<string>(),
+  };
+  current.expense_amount += row.amount;
+  current.ledger_entry_count += 1;
+  current.projectIds.add(row.project_id);
+  groups.set(row.cost_category_id, current);
 }
 
 function resolveReportRange(

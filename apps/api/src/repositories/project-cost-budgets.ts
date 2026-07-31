@@ -1,6 +1,12 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  summarizeProjectSupplierCosts,
+  type ProjectCostBudgetSupplierCostTotals,
+} from "@/repositories/project-cost-budget-supplier-cost";
 import type { SaveProjectCostBudgetsInput } from "@/schema/finance-costs";
 import { SupabaseDB } from "@/utils/supabase/index";
+
+export type { ProjectCostBudgetSupplierCostTotals };
 
 const PROJECT_COST_BUDGET_SELECT = `
   id,
@@ -52,16 +58,6 @@ export type ProjectCostBudgetExpenseTotals = {
 export type ProjectCostBudgetCommitmentTotals = {
   sourceRowCount: number;
   totalCommitmentAmount: number;
-  byCategory: Map<string, number>;
-  categoryDetails: Map<string, {
-    code: string | null;
-    name: string | null;
-  }>;
-};
-
-export type ProjectCostBudgetSupplierCostTotals = {
-  sourceRowCount: number;
-  totalSupplierCostAmount: number;
   byCategory: Map<string, number>;
   categoryDetails: Map<string, {
     code: string | null;
@@ -249,56 +245,7 @@ class ProjectCostBudgetRepository {
     projectId: string;
   }): Promise<ProjectCostBudgetSupplierCostTotals> {
     const rows = await listSupplierCostEventRows(input);
-    if (rows.length > 10_000) {
-      throw Errors.business(
-        422,
-        "项目供应商成本事件过多，请使用成本汇总任务",
-        "PROJECT_SUPPLIER_COST_EVENTS_TOO_MANY_ROWS",
-      );
-    }
-    const byCategory = new Map<string, number>();
-    const categoryDetails = new Map<string, {
-      code: string | null;
-      name: string | null;
-    }>();
-    let totalSupplierCostAmount = 0;
-    for (const value of rows) {
-      const row = asRecord(value);
-      const category = parseSupplierCostCategory(row?.cost_category);
-      if (
-        !row ||
-        typeof row.id !== "string" ||
-        typeof row.created_at !== "string" ||
-        typeof row.cost_category_id !== "string" ||
-        !category
-      ) {
-        throw Errors.dbError("解析项目供应商实际成本失败", rows);
-      }
-      const amount = parseNonNegativeAggregateMoney(
-        row.amount,
-        "解析项目供应商实际成本失败",
-        rows,
-      );
-      totalSupplierCostAmount += amount;
-      byCategory.set(
-        row.cost_category_id,
-        roundMoney((byCategory.get(row.cost_category_id) ?? 0) + amount),
-      );
-      const existing = categoryDetails.get(row.cost_category_id);
-      if (
-        existing &&
-        (existing.code !== category.code || existing.name !== category.name)
-      ) {
-        throw Errors.dbError("解析项目供应商实际成本失败", rows);
-      }
-      categoryDetails.set(row.cost_category_id, category);
-    }
-    return {
-      sourceRowCount: rows.length,
-      totalSupplierCostAmount: roundMoney(totalSupplierCostAmount),
-      byCategory,
-      categoryDetails,
-    };
+    return summarizeProjectSupplierCosts(rows);
   }
 
   async listActiveCategoriesByIds(input: {
@@ -444,18 +391,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
-}
-
-function parseSupplierCostCategory(value: unknown) {
-  const category = asRecord(Array.isArray(value) ? value[0] : value);
-  if (
-    !category ||
-    typeof category.code !== "string" ||
-    typeof category.name !== "string"
-  ) {
-    return null;
-  }
-  return { code: category.code, name: category.name };
 }
 
 function normalizeProjectCostBudgetRecord(

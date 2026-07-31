@@ -27,6 +27,17 @@ export type FinanceOperatingReportReceivableRow = {
   payment_type: string | null;
 };
 
+export type FinanceOperatingReportSupplierCostRow = {
+  id: string;
+  project_id: string;
+  project_name: string | null;
+  project_status: string | null;
+  cost_category_id: string;
+  cost_category_name: string | null;
+  amount: number;
+  occurred_at: string;
+};
+
 type QueryInput = {
   tenantId: string;
   dateFrom: string;
@@ -72,6 +83,16 @@ type ReceivableDbRow = {
   status: string | null;
   payment_type: string | null;
   project?: MaybeArray<ProjectRelation>;
+};
+
+type SupplierCostDbRow = {
+  id: string;
+  project_id: string;
+  cost_category_id: string;
+  amount: number | string | null;
+  occurred_at: string;
+  project?: MaybeArray<ProjectRelation>;
+  cost_category?: MaybeArray<CostCategoryRelation>;
 };
 
 class FinanceOperatingReportRepository {
@@ -178,6 +199,62 @@ class FinanceOperatingReportRepository {
         due_date: row.due_date,
         status: row.status,
         payment_type: row.payment_type,
+      };
+    });
+  }
+
+  async listSupplierCostRows(
+    input: QueryInput,
+  ): Promise<FinanceOperatingReportSupplierCostRow[]> {
+    const projectRelation = input.projectStatus
+      ? "project:projects!project_cost_events_project_tenant_fkey!inner(id, name, status)"
+      : "project:projects!project_cost_events_project_tenant_fkey(id, name, status)";
+    const rows: SupplierCostDbRow[] = [];
+    for (let from = 0; from < input.sourceLimit; from += 1_000) {
+      const to = Math.min(from + 999, input.sourceLimit - 1);
+      let query = SupabaseDB.getAdminClient()
+        .from("project_cost_events")
+        .select(`
+          id,
+          project_id,
+          cost_category_id,
+          amount,
+          occurred_at,
+          ${projectRelation},
+          cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(id, code, name)
+        `)
+        .eq("tenant_id", input.tenantId)
+        .gte("occurred_at", `${input.dateFrom}T00:00:00.000Z`)
+        .lte("occurred_at", `${input.dateTo}T23:59:59.999Z`)
+        .order("occurred_at", { ascending: true })
+        .order("id", { ascending: true });
+      if (input.projectId) query = query.eq("project_id", input.projectId);
+      if (input.projectStatus) {
+        query = query.eq("project.status", input.projectStatus);
+      }
+      const { data, error } = await query.range(from, to);
+      if (error) {
+        throw Errors.dbError("查询财务运营报表供应商成本失败", error);
+      }
+      if (!Array.isArray(data)) {
+        throw Errors.dbError("解析财务运营报表供应商成本失败", data);
+      }
+      rows.push(...data as unknown as SupplierCostDbRow[]);
+      if (data.length < to - from + 1) break;
+    }
+
+    return rows.map((row) => {
+      const project = firstRelation(row.project);
+      const category = firstRelation(row.cost_category);
+      return {
+        id: row.id,
+        project_id: row.project_id,
+        project_name: project?.name ?? null,
+        project_status: project?.status ?? null,
+        cost_category_id: row.cost_category_id,
+        cost_category_name: category?.name || category?.code || null,
+        amount: normalizeMoney(row.amount),
+        occurred_at: row.occurred_at,
       };
     });
   }

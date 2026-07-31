@@ -243,6 +243,44 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
       code: "FINANCE_PROJECT_SUPPLIER_FACTS_TOO_MANY_ROWS",
     });
   });
+
+  test("aggregates cents exactly and rejects unsafe supplier totals", async () => {
+    const { financeProjectSummaryRepository: repository } = await import(
+      "./finance-project-summary"
+    );
+    responses.set("project_cost_events", {
+      data: [
+        supplierFact("project-1", "category-1", "0.01"),
+        supplierFact("project-1", "category-1", "0.01"),
+        supplierFact("project-1", "category-1", "0.01"),
+      ],
+      error: null,
+    });
+    responses.set("supplier_payable_events", { data: [], error: null });
+    responses.set("supplier_payments", { data: [], error: null });
+
+    const exact = await repository.listSupplierTotals({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+    });
+    expect(exact.get("project-1")?.supplier_cost_amount).toBe(0.03);
+
+    responses.set("project_cost_events", {
+      data: [supplierFact(
+        "project-1",
+        "category-1",
+        "9999999999999999.99",
+      )],
+      error: null,
+    });
+    await expect(repository.listSupplierTotals({
+      tenantId: "tenant-1",
+      projectIds: ["project-1"],
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      code: "FINANCE_MONEY_EXCEEDS_SAFE_RANGE",
+    });
+  });
 });
 
 function projectRow(

@@ -45,7 +45,30 @@ const listLedgerRows = mock(async () => [
     cost_category_id: null,
     cost_category_name: null,
   },
+  {
+    id: "supplier-payment-1",
+    project_id: "project-1",
+    amount: 100,
+    direction: "out",
+    entry_type: "supplier_payment",
+    occurred_at: "2026-06-13T10:00:00.000Z",
+    metadata: {},
+    project_name: "A 项目",
+    project_status: "constructing",
+    cost_category_id: null,
+    cost_category_name: null,
+  },
 ]);
+const listSupplierCostRows = mock(async () => [{
+  id: "supplier-cost-1",
+  project_id: "project-1",
+  amount: 100,
+  occurred_at: "2026-06-13T09:00:00.000Z",
+  project_name: "A 项目",
+  project_status: "constructing",
+  cost_category_id: "category-1",
+  cost_category_name: "人工",
+}]);
 const listReceivableRows = mock(async () => [
   {
     id: "receivable-1",
@@ -123,6 +146,7 @@ async function createService() {
   return new FinanceOperatingReportService({
     repository: {
       listLedgerRows,
+      listSupplierCostRows,
       listReceivableRows,
     },
     accessPolicyService: accessPolicy,
@@ -132,6 +156,7 @@ async function createService() {
 describe("financeOperatingReportService", () => {
   beforeEach(() => {
     listLedgerRows.mockClear();
+    listSupplierCostRows.mockClear();
     listReceivableRows.mockClear();
     accessPolicy.assertTenantContext.mockClear();
     accessPolicy.hasPermission.mockClear();
@@ -151,8 +176,8 @@ describe("financeOperatingReportService", () => {
 
     expect(result.summary).toEqual({
       received_amount: 15000,
-      expense_amount: 3000,
-      actual_profit_amount: 12000,
+      expense_amount: 3100,
+      actual_profit_amount: 11900,
       receivable_remaining_amount: 3000,
       overdue_amount: 2000,
       unallocated_expense_amount: 0,
@@ -162,8 +187,8 @@ describe("financeOperatingReportService", () => {
         key: "project-1",
         label: "A 项目",
         received_amount: 10000,
-        expense_amount: 3000,
-        actual_profit_amount: 7000,
+        expense_amount: 3100,
+        actual_profit_amount: 6900,
         overdue_amount: 2000,
       }),
       expect.objectContaining({
@@ -182,6 +207,37 @@ describe("financeOperatingReportService", () => {
       projectId: undefined,
       projectStatus: undefined,
       sourceLimit: 10000,
+    });
+    expect(listSupplierCostRows).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      dateFrom: "2026-06-01",
+      dateTo: "2026-06-30",
+      projectId: undefined,
+      projectStatus: undefined,
+      sourceLimit: 10000,
+    });
+  });
+
+  test("reports supplier cost before payment in project groups", async () => {
+    listLedgerRows.mockImplementationOnce(async () => []);
+    listReceivableRows.mockImplementationOnce(async () => []);
+    const service = await createService();
+
+    const result = await service.getOperatingReport(
+      authContextWithPermissions([{ code: "finance.view", scope: "all" }]),
+      {
+        date_from: "2026-06-01",
+        date_to: "2026-06-30",
+        group_by: "project",
+      },
+    );
+
+    expect(result.summary.expense_amount).toBe(100);
+    expect(result.summary.actual_profit_amount).toBe(-100);
+    expect(result.summary.unallocated_expense_amount).toBe(0);
+    expect(result.groups[0]).toMatchObject({
+      key: "project-1",
+      expense_amount: 100,
     });
   });
 

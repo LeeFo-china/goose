@@ -156,6 +156,37 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
         code: "PROJECT_SUPPLIER_COST_EVENTS_TOO_MANY_ROWS",
       });
   });
+
+  test("aggregates cents exactly and rejects unsafe supplier cost totals", async () => {
+    const { projectCostBudgetRepository } = await import(
+      "./project-cost-budgets"
+    );
+    const input = { tenantId: "tenant-1", projectId: "project-1" };
+    rows = [
+      supplierCostRow("category-1", "0.01", "material", "材料"),
+      supplierCostRow("category-1", "0.01", "material", "材料"),
+      supplierCostRow("category-1", "0.01", "material", "材料"),
+    ];
+
+    const exact = await projectCostBudgetRepository.listSupplierCostTotals(
+      input,
+    );
+    expect(exact.totalSupplierCostAmount).toBe(0.03);
+
+    rows = [
+      supplierCostRow(
+        "category-1",
+        "9999999999999999.99",
+        "material",
+        "材料",
+      ),
+    ];
+    await expect(projectCostBudgetRepository.listSupplierCostTotals(input))
+      .rejects.toMatchObject({
+        statusCode: 422,
+        code: "FINANCE_MONEY_EXCEEDS_SAFE_RANGE",
+      });
+  });
 });
 
 function supplierCostRow(

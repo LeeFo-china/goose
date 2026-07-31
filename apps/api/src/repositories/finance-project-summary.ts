@@ -13,6 +13,9 @@ import {
   listFinanceProjectLedgerTotals,
   listFinanceProjectSupplierTotals,
 } from "@/repositories/finance-project-summary-supplier-totals";
+import {
+  listFinanceProjectLedgerTrend,
+} from "@/repositories/finance-project-summary-trend";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -87,14 +90,6 @@ type FinanceProjectBudgetRow = {
 type FinanceProjectRiskSearchRow = {
   project_id: string;
   total_count: number | string | null;
-};
-
-type FinanceProjectLedgerTrendRow = {
-  project_id: string | null;
-  direction: string | null;
-  entry_type: string | null;
-  amount: number | string | null;
-  occurred_at: string | null;
 };
 
 class FinanceProjectSummaryRepository {
@@ -325,52 +320,7 @@ class FinanceProjectSummaryRepository {
     expense_amount: number;
     supplier_cash_paid_amount: number;
   }>> {
-    if (input.projectIds.length === 0) {
-      return [];
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("finance_ledger_entries")
-      .select("project_id, direction, entry_type, amount, occurred_at")
-      .eq("tenant_id", input.tenantId)
-      .in("project_id", input.projectIds)
-      .gte("occurred_at", `${input.dateFrom}T00:00:00`);
-
-    if (error) {
-      throw Errors.dbError("查询项目财务趋势失败", error);
-    }
-
-    const byDate = new Map<string, {
-      date: string;
-      income_amount: number;
-      expense_amount: number;
-      supplier_cash_paid_amount: number;
-    }>();
-    for (const row of ((data as FinanceProjectLedgerTrendRow[] | null) || [])) {
-      if (!row.project_id || !row.occurred_at) continue;
-      const date = row.occurred_at.slice(0, 10);
-      const current = byDate.get(date) || {
-        date,
-        income_amount: 0,
-        expense_amount: 0,
-        supplier_cash_paid_amount: 0,
-      };
-      const amount = normalizeMoney(row.amount);
-      if (row.direction === "in") {
-        current.income_amount += amount;
-      } else if (
-        row.direction === "out" &&
-        row.entry_type === "supplier_payment"
-      ) {
-        current.supplier_cash_paid_amount += amount;
-      } else if (row.direction === "out") {
-        current.expense_amount += amount;
-      }
-      byDate.set(date, current);
-    }
-
-    return Array.from(byDate.values())
-      .sort((left, right) => left.date.localeCompare(right.date));
+    return listFinanceProjectLedgerTrend(input);
   }
 
   async listReceivableTotals(input: {
