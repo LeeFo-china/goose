@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  SupplierPayableFilterOptionQuerySchema,
   SupplierPayableListQuerySchema,
   SupplierPaymentConfirmSchema,
   SupplierPaymentListQuerySchema,
@@ -70,6 +71,27 @@ describe("supplier payable and payment request query schemas", () => {
         pageSize: 100,
       });
       expect(schema.safeParse({ pageSize: "101" }).success).toBe(false);
+    }
+  });
+
+  test("strictly bounds payable filter option queries", () => {
+    for (const type of ["project", "supplier", "purchase_order"] as const) {
+      expect(SupplierPayableFilterOptionQuerySchema.parse({
+        type,
+        keyword: "  测试  ",
+        page: "2",
+        pageSize: "100",
+      })).toEqual({ type, keyword: "测试", page: 2, pageSize: 100 });
+    }
+    for (const input of [
+      { type: "receipt" },
+      { type: "project", keyword: " " },
+      { type: "project", keyword: "a".repeat(101) },
+      { type: "project", pageSize: 101 },
+      { type: "project", unknown: true },
+    ]) {
+      expect(SupplierPayableFilterOptionQuerySchema.safeParse(input).success)
+        .toBe(false);
     }
   });
 

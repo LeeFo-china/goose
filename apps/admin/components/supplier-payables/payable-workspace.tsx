@@ -5,19 +5,16 @@ import { CircleDollarSign, PackageSearch } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  loadPurchaseOrderProjects,
-  loadPurchaseOrderRelationships,
-} from "@/components/supplier-purchase-orders/purchase-order-api";
-import type {
-  ProjectOption,
-  PurchaseOrderSupplierOption,
-} from "@/components/supplier-purchase-orders/purchase-order-types";
 import { loadTenantSupplierSettings } from "@/components/suppliers/supplier-settings-api";
-import type { TenantSupplierSettings } from "@/components/suppliers/supplier-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Empty,
   EmptyDescription,
@@ -27,78 +24,78 @@ import {
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 
+import { listSupplierPayableFilterOptions } from "./payable-api";
 import { PayableFilters } from "./payable-filters";
 import { PayableList } from "./payable-list";
 import { canMergePayables, canSelectPayable } from "./payable-rules";
 import { PayableSummary } from "./payable-summary";
-import type { SupplierPayable } from "./payable-types";
+import type {
+  SupplierPayable,
+  SupplierPayableFilterOption,
+  SupplierPayableFilterOptionType,
+} from "./payable-types";
 import {
   buildPaymentRequestHref,
   initialPayableFilters,
+  payableLoadPolicy,
   resetPayableFilters,
+  type PayableModulePreflight,
   usePayableList,
 } from "./use-payable-list";
 
-const disabledModule: TenantSupplierSettings = {
-  tenant_id: "",
-  module_enabled: false,
-  require_active_contract_for_new_order: false,
-  enabled_by_employee_id: null,
-  enabled_at: null,
-  version: 0,
-  created_at: "",
-  updated_at: "",
-};
+const FILTER_TYPES = ["project", "supplier", "purchase_order"] as const;
+type OptionPagination = { page: number; totalPages: number };
 
 export function PayableWorkspace({
   canView,
   canCreate,
   canReadSettings,
-  canViewPurchaseOrders,
 }: {
   canView: boolean;
   canCreate: boolean;
   canReadSettings: boolean;
-  canViewPurchaseOrders: boolean;
 }) {
   const router = useRouter();
-  const [settings, setSettings] = useState<TenantSupplierSettings | null>(null);
-  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [modulePreflight, setModulePreflight] =
+    useState<PayableModulePreflight>("unknown");
+  const [options, setOptions] = useState(emptyOptionState);
+  const [optionPages, setOptionPages] = useState(emptyOptionPages);
+  const [optionsReady, setOptionsReady] = useState(false);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [loadingMoreOptions, setLoadingMoreOptions] = useState(false);
-  const [projects, setProjects] = useState<ProjectOption[]>([]);
-  const [suppliers, setSuppliers] = useState<PurchaseOrderSupplierOption[]>([]);
-  const [projectPage, setProjectPage] = useState(1);
-  const [projectTotalPages, setProjectTotalPages] = useState(1);
-  const [supplierPage, setSupplierPage] = useState(1);
-  const [supplierTotalPages, setSupplierTotalPages] = useState(1);
   const [filters, setFilters] = useState(initialPayableFilters);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
-  const moduleEnabled = settings?.module_enabled === true;
-  const canLoad = canView && canReadSettings && moduleEnabled;
-  const canLoadOptions = canLoad && canViewPurchaseOrders;
-  const { records, loading, loadingMore, error, loadMore } =
-    usePayableList(canLoad, filters);
+  const loadPolicy = payableLoadPolicy({
+    canView,
+    canReadSettings,
+    preflight: modulePreflight,
+  });
+  const {
+    records,
+    loading,
+    loadingMore,
+    error,
+    errorCode,
+    hasLoaded,
+    clear,
+    loadMore,
+  } = usePayableList(loadPolicy.shouldLoadPayables, filters);
 
   useEffect(() => {
-    if (!canView || !canReadSettings) {
-      setSettingsLoading(false);
-      return;
-    }
+    if (!canView || !canReadSettings) return;
     let active = true;
-    setSettingsLoading(true);
-    void loadTenantSupplierSettings().then((next) => {
-      if (active) setSettings(next);
+    setModulePreflight("checking");
+    void loadTenantSupplierSettings().then(() => {
+      if (active) setModulePreflight("enabled");
     }).catch((caught) => {
       if (!active) return;
-      if ((caught as { code?: string }).code === "SUPPLIER_MODULE_DISABLED") {
-        setSettings(disabledModule);
+      if (requestErrorCode(caught) === "SUPPLIER_MODULE_DISABLED") {
+        setModulePreflight("disabled");
       } else {
+        setModulePreflight("error");
         setWorkspaceError(errorMessage(caught, "供应商模块配置加载失败"));
       }
-    }).finally(() => {
-      if (active) setSettingsLoading(false);
     });
     return () => {
       active = false;
@@ -106,92 +103,90 @@ export function PayableWorkspace({
   }, [canReadSettings, canView]);
 
   useEffect(() => {
-    if (!canLoadOptions) return;
+    if (!loadPolicy.shouldLoadPayables || !hasLoaded || optionsReady) return;
     let active = true;
     setOptionsLoading(true);
-    void Promise.all([
-      loadPurchaseOrderProjects(1),
-      loadPurchaseOrderRelationships(1),
-    ]).then(([projectResult, supplierResult]) => {
+    void Promise.all(FILTER_TYPES.map((type) =>
+      listSupplierPayableFilterOptions({ type, page: 1, pageSize: 20 })
+    )).then((results) => {
       if (!active) return;
-      setProjects(projectResult.list);
-      setProjectPage(projectResult.pagination.page);
-      setProjectTotalPages(pageCount(projectResult.pagination.totalPages));
-      setSuppliers(supplierResult.list);
-      setSupplierPage(supplierResult.pagination.page);
-      setSupplierTotalPages(pageCount(supplierResult.pagination.totalPages));
+      setOptions(Object.fromEntries(results.map((result, index) => [
+        FILTER_TYPES[index],
+        result.list,
+      ])) as Record<SupplierPayableFilterOptionType, SupplierPayableFilterOption[]>);
+      setOptionPages(Object.fromEntries(results.map((result, index) => [
+        FILTER_TYPES[index],
+        {
+          page: result.pagination.page,
+          totalPages: pageCount(result.pagination.totalPages),
+        },
+      ])) as Record<SupplierPayableFilterOptionType, OptionPagination>);
+      setOptionsReady(true);
     }).catch((caught) => {
-      if (active) setWorkspaceError(errorMessage(caught, "应付筛选项加载失败"));
+      if (active) {
+        setWorkspaceError(errorMessage(caught, "应付筛选项加载失败"));
+      }
     }).finally(() => {
       if (active) setOptionsLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [canLoadOptions]);
+  }, [hasLoaded, loadPolicy.shouldLoadPayables, optionsReady]);
 
-  useEffect(() => {
-    setSelectedIds(new Set());
-  }, [
-    filters.dueFrom,
-    filters.dueTo,
-    filters.projectId,
-    filters.status,
-    filters.tenantSupplierId,
-  ]);
-
-  const projectOptions = useMemo(() => [
-    { value: "all", label: "全部项目" },
-    ...projects.map(({ id, name }) => ({ value: id, label: name })),
-  ], [projects]);
-  const supplierOptions = useMemo(() => [
-    { value: "all", label: "全部供应商" },
-    ...suppliers.map(({ tenant_supplier_id, supplier }) => ({
-      value: tenant_supplier_id,
-      label: supplier.name,
-    })),
-  ], [suppliers]);
-  const projectNames = useMemo(
-    () => Object.fromEntries(projects.map(({ id, name }) => [id, name])),
-    [projects],
+  const projectOptions = useMemo(
+    () => withAllOption("全部项目", options.project),
+    [options.project],
   );
-  const supplierNames = useMemo(
-    () => Object.fromEntries(suppliers.map(({ tenant_supplier_id, supplier }) =>
-      [tenant_supplier_id, supplier.name]
-    )),
-    [suppliers],
+  const supplierOptions = useMemo(
+    () => withAllOption("全部供应商", options.supplier),
+    [options.supplier],
+  );
+  const purchaseOrderOptions = useMemo(
+    () => withAllOption("全部采购单", options.purchase_order),
+    [options.purchase_order],
   );
 
-  async function loadMoreProjects() {
-    if (loadingMoreOptions || projectPage >= projectTotalPages) return;
+  async function loadMoreFilterOptions(type: SupplierPayableFilterOptionType) {
+    const currentPage = optionPages[type];
+    if (loadingMoreOptions || currentPage.page >= currentPage.totalPages) return;
     setLoadingMoreOptions(true);
     try {
-      const next = await loadPurchaseOrderProjects(projectPage + 1);
-      setProjects((current) => mergeBy(current, next.list, "id"));
-      setProjectPage(next.pagination.page);
-      setProjectTotalPages(pageCount(next.pagination.totalPages));
+      const next = await listSupplierPayableFilterOptions({
+        type,
+        page: currentPage.page + 1,
+        pageSize: 20,
+      });
+      setOptions((current) => ({
+        ...current,
+        [type]: mergeOptions(current[type], next.list),
+      }));
+      setOptionPages((current) => ({
+        ...current,
+        [type]: {
+          page: next.pagination.page,
+          totalPages: pageCount(next.pagination.totalPages),
+        },
+      }));
     } catch (caught) {
-      setWorkspaceError(errorMessage(caught, "更多项目筛选项加载失败"));
+      setWorkspaceError(errorMessage(caught, "更多应付筛选项加载失败"));
     } finally {
       setLoadingMoreOptions(false);
     }
   }
 
-  async function loadMoreSuppliers() {
-    if (loadingMoreOptions || supplierPage >= supplierTotalPages) return;
-    setLoadingMoreOptions(true);
-    try {
-      const next = await loadPurchaseOrderRelationships(supplierPage + 1);
-      setSuppliers((current) =>
-        mergeBy(current, next.list, "tenant_supplier_id")
-      );
-      setSupplierPage(next.pagination.page);
-      setSupplierTotalPages(pageCount(next.pagination.totalPages));
-    } catch (caught) {
-      setWorkspaceError(errorMessage(caught, "更多供应商筛选项加载失败"));
-    } finally {
-      setLoadingMoreOptions(false);
-    }
+  function handleFilterChange(
+    patch: Parameters<typeof resetPayableFilters>[1],
+  ) {
+    clear();
+    setSelectedIds(new Set());
+    setFilters((current) => resetPayableFilters(current, patch));
+  }
+
+  function handleFilterReset() {
+    clear();
+    setSelectedIds(new Set());
+    setFilters(initialPayableFilters);
   }
 
   function togglePayable(record: SupplierPayable) {
@@ -206,9 +201,7 @@ export function PayableWorkspace({
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.delete(record.id)) return next;
-      if (!canCreate || !hasAvailableAmount || next.size >= 100) {
-        return current;
-      }
+      if (!canCreate || !hasAvailableAmount || next.size >= 100) return current;
       const first = records.list.find(({ id }) => next.has(id));
       if (first && !canMergePayables(first, selectionScope)) return current;
       next.add(record.id);
@@ -223,37 +216,15 @@ export function PayableWorkspace({
       </StatusAlert>
     );
   }
-  if (!canReadSettings) {
-    return (
-      <StatusAlert>
-        当前账号没有 supplier.view 权限，无法确认供应商模块状态。
-      </StatusAlert>
-    );
+  if (modulePreflight === "checking" || (loading && !hasLoaded)) {
+    return <PayableWorkspaceSkeleton />;
   }
-  if (settingsLoading) return <PayableWorkspaceSkeleton />;
-  if (!settings) {
+  if (modulePreflight === "error") {
     return <StatusAlert>{workspaceError ?? "供应商模块配置加载失败"}</StatusAlert>;
   }
-  if (!settings.module_enabled) {
-    return (
-      <PageContainer>
-        <PageHeader title="供应商应付" description="按项目、供应商和到期日跟踪采购应付。" />
-        <Card className="flex min-h-80 items-center justify-center shadow-none">
-          <CardContent className="p-6">
-            <Empty>
-              <EmptyHeader>
-                <EmptyMedia variant="icon"><PackageSearch /></EmptyMedia>
-                <EmptyTitle>供应商模块尚未启用</EmptyTitle>
-                <EmptyDescription>
-                  当前不会加载应付数据，请联系平台管理员启用供应商模块。
-                </EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          </CardContent>
-        </Card>
-      </PageContainer>
-    );
-  }
+  const moduleDisabled = modulePreflight === "disabled" ||
+    errorCode === "SUPPLIER_MODULE_DISABLED";
+  if (moduleDisabled) return <DisabledModule />;
 
   const selectedPayables = records.list.filter(({ id }) => selectedIds.has(id));
   return (
@@ -270,7 +241,9 @@ export function PayableWorkspace({
             ))}
           >
             <CircleDollarSign data-icon="inline-start" />
-            创建付款申请{selectedPayables.length ? `（${selectedPayables.length}）` : ""}
+            创建付款申请{selectedPayables.length
+              ? `（${selectedPayables.length}）`
+              : ""}
           </Button>
         ) : undefined}
       />
@@ -298,15 +271,18 @@ export function PayableWorkspace({
             filters={filters}
             projectOptions={projectOptions}
             supplierOptions={supplierOptions}
+            purchaseOrderOptions={purchaseOrderOptions}
             loading={loading || optionsLoading}
             loadingMoreOptions={loadingMoreOptions}
-            canLoadMoreProjects={projectPage < projectTotalPages}
-            canLoadMoreSuppliers={supplierPage < supplierTotalPages}
-            onChange={(patch) =>
-              setFilters((current) => resetPayableFilters(current, patch))}
-            onReset={() => setFilters(initialPayableFilters)}
-            onLoadMoreProjects={() => void loadMoreProjects()}
-            onLoadMoreSuppliers={() => void loadMoreSuppliers()}
+            canLoadMoreProjects={hasMore(optionPages.project)}
+            canLoadMoreSuppliers={hasMore(optionPages.supplier)}
+            canLoadMorePurchaseOrders={hasMore(optionPages.purchase_order)}
+            onChange={handleFilterChange}
+            onReset={handleFilterReset}
+            onLoadMoreProjects={() => void loadMoreFilterOptions("project")}
+            onLoadMoreSuppliers={() => void loadMoreFilterOptions("supplier")}
+            onLoadMorePurchaseOrders={() =>
+              void loadMoreFilterOptions("purchase_order")}
           />
         </CardHeader>
         <CardContent className="p-0">
@@ -315,8 +291,6 @@ export function PayableWorkspace({
             loading={loading}
             canCreate={canCreate}
             selectedIds={selectedIds}
-            projectNames={projectNames}
-            supplierNames={supplierNames}
             onToggle={togglePayable}
             onCreateOne={(record) =>
               router.push(buildPaymentRequestHref([record.id]))}
@@ -333,6 +307,27 @@ export function PayableWorkspace({
               </Button>
             </div>
           ) : null}
+        </CardContent>
+      </Card>
+    </PageContainer>
+  );
+}
+
+function DisabledModule() {
+  return (
+    <PageContainer>
+      <PageHeader title="供应商应付" description="按项目、供应商和到期日跟踪采购应付。" />
+      <Card className="flex min-h-80 items-center justify-center shadow-none">
+        <CardContent className="p-6">
+          <Empty>
+            <EmptyHeader>
+              <EmptyMedia variant="icon"><PackageSearch /></EmptyMedia>
+              <EmptyTitle>供应商模块尚未启用</EmptyTitle>
+              <EmptyDescription>
+                当前不会加载应付数据，请联系平台管理员启用供应商模块。
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         </CardContent>
       </Card>
     </PageContainer>
@@ -369,15 +364,49 @@ function PayableWorkspaceSkeleton() {
   );
 }
 
+function emptyOptionState() {
+  return { project: [], supplier: [], purchase_order: [] } as Record<
+    SupplierPayableFilterOptionType,
+    SupplierPayableFilterOption[]
+  >;
+}
+
+function emptyOptionPages() {
+  const initial = { page: 1, totalPages: 1 };
+  return {
+    project: initial,
+    supplier: initial,
+    purchase_order: initial,
+  } as Record<SupplierPayableFilterOptionType, OptionPagination>;
+}
+
+function withAllOption(label: string, items: SupplierPayableFilterOption[]) {
+  return [{ value: "all", label }, ...items.map(({ id, label: optionLabel }) =>
+    ({ value: id, label: optionLabel }))];
+}
+
+function mergeOptions(
+  current: SupplierPayableFilterOption[],
+  next: SupplierPayableFilterOption[],
+) {
+  const seen = new Set(current.map(({ id }) => id));
+  return [...current, ...next.filter(({ id }) => !seen.has(id))];
+}
+
+function hasMore(pagination: OptionPagination) {
+  return pagination.page < pagination.totalPages;
+}
+
 function pageCount(value: number) {
   return Math.max(1, value || 1);
 }
 
-function mergeBy<T, Key extends keyof T>(current: T[], next: T[], key: Key) {
-  const seen = new Set(current.map((item) => item[key]));
-  return [...current, ...next.filter((item) => !seen.has(item[key]))];
-}
-
 function errorMessage(caught: unknown, fallback: string) {
   return caught instanceof Error ? caught.message : fallback;
+}
+
+function requestErrorCode(caught: unknown) {
+  if (!caught || typeof caught !== "object" || !("code" in caught)) return null;
+  const code = (caught as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
 }

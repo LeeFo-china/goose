@@ -3011,12 +3011,27 @@ BEGIN
       payable.supplier_purchase_order_id,
       payable.supplier_purchase_order_receipt_id,
       payable.supplier_purchase_order_receipt_item_id,
+      project.name AS project_name,
+      supplier.name AS supplier_name,
+      purchase_order.order_no AS purchase_order_no,
+      receipt.receipt_no,
       payable.invoice_required_before_payment,
       payable.amount,
       payable.currency,
       payable.occurred_at,
       payable.due_at
     FROM public.supplier_payable_events AS payable
+    JOIN public.projects AS project
+      ON project.id = payable.project_id
+      AND project.tenant_id = payable.tenant_id
+    JOIN public.suppliers AS supplier
+      ON supplier.id = payable.supplier_id
+    JOIN public.supplier_purchase_orders AS purchase_order
+      ON purchase_order.id = payable.supplier_purchase_order_id
+      AND purchase_order.tenant_id = payable.tenant_id
+    JOIN public.supplier_purchase_order_receipts AS receipt
+      ON receipt.id = payable.supplier_purchase_order_receipt_id
+      AND receipt.tenant_id = payable.tenant_id
     WHERE payable.tenant_id = p_tenant_id
       AND (
         p_visible_project_ids IS NULL
@@ -3076,6 +3091,10 @@ BEGIN
       payable.supplier_purchase_order_id,
       payable.supplier_purchase_order_receipt_id,
       payable.supplier_purchase_order_receipt_item_id,
+      payable.project_name,
+      payable.supplier_name,
+      payable.purchase_order_no,
+      payable.receipt_no,
       payable.invoice_required_before_payment,
       payable.amount,
       payable.currency,
@@ -3131,6 +3150,10 @@ BEGIN
             page_rows.supplier_purchase_order_receipt_id,
           'receipt_item_id',
             page_rows.supplier_purchase_order_receipt_item_id,
+          'project_name', page_rows.project_name,
+          'supplier_name', page_rows.supplier_name,
+          'purchase_order_no', page_rows.purchase_order_no,
+          'receipt_no', page_rows.receipt_no,
           'invoice_required_before_payment',
             page_rows.invoice_required_before_payment,
           'amount', page_rows.amount::text,
@@ -3143,6 +3166,139 @@ BEGIN
           'status', page_rows.payable_status
         )
         ORDER BY page_rows.due_at DESC, page_rows.id DESC
+      ),
+      '[]'::jsonb
+    ),
+    (SELECT COUNT(*) FROM filtered)
+  INTO v_items, v_total
+  FROM page_rows;
+
+  RETURN jsonb_build_object(
+    'items', v_items,
+    'total', v_total,
+    'page', p_page,
+    'page_size', p_page_size
+  );
+END;
+$$;
+
+CREATE FUNCTION public.list_supplier_payable_filter_options(
+  p_tenant_id uuid,
+  p_visible_project_ids uuid[] DEFAULT NULL,
+  p_type text DEFAULT NULL,
+  p_keyword text DEFAULT NULL,
+  p_page integer DEFAULT 1,
+  p_page_size integer DEFAULT 20
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_items jsonb;
+  v_total bigint;
+BEGIN
+  IF p_tenant_id IS NULL
+    OR p_type IS NULL
+    OR p_type NOT IN ('project', 'supplier', 'purchase_order')
+    OR p_page IS NULL
+    OR p_page_size IS NULL
+    OR p_page < 1
+    OR p_page_size NOT BETWEEN 1 AND 100
+    OR p_keyword IS NOT NULL
+      AND (
+        btrim(p_keyword) = ''
+        OR char_length(btrim(p_keyword)) > 100
+      )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_PAGINATION_INVALID';
+  END IF;
+
+  IF p_visible_project_ids IS NOT NULL
+    AND cardinality(p_visible_project_ids) = 0
+  THEN
+    RETURN jsonb_build_object(
+      'items', '[]'::jsonb,
+      'total', 0,
+      'page', p_page,
+      'page_size', p_page_size
+    );
+  END IF;
+
+  WITH options AS MATERIALIZED (
+    SELECT DISTINCT
+      payable.project_id AS option_id,
+      project.name AS option_label
+    FROM public.supplier_payable_events AS payable
+    JOIN public.projects AS project
+      ON project.id = payable.project_id
+      AND project.tenant_id = payable.tenant_id
+    WHERE p_type = 'project'
+      AND payable.tenant_id = p_tenant_id
+      AND (
+        p_visible_project_ids IS NULL
+        OR payable.project_id = ANY (p_visible_project_ids)
+      )
+
+    UNION ALL
+
+    SELECT DISTINCT
+      payable.tenant_supplier_id AS option_id,
+      supplier.name AS option_label
+    FROM public.supplier_payable_events AS payable
+    JOIN public.suppliers AS supplier
+      ON supplier.id = payable.supplier_id
+    WHERE p_type = 'supplier'
+      AND payable.tenant_id = p_tenant_id
+      AND (
+        p_visible_project_ids IS NULL
+        OR payable.project_id = ANY (p_visible_project_ids)
+      )
+
+    UNION ALL
+
+    SELECT DISTINCT
+      payable.supplier_purchase_order_id AS option_id,
+      purchase_order.order_no AS option_label
+    FROM public.supplier_payable_events AS payable
+    JOIN public.supplier_purchase_orders AS purchase_order
+      ON purchase_order.id = payable.supplier_purchase_order_id
+      AND purchase_order.tenant_id = payable.tenant_id
+    WHERE p_type = 'purchase_order'
+      AND payable.tenant_id = p_tenant_id
+      AND (
+        p_visible_project_ids IS NULL
+        OR payable.project_id = ANY (p_visible_project_ids)
+      )
+  ),
+  filtered AS MATERIALIZED (
+    SELECT option_id, option_label
+    FROM options
+    WHERE p_keyword IS NULL
+      OR option_label ILIKE '%' || btrim(p_keyword) || '%'
+  ),
+  page_rows AS MATERIALIZED (
+    SELECT
+      filtered.option_id,
+      filtered.option_label,
+      COUNT(*) OVER () AS total_count
+    FROM filtered
+    ORDER BY filtered.option_label ASC, filtered.option_id ASC
+    LIMIT p_page_size
+    OFFSET (p_page - 1) * p_page_size
+  )
+  SELECT
+    COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.option_id,
+          'label', page_rows.option_label
+        )
+        ORDER BY page_rows.option_label ASC, page_rows.option_id ASC
       ),
       '[]'::jsonb
     ),
@@ -3621,6 +3777,14 @@ REVOKE ALL ON FUNCTION
     integer,
     integer
   ),
+  public.list_supplier_payable_filter_options(
+    uuid,
+    uuid[],
+    text,
+    text,
+    integer,
+    integer
+  ),
   public.list_supplier_payment_requests(
     uuid,
     uuid[],
@@ -3717,6 +3881,14 @@ GRANT EXECUTE ON FUNCTION
     text,
     timestamptz,
     timestamptz,
+    integer,
+    integer
+  ),
+  public.list_supplier_payable_filter_options(
+    uuid,
+    uuid[],
+    text,
+    text,
     integer,
     integer
   ),

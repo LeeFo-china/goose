@@ -31,11 +31,39 @@ function dependencies(visibleProjectIds: string[] | null = [PROJECT_ID]) {
         input,
       })),
       getPurchaseOrderSummary: mock(async () => ({})),
+      listFilterOptions: mock(async (input: unknown) => ({
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0 },
+        input,
+      })),
     },
   };
 }
 
 describe("SupplierPayablesService", () => {
+  test("uses payable read permission and visible project scope for options", async () => {
+    const deps = dependencies([PROJECT_ID]);
+    const { SupplierPayablesService } = await import("./supplier-payables");
+    const service = new SupplierPayablesService(deps as never);
+
+    await service.listFilterOptions(auth, {
+      type: "supplier",
+      keyword: "材料",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(deps.access.requirePayableRead).toHaveBeenCalledWith(auth);
+    expect(deps.access.getVisibleProjectIds).toHaveBeenCalledWith(auth);
+    expect(deps.repository.listFilterOptions).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
+      type: "supplier",
+      keyword: "材料",
+      page: 1,
+      pageSize: 20,
+    });
+  });
   test.each([
     [null, "all project scope"],
     [[PROJECT_ID], "scoped project ids"],

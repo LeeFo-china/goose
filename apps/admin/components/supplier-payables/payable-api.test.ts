@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { listSupplierPayables } from "./payable-api";
+import {
+  listSupplierPayableFilterOptions,
+  listSupplierPayables,
+} from "./payable-api";
 
 const originalFetch = globalThis.fetch;
 
@@ -44,6 +47,22 @@ describe("供应商应付 API 契约", () => {
 
     expect(String(calls[0]?.input)).toBe(
       "/api/backend/supplier-payables?page=1&pageSize=100",
+    );
+  });
+
+  test("专用筛选项使用应付权限下的受限分页接口", async () => {
+    const calls = installSuccessFetch();
+
+    await listSupplierPayableFilterOptions({
+      type: "purchase_order",
+      keyword: " PO ",
+      page: 2,
+      pageSize: 20,
+    });
+
+    expect(String(calls[0]?.input)).toBe(
+      "/api/backend/supplier-payable-filter-options?" +
+        "type=purchase_order&page=2&pageSize=20&keyword=PO",
     );
   });
 });

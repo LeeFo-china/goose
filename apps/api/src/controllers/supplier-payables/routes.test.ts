@@ -9,9 +9,10 @@ const emptyPage = {
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 };
 const list = mock(async () => emptyPage);
+const listFilterOptions = mock(async () => emptyPage);
 
 mock.module("@/services/supplier-payables", () => ({
-  supplierPayablesService: { list },
+  supplierPayablesService: { list, listFilterOptions },
 }));
 
 const auth = {
@@ -31,9 +32,12 @@ async function controller() {
 }
 
 describe("SupplierPayablesController", () => {
-  beforeEach(() => list.mockClear());
+  beforeEach(() => {
+    list.mockClear();
+    listFilterOptions.mockClear();
+  });
 
-  test("registers the payable route once", async () => {
+  test("registers payable list and filter option routes once", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
     value.registerExtraRoutes({
@@ -41,7 +45,23 @@ describe("SupplierPayablesController", () => {
     } as never);
     expect(routes).toEqual([
       { method: "GET", path: "/supplier-payables" },
+      { method: "GET", path: "/supplier-payable-filter-options" },
     ]);
+  });
+
+  test("parses paginated minimal filter options", async () => {
+    const value = await controller();
+    const response = await value.listFilterOptions({
+      query: { type: "purchase_order", keyword: " PO ", page: "2" },
+    } as never);
+
+    expect(listFilterOptions).toHaveBeenCalledWith(auth, {
+      type: "purchase_order",
+      keyword: "PO",
+      page: 2,
+      pageSize: 20,
+    });
+    expect(response).toEqual({ data: emptyPage, message: "success" });
   });
 
   test("parses bounded filters and wraps the service result", async () => {

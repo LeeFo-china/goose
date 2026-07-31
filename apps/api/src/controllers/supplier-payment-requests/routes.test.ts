@@ -112,9 +112,9 @@ describe("SupplierPaymentRequestsController routes", () => {
     payableController.registerExtraRoutes({
       get: (path: string) => routes.push({ method: "GET", path }),
     } as never);
-    expect(routes).toHaveLength(12);
+    expect(routes).toHaveLength(13);
     expect(new Set(routes.map(({ method, path }) => `${method} ${path}`)).size)
-      .toBe(12);
+      .toBe(13);
   });
 
   test("parses paginated reads and wraps their responses", async () => {

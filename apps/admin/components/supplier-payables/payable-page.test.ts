@@ -3,7 +3,9 @@ import { describe, expect, test } from "bun:test";
 
 import {
   appendPayablePage,
+  beginPayableListRequest,
   buildPaymentRequestHref,
+  payableLoadPolicy,
   resetPayableFilters,
 } from "./use-payable-list";
 import type { SupplierPayable, SupplierPayablePage } from "./payable-types";
@@ -20,6 +22,7 @@ describe("供应商应付页面规则", () => {
       page: 4,
       projectId: "all",
       tenantSupplierId: "all",
+      purchaseOrderId: "all",
       status: "all",
       dueFrom: "",
       dueTo: "",
@@ -27,9 +30,38 @@ describe("供应商应付页面规则", () => {
       page: 1,
       projectId: "all",
       tenantSupplierId: "all",
+      purchaseOrderId: "all",
       status: "overdue",
       dueFrom: "",
       dueTo: "",
+    });
+  });
+
+  test("payable-only 角色不依赖 supplier 或采购单权限", () => {
+    expect(payableLoadPolicy({
+      canView: true,
+      canReadSettings: false,
+      preflight: "unknown",
+    })).toEqual({ shouldPreflightSettings: false, shouldLoadPayables: true });
+    expect(payableLoadPolicy({
+      canView: true,
+      canReadSettings: true,
+      preflight: "disabled",
+    })).toEqual({ shouldPreflightSettings: false, shouldLoadPayables: false });
+    expect(payableLoadPolicy({
+      canView: false,
+      canReadSettings: true,
+      preflight: "unknown",
+    })).toEqual({ shouldPreflightSettings: false, shouldLoadPayables: false });
+  });
+
+  test("新筛选请求开始即隔离旧页，失败时不残留可选行", () => {
+    const stale = page([
+      payable("00000000-0000-4000-8000-000000000001"),
+    ], 3);
+    expect(beginPayableListRequest(stale)).toEqual({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
     });
   });
 
@@ -65,8 +97,7 @@ describe("供应商应付页面边界", () => {
   test("服务端页面 fail closed 传递查看权限", () => {
     const source = readSource("../../app/(console)/supplier-payables/page.tsx");
     expect(source).toContain('permissions.has("supplier.payable.view")');
-    expect(source).toContain('permissions.has("supplier.view")');
-    expect(source).toContain(
+    expect(source).not.toContain(
       'permissions.has("supplier.purchase-order.view")',
     );
   });
@@ -80,10 +111,11 @@ describe("供应商应付页面边界", () => {
     );
 
     expect(workspace).toContain("if (!canView)");
-    expect(workspace).toContain("if (!settings.module_enabled)");
-    expect(workspace).toContain("loadTenantSupplierSettings");
+    expect(workspace).toContain("SUPPLIER_MODULE_DISABLED");
     expect(hook).toContain("if (!canLoad) return");
     expect(hook).toContain("pageSize: 20");
+    expect(hook).toContain("purchase_order_id");
+    expect(workspace).toContain("clear()");
     expect(workspace).toContain("<StatusAlert");
     expect(list).toContain("<Empty");
     expect(list).toContain("<Skeleton");
@@ -104,7 +136,10 @@ describe("供应商应付页面边界", () => {
     expect(workspace).not.toContain("localStorage");
     expect(list).toContain("可申请");
     expect(list).toContain("采购/收货单");
+    expect(list).toContain("record.project_name");
+    expect(list).toContain("record.supplier_name");
     expect(filters).toContain("到期开始日期");
+    expect(filters).toContain("采购单");
     expect(filters).toContain("全部状态");
     expect(summary).toContain("待付金额");
     expect(menu).toContain('href: "/supplier-payables"');
@@ -133,6 +168,10 @@ function payable(id: string): SupplierPayable {
     supplier_purchase_order_id: "40000000-0000-4000-8000-000000000001",
     receipt_id: "50000000-0000-4000-8000-000000000001",
     receipt_item_id: "60000000-0000-4000-8000-000000000001",
+    project_name: "青山项目",
+    supplier_name: "示例供应商",
+    purchase_order_no: "PO-001",
+    receipt_no: "RCV-001",
     invoice_required_before_payment: false,
     amount: "100.00",
     paid_amount: "20.00",

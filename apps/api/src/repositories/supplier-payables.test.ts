@@ -47,6 +47,10 @@ const payable = {
   supplier_purchase_order_id: ORDER_ID,
   receipt_id: RECEIPT_ID,
   receipt_item_id: RECEIPT_ITEM_ID,
+  project_name: "青山项目",
+  supplier_name: "示例供应商",
+  purchase_order_no: "PO-20260731-001",
+  receipt_no: "RCV-20260731-001",
   invoice_required_before_payment: true,
   amount: "100.00",
   paid_amount: "20.00",
@@ -59,6 +63,40 @@ const payable = {
 } as const;
 
 describe("SupplierPayablesRepository", () => {
+  test("lists minimal payable filter options through a bounded RPC", async () => {
+    const option = { id: PROJECT_ID, label: "青山项目" };
+    const { repository, requests } = await repositoryFor(() => ({
+      body: { items: [option], total: 1, page: 2, page_size: 20 },
+    }));
+
+    const result = await repository.listFilterOptions({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
+      type: "project",
+      keyword: "青山",
+      page: 2,
+      pageSize: 20,
+    });
+
+    expect(result.list).toEqual([option]);
+    expect(result.pagination).toEqual({
+      page: 2,
+      pageSize: 20,
+      total: 1,
+      totalPages: 1,
+    });
+    expect(new URL(requests[0]!.url).pathname).toEndWith(
+      "/rpc/list_supplier_payable_filter_options",
+    );
+    expect(await requests[0]!.clone().json()).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_visible_project_ids: [PROJECT_ID],
+      p_type: "project",
+      p_keyword: "青山",
+      p_page: 2,
+      p_page_size: 20,
+    });
+  });
   test("maps every payable filter to the exact paginated RPC parameters", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: { items: [payable], total: 101, page: 2, page_size: 100 },

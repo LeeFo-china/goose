@@ -68,6 +68,17 @@ export const SupplierPayableListQuerySchema = PaginationQuerySchema.extend({
   );
 });
 
+export const SupplierPayableFilterOptionQuerySchema =
+  PaginationQuerySchema.extend({
+    type: z.enum(["project", "supplier", "purchase_order"], {
+      message: "无效的应付筛选项类型",
+    }),
+    keyword: z.string().trim()
+      .min(1, "筛选项关键词不能为空")
+      .max(100, "筛选项关键词不能超过 100 个字符")
+      .optional(),
+  }).strict();
+
 export const SupplierPaymentRequestListQuerySchema =
   PaginationQuerySchema.extend({
     project_id: uuid("无效的项目 ID").optional(),
@@ -237,6 +248,8 @@ export type SupplierPaymentMethod =
   z.infer<typeof SupplierPaymentMethodSchema>;
 export type SupplierPayableListQuery =
   z.infer<typeof SupplierPayableListQuerySchema>;
+export type SupplierPayableFilterOptionQuery =
+  z.infer<typeof SupplierPayableFilterOptionQuerySchema>;
 export type SupplierPaymentRequestListQuery =
   z.infer<typeof SupplierPaymentRequestListQuerySchema>;
 export type SupplierPaymentRequestParam =

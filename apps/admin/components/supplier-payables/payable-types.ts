@@ -15,6 +15,10 @@ export type SupplierPayableFacts = {
   supplier_purchase_order_id: string;
   receipt_id: string;
   receipt_item_id: string;
+  project_name: string;
+  supplier_name: string;
+  purchase_order_no: string;
+  receipt_no: string;
   invoice_required_before_payment: boolean;
   amount: string;
   paid_amount: string;
@@ -31,6 +35,19 @@ export type SupplierPayable = SupplierPayableFacts & {
 };
 
 export type SupplierPayablePage = PageData<SupplierPayable>;
+
+export type SupplierPayableFilterOptionType =
+  | "project"
+  | "supplier"
+  | "purchase_order";
+
+export type SupplierPayableFilterOption = {
+  id: string;
+  label: string;
+};
+
+export type SupplierPayableFilterOptionPage =
+  PageData<SupplierPayableFilterOption>;
 
 export type SupplierPayableListQuery = {
   page: number;

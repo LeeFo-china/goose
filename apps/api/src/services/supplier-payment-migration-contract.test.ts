@@ -367,6 +367,25 @@ describe("supplier payment data migration contract", () => {
       /'receipt_id',\s*page_rows\.supplier_purchase_order_receipt_id/,
       /'receipt_item_id',\s*page_rows\.supplier_purchase_order_receipt_item_id/,
       /'invoice_required_before_payment',\s*page_rows\.invoice_required_before_payment/,
+      /'project_name',\s*page_rows\.project_name/,
+      /'supplier_name',\s*page_rows\.supplier_name/,
+      /'purchase_order_no',\s*page_rows\.purchase_order_no/,
+      /'receipt_no',\s*page_rows\.receipt_no/,
+    ]);
+    const options = fn("list_supplier_payable_filter_options");
+    contracts(options, [
+      /p_visible_project_ids uuid\[\] DEFAULT NULL/,
+      /p_type text/,
+      /p_page integer DEFAULT 1/,
+      /p_page_size integer DEFAULT 20/,
+      /p_page_size NOT BETWEEN 1 AND 100/,
+      /p_type NOT IN \('project', 'supplier', 'purchase_order'\)/,
+      /payable\.project_id = ANY\s*\(\s*p_visible_project_ids\s*\)/,
+      /ORDER BY[\s\S]*option_label ASC[\s\S]*option_id ASC/,
+      /LIMIT p_page_size/,
+      /OFFSET \(p_page - 1\) \* p_page_size/,
+      /SECURITY DEFINER/,
+      /SET search_path = pg_catalog, public/,
     ]);
     contracts(requests, [
       /p_visible_project_ids uuid\[\] DEFAULT NULL/,
@@ -376,6 +395,9 @@ describe("supplier payment data migration contract", () => {
     ]);
     expect(migration.match(
       /public\.list_supplier_payables\(\s*uuid,\s*uuid\[\],/g,
+    )).toHaveLength(2);
+    expect(migration.match(
+      /public\.list_supplier_payable_filter_options\(\s*uuid,\s*uuid\[\],/g,
     )).toHaveLength(2);
     expect(migration.match(
       /public\.list_supplier_payment_requests\(\s*uuid,\s*uuid\[\],/g,

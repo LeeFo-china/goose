@@ -1,7 +1,10 @@
 import {
   supplierPayablesRepository,
 } from "@/repositories/supplier-payables";
-import type { SupplierPayableListQuery } from "@/schema/supplier-payments";
+import type {
+  SupplierPayableFilterOptionQuery,
+  SupplierPayableListQuery,
+} from "@/schema/supplier-payments";
 import type { AuthContext } from "@/services/authorization";
 import {
   supplierPaymentAccessService,
@@ -13,7 +16,7 @@ type AccessPort = Pick<
 >;
 type RepositoryPort = Pick<
   typeof supplierPayablesRepository,
-  "list" | "getPurchaseOrderSummary"
+  "list" | "listFilterOptions" | "getPurchaseOrderSummary"
 >;
 
 export type SupplierPayablesServiceDependencies = {
@@ -34,6 +37,19 @@ export class SupplierPayablesService {
     const scope = await this.access.requirePayableRead(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
     return this.repository.list({
+      tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
+      ...query,
+    });
+  }
+
+  async listFilterOptions(
+    auth: AuthContext,
+    query: SupplierPayableFilterOptionQuery,
+  ) {
+    const scope = await this.access.requirePayableRead(auth);
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.listFilterOptions({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
       ...query,

@@ -41,8 +41,6 @@ export function PayableList({
   loading,
   canCreate,
   selectedIds,
-  projectNames,
-  supplierNames,
   onToggle,
   onCreateOne,
 }: {
@@ -50,8 +48,6 @@ export function PayableList({
   loading: boolean;
   canCreate: boolean;
   selectedIds: Set<string>;
-  projectNames: Record<string, string>;
-  supplierNames: Record<string, string>;
   onToggle: (record: SupplierPayable) => void;
   onCreateOne: (record: SupplierPayable) => void;
 }) {
@@ -114,18 +110,16 @@ export function PayableList({
                 />
               </TableCell>
               <TableCell className="max-w-44 truncate">
-                {projectNames[record.project_id] ??
-                  `项目 ${shortId(record.project_id)}`}
+                {record.project_name}
               </TableCell>
               <TableCell className="max-w-48 truncate">
-                {supplierNames[record.tenant_supplier_id] ??
-                  `供应商 ${shortId(record.tenant_supplier_id)}`}
+                {record.supplier_name}
               </TableCell>
               <TableCell>
                 <div className="flex flex-col gap-1 font-mono text-xs">
-                  <span>采购 {shortId(record.supplier_purchase_order_id)}</span>
+                  <span>采购 {record.purchase_order_no}</span>
                   <span className="text-muted-foreground">
-                    收货 {shortId(record.receipt_id)}
+                    收货 {record.receipt_no}
                   </span>
                 </div>
               </TableCell>

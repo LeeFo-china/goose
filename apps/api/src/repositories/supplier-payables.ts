@@ -2,6 +2,9 @@ import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
 import { SupplierPayableStatusSchema } from "@/schema/supplier-payments";
+import type {
+  SupplierPayableFilterOptionQuery,
+} from "@/schema/supplier-payments";
 import { SupabaseDB } from "@/utils/supabase";
 
 type RpcResult = { data: unknown; error: unknown };
@@ -23,6 +26,12 @@ export type SupplierPayableListInput = PageInput & {
   due_from?: string;
   due_to?: string;
 };
+export type SupplierPayableFilterOptionInput = PageInput & {
+  tenant_id: string;
+  visible_project_ids: string[] | null;
+  type: SupplierPayableFilterOptionQuery["type"];
+  keyword?: string;
+};
 
 const uuid = z.uuid();
 const dateTime = z.iso.datetime({ offset: true });
@@ -36,6 +45,10 @@ const SupplierPayableListItemSchema = z.object({
   supplier_purchase_order_id: uuid,
   receipt_id: uuid,
   receipt_item_id: uuid,
+  project_name: z.string().min(1),
+  supplier_name: z.string().min(1),
+  purchase_order_no: z.string().min(1),
+  receipt_no: z.string().min(1),
   invoice_required_before_payment: z.boolean(),
   amount: money,
   paid_amount: money,
@@ -45,6 +58,18 @@ const SupplierPayableListItemSchema = z.object({
   occurred_at: dateTime,
   due_at: dateTime,
   status: SupplierPayableStatusSchema,
+}).strict();
+
+const SupplierPayableFilterOptionSchema = z.object({
+  id: uuid,
+  label: z.string().min(1),
+}).strict();
+
+const SupplierPayableFilterOptionPageSchema = z.object({
+  items: z.array(SupplierPayableFilterOptionSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  page_size: z.number().int().min(1).max(100),
 }).strict();
 
 const SupplierPayablePageSchema = z.object({
@@ -98,6 +123,27 @@ export class SupplierPayablesRepository {
       SupplierPayablePageSchema,
       data,
       "查询供应商应付失败",
+    );
+    return toPage(result.items, result);
+  }
+
+  async listFilterOptions(input: SupplierPayableFilterOptionInput) {
+    const { data, error } = await this.client.rpc(
+      "list_supplier_payable_filter_options",
+      {
+        p_tenant_id: input.tenant_id,
+        p_visible_project_ids: input.visible_project_ids,
+        p_type: input.type,
+        p_keyword: input.keyword?.trim() || null,
+        p_page: input.page,
+        p_page_size: input.pageSize,
+      },
+    );
+    if (error) throw Errors.dbError("查询供应商应付筛选项失败", error);
+    const result = parse(
+      SupplierPayableFilterOptionPageSchema,
+      data,
+      "查询供应商应付筛选项失败",
     );
     return toPage(result.items, result);
   }

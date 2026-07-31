@@ -13,6 +13,7 @@ export type PayableFiltersState = {
   page: number;
   projectId: string;
   tenantSupplierId: string;
+  purchaseOrderId: string;
   status: SupplierPayableStatus | "all";
   dueFrom: string;
   dueTo: string;
@@ -25,10 +26,37 @@ export const initialPayableFilters: PayableFiltersState = {
   page: 1,
   projectId: "all",
   tenantSupplierId: "all",
+  purchaseOrderId: "all",
   status: "all",
   dueFrom: "",
   dueTo: "",
 };
+
+export type PayableModulePreflight =
+  | "unknown"
+  | "checking"
+  | "enabled"
+  | "disabled"
+  | "error";
+
+export function payableLoadPolicy({
+  canView,
+  canReadSettings,
+  preflight,
+}: {
+  canView: boolean;
+  canReadSettings: boolean;
+  preflight: PayableModulePreflight;
+}) {
+  if (!canView) {
+    return { shouldPreflightSettings: false, shouldLoadPayables: false };
+  }
+  return {
+    shouldPreflightSettings: canReadSettings && preflight === "unknown",
+    shouldLoadPayables: preflight === "enabled" ||
+      (!canReadSettings && preflight === "unknown"),
+  };
+}
 
 export function resetPayableFilters(
   current: PayableFiltersState,
@@ -51,6 +79,12 @@ export function appendPayablePage(
   };
 }
 
+export function beginPayableListRequest(
+  _current: SupplierPayablePage,
+): SupplierPayablePage {
+  return emptyPage();
+}
+
 export function buildPaymentRequestHref(payableIds: string[]) {
   const ids = [...new Set(payableIds)]
     .filter((id) => UUID_PATTERN.test(id))
@@ -70,6 +104,8 @@ export function usePayableList(
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const requestVersion = useRef(0);
 
   const queryFor = useCallback((page: number): SupplierPayableListQuery => ({
@@ -81,6 +117,9 @@ export function usePayableList(
     ...(filters.tenantSupplierId !== "all"
       ? { tenant_supplier_id: filters.tenantSupplierId }
       : {}),
+    ...(filters.purchaseOrderId !== "all"
+      ? { purchase_order_id: filters.purchaseOrderId }
+      : {}),
     ...(filters.status !== "all" ? { status: filters.status } : {}),
     ...(filters.dueFrom ? { due_from: startOfDay(filters.dueFrom) } : {}),
     ...(filters.dueTo ? { due_to: endOfDay(filters.dueTo) } : {}),
@@ -88,6 +127,7 @@ export function usePayableList(
     filters.dueFrom,
     filters.dueTo,
     filters.projectId,
+    filters.purchaseOrderId,
     filters.status,
     filters.tenantSupplierId,
   ]);
@@ -98,12 +138,19 @@ export function usePayableList(
     setLoading(true);
     setLoadingMore(false);
     setError(null);
+    setErrorCode(null);
+    setHasLoaded(false);
+    setRecords(beginPayableListRequest);
     try {
       const next = await listSupplierPayables(queryFor(filters.page));
-      if (requestVersion.current === version) setRecords(next);
+      if (requestVersion.current === version) {
+        setRecords(next);
+        setHasLoaded(true);
+      }
     } catch (caught) {
       if (requestVersion.current === version) {
         setError(errorMessage(caught, "供应商应付列表加载失败"));
+        setErrorCode(requestErrorCode(caught));
       }
     } finally {
       if (requestVersion.current === version) setLoading(false);
@@ -117,6 +164,8 @@ export function usePayableList(
       setLoading(false);
       setLoadingMore(false);
       setError(null);
+      setErrorCode(null);
+      setHasLoaded(false);
       return;
     }
     void reload();
@@ -124,6 +173,16 @@ export function usePayableList(
       requestVersion.current += 1;
     };
   }, [canLoad, reload]);
+
+  const clear = useCallback(() => {
+    requestVersion.current += 1;
+    setRecords(emptyPage());
+    setLoading(false);
+    setLoadingMore(false);
+    setError(null);
+    setErrorCode(null);
+    setHasLoaded(false);
+  }, []);
 
   const loadMore = useCallback(async () => {
     if (
@@ -133,6 +192,7 @@ export function usePayableList(
     const version = ++requestVersion.current;
     setLoadingMore(true);
     setError(null);
+    setErrorCode(null);
     try {
       const next = await listSupplierPayables(
         queryFor(records.pagination.page + 1),
@@ -143,13 +203,24 @@ export function usePayableList(
     } catch (caught) {
       if (requestVersion.current === version) {
         setError(errorMessage(caught, "更多供应商应付加载失败"));
+        setErrorCode(requestErrorCode(caught));
       }
     } finally {
       if (requestVersion.current === version) setLoadingMore(false);
     }
   }, [canLoad, loading, loadingMore, queryFor, records.pagination]);
 
-  return { records, loading, loadingMore, error, reload, loadMore };
+  return {
+    records,
+    loading,
+    loadingMore,
+    error,
+    errorCode,
+    hasLoaded,
+    clear,
+    reload,
+    loadMore,
+  };
 }
 
 function emptyPage(): SupplierPayablePage {
@@ -169,4 +240,12 @@ function endOfDay(value: string) {
 
 function errorMessage(caught: unknown, fallback: string) {
   return caught instanceof Error ? caught.message : fallback;
+}
+
+function requestErrorCode(caught: unknown) {
+  if (!caught || typeof caught !== "object" || !("code" in caught)) {
+    return null;
+  }
+  const code = (caught as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
 }

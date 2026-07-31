@@ -2,6 +2,8 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 import { availableToRequestAmount } from "./payable-rules";
 import type {
+  SupplierPayableFilterOptionPage,
+  SupplierPayableFilterOptionType,
   SupplierPayableFacts,
   SupplierPayableListQuery,
   SupplierPayablePage,
@@ -45,6 +47,24 @@ export async function listSupplierPayables(
       available_to_request_amount: availableToRequestAmount(item),
     })),
   };
+}
+
+export function listSupplierPayableFilterOptions(input: {
+  type: SupplierPayableFilterOptionType;
+  page: number;
+  pageSize: number;
+  keyword?: string;
+}) {
+  const query = new URLSearchParams({
+    type: input.type,
+    page: String(normalizePage(input.page)),
+    pageSize: String(normalizePageSize(input.pageSize)),
+  });
+  if (input.keyword?.trim()) query.set("keyword", input.keyword.trim());
+  return requestBackendJson<SupplierPayableFilterOptionPage>(
+    `/supplier-payable-filter-options?${query}`,
+    { fallbackMessage: "供应商应付筛选项加载失败" },
+  );
 }
 
 function normalizePage(page: number) {
