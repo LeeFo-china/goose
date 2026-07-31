@@ -169,7 +169,7 @@ export function FinanceOverviewCharts({
   ];
   const profitData: ChartItem[] = [
     { label: "已收", value: toNumber(summary.received_amount) },
-    { label: "已付成本", value: toNumber(summary.expense_paid_amount) },
+    { label: "已付费用", value: toNumber(summary.expense_paid_amount) },
     { label: "实际利润", value: toNumber(summary.actual_profit_amount) },
     { label: "预算利润", value: toNumber(summary.projected_budget_profit_amount) },
   ];

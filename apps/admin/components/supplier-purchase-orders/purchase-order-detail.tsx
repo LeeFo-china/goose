@@ -46,9 +46,13 @@ import { cn } from "@/lib/utils";
 import {
   cancelPurchaseOrder,
   loadPurchaseOrder,
+  loadPurchaseOrderFinancialSummary,
   loadPurchaseOrderItems,
   submitPurchaseOrder,
 } from "./purchase-order-api";
+import {
+  PurchaseOrderFinancialSummary,
+} from "./purchase-order-financial-summary";
 import {
   PurchaseOrderFulfillmentPanel,
 } from "./purchase-order-fulfillment-panel";
@@ -67,17 +71,20 @@ import {
 import type {
   PurchaseOrderItem,
   PurchaseOrderWithReferences,
+  SupplierPurchaseOrderFinancialSummary,
 } from "./purchase-order-types";
 
 export function PurchaseOrderDetail({
   open,
   order,
+  canViewPurchaseOrders,
   canManage,
   onOpenChange,
   onChanged,
 }: {
   open: boolean;
   order: PurchaseOrderWithReferences | null;
+  canViewPurchaseOrders: boolean;
   canManage: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
@@ -91,9 +98,36 @@ export function PurchaseOrderDetail({
   const [commandAttempt, setCommandAttempt] =
     useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [financialSummary, setFinancialSummary] =
+    useState<SupplierPurchaseOrderFinancialSummary | null>(null);
+  const [financialSummaryLoading, setFinancialSummaryLoading] =
+    useState(false);
+  const [financialSummaryError, setFinancialSummaryError] =
+    useState<string | null>(null);
   const [fulfillmentState, setFulfillmentState] =
     useState<FulfillmentLoadState>(unloadedFulfillmentState);
   const requestGuard = useRef(createLatestRequestGuard());
+  const financialSummaryRequestGuard = useRef(createLatestRequestGuard());
+
+  const reloadFinancialSummary = useCallback(async () => {
+    const isLatest = financialSummaryRequestGuard.current.start();
+    if (!order || !canViewPurchaseOrders) return;
+    setFinancialSummaryLoading(true);
+    setFinancialSummaryError(null);
+    try {
+      const summary = await loadPurchaseOrderFinancialSummary(order.id);
+      if (isLatest()) setFinancialSummary(summary);
+    } catch (caught) {
+      if (isLatest()) {
+        setFinancialSummaryError(errorMessage(
+          caught,
+          "采购单财务摘要加载失败",
+        ));
+      }
+    } finally {
+      if (isLatest()) setFinancialSummaryLoading(false);
+    }
+  }, [canViewPurchaseOrders, order]);
 
   const reload = useCallback(async () => {
     const isLatest = requestGuard.current.start();
@@ -122,21 +156,38 @@ export function PurchaseOrderDetail({
 
   useEffect(() => {
     requestGuard.current.invalidate();
+    financialSummaryRequestGuard.current.invalidate();
     setCurrent(order);
     setItems([]);
+    setFinancialSummary(null);
+    setFinancialSummaryLoading(false);
+    setFinancialSummaryError(null);
     setHasLoadedDetail(false);
     setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
-    if (open) void reload();
-    return () => requestGuard.current.invalidate();
-  }, [open, order, reload]);
+    if (open) {
+      void reload();
+      if (canViewPurchaseOrders) void reloadFinancialSummary();
+    }
+    return () => {
+      requestGuard.current.invalidate();
+      financialSummaryRequestGuard.current.invalidate();
+    };
+  }, [
+    canViewPurchaseOrders,
+    open,
+    order,
+    reload,
+    reloadFinancialSummary,
+  ]);
 
   const handleFulfillmentChanged = useCallback(async () => {
     const version = await reload();
+    if (canViewPurchaseOrders) void reloadFinancialSummary();
     onChanged();
     return version;
-  }, [onChanged, reload]);
+  }, [canViewPurchaseOrders, onChanged, reload, reloadFinancialSummary]);
 
   async function runCommand(action: "submit" | "cancel") {
     if (!current || busy) return;
@@ -172,6 +223,7 @@ export function PurchaseOrderDetail({
         toast.success("采购单已取消");
       }
       await reload();
+      if (canViewPurchaseOrders) void reloadFinancialSummary();
       setCommandAttempt(null);
       onChanged();
     } catch (caught) {
@@ -284,6 +336,13 @@ export function PurchaseOrderDetail({
                 </TableBody>
               </Table>
             </div>
+            {canViewPurchaseOrders ? (
+              <PurchaseOrderFinancialSummary
+                summary={financialSummary}
+                isLoading={financialSummaryLoading}
+                error={financialSummaryError}
+              />
+            ) : null}
             <PurchaseOrderFulfillmentPanel
               order={current}
               purchaseOrderItems={items}

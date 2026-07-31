@@ -56,6 +56,9 @@ export type FinanceProjectOperatingSummary = {
   overdue_amount: number;
   overdue_count: number;
   expense_paid_amount: number;
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
   actual_profit_amount: number;
   projected_profit_amount: number;
   net_cash_flow_amount: number;
@@ -85,6 +88,9 @@ export type FinanceProjectOperatingSummaryTotals = {
   overdue_amount: number;
   overdue_count: number;
   expense_paid_amount: number;
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
   actual_profit_amount: number;
   projected_profit_amount: number;
   net_cash_flow_amount: number;
@@ -159,6 +165,9 @@ export function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSumma
     overdue_amount: 0,
     overdue_count: 0,
     expense_paid_amount: 0,
+    supplier_cost_amount: 0,
+    supplier_payable_open_amount: 0,
+    supplier_cash_paid_amount: 0,
     actual_profit_amount: 0,
     projected_profit_amount: 0,
     net_cash_flow_amount: 0,
@@ -186,6 +195,18 @@ export function emptyFinanceProjectSummaryTotals(): FinanceProjectOperatingSumma
       negative_projected_profit: 0,
     },
   };
+}
+
+export function calculateDisplayedProjectCost(summary: Pick<
+  FinanceProjectOperatingSummary,
+  "expense_paid_amount" | "supplier_cost_amount"
+>): number {
+  return finiteMoney(summary.expense_paid_amount) +
+    finiteMoney(summary.supplier_cost_amount);
+}
+
+function finiteMoney(value: number): number {
+  return Number.isFinite(value) ? value : 0;
 }
 
 export function emptyFinanceProjectSummaryAnalytics(): FinanceProjectSummaryAnalytics {

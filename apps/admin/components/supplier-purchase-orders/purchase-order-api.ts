@@ -9,6 +9,7 @@ import type {
   PurchaseOrderPage,
   PurchaseOrderSupplierOption,
   PurchaseOrderWithReferences,
+  SupplierPurchaseOrderFinancialSummary,
 } from "./purchase-order-types";
 
 export type PurchaseOrderFilters = {
@@ -39,6 +40,13 @@ export function loadPurchaseOrder(orderId: string) {
   return requestBackendJson<PurchaseOrderWithReferences>(
     `/supplier-purchase-orders/${orderId}`,
     { fallbackMessage: "采购单详情加载失败" },
+  );
+}
+
+export function loadPurchaseOrderFinancialSummary(orderId: string) {
+  return requestBackendJson<SupplierPurchaseOrderFinancialSummary>(
+    `/supplier-purchase-orders/${encodeURIComponent(orderId)}/financial-summary`,
+    { fallbackMessage: "采购单财务摘要加载失败" },
   );
 }
 

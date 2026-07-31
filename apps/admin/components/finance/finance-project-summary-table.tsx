@@ -57,6 +57,19 @@ function budgetRatio(row: FinanceProjectOperatingSummary) {
   return row.budget_usage_ratio ?? null;
 }
 
+function supplierAmount(
+  row: FinanceProjectOperatingSummary,
+  key: keyof Pick<
+    FinanceProjectOperatingSummary,
+    | "supplier_cost_amount"
+    | "supplier_payable_open_amount"
+    | "supplier_cash_paid_amount"
+  >,
+) {
+  const value = row[key];
+  return Number.isFinite(value) ? value : 0;
+}
+
 function riskLevel(row: FinanceProjectOperatingSummary): FinanceProjectRiskLevel {
   return row.risk_level || "normal";
 }
@@ -289,6 +302,33 @@ export function FinanceProjectSummaryTable({
       },
     },
     {
+      id: "supplier_cost",
+      header: "供应商成本",
+      cell: ({ row }) => (
+        <div className="min-w-0 text-right text-xs tabular-nums">
+          <div className="truncate font-medium text-foreground">
+            已发生供应商成本 {formatFinanceMoney(
+              supplierAmount(row.original, "supplier_cost_amount"),
+            )}
+          </div>
+          <div className="mt-1 truncate text-muted-foreground">
+            未付供应商应付 {formatFinanceMoney(
+              supplierAmount(row.original, "supplier_payable_open_amount"),
+            )}
+          </div>
+          <div className="mt-1 truncate text-muted-foreground">
+            已付供应商现金 {formatFinanceMoney(
+              supplierAmount(row.original, "supplier_cash_paid_amount"),
+            )}
+          </div>
+        </div>
+      ),
+      meta: {
+        headerClassName: "w-[16rem] text-right",
+        cellClassName: "min-w-64 text-right",
+      },
+    },
+    {
       accessorKey: "actual_profit_amount",
       header: "利润",
       cell: ({ row }) => (
@@ -383,7 +423,8 @@ export function FinanceProjectSummaryTable({
       columns={columns}
       data={rows}
       emptyText="暂无项目经营数据"
-      containerClassName="overflow-x-hidden"
+      containerClassName="overflow-x-auto"
+      minWidth="min-w-[88rem]"
       tableClassName="table-fixed [&_td]:px-3 [&_td]:py-2 [&_th]:px-3"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={rowToneClass}

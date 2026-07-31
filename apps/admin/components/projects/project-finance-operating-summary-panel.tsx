@@ -11,6 +11,9 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { FinanceProjectOperatingSummary } from "@/components/finance/finance-requests";
 import {
+  calculateDisplayedProjectCost,
+} from "@/components/finance/finance-project-summary-types";
+import {
   formatFinanceMoney,
   formatFinancePercent,
 } from "@/components/finance/finance-ledger-utils";
@@ -184,6 +187,25 @@ export function ProjectFinanceOperatingSummaryPanel({
               value={formatFinancePercent(summary.actual_gross_margin)}
               loading={loading}
             />
+            <CompactMetric
+              label="已发生供应商成本"
+              value={formatFinanceMoney(toNumber(summary.supplier_cost_amount))}
+              loading={loading}
+            />
+            <CompactMetric
+              label="未付供应商应付"
+              value={formatFinanceMoney(
+                toNumber(summary.supplier_payable_open_amount),
+              )}
+              loading={loading}
+            />
+            <CompactMetric
+              label="已付供应商现金"
+              value={formatFinanceMoney(
+                toNumber(summary.supplier_cash_paid_amount),
+              )}
+              loading={loading}
+            />
           </div>
         </section>
 
@@ -249,7 +271,11 @@ function buildMoneyFlowData(
   return [
     { label: "合同金额", value: toNumber(summary.contract_amount), kind: "base" },
     { label: "已收金额", value: toNumber(summary.received_amount), kind: "income" },
-    { label: "已付支出", value: toNumber(summary.expense_paid_amount), kind: "cost" },
+    {
+      label: "项目成本",
+      value: calculateDisplayedProjectCost(summary),
+      kind: "cost",
+    },
     { label: "实际利润", value: toNumber(summary.actual_profit_amount), kind: "profit" },
     { label: "预测利润", value: toNumber(summary.projected_profit_amount), kind: "forecast" },
   ];
@@ -347,6 +373,9 @@ function emptySummary(projectId: string): FinanceProjectOperatingSummary {
     overdue_amount: 0,
     overdue_count: 0,
     expense_paid_amount: 0,
+    supplier_cost_amount: 0,
+    supplier_payable_open_amount: 0,
+    supplier_cash_paid_amount: 0,
     actual_profit_amount: 0,
     projected_profit_amount: 0,
     net_cash_flow_amount: 0,

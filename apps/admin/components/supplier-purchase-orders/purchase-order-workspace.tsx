@@ -426,6 +426,7 @@ export function PurchaseOrderWorkspace({
       <PurchaseOrderDetail
         open={detailOpen}
         order={detailOrder}
+        canViewPurchaseOrders={canViewPurchaseOrders}
         canManage={canManagePurchaseOrders}
         onOpenChange={handleDetailOpenChange}
         onChanged={loadOrders}

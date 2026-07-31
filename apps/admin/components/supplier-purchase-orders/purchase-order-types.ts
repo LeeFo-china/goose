@@ -174,6 +174,16 @@ export type PurchaseOrderCommandResult = {
   version: number;
 };
 
+export type SupplierPurchaseOrderFinancialSummary = {
+  purchase_order_id: string;
+  accepted_amount: string;
+  payable_amount: string;
+  reserved_request_amount: string;
+  paid_amount: string;
+  open_amount: string;
+  available_to_request_amount: string;
+};
+
 export type PurchaseOrderPage = PageData<PurchaseOrderWithReferences>;
 export type PurchaseOrderItemPage = PageData<PurchaseOrderItem>;
 export type PurchaseOrderCatalogPage = PageData<PurchaseOrderCatalogItem>;
