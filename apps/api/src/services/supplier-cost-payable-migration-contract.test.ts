@@ -8,6 +8,13 @@ const migrationUrl = new URL(
 const migration = existsSync(migrationUrl)
   ? readFileSync(migrationUrl, "utf8")
   : "";
+const previousGuardMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260729190000_harden_supplier_purchase_orders.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function contracts(source: string, patterns: readonly RegExp[]) {
   for (const pattern of patterns) expect(source).toMatch(pattern);
@@ -22,15 +29,19 @@ function ordered(source: string, patterns: readonly RegExp[]) {
   }
 }
 
-function sqlFunction(schema: string, name: string) {
-  const start = migration.search(
+function sqlFunctionFrom(source: string, schema: string, name: string) {
+  const start = source.search(
     new RegExp(
       `CREATE (?:OR REPLACE )?FUNCTION ${schema}\\.${name}\\s*\\(`,
     ),
   );
   if (start < 0) return "";
-  const end = migration.indexOf("\n$$;", start);
-  return end < 0 ? migration.slice(start) : migration.slice(start, end + 4);
+  const end = source.indexOf("\n$$;", start);
+  return end < 0 ? source.slice(start) : source.slice(start, end + 4);
+}
+
+function sqlFunction(schema: string, name: string) {
+  return sqlFunctionFrom(migration, schema, name);
 }
 
 function sqlTable(name: string) {
@@ -108,6 +119,8 @@ describe("supplier cost and payable migration contract", () => {
     contracts(migration, [
       /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN settlement_term_days_snapshot integer/,
       /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN invoice_required_before_payment_snapshot boolean/,
+      /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN commercial_snapshot_source text/,
+      /supplier_purchase_orders_commercial_snapshot_source_check[\s\S]*'contract_snapshot'[\s\S]*'relationship_default_snapshot'[\s\S]*'legacy_default_snapshot'/,
       /ALTER TABLE public\.supplier_purchase_order_items[\s\S]*ADD COLUMN cost_category_id uuid/,
       /supplier_purchase_order_items_cost_category_tenant_fkey[\s\S]*FOREIGN KEY \(cost_category_id, tenant_id\)[\s\S]*finance_cost_categories\(id, tenant_id\)/,
       /ALTER TABLE public\.project_cost_commitments[\s\S]*ADD COLUMN recognized_amount numeric\(18, 2\) NOT NULL DEFAULT 0/,
@@ -210,7 +223,9 @@ describe("supplier cost and payable migration contract", () => {
       /SUPPLIER_ACCOUNTING_LEGACY_GAP_PAGINATION_INVALID/,
       /unmapped_order_item/,
       /unfinancialized_receipt_item/,
+      /legacy_default_snapshot/,
       /supplier_purchase_order_items/,
+      /supplier_purchase_orders/,
       /supplier_purchase_order_receipt_items/,
       /accepted_quantity > 0/,
       /project_cost_events/,
@@ -224,6 +239,28 @@ describe("supplier cost and payable migration contract", () => {
     expect(migration).toMatch(
       /GRANT EXECUTE ON FUNCTION\s*public\.list_supplier_accounting_legacy_gaps\(\s*uuid,\s*integer,\s*integer\s*\)\s*TO service_role/,
     );
+  });
+
+  test("backfills historical commercial terms only from relationship defaults", () => {
+    const commercialBackfill = migration.slice(
+      migration.indexOf("-- Backfill historical commercial defaults"),
+      migration.indexOf("-- End historical commercial defaults"),
+    );
+    contracts(commercialBackfill, [
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+      /FROM public\.tenant_suppliers AS relationship/,
+      /settlement_term_days_snapshot = relationship\.settlement_term_days/,
+      /invoice_required_before_payment_snapshot =\s*relationship\.invoice_required_before_payment/,
+      /commercial_snapshot_source = 'legacy_default_snapshot'/,
+    ]);
+    expect(commercialBackfill).not.toMatch(/supplier_contracts|CURRENT_DATE/);
+    ordered(migration, [
+      /-- Backfill historical commercial defaults/,
+      /commercial_snapshot_source = 'legacy_default_snapshot'/,
+      /-- Backfill financializable accepted receipt items/,
+      /cost_event\.occurred_at \+ make_interval\(\s*days => purchase_order\.settlement_term_days_snapshot\s*\)/,
+      /purchase_order\.invoice_required_before_payment_snapshot/,
+    ]);
   });
 
   test("uses a transaction-scoped guard suspension for historical backfill", () => {
@@ -264,6 +301,9 @@ describe("supplier cost and payable migration contract", () => {
       /ORDER BY contract\.valid_until DESC, contract\.id/,
       /NEW\.settlement_term_days_snapshot := COALESCE\(/,
       /NEW\.invoice_required_before_payment_snapshot := COALESCE\(/,
+      /NEW\.commercial_snapshot_source := CASE/,
+      /'contract_snapshot'/,
+      /'relationship_default_snapshot'/,
       /RETURN NEW/,
     ]);
     ordered(snapshot, [
@@ -291,6 +331,33 @@ describe("supplier cost and payable migration contract", () => {
     expect(triggerAt).toBeGreaterThanOrEqual(0);
     expect(triggerAt).toBeLessThan(notNullAt);
     expect(notNullAt).toBeLessThan(convertAt);
+  });
+
+  test("freezes commercial snapshots after order submission", () => {
+    const guard = sqlFunction(
+      "public",
+      "prevent_submitted_supplier_purchase_order_mutation",
+    );
+    const previousGuard = sqlFunctionFrom(
+      previousGuardMigration,
+      "public",
+      "prevent_submitted_supplier_purchase_order_mutation",
+    );
+    contracts(guard, [
+      /IF OLD\.status = 'submitted'/,
+      /NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s*OLD\.settlement_term_days_snapshot/,
+      /NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s*OLD\.invoice_required_before_payment_snapshot/,
+      /NEW\.commercial_snapshot_source IS DISTINCT FROM\s*OLD\.commercial_snapshot_source/,
+    ]);
+    const withoutSnapshotFreeze = guard.replace(
+      /\s+OR NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s+OLD\.settlement_term_days_snapshot\s+OR NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s+OLD\.invoice_required_before_payment_snapshot\s+OR NEW\.commercial_snapshot_source IS DISTINCT FROM\s+OLD\.commercial_snapshot_source/,
+      "",
+    );
+    const normalizeSql = (source: string) =>
+      source.replace(/\s+/g, " ").trim();
+    expect(normalizeSql(withoutSnapshotFreeze)).toBe(
+      normalizeSql(previousGuard),
+    );
   });
 
   test("converts requisitions with category and commercial snapshots", () => {
@@ -330,8 +397,7 @@ describe("supplier cost and payable migration contract", () => {
       /'status', 'state_conflict'[\s\S]*'SUPPLIER_PURCHASE_ORDER_COST_CATEGORY_REQUIRED'/,
       /create_supplier_purchase_order_receipt_fulfillment_v1\(/,
       /previous_recognized_amount/,
-      /cumulative_accepted_quantity =\s*financial_line\.ordered_quantity[\s\S]*financial_line\.line_total_amount -\s*financial_line\.previous_recognized_amount/,
-      /round\(\s*financial_line\.line_total_amount \*\s*financial_line\.accepted_quantity \/\s*financial_line\.ordered_quantity,\s*2\s*\)/,
+      /greatest\(\s*least\(\s*financial_line\.line_total_amount,\s*CASE[\s\S]*financial_line\.cumulative_accepted_quantity >=\s*financial_line\.ordered_quantity[\s\S]*financial_line\.line_total_amount[\s\S]*round\(\s*financial_line\.line_total_amount \*\s*financial_line\.cumulative_accepted_quantity \/\s*financial_line\.ordered_quantity,\s*2\s*\)[\s\S]*END\s*\) -\s*financial_line\.previous_recognized_amount,\s*0\s*\)/,
       /WHERE financial_line\.accepted_quantity > 0/,
       /INSERT INTO public\.project_cost_events/,
       /INSERT INTO public\.supplier_payable_events/,
@@ -352,6 +418,52 @@ describe("supplier cost and payable migration contract", () => {
     ]);
     expect(receipt).toMatch(
       /exception block is a subtransaction[\s\S]*v1 receipt[\s\S]*command event[\s\S]*roll back/i,
+    );
+    expect(receipt).not.toMatch(
+      /line_total_amount \*\s*financial_line\.accepted_quantity \/\s*financial_line\.ordered_quantity/,
+    );
+  });
+
+  test("allocates live and historical facts from monotonic cumulative targets", () => {
+    const backfill = migration.slice(
+      migration.indexOf("-- Backfill financializable accepted receipt items"),
+      migration.indexOf(
+        "INSERT INTO public.supplier_payable_events",
+        migration.indexOf("-- Backfill financializable accepted receipt items"),
+      ),
+    );
+    contracts(backfill, [
+      /SUM\(receipt_item\.accepted_quantity\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW[\s\S]*AS cumulative_accepted_quantity/,
+      /targeted AS MATERIALIZED/,
+      /least\(\s*historical_line\.line_total_amount,\s*CASE[\s\S]*historical_line\.cumulative_accepted_quantity >=\s*historical_line\.ordered_quantity[\s\S]*historical_line\.line_total_amount[\s\S]*round\(\s*historical_line\.line_total_amount \*\s*historical_line\.cumulative_accepted_quantity \/\s*historical_line\.ordered_quantity,\s*2\s*\)[\s\S]*END\s*\)[\s\S]*AS cumulative_target_amount/,
+      /greatest\(\s*targeted\.cumulative_target_amount - COALESCE\(\s*lag\(targeted\.cumulative_target_amount\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING[\s\S]*\),\s*0\s*\),\s*0\s*\)[\s\S]*AS recognized_amount/,
+    ]);
+    expect(backfill).not.toMatch(
+      /line_total_amount \*\s*historical_line\.accepted_quantity \/\s*historical_line\.ordered_quantity/,
+    );
+
+    const lineTotalCents = 4;
+    const orderedQuantity = 6;
+    const cumulativeTargets = Array.from({ length: orderedQuantity }, (_, i) =>
+      Math.min(
+        lineTotalCents,
+        Math.round((lineTotalCents * (i + 1)) / orderedQuantity),
+      ),
+    );
+    const allocations = cumulativeTargets.map(
+      (target, i) => target - (cumulativeTargets[i - 1] ?? 0),
+    );
+    const unsafeFinalAllocation =
+      lineTotalCents -
+      Array.from({ length: orderedQuantity - 1 }, () =>
+        Math.round(lineTotalCents / orderedQuantity),
+      ).reduce((sum, amount) => sum + amount, 0);
+
+    expect(unsafeFinalAllocation).toBe(-1);
+    expect(allocations).toEqual([1, 0, 1, 1, 0, 1]);
+    expect(allocations.every((amount) => amount >= 0)).toBe(true);
+    expect(allocations.reduce((sum, amount) => sum + amount, 0)).toBe(
+      lineTotalCents,
     );
   });
 

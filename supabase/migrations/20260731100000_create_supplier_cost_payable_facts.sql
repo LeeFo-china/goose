@@ -20,7 +20,8 @@ UNIQUE (
 
 ALTER TABLE public.supplier_purchase_orders
 ADD COLUMN settlement_term_days_snapshot integer NULL,
-ADD COLUMN invoice_required_before_payment_snapshot boolean NULL;
+ADD COLUMN invoice_required_before_payment_snapshot boolean NULL,
+ADD COLUMN commercial_snapshot_source text NULL;
 
 ALTER TABLE public.supplier_purchase_orders
 ADD CONSTRAINT supplier_purchase_orders_settlement_snapshot_check
@@ -29,19 +30,36 @@ CHECK (
   OR settlement_term_days_snapshot BETWEEN 0 AND 3650
 );
 
+ALTER TABLE public.supplier_purchase_orders
+ADD CONSTRAINT supplier_purchase_orders_commercial_snapshot_source_check
+CHECK (
+  commercial_snapshot_source IS NULL
+  OR commercial_snapshot_source IN (
+    'contract_snapshot',
+    'relationship_default_snapshot',
+    'legacy_default_snapshot'
+  )
+);
+
 COMMENT ON COLUMN
   public.supplier_purchase_orders.settlement_term_days_snapshot
 IS
-  'New orders freeze conversion-time terms. Values on pre-20260731100000 '
-  'orders are migration-time reconstructions from the then-active contract '
-  'or tenant-supplier default and are not asserted as historical facts.';
+  'New orders freeze conversion-time terms. Pre-20260731100000 orders use '
+  'the relationship default available during migration and are not asserted '
+  'as historical contract facts.';
 
 COMMENT ON COLUMN
   public.supplier_purchase_orders.invoice_required_before_payment_snapshot
 IS
-  'New orders freeze conversion-time terms. Values on pre-20260731100000 '
-  'orders are migration-time reconstructions and are not asserted as '
-  'historical facts.';
+  'New orders freeze conversion-time terms. Pre-20260731100000 orders use '
+  'the relationship default available during migration and are not asserted '
+  'as historical contract facts.';
+
+COMMENT ON COLUMN
+  public.supplier_purchase_orders.commercial_snapshot_source
+IS
+  'Records whether commercial terms came from the applicable contract, the '
+  'relationship default, or a legacy migration-time default reconstruction.';
 
 CREATE FUNCTION public.populate_supplier_purchase_order_commercial_snapshot()
 RETURNS trigger
@@ -50,6 +68,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_contract_id uuid;
   v_contract_settlement_term_days integer;
   v_contract_invoice_required boolean;
   v_default_settlement_term_days integer;
@@ -79,9 +98,11 @@ BEGIN
   END IF;
 
   SELECT
+    contract.id,
     contract.settlement_term_days,
     contract.invoice_required_before_payment
   INTO
+    v_contract_id,
     v_contract_settlement_term_days,
     v_contract_invoice_required
   FROM public.supplier_contracts AS contract
@@ -101,6 +122,10 @@ BEGIN
     v_contract_invoice_required,
     v_default_invoice_required
   );
+  NEW.commercial_snapshot_source := CASE
+    WHEN v_contract_id IS NOT NULL THEN 'contract_snapshot'
+    ELSE 'relationship_default_snapshot'
+  END;
   RETURN NEW;
 END;
 $$;
@@ -114,6 +139,135 @@ BEFORE INSERT ON public.supplier_purchase_orders
 FOR EACH ROW
 EXECUTE FUNCTION
   public.populate_supplier_purchase_order_commercial_snapshot();
+
+CREATE OR REPLACE FUNCTION public.prevent_submitted_supplier_purchase_order_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.status <> 'draft'
+      OR NEW.version <> 1
+      OR NEW.submitted_by_employee_id IS NOT NULL
+      OR NEW.submitted_at IS NOT NULL
+      OR NEW.cancelled_by_employee_id IS NOT NULL
+      OR NEW.cancelled_at IS NOT NULL
+      OR NEW.cancel_reason IS NOT NULL
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    IF OLD.status <> 'draft' THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+    END IF;
+    RETURN OLD;
+  END IF;
+
+  IF NEW.id IS DISTINCT FROM OLD.id
+    OR NEW.created_by_employee_id IS DISTINCT FROM OLD.created_by_employee_id
+    OR NEW.created_at IS DISTINCT FROM OLD.created_at
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF OLD.status = 'cancelled' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF OLD.status = 'submitted' THEN
+    IF NEW.status <> 'cancelled'
+      OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+      OR NEW.project_id IS DISTINCT FROM OLD.project_id
+      OR NEW.tenant_supplier_id IS DISTINCT FROM OLD.tenant_supplier_id
+      OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id
+      OR NEW.order_no IS DISTINCT FROM OLD.order_no
+      OR NEW.currency IS DISTINCT FROM OLD.currency
+      OR NEW.expected_delivery_date IS DISTINCT FROM
+        OLD.expected_delivery_date
+      OR NEW.remark IS DISTINCT FROM OLD.remark
+      OR NEW.priced_at IS DISTINCT FROM OLD.priced_at
+      OR NEW.subtotal_amount IS DISTINCT FROM OLD.subtotal_amount
+      OR NEW.tax_amount IS DISTINCT FROM OLD.tax_amount
+      OR NEW.total_amount IS DISTINCT FROM OLD.total_amount
+      OR NEW.settlement_term_days_snapshot IS DISTINCT FROM
+        OLD.settlement_term_days_snapshot
+      OR NEW.invoice_required_before_payment_snapshot IS DISTINCT FROM
+        OLD.invoice_required_before_payment_snapshot
+      OR NEW.commercial_snapshot_source IS DISTINCT FROM
+        OLD.commercial_snapshot_source
+      OR NEW.submitted_by_employee_id IS DISTINCT FROM
+        OLD.submitted_by_employee_id
+      OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at
+      OR NEW.cancelled_by_employee_id IS NULL
+      OR NEW.cancelled_at IS NULL
+      OR NEW.cancel_reason IS NULL
+      OR btrim(NEW.cancel_reason) = ''
+      OR char_length(btrim(NEW.cancel_reason)) > 500
+      OR NEW.version <> OLD.version + 1
+      OR NEW.updated_by_employee_id IS DISTINCT FROM
+        NEW.cancelled_by_employee_id
+      OR NEW.updated_at < OLD.updated_at
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.status NOT IN ('draft', 'submitted')
+    OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+    OR NEW.project_id IS DISTINCT FROM OLD.project_id
+    OR NEW.tenant_supplier_id IS DISTINCT FROM OLD.tenant_supplier_id
+    OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id
+    OR NEW.order_no IS DISTINCT FROM OLD.order_no
+    OR NEW.currency IS DISTINCT FROM OLD.currency
+    OR NEW.cancelled_by_employee_id IS NOT NULL
+    OR NEW.cancelled_at IS NOT NULL
+    OR NEW.cancel_reason IS NOT NULL
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF NEW.status = 'draft' AND (
+    NEW.submitted_by_employee_id IS NOT NULL
+    OR NEW.submitted_at IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF NEW.status = 'submitted' AND (
+    NEW.submitted_by_employee_id IS NULL
+    OR NEW.submitted_at IS NULL
+    OR NEW.version <> OLD.version + 1
+    OR NEW.updated_by_employee_id IS DISTINCT FROM
+      NEW.submitted_by_employee_id
+    OR NEW.updated_at < OLD.updated_at
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
 
 ALTER TABLE public.supplier_purchase_order_items
 ADD COLUMN cost_category_id uuid NULL;
@@ -206,48 +360,25 @@ WHERE purchase_item.supplier_purchase_order_id =
   AND purchase_item.cost_category_id IS NULL;
 -- End reliable historical line categories
 
--- Historical commercial values are explicitly migration-time
--- reconstructions. The active contract at migration time wins; otherwise the
--- tenant-supplier default is used. No claim is made about prior contract state.
-WITH reconstructed AS MATERIALIZED (
-  SELECT
-    purchase_order.id,
-    COALESCE(
-      active_contract.settlement_term_days,
-      relationship.settlement_term_days
-    ) AS settlement_term_days,
-    COALESCE(
-      active_contract.invoice_required_before_payment,
-      relationship.invoice_required_before_payment
-    ) AS invoice_required_before_payment
-  FROM public.supplier_purchase_orders AS purchase_order
-  JOIN public.tenant_suppliers AS relationship
-    ON relationship.id = purchase_order.tenant_supplier_id
-    AND relationship.tenant_id = purchase_order.tenant_id
-    AND relationship.supplier_id = purchase_order.supplier_id
-  LEFT JOIN LATERAL (
-    SELECT
-      contract.settlement_term_days,
-      contract.invoice_required_before_payment
-    FROM public.supplier_contracts AS contract
-    WHERE contract.tenant_id = purchase_order.tenant_id
-      AND contract.tenant_supplier_id = purchase_order.tenant_supplier_id
-      AND contract.lifecycle_status = 'active'
-      AND CURRENT_DATE BETWEEN contract.valid_from AND contract.valid_until
-    ORDER BY contract.valid_until DESC, contract.id
-    LIMIT 1
-  ) AS active_contract ON true
-)
+-- Backfill historical commercial defaults
+-- Prior contract state cannot be reconstructed reliably. Preserve that
+-- uncertainty by using only the current relationship defaults and recording
+-- explicit provenance for the paginated operational diagnostic.
 UPDATE public.supplier_purchase_orders AS purchase_order
-SET settlement_term_days_snapshot = reconstructed.settlement_term_days,
+SET settlement_term_days_snapshot = relationship.settlement_term_days,
     invoice_required_before_payment_snapshot =
-      reconstructed.invoice_required_before_payment
-FROM reconstructed
-WHERE purchase_order.id = reconstructed.id
+      relationship.invoice_required_before_payment,
+    commercial_snapshot_source = 'legacy_default_snapshot'
+FROM public.tenant_suppliers AS relationship
+WHERE relationship.id = purchase_order.tenant_supplier_id
+  AND relationship.tenant_id = purchase_order.tenant_id
+  AND relationship.supplier_id = purchase_order.supplier_id
   AND (
     purchase_order.settlement_term_days_snapshot IS NULL
     OR purchase_order.invoice_required_before_payment_snapshot IS NULL
+    OR purchase_order.commercial_snapshot_source IS NULL
   );
+-- End historical commercial defaults
 
 ALTER TABLE public.supplier_purchase_order_items
 ENABLE TRIGGER supplier_purchase_order_items_require_draft;
@@ -291,7 +422,8 @@ $migration$;
 
 ALTER TABLE public.supplier_purchase_orders
 ALTER COLUMN settlement_term_days_snapshot SET NOT NULL,
-ALTER COLUMN invoice_required_before_payment_snapshot SET NOT NULL;
+ALTER COLUMN invoice_required_before_payment_snapshot SET NOT NULL,
+ALTER COLUMN commercial_snapshot_source SET NOT NULL;
 
 CREATE TABLE public.project_cost_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -977,19 +1109,23 @@ BEGIN
   allocated AS MATERIALIZED (
     SELECT
       financial_line.*,
-      CASE
-        WHEN financial_line.cumulative_accepted_quantity =
-          financial_line.ordered_quantity
-        THEN
-          financial_line.line_total_amount -
-            financial_line.previous_recognized_amount
-        ELSE round(
-          financial_line.line_total_amount *
-            financial_line.accepted_quantity /
-            financial_line.ordered_quantity,
-          2
-        )
-      END::numeric(18, 2) AS recognized_amount
+      greatest(
+        least(
+          financial_line.line_total_amount,
+          CASE
+            WHEN financial_line.cumulative_accepted_quantity >=
+              financial_line.ordered_quantity
+            THEN financial_line.line_total_amount
+            ELSE round(
+              financial_line.line_total_amount *
+                financial_line.cumulative_accepted_quantity /
+                financial_line.ordered_quantity,
+              2
+            )
+          END
+        ) - financial_line.previous_recognized_amount,
+        0
+      )::numeric(18, 2) AS recognized_amount
     FROM financial_line
     WHERE financial_line.accepted_quantity > 0
   )
@@ -1192,36 +1328,43 @@ WITH historical_line AS MATERIALIZED (
   WHERE receipt_item.accepted_quantity > 0
     AND purchase_item.cost_category_id IS NOT NULL
 ),
-allocated AS MATERIALIZED (
+targeted AS MATERIALIZED (
   SELECT
     historical_line.*,
-    CASE
-      WHEN historical_line.cumulative_accepted_quantity =
-        historical_line.ordered_quantity
-      THEN historical_line.line_total_amount - COALESCE(
-        SUM(round(
+    least(
+      historical_line.line_total_amount,
+      CASE
+        WHEN historical_line.cumulative_accepted_quantity >=
+          historical_line.ordered_quantity
+        THEN historical_line.line_total_amount
+        ELSE round(
           historical_line.line_total_amount *
-            historical_line.accepted_quantity /
+            historical_line.cumulative_accepted_quantity /
             historical_line.ordered_quantity,
           2
-        )) OVER (
-          PARTITION BY historical_line.purchase_order_item_id
+        )
+      END
+    )::numeric(18, 2) AS cumulative_target_amount
+  FROM historical_line
+),
+allocated AS MATERIALIZED (
+  SELECT
+    targeted.*,
+    greatest(
+      targeted.cumulative_target_amount - COALESCE(
+        lag(targeted.cumulative_target_amount) OVER (
+          PARTITION BY targeted.purchase_order_item_id
           ORDER BY
-            historical_line.received_at,
-            historical_line.receipt_id,
-            historical_line.receipt_item_id
+            targeted.received_at,
+            targeted.receipt_id,
+            targeted.receipt_item_id
           ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
         ),
         0
-      )
-      ELSE round(
-        historical_line.line_total_amount *
-          historical_line.accepted_quantity /
-          historical_line.ordered_quantity,
-        2
-      )
-    END::numeric(18, 2) AS recognized_amount
-  FROM historical_line
+      ),
+      0
+    )::numeric(18, 2) AS recognized_amount
+  FROM targeted
 )
 INSERT INTO public.project_cost_events (
   tenant_id,
@@ -1372,6 +1515,20 @@ BEGIN
 
   RETURN QUERY
   WITH gaps AS MATERIALIZED (
+    SELECT
+      'legacy_default_snapshot'::text AS gap_type,
+      purchase_order.id AS supplier_purchase_order_id,
+      NULL::uuid AS supplier_purchase_order_item_id,
+      NULL::uuid AS supplier_purchase_order_receipt_item_id,
+      'commercial_terms_use_migration_time_relationship_default'::text
+        AS reason
+    FROM public.supplier_purchase_orders AS purchase_order
+    WHERE purchase_order.tenant_id = p_tenant_id
+      AND purchase_order.commercial_snapshot_source =
+        'legacy_default_snapshot'
+
+    UNION ALL
+
     SELECT
       'unmapped_order_item'::text AS gap_type,
       purchase_item.supplier_purchase_order_id,
