@@ -1246,7 +1246,7 @@ git commit -m "feat(admin): 定义应付付款页面契约"
 - Create: `apps/admin/components/supplier-payables/payable-page.test.ts`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: 写页面 RED 测试**
+- [x] **Step 1: 写页面 RED 测试**
 
 检查源码和纯规则：
 
@@ -1268,7 +1268,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 - 跨范围多选自动清除或禁用，不提交非法组合。
 - 列表没有无限全量请求。
 
-- [ ] **Step 2: 实现页面骨架和筛选**
+- [x] **Step 2: 实现页面骨架和筛选**
 
 使用现有 Admin 组件：
 
@@ -1291,7 +1291,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 已付 | 可申请 | 状态 | 操作
 ```
 
-- [ ] **Step 3: 实现选择和创建申请入口**
+- [x] **Step 3: 实现选择和创建申请入口**
 
 多选时第一条锁定 `project_id + tenant_supplier_id + currency`，不匹配行禁用。创建
 按钮深链到：
@@ -1302,7 +1302,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 
 URL 最多承载 100 个 UUID，不使用 localStorage 保存金额。
 
-- [ ] **Step 4: 注册菜单和权限**
+- [x] **Step 4: 注册菜单和权限**
 
 在“采购供应”组加入：
 
@@ -1314,7 +1314,7 @@ URL 最多承载 100 个 UUID，不使用 localStorage 保存金额。
 }
 ```
 
-- [ ] **Step 5: 运行页面 GREEN**
+- [x] **Step 5: 运行页面 GREEN**
 
 Run:
 
@@ -1326,7 +1326,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交应付页面**
+- [x] **Step 6: 提交应付页面**
 
 ```bash
 git add 'apps/admin/app/(console)/supplier-payables' \
