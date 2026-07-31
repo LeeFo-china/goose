@@ -73,6 +73,14 @@ import {
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
 
+import type { ClaimVoucherDecision } from "../claim-voucher-policy";
+import {
+  claimResolvedVoucher,
+  decideResolvedClaimVoucher,
+  resolveClaimVoucher,
+  type ResolvedClaimVoucher,
+} from "../claim-voucher-resolver";
+
 import {
   buildCampaignRewardTitle,
   CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS,
@@ -277,73 +285,129 @@ export async function getCampaignMetaForEmployeeClaim(this: any, campaignId: str
   throw Errors.badRequest("活动实例不存在");
 }
 
-export async function getVoucherMetaForEmployeeClaim(this: any, voucherToken: string) {
-  const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
+const claimVoucherRepositories = {
+  share: customerProjectLogShareCampaignRepository,
+  appointment: customerAppointmentRewardCampaignRepository,
+};
+
+async function resolveEmployeeClaimVoucher(
+  service: any,
+  voucherToken: string,
+): Promise<ResolvedClaimVoucher> {
+  const resolved = await resolveClaimVoucher(
     normalizeVoucherToken(voucherToken),
+    claimVoucherRepositories,
   );
-  if (!campaign) {
+  if (!resolved) {
     throw Errors.badRequest("领取凭证不存在");
   }
 
-  const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
+  if (resolved.campaignType === "share_assist") {
+    return {
+      campaignType: "share_assist",
+      instance: await service.ensureCampaignPhase2Metadata(resolved.instance),
+    };
+  }
+
   return {
-    id: finalCampaign.id,
-    project_id: finalCampaign.project_id,
-    status: finalCampaign.status,
-    reward_claim_voucher_token: finalCampaign.reward_claim_voucher_token,
+    campaignType: "appointment_reward",
+    instance: await service.ensureAppointmentRewardMetadata(resolved.instance),
+  };
+}
+
+function assertClaimVoucherCanClaim(decision: ClaimVoucherDecision): void {
+  if (decision.canClaim) {
+    return;
+  }
+
+  const messageByReason = {
+    already_claimed: "当前活动奖励已领取",
+    voucher_expired: "领取凭证已过期",
+    campaign_not_achieved: "当前活动未达到领奖状态",
+    campaign_closed: "当前活动已关闭",
+    voucher_invalid: "领取凭证不存在",
+  } as const;
+  throw Errors.badRequest(
+    decision.blockReason
+      ? messageByReason[decision.blockReason]
+      : "领取凭证不可用",
+  );
+}
+
+export async function getVoucherMetaForEmployeeClaim(this: any, voucherToken: string) {
+  const resolved = await resolveEmployeeClaimVoucher(this, voucherToken);
+  return {
+    id: resolved.instance.id,
+    project_id: resolved.instance.project_id,
+    status: resolved.instance.status,
+    campaign_type: resolved.campaignType,
+    reward_claim_voucher_token: resolved.instance.reward_claim_voucher_token,
   };
 }
 
 export async function getEmployeeVoucherDetail(this: any, voucherToken: string) {
-  const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
-    normalizeVoucherToken(voucherToken),
-  );
-  if (!campaign) {
-    throw Errors.badRequest("领取凭证不存在");
+  const resolved = await resolveEmployeeClaimVoucher(this, voucherToken);
+  const decision = decideResolvedClaimVoucher(resolved);
+
+  if (resolved.campaignType === "share_assist") {
+    const campaign = resolved.instance;
+    const [detail, owner] = await Promise.all([
+      this.buildCampaignPublicDetail(campaign.share_token),
+      this.getCustomerById(campaign.customer_id),
+    ]);
+
+    return {
+      voucher_token: campaign.reward_claim_voucher_token,
+      campaign_id: campaign.id,
+      instance_id: campaign.id,
+      marketing_campaign_id: campaign.campaign_id,
+      campaign_type: "share_assist" as const,
+      project_id: campaign.project_id,
+      status: campaign.status,
+      reward_claim_status: campaign.reward_claim_status,
+      claim_code: campaign.reward_claim_code,
+      customer_name: maskDisplayName(owner.name),
+      project_name: detail.project_name,
+      reward_title: getCampaignRewardTitle(campaign),
+      reward_claim_channel: campaign.reward_claim_channel,
+      reward_claim_instruction: campaign.reward_claim_instruction,
+      can_claim: decision.canClaim,
+      claim_block_reason: decision.blockReason,
+      claimed_at: campaign.reward_claimed_at,
+      expires_at: campaign.reward_claim_voucher_expires_at,
+      voucher_status: decision.voucherStatus,
+    };
   }
 
-  const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
-  const detail = await this.buildCampaignPublicDetail(finalCampaign.share_token);
-  const owner = await this.getCustomerById(finalCampaign.customer_id);
-  const voucher = this.buildRewardClaimVoucherPayload(finalCampaign);
-  const voucherStatus = voucher?.status || "invalid";
-
-  let canClaim = true;
-  let claimBlockReason: "already_claimed" | "voucher_expired" | "campaign_not_achieved" | "campaign_closed" | "voucher_invalid" | null = null;
-
-  if (!voucher) {
-    canClaim = false;
-    claimBlockReason = "voucher_invalid";
-  } else if (voucher.status === "claimed") {
-    canClaim = false;
-    claimBlockReason = "already_claimed";
-  } else if (voucher.status === "expired") {
-    canClaim = false;
-    claimBlockReason = "voucher_expired";
-  } else if (!this.isCampaignRewardClaimable(finalCampaign)) {
-    canClaim = false;
-    claimBlockReason = finalCampaign.status === "closed"
-      ? "campaign_closed"
-      : "campaign_not_achieved";
-  }
+  const instance = resolved.instance;
+  const [campaign, project, owner] = await Promise.all([
+    this.getMarketingCampaignOrThrow(instance.campaign_id),
+    this.getOwnedProjectById(instance.project_id),
+    this.getCustomerById(instance.customer_id),
+  ]);
 
   return {
-    voucher_token: finalCampaign.reward_claim_voucher_token,
-    campaign_id: finalCampaign.id,
-    project_id: finalCampaign.project_id,
-    status: finalCampaign.status,
-    reward_claim_status: finalCampaign.reward_claim_status,
-    claim_code: finalCampaign.reward_claim_code,
+    voucher_token: instance.reward_claim_voucher_token,
+    campaign_id: instance.id,
+    instance_id: instance.id,
+    marketing_campaign_id: instance.campaign_id,
+    campaign_type: "appointment_reward" as const,
+    project_id: instance.project_id,
+    status: instance.status,
+    reward_claim_status: instance.reward_claim_status,
+    claim_code: instance.reward_claim_code,
     customer_name: maskDisplayName(owner.name),
-    project_name: detail.project_name,
-    reward_title: getCampaignRewardTitle(finalCampaign),
-    reward_claim_channel: finalCampaign.reward_claim_channel,
-    reward_claim_instruction: finalCampaign.reward_claim_instruction,
-    can_claim: canClaim,
-    claim_block_reason: claimBlockReason,
-    claimed_at: finalCampaign.reward_claimed_at,
-    expires_at: voucher?.expires_at || null,
-    voucher_status: voucherStatus,
+    project_name: project.name,
+    reward_title: getAppointmentRewardTitle(campaign.reward_title),
+    reward_claim_channel: instance.reward_claim_channel || "store",
+    reward_claim_instruction: getAppointmentRewardClaimInstruction(
+      campaign.reward_claim_instruction,
+    ),
+    can_claim: decision.canClaim,
+    claim_block_reason: decision.blockReason,
+    claimed_at: instance.reward_claimed_at,
+    expires_at: null,
+    voucher_status: decision.voucherStatus,
   };
 }
 
@@ -393,45 +457,26 @@ export async function claimCampaignRewardByVoucher(this: any,
   employeeId: string,
   input: ClaimCustomerProjectLogShareVoucherInput,
 ) {
-  const campaign = await customerProjectLogShareCampaignRepository.findByVoucherToken(
-    normalizeVoucherToken(voucherToken),
-  );
-  if (!campaign) {
-    throw Errors.badRequest("领取凭证不存在");
-  }
+  const resolved = await resolveEmployeeClaimVoucher(this, voucherToken);
+  assertClaimVoucherCanClaim(decideResolvedClaimVoucher(resolved));
 
-  const finalCampaign = await this.ensureCampaignPhase2Metadata(campaign);
-  const voucher = this.buildRewardClaimVoucherPayload(finalCampaign);
-  if (!voucher || !finalCampaign.reward_claim_voucher_token) {
-    throw Errors.badRequest("领取凭证不存在");
+  const updatedCampaign = await claimResolvedVoucher(resolved, {
+    employeeId,
+    channel: input.channel,
+    claimedAt: new Date().toISOString(),
+  }, claimVoucherRepositories);
+  if (!updatedCampaign) {
+    const latest = await resolveEmployeeClaimVoucher(this, voucherToken);
+    const latestDecision = decideResolvedClaimVoucher(latest);
+    assertClaimVoucherCanClaim(latestDecision);
+    throw Errors.badRequest("领取凭证状态已变更，请刷新后重试");
   }
-
-  if (voucher.status === "claimed" || finalCampaign.reward_claim_status === "claimed") {
-    throw Errors.badRequest("当前活动奖励已领取");
-  }
-
-  if (voucher.status === "expired") {
-    throw Errors.badRequest("领取凭证已过期");
-  }
-
-  if (!this.isCampaignRewardClaimable(finalCampaign)) {
-    throw Errors.badRequest(
-      finalCampaign.status === "closed" ? "当前活动已关闭" : "当前活动未达到领奖状态",
-    );
-  }
-
-  const updatedCampaign = await customerProjectLogShareCampaignRepository.updateRewardMetadata({
-    id: finalCampaign.id,
-    status: "reward_claimed",
-    reward_claim_status: "claimed",
-    reward_claim_channel: input.channel,
-    reward_claimed_at: new Date().toISOString(),
-    reward_claimed_by_employee_id: employeeId,
-  });
 
   return {
-    voucher_token: finalCampaign.reward_claim_voucher_token,
+    voucher_token: resolved.instance.reward_claim_voucher_token,
     campaign_id: updatedCampaign.id,
+    instance_id: updatedCampaign.id,
+    campaign_type: resolved.campaignType,
     status: updatedCampaign.status,
     reward_claim_status: updatedCampaign.reward_claim_status,
     reward_claimed_at: updatedCampaign.reward_claimed_at,
