@@ -11,6 +11,7 @@ import {
 import { StatusAlert } from "@/components/admin/status-alert";
 import type { FinanceProjectOperatingSummary } from "@/components/finance/finance-requests";
 import {
+  buildDisplayedProjectCostMetric,
   calculateDisplayedProjectCost,
 } from "@/components/finance/finance-project-summary-types";
 import {
@@ -80,6 +81,7 @@ export function ProjectFinanceOperatingSummaryPanel({
   const budgetUsageRatio = summary.budget_configured
     ? normalizeRatio(summary.budget_usage_ratio)
     : null;
+  const projectCostMetric = buildDisplayedProjectCostMetric(summary);
   const flowData = buildMoneyFlowData(summary);
   const statusItems = buildStatusItems(summary, projectId, overdueText);
 
@@ -140,11 +142,13 @@ export function ProjectFinanceOperatingSummaryPanel({
               title="预算执行率"
               progress={budgetUsageRatio}
               loading={loading}
-              primaryLabel="已付支出"
-              primaryValue={formatFinanceMoney(summary.expense_paid_amount)}
+              primaryLabel={projectCostMetric.label}
+              primaryValue={formatFinanceMoney(projectCostMetric.value)}
               secondaryLabel="预算剩余"
               secondaryValue={budgetText(summary, "budget_remaining_amount")}
-              emptyText={summary.budget_configured ? "暂无支出" : "未配置预算"}
+              emptyText={summary.budget_configured
+                ? projectCostMetric.emptyText
+                : "未配置预算"}
               overLimit={Boolean(
                 summary.budget_configured
                 && budgetUsageRatio !== null

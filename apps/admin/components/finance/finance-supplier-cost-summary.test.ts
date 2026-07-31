@@ -27,6 +27,35 @@ describe("项目供应商成本摘要", () => {
     })).toBe(0);
   });
 
+  test("预算进度主金额使用项目成本且不受供应商现金变化影响", async () => {
+    const types = await import("./finance-project-summary-types");
+    const buildDisplayedProjectCostMetric = Reflect.get(
+      types,
+      "buildDisplayedProjectCostMetric",
+    );
+    const baseSummary = {
+      expense_paid_amount: 100,
+      supplier_cost_amount: 40,
+      supplier_cash_paid_amount: 20,
+    };
+    const changedCashSummary = {
+      ...baseSummary,
+      supplier_cash_paid_amount: 999,
+    };
+
+    expect(typeof buildDisplayedProjectCostMetric).toBe("function");
+    expect(buildDisplayedProjectCostMetric(baseSummary)).toEqual({
+      label: "已发生项目成本",
+      value: 140,
+      emptyText: "暂无成本",
+    });
+    expect(buildDisplayedProjectCostMetric(changedCashSummary)).toEqual({
+      label: "已发生项目成本",
+      value: 140,
+      emptyText: "暂无成本",
+    });
+  });
+
   test("DTO 和空汇总要求三个供应商金额字段", () => {
     const types = readSource("./finance-project-summary-types.ts");
 

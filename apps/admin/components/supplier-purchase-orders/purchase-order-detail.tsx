@@ -54,6 +54,12 @@ import {
   PurchaseOrderFinancialSummary,
 } from "./purchase-order-financial-summary";
 import {
+  failedFinancialSummaryState,
+  loadedFinancialSummaryState,
+  loadingFinancialSummaryState,
+  unloadedFinancialSummaryState,
+} from "./purchase-order-financial-summary-state";
+import {
   PurchaseOrderFulfillmentPanel,
 } from "./purchase-order-fulfillment-panel";
 import {
@@ -71,7 +77,6 @@ import {
 import type {
   PurchaseOrderItem,
   PurchaseOrderWithReferences,
-  SupplierPurchaseOrderFinancialSummary,
 } from "./purchase-order-types";
 
 export function PurchaseOrderDetail({
@@ -98,12 +103,9 @@ export function PurchaseOrderDetail({
   const [commandAttempt, setCommandAttempt] =
     useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [financialSummary, setFinancialSummary] =
-    useState<SupplierPurchaseOrderFinancialSummary | null>(null);
-  const [financialSummaryLoading, setFinancialSummaryLoading] =
-    useState(false);
-  const [financialSummaryError, setFinancialSummaryError] =
-    useState<string | null>(null);
+  const [financialSummaryState, setFinancialSummaryState] = useState(
+    unloadedFinancialSummaryState,
+  );
   const [fulfillmentState, setFulfillmentState] =
     useState<FulfillmentLoadState>(unloadedFulfillmentState);
   const requestGuard = useRef(createLatestRequestGuard());
@@ -112,20 +114,18 @@ export function PurchaseOrderDetail({
   const reloadFinancialSummary = useCallback(async () => {
     const isLatest = financialSummaryRequestGuard.current.start();
     if (!order || !canViewPurchaseOrders) return;
-    setFinancialSummaryLoading(true);
-    setFinancialSummaryError(null);
+    setFinancialSummaryState(loadingFinancialSummaryState);
     try {
       const summary = await loadPurchaseOrderFinancialSummary(order.id);
-      if (isLatest()) setFinancialSummary(summary);
+      if (isLatest()) {
+        setFinancialSummaryState(loadedFinancialSummaryState(summary));
+      }
     } catch (caught) {
       if (isLatest()) {
-        setFinancialSummaryError(errorMessage(
-          caught,
-          "采购单财务摘要加载失败",
+        setFinancialSummaryState(failedFinancialSummaryState(
+          errorMessage(caught, "采购单财务摘要加载失败"),
         ));
       }
-    } finally {
-      if (isLatest()) setFinancialSummaryLoading(false);
     }
   }, [canViewPurchaseOrders, order]);
 
@@ -159,9 +159,7 @@ export function PurchaseOrderDetail({
     financialSummaryRequestGuard.current.invalidate();
     setCurrent(order);
     setItems([]);
-    setFinancialSummary(null);
-    setFinancialSummaryLoading(false);
-    setFinancialSummaryError(null);
+    setFinancialSummaryState(unloadedFinancialSummaryState);
     setHasLoadedDetail(false);
     setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
@@ -338,9 +336,9 @@ export function PurchaseOrderDetail({
             </div>
             {canViewPurchaseOrders ? (
               <PurchaseOrderFinancialSummary
-                summary={financialSummary}
-                isLoading={financialSummaryLoading}
-                error={financialSummaryError}
+                summary={financialSummaryState.summary}
+                isLoading={financialSummaryState.isLoading}
+                error={financialSummaryState.error}
               />
             ) : null}
             <PurchaseOrderFulfillmentPanel

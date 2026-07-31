@@ -1,6 +1,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { afterEach, describe, expect, test } from "bun:test";
 
+import {
+  failedFinancialSummaryState,
+} from "./purchase-order-financial-summary-state";
+import { createLatestRequestGuard } from "./purchase-order-fulfillment-ui-state";
+
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {
@@ -83,7 +88,9 @@ describe("采购单财务摘要", () => {
     expect(detail).toContain("canViewPurchaseOrders");
     expect(detail).toContain("loadPurchaseOrderFinancialSummary");
     expect(detail).toContain("financialSummaryRequestGuard");
-    expect(detail).toContain("setFinancialSummary(null)");
+    expect(detail).toContain(
+      "setFinancialSummaryState(unloadedFinancialSummaryState)",
+    );
     expect(detail).toContain("<PurchaseOrderFinancialSummary");
     expect(detail).toMatch(
       /canViewPurchaseOrders\s*\?\s*\(\s*<PurchaseOrderFinancialSummary/,
@@ -91,5 +98,37 @@ describe("采购单财务摘要", () => {
     expect(workspace).toContain(
       "canViewPurchaseOrders={canViewPurchaseOrders}",
     );
+  });
+
+  test("旧采购单摘要请求不能覆盖最新采购单", () => {
+    const guard = createLatestRequestGuard();
+    const isFirstLatest = guard.start();
+    const isSecondLatest = guard.start();
+    let visibleOrderId: string | null = null;
+
+    if (isFirstLatest()) visibleOrderId = "order-a";
+    if (isSecondLatest()) visibleOrderId = "order-b";
+
+    expect(visibleOrderId).toBe("order-b");
+  });
+
+  test("财务摘要失败状态不携带或覆盖基础详情错误", () => {
+    const baseDetailState = {
+      orderId: "order-a",
+      error: null,
+    };
+
+    const financialState = failedFinancialSummaryState("摘要加载失败");
+
+    expect(financialState).toEqual({
+      summary: null,
+      isLoading: false,
+      error: "摘要加载失败",
+    });
+    expect(baseDetailState).toEqual({
+      orderId: "order-a",
+      error: null,
+    });
+    expect(financialState).not.toHaveProperty("orderId");
   });
 });

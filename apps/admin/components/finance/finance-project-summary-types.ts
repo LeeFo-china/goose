@@ -205,6 +205,17 @@ export function calculateDisplayedProjectCost(summary: Pick<
     finiteMoney(summary.supplier_cost_amount);
 }
 
+export function buildDisplayedProjectCostMetric(summary: Pick<
+  FinanceProjectOperatingSummary,
+  "expense_paid_amount" | "supplier_cost_amount"
+>) {
+  return {
+    label: "已发生项目成本" as const,
+    value: calculateDisplayedProjectCost(summary),
+    emptyText: "暂无成本" as const,
+  };
+}
+
 function finiteMoney(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }
