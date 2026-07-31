@@ -25,7 +25,7 @@ import {
   assertRequestStateSnapshotUnchanged,
   readInvoiceGateSnapshot,
   readProjectCostSnapshot,
-  readRequestStateSnapshot,
+  snapshotRequestAccountingState,
 } from "./supplier-payment-smoke-assertions";
 
 export {
@@ -153,7 +153,7 @@ async function assertSelfReviewRejected(
   state: SupplierPaymentScenarioState,
 ): Promise<void> {
   assert(state.activeRequestId, "active request is required");
-  const before = await readRequestStateSnapshot(
+  const before = await snapshotRequestAccountingState(
     sql,
     state.fixture,
     state.activeRequestId,
@@ -184,7 +184,7 @@ async function assertSelfReviewRejected(
       reject.error_code === "SUPPLIER_PAYMENT_SELF_REVIEW",
     "submitter reject must match frozen self_review envelope",
   );
-  const after = await readRequestStateSnapshot(
+  const after = await snapshotRequestAccountingState(
     sql,
     state.fixture,
     state.activeRequestId,

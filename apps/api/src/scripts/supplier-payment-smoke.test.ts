@@ -349,7 +349,13 @@ describe("supplier payment database smoke helpers", () => {
       },
       allocations: [{
         id: "allocation-a",
+        tenant_id: "tenant-a",
+        payment_request_id: "request-a",
+        payable_event_id: "payable-a",
+        requested_amount: "30.00",
         paid_amount: "0.00",
+        created_at: "2026-07-31T00:00:00.000Z",
+        updated_at: "2026-07-31T00:00:00.000Z",
       }],
       payment_count: 0,
       payment_allocation_count: 0,
@@ -371,11 +377,49 @@ describe("supplier payment database smoke helpers", () => {
       {
         ...structuredClone(snapshot),
         allocations: [{
-          id: "allocation-a",
+          ...snapshot.allocations[0]!,
           paid_amount: "1.00",
         }],
       },
     )).toThrow("invoice gate");
+    for (const changedAllocation of [
+      {
+        ...snapshot.allocations[0]!,
+        requested_amount: "29.00",
+      },
+      {
+        ...snapshot.allocations[0]!,
+        payable_event_id: "payable-b",
+      },
+      {
+        ...snapshot.allocations[0]!,
+        updated_at: "2026-07-31T00:00:01.000Z",
+      },
+    ]) {
+      expect(() => paymentFlowFixes.assertInvoiceGateSnapshotUnchanged(
+        snapshot,
+        {
+          ...structuredClone(snapshot),
+          allocations: [changedAllocation],
+        },
+      )).toThrow("invoice gate");
+    }
+  });
+
+  test("snapshots every allocation column in stable tenant-request order", async () => {
+    const source = await Bun.file(new URL(
+      "./supplier-payment-smoke-assertions.ts",
+      import.meta.url,
+    )).text();
+    expect(source).toContain("to_jsonb(allocation.*)");
+    expect(source).toContain("jsonb_agg(");
+    expect(source).toContain("order by allocation.id");
+    expect(source).toContain(
+      "allocation.tenant_id = ${fixture.tenant_id}::uuid",
+    );
+    expect(source).toContain(
+      "allocation.payment_request_id = ${requestId}::uuid",
+    );
   });
 
   test("keeps whole-project cost totals unchanged after supplier cash", () => {

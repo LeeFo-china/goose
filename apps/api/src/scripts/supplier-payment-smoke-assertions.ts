@@ -7,10 +7,7 @@ import { paymentSmokeAssert as assert } from
 
 export type RequestStateSnapshot = {
   request: Record<string, unknown>;
-  allocations: Array<{
-    id: string;
-    paid_amount: string;
-  }>;
+  allocations: Array<Record<string, unknown>>;
 };
 
 export type InvoiceGateSnapshot = RequestStateSnapshot & {
@@ -68,26 +65,28 @@ export function assertProjectCostSnapshotUnchanged(
   return true;
 }
 
-export async function readRequestStateSnapshot(
+export async function snapshotRequestAccountingState(
   sql: SupplierPaymentSmokeSql,
   fixture: SupplierPaymentSmokeFixture,
   requestId: string,
 ): Promise<RequestStateSnapshot> {
-  const requests = await sql<{ request: Record<string, unknown> }[]>`
-    select to_jsonb(request.*) as request
+  const rows = await sql<RequestStateSnapshot[]>`
+    select to_jsonb(request.*) as request,
+      coalesce((
+        select jsonb_agg(
+          to_jsonb(allocation.*)
+          order by allocation.id
+        )
+        from public.supplier_payment_request_allocations as allocation
+        where allocation.tenant_id = ${fixture.tenant_id}::uuid
+          and allocation.payment_request_id = ${requestId}::uuid
+      ), '[]'::jsonb) as allocations
     from public.supplier_payment_requests as request
     where request.tenant_id = ${fixture.tenant_id}::uuid
       and request.id = ${requestId}::uuid;
   `;
-  assert(requests.length === 1 && requests[0], "request snapshot is required");
-  const allocations = await sql<RequestStateSnapshot["allocations"]>`
-    select allocation.id, allocation.paid_amount::text
-    from public.supplier_payment_request_allocations as allocation
-    where allocation.tenant_id = ${fixture.tenant_id}::uuid
-      and allocation.payment_request_id = ${requestId}::uuid
-    order by allocation.id;
-  `;
-  return { request: requests[0]!.request, allocations };
+  assert(rows.length === 1 && rows[0], "request snapshot is required");
+  return rows[0]!;
 }
 
 export async function readInvoiceGateSnapshot(
@@ -96,7 +95,11 @@ export async function readInvoiceGateSnapshot(
   requestId: string,
   paymentId: string,
 ): Promise<InvoiceGateSnapshot> {
-  const state = await readRequestStateSnapshot(sql, fixture, requestId);
+  const state = await snapshotRequestAccountingState(
+    sql,
+    fixture,
+    requestId,
+  );
   const rows = await sql<Array<{
     payment_count: number;
     payment_allocation_count: number;
