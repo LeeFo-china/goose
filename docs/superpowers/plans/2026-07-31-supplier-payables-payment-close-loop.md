@@ -1351,7 +1351,7 @@ git commit -m "feat(admin): 实现供应商应付工作区"
 - Create: `apps/admin/components/supplier-payment-requests/payment-dialog.test.ts`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: 写付款申请页面 RED 测试**
+- [x] **Step 1: 写付款申请页面 RED 测试**
 
 断言权限：
 
@@ -1372,7 +1372,7 @@ expect(pageSource).toContain(
 
 继续断言列表分页、深链 `payableIds` 校验、状态动作、命令后刷新和并发冲突刷新。
 
-- [ ] **Step 2: 实现列表和草稿编辑器**
+- [x] **Step 2: 实现列表和草稿编辑器**
 
 编辑器字段：
 
@@ -1388,12 +1388,12 @@ expect(pageSource).toContain(
 从深链读取应付 ID 后重新请求服务端事实；客户端不信任 URL 金额。保存草稿使用
 稳定 client UUID 和 `expected_version`。
 
-- [ ] **Step 3: 实现提交、审批、取消和关闭**
+- [x] **Step 3: 实现提交、审批、取消和关闭**
 
 所有对话框显示申请号、项目、供应商、金额和状态版本。驳回、取消、关闭要求原因。
 命令 pending 时禁用同一资源全部动作。
 
-- [ ] **Step 4: 写付款对话框 RED 测试**
+- [x] **Step 4: 写付款对话框 RED 测试**
 
 覆盖：
 
@@ -1426,12 +1426,12 @@ expect(buildPaymentPayload({
 - `other` 要求备注。
 - 发票阻断显示且不提供绕过参数。
 
-- [ ] **Step 5: 实现付款与凭证**
+- [x] **Step 5: 实现付款与凭证**
 
 复用 `apps/admin/components/expenses/expense-mutation-shared.ts` 的上传限制和既有
 上传 client，不复制存储实现。付款命令成功后显示付款号并刷新全部相关资源。
 
-- [ ] **Step 6: 注册菜单**
+- [x] **Step 6: 注册菜单**
 
 ```ts
 {
@@ -1441,7 +1441,7 @@ expect(buildPaymentPayload({
 }
 ```
 
-- [ ] **Step 7: 运行付款申请 GREEN**
+- [x] **Step 7: 运行付款申请 GREEN**
 
 Run:
 
@@ -1454,7 +1454,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交付款申请页面**
+- [x] **Step 8: 提交付款申请页面**
 
 ```bash
 git add 'apps/admin/app/(console)/supplier-payment-requests' \
