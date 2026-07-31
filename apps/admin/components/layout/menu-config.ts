@@ -205,6 +205,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: CircleDollarSign,
         permission: "supplier.payable.view",
       },
+      {
+        href: "/supplier-payment-requests",
+        label: "供应商付款申请",
+        icon: WalletCards,
+        permission: "supplier.payment-request.view",
+      },
     ],
   },
   {

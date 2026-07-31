@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  listSupplierPayablesByIds,
   listSupplierPayableFilterOptions,
   listSupplierPayables,
 } from "./payable-api";
@@ -12,6 +13,19 @@ afterEach(() => {
 });
 
 describe("供应商应付 API 契约", () => {
+  test("批量事实查询只发送受限服务端应付 ID", async () => {
+    const calls = installSuccessFetch([]);
+    const ids = [
+      "00000000-0000-4000-8000-000000000001",
+      "00000000-0000-4000-8000-000000000002",
+    ];
+
+    await listSupplierPayablesByIds(ids);
+
+    const url = new URL(String(calls[0]?.input), "http://admin.local");
+    expect(url.pathname).toBe("/api/backend/supplier-payables/batch");
+    expect(url.searchParams.get("ids")).toBe(ids.join(","));
+  });
   test("列表使用受限分页和后端 snake_case 筛选", async () => {
     const calls = installSuccessFetch();
 
@@ -69,7 +83,7 @@ describe("供应商应付 API 契约", () => {
 
 type FetchCall = { input: RequestInfo | URL; init?: RequestInit };
 
-function installSuccessFetch() {
+function installSuccessFetch(data?: unknown) {
   const calls: FetchCall[] = [];
   globalThis.fetch = (async (
     input: RequestInfo | URL,
@@ -78,7 +92,7 @@ function installSuccessFetch() {
     calls.push({ input, init });
     return new Response(JSON.stringify({
       success: true,
-      data: {
+      data: data ?? {
         list: [],
         pagination: {
           page: 1,

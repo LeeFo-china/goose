@@ -10,9 +10,10 @@ const emptyPage = {
 };
 const list = mock(async () => emptyPage);
 const listFilterOptions = mock(async () => emptyPage);
+const batch = mock(async () => []);
 
 mock.module("@/services/supplier-payables", () => ({
-  supplierPayablesService: { list, listFilterOptions },
+  supplierPayablesService: { list, listFilterOptions, batch },
 }));
 
 const auth = {
@@ -35,6 +36,7 @@ describe("SupplierPayablesController", () => {
   beforeEach(() => {
     list.mockClear();
     listFilterOptions.mockClear();
+    batch.mockClear();
   });
 
   test("registers payable list and filter option routes once", async () => {
@@ -45,8 +47,22 @@ describe("SupplierPayablesController", () => {
     } as never);
     expect(routes).toEqual([
       { method: "GET", path: "/supplier-payables" },
+      { method: "GET", path: "/supplier-payables/batch" },
       { method: "GET", path: "/supplier-payable-filter-options" },
     ]);
+  });
+
+  test("parses a strict bounded payable ID batch", async () => {
+    const value = await controller();
+    const otherId = "85000000-0000-4000-8000-000000000005";
+    const response = await value.batchPayables({
+      query: { ids: `${PROJECT_ID}, ${otherId}` },
+    } as never);
+
+    expect(batch).toHaveBeenCalledWith(auth, {
+      ids: [PROJECT_ID, otherId],
+    });
+    expect(response).toEqual({ data: [], message: "success" });
   });
 
   test("parses paginated minimal filter options", async () => {

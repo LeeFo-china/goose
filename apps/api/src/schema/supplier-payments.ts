@@ -79,6 +79,29 @@ export const SupplierPayableFilterOptionQuerySchema =
       .optional(),
   }).strict();
 
+const SupplierPayableBatchIdsSchema = z.array(
+  uuid("无效的应付事件 ID").transform((value) => value.toLowerCase()),
+)
+  .min(1, "至少需要一个应付事件 ID")
+  .max(100, "应付事件 ID 不能超过 100 个")
+  .superRefine((ids, context) => {
+    if (new Set(ids).size !== ids.length) {
+      context.addIssue({
+        code: "custom",
+        path: [],
+        message: "应付事件 ID 不能重复",
+      });
+    }
+  });
+
+export const SupplierPayableBatchQuerySchema = z.object({
+  ids: z.string().trim()
+    .min(1, "应付事件 ID 不能为空")
+    .max(4096, "应付事件 ID 参数过长")
+    .transform((value) => value.split(",").map((id) => id.trim()))
+    .pipe(SupplierPayableBatchIdsSchema),
+}).strict();
+
 export const SupplierPaymentRequestListQuerySchema =
   PaginationQuerySchema.extend({
     project_id: uuid("无效的项目 ID").optional(),
@@ -250,6 +273,8 @@ export type SupplierPayableListQuery =
   z.infer<typeof SupplierPayableListQuerySchema>;
 export type SupplierPayableFilterOptionQuery =
   z.infer<typeof SupplierPayableFilterOptionQuerySchema>;
+export type SupplierPayableBatchQuery =
+  z.infer<typeof SupplierPayableBatchQuerySchema>;
 export type SupplierPaymentRequestListQuery =
   z.infer<typeof SupplierPaymentRequestListQuerySchema>;
 export type SupplierPaymentRequestParam =

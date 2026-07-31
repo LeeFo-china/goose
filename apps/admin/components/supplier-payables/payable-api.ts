@@ -1,6 +1,7 @@
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { availableToRequestAmount } from "./payable-rules";
+import { normalizeSupplierPayableIds } from "./payable-id-batch";
 import type {
   SupplierPayableFilterOptionPage,
   SupplierPayableFilterOptionType,
@@ -15,6 +16,21 @@ type SupplierPayableFactsPage = Omit<SupplierPayablePage, "list"> & {
 
 const PAYABLE_PATH = "/supplier-payables";
 const MAX_PAGE_SIZE = 100;
+
+export async function listSupplierPayablesByIds(
+  payableIds: readonly string[],
+): Promise<SupplierPayablePage["list"]> {
+  const ids = normalizeSupplierPayableIds(payableIds);
+  const query = new URLSearchParams({ ids: ids.join(",") });
+  const facts = await requestBackendJson<SupplierPayableFacts[]>(
+    `${PAYABLE_PATH}/batch?${query}`,
+    { fallbackMessage: "所选供应商应付重新校验失败" },
+  );
+  return facts.map((item) => ({
+    ...item,
+    available_to_request_amount: availableToRequestAmount(item),
+  }));
+}
 
 export async function listSupplierPayables(
   input: SupplierPayableListQuery,

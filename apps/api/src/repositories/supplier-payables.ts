@@ -32,6 +32,11 @@ export type SupplierPayableFilterOptionInput = PageInput & {
   type: SupplierPayableFilterOptionQuery["type"];
   keyword?: string;
 };
+export type SupplierPayableBatchInput = {
+  tenant_id: string;
+  visible_project_ids: string[] | null;
+  ids: string[];
+};
 
 const uuid = z.uuid();
 const dateTime = z.iso.datetime({ offset: true });
@@ -125,6 +130,23 @@ export class SupplierPayablesRepository {
       "查询供应商应付失败",
     );
     return toPage(result.items, result);
+  }
+
+  async batch(input: SupplierPayableBatchInput) {
+    const { data, error } = await this.client.rpc(
+      "get_supplier_payables_by_ids",
+      {
+        p_tenant_id: input.tenant_id,
+        p_visible_project_ids: input.visible_project_ids,
+        p_payable_event_ids: input.ids,
+      },
+    );
+    if (error) throw Errors.dbError("批量查询供应商应付失败", error);
+    return parse(
+      z.array(SupplierPayableListItemSchema).max(100),
+      data,
+      "批量查询供应商应付失败",
+    );
   }
 
   async listFilterOptions(input: SupplierPayableFilterOptionInput) {

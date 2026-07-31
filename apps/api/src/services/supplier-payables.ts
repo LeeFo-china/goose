@@ -2,6 +2,7 @@ import {
   supplierPayablesRepository,
 } from "@/repositories/supplier-payables";
 import type {
+  SupplierPayableBatchQuery,
   SupplierPayableFilterOptionQuery,
   SupplierPayableListQuery,
 } from "@/schema/supplier-payments";
@@ -16,7 +17,7 @@ type AccessPort = Pick<
 >;
 type RepositoryPort = Pick<
   typeof supplierPayablesRepository,
-  "list" | "listFilterOptions" | "getPurchaseOrderSummary"
+  "list" | "batch" | "listFilterOptions" | "getPurchaseOrderSummary"
 >;
 
 export type SupplierPayablesServiceDependencies = {
@@ -40,6 +41,16 @@ export class SupplierPayablesService {
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,
       ...query,
+    });
+  }
+
+  async batch(auth: AuthContext, query: SupplierPayableBatchQuery) {
+    const scope = await this.access.requirePayableRead(auth);
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.batch({
+      tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
+      ids: query.ids,
     });
   }
 

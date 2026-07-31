@@ -189,6 +189,18 @@ export function usePayableList(
     };
   }, [canLoad, reload]);
 
+  useEffect(() => {
+    if (!canLoad) return;
+    const handlePaymentCommand = () => void reload();
+    window.addEventListener("supplier-payment-command", handlePaymentCommand);
+    return () => {
+      window.removeEventListener(
+        "supplier-payment-command",
+        handlePaymentCommand,
+      );
+    };
+  }, [canLoad, reload]);
+
   const clear = useCallback(() => {
     requestVersion.current += 1;
     setRecords(emptyPage());

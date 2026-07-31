@@ -1,6 +1,7 @@
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  SupplierPayableBatchQuerySchema,
   SupplierPayableFilterOptionQuerySchema,
   SupplierPayableListQuerySchema,
 } from "@/schema/supplier-payments";
@@ -24,6 +25,15 @@ class SupplierPayablesController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierPayablesService.list(auth, query),
+    );
+  }
+
+  @Get("/supplier-payables/batch")
+  async batchPayables(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(SupplierPayableBatchQuerySchema, request.query);
+    return ResponseHandler.success(
+      await supplierPayablesService.batch(auth, query),
     );
   }
 
