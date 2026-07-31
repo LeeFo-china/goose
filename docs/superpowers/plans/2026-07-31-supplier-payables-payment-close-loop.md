@@ -4,7 +4,7 @@
 
 **Goal:** 交付合格收货原子形成项目成本和供应商应付、付款申请审批、部分付款、多次付款、应付核销及现金台账的完整闭环。
 
-**Architecture:** 两组 additive Supabase migration 分别建立收货财务事实和付款申请/付款事实，所有关键状态变化由带租户范围、乐观锁和幂等快照的原子 RPC 完成。Fastify 保持 controller/service/repository 分层，Next.js Admin 在“采购供应”下增加应付和付款申请工作区；项目经营成本与供应商付款现金分开聚合，避免重复成本。
+**Architecture:** 三版 additive Supabase migration 分别建立收货财务事实、付款申请/付款事实和受限 batch 读取，所有关键状态变化由带租户范围、乐观锁和幂等快照的原子 RPC 完成。Fastify 保持 controller/service/repository 分层，Next.js Admin 在“采购供应”下增加应付和付款申请工作区；项目经营成本与供应商付款现金分开聚合，避免重复成本。
 
 **Tech Stack:** Bun、TypeScript、Fastify、Zod、Supabase/PostgreSQL、Next.js 15、React 19、shadcn/Radix、Playwright
 
@@ -1560,7 +1560,7 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 - Modify: `apps/api/src/types/database.ts`
 - Modify: `docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md`
 
-- [ ] **Step 1: 写 Playwright RED 工作流**
+- [x] **Step 1: 写 Playwright RED 工作流**
 
 一个确定性场景完成：
 
@@ -1574,12 +1574,12 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 8. 打开要求发票的申请并看到不可绕过阻断。
 9. mutation journal 证明客户端没有提交 tenant、actor、成本或可用余额。
 
-- [ ] **Step 2: 实现独立 Mock Backend**
+- [x] **Step 2: 实现独立 Mock Backend**
 
 使用端口 `3995`，只实现新 E2E 和页面 session 所需路由。所有列表严格分页；状态机、
 余额和 mutation journal 固定可预测。不要依赖真实数据库或修改现有采购 E2E fixture。
 
-- [ ] **Step 3: 注册 Playwright 和 package script**
+- [x] **Step 3: 注册 Playwright 和 package script**
 
 `apps/admin/package.json` 增加：
 
@@ -1587,7 +1587,7 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 "test:e2e:supplier-payment": "env -u NO_COLOR playwright test --config=playwright.supplier-payment.config.ts"
 ```
 
-- [ ] **Step 4: 运行 E2E GREEN**
+- [x] **Step 4: 运行 E2E GREEN**
 
 Run:
 
@@ -1598,7 +1598,7 @@ bunx playwright test --config=playwright.supplier-payment.config.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交 E2E**
+- [x] **Step 5: 提交 E2E**
 
 ```bash
 git add apps/admin/e2e/supplier-payment-* \
@@ -1607,7 +1607,7 @@ git add apps/admin/e2e/supplier-payment-* \
 git commit -m "test(admin): 覆盖供应商付款闭环"
 ```
 
-- [ ] **Step 6: migration 应用前检查**
+- [x] **Step 6: migration 应用前检查**
 
 从仓库根目录加载用户指定 env，但禁止输出其内容：
 
@@ -1615,24 +1615,25 @@ git commit -m "test(admin): 覆盖供应商付款闭环"
 supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
 
-Expected: 仅 `20260731100000`、`20260731110000` 为 Local pending；其他
+Expected: 仅 `20260731100000`、`20260731110000`、`20260731120000` 为 Local pending；其他
 Local/Remote 对齐。
 
-先在事务回滚或 shadow 环境执行两版 migration 和 Task 6 smoke。任何失败先修
+先在事务回滚或 shadow 环境执行三版 migration 和 Task 6 smoke。任何失败先修
 migration，禁止手工远端 DDL/DML。
 
-- [ ] **Step 7: 正式应用 migration**
+- [x] **Step 7: 正式应用 migration**
 
-使用仓库 `Migrate Dev Database` 工作流：
+计划优先使用仓库 `Migrate Dev Database` 工作流；本次实际使用用户指定 `.env` 和
+Supabase CLI 完成等价 plan/apply（未触发 GitHub workflow）：
 
-1. `mode=plan`，确认仅两版 pending 且顺序正确。
-2. `mode=apply`，确认 applied versions 为
-   `20260731100000`、`20260731110000`。
+1. `supabase db push --dry-run`，确认仅三版 pending 且顺序正确。
+2. `supabase db push --yes`，应用 `20260731100000`、`20260731110000`、
+   `20260731120000`。
 3. 再运行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`。
 
 Expected: Local/Remote 全量对齐。
 
-- [ ] **Step 8: 生成并核对数据库类型**
+- [x] **Step 8: 生成并核对数据库类型**
 
 优先运行：
 
@@ -1655,7 +1656,7 @@ bun run typecheck
 
 Expected: PASS，类型差异只包含本阶段新增列、表和 RPC。
 
-- [ ] **Step 9: 运行真实数据库 smoke 与执行计划**
+- [x] **Step 9: 运行真实数据库 smoke、记录安全例外与执行计划**
 
 Run:
 
@@ -1671,7 +1672,19 @@ Expected:
 - smoke 后 fixture 残留为 0。
 - 三类关键查询使用设计索引。
 
-- [ ] **Step 10: 运行全量供应商回归**
+发布环境例外：完整 16 项 smoke 的 committed-concurrency 探针只能在显式标记的
+loopback disposable 数据库和显式 payable fixture 上运行。本次用户提供的是非
+loopback Dev 数据库，脚本按设计以
+`SUPPLIER_PAYMENT_SMOKE_PREREQUISITE_CONCURRENCY_ALLOW_COMMITTED_CONCURRENCY_REQUIRED`
+拒绝，未绕过安全门。真实 rollback-only EXPLAIN、fresh-connection 残留检查和
+全部静态/确定性并发契约均通过；完整 16 项需在可抛弃本地数据库具备时补跑。
+这不记为真实业务 smoke PASS：未验证风险是数据库真实并发锁竞争、16 项业务命令
+及清理在同一可抛弃实例上的联动。责任人为后端/数据库发布负责人；补测条件是本地
+Supabase/Docker 可用、数据库地址为 loopback、显式设置 disposable 标志并提供
+专用 payable fixture ID，完成标准是 16 项全 `true` 且 fresh connection 残留为 0。
+该项是进入生产环境前的发布门禁，不阻止本次 Dev migration 收口和代码合并。
+
+- [x] **Step 10: 运行全量供应商回归**
 
 Run:
 
@@ -1694,7 +1707,7 @@ bunx playwright test --config=playwright.supplier-purchase-order.config.ts
 
 Expected: 0 failure。
 
-- [ ] **Step 11: 完成需求逐条审计**
+- [x] **Step 11: 完成需求逐条审计**
 
 逐条提供当前事实证据：
 
@@ -1710,9 +1723,10 @@ Expected: 0 failure。
 - 所有新增列表接口均分页，关键计划使用索引。
 - 旧采购申请、采购单、履约和费用链路回归通过。
 - migration Local/Remote 对齐。
-- Orange 与任务启动基线一致，Agent 零写入。
+- Orange 启动快照未持久化，无法严格证明相对启动基线一致；当前只读快照、Agent
+  零写命令和 gooes diff 中无 Orange 文件作为可审计边界。
 
-- [ ] **Step 12: 更新计划证据并提交**
+- [x] **Step 12: 更新计划证据并提交**
 
 把每个 Task 勾选为 `[x]`，在本文末尾记录：
 
@@ -1723,9 +1737,10 @@ Expected: 0 failure。
 - 测试、类型检查和构建计数。
 - Orange 只读基线核查。
 
+数据库类型已在独立提交 `4ab728fb` 中提交，本步骤只提交计划证据：
+
 ```bash
-git add apps/api/src/types/database.ts \
-  docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md
+git add docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md
 git commit -m "docs(supplier): 完成应付付款阶段收口"
 ```
 
@@ -1736,5 +1751,90 @@ git diff --cached --check
 git diff --cached --name-only
 ```
 
-Expected: 只包含数据库类型和本计划，不包含
+Expected: 只包含本计划，不包含
 `packages/domain/gooes-domain-1.13.0.tgz` 或 Orange 文件。
+
+---
+
+## 2026-07-31 完成证据
+
+### 提交
+
+- Task 1–6：`74522aae`、`3f02e864`、`68a0f8d5`、`d27af919`、
+  `aee4a95f`、`fc6b6d3b`。
+- Task 7–10：`dde6247b`、`27015d86`、`38de2836`、`1a8dc2f1`。
+- Task 11：`2c491798`（确定性 E2E）、`4ab728fb`（数据库类型）、
+  `cf44ca50`（真实回滚 smoke fixture 与 EXPLAIN）。
+
+### Migration 发布
+
+- 应用前 `supabase migration list` 仅三版 pending：
+  `20260731100000`、`20260731110000`、`20260731120000`。
+- migration 契约：36 tests / 810 assertions；`db push --dry-run` 仅列出上述三版。
+- 回滚 rehearsal 在内存中精确去除 `20260731100000`、`20260731110000` 已有的
+  最外层 `BEGIN`/`COMMIT`，将无外层事务的 `20260731120000` 原样纳入 Bun.SQL
+  `sql.begin`，在同一真实事务中完整执行后抛出 sentinel 触发自动回滚；回滚后
+  migration 状态仍 pending，目标对象计数为 0。
+- 未触发 GitHub `Migrate Dev Database` workflow；使用用户指定 `.env` 执行等价
+  CLI plan/apply。`supabase db push --yes` 正式应用三版成功；应用后目标对象计数
+  为 4，最终 Local/Remote 全量对齐。回滚策略为 forward-only 补偿 migration，
+  不手工修库。
+
+### 数据库类型
+
+- 当前 Supabase CLI 需要 Docker/pg-meta，环境无 Docker daemon 且无可用
+  project ref，因此未接受不完整或破坏性的全量生成结果。
+- 采用 Dev catalog 范围化 fallback：11 张相关表 Row 列、6 张新表 Insert
+  optionality、14 个 RPC Args/DEFAULT optionality 均为 0 差异；未删除既有 key。
+- 类型契约 6 tests / 32 assertions，API typecheck/build/file-size 全绿。
+  pg-meta 或 project access 恢复后仍应补一次官方全量 regenerate + diff。
+
+### 真实数据库 smoke 与执行计划
+
+- 完整 smoke 在非 loopback、非 disposable Dev 数据库按设计被 committed-
+  concurrency 安全门拒绝；未设置绕过变量，也没有伪装数据库地址。本项不记为
+  真实业务 smoke PASS，遗留风险是 live 数据库并发锁、16 项命令与清理联动尚未在
+  disposable 实例验证。
+- rollback-only 真实 EXPLAIN exit 0，fresh connection 残留为 0，命中：
+  `supplier_payable_events_tenant_status_query_idx`、
+  `supplier_payment_requests_tenant_status_updated_idx`、
+  `project_cost_events_tenant_project_category_occurred_idx`、
+  `project_cost_commitments_active_remaining_idx`、
+  `supplier_payable_events_tenant_project_due_idx`、
+  `finance_ledger_entries_tenant_type_occurred_idx`；
+  `transaction_rolled_back=true`。
+- smoke fixture 根因修复回归 26 tests / 94 assertions；没有放宽并发安全门。
+- 后端/数据库发布负责人须在生产发布前用 loopback disposable Supabase 和显式
+  payable fixture 补跑；只有 16 项全 `true` 且 fresh residual=0 才能关闭风险。
+
+### 全量回归
+
+- `api:typecheck`、`api:build`、`admin:check`、`admin:build` 全绿；Admin 文件检查
+  1067 个 TS/TSX 文件均不超过 500 行。
+- API 全部 supplier 测试：670 tests / 5486 assertions，0 failure。
+- Admin 指定组件：126 tests / 638 assertions，0 failure。
+- Playwright：付款闭环 1 passed；采购申请闭环 1 passed；采购单闭环 2 passed。
+
+### 需求审计
+
+- 合格收货、成本、应付与承诺消费由同一收货 RPC 事务生成；分批收货按冻结订单
+  金额累计，拒收行不生成成本或应付。
+- 申请占用使用锁、乐观版本和幂等快照；驳回、取消、关闭释放余额；部分付款、
+  多次付款和重放通过状态机及唯一幂等事实约束。
+- 发票门禁在付款 RPC 写入前校验，失败无部分写入；每笔付款只生成一条供应商现金
+  台账。项目成本只聚合费用与 supplier cost，不把 supplier cash 重复计成本。
+- 新增列表和辅助查询均有 `page=1&pageSize=20`、最大 100 的边界或受限 batch；
+  关键读取已由真实 EXPLAIN 证明命中索引。
+- 旧采购申请、采购单、履约和费用聚合包含在 670 项 API、126 项 Admin 与三条
+  Playwright 回归中。
+- Orange 仓库只做 `git status`/`rev-parse` 只读核查，Agent 未执行修改、格式化、
+  暂存或提交命令。当前 HEAD 为 `96443db9f3b36402229fe24c91c2b63746019156`；
+  其既有 dirty 状态不纳入 gooes 提交。由于任务启动快照未持久化，无法独立证明
+  相对启动基线逐文件一致；这是证据留存缺口，不把当前 dirty 状态归因于本任务。
+
+### 既有数据库安全提示（不在本阶段自动修复）
+
+`public.customer_wechat_pay_smoke_notifications` 与
+`public.customer_wechat_pay_smoke_orders` 当前 RLS disabled。直接启用 RLS 而没有
+配套 policy 会阻断现有访问，因此本阶段没有擅自修改；应另开安全任务，先梳理访问
+角色和 policy，再通过独立 migration 启用并验证。
