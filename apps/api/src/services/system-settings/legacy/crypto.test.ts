@@ -73,4 +73,31 @@ describe("system setting value validation", () => {
       expect(JSON.stringify(error)).not.toContain(oversizedAppKey);
     }
   });
+
+  test("validates virtual-payment message token and Mini Program original ID", () => {
+    const tokenRecord = {
+      ...record,
+      key: "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN",
+      is_secret: true,
+    };
+    const originalIdRecord = {
+      ...record,
+      key: "WECHAT_MINIPROGRAM_ORIGINAL_ID",
+      is_secret: false,
+    };
+
+    expect(validateSettingValue(tokenRecord, "message-token")).toBe("message-token");
+    expect(validateSettingValue(originalIdRecord, "gh_97417a04a28d"))
+      .toBe("gh_97417a04a28d");
+    for (const invalid of [" ", "x".repeat(513)]) {
+      expect(() => validateSettingValue(tokenRecord, invalid)).toThrow(
+        "微信虚拟支付消息令牌格式不正确",
+      );
+    }
+    for (const invalid of ["wx-appid", "gh_", "gh_bad/value"] ) {
+      expect(() => validateSettingValue(originalIdRecord, invalid)).toThrow(
+        "微信小程序原始 ID 格式不正确",
+      );
+    }
+  });
 });

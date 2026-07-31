@@ -6,82 +6,48 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const NOTIFICATION_ID = "11111111-1111-4111-8111-111111111111";
 const ORDER_ID = "22222222-2222-4222-8222-222222222222";
-const EVENT_KEY = "a".repeat(64);
-const PAYLOAD_HASH = "b".repeat(64);
-
 const record = {
   id: NOTIFICATION_ID,
-  event_key: EVENT_KEY,
-  payload_sha256: PAYLOAD_HASH,
+  event_key: "a".repeat(64),
+  payload_sha256: "b".repeat(64),
   status: "processing" as const,
   order_id: null,
   retry_count: 0,
   result_summary: {},
 };
 
-function repositoryWith(input: {
-  singleResults?: Array<{ data: unknown; error: unknown }>;
-  maybeSingleResult?: { data: unknown; error: unknown };
-}) {
-  const calls: Array<[string, ...unknown[]]> = [];
-  const singleResults = [...(input.singleResults ?? [])];
-  const query = {
-    select(columns: string) {
-      calls.push(["select", columns]);
-      return query;
-    },
-    eq(column: string, value: unknown) {
-      calls.push(["eq", column, value]);
-      return query;
-    },
-    neq(column: string, value: unknown) {
-      calls.push(["neq", column, value]);
-      return query;
-    },
-    limit(count: number) {
-      calls.push(["limit", count]);
-      return query;
-    },
-    insert(values: Record<string, unknown>) {
-      calls.push(["insert", values]);
-      return query;
-    },
-    update(values: Record<string, unknown>) {
-      calls.push(["update", values]);
-      return query;
-    },
-    single: mock(async () => singleResults.shift() ?? { data: null, error: null }),
-    maybeSingle: mock(async () => input.maybeSingleResult ?? {
-      data: null,
-      error: null,
-    }),
-  };
-  const client = {
-    from(table: string) {
-      calls.push(["from", table]);
-      return query;
-    },
-  };
-  return { calls, client };
-}
-
 const createInput = {
-  eventKey: EVENT_KEY,
   eventType: "xpay_goods_deliver_notify" as const,
   environment: "production" as const,
+  recipientOriginalId: "gh_original",
+  senderIdHash: "c".repeat(64),
+  providerCreatedAtUnix: 1_714_037_059,
+  messageType: "event" as const,
   outTradeNo: "BV202608010001",
   providerProductId: "branding-annual",
-  openidHash: "c".repeat(64),
-  normalizedPayload: { transaction_id: "transaction-1" },
-  payloadSha256: PAYLOAD_HASH,
+  openidHash: "d".repeat(64),
+  providerOrderNo: "provider-order-1",
+  transactionId: "transaction-1",
+  paidAt: "2026-08-01T01:01:00.000Z",
+  quantity: 1 as const,
+  origPriceFen: 100,
+  actualPriceFen: 100,
+  attach: ORDER_ID,
   requestId: "request-1",
 };
 
+function repositoryWith(result: { data: unknown; error: unknown }) {
+  const rpc = mock(async (
+    _name: string,
+    _parameters: Record<string, unknown>,
+  ) => result);
+  const client = { rpc };
+  return { client, rpc };
+}
+
 describe("WechatVirtualPaymentNotificationRepository", () => {
-  test("persists only authenticated normalized facts and parses the inserted inbox row", async () => {
-    const fixture = repositoryWith({
-      singleResults: [{ data: record, error: null }],
-    });
+  test("accepts only typed facts through the dedicated canonicalization RPC", async () => {
+    const fixture = repositoryWith({ data: { created: true, record }, error: null });
     const { WechatVirtualPaymentNotificationRepository } = await import(
       "./wechat-virtual-payment-notifications"
     );
@@ -93,41 +59,37 @@ describe("WechatVirtualPaymentNotificationRepository", () => {
       created: true,
       record,
     });
-    const insert = fixture.calls.find(([method]) => method === "insert")?.[1];
-    expect(insert).toMatchObject({
-      authentication_method: "wechat_plaintext_sha1",
-      authentication_status: "verified",
-      normalized_payload: createInput.normalizedPayload,
-      openid_hash: createInput.openidHash,
-    });
-    expect(JSON.stringify(insert)).not.toContain("payer-openid");
-    expect(JSON.stringify(insert)).not.toContain("message-token");
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      "wechat_accept_virtual_payment_notification",
+      {
+        p_event_type: createInput.eventType,
+        p_environment: createInput.environment,
+        p_recipient_original_id: createInput.recipientOriginalId,
+        p_sender_id_hash: createInput.senderIdHash,
+        p_provider_created_at: createInput.providerCreatedAtUnix,
+        p_msg_type: createInput.messageType,
+        p_out_trade_no: createInput.outTradeNo,
+        p_provider_product_id: createInput.providerProductId,
+        p_openid_hash: createInput.openidHash,
+        p_provider_order_no: createInput.providerOrderNo,
+        p_transaction_id: createInput.transactionId,
+        p_paid_at: createInput.paidAt,
+        p_quantity: createInput.quantity,
+        p_orig_price_fen: createInput.origPriceFen,
+        p_actual_price_fen: createInput.actualPriceFen,
+        p_attach: createInput.attach,
+        p_request_id: createInput.requestId,
+      },
+    );
+    const params = fixture.rpc.mock.calls[0]?.[1];
+    expect(params).not.toHaveProperty("normalized_payload");
+    expect(params).not.toHaveProperty("authentication_status");
+    expect(params).not.toHaveProperty("payload_sha256");
   });
 
-  test("resolves an exact unique-key duplicate through one bounded event lookup", async () => {
-    const fixture = repositoryWith({
-      singleResults: [{ data: null, error: { code: "23505" } }],
-      maybeSingleResult: { data: record, error: null },
-    });
-    const { WechatVirtualPaymentNotificationRepository } = await import(
-      "./wechat-virtual-payment-notifications"
-    );
-    const repository = new WechatVirtualPaymentNotificationRepository(
-      () => fixture.client,
-    );
-
-    expect(await repository.createOrGet(createInput)).toEqual({
-      created: false,
-      record,
-    });
-    expect(fixture.calls).toContainEqual(["eq", "event_key", EVENT_KEY]);
-    expect(fixture.calls).toContainEqual(["limit", 1]);
-  });
-
-  test("marks completion by notification identity without replacing immutable facts", async () => {
-    const fixture = repositoryWith({
-      singleResults: [{ data: { id: NOTIFICATION_ID }, error: null }],
-    });
+  test("marks completion through a typed result command", async () => {
+    const processed = { ...record, status: "processed", order_id: ORDER_ID };
+    const fixture = repositoryWith({ data: processed, error: null });
     const { WechatVirtualPaymentNotificationRepository } = await import(
       "./wechat-virtual-payment-notifications"
     );
@@ -138,21 +100,26 @@ describe("WechatVirtualPaymentNotificationRepository", () => {
     await repository.markProcessed({
       notificationId: NOTIFICATION_ID,
       orderId: ORDER_ID,
-      resultSummary: { fulfilled: true },
+      paymentRecorded: true,
+      fulfilled: true,
+      entitlementEventId: "33333333-3333-4333-8333-333333333333",
+      entitlementStatus: "active",
     });
-    const update = fixture.calls.find(([method]) => method === "update")?.[1];
-    expect(update).toMatchObject({
-      order_id: ORDER_ID,
-      status: "processed",
-      result_summary: { fulfilled: true },
-    });
-    expect(update).not.toHaveProperty("event_key");
-    expect(update).not.toHaveProperty("normalized_payload");
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      "wechat_mark_virtual_payment_notification_processed",
+      expect.objectContaining({
+        p_notification_id: NOTIFICATION_ID,
+        p_order_id: ORDER_ID,
+        p_payment_recorded: true,
+        p_fulfilled: true,
+      }),
+    );
   });
 
-  test("never downgrades a processed inbox fact while recording a retry", async () => {
+  test("delegates retry increments to one atomic failed command", async () => {
     const fixture = repositoryWith({
-      maybeSingleResult: { data: null, error: null },
+      data: { ...record, status: "failed", retry_count: 1 },
+      error: null,
     });
     const { WechatVirtualPaymentNotificationRepository } = await import(
       "./wechat-virtual-payment-notifications"
@@ -164,12 +131,40 @@ describe("WechatVirtualPaymentNotificationRepository", () => {
     await repository.markFailed({
       notificationId: NOTIFICATION_ID,
       orderId: ORDER_ID,
-      retryCount: 1,
       errorCode: "DB_ERROR",
       errorSummary: "微信虚拟支付消息等待重试",
     });
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      "wechat_mark_virtual_payment_notification_failed",
+      {
+        p_notification_id: NOTIFICATION_ID,
+        p_order_id: ORDER_ID,
+        p_error_code: "DB_ERROR",
+        p_error_summary: "微信虚拟支付消息等待重试",
+      },
+    );
+  });
 
-    expect(fixture.calls).toContainEqual(["eq", "id", NOTIFICATION_ID]);
-    expect(fixture.calls).toContainEqual(["neq", "status", "processed"]);
+  test.each([
+    ["WECHAT_VIRTUAL_NOTIFICATION_INPUT_INVALID", 400],
+    ["WECHAT_VIRTUAL_NOTIFICATION_EVENT_CONFLICT", 409],
+    ["WECHAT_VIRTUAL_NOTIFICATION_NOT_FOUND", 404],
+    ["WECHAT_VIRTUAL_NOTIFICATION_ORDER_CONFLICT", 409],
+  ])("maps %s without leaking database details", async (code, statusCode) => {
+    const fixture = repositoryWith({
+      data: null,
+      error: { code: "P0001", message: code },
+    });
+    const { WechatVirtualPaymentNotificationRepository } = await import(
+      "./wechat-virtual-payment-notifications"
+    );
+    const repository = new WechatVirtualPaymentNotificationRepository(
+      () => fixture.client,
+    );
+
+    await expect(repository.createOrGet(createInput)).rejects.toMatchObject({
+      code,
+      statusCode,
+    });
   });
 });

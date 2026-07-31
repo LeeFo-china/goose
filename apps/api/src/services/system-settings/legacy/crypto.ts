@@ -20,6 +20,10 @@ import {
   MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
 } from '@/services/branding-virtual-payment-contracts';
 import { isTencentOcrEncryptionPublicKeyPem } from '@/services/ocr/tencent-encryption-key';
+import {
+  isValidWechatMiniProgramOriginalId,
+  isValidWechatVirtualPaymentMessageToken,
+} from '@/services/wechat-virtual-payment-message-config';
 
 const TENCENT_OCR_ENCRYPTION_PUBLIC_KEY = 'TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM';
 export function normalizeStoredValue(value: string | null | undefined) {
@@ -121,6 +125,28 @@ export function resolveEffectiveValue(record: SystemSettingRecord): {
 
 export function validateSettingValue(record: SystemSettingRecord, value: string | null) {
   if (!value) return null;
+
+  if (
+    record.key === 'WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN' &&
+    !isValidWechatVirtualPaymentMessageToken(value)
+  ) {
+    throw Errors.business(
+      400,
+      '微信虚拟支付消息令牌格式不正确',
+      'WECHAT_VIRTUAL_MESSAGE_TOKEN_INVALID',
+    );
+  }
+
+  if (
+    record.key === 'WECHAT_MINIPROGRAM_ORIGINAL_ID' &&
+    !isValidWechatMiniProgramOriginalId(value)
+  ) {
+    throw Errors.business(
+      400,
+      '微信小程序原始 ID 格式不正确',
+      'WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_INVALID',
+    );
+  }
 
   if (
     WECHAT_VIRTUAL_PAYMENT_SECRET_SETTING_KEYS.has(record.key) &&

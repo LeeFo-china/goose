@@ -11,6 +11,9 @@ export type WechatVirtualGoodsDeliveryMessage = {
   format: WechatVirtualMessageFormat;
   eventType: "xpay_goods_deliver_notify";
   toUserName: string;
+  fromUserName: string;
+  providerCreatedAtUnix: number;
+  messageType: "event";
   openid: string;
   outTradeNo: string;
   environment: "sandbox" | "production";
@@ -127,6 +130,9 @@ export function parseWechatVirtualPaymentMessage(input: {
     format,
     eventType: payload.Event,
     toUserName: payload.ToUserName,
+    fromUserName: payload.FromUserName,
+    providerCreatedAtUnix: payload.CreateTime,
+    messageType: payload.MsgType,
     openid: payload.OpenId,
     outTradeNo: payload.OutTradeNo,
     environment: payload.Env === 1 ? "sandbox" : "production",

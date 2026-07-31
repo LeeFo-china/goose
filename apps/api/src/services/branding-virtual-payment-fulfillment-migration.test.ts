@@ -15,7 +15,58 @@ describe("branding virtual-payment fulfillment migration", () => {
     expect(migration).toContain("ENABLE ROW LEVEL SECURITY");
     expect(migration).toContain("FORCE ROW LEVEL SECURITY");
     expect(migration).toMatch(/REVOKE ALL ON TABLE public\.wechat_virtual_payment_notifications[\s\S]*FROM PUBLIC, anon, authenticated, service_role/);
-    expect(migration).toContain("GRANT SELECT, INSERT, UPDATE");
+    expect(migration).toMatch(/GRANT SELECT\s+ON TABLE public\.wechat_virtual_payment_notifications\s+TO service_role/);
+    expect(migration).not.toMatch(/GRANT[^;]*(?:INSERT|UPDATE|DELETE)[^;]*ON TABLE public\.wechat_virtual_payment_notifications/);
+    for (const column of [
+      "recipient_original_id text NOT NULL",
+      "sender_id_hash text NOT NULL",
+      "msg_type text NOT NULL",
+      "provider_created_at bigint NOT NULL",
+    ]) expect(migration).toContain(column);
+    expect(migration).toContain("'xpay_refund_notify'");
+    expect(migration).toContain("'xpay_refund_inquiry'");
+    expect(migration).toContain("wechat_virtual_payment_notifications_goods_context_check");
+    expect(migration).toMatch(/result_shape_check[\s\S]*event_type <> 'xpay_goods_deliver_notify'/);
+  });
+
+  test("exposes only typed service-role command RPCs for inbox writes", async () => {
+    const migration = await Bun.file(migrationPath).text();
+    for (const name of [
+      "wechat_accept_virtual_payment_notification",
+      "wechat_mark_virtual_payment_notification_processed",
+      "wechat_mark_virtual_payment_notification_failed",
+    ]) {
+      const start = migration.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`);
+      expect(start).toBeGreaterThan(0);
+      const body = migration.slice(start);
+      expect(body).toContain("SECURITY DEFINER");
+      expect(body).toContain("SET search_path = public, pg_temp");
+      expect(body).toMatch(new RegExp(`REVOKE ALL ON FUNCTION public\\.${name}\\([\\s\\S]*?FROM PUBLIC, anon, authenticated, service_role`));
+      expect(body).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${name}\\([\\s\\S]*?TO service_role`));
+    }
+    expect(migration).not.toContain("p_normalized_payload");
+    expect(migration).not.toContain("p_authentication_status");
+    expect(migration).toContain("authentication_status, normalized_payload");
+    expect(migration).toContain("'wechat_plaintext_sha1', 'verified'");
+    expect(migration).toContain("jsonb_build_object(");
+    expect(migration).toContain("digest(v_normalized_payload::text, 'sha256')");
+  });
+
+  test("keeps processed terminal, order binding immutable, and failed retries atomic", async () => {
+    const migration = await Bun.file(migrationPath).text();
+    for (const code of [
+      "WECHAT_VIRTUAL_NOTIFICATION_ORDER_CONFLICT",
+      "WECHAT_VIRTUAL_NOTIFICATION_PROCESSED_TERMINAL",
+      "WECHAT_VIRTUAL_NOTIFICATION_RETRY_MONOTONIC",
+      "WECHAT_VIRTUAL_NOTIFICATION_RESULT_IMMUTABLE",
+    ]) expect(migration).toContain(code);
+    expect(migration).toContain("retry_count = retry_count + 1");
+    expect(migration).toContain("FOR UPDATE");
+    expect(migration).toContain("IF v_notification.status = 'processed' THEN");
+    expect(migration).toContain("NEW.status = 'failed'");
+    expect(migration).toContain("NEW.retry_count <> OLD.retry_count + 1");
+    expect(migration).toContain("p_payment_recorded IS DISTINCT FROM true");
+    expect(migration).toContain("result_summary->>'payment_recorded' = 'true'");
   });
 
   test("uses the shared tenant lock before order and entitlement locks", async () => {
@@ -75,12 +126,28 @@ describe("branding virtual-payment fulfillment migration", () => {
       "orig_price_fen",
       "actual_price_fen",
       "attach",
-    ]) expect(migration).toContain(`normalized_payload->>'${field}'`);
+      "recipient_original_id",
+      "sender_id_hash",
+      "msg_type",
+      "provider_created_at",
+    ]) expect(migration).toContain(`v_notification.${field}`);
+    expect(migration).not.toContain("normalized_payload->>");
+  });
+
+  test("rejects NULL source/event values and enforces exact source-event pairs", async () => {
+    const migration = await Bun.file(migrationPath).text();
+    expect(migration).toContain("p_source IS NULL");
+    expect(migration).toContain("p_event_type IS NULL");
+    expect(migration).toContain("p_source = 'notification' AND p_msg_type IS NULL");
+    expect(migration).toContain("p_source IS DISTINCT FROM 'reconciliation'");
+    expect(migration).toContain("p_source = 'notification'");
+    expect(migration).toContain("p_source IN ('query', 'reconciliation')");
+    expect(migration).toContain("p_event_type = 'query_order'");
   });
 
   test("keeps late-close recovery explicit and preserves stopped entitlement status", async () => {
     const migration = await Bun.file(migrationPath).text();
-    expect(migration).toContain("p_allow_late_closed_recovery AND p_source <> 'reconciliation'");
+    expect(migration).toMatch(/p_allow_late_closed_recovery\s+AND p_source IS DISTINCT FROM 'reconciliation'/);
     expect(migration).toContain("v_is_late_closed AND NOT p_allow_late_closed_recovery");
     expect(migration).toContain("v_entitlement.status IN ('suspended', 'revoked')");
     expect(migration).not.toMatch(/SET\s+status = 'active'[\s\S]{0,260}v_entitlement\.status IN \('suspended', 'revoked'\)/);

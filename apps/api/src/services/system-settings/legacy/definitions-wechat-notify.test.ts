@@ -29,5 +29,6 @@ describe("wechat message setting definitions", () => {
     });
     expect(originalId?.isSecret).not.toBe(true);
     expect(originalId?.key).not.toBe(appId?.key);
+    expect(originalId?.description).toContain("gh_");
   });
 });

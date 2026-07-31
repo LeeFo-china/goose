@@ -1,21 +1,12 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { matchesPostgresError } from "@/errors/postgres-error-details";
 import { SupabaseDB } from "@/utils/supabase";
 
-type QueryResult = { data: unknown; error: unknown };
-type QueryBuilder = {
-  select(columns: string): QueryBuilder;
-  eq(column: string, value: unknown): QueryBuilder;
-  neq(column: string, value: unknown): QueryBuilder;
-  limit(count: number): QueryBuilder;
-  maybeSingle(): Promise<QueryResult>;
-  single(): Promise<QueryResult>;
-  insert(values: Record<string, unknown>): QueryBuilder;
-  update(values: Record<string, unknown>): QueryBuilder;
-};
+type RpcResult = { data: unknown; error: unknown };
 type Client = {
-  from(table: "wechat_virtual_payment_notifications"): QueryBuilder;
+  rpc(name: string, parameters: Record<string, unknown>): Promise<RpcResult>;
 };
 
 const NotificationRecordSchema = z.object({
@@ -27,20 +18,45 @@ const NotificationRecordSchema = z.object({
   retry_count: z.number().int().nonnegative(),
   result_summary: z.record(z.string(), z.unknown()),
 });
+const AcceptanceResultSchema = z.object({
+  created: z.boolean(),
+  record: NotificationRecordSchema,
+});
 
 export type WechatVirtualPaymentNotificationRecord = z.infer<
   typeof NotificationRecordSchema
 >;
 
-const NOTIFICATION_COLUMNS = [
-  "id",
-  "event_key",
-  "payload_sha256",
-  "status",
-  "order_id",
-  "retry_count",
-  "result_summary",
-].join(",");
+const COMMAND_ERRORS = {
+  WECHAT_VIRTUAL_NOTIFICATION_INPUT_INVALID: {
+    statusCode: 400,
+    message: "微信虚拟支付消息字段无效",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_EVENT_CONFLICT: {
+    statusCode: 409,
+    message: "微信虚拟支付消息幂等事实冲突",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_NOT_FOUND: {
+    statusCode: 404,
+    message: "微信虚拟支付消息不存在",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_ORDER_CONFLICT: {
+    statusCode: 409,
+    message: "微信虚拟支付消息关联订单冲突",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_RESULT_IMMUTABLE: {
+    statusCode: 409,
+    message: "微信虚拟支付消息结果不可变更",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_PROCESSED_TERMINAL: {
+    statusCode: 409,
+    message: "微信虚拟支付消息已完成处理",
+  },
+  WECHAT_VIRTUAL_NOTIFICATION_RETRY_MONOTONIC: {
+    statusCode: 409,
+    message: "微信虚拟支付消息重试状态冲突",
+  },
+} as const;
 
 export class WechatVirtualPaymentNotificationRepository {
   constructor(
@@ -49,106 +65,100 @@ export class WechatVirtualPaymentNotificationRepository {
   ) {}
 
   async createOrGet(input: {
-    eventKey: string;
     eventType: "xpay_goods_deliver_notify";
     environment: "sandbox" | "production";
+    recipientOriginalId: string;
+    senderIdHash: string;
+    providerCreatedAtUnix: number;
+    messageType: "event";
     outTradeNo: string;
     providerProductId: string;
     openidHash: string;
-    normalizedPayload: Record<string, unknown>;
-    payloadSha256: string;
+    providerOrderNo: string;
+    transactionId: string;
+    paidAt: string;
+    quantity: 1;
+    origPriceFen: number;
+    actualPriceFen: number;
+    attach: string;
     requestId: string | null;
   }): Promise<{
     created: boolean;
     record: WechatVirtualPaymentNotificationRecord;
   }> {
-    const table = this.clientProvider().from(
-      "wechat_virtual_payment_notifications",
+    const { data, error } = await this.clientProvider().rpc(
+      "wechat_accept_virtual_payment_notification",
+      {
+        p_event_type: input.eventType,
+        p_environment: input.environment,
+        p_recipient_original_id: input.recipientOriginalId,
+        p_sender_id_hash: input.senderIdHash,
+        p_provider_created_at: input.providerCreatedAtUnix,
+        p_msg_type: input.messageType,
+        p_out_trade_no: input.outTradeNo,
+        p_provider_product_id: input.providerProductId,
+        p_openid_hash: input.openidHash,
+        p_provider_order_no: input.providerOrderNo,
+        p_transaction_id: input.transactionId,
+        p_paid_at: input.paidAt,
+        p_quantity: input.quantity,
+        p_orig_price_fen: input.origPriceFen,
+        p_actual_price_fen: input.actualPriceFen,
+        p_attach: input.attach,
+        p_request_id: input.requestId,
+      },
     );
-    const { data, error } = await table.insert({
-      event_key: input.eventKey,
-      event_type: input.eventType,
-      environment: input.environment,
-      out_trade_no: input.outTradeNo,
-      provider_product_id: input.providerProductId,
-      openid_hash: input.openidHash,
-      authentication_method: "wechat_plaintext_sha1",
-      authentication_status: "verified",
-      normalized_payload: input.normalizedPayload,
-      payload_sha256: input.payloadSha256,
-      status: "processing",
-      request_id: input.requestId,
-    }).select(NOTIFICATION_COLUMNS).single();
-    if (!error) {
-      return { created: true, record: parseRecord(data) };
-    }
-    if (readPostgresCode(error) !== "23505") {
-      throw Errors.dbError("保存微信虚拟支付消息失败");
-    }
-
-    const existing = await this.findByEventKey(input.eventKey);
-    if (!existing) throw Errors.dbError("读取重复微信虚拟支付消息失败");
-    return { created: false, record: existing };
-  }
-
-  async findByEventKey(
-    eventKey: string,
-  ): Promise<WechatVirtualPaymentNotificationRecord | null> {
-    const { data, error } = await this.clientProvider()
-      .from("wechat_virtual_payment_notifications")
-      .select(NOTIFICATION_COLUMNS)
-      .eq("event_key", eventKey)
-      .limit(1)
-      .maybeSingle();
-    if (error) throw Errors.dbError("查询微信虚拟支付消息失败");
-    return data === null ? null : parseRecord(data);
+    if (error) throwCommandError(error, "保存微信虚拟支付消息失败");
+    const parsed = AcceptanceResultSchema.safeParse(firstRow(data));
+    if (!parsed.success) throw Errors.dbError("微信虚拟支付消息数据格式错误");
+    return parsed.data;
   }
 
   async markProcessed(input: {
     notificationId: string;
     orderId: string;
-    resultSummary: Record<string, unknown>;
-  }): Promise<void> {
-    const { error } = await this.clientProvider()
-      .from("wechat_virtual_payment_notifications")
-      .update({
-        order_id: input.orderId,
-        status: "processed",
-        result_summary: input.resultSummary,
-        last_error_code: null,
-        last_error_summary: null,
-        processed_at: new Date().toISOString(),
-      })
-      .eq("id", input.notificationId)
-      .neq("status", "processed")
-      .select("id")
-      .maybeSingle();
-    if (error) throw Errors.dbError("完成微信虚拟支付消息处理失败");
+    paymentRecorded: true;
+    fulfilled: true;
+    entitlementEventId: string;
+    entitlementStatus: "active" | "suspended" | "expired" | "revoked";
+  }): Promise<WechatVirtualPaymentNotificationRecord> {
+    const { data, error } = await this.clientProvider().rpc(
+      "wechat_mark_virtual_payment_notification_processed",
+      {
+        p_notification_id: input.notificationId,
+        p_order_id: input.orderId,
+        p_payment_recorded: input.paymentRecorded,
+        p_fulfilled: input.fulfilled,
+        p_entitlement_event_id: input.entitlementEventId,
+        p_entitlement_status: input.entitlementStatus,
+      },
+    );
+    if (error) throwCommandError(error, "完成微信虚拟支付消息处理失败");
+    return parseRecord(firstRow(data));
   }
 
   async markFailed(input: {
     notificationId: string;
     orderId: string | null;
-    retryCount: number;
     errorCode: string;
     errorSummary: string;
-  }): Promise<void> {
-    const { error } = await this.clientProvider()
-      .from("wechat_virtual_payment_notifications")
-      .update({
-        order_id: input.orderId,
-        status: "failed",
-        retry_count: input.retryCount + 1,
-        last_error_code: input.errorCode.slice(0, 100),
-        last_error_summary: input.errorSummary.slice(0, 500),
-        processed_at: null,
-      })
-      .eq("id", input.notificationId)
-      .neq("status", "processed")
-      .select("id")
-      .maybeSingle();
-    if (error) throw Errors.dbError("记录微信虚拟支付消息失败状态失败");
+  }): Promise<WechatVirtualPaymentNotificationRecord> {
+    const { data, error } = await this.clientProvider().rpc(
+      "wechat_mark_virtual_payment_notification_failed",
+      {
+        p_notification_id: input.notificationId,
+        p_order_id: input.orderId,
+        p_error_code: input.errorCode.slice(0, 100),
+        p_error_summary: input.errorSummary.slice(0, 500),
+      },
+    );
+    if (error) throwCommandError(error, "记录微信虚拟支付消息失败状态失败");
+    return parseRecord(firstRow(data));
   }
+}
+
+function firstRow(data: unknown): unknown {
+  return Array.isArray(data) ? data[0] : data;
 }
 
 function parseRecord(data: unknown): WechatVirtualPaymentNotificationRecord {
@@ -157,10 +167,13 @@ function parseRecord(data: unknown): WechatVirtualPaymentNotificationRecord {
   return parsed.data;
 }
 
-function readPostgresCode(error: unknown): string | null {
-  if (!error || typeof error !== "object") return null;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === "string" ? code : null;
+function throwCommandError(error: unknown, fallbackMessage: string): never {
+  for (const [code, mapped] of Object.entries(COMMAND_ERRORS)) {
+    if (matchesPostgresError(error, "P0001", code)) {
+      throw Errors.business(mapped.statusCode, mapped.message, code);
+    }
+  }
+  throw Errors.dbError(fallbackMessage);
 }
 
 export const wechatVirtualPaymentNotificationRepository =

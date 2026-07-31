@@ -93,6 +93,25 @@ describe("isVisitorSessionRoute", () => {
 });
 
 describe("auth public route allowlist", () => {
+  test("allows only exact WeChat virtual-payment GET and POST event routes", () => {
+    const route = "/wechat/virtual-payment/events";
+    expect(isPublicRoute("GET", route)).toBe(true);
+    expect(isPublicRoute("POST", route)).toBe(true);
+
+    for (const method of ["HEAD", "PUT", "PATCH", "DELETE"]) {
+      expect(isPublicRoute(method, route)).toBe(false);
+    }
+    for (const path of [
+      "/wechat/virtual-payment/events/",
+      "/wechat/virtual-payment/events/extra",
+      "/wechat/virtual-payment",
+      "/wechat/virtual-payment/events-other",
+    ]) {
+      expect(isPublicRoute("GET", path)).toBe(false);
+      expect(isPublicRoute("POST", path)).toBe(false);
+    }
+  });
+
   test("allows only effective branding reads without a token or with a visitor session", () => {
     for (const method of ["GET", "HEAD"]) {
       expect(isPublicRoute(method, "/branding/effective")).toBe(true);

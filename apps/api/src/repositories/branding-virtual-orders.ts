@@ -228,6 +228,10 @@ export class BrandingVirtualOrderRepository {
     eventType: "xpay_goods_deliver_notify" | "query_order";
     successful: true;
     environment: "sandbox" | "production";
+    recipientOriginalId: string | null;
+    senderIdHash: string | null;
+    providerCreatedAtUnix: number | null;
+    messageType: "event" | null;
     openid: string;
     outTradeNo: string;
     providerProductId: string;
@@ -248,6 +252,10 @@ export class BrandingVirtualOrderRepository {
         p_source: input.source,
         p_allow_late_closed_recovery: input.allowLateClosedRecovery,
         p_event_type: input.eventType,
+        p_recipient_original_id: input.recipientOriginalId,
+        p_sender_id_hash: input.senderIdHash,
+        p_provider_created_at: input.providerCreatedAtUnix,
+        p_msg_type: input.messageType,
         p_successful_state: input.successful,
         p_environment: input.environment,
         p_openid: input.openid,

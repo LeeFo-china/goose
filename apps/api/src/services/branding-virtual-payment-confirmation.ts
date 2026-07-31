@@ -16,6 +16,10 @@ export type BrandingVirtualSuccessfulTransaction = {
   eventType: "xpay_goods_deliver_notify" | "query_order";
   successful: true;
   environment: "sandbox" | "production";
+  recipientOriginalId: string | null;
+  senderIdHash: string | null;
+  providerCreatedAtUnix: number | null;
+  messageType: "event" | null;
   openid: string;
   outTradeNo: string;
   providerProductId: string;
@@ -50,6 +54,7 @@ export class BrandingVirtualPaymentConfirmation {
   async confirm(
     input: BrandingVirtualPaymentConfirmationInput,
   ): Promise<BrandingVirtualPurchaseConfirmationResult> {
+    assertSourceBinding(input);
     if (!safeTextEqual(input.order.payer_openid, input.transaction.openid)) {
       throw bindingMismatch(
         "BRANDING_VIRTUAL_PAYMENT_OPENID_MISMATCH",
@@ -65,6 +70,30 @@ export class BrandingVirtualPaymentConfirmation {
       allowLateClosedRecovery: input.allowLateClosedRecovery ?? false,
       ...input.transaction,
     });
+  }
+}
+
+function assertSourceBinding(input: BrandingVirtualPaymentConfirmationInput): void {
+  const transaction = input.transaction;
+  const isNotification = input.source === "notification"
+    && input.notificationId !== null
+    && transaction.eventType === "xpay_goods_deliver_notify"
+    && transaction.recipientOriginalId !== null
+    && transaction.senderIdHash !== null
+    && transaction.providerCreatedAtUnix !== null
+    && transaction.messageType === "event";
+  const isQuery = (input.source === "query" || input.source === "reconciliation")
+    && input.notificationId === null
+    && transaction.eventType === "query_order"
+    && transaction.recipientOriginalId === null
+    && transaction.senderIdHash === null
+    && transaction.providerCreatedAtUnix === null
+    && transaction.messageType === null;
+  if (!isNotification && !isQuery) {
+    throw bindingMismatch(
+      "BRANDING_VIRTUAL_PAYMENT_SOURCE_EVENT_MISMATCH",
+      "source",
+    );
   }
 }
 

@@ -55,6 +55,10 @@ const transaction = {
   eventType: "xpay_goods_deliver_notify" as const,
   successful: true as const,
   environment: "production" as const,
+  recipientOriginalId: "gh_original",
+  senderIdHash: "a".repeat(64),
+  providerCreatedAtUnix: 1_714_037_059,
+  messageType: "event" as const,
   openid: "payer-openid",
   outTradeNo: order.out_trade_no,
   providerProductId: order.provider_product_id,
@@ -119,7 +123,7 @@ describe("BrandingVirtualPaymentConfirmation", () => {
       source: "notification",
       order,
       transaction: { ...transaction, openid: "other-openid" },
-      notificationId: null,
+      notificationId: "99999999-9999-4999-8999-999999999999",
     })).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PAYMENT_OPENID_MISMATCH",
@@ -144,13 +148,72 @@ describe("BrandingVirtualPaymentConfirmation", () => {
     const confirmPurchase = mock(async () => originalFact);
     const confirmation = new BrandingVirtualPaymentConfirmation({ confirmPurchase });
 
+    const queryTransaction = {
+      ...transaction,
+      eventType: "query_order" as const,
+      recipientOriginalId: null,
+      senderIdHash: null,
+      providerCreatedAtUnix: null,
+      messageType: null,
+    };
     const results = await Promise.all([
-      confirmation.confirm({ source: "notification", order, transaction, notificationId: null }),
-      confirmation.confirm({ source: "query", order, transaction, notificationId: null }),
+      confirmation.confirm({
+        source: "notification",
+        order,
+        transaction,
+        notificationId: "99999999-9999-4999-8999-999999999999",
+      }),
+      confirmation.confirm({
+        source: "query",
+        order,
+        transaction: queryTransaction,
+        notificationId: null,
+      }),
     ]);
 
     expect(results).toEqual([originalFact, originalFact]);
     expect(confirmPurchase).toHaveBeenCalledTimes(2);
+  });
+
+  test.each([
+    {
+      source: "notification" as const,
+      notificationId: null,
+      transaction,
+    },
+    {
+      source: "query" as const,
+      notificationId: null,
+      transaction,
+    },
+    {
+      source: "notification" as const,
+      notificationId: "99999999-9999-4999-8999-999999999999",
+      transaction: { ...transaction, messageType: null },
+    },
+  ])("rejects an invalid source/event/metadata tuple before the RPC", async (input) => {
+    const { BrandingVirtualPaymentConfirmation } = await import(
+      "./branding-virtual-payment-confirmation"
+    );
+    const confirmPurchase = mock(async () => ({
+      idempotent: false,
+      payment_recorded: false,
+      fulfilled: false,
+      recoverable: false,
+      entitlement_event_id: null,
+      entitlement_status: null,
+      failure_code: null,
+    }));
+    const confirmation = new BrandingVirtualPaymentConfirmation({ confirmPurchase });
+
+    await expect(confirmation.confirm({
+      order,
+      ...input,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_VIRTUAL_PAYMENT_SOURCE_EVENT_MISMATCH",
+    });
+    expect(confirmPurchase).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -189,7 +252,7 @@ describe("BrandingVirtualPaymentConfirmation", () => {
       source: "notification",
       order,
       transaction: invalid,
-      notificationId: null,
+      notificationId: "99999999-9999-4999-8999-999999999999",
     })).rejects.toMatchObject({ statusCode: 409, code });
     expect(confirmPurchase).not.toHaveBeenCalled();
   });

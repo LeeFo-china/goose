@@ -42,6 +42,8 @@ const rawBody = JSON.stringify({
 });
 const token = "message-token";
 const originalId = "gh_original";
+const eventKey = "a".repeat(64);
+const payloadSha256 = "b".repeat(64);
 const query = {
   timestamp: "1714037059",
   nonce: "486452656",
@@ -98,12 +100,12 @@ describe("WechatVirtualPaymentNotificationService", () => {
     key === "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN" ? token : originalId
   ));
   const findByOutTradeNo = mock(async () => order);
-  const createOrGet = mock(async (input: CreateOrGetInput): Promise<CreateOrGetResult> => ({
+  const createOrGet = mock(async (_input: CreateOrGetInput): Promise<CreateOrGetResult> => ({
     created: true,
     record: {
       id: "99999999-9999-4999-8999-999999999999",
-      event_key: input.eventKey,
-      payload_sha256: input.payloadSha256,
+      event_key: eventKey,
+      payload_sha256: payloadSha256,
       status: "processing" as const,
       order_id: null,
       retry_count: 0,
@@ -112,10 +114,26 @@ describe("WechatVirtualPaymentNotificationService", () => {
   }));
   const markProcessed = mock(async (
     _input: Parameters<WechatVirtualPaymentNotificationRepository["markProcessed"]>[0],
-  ) => undefined);
+  ) => ({
+    id: "99999999-9999-4999-8999-999999999999",
+    event_key: eventKey,
+    payload_sha256: payloadSha256,
+    status: "processed" as const,
+    order_id: order.id,
+    retry_count: 0,
+    result_summary: {},
+  }));
   const markFailed = mock(async (
     _input: Parameters<WechatVirtualPaymentNotificationRepository["markFailed"]>[0],
-  ) => undefined);
+  ) => ({
+    id: "99999999-9999-4999-8999-999999999999",
+    event_key: eventKey,
+    payload_sha256: payloadSha256,
+    status: "failed" as const,
+    order_id: order.id,
+    retry_count: 1,
+    result_summary: {},
+  }));
   const confirm = mock(async (
     _input: BrandingVirtualPaymentConfirmationInput,
   ): Promise<BrandingVirtualPurchaseConfirmationResult> => ({
@@ -163,6 +181,18 @@ describe("WechatVirtualPaymentNotificationService", () => {
       body: { ErrCode: 0, ErrMsg: "success" },
     });
     expect(createOrGet).toHaveBeenCalledTimes(1);
+    expect(createOrGet).toHaveBeenCalledWith(expect.objectContaining({
+      eventType: "xpay_goods_deliver_notify",
+      recipientOriginalId: "gh_original",
+      senderIdHash: createHash("sha256").update("official-openid").digest("hex"),
+      providerCreatedAtUnix: 1_714_037_059,
+      messageType: "event",
+      openidHash: createHash("sha256").update("payer-openid").digest("hex"),
+    }));
+    const acceptanceInput = createOrGet.mock.calls[0]?.[0];
+    expect(acceptanceInput).not.toHaveProperty("normalizedPayload");
+    expect(acceptanceInput).not.toHaveProperty("authenticationStatus");
+    expect(acceptanceInput).not.toHaveProperty("payloadSha256");
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(markProcessed).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(createOrGet.mock.calls[0])).not.toContain("payer-openid");
@@ -194,6 +224,18 @@ describe("WechatVirtualPaymentNotificationService", () => {
     });
   });
 
+  test.each([
+    [" ", "WECHAT_VIRTUAL_MESSAGE_TOKEN_INVALID"],
+    ["x".repeat(513), "WECHAT_VIRTUAL_MESSAGE_TOKEN_INVALID"],
+  ])("fails closed for invalid message-token configuration", async (value, code) => {
+    getPlatformSecretString.mockResolvedValueOnce(value);
+    await expect((await createService()).verifyEndpoint({
+      ...query,
+      echostr: "echo-value",
+    })).rejects.toMatchObject({ statusCode: 503, code });
+    expect(createOrGet).not.toHaveBeenCalled();
+  });
+
   test("fails closed when the Mini Program original ID is absent", async () => {
     getPlatformSecretString.mockImplementationOnce(async () => token)
       .mockImplementationOnce(async () => "");
@@ -211,6 +253,26 @@ describe("WechatVirtualPaymentNotificationService", () => {
     expect(createOrGet).not.toHaveBeenCalled();
     expect(confirm).not.toHaveBeenCalled();
   });
+
+  test.each(["wx-appid", "gh_", "gh_bad/value", `gh_${"a".repeat(126)}`])(
+    "fails closed for invalid Mini Program original-ID configuration",
+    async (value) => {
+      getPlatformSecretString.mockImplementationOnce(async () => token)
+        .mockImplementationOnce(async () => value);
+      const result = await (await createService()).handle({
+        rawBody,
+        contentType: "application/json",
+        query,
+        requestId: "request-invalid-original-id",
+      });
+
+      expect(result).toMatchObject({
+        body: { ErrCode: 1, ErrMsg: "retry" },
+        errorCode: "WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_INVALID",
+      });
+      expect(createOrGet).not.toHaveBeenCalled();
+    },
+  );
 
   test("rejects a ToUserName mismatch before inbox persistence", async () => {
     getPlatformSecretString.mockImplementationOnce(async () => token)
@@ -230,12 +292,12 @@ describe("WechatVirtualPaymentNotificationService", () => {
   });
 
   test("returns the original successful fact for a processed duplicate", async () => {
-    createOrGet.mockImplementationOnce(async (input) => ({
+    createOrGet.mockImplementationOnce(async () => ({
       created: false,
       record: {
         id: "99999999-9999-4999-8999-999999999999",
-        event_key: input.eventKey,
-        payload_sha256: input.payloadSha256,
+        event_key: eventKey,
+        payload_sha256: payloadSha256,
         status: "processed" as const,
         order_id: order.id,
         retry_count: 0,
@@ -258,12 +320,12 @@ describe("WechatVirtualPaymentNotificationService", () => {
   });
 
   test("re-runs idempotent confirmation for an orphaned processing duplicate", async () => {
-    createOrGet.mockImplementationOnce(async (input) => ({
+    createOrGet.mockImplementationOnce(async () => ({
       created: false,
       record: {
         id: "99999999-9999-4999-8999-999999999999",
-        event_key: input.eventKey,
-        payload_sha256: input.payloadSha256,
+        event_key: eventKey,
+        payload_sha256: payloadSha256,
         status: "processing" as const,
         order_id: null,
         retry_count: 0,
@@ -298,12 +360,12 @@ describe("WechatVirtualPaymentNotificationService", () => {
       errorCode: "DB_ERROR",
     });
 
-    createOrGet.mockImplementationOnce(async (input) => ({
+    createOrGet.mockImplementationOnce(async () => ({
       created: false,
       record: {
         id: "99999999-9999-4999-8999-999999999999",
-        event_key: input.eventKey,
-        payload_sha256: input.payloadSha256,
+        event_key: eventKey,
+        payload_sha256: payloadSha256,
         status: "failed" as const,
         order_id: order.id,
         retry_count: 1,
@@ -331,19 +393,12 @@ describe("WechatVirtualPaymentNotificationService", () => {
     expect(markProcessed).toHaveBeenCalledTimes(2);
   });
 
-  test("does not downgrade a processed fact when a duplicate payload conflicts", async () => {
-    createOrGet.mockImplementationOnce(async (input) => ({
-      created: false,
-      record: {
-        id: "99999999-9999-4999-8999-999999999999",
-        event_key: input.eventKey,
-        payload_sha256: "0".repeat(64),
-        status: "processed" as const,
-        order_id: order.id,
-        retry_count: 0,
-        result_summary: { fulfilled: true },
-      },
-    }));
+  test("does not downgrade a processed fact when the acceptance RPC reports a conflict", async () => {
+    createOrGet.mockRejectedValueOnce(Errors.business(
+      409,
+      "微信虚拟支付消息幂等事实冲突",
+      "WECHAT_VIRTUAL_NOTIFICATION_EVENT_CONFLICT",
+    ));
 
     const result = await (await createService()).handle({
       rawBody,
@@ -354,7 +409,7 @@ describe("WechatVirtualPaymentNotificationService", () => {
 
     expect(result).toMatchObject({
       body: { ErrCode: 1, ErrMsg: "retry" },
-      errorCode: "WECHAT_VIRTUAL_MESSAGE_EVENT_CONFLICT",
+      errorCode: "WECHAT_VIRTUAL_NOTIFICATION_EVENT_CONFLICT",
     });
     expect(markFailed).not.toHaveBeenCalled();
     expect(confirm).not.toHaveBeenCalled();

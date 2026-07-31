@@ -17,6 +17,10 @@ import {
   verifyWechatMessageSignature,
   type WechatVirtualMessageFormat,
 } from "@/services/wechat-virtual-payment-message";
+import {
+  isValidWechatMiniProgramOriginalId,
+  isValidWechatVirtualPaymentMessageToken,
+} from "@/services/wechat-virtual-payment-message-config";
 import { systemSettingsService } from "@/services/system-settings";
 
 export const WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN =
@@ -118,6 +122,13 @@ export class WechatVirtualPaymentNotificationService {
         "WECHAT_VIRTUAL_MESSAGE_TOKEN_MISSING",
       );
     }
+    if (!isValidWechatVirtualPaymentMessageToken(token)) {
+      throw Errors.business(
+        503,
+        "微信虚拟支付消息令牌配置无效",
+        "WECHAT_VIRTUAL_MESSAGE_TOKEN_INVALID",
+      );
+    }
     const signature = exactQueryText(query.signature, "signature", 40);
     const timestamp = exactQueryText(query.timestamp, "timestamp", 20);
     const nonce = exactQueryText(query.nonce, "nonce", 128);
@@ -144,6 +155,13 @@ export class WechatVirtualPaymentNotificationService {
         "WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_MISSING",
       );
     }
+    if (!isValidWechatMiniProgramOriginalId(expectedOriginalId)) {
+      throw Errors.business(
+        503,
+        "微信小程序原始 ID 配置无效",
+        "WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_INVALID",
+      );
+    }
     if (message.toUserName !== expectedOriginalId) {
       throw Errors.business(
         409,
@@ -152,24 +170,26 @@ export class WechatVirtualPaymentNotificationService {
         { field: "ToUserName" },
       );
     }
-    const normalized = normalizeMessage(message);
-    const eventKey = sha256(`${message.eventType}\n${message.transactionId}`);
-    const payloadSha256 = sha256(JSON.stringify(normalized));
     const persisted = await this.notifications.createOrGet({
-      eventKey,
       eventType: message.eventType,
       environment: message.environment,
+      recipientOriginalId: message.toUserName,
+      senderIdHash: sha256(message.fromUserName),
+      providerCreatedAtUnix: message.providerCreatedAtUnix,
+      messageType: message.messageType,
       outTradeNo: message.outTradeNo,
       providerProductId: message.providerProductId,
-      openidHash: normalized.openid_hash,
-      normalizedPayload: normalized,
-      payloadSha256,
+      openidHash: sha256(message.openid),
+      providerOrderNo: message.providerOrderNo,
+      transactionId: message.transactionId,
+      paidAt: message.paidAt,
+      quantity: message.quantity,
+      origPriceFen: message.origPriceFen,
+      actualPriceFen: message.actualPriceFen,
+      attach: message.attach,
       requestId: input.requestId?.slice(0, 128) ?? null,
     });
 
-    if (persisted.record.payload_sha256 !== payloadSha256) {
-      return retryResult(input.format, "WECHAT_VIRTUAL_MESSAGE_EVENT_CONFLICT");
-    }
     if (!persisted.created && persisted.record.status === "processed") {
       return successResult(input.format);
     }
@@ -192,6 +212,10 @@ export class WechatVirtualPaymentNotificationService {
           eventType: message.eventType,
           successful: true,
           environment: message.environment,
+          recipientOriginalId: message.toUserName,
+          senderIdHash: sha256(message.fromUserName),
+          providerCreatedAtUnix: message.providerCreatedAtUnix,
+          messageType: message.messageType,
           openid: message.openid,
           outTradeNo: message.outTradeNo,
           providerProductId: message.providerProductId,
@@ -213,15 +237,16 @@ export class WechatVirtualPaymentNotificationService {
           input.format,
         );
       }
+      if (!result.entitlement_event_id || !result.entitlement_status) {
+        throw Errors.dbError("微信虚拟支付履约结果缺少权益事实");
+      }
       await this.notifications.markProcessed({
         notificationId: persisted.record.id,
         orderId: order.id,
-        resultSummary: {
-          payment_recorded: result.payment_recorded,
-          fulfilled: result.fulfilled,
-          entitlement_event_id: result.entitlement_event_id,
-          entitlement_status: result.entitlement_status,
-        },
+        paymentRecorded: true,
+        fulfilled: true,
+        entitlementEventId: result.entitlement_event_id,
+        entitlementStatus: result.entitlement_status,
       });
       return successResult(input.format);
     } catch (error) {
@@ -244,7 +269,6 @@ export class WechatVirtualPaymentNotificationService {
       await this.notifications.markFailed({
         notificationId: notification.id,
         orderId,
-        retryCount: notification.retry_count,
         errorCode,
         errorSummary: failureSummary(errorCode),
       });
@@ -256,23 +280,6 @@ export class WechatVirtualPaymentNotificationService {
       };
     }
   }
-}
-
-function normalizeMessage(message: ReturnType<typeof parseWechatVirtualPaymentMessage>) {
-  return {
-    event_type: message.eventType,
-    environment: message.environment,
-    out_trade_no: message.outTradeNo,
-    provider_order_no: message.providerOrderNo,
-    transaction_id: message.transactionId,
-    paid_at: message.paidAt,
-    provider_product_id: message.providerProductId,
-    quantity: message.quantity,
-    orig_price_fen: message.origPriceFen,
-    actual_price_fen: message.actualPriceFen,
-    attach: message.attach,
-    openid_hash: sha256(message.openid),
-  };
 }
 
 function formatFromContentType(contentType: string): WechatVirtualMessageFormat {

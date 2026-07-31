@@ -885,6 +885,7 @@ git commit -m "fix(payments): 原子化虚拟支付请求签发"
 - Create: `apps/api/src/repositories/wechat-virtual-payment-notifications.test.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-message.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-message.test.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-message-config.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.test.ts`
 - Create: `apps/api/src/services/branding-virtual-payment-confirmation.ts`
@@ -896,6 +897,10 @@ git commit -m "fix(payments): 原子化虚拟支付请求签发"
 - Modify: `apps/api/src/repositories/branding-virtual-orders.test.ts`
 - Modify: `apps/api/src/repositories/system-settings.ts`
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts`
+- Modify: `apps/api/src/services/system-settings/legacy/crypto.ts`
+- Modify: `apps/api/src/plugins/auth/legacy/routes.ts`
+- Modify: `apps/api/src/plugins/auth/legacy-plugin.ts`
+- Create: `apps/api/src/plugins/auth/legacy-plugin.test.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
 - [x] **Step 1: 写重复、伪造、乱序和原子履约测试**
@@ -951,7 +956,9 @@ ON public.wechat_virtual_payment_notifications(status, received_at, id)
 WHERE status IN ('processing', 'failed');
 ```
 
-同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`。事务锁顺序固定为：租户权益 advisory lock、微信 transaction/provider order advisory lock、order row、entitlement row；完整比对服务端订单、通知收件箱和微信支付事实。支付事实先落为 `succeeded + grant_failed`，权益更新与 purchase event 位于可回滚子事务；发放失败必须保留真实收款事实供重试。若已有 `entitlement_event_id` 则返回原事实；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；暂停或撤销的权益只延长期限，不静默恢复状态。RPC 以 order、notification、transaction 和 provider order identity 共同约束幂等。
+收件箱表只向 `service_role` 开放读取，写入、完成和失败迁移只能调用三个定向 `SECURITY DEFINER` RPC。接收 RPC 仅接受强类型事实，由数据库生成稳定事件键、规范化快照、载荷哈希和固定认证结论；应用层不能提交任意 JSON、伪造 `verified` 或自行计算重试次数。触发器保持快照、订单绑定和完成结果不可变，`processed` 为终态，每次写入 `failed` 必须原子递增一次重试计数。表级事件枚举保留后续 `xpay_refund_notify` / `xpay_refund_inquiry`，当前仅发货事件有可执行接收 RPC，并由事件专属 CHECK 要求完整商品上下文。
+
+同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`。事务锁顺序固定为：租户权益 advisory lock、微信 transaction/provider order advisory lock、order row、entitlement row；完整比对服务端订单、通知收件箱和微信支付事实，包括接收方原始 ID、发送方哈希、微信创建时间和消息类型。支付事实先落为 `succeeded + grant_failed`，权益更新与 purchase event 位于可回滚子事务；发放失败必须保留真实收款事实供重试。若已有 `entitlement_event_id` 则返回原事实；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；暂停或撤销的权益只延长期限，不静默恢复状态。RPC 以 order、notification、transaction 和 provider order identity 共同约束幂等，并拒绝 NULL 或不匹配的 source/event 组合。
 
 - [x] **Step 4: 实现独立消息入口**
 
@@ -962,9 +969,9 @@ fastify.get("/wechat/virtual-payment/events", this.verifyEndpoint);
 fastify.post("/wechat/virtual-payment/events", this.handleEvent);
 ```
 
-消息 service 先验证微信消息入口，再生成 `sha256(eventType + stableProviderIdentity)` 事件键，落库后派发。成功响应严格按微信官方消息协议返回 `ErrCode=0`；上下文不匹配返回可观测的稳定错误且绝不创建权益。
+消息 service 先验证微信消息入口和目标小程序原始 ID，再把限定字段与敏感身份哈希交给数据库接收 RPC，由数据库生成 `sha256(eventType + stableProviderIdentity)` 事件键并落库后派发。成功响应严格按微信官方消息协议返回 `ErrCode=0`；上下文不匹配返回可观测的稳定错误且绝不创建权益。鉴权只公开精确的 GET/POST `/wechat/virtual-payment/events`，其余方法、子路径和近似路径仍需 Bearer token；Fastify 使用单一 callback-style hook 包装异步鉴权，已覆盖真实 injection，避免 Bun 下提前回复继续执行 handler。
 
-首期按微信官方明文模式实现：使用独立平台级密钥 `WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN` 对 `token + timestamp + nonce` 排序后执行 SHA-1 验签，并使用非密钥平台配置 `WECHAT_MINIPROGRAM_ORIGINAL_ID` 精确绑定 `ToUserName`。JSON 输入返回 JSON，XML 输入返回 XML；入口限制 64 KiB，认证通过前不保存任何消息。当前契约没有 `EncodingAESKey`，因此带 `encrypt_type`/`msg_signature` 的安全模式请求必须 fail closed；部署微信后台必须先选择明文模式，不得猜测密钥或复用 AppSecret/AppKey。后续启用安全模式须独立补齐 AES 消息解密、验签与轮换设计。
+首期按微信官方明文模式实现：使用独立平台级密钥 `WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN` 对 `token + timestamp + nonce` 排序后执行 SHA-1 验签，并使用非密钥平台配置 `WECHAT_MINIPROGRAM_ORIGINAL_ID` 精确绑定 `ToUserName`。Token 必须为非空且不超过内部防御上限 512 字符；原始 ID 必须匹配 `gh_` 前缀格式且不超过 128 字符，保存和运行时读取均复用同一校验。JSON 输入返回 JSON，XML 输入返回 XML；入口限制 64 KiB，认证通过前不保存任何消息。当前契约没有 `EncodingAESKey`，因此带 `encrypt_type`/`msg_signature` 的安全模式请求必须 fail closed；部署微信后台必须先选择明文模式，不得猜测密钥或复用 AppSecret/AppKey。后续启用安全模式须独立补齐 AES 消息解密、验签与轮换设计。
 
 支付确认成功后，通知路径直接按微信消息协议确认发货；主动查单路径必须调用 `/xpay/notify_provide_goods` 告知微信本地权益已交付。`notify_provide_goods` 暂时失败只记录可重试的发货通知状态，不重复延长权益。
 
