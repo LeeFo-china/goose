@@ -43,6 +43,8 @@
 - `apps/api/src/repositories/wechat-mini-session-credentials.ts`：会话凭据轮换、读取、使用时间和失效。
 - `apps/api/src/services/wechat-mini-session-credentials.ts`：OAuth 身份绑定、会话轮换与重新登录契约。
 - `apps/api/src/services/wechat-virtual-payment-signatures.ts`：用户态签名与支付请求签名的纯函数。
+- `apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts`：虚拟支付服务器 API 输入、归一化结果和网关端口。
+- `apps/api/src/services/wechat-virtual-payment-gateway-response.ts`：XPay 小写应答信封、订单与退款结果的严格运行时归一化。
 - `apps/api/src/services/wechat-virtual-payment-gateway.ts`：`query_order`、`refund_order`、`notify_provide_goods` 和账单 HTTP 边界。
 - `apps/api/src/repositories/branding-virtual-orders.ts`：虚拟订单创建、查询、claim 和履约 RPC。
 - `apps/api/src/services/tenant-branding-virtual-orders.ts`：租户订单创建与支付参数编排。
@@ -592,12 +594,22 @@ git commit -m "feat(payments): 增加虚拟商品配置与购买能力"
 **Files:**
 - Create: `apps/api/src/services/wechat-virtual-payment-signatures.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-signatures.test.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-gateway-response.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway.test.ts`
 
 - [ ] **Step 1: 固化官方请求字段并写签名向量测试**
 
-开始编码前在官方页面逐项核对 `wx.requestVirtualPayment`、`/xpay/query_order`、`/xpay/refund_order`、`/xpay/notify_provide_goods` 的字段、大小写、拼接顺序和摘要算法，把核对日期写入测试注释。测试输入固定，不使用真实密钥：
+2026-08-01 已通过 `curl` 逐项核对以下官方页面；测试注释保留核对日期和 URL：
+
+- `https://developers.weixin.qq.com/miniprogram/dev/platform-capabilities/business-capabilities/virtual-payment.html`
+- `https://developers.weixin.qq.com/miniprogram/dev/api/payment/wx.requestVirtualPayment.html`
+- `https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_query_order.html`
+- `https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_refund_order.html`
+- `https://developers.weixin.qq.com/miniprogram/dev/server/API/VirtualPayment/api_notify_provide_goods.html`
+
+官方服务器 API 响应字段为小写 `errcode`、`errmsg`；本 Task 不修改消息回调协议的 `ErrCode`、`ErrMsg` 大写约定。三个 XPay 服务器 API 均使用 `https://api.weixin.qq.com`，正式/沙箱通过 body 的 `env=0/1` 和对应环境 AppKey 区分，不使用不同的生产默认 base URL。测试输入固定，不使用真实密钥：
 
 ```ts
 const officialBody = '{"openid": "xxx", "user_ip": "127.0.0.1", "env": 0}';
@@ -630,9 +642,6 @@ import { createHmac } from "node:crypto";
 
 export type VirtualPaymentRequestPayload = {
   offerId: string;
-  buyQuantity: 1;
-  env: 0 | 1;
-  currencyType: "CNY";
   productId: string;
   goodsPrice: number;
   outTradeNo: string;
@@ -640,14 +649,16 @@ export type VirtualPaymentRequestPayload = {
 };
 
 export function buildVirtualPaymentRequest(input: VirtualPaymentRequestPayload & {
-  appKey: string;
+  environment: "sandbox" | "production";
+  signingSecret: { environment: "sandbox" | "production"; appKey: string };
   sessionKey: string;
 }) {
+  const env = input.environment === "production" ? 0 : 1;
   const signData = JSON.stringify({
     offerId: input.offerId,
-    buyQuantity: input.buyQuantity,
-    env: input.env,
-    currencyType: input.currencyType,
+    buyQuantity: 1,
+    env,
+    currencyType: "CNY",
     productId: input.productId,
     goodsPrice: input.goodsPrice,
     outTradeNo: input.outTradeNo,
@@ -656,7 +667,7 @@ export function buildVirtualPaymentRequest(input: VirtualPaymentRequestPayload &
   return {
     signData,
     mode: "short_series_goods" as const,
-    paySig: calculateVirtualPaymentPaySig("requestVirtualPayment", signData, input.appKey),
+    paySig: calculateVirtualPaymentPaySig("requestVirtualPayment", signData, input.signingSecret.appKey),
     signature: calculateVirtualPaymentUserSignature(signData, input.sessionKey),
   };
 }
@@ -670,7 +681,7 @@ export function calculateVirtualPaymentUserSignature(signData: string, sessionKe
 }
 ```
 
-`signData` 必须以生成后的同一个字符串完成签名并返回客户端，不得二次解析或重新序列化；AppKey 和 session key 不得被返回或记录。若实施当天官方字段或算法已经变化，先同步修订设计文档和本计划再编码。
+`env` 只由 `environment` 派生，签名密钥必须带相同环境标签；`signData` 必须以生成后的同一个字符串完成签名并返回客户端，不得二次解析或重新序列化；AppKey 和 session key 不得被返回或记录。若实施当天官方字段或算法已经变化，先同步修订设计文档和本计划再编码。
 
 - [ ] **Step 4: 实现 HTTP gateway**
 
@@ -682,7 +693,13 @@ export interface WechatVirtualPaymentGatewayPort {
 }
 ```
 
-Gateway 使用注入的 `fetch`、超时 `AbortSignal.timeout(8_000)` 和分环境 base URL；只返回归一化结果。HTTP 非 2xx、微信 `ErrCode` 非 0、JSON 不合法分别包装为 `Errors.business(502, ..., stableCode, boundedDetails)`，details 只含 HTTP 状态、微信错误码和 requestId，不含密钥、签名、OpenID 或完整载荷。
+Gateway 使用注入的 `fetch`、超时 `AbortSignal.timeout(8_000)` 和单一官方默认 base URL `https://api.weixin.qq.com`；base URL 只允许测试注入。`accessToken` 由调用方或后续 token provider 传入，本 Task 不重复实现 token 缓存。
+
+- `query_order`：`POST /xpay/query_order?access_token&pay_sig`，body 为 `openid`、派生 `env` 以及 `order_id`/`wx_order_id` 严格二选一，只使用支付签名。
+- `refund_order`：官方调用 URL 和查询参数表只列 `access_token`、`pay_sig`，但同页“注意事项”明确要求“使用用户态签名与支付签名”。本实现采用该更严格说明，在 query 同时传 `signature` 和 `pay_sig`，且两者都基于实际发送的同一个原始 JSON body；受理成功只返回 `submitted` 语义，最终结果仍由查单或退款通知确认。
+- `notify_provide_goods`：`POST /xpay/notify_provide_goods?access_token`，body 为派生 `env` 以及 `order_id`/`wx_order_id` 严格二选一，不传 `pay_sig` 或 `signature`，成功响应体允许为空。
+
+Gateway 只返回经过严格运行时验证的归一化结果。HTTP 非 2xx、网络或超时、微信小写 `errcode` 非 0、JSON 不合法分别包装为稳定 `Errors.business(...)`；details 只含有界的 `httpStatus`、`wechatErrcode` 和 `requestId`，不含 URL query、密钥、签名、OpenID、`errmsg` 原文或完整载荷。
 
 基础库返回 `-15007`（`session_key` 过期）发生在小程序本地，API 无法从该客户端错误反推凭据状态；小程序必须先重新执行 `wx.login`，登录 API 轮换凭据后再请求同一订单的 payment-request。服务端 gateway 在调用微信服务器 API 时若收到明确的会话失效错误，才将当前凭据标记为 `invalid`。凭据缺失或已 invalid 时 API 返回 HTTP 409 `BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED`，不得创建新订单或回退普通支付。
 
@@ -693,7 +710,7 @@ Run: `bun test apps/api/src/services/wechat-virtual-payment-signatures.test.ts a
 Expected: 固定签名向量、超时、非 2xx、微信错误码和环境隔离测试全部 PASS。
 
 ```bash
-git add apps/api/src/services/wechat-virtual-payment-signatures.ts apps/api/src/services/wechat-virtual-payment-signatures.test.ts apps/api/src/services/wechat-virtual-payment-gateway.ts apps/api/src/services/wechat-virtual-payment-gateway.test.ts
+git add apps/api/src/services/wechat-virtual-payment-signatures.ts apps/api/src/services/wechat-virtual-payment-signatures.test.ts apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts apps/api/src/services/wechat-virtual-payment-gateway-response.ts apps/api/src/services/wechat-virtual-payment-gateway.ts apps/api/src/services/wechat-virtual-payment-gateway.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
 git commit -m "feat(payments): 实现微信虚拟支付网关"
 ```
 
