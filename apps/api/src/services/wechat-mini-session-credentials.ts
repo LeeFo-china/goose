@@ -7,6 +7,9 @@ import {
   type WechatMiniSessionCredentialRecord,
   type WechatMiniSessionCredentialStatus,
 } from "@/repositories/wechat-mini-session-credentials";
+import {
+  BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
+} from "@/services/branding-virtual-payment-contracts";
 
 import {
   decryptWechatMiniSessionKey,
@@ -14,8 +17,6 @@ import {
 } from "./wechat-mini-session-crypto";
 
 const CURRENT_ENCRYPTION_KEY_VERSION = 1;
-const SESSION_REFRESH_REQUIRED_CODE =
-  "BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED";
 
 type IdentityRepositoryPort = Pick<
   typeof userIdentityRepository,
@@ -178,7 +179,7 @@ function throwSessionRefreshRequired(): never {
   throw Errors.business(
     409,
     "微信会话已失效，请重新登录",
-    SESSION_REFRESH_REQUIRED_CODE,
+    BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
   );
 }
 

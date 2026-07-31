@@ -1,4 +1,7 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
+} from "@/services/branding-virtual-payment-contracts";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type WechatMiniSessionCredentialStatus =
@@ -40,9 +43,14 @@ export class WechatMiniSessionCredentialRepository {
     functionName: string,
     parameters: Record<string, unknown>,
     errorMessage: string,
+    mapError?: (error: unknown) => Error | null,
   ): Promise<unknown> {
     const { data, error } = await this.client.rpc(functionName, parameters);
     if (error) {
+      const mapped = mapError?.(error);
+      if (mapped) {
+        throw mapped;
+      }
       throw Errors.dbError(errorMessage, error);
     }
     return data;
@@ -67,6 +75,7 @@ export class WechatMiniSessionCredentialRepository {
         p_encryption_key_version: input.encryptionKeyVersion,
       },
       "轮换微信会话凭据失败",
+      mapRotationError,
     );
     return this.requireFirst(data, "轮换微信会话凭据失败");
   }
@@ -159,3 +168,21 @@ export class WechatMiniSessionCredentialRepository {
 
 export const wechatMiniSessionCredentialRepository =
   new WechatMiniSessionCredentialRepository();
+
+function mapRotationError(error: unknown): Error | null {
+  if (!error || typeof error !== "object") {
+    return null;
+  }
+  const record = error as Record<string, unknown>;
+  if (
+    record.code !== "P0001"
+    || record.message !== "WECHAT_MINI_SESSION_IDENTITY_MISMATCH"
+  ) {
+    return null;
+  }
+  return Errors.business(
+    409,
+    "微信会话已失效，请重新登录",
+    BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
+  );
+}

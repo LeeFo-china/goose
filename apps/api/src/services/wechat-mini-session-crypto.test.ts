@@ -47,4 +47,28 @@ describe("wechat mini session crypto", () => {
       }),
     );
   });
+
+  test("preserves the server configuration error when decrypting without a key", () => {
+    process.env[ENV_NAME] = "test-key-material-not-used-in-production";
+    const encrypted = encryptWechatMiniSessionKey("session-key", 1);
+    delete process.env[ENV_NAME];
+
+    expect(() => decryptWechatMiniSessionKey(encrypted, 1)).toThrowError(
+      expect.objectContaining({
+        statusCode: 503,
+        code: "WECHAT_MINI_SESSION_ENCRYPTION_KEY_MISSING",
+      }),
+    );
+  });
+
+  test("rejects envelopes with appended fields", () => {
+    process.env[ENV_NAME] = "test-key-material-not-used-in-production";
+    const encrypted = encryptWechatMiniSessionKey("session-key", 1);
+
+    expect(() => decryptWechatMiniSessionKey(`${encrypted}:extra`, 1))
+      .toThrowError(expect.objectContaining({
+        statusCode: 409,
+        code: "BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED",
+      }));
+  });
 });

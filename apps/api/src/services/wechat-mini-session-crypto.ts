@@ -6,12 +6,13 @@ import {
 } from "node:crypto";
 
 import { Errors } from "@/errors/error-factory";
+import {
+  BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
+} from "@/services/branding-virtual-payment-contracts";
 
 const ENVELOPE_PREFIX = "wmss:v1";
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
-const SESSION_REFRESH_REQUIRED_CODE =
-  "BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED";
 
 function keyFor(version: number): Buffer {
   const raw = process.env[
@@ -52,11 +53,13 @@ export function decryptWechatMiniSessionKey(
   value: string,
   version: number,
 ): string {
+  const key = keyFor(version);
   try {
-    const [family, format, storedVersion, ivText, tagText, ciphertextText] =
-      value.split(":");
+    const parts = value.split(":");
+    const [family, format, storedVersion, ivText, tagText, ciphertextText] = parts;
     if (
-      `${family}:${format}` !== ENVELOPE_PREFIX
+      parts.length !== 6
+      || `${family}:${format}` !== ENVELOPE_PREFIX
       || Number(storedVersion) !== version
       || !ivText
       || !tagText
@@ -73,7 +76,7 @@ export function decryptWechatMiniSessionKey(
 
     const decipher = createDecipheriv(
       "aes-256-gcm",
-      keyFor(version),
+      key,
       iv,
     );
     decipher.setAuthTag(authTag);
@@ -86,7 +89,7 @@ export function decryptWechatMiniSessionKey(
     throw Errors.business(
       409,
       "微信会话已失效，请重新登录",
-      SESSION_REFRESH_REQUIRED_CODE,
+      BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
     );
   }
 }
