@@ -246,6 +246,17 @@ export const SUPPLIER_PAYMENT_COMMAND_ERROR_CODES = {
   idempotency_conflict: "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT",
 } as const;
 
+const PAYMENT_REQUEST_STATUS_BY_COMMAND_STATUS = {
+  saved: "draft",
+  submitted: "pending_approval",
+  approved: "approved",
+  rejected: "rejected",
+  cancelled: "cancelled",
+  closed: "closed",
+  partially_paid: "partially_paid",
+  paid: "paid",
+} as const;
+
 const SupplierPaymentRequestCommandSuccessSchema = z.object({
   status: z.enum([
     "saved",
@@ -258,7 +269,9 @@ const SupplierPaymentRequestCommandSuccessSchema = z.object({
   idempotent: z.boolean(),
   payment_request: SupplierPaymentRequestSchema,
   version: z.number().int().positive(),
-}).strict();
+}).strict().superRefine((input, context) => {
+  validatePaymentRequestCommandSuccess(input, context);
+});
 
 const SupplierPaymentCommandSuccessSchema = z.object({
   status: z.enum(["partially_paid", "paid"]),
@@ -266,7 +279,88 @@ const SupplierPaymentCommandSuccessSchema = z.object({
   payment_request: SupplierPaymentRequestSchema,
   payment: SupplierPaymentSchema,
   version: z.number().int().positive(),
-}).strict();
+}).strict().superRefine((input, context) => {
+  validatePaymentRequestCommandSuccess(input, context);
+  addMismatchIssue(
+    input.payment.payment_request_id,
+    input.payment_request.id,
+    ["payment", "payment_request_id"],
+    "付款记录与付款申请不匹配",
+    context,
+  );
+  addMismatchIssue(
+    input.payment.tenant_id,
+    input.payment_request.tenant_id,
+    ["payment", "tenant_id"],
+    "付款记录与付款申请的租户不匹配",
+    context,
+  );
+  addMismatchIssue(
+    input.payment.project_id,
+    input.payment_request.project_id,
+    ["payment", "project_id"],
+    "付款记录与付款申请的项目不匹配",
+    context,
+  );
+  addMismatchIssue(
+    input.payment.tenant_supplier_id,
+    input.payment_request.tenant_supplier_id,
+    ["payment", "tenant_supplier_id"],
+    "付款记录与付款申请的租户供应商关系不匹配",
+    context,
+  );
+  addMismatchIssue(
+    input.payment.supplier_id,
+    input.payment_request.supplier_id,
+    ["payment", "supplier_id"],
+    "付款记录与付款申请的供应商不匹配",
+    context,
+  );
+  addMismatchIssue(
+    input.payment.currency,
+    input.payment_request.currency,
+    ["payment", "currency"],
+    "付款记录与付款申请的币种不匹配",
+    context,
+  );
+});
+
+function validatePaymentRequestCommandSuccess(
+  input: {
+    status: keyof typeof PAYMENT_REQUEST_STATUS_BY_COMMAND_STATUS;
+    payment_request: z.infer<typeof SupplierPaymentRequestSchema>;
+    version: number;
+  },
+  context: z.RefinementCtx,
+): void {
+  const expectedStatus = PAYMENT_REQUEST_STATUS_BY_COMMAND_STATUS[input.status];
+  if (input.payment_request.status !== expectedStatus) {
+    context.addIssue({
+      code: "custom",
+      path: ["payment_request", "status"],
+      message: "付款申请状态与命令结果不匹配",
+    });
+  }
+  addMismatchIssue(
+    input.version,
+    input.payment_request.version,
+    ["version"],
+    "命令结果版本与付款申请版本不匹配",
+    context,
+  );
+}
+
+function addMismatchIssue(
+  actual: string | number,
+  expected: string | number,
+  path: PropertyKey[],
+  message: string,
+  context: z.RefinementCtx,
+): void {
+  if (actual !== expected) {
+    context.addIssue({ code: "custom", path, message });
+  }
+}
 
 function commandErrorSchema<
   Status extends keyof typeof SUPPLIER_PAYMENT_COMMAND_ERROR_CODES,

@@ -146,6 +146,32 @@ const paymentAllocation = {
   created_at: AT,
 } as const;
 
+function paymentSuccessEnvelope(input: {
+  status?: "partially_paid" | "paid";
+  requestOverrides?: Record<string, unknown>;
+  paymentOverrides?: Record<string, unknown>;
+  version?: number;
+} = {}) {
+  const status = input.status ?? "partially_paid";
+  return {
+    status,
+    idempotent: true,
+    payment_request: { ...paymentRequest, status, ...input.requestOverrides },
+    payment: { ...supplierPayment, ...input.paymentOverrides },
+    version: input.version ?? 4,
+  };
+}
+
+const REQUEST_ONLY_STATUS_PAIRS = [
+  ["saved", "draft"], ["submitted", "pending_approval"],
+  ["approved", "approved"], ["rejected", "rejected"],
+  ["cancelled", "cancelled"], ["closed", "closed"],
+] as const;
+const PAYMENT_STATUS_PAIRS =
+  [["partially_paid", "partially_paid"], ["paid", "paid"]] as const;
+const SUCCESS_STATUS_PAIRS =
+  [...REQUEST_ONLY_STATUS_PAIRS, ...PAYMENT_STATUS_PAIRS] as const;
+
 describe("supplier payable and payment database records", () => {
   test("selects every numeric database fact as text", () => {
     for (const select of [
@@ -312,18 +338,14 @@ describe("supplier payable and payment database records", () => {
 
 describe("supplier payment command envelope", () => {
   test("strictly parses request-only success statuses", () => {
-    for (const status of [
-      "saved",
-      "submitted",
-      "approved",
-      "rejected",
-      "cancelled",
-      "closed",
-    ] as const) {
+    for (const [status, requestStatus] of REQUEST_ONLY_STATUS_PAIRS) {
       const envelope = {
         status,
         idempotent: false,
-        payment_request: paymentRequest,
+        payment_request: {
+          ...paymentRequest,
+          status: requestStatus,
+        },
         version: 4,
       };
       const result = SupplierPaymentCommandEnvelopeSchema.safeParse(envelope);
@@ -340,16 +362,11 @@ describe("supplier payment command envelope", () => {
 
   test("requires a payment for partially paid and paid statuses", () => {
     for (const status of ["partially_paid", "paid"] as const) {
-      const envelope = {
+      const envelope = paymentSuccessEnvelope({
         status,
-        idempotent: true,
-        payment_request: {
-          ...paymentRequest,
-          status,
-        },
-        payment: supplierPayment,
+        requestOverrides: { version: 5 },
         version: 5,
-      };
+      });
       const result = SupplierPaymentCommandEnvelopeSchema.safeParse(envelope);
       expect(result.success).toBe(true);
       if (result.success) {
@@ -358,6 +375,57 @@ describe("supplier payment command envelope", () => {
       const { payment: _payment, ...withoutPayment } = envelope;
       expect(SupplierPaymentCommandEnvelopeSchema.safeParse(withoutPayment)
         .success).toBe(false);
+    }
+  });
+
+  test("rejects every success status paired with another request status", () => {
+    for (const [status, requestStatus] of SUCCESS_STATUS_PAIRS) {
+      const envelope = {
+        status,
+        idempotent: false,
+        payment_request: {
+          ...paymentRequest,
+          status: requestStatus === "draft" ? "approved" : "draft",
+        },
+        version: 4,
+        ...(
+          status === "partially_paid" || status === "paid"
+            ? { payment: supplierPayment }
+            : {}
+        ),
+      };
+      expect(SupplierPaymentCommandEnvelopeSchema.safeParse(envelope).success)
+        .toBe(false);
+    }
+  });
+
+  test("rejects success versions that differ from the request version", () => {
+    expect(SupplierPaymentCommandEnvelopeSchema.safeParse(
+      paymentSuccessEnvelope({ version: 5 }),
+    ).success).toBe(false);
+  });
+
+  test("rejects a payment attached to another request", () => {
+    const envelope = paymentSuccessEnvelope({
+      paymentOverrides: { payment_request_id: ID },
+    });
+    expect(SupplierPaymentCommandEnvelopeSchema.safeParse(envelope).success)
+      .toBe(false);
+  });
+
+  test("rejects payment scope facts that differ from the request", () => {
+    for (const [field, value] of [
+      ["tenant_id", ID],
+      ["project_id", ID],
+      ["tenant_supplier_id", ID],
+      ["supplier_id", ID],
+      ["currency", "USD"],
+    ] as const) {
+      const envelope = paymentSuccessEnvelope({
+        paymentOverrides: { [field]: value },
+      });
+      expect(SupplierPaymentCommandEnvelopeSchema.safeParse(envelope).success)
+        .toBe(false);
     }
   });
 
