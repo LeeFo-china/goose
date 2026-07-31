@@ -108,7 +108,17 @@ describe("H5 development hostname cutover", () => {
   test("routes H5 pages to H5 and compatibility APIs to API", () => {
     const nginx = readRepositoryFile("deploy/nginx/gooes-dev.conf");
     const workflow = readRepositoryFile(".github/workflows/deploy-dev.yml");
+    const apiServer = nginx.slice(
+      nginx.indexOf("server_name api-dev.goodcms.cn;"),
+      nginx.indexOf("server_name admin-dev.goodcms.cn;"),
+    );
+    const adminServer = nginx.slice(
+      nginx.indexOf("server_name admin-dev.goodcms.cn;"),
+      nginx.indexOf("server_name h5-dev.goodcms.cn;"),
+    );
 
+    expect(apiServer).toContain("proxy_pass http://127.0.0.1:13000;");
+    expect(adminServer).toContain("proxy_pass http://127.0.0.1:13010;");
     expect(nginx).toContain("server_name h5-dev.goodcms.cn;");
     expect(nginx).toContain("location = /public/marketing-pages {");
     expect(nginx).toContain("location ^~ /public/marketing-pages/ {");
