@@ -10,7 +10,7 @@ const migration = existsSync(migrationUrl)
   : "";
 const previousGuardMigration = readFileSync(
   new URL(
-    "../../../../supabase/migrations/20260729190000_harden_supplier_purchase_orders.sql",
+    "../../../../supabase/migrations/20260729191000_fix_supplier_purchase_order_transitions.sql",
     import.meta.url,
   ),
   "utf8",
@@ -348,6 +348,8 @@ describe("supplier cost and payable migration contract", () => {
       /NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s*OLD\.settlement_term_days_snapshot/,
       /NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s*OLD\.invoice_required_before_payment_snapshot/,
       /NEW\.commercial_snapshot_source IS DISTINCT FROM\s*OLD\.commercial_snapshot_source/,
+      /IF NEW\.status NOT IN \('draft', 'submitted', 'cancelled'\)[\s\S]*NEW\.version <> OLD\.version \+ 1[\s\S]*NEW\.updated_by_employee_id IS NULL[\s\S]*NEW\.updated_at < OLD\.updated_at/,
+      /IF NEW\.status = 'cancelled' AND \([\s\S]*NEW\.cancelled_by_employee_id IS NULL[\s\S]*NEW\.updated_by_employee_id IS DISTINCT FROM\s*NEW\.cancelled_by_employee_id/,
     ]);
     const withoutSnapshotFreeze = guard.replace(
       /\s+OR NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s+OLD\.settlement_term_days_snapshot\s+OR NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s+OLD\.invoice_required_before_payment_snapshot\s+OR NEW\.commercial_snapshot_source IS DISTINCT FROM\s+OLD\.commercial_snapshot_source/,

@@ -227,16 +227,16 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  IF NEW.status NOT IN ('draft', 'submitted')
+  IF NEW.status NOT IN ('draft', 'submitted', 'cancelled')
     OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
     OR NEW.project_id IS DISTINCT FROM OLD.project_id
     OR NEW.tenant_supplier_id IS DISTINCT FROM OLD.tenant_supplier_id
     OR NEW.supplier_id IS DISTINCT FROM OLD.supplier_id
     OR NEW.order_no IS DISTINCT FROM OLD.order_no
     OR NEW.currency IS DISTINCT FROM OLD.currency
-    OR NEW.cancelled_by_employee_id IS NOT NULL
-    OR NEW.cancelled_at IS NOT NULL
-    OR NEW.cancel_reason IS NOT NULL
+    OR NEW.version <> OLD.version + 1
+    OR NEW.updated_by_employee_id IS NULL
+    OR NEW.updated_at < OLD.updated_at
   THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -246,6 +246,22 @@ BEGIN
   IF NEW.status = 'draft' AND (
     NEW.submitted_by_employee_id IS NOT NULL
     OR NEW.submitted_at IS NOT NULL
+    OR NEW.cancelled_by_employee_id IS NOT NULL
+    OR NEW.cancelled_at IS NOT NULL
+    OR NEW.cancel_reason IS NOT NULL
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF NEW.status IN ('submitted', 'cancelled') AND (
+    NEW.expected_delivery_date IS DISTINCT FROM OLD.expected_delivery_date
+    OR NEW.remark IS DISTINCT FROM OLD.remark
+    OR NEW.priced_at IS DISTINCT FROM OLD.priced_at
+    OR NEW.subtotal_amount IS DISTINCT FROM OLD.subtotal_amount
+    OR NEW.tax_amount IS DISTINCT FROM OLD.tax_amount
+    OR NEW.total_amount IS DISTINCT FROM OLD.total_amount
   ) THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -255,10 +271,28 @@ BEGIN
   IF NEW.status = 'submitted' AND (
     NEW.submitted_by_employee_id IS NULL
     OR NEW.submitted_at IS NULL
-    OR NEW.version <> OLD.version + 1
+    OR NEW.cancelled_by_employee_id IS NOT NULL
+    OR NEW.cancelled_at IS NOT NULL
+    OR NEW.cancel_reason IS NOT NULL
     OR NEW.updated_by_employee_id IS DISTINCT FROM
       NEW.submitted_by_employee_id
-    OR NEW.updated_at < OLD.updated_at
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_STATE_CONFLICT';
+  END IF;
+
+  IF NEW.status = 'cancelled' AND (
+    NEW.submitted_by_employee_id IS DISTINCT FROM
+      OLD.submitted_by_employee_id
+    OR NEW.submitted_at IS DISTINCT FROM OLD.submitted_at
+    OR NEW.cancelled_by_employee_id IS NULL
+    OR NEW.cancelled_at IS NULL
+    OR NEW.cancel_reason IS NULL
+    OR btrim(NEW.cancel_reason) = ''
+    OR char_length(btrim(NEW.cancel_reason)) > 500
+    OR NEW.updated_by_employee_id IS DISTINCT FROM
+      NEW.cancelled_by_employee_id
   ) THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
