@@ -155,6 +155,9 @@ DECLARE
   v_mapping_secret_ref text;
   v_sensitive_changed boolean := false;
 BEGIN
+  IF p_expected_product_version IS NULL OR p_expected_product_version <= 0 THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
   IF p_actor_employee_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_ACTOR_REQUIRED';
   END IF;
@@ -253,9 +256,11 @@ BEGIN
     OR (p_virtual_product_patch->>'secret_revision')::numeric
       <> trunc((p_virtual_product_patch->>'secret_revision')::numeric)
     OR (p_virtual_product_patch->>'secret_revision')::numeric <= 0
+    OR (p_virtual_product_patch->>'secret_revision')::numeric > 2147483647
     OR (p_virtual_product_patch->>'version')::numeric
       <> trunc((p_virtual_product_patch->>'version')::numeric)
     OR (p_virtual_product_patch->>'version')::numeric <= 0
+    OR (p_virtual_product_patch->>'version')::numeric > 2147483647
   ) THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
   END IF;
@@ -268,7 +273,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_NOT_FOUND';
   END IF;
-  IF v_product.version <> p_expected_product_version THEN
+  IF v_product.version IS DISTINCT FROM p_expected_product_version THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_VERSION_CONFLICT';
   END IF;
 
@@ -301,10 +306,12 @@ BEGIN
     FOR UPDATE;
     v_mapping_exists := FOUND;
 
-    IF v_mapping_exists AND v_mapping.version <> v_expected_mapping_version THEN
+    IF v_mapping_exists
+       AND v_mapping.version IS DISTINCT FROM v_expected_mapping_version
+    THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_VERSION_CONFLICT';
     END IF;
-    IF NOT v_mapping_exists AND v_expected_mapping_version <> 1 THEN
+    IF NOT v_mapping_exists AND v_expected_mapping_version IS DISTINCT FROM 1 THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_VERSION_CONFLICT';
     END IF;
 
@@ -457,6 +464,13 @@ DECLARE
   v_product public.platform_addon_products%ROWTYPE;
   v_mapping public.platform_virtual_payment_products%ROWTYPE;
 BEGIN
+  IF p_expected_product_version IS NULL OR p_expected_product_version <= 0
+     OR p_expected_mapping_version IS NULL OR p_expected_mapping_version <= 0
+     OR p_validated_at IS NULL
+     OR p_updated_by IS NULL
+  THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
   IF p_validation_status NOT IN ('valid', 'invalid') THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_VALIDATION_STATUS_INVALID';
   END IF;
@@ -468,7 +482,7 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_NOT_FOUND';
   END IF;
-  IF v_product.version <> p_expected_product_version THEN
+  IF v_product.version IS DISTINCT FROM p_expected_product_version THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_VERSION_CONFLICT';
   END IF;
 
@@ -477,7 +491,9 @@ BEGIN
   WHERE addon_product_id = p_addon_product_id
     AND environment = p_environment
   FOR UPDATE;
-  IF NOT FOUND OR v_mapping.version <> p_expected_mapping_version THEN
+  IF NOT FOUND
+     OR v_mapping.version IS DISTINCT FROM p_expected_mapping_version
+  THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_VERSION_CONFLICT';
   END IF;
 

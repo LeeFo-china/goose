@@ -23,6 +23,22 @@ describe("BrandingVirtualProductValidationSchema", () => {
       version: 0,
     })).toThrow();
   });
+
+  test("matches the PostgreSQL integer upper boundary", () => {
+    expect(BrandingVirtualProductValidationSchema.parse({
+      version: 2_147_483_647,
+    })).toEqual({ version: 2_147_483_647 });
+
+    const result = BrandingVirtualProductValidationSchema.safeParse({
+      version: 2_147_483_648,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(expect.objectContaining({
+        message: "版本号超出支持范围",
+      }));
+    }
+  });
 });
 
 describe("BrandingAddonProductPatchSchema", () => {
@@ -153,6 +169,52 @@ describe("BrandingAddonProductPatchSchema", () => {
         amount_fen,
         version: 1,
       })).toThrow();
+    }
+  });
+
+  test("matches PostgreSQL integer boundaries for command versions", () => {
+    const virtualProduct = {
+      environment: "production" as const,
+      app_id: "wx-app",
+      virtual_merchant_id: "merchant",
+      offer_id: "offer",
+      provider_product_id: "product",
+      expected_amount_fen: 9_900,
+      encrypted_secret_ref:
+        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
+      secret_revision: 2_147_483_647,
+      status: "draft" as const,
+      version: 2_147_483_647,
+    };
+    expect(BrandingAddonProductPatchSchema.parse({
+      virtual_product: virtualProduct,
+      version: 2_147_483_647,
+    })).toMatchObject({
+      virtual_product: virtualProduct,
+      version: 2_147_483_647,
+    });
+
+    for (const input of [
+      { version: 2_147_483_648, name: "年度品牌技术支持" },
+      {
+        version: 1,
+        virtual_product: {
+          ...virtualProduct,
+          secret_revision: 2_147_483_648,
+        },
+      },
+      {
+        version: 1,
+        virtual_product: { ...virtualProduct, version: 2_147_483_648 },
+      },
+    ]) {
+      const result = BrandingAddonProductPatchSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(
+          (issue) => issue.message.includes("超出支持范围"),
+        )).toBe(true);
+      }
     }
   });
 

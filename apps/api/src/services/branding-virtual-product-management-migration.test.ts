@@ -56,6 +56,10 @@ describe("branding virtual product management migration", () => {
 
   test("validates every JSON patch field before casts or writes", () => {
     const sql = normalizedSql();
+    const manageRpc = sql.slice(
+      sql.indexOf("create or replace function public.branding_manage_virtual_product_configuration"),
+      sql.indexOf("create or replace function public.branding_set_virtual_product_configuration_validation"),
+    );
 
     expect(sql).toContain("jsonb_typeof(p_product_patch) <> 'object'");
     expect(sql).toContain("jsonb_typeof(p_virtual_product_patch) <> 'object'");
@@ -74,7 +78,50 @@ describe("branding virtual product management migration", () => {
     ]) expect(sql).toContain(`'${key}'`);
     expect(sql).toContain("jsonb_typeof(p_virtual_product_patch->'expected_amount_fen') <> 'number'");
     expect(sql).toContain("jsonb_typeof(p_product_patch->'enabled') <> 'boolean'");
+    for (const field of ["secret_revision", "version"] as const) {
+      const upperBound = manageRpc.indexOf(
+        `(p_virtual_product_patch->>'${field}')::numeric > 2147483647`,
+      );
+      const integerCast = manageRpc.indexOf(
+        `(p_virtual_product_patch->>'${field}')::integer`,
+      );
+      expect(upperBound).toBeGreaterThanOrEqual(0);
+      expect(integerCast).toBeGreaterThan(upperBound);
+    }
     expect(sql).toContain("message = 'branding_virtual_product_patch_invalid'");
+  });
+
+  test("rejects null command metadata and compares locked versions null-safely", () => {
+    const sql = normalizedSql();
+    const manageRpc = sql.slice(
+      sql.indexOf("create or replace function public.branding_manage_virtual_product_configuration"),
+      sql.indexOf("create or replace function public.branding_set_virtual_product_configuration_validation"),
+    );
+    const validationRpc = sql.slice(
+      sql.indexOf("create or replace function public.branding_set_virtual_product_configuration_validation"),
+      sql.indexOf("revoke all on function public.branding_manage_virtual_product_configuration"),
+    );
+
+    expect(manageRpc).toContain(
+      "p_expected_product_version is null or p_expected_product_version <= 0",
+    );
+    expect(manageRpc).toContain(
+      "v_product.version is distinct from p_expected_product_version",
+    );
+    expect(validationRpc).toContain(
+      "p_expected_product_version is null or p_expected_product_version <= 0",
+    );
+    expect(validationRpc).toContain(
+      "p_expected_mapping_version is null or p_expected_mapping_version <= 0",
+    );
+    expect(validationRpc).toContain("p_validated_at is null");
+    expect(validationRpc).toContain("p_updated_by is null");
+    expect(validationRpc).toContain(
+      "v_product.version is distinct from p_expected_product_version",
+    );
+    expect(validationRpc).toContain(
+      "v_mapping.version is distinct from p_expected_mapping_version",
+    );
   });
 
   test("provides one narrow service-role-only management read RPC", () => {

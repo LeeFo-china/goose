@@ -41,9 +41,15 @@ export const BrandingVirtualProductPatchSchema = z.object({
   provider_product_id: z.string().trim().min(1).max(128),
   expected_amount_fen: BrandingAddonAmountFenSchema,
   encrypted_secret_ref: VirtualPaymentSecretRefSchema,
-  secret_revision: z.number().int().positive(),
+  secret_revision: z.number()
+    .int("密钥版本号必须是整数")
+    .positive("密钥版本号必须大于 0")
+    .max(2_147_483_647, "密钥版本号超出支持范围"),
   status: z.enum(["draft", "active", "disabled"]),
-  version: z.number().int().positive(),
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
 }).strict().refine(
   (input) => input.encrypted_secret_ref === (
     input.environment === "production"
@@ -71,7 +77,10 @@ export const BrandingAddonProductPatchSchema = z.object({
   enabled: z.boolean().optional(),
   purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
   virtual_product: BrandingVirtualProductPatchSchema.optional(),
-  version: z.number().int("版本号必须是整数").positive("版本号必须大于 0"),
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
 }).strict().refine(
   (input) => PRODUCT_PATCH_MUTABLE_FIELDS.some(
     (field) => input[field] !== undefined,
@@ -91,7 +100,10 @@ export const BrandingVirtualProductEnvironmentParamsSchema = z.object({
 }).strict();
 
 export const BrandingVirtualProductValidationSchema = z.object({
-  version: z.number().int("版本号必须是整数").positive("版本号必须大于 0"),
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
 }).strict();
 
 export const BrandingAddonOrderParamsSchema = z.object({
