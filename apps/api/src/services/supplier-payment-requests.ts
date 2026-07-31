@@ -27,6 +27,7 @@ type AccessPort = Pick<
   | "requireRequestManage"
   | "requireRequestApprove"
   | "requirePayment"
+  | "getVisibleProjectIds"
   | "assertProjectRead"
   | "assertProjectUpdate"
 >;
@@ -79,6 +80,19 @@ const ERROR_MESSAGES: Record<CommandErrorStatus, string> = {
   self_review: "申请人不能审批自己提交的付款申请",
   idempotency_conflict: "幂等键已用于其他付款操作",
 };
+const ERROR_CODES: Record<CommandErrorStatus, string> = {
+  not_found: "SUPPLIER_PAYMENT_REQUEST_NOT_FOUND",
+  validation_error: "SUPPLIER_PAYMENT_VALIDATION_ERROR",
+  state_conflict: "SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT",
+  version_conflict: "SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT",
+  scope_mismatch: "SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH",
+  amount_unavailable: "SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE",
+  allocation_invalid: "SUPPLIER_PAYMENT_ALLOCATION_INVALID",
+  evidence_required: "SUPPLIER_PAYMENT_EVIDENCE_REQUIRED",
+  invoice_required: "SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED",
+  self_review: "SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN",
+  idempotency_conflict: "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT",
+};
 
 export class SupplierPaymentRequestsService {
   private readonly access: AccessPort;
@@ -92,18 +106,12 @@ export class SupplierPaymentRequestsService {
 
   async list(auth: AuthContext, query: SupplierPaymentRequestListQuery) {
     const scope = await this.access.requireRequestRead(auth);
-    if (query.project_id) {
-      await this.access.assertProjectRead(auth, query.project_id);
-    }
-    const result = await this.repository.list({
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.list({
       tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
       ...query,
     });
-    await this.assertProjectReads(
-      auth,
-      result.list.map((item) => item.project_id),
-    );
-    return result;
   }
 
   async detail(auth: AuthContext, paymentRequestId: string) {
@@ -145,7 +153,7 @@ export class SupplierPaymentRequestsService {
       throw Errors.business(
         409,
         "路径中的付款申请 ID 与请求体不一致",
-        "SUPPLIER_PAYMENT_SCOPE_MISMATCH",
+        "SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH",
       );
     }
     const scope = await this.access.requireRequestManage(auth);
@@ -333,17 +341,8 @@ export class SupplierPaymentRequestsService {
     throw Errors.business(
       409,
       "供应商付款申请不存在",
-      "SUPPLIER_PAYMENT_NOT_FOUND",
+      "SUPPLIER_PAYMENT_REQUEST_NOT_FOUND",
     );
-  }
-
-  private async assertProjectReads(
-    auth: AuthContext,
-    projectIds: string[],
-  ): Promise<void> {
-    for (const projectId of new Set(projectIds)) {
-      await this.access.assertProjectRead(auth, projectId);
-    }
   }
 
   private async execute(
@@ -356,7 +355,7 @@ export class SupplierPaymentRequestsService {
       throw Errors.business(
         409,
         ERROR_MESSAGES[envelope.status],
-        envelope.error_code,
+        ERROR_CODES[envelope.status],
       );
     }
     if (!expected.includes(envelope.status)) {

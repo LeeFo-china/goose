@@ -164,7 +164,7 @@ describe("SupplierPaymentRequestsController routes", () => {
       ["reject", {
         headers,
         params: { id: ID.request },
-        body: { expected_version: 1, remark: "驳回" },
+        body: { expected_version: 1, remark: "  驳回  " },
       }],
       ["cancel", {
         headers,
@@ -204,7 +204,6 @@ describe("SupplierPaymentRequestsController routes", () => {
       const service of [
         services.submit,
         services.approve,
-        services.reject,
         services.cancel,
         services.close,
         services.confirmPayment,
@@ -217,6 +216,32 @@ describe("SupplierPaymentRequestsController routes", () => {
         ID.idempotency,
       );
     }
+    expect(services.reject).toHaveBeenCalledWith(
+      auth,
+      ID.request,
+      { expected_version: 1, remark: "驳回" },
+      ID.idempotency,
+    );
+  });
+
+  test.each([
+    [{ expected_version: 1 }],
+    [{ expected_version: 1, remark: null }],
+    [{ expected_version: 1, remark: "" }],
+    [{ expected_version: 1, remark: "   " }],
+    [{ expected_version: 1, remark: "驳".repeat(501) }],
+    [{ expected_version: 1, remark: "驳回", unexpected: true }],
+  ])("requires a strict non-empty reject remark", async (body) => {
+    const value = await controller();
+    await expect(value.reject({
+      headers: { "idempotency-key": ID.idempotency },
+      params: { id: ID.request },
+      body,
+    } as never)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    });
+    expect(services.reject).not.toHaveBeenCalled();
   });
 
   test("rejects non-UUID idempotency keys before every mutation service", async () => {

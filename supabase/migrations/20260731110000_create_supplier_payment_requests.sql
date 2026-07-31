@@ -2810,6 +2810,7 @@ FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.list_supplier_payables(
   p_tenant_id uuid,
+  p_visible_project_ids uuid[] DEFAULT NULL,
   p_project_id uuid DEFAULT NULL,
   p_tenant_supplier_id uuid DEFAULT NULL,
   p_purchase_order_id uuid DEFAULT NULL,
@@ -2898,6 +2899,10 @@ BEGIN
     LEFT JOIN reserved ON reserved.payable_event_id = payable.id
     WHERE payable.tenant_id = p_tenant_id
       AND (
+        p_visible_project_ids IS NULL
+        OR payable.project_id = ANY (p_visible_project_ids)
+      )
+      AND (
         p_project_id IS NULL
         OR payable.project_id = p_project_id
       )
@@ -2976,6 +2981,7 @@ $$;
 
 CREATE FUNCTION public.list_supplier_payment_requests(
   p_tenant_id uuid,
+  p_visible_project_ids uuid[] DEFAULT NULL,
   p_project_id uuid DEFAULT NULL,
   p_tenant_supplier_id uuid DEFAULT NULL,
   p_status text DEFAULT NULL,
@@ -3045,6 +3051,10 @@ BEGIN
     JOIN public.suppliers AS supplier
       ON supplier.id = payment_request.supplier_id
     WHERE payment_request.tenant_id = p_tenant_id
+      AND (
+        p_visible_project_ids IS NULL
+        OR payment_request.project_id = ANY (p_visible_project_ids)
+      )
       AND (
         p_project_id IS NULL
         OR payment_request.project_id = p_project_id
@@ -3415,6 +3425,7 @@ REVOKE ALL ON FUNCTION
   ),
   public.list_supplier_payables(
     uuid,
+    uuid[],
     uuid,
     uuid,
     uuid,
@@ -3426,6 +3437,7 @@ REVOKE ALL ON FUNCTION
   ),
   public.list_supplier_payment_requests(
     uuid,
+    uuid[],
     uuid,
     uuid,
     text,
@@ -3512,6 +3524,7 @@ GRANT EXECUTE ON FUNCTION
   ),
   public.list_supplier_payables(
     uuid,
+    uuid[],
     uuid,
     uuid,
     uuid,
@@ -3523,6 +3536,7 @@ GRANT EXECUTE ON FUNCTION
   ),
   public.list_supplier_payment_requests(
     uuid,
+    uuid[],
     uuid,
     uuid,
     text,

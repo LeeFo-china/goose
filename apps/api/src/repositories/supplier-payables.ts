@@ -15,6 +15,7 @@ type PageInput = { page: number; pageSize: number };
 
 export type SupplierPayableListInput = PageInput & {
   tenant_id: string;
+  visible_project_ids: string[] | null;
   project_id?: string;
   tenant_supplier_id?: string;
   purchase_order_id?: string;
@@ -78,6 +79,7 @@ export class SupplierPayablesRepository {
   async list(input: SupplierPayableListInput) {
     const { data, error } = await this.client.rpc("list_supplier_payables", {
       p_tenant_id: input.tenant_id,
+      p_visible_project_ids: input.visible_project_ids,
       p_project_id: input.project_id ?? null,
       p_tenant_supplier_id: input.tenant_supplier_id ?? null,
       p_purchase_order_id: input.purchase_order_id ?? null,

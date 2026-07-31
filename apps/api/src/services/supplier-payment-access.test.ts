@@ -58,6 +58,7 @@ function dependencies(overrides: {
           throw Object.assign(new Error(), { code: "FORBIDDEN" });
         }
       }),
+      getVisibleProjectIds: mock(async () => [PROJECT_ID]),
       canAccessProject: mock(async () => overrides.projectAccess ?? true),
     },
     repository: {
@@ -137,12 +138,17 @@ describe("SupplierPaymentAccessService", () => {
     const service = new SupplierPaymentAccessService(deps as never);
     const context = auth(["project.read", "project.update"]);
 
+    expect(await service.getVisibleProjectIds(context)).toEqual([PROJECT_ID]);
     await service.assertProjectRead(context, PROJECT_ID);
     await service.assertProjectUpdate(context, PROJECT_ID);
     expect(deps.accessPolicy.canAccessProject).toHaveBeenNthCalledWith(
       1,
       context,
       PROJECT_ID,
+      "project.read",
+    );
+    expect(deps.accessPolicy.getVisibleProjectIds).toHaveBeenCalledWith(
+      context,
       "project.read",
     );
     expect(deps.accessPolicy.canAccessProject).toHaveBeenNthCalledWith(

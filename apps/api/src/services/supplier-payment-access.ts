@@ -8,7 +8,10 @@ import type { AuthContext } from "@/services/authorization";
 
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
-  "assertTenantContext" | "assertPermission" | "canAccessProject"
+  | "assertTenantContext"
+  | "assertPermission"
+  | "canAccessProject"
+  | "getVisibleProjectIds"
 >;
 type SettingsRepositoryPort = {
   getSettings(tenantId: string): Promise<
@@ -67,6 +70,10 @@ export class SupplierPaymentAccessService {
 
   assertProjectUpdate(auth: AuthContext, projectId: string) {
     return this.assertProject(auth, projectId, "project.update");
+  }
+
+  getVisibleProjectIds(auth: AuthContext) {
+    return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
   private async requireScope(

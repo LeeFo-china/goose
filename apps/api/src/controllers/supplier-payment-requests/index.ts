@@ -39,6 +39,13 @@ const SupplierPaymentRequestUpdateSchema =
       message: "更新付款申请时版本号必须为正整数",
     },
   );
+const SupplierPaymentRequestRejectSchema =
+  SupplierPaymentRequestReviewSchema.extend({
+    remark: z.string()
+      .trim()
+      .min(1, "驳回原因不能为空")
+      .max(500, "驳回原因不能超过 500 个字符"),
+  }).strict();
 
 class SupplierPaymentRequestsController extends TenantBaseController {
   constructor() {
@@ -154,7 +161,7 @@ class SupplierPaymentRequestsController extends TenantBaseController {
     const key = this.requirePaymentIdempotencyKey(request);
     const { id } = this.parseId(request);
     const input = this.parse(
-      SupplierPaymentRequestReviewSchema,
+      SupplierPaymentRequestRejectSchema,
       request.body,
     );
     return ResponseHandler.success(

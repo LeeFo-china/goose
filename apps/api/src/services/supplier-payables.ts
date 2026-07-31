@@ -9,7 +9,7 @@ import {
 
 type AccessPort = Pick<
   typeof supplierPaymentAccessService,
-  "requirePayableRead" | "assertProjectRead"
+  "requirePayableRead" | "getVisibleProjectIds"
 >;
 type RepositoryPort = Pick<
   typeof supplierPayablesRepository,
@@ -32,21 +32,12 @@ export class SupplierPayablesService {
 
   async list(auth: AuthContext, query: SupplierPayableListQuery) {
     const scope = await this.access.requirePayableRead(auth);
-    if (query.project_id) {
-      await this.access.assertProjectRead(auth, query.project_id);
-    }
-
-    const result = await this.repository.list({
+    const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.list({
       tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
       ...query,
     });
-    const projectIds = new Set(
-      result.list.map((item) => item.project_id),
-    );
-    for (const projectId of projectIds) {
-      await this.access.assertProjectRead(auth, projectId);
-    }
-    return result;
   }
 }
 

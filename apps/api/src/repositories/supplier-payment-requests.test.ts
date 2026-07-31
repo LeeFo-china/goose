@@ -128,6 +128,7 @@ describe("SupplierPaymentRequestsRepository", () => {
 
     await repository.list({
       tenant_id: ID.tenant,
+      visible_project_ids: [ID.project],
       project_id: ID.project,
       tenant_supplier_id: ID.relationship,
       status: "draft",
@@ -155,6 +156,7 @@ describe("SupplierPaymentRequestsRepository", () => {
     ]);
     expect(await requests[0]!.clone().json()).toEqual({
       p_tenant_id: ID.tenant,
+      p_visible_project_ids: [ID.project],
       p_project_id: ID.project,
       p_tenant_supplier_id: ID.relationship,
       p_status: "draft",
@@ -359,6 +361,7 @@ describe("SupplierPaymentRequestsRepository", () => {
     }));
     await expect(malformed.repository.list({
       tenant_id: ID.tenant,
+      visible_project_ids: null,
       page: 1,
       pageSize: 20,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });

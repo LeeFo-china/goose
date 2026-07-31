@@ -61,6 +61,7 @@ describe("SupplierPayablesRepository", () => {
 
     const result = await repository.list({
       tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
       project_id: PROJECT_ID,
       tenant_supplier_id: RELATIONSHIP_ID,
       purchase_order_id: ORDER_ID,
@@ -83,6 +84,7 @@ describe("SupplierPayablesRepository", () => {
     );
     expect(await requests[0]!.clone().json()).toEqual({
       p_tenant_id: TENANT_ID,
+      p_visible_project_ids: [PROJECT_ID],
       p_project_id: PROJECT_ID,
       p_tenant_supplier_id: RELATIONSHIP_ID,
       p_purchase_order_id: ORDER_ID,
@@ -110,11 +112,17 @@ describe("SupplierPayablesRepository", () => {
         : summary,
     }));
 
-    await repository.list({ tenant_id: TENANT_ID, page: 1, pageSize: 20 });
+    await repository.list({
+      tenant_id: TENANT_ID,
+      visible_project_ids: null,
+      page: 1,
+      pageSize: 20,
+    });
     expect(await repository.getPurchaseOrderSummary(TENANT_ID, ORDER_ID))
       .toEqual(summary);
     expect(await requests[0]!.clone().json()).toEqual({
       p_tenant_id: TENANT_ID,
+      p_visible_project_ids: null,
       p_project_id: null,
       p_tenant_supplier_id: null,
       p_purchase_order_id: null,
@@ -133,6 +141,34 @@ describe("SupplierPayablesRepository", () => {
     });
   });
 
+  test("passes an empty visible project scope to the database", async () => {
+    const { repository, requests } = await repositoryFor(() => ({
+      body: { items: [], total: 0, page: 1, page_size: 20 },
+    }));
+    const result = await repository.list({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [],
+      project_id: PROJECT_ID,
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.list).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(await requests[0]!.clone().json()).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_visible_project_ids: [],
+      p_project_id: PROJECT_ID,
+      p_tenant_supplier_id: null,
+      p_purchase_order_id: null,
+      p_status: null,
+      p_due_from: null,
+      p_due_to: null,
+      p_page: 1,
+      p_page_size: 20,
+    });
+  });
+
   test("rejects malformed RPC data and wraps database failures", async () => {
     const malformed = await repositoryFor(() => ({
       body: {
@@ -144,6 +180,7 @@ describe("SupplierPayablesRepository", () => {
     }));
     await expect(malformed.repository.list({
       tenant_id: TENANT_ID,
+      visible_project_ids: null,
       page: 1,
       pageSize: 20,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });

@@ -27,6 +27,7 @@ type PageInput = { page: number; pageSize: number };
 
 export type SupplierPaymentRequestListInput = PageInput & {
   tenant_id: string;
+  visible_project_ids: string[] | null;
   project_id?: string;
   tenant_supplier_id?: string;
   status?: z.infer<typeof SupplierPaymentRequestStatusSchema>;
@@ -130,6 +131,7 @@ export class SupplierPaymentRequestsRepository {
   async list(input: SupplierPaymentRequestListInput) {
     const data = await this.rpc("list_supplier_payment_requests", {
       p_tenant_id: input.tenant_id,
+      p_visible_project_ids: input.visible_project_ids,
       p_project_id: input.project_id ?? null,
       p_tenant_supplier_id: input.tenant_supplier_id ?? null,
       p_status: input.status ?? null,

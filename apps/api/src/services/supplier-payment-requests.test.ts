@@ -46,6 +46,9 @@ function dependencies() {
       requireRequestManage: mock(async () => scope),
       requireRequestApprove: mock(async () => scope),
       requirePayment: mock(async () => scope),
+      getVisibleProjectIds: mock(
+        async (): Promise<string[] | null> => [ID.project],
+      ),
       assertProjectRead: mock(async () => undefined),
       assertProjectUpdate: mock(async () => undefined),
     },
@@ -84,8 +87,17 @@ function success(status: string) {
 }
 
 describe("SupplierPaymentRequestsService reads", () => {
-  test("scopes list filters and every returned project", async () => {
+  test.each([
+    [null, "all project scope"],
+    [[ID.project], "scoped project ids"],
+    [[], "empty project scope"],
+  ] as const)("scopes list in SQL with %s for %s", async (
+    visibleProjectIds,
+  ) => {
     const deps = dependencies();
+    deps.access.getVisibleProjectIds.mockImplementation(async () =>
+      visibleProjectIds === null ? null : [...visibleProjectIds]
+    );
     const { SupplierPaymentRequestsService } = await import(
       "./supplier-payment-requests"
     );
@@ -100,19 +112,14 @@ describe("SupplierPaymentRequestsService reads", () => {
 
     expect(deps.repository.list).toHaveBeenCalledWith({
       tenant_id: ID.tenant,
+      visible_project_ids: visibleProjectIds,
       project_id: ID.project,
       status: "draft",
       page: 1,
       pageSize: 20,
     });
-    expect(deps.access.assertProjectRead).toHaveBeenCalledWith(
-      auth,
-      ID.project,
-    );
-    expect(deps.access.assertProjectRead).toHaveBeenCalledWith(
-      auth,
-      ID.otherProject,
-    );
+    expect(deps.access.getVisibleProjectIds).toHaveBeenCalledWith(auth);
+    expect(deps.access.assertProjectRead).not.toHaveBeenCalled();
   });
 
   test("checks detail scope before returning detail or payments", async () => {
@@ -145,7 +152,7 @@ describe("SupplierPaymentRequestsService reads", () => {
 
     await expect(service.detail(auth, ID.request)).rejects.toMatchObject({
       statusCode: 409,
-      code: "SUPPLIER_PAYMENT_NOT_FOUND",
+      code: "SUPPLIER_PAYMENT_REQUEST_NOT_FOUND",
     });
     expect(deps.access.assertProjectRead).not.toHaveBeenCalled();
   });
@@ -265,28 +272,74 @@ describe("SupplierPaymentRequestsService commands", () => {
       }],
     }, ID.idempotency)).rejects.toMatchObject({
       statusCode: 409,
-      code: "SUPPLIER_PAYMENT_SCOPE_MISMATCH",
+      code: "SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH",
     });
     expect(deps.repository.saveDraft).not.toHaveBeenCalled();
   });
 
   test.each([
-    ["not_found", "SUPPLIER_PAYMENT_NOT_FOUND"],
-    ["validation_error", "SUPPLIER_PAYMENT_VALIDATION_ERROR"],
-    ["state_conflict", "SUPPLIER_PAYMENT_STATE_CONFLICT"],
-    ["version_conflict", "SUPPLIER_PAYMENT_VERSION_CONFLICT"],
-    ["scope_mismatch", "SUPPLIER_PAYMENT_SCOPE_MISMATCH"],
-    ["amount_unavailable", "SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE"],
-    ["allocation_invalid", "SUPPLIER_PAYMENT_ALLOCATION_INVALID"],
-    ["evidence_required", "SUPPLIER_PAYMENT_EVIDENCE_REQUIRED"],
-    ["invoice_required", "SUPPLIER_PAYMENT_INVOICE_REQUIRED"],
-    ["self_review", "SUPPLIER_PAYMENT_SELF_REVIEW"],
-    ["idempotency_conflict", "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT"],
-  ] as const)("maps %s to a stable 409 business error", async (status, code) => {
+    [
+      "not_found",
+      "SUPPLIER_PAYMENT_NOT_FOUND",
+      "SUPPLIER_PAYMENT_REQUEST_NOT_FOUND",
+    ],
+    [
+      "validation_error",
+      "SUPPLIER_PAYMENT_VALIDATION_ERROR",
+      "SUPPLIER_PAYMENT_VALIDATION_ERROR",
+    ],
+    [
+      "state_conflict",
+      "SUPPLIER_PAYMENT_STATE_CONFLICT",
+      "SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT",
+    ],
+    [
+      "version_conflict",
+      "SUPPLIER_PAYMENT_VERSION_CONFLICT",
+      "SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT",
+    ],
+    [
+      "scope_mismatch",
+      "SUPPLIER_PAYMENT_SCOPE_MISMATCH",
+      "SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH",
+    ],
+    [
+      "amount_unavailable",
+      "SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE",
+      "SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE",
+    ],
+    [
+      "allocation_invalid",
+      "SUPPLIER_PAYMENT_ALLOCATION_INVALID",
+      "SUPPLIER_PAYMENT_ALLOCATION_INVALID",
+    ],
+    [
+      "evidence_required",
+      "SUPPLIER_PAYMENT_EVIDENCE_REQUIRED",
+      "SUPPLIER_PAYMENT_EVIDENCE_REQUIRED",
+    ],
+    [
+      "invoice_required",
+      "SUPPLIER_PAYMENT_INVOICE_REQUIRED",
+      "SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED",
+    ],
+    [
+      "self_review",
+      "SUPPLIER_PAYMENT_SELF_REVIEW",
+      "SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN",
+    ],
+    [
+      "idempotency_conflict",
+      "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT",
+      "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT",
+    ],
+  ] as const)(
+    "maps %s to the frozen API business code",
+    async (status, databaseCode, apiCode) => {
     const deps = dependencies();
     deps.repository.submit.mockImplementation(async () => ({
       status,
-      error_code: code,
+      error_code: databaseCode,
     }) as never);
     const { SupplierPaymentRequestsService } = await import(
       "./supplier-payment-requests"
@@ -297,9 +350,10 @@ describe("SupplierPaymentRequestsService commands", () => {
       expected_version: 1,
     }, ID.idempotency)).rejects.toMatchObject({
       statusCode: 409,
-      code,
+      code: apiCode,
     });
-  });
+    },
+  );
 
   test("does not rewrap repository database errors", async () => {
     const deps = dependencies();

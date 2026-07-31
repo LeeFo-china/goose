@@ -8,14 +8,13 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "83000000-0000-4000-8000-000000000001";
 const PROJECT_ID = "83000000-0000-4000-8000-000000000002";
-const OTHER_PROJECT_ID = "83000000-0000-4000-8000-000000000003";
 const auth = {
   authUserId: "83000000-0000-4000-8000-000000000004",
   employeeId: "83000000-0000-4000-8000-000000000005",
   tenantId: TENANT_ID,
 } as unknown as AuthContext;
 
-function dependencies(projectIds = [PROJECT_ID]) {
+function dependencies(visibleProjectIds: string[] | null = [PROJECT_ID]) {
   return {
     access: {
       requirePayableRead: mock(async () => ({
@@ -23,12 +22,12 @@ function dependencies(projectIds = [PROJECT_ID]) {
         authUserId: auth.authUserId,
         employeeId: auth.employeeId!,
       })),
-      assertProjectRead: mock(async () => undefined),
+      getVisibleProjectIds: mock(async () => visibleProjectIds),
     },
     repository: {
       list: mock(async (input: unknown) => ({
-        list: projectIds.map((project_id) => ({ project_id })),
-        pagination: { page: 1, pageSize: 20, total: projectIds.length },
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0 },
         input,
       })),
       getPurchaseOrderSummary: mock(async () => ({})),
@@ -37,8 +36,16 @@ function dependencies(projectIds = [PROJECT_ID]) {
 }
 
 describe("SupplierPayablesService", () => {
-  test("injects the tenant and checks a requested project before querying", async () => {
-    const deps = dependencies();
+  test.each([
+    [null, "all project scope"],
+    [[PROJECT_ID], "scoped project ids"],
+    [[], "empty project scope"],
+  ] as const)("passes %s for %s before database pagination", async (
+    visibleProjectIds,
+  ) => {
+    const deps = dependencies(
+      visibleProjectIds === null ? null : [...visibleProjectIds],
+    );
     const { SupplierPayablesService } = await import("./supplier-payables");
     const service = new SupplierPayablesService(deps as never);
 
@@ -50,53 +57,14 @@ describe("SupplierPayablesService", () => {
     });
 
     expect(deps.access.requirePayableRead).toHaveBeenCalledWith(auth);
-    expect(deps.access.assertProjectRead).toHaveBeenNthCalledWith(
-      1,
-      auth,
-      PROJECT_ID,
-    );
+    expect(deps.access.getVisibleProjectIds).toHaveBeenCalledWith(auth);
     expect(deps.repository.list).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
+      visible_project_ids: visibleProjectIds,
       project_id: PROJECT_ID,
       status: "open",
       page: 1,
       pageSize: 20,
     });
-  });
-
-  test("checks every distinct project returned by an unfiltered page", async () => {
-    const deps = dependencies([PROJECT_ID, PROJECT_ID, OTHER_PROJECT_ID]);
-    const { SupplierPayablesService } = await import("./supplier-payables");
-    const service = new SupplierPayablesService(deps as never);
-
-    await service.list(auth, { page: 1, pageSize: 20 });
-
-    expect(deps.access.assertProjectRead).toHaveBeenCalledTimes(2);
-    expect(deps.access.assertProjectRead).toHaveBeenNthCalledWith(
-      1,
-      auth,
-      PROJECT_ID,
-    );
-    expect(deps.access.assertProjectRead).toHaveBeenNthCalledWith(
-      2,
-      auth,
-      OTHER_PROJECT_ID,
-    );
-  });
-
-  test("does not query when the explicit project is outside read scope", async () => {
-    const deps = dependencies();
-    deps.access.assertProjectRead.mockImplementation(async () => {
-      throw Object.assign(new Error(), { code: "FORBIDDEN" });
-    });
-    const { SupplierPayablesService } = await import("./supplier-payables");
-    const service = new SupplierPayablesService(deps as never);
-
-    await expect(service.list(auth, {
-      project_id: PROJECT_ID,
-      page: 1,
-      pageSize: 20,
-    })).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(deps.repository.list).not.toHaveBeenCalled();
   });
 });

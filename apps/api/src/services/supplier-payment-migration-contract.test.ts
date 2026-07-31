@@ -355,6 +355,32 @@ describe("supplier payment data migration contract", () => {
         /SET search_path = pg_catalog, public/,
       ]);
     }
+    const payables = fn("list_supplier_payables");
+    const requests = fn("list_supplier_payment_requests");
+    contracts(payables, [
+      /p_visible_project_ids uuid\[\] DEFAULT NULL/,
+      /p_visible_project_ids IS NULL[\s\S]*payable\.project_id = ANY\s*\(\s*p_visible_project_ids\s*\)/,
+      /p_project_id IS NULL[\s\S]*payable\.project_id = p_project_id/,
+      /FROM filtered\)/,
+    ]);
+    contracts(requests, [
+      /p_visible_project_ids uuid\[\] DEFAULT NULL/,
+      /p_visible_project_ids IS NULL[\s\S]*payment_request\.project_id = ANY\s*\(\s*p_visible_project_ids\s*\)/,
+      /p_project_id IS NULL[\s\S]*payment_request\.project_id = p_project_id/,
+      /FROM filtered\)/,
+    ]);
+    expect(migration.match(
+      /public\.list_supplier_payables\(\s*uuid,\s*uuid\[\],/g,
+    )).toHaveLength(2);
+    expect(migration.match(
+      /public\.list_supplier_payment_requests\(\s*uuid,\s*uuid\[\],/g,
+    )).toHaveLength(2);
+    expect(migration).not.toMatch(
+      /public\.list_supplier_payables\(\s*uuid,\s*uuid,\s*uuid,/,
+    );
+    expect(migration).not.toMatch(
+      /public\.list_supplier_payment_requests\(\s*uuid,\s*uuid,\s*uuid,\s*text,/,
+    );
     contracts(fn("get_supplier_payment_request_detail"), [
       /supplier_payment_requests/,
       /supplier_payment_request_allocations/,
