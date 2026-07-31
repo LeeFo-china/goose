@@ -94,32 +94,62 @@ function createFixture(options: {
   const current = options.product ?? product;
   const mapping = options.mapping ?? productionMapping;
   const getProduct = mock(async () => current);
-  const updateProduct = mock(async () => ({ ...current, version: 2 }));
+  const updatedProduct = { ...current, version: 2 };
   const findByProductAndEnvironment = mock(async () => mapping);
-  const createMapping = mock(async () => mapping);
-  const updateMapping = mock(async () => ({ ...mapping, version: 2 }));
+  const manageConfiguration = mock(async (input: {
+    productPatch: Record<string, unknown>;
+    virtualProductPatch: Record<string, unknown>;
+  }) => {
+    const coordinatesChanged =
+      input.virtualProductPatch.provider_product_id !== undefined &&
+      input.virtualProductPatch.provider_product_id !== mapping.provider_product_id;
+    return {
+      product: Object.keys(input.productPatch).length > 0
+        ? updatedProduct
+        : current,
+      virtual_product: {
+        ...mapping,
+        ...input.virtualProductPatch,
+        validation_status: coordinatesChanged
+          ? "pending" as const
+          : mapping.validation_status,
+        validated_at: coordinatesChanged ? null : mapping.validated_at,
+        version: 2,
+      },
+    };
+  });
   const recordBestEffort = mock(async () => null);
   const getSecretString = mock(async () => options.secretBundle ?? JSON.stringify({
     appKey: "production-secret",
     revision: 2,
   }));
   const service = new PlatformBrandingAddonProductService({
-    repository: { getProduct, updateProduct },
+    repository: { getProduct },
     virtualProductRepository: {
       findByProductAndEnvironment,
-      createMapping,
-      updateMapping,
+      manageConfiguration,
     },
     settingsService: {
       getSecretString,
     },
     accessPolicy: { assertPermission: mock(() => "all" as const) },
     audit: { recordBestEffort },
+    managementService: {
+      getSummaries: mock(async () => []),
+      validateConfiguration: mock(async () => ({
+        virtual_product: mapping,
+        validation: {
+          kind: "server_configuration" as const,
+          validated_at: "2026-08-01T00:00:00.000Z",
+        },
+      })),
+    },
   });
   return {
     service,
-    updateProduct,
-    updateMapping,
+    updateProduct: manageConfiguration,
+    updateMapping: manageConfiguration,
+    manageConfiguration,
     recordBestEffort,
     getSecretString,
   };
@@ -140,6 +170,39 @@ const activeProductionPatch = {
 };
 
 describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
+  test("rejects an unsupported purchase mode transition with a stable conflict", async () => {
+    const fixture = createFixture({
+      product: { ...product, purchase_mode: "direct_legacy" },
+    });
+    await expect(fixture.service.update(platformAuth, {
+      purchase_mode: "wechat_virtual",
+      version: 1,
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_ADDON_PURCHASE_MODE_TRANSITION_INVALID",
+    });
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+  });
+
+  test.each(["draft", "disabled", "active"] as const)(
+    "rejects a 99-fen production %s mapping with the same conflict",
+    async (status) => {
+      const fixture = createFixture();
+      await expect(fixture.service.update(platformAuth, {
+        virtual_product: {
+          ...activeProductionPatch,
+          expected_amount_fen: 99,
+          status,
+        },
+        version: 1,
+      })).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW",
+      });
+      expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    },
+  );
+
   test("rejects a production price below one yuan with a stable conflict", async () => {
     const fixture = createFixture({
       product: { ...product, amount_fen: 99 },
@@ -164,11 +227,13 @@ describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
       version: 1,
     });
 
-    expect(fixture.updateMapping).toHaveBeenCalledWith(expect.objectContaining({
-      id: productionMapping.id,
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
-    }));
+    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: {},
+      virtualProductPatch: activeProductionPatch,
+      actorEmployeeId: EMPLOYEE_ID,
+    });
     const auditJson = JSON.stringify(fixture.recordBestEffort.mock.calls);
     expect(auditJson).not.toContain("production-secret");
     expect(auditJson).not.toContain("appKey");
@@ -213,6 +278,35 @@ describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
     );
     expect(JSON.stringify(fixture.recordBestEffort.mock.calls)).toContain(
       '"configured":false',
+    );
+  });
+
+  test("saves changed validated coordinates only as a draft for revalidation", async () => {
+    const fixture = createFixture();
+
+    const result = await fixture.service.update(platformAuth, {
+      virtual_product: {
+        ...activeProductionPatch,
+        provider_product_id: "changed-product-id",
+        status: "draft",
+      },
+      version: 1,
+    });
+
+    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
+    expect(result.virtual_product).toMatchObject({
+      provider_product_id: "changed-product-id",
+      status: "draft",
+      validation_status: "pending",
+      validated_at: null,
+    });
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        virtualProductPatch: expect.objectContaining({
+          provider_product_id: "changed-product-id",
+          status: "draft",
+        }),
+      }),
     );
   });
 });

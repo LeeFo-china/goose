@@ -86,6 +86,14 @@ export const BrandingAddonCreateOrderSchema = z.object({
 
 export const BrandingAddonEmptySchema = z.object({}).strict();
 
+export const BrandingVirtualProductEnvironmentParamsSchema = z.object({
+  environment: z.enum(VIRTUAL_PAYMENT_ENVIRONMENTS),
+}).strict();
+
+export const BrandingVirtualProductValidationSchema = z.object({
+  version: z.number().int("版本号必须是整数").positive("版本号必须大于 0"),
+}).strict();
+
 export const BrandingAddonOrderParamsSchema = z.object({
   id: z.uuid("订单 ID 格式不正确"),
 }).strict();
@@ -123,6 +131,8 @@ export type BrandingAddonProductPatchInput =
   z.infer<typeof BrandingAddonProductPatchSchema>;
 export type BrandingVirtualProductPatchInput =
   z.infer<typeof BrandingVirtualProductPatchSchema>;
+export type BrandingVirtualProductValidationInput =
+  z.infer<typeof BrandingVirtualProductValidationSchema>;
 export type BrandingAddonCreateOrderInput =
   z.infer<typeof BrandingAddonCreateOrderSchema>;
 export type BrandingAddonOrderListQuery =

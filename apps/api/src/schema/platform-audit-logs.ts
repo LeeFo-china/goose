@@ -79,6 +79,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "supplier_contract_activate",
   "supplier_contract_terminate",
   "branding_addon_product.update",
+  "branding_virtual_product.validate",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);

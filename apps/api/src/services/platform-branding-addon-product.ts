@@ -2,19 +2,19 @@ import { Errors } from "@/errors/error-factory";
 import {
   brandingAddonProductRepository,
   type BrandingAddonProductRecord,
-  type UpdateBrandingAddonProductInput,
 } from "@/repositories/branding-addon-products";
 import {
   brandingVirtualProductRepository,
   type BrandingVirtualProductRecord,
-  type SaveBrandingVirtualProductInput,
 } from "@/repositories/branding-virtual-products";
 import type { BrandingAddonProductPatchInput } from "@/schema/branding-addon";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { MAX_POSTGRES_INTEGER_FEN } from "@/services/branding-addon-contracts";
 import {
-  brandingVirtualProductVersionConflict,
+  brandingVirtualProductManagementService,
+} from "@/services/branding-virtual-product-management";
+import {
   hasBrandingAddonProductMutation,
   hasVirtualProductValidationInputChanged,
   isApplicationErrorLike,
@@ -25,33 +25,27 @@ import {
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { systemSettingsService } from "@/services/system-settings";
-import { BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN } from "@gooes/domain";
+import {
+  BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN,
+  type BrandingPurchaseMode,
+} from "@gooes/domain";
 
 const MANAGE_PERMISSION = "platform.branding_product.manage";
 
 type ProductRepositoryPort = Pick<
   typeof brandingAddonProductRepository,
-  "getProduct" | "updateProduct"
+  "getProduct"
 >;
-
 type VirtualProductRepositoryPort = Pick<
   typeof brandingVirtualProductRepository,
-  "findByProductAndEnvironment" | "createMapping" | "updateMapping"
+  "findByProductAndEnvironment" | "manageConfiguration"
 >;
-
-type SettingsServicePort = Pick<
-  typeof systemSettingsService,
-  "getSecretString"
->;
-
-type AccessPolicyPort = Pick<
-  typeof accessPolicyService,
-  "assertPermission"
->;
-
-type AuditPort = Pick<
-  typeof platformAuditLogService,
-  "recordBestEffort"
+type SettingsServicePort = Pick<typeof systemSettingsService, "getSecretString">;
+type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
+type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
+type ManagementServicePort = Pick<
+  typeof brandingVirtualProductManagementService,
+  "getSummaries" | "validateConfiguration"
 >;
 
 export type PlatformBrandingAddonProductServiceDependencies = {
@@ -60,6 +54,7 @@ export type PlatformBrandingAddonProductServiceDependencies = {
   settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
+  managementService?: ManagementServicePort;
 };
 
 export class PlatformBrandingAddonProductService {
@@ -68,89 +63,95 @@ export class PlatformBrandingAddonProductService {
   private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
+  private readonly managementService: ManagementServicePort;
 
-  constructor(
-    dependencies: PlatformBrandingAddonProductServiceDependencies = {},
-  ) {
-    this.repository = dependencies.repository ??
-      brandingAddonProductRepository;
+  constructor(dependencies: PlatformBrandingAddonProductServiceDependencies = {}) {
+    this.repository = dependencies.repository ?? brandingAddonProductRepository;
     this.virtualProductRepository = dependencies.virtualProductRepository ??
       brandingVirtualProductRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.audit = dependencies.audit ?? platformAuditLogService;
+    this.managementService = dependencies.managementService ??
+      brandingVirtualProductManagementService;
   }
 
   async get(authContext: AuthContext) {
     this.requirePlatformOperator(authContext);
-    return { product: serializeProduct(await this.requireProduct()) };
+    const product = await this.requireProduct();
+    return {
+      product: serializeProduct(product),
+      virtual_products: await this.managementService.getSummaries(product),
+    };
   }
 
-  async update(
+  validateVirtualProduct(
     authContext: AuthContext,
-    input: BrandingAddonProductPatchInput,
+    input: { environment: "sandbox" | "production"; version: number },
   ) {
+    return this.managementService.validateConfiguration(authContext, input);
+  }
+
+  async update(authContext: AuthContext, input: BrandingAddonProductPatchInput) {
     const actor = this.requirePlatformOperator(authContext);
     const current = await this.requireProduct();
-    if (current.version !== input.version) {
-      throw productVersionConflict();
-    }
+    if (current.version !== input.version) throw productVersionConflict();
 
     this.assertFinalPrice(current, input);
     const finalAmountFen = input.amount_fen ?? current.amount_fen;
     const finalPurchaseMode = input.purchase_mode ?? current.purchase_mode;
+    assertPurchaseModeTransition(current.purchase_mode, finalPurchaseMode);
+
     const requestedMapping = input.virtual_product
       ? await this.findMapping(current.id, input.virtual_product.environment)
       : null;
-    const productionMapping = finalPurchaseMode === "wechat_virtual"
-      ? input.virtual_product?.environment === "production"
+    if (
+      input.virtual_product?.environment === "production" &&
+      input.virtual_product.expected_amount_fen <
+        BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN
+    ) throw amountTooLow();
+
+    const secretConfigured = input.virtual_product
+      ? await this.assertMappingCanBeSaved(
+        requestedMapping,
+        input.virtual_product,
+        finalAmountFen,
+      )
+      : null;
+
+    if (finalPurchaseMode === "wechat_virtual") {
+      const production = input.virtual_product?.environment === "production"
         ? mergeBrandingVirtualProduct(
           current.id,
           requestedMapping,
           input.virtual_product,
         )
-        : await this.findMapping(current.id, "production")
-      : null;
-
-    const secretConfigured = input.virtual_product
-      ? await this.assertMappingCanBeSaved({
-        current: requestedMapping,
-        input: input.virtual_product,
-        amountFen: finalAmountFen,
-      })
-      : null;
-    if (
-      finalPurchaseMode === "wechat_virtual" &&
-      !(
-        input.virtual_product?.environment === "production" &&
-        input.virtual_product.status === "active"
-      )
-    ) {
-      await this.assertProductionMappingReady(productionMapping, finalAmountFen);
+        : await this.findMapping(current.id, "production");
+      await this.assertProductionMappingReady(production, finalAmountFen);
     }
 
-    const updatedMapping = input.virtual_product
-      ? await this.saveMapping(
-        current.id,
-        requestedMapping,
-        input.virtual_product,
-        actor.employeeId,
-      )
-      : null;
-    const updated = hasBrandingAddonProductMutation(input)
-      ? await this.updateProduct(buildUpdateInput(input, actor.employeeId))
-      : current;
-    if (!updated) throw productVersionConflict();
+    let result: Awaited<ReturnType<VirtualProductRepositoryPort["manageConfiguration"]>>;
+    try {
+      result = await this.virtualProductRepository.manageConfiguration({
+        expectedProductVersion: input.version,
+        productPatch: buildProductPatch(input),
+        virtualProductPatch: input.virtual_product ?? {},
+        actorEmployeeId: actor.employeeId,
+      });
+    } catch (error) {
+      if (isApplicationErrorLike(error)) throw error;
+      throw Errors.dbError("保存品牌权益商品配置失败");
+    }
 
     const before = serializeProduct(current);
-    const after = serializeProduct(updated);
+    const after = serializeProduct(result.product);
     await this.audit.recordBestEffort({
       action: "branding_addon_product.update",
       actorEmployeeId: actor.employeeId,
       actorUserId: actor.authUserId,
       resourceType: "branding_addon_product",
-      resourceId: updated.id,
-      resourceLabel: updated.name,
+      resourceId: result.product.id,
+      resourceLabel: result.product.name,
       status: "success",
       summary: "更新年度品牌权益商品",
       metadata: {
@@ -162,8 +163,8 @@ export class PlatformBrandingAddonProductService {
               from: requestedMapping
                 ? serializeBrandingVirtualProduct(requestedMapping)
                 : null,
-              to: updatedMapping
-                ? serializeBrandingVirtualProduct(updatedMapping)
+              to: result.virtual_product
+                ? serializeBrandingVirtualProduct(result.virtual_product)
                 : null,
             },
             secret: {
@@ -175,54 +176,35 @@ export class PlatformBrandingAddonProductService {
           : {}),
       },
     });
-
     return {
       product: after,
-      ...(updatedMapping
-        ? { virtual_product: serializeBrandingVirtualProduct(updatedMapping) }
+      ...(result.virtual_product
+        ? { virtual_product: serializeBrandingVirtualProduct(result.virtual_product) }
         : {}),
     };
   }
 
   private requirePlatformOperator(authContext: AuthContext) {
     if (
-      !authContext.isPlatformAdmin ||
-      authContext.tenantId !== null ||
-      !authContext.employeeId ||
-      !authContext.authUserId
-    ) {
-      throw Errors.forbidden();
-    }
+      !authContext.isPlatformAdmin || authContext.tenantId !== null ||
+      !authContext.employeeId || !authContext.authUserId
+    ) throw Errors.forbidden();
     this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
-    return {
-      authUserId: authContext.authUserId,
-      employeeId: authContext.employeeId,
-    };
+    return { employeeId: authContext.employeeId, authUserId: authContext.authUserId };
   }
 
   private async requireProduct() {
-    let product: BrandingAddonProductRecord | null;
     try {
-      product = await this.repository.getProduct();
+      const product = await this.repository.getProduct();
+      if (product) return product;
     } catch {
       throw Errors.dbError("查询年度品牌权益商品失败");
     }
-    if (!product) {
-      throw Errors.business(
-        404,
-        "年度品牌权益商品不存在",
-        "BRANDING_ADDON_PRODUCT_NOT_FOUND",
-      );
-    }
-    return product;
-  }
-
-  private async updateProduct(input: UpdateBrandingAddonProductInput) {
-    try {
-      return await this.repository.updateProduct(input);
-    } catch {
-      throw Errors.dbError("更新年度品牌权益商品失败");
-    }
+    throw Errors.business(
+      404,
+      "年度品牌权益商品不存在",
+      "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+    );
   }
 
   private async findMapping(
@@ -234,56 +216,39 @@ export class PlatformBrandingAddonProductService {
         addonProductId,
         environment,
       });
-    } catch {
+    } catch (error) {
+      if (isApplicationErrorLike(error)) throw error;
       throw Errors.dbError("查询品牌权益虚拟商品映射失败");
     }
   }
 
-  private async assertMappingCanBeSaved(input: {
-    current: BrandingVirtualProductRecord | null;
-    input: NonNullable<BrandingAddonProductPatchInput["virtual_product"]>;
-    amountFen: number | null;
-  }): Promise<boolean> {
-    if (input.current && input.current.version !== input.input.version) {
-      throw brandingVirtualProductVersionConflict();
-    }
-    if (!input.current && input.input.version !== 1) {
-      throw brandingVirtualProductVersionConflict();
-    }
-    const expectedSecretKey =
-      WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[input.input.environment];
-    if (input.input.encrypted_secret_ref !== expectedSecretKey) {
+  private async assertMappingCanBeSaved(
+    current: BrandingVirtualProductRecord | null,
+    input: NonNullable<BrandingAddonProductPatchInput["virtual_product"]>,
+    amountFen: number | null,
+  ) {
+    if ((current?.version ?? 1) !== input.version) {
       throw Errors.business(
         409,
-        "虚拟支付密钥引用与环境不匹配",
-        "BRANDING_VIRTUAL_PRODUCT_SECRET_ENVIRONMENT_MISMATCH",
+        "虚拟商品映射版本已变化，请刷新后重试",
+        "BRANDING_VIRTUAL_PRODUCT_VERSION_CONFLICT",
       );
     }
-    if (input.input.status !== "active") {
-      return this.hasConfiguredSecretBundle(
-        expectedSecretKey,
-        input.input.secret_revision,
-      );
-    }
-    await this.assertSecretBundle(
-      expectedSecretKey,
-      input.input.secret_revision,
+    const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[input.environment];
+    const configured = await this.hasConfiguredSecretBundle(
+      key,
+      input.secret_revision,
     );
-    if (
-      input.current &&
-      hasVirtualProductValidationInputChanged(input.current, input.input)
-    ) {
+    if (input.status !== "active") return configured;
+    if (!configured) throw secretInvalid();
+    if (current && hasVirtualProductValidationInputChanged(current, input)) {
       throw Errors.business(
         409,
         "虚拟商品映射参数变化后必须重新验证",
         "BRANDING_VIRTUAL_PRODUCT_REVALIDATION_REQUIRED",
       );
     }
-    const merged = mergeBrandingVirtualProduct(
-      "",
-      input.current,
-      input.input,
-    );
+    const merged = mergeBrandingVirtualProduct("", current, input);
     if (merged.validation_status !== "valid") {
       throw Errors.business(
         409,
@@ -291,8 +256,8 @@ export class PlatformBrandingAddonProductService {
         "BRANDING_VIRTUAL_PRODUCT_INVALID",
       );
     }
-    if (input.input.environment === "production") {
-      await this.assertProductionMappingReady(merged, input.amountFen);
+    if (input.environment === "production") {
+      await this.assertProductionMappingReady(merged, amountFen);
     }
     return true;
   }
@@ -300,7 +265,7 @@ export class PlatformBrandingAddonProductService {
   private async assertProductionMappingReady(
     mapping: BrandingVirtualProductRecord | null,
     amountFen: number | null,
-  ): Promise<void> {
+  ) {
     if (!mapping || mapping.environment !== "production") {
       throw Errors.business(
         409,
@@ -308,29 +273,15 @@ export class PlatformBrandingAddonProductService {
         "BRANDING_VIRTUAL_PRODUCT_PRODUCTION_REQUIRED",
       );
     }
+    if (mapping.expected_amount_fen < BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN ||
+      amountFen === null || amountFen < BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN) {
+      throw amountTooLow();
+    }
     if (mapping.status !== "active") {
-      throw Errors.business(
-        409,
-        "生产虚拟商品映射未启用",
-        "BRANDING_VIRTUAL_PRODUCT_DISABLED",
-      );
+      throw Errors.business(409, "生产虚拟商品映射未启用", "BRANDING_VIRTUAL_PRODUCT_DISABLED");
     }
     if (mapping.validation_status !== "valid") {
-      throw Errors.business(
-        409,
-        "生产虚拟商品映射未通过验证",
-        "BRANDING_VIRTUAL_PRODUCT_INVALID",
-      );
-    }
-    if (
-      amountFen === null ||
-      amountFen < BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN
-    ) {
-      throw Errors.business(
-        409,
-        "生产虚拟商品价格不得低于 100 分",
-        "BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW",
-      );
+      throw Errors.business(409, "生产虚拟商品映射未通过验证", "BRANDING_VIRTUAL_PRODUCT_INVALID");
     }
     if (mapping.expected_amount_fen !== amountFen) {
       throw Errors.business(
@@ -339,100 +290,40 @@ export class PlatformBrandingAddonProductService {
         "BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH",
       );
     }
-    const expectedKey = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production;
-    if (mapping.encrypted_secret_ref !== expectedKey) {
+    const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production;
+    if (mapping.encrypted_secret_ref !== key) {
       throw Errors.business(
         409,
         "生产虚拟商品必须使用生产密钥",
         "BRANDING_VIRTUAL_PRODUCT_SECRET_ENVIRONMENT_MISMATCH",
       );
     }
-    await this.assertSecretBundle(expectedKey, mapping.secret_revision);
+    if (!await this.hasConfiguredSecretBundle(key, mapping.secret_revision)) {
+      throw secretInvalid();
+    }
   }
 
-  private async assertSecretBundle(
-    key: string,
-    revision: number,
-  ): Promise<void> {
-    if (!await this.hasConfiguredSecretBundle(key, revision)) {
-      throw Errors.business(
-        409,
-        "虚拟支付密钥未配置或版本不匹配",
-        "BRANDING_VIRTUAL_PRODUCT_SECRET_INVALID",
+  private async hasConfiguredSecretBundle(key: string, revision: number) {
+    try {
+      const bundle = parseWechatVirtualPaymentSecretBundle(
+        await this.settingsService.getSecretString(key),
       );
-    }
-  }
-
-  private async hasConfiguredSecretBundle(
-    key: string,
-    revision: number,
-  ): Promise<boolean> {
-    let value: string;
-    try {
-      value = await this.settingsService.getSecretString(key);
+      return bundle?.revision === revision;
     } catch {
-      value = "";
-    }
-    const bundle = parseWechatVirtualPaymentSecretBundle(value);
-    return bundle?.revision === revision;
-  }
-
-  private async saveMapping(
-    addonProductId: string,
-    current: BrandingVirtualProductRecord | null,
-    input: NonNullable<BrandingAddonProductPatchInput["virtual_product"]>,
-    employeeId: string,
-  ) {
-    const saveInput: SaveBrandingVirtualProductInput = {
-      addonProductId,
-      environment: input.environment,
-      appId: input.app_id,
-      virtualMerchantId: input.virtual_merchant_id,
-      offerId: input.offer_id,
-      providerProductId: input.provider_product_id,
-      expectedAmountFen: input.expected_amount_fen,
-      encryptedSecretRef: input.encrypted_secret_ref,
-      secretRevision: input.secret_revision,
-      status: input.status,
-      updatedByEmployeeId: employeeId,
-    };
-    try {
-      if (!current) {
-        return await this.virtualProductRepository.createMapping(saveInput);
-      }
-      const updated = await this.virtualProductRepository.updateMapping({
-        ...saveInput,
-        id: current.id,
-        expectedVersion: input.version,
-      });
-      if (!updated) throw brandingVirtualProductVersionConflict();
-      return updated;
-    } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
-      throw Errors.dbError("保存品牌权益虚拟商品映射失败");
+      return false;
     }
   }
 
   private assertFinalPrice(
     current: BrandingAddonProductRecord,
     input: BrandingAddonProductPatchInput,
-  ): void {
-    const isEnabled = input.enabled ?? current.enabled;
+  ) {
     const amountFen = input.amount_fen ?? current.amount_fen;
-    if (
-      amountFen !== null &&
-      (
-        !Number.isSafeInteger(amountFen) ||
-        amountFen <= 0 ||
-        amountFen > MAX_POSTGRES_INTEGER_FEN
-      )
-    ) {
-      throw Errors.badRequest("商品价格必须是支持范围内的正整数分");
-    }
-    if (
-      isEnabled &&
-      amountFen === null
-    ) {
+    if (amountFen !== null && (
+      !Number.isSafeInteger(amountFen) || amountFen <= 0 ||
+      amountFen > MAX_POSTGRES_INTEGER_FEN
+    )) throw Errors.badRequest("商品价格必须是支持范围内的正整数分");
+    if ((input.enabled ?? current.enabled) && amountFen === null) {
       throw Errors.business(
         409,
         "启用商品前必须配置正整数分价格",
@@ -442,25 +333,27 @@ export class PlatformBrandingAddonProductService {
   }
 }
 
-function buildUpdateInput(
-  input: BrandingAddonProductPatchInput,
-  updatedByEmployeeId: string,
-): UpdateBrandingAddonProductInput {
+function buildProductPatch(input: BrandingAddonProductPatchInput) {
+  if (!hasBrandingAddonProductMutation(input)) return {};
   return {
-    expectedVersion: input.version,
-    updatedByEmployeeId,
     ...(input.name === undefined ? {} : { name: input.name }),
-    ...(input.amount_fen === undefined
-      ? {}
-      : { amountFen: input.amount_fen }),
-    ...(input.purchase_notes === undefined
-      ? {}
-      : { purchaseNotes: input.purchase_notes }),
+    ...(input.amount_fen === undefined ? {} : { amount_fen: input.amount_fen }),
+    ...(input.purchase_notes === undefined ? {} : { purchase_notes: input.purchase_notes }),
     ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
-    ...(input.purchase_mode === undefined
-      ? {}
-      : { purchaseMode: input.purchase_mode }),
+    ...(input.purchase_mode === undefined ? {} : { purchase_mode: input.purchase_mode }),
   };
+}
+
+function assertPurchaseModeTransition(from: BrandingPurchaseMode, to: BrandingPurchaseMode) {
+  if (from === to ||
+    (from === "direct_legacy" && to === "maintenance") ||
+    (from === "maintenance" && to === "wechat_virtual") ||
+    (from === "wechat_virtual" && to === "maintenance")) return;
+  throw Errors.business(
+    409,
+    "不支持当前商品购买模式切换",
+    "BRANDING_ADDON_PURCHASE_MODE_TRANSITION_INVALID",
+  );
 }
 
 function serializeProduct(product: BrandingAddonProductRecord) {
@@ -482,6 +375,20 @@ function productVersionConflict() {
     409,
     "商品配置版本已变化，请刷新后重试",
     "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
+  );
+}
+function amountTooLow() {
+  return Errors.business(
+    409,
+    "生产虚拟商品价格不得低于 100 分",
+    "BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW",
+  );
+}
+function secretInvalid() {
+  return Errors.business(
+    409,
+    "虚拟支付密钥未配置或版本不匹配",
+    "BRANDING_VIRTUAL_PRODUCT_SECRET_INVALID",
   );
 }
 

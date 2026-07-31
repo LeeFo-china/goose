@@ -100,11 +100,22 @@ function createFixture(options: {
     if (options.getError) throw options.getError;
     return options.current === undefined ? product : options.current;
   });
-  const updateProduct = mock(async () => {
+  const manageConfiguration = mock(async () => {
     if (options.updateError) throw options.updateError;
-    return options.updated === undefined
-      ? { ...product, amount_fen: 1, enabled: true, version: 2 }
-      : options.updated;
+    if (options.updated === null) {
+      throw Object.assign(new Error("version conflict"), {
+        statusCode: 409,
+        code: "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
+      });
+    }
+    return {
+      product: options.updated === undefined
+        ? { ...product, amount_fen: 1, enabled: true, version: 2 }
+        : options.updated ?? product,
+      virtual_product: options.updatedMapping === undefined
+        ? null
+        : options.updatedMapping,
+    };
   });
   const assertPermission = mock((
     authContext: AuthContext,
@@ -140,22 +151,31 @@ function createFixture(options: {
       revision: 2,
     })
   );
+  const getSummaries = mock(async () => []);
+  const validateConfiguration = mock(async () => ({
+    virtual_product: productionMapping,
+    validation: {
+      kind: "server_configuration" as const,
+      validated_at: "2026-08-01T00:00:00.000Z",
+    },
+  }));
   const service = new PlatformBrandingAddonProductService({
-    repository: { getProduct, updateProduct },
+    repository: { getProduct },
     virtualProductRepository: {
       findByProductAndEnvironment,
-      createMapping,
-      updateMapping,
+      manageConfiguration,
     },
     settingsService: { getSecretString },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
+    managementService: { getSummaries, validateConfiguration },
   });
 
   return {
     service,
     getProduct,
-    updateProduct,
+    updateProduct: manageConfiguration,
+    manageConfiguration,
     assertPermission,
     recordBestEffort,
     findByProductAndEnvironment,
@@ -226,6 +246,7 @@ describe("PlatformBrandingAddonProductService reads", () => {
         purchase_mode: "maintenance",
         version: 1,
       },
+      virtual_products: [],
     });
   });
 
@@ -286,10 +307,11 @@ describe("PlatformBrandingAddonProductService updates", () => {
         version: 2,
       },
     });
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      name: "年度品牌支持服务",
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { name: "年度品牌支持服务" },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
     expect(fixture.recordBestEffort).toHaveBeenCalledWith({
       action: "branding_addon_product.update",
@@ -338,10 +360,11 @@ describe("PlatformBrandingAddonProductService updates", () => {
       version: 1,
     });
 
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      enabled: true,
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { enabled: true },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
   });
 
@@ -367,10 +390,11 @@ describe("PlatformBrandingAddonProductService updates", () => {
       version: 1,
     });
 
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      amountFen: 2_147_483_647,
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { amount_fen: 2_147_483_647 },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
   });
 
@@ -463,37 +487,12 @@ describe("PlatformBrandingAddonProductService updates", () => {
       addonProductId: product.id,
       environment: "production",
     });
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      purchaseMode: "wechat_virtual",
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { purchase_mode: "wechat_virtual" },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
   });
-
-  test.each([
-    [{ status: "disabled" }, "BRANDING_VIRTUAL_PRODUCT_DISABLED"],
-    [{ validation_status: "invalid" }, "BRANDING_VIRTUAL_PRODUCT_INVALID"],
-    [{ expected_amount_fen: 8_800 }, "BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH"],
-    [{ environment: "sandbox" }, "BRANDING_VIRTUAL_PRODUCT_PRODUCTION_REQUIRED"],
-  ] as const)(
-    "rejects an unavailable production mapping before switching: %o",
-    async (mappingPatch, code) => {
-      const current = {
-        ...product,
-        amount_fen: 9_900,
-        enabled: true,
-      } satisfies BrandingAddonProductRecord;
-      const fixture = createFixture({
-        current,
-        mapping: { ...productionMapping, ...mappingPatch },
-      });
-
-      await expect(fixture.service.update(platformAuth, {
-        purchase_mode: "wechat_virtual",
-        version: 1,
-      })).rejects.toMatchObject({ statusCode: 409, code });
-      expect(fixture.updateProduct).not.toHaveBeenCalled();
-    },
-  );
 
 });

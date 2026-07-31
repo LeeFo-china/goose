@@ -118,6 +118,7 @@ describe("BrandingAddonController routes", () => {
     expect([...registeredHandlers(controller).keys()]).toEqual([
       "GET /platform/branding/entitlement-product",
       "PATCH /platform/branding/entitlement-product",
+      "POST /platform/branding/entitlement-product/virtual-products/:environment/validate",
       "GET /platform/branding/entitlement-orders",
       "GET /platform/branding/entitlement-orders/:id",
       "GET /tenant/branding/entitlement-product",
@@ -138,12 +139,21 @@ describe("BrandingAddonController routes", () => {
       auth: authorizationService.getRequiredAuthContext,
       get: platformBrandingAddonProductService.get,
       update: platformBrandingAddonProductService.update,
+      validate: platformBrandingAddonProductService.validateVirtualProduct,
     };
     const get = mock(async () => ({ product: { version: 1 } }));
     const update = mock(async () => ({ product: { version: 2 } }));
+    const validate = mock(async () => ({
+      virtual_product: { validation_status: "valid", version: 2 },
+    }));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingAddonProductService, "get", get);
     replaceMethod(platformBrandingAddonProductService, "update", update);
+    replaceMethod(
+      platformBrandingAddonProductService,
+      "validateVirtualProduct",
+      validate,
+    );
 
     try {
       const getResponse = await requiredHandler(
@@ -170,6 +180,20 @@ describe("BrandingAddonController routes", () => {
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {});
       expect(update).toHaveBeenCalledWith(platformAuth, patch);
+
+      await requiredHandler(
+        controller,
+        "POST /platform/branding/entitlement-product/virtual-products/:environment/validate",
+      )({
+        params: { environment: "production" },
+        body: { version: 1 },
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(validate).toHaveBeenCalledWith(platformAuth, {
+        environment: "production",
+        version: 1,
+      });
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingAddonProductService, "get", originals.get);
@@ -177,6 +201,11 @@ describe("BrandingAddonController routes", () => {
         platformBrandingAddonProductService,
         "update",
         originals.update,
+      );
+      replaceMethod(
+        platformBrandingAddonProductService,
+        "validateVirtualProduct",
+        originals.validate,
       );
     }
   });

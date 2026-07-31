@@ -7,6 +7,8 @@ import {
   BrandingAddonOrderListQuerySchema,
   BrandingAddonOrderParamsSchema,
   BrandingAddonProductPatchSchema,
+  BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualProductValidationSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "@/schema/branding-addon";
 import {
@@ -69,6 +71,23 @@ class PlatformBrandingAddonController extends PlatformBaseController {
     const input = parse(BrandingAddonProductPatchSchema, request.body);
     return ResponseHandler.success(
       await platformBrandingAddonProductService.update(authContext, input),
+    );
+  }
+
+  @Post("/platform/branding/entitlement-product/virtual-products/:environment/validate")
+  async validateVirtualProduct(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const { environment } = parse(
+      BrandingVirtualProductEnvironmentParamsSchema,
+      request.params,
+    );
+    const input = parse(BrandingVirtualProductValidationSchema, request.body);
+    return ResponseHandler.success(
+      await platformBrandingAddonProductService.validateVirtualProduct(
+        authContext,
+        { environment, version: input.version },
+      ),
     );
   }
 

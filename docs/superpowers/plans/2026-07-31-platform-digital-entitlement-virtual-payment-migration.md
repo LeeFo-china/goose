@@ -28,10 +28,11 @@
 
 - `supabase/migrations/20260731130000_create_branding_virtual_payment_foundation.sql`：商品购买模式、虚拟商品映射、虚拟订单、权限、RLS、索引和订单创建 RPC。
 - `supabase/migrations/20260731131000_create_wechat_mini_session_credentials.sql`：加密微信会话凭据、轮换 RPC、撤销触发器和访问边界。
-- `supabase/migrations/20260731132000_create_branding_virtual_payment_fulfillment.sql`：虚拟支付消息、支付确认与权益履约原子 RPC、claim RPC。
-- `supabase/migrations/20260731133000_create_branding_entitlement_order_query.sql`：新旧订单统一分页、详情与筛选 RPC。
-- `supabase/migrations/20260731134000_create_branding_virtual_payment_refunds.sql`：人工退款、退款状态、退款补偿事件和原子补偿 RPC。
-- `supabase/migrations/20260731135000_guard_legacy_branding_payment_cutover.sql`：旧普通支付写入数据库保护、旧 pending claim 和切换前置校验。
+- `supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql`：虚拟商品验证生命周期、商品与映射原子管理 RPC、验证结果 RPC。
+- `supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql`：虚拟支付消息、支付确认与权益履约原子 RPC、claim RPC。
+- `supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql`：新旧订单统一分页、详情与筛选 RPC。
+- `supabase/migrations/20260731135000_create_branding_virtual_payment_refunds.sql`：人工退款、退款状态、退款补偿事件和原子补偿 RPC。
+- `supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql`：旧普通支付写入数据库保护、旧 pending claim 和切换前置校验。
 
 ### API
 
@@ -443,6 +444,7 @@ git commit -m "feat(auth): 保存微信虚拟支付会话凭据"
 ## Task 3：提供虚拟商品映射与购买能力接口
 
 **Files:**
+- Create: `supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql`
 - Create: `apps/api/src/repositories/branding-virtual-products.ts`
 - Create: `apps/api/src/services/branding-virtual-products.ts`
 - Create: `apps/api/src/services/branding-virtual-products.test.ts`
@@ -453,6 +455,12 @@ git commit -m "feat(auth): 保存微信虚拟支付会话凭据"
 - Modify: `apps/api/src/services/platform-branding-addon-product.ts`
 - Modify: `apps/api/src/schema/branding-addon.ts`
 - Modify: `apps/api/src/controllers/branding-addon/index.ts`
+
+管理侧保存必须通过单个 `branding_manage_virtual_product_configuration`
+RPC 原子更新商品与映射，禁止先后执行两次写入。影响支付坐标或密钥版本的
+字段变化必须将验证状态重置为 `pending` 并清空验证时间；只有受保护的本地
+配置验证接口可通过独立 RPC 写入 `valid/invalid`。本地验证只确认服务端配置、
+密钥包结构和金额一致性，不宣称已远程验证微信 ProductId。
 
 - [ ] **Step 1: 写商品可售性矩阵测试**
 
@@ -774,7 +782,7 @@ git commit -m "feat(payments): 增加品牌权益虚拟支付下单"
 ## Task 6：接入微信消息并实现原子支付履约
 
 **Files:**
-- Create: `supabase/migrations/20260731132000_create_branding_virtual_payment_fulfillment.sql`
+- Create: `supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql`
 - Create: `apps/api/src/repositories/wechat-virtual-payment-notifications.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-notifications.test.ts`
@@ -859,7 +867,7 @@ Run: `bun test apps/api/src/services/wechat-virtual-payment-notifications.test.t
 Expected: 重复、并发、错误上下文和重试测试 PASS；普通 `/pay/wechat/callback` 测试不变。
 
 ```bash
-git add supabase/migrations/20260731132000_create_branding_virtual_payment_fulfillment.sql apps/api/src/repositories/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/controllers/wechat-virtual-payment/index.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts apps/api/src/routes/index.ts
+git add supabase/migrations/20260731133000_create_branding_virtual_payment_fulfillment.sql apps/api/src/repositories/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.ts apps/api/src/services/wechat-virtual-payment-notifications.test.ts apps/api/src/services/branding-virtual-payment-confirmation.ts apps/api/src/services/branding-virtual-payment-confirmation.test.ts apps/api/src/controllers/wechat-virtual-payment/index.ts apps/api/src/controllers/wechat-virtual-payment/routes.test.ts apps/api/src/routes/index.ts
 git commit -m "feat(payments): 完成虚拟支付通知与权益履约"
 ```
 
@@ -937,7 +945,7 @@ git commit -m "feat(payments): 补偿虚拟支付订单与履约"
 ## Task 8：统一新旧品牌权益订单读取
 
 **Files:**
-- Create: `supabase/migrations/20260731133000_create_branding_entitlement_order_query.sql`
+- Create: `supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql`
 - Create: `apps/api/src/repositories/branding-entitlement-order-query.ts`
 - Create: `apps/api/src/repositories/branding-entitlement-order-query.test.ts`
 - Create: `apps/api/src/services/branding-entitlement-order-query.ts`
@@ -1012,14 +1020,14 @@ Expected: 全部 PASS。
 在 dev 应用 migration 后运行针对默认列表、tenant_id 筛选和 keyword 搜索的 `EXPLAIN (ANALYZE, BUFFERS)`；Expected: 无应用层 N+1，分页结果最多 100，过滤能使用对应组合/关键词索引。将计划输出粘贴到 `docs/runbooks/branding-virtual-payment-cutover.md` 的验证记录。
 
 ```bash
-git add supabase/migrations/20260731133000_create_branding_entitlement_order_query.sql apps/api/src/repositories/branding-entitlement-order-query.ts apps/api/src/repositories/branding-entitlement-order-query.test.ts apps/api/src/services/branding-entitlement-order-query.ts apps/api/src/services/branding-entitlement-order-query.test.ts apps/api/src/services/tenant-branding-addon-orders.ts apps/api/src/services/platform-branding-addon-orders.ts apps/api/src/schema/branding-addon.ts
+git add supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql apps/api/src/repositories/branding-entitlement-order-query.ts apps/api/src/repositories/branding-entitlement-order-query.test.ts apps/api/src/services/branding-entitlement-order-query.ts apps/api/src/services/branding-entitlement-order-query.test.ts apps/api/src/services/tenant-branding-addon-orders.ts apps/api/src/services/platform-branding-addon-orders.ts apps/api/src/schema/branding-addon.ts
 git commit -m "feat(payments): 统一品牌权益新旧订单查询"
 ```
 
 ## Task 9：实现人工退款、iOS 外部退款和权益补偿
 
 **Files:**
-- Create: `supabase/migrations/20260731134000_create_branding_virtual_payment_refunds.sql`
+- Create: `supabase/migrations/20260731135000_create_branding_virtual_payment_refunds.sql`
 - Create: `apps/api/src/repositories/branding-virtual-refunds.ts`
 - Create: `apps/api/src/services/branding-virtual-refunds.ts`
 - Create: `apps/api/src/services/branding-virtual-refunds.test.ts`
@@ -1149,7 +1157,7 @@ Run: `bun test apps/api/src/services/branding-virtual-refunds.test.ts apps/api/s
 Expected: 全部 PASS；iOS 不调用 `refundOrder`；退款失败没有 compensation event；重复成功通知只补偿一次。
 
 ```bash
-git add supabase/migrations/20260731134000_create_branding_virtual_payment_refunds.sql apps/api/src/repositories/branding-virtual-refunds.ts apps/api/src/services/branding-virtual-refunds.ts apps/api/src/services/branding-virtual-refunds.test.ts apps/api/src/services/branding-virtual-payment-reconciliation.ts apps/api/src/services/branding-virtual-payment-reconciliation.test.ts apps/api/src/workers/billing-reconcile-worker.ts apps/api/src/workers/billing-reconcile-worker-virtual-payment.test.ts apps/api/src/schema/branding-addon.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/services/wechat-virtual-payment-notifications.ts
+git add supabase/migrations/20260731135000_create_branding_virtual_payment_refunds.sql apps/api/src/repositories/branding-virtual-refunds.ts apps/api/src/services/branding-virtual-refunds.ts apps/api/src/services/branding-virtual-refunds.test.ts apps/api/src/services/branding-virtual-payment-reconciliation.ts apps/api/src/services/branding-virtual-payment-reconciliation.test.ts apps/api/src/workers/billing-reconcile-worker.ts apps/api/src/workers/billing-reconcile-worker-virtual-payment.test.ts apps/api/src/schema/branding-addon.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/services/wechat-virtual-payment-notifications.ts
 git commit -m "feat(payments): 增加虚拟支付人工退款与权益补偿"
 ```
 
@@ -1231,7 +1239,7 @@ git commit -m "feat(admin): 增加品牌权益虚拟支付管理"
 ## Task 11：阻断旧写入并收敛旧普通支付 pending 订单
 
 **Files:**
-- Create: `supabase/migrations/20260731135000_guard_legacy_branding_payment_cutover.sql`
+- Create: `supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql`
 - Create: `apps/api/src/scripts/branding-virtual-payment-cutover.ts`
 - Create: `apps/api/src/scripts/branding-virtual-payment-cutover.test.ts`
 - Modify: `apps/api/src/services/tenant-branding-addon-orders.ts`
@@ -1302,7 +1310,7 @@ Run: `bun test apps/api/src/scripts/branding-virtual-payment-cutover.test.ts app
 Expected: 全部 PASS；任何未决订单都阻止切换；切换后旧写接口稳定返回 409。
 
 ```bash
-git add supabase/migrations/20260731135000_guard_legacy_branding_payment_cutover.sql apps/api/src/scripts/branding-virtual-payment-cutover.ts apps/api/src/scripts/branding-virtual-payment-cutover.test.ts apps/api/src/services/tenant-branding-addon-orders.ts apps/api/src/services/tenant-branding-addon-orders-payment.test.ts apps/api/package.json docs/runbooks/branding-virtual-payment-cutover.md
+git add supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql apps/api/src/scripts/branding-virtual-payment-cutover.ts apps/api/src/scripts/branding-virtual-payment-cutover.test.ts apps/api/src/services/tenant-branding-addon-orders.ts apps/api/src/services/tenant-branding-addon-orders-payment.test.ts apps/api/package.json docs/runbooks/branding-virtual-payment-cutover.md
 git commit -m "feat(payments): 增加虚拟支付切换保护"
 ```
 

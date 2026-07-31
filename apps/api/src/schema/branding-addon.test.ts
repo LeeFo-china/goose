@@ -4,8 +4,26 @@ import {
   BrandingAddonCreateOrderSchema,
   BrandingAddonOrderListQuerySchema,
   BrandingAddonProductPatchSchema,
+  BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualProductValidationSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "./branding-addon";
+
+describe("BrandingVirtualProductValidationSchema", () => {
+  test("accepts only a supported environment and positive mapping version", () => {
+    expect(BrandingVirtualProductEnvironmentParamsSchema.parse({
+      environment: "production",
+    })).toEqual({ environment: "production" });
+    expect(BrandingVirtualProductValidationSchema.parse({ version: 1 }))
+      .toEqual({ version: 1 });
+    expect(() => BrandingVirtualProductEnvironmentParamsSchema.parse({
+      environment: "staging",
+    })).toThrow();
+    expect(() => BrandingVirtualProductValidationSchema.parse({
+      version: 0,
+    })).toThrow();
+  });
+});
 
 describe("BrandingAddonProductPatchSchema", () => {
   test("accepts a positive integer price in fen", () => {
