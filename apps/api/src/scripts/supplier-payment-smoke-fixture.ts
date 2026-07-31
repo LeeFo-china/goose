@@ -4,10 +4,7 @@ import {
   selectFixtureReferences,
   type SmokeSql,
 } from "./supplier-purchase-order-smoke-fixture";
-import {
-  orderCommand,
-  saveDraft,
-} from "./supplier-purchase-order-smoke-commands";
+import { orderCommand } from "./supplier-purchase-order-smoke-commands";
 import {
   extendFixture,
   reviewRequisition,
@@ -54,6 +51,16 @@ export const SUPPLIER_PAYMENT_SMOKE_IDS = {
   tenantIsolationKey: "86000000-0000-4000-8000-000000000032",
   selfReviewApproveKey: "86000000-0000-4000-8000-000000000033",
   selfReviewRejectKey: "86000000-0000-4000-8000-000000000034",
+  invoiceRequisition: "86000000-0000-4000-8000-000000000035",
+  explainNoiseSupplier: "86000000-0000-4000-8000-000000000036",
+  explainNoiseRelationship: "86000000-0000-4000-8000-000000000037",
+  explainNoiseProduct: "86000000-0000-4000-8000-000000000038",
+  explainNoiseSku: "86000000-0000-4000-8000-000000000039",
+  explainNoisePriceList: "86000000-0000-4000-8000-000000000040",
+  explainNoisePriceItem: "86000000-0000-4000-8000-000000000041",
+  explainNoiseOrder: "86000000-0000-4000-8000-000000000042",
+  explainNoiseOrderItem: "86000000-0000-4000-8000-000000000043",
+  explainNoiseFulfillment: "86000000-0000-4000-8000-000000000044",
 } as const;
 
 export type SupplierPaymentSmokeSql = SmokeSql;
@@ -118,66 +125,68 @@ async function seedCommercialContract(
 async function prepareRequisitionOrder(
   sql: SupplierPaymentSmokeSql,
   fixture: RequisitionSmokeFixture,
+  input: {
+    requisitionId: string;
+    orderId: string;
+    quantity: number;
+    label: string;
+  },
 ): Promise<string> {
   requireStatus(
     await saveRequisition(
       sql,
       fixture,
-      SUPPLIER_PAYMENT_SMOKE_IDS.requisition,
+      input.requisitionId,
       0,
-      "supplier-payment-smoke-requisition-save",
-      3.3333,
+      `supplier-payment-smoke-${input.label}-requisition-save`,
+      input.quantity,
     ),
     "saved",
-    "requisition save",
+    `${input.label} requisition save`,
   );
   requireStatus(
     await submitRequisition(
       sql,
       fixture,
-      SUPPLIER_PAYMENT_SMOKE_IDS.requisition,
+      input.requisitionId,
       1,
-      "supplier-payment-smoke-requisition-submit",
+      `supplier-payment-smoke-${input.label}-requisition-submit`,
     ),
     "submitted",
-    "requisition submit",
+    `${input.label} requisition submit`,
   );
   requireStatus(
     await reviewRequisition(
       sql,
       fixture,
-      SUPPLIER_PAYMENT_SMOKE_IDS.requisition,
+      input.requisitionId,
       2,
       "approve",
-      "supplier-payment-smoke-requisition-approve",
+      `supplier-payment-smoke-${input.label}-requisition-approve`,
     ),
     "approved",
-    "requisition approval",
+    `${input.label} requisition approval`,
   );
   requireStatus(
     await convertRequisition(
       sql,
       fixture,
-      SUPPLIER_PAYMENT_SMOKE_IDS.requisition,
-      SUPPLIER_PAYMENT_SMOKE_IDS.order,
+      input.requisitionId,
+      input.orderId,
       3,
-      "supplier-payment-smoke-requisition-convert",
+      `supplier-payment-smoke-${input.label}-requisition-convert`,
     ),
     "converted",
-    "requisition conversion",
+    `${input.label} requisition conversion`,
   );
   requireStatus(
     await orderCommand(sql, fixture, "submit", 1, {
-      orderId: SUPPLIER_PAYMENT_SMOKE_IDS.order,
+      orderId: input.orderId,
     }),
     "submitted",
-    "converted order submit",
+    `${input.label} converted order submit`,
   );
-  return selectOrderItem(
-    sql,
-    fixture.tenant_id,
-    SUPPLIER_PAYMENT_SMOKE_IDS.order,
-  );
+  return selectOrderItem(sql, fixture.tenant_id, input.orderId);
 }
 
 async function prepareInvoiceOrder(
@@ -191,37 +200,12 @@ async function prepareInvoiceOrder(
     where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.contract}::uuid
       and tenant_id = ${fixture.tenant_id}::uuid;
   `;
-  requireStatus(
-    await saveDraft(
-      sql,
-      fixture,
-      0,
-      1,
-      "supplier-payment-smoke-invoice-order-save",
-      { orderId: SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder },
-    ),
-    "saved",
-    "invoice order save",
-  );
-  const itemId = await selectOrderItem(
-    sql,
-    fixture.tenant_id,
-    SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder,
-  );
-  await sql`
-    update public.supplier_purchase_order_items
-    set cost_category_id = ${fixture.cost_category_id}::uuid
-    where id = ${itemId}::uuid
-      and tenant_id = ${fixture.tenant_id}::uuid;
-  `;
-  requireStatus(
-    await orderCommand(sql, fixture, "submit", 1, {
-      orderId: SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder,
-    }),
-    "submitted",
-    "invoice order submit",
-  );
-  return itemId;
+  return prepareRequisitionOrder(sql, fixture, {
+    requisitionId: SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequisition,
+    orderId: SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder,
+    quantity: 1,
+    label: "invoice",
+  });
 }
 
 async function selectOrderItem(
@@ -313,7 +297,12 @@ export async function seedSupplierPaymentSmokeFixture(
     SUPPLIER_PAYMENT_SMOKE_IDS.budget,
   );
   await seedCommercialContract(sql, fixture);
-  const orderItemId = await prepareRequisitionOrder(sql, fixture);
+  const orderItemId = await prepareRequisitionOrder(sql, fixture, {
+    requisitionId: SUPPLIER_PAYMENT_SMOKE_IDS.requisition,
+    orderId: SUPPLIER_PAYMENT_SMOKE_IDS.order,
+    quantity: 3.3333,
+    label: "main",
+  });
   const invoiceOrderItemId = await prepareInvoiceOrder(sql, fixture);
   await prepareFulfillment(sql, fixture, {
     orderId: SUPPLIER_PAYMENT_SMOKE_IDS.order,

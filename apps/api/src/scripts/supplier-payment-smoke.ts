@@ -135,7 +135,8 @@ export async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
     from (
       select count(*) from public.supplier_purchase_orders where id in (
         ${SUPPLIER_PAYMENT_SMOKE_IDS.order}::uuid,
-        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder}::uuid
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoiceOrder}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseOrder}::uuid
       )
       union all
       select count(*) from public.supplier_payment_requests where id in (
@@ -157,7 +158,10 @@ export async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
       where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.contractDocument}::uuid
       union all
       select count(*) from public.supplier_purchase_requisitions
-      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.requisition}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.requisition}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.invoiceRequisition}::uuid
+      )
       union all
       select count(*) from public.finance_cost_categories
       where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.costCategory}::uuid
@@ -179,25 +183,47 @@ export async function countResidualFixtureRows(sql: Bun.SQL): Promise<number> {
       )
       union all
       select count(*) from public.suppliers
-      where id = ${SUPPLIER_PAYMENT_BASE_IDS.supplier}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.supplier}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseSupplier}::uuid
+      )
       union all
       select count(*) from public.tenant_suppliers
       where id in (
         ${SUPPLIER_PAYMENT_BASE_IDS.relationship}::uuid,
-        ${SUPPLIER_PAYMENT_BASE_IDS.otherRelationship}::uuid
+        ${SUPPLIER_PAYMENT_BASE_IDS.otherRelationship}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseRelationship}::uuid
       )
       union all
       select count(*) from public.supplier_products
-      where id = ${SUPPLIER_PAYMENT_BASE_IDS.product}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.product}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseProduct}::uuid
+      )
       union all
       select count(*) from public.supplier_skus
-      where id = ${SUPPLIER_PAYMENT_BASE_IDS.sku}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.sku}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseSku}::uuid
+      )
       union all
       select count(*) from public.supplier_price_lists
-      where id = ${SUPPLIER_PAYMENT_BASE_IDS.priceList}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.priceList}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoisePriceList}::uuid
+      )
       union all
       select count(*) from public.supplier_price_list_items
-      where id = ${SUPPLIER_PAYMENT_BASE_IDS.priceItem}::uuid
+      where id in (
+        ${SUPPLIER_PAYMENT_BASE_IDS.priceItem}::uuid,
+        ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoisePriceItem}::uuid
+      )
+      union all
+      select count(*) from public.supplier_purchase_order_items
+      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseOrderItem}::uuid
+      union all
+      select count(*) from public.supplier_purchase_order_fulfillments
+      where id = ${SUPPLIER_PAYMENT_SMOKE_IDS.explainNoiseFulfillment}::uuid
       union all
       select count(*) from public.catalog_categories
       where id = ${SUPPLIER_PAYMENT_BASE_IDS.category}::uuid

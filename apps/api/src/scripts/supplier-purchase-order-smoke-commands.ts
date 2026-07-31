@@ -67,7 +67,7 @@ export async function orderCommand(
         ${context.orderId}::uuid, ${context.tenantId}::uuid,
         ${expectedVersion}::integer, ${context.userId}::uuid,
         ${context.employeeId}::uuid,
-        ${`smoke-submit-${expectedVersion}-${context.tenantId}`}
+        ${`smoke-submit-${expectedVersion}-${context.tenantId}-${context.orderId}`}
       ) as result;
     `
     : await sql<ResultRow[]>`
@@ -75,7 +75,7 @@ export async function orderCommand(
         ${context.orderId}::uuid, ${context.tenantId}::uuid,
         ${expectedVersion}::integer, '数据库 smoke 取消',
         ${context.userId}::uuid, ${context.employeeId}::uuid,
-        ${`smoke-cancel-${expectedVersion}-${context.tenantId}`}
+        ${`smoke-cancel-${expectedVersion}-${context.tenantId}-${context.orderId}`}
       ) as result;
     `;
   return rows[0]?.result;

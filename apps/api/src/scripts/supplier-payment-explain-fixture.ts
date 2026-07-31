@@ -3,6 +3,8 @@ import {
   type SupplierPaymentSmokeFixture,
   type SupplierPaymentSmokeSql,
 } from "./supplier-payment-smoke-fixture";
+import { seedSupplierPayableNoise } from
+  "./supplier-payment-explain-payable-noise";
 
 export class SupplierPaymentExplainFixtureError extends Error {
   override readonly name = "SupplierPaymentExplainFixtureError";
@@ -207,9 +209,10 @@ export async function seedSupplierPaymentExplainCardinality(
         select md5(
           'supplier-payment-explain-receipt-item-' || generated.no
         )::uuid
-        from generate_series(1, 5000) as generated(no)
+        from generate_series(1, 100) as generated(no)
       );
   `;
+  await seedSupplierPayableNoise(sql, fixture);
   await seedRequestsCommitmentsAndCash(sql, fixture);
   await sql`
     analyze public.project_cost_events;

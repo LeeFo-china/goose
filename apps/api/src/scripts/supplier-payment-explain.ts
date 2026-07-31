@@ -259,6 +259,14 @@ async function countExplainResiduals(sql: Bun.SQL): Promise<number> {
         from generate_series(1, 5000) as generated(no)
       )
       union all
+      select count(*) from public.supplier_purchase_order_receipt_items
+      where id in (
+        select md5(
+          'supplier-payment-explain-noise-item-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
       select count(*) from public.project_cost_events
       where source_id in (
         select md5(
@@ -271,6 +279,14 @@ async function countExplainResiduals(sql: Bun.SQL): Promise<number> {
       where source_id in (
         select md5(
           'supplier-payment-explain-receipt-item-' || generated.no
+        )::uuid
+        from generate_series(1, 5000) as generated(no)
+      )
+      union all
+      select count(*) from public.supplier_payable_events
+      where source_id in (
+        select md5(
+          'supplier-payment-explain-noise-item-' || generated.no
         )::uuid
         from generate_series(1, 5000) as generated(no)
       )
