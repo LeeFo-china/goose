@@ -6,6 +6,7 @@ import {
   type UserBusinessMembershipRecord,
   type UserOAuthIdentityRecord,
 } from "@/repositories/user-identities";
+import { wechatMiniSessionCredentialService } from "@/services/wechat-mini-session-credentials";
 
 const IDENTITY_LOOKUP_CACHE_TTL_MS = 60_000;
 const MAX_IDENTITY_LOOKUP_CACHE_SIZE = 4_000;
@@ -233,11 +234,16 @@ class UserIdentityService {
   }) {
     this.clearOauthCache(input);
     try {
-      await userIdentityRepository.unbindOauthIdentities({
+      const unboundIdentities = await userIdentityRepository.unbindOauthIdentities({
         userId: input.userId,
         platform: input.platform,
         openid: input.openid ?? null,
       });
+      if (input.platform === "wechat_mini") {
+        await Promise.all(unboundIdentities.map((identity) =>
+          wechatMiniSessionCredentialService.revokeForOauthIdentity(identity.id)
+        ));
+      }
       await this.recordEventBestEffort({
         userId: input.userId,
         eventType: "identity_oauth_unbound",
