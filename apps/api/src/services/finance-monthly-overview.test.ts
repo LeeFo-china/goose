@@ -68,7 +68,7 @@ const listSupplierCostRows = mock(async () => [{
   project_status: "constructing",
   cost_category_id: "category-material",
   cost_category_name: "材料",
-  amount: 100,
+  amount: "100.00",
   occurred_at: "2026-06-08T09:00:00.000Z",
 }]);
 

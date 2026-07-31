@@ -105,7 +105,7 @@ async function listTrendRows(input: {
     const to = Math.min(from + 999, MAX_TREND_ROWS);
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("finance_ledger_entries")
-      .select("id,project_id,direction,entry_type,amount,occurred_at,created_at")
+      .select("id,project_id,direction,entry_type,amount::text,occurred_at,created_at")
       .eq("tenant_id", input.tenantId)
       .in("project_id", input.projectIds)
       .gte("occurred_at", `${input.dateFrom}T00:00:00`)

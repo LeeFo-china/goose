@@ -92,7 +92,7 @@ describe("finance project ledger trend pagination", () => {
       ["id", { ascending: true }],
     ]);
     expect(calls[0]?.select).toBe(
-      "id,project_id,direction,entry_type,amount,occurred_at,created_at",
+      "id,project_id,direction,entry_type,amount::text,occurred_at,created_at",
     );
   });
 

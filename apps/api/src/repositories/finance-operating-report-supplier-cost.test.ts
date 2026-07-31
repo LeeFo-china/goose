@@ -92,7 +92,7 @@ describe("finance operating report supplier cost query", () => {
         projectId?: string;
         projectStatus?: string;
         sourceLimit: number;
-      }): Promise<Array<{ amount: number; cost_category_name: string }>>;
+      }): Promise<Array<{ amount: string; cost_category_name: string }>>;
     };
 
     const result = await repository.listSupplierCostRows({
@@ -106,7 +106,7 @@ describe("finance operating report supplier cost query", () => {
 
     expect(result).toHaveLength(1_001);
     expect(result[0]).toMatchObject({
-      amount: 0.01,
+      amount: "0.01",
       cost_category_name: "材料",
     });
     expect(calls.map((call) => call.range)).toEqual([
@@ -125,5 +125,6 @@ describe("finance operating report supplier cost query", () => {
       ["project.status", "constructing"],
     ]));
     expect(calls[0]?.select).not.toContain("*");
+    expect(calls[0]?.select).toContain("amount::text");
   });
 });

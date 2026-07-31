@@ -18,6 +18,10 @@ import type { AuthContext } from "@/services/authorization";
 import {
   buildFinanceReconciliationExceptions,
 } from "@/services/finance-reconciliation-exceptions";
+import {
+  aggregateSupplierCostCentsBy,
+  supplierCostCentsToNumber,
+} from "@/services/finance-report-supplier-costs";
 
 const SOURCE_LIMIT = 10_000;
 
@@ -205,9 +209,14 @@ function buildSummary(input: {
       unallocatedExpenseAmount: 0,
     },
   );
-  for (const row of input.supplierCostRows) {
-    ledger.expenseAmount += row.amount;
-  }
+  const supplierCostCents = aggregateSupplierCostCentsBy(
+    input.supplierCostRows,
+    () => "total",
+  ).get("total") ?? BigInt(0);
+  ledger.expenseAmount += supplierCostCentsToNumber(
+    supplierCostCents,
+    input.supplierCostRows,
+  );
   const receivable = input.receivableRows.reduce(
     (summary, row) => {
       if (row.status === "canceled") return summary;

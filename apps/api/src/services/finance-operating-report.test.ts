@@ -62,7 +62,7 @@ const listLedgerRows = mock(async () => [
 const listSupplierCostRows = mock(async () => [{
   id: "supplier-cost-1",
   project_id: "project-1",
-  amount: 100,
+  amount: "100.00",
   occurred_at: "2026-06-13T09:00:00.000Z",
   project_name: "A 项目",
   project_status: "constructing",

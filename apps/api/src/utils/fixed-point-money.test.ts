@@ -52,4 +52,34 @@ describe("fixed point money", () => {
         code: "FINANCE_MONEY_EXCEEDS_SAFE_RANGE",
       }));
   });
+
+  test("accepts ordinary numbers but rejects ambiguous high numbers", () => {
+    for (const amount of [12.34, 1.15]) {
+      expect(moneyCentsToSafeNumber(
+        addMoneyCents(BigInt(0), amount, context),
+        context,
+      )).toBe(amount);
+    }
+
+    for (const amount of [
+      90_071_992_547_409.91,
+      90_071_992_547_409.92,
+    ]) {
+      expect(() => addMoneyCents(BigInt(0), amount, context))
+        .toThrowError(expect.objectContaining({
+          statusCode: 422,
+          code: "FINANCE_MONEY_EXCEEDS_SAFE_RANGE",
+      }));
+    }
+  });
+
+  test("rejects invalid or sub-cent numeric facts", () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, -0.01, 1.001]) {
+      expect(() => addMoneyCents(BigInt(0), amount, context))
+        .toThrowError(expect.objectContaining({
+          statusCode: 500,
+          code: "DB_ERROR",
+        }));
+    }
+  });
 });

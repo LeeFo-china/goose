@@ -316,7 +316,7 @@ async function listSupplierCostEventRows(input: {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_cost_events")
       .select(
-        "id,cost_category_id,amount,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+        "id,cost_category_id,amount::text,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
       )
       .eq("tenant_id", input.tenantId)
       .eq("project_id", input.projectId)

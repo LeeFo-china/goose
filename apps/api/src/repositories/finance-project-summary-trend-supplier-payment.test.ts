@@ -41,7 +41,7 @@ describe("finance project ledger trend supplier payment", () => {
     });
 
     expect(selectedColumns).toBe(
-      "id,project_id,direction,entry_type,amount,occurred_at,created_at",
+      "id,project_id,direction,entry_type,amount::text,occurred_at,created_at",
     );
     expect(result).toEqual([
       {

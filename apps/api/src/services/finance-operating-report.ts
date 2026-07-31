@@ -11,6 +11,10 @@ import type {
 } from "@/schema/finance-reports";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  aggregateSupplierCostCentsBy,
+  supplierCostCentsToNumber,
+} from "@/services/finance-report-supplier-costs";
 
 const MAX_REPORT_RANGE_DAYS = 366;
 const DEFAULT_REPORT_RANGE_DAYS = 30;
@@ -143,9 +147,13 @@ export class FinanceOperatingReportService {
     for (const row of input.supplierCostRows) {
       const key = supplierCostGroupKey(row, input.groupBy);
       const current = groups.get(key.key) || emptyGroup(key.key, key.label);
-      current.expense_amount += row.amount;
       groups.set(key.key, current);
     }
+    applySupplierCostCents(
+      groups,
+      input.supplierCostRows,
+      (row) => supplierCostGroupKey(row, input.groupBy).key,
+    );
 
     for (const row of input.receivableRows) {
       const key = receivableGroupKey(row, input.groupBy);
@@ -167,7 +175,11 @@ export class FinanceOperatingReportService {
   ) {
     const group = emptyGroup("summary", "汇总");
     for (const row of ledgerRows) applyLedgerToGroup(group, row);
-    for (const row of supplierCostRows) group.expense_amount += row.amount;
+    applySupplierCostCents(
+      new Map([["summary", group]]),
+      supplierCostRows,
+      () => "summary",
+    );
     for (const row of receivableRows) {
       applyReceivableToGroup(group, row, tenantToday);
     }
@@ -243,6 +255,17 @@ function applyLedgerToGroup(
     if (!row.cost_category_id) {
       group.unallocated_expense_amount += row.amount;
     }
+  }
+}
+
+function applySupplierCostCents(
+  groups: Map<string, FinanceOperatingReportGroup>,
+  rows: FinanceOperatingReportSupplierCostRow[],
+  getKey: (row: FinanceOperatingReportSupplierCostRow) => string,
+) {
+  const centsByGroup = aggregateSupplierCostCentsBy(rows, getKey);
+  for (const [key, cents] of centsByGroup) {
+    groups.get(key)!.expense_amount += supplierCostCentsToNumber(cents, rows);
   }
 }
 

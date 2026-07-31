@@ -34,7 +34,7 @@ export type FinanceOperatingReportSupplierCostRow = {
   project_status: string | null;
   cost_category_id: string;
   cost_category_name: string | null;
-  amount: number;
+  amount: string;
   occurred_at: string;
 };
 
@@ -67,7 +67,7 @@ type LedgerDbRow = {
   cost_category_id: string | null;
   direction: string | null;
   entry_type: string | null;
-  amount: number | string | null;
+  amount: unknown;
   occurred_at: string | null;
   metadata: unknown;
   project?: MaybeArray<ProjectRelation>;
@@ -218,7 +218,7 @@ class FinanceOperatingReportRepository {
           id,
           project_id,
           cost_category_id,
-          amount,
+          amount::text,
           occurred_at,
           ${projectRelation},
           cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(id, code, name)
@@ -246,6 +246,9 @@ class FinanceOperatingReportRepository {
     return rows.map((row) => {
       const project = firstRelation(row.project);
       const category = firstRelation(row.cost_category);
+      if (typeof row.amount !== "string") {
+        throw Errors.dbError("解析财务运营报表供应商成本失败", rows);
+      }
       return {
         id: row.id,
         project_id: row.project_id,
@@ -253,7 +256,7 @@ class FinanceOperatingReportRepository {
         project_status: project?.status ?? null,
         cost_category_id: row.cost_category_id,
         cost_category_name: category?.name || category?.code || null,
-        amount: normalizeMoney(row.amount),
+        amount: row.amount,
         occurred_at: row.occurred_at,
       };
     });

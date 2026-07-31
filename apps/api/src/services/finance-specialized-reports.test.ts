@@ -80,7 +80,7 @@ const listSupplierCostRows = mock(async () => [{
   project_status: "constructing",
   cost_category_id: "category-labor",
   cost_category_name: "人工",
-  amount: 5000,
+  amount: "5000.00",
   occurred_at: "2026-06-09T09:00:00.000Z",
 }]);
 
@@ -371,7 +371,7 @@ describe("FinanceSpecializedReportService", () => {
         cost_category_name: "人工",
         expense_amount: 17000,
         expense_percent: 0.9189,
-        ledger_entry_count: 2,
+        ledger_entry_count: 1,
         project_count: 1,
       },
       {

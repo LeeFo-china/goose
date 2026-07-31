@@ -23,6 +23,10 @@ import {
   financeMonthlyOverviewService,
 } from "@/services/finance-monthly-overview";
 import {
+  applySupplierCostsToCategoryGroups,
+  applySupplierCostsToProjectGroups,
+} from "@/services/finance-specialized-supplier-costs";
+import {
   agingBucketKey,
   buildMonthlyOverviewCsv,
   compareBy,
@@ -171,9 +175,7 @@ export class FinanceSpecializedReportService {
         group.expense_amount += row.amount;
       }
     }
-    for (const row of supplierCostRows) {
-      getProjectGroup(groups, row).expense_amount += row.amount;
-    }
+    applySupplierCostsToProjectGroups(groups, supplierCostRows);
 
     for (const row of receivableRows) {
       if (row.status === "canceled") continue;
@@ -274,10 +276,10 @@ export class FinanceSpecializedReportService {
         unallocatedExpenseAmount += row.amount;
       }
     }
-    for (const row of supplierCostRows) {
-      addCostCategoryRow(groups, row);
-      expenseAmount += row.amount;
-    }
+    expenseAmount += applySupplierCostsToCategoryGroups(
+      groups,
+      supplierCostRows,
+    );
 
     const list = Array.from(groups.values()).map((item) => ({
       cost_category_id: item.cost_category_id,
@@ -429,27 +431,6 @@ function getProjectGroup(
   };
   groups.set(key, current);
   return current;
-}
-
-function addCostCategoryRow(
-  groups: Map<string, FinanceCostCategorySummaryItem & {
-    projectIds: Set<string>;
-  }>,
-  row: FinanceOperatingReportSupplierCostRow,
-) {
-  const current = groups.get(row.cost_category_id) || {
-    cost_category_id: row.cost_category_id,
-    cost_category_name: row.cost_category_name || "未归集",
-    expense_amount: 0,
-    expense_percent: 0,
-    ledger_entry_count: 0,
-    project_count: 0,
-    projectIds: new Set<string>(),
-  };
-  current.expense_amount += row.amount;
-  current.ledger_entry_count += 1;
-  current.projectIds.add(row.project_id);
-  groups.set(row.cost_category_id, current);
 }
 
 function resolveReportRange(

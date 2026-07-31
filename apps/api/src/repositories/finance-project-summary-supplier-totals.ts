@@ -21,7 +21,7 @@ export async function listFinanceProjectLedgerTotals(input: {
 
   const { data, error } = await queryFactPages(
     "finance_ledger_entries",
-    "project_id,direction,entry_type,amount,cost_category_id",
+    "project_id,direction,entry_type,amount::text,cost_category_id",
     input.tenantId,
     projectIds,
   );
@@ -66,19 +66,19 @@ export async function listFinanceProjectSupplierTotals(input: {
   const [costResult, payableResult, paymentResult] = await Promise.all([
     queryFactPages(
       "project_cost_events",
-      "project_id,cost_category_id,amount",
+      "project_id,cost_category_id,amount::text",
       input.tenantId,
       projectIds,
     ),
     queryFactPages(
       "supplier_payable_events",
-      "project_id,amount",
+      "project_id,amount::text",
       input.tenantId,
       projectIds,
     ),
     queryFactPages(
       "supplier_payments",
-      "project_id,amount",
+      "project_id,amount::text",
       input.tenantId,
       projectIds,
     ),

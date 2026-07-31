@@ -78,7 +78,7 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       {
         method: "select",
         args: [
-          "id,cost_category_id,amount,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+          "id,cost_category_id,amount::text,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
         ],
       },
       { method: "eq", args: ["tenant_id", "tenant-1"] },

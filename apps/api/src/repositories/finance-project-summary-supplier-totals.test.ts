@@ -149,6 +149,12 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
       ]);
       expect(call.select).not.toContain("*");
     }
+    expect(calls.map((call) => [call.table, call.select])).toEqual([
+      ["finance_ledger_entries", "project_id,direction,entry_type,amount::text,cost_category_id"],
+      ["project_cost_events", "project_id,cost_category_id,amount::text"],
+      ["supplier_payable_events", "project_id,amount::text"],
+      ["supplier_payments", "project_id,amount::text"],
+    ]);
   });
 
   test("pages a batched project fact set past the PostgREST row cap", async () => {
