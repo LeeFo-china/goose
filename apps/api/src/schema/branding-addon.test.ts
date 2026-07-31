@@ -5,9 +5,55 @@ import {
   BrandingAddonOrderListQuerySchema,
   BrandingAddonProductPatchSchema,
   BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualCreateOrderSchema,
   BrandingVirtualProductValidationSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "./branding-addon";
+
+describe("BrandingVirtualCreateOrderSchema", () => {
+  const valid = {
+    product_code: "custom_support_branding_annual",
+    idempotency_key: "00000000-0000-4000-8000-000000000001",
+  } as const;
+
+  test("defaults the diagnostic platform without accepting price or server context", () => {
+    expect(BrandingVirtualCreateOrderSchema.parse(valid)).toEqual({
+      ...valid,
+      requested_platform: "unknown",
+    });
+    expect(BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      requested_platform: "ios",
+    }).requested_platform).toBe("ios");
+
+    for (const forged of [
+      { amount_fen: 1 },
+      { environment: "sandbox" },
+      { offer_id: "client-offer" },
+      { provider_product_id: "client-product" },
+      { payer_openid: "client-openid" },
+      { tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { created_by: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      { appKey: "secret" },
+    ]) {
+      expect(() => BrandingVirtualCreateOrderSchema.parse({
+        ...valid,
+        ...forged,
+      })).toThrow();
+    }
+  });
+
+  test("rejects unsupported platforms and non-v4 idempotency keys", () => {
+    expect(() => BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      requested_platform: "macos",
+    })).toThrow();
+    expect(() => BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      idempotency_key: "00000000-0000-1000-8000-000000000001",
+    })).toThrow();
+  });
+});
 
 describe("BrandingVirtualProductValidationSchema", () => {
   test("accepts only a supported environment and positive mapping version", () => {

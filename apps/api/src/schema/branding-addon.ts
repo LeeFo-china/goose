@@ -8,6 +8,7 @@ import {
 import {
   BRANDING_PURCHASE_MODES,
   VIRTUAL_PAYMENT_ENVIRONMENTS,
+  VIRTUAL_PAYMENT_PLATFORMS,
 } from "../services/branding-virtual-payment-contracts";
 import { PaginationQuerySchema } from "./request";
 
@@ -93,6 +94,12 @@ export const BrandingAddonCreateOrderSchema = z.object({
   idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
 }).strict();
 
+export const BrandingVirtualCreateOrderSchema = z.object({
+  product_code: z.literal(BRANDING_ADDON_PRODUCT_CODE),
+  idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
+  requested_platform: z.enum(VIRTUAL_PAYMENT_PLATFORMS).default("unknown"),
+}).strict();
+
 export const BrandingAddonEmptySchema = z.object({}).strict();
 
 export const BrandingVirtualProductEnvironmentParamsSchema = z.object({
@@ -147,6 +154,8 @@ export type BrandingVirtualProductValidationInput =
   z.infer<typeof BrandingVirtualProductValidationSchema>;
 export type BrandingAddonCreateOrderInput =
   z.infer<typeof BrandingAddonCreateOrderSchema>;
+export type BrandingVirtualCreateOrderInput =
+  z.infer<typeof BrandingVirtualCreateOrderSchema>;
 export type BrandingAddonOrderListQuery =
   z.infer<typeof BrandingAddonOrderListQuerySchema>;
 export type PlatformBrandingAddonOrderListQuery =

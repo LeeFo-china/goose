@@ -473,6 +473,7 @@ git commit -m "feat(auth): 保存微信虚拟支付会话凭据"
 - Modify: `apps/api/src/schema/platform-audit-logs.ts`
 - Modify: `apps/api/src/controllers/branding-addon/index.ts`
 - Modify: `apps/api/src/controllers/branding-addon/routes.test.ts`
+- Create: `apps/api/src/controllers/branding-addon/routes-virtual-payment.test.ts`
 - Modify: `apps/api/src/repositories/system-settings.test.ts`
 - Create: `apps/api/src/repositories/system-settings-platform-secrets.test.ts`
 - Modify: `apps/api/src/services/tenant-branding-addon-orders.test-fixtures.ts`
@@ -721,12 +722,18 @@ git commit -m "feat(payments): 实现微信虚拟支付网关"
 ## Task 5：实现租户虚拟订单创建与支付请求
 
 **Files:**
+- Create: `supabase/migrations/20260801100000_harden_branding_virtual_order_payment_window.sql`
 - Create: `apps/api/src/repositories/branding-virtual-orders.ts`
+- Create: `apps/api/src/repositories/branding-virtual-orders.test.ts`
 - Create: `apps/api/src/services/tenant-branding-virtual-orders.ts`
 - Create: `apps/api/src/services/tenant-branding-virtual-orders.test.ts`
+- Create: `apps/api/src/services/branding-virtual-order-payment-window-migration-contract.test.ts`
 - Modify: `apps/api/src/schema/branding-addon.ts`
+- Modify: `apps/api/src/schema/branding-addon.test.ts`
 - Modify: `apps/api/src/controllers/branding-addon/index.ts`
 - Modify: `apps/api/src/controllers/branding-addon/routes.test.ts`
+- Modify: `apps/api/src/repositories/system-settings.ts`
+- Modify: `apps/api/src/repositories/system-settings.test.ts`
 
 - [ ] **Step 1: 写权限、幂等、OpenID 和会话恢复测试**
 
@@ -752,7 +759,7 @@ test("requires a fresh wx.login credential without creating another order", asyn
 
 - [ ] **Step 2: 运行失败测试**
 
-Run: `bun test apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/controllers/branding-addon/routes.test.ts`
+Run from `apps/api`: `bun test src/services/tenant-branding-virtual-orders.test.ts src/controllers/branding-addon/routes.test.ts`
 
 Expected: 新 service 和新路由测试 FAIL。
 
@@ -817,12 +824,12 @@ return {
 
 - [ ] **Step 5: 验证并提交**
 
-Run: `bun test apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/controllers/branding-addon/routes.test.ts && bun run api:typecheck`
+Run from `apps/api`: `bun test src/services/tenant-branding-virtual-orders.test.ts src/repositories/branding-virtual-orders.test.ts src/services/branding-virtual-order-payment-window-migration-contract.test.ts src/schema/branding-addon.test.ts src/controllers/branding-addon/routes.test.ts src/controllers/branding-addon/routes-virtual-payment.test.ts src/repositories/system-settings.test.ts && bun run typecheck`
 
 Expected: 全部 PASS，路由响应中不存在 `appKey`、`sessionKey` 或 `encrypted_secret_ref`。
 
 ```bash
-git add apps/api/src/repositories/branding-virtual-orders.ts apps/api/src/services/tenant-branding-virtual-orders.ts apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/schema/branding-addon.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/controllers/branding-addon/routes.test.ts
+git add supabase/migrations/20260801100000_harden_branding_virtual_order_payment_window.sql apps/api/src/repositories/branding-virtual-orders.ts apps/api/src/repositories/branding-virtual-orders.test.ts apps/api/src/services/tenant-branding-virtual-orders.ts apps/api/src/services/tenant-branding-virtual-orders.test.ts apps/api/src/services/branding-virtual-order-payment-window-migration-contract.test.ts apps/api/src/schema/branding-addon.ts apps/api/src/schema/branding-addon.test.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/controllers/branding-addon/routes.test.ts apps/api/src/controllers/branding-addon/routes-virtual-payment.test.ts apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
 git commit -m "feat(payments): 增加品牌权益虚拟支付下单"
 ```
 

@@ -124,6 +124,8 @@ describe("BrandingAddonController routes", () => {
       "GET /tenant/branding/entitlement-product",
       "POST /tenant/branding/entitlement-orders",
       "POST /tenant/branding/entitlement-orders/:id/payment-request",
+      "POST /tenant/branding/virtual-payment/orders",
+      "POST /tenant/branding/virtual-payment/orders/:id/payment-request",
       "GET /tenant/branding/entitlement-orders",
       "GET /tenant/branding/entitlement-orders/:id",
     ]);

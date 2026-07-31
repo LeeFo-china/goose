@@ -49,6 +49,10 @@ const pendingConfigError = {
   code: "23514",
   message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
 };
+const pendingVirtualOrderError = {
+  code: "P0001",
+  message: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+};
 
 function queueExistingSettings(count: number) {
   maybeSingleResults = Array.from({ length: count }, () => ({
@@ -111,6 +115,19 @@ describe("SystemSettingRepository payment config trigger errors", () => {
         code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
         message:
           "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
+      });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  test("maps the exact virtual payment rotation guard to the stable 409", async () => {
+    updateResult = { data: null, error: pendingVirtualOrderError };
+    const systemSettingRepository = await createRepository();
+
+    await expect(systemSettingRepository.updateValue(updateInput)).rejects
+      .toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+        message: "存在支付窗口未结束的虚拟支付订单，请等待订单关闭后再轮换密钥",
       });
     expect(insert).not.toHaveBeenCalled();
   });

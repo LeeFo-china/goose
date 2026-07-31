@@ -1,0 +1,204 @@
+import { describe, expect, mock, test } from "bun:test";
+import type { BrandingVirtualOrderRecord } from "./branding-virtual-orders";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+const TENANT_ID = "11111111-1111-4111-8111-111111111111";
+const ORDER_ID = "22222222-2222-4222-8222-222222222222";
+const MAPPING_ID = "33333333-3333-4333-8333-333333333333";
+const EMPLOYEE_ID = "44444444-4444-4444-8444-444444444444";
+const IDEMPOTENCY_KEY = "55555555-5555-4555-8555-555555555555";
+
+const order = {
+  id: ORDER_ID,
+  tenant_id: TENANT_ID,
+  order_no: "BVO-20260801010000000-ABCDEF123456",
+  out_trade_no: "BV20260801010000ABCDEF1234567890",
+  idempotency_key: IDEMPOTENCY_KEY,
+  product_id: "66666666-6666-4666-8666-666666666666",
+  product_code: "custom_support_branding_annual",
+  entitlement_code: "custom_support_branding",
+  product_name: "年度品牌技术支持",
+  amount_fen: 9_900,
+  term_years: 1,
+  purchase_notes: "购买说明",
+  refund_policy: "退款规则",
+  environment: "production",
+  offer_id: "offer-1",
+  provider_product_id: "product-1",
+  requested_platform: "unknown",
+  settlement_channel: null,
+  payer_openid: "openid",
+  provider_order_no: null,
+  transaction_id: null,
+  payment_status: "pending",
+  fulfillment_status: "pending",
+  refund_status: "none",
+  paid_amount_fen: null,
+  paid_at: null,
+  entitlement_event_id: null,
+  config_version: 1,
+  secret_revision: 1,
+  payment_expires_at: "2026-08-01T01:05:00.000Z",
+  failure_code: null,
+  failure_message: null,
+  created_by: EMPLOYEE_ID,
+  created_at: "2026-08-01T01:00:00.000Z",
+  updated_at: "2026-08-01T01:00:00.000Z",
+} satisfies BrandingVirtualOrderRecord;
+
+async function repositoryWith(input: {
+  queryData?: unknown;
+  queryError?: unknown;
+  rpcData?: unknown;
+  rpcError?: unknown;
+}) {
+  const calls: Array<[string, ...unknown[]]> = [];
+  const query = {
+    select(columns: string) {
+      calls.push(["select", columns]);
+      return query;
+    },
+    eq(column: string, value: unknown) {
+      calls.push(["eq", column, value]);
+      return query;
+    },
+    limit(value: number) {
+      calls.push(["limit", value]);
+      return query;
+    },
+    maybeSingle: mock(async () => ({
+      data: input.queryData ?? null,
+      error: input.queryError ?? null,
+    })),
+  };
+  const client = {
+    from(table: string) {
+      calls.push(["from", table]);
+      return query;
+    },
+    rpc: mock(async (name: string, parameters: Record<string, unknown>) => {
+      calls.push(["rpc", name, parameters]);
+      return { data: input.rpcData ?? null, error: input.rpcError ?? null };
+    }),
+  };
+  const { BrandingVirtualOrderRepository } = await import(
+    "./branding-virtual-orders"
+  );
+  return {
+    repository: new BrandingVirtualOrderRepository(() => client),
+    calls,
+    client,
+  };
+}
+
+describe("BrandingVirtualOrderRepository", () => {
+  test("looks up one production mapping id for the fixed product", async () => {
+    const f = await repositoryWith({ queryData: { id: MAPPING_ID } });
+    expect(await f.repository.findProductionMappingId({
+      productCode: "custom_support_branding_annual",
+    })).toBe(MAPPING_ID);
+    expect(f.calls).toContainEqual(["from", "platform_virtual_payment_products"]);
+    expect(f.calls).toContainEqual(["eq", "environment", "production"]);
+    expect(f.calls).toContainEqual([
+      "eq",
+      "platform_addon_products.code",
+      "custom_support_branding_annual",
+    ]);
+    expect(f.calls).toContainEqual(["limit", 1]);
+  });
+
+  test("creates only through the narrow atomic RPC and parses its result", async () => {
+    const f = await repositoryWith({ rpcData: order });
+    expect(await f.repository.create({
+      tenantId: TENANT_ID,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      virtualProductId: MAPPING_ID,
+      requestedPlatform: "ios",
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    })).toEqual(order);
+    expect(f.calls).toContainEqual([
+      "rpc",
+      "branding_create_virtual_addon_order",
+      {
+        p_tenant_id: TENANT_ID,
+        p_idempotency_key: IDEMPOTENCY_KEY,
+        p_virtual_product_id: MAPPING_ID,
+        p_requested_platform: "ios",
+        p_payer_openid: "openid",
+        p_created_by: EMPLOYEE_ID,
+      },
+    ]);
+  });
+
+  test.each([
+    ["BRANDING_VIRTUAL_ORDER_INPUT_INVALID", 400],
+    ["BRANDING_VIRTUAL_PRODUCT_NOT_FOUND", 404],
+    ["BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH", 409],
+    ["BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH", 409],
+    ["BRANDING_VIRTUAL_PURCHASE_MODE_UNAVAILABLE", 409],
+    ["BRANDING_VIRTUAL_PRODUCT_DISABLED", 409],
+    ["BRANDING_VIRTUAL_PRODUCT_MAPPING_UNAVAILABLE", 409],
+    ["BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH", 409],
+    ["BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW", 409],
+    ["BRANDING_VIRTUAL_ORDER_CONFLICT", 409],
+  ])("maps exact RPC error %s", async (message, statusCode) => {
+    const f = await repositoryWith({
+      rpcError: { code: "P0001", message },
+    });
+    await expect(f.repository.create({
+      tenantId: TENANT_ID,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      virtualProductId: MAPPING_ID,
+      requestedPlatform: "unknown",
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    })).rejects.toMatchObject({ statusCode, code: message });
+  });
+
+  test("sanitizes unknown database failures and malformed RPC rows", async () => {
+    const database = await repositoryWith({
+      rpcError: { code: "XX000", message: "private SQL and secret" },
+    });
+    await expect(database.repository.create({
+      tenantId: TENANT_ID,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      virtualProductId: MAPPING_ID,
+      requestedPlatform: "unknown",
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    })).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: undefined,
+    });
+
+    const malformed = await repositoryWith({ rpcData: { id: ORDER_ID } });
+    await expect(malformed.repository.create({
+      tenantId: TENANT_ID,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      virtualProductId: MAPPING_ID,
+      requestedPlatform: "unknown",
+      payerOpenid: "openid",
+      createdBy: EMPLOYEE_ID,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
+
+  test("reads one tenant-bound order using only required columns", async () => {
+    const f = await repositoryWith({ queryData: order });
+    expect(await f.repository.findTenantOrderById({
+      tenantId: TENANT_ID,
+      orderId: ORDER_ID,
+    })).toEqual(order);
+    expect(f.calls).toContainEqual(["from", "tenant_virtual_addon_orders"]);
+    expect(f.calls).toContainEqual(["eq", "tenant_id", TENANT_ID]);
+    expect(f.calls).toContainEqual(["eq", "id", ORDER_ID]);
+    expect(f.calls).toContainEqual(["limit", 1]);
+    const selected = f.calls.find(([method]) => method === "select")?.[1];
+    expect(selected).not.toBe("*");
+    expect(String(selected)).not.toContain("reconcile_");
+  });
+});

@@ -137,6 +137,17 @@ export class SystemSettingRepository {
           "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
         );
       }
+      if (matchesPostgresError(
+        error,
+        "P0001",
+        "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+      )) {
+        throw Errors.business(
+          409,
+          "存在支付窗口未结束的虚拟支付订单，请等待订单关闭后再轮换密钥",
+          "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+        );
+      }
       throw Errors.dbError("更新系统配置失败", error);
     }
 

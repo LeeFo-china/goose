@@ -9,6 +9,7 @@ import {
   BrandingAddonProductPatchSchema,
   BrandingVirtualProductEnvironmentParamsSchema,
   BrandingVirtualProductValidationSchema,
+  BrandingVirtualCreateOrderSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "@/schema/branding-addon";
 import {
@@ -23,6 +24,9 @@ import {
 import {
   tenantBrandingAddonOrderService,
 } from "@/services/tenant-branding-addon-orders";
+import {
+  tenantBrandingVirtualOrderService,
+} from "@/services/tenant-branding-virtual-orders";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -152,6 +156,37 @@ class TenantBrandingAddonController extends TenantBaseController {
     const payerOpenid = requireWechatPayerOpenid(request);
     return ResponseHandler.success(
       await tenantBrandingAddonOrderService.createPaymentRequest(
+        authContext,
+        id,
+        payerOpenid,
+      ),
+    );
+  }
+
+  @Post("/tenant/branding/virtual-payment/orders")
+  async createVirtualOrder(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const input = parse(BrandingVirtualCreateOrderSchema, request.body);
+    const payerOpenid = requireWechatPayerOpenid(request);
+    return ResponseHandler.success(
+      await tenantBrandingVirtualOrderService.createOrder(
+        authContext,
+        input,
+        payerOpenid,
+      ),
+    );
+  }
+
+  @Post("/tenant/branding/virtual-payment/orders/:id/payment-request")
+  async createVirtualPaymentRequest(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const { id } = parse(BrandingAddonOrderParamsSchema, request.params);
+    parse(BrandingAddonEmptySchema, request.query);
+    parse(BrandingAddonEmptySchema, request.body);
+    const payerOpenid = requireWechatPayerOpenid(request);
+    return ResponseHandler.success(
+      await tenantBrandingVirtualOrderService.createPaymentRequest(
         authContext,
         id,
         payerOpenid,
