@@ -14,7 +14,7 @@ dev 环境用于日常开发、跨端联调、数据库 migration 预演和上�
 | --- | --- | --- |
 | API | `https://api-dev.goodcms.cn` | 小程序开发版、Admin dev 统一调用 |
 | Admin | `https://admin-dev.goodcms.cn` | Admin dev 访问入口 |
-| H5 | `https://h5-dev.goodcms.cn` | 预留给 H5 dev，当前按功能需要启用 |
+| H5 | `https://h5-dev.goodcms.cn` | 独立 H5 dev 页面与 WebView 入口 |
 | 生产 API | `https://api.goodcms.cn` | 仅生产端使用，开发联调禁止误连 |
 | 生产 Admin | `https://admin.goodcms.cn` | 仅生产端使用 |
 
@@ -24,8 +24,10 @@ dev 环境用于日常开发、跨端联调、数据库 migration 预演和上�
 | --- | --- |
 | `https://api-dev.goodcms.cn/` | `200 OK` |
 | `https://admin-dev.goodcms.cn/login` | `200 OK` |
+| `https://h5-dev.goodcms.cn/config.js` | `200 OK`，`X-Gooes-Service: h5` |
 | API dev 容器 | `gooes-api-dev` healthy |
 | Admin dev 容器 | `gooes-admin-dev` healthy |
+| H5 dev 容器 | `gooes-h5-dev` healthy |
 
 ## 3. 测试账号与基础数据
 
@@ -95,6 +97,7 @@ prod: https://api.goodcms.cn
 request 合法域名：https://api-dev.goodcms.cn
 downloadFile 合法域名：https://api-dev.goodcms.cn
 uploadFile 合法域名：https://api-dev.goodcms.cn
+业务域名：https://h5-dev.goodcms.cn
 ```
 
 如某些上传链路使用 COS 直传，还需要按后端返回的签名 URL 域名补充合法域名。小程序端不要手写 COS 域名，也不要拼接对象路径。
@@ -132,6 +135,8 @@ uploadFile 合法域名：https://api-dev.goodcms.cn
 3. 项目、施工日志、工序验收、评论、图片上传等业务不访问生产 API。
 4. 图片上传后能立即预览，刷新页面后仍可展示。
 5. 无权限场景能展示后端返回的业务错误，不吞掉错误码。
+6. 活动列表和 H5 session 请求命中 `api-dev.goodcms.cn`，活动 WebView
+   页面命中 `h5-dev.goodcms.cn`。
 
 ## 5. Admin 端对接
 

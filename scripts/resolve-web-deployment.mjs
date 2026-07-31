@@ -7,7 +7,7 @@ const LEGACY_ALL_SERVICES = [
   "cos-reconcile-worker",
   "billing-reconcile-worker",
 ];
-const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, "web"]);
+const ALLOWED_SERVICES = new Set([...LEGACY_ALL_SERVICES, "h5", "web"]);
 
 function reject(message) {
   console.error(message);
@@ -20,7 +20,7 @@ const normalizedInput = rawServices.replaceAll(/\s/g, "");
 if (normalizedInput === "all") {
   console.log(
     (mode === "build"
-      ? ["api", "admin", "web", "social-video-worker"]
+      ? ["api", "admin", "h5", "web", "social-video-worker"]
       : LEGACY_ALL_SERVICES
     ).join(" "),
   );

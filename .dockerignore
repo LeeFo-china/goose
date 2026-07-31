@@ -34,8 +34,6 @@ docs/360video/goose.pem
 *.key
 *.crt
 
-apps/h5
-
 supabase/volumes
 supabase/.branches
 supabase/.temp
