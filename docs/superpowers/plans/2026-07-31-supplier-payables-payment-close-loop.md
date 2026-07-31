@@ -1476,7 +1476,7 @@ git commit -m "feat(admin): 实现供应商付款申请工作区"
 - Modify: `apps/admin/components/projects/project-finance-operating-summary-widgets.tsx`
 - Create: `apps/admin/components/finance/finance-supplier-cost-summary.test.ts`
 
-- [ ] **Step 1: 写采购单摘要 RED 测试**
+- [x] **Step 1: 写采购单摘要 RED 测试**
 
 断言采购单详情加载：
 
@@ -1492,7 +1492,7 @@ GET /supplier-purchase-orders/:id/financial-summary
 
 金额权限不足时不请求财务摘要、不渲染金额占位。
 
-- [ ] **Step 2: 实现采购单摘要**
+- [x] **Step 2: 实现采购单摘要**
 
 组件 props：
 
@@ -1506,7 +1506,7 @@ type PurchaseOrderFinancialSummaryProps = {
 
 使用现有 Card、Skeleton、Alert 和金额格式工具。
 
-- [ ] **Step 3: 写项目摘要 RED 测试**
+- [x] **Step 3: 写项目摘要 RED 测试**
 
 ```ts
 expect(renderedText).toContain("已发生供应商成本");
@@ -1519,12 +1519,12 @@ expect(calculateDisplayedProjectCost(summary)).toBe(
 
 断言 `supplier_cash_paid_amount` 不加入项目成本。
 
-- [ ] **Step 4: 实现项目财务摘要**
+- [x] **Step 4: 实现项目财务摘要**
 
 更新类型、表格和项目 widget，保持原费用、预算、利润字段不变。新增字段为空时按 0
 展示，但 API schema 仍要求服务端返回完整字段，避免静默兼容错误。
 
-- [ ] **Step 5: 运行摘要 GREEN**
+- [x] **Step 5: 运行摘要 GREEN**
 
 Run:
 
@@ -1537,7 +1537,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交摘要**
+- [x] **Step 6: 提交摘要**
 
 ```bash
 git add apps/admin/components/supplier-purchase-orders \
