@@ -13,6 +13,10 @@ class SupplierCostQuery {
     queryCalls.push({ method: "eq", args });
     return this;
   }
+  order(...args: unknown[]) {
+    queryCalls.push({ method: "order", args });
+    return this;
+  }
   range(...args: unknown[]) {
     queryCalls.push({ method: "range", args });
     const [from, to] = args as [number, number];
@@ -40,9 +44,9 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
     queryCalls.length = 0;
     queryError = null;
     rows = [
-      { cost_category_id: "category-1", amount: "25.50" },
-      { cost_category_id: "category-1", amount: "14.50" },
-      { cost_category_id: "category-2", amount: "8.00" },
+      supplierCostRow("category-1", "25.50", "material", "材料"),
+      supplierCostRow("category-1", "14.50", "material", "材料"),
+      supplierCostRow("category-2", "8.00", "labor", "人工"),
     ];
   });
 
@@ -57,6 +61,10 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       }): Promise<{
         totalSupplierCostAmount: number;
         byCategory: Map<string, number>;
+        categoryDetails: Map<string, {
+          code: string | null;
+          name: string | null;
+        }>;
       }>;
     };
 
@@ -67,9 +75,16 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
 
     expect(queryCalls).toEqual([
       { method: "from", args: ["project_cost_events"] },
-      { method: "select", args: ["cost_category_id,amount"] },
+      {
+        method: "select",
+        args: [
+          "id,cost_category_id,amount,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+        ],
+      },
       { method: "eq", args: ["tenant_id", "tenant-1"] },
       { method: "eq", args: ["project_id", "project-1"] },
+      { method: "order", args: ["created_at", { ascending: true }] },
+      { method: "order", args: ["id", { ascending: true }] },
       { method: "range", args: [0, 999] },
     ]);
     expect(result.totalSupplierCostAmount).toBe(48);
@@ -77,12 +92,19 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       ["category-1", 40],
       ["category-2", 8],
     ]);
+    expect([...result.categoryDetails.entries()]).toEqual([
+      ["category-1", { code: "material", name: "材料" }],
+      ["category-2", { code: "labor", name: "人工" }],
+    ]);
   });
 
   test("pages past the PostgREST row cap without per-category queries", async () => {
     rows = Array.from({ length: 1_001 }, (_, index) => ({
+      id: `event-${index}`,
       cost_category_id: index % 2 ? "category-1" : "category-2",
       amount: "1.00",
+      created_at: "2026-07-31T00:00:00.000Z",
+      cost_category: { code: "material", name: "材料" },
     }));
     const { projectCostBudgetRepository } = await import(
       "./project-cost-budgets"
@@ -122,8 +144,11 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       .toMatchObject({ statusCode: 500, code: "DB_ERROR" });
 
     rows = Array.from({ length: 10_001 }, () => ({
+      id: "event-1",
       cost_category_id: "category-1",
       amount: "1.00",
+      created_at: "2026-07-31T00:00:00.000Z",
+      cost_category: { code: "material", name: "材料" },
     }));
     await expect(repository.listSupplierCostTotals(input)).rejects
       .toMatchObject({
@@ -132,3 +157,18 @@ describe("projectCostBudgetRepository supplier cost totals", () => {
       });
   });
 });
+
+function supplierCostRow(
+  costCategoryId: string,
+  amount: string,
+  code: string,
+  name: string,
+) {
+  return {
+    id: `event-${costCategoryId}-${amount}`,
+    cost_category_id: costCategoryId,
+    amount,
+    created_at: "2026-07-31T00:00:00.000Z",
+    cost_category: { code, name },
+  };
+}

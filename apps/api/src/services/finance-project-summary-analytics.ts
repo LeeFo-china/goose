@@ -20,6 +20,7 @@ export type FinanceProjectSummaryTrendPoint = {
   date: string;
   income_amount: number;
   expense_amount: number;
+  supplier_cash_paid_amount: number;
   net_cash_flow_amount: number;
 };
 
@@ -89,7 +90,12 @@ export async function buildFinanceProjectSummaryAnalytics(input: {
       date: item.date,
       income_amount: roundMoney(item.income_amount),
       expense_amount: roundMoney(item.expense_amount),
-      net_cash_flow_amount: roundMoney(item.income_amount - item.expense_amount),
+      supplier_cash_paid_amount: roundMoney(item.supplier_cash_paid_amount),
+      net_cash_flow_amount: roundMoney(
+        item.income_amount -
+          item.expense_amount -
+          item.supplier_cash_paid_amount,
+      ),
     })),
   };
 }

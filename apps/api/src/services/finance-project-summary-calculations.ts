@@ -81,6 +81,8 @@ export function buildProjectOperatingSummary(input: {
     hasCategoryOverBudget: hasCategoryOverBudget({
       budgetTotals: input.budgetTotals,
       expenseByCategory: input.ledgerTotals?.expense_by_category,
+      supplierCostByCategory:
+        input.supplierTotals?.supplier_cost_by_category,
     }),
   });
 
@@ -258,11 +260,13 @@ function emptyRiskFlagCounts(): Record<FinanceProjectRiskFlag, number> {
 function hasCategoryOverBudget(input: {
   budgetTotals?: FinanceProjectBudgetTotals;
   expenseByCategory?: Map<string, number>;
+  supplierCostByCategory?: Map<string, number>;
 }) {
-  if (!input.budgetTotals || !input.expenseByCategory) return false;
+  if (!input.budgetTotals) return false;
 
   for (const [categoryId, budget] of input.budgetTotals.category_budgets) {
-    const expenseAmount = input.expenseByCategory.get(categoryId) ?? 0;
+    const expenseAmount = (input.expenseByCategory?.get(categoryId) ?? 0) +
+      (input.supplierCostByCategory?.get(categoryId) ?? 0);
     const warningAmount = budget.budget_amount *
       (budget.warning_threshold_percent / 100);
     if (expenseAmount > warningAmount) return true;

@@ -60,6 +60,7 @@ function dependencies(projectIds = ["project-1"]) {
         id,
         {
           supplier_cost_amount: 40,
+          supplier_cost_by_category: new Map([["category-1", 40]]),
           supplier_payable_open_amount: 80,
           supplier_cash_paid_amount: 20,
         },
@@ -78,7 +79,15 @@ function dependencies(projectIds = ["project-1"]) {
       ]))),
       listBudgetTotals: mock(async () => new Map(projectIds.map((id) => [
         id,
-        { budget_amount: 100, category_budgets: new Map() },
+        {
+          budget_amount: 100,
+          category_budgets: new Map([
+            ["category-1", {
+              budget_amount: 50,
+              warning_threshold_percent: 100,
+            }],
+          ]),
+        },
       ]))),
     },
     accessPolicyService: {
@@ -145,5 +154,29 @@ describe("FinanceProjectSummaryService supplier totals", () => {
       tenantId: "tenant-1",
       projectIds: ["project-1", "project-2"],
     });
+  });
+
+  test("includes supplier category cost in category-over-budget risk", async () => {
+    const deps = dependencies();
+    const { FinanceProjectSummaryService } = await import(
+      "./finance-project-summary"
+    );
+    deps.repository.listSupplierTotals.mockImplementationOnce(async () =>
+      new Map([["project-1", {
+        supplier_cost_amount: 60,
+        supplier_cost_by_category: new Map([["category-1", 60]]),
+        supplier_payable_open_amount: 60,
+        supplier_cash_paid_amount: 0,
+      }]])
+    );
+    const service = new FinanceProjectSummaryService(deps as never);
+
+    const result = await service.listProjectSummaries(auth, {
+      page: 1,
+      pageSize: 20,
+      include_analytics: false,
+    });
+
+    expect(result.list[0]?.risk_flags).toContain("category_over_budget");
   });
 });

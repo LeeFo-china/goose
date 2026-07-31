@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -52,6 +51,7 @@ const listLedgerTrend = mock(async () => [{
   date: "2026-06-01",
   income_amount: 50000,
   expense_amount: 12000,
+  supplier_cash_paid_amount: 0,
 }]);
 const listReceivableTotals = mock(async () => new Map([
   ["project-1", {
@@ -139,7 +139,6 @@ async function createService() {
     accessPolicyService,
   });
 }
-
 describe("financeProjectSummaryService", () => {
   beforeEach(() => {
     listProjects.mockClear();
@@ -219,6 +218,7 @@ describe("financeProjectSummaryService", () => {
         date: "2026-06-01",
         income_amount: 50000,
         expense_amount: 12000,
+        supplier_cash_paid_amount: 0,
         net_cash_flow_amount: 38000,
       },
     ]);

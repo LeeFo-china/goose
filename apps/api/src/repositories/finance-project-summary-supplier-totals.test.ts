@@ -6,12 +6,14 @@ const calls: Array<{
   table: string;
   select: string | null;
   filters: Array<[string, unknown]>;
+  orders: Array<[string, { ascending: boolean }]>;
   range: [number, number] | null;
 }> = [];
 
 class FactQuery {
   private selectColumns: string | null = null;
   private readonly filters: Array<[string, unknown]> = [];
+  private readonly orders: Array<[string, { ascending: boolean }]> = [];
 
   constructor(private readonly table: string) {}
 
@@ -27,11 +29,16 @@ class FactQuery {
     this.filters.push([column, value]);
     return this;
   }
+  order(column: string, options: { ascending: boolean }) {
+    this.orders.push([column, options]);
+    return this;
+  }
   range(from: number, to: number) {
     calls.push({
       table: this.table,
       select: this.selectColumns,
       filters: [...this.filters],
+      orders: [...this.orders],
       range: [from, to],
     });
     const response = responses.get(this.table) ?? { data: [], error: null };
@@ -64,8 +71,8 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
     });
     responses.set("project_cost_events", {
       data: [
-        { project_id: "project-1", amount: "40.00" },
-        { project_id: "project-2", amount: "7.00" },
+        supplierFact("project-1", "category-1", "40.00"),
+        supplierFact("project-2", "category-2", "7.00"),
       ],
       error: null,
     });
@@ -102,6 +109,7 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
           supplier_cost_amount: number;
           supplier_payable_open_amount: number;
           supplier_cash_paid_amount: number;
+          supplier_cost_by_category: Map<string, number>;
         }>>;
       }
     ).listSupplierTotals({
@@ -117,11 +125,13 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
     });
     expect(supplier.get("project-1")).toEqual({
       supplier_cost_amount: 40,
+      supplier_cost_by_category: new Map([["category-1", 40]]),
       supplier_payable_open_amount: 80,
       supplier_cash_paid_amount: 20,
     });
     expect(supplier.get("project-2")).toEqual({
       supplier_cost_amount: 7,
+      supplier_cost_by_category: new Map([["category-2", 7]]),
       supplier_payable_open_amount: 7,
       supplier_cash_paid_amount: 3,
     });
@@ -133,6 +143,10 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
         ["project-1", "project-2"],
       ]);
       expect(call.range).toEqual([0, 999]);
+      expect(call.orders).toEqual([
+        ["created_at", { ascending: true }],
+        ["id", { ascending: true }],
+      ]);
       expect(call.select).not.toContain("*");
     }
   });
@@ -140,8 +154,11 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
   test("pages a batched project fact set past the PostgREST row cap", async () => {
     responses.set("project_cost_events", {
       data: Array.from({ length: 1_001 }, () => ({
+        id: "event-1",
         project_id: "project-1",
+        cost_category_id: "category-1",
         amount: "1.00",
+        created_at: "2026-07-31T00:00:00.000Z",
       })),
       error: null,
     });
@@ -210,8 +227,11 @@ describe("FinanceProjectSummaryRepository supplier totals", () => {
 
     responses.set("project_cost_events", {
       data: Array.from({ length: 10_001 }, () => ({
+        id: "event-1",
         project_id: "project-1",
+        cost_category_id: "category-1",
         amount: "1.00",
+        created_at: "2026-07-31T00:00:00.000Z",
       })),
       error: null,
     });
@@ -237,5 +257,19 @@ function projectRow(
     entry_type: entryType,
     amount,
     cost_category_id: costCategoryId,
+  };
+}
+
+function supplierFact(
+  projectId: string,
+  costCategoryId: string,
+  amount: string,
+) {
+  return {
+    id: `${projectId}-${costCategoryId}`,
+    project_id: projectId,
+    cost_category_id: costCategoryId,
+    amount,
+    created_at: "2026-07-31T00:00:00.000Z",
   };
 }

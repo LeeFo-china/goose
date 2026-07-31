@@ -63,6 +63,10 @@ export type ProjectCostBudgetSupplierCostTotals = {
   sourceRowCount: number;
   totalSupplierCostAmount: number;
   byCategory: Map<string, number>;
+  categoryDetails: Map<string, {
+    code: string | null;
+    name: string | null;
+  }>;
 };
 
 class ProjectCostBudgetRepository {
@@ -253,10 +257,21 @@ class ProjectCostBudgetRepository {
       );
     }
     const byCategory = new Map<string, number>();
+    const categoryDetails = new Map<string, {
+      code: string | null;
+      name: string | null;
+    }>();
     let totalSupplierCostAmount = 0;
     for (const value of rows) {
       const row = asRecord(value);
-      if (!row || typeof row.cost_category_id !== "string") {
+      const category = parseSupplierCostCategory(row?.cost_category);
+      if (
+        !row ||
+        typeof row.id !== "string" ||
+        typeof row.created_at !== "string" ||
+        typeof row.cost_category_id !== "string" ||
+        !category
+      ) {
         throw Errors.dbError("解析项目供应商实际成本失败", rows);
       }
       const amount = parseNonNegativeAggregateMoney(
@@ -269,11 +284,20 @@ class ProjectCostBudgetRepository {
         row.cost_category_id,
         roundMoney((byCategory.get(row.cost_category_id) ?? 0) + amount),
       );
+      const existing = categoryDetails.get(row.cost_category_id);
+      if (
+        existing &&
+        (existing.code !== category.code || existing.name !== category.name)
+      ) {
+        throw Errors.dbError("解析项目供应商实际成本失败", rows);
+      }
+      categoryDetails.set(row.cost_category_id, category);
     }
     return {
       sourceRowCount: rows.length,
       totalSupplierCostAmount: roundMoney(totalSupplierCostAmount),
       byCategory,
+      categoryDetails,
     };
   }
 
@@ -344,9 +368,13 @@ async function listSupplierCostEventRows(input: {
     const to = Math.min(from + 999, 10_000);
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("project_cost_events")
-      .select("cost_category_id,amount")
+      .select(
+        "id,cost_category_id,amount,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+      )
       .eq("tenant_id", input.tenantId)
       .eq("project_id", input.projectId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to);
     if (error) {
       throw Errors.dbError("查询项目供应商实际成本失败", error);
@@ -416,6 +444,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function parseSupplierCostCategory(value: unknown) {
+  const category = asRecord(Array.isArray(value) ? value[0] : value);
+  if (
+    !category ||
+    typeof category.code !== "string" ||
+    typeof category.name !== "string"
+  ) {
+    return null;
+  }
+  return { code: category.code, name: category.name };
 }
 
 function normalizeProjectCostBudgetRecord(

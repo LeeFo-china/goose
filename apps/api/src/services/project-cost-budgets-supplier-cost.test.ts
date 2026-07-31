@@ -54,6 +54,9 @@ function dependencies() {
         sourceRowCount: 1,
         totalSupplierCostAmount: 40,
         byCategory: new Map([["category-1", 40]]),
+        categoryDetails: new Map([
+          ["category-1", { code: "material", name: "材料" }],
+        ]),
       })),
       listActiveCategoriesByIds: mock(async () => []),
       saveBudgets: mock(async () => []),
@@ -108,6 +111,10 @@ describe("ProjectCostBudgetService supplier cost", () => {
         ["category-1", 40],
         ["category-2", 10],
       ]),
+      categoryDetails: new Map([
+        ["category-1", { code: "material", name: "材料" }],
+        ["category-2", { code: "labor", name: "人工" }],
+      ]),
     }));
     const { ProjectCostBudgetService } = await import(
       "./project-cost-budgets"
@@ -120,6 +127,8 @@ describe("ProjectCostBudgetService supplier cost", () => {
     expect(result.list).toHaveLength(2);
     expect(result.list[1]).toMatchObject({
       cost_category_id: "category-2",
+      category_code: "labor",
+      category_name: "人工",
       supplier_cost_amount: 10,
       active_commitment_amount: 0,
     });

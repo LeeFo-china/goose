@@ -244,7 +244,8 @@ function buildProjectCostBudgetResult(input: {
     list.push(buildUnbudgetedCommitmentListItem({
       projectId: input.projectId,
       costCategoryId,
-      category: input.commitmentTotals.categoryDetails.get(costCategoryId),
+      category: input.commitmentTotals.categoryDetails.get(costCategoryId) ??
+        input.supplierCostTotals.categoryDetails.get(costCategoryId),
       expenseAmount: input.expenseTotals.byCategory.get(costCategoryId) ?? 0,
       supplierCostAmount:
         input.supplierCostTotals.byCategory.get(costCategoryId) ?? 0,

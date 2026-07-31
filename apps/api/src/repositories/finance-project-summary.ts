@@ -36,6 +36,7 @@ export type FinanceProjectSupplierTotals = {
   supplier_cost_amount: number;
   supplier_payable_open_amount: number;
   supplier_cash_paid_amount: number;
+  supplier_cost_by_category: Map<string, number>;
 };
 
 export type { FinanceProjectUnallocatedExpenseItem };
@@ -91,6 +92,7 @@ type FinanceProjectRiskSearchRow = {
 type FinanceProjectLedgerTrendRow = {
   project_id: string | null;
   direction: string | null;
+  entry_type: string | null;
   amount: number | string | null;
   occurred_at: string | null;
 };
@@ -321,6 +323,7 @@ class FinanceProjectSummaryRepository {
     date: string;
     income_amount: number;
     expense_amount: number;
+    supplier_cash_paid_amount: number;
   }>> {
     if (input.projectIds.length === 0) {
       return [];
@@ -328,7 +331,7 @@ class FinanceProjectSummaryRepository {
 
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("finance_ledger_entries")
-      .select("project_id, direction, amount, occurred_at")
+      .select("project_id, direction, entry_type, amount, occurred_at")
       .eq("tenant_id", input.tenantId)
       .in("project_id", input.projectIds)
       .gte("occurred_at", `${input.dateFrom}T00:00:00`);
@@ -341,6 +344,7 @@ class FinanceProjectSummaryRepository {
       date: string;
       income_amount: number;
       expense_amount: number;
+      supplier_cash_paid_amount: number;
     }>();
     for (const row of ((data as FinanceProjectLedgerTrendRow[] | null) || [])) {
       if (!row.project_id || !row.occurred_at) continue;
@@ -349,10 +353,16 @@ class FinanceProjectSummaryRepository {
         date,
         income_amount: 0,
         expense_amount: 0,
+        supplier_cash_paid_amount: 0,
       };
       const amount = normalizeMoney(row.amount);
       if (row.direction === "in") {
         current.income_amount += amount;
+      } else if (
+        row.direction === "out" &&
+        row.entry_type === "supplier_payment"
+      ) {
+        current.supplier_cash_paid_amount += amount;
       } else if (row.direction === "out") {
         current.expense_amount += amount;
       }

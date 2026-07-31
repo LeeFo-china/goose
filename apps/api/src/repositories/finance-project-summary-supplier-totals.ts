@@ -62,7 +62,7 @@ export async function listFinanceProjectSupplierTotals(input: {
   const [costResult, payableResult, paymentResult] = await Promise.all([
     queryFactPages(
       "project_cost_events",
-      "project_id,amount",
+      "project_id,cost_category_id,amount",
       input.tenantId,
       projectIds,
     ),
@@ -96,7 +96,7 @@ export async function listFinanceProjectSupplierTotals(input: {
   );
 
   const totals = new Map<string, FinanceProjectSupplierTotals>();
-  aggregateFacts(costs, totals, "supplier_cost_amount");
+  aggregateSupplierCosts(costs, totals);
   aggregateFacts(payables, totals, "supplier_payable_open_amount");
   aggregateFacts(payments, totals, "supplier_cash_paid_amount");
   for (const total of totals.values()) {
@@ -122,6 +122,8 @@ async function queryFactPages(
       .select(columns)
       .eq("tenant_id", tenantId)
       .in("project_id", projectIds)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, to);
     if (result.error) return { data: [], error: result.error };
     if (!Array.isArray(result.data)) {
@@ -145,7 +147,7 @@ function parseFactResult(
 function aggregateFacts(
   rows: unknown[],
   totals: Map<string, FinanceProjectSupplierTotals>,
-  field: keyof FinanceProjectSupplierTotals,
+  field: "supplier_payable_open_amount" | "supplier_cash_paid_amount",
 ) {
   for (const value of rows) {
     const row = asRecord(value);
@@ -156,6 +158,39 @@ function aggregateFacts(
     current[field] = roundMoney(
       current[field] +
         parseMoney(row.amount, "解析项目供应商财务事实失败", rows),
+    );
+    totals.set(row.project_id, current);
+  }
+}
+
+function aggregateSupplierCosts(
+  rows: unknown[],
+  totals: Map<string, FinanceProjectSupplierTotals>,
+) {
+  for (const value of rows) {
+    const row = asRecord(value);
+    if (
+      !row ||
+      typeof row.project_id !== "string" ||
+      typeof row.cost_category_id !== "string"
+    ) {
+      throw Errors.dbError("解析项目供应商财务事实失败", rows);
+    }
+    const current = totals.get(row.project_id) ?? emptySupplierTotals();
+    const amount = parseMoney(
+      row.amount,
+      "解析项目供应商财务事实失败",
+      rows,
+    );
+    current.supplier_cost_amount = roundMoney(
+      current.supplier_cost_amount + amount,
+    );
+    current.supplier_cost_by_category.set(
+      row.cost_category_id,
+      roundMoney(
+        (current.supplier_cost_by_category.get(row.cost_category_id) ?? 0) +
+          amount,
+      ),
     );
     totals.set(row.project_id, current);
   }
@@ -215,6 +250,7 @@ function emptySupplierTotals(): FinanceProjectSupplierTotals {
     supplier_cost_amount: 0,
     supplier_payable_open_amount: 0,
     supplier_cash_paid_amount: 0,
+    supplier_cost_by_category: new Map(),
   };
 }
 

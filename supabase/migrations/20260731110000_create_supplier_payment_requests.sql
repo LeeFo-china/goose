@@ -62,6 +62,8 @@ DO $supplier_payment_aggregate_patch$
 DECLARE
   v_definition text;
   v_occurrences integer;
+  v_old text;
+  v_new text;
 BEGIN
   SELECT pg_get_functiondef(
     'public.list_project_cost_expense_totals(uuid,uuid)'::regprocedure
@@ -107,6 +109,147 @@ BEGIN
     'l.direction = ''out'' ' ||
       'AND l.entry_type <> ''supplier_payment'''
   );
+  EXECUTE v_definition;
+
+  -- Re-read the effective definition after the supplier-payment exclusion.
+  -- Every following replacement is unique and fail-closed so this patch can
+  -- never restore the pre-payment expense semantics.
+  SELECT pg_get_functiondef(
+    (
+      'public.search_finance_project_risk_ids(' ||
+        'uuid,integer,integer,text,text,text,text,' ||
+        'boolean,boolean,boolean,numeric,numeric)'
+    )::regprocedure
+  )
+  INTO v_definition;
+
+  v_old := E'),\nreceivable_totals as (';
+  v_new := $risk_patch$
+),
+supplier_cost_totals as (
+  select
+    cost_event.project_id,
+    coalesce(sum(cost_event.amount), 0)::numeric as supplier_cost_amount
+  FROM public.project_cost_events cost_event
+  join base_projects bp on bp.id = cost_event.project_id
+  where cost_event.tenant_id = p_tenant_id
+  group by cost_event.project_id
+),
+receivable_totals as ($risk_patch$;
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
+  v_old := $risk_patch$category_expenses as (
+  select
+    l.project_id,
+    l.cost_category_id,
+    coalesce(sum(l.amount), 0)::numeric as expense_amount
+  from public.finance_ledger_entries l
+  join base_projects bp on bp.id = l.project_id
+  where l.tenant_id = p_tenant_id
+    and l.direction = 'out' AND l.entry_type <> 'supplier_payment'
+    and l.cost_category_id is not null
+  group by l.project_id, l.cost_category_id
+),$risk_patch$;
+  v_new := $risk_patch$category_expenses as (
+  select
+    scoped.project_id,
+    scoped.cost_category_id,
+    coalesce(sum(scoped.amount), 0)::numeric as expense_amount
+  from (
+    select l.project_id, l.cost_category_id, l.amount
+    from public.finance_ledger_entries l
+    join base_projects bp on bp.id = l.project_id
+    where l.tenant_id = p_tenant_id
+      and l.direction = 'out' AND l.entry_type <> 'supplier_payment'
+      and l.cost_category_id is not null
+    UNION ALL
+    select
+      cost_event.project_id,
+      cost_event.cost_category_id,
+      cost_event.amount
+    FROM public.project_cost_events cost_event
+    join base_projects bp on bp.id = cost_event.project_id
+    where cost_event.tenant_id = p_tenant_id
+  ) scoped
+  group by scoped.project_id, scoped.cost_category_id
+),$risk_patch$;
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
+  v_old := 'coalesce(l.expense_amount, 0) as expense_amount';
+  v_new :=
+    '(coalesce(l.expense_amount, 0) + ' ||
+    'coalesce(sc.supplier_cost_amount, 0)) as expense_amount';
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
+  v_old := 'then coalesce(l.expense_amount, 0) / bt.budget_amount';
+  v_new :=
+    'then (coalesce(l.expense_amount, 0) + ' ||
+    'coalesce(sc.supplier_cost_amount, 0)) / bt.budget_amount';
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
+  v_old :=
+    '(coalesce(l.income_amount, 0) - ' ||
+    'coalesce(l.expense_amount, 0)) < 0';
+  v_new :=
+    '(coalesce(l.income_amount, 0) - ' ||
+    '(coalesce(l.expense_amount, 0) + ' ||
+    'coalesce(sc.supplier_cost_amount, 0))) < 0';
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
+  v_old := 'left join ledger_totals l on l.project_id = bp.id';
+  v_new :=
+    'left join ledger_totals l on l.project_id = bp.id' || E'\n' ||
+    '  left join supplier_cost_totals sc on sc.project_id = bp.id';
+  v_occurrences := (
+    length(v_definition) - length(replace(v_definition, v_old, ''))
+  ) / length(v_old);
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(v_definition, v_old, v_new);
+
   EXECUTE v_definition;
 
   SELECT pg_get_functiondef(
