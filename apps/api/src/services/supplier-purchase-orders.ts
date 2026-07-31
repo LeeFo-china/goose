@@ -34,6 +34,7 @@ type PurchaseOrderRepositoryPort = Pick<
   | "listCatalog"
   | "listProjectOptions"
   | "listSupplierOptions"
+  | "getFinancialSummary"
   | "saveDraft"
   | "submit"
   | "cancel"
@@ -150,6 +151,13 @@ export class SupplierPurchaseOrdersService {
       pageSize: query.pageSize,
       ...(query.keyword ? { keyword: query.keyword } : {}),
     });
+  }
+
+  async getFinancialSummary(auth: AuthContext, orderId: string) {
+    const scope = await this.access.requireRead(auth);
+    const order = await this.requireOrder(scope.tenantId, orderId);
+    await this.access.assertProjectRead(auth, order.project_id);
+    return this.repository.getFinancialSummary(scope.tenantId, orderId);
   }
 
   async saveDraft(

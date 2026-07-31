@@ -3,6 +3,7 @@ import type {
   FinanceProjectLedgerTotals,
   FinanceProjectReceivableTotals,
   FinanceProjectSummaryProjectRow,
+  FinanceProjectSupplierTotals,
   FinanceProjectUnallocatedExpenseItem,
 } from "@/repositories/finance-project-summary";
 import {
@@ -18,6 +19,7 @@ import type {
 export function buildProjectOperatingSummary(input: {
   project: FinanceProjectSummaryProjectRow;
   ledgerTotals?: FinanceProjectLedgerTotals;
+  supplierTotals?: FinanceProjectSupplierTotals;
   unallocatedExpenseItems?: FinanceProjectUnallocatedExpenseItem[];
   receivableTotals?: FinanceProjectReceivableTotals;
   budgetTotals?: FinanceProjectBudgetTotals;
@@ -25,17 +27,30 @@ export function buildProjectOperatingSummary(input: {
   const contractAmount = resolveContractAmount(input.project);
   const receivedAmount = roundMoney(input.ledgerTotals?.income_amount ?? 0);
   const expensePaidAmount = roundMoney(input.ledgerTotals?.expense_amount ?? 0);
-  const actualProfitAmount = roundMoney(receivedAmount - expensePaidAmount);
-  const projectedProfitAmount = roundMoney(contractAmount - expensePaidAmount);
+  const supplierCostAmount = roundMoney(
+    input.supplierTotals?.supplier_cost_amount ?? 0,
+  );
+  const supplierPayableOpenAmount = roundMoney(
+    input.supplierTotals?.supplier_payable_open_amount ?? 0,
+  );
+  const supplierCashPaidAmount = roundMoney(
+    input.supplierTotals?.supplier_cash_paid_amount ?? 0,
+  );
+  const actualCostAmount = roundMoney(expensePaidAmount + supplierCostAmount);
+  const actualProfitAmount = roundMoney(receivedAmount - actualCostAmount);
+  const projectedProfitAmount = roundMoney(contractAmount - actualCostAmount);
+  const netCashFlowAmount = roundMoney(
+    receivedAmount - expensePaidAmount - supplierCashPaidAmount,
+  );
   const budgetConfigured = Boolean(input.budgetTotals);
   const budgetCostAmount = budgetConfigured
     ? roundMoney(input.budgetTotals?.budget_amount ?? 0)
     : 0;
   const budgetRemainingAmount = budgetConfigured
-    ? roundMoney(budgetCostAmount - expensePaidAmount)
+    ? roundMoney(budgetCostAmount - actualCostAmount)
     : 0;
   const budgetUsageRatio = budgetConfigured && budgetCostAmount > 0
-    ? roundRatio(expensePaidAmount / budgetCostAmount)
+    ? roundRatio(actualCostAmount / budgetCostAmount)
     : null;
   const unallocatedExpenseAmount = roundMoney(
     input.ledgerTotals?.unallocated_expense_amount ?? 0,
@@ -55,7 +70,7 @@ export function buildProjectOperatingSummary(input: {
     projectId: input.project.id,
     contractAmount,
     receivedAmount,
-    expensePaidAmount,
+    expensePaidAmount: actualCostAmount,
     budgetConfigured,
     budgetCostAmount,
     budgetUsageRatio,
@@ -82,9 +97,12 @@ export function buildProjectOperatingSummary(input: {
     overdue_amount: overdueAmount,
     overdue_count: overdueCount,
     expense_paid_amount: expensePaidAmount,
+    supplier_cost_amount: supplierCostAmount,
+    supplier_payable_open_amount: supplierPayableOpenAmount,
+    supplier_cash_paid_amount: supplierCashPaidAmount,
     actual_profit_amount: actualProfitAmount,
     projected_profit_amount: projectedProfitAmount,
-    net_cash_flow_amount: actualProfitAmount,
+    net_cash_flow_amount: netCashFlowAmount,
     actual_gross_margin: receivedAmount > 0
       ? roundRatio(actualProfitAmount / receivedAmount)
       : null,
@@ -119,6 +137,9 @@ export function summarizeFinanceProjectSummaryList(
     acc.overdue_amount += item.overdue_amount;
     acc.overdue_count += item.overdue_count;
     acc.expense_paid_amount += item.expense_paid_amount;
+    acc.supplier_cost_amount += item.supplier_cost_amount;
+    acc.supplier_payable_open_amount += item.supplier_payable_open_amount;
+    acc.supplier_cash_paid_amount += item.supplier_cash_paid_amount;
     acc.actual_profit_amount += item.actual_profit_amount;
     acc.projected_profit_amount += item.projected_profit_amount;
     acc.net_cash_flow_amount += item.net_cash_flow_amount;
@@ -145,6 +166,13 @@ export function summarizeFinanceProjectSummaryList(
   );
   totals.overdue_amount = roundMoney(totals.overdue_amount);
   totals.expense_paid_amount = roundMoney(totals.expense_paid_amount);
+  totals.supplier_cost_amount = roundMoney(totals.supplier_cost_amount);
+  totals.supplier_payable_open_amount = roundMoney(
+    totals.supplier_payable_open_amount,
+  );
+  totals.supplier_cash_paid_amount = roundMoney(
+    totals.supplier_cash_paid_amount,
+  );
   totals.actual_profit_amount = roundMoney(totals.actual_profit_amount);
   totals.projected_profit_amount = roundMoney(totals.projected_profit_amount);
   totals.net_cash_flow_amount = roundMoney(totals.net_cash_flow_amount);
@@ -164,7 +192,10 @@ export function summarizeFinanceProjectSummaryList(
     ? roundRatio(totals.projected_profit_amount / totals.contract_amount)
     : null;
   totals.budget_usage_ratio = totals.budget_cost_amount > 0
-    ? roundRatio(totals.expense_paid_amount / totals.budget_cost_amount)
+    ? roundRatio(
+      (totals.expense_paid_amount + totals.supplier_cost_amount) /
+        totals.budget_cost_amount,
+    )
     : null;
   totals.projected_budget_gross_margin = totals.contract_amount > 0 &&
       totals.budget_configured_count > 0
@@ -188,6 +219,9 @@ function emptyFinanceProjectOperatingSummaryTotals(): FinanceProjectOperatingSum
     overdue_amount: 0,
     overdue_count: 0,
     expense_paid_amount: 0,
+    supplier_cost_amount: 0,
+    supplier_payable_open_amount: 0,
+    supplier_cash_paid_amount: 0,
     actual_profit_amount: 0,
     projected_profit_amount: 0,
     net_cash_flow_amount: 0,

@@ -18,6 +18,10 @@ import {
   type SupplierPurchaseOrderSupplierOption,
   type SupplierPurchaseOrderWithReferences,
 } from "@/repositories/supplier-purchase-order-records";
+import {
+  SupplierPurchaseOrderFinancialSummarySchema,
+  type SupplierPurchaseOrderFinancialSummary,
+} from "@/schema/supplier-purchase-orders";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type {
@@ -284,6 +288,25 @@ export class SupplierPurchaseOrdersRepository {
       result.items,
       { page: result.page, pageSize: result.page_size },
       result.total,
+    );
+  }
+
+  async getFinancialSummary(
+    tenantId: string,
+    purchaseOrderId: string,
+  ): Promise<SupplierPurchaseOrderFinancialSummary> {
+    const { data, error } = await this.client.rpc(
+      "get_supplier_purchase_order_financial_summary",
+      {
+        p_tenant_id: tenantId,
+        p_supplier_purchase_order_id: purchaseOrderId,
+      },
+    );
+    if (error) throw Errors.dbError("查询采购单财务摘要失败", error);
+    return parse(
+      SupplierPurchaseOrderFinancialSummarySchema,
+      data,
+      "查询采购单财务摘要失败",
     );
   }
 

@@ -96,7 +96,7 @@ describe("SupplierPurchaseOrdersController", () => {
     }
   });
 
-  test("registers all fifteen purchase order routes", async () => {
+  test("registers all sixteen purchase order routes", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
 
@@ -109,6 +109,10 @@ describe("SupplierPurchaseOrdersController", () => {
       { method: "GET", path: "/supplier-purchase-orders" },
       { method: "GET", path: "/supplier-purchase-orders/:id" },
       { method: "GET", path: "/supplier-purchase-orders/:id/items" },
+      {
+        method: "GET",
+        path: "/supplier-purchase-orders/:id/financial-summary",
+      },
       { method: "GET", path: "/supplier-purchase-orders/:id/fulfillment" },
       { method: "GET", path: "/supplier-purchase-orders/:id/shipments" },
       { method: "GET", path: "/supplier-purchase-orders/:id/receipts" },

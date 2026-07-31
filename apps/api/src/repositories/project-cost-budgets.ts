@@ -59,6 +59,12 @@ export type ProjectCostBudgetCommitmentTotals = {
   }>;
 };
 
+export type ProjectCostBudgetSupplierCostTotals = {
+  sourceRowCount: number;
+  totalSupplierCostAmount: number;
+  byCategory: Map<string, number>;
+};
+
 class ProjectCostBudgetRepository {
   async findProject(input: {
     tenantId: string;
@@ -234,6 +240,43 @@ class ProjectCostBudgetRepository {
     };
   }
 
+  async listSupplierCostTotals(input: {
+    tenantId: string;
+    projectId: string;
+  }): Promise<ProjectCostBudgetSupplierCostTotals> {
+    const rows = await listSupplierCostEventRows(input);
+    if (rows.length > 10_000) {
+      throw Errors.business(
+        422,
+        "项目供应商成本事件过多，请使用成本汇总任务",
+        "PROJECT_SUPPLIER_COST_EVENTS_TOO_MANY_ROWS",
+      );
+    }
+    const byCategory = new Map<string, number>();
+    let totalSupplierCostAmount = 0;
+    for (const value of rows) {
+      const row = asRecord(value);
+      if (!row || typeof row.cost_category_id !== "string") {
+        throw Errors.dbError("解析项目供应商实际成本失败", rows);
+      }
+      const amount = parseNonNegativeAggregateMoney(
+        row.amount,
+        "解析项目供应商实际成本失败",
+        rows,
+      );
+      totalSupplierCostAmount += amount;
+      byCategory.set(
+        row.cost_category_id,
+        roundMoney((byCategory.get(row.cost_category_id) ?? 0) + amount),
+      );
+    }
+    return {
+      sourceRowCount: rows.length,
+      totalSupplierCostAmount: roundMoney(totalSupplierCostAmount),
+      byCategory,
+    };
+  }
+
   async listActiveCategoriesByIds(input: {
     tenantId: string;
     categoryIds: string[];
@@ -290,6 +333,31 @@ class ProjectCostBudgetRepository {
       projectId: input.projectId,
     });
   }
+}
+
+async function listSupplierCostEventRows(input: {
+  tenantId: string;
+  projectId: string;
+}): Promise<unknown[]> {
+  const rows: unknown[] = [];
+  for (let from = 0; from <= 10_000; from += 1_000) {
+    const to = Math.min(from + 999, 10_000);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_cost_events")
+      .select("cost_category_id,amount")
+      .eq("tenant_id", input.tenantId)
+      .eq("project_id", input.projectId)
+      .range(from, to);
+    if (error) {
+      throw Errors.dbError("查询项目供应商实际成本失败", error);
+    }
+    if (!Array.isArray(data)) {
+      throw Errors.dbError("解析项目供应商实际成本失败", data);
+    }
+    rows.push(...data);
+    if (data.length < to - from + 1) break;
+  }
+  return rows;
 }
 
 function parseBoundedAggregate(input: {

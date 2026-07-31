@@ -70,6 +70,7 @@ export async function listFinanceProjectUnallocatedExpenseItems(input: {
     `)
     .eq("tenant_id", input.tenantId)
     .eq("direction", "out")
+    .neq("entry_type", "supplier_payment")
     .is("cost_category_id", null)
     .in("project_id", input.projectIds)
     .order("occurred_at", { ascending: false })

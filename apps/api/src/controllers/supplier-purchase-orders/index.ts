@@ -67,6 +67,18 @@ class SupplierPurchaseOrdersController extends TenantBaseController {
     );
   }
 
+  @Get("/supplier-purchase-orders/:id/financial-summary")
+  async getFinancialSummary(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(
+      SupplierPurchaseOrderParamSchema,
+      request.params,
+    );
+    return ResponseHandler.success(
+      await supplierPurchaseOrdersService.getFinancialSummary(auth, id),
+    );
+  }
+
   @Get("/supplier-purchase-orders/:id/fulfillment")
   async getFulfillment(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);

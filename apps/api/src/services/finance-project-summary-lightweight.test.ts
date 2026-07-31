@@ -47,6 +47,7 @@ const service = new FinanceProjectSummaryService({
         expense_by_category: new Map(),
       }],
     ])),
+    listSupplierTotals: mock(async () => new Map()),
     listUnallocatedExpenseItems: mock(async () => new Map()),
     listLedgerTrend,
     listReceivableTotals: mock(async () => new Map()),

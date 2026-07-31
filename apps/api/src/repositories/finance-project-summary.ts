@@ -9,6 +9,10 @@ import {
   listFinanceProjectUnallocatedExpenseItems,
   type FinanceProjectUnallocatedExpenseItem,
 } from "@/repositories/finance-project-summary-unallocated-items";
+import {
+  listFinanceProjectLedgerTotals,
+  listFinanceProjectSupplierTotals,
+} from "@/repositories/finance-project-summary-supplier-totals";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -26,6 +30,12 @@ export type FinanceProjectLedgerTotals = {
   unallocated_expense_amount: number;
   ledger_entry_count: number;
   expense_by_category: Map<string, number>;
+};
+
+export type FinanceProjectSupplierTotals = {
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
 };
 
 export type { FinanceProjectUnallocatedExpenseItem };
@@ -285,56 +295,14 @@ class FinanceProjectSummaryRepository {
     tenantId: string;
     projectIds: string[];
   }): Promise<Map<string, FinanceProjectLedgerTotals>> {
-    if (input.projectIds.length === 0) {
-      return new Map();
-    }
+    return listFinanceProjectLedgerTotals(input);
+  }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("finance_ledger_entries")
-      .select("project_id, direction, amount, cost_category_id")
-      .eq("tenant_id", input.tenantId)
-      .in("project_id", input.projectIds);
-
-    if (error) {
-      throw Errors.dbError("查询项目财务流水汇总失败", error);
-    }
-
-    const totals = new Map<string, FinanceProjectLedgerTotals>();
-    for (const row of (data || []) as Array<{
-      project_id: string | null;
-      direction: string | null;
-      amount: number | string | null;
-      cost_category_id: string | null;
-    }>) {
-      if (!row.project_id) continue;
-      const current = totals.get(row.project_id) || {
-        income_amount: 0,
-        expense_amount: 0,
-        unallocated_expense_amount: 0,
-        ledger_entry_count: 0,
-        expense_by_category: new Map<string, number>(),
-      };
-      const amount = normalizeMoney(row.amount);
-      if (row.direction === "in") {
-        current.income_amount += amount;
-      } else if (row.direction === "out") {
-        current.expense_amount += amount;
-        if (!row.cost_category_id) {
-          current.unallocated_expense_amount += amount;
-        }
-        if (row.cost_category_id) {
-          current.expense_by_category.set(
-            row.cost_category_id,
-            (current.expense_by_category.get(row.cost_category_id) ?? 0) +
-              amount,
-          );
-        }
-      }
-      current.ledger_entry_count += 1;
-      totals.set(row.project_id, current);
-    }
-
-    return totals;
+  async listSupplierTotals(input: {
+    tenantId: string;
+    projectIds: string[];
+  }): Promise<Map<string, FinanceProjectSupplierTotals>> {
+    return listFinanceProjectSupplierTotals(input);
   }
 
   async listUnallocatedExpenseItems(input: {
