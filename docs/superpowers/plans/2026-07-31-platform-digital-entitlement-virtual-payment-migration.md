@@ -705,7 +705,7 @@ Gateway 只返回经过严格运行时验证的归一化结果。HTTP 非 2xx、
 
 - [ ] **Step 5: 验证并提交**
 
-Run: `bun test apps/api/src/services/wechat-virtual-payment-signatures.test.ts apps/api/src/services/wechat-virtual-payment-gateway.test.ts && bun run api:typecheck`
+Run: `cd apps/api && bun test src/services/wechat-virtual-payment-signatures.test.ts src/services/wechat-virtual-payment-gateway.test.ts && bun run typecheck`
 
 Expected: 固定签名向量、超时、非 2xx、微信错误码和环境隔离测试全部 PASS。
 
