@@ -9,21 +9,33 @@ import {
 import type { SupplierPaymentSmokeSql } from
   "./supplier-payment-smoke-fixture";
 import {
+  captureSupplierPaymentFailure,
   closeThenCheckFreshResidual,
   type SupplierPaymentFailureState,
 } from "./supplier-payment-smoke-residual";
+import {
+  createConcurrencyRunIdentity,
+  createMonotonicDeadline,
+  pollUntilBeforeDeadline,
+  prepareConcurrencyRun,
+  waitForPromiseBeforeDeadline,
+  type ConcurrencyRunIdentity,
+  type MonotonicDeadline,
+} from "./supplier-payment-smoke-concurrency-helpers";
+import {
+  cleanupConcurrentRequests,
+  countConcurrentConflicts,
+  countConcurrentResiduals,
+} from "./supplier-payment-smoke-concurrency-store";
+
+export {
+  createConcurrencyRunIdentity,
+  pollUntilBeforeDeadline,
+  prepareConcurrencyRun,
+};
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
-
-export const SUPPLIER_PAYMENT_CONCURRENCY_IDS = {
-  requestA: "87000000-0000-4000-8000-000000000002",
-  requestB: "87000000-0000-4000-8000-000000000003",
-  saveA: "87000000-0000-4000-8000-000000000004",
-  saveB: "87000000-0000-4000-8000-000000000005",
-  submitA: "87000000-0000-4000-8000-000000000006",
-  submitB: "87000000-0000-4000-8000-000000000007",
-} as const;
 
 type ConcurrentClient<Transaction> = {
   clientId: "A" | "B";
@@ -89,16 +101,21 @@ async function waitForSignal<Value>(
   signal: Promise<Value>,
   operation: Promise<unknown>,
   label: string,
+  deadline: MonotonicDeadline,
 ): Promise<Value> {
-  return Promise.race([
-    signal,
-    operation.then(
-      () => prerequisite(`${label}_COMPLETED_BEFORE_BARRIER`),
-      (error) => {
-        throw error;
-      },
-    ),
-  ]);
+  return waitForPromiseBeforeDeadline(
+    Promise.race([
+      signal,
+      operation.then(
+        () => prerequisite(`${label}_COMPLETED_BEFORE_BARRIER`),
+        (error) => {
+          throw error;
+        },
+      ),
+    ]),
+    deadline,
+    label,
+  );
 }
 
 export async function runConcurrentSubmitOverlap<Transaction, Result>(input: {
@@ -111,6 +128,7 @@ export async function runConcurrentSubmitOverlap<Transaction, Result>(input: {
     transaction: Transaction,
   ): Promise<Result>;
   waitForSecondBlocked(): Promise<void>;
+  timeoutMs?: number;
 }): Promise<readonly [Result, Result]> {
   const [clientA, clientB] = input.clients;
   if (clientA === clientB || clientA.clientId === clientB.clientId) {
@@ -121,6 +139,7 @@ export async function runConcurrentSubmitOverlap<Transaction, Result>(input: {
   const secondStarted = deferred<void>();
   let operationA: Promise<Result> | undefined;
   let operationB: Promise<Result> | undefined;
+  const deadline = createMonotonicDeadline(input.timeoutMs ?? 5_000);
   try {
     operationA = clientA.begin(async (transaction) => {
       const result = await input.submit("A", transaction);
@@ -128,82 +147,43 @@ export async function runConcurrentSubmitOverlap<Transaction, Result>(input: {
       await releaseFirst.promise;
       return result;
     });
-    await waitForSignal(firstSubmitted.promise, operationA, "FIRST_SUBMIT");
+    await waitForSignal(
+      firstSubmitted.promise,
+      operationA,
+      "FIRST_SUBMIT",
+      deadline,
+    );
     operationB = clientB.begin(async (transaction) => {
       secondStarted.resolve();
       return input.submit("B", transaction);
     });
-    await waitForSignal(secondStarted.promise, operationB, "SECOND_SUBMIT");
-    await input.waitForSecondBlocked();
+    await waitForSignal(
+      secondStarted.promise,
+      operationB,
+      "SECOND_SUBMIT",
+      deadline,
+    );
+    await waitForPromiseBeforeDeadline(
+      input.waitForSecondBlocked(),
+      deadline,
+      "SECOND_SUBMIT_LOCK",
+    );
     releaseFirst.resolve();
-    return await Promise.all([operationA, operationB]);
+    return await waitForPromiseBeforeDeadline(
+      Promise.all([operationA, operationB]),
+      deadline,
+      "SUBMIT_COMPLETION",
+    );
   } finally {
     releaseFirst.resolve();
-    await Promise.allSettled(
+    const settlement = Promise.allSettled(
       [operationA, operationB].filter(
         (operation): operation is Promise<Result> => operation !== undefined,
       ),
     );
+    await Promise.race([settlement, deadline.delay(0)]);
+    // The caller closes both dedicated pools, cancelling any stuck query.
   }
-}
-
-async function cleanupConcurrentRequests(
-  database: Bun.SQL,
-): Promise<void> {
-  await database.begin(async (transaction) => {
-    await transaction`select set_config(
-      'app.supplier_payment_command', 'on', true
-    );`;
-    await transaction`
-      delete from public.supplier_payment_request_allocations
-      where payment_request_id in (
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-      );
-    `;
-    await transaction`
-      delete from public.supplier_payment_requests
-      where id in (
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-      );
-    `;
-    await transaction`
-      delete from public.supplier_command_events
-      where resource_type = 'supplier_payment_request'
-        and resource_id in (
-          ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-          ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-        );
-    `;
-  });
-}
-
-async function countConcurrentResiduals(database: Bun.SQL): Promise<number> {
-  const rows = await database<{ count: number }[]>`
-    select sum(fact.count)::integer as count
-    from (
-      select count(*) from public.supplier_payment_request_allocations
-      where payment_request_id in (
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-      )
-      union all
-      select count(*) from public.supplier_payment_requests
-      where id in (
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-        ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-      )
-      union all
-      select count(*) from public.supplier_command_events
-      where resource_type = 'supplier_payment_request'
-        and resource_id in (
-          ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA}::uuid,
-          ${SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB}::uuid
-        )
-    ) as fact;
-  `;
-  return rows[0]?.count ?? -1;
 }
 
 async function readConcurrentPayable(
@@ -272,6 +252,7 @@ async function readConcurrentPayable(
 async function seedConcurrentDrafts(
   database: Bun.SQL,
   fixture: ConcurrentPayableFixture,
+  identity: ConcurrencyRunIdentity,
 ): Promise<void> {
   const allocations = [{
     payable_event_id: fixture.payable_id,
@@ -280,16 +261,18 @@ async function seedConcurrentDrafts(
   await database.begin(async (transaction) => {
     const sql = transaction as unknown as SupplierPaymentSmokeSql;
     const a = await savePaymentRequest(sql, fixture, {
-      requestId: SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA,
+      requestId: identity.requestA,
       expectedVersion: 0,
-      idempotencyKey: SUPPLIER_PAYMENT_CONCURRENCY_IDS.saveA,
+      idempotencyKey: identity.saveA,
       allocations,
+      reason: `supplier-payment-concurrency:${identity.marker}`,
     });
     const b = await savePaymentRequest(sql, fixture, {
-      requestId: SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB,
+      requestId: identity.requestB,
       expectedVersion: 0,
-      idempotencyKey: SUPPLIER_PAYMENT_CONCURRENCY_IDS.saveB,
+      idempotencyKey: identity.saveB,
       allocations,
+      reason: `supplier-payment-concurrency:${identity.marker}`,
     });
     if (a.status !== "saved" || b.status !== "saved") {
       prerequisite("DRAFT_SETUP_FAILED");
@@ -309,33 +292,32 @@ async function readBackendPid(sql: SupplierPaymentSmokeSql): Promise<number> {
 async function waitForBlockedSubmit(
   lookup: Bun.SQL,
   backendPid: number,
+  deadline: MonotonicDeadline,
 ): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const rows = await lookup<{ waiting: boolean }[]>`
-      select exists (
-        select 1
-        from pg_catalog.pg_stat_activity as activity
-        where activity.pid = ${backendPid}::integer
-          and activity.wait_event_type = 'Lock'
-          and activity.query like '%submit_supplier_payment_request%'
-          and exists (
-            select 1
-            from pg_catalog.pg_locks as waiting_lock
-            where waiting_lock.pid = activity.pid
-              and not waiting_lock.granted
-          )
-      ) as waiting;
-    `;
-    if (rows[0]?.waiting === true) return;
-  }
-  prerequisite("SECOND_SUBMIT_LOCK_NOT_OBSERVED");
-}
-
-function captureFailure(
-  current: SupplierPaymentFailureState,
-  value: unknown,
-): SupplierPaymentFailureState {
-  return current.failed ? current : { failed: true, value };
+  await pollUntilBeforeDeadline({
+    label: "SECOND_SUBMIT_LOCK",
+    deadlineAt: deadline.deadlineAt,
+    now: deadline.now,
+    delay: deadline.delay,
+    async probe() {
+      const rows = await lookup<{ waiting: boolean }[]>`
+        select exists (
+          select 1
+          from pg_catalog.pg_stat_activity as activity
+          where activity.pid = ${backendPid}::integer
+            and activity.wait_event_type = 'Lock'
+            and activity.query like '%submit_supplier_payment_request%'
+            and exists (
+              select 1
+              from pg_catalog.pg_locks as waiting_lock
+              where waiting_lock.pid = activity.pid
+                and not waiting_lock.granted
+            )
+        ) as waiting;
+      `;
+      return rows[0]?.waiting === true;
+    },
+  });
 }
 
 async function closeAndCapture(
@@ -343,10 +325,10 @@ async function closeAndCapture(
   failure: SupplierPaymentFailureState,
 ): Promise<SupplierPaymentFailureState> {
   try {
-    await database.close();
+    await database.close({ timeout: 1 });
     return failure;
   } catch (error) {
-    return captureFailure(failure, error);
+    return captureSupplierPaymentFailure(failure, error);
   }
 }
 
@@ -356,29 +338,35 @@ export async function runConcurrentRequestProbe(
     allowCommittedConcurrency?: string;
     disposableDatabase?: string;
     payableId?: string;
+    idFactory?: () => string;
   },
 ): Promise<true> {
   const validated = assertCommittedConcurrencyConfig({
     databaseUrl,
     ...config,
   });
-  const control = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
-  const databaseA = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
-  const databaseB = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const identity = createConcurrencyRunIdentity(config.idFactory);
+  const connectionOptions = {
+    max: 1,
+    prepare: false,
+    connectionTimeout: 10,
+  } as const;
+  const control = new Bun.SQL(databaseUrl, connectionOptions);
+  const databaseA = new Bun.SQL(databaseUrl, connectionOptions);
+  const databaseB = new Bun.SQL(databaseUrl, connectionOptions);
   let failure: SupplierPaymentFailureState = { failed: false };
   let passed = false;
   try {
-    try {
-      await cleanupConcurrentRequests(control);
-    } catch {
-      prerequisite("DEDICATED_IDS_CLEANUP_FAILED");
-    }
-    if (await countConcurrentResiduals(control) !== 0) {
-      prerequisite("DEDICATED_IDS_CONFLICT");
-    }
     const fixture = await readConcurrentPayable(control, validated.payableId);
-    await seedConcurrentDrafts(control, fixture);
+    await prepareConcurrencyRun({
+      identity,
+      countConflicts: (runIdentity) =>
+        countConcurrentConflicts(control, runIdentity),
+      seed: (runIdentity) =>
+        seedConcurrentDrafts(control, fixture, runIdentity),
+    });
     const backendB = deferred<number>();
+    const lockDeadline = createMonotonicDeadline(5_000);
     const results = await runConcurrentSubmitOverlap({
       clients: [
         {
@@ -392,19 +380,26 @@ export async function runConcurrentRequestProbe(
       ],
       async submit(clientId, transaction) {
         const sql = transaction as unknown as SupplierPaymentSmokeSql;
+        await sql`set local statement_timeout = '15s';`;
+        await sql`set local lock_timeout = '10s';`;
         if (clientId === "B") backendB.resolve(await readBackendPid(sql));
         return submitPaymentRequest(sql, fixture, {
           requestId: clientId === "A"
-            ? SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestA
-            : SUPPLIER_PAYMENT_CONCURRENCY_IDS.requestB,
+            ? identity.requestA
+            : identity.requestB,
           expectedVersion: 1,
           idempotencyKey: clientId === "A"
-            ? SUPPLIER_PAYMENT_CONCURRENCY_IDS.submitA
-            : SUPPLIER_PAYMENT_CONCURRENCY_IDS.submitB,
+            ? identity.submitA
+            : identity.submitB,
         });
       },
       async waitForSecondBlocked() {
-        await waitForBlockedSubmit(control, await backendB.promise);
+        const backendPid = await waitForPromiseBeforeDeadline(
+          backendB.promise,
+          lockDeadline,
+          "BACKEND_PID",
+        );
+        await waitForBlockedSubmit(control, backendPid, lockDeadline);
       },
     });
     if (
@@ -423,15 +418,16 @@ export async function runConcurrentRequestProbe(
   failure = await closeAndCapture(databaseB, failure);
   failure = await closeAndCapture(databaseA, failure);
   try {
-    await cleanupConcurrentRequests(control);
+    await cleanupConcurrentRequests(control, identity);
   } catch (error) {
-    failure = captureFailure(failure, error);
+    failure = captureSupplierPaymentFailure(failure, error);
   }
   await closeThenCheckFreshResidual({
     original: control,
     createFresh: () =>
-      new Bun.SQL(databaseUrl, { max: 1, prepare: false }),
-    countResidual: countConcurrentResiduals,
+      new Bun.SQL(databaseUrl, connectionOptions),
+    countResidual: (connection) =>
+      countConcurrentResiduals(connection, identity),
     primaryFailure: failure,
     label: "supplier payment committed concurrency",
   });

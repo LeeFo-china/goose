@@ -3,17 +3,35 @@ import { SupplierPaymentSmokeAssertionError } from
 
 export type SupplierPaymentFailureState =
   | { failed: false }
-  | { failed: true; value: unknown };
+  | { failed: true; value: unknown; suppressed?: unknown[] };
 
 type Closable = {
   close(): Promise<void>;
 };
 
-function captureFailure(
+export function captureSupplierPaymentFailure(
   current: SupplierPaymentFailureState,
   value: unknown,
 ): SupplierPaymentFailureState {
-  return current.failed ? current : { failed: true, value };
+  return current.failed
+    ? {
+      ...current,
+      suppressed: [...(current.suppressed ?? []), value],
+    }
+    : { failed: true, value };
+}
+
+export function throwSupplierPaymentFailures(
+  failure: SupplierPaymentFailureState,
+): void {
+  if (!failure.failed) return;
+  const errors = [failure.value, ...(failure.suppressed ?? [])];
+  if (errors.length === 1) throw failure.value;
+  throw new AggregateError(
+    errors,
+    "SUPPLIER_PAYMENT_SMOKE_FINALIZATION_FAILED",
+    { cause: failure.value },
+  );
 }
 
 export async function closeThenCheckFreshResidual<
@@ -29,7 +47,7 @@ export async function closeThenCheckFreshResidual<
   try {
     await input.original.close();
   } catch (error) {
-    failure = captureFailure(failure, error);
+    failure = captureSupplierPaymentFailure(failure, error);
   }
 
   let fresh: Connection | undefined;
@@ -42,15 +60,15 @@ export async function closeThenCheckFreshResidual<
       );
     }
   } catch (error) {
-    failure = captureFailure(failure, error);
+    failure = captureSupplierPaymentFailure(failure, error);
   }
 
   if (fresh) {
     try {
       await fresh.close();
     } catch (error) {
-      failure = captureFailure(failure, error);
+      failure = captureSupplierPaymentFailure(failure, error);
     }
   }
-  if (failure.failed) throw failure.value;
+  throwSupplierPaymentFailures(failure);
 }

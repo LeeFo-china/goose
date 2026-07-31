@@ -1,4 +1,5 @@
 import {
+  SUPPLIER_PAYMENT_BASE_IDS,
   SUPPLIER_PAYMENT_SMOKE_IDS,
   type SupplierPaymentSmokeSql,
 } from "./supplier-payment-smoke-fixture";
@@ -27,6 +28,13 @@ import {
   readProjectCostSnapshot,
   snapshotRequestAccountingState,
 } from "./supplier-payment-smoke-assertions";
+import {
+  assertFinalPaymentFacts,
+  assertPartialPaymentFacts,
+  assertPaymentReplayUnchanged,
+  readPaymentFactSnapshot,
+  type PaymentFactExpectation,
+} from "./supplier-payment-smoke-payment-facts";
 
 export {
   assertInvoiceGateSnapshotUnchanged,
@@ -234,35 +242,9 @@ async function assertPaymentFacts(
   state: SupplierPaymentScenarioState,
 ): Promise<void> {
   assert(state.activeRequestId, "active request is required");
-  const rows = await sql<Array<{
-    status: string;
-    requested_amount: string;
-    paid_amount: string;
-    payment_count: number;
-    ledger_count: number;
-  }>>`
-    select request.status, request.requested_amount::text,
-      request.paid_amount::text,
-      (select count(*)::integer from public.supplier_payments as payment
-        where payment.tenant_id = request.tenant_id
-          and payment.payment_request_id = request.id) as payment_count,
-      (select count(*)::integer from public.finance_ledger_entries as ledger
-        where ledger.tenant_id = request.tenant_id
-          and ledger.entry_type = 'supplier_payment'
-          and ledger.source_id in (
-            ${SUPPLIER_PAYMENT_SMOKE_IDS.firstPayment}::uuid,
-            ${SUPPLIER_PAYMENT_SMOKE_IDS.finalPayment}::uuid
-          )) as ledger_count
-    from public.supplier_payment_requests as request
-    where request.tenant_id = ${state.fixture.tenant_id}::uuid
-      and request.id = ${state.activeRequestId}::uuid;
-  `;
-  assert(
-    rows.length === 1 && rows[0]?.status === "paid" &&
-      rows[0]?.requested_amount === "30.00" &&
-      rows[0]?.paid_amount === "30.00" &&
-      rows[0]?.payment_count === 2 && rows[0]?.ledger_count === 2,
-    "final payment facts must close with one ledger per payment",
+  assertFinalPaymentFacts(
+    await readCurrentPaymentFacts(sql, state),
+    paymentFactExpectation(state),
   );
   assert(state.projectCostBeforePayment, "project cost baseline is required");
   assertProjectCostSnapshotUnchanged(
@@ -274,6 +256,40 @@ async function assertPaymentFacts(
     supplier_cash_single_ledger: true,
     supplier_cash_not_double_costed: true,
   } as const);
+}
+
+function paymentFactExpectation(
+  state: SupplierPaymentScenarioState,
+): PaymentFactExpectation {
+  assert(state.activeRequestId, "active request is required");
+  return {
+    requestId: state.activeRequestId,
+    projectId: state.fixture.project_id,
+    relationshipId: state.fixture.relationship_id,
+    supplierId: SUPPLIER_PAYMENT_BASE_IDS.supplier,
+    firstPaymentId: SUPPLIER_PAYMENT_SMOKE_IDS.firstPayment,
+    finalPaymentId: SUPPLIER_PAYMENT_SMOKE_IDS.finalPayment,
+    allocations: state.activeAllocations.map((allocation) => ({
+      id: allocation.id,
+      payableId: allocation.payable_event_id,
+      requestedAmount: allocation.requested_amount,
+    })),
+  };
+}
+
+async function readCurrentPaymentFacts(
+  sql: SupplierPaymentSmokeSql,
+  state: SupplierPaymentScenarioState,
+) {
+  assert(state.activeRequestId, "active request is required");
+  return readPaymentFactSnapshot(sql, {
+    tenantId: state.fixture.tenant_id,
+    requestId: state.activeRequestId,
+    paymentIds: [
+      SUPPLIER_PAYMENT_SMOKE_IDS.firstPayment,
+      SUPPLIER_PAYMENT_SMOKE_IDS.finalPayment,
+    ],
+  });
 }
 
 async function createInvoiceRequest(
@@ -412,12 +428,22 @@ export async function executeSupplierPaymentFlowStep(
       );
       const payment = await runPayment(sql, state, true);
       assert(payment.status === "partially_paid", "partial payment");
+      state.partialPaymentSnapshot = await readCurrentPaymentFacts(sql, state);
+      assertPartialPaymentFacts(
+        state.partialPaymentSnapshot,
+        paymentFactExpectation(state),
+      );
       state.checks.partial_payment_recorded = true;
       return payment;
     }
     case "partial_payment_replay": {
+      assert(state.partialPaymentSnapshot, "partial payment snapshot required");
       const replay = await runPayment(sql, state, true);
       assert(replay.status === "partially_paid" && replay.idempotent, "replay");
+      assertPaymentReplayUnchanged(
+        state.partialPaymentSnapshot,
+        await readCurrentPaymentFacts(sql, state),
+      );
       state.checks.repeated_payment_idempotent = true;
       return replay;
     }

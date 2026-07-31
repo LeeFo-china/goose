@@ -8,6 +8,8 @@ import type {
 } from "./supplier-payment-smoke-fixture";
 import type { ProjectCostSnapshot } from
   "./supplier-payment-smoke-assertions";
+import type { PaymentFactSnapshot } from
+  "./supplier-payment-smoke-payment-facts";
 
 export type SupplierPaymentScenarioState = {
   fixture: SupplierPaymentSmokeFixture;
@@ -16,6 +18,7 @@ export type SupplierPaymentScenarioState = {
   activeRequestId?: string;
   activeAllocations: RequestAllocationFact[];
   projectCostBeforePayment?: ProjectCostSnapshot;
+  partialPaymentSnapshot?: PaymentFactSnapshot;
   checks: Record<string, true>;
 };
 

@@ -154,6 +154,8 @@ export async function savePaymentRequest(
       payable_event_id: string;
       requested_amount: string;
     }>;
+    reason?: string;
+    remark?: string | null;
   },
 ): Promise<SupplierPaymentCommandEnvelope> {
   const rows = await sql<ResultRow[]>`
@@ -163,8 +165,8 @@ export async function savePaymentRequest(
       ${fixture.project_id}::uuid,
       ${fixture.relationship_id}::uuid,
       ${input.expectedVersion}::integer,
-      '供应商应付付款数据库烟测',
-      null::text,
+      ${input.reason ?? "供应商应付付款数据库烟测"}::text,
+      ${input.remark ?? null}::text,
       ${input.allocations}::jsonb,
       ${fixture.user_id}::uuid,
       ${fixture.employee_id}::uuid,

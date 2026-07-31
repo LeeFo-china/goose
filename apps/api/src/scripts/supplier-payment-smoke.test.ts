@@ -451,22 +451,30 @@ describe("supplier payment database smoke helpers", () => {
         throw new Error("original close");
       },
     };
-    await expect(smokeFixes.closeThenCheckFreshResidual({
-      original,
-      createFresh() {
-        events.push("fresh:create");
-        return {
-          async close() {
-            events.push("fresh:close");
-          },
-        };
-      },
-      async countResidual() {
-        events.push("fresh:count");
-        return 0;
-      },
-      primaryFailure: { failed: true, value: primaryFailure },
-    })).rejects.toBe(primaryFailure);
+    try {
+      await smokeFixes.closeThenCheckFreshResidual({
+        original,
+        createFresh() {
+          events.push("fresh:create");
+          return {
+            async close() {
+              events.push("fresh:close");
+            },
+          };
+        },
+        async countResidual() {
+          events.push("fresh:count");
+          return 0;
+        },
+        primaryFailure: { failed: true, value: primaryFailure },
+      });
+      throw new Error("expected finalization failure");
+    } catch (error) {
+      expect(error).toBeInstanceOf(AggregateError);
+      expect((error as AggregateError).errors[0]).toBe(primaryFailure);
+      expect(String((error as AggregateError).errors[1]))
+        .toContain("original close");
+    }
     expect(events).toEqual([
       "original:close",
       "fresh:create",
