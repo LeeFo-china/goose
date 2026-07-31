@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { buildPaymentPayload } from "./payment-dialog-rules";
+import {
+  buildPaymentPayload,
+  toLocalDateTimeInput,
+  toPaymentIsoDateTime,
+} from "./payment-dialog-rules";
 import type { SupplierPaymentRequestDetail } from "./payment-request-types";
 
 const ID = (index: number) =>
@@ -82,6 +86,42 @@ describe("供应商付款 payload", () => {
     expect(JSON.stringify(input)).not.toContain("bypass");
   });
 });
+
+describe("供应商付款时间", () => {
+  test("uses the browser local wall time for the datetime-local default", () => {
+    withTimezone("Asia/Shanghai", () => {
+      const paidAt = new Date("2026-07-31T18:00:00+08:00");
+
+      expect(toLocalDateTimeInput(paidAt)).toBe("2026-07-31T18:00");
+    });
+  });
+
+  test("returns an empty or null result for invalid time without throwing", () => {
+    expect(() => toLocalDateTimeInput(new Date(Number.NaN)))
+      .not.toThrow();
+    expect(toLocalDateTimeInput(new Date(Number.NaN))).toBe("");
+    expect(() => toPaymentIsoDateTime("not-a-date")).not.toThrow();
+    expect(toPaymentIsoDateTime("not-a-date")).toBeNull();
+  });
+
+  test("converts a valid browser local value back to UTC", () => {
+    withTimezone("Asia/Shanghai", () => {
+      expect(toPaymentIsoDateTime("2026-07-31T18:00"))
+        .toBe("2026-07-31T10:00:00.000Z");
+    });
+  });
+});
+
+function withTimezone(timezone: string, assertion: () => void) {
+  const previousTimezone = process.env.TZ;
+  try {
+    process.env.TZ = timezone;
+    assertion();
+  } finally {
+    if (previousTimezone === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTimezone;
+  }
+}
 
 function validInput() {
   return {

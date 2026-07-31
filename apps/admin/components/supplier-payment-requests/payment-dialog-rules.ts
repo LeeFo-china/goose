@@ -21,6 +21,18 @@ export type BuildPaymentPayloadInput = {
   remark: string | null;
 };
 
+export function toLocalDateTimeInput(date: Date): string {
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+export function toPaymentIsoDateTime(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function buildPaymentPayload(
   input: BuildPaymentPayloadInput,
 ): SupplierPaymentConfirmInput {

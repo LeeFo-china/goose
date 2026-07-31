@@ -39,7 +39,11 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
-import { buildPaymentPayload } from "./payment-dialog-rules";
+import {
+  buildPaymentPayload,
+  toLocalDateTimeInput,
+  toPaymentIsoDateTime,
+} from "./payment-dialog-rules";
 import {
   decimalFromCents,
   errorMessage,
@@ -124,7 +128,7 @@ export function PaymentDialog({
     setPaymentId(crypto.randomUUID());
     setPaymentMethod("bank_transfer");
     setPaymentReference("");
-    setPaidAt(new Date().toISOString().slice(0, 16));
+    setPaidAt(toLocalDateTimeInput(new Date()));
     setPaymentAmount(decimalFromCents(total));
     setRemark("");
     setEvidenceImages([]);
@@ -149,6 +153,7 @@ export function PaymentDialog({
     }
   }, [lines]);
   const busy = pending || uploading || submitting;
+  const paidAtInvalid = toPaymentIsoDateTime(paidAt) === null;
 
   async function handleFiles(fileList: FileList | null) {
     const files = Array.from(fileList ?? []);
@@ -174,12 +179,14 @@ export function PaymentDialog({
     setSubmitting(true);
     setError(null);
     try {
+      const paidAtIso = toPaymentIsoDateTime(paidAt);
+      if (!paidAtIso) throw new RangeError("付款时间无效");
       const payload = buildPaymentPayload({
         request,
         paymentId,
         paymentMethod,
         paymentReference,
-        paidAt: new Date(paidAt).toISOString(),
+        paidAt: paidAtIso,
         paymentAmount,
         evidenceImages,
         remark,
@@ -267,15 +274,17 @@ export function PaymentDialog({
                 />
                 <FieldError>{!paymentReference.trim() ? "付款流水号不能为空" : undefined}</FieldError>
               </Field>
-              <Field>
+              <Field data-invalid={paidAtInvalid}>
                 <FieldLabel htmlFor="supplier-payment-paid-at">付款时间</FieldLabel>
                 <Input
                   id="supplier-payment-paid-at"
                   type="datetime-local"
                   value={paidAt}
                   disabled={busy}
+                  aria-invalid={paidAtInvalid}
                   onChange={(event) => setPaidAt(event.target.value)}
                 />
+                <FieldError>{paidAtInvalid ? "请选择有效的付款时间" : undefined}</FieldError>
               </Field>
               <Field>
                 <FieldLabel htmlFor="supplier-payment-amount">本次付款金额</FieldLabel>
