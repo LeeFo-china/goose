@@ -45,7 +45,7 @@ type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 type ManagementServicePort = Pick<
   typeof brandingVirtualProductManagementService,
-  "getSummaries" | "validateConfiguration"
+  "getConfiguration" | "validateConfiguration"
 >;
 
 export type PlatformBrandingAddonProductServiceDependencies = {
@@ -78,11 +78,7 @@ export class PlatformBrandingAddonProductService {
 
   async get(authContext: AuthContext) {
     this.requirePlatformOperator(authContext);
-    const product = await this.requireProduct();
-    return {
-      product: serializeProduct(product),
-      virtual_products: await this.managementService.getSummaries(product),
-    };
+    return this.managementService.getConfiguration();
   }
 
   validateVirtualProduct(

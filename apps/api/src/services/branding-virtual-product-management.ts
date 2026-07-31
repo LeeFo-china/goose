@@ -1,8 +1,5 @@
 import { Errors } from "@/errors/error-factory";
-import {
-  brandingAddonProductRepository,
-  type BrandingAddonProductRecord,
-} from "@/repositories/branding-addon-products";
+import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import {
   brandingVirtualProductRepository,
   type BrandingVirtualPaymentSecretSettingKey,
@@ -25,23 +22,23 @@ import {
 } from "@gooes/domain";
 
 const MANAGE_PERMISSION = "platform.branding_product.manage";
+const SECRET_KEYS = [
+  WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.sandbox,
+  WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
+] as const;
 
-type ProductRepositoryPort = Pick<
-  typeof brandingAddonProductRepository,
-  "getProduct"
->;
 type VirtualProductRepositoryPort = Pick<
   typeof brandingVirtualProductRepository,
-  | "listByProduct"
-  | "findByProductAndEnvironment"
-  | "setConfigurationValidation"
+  "getManagementSnapshot" | "setConfigurationValidation"
 >;
-type SettingsServicePort = Pick<typeof systemSettingsService, "getSecretString">;
+type SettingsServicePort = Pick<
+  typeof systemSettingsService,
+  "getPlatformSecretStrings"
+>;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 
 export type BrandingVirtualProductManagementDependencies = {
-  productRepository?: ProductRepositoryPort;
   virtualProductRepository?: VirtualProductRepositoryPort;
   settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
@@ -50,7 +47,6 @@ export type BrandingVirtualProductManagementDependencies = {
 };
 
 export class BrandingVirtualProductManagementService {
-  private readonly productRepository: ProductRepositoryPort;
   private readonly virtualProductRepository: VirtualProductRepositoryPort;
   private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
@@ -58,8 +54,6 @@ export class BrandingVirtualProductManagementService {
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: BrandingVirtualProductManagementDependencies = {}) {
-    this.productRepository = dependencies.productRepository ??
-      brandingAddonProductRepository;
     this.virtualProductRepository = dependencies.virtualProductRepository ??
       brandingVirtualProductRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
@@ -68,32 +62,15 @@ export class BrandingVirtualProductManagementService {
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
-  async getSummaries(product: BrandingAddonProductRecord) {
-    let mappings: BrandingVirtualProductRecord[];
-    try {
-      mappings = await this.virtualProductRepository.listByProduct(product.id);
-    } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
-      throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    }
-    const byEnvironment = new Map(
-      mappings.map((mapping) => [mapping.environment, mapping]),
-    );
-
-    return Promise.all(VIRTUAL_PAYMENT_ENVIRONMENTS.map(async (environment) => {
-      const mapping = byEnvironment.get(environment) ?? null;
-      const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[environment];
-      const bundle = await this.readBundle(key);
-      return {
-        environment,
-        mapping: mapping ? serializeBrandingVirtualProduct(mapping) : null,
-        secret: {
-          key,
-          revision: bundle?.revision ?? null,
-          configured: bundle !== null,
-        },
-      };
-    }));
+  async getConfiguration() {
+    const [snapshot, secretValues] = await Promise.all([
+      this.readSnapshot(),
+      this.readSecretValues(),
+    ]);
+    return {
+      product: serializeProduct(snapshot.product),
+      virtual_products: buildSummaries(snapshot.mappings, secretValues),
+    };
   }
 
   async validateConfiguration(
@@ -101,8 +78,21 @@ export class BrandingVirtualProductManagementService {
     input: { environment: BrandingVirtualPaymentEnvironment; version: number },
   ) {
     const actor = this.requirePlatformOperator(authContext);
-    const product = await this.requireProduct();
-    const mapping = await this.requireMapping(product.id, input.environment);
+    const [snapshot, secretValues] = await Promise.all([
+      this.readSnapshot(),
+      this.readSecretValues(),
+    ]);
+    const product = snapshot.product;
+    const mapping = snapshot.mappings.find(
+      (candidate) => candidate.environment === input.environment,
+    );
+    if (!mapping) {
+      throw Errors.business(
+        404,
+        "虚拟商品映射不存在",
+        "BRANDING_VIRTUAL_PRODUCT_NOT_FOUND",
+      );
+    }
     if (mapping.version !== input.version) {
       throw Errors.business(
         409,
@@ -112,7 +102,7 @@ export class BrandingVirtualProductManagementService {
     }
 
     const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[input.environment];
-    const bundle = await this.readBundle(key);
+    const bundle = parseWechatVirtualPaymentSecretBundle(secretValues[key] ?? "");
     const validationError = localValidationError(product, mapping, key, bundle);
     const validationStatus = validationError ? "invalid" : "valid";
     const validatedAt = this.nowFactory().toISOString();
@@ -154,7 +144,10 @@ export class BrandingVirtualProductManagementService {
     }
     return {
       virtual_product: serializeBrandingVirtualProduct(saved),
-      validation: { kind: "server_configuration" as const, validated_at: validatedAt },
+      validation: {
+        kind: "server_configuration" as const,
+        validated_at: validatedAt,
+      },
     };
   }
 
@@ -170,38 +163,23 @@ export class BrandingVirtualProductManagementService {
     };
   }
 
-  private async requireProduct() {
+  private async readSnapshot() {
     try {
-      const product = await this.productRepository.getProduct();
-      if (product) return product;
+      return await this.virtualProductRepository.getManagementSnapshot();
     } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
-      throw Errors.dbError("查询年度品牌权益商品失败");
+      throw sanitizedInfrastructureError(
+        error,
+        "查询品牌权益虚拟商品管理配置失败",
+      );
     }
-    throw Errors.business(
-      404,
-      "年度品牌权益商品不存在",
-      "BRANDING_ADDON_PRODUCT_NOT_FOUND",
-    );
   }
 
-  private async requireMapping(
-    addonProductId: string,
-    environment: BrandingVirtualPaymentEnvironment,
-  ) {
+  private async readSecretValues() {
     try {
-      const mapping = await this.virtualProductRepository
-        .findByProductAndEnvironment({ addonProductId, environment });
-      if (mapping) return mapping;
+      return await this.settingsService.getPlatformSecretStrings(SECRET_KEYS);
     } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
-      throw Errors.dbError("查询品牌权益虚拟商品映射失败");
+      throw sanitizedInfrastructureError(error, "读取平台支付密钥配置失败");
     }
-    throw Errors.business(
-      404,
-      "虚拟商品映射不存在",
-      "BRANDING_VIRTUAL_PRODUCT_NOT_FOUND",
-    );
   }
 
   private async persistValidation(
@@ -214,16 +192,45 @@ export class BrandingVirtualProductManagementService {
       throw Errors.dbError("保存品牌权益虚拟商品验证结果失败");
     }
   }
+}
 
-  private async readBundle(key: BrandingVirtualPaymentSecretSettingKey) {
-    try {
-      return parseWechatVirtualPaymentSecretBundle(
-        await this.settingsService.getSecretString(key),
-      );
-    } catch {
-      return null;
-    }
+function buildSummaries(
+  mappings: BrandingVirtualProductRecord[],
+  secretValues: Record<string, string>,
+) {
+  const byEnvironment = new Map(
+    mappings.map((mapping) => [mapping.environment, mapping]),
+  );
+  return VIRTUAL_PAYMENT_ENVIRONMENTS.map((environment) => {
+    const mapping = byEnvironment.get(environment) ?? null;
+    const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[environment];
+    const bundle = parseWechatVirtualPaymentSecretBundle(secretValues[key] ?? "");
+    return {
+      environment,
+      mapping: mapping ? serializeBrandingVirtualProduct(mapping) : null,
+      secret: {
+        key,
+        revision: bundle?.revision ?? null,
+        configured: bundle !== null,
+      },
+    };
+  });
+}
+
+function sanitizedInfrastructureError(error: unknown, fallback: string) {
+  if (isApplicationErrorLike(error)) {
+    const appError = error as {
+      statusCode: number;
+      message: string;
+      code: string;
+    };
+    return Errors.business(
+      appError.statusCode,
+      appError.message,
+      appError.code,
+    );
   }
+  return Errors.dbError(fallback);
 }
 
 function localValidationError(
@@ -260,6 +267,20 @@ function localValidationError(
     };
   }
   return null;
+}
+
+function serializeProduct(product: BrandingAddonProductRecord) {
+  return {
+    code: product.code,
+    entitlement_code: product.entitlement_code,
+    name: product.name,
+    amount_fen: product.amount_fen,
+    term_years: product.term_years,
+    purchase_notes: product.purchase_notes,
+    enabled: product.enabled,
+    purchase_mode: product.purchase_mode,
+    version: product.version,
+  };
 }
 
 export const brandingVirtualProductManagementService =

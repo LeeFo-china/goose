@@ -135,7 +135,20 @@ function createFixture(options: {
     accessPolicy: { assertPermission: mock(() => "all" as const) },
     audit: { recordBestEffort },
     managementService: {
-      getSummaries: mock(async () => []),
+      getConfiguration: mock(async () => ({
+        product: {
+          code: current.code,
+          entitlement_code: current.entitlement_code,
+          name: current.name,
+          amount_fen: current.amount_fen,
+          term_years: current.term_years,
+          purchase_notes: current.purchase_notes,
+          enabled: current.enabled,
+          purchase_mode: current.purchase_mode,
+          version: current.version,
+        },
+        virtual_products: [],
+      })),
       validateConfiguration: mock(async () => ({
         virtual_product: mapping,
         validation: {

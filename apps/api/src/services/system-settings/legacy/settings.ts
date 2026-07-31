@@ -30,6 +30,45 @@ import {
   resolveEffectiveValue,
   validateSettingValue,
 } from './crypto';
+import { AppError } from '@/errors/app-error';
+import type {
+  PlatformSecretSettingRecord,
+  SystemSettingRepository,
+} from '@/repositories/system-settings';
+
+export async function getPlatformSecretStrings(
+  repository: Pick<SystemSettingRepository, "findPlatformByKeys">,
+  keys: readonly [string, string],
+): Promise<Record<string, string>> {
+  const records = await repository.findPlatformByKeys(keys);
+  const byKey = new Map<string, PlatformSecretSettingRecord>(
+    records.map((record) => [record.key, record] as const),
+  );
+
+  return Object.fromEntries(keys.map((key) => {
+    const record = byKey.get(key);
+    const stored = record?.status === "active"
+      ? normalizeStoredValue(record.value_text)
+      : null;
+    if (stored) {
+      try {
+        return [key, record?.is_secret ? decryptSecretValue(stored) : stored];
+      } catch (error) {
+        if (error instanceof AppError) {
+          throw Errors.business(error.statusCode, error.message, error.code);
+        }
+        throw Errors.dbError("读取平台支付密钥配置失败");
+      }
+    }
+    const definition = definitionByKey.get(key);
+    return [
+      key,
+      readEnvValue(definition?.envNames ?? [key]) ??
+        definition?.defaultValue ??
+        "",
+    ];
+  }));
+}
 
 export async function listSettings(this: any, authContext?: AuthContext) {
     const records = await this.listRecords();

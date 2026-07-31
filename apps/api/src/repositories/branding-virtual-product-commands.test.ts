@@ -22,7 +22,6 @@ const EMPLOYEE_ID = "11111111-1111-4111-8111-111111111111";
 function createClient(options: {
   rpcData?: unknown;
   rpcError?: unknown;
-  listData?: unknown[];
 } = {}) {
   const calls: Array<[string, ...unknown[]]> = [];
   const query = {
@@ -34,14 +33,6 @@ function createClient(options: {
       calls.push(["eq", column, value]);
       return query;
     },
-    order(column: string, order: { ascending: boolean }) {
-      calls.push(["order", column, order]);
-      return query;
-    },
-    limit: mock(async (count: number) => {
-      calls.push(["limit", count]);
-      return { data: options.listData ?? [], error: null };
-    }),
     maybeSingle: mock(async () => ({ data: null, error: null })),
   };
   const rpc = mock(async (name: string, params: Record<string, unknown>) => {
@@ -73,21 +64,6 @@ describe("BrandingVirtualProductRepository management commands", () => {
     expect(source).not.toContain("update(input: Record<string, unknown>)");
   });
 
-  test("lists both environments with explicit ordering and a fixed maximum", async () => {
-    const fixture = createClient();
-    const repository = new BrandingVirtualProductRepository(() => fixture.client);
-
-    await repository.listByProduct(PRODUCT_ID);
-
-    expect(fixture.calls).toContainEqual(["eq", "addon_product_id", PRODUCT_ID]);
-    expect(fixture.calls).toContainEqual([
-      "order",
-      "environment",
-      { ascending: true },
-    ]);
-    expect(fixture.calls).toContainEqual(["limit", 2]);
-  });
-
   test("sends product and mapping patches through one atomic RPC", async () => {
     const result = { product: { id: PRODUCT_ID }, virtual_product: null };
     const fixture = createClient({ rpcData: result });
@@ -111,6 +87,20 @@ describe("BrandingVirtualProductRepository management commands", () => {
     );
   });
 
+  test("loads the complete management snapshot through one read RPC", async () => {
+    const snapshot = { product: { id: PRODUCT_ID }, mappings: [] };
+    const fixture = createClient({ rpcData: snapshot });
+    const repository = new BrandingVirtualProductRepository(() => fixture.client);
+
+    await expect(repository.getManagementSnapshot()).resolves
+      .toMatchObject(snapshot);
+    expect(fixture.rpc).toHaveBeenCalledTimes(1);
+    expect(fixture.rpc).toHaveBeenCalledWith(
+      "branding_get_virtual_product_management_snapshot",
+      {},
+    );
+  });
+
   test("maps known conflicts to 409 and unknown database errors to 500", async () => {
     for (const [rpcError, statusCode, code] of [
       [
@@ -122,6 +112,11 @@ describe("BrandingVirtualProductRepository management commands", () => {
         { code: "42P01", message: "private sql" },
         500,
         "DB_ERROR",
+      ],
+      [
+        { code: "P0001", message: "BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID" },
+        409,
+        "BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID",
       ],
     ] as const) {
       const fixture = createClient({ rpcError });

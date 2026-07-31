@@ -10,7 +10,6 @@ type QueryResult = {
 
 type ProductQuery = {
   select(columns: string): ProductQuery;
-  update(patch: Record<string, unknown>): ProductQuery;
   eq(column: string, value: unknown): ProductQuery;
   maybeSingle(): Promise<QueryResult>;
 };
@@ -34,16 +33,6 @@ export type BrandingAddonProductRecord = {
   updated_by_employee_id: string | null;
   created_at: string;
   updated_at: string;
-};
-
-export type UpdateBrandingAddonProductInput = {
-  name?: string;
-  amountFen?: number;
-  purchaseNotes?: string;
-  enabled?: boolean;
-  purchaseMode?: BrandingPurchaseMode;
-  expectedVersion: number;
-  updatedByEmployeeId: string;
 };
 
 const PRODUCT_COLUMNS = [
@@ -79,31 +68,6 @@ export class BrandingAddonProductRepository {
     return (data as BrandingAddonProductRecord | null) ?? null;
   }
 
-  async updateProduct(input: UpdateBrandingAddonProductInput) {
-    const patch: Record<string, unknown> = {
-      version: input.expectedVersion + 1,
-      updated_by_employee_id: input.updatedByEmployeeId,
-    };
-    if (input.name !== undefined) patch.name = input.name;
-    if (input.amountFen !== undefined) patch.amount_fen = input.amountFen;
-    if (input.purchaseNotes !== undefined) {
-      patch.purchase_notes = input.purchaseNotes;
-    }
-    if (input.enabled !== undefined) patch.enabled = input.enabled;
-    if (input.purchaseMode !== undefined) {
-      patch.purchase_mode = input.purchaseMode;
-    }
-
-    const { data, error } = await this.clientProvider()
-      .from("platform_addon_products")
-      .update(patch)
-      .eq("code", BRANDING_ADDON_PRODUCT_CODE)
-      .eq("version", input.expectedVersion)
-      .select(PRODUCT_COLUMNS)
-      .maybeSingle();
-    if (error) throw Errors.dbError("更新年度品牌权益商品失败");
-    return (data as BrandingAddonProductRecord | null) ?? null;
-  }
 }
 
 export const brandingAddonProductRepository =

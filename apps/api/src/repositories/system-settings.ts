@@ -22,6 +22,11 @@ export type SystemSettingRecord = {
   updated_at: string;
 };
 
+export type PlatformSecretSettingRecord = Pick<
+  SystemSettingRecord,
+  "key" | "value_text" | "is_secret" | "status"
+>;
+
 export class SystemSettingRepository {
   constructor(
     private readonly client: unknown = SupabaseDB.getAdminClient(),
@@ -75,6 +80,20 @@ export class SystemSettingRepository {
     }
 
     return (data || null) as SystemSettingRecord | null;
+  }
+
+  async findPlatformByKeys(
+    keys: readonly [string, string],
+  ): Promise<PlatformSecretSettingRecord[]> {
+    const { data, error } = await this.table()
+      .select("key,value_text,is_secret,status")
+      .in("key", keys)
+      .is("tenant_id", null)
+      .limit(2);
+    if (error) {
+      throw Errors.dbError("查询平台支付密钥配置失败");
+    }
+    return Array.isArray(data) ? data as PlatformSecretSettingRecord[] : [];
   }
 
   async updateValue(input: {

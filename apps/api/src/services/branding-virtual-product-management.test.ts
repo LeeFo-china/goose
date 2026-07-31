@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
 import { PlatformAuditLogActionSchema } from "@/schema/platform-audit-logs";
+import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -95,14 +96,22 @@ function createFixture(options: {
   secretValues?: Record<string, string>;
   validationResult?: BrandingVirtualProductRecord;
   validationError?: unknown;
+  secretError?: unknown;
 } = {}) {
-  const getProduct = mock(async () =>
-    options.product === undefined ? product : options.product
+  const snapshotProduct = options.product === undefined ? product : options.product;
+  const snapshotMappings = options.mappings ?? (
+    options.mapping === undefined ? [mapping] : options.mapping ? [options.mapping] : []
   );
-  const listByProduct = mock(async () => options.mappings ?? [mapping]);
-  const findByProductAndEnvironment = mock(async () =>
-    options.mapping === undefined ? mapping : options.mapping
-  );
+  const getManagementSnapshot = mock(async () => {
+    if (!snapshotProduct) {
+      throw Errors.business(
+        404,
+        "年度品牌权益商品不存在",
+        "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+      );
+    }
+    return { product: snapshotProduct, mappings: snapshotMappings };
+  });
   const setConfigurationValidation = mock(async (input: {
     validationStatus: "valid" | "invalid";
   }) => {
@@ -124,28 +133,27 @@ function createFixture(options: {
       revision: 2,
     }),
   };
-  const getSecretString = mock(async (key: string) => secretValues[key] ?? "");
+  const getPlatformSecretStrings = mock(async () => {
+    if (options.secretError) throw options.secretError;
+    return secretValues;
+  });
   const assertPermission = mock(() => "all" as const);
   const recordBestEffort = mock(async () => null);
   const service = new BrandingVirtualProductManagementService({
-    productRepository: { getProduct },
     virtualProductRepository: {
-      listByProduct,
-      findByProductAndEnvironment,
+      getManagementSnapshot,
       setConfigurationValidation,
     },
-    settingsService: { getSecretString },
+    settingsService: { getPlatformSecretStrings },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
     nowFactory: () => new Date("2026-08-01T01:02:03.000Z"),
   });
   return {
     service,
-    getProduct,
-    listByProduct,
-    findByProductAndEnvironment,
+    getManagementSnapshot,
     setConfigurationValidation,
-    getSecretString,
+    getPlatformSecretStrings,
     recordBestEffort,
   };
 }
@@ -154,9 +162,13 @@ describe("BrandingVirtualProductManagementService summaries", () => {
   test("returns both environment summaries with configured secret metadata", async () => {
     const fixture = createFixture();
 
-    const summaries = await fixture.service.getSummaries(product);
+    const result = await fixture.service.getConfiguration();
 
-    expect(summaries).toEqual([
+    expect(result.product).toMatchObject({
+      code: "custom_support_branding_annual",
+      version: 4,
+    });
+    expect(result.virtual_products).toEqual([
       {
         environment: "sandbox",
         mapping: null,
@@ -181,12 +193,51 @@ describe("BrandingVirtualProductManagementService summaries", () => {
         },
       },
     ]);
-    expect(fixture.listByProduct).toHaveBeenCalledWith(PRODUCT_ID);
-    expect(fixture.getSecretString).toHaveBeenCalledTimes(2);
-    const json = JSON.stringify(summaries);
+    expect(fixture.getManagementSnapshot).toHaveBeenCalledTimes(1);
+    expect(fixture.getPlatformSecretStrings).toHaveBeenCalledTimes(1);
+    expect(
+      fixture.getManagementSnapshot.mock.calls.length +
+        fixture.getPlatformSecretStrings.mock.calls.length,
+    ).toBe(2);
+    const json = JSON.stringify(result.virtual_products);
     expect(json).not.toContain("sandbox-secret");
     expect(json).not.toContain("production-secret");
     expect(json).not.toContain("appKey");
+  });
+
+  test("preserves a sanitized settings infrastructure failure", async () => {
+    const fixture = createFixture({
+      secretError: Errors.business(
+        500,
+        "系统配置密文解密失败",
+        "CONFIG_SECRET_DECRYPT_FAILED",
+        { ciphertext: "must-not-leak" },
+      ),
+    });
+
+    await expect(fixture.service.getConfiguration()).rejects.toMatchObject({
+      statusCode: 500,
+      code: "CONFIG_SECRET_DECRYPT_FAILED",
+      details: undefined,
+    });
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain("must-not-leak");
+  });
+
+  test("preserves a sanitized settings database failure on GET", async () => {
+    const fixture = createFixture({
+      secretError: Errors.dbError("查询平台支付密钥配置失败", {
+        value_text: "must-not-leak",
+      }),
+    });
+
+    await expect(fixture.service.getConfiguration()).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: undefined,
+    });
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain("must-not-leak");
   });
 });
 
@@ -253,5 +304,48 @@ describe("BrandingVirtualProductManagementService local validation", () => {
       statusCode: 500,
       code: "DB_ERROR",
     });
+  });
+
+  test("does not mutate validation state when secret infrastructure fails", async () => {
+    const fixture = createFixture({
+      secretError: Errors.dbError("查询系统配置失败", {
+        value_text: "must-not-leak",
+      }),
+    });
+
+    await expect(fixture.service.validateConfiguration(
+      platformAuth,
+      { environment: "production", version: 3 },
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: undefined,
+    });
+    expect(fixture.setConfigurationValidation).not.toHaveBeenCalled();
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain("must-not-leak");
+  });
+
+  test("does not mutate validation state when secret decryption fails", async () => {
+    const fixture = createFixture({
+      secretError: Errors.business(
+        500,
+        "系统配置密文解密失败",
+        "CONFIG_SECRET_DECRYPT_FAILED",
+        { ciphertext: "must-not-leak" },
+      ),
+    });
+
+    await expect(fixture.service.validateConfiguration(
+      platformAuth,
+      { environment: "production", version: 3 },
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "CONFIG_SECRET_DECRYPT_FAILED",
+      details: undefined,
+    });
+    expect(fixture.setConfigurationValidation).not.toHaveBeenCalled();
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain("must-not-leak");
   });
 });

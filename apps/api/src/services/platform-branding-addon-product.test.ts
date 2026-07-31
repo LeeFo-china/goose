@@ -90,14 +90,12 @@ beforeAll(async () => {
 function createFixture(options: {
   current?: BrandingAddonProductRecord | null;
   updated?: BrandingAddonProductRecord | null;
-  getError?: unknown;
   updateError?: unknown;
   mapping?: BrandingVirtualProductRecord | null;
   updatedMapping?: BrandingVirtualProductRecord | null;
   secretBundle?: string;
 } = {}) {
   const getProduct = mock(async () => {
-    if (options.getError) throw options.getError;
     return options.current === undefined ? product : options.current;
   });
   const manageConfiguration = mock(async () => {
@@ -141,7 +139,29 @@ function createFixture(options: {
       revision: 2,
     })
   );
-  const getSummaries = mock(async () => []);
+  const getConfiguration = mock(async () => {
+    const current = options.current === undefined ? product : options.current;
+    if (!current) {
+      throw Object.assign(new Error("年度品牌权益商品不存在"), {
+        statusCode: 404,
+        code: "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+      });
+    }
+    return {
+      product: {
+        code: current.code,
+        entitlement_code: current.entitlement_code,
+        name: current.name,
+        amount_fen: current.amount_fen,
+        term_years: current.term_years,
+        purchase_notes: current.purchase_notes,
+        enabled: current.enabled,
+        purchase_mode: current.purchase_mode,
+        version: current.version,
+      },
+      virtual_products: [],
+    };
+  });
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,
     validation: {
@@ -158,7 +178,7 @@ function createFixture(options: {
     settingsService: { getSecretString },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
-    managementService: { getSummaries, validateConfiguration },
+    managementService: { getConfiguration, validateConfiguration },
   });
 
   return {
@@ -169,6 +189,7 @@ function createFixture(options: {
     recordBestEffort,
     findByProductAndEnvironment,
     getSecretString,
+    getConfiguration,
   };
 }
 
@@ -235,6 +256,8 @@ describe("PlatformBrandingAddonProductService reads", () => {
       },
       virtual_products: [],
     });
+    expect(fixture.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.getProduct).not.toHaveBeenCalled();
   });
 
   test("maps a missing product to a stable not-found error", async () => {
@@ -246,20 +269,6 @@ describe("PlatformBrandingAddonProductService reads", () => {
     });
   });
 
-  test("does not expose repository diagnostics", async () => {
-    const fixture = createFixture({
-      getError: {
-        code: "DB_ERROR",
-        details: { message: "secret sql", hint: "private row" },
-      },
-    });
-
-    await expect(fixture.service.get(platformAuth)).rejects.toMatchObject({
-      statusCode: 500,
-      code: "DB_ERROR",
-      details: undefined,
-    });
-  });
 });
 
 describe("PlatformBrandingAddonProductService updates", () => {

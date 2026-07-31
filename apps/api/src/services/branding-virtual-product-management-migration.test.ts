@@ -54,6 +54,51 @@ describe("branding virtual product management migration", () => {
     expect(sql).toContain("jsonb_build_object('product'");
   });
 
+  test("validates every JSON patch field before casts or writes", () => {
+    const sql = normalizedSql();
+
+    expect(sql).toContain("jsonb_typeof(p_product_patch) <> 'object'");
+    expect(sql).toContain("jsonb_typeof(p_virtual_product_patch) <> 'object'");
+    expect(sql).toContain("p_virtual_product_patch ?& array[");
+    for (const key of [
+      "environment",
+      "app_id",
+      "virtual_merchant_id",
+      "offer_id",
+      "provider_product_id",
+      "expected_amount_fen",
+      "encrypted_secret_ref",
+      "secret_revision",
+      "status",
+      "version",
+    ]) expect(sql).toContain(`'${key}'`);
+    expect(sql).toContain("jsonb_typeof(p_virtual_product_patch->'expected_amount_fen') <> 'number'");
+    expect(sql).toContain("jsonb_typeof(p_product_patch->'enabled') <> 'boolean'");
+    expect(sql).toContain("message = 'branding_virtual_product_patch_invalid'");
+  });
+
+  test("provides one narrow service-role-only management read RPC", () => {
+    const sql = normalizedSql();
+    const readRpc = sql.slice(
+      sql.indexOf("create or replace function public.branding_get_virtual_product_management_snapshot"),
+      sql.indexOf("create or replace function public.branding_manage_virtual_product_configuration"),
+    );
+
+    expect(sql).toContain("branding_get_virtual_product_management_snapshot");
+    expect(sql).toContain("security definer");
+    expect(sql).toContain("set search_path = public, pg_temp");
+    expect(sql).toContain("jsonb_build_object('product'");
+    expect(sql).toContain("'mappings'");
+    expect(readRpc).toContain("limit 2");
+    expect(readRpc).not.toContain("select *");
+    expect(sql).toContain(
+      "grant execute on function public.branding_get_virtual_product_management_snapshot() to service_role",
+    );
+    expect(sql).toContain(
+      "revoke all on function public.branding_get_virtual_product_management_snapshot() from public, anon, authenticated",
+    );
+  });
+
   test("writes local validation results with both optimistic versions", () => {
     const sql = normalizedSql();
 
@@ -85,7 +130,7 @@ describe("branding virtual product management migration", () => {
     expect(sql).not.toContain("grant execute on function public.branding_manage_virtual_product_configuration() to authenticated");
   });
 
-  test("removes service-role table writes after the foundation grant", () => {
+  test("removes direct product and mapping writes after their earlier grants", () => {
     const sql = normalizedSql();
     const foundation = readFileSync(new URL(
       "../../../../supabase/migrations/20260731130000_create_branding_virtual_payment_foundation.sql",
@@ -95,11 +140,24 @@ describe("branding virtual product management migration", () => {
     expect(foundation).toContain(
       "grant select, insert, update on table public.platform_virtual_payment_products to service_role",
     );
+    const commerce = readFileSync(new URL(
+      "../../../../supabase/migrations/20260728120000_create_branding_addon_commerce.sql",
+      import.meta.url,
+    ), "utf8").replace(/\s+/g, " ").toLowerCase();
+    expect(commerce).toContain(
+      "grant select, insert, update on table public.platform_addon_products to service_role",
+    );
     expect(sql).toContain(
       "revoke insert, update on table public.platform_virtual_payment_products from service_role",
     );
     expect(sql).not.toContain(
       "revoke select on table public.platform_virtual_payment_products from service_role",
+    );
+    expect(sql).toContain(
+      "revoke insert, update on table public.platform_addon_products from service_role",
+    );
+    expect(sql).not.toContain(
+      "revoke select on table public.platform_addon_products from service_role",
     );
   });
 });

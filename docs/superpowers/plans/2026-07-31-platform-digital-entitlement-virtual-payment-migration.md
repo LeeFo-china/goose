@@ -460,15 +460,18 @@ git commit -m "feat(auth): 保存微信虚拟支付会话凭据"
 - Modify: `apps/api/src/services/system-settings/legacy/crypto.test.ts`
 - Modify: `apps/api/src/repositories/branding-addon-products.ts`
 - Modify: `apps/api/src/repositories/branding-addon-products.test.ts`
+- Modify: `apps/api/src/repositories/system-settings.ts`
 - Modify: `apps/api/src/services/platform-branding-addon-product.ts`
 - Modify: `apps/api/src/services/platform-branding-addon-product.test.ts`
 - Modify: `apps/api/src/services/platform-branding-addon-product-virtual.test.ts`
+- Modify: `apps/api/src/services/system-settings/legacy-service.ts`
 - Modify: `apps/api/src/schema/branding-addon.ts`
 - Modify: `apps/api/src/schema/branding-addon.test.ts`
 - Modify: `apps/api/src/schema/platform-audit-logs.ts`
 - Modify: `apps/api/src/controllers/branding-addon/index.ts`
 - Modify: `apps/api/src/controllers/branding-addon/routes.test.ts`
 - Modify: `apps/api/src/repositories/system-settings.test.ts`
+- Create: `apps/api/src/repositories/system-settings-platform-secrets.test.ts`
 - Modify: `apps/api/src/services/tenant-branding-addon-orders.test-fixtures.ts`
 - Modify: `docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md`
 
@@ -479,6 +482,11 @@ RPC 原子更新商品与映射，禁止先后执行两次写入。影响支付�
 密钥包结构和金额一致性，不宣称已远程验证微信 ProductId。该 migration 在
 Task 1 临时授权之后撤销 service role 对映射表的 `INSERT/UPDATE`，最终权限
 固定为表 `SELECT` 加两个窄 RPC 的 `EXECUTE`，应用仓储不得暴露表直写方法。
+平台 GET 使用 `branding_get_virtual_product_management_snapshot()` 一次读取商品与
+两环境映射，再通过 system settings 专用双 key 查询一次读取密钥配置；冷缓存
+数据库往返最多两次。该批量查询只选择 `key,value_text,is_secret,status`，并固定
+平台 scope 与 `limit(2)`。商品表同样撤销 service role 的 `INSERT/UPDATE`，只允许
+原子管理 RPC 写入。
 
 - [ ] **Step 1: 写商品可售性矩阵测试**
 
@@ -570,12 +578,12 @@ Service 在激活 production 映射和切换 `wechat_virtual` 时同时验证价
 
 - [ ] **Step 5: 验证并提交**
 
-Run: `bun test apps/api/src/services/branding-virtual-payment-migration-contract.test.ts apps/api/src/services/branding-virtual-products.test.ts apps/api/src/services/branding-virtual-product-management.test.ts apps/api/src/services/branding-virtual-product-management-migration.test.ts apps/api/src/repositories/branding-virtual-product-commands.test.ts apps/api/src/services/platform-branding-addon-product.test.ts apps/api/src/services/platform-branding-addon-product-virtual.test.ts apps/api/src/controllers/branding-addon/routes.test.ts apps/api/src/schema/branding-addon.test.ts && bun run api:check`
+Run: `cd apps/api && bun test src/services/branding-virtual-payment-migration-contract.test.ts src/services/branding-virtual-products.test.ts src/services/branding-virtual-product-management.test.ts src/services/branding-virtual-product-management-migration.test.ts src/repositories/branding-virtual-product-commands.test.ts src/repositories/branding-addon-products.test.ts src/repositories/system-settings-platform-secrets.test.ts src/services/platform-branding-addon-product.test.ts src/services/platform-branding-addon-product-virtual.test.ts src/controllers/branding-addon/routes.test.ts src/schema/branding-addon.test.ts && bun run check`
 
 Expected: PASS；旧 `direct_legacy` 商品读取兼容；production 金额低于 100 分时稳定返回 409。
 
 ```bash
-git add supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql apps/api/src/repositories/branding-virtual-products.ts apps/api/src/repositories/branding-virtual-product-commands.test.ts apps/api/src/repositories/branding-addon-products.ts apps/api/src/repositories/branding-addon-products.test.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/services/branding-virtual-products.ts apps/api/src/services/branding-virtual-products.test.ts apps/api/src/services/branding-virtual-product-management.ts apps/api/src/services/branding-virtual-product-management.test.ts apps/api/src/services/branding-virtual-product-management-migration.test.ts apps/api/src/services/platform-branding-addon-product.ts apps/api/src/services/platform-branding-addon-product.test.ts apps/api/src/services/platform-branding-addon-product-virtual.test.ts apps/api/src/services/system-settings/legacy/crypto.ts apps/api/src/services/system-settings/legacy/crypto.test.ts apps/api/src/services/system-settings/legacy/definitions-payment.ts apps/api/src/services/system-settings/legacy/definitions-payment.test.ts apps/api/src/services/system-settings/legacy/definitions.ts apps/api/src/services/system-settings/legacy/settings.ts apps/api/src/services/tenant-branding-addon-orders.test-fixtures.ts apps/api/src/schema/branding-addon.ts apps/api/src/schema/branding-addon.test.ts apps/api/src/schema/platform-audit-logs.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/controllers/branding-addon/routes.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
+git add supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql apps/api/src/repositories/branding-virtual-products.ts apps/api/src/repositories/branding-virtual-product-commands.test.ts apps/api/src/repositories/branding-addon-products.ts apps/api/src/repositories/branding-addon-products.test.ts apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/repositories/system-settings-platform-secrets.test.ts apps/api/src/services/branding-virtual-products.ts apps/api/src/services/branding-virtual-products.test.ts apps/api/src/services/branding-virtual-product-management.ts apps/api/src/services/branding-virtual-product-management.test.ts apps/api/src/services/branding-virtual-product-management-migration.test.ts apps/api/src/services/platform-branding-addon-product.ts apps/api/src/services/platform-branding-addon-product.test.ts apps/api/src/services/platform-branding-addon-product-virtual.test.ts apps/api/src/services/system-settings/legacy-service.ts apps/api/src/services/system-settings/legacy/crypto.ts apps/api/src/services/system-settings/legacy/crypto.test.ts apps/api/src/services/system-settings/legacy/definitions-payment.ts apps/api/src/services/system-settings/legacy/definitions-payment.test.ts apps/api/src/services/system-settings/legacy/definitions.ts apps/api/src/services/system-settings/legacy/settings.ts apps/api/src/services/tenant-branding-addon-orders.test-fixtures.ts apps/api/src/schema/branding-addon.ts apps/api/src/schema/branding-addon.test.ts apps/api/src/schema/platform-audit-logs.ts apps/api/src/controllers/branding-addon/index.ts apps/api/src/controllers/branding-addon/routes.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
 git commit -m "feat(payments): 增加虚拟商品配置与购买能力"
 ```
 

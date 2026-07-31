@@ -53,6 +53,82 @@ BEFORE INSERT OR UPDATE ON public.platform_virtual_payment_products
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_branding_virtual_product_validation_lifecycle();
 
+CREATE OR REPLACE FUNCTION public.branding_get_virtual_product_management_snapshot()
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_product jsonb;
+  v_product_id uuid;
+  v_mappings jsonb;
+BEGIN
+  SELECT product.id,
+         jsonb_build_object(
+           'id', product.id,
+           'code', product.code,
+           'entitlement_code', product.entitlement_code,
+           'name', product.name,
+           'amount_fen', product.amount_fen,
+           'term_years', product.term_years,
+           'purchase_notes', product.purchase_notes,
+           'refund_policy', product.refund_policy,
+           'enabled', product.enabled,
+           'purchase_mode', product.purchase_mode,
+           'version', product.version,
+           'updated_by_employee_id', product.updated_by_employee_id,
+           'created_at', product.created_at,
+           'updated_at', product.updated_at
+         )
+  INTO v_product_id, v_product
+  FROM public.platform_addon_products AS product
+  WHERE product.code = 'custom_support_branding_annual';
+
+  IF v_product IS NULL THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_ADDON_PRODUCT_NOT_FOUND';
+  END IF;
+
+  SELECT COALESCE(
+    jsonb_agg(bounded.payload ORDER BY bounded.environment),
+    '[]'::jsonb
+  ) INTO v_mappings
+  FROM (
+    SELECT mapping.environment,
+           jsonb_build_object(
+             'id', mapping.id,
+             'addon_product_id', mapping.addon_product_id,
+             'provider', mapping.provider,
+             'environment', mapping.environment,
+             'app_id', mapping.app_id,
+             'virtual_merchant_id', mapping.virtual_merchant_id,
+             'offer_id', mapping.offer_id,
+             'provider_product_id', mapping.provider_product_id,
+             'goods_quantity', mapping.goods_quantity,
+             'expected_amount_fen', mapping.expected_amount_fen,
+             'encrypted_secret_ref', mapping.encrypted_secret_ref,
+             'secret_revision', mapping.secret_revision,
+             'status', mapping.status,
+             'validation_status', mapping.validation_status,
+             'validated_at', mapping.validated_at,
+             'version', mapping.version,
+             'created_by', mapping.created_by,
+             'updated_by', mapping.updated_by,
+             'created_at', mapping.created_at,
+             'updated_at', mapping.updated_at
+           ) AS payload
+    FROM public.platform_virtual_payment_products AS mapping
+    WHERE mapping.addon_product_id = v_product_id
+    ORDER BY mapping.environment
+    LIMIT 2
+  ) AS bounded;
+
+  RETURN jsonb_build_object('product', v_product, 'mappings', v_mappings);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.branding_manage_virtual_product_configuration(
   p_expected_product_version integer,
   p_product_patch jsonb,
@@ -86,7 +162,12 @@ BEGIN
      OR p_virtual_product_patch IS NULL
      OR jsonb_typeof(p_virtual_product_patch) <> 'object'
   THEN
-    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_PATCH_INVALID';
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+  IF p_product_patch = '{}'::jsonb
+     AND p_virtual_product_patch = '{}'::jsonb
+  THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
   END IF;
   IF EXISTS (
     SELECT 1 FROM jsonb_object_keys(p_product_patch) AS item(key)
@@ -99,7 +180,84 @@ BEGIN
       'secret_revision', 'status', 'version'
     )
   ) THEN
-    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_ADDON_PRODUCT_PATCH_INVALID';
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+
+  IF (p_product_patch ? 'name' AND (
+        jsonb_typeof(p_product_patch->'name') <> 'string'
+        OR btrim(p_product_patch->>'name') = ''
+        OR char_length(p_product_patch->>'name') > 100
+      ))
+     OR (p_product_patch ? 'amount_fen' AND
+        jsonb_typeof(p_product_patch->'amount_fen') <> 'number')
+     OR (p_product_patch ? 'purchase_notes' AND (
+        jsonb_typeof(p_product_patch->'purchase_notes') <> 'string'
+        OR btrim(p_product_patch->>'purchase_notes') = ''
+        OR char_length(p_product_patch->>'purchase_notes') > 500
+      ))
+     OR (p_product_patch ? 'enabled' AND
+        jsonb_typeof(p_product_patch->'enabled') <> 'boolean')
+     OR (p_product_patch ? 'purchase_mode' AND
+        jsonb_typeof(p_product_patch->'purchase_mode') <> 'string')
+  THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+  IF p_product_patch ? 'amount_fen' AND (
+       (p_product_patch->>'amount_fen')::numeric <> trunc((p_product_patch->>'amount_fen')::numeric)
+       OR (p_product_patch->>'amount_fen')::numeric <= 0
+       OR (p_product_patch->>'amount_fen')::numeric > 2147483647
+     )
+  THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+  IF p_product_patch ? 'purchase_mode'
+     AND p_product_patch->>'purchase_mode' NOT IN ('direct_legacy', 'maintenance', 'wechat_virtual')
+  THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+
+  IF p_virtual_product_patch <> '{}'::jsonb AND (
+    NOT (p_virtual_product_patch ?& ARRAY[
+      'environment', 'app_id', 'virtual_merchant_id', 'offer_id',
+      'provider_product_id', 'expected_amount_fen', 'encrypted_secret_ref',
+      'secret_revision', 'status', 'version'
+    ])
+    OR jsonb_typeof(p_virtual_product_patch->'environment') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'app_id') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'virtual_merchant_id') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'offer_id') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'provider_product_id') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'expected_amount_fen') <> 'number'
+    OR jsonb_typeof(p_virtual_product_patch->'encrypted_secret_ref') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'secret_revision') <> 'number'
+    OR jsonb_typeof(p_virtual_product_patch->'status') <> 'string'
+    OR jsonb_typeof(p_virtual_product_patch->'version') <> 'number'
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
+  END IF;
+  IF p_virtual_product_patch <> '{}'::jsonb AND (
+    btrim(p_virtual_product_patch->>'app_id') = ''
+    OR char_length(p_virtual_product_patch->>'app_id') > 64
+    OR btrim(p_virtual_product_patch->>'virtual_merchant_id') = ''
+    OR char_length(p_virtual_product_patch->>'virtual_merchant_id') > 64
+    OR btrim(p_virtual_product_patch->>'offer_id') = ''
+    OR char_length(p_virtual_product_patch->>'offer_id') > 128
+    OR btrim(p_virtual_product_patch->>'provider_product_id') = ''
+    OR char_length(p_virtual_product_patch->>'provider_product_id') > 128
+    OR p_virtual_product_patch->>'environment' NOT IN ('sandbox', 'production')
+    OR p_virtual_product_patch->>'status' NOT IN ('draft', 'active', 'disabled')
+    OR (p_virtual_product_patch->>'expected_amount_fen')::numeric
+      <> trunc((p_virtual_product_patch->>'expected_amount_fen')::numeric)
+    OR (p_virtual_product_patch->>'expected_amount_fen')::numeric <= 0
+    OR (p_virtual_product_patch->>'expected_amount_fen')::numeric > 2147483647
+    OR (p_virtual_product_patch->>'secret_revision')::numeric
+      <> trunc((p_virtual_product_patch->>'secret_revision')::numeric)
+    OR (p_virtual_product_patch->>'secret_revision')::numeric <= 0
+    OR (p_virtual_product_patch->>'version')::numeric
+      <> trunc((p_virtual_product_patch->>'version')::numeric)
+    OR (p_virtual_product_patch->>'version')::numeric <= 0
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID';
   END IF;
 
   SELECT * INTO v_product
@@ -349,11 +507,19 @@ FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.branding_set_virtual_product_configuration_validation(uuid, text, integer, integer, text, timestamptz, uuid)
 TO service_role;
 
+REVOKE ALL ON FUNCTION public.branding_get_virtual_product_management_snapshot()
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_get_virtual_product_management_snapshot()
+TO service_role;
+
 -- Task 1 temporarily granted table writes so the mapping could be introduced
 -- before its command boundary existed. From this migration onward all writes
 -- must pass through one of the two audited, optimistic-locking RPCs above.
 REVOKE INSERT, UPDATE
 ON TABLE public.platform_virtual_payment_products
+FROM service_role;
+REVOKE INSERT, UPDATE
+ON TABLE public.platform_addon_products
 FROM service_role;
 
 COMMIT;

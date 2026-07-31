@@ -14,8 +14,6 @@ type QueryResult = {
 type VirtualProductQuery = {
   select(columns: string): VirtualProductQuery;
   eq(column: string, value: unknown): VirtualProductQuery;
-  order?(column: string, options: { ascending: boolean }): VirtualProductQuery;
-  limit?(count: number): Promise<QueryResult>;
   maybeSingle(): Promise<QueryResult>;
 };
 
@@ -74,6 +72,11 @@ export type ManageBrandingVirtualProductConfigurationResult = {
   virtual_product: BrandingVirtualProductRecord | null;
 };
 
+export type BrandingVirtualProductManagementSnapshot = {
+  product: BrandingAddonProductRecord;
+  mappings: BrandingVirtualProductRecord[];
+};
+
 export type SetBrandingVirtualProductValidationInput = {
   addonProductId: string;
   environment: BrandingVirtualPaymentEnvironment;
@@ -129,21 +132,6 @@ export class BrandingVirtualProductRepository {
     return (data as BrandingVirtualProductRecord | null) ?? null;
   }
 
-  async listByProduct(addonProductId: string) {
-    // A database unique constraint limits this internal auxiliary list to the
-    // two supported environments, so the fixed limit is a hard safety bound.
-    const query = this.clientProvider()
-      .from("platform_virtual_payment_products")
-      .select(VIRTUAL_PRODUCT_COLUMNS)
-      .eq("addon_product_id", addonProductId);
-    if (!query.order) throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    const ordered = query.order("environment", { ascending: true });
-    if (!ordered.limit) throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    const { data, error } = await ordered.limit(2);
-    if (error) throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    return Array.isArray(data) ? data as BrandingVirtualProductRecord[] : [];
-  }
-
   async manageConfiguration(
     input: ManageBrandingVirtualProductConfigurationInput,
   ) {
@@ -163,6 +151,25 @@ export class BrandingVirtualProductRepository {
       "保存品牌权益商品配置失败",
     );
     return data as ManageBrandingVirtualProductConfigurationResult;
+  }
+
+  async getManagementSnapshot() {
+    const client = this.clientProvider();
+    if (!client.rpc) {
+      throw Errors.dbError("查询品牌权益虚拟商品管理配置失败");
+    }
+    const { data, error } = await client.rpc(
+      "branding_get_virtual_product_management_snapshot",
+      {},
+    );
+    if (error) throwVirtualProductCommandError(
+      error,
+      "查询品牌权益虚拟商品管理配置失败",
+    );
+    if (!data || typeof data !== "object") {
+      throw Errors.dbError("查询品牌权益虚拟商品管理配置失败");
+    }
+    return data as BrandingVirtualProductManagementSnapshot;
   }
 
   async setConfigurationValidation(
@@ -200,10 +207,14 @@ export class BrandingVirtualProductRepository {
 export const brandingVirtualProductRepository =
   new BrandingVirtualProductRepository();
 
-const COMMAND_ERRORS: Record<string, { message: string; code: string }> = {
+const COMMAND_ERRORS: Record<
+  string,
+  { message: string; code: string; statusCode?: number }
+> = {
   BRANDING_ADDON_PRODUCT_NOT_FOUND: {
     message: "年度品牌权益商品不存在",
     code: "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+    statusCode: 404,
   },
   BRANDING_ADDON_PRODUCT_VERSION_CONFLICT: {
     message: "商品配置版本已变化，请刷新后重试",
@@ -245,6 +256,10 @@ const COMMAND_ERRORS: Record<string, { message: string; code: string }> = {
     message: "虚拟支付密钥引用与环境不匹配",
     code: "BRANDING_VIRTUAL_PRODUCT_SECRET_ENVIRONMENT_MISMATCH",
   },
+  BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID: {
+    message: "虚拟商品配置参数不合法",
+    code: "BRANDING_VIRTUAL_PRODUCT_PATCH_INVALID",
+  },
 };
 
 function throwVirtualProductCommandError(
@@ -256,7 +271,11 @@ function throwVirtualProductCommandError(
     if (record.code === "P0001" && typeof record.message === "string") {
       const mapped = COMMAND_ERRORS[record.message];
       if (mapped) {
-        throw Errors.business(409, mapped.message, mapped.code);
+        throw Errors.business(
+          mapped.statusCode ?? 409,
+          mapped.message,
+          mapped.code,
+        );
       }
     }
   }
