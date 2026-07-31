@@ -113,6 +113,119 @@ describe("wechat virtual payment bounded response reader", () => {
     });
     expect(JSON.stringify(error)).not.toContain("sensitive upstream URL");
   });
+
+  test("keeps the primary read error when cancel cleanup fails", async () => {
+    const calls: string[] = [];
+    const body = new ReadableStream<Uint8Array>();
+    const reader = {
+      async read() {
+        calls.push("read");
+        throw new DOMException("primary timeout", "TimeoutError");
+      },
+      async cancel() {
+        calls.push("cancel");
+        throw new Error("cancel cleanup failed");
+      },
+      releaseLock() {
+        calls.push("release");
+      },
+    };
+    Object.defineProperty(body, "getReader", { value: () => reader });
+
+    const error = await readWechatVirtualPaymentResponseBody(
+      new Response(body, { status: 200 }),
+      SAFE_REQUEST_ID,
+    ).catch((caught) => caught);
+    expect(error).toMatchObject({
+      statusCode: 504,
+      code: "WECHAT_VIRTUAL_PAYMENT_GATEWAY_TIMEOUT",
+    });
+    expect(JSON.stringify(error)).not.toContain("cleanup failed");
+    expect(calls).toEqual(["read", "cancel", "release"]);
+  });
+
+  test("keeps the primary read error when release cleanup fails", async () => {
+    const calls: string[] = [];
+    const body = new ReadableStream<Uint8Array>();
+    const reader = {
+      async read() {
+        calls.push("read");
+        throw new DOMException("primary timeout", "TimeoutError");
+      },
+      async cancel() {
+        calls.push("cancel");
+      },
+      releaseLock() {
+        calls.push("release");
+        throw new Error("release cleanup failed");
+      },
+    };
+    Object.defineProperty(body, "getReader", { value: () => reader });
+
+    const error = await readWechatVirtualPaymentResponseBody(
+      new Response(body, { status: 200 }),
+      SAFE_REQUEST_ID,
+    ).catch((caught) => caught);
+    expect(error).toMatchObject({
+      statusCode: 504,
+      code: "WECHAT_VIRTUAL_PAYMENT_GATEWAY_TIMEOUT",
+    });
+    expect(JSON.stringify(error)).not.toContain("cleanup failed");
+    expect(calls).toEqual(["read", "cancel", "release"]);
+  });
+
+  test("releases the reader after a normal completed response", async () => {
+    const calls: string[] = [];
+    const body = new ReadableStream<Uint8Array>();
+    let readCount = 0;
+    const reader = {
+      async read() {
+        calls.push("read");
+        readCount += 1;
+        return readCount === 1
+          ? { done: false, value: new TextEncoder().encode("ok") }
+          : { done: true, value: undefined };
+      },
+      async cancel() {
+        calls.push("cancel");
+      },
+      releaseLock() {
+        calls.push("release");
+      },
+    };
+    Object.defineProperty(body, "getReader", { value: () => reader });
+
+    await expect(readWechatVirtualPaymentResponseBody(
+      new Response(body, { status: 200 }),
+      SAFE_REQUEST_ID,
+    )).resolves.toBe("ok");
+    expect(calls).toEqual(["read", "read", "release"]);
+  });
+
+  test("keeps a valid completed response when release cleanup fails", async () => {
+    const body = new ReadableStream<Uint8Array>();
+    let readCount = 0;
+    const reader = {
+      async read() {
+        readCount += 1;
+        return readCount === 1
+          ? { done: false, value: new TextEncoder().encode("ok") }
+          : { done: true, value: undefined };
+      },
+      async cancel() {
+        throw new Error("cancel must not run");
+      },
+      releaseLock() {
+        throw new Error("release cleanup failed");
+      },
+    };
+    Object.defineProperty(body, "getReader", { value: () => reader });
+
+    await expect(readWechatVirtualPaymentResponseBody(
+      new Response(body, { status: 200 }),
+      SAFE_REQUEST_ID,
+    )).resolves.toBe("ok");
+  });
 });
 
 describe("wechat virtual payment request id normalization", () => {

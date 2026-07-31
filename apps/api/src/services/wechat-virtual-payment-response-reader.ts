@@ -48,7 +48,7 @@ export async function readWechatVirtualPaymentResponseBody(
     await reader.cancel().catch(() => undefined);
     throwResponseReadFailure(error, response.status, requestId);
   } finally {
-    reader.releaseLock();
+    releaseReaderLock(reader);
   }
   if (exceededLimit) throwResponseTooLarge(response.status, requestId);
 
@@ -71,6 +71,18 @@ function parseContentLength(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+function releaseReaderLock(
+  reader: { releaseLock(): void },
+): void {
+  // Reader cleanup is best-effort and must not replace a classified gateway
+  // failure or turn an otherwise valid bounded response into an error.
+  try {
+    reader.releaseLock();
+  } catch {
+    // No sensitive upstream diagnostics are retained from cleanup failures.
+  }
 }
 
 function throwResponseReadFailure(
