@@ -81,6 +81,7 @@ describe("supplier cost and payable migration contract", () => {
         /FOREIGN KEY \(purchase_requisition_id, tenant_id\)[\s\S]*supplier_purchase_requisitions\(id, tenant_id\)/,
         /UNIQUE \(tenant_id, source_type, source_id\)/,
         /CHECK \(source_type = 'supplier_purchase_receipt_item'\)/,
+        /CHECK \(source_id = supplier_purchase_order_receipt_item_id\)/,
         /CHECK \(currency = 'CNY'\)/,
         /CHECK \(amount >= 0\)/,
         /CHECK \(accepted_quantity > 0\)/,
@@ -225,6 +226,73 @@ describe("supplier cost and payable migration contract", () => {
     );
   });
 
+  test("uses a transaction-scoped guard suspension for historical backfill", () => {
+    ordered(migration, [
+      /ALTER TABLE public\.supplier_purchase_order_items\s*DISABLE TRIGGER supplier_purchase_order_items_require_draft/,
+      /ALTER TABLE public\.supplier_purchase_orders\s*DISABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation/,
+      /-- Backfill reliable historical line categories/,
+      /UPDATE public\.supplier_purchase_order_items AS purchase_item/,
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+      /ALTER TABLE public\.supplier_purchase_order_items\s*ENABLE TRIGGER supplier_purchase_order_items_require_draft/,
+      /ALTER TABLE public\.supplier_purchase_orders\s*ENABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation/,
+      /SUPPLIER_PURCHASE_ORDER_GUARD_RESTORE_FAILED/,
+    ]);
+    contracts(migration, [
+      /pg_catalog\.pg_trigger/,
+      /supplier_purchase_order_items_require_draft/,
+      /public\.prevent_supplier_purchase_order_item_mutation\(\)'\s*::regprocedure/,
+      /supplier_purchase_orders_prevent_submitted_mutation/,
+      /public\.prevent_submitted_supplier_purchase_order_mutation\(\)'\s*::regprocedure/,
+      /guard_trigger\.tgenabled = 'O'/,
+    ]);
+  });
+
+  test("populates every inserted order snapshot before enforcing not null", () => {
+    const snapshot = sqlFunction(
+      "public",
+      "populate_supplier_purchase_order_commercial_snapshot",
+    );
+    contracts(snapshot, [
+      /RETURNS trigger/,
+      /SECURITY DEFINER/,
+      /SET search_path = pg_catalog, public/,
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*FOR SHARE/,
+      /FROM public\.supplier_contracts AS contract/,
+      /contract\.lifecycle_status = 'active'/,
+      /contract\.valid_from <= NEW\.priced_at::date/,
+      /contract\.valid_until >= NEW\.priced_at::date/,
+      /ORDER BY contract\.valid_until DESC, contract\.id/,
+      /NEW\.settlement_term_days_snapshot := COALESCE\(/,
+      /NEW\.invoice_required_before_payment_snapshot := COALESCE\(/,
+      /RETURN NEW/,
+    ]);
+    ordered(snapshot, [
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR SHARE/,
+      /FROM public\.supplier_contracts AS contract/,
+    ]);
+    const contractRead = snapshot.slice(
+      snapshot.indexOf("FROM public.supplier_contracts AS contract"),
+      snapshot.indexOf("NEW.settlement_term_days_snapshot"),
+    );
+    expect(contractRead).not.toContain("FOR SHARE");
+    contracts(migration, [
+      /CREATE TRIGGER supplier_purchase_orders_commercial_snapshot\s*BEFORE INSERT ON public\.supplier_purchase_orders[\s\S]*populate_supplier_purchase_order_commercial_snapshot/,
+      /REVOKE ALL ON FUNCTION\s*public\.populate_supplier_purchase_order_commercial_snapshot\(\)\s*FROM PUBLIC, anon, authenticated, service_role/,
+    ]);
+    const triggerAt = migration.indexOf(
+      "CREATE TRIGGER supplier_purchase_orders_commercial_snapshot",
+    );
+    const notNullAt = migration.indexOf(
+      "ALTER COLUMN settlement_term_days_snapshot SET NOT NULL",
+    );
+    const convertAt = migration.indexOf(
+      "CREATE OR REPLACE FUNCTION public.convert_supplier_purchase_requisition",
+    );
+    expect(triggerAt).toBeGreaterThanOrEqual(0);
+    expect(triggerAt).toBeLessThan(notNullAt);
+    expect(notNullAt).toBeLessThan(convertAt);
+  });
+
   test("converts requisitions with category and commercial snapshots", () => {
     const convert = sqlFunction(
       "public",
@@ -235,17 +303,16 @@ describe("supplier cost and payable migration contract", () => {
       /p_requisition_id uuid[\s\S]*p_tenant_id uuid[\s\S]*p_expected_version integer[\s\S]*p_purchase_order_id uuid[\s\S]*p_actor_user_id uuid[\s\S]*p_actor_employee_id uuid[\s\S]*p_idempotency_key text/,
       /SECURITY DEFINER/,
       /SET search_path = pg_catalog, public/,
-      /FROM public\.tenant_suppliers AS relationship[\s\S]*FOR SHARE/,
-      /FROM public\.supplier_contracts AS contract[\s\S]*lifecycle_status = 'active'[\s\S]*valid_from <= v_checked_at::date[\s\S]*valid_until >= v_checked_at::date[\s\S]*ORDER BY[\s\S]*FOR SHARE/,
-      /COALESCE\(\s*v_contract_settlement_term_days,\s*v_default_settlement_term_days\s*\)/,
-      /COALESCE\(\s*v_contract_invoice_required,\s*v_default_invoice_required\s*\)/,
       /UPDATE public\.supplier_purchase_order_items AS purchase_item[\s\S]*SET cost_category_id = requisition_item\.cost_category_id[\s\S]*purchase_item\.supplier_sku_id =\s*requisition_item\.supplier_sku_id/,
-      /UPDATE public\.supplier_purchase_orders AS purchase_order[\s\S]*settlement_term_days_snapshot = v_settlement_term_days[\s\S]*invoice_required_before_payment_snapshot = v_invoice_required/,
       /convert_supplier_purchase_requisition_commercial_v1\([\s\S]*v_result ->> 'status' <> 'converted'[\s\S]*v_result ->> 'idempotent'/,
     ]);
+    expect(convert).not.toMatch(
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+    );
     ordered(convert, [
-      /FROM public\.supplier_contracts AS contract[\s\S]*?FOR SHARE/,
-      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR SHARE/,
+      /convert_supplier_purchase_requisition_commercial_v1\(/,
+      /v_result ->> 'idempotent'/,
+      /UPDATE public\.supplier_purchase_order_items AS purchase_item/,
     ]);
   });
 

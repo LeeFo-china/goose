@@ -43,6 +43,78 @@ IS
   'orders are migration-time reconstructions and are not asserted as '
   'historical facts.';
 
+CREATE FUNCTION public.populate_supplier_purchase_order_commercial_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_contract_settlement_term_days integer;
+  v_contract_invoice_required boolean;
+  v_default_settlement_term_days integer;
+  v_default_invoice_required boolean;
+BEGIN
+  -- Every existing v1 creation path already holds this relationship row
+  -- FOR SHARE, and every contract/default command must lock it before commit.
+  -- Re-enter that fence first. The following plain contract read then sees a
+  -- consistent before-or-after state without taking a contract lock after the
+  -- relationship lock (which would invert mutate_supplier_contract).
+  SELECT
+    relationship.settlement_term_days,
+    relationship.invoice_required_before_payment
+  INTO
+    v_default_settlement_term_days,
+    v_default_invoice_required
+  FROM public.tenant_suppliers AS relationship
+  WHERE relationship.id = NEW.tenant_supplier_id
+    AND relationship.tenant_id = NEW.tenant_id
+    AND relationship.supplier_id = NEW.supplier_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'TENANT_SUPPLIER_STATE_CONFLICT';
+  END IF;
+
+  SELECT
+    contract.settlement_term_days,
+    contract.invoice_required_before_payment
+  INTO
+    v_contract_settlement_term_days,
+    v_contract_invoice_required
+  FROM public.supplier_contracts AS contract
+  WHERE contract.tenant_id = NEW.tenant_id
+    AND contract.tenant_supplier_id = NEW.tenant_supplier_id
+    AND contract.lifecycle_status = 'active'
+    AND contract.valid_from <= NEW.priced_at::date
+    AND contract.valid_until >= NEW.priced_at::date
+  ORDER BY contract.valid_until DESC, contract.id
+  LIMIT 1;
+
+  NEW.settlement_term_days_snapshot := COALESCE(
+    v_contract_settlement_term_days,
+    v_default_settlement_term_days
+  );
+  NEW.invoice_required_before_payment_snapshot := COALESCE(
+    v_contract_invoice_required,
+    v_default_invoice_required
+  );
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.populate_supplier_purchase_order_commercial_snapshot()
+FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE TRIGGER supplier_purchase_orders_commercial_snapshot
+BEFORE INSERT ON public.supplier_purchase_orders
+FOR EACH ROW
+EXECUTE FUNCTION
+  public.populate_supplier_purchase_order_commercial_snapshot();
+
 ALTER TABLE public.supplier_purchase_order_items
 ADD COLUMN cost_category_id uuid NULL;
 
@@ -99,6 +171,15 @@ CHECK (
     AND release_reason IS NOT NULL
   )
 );
+
+-- Both ALTER TABLE statements take transaction-duration AccessExclusive
+-- locks. Concurrent writers cannot observe the temporary suspension, and any
+-- migration failure rolls these DDL changes back with the backfill.
+ALTER TABLE public.supplier_purchase_order_items
+DISABLE TRIGGER supplier_purchase_order_items_require_draft;
+
+ALTER TABLE public.supplier_purchase_orders
+DISABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation;
 
 -- Backfill reliable historical line categories
 WITH reliable_mapping AS MATERIALIZED (
@@ -167,6 +248,46 @@ WHERE purchase_order.id = reconstructed.id
     purchase_order.settlement_term_days_snapshot IS NULL
     OR purchase_order.invoice_required_before_payment_snapshot IS NULL
   );
+
+ALTER TABLE public.supplier_purchase_order_items
+ENABLE TRIGGER supplier_purchase_order_items_require_draft;
+
+ALTER TABLE public.supplier_purchase_orders
+ENABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation;
+
+DO $migration$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS guard_trigger
+    WHERE guard_trigger.tgrelid =
+        'public.supplier_purchase_order_items'::regclass
+      AND guard_trigger.tgname =
+        'supplier_purchase_order_items_require_draft'
+      AND guard_trigger.tgfoid =
+        'public.prevent_supplier_purchase_order_item_mutation()'
+          ::regprocedure
+      AND guard_trigger.tgenabled = 'O'
+  )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_trigger AS guard_trigger
+      WHERE guard_trigger.tgrelid =
+          'public.supplier_purchase_orders'::regclass
+        AND guard_trigger.tgname =
+          'supplier_purchase_orders_prevent_submitted_mutation'
+        AND guard_trigger.tgfoid =
+          'public.prevent_submitted_supplier_purchase_order_mutation()'
+            ::regprocedure
+        AND guard_trigger.tgenabled = 'O'
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PURCHASE_ORDER_GUARD_RESTORE_FAILED';
+  END IF;
+END;
+$migration$;
 
 ALTER TABLE public.supplier_purchase_orders
 ALTER COLUMN settlement_term_days_snapshot SET NOT NULL,
@@ -256,6 +377,8 @@ CREATE TABLE public.project_cost_events (
     ON DELETE RESTRICT,
   CONSTRAINT project_cost_events_source_type_check
     CHECK (source_type = 'supplier_purchase_receipt_item'),
+  CONSTRAINT project_cost_events_source_identity_check
+    CHECK (source_id = supplier_purchase_order_receipt_item_id),
   CONSTRAINT project_cost_events_currency_check CHECK (currency = 'CNY'),
   CONSTRAINT project_cost_events_amount_check CHECK (amount >= 0),
   CONSTRAINT project_cost_events_quantity_check CHECK (accepted_quantity > 0),
@@ -349,6 +472,8 @@ CREATE TABLE public.supplier_payable_events (
     ON DELETE RESTRICT,
   CONSTRAINT supplier_payable_events_source_type_check
     CHECK (source_type = 'supplier_purchase_receipt_item'),
+  CONSTRAINT supplier_payable_events_source_identity_check
+    CHECK (source_id = supplier_purchase_order_receipt_item_id),
   CONSTRAINT supplier_payable_events_currency_check CHECK (currency = 'CNY'),
   CONSTRAINT supplier_payable_events_amount_check CHECK (amount >= 0),
   CONSTRAINT supplier_payable_events_quantity_check
@@ -620,14 +745,6 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_result jsonb;
-  v_checked_at timestamptz := clock_timestamp();
-  v_tenant_supplier_id uuid;
-  v_default_settlement_term_days integer;
-  v_default_invoice_required boolean;
-  v_contract_settlement_term_days integer;
-  v_contract_invoice_required boolean;
-  v_settlement_term_days integer;
-  v_invoice_required boolean;
   v_expected_item_count integer;
   v_updated_item_count integer;
 BEGIN
@@ -649,53 +766,6 @@ BEGIN
   THEN
     RETURN v_result;
   END IF;
-
-  SELECT requisition.tenant_supplier_id
-  INTO v_tenant_supplier_id
-  FROM public.supplier_purchase_requisitions AS requisition
-  WHERE requisition.id = p_requisition_id
-    AND requisition.tenant_id = p_tenant_id;
-
-  IF v_tenant_supplier_id IS NOT NULL THEN
-    -- Contract mutation locks contract then relationship. Use the same order
-    -- so conversion reads one consistent commercial snapshot without creating
-    -- an inverse-lock deadlock.
-    SELECT
-      contract.settlement_term_days,
-      contract.invoice_required_before_payment
-    INTO
-      v_contract_settlement_term_days,
-      v_contract_invoice_required
-    FROM public.supplier_contracts AS contract
-    WHERE contract.tenant_id = p_tenant_id
-      AND contract.tenant_supplier_id = v_tenant_supplier_id
-      AND contract.lifecycle_status = 'active'
-      AND contract.valid_from <= v_checked_at::date
-      AND contract.valid_until >= v_checked_at::date
-    ORDER BY contract.valid_until DESC, contract.id
-    LIMIT 1
-    FOR SHARE;
-
-    SELECT
-      relationship.settlement_term_days,
-      relationship.invoice_required_before_payment
-    INTO
-      v_default_settlement_term_days,
-      v_default_invoice_required
-    FROM public.tenant_suppliers AS relationship
-    WHERE relationship.id = v_tenant_supplier_id
-      AND relationship.tenant_id = p_tenant_id
-    FOR SHARE;
-  END IF;
-
-  v_settlement_term_days := COALESCE(
-    v_contract_settlement_term_days,
-    v_default_settlement_term_days
-  );
-  v_invoice_required := COALESCE(
-    v_contract_invoice_required,
-    v_default_invoice_required
-  );
 
   UPDATE public.supplier_purchase_order_items AS purchase_item
   SET cost_category_id = requisition_item.cost_category_id
@@ -719,12 +789,6 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_ORDER_COST_CATEGORY_REQUIRED';
   END IF;
-
-  UPDATE public.supplier_purchase_orders AS purchase_order
-  SET settlement_term_days_snapshot = v_settlement_term_days,
-      invoice_required_before_payment_snapshot = v_invoice_required
-  WHERE purchase_order.id = p_purchase_order_id
-    AND purchase_order.tenant_id = p_tenant_id;
 
   RETURN v_result;
 END;
