@@ -16,14 +16,14 @@
 - Create: `apps/h5/server.test.ts`
 - Modify: `apps/h5/server.ts`
 
-- [ ] Write a process-level test that starts the built H5 server, requests a deep
+- [x] Write a process-level test that starts the built H5 server, requests a deep
   `/p/:slug` route, and expects SPA HTML plus `X-Gooes-Service` and
   `X-Gooes-Revision`.
-- [ ] Run `bun test apps/h5/server.test.ts` and confirm it fails because the
+- [x] Run `bun test apps/h5/server.test.ts` and confirm it fails because the
   service headers are missing.
-- [ ] Add the service and revision headers to static-file and SPA-fallback
+- [x] Add the service and revision headers to static-file and SPA-fallback
   responses.
-- [ ] Run `bun test apps/h5/server.test.ts` and confirm it passes.
+- [x] Run `bun test apps/h5/server.test.ts` and confirm it passes.
 
 ### Task 2: Lock the development deployment contract
 
@@ -33,13 +33,13 @@
 - Modify: `scripts/verify-dev-build-plan.mjs`
 - Modify: `scripts/resolve-web-deployment.mjs`
 
-- [ ] Add failing tests for H5 change classification, ordered build/deploy
+- [x] Add failing tests for H5 change classification, ordered build/deploy
   evidence, explicit manual H5 resolution, and the required compose/Nginx/CI
   fragments.
-- [ ] Run the contract test and confirm it fails on the unsupported H5 service.
-- [ ] Add `h5` to the development planner, verifier, and manual service resolver
+- [x] Run the contract test and confirm it fails on the unsupported H5 service.
+- [x] Add `h5` to the development planner, verifier, and manual service resolver
   without changing production H5 URLs.
-- [ ] Run the contract test and confirm the planner/verifier assertions pass.
+- [x] Run the contract test and confirm the planner/verifier assertions pass.
 
 ### Task 3: Add the independent H5 image and compose service
 
@@ -48,12 +48,12 @@
 - Modify: `deploy/docker-compose.dev.yml`
 - Modify: `.github/workflows/build-docker-images.yml`
 
-- [ ] Extend the failing deployment contract with the H5 image repository,
+- [x] Extend the failing deployment contract with the H5 image repository,
   build case, OCI labels, compose port `13030`, and container health check.
-- [ ] Build the smallest Bun image that copies only the built H5 application,
+- [x] Build the smallest Bun image that copies only the built H5 application,
   exposes port `3020`, and carries immutable revision/run labels.
-- [ ] Add `gooes-h5-dev` to development compose and the image build matrix.
-- [ ] Run the deployment contract and confirm these assertions pass.
+- [x] Add `gooes-h5-dev` to development compose and the image build matrix.
+- [x] Run the deployment contract and confirm these assertions pass.
 
 ### Task 4: Cut over the development hostname safely
 
@@ -62,28 +62,33 @@
 - Modify: `.github/workflows/deploy-dev.yml`
 - Modify: `scripts/deploy-dev-workflow-contract.test.ts`
 
-- [ ] Extend the failing workflow contract for H5 manifest resolution,
+- [x] Extend the failing workflow contract for H5 manifest resolution,
   digest-based compose deployment, container verification, Nginx backup,
   `nginx -t`, reload, rollback, and external smoke.
-- [ ] Track the complete development API/Admin/H5 Nginx configuration with H5
+- [x] Track the complete development API/Admin/H5 Nginx configuration with H5
   page traffic on `13030` and public API/session routes on `13000`.
-- [ ] Add H5 support to the reusable dev deploy workflow and perform Nginx
+- [x] Add H5 support to the reusable dev deploy workflow and perform Nginx
   cutover only after the immutable H5 container is healthy.
-- [ ] Run both deployment contract test files and confirm they pass.
+- [x] Run both deployment contract test files and confirm they pass.
 
 ### Task 5: Verify and publish the development fix
 
 **Files:**
 - Verify all files from Tasks 1-4.
-- Create: `docs/handoffs/2026-07-31-h5-activity-environment-handoff.md`
+- Create: `docs/miniprogram/2026-07-31-h5-activity-environment-handoff.md`
 
-- [ ] Build H5 and run its process-level smoke test.
-- [ ] Run the targeted deployment and orchestration contract tests.
-- [ ] Run `git diff --check` and inspect the scoped diff.
-- [ ] Commit and push the isolated branch.
-- [ ] Build and deploy the H5 development image from immutable workflow
+- [x] Build H5 and run its process-level smoke test.
+- [x] Run the targeted deployment and orchestration contract tests.
+- [x] Run `git diff --check` and inspect the scoped diff.
+- [x] Commit and push the isolated branch.
+- [x] Build and deploy the H5 development image from immutable workflow
   evidence.
-- [ ] Verify the real development page, config, and activity-list endpoints.
-- [ ] Record the Orange read-only integration changes and WeChat domain
+- [x] Verify the real development page, config, and activity-list endpoints.
+- [x] Record the Orange read-only integration changes and WeChat domain
   configuration checklist in the handoff document.
 
+Execution evidence:
+
+- Build run: `30599760611`
+- Deploy run: `30599827226`
+- Deployed revision: `7aee4e83217a48e7149e8ca90e3cd2ae7c255f2d`
