@@ -38,7 +38,10 @@ import {
   errorMessage,
   paymentRequestConflictMessage,
 } from "./payment-request-page-utils";
-import { supplierPaymentCommandRefresh } from "./payment-request-command-refresh";
+import {
+  paymentRequestRefreshOutcome,
+  supplierPaymentCommandRefresh,
+} from "./payment-request-command-refresh";
 import { paymentRequestActions } from "./payment-request-rules";
 import {
   PaymentRequestReviewDialog,
@@ -177,12 +180,26 @@ export function PaymentRequestDetail({
     setReviewOpen(true);
   }
 
-  async function refreshLatest() {
+  async function refreshLatest(
+    failureMessage = "最新数据刷新失败，请手动重试刷新。",
+  ) {
     const latest = await reload();
-    setAttempt(null);
-    onPendingChange(null);
-    setReviewOpen(false);
-    if (latest) onChanged(latest.payment_request);
+    const outcome = paymentRequestRefreshOutcome(latest);
+    setRefreshRequired(outcome.refreshRequired);
+    if (outcome.status === "failed") {
+      setError(failureMessage);
+      return null;
+    }
+    if (outcome.releaseAttempt) {
+      setAttempt(null);
+      onPendingChange(null);
+    }
+    if (outcome.closeDialogs) {
+      setReviewOpen(false);
+      setPaymentOpen(false);
+    }
+    if (outcome.notifyChanged) onChanged(outcome.latest.payment_request);
+    return outcome.latest;
   }
 
   async function handleCommandError(caught: unknown) {
@@ -191,8 +208,13 @@ export function PaymentRequestDetail({
     setError(message);
     if (conflict) {
       setError(`${message} 正在刷新最新数据。`);
-      await refreshLatest();
-      setError(`${message} 已刷新最新数据。`);
+      const refreshFailure = `${message} 自动刷新失败，请手动重试刷新。`;
+      const latest = await refreshLatest(refreshFailure);
+      if (latest) {
+        setError(`${message} 已刷新最新数据。`);
+      } else {
+        return new Error(refreshFailure);
+      }
     }
     return new Error(message);
   }
