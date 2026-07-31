@@ -1694,7 +1694,9 @@ bun run api:build
 bun run admin:check
 bun run admin:build
 cd apps/api
-bun test $(rg --files src -g '*supplier*.test.ts' | sort)
+bun test $(rg --files src -g '*supplier*.test.ts' | sort) \
+  src/controllers/supplier-payment-requests/routes.test.ts \
+  src/controllers/supplier-payables/routes.test.ts
 cd ../admin
 bun test components/supplier-payables \
   components/supplier-payment-requests \
@@ -1764,7 +1766,8 @@ Expected: 只包含本计划，不包含
   `aee4a95f`、`fc6b6d3b`。
 - Task 7–10：`dde6247b`、`27015d86`、`38de2836`、`1a8dc2f1`。
 - Task 11：`2c491798`（确定性 E2E）、`4ab728fb`（数据库类型）、
-  `cf44ca50`（真实回滚 smoke fixture 与 EXPLAIN）。
+  `cf44ca50`（真实回滚 smoke fixture 与 EXPLAIN）、`747163a9`（路由回归计数）、
+  `59a16e77`（合入当前 main 并保留已发布 migration 语义）。
 
 ### Migration 发布
 
@@ -1811,7 +1814,8 @@ Expected: 只包含本计划，不包含
 
 - `api:typecheck`、`api:build`、`admin:check`、`admin:build` 全绿；Admin 文件检查
   1067 个 TS/TSX 文件均不超过 500 行。
-- API 全部 supplier 测试：670 tests / 5486 assertions，0 failure。
+- API 全部 supplier 测试及两组非 supplier 文件名的付款路由测试：
+  691 tests / 5556 assertions，0 failure。
 - Admin 指定组件：126 tests / 638 assertions，0 failure。
 - Playwright：付款闭环 1 passed；采购申请闭环 1 passed；采购单闭环 2 passed。
 
@@ -1825,7 +1829,7 @@ Expected: 只包含本计划，不包含
   台账。项目成本只聚合费用与 supplier cost，不把 supplier cash 重复计成本。
 - 新增列表和辅助查询均有 `page=1&pageSize=20`、最大 100 的边界或受限 batch；
   关键读取已由真实 EXPLAIN 证明命中索引。
-- 旧采购申请、采购单、履约和费用聚合包含在 670 项 API、126 项 Admin 与三条
+- 旧采购申请、采购单、履约和费用聚合包含在 691 项 API、126 项 Admin 与三条
   Playwright 回归中。
 - Orange 仓库只做 `git status`/`rev-parse` 只读核查，Agent 未执行修改、格式化、
   暂存或提交命令。当前 HEAD 为 `96443db9f3b36402229fe24c91c2b63746019156`；
