@@ -276,7 +276,6 @@ function commandErrorSchema<
   return z.object({
     status: z.literal(status),
     error_code: z.literal(SUPPLIER_PAYMENT_COMMAND_ERROR_CODES[status]),
-    reason: z.string().min(1).optional(),
   }).strict();
 }
 

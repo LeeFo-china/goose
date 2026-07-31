@@ -408,13 +408,16 @@ describe("supplier payment command envelope", () => {
         error_code: "SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT",
       },
     ] as const;
-    for (const base of envelopes) {
-      const envelope = { ...base, reason: "命令执行失败" };
+    for (const envelope of envelopes) {
       const result = SupplierPaymentCommandEnvelopeSchema.safeParse(envelope);
       expect(result.success).toBe(true);
       if (result.success) {
         expect(result.data).toEqual(envelope);
       }
+      expect(SupplierPaymentCommandEnvelopeSchema.safeParse({
+        ...envelope,
+        reason: "命令执行失败",
+      }).success).toBe(false);
       expect(SupplierPaymentCommandEnvelopeSchema.safeParse({
         ...envelope,
         error_code: "SUPPLIER_PAYMENT_UNKNOWN",
