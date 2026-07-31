@@ -199,6 +199,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: ClipboardList,
         permission: "supplier.purchase-order.view",
       },
+      {
+        href: "/supplier-payables",
+        label: "供应商应付",
+        icon: CircleDollarSign,
+        permission: "supplier.payable.view",
+      },
     ],
   },
   {
