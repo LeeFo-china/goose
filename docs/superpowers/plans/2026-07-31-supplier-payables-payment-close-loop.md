@@ -477,7 +477,7 @@ git commit -m "feat(db): 建立供应商成本应付事实"
 - Create: `apps/api/src/services/supplier-payment-command-migration-contract.test.ts`
 - Create: `supabase/migrations/20260731110000_create_supplier_payment_requests.sql`
 
-- [ ] **Step 1: 写付款表 migration RED 测试**
+- [x] **Step 1: 写付款表 migration RED 测试**
 
 ```ts
 for (const table of [
@@ -512,7 +512,7 @@ for (const permission of [
 - `supplier_command_events.resource_type` 接受
   `supplier_payment_request` 和 `supplier_payment`。
 
-- [ ] **Step 2: 写命令 RED 测试**
+- [x] **Step 2: 写命令 RED 测试**
 
 固定以下 RPC：
 
@@ -543,7 +543,7 @@ for (const name of functions) {
 - 发票门禁先于任何付款插入。
 - 付款、分配、申请 paid amount、状态和现金台账同事务。
 
-- [ ] **Step 3: 运行付款 migration 测试确认 RED**
+- [x] **Step 3: 运行付款 migration 测试确认 RED**
 
 Run:
 
@@ -555,7 +555,7 @@ bun test src/services/supplier-payment-migration-contract.test.ts \
 
 Expected: FAIL，migration 不存在。
 
-- [ ] **Step 4: 建立表和不可变付款**
+- [x] **Step 4: 建立表和不可变付款**
 
 状态 check 固定：
 
@@ -587,7 +587,7 @@ CHECK (payment_method IN (
 为 `supplier_payments`、`supplier_payment_allocations` 安装
 `BEFORE UPDATE OR DELETE` 不可变保护。申请与申请分配只允许受控 RPC 变更。
 
-- [ ] **Step 5: 实现草稿、提交和审核**
+- [x] **Step 5: 实现草稿、提交和审核**
 
 `save_supplier_payment_request_draft`：
 
@@ -613,7 +613,7 @@ CHECK (payment_method IN (
   `SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN`。
 - 不创建 workflow 业务事实。
 
-- [ ] **Step 6: 实现取消、关闭和付款**
+- [x] **Step 6: 实现取消、关闭和付款**
 
 `cancel_supplier_payment_request` 允许：
 
@@ -648,7 +648,7 @@ draft | pending_approval | approved
 
 部分付款使用 `"status": "partially_paid"`。
 
-- [ ] **Step 7: 建立查询和索引**
+- [x] **Step 7: 建立查询和索引**
 
 创建受控分页函数：
 
@@ -663,7 +663,7 @@ get_supplier_purchase_order_financial_summary(...)
 所有列表要求 `p_page >= 1`、`1 <= p_page_size <= 100`，返回总数和稳定分页。
 索引逐项覆盖设计第 12 节。
 
-- [ ] **Step 8: 运行付款 migration GREEN**
+- [x] **Step 8: 运行付款 migration GREEN**
 
 Run:
 
@@ -675,7 +675,7 @@ bun test src/services/supplier-payment-migration-contract.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交付款 migration**
+- [x] **Step 9: 提交付款 migration**
 
 ```bash
 git add apps/api/src/services/supplier-payment-migration-contract.test.ts \
