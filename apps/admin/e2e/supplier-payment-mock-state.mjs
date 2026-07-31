@@ -108,7 +108,7 @@ export function listRequests(state, url) {
   if (keyword) {
     records = records.filter((record) =>
       record.request_no.toLowerCase().includes(keyword) ||
-      record.reason.toLowerCase().includes(keyword)
+      record.supplier_name.toLowerCase().includes(keyword)
     );
   }
   return records.sort((left, right) =>

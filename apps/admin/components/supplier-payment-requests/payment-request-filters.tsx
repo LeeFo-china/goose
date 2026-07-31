@@ -55,14 +55,14 @@ export function PaymentRequestFilters({
     <div className="flex flex-col gap-2">
       <FieldGroup className="grid gap-3 lg:grid-cols-4 xl:grid-cols-6">
         <Field className="lg:col-span-2">
-          <FieldLabel htmlFor="payment-request-keyword">申请号或原因</FieldLabel>
+          <FieldLabel htmlFor="payment-request-keyword">申请号或供应商</FieldLabel>
           <div className="flex gap-2">
             <Input
               id="payment-request-keyword"
               value={keyword}
               maxLength={100}
               disabled={loading}
-              placeholder="搜索申请号或原因"
+              placeholder="搜索申请号或供应商"
               onChange={(event) => onKeywordChange(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") onSearch();

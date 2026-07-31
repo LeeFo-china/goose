@@ -20,6 +20,7 @@ const ID = {
   employee: "84000000-0000-4000-8000-000000000011",
   idempotency: "84000000-0000-4000-8000-000000000012",
 };
+const EVIDENCE_PATH = `tenants/${ID.tenant}/expense-request/evidence.png`;
 const auth = {
   authUserId: ID.user,
   employeeId: ID.employee,
@@ -68,6 +69,16 @@ function dependencies() {
       cancel: mock(async () => success("cancelled")),
       close: mock(async () => success("closed")),
       confirmPayment: mock(async () => success("paid")),
+    },
+    fileRepository: {
+      findActiveByObjectKeys: mock(async () => [{
+        object_key: EVIDENCE_PATH,
+        tenant_id: ID.tenant,
+        scene: "expense_request",
+        status: "active",
+        deleted_at: null,
+        created_by_employee_id: ID.employee,
+      }]),
     },
   };
 }
@@ -194,7 +205,7 @@ describe("SupplierPaymentRequestsService commands", () => {
       payment_method: "bank_transfer",
       payment_reference: "BANK-001",
       paid_at: "2026-07-31T08:00:00.000Z",
-      evidence_images: ["evidence/1.png"],
+      evidence_images: [EVIDENCE_PATH],
       allocations: [{
         payment_request_allocation_id: ID.allocation,
         payable_event_id: ID.payable,
@@ -277,7 +288,7 @@ describe("SupplierPaymentRequestsService commands", () => {
       payment_method: "bank_transfer" as const,
       payment_reference: "BANK-001",
       paid_at: "2026-07-31T08:00:00.000Z",
-      evidence_images: ["evidence/1.png"],
+      evidence_images: [EVIDENCE_PATH],
       remark,
       allocations: [{
         payment_request_allocation_id: ID.allocation,
@@ -322,6 +333,41 @@ describe("SupplierPaymentRequestsService commands", () => {
       2,
       expect.objectContaining({ remark: "付款备注" }),
     );
+  });
+
+  test("rejects payment evidence outside the active tenant employee upload set", async () => {
+    const deps = dependencies();
+    deps.fileRepository.findActiveByObjectKeys.mockImplementation(async () =>
+      []
+    );
+    const { SupplierPaymentRequestsService } = await import(
+      "./supplier-payment-requests"
+    );
+    const service = new SupplierPaymentRequestsService(deps as never);
+
+    await expect(service.confirmPayment(auth, ID.request, {
+      id: ID.payment,
+      expected_version: 1,
+      payment_method: "bank_transfer",
+      payment_reference: "BANK-001",
+      paid_at: "2026-07-31T08:00:00.000Z",
+      evidence_images: [EVIDENCE_PATH],
+      allocations: [{
+        payment_request_allocation_id: ID.allocation,
+        payable_event_id: ID.payable,
+        amount: "100.00",
+      }],
+    }, ID.idempotency)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "SUPPLIER_PAYMENT_EVIDENCE_FILE_INVALID",
+    });
+
+    expect(deps.fileRepository.findActiveByObjectKeys).toHaveBeenCalledWith({
+      objectKeys: [EVIDENCE_PATH],
+      tenantId: ID.tenant,
+      limit: 9,
+    });
+    expect(deps.repository.confirmPayment).not.toHaveBeenCalled();
   });
 
   test("rejects a path/body draft ID mismatch before repository access", async () => {

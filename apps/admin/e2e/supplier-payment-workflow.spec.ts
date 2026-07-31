@@ -241,8 +241,9 @@ test("供应商应付完成申请、分权审批、分次付款与发票门禁�
   expect(journal.length).toBeGreaterThanOrEqual(5);
   for (const entry of journal) {
     expect(["POST", "PUT"]).toContain(entry.method);
-    expect(entry.idempotencyKey).toEqual(expect.any(String));
-    expect(entry.idempotencyKey?.trim()).not.toBe("");
+    expect(entry.idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expectNoServerFacts(entry.payload);
   }
 

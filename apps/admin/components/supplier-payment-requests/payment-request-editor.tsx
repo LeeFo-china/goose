@@ -175,6 +175,7 @@ export function PaymentRequestEditor({
       scope: request ? "payment-request:update" : "payment-request:create",
       resourcePath: draftId,
       payload: { ...basePayload, expected_version: request?.version ?? 0 },
+      keyFormat: "uuid",
     });
     setAttempt(nextAttempt);
     setSaving(true);

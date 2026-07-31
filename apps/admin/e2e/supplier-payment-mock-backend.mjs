@@ -34,6 +34,8 @@ const uploadPng = Buffer.from(
   "base64",
 );
 let state = createState();
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function sendJson(response, status, payload, headers = {}) {
   response.writeHead(status, {
@@ -116,9 +118,9 @@ function commandResponse(response, result) {
 
 async function runCommand(request, response, url, execute) {
   const payload = await readBody(request);
-  if (!request.headers["idempotency-key"]) {
-    return sendError(response, 400, "IDEMPOTENCY_KEY_REQUIRED",
-      "幂等键不能为空");
+  if (!UUID_PATTERN.test(request.headers["idempotency-key"] ?? "")) {
+    return sendError(response, 400, "IDEMPOTENCY_KEY_INVALID",
+      "付款幂等键必须是 UUID");
   }
   recordMutation(state, request, url.pathname, payload);
   commandResponse(response, execute(payload));

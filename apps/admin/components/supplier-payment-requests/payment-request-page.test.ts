@@ -178,6 +178,7 @@ describe("供应商付款申请页面边界", () => {
     expect(workspace).toContain("supplierPaymentCommandRefresh()");
     expect(editor).toContain("expected_version");
     expect(editor).toContain("resolveSupplierCommandAttempt");
+    expect(editor).toContain('keyFormat: "uuid"');
     expect(editor).toContain("amount > moneyCents(line.available)");
     expect(editor).toContain("mergePaymentRequestDraftLines");
     expect(editor).not.toContain("available: allocation.payable_amount");
@@ -196,6 +197,7 @@ describe("供应商付款申请页面边界", () => {
     expect(batchIndex).toBeGreaterThan(statusGuardIndex);
     expect(editor).toContain("if (saved) onPendingChange(null)");
     expect(detail).toContain("pendingRequestId");
+    expect(detail).toContain('keyFormat: "uuid"');
     expect(detail).toContain("supplierPaymentCommandRefresh()");
     expect(detail).toContain("刷新最新数据");
     expect(review).toContain("驳回原因");
@@ -231,6 +233,8 @@ describe("供应商付款申请页面边界", () => {
     expect(filters).toContain("canUseStructuredOptions");
     expect(filters).toContain("项目 ID");
     expect(filters).toContain("供应商关系 ID");
+    expect(filters).toContain("申请号或供应商");
+    expect(filters).not.toContain("申请号或原因");
     expect(page).toContain('permissions.has("supplier.payable.view")');
     expect(workspace).toContain("canViewPayables");
     expect(workspace).toContain("canView && canViewPayables");

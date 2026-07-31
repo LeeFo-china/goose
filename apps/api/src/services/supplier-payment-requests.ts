@@ -3,6 +3,9 @@ import {
   supplierPaymentRequestsRepository,
   type SupplierPaymentRequestDetail,
 } from "@/repositories/supplier-payment-requests";
+import {
+  supplierPaymentEvidenceFilesRepository,
+} from "@/repositories/supplier-payment-evidence-files";
 import type {
   SupplierPaymentCommandEnvelope,
 } from "@/repositories/supplier-payment-records";
@@ -43,6 +46,10 @@ type RepositoryPort = Pick<
   | "close"
   | "confirmPayment"
 >;
+type FileRepositoryPort = Pick<
+  typeof supplierPaymentEvidenceFilesRepository,
+  "findActiveByObjectKeys"
+>;
 type CommandScope = {
   tenantId: string;
   authUserId: string;
@@ -65,6 +72,7 @@ type CommandErrorStatus = Exclude<
 export type SupplierPaymentRequestsServiceDependencies = {
   access?: AccessPort;
   repository?: RepositoryPort;
+  fileRepository?: FileRepositoryPort;
 };
 
 const ERROR_MESSAGES: Record<CommandErrorStatus, string> = {
@@ -97,11 +105,14 @@ const ERROR_CODES: Record<CommandErrorStatus, string> = {
 export class SupplierPaymentRequestsService {
   private readonly access: AccessPort;
   private readonly repository: RepositoryPort;
+  private readonly fileRepository: FileRepositoryPort;
 
   constructor(dependencies: SupplierPaymentRequestsServiceDependencies = {}) {
     this.access = dependencies.access ?? supplierPaymentAccessService;
     this.repository = dependencies.repository ??
       supplierPaymentRequestsRepository;
+    this.fileRepository = dependencies.fileRepository ??
+      supplierPaymentEvidenceFilesRepository;
   }
 
   async list(auth: AuthContext, query: SupplierPaymentRequestListQuery) {
@@ -273,6 +284,7 @@ export class SupplierPaymentRequestsService {
       paymentRequestId,
       "pay",
     );
+    await this.assertPaymentEvidence(scope, input.evidence_images);
     return this.execute(
       this.repository.confirmPayment({
         ...commandContext(scope, paymentRequestId, input, idempotencyKey),
@@ -286,6 +298,48 @@ export class SupplierPaymentRequestsService {
       }),
       ["partially_paid", "paid"],
       "确认供应商付款失败",
+    );
+  }
+
+  private async assertPaymentEvidence(
+    scope: CommandScope,
+    evidenceImages: string[],
+  ): Promise<void> {
+    const objectKeys = [...new Set(evidenceImages)];
+    if (
+      objectKeys.length < 1 || objectKeys.length > 9 ||
+      objectKeys.length !== evidenceImages.length
+    ) {
+      this.throwInvalidPaymentEvidence();
+    }
+    const files = await this.fileRepository.findActiveByObjectKeys({
+      objectKeys,
+      tenantId: scope.tenantId,
+      limit: 9,
+    });
+    const fileByObjectKey = new Map(
+      files.map((file) => [file.object_key, file]),
+    );
+    for (const objectKey of objectKeys) {
+      const file = fileByObjectKey.get(objectKey);
+      if (
+        !file ||
+        file.tenant_id !== scope.tenantId ||
+        file.scene !== "expense_request" ||
+        file.status !== "active" ||
+        file.deleted_at !== null ||
+        file.created_by_employee_id !== scope.employeeId
+      ) {
+        this.throwInvalidPaymentEvidence();
+      }
+    }
+  }
+
+  private throwInvalidPaymentEvidence(): never {
+    throw Errors.business(
+      400,
+      "付款凭证与当前员工上传的有效租户文件不匹配",
+      "SUPPLIER_PAYMENT_EVIDENCE_FILE_INVALID",
     );
   }
 

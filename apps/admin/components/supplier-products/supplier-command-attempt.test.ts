@@ -57,4 +57,17 @@ describe("resolveSupplierCommandAttempt", () => {
 
     expect(cancel.idempotencyKey).not.toBe(submit.idempotencyKey);
   });
+
+  test("allocates a pure UUID when the HTTP contract requires one", () => {
+    const attempt = resolveSupplierCommandAttempt(null, {
+      scope: "payment-request:create",
+      resourcePath: "request-1",
+      payload: { expected_version: 0 },
+      keyFormat: "uuid",
+    });
+
+    expect(attempt.idempotencyKey).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
 });

@@ -258,6 +258,7 @@ export function PaymentRequestDetail({
       scope: `payment-request:${reviewAction}`,
       resourcePath: current.id,
       payload: commandPayload,
+      keyFormat: "uuid",
     });
     setAttempt(nextAttempt);
     onPendingChange(current.id);
@@ -307,6 +308,7 @@ export function PaymentRequestDetail({
       scope: "payment-request:payment",
       resourcePath: current.id,
       payload,
+      keyFormat: "uuid",
     });
     setAttempt(nextAttempt);
     onPendingChange(current.id);
