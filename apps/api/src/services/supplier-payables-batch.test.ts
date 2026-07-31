@@ -35,4 +35,32 @@ describe("SupplierPayablesService.batch", () => {
       ids: [PAYABLE_ID],
     });
   });
+
+  test("request draft facts require manage and project update scope", async () => {
+    const access = {
+      requirePayableRead: mock(async () => ({ tenantId: TENANT_ID })),
+      requireRequestManage: mock(async () => ({ tenantId: TENANT_ID })),
+      getVisibleProjectIds: mock(async () => ["read-project"]),
+      getUpdatableProjectIds: mock(async () => [PROJECT_ID]),
+    };
+    const repository = {
+      list: mock(async () => ({})),
+      listFilterOptions: mock(async () => ({})),
+      getPurchaseOrderSummary: mock(async () => ({})),
+      batch: mock(async () => []),
+    };
+    const { SupplierPayablesService } = await import("./supplier-payables");
+    const service = new SupplierPayablesService({ access, repository } as never);
+    expect(await service.requestDraftBatch(auth, { ids: [PAYABLE_ID] }))
+      .toEqual([]);
+    expect(access.requireRequestManage).toHaveBeenCalledWith(auth);
+    expect(access.getUpdatableProjectIds).toHaveBeenCalledWith(auth);
+    expect(access.requirePayableRead).not.toHaveBeenCalled();
+    expect(access.getVisibleProjectIds).not.toHaveBeenCalled();
+    expect(repository.batch).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      visible_project_ids: [PROJECT_ID],
+      ids: [PAYABLE_ID],
+    });
+  });
 });

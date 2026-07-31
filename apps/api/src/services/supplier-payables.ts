@@ -13,7 +13,10 @@ import {
 
 type AccessPort = Pick<
   typeof supplierPaymentAccessService,
-  "requirePayableRead" | "getVisibleProjectIds"
+  | "requirePayableRead"
+  | "requireRequestManage"
+  | "getVisibleProjectIds"
+  | "getUpdatableProjectIds"
 >;
 type RepositoryPort = Pick<
   typeof supplierPayablesRepository,
@@ -47,6 +50,19 @@ export class SupplierPayablesService {
   async batch(auth: AuthContext, query: SupplierPayableBatchQuery) {
     const scope = await this.access.requirePayableRead(auth);
     const visibleProjectIds = await this.access.getVisibleProjectIds(auth);
+    return this.repository.batch({
+      tenant_id: scope.tenantId,
+      visible_project_ids: visibleProjectIds,
+      ids: query.ids,
+    });
+  }
+
+  async requestDraftBatch(
+    auth: AuthContext,
+    query: SupplierPayableBatchQuery,
+  ) {
+    const scope = await this.access.requireRequestManage(auth);
+    const visibleProjectIds = await this.access.getUpdatableProjectIds(auth);
     return this.repository.batch({
       tenant_id: scope.tenantId,
       visible_project_ids: visibleProjectIds,

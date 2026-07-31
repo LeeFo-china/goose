@@ -139,6 +139,7 @@ describe("SupplierPaymentAccessService", () => {
     const context = auth(["project.read", "project.update"]);
 
     expect(await service.getVisibleProjectIds(context)).toEqual([PROJECT_ID]);
+    expect(await service.getUpdatableProjectIds(context)).toEqual([PROJECT_ID]);
     await service.assertProjectRead(context, PROJECT_ID);
     await service.assertProjectUpdate(context, PROJECT_ID);
     expect(deps.accessPolicy.canAccessProject).toHaveBeenNthCalledWith(
@@ -150,6 +151,10 @@ describe("SupplierPaymentAccessService", () => {
     expect(deps.accessPolicy.getVisibleProjectIds).toHaveBeenCalledWith(
       context,
       "project.read",
+    );
+    expect(deps.accessPolicy.getVisibleProjectIds).toHaveBeenCalledWith(
+      context,
+      "project.update",
     );
     expect(deps.accessPolicy.canAccessProject).toHaveBeenNthCalledWith(
       2,

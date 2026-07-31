@@ -76,6 +76,10 @@ export class SupplierPaymentAccessService {
     return this.accessPolicy.getVisibleProjectIds(auth, "project.read");
   }
 
+  getUpdatableProjectIds(auth: AuthContext) {
+    return this.accessPolicy.getVisibleProjectIds(auth, "project.update");
+  }
+
   private async requireScope(
     auth: AuthContext,
     permission: SupplierPaymentPermission,

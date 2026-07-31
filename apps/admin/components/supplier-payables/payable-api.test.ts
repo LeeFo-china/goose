@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("供应商应付 API 契约", () => {
-  test("批量事实查询只发送受限服务端应付 ID", async () => {
+  test("付款申请草稿事实查询只发送受限应付 ID", async () => {
     const calls = installSuccessFetch([]);
     const ids = [
       "00000000-0000-4000-8000-000000000001",
@@ -23,7 +23,9 @@ describe("供应商应付 API 契约", () => {
     await listSupplierPayablesByIds(ids);
 
     const url = new URL(String(calls[0]?.input), "http://admin.local");
-    expect(url.pathname).toBe("/api/backend/supplier-payables/batch");
+    expect(url.pathname).toBe(
+      "/api/backend/supplier-payment-request-payable-facts/batch",
+    );
     expect(url.searchParams.get("ids")).toBe(ids.join(","));
   });
   test("列表使用受限分页和后端 snake_case 筛选", async () => {

@@ -11,9 +11,15 @@ const emptyPage = {
 const list = mock(async () => emptyPage);
 const listFilterOptions = mock(async () => emptyPage);
 const batch = mock(async () => []);
+const requestDraftBatch = mock(async () => []);
 
 mock.module("@/services/supplier-payables", () => ({
-  supplierPayablesService: { list, listFilterOptions, batch },
+  supplierPayablesService: {
+    list,
+    listFilterOptions,
+    batch,
+    requestDraftBatch,
+  },
 }));
 
 const auth = {
@@ -37,6 +43,7 @@ describe("SupplierPayablesController", () => {
     list.mockClear();
     listFilterOptions.mockClear();
     batch.mockClear();
+    requestDraftBatch.mockClear();
   });
 
   test("registers payable list and filter option routes once", async () => {
@@ -48,8 +55,23 @@ describe("SupplierPayablesController", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/supplier-payables" },
       { method: "GET", path: "/supplier-payables/batch" },
+      {
+        method: "GET",
+        path: "/supplier-payment-request-payable-facts/batch",
+      },
       { method: "GET", path: "/supplier-payable-filter-options" },
     ]);
+  });
+
+  test("parses payment request draft payable facts independently", async () => {
+    const value = await controller();
+    const response = await value.batchPaymentRequestPayableFacts({
+      query: { ids: PROJECT_ID },
+    } as never);
+    expect(requestDraftBatch).toHaveBeenCalledWith(auth, {
+      ids: [PROJECT_ID],
+    });
+    expect(response).toEqual({ data: [], message: "success" });
   });
 
   test("parses a strict bounded payable ID batch", async () => {

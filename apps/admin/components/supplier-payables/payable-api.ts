@@ -15,6 +15,8 @@ type SupplierPayableFactsPage = Omit<SupplierPayablePage, "list"> & {
 };
 
 const PAYABLE_PATH = "/supplier-payables";
+const REQUEST_PAYABLE_FACTS_PATH =
+  "/supplier-payment-request-payable-facts/batch";
 const MAX_PAGE_SIZE = 100;
 
 export async function listSupplierPayablesByIds(
@@ -23,7 +25,7 @@ export async function listSupplierPayablesByIds(
   const ids = normalizeSupplierPayableIds(payableIds);
   const query = new URLSearchParams({ ids: ids.join(",") });
   const facts = await requestBackendJson<SupplierPayableFacts[]>(
-    `${PAYABLE_PATH}/batch?${query}`,
+    `${REQUEST_PAYABLE_FACTS_PATH}?${query}`,
     { fallbackMessage: "所选供应商应付重新校验失败" },
   );
   return facts.map((item) => ({

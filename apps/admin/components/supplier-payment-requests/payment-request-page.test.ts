@@ -219,7 +219,7 @@ describe("供应商付款申请页面边界", () => {
     expect(list).toContain("invoiceBlocked: null");
   });
 
-  test("filters reuse bounded payable filter options instead of raw UUID inputs", () => {
+  test("filters use bounded options when allowed and UUID fallback otherwise", () => {
     const page = readSource("../../app/(console)/supplier-payment-requests/page.tsx");
     const workspace = readSource("./payment-request-workspace.tsx");
     const optionsHook = readSource("./use-payment-request-filter-options.ts");
@@ -228,10 +228,15 @@ describe("供应商付款申请页面边界", () => {
     expect(optionsHook).toContain("pageSize: PAGE_SIZE");
     expect(optionsHook).toContain("PAGE_SIZE = 20");
     expect(filters).toContain("FormSelect");
-    expect(filters).not.toContain("项目 ID");
-    expect(filters).not.toContain("供应商关系 ID");
+    expect(filters).toContain("canUseStructuredOptions");
+    expect(filters).toContain("项目 ID");
+    expect(filters).toContain("供应商关系 ID");
     expect(page).toContain('permissions.has("supplier.payable.view")');
     expect(workspace).toContain("canViewPayables");
+    expect(workspace).toContain("canView && canViewPayables");
+    expect(workspace).toContain(
+      "canUseStructuredOptions={canViewPayables}",
+    );
   });
 
   test("payment history page changes reload without resetting back to page one", () => {

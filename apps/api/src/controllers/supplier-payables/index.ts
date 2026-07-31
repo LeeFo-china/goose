@@ -37,6 +37,15 @@ class SupplierPayablesController extends TenantBaseController {
     );
   }
 
+  @Get("/supplier-payment-request-payable-facts/batch")
+  async batchPaymentRequestPayableFacts(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = this.parse(SupplierPayableBatchQuerySchema, request.query);
+    return ResponseHandler.success(
+      await supplierPayablesService.requestDraftBatch(auth, query),
+    );
+  }
+
   @Get("/supplier-payable-filter-options")
   async listFilterOptions(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);

@@ -310,6 +310,7 @@ export function PaymentRequestWorkspace({
             keyword={keyword}
             loading={loading}
             optionsLoading={filterOptions.loading || !canViewPayables}
+            canUseStructuredOptions={canViewPayables}
             projectOptions={filterOptions.projectOptions}
             supplierOptions={filterOptions.supplierOptions}
             canLoadMoreProjects={filterOptions.canLoadMoreProjects}

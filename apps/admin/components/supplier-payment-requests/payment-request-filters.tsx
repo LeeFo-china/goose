@@ -23,6 +23,7 @@ export function PaymentRequestFilters({
   keyword,
   loading,
   optionsLoading,
+  canUseStructuredOptions,
   projectOptions,
   supplierOptions,
   canLoadMoreProjects,
@@ -38,6 +39,7 @@ export function PaymentRequestFilters({
   keyword: string;
   loading: boolean;
   optionsLoading: boolean;
+  canUseStructuredOptions: boolean;
   projectOptions: SelectOption[];
   supplierOptions: SelectOption[];
   canLoadMoreProjects: boolean;
@@ -92,26 +94,61 @@ export function PaymentRequestFilters({
             </SelectContent>
           </Select>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="payment-request-project">项目</FieldLabel>
-          <FormSelect
-            id="payment-request-project"
-            value={state.projectId}
-            options={projectOptions}
-            disabled={loading || optionsLoading}
-            onChange={(projectId) => onChange({ projectId })}
-          />
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="payment-request-supplier">供应商</FieldLabel>
-          <FormSelect
-            id="payment-request-supplier"
-            value={state.tenantSupplierId}
-            options={supplierOptions}
-            disabled={loading || optionsLoading}
-            onChange={(tenantSupplierId) => onChange({ tenantSupplierId })}
-          />
-        </Field>
+        {canUseStructuredOptions ? (
+          <>
+            <Field>
+              <FieldLabel htmlFor="payment-request-project">项目</FieldLabel>
+              <FormSelect
+                id="payment-request-project"
+                value={state.projectId}
+                options={projectOptions}
+                disabled={loading || optionsLoading}
+                onChange={(projectId) => onChange({ projectId })}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="payment-request-supplier">供应商</FieldLabel>
+              <FormSelect
+                id="payment-request-supplier"
+                value={state.tenantSupplierId}
+                options={supplierOptions}
+                disabled={loading || optionsLoading}
+                onChange={(tenantSupplierId) => onChange({ tenantSupplierId })}
+              />
+            </Field>
+          </>
+        ) : (
+          <>
+            <Field>
+              <FieldLabel htmlFor="payment-request-project">项目 ID</FieldLabel>
+              <Input
+                id="payment-request-project"
+                value={state.projectId === "all" ? "" : state.projectId}
+                disabled={loading}
+                placeholder="输入完整项目 UUID，留空表示全部"
+                onChange={(event) => onChange({
+                  projectId: event.target.value.trim() || "all",
+                })}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="payment-request-supplier">
+                供应商关系 ID
+              </FieldLabel>
+              <Input
+                id="payment-request-supplier"
+                value={state.tenantSupplierId === "all"
+                  ? ""
+                  : state.tenantSupplierId}
+                disabled={loading}
+                placeholder="输入完整供应商关系 UUID，留空表示全部"
+                onChange={(event) => onChange({
+                  tenantSupplierId: event.target.value.trim() || "all",
+                })}
+              />
+            </Field>
+          </>
+        )}
         <Field>
           <FieldLabel htmlFor="payment-request-created-from">创建开始日期</FieldLabel>
           <Input
@@ -139,7 +176,8 @@ export function PaymentRequestFilters({
           </Button>
         </Field>
       </FieldGroup>
-      {canLoadMoreProjects || canLoadMoreSuppliers ? (
+      {canUseStructuredOptions &&
+          (canLoadMoreProjects || canLoadMoreSuppliers) ? (
         <div className="flex flex-wrap gap-2">
           {canLoadMoreProjects ? (
             <Button
