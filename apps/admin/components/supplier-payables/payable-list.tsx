@@ -78,7 +78,10 @@ export function PayableList({
 
   const selected = records.find(({ id }) => selectedIds.has(id));
   return (
-    <Table containerClassName="min-w-[1480px] overflow-x-auto">
+    <Table
+      className="min-w-[1480px]"
+      containerClassName="max-w-full overflow-x-auto"
+    >
       <TableHeader className="sticky top-0 bg-card">
         <TableRow>
           <TableHead className="w-12"><span className="sr-only">选择</span></TableHead>

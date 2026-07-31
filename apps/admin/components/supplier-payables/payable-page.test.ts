@@ -5,6 +5,8 @@ import {
   appendPayablePage,
   beginPayableListRequest,
   buildPaymentRequestHref,
+  nextPayableRetryAttempt,
+  payableDateRange,
   payableLoadPolicy,
   resetPayableFilters,
 } from "./use-payable-list";
@@ -63,6 +65,34 @@ describe("供应商应付页面规则", () => {
       list: [],
       pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
     });
+  });
+
+  test("上海时区日期筛选转换为浏览器本地日界", () => {
+    const originalTimezone = process.env.TZ;
+    process.env.TZ = "Asia/Shanghai";
+    try {
+      expect(payableDateRange("2026-07-31", "2026-07-31")).toEqual({
+        due_from: "2026-07-30T16:00:00.000Z",
+        due_to: "2026-07-31T15:59:59.999Z",
+      });
+    } finally {
+      if (originalTimezone === undefined) delete process.env.TZ;
+      else process.env.TZ = originalTimezone;
+    }
+  });
+
+  test("非法本地日期和倒置范围 fail closed", () => {
+    for (const value of ["bad", "2026-02-30", "2026-7-1"]) {
+      expect(() => payableDateRange(value, "")).toThrow("无效的到期日期");
+    }
+    expect(() => payableDateRange("2026-08-01", "2026-07-31"))
+      .toThrow("到期结束日期不能早于开始日期");
+    expect(payableDateRange("", "")).toEqual({});
+  });
+
+  test("局部重试递增请求代次且不保留失败代次", () => {
+    expect(nextPayableRetryAttempt(0)).toBe(1);
+    expect(nextPayableRetryAttempt(3)).toBe(4);
   });
 
   test("加载更多稳定合并下一页且去重", () => {
@@ -138,10 +168,19 @@ describe("供应商应付页面边界", () => {
     expect(list).toContain("采购/收货单");
     expect(list).toContain("record.project_name");
     expect(list).toContain("record.supplier_name");
+    expect(list).toContain('className="min-w-[1480px]"');
+    expect(list).toContain(
+      'containerClassName="max-w-full overflow-x-auto"',
+    );
+    expect(list).not.toContain(
+      'containerClassName="min-w-[1480px] overflow-x-auto"',
+    );
     expect(filters).toContain("到期开始日期");
     expect(filters).toContain("采购单");
     expect(filters).toContain("全部状态");
     expect(summary).toContain("待付金额");
+    expect(workspace).toContain("重试加载应付");
+    expect(workspace).toContain("重试筛选项");
     expect(menu).toContain('href: "/supplier-payables"');
     expect(menu).toContain('permission: "supplier.payable.view"');
   });

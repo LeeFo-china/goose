@@ -85,6 +85,22 @@ export function beginPayableListRequest(
   return emptyPage();
 }
 
+export function nextPayableRetryAttempt(current: number) {
+  return Number.isSafeInteger(current) && current >= 0 ? current + 1 : 1;
+}
+
+export function payableDateRange(dueFrom: string, dueTo: string) {
+  const start = dueFrom ? localDateBoundary(dueFrom, "start") : null;
+  const end = dueTo ? localDateBoundary(dueTo, "end") : null;
+  if (start && end && start.getTime() > end.getTime()) {
+    throw new Error("到期结束日期不能早于开始日期");
+  }
+  return {
+    ...(start ? { due_from: start.toISOString() } : {}),
+    ...(end ? { due_to: end.toISOString() } : {}),
+  };
+}
+
 export function buildPaymentRequestHref(payableIds: string[]) {
   const ids = [...new Set(payableIds)]
     .filter((id) => UUID_PATTERN.test(id))
@@ -121,8 +137,7 @@ export function usePayableList(
       ? { purchase_order_id: filters.purchaseOrderId }
       : {}),
     ...(filters.status !== "all" ? { status: filters.status } : {}),
-    ...(filters.dueFrom ? { due_from: startOfDay(filters.dueFrom) } : {}),
-    ...(filters.dueTo ? { due_to: endOfDay(filters.dueTo) } : {}),
+    ...payableDateRange(filters.dueFrom, filters.dueTo),
   }), [
     filters.dueFrom,
     filters.dueTo,
@@ -230,12 +245,28 @@ function emptyPage(): SupplierPayablePage {
   };
 }
 
-function startOfDay(value: string) {
-  return `${value}T00:00:00.000Z`;
-}
-
-function endOfDay(value: string) {
-  return `${value}T23:59:59.999Z`;
+function localDateBoundary(value: string, boundary: "start" | "end") {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error("无效的到期日期");
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(0);
+  date.setFullYear(year, month - 1, day);
+  date.setHours(
+    boundary === "start" ? 0 : 23,
+    boundary === "start" ? 0 : 59,
+    boundary === "start" ? 0 : 59,
+    boundary === "start" ? 0 : 999,
+  );
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    throw new Error("无效的到期日期");
+  }
+  return date;
 }
 
 function errorMessage(caught: unknown, fallback: string) {

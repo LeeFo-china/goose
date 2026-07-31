@@ -37,6 +37,7 @@ import type {
 import {
   buildPaymentRequestHref,
   initialPayableFilters,
+  nextPayableRetryAttempt,
   payableLoadPolicy,
   resetPayableFilters,
   type PayableModulePreflight,
@@ -61,6 +62,7 @@ export function PayableWorkspace({
   const [options, setOptions] = useState(emptyOptionState);
   const [optionPages, setOptionPages] = useState(emptyOptionPages);
   const [optionsReady, setOptionsReady] = useState(false);
+  const [optionsRetryAttempt, setOptionsRetryAttempt] = useState(0);
   const [optionsLoading, setOptionsLoading] = useState(false);
   const [loadingMoreOptions, setLoadingMoreOptions] = useState(false);
   const [filters, setFilters] = useState(initialPayableFilters);
@@ -79,6 +81,7 @@ export function PayableWorkspace({
     errorCode,
     hasLoaded,
     clear,
+    reload,
     loadMore,
   } = usePayableList(loadPolicy.shouldLoadPayables, filters);
 
@@ -132,7 +135,12 @@ export function PayableWorkspace({
     return () => {
       active = false;
     };
-  }, [hasLoaded, loadPolicy.shouldLoadPayables, optionsReady]);
+  }, [
+    hasLoaded,
+    loadPolicy.shouldLoadPayables,
+    optionsReady,
+    optionsRetryAttempt,
+  ]);
 
   const projectOptions = useMemo(
     () => withAllOption("全部项目", options.project),
@@ -187,6 +195,12 @@ export function PayableWorkspace({
     clear();
     setSelectedIds(new Set());
     setFilters(initialPayableFilters);
+  }
+
+  function retryFilterOptions() {
+    setWorkspaceError(null);
+    setOptionsReady(false);
+    setOptionsRetryAttempt(nextPayableRetryAttempt);
   }
 
   function togglePayable(record: SupplierPayable) {
@@ -253,8 +267,19 @@ export function PayableWorkspace({
         </StatusAlert>
       ) : null}
       <PayableSummary records={records.list} />
-      {workspaceError || error ? (
-        <StatusAlert>{workspaceError ?? error}</StatusAlert>
+      {error ? (
+        <RetryAlert
+          message={error}
+          label="重试加载应付"
+          onRetry={() => void reload()}
+        />
+      ) : null}
+      {workspaceError ? (
+        <RetryAlert
+          message={workspaceError}
+          label="重试筛选项"
+          onRetry={retryFilterOptions}
+        />
       ) : null}
       <Card className="overflow-hidden shadow-none">
         <CardHeader className="border-b bg-muted/20 p-4">
@@ -331,6 +356,23 @@ function DisabledModule() {
         </CardContent>
       </Card>
     </PageContainer>
+  );
+}
+
+function RetryAlert({ message, label, onRetry }: {
+  message: string;
+  label: string;
+  onRetry: () => void;
+}) {
+  return (
+    <StatusAlert>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>{message}</span>
+        <Button type="button" size="sm" variant="outline" onClick={onRetry}>
+          {label}
+        </Button>
+      </div>
+    </StatusAlert>
   );
 }
 
