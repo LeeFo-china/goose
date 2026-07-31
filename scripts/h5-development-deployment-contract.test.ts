@@ -158,6 +158,11 @@ describe("H5 development hostname cutover", () => {
     );
     expect(workflow).toContain("sudo nginx -t");
     expect(workflow).toContain("sudo systemctl reload nginx");
+    expect(workflow).toContain("route_ready=false");
+    expect(workflow).toContain("--noproxy '*'");
+    expect(workflow).toContain(
+      "--resolve h5-dev.goodcms.cn:443:127.0.0.1",
+    );
     expect(workflow).toContain(
       "https://h5-dev.goodcms.cn/p/h5-deployment-smoke",
     );

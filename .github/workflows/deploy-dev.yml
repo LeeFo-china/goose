@@ -357,17 +357,30 @@ jobs:
           sudo nginx -t || restore_h5_nginx "nginx configuration is invalid"
           sudo systemctl reload nginx || restore_h5_nginx "nginx reload failed"
 
-          headers="$(curl -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://h5-dev.goodcms.cn/config.js)" \
+          route_ready=false
+          for _ in $(seq 1 30); do
+            headers="$(curl --noproxy '*' \
+              --resolve h5-dev.goodcms.cn:443:127.0.0.1 \
+              -sS -D - -o /dev/null \
+              https://h5-dev.goodcms.cn/config.js || true)"
+            if grep -iq '^x-gooes-service: h5' <<< "${headers}" \
+              && grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}"; then
+              route_ready=true
+              break
+            fi
+            sleep 1
+          done
+          [ "${route_ready}" = true ] \
             || restore_h5_nginx "external smoke failed"
-          grep -iq '^x-gooes-service: h5' <<< "${headers}" \
-            || restore_h5_nginx "external smoke failed"
-          grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}" \
-            || restore_h5_nginx "external smoke failed"
-          curl -fsS --retry 8 --retry-delay 3 \
+          curl --noproxy '*' \
+            --resolve h5-dev.goodcms.cn:443:127.0.0.1 \
+            -fsS \
             https://h5-dev.goodcms.cn/p/h5-deployment-smoke \
             | grep -q '<main id="app"' \
             || restore_h5_nginx "external smoke failed"
-          curl -fsS --retry 8 --retry-delay 3 -o /dev/null \
+          curl --noproxy '*' \
+            --resolve h5-dev.goodcms.cn:443:127.0.0.1 \
+            -fsS -o /dev/null \
             'https://h5-dev.goodcms.cn/public/marketing-pages?scene=home' \
             || restore_h5_nginx "external smoke failed"
 
