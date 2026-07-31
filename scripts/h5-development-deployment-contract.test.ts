@@ -67,6 +67,7 @@ describe("H5 development build plan", () => {
 describe("H5 development image", () => {
   test("builds and runs H5 as an independent immutable service", () => {
     const dockerfile = readRepositoryFile("docker/h5.Dockerfile");
+    const dockerignore = readRepositoryFile(".dockerignore");
     const compose = readRepositoryFile("deploy/docker-compose.dev.yml");
     const workflow = readRepositoryFile(
       ".github/workflows/build-docker-images.yml",
@@ -76,6 +77,7 @@ describe("H5 development image", () => {
     expect(dockerfile).toContain('com.goodcms.service="h5"');
     expect(dockerfile).toContain("ENV GOOES_BUILD_SHA=${BUILD_SHA}");
     expect(dockerfile).toContain('CMD ["bun", "server.ts"]');
+    expect(dockerignore.split(/\r?\n/)).not.toContain("apps/h5");
 
     expect(compose).toContain("gooes-h5-dev:");
     expect(compose).toContain(
