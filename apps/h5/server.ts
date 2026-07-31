@@ -1,5 +1,14 @@
 const root = `${import.meta.dir}/dist`;
 const port = Number(process.env.PORT || 3020);
+const revision = process.env.GOOES_BUILD_SHA || "unknown";
+
+function getResponseHeaders(contentType: string) {
+  return {
+    "content-type": contentType,
+    "x-gooes-revision": revision,
+    "x-gooes-service": "h5",
+  };
+}
 
 function getContentType(pathname: string) {
   if (pathname.endsWith(".js")) return "application/javascript; charset=utf-8";
@@ -18,12 +27,12 @@ async function readStatic(pathname: string) {
 
   if (await file.exists()) {
     return new Response(file, {
-      headers: { "content-type": getContentType(normalized) },
+      headers: getResponseHeaders(getContentType(normalized)),
     });
   }
 
   return new Response(Bun.file(`${root}/index.html`), {
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: getResponseHeaders("text/html; charset=utf-8"),
   });
 }
 
