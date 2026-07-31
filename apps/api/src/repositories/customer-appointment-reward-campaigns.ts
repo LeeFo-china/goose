@@ -165,6 +165,36 @@ class CustomerAppointmentRewardCampaignRepository {
     return data as CustomerAppointmentRewardCampaignRow;
   }
 
+  async claimRewardByVoucherIfUnclaimed(input: {
+    id: string;
+    voucherToken: string;
+    employeeId: string;
+    channel: string;
+    claimedAt: string;
+  }) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_appointment_reward_campaigns")
+      .update({
+        status: "reward_claimed",
+        reward_claim_status: "claimed",
+        reward_claim_channel: input.channel,
+        reward_claimed_at: input.claimedAt,
+        reward_claimed_by_employee_id: input.employeeId,
+      })
+      .eq("id", input.id)
+      .eq("reward_claim_voucher_token", input.voucherToken)
+      .neq("reward_claim_status", "claimed")
+      .neq("status", "reward_claimed")
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("核销预约奖励领取凭证失败", error);
+    }
+
+    return (data || null) as CustomerAppointmentRewardCampaignRow | null;
+  }
+
   async countByMarketingCampaignStatus(campaignId: string) {
     const { data, error } = await SupabaseDB.getAdminClient()
       .from("customer_appointment_reward_campaigns")

@@ -42,6 +42,10 @@ class CustomerProjectLogShareCampaignRepository {
     return legacyCustomerProjectLogShareCampaignRepository.updateRewardMetadata(...args);
   }
 
+  claimRewardByVoucherIfUnclaimed(...args: Parameters<LegacyCustomerProjectLogShareCampaignRepository["claimRewardByVoucherIfUnclaimed"]>) {
+    return legacyCustomerProjectLogShareCampaignRepository.claimRewardByVoucherIfUnclaimed(...args);
+  }
+
   touchPosterSavedAt(...args: Parameters<LegacyCustomerProjectLogShareCampaignRepository["touchPosterSavedAt"]>) {
     return legacyCustomerProjectLogShareCampaignRepository.touchPosterSavedAt(...args);
   }

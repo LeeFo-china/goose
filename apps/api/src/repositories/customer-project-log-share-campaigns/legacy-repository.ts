@@ -10,6 +10,7 @@ import {
   create,
   updateMetrics,
   updateRewardMetadata,
+  claimRewardByVoucherIfUnclaimed,
   touchPosterSavedAt,
   touchLatestOpenedAt,
   updateStatus,
@@ -33,6 +34,7 @@ class CustomerProjectLogShareCampaignRepository {
   create = create;
   updateMetrics = updateMetrics;
   updateRewardMetadata = updateRewardMetadata;
+  claimRewardByVoucherIfUnclaimed = claimRewardByVoucherIfUnclaimed;
   touchPosterSavedAt = touchPosterSavedAt;
   touchLatestOpenedAt = touchLatestOpenedAt;
   createOpen = createOpen;
