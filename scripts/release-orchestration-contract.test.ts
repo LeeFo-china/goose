@@ -1801,7 +1801,7 @@ describe("reusable build workflow", () => {
     const buildStep = sliceWorkflowStep(buildWorkflow, "Build and push image");
 
     expect(buildStep).toContain('RUN_IMAGE="${IMAGE_BASE}:run-${GITHUB_RUN_ID}-${GITHUB_SHA}"');
-    expect(buildStep.match(/-t "\$RUN_IMAGE"/g)).toHaveLength(4);
+    expect(buildStep.match(/-t "\$RUN_IMAGE"/g)).toHaveLength(5);
     expect(buildStep).toContain('push_image "$RUN_IMAGE"');
     expect(buildStep).toContain('docker buildx imagetools inspect "${image}"');
     expect(buildStep).not.toContain('docker buildx imagetools inspect "$SHA_IMAGE"');
@@ -1856,7 +1856,7 @@ describe("reusable build workflow", () => {
     expect(buildStep).not.toContain('\n          docker push "$BRANCH_IMAGE"');
     expect(buildStep).not.toContain('\n          docker push "$SHA_IMAGE"');
     expect(buildStep).not.toContain('\n          docker push "$RUN_IMAGE"');
-    expect(buildStep.match(/\bdocker build\b/g)).toHaveLength(4);
+    expect(buildStep.match(/\bdocker build\b/g)).toHaveLength(5);
   });
 
   test("retries production remote digest resolution before immutable pull", () => {

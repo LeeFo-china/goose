@@ -75,6 +75,36 @@ services:
     networks:
       - gooes_dev
 
+  gooes-h5-dev:
+    image: ${GOOES_H5_IMAGE:?set GOOES_H5_IMAGE}
+    container_name: gooes-h5-dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3020
+    ports:
+      - "127.0.0.1:13030:3020"
+    depends_on:
+      gooes-api-dev:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bun -e 'fetch(\"http://127.0.0.1:3020/config.js\").then((r) => process.exit(r.status === 200 && r.headers.get(\"x-gooes-service\") === \"h5\" ? 0 : 1)).catch(() => process.exit(1))'",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - gooes_dev
+
   gooes-web-dev:
     image: ${GOOES_WEB_IMAGE:?set GOOES_WEB_IMAGE}
     container_name: gooes-web-dev

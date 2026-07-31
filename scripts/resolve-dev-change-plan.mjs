@@ -1,10 +1,11 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-const BUILD_ORDER = ["api", "admin", "web", "social-video-worker"];
+const BUILD_ORDER = ["api", "admin", "h5", "web", "social-video-worker"];
 const DEPLOY_ORDER = [
   "api",
   "admin",
+  "h5",
   "web",
   "social-video-worker",
   "cos-reconcile-worker",
@@ -73,13 +74,18 @@ export function resolveDevChangePlan(paths, metadata) {
   let migrationChanged = false;
 
   for (const path of changedFiles) {
-    if (path.startsWith("apps/h5/") && !isNoopPath(path)) {
-      throw new Error("unsupported automatic service: h5");
-    }
-    if (path.startsWith("deploy/nginx/")) {
+    if (
+      (path.startsWith("apps/h5/")
+        || path === "docker/h5.Dockerfile"
+        || path === "deploy/nginx/gooes-dev.conf")
+      && !isNoopPath(path)
+    ) {
+      classifications.add("h5");
+      build.add("h5");
+      deploy.add("h5");
+    } else if (path.startsWith("deploy/nginx/")) {
       throw new Error("unsupported automatic service: dev-nginx");
-    }
-    if (isNoopPath(path)) {
+    } else if (isNoopPath(path)) {
       classifications.add("non-runtime");
     } else if (path.startsWith("supabase/migrations/")) {
       migrationChanged = true;
