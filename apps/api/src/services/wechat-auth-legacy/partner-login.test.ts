@@ -57,6 +57,9 @@ const partnerAuthResponse: PartnerAuthResponse = {
 const loginResolvedAuthUser = mock(
   async (): Promise<PartnerAuthResponse | null> => partnerAuthResponse,
 );
+const logInfo = mock(() => undefined);
+const logWarn = mock(() => undefined);
+const logError = mock(() => undefined);
 const rotateForLogin = mock(async () => ({
   credentialId: "00000000-0000-4000-8000-000000000501",
   oauthIdentityId: "00000000-0000-4000-8000-000000000601",
@@ -85,7 +88,7 @@ mock.module("@/services/wechat-mini-session-credentials", () => ({
 }));
 
 function createRequest(): FastifyRequest {
-  const log = { info: () => undefined, warn: () => undefined, error: () => undefined };
+  const log = { info: logInfo, warn: logWarn, error: logError };
   return { id: "test-request", body: { code: "wx-code" }, log } as unknown as FastifyRequest;
 }
 
@@ -132,6 +135,9 @@ describe("wechat /auth platform partner login", () => {
     resolveWechatLoginStateByOpenid.mockClear();
     resolveWechatLoginMembershipState.mockClear();
     loginResolvedAuthUser.mockClear();
+    logInfo.mockClear();
+    logWarn.mockClear();
+    logError.mockClear();
     rotateForLogin.mockClear();
   });
 
@@ -184,6 +190,13 @@ describe("wechat /auth platform partner login", () => {
       sessionKey: "wx-session-key",
     });
     expect(JSON.stringify(response)).not.toContain("wx-session-key");
+    const serializedLogArguments = JSON.stringify([
+      logInfo.mock.calls,
+      logWarn.mock.calls,
+      logError.mock.calls,
+    ]);
+    expect(serializedLogArguments).not.toContain("session_key");
+    expect(serializedLogArguments).not.toContain("wx-session-key");
   });
 
   test("keeps visitor response when current WeChat is not bound to a partner member", async () => {

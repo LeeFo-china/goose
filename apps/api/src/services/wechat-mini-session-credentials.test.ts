@@ -45,7 +45,7 @@ function credential(
     oauth_identity_id: OAUTH_IDENTITY_ID,
     openid_hash: "0".repeat(64),
     encrypted_session_key: "encrypted-value",
-    key_version: 1,
+    encryption_key_version: 1,
     session_revision: 1,
     status: "active",
     obtained_at: "2026-07-31T13:10:00.000Z",
@@ -72,7 +72,7 @@ async function createHarness() {
       openid: string;
       openidHash: string;
       encryptedSessionKey: string;
-      keyVersion: number;
+      encryptionKeyVersion: number;
     }) => credential({
       encrypted_session_key: input.encryptedSessionKey,
       openid_hash: input.openidHash,
@@ -264,6 +264,8 @@ describe("WechatMiniSessionCredentialService", () => {
     ), "utf8");
 
     expect(migration).toContain("FORCE ROW LEVEL SECURITY");
+    expect(migration).toContain("encryption_key_version integer NOT NULL");
+    expect(migration).not.toMatch(/\bkey_version\b/);
     expect(migration).toMatch(/REVOKE ALL ON TABLE[\s\S]+FROM PUBLIC, anon, authenticated, service_role/);
     expect(migration).not.toMatch(/GRANT (?:SELECT|INSERT|UPDATE|DELETE)[\s\S]+TO service_role/);
     expect(migration).toMatch(/rotate_wechat_mini_session_credential[\s\S]+SECURITY DEFINER[\s\S]+FOR UPDATE/);

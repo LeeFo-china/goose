@@ -13,7 +13,7 @@ import {
   encryptWechatMiniSessionKey,
 } from "./wechat-mini-session-crypto";
 
-const CURRENT_KEY_VERSION = 1;
+const CURRENT_ENCRYPTION_KEY_VERSION = 1;
 const SESSION_REFRESH_REQUIRED_CODE =
   "BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED";
 
@@ -72,7 +72,7 @@ export class WechatMiniSessionCredentialService {
 
     const encryptedSessionKey = encryptWechatMiniSessionKey(
       input.sessionKey,
-      CURRENT_KEY_VERSION,
+      CURRENT_ENCRYPTION_KEY_VERSION,
     );
     const record = await this.credentialRepository.rotate({
       oauthIdentityId: identity.id,
@@ -80,7 +80,7 @@ export class WechatMiniSessionCredentialService {
       openid: input.openid,
       openidHash: createHash("sha256").update(input.openid).digest("hex"),
       encryptedSessionKey,
-      keyVersion: CURRENT_KEY_VERSION,
+      encryptionKeyVersion: CURRENT_ENCRYPTION_KEY_VERSION,
     });
 
     return credentialMetadata(record);
@@ -115,7 +115,7 @@ export class WechatMiniSessionCredentialService {
 
     const sessionKey = decryptWechatMiniSessionKey(
       record.encrypted_session_key,
-      record.key_version,
+      record.encryption_key_version,
     );
     const isStillActive = await this.credentialRepository.markUsed({
       credentialId: record.id,

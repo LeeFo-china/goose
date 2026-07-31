@@ -14,7 +14,7 @@ CREATE TABLE public.wechat_mini_session_credentials (
     REFERENCES public.user_oauth_identities(id) ON DELETE CASCADE,
   openid_hash text NOT NULL,
   encrypted_session_key text NOT NULL,
-  key_version integer NOT NULL,
+  encryption_key_version integer NOT NULL,
   session_revision integer NOT NULL DEFAULT 1,
   status text NOT NULL DEFAULT 'active',
   obtained_at timestamptz NOT NULL DEFAULT now(),
@@ -29,8 +29,8 @@ CREATE TABLE public.wechat_mini_session_credentials (
       btrim(encrypted_session_key) <> ''
       AND char_length(encrypted_session_key) <= 2048
     ),
-  CONSTRAINT wechat_mini_session_credentials_key_version_check
-    CHECK (key_version > 0),
+  CONSTRAINT wechat_mini_session_credentials_encryption_key_version_check
+    CHECK (encryption_key_version > 0),
   CONSTRAINT wechat_mini_session_credentials_revision_check
     CHECK (session_revision > 0),
   CONSTRAINT wechat_mini_session_credentials_status_check
@@ -70,7 +70,7 @@ CREATE FUNCTION public.rotate_wechat_mini_session_credential(
   p_openid text,
   p_openid_hash text,
   p_encrypted_session_key text,
-  p_key_version integer
+  p_encryption_key_version integer
 )
 RETURNS SETOF public.wechat_mini_session_credentials
 LANGUAGE plpgsql
@@ -87,7 +87,7 @@ BEGIN
     OR btrim(COALESCE(p_openid, '')) = ''
     OR COALESCE(p_openid_hash, '') !~ '^[0-9a-f]{64}$'
     OR btrim(COALESCE(p_encrypted_session_key, '')) = ''
-    OR COALESCE(p_key_version, 0) <= 0
+    OR COALESCE(p_encryption_key_version, 0) <= 0
   THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -127,7 +127,7 @@ BEGIN
     oauth_identity_id,
     openid_hash,
     encrypted_session_key,
-    key_version,
+    encryption_key_version,
     session_revision,
     status,
     obtained_at
@@ -136,7 +136,7 @@ BEGIN
     p_oauth_identity_id,
     p_openid_hash,
     p_encrypted_session_key,
-    p_key_version,
+    p_encryption_key_version,
     v_next_revision,
     'active',
     now()

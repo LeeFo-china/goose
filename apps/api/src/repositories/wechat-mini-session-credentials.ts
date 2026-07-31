@@ -11,7 +11,7 @@ export type WechatMiniSessionCredentialRecord = {
   oauth_identity_id: string;
   openid_hash: string;
   encrypted_session_key: string;
-  key_version: number;
+  encryption_key_version: number;
   session_revision: number;
   status: WechatMiniSessionCredentialStatus;
   obtained_at: string;
@@ -54,7 +54,7 @@ export class WechatMiniSessionCredentialRepository {
     openid: string;
     openidHash: string;
     encryptedSessionKey: string;
-    keyVersion: number;
+    encryptionKeyVersion: number;
   }): Promise<WechatMiniSessionCredentialRecord> {
     const data = await this.rpc(
       "rotate_wechat_mini_session_credential",
@@ -64,7 +64,7 @@ export class WechatMiniSessionCredentialRepository {
         p_openid: input.openid,
         p_openid_hash: input.openidHash,
         p_encrypted_session_key: input.encryptedSessionKey,
-        p_key_version: input.keyVersion,
+        p_encryption_key_version: input.encryptionKeyVersion,
       },
       "轮换微信会话凭据失败",
     );
