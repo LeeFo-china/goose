@@ -11,6 +11,12 @@ function normalize(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+function functionSql(sql: string, name: string): string {
+  const start = sql.indexOf(`create or replace function public.${name}`);
+  const end = sql.indexOf("$$;", start);
+  return start >= 0 && end >= 0 ? sql.slice(start, end) : "";
+}
+
 describe("branding virtual order payment-window hardening migration", () => {
   test("exists as a forward migration with an explicit rollback note", () => {
     expect(existsSync(migrationPath)).toBe(true);
@@ -86,13 +92,10 @@ describe("branding virtual order payment-window hardening migration", () => {
     if (!existsSync(migrationPath)) return;
     const sql = normalize(readFileSync(migrationPath, "utf8"));
     for (const rpc of [
-      "branding_create_virtual_addon_order",
       "branding_claim_virtual_addon_payment_request",
       "branding_finalize_virtual_addon_payment_request",
     ]) {
-      const start = sql.indexOf(`create or replace function public.${rpc}`);
-      const end = sql.indexOf("$$;", start);
-      const body = sql.slice(start, end);
+      const body = functionSql(sql, rpc);
       const entitlementLock = body.indexOf(
         "hashtextextended(p_tenant_id::text || ':custom_support_branding', 20260728)",
       );
@@ -110,6 +113,81 @@ describe("branding virtual order payment-window hardening migration", () => {
     }
   });
 
+  test("returns the same idempotent fact before current entitlement and config checks", () => {
+    if (!existsSync(migrationPath)) return;
+    const sql = normalize(readFileSync(migrationPath, "utf8"));
+    const body = functionSql(sql, "branding_create_virtual_addon_order");
+    const entitlementLock = body.indexOf(
+      "hashtextextended(p_tenant_id::text || ':custom_support_branding', 20260728)",
+    );
+    const replayLock = body.indexOf(
+      "orders.idempotency_key = p_idempotency_key for update",
+    );
+    const replayReturn = body.indexOf("return v_order", replayLock);
+    const configLock = body.indexOf(
+      "hashtextextended('branding_virtual_payment_config', 20260801)",
+    );
+    const suspendedCheck = body.indexOf("entitlement.status = 'suspended'");
+    const revokedCheck = body.indexOf("entitlement.status = 'revoked'");
+    const productLock = body.indexOf("from public.platform_addon_products");
+    expect(entitlementLock).toBeLessThan(replayLock);
+    expect(replayLock).toBeLessThan(replayReturn);
+    expect(replayReturn).toBeLessThan(configLock);
+    expect(configLock).toBeLessThan(suspendedCheck);
+    expect(replayReturn).toBeLessThan(revokedCheck);
+    expect(suspendedCheck).toBeLessThan(productLock);
+  });
+
+  test("refreshes payment-window time only after advisory and row locks", () => {
+    if (!existsSync(migrationPath)) return;
+    const sql = normalize(readFileSync(migrationPath, "utf8"));
+    const create = functionSql(sql, "branding_create_virtual_addon_order");
+    const pendingLock = create.indexOf(
+      "and orders.product_code = v_product.code and orders.payment_status = 'pending' for update",
+    );
+    const createNow = create.indexOf("v_now := clock_timestamp()");
+    expect(create).not.toContain("v_now timestamptz := clock_timestamp()");
+    expect(pendingLock).toBeGreaterThanOrEqual(0);
+    expect(pendingLock).toBeLessThan(createNow);
+    expect(createNow).toBeLessThan(
+      create.indexOf("v_order.payment_expires_at <= v_now", createNow),
+    );
+
+    for (const rpc of [
+      "branding_claim_virtual_addon_payment_request",
+      "branding_finalize_virtual_addon_payment_request",
+    ]) {
+      const body = functionSql(sql, rpc);
+      const orderLock = body.indexOf(
+        "where orders.tenant_id = p_tenant_id and orders.id = p_order_id for update",
+      );
+      const nowAssignment = body.indexOf("v_now := clock_timestamp()");
+      expect(body).not.toContain("v_now timestamptz := clock_timestamp()");
+      expect(orderLock).toBeGreaterThanOrEqual(0);
+      expect(orderLock).toBeLessThan(nowAssignment);
+      expect(nowAssignment).toBeLessThan(
+        body.indexOf("payment_request_claim_expires_at", nowAssignment),
+      );
+      expect(nowAssignment).toBeLessThan(
+        body.indexOf("payment_expires_at <= v_now", nowAssignment),
+      );
+    }
+  });
+
+  test("refreshes secret-rotation time after the global config lock", () => {
+    if (!existsSync(migrationPath)) return;
+    const sql = normalize(readFileSync(migrationPath, "utf8"));
+    const body = functionSql(sql, "guard_branding_virtual_payment_secret_rotation");
+    const configLock = body.indexOf(
+      "hashtextextended('branding_virtual_payment_config', 20260801)",
+    );
+    const nowAssignment = body.indexOf("v_now := clock_timestamp()");
+    const pendingRead = body.indexOf("from public.tenant_virtual_addon_orders");
+    expect(body).not.toContain("v_now timestamptz := clock_timestamp()");
+    expect(configLock).toBeLessThan(nowAssignment);
+    expect(nowAssignment).toBeLessThan(pendingRead);
+  });
+
   test("keeps issued expired orders pending while closing only unissued stale facts", () => {
     if (!existsSync(migrationPath)) return;
     const sql = normalize(readFileSync(migrationPath, "utf8"));
@@ -122,6 +200,30 @@ describe("branding virtual order payment-window hardening migration", () => {
     expect(createRpc).toContain("payment_request_claim_expires_at <= v_now");
     expect(createRpc).not.toContain("payment_request_issued_at is not null set payment_status = 'closed'");
     expect(createRpc).toContain("orders.payment_status = 'pending'");
+  });
+
+  test("frees a locally closable stale pending fact before checking its old owner", () => {
+    if (!existsSync(migrationPath)) return;
+    const sql = normalize(readFileSync(migrationPath, "utf8"));
+    const body = functionSql(sql, "branding_create_virtual_addon_order");
+    const pendingLock = body.indexOf(
+      "and orders.product_code = v_product.code and orders.payment_status = 'pending' for update",
+    );
+    const closableCheck = body.indexOf(
+      "if v_order.payment_request_issued_at is null",
+      pendingLock,
+    );
+    const payerCheck = body.indexOf(
+      "if v_order.payer_openid is distinct from p_payer_openid",
+      pendingLock,
+    );
+    const actorCheck = body.indexOf(
+      "if v_order.created_by is distinct from p_created_by",
+      pendingLock,
+    );
+    expect(pendingLock).toBeGreaterThanOrEqual(0);
+    expect(closableCheck).toBeLessThan(payerCheck);
+    expect(closableCheck).toBeLessThan(actorCheck);
   });
 
   test("guards secret identity and atomically disables the matching mapping", () => {
@@ -137,6 +239,16 @@ describe("branding virtual order payment-window hardening migration", () => {
     expect(sql).toContain("status = 'disabled'");
     expect(sql).toContain("validation_status = 'pending'");
     expect(sql).toContain("validated_at = null");
+  });
+
+  test("does not disable or version-bump a mapping for a no-op secret update", () => {
+    if (!existsSync(migrationPath)) return;
+    const sql = normalize(readFileSync(migrationPath, "utf8"));
+    const body = functionSql(sql, "guard_branding_virtual_payment_secret_rotation");
+    expect(body).toMatch(
+      /if v_effective_changed then if exists \([\s\S]*?update public\.platform_virtual_payment_products[\s\S]*?version = version \+ 1[\s\S]*?end if;/,
+    );
+    expect(body).not.toContain("if v_effective_changed and exists");
   });
 
   test("closes only unissued unclaimed orders when entitlement is suspended or revoked", () => {

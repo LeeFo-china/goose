@@ -61,7 +61,7 @@ DECLARE
   v_product public.platform_addon_products%ROWTYPE;
   v_virtual_product public.platform_virtual_payment_products%ROWTYPE;
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
   v_order_no text;
   v_out_trade_no text;
 BEGIN
@@ -84,6 +84,24 @@ BEGIN
   PERFORM pg_advisory_xact_lock(
     hashtextextended(p_tenant_id::text || ':custom_support_branding', 20260728)
   );
+
+  SELECT orders.* INTO v_order
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.tenant_id = p_tenant_id
+    AND orders.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+  IF FOUND THEN
+    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+    END IF;
+    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
+    END IF;
+    RETURN v_order;
+  END IF;
+
   PERFORM pg_advisory_xact_lock(
     hashtextextended('branding_virtual_payment_config', 20260801)
   );
@@ -148,56 +166,40 @@ BEGIN
       ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW';
   END IF;
 
-  UPDATE public.tenant_virtual_addon_orders AS orders
-  SET payment_status = 'closed',
-      failure_code = 'BRANDING_VIRTUAL_ORDER_EXPIRED',
-      failure_message = '虚拟支付订单支付时间已结束',
-      payment_request_claim_token = NULL,
-      payment_request_claimed_at = NULL,
-      payment_request_claim_expires_at = NULL
-  WHERE orders.tenant_id = p_tenant_id
-    AND orders.product_code = v_product.code
-    AND orders.payment_status = 'pending'
-    AND orders.payment_expires_at <= v_now
-    AND orders.payment_request_issued_at IS NULL
-    AND (
-      orders.payment_request_claim_token IS NULL
-      OR orders.payment_request_claim_expires_at <= v_now
-    );
-
-  SELECT orders.* INTO v_order
-  FROM public.tenant_virtual_addon_orders AS orders
-  WHERE orders.tenant_id = p_tenant_id
-    AND orders.idempotency_key = p_idempotency_key
-  FOR UPDATE;
-  IF FOUND THEN
-    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
-    END IF;
-    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
-    END IF;
-    RETURN v_order;
-  END IF;
-
   SELECT orders.* INTO v_order
   FROM public.tenant_virtual_addon_orders AS orders
   WHERE orders.tenant_id = p_tenant_id
     AND orders.product_code = v_product.code
     AND orders.payment_status = 'pending'
   FOR UPDATE;
+  v_now := clock_timestamp();
   IF FOUND THEN
-    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+    IF v_order.payment_request_issued_at IS NULL
+       AND v_order.payment_expires_at <= v_now
+       AND (
+         v_order.payment_request_claim_token IS NULL
+         OR v_order.payment_request_claim_expires_at <= v_now
+       )
+    THEN
+      UPDATE public.tenant_virtual_addon_orders
+      SET payment_status = 'closed',
+          failure_code = 'BRANDING_VIRTUAL_ORDER_EXPIRED',
+          failure_message = '虚拟支付订单支付时间已结束',
+          payment_request_claim_token = NULL,
+          payment_request_claimed_at = NULL,
+          payment_request_claim_expires_at = NULL
+      WHERE id = v_order.id;
+    ELSE
+      IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+      END IF;
+      IF v_order.created_by IS DISTINCT FROM p_created_by THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
+      END IF;
+      RETURN v_order;
     END IF;
-    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
-    END IF;
-    RETURN v_order;
   END IF;
 
   v_order_no := 'BVO-' || to_char(v_now, 'YYYYMMDDHH24MISSMS') || '-' ||
@@ -315,7 +317,7 @@ DECLARE
   v_product public.platform_addon_products%ROWTYPE;
   v_mapping public.platform_virtual_payment_products%ROWTYPE;
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
 BEGIN
   IF p_tenant_id IS NULL OR p_order_id IS NULL OR p_created_by IS NULL
      OR p_payer_openid IS NULL OR btrim(p_payer_openid) = ''
@@ -389,6 +391,7 @@ BEGIN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_NOT_PENDING';
   END IF;
+  v_now := clock_timestamp();
   IF v_order.payment_request_claim_token IS NOT NULL
      AND v_order.payment_request_claim_expires_at > v_now
   THEN
@@ -442,7 +445,7 @@ DECLARE
   v_product public.platform_addon_products%ROWTYPE;
   v_mapping public.platform_virtual_payment_products%ROWTYPE;
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
 BEGIN
   IF p_tenant_id IS NULL OR p_order_id IS NULL OR p_created_by IS NULL
      OR p_claim_token IS NULL OR p_payer_openid IS NULL
@@ -517,6 +520,7 @@ BEGIN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_ORDER_NOT_PENDING';
   END IF;
+  v_now := clock_timestamp();
   IF v_order.payment_request_claim_token IS DISTINCT FROM p_claim_token
      OR v_order.payment_request_claim_expires_at <= v_now
   THEN
@@ -706,7 +710,7 @@ DECLARE
   v_new_protected boolean;
   v_key text;
   v_environment text;
-  v_now timestamptz := clock_timestamp();
+  v_now timestamptz;
   v_effective_changed boolean;
 BEGIN
   IF TG_OP = 'INSERT' THEN
@@ -768,30 +772,33 @@ BEGIN
   PERFORM pg_advisory_xact_lock(
     hashtextextended('branding_virtual_payment_config', 20260801)
   );
+  v_now := clock_timestamp();
 
-  IF v_effective_changed AND EXISTS (
-    SELECT 1
-    FROM public.tenant_virtual_addon_orders AS orders
-    WHERE orders.environment = v_environment
-      AND orders.payment_status = 'pending'
-      AND (
-        orders.payment_expires_at > v_now
-        OR orders.payment_request_claim_expires_at > v_now
-        OR orders.payment_request_issued_at IS NOT NULL
-      )
-    LIMIT 1
-  ) THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS';
+  IF v_effective_changed THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.tenant_virtual_addon_orders AS orders
+      WHERE orders.environment = v_environment
+        AND orders.payment_status = 'pending'
+        AND (
+          orders.payment_expires_at > v_now
+          OR orders.payment_request_claim_expires_at > v_now
+          OR orders.payment_request_issued_at IS NOT NULL
+        )
+      LIMIT 1
+    ) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS';
+    END IF;
+
+    UPDATE public.platform_virtual_payment_products
+    SET status = 'disabled',
+        validation_status = 'pending',
+        validated_at = NULL,
+        version = version + 1
+    WHERE environment = v_environment
+      AND encrypted_secret_ref = v_key;
   END IF;
-
-  UPDATE public.platform_virtual_payment_products
-  SET status = 'disabled',
-      validation_status = 'pending',
-      validated_at = NULL,
-      version = version + 1
-  WHERE environment = v_environment
-    AND encrypted_secret_ref = v_key;
 
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;

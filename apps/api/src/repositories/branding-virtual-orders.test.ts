@@ -283,4 +283,16 @@ describe("BrandingVirtualOrderRepository", () => {
     expect(selected).not.toBe("*");
     expect(String(selected)).not.toContain("reconcile_");
   });
+
+  test("reads one tenant idempotent fact with a bounded exact query", async () => {
+    const f = await repositoryWith({ queryData: order });
+    expect(await f.repository.findTenantOrderByIdempotencyKey({
+      tenantId: TENANT_ID,
+      idempotencyKey: IDEMPOTENCY_KEY,
+    })).toEqual(order);
+    expect(f.calls).toContainEqual(["from", "tenant_virtual_addon_orders"]);
+    expect(f.calls).toContainEqual(["eq", "tenant_id", TENANT_ID]);
+    expect(f.calls).toContainEqual(["eq", "idempotency_key", IDEMPOTENCY_KEY]);
+    expect(f.calls).toContainEqual(["limit", 1]);
+  });
 });

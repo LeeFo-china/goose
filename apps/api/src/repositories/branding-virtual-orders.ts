@@ -173,6 +173,23 @@ export class BrandingVirtualOrderRepository {
       : parseOrder(data, "查询品牌权益虚拟支付订单失败");
   }
 
+  async findTenantOrderByIdempotencyKey(input: {
+    tenantId: string;
+    idempotencyKey: string;
+  }): Promise<BrandingVirtualOrderRecord | null> {
+    const { data, error } = await this.clientProvider()
+      .from("tenant_virtual_addon_orders")
+      .select(ORDER_COLUMNS)
+      .eq("tenant_id", input.tenantId)
+      .eq("idempotency_key", input.idempotencyKey)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询品牌权益虚拟支付订单失败");
+    return data === null
+      ? null
+      : parseOrder(data, "查询品牌权益虚拟支付订单失败");
+  }
+
   async claimPaymentRequest(input: {
     tenantId: string;
     orderId: string;

@@ -109,11 +109,19 @@ const finalizedOrder: BrandingVirtualOrderRecord = {
 function fixture() {
   const events: string[] = [];
   const repository = {
-    findProductionMapping: mock(async () => ({
-      id: MAPPING_ID,
-      environment: "production" as const,
-      secret_revision: 7,
-    })),
+    findTenantOrderByIdempotencyKey: mock(async () => {
+      events.push("replay");
+      return null as BrandingVirtualOrderRecord | null;
+    }),
+    findProductionMapping: mock(async (): Promise<{
+      id: string;
+      environment: "production";
+      secret_revision: number;
+    } | null> => ({
+        id: MAPPING_ID,
+        environment: "production",
+        secret_revision: 7,
+      })),
     findProductionMappingId: mock(async () => MAPPING_ID),
     create: mock(async () => order),
     findTenantOrderById: mock(async () => order),
@@ -273,6 +281,102 @@ describe("exact environment secret preflight", () => {
       product_code: "custom_support_branding_annual",
       idempotency_key: IDEMPOTENCY_KEY,
       requested_platform: "unknown",
+    }, OPENID)).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_VIRTUAL_PAYMENT_SECRET_INVALID",
+    });
+    expect(f.repository.create).not.toHaveBeenCalled();
+  });
+
+  test.each(["succeeded", "closed"] as const)(
+    "replays an existing %s fact without reading current mapping or secret",
+    async (paymentStatus) => {
+      const f = fixture();
+      f.repository.findTenantOrderByIdempotencyKey.mockResolvedValueOnce({
+        ...order,
+        payment_status: paymentStatus,
+      });
+      f.repository.findProductionMapping.mockRejectedValueOnce(
+        Errors.business(409, "当前销售配置不可用", "CONFIG_DISABLED"),
+      );
+      f.settingsService.getPlatformSecretString.mockResolvedValueOnce("");
+
+      const result = await f.service.createOrder(auth, {
+        product_code: "custom_support_branding_annual",
+        idempotency_key: IDEMPOTENCY_KEY,
+        requested_platform: "ios",
+      }, OPENID);
+
+      expect(result.order).toMatchObject({ id: ORDER_ID, payment_status: paymentStatus });
+      expect(f.repository.findProductionMapping).not.toHaveBeenCalled();
+      expect(f.settingsService.getPlatformSecretString).not.toHaveBeenCalled();
+      expect(f.repository.create).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ["payer_openid", "another-openid", "BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH"],
+    ["created_by", "99999999-9999-4999-8999-999999999999", "BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH"],
+  ] as const)("rejects replay identity mismatch for %s", async (field, value, code) => {
+    const f = fixture();
+    f.repository.findTenantOrderByIdempotencyKey.mockResolvedValueOnce({
+      ...order,
+      [field]: value,
+    });
+
+    await expect(f.service.createOrder(auth, {
+      product_code: "custom_support_branding_annual",
+      idempotency_key: IDEMPOTENCY_KEY,
+      requested_platform: "unknown",
+    }, OPENID)).rejects.toMatchObject({ statusCode: 409, code });
+    expect(f.repository.findProductionMapping).not.toHaveBeenCalled();
+  });
+
+  test("lets a concurrently-created fact win over a missing mapping", async () => {
+    const f = fixture();
+    f.repository.findTenantOrderByIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...order, payment_status: "closed" });
+    f.repository.findProductionMapping.mockResolvedValueOnce(null);
+
+    const result = await f.service.createOrder(auth, {
+      product_code: "custom_support_branding_annual",
+      idempotency_key: IDEMPOTENCY_KEY,
+      requested_platform: "unknown",
+    }, OPENID);
+
+    expect(result.order).toMatchObject({ id: ORDER_ID, payment_status: "closed" });
+    expect(f.repository.create).not.toHaveBeenCalled();
+  });
+
+  test("lets a concurrently-created fact win over a failed secret preflight", async () => {
+    const f = fixture();
+    f.repository.findTenantOrderByIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ...order, payment_status: "succeeded" });
+    f.settingsService.getPlatformSecretString.mockResolvedValueOnce("");
+
+    const result = await f.service.createOrder(auth, {
+      product_code: "custom_support_branding_annual",
+      idempotency_key: IDEMPOTENCY_KEY,
+      requested_platform: "ios",
+    }, OPENID);
+
+    expect(result.order).toMatchObject({ id: ORDER_ID, payment_status: "succeeded" });
+    expect(f.repository.create).not.toHaveBeenCalled();
+  });
+
+  test("preserves the original preflight error when the replay recheck fails", async () => {
+    const f = fixture();
+    f.repository.findTenantOrderByIdempotencyKey
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(Errors.dbError("并发事实复查失败"));
+    f.settingsService.getPlatformSecretString.mockResolvedValueOnce("");
+
+    await expect(f.service.createOrder(auth, {
+      product_code: "custom_support_branding_annual",
+      idempotency_key: IDEMPOTENCY_KEY,
+      requested_platform: "ios",
     }, OPENID)).rejects.toMatchObject({
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PAYMENT_SECRET_INVALID",

@@ -824,6 +824,18 @@ release，release 失败由租约自动恢复且不能覆盖原错误。
 数据库触发器无法观察环境变量变化，存在 pending、有效 claim 或已签发未对账订单期间
 严禁运维修改对应环境变量，必须先完成对账并停用 mapping。
 
+同一租户同一幂等键的不可变订单事实优先于当前销售状态：service 先按
+`tenant_id + idempotency_key` 有界精确查询并校验付款人/操作人；数据库在取得租户权益锁后、
+取得全局配置锁及检查暂停/撤销/maintenance/mapping 前再次锁定并返回同键事实。首次查询
+未命中后若 mapping 或密钥预检失败，service 再精确复查一次；只有确实仍无事实才返回原始
+预检错误，复查自身失败不得覆盖原错误。这样 succeeded、closed 和 pending 回放均不依赖
+当前配置，同时新订单仍不能绕过服务端密钥预检。
+
+所有支付窗口与 claim 租约判断必须在对应 advisory lock、商品/mapping 行锁和订单行锁全部
+取得后重新执行 `clock_timestamp()`，禁止用等待锁之前的时间。密钥触发器也必须在全局配置
+锁后刷新时间；仅 INSERT/DELETE 或 `value_text/status` 实际变化才执行 pending 保护、禁用
+mapping 和递增版本，审计字段更新或同值 UPDATE 是 no-op。
+
 受保护密钥的 INSERT/UPDATE/DELETE 均在全局配置锁内执行。key、tenant_id、is_secret 不可
 变更，配置必须为 `tenant_id IS NULL AND is_secret = true`；有效值或状态变化在存在可签发、
 签发中或已签发待对账订单时被拒绝。允许的密钥变化会在同一事务内禁用对应环境 mapping

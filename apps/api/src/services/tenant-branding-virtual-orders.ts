@@ -21,6 +21,7 @@ const TENANT_ADMIN_ROLE = "system_admin";
 
 type RepositoryPort = Pick<
   typeof brandingVirtualOrderRepository,
+  | "findTenantOrderByIdempotencyKey"
   | "findProductionMapping"
   | "create"
   | "claimPaymentRequest"
@@ -72,11 +73,52 @@ export class TenantBrandingVirtualOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
-    const mapping = await this.repository.findProductionMapping({
-      productCode: input.product_code,
-    });
-    if (!mapping) throw mappingUnavailable();
-    await this.requireBoundSecret(mapping.environment, mapping.secret_revision);
+    const replayInput = {
+      tenantId: actor.tenantId,
+      idempotencyKey: input.idempotency_key,
+    };
+    const existing = await this.repository.findTenantOrderByIdempotencyKey(
+      replayInput,
+    );
+    if (existing) {
+      assertReplayIdentity(existing, actor.employeeId, payerOpenid);
+      return createOrderResult(existing, this.nowFactory());
+    }
+
+    let mapping: Awaited<ReturnType<RepositoryPort["findProductionMapping"]>>;
+    try {
+      mapping = await this.repository.findProductionMapping({
+        productCode: input.product_code,
+      });
+    } catch (error) {
+      const replay = await this.replayAfterPreflightFailure(
+        replayInput,
+        actor.employeeId,
+        payerOpenid,
+        error,
+      );
+      return createOrderResult(replay, this.nowFactory());
+    }
+    if (!mapping) {
+      const replay = await this.replayAfterPreflightFailure(
+        replayInput,
+        actor.employeeId,
+        payerOpenid,
+        mappingUnavailable(),
+      );
+      return createOrderResult(replay, this.nowFactory());
+    }
+    try {
+      await this.requireBoundSecret(mapping.environment, mapping.secret_revision);
+    } catch (error) {
+      const replay = await this.replayAfterPreflightFailure(
+        replayInput,
+        actor.employeeId,
+        payerOpenid,
+        error,
+      );
+      return createOrderResult(replay, this.nowFactory());
+    }
     const order = await this.repository.create({
       tenantId: actor.tenantId,
       idempotencyKey: input.idempotency_key,
@@ -85,10 +127,7 @@ export class TenantBrandingVirtualOrderService {
       payerOpenid,
       createdBy: actor.employeeId,
     });
-    return {
-      order: serializeVirtualOrder(order),
-      server_time: this.nowFactory().toISOString(),
-    };
+    return createOrderResult(order, this.nowFactory());
   }
 
   async createPaymentRequest(
@@ -199,6 +238,51 @@ export class TenantBrandingVirtualOrderService {
     } catch {
       // The short database lease recovers a process crash or release failure.
     }
+  }
+
+  private async replayAfterPreflightFailure(
+    input: Parameters<RepositoryPort["findTenantOrderByIdempotencyKey"]>[0],
+    employeeId: string,
+    payerOpenid: string,
+    originalError: unknown,
+  ): Promise<BrandingVirtualOrderRecord> {
+    let existing: BrandingVirtualOrderRecord | null;
+    try {
+      existing = await this.repository.findTenantOrderByIdempotencyKey(input);
+    } catch {
+      throw originalError;
+    }
+    if (!existing) throw originalError;
+    assertReplayIdentity(existing, employeeId, payerOpenid);
+    return existing;
+  }
+}
+
+function createOrderResult(order: BrandingVirtualOrderRecord, now: Date) {
+  return {
+    order: serializeVirtualOrder(order),
+    server_time: now.toISOString(),
+  };
+}
+
+function assertReplayIdentity(
+  order: BrandingVirtualOrderRecord,
+  employeeId: string,
+  payerOpenid: string,
+): void {
+  if (order.payer_openid !== payerOpenid) {
+    throw Errors.business(
+      409,
+      "该订单已绑定其他付款人",
+      "BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH",
+    );
+  }
+  if (order.created_by !== employeeId) {
+    throw Errors.business(
+      409,
+      "该订单已绑定其他操作人",
+      "BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH",
+    );
   }
 }
 

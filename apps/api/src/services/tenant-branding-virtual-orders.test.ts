@@ -100,6 +100,10 @@ function fixture(overrides: {
     ? order
     : overrides.currentOrder;
   const repository = {
+    findTenantOrderByIdempotencyKey: mock(async (_input: {
+      tenantId: string;
+      idempotencyKey: string;
+    }): Promise<BrandingVirtualOrderRecord | null> => null),
     findProductionMapping: mock(
       async (_input: { productCode: typeof order.product_code }): Promise<{
         id: string;
