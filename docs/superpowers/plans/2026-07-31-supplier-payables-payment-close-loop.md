@@ -1698,7 +1698,8 @@ bun test $(rg --files src -g '*supplier*.test.ts' | sort) \
   src/controllers/supplier-payment-requests/routes.test.ts \
   src/controllers/supplier-payables/routes.test.ts
 cd ../admin
-bun test components/supplier-payables \
+bun test components/supplier-products/supplier-command-attempt.test.ts \
+  components/supplier-payables \
   components/supplier-payment-requests \
   components/supplier-purchase-orders \
   components/finance/finance-supplier-cost-summary.test.ts
@@ -1767,7 +1768,8 @@ Expected: 只包含本计划，不包含
 - Task 7–10：`dde6247b`、`27015d86`、`38de2836`、`1a8dc2f1`。
 - Task 11：`2c491798`（确定性 E2E）、`4ab728fb`（数据库类型）、
   `cf44ca50`（真实回滚 smoke fixture 与 EXPLAIN）、`747163a9`（路由回归计数）、
-  `59a16e77`（合入当前 main 并保留已发布 migration 语义）。
+  `59a16e77`（合入当前 main 并保留已发布 migration 语义）、`0549c652`
+  （付款 UUID 幂等键、凭证归属校验与搜索契约对齐）。
 
 ### Migration 发布
 
@@ -1815,8 +1817,8 @@ Expected: 只包含本计划，不包含
 - `api:typecheck`、`api:build`、`admin:check`、`admin:build` 全绿；Admin 文件检查
   1067 个 TS/TSX 文件均不超过 500 行。
 - API 全部 supplier 测试及两组非 supplier 文件名的付款路由测试：
-  691 tests / 5556 assertions，0 failure。
-- Admin 指定组件：126 tests / 638 assertions，0 failure。
+  693 tests / 5565 assertions，0 failure。
+- Admin 指定组件及通用命令 helper：130 tests / 650 assertions，0 failure。
 - Playwright：付款闭环 1 passed；采购申请闭环 1 passed；采购单闭环 2 passed。
 
 ### 需求审计
@@ -1827,9 +1829,14 @@ Expected: 只包含本计划，不包含
   多次付款和重放通过状态机及唯一幂等事实约束。
 - 发票门禁在付款 RPC 写入前校验，失败无部分写入；每笔付款只生成一条供应商现金
   台账。项目成本只聚合费用与 supplier cost，不把 supplier cash 重复计成本。
+- Admin 付款命令使用 controller 要求的纯 UUID 幂等键；E2E mock 会拒绝非 UUID，
+  防止 scoped key 在 mock 中误通过。付款前以一次受限、租户隔离查询校验全部凭证
+  文件属于当前员工、`expense_request` 场景且仍有效，任一不匹配时不调用付款 RPC。
+- 付款申请列表的 UI 文案、mock 和后端查询统一为“申请号或供应商”，不再错误提示
+  可按申请原因搜索。
 - 新增列表和辅助查询均有 `page=1&pageSize=20`、最大 100 的边界或受限 batch；
   关键读取已由真实 EXPLAIN 证明命中索引。
-- 旧采购申请、采购单、履约和费用聚合包含在 691 项 API、126 项 Admin 与三条
+- 旧采购申请、采购单、履约和费用聚合包含在 693 项 API、130 项 Admin 与三条
   Playwright 回归中。
 - Orange 仓库只做 `git status`/`rev-parse` 只读核查，Agent 未执行修改、格式化、
   暂存或提交命令。当前 HEAD 为 `96443db9f3b36402229fe24c91c2b63746019156`；
