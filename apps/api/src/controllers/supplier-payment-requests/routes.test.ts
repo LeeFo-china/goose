@@ -81,7 +81,7 @@ describe("SupplierPaymentRequestsController routes", () => {
     for (const service of Object.values(services)) service.mockClear();
   });
 
-  test("registers the eleven request routes exactly once", async () => {
+  test("registers request and payable routes exactly once", async () => {
     const value = await controller();
     const routes: Array<{ method: string; path: string }> = [];
     value.registerExtraRoutes({
@@ -112,9 +112,9 @@ describe("SupplierPaymentRequestsController routes", () => {
     payableController.registerExtraRoutes({
       get: (path: string) => routes.push({ method: "GET", path }),
     } as never);
-    expect(routes).toHaveLength(13);
+    expect(routes).toHaveLength(15);
     expect(new Set(routes.map(({ method, path }) => `${method} ${path}`)).size)
-      .toBe(13);
+      .toBe(15);
   });
 
   test("parses paginated reads and wraps their responses", async () => {
