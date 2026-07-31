@@ -59,6 +59,7 @@
     "wechat-pay:applyment-preflight": "bun --env-file=.env --env-file=.env.local src/scripts/wechat-pay-applyment-preflight.ts",
     "ocr:cam:readiness": "bun --env-file=.env src/scripts/tencent-ocr-cam-readiness.ts",
     "ocr:results:cleanup": "bun src/scripts/ocr-result-cleanup.ts",
+    "marketing:claim-voucher:fixtures": "bun src/scripts/marketing-claim-voucher-fixtures.ts",
     "storage:low-frequency-images:backfill": "bun src/scripts/storage-low-frequency-images-backfill.ts",
     "build": "bun build src/app.ts --outdir dist --target node",
     "typecheck": "tsc -p tsconfig.json --noEmit",

@@ -64,6 +64,8 @@ Compose 文件：
 ```text
 gooes-api-dev
 gooes-admin-dev
+gooes-h5-dev
+gooes-web-dev
 gooes-social-video-worker-dev
 gooes-cos-reconcile-worker-dev
 ```
@@ -73,6 +75,7 @@ gooes-cos-reconcile-worker-dev
 ```text
 useccr.ccs.tencentyun.com/america_goose/goose-api:dev
 useccr.ccs.tencentyun.com/america_goose/goose-admin:dev
+useccr.ccs.tencentyun.com/america_goose/goose-h5:dev
 useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:dev
 ```
 
@@ -81,7 +84,8 @@ useccr.ccs.tencentyun.com/america_goose/goose-social-video-worker:dev
 ```text
 127.0.0.1:13000 -> gooes-api-dev:3000
 127.0.0.1:13010 -> gooes-admin-dev:3010
-127.0.0.1:13020 -> h5-dev 预留
+127.0.0.1:13020 -> gooes-web-dev:3020
+127.0.0.1:13030 -> gooes-h5-dev:3020
 ```
 
 部署时必须使用：
@@ -107,15 +111,17 @@ docker compose -f docker-compose.dev.yml up -d --no-deps --force-recreate <servi
 ```text
 api-dev.goodcms.cn   -> 127.0.0.1:13000
 admin-dev.goodcms.cn -> 127.0.0.1:13010
-h5-dev.goodcms.cn    -> 127.0.0.1:13020
+h5-dev.goodcms.cn    -> 127.0.0.1:13030
 ```
 
-`h5-dev.goodcms.cn` 在 2026-05-17 没有独立 H5 运行容器，默认页面 upstream `127.0.0.1:13020` 仍是预留位。但为了小程序开发版能按同源 H5 域名读取公开活动接口，Nginx 已按生产 H5 口径增加公开接口代理：
+自 2026-07-31 起，`h5-dev.goodcms.cn` 页面由独立 `gooes-h5-dev`
+容器提供。为兼容既有小程序开发构建，Nginx 仍保留以下 API 代理：
 
 ```text
 h5-dev.goodcms.cn/public/marketing-pages    -> 127.0.0.1:13000
 h5-dev.goodcms.cn/public/marketing-pages/*  -> 127.0.0.1:13000
 h5-dev.goodcms.cn/public/tenants/*          -> 127.0.0.1:13000
+h5-dev.goodcms.cn/wechat/h5-session         -> 127.0.0.1:13000
 ```
 
 2026-05-18 验证：

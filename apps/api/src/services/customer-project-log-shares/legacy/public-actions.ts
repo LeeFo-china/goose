@@ -7,6 +7,7 @@ import type { AuthContext } from "@/services/authorization";
 import { projectMemberService } from "@/services/project-members";
 import { systemSettingsService } from "@/services/system-settings";
 import { userIdentityService } from "@/services/user-identities";
+import { wechatOpenLinkService } from "@/services/wechat-open-link";
 import { customerProjectLogShareCampaignRepository, type CustomerProjectLogShareCampaignRow } from "@/repositories/customer-project-log-share-campaigns";
 import {
   marketingCampaignRepository,
@@ -73,6 +74,9 @@ import {
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
 
+import { buildMiniProgramQrcodeRequest } from "../mini-program-qrcode-request";
+import { serializeShareRewardCode } from "../share-reward-code";
+
 import {
   buildCampaignRewardTitle,
   CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS,
@@ -86,7 +90,6 @@ import {
   buildDefaultConfigRewardTitle,
   buildMiniProgramScene,
   buildRewardClaimCode,
-  buildShareRewardCode,
   buildShareToken,
   buildVoucherMiniProgramScene,
   fallbackCopies,
@@ -166,11 +169,13 @@ export async function getShareCard(this: any,
     designer_name: context.designer_name,
     share_reward_title: campaign ? getCampaignRewardTitle(campaign) : null,
     share_reward_code: campaign
-      ? (campaign.reward_claim_code || buildShareRewardCode({
-        customerId: context.customer_id,
-        projectId: context.project_id,
-        logId: context.log_id,
-      }))
+      ? serializeShareRewardCode({
+        status: campaign.status,
+        achievedAt: campaign.achieved_at,
+        assistCount: campaign.assist_count,
+        targetAssistCount: campaign.target_assist_count,
+        rewardClaimCode: campaign.reward_claim_code,
+      })
       : null,
     share_reward_remark: campaign ? getCampaignRewardRemark(campaign) : null,
     share_token: campaign?.share_token || null,
@@ -188,12 +193,13 @@ export async function getShareCampaignQrcodeBuffer(this: any, shareToken: string
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
+      body: JSON.stringify(await buildMiniProgramQrcodeRequest({
         scene: buildMiniProgramScene(shareToken),
         page: await getWechatShareCampaignPage(),
-        check_path: false,
-        env_version: "release",
-      }),
+        settings: systemSettingsService,
+        normalizeEnvVersion: wechatOpenLinkService.normalizeEnvVersion
+          .bind(wechatOpenLinkService),
+      })),
     },
   );
 
@@ -236,12 +242,13 @@ export async function getRewardClaimVoucherQrcodeBuffer(this: any, voucherToken:
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
+      body: JSON.stringify(await buildMiniProgramQrcodeRequest({
         scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
         page: await getWechatShareCampaignClaimVoucherPage(),
-        check_path: false,
-        env_version: "release",
-      }),
+        settings: systemSettingsService,
+        normalizeEnvVersion: wechatOpenLinkService.normalizeEnvVersion
+          .bind(wechatOpenLinkService),
+      })),
     },
   );
 
@@ -284,12 +291,13 @@ export async function getAppointmentRewardClaimVoucherQrcodeBuffer(this: any, vo
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
+      body: JSON.stringify(await buildMiniProgramQrcodeRequest({
         scene: buildVoucherMiniProgramScene(finalCampaign.reward_claim_voucher_token),
         page: await getWechatShareCampaignClaimVoucherPage(),
-        check_path: false,
-        env_version: "release",
-      }),
+        settings: systemSettingsService,
+        normalizeEnvVersion: wechatOpenLinkService.normalizeEnvVersion
+          .bind(wechatOpenLinkService),
+      })),
     },
   );
 

@@ -73,6 +73,8 @@ import {
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
 
+import { decideClaimVoucher } from "../claim-voucher-policy";
+
 import {
   buildCampaignRewardTitle,
   CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS,
@@ -180,24 +182,15 @@ export function getRewardClaimVoucherStatus(this: any,
     return null;
   }
 
-  if (campaign.status === "reward_claimed" || campaign.reward_claim_status === "claimed") {
-    return "claimed";
-  }
-
-  if (campaign.status === "closed") {
-    return "invalid";
-  }
-
-  const expiresAt = this.getVoucherExpiresAt(campaign);
-  if (expiresAt && new Date(expiresAt).getTime() < Date.now()) {
-    return "expired";
-  }
-
-  if (this.isCampaignRewardClaimable(campaign)) {
-    return "active";
-  }
-
-  return "invalid";
+  return decideClaimVoucher({
+    hasVoucherToken: true,
+    isClaimed:
+      campaign.status === "reward_claimed"
+      || campaign.reward_claim_status === "claimed",
+    isClosed: campaign.status === "closed",
+    isAchieved: this.isCampaignRewardClaimable(campaign),
+    expiresAt: this.getVoucherExpiresAt(campaign),
+  }).voucherStatus;
 }
 
 export function isCampaignRewardClaimable(this: any, campaign: CustomerProjectLogShareCampaignRow) {

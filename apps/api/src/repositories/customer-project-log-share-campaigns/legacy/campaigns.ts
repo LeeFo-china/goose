@@ -127,6 +127,36 @@ export async function updateRewardMetadata(this: any, input: {
   return data as CustomerProjectLogShareCampaignRow;
 }
 
+export async function claimRewardByVoucherIfUnclaimed(this: any, input: {
+  id: string;
+  voucherToken: string;
+  employeeId: string;
+  channel: string;
+  claimedAt: string;
+}) {
+  const { data, error } = await SupabaseDB.getAdminClient()
+    .from("customer_log_share_campaigns")
+    .update({
+      status: "reward_claimed",
+      reward_claim_status: "claimed",
+      reward_claim_channel: input.channel,
+      reward_claimed_at: input.claimedAt,
+      reward_claimed_by_employee_id: input.employeeId,
+    })
+    .eq("id", input.id)
+    .eq("reward_claim_voucher_token", input.voucherToken)
+    .neq("reward_claim_status", "claimed")
+    .neq("status", "reward_claimed")
+    .select("*")
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("核销分享活动领取凭证失败", error);
+  }
+
+  return (data || null) as CustomerProjectLogShareCampaignRow | null;
+}
+
 export async function touchPosterSavedAt(this: any, id: string) {
   const { data, error } = await SupabaseDB.getAdminClient()
     .from("customer_log_share_campaigns")

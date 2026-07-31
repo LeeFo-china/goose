@@ -89,7 +89,6 @@ import {
   buildShareRewardCode,
   buildShareToken,
   buildVoucherMiniProgramScene,
-  fallbackCopies,
   getAppointmentRewardClaimInstruction,
   getAppointmentRewardTitle,
   getCampaignRewardRemark,
@@ -165,9 +164,9 @@ export async function requestAiCopies(this: any,
         },
       ],
     });
-    return parseCopiesResult(result.content, context);
+    return parseCopiesResult(result.content, context, input.length);
   } catch {
-    return fallbackCopies(context);
+    return parseCopiesResult("", context, input.length);
   }
 }
 

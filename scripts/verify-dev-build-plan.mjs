@@ -18,6 +18,7 @@ const CLASSIFICATIONS = new Set([
   "non-runtime",
   "migration",
   "web",
+  "h5",
   "api",
   "admin",
   "social-video-worker",
@@ -25,10 +26,11 @@ const CLASSIFICATIONS = new Set([
   "unknown-runtime",
   "fallback-all",
 ]);
-const BUILD_ORDER = ["api", "admin", "web", "social-video-worker"];
+const BUILD_ORDER = ["api", "admin", "h5", "web", "social-video-worker"];
 const DEPLOY_ORDER = [
   "api",
   "admin",
+  "h5",
   "web",
   "social-video-worker",
   "cos-reconcile-worker",
