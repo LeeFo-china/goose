@@ -480,6 +480,7 @@ CREATE TABLE public.project_cost_events (
   accepted_quantity numeric(18, 4) NOT NULL,
   amount numeric(18, 2) NOT NULL,
   occurred_at timestamptz NOT NULL,
+  created_by_employee_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT project_cost_events_project_tenant_fkey
     FOREIGN KEY (project_id, tenant_id)
@@ -488,6 +489,10 @@ CREATE TABLE public.project_cost_events (
   CONSTRAINT project_cost_events_category_tenant_fkey
     FOREIGN KEY (cost_category_id, tenant_id)
     REFERENCES public.finance_cost_categories(id, tenant_id)
+    ON DELETE RESTRICT,
+  CONSTRAINT project_cost_events_created_employee_tenant_fkey
+    FOREIGN KEY (created_by_employee_id, tenant_id)
+    REFERENCES public.employees(id, tenant_id)
     ON DELETE RESTRICT,
   CONSTRAINT project_cost_events_relationship_tenant_supplier_fkey
     FOREIGN KEY (tenant_supplier_id, tenant_id, supplier_id)
@@ -575,6 +580,7 @@ CREATE TABLE public.supplier_payable_events (
   occurred_at timestamptz NOT NULL,
   due_at timestamptz NOT NULL,
   invoice_required_before_payment boolean NOT NULL,
+  created_by_employee_id uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT supplier_payable_events_project_tenant_fkey
     FOREIGN KEY (project_id, tenant_id)
@@ -583,6 +589,10 @@ CREATE TABLE public.supplier_payable_events (
   CONSTRAINT supplier_payable_events_category_tenant_fkey
     FOREIGN KEY (cost_category_id, tenant_id)
     REFERENCES public.finance_cost_categories(id, tenant_id)
+    ON DELETE RESTRICT,
+  CONSTRAINT supplier_payable_events_created_employee_tenant_fkey
+    FOREIGN KEY (created_by_employee_id, tenant_id)
+    REFERENCES public.employees(id, tenant_id)
     ON DELETE RESTRICT,
   CONSTRAINT supplier_payable_events_relationship_tenant_supplier_fkey
     FOREIGN KEY (tenant_supplier_id, tenant_id, supplier_id)
@@ -1179,7 +1189,8 @@ BEGIN
     currency,
     accepted_quantity,
     amount,
-    occurred_at
+    occurred_at,
+    created_by_employee_id
   )
   SELECT
     p_tenant_id,
@@ -1197,7 +1208,8 @@ BEGIN
     'CNY',
     allocated.accepted_quantity,
     allocated.recognized_amount,
-    p_received_at
+    p_received_at,
+    p_actor_employee_id
   FROM allocated
   JOIN public.supplier_purchase_order_receipt_items AS receipt_item
     ON receipt_item.id = allocated.receipt_item_id
@@ -1221,7 +1233,8 @@ BEGIN
     amount,
     occurred_at,
     due_at,
-    invoice_required_before_payment
+    invoice_required_before_payment,
+    created_by_employee_id
   )
   SELECT
     cost_event.tenant_id,
@@ -1243,7 +1256,8 @@ BEGIN
     p_received_at + make_interval(
       days => v_order.settlement_term_days_snapshot
     ),
-    v_order.invoice_required_before_payment_snapshot
+    v_order.invoice_required_before_payment_snapshot,
+    cost_event.created_by_employee_id
   FROM public.project_cost_events AS cost_event
   WHERE cost_event.tenant_id = p_tenant_id
     AND cost_event.supplier_purchase_order_receipt_id = p_receipt_id
@@ -1340,6 +1354,7 @@ WITH historical_line AS MATERIALIZED (
     purchase_item.quantity AS ordered_quantity,
     purchase_item.total_amount AS line_total_amount,
     receipt.received_at,
+    receipt.received_by_employee_id,
     SUM(receipt_item.accepted_quantity) OVER (
       PARTITION BY purchase_item.id
       ORDER BY receipt.received_at, receipt.id, receipt_item.id
@@ -1416,7 +1431,8 @@ INSERT INTO public.project_cost_events (
   currency,
   accepted_quantity,
   amount,
-  occurred_at
+  occurred_at,
+  created_by_employee_id
 )
 SELECT
   allocated.tenant_id,
@@ -1434,7 +1450,8 @@ SELECT
   'CNY',
   allocated.accepted_quantity,
   allocated.recognized_amount,
-  allocated.received_at
+  allocated.received_at,
+  allocated.received_by_employee_id
 FROM allocated
 ON CONFLICT (tenant_id, source_type, source_id) DO NOTHING;
 
@@ -1456,7 +1473,8 @@ INSERT INTO public.supplier_payable_events (
   amount,
   occurred_at,
   due_at,
-  invoice_required_before_payment
+  invoice_required_before_payment,
+  created_by_employee_id
 )
 SELECT
   cost_event.tenant_id,
@@ -1478,7 +1496,8 @@ SELECT
   cost_event.occurred_at + make_interval(
     days => purchase_order.settlement_term_days_snapshot
   ),
-  purchase_order.invoice_required_before_payment_snapshot
+  purchase_order.invoice_required_before_payment_snapshot,
+  cost_event.created_by_employee_id
 FROM public.project_cost_events AS cost_event
 JOIN public.supplier_purchase_orders AS purchase_order
   ON purchase_order.id = cost_event.supplier_purchase_order_id

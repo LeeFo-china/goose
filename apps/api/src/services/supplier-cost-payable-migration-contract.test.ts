@@ -5,9 +5,7 @@ const migrationUrl = new URL(
   "../../../../supabase/migrations/20260731100000_create_supplier_cost_payable_facts.sql",
   import.meta.url,
 );
-const migration = existsSync(migrationUrl)
-  ? readFileSync(migrationUrl, "utf8")
-  : "";
+const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
 const previousGuardMigration = readFileSync(
   new URL(
     "../../../../supabase/migrations/20260729191000_fix_supplier_purchase_order_transitions.sql",
@@ -40,9 +38,8 @@ function sqlFunctionFrom(source: string, schema: string, name: string) {
   return end < 0 ? source.slice(start) : source.slice(start, end + 4);
 }
 
-function sqlFunction(schema: string, name: string) {
-  return sqlFunctionFrom(migration, schema, name);
-}
+const sqlFunction = (schema: string, name: string) =>
+  sqlFunctionFrom(migration, schema, name);
 
 function sqlTable(name: string) {
   const start = migration.indexOf(`CREATE TABLE public.${name}`);
@@ -55,9 +52,7 @@ function aclStatement(prefix: string, suffix: string) {
   const start = migration.indexOf(prefix);
   if (start < 0) return "";
   const end = migration.indexOf(suffix, start);
-  return end < 0
-    ? migration.slice(start)
-    : migration.slice(start, end + suffix.length);
+  return end < 0 ? migration.slice(start) : migration.slice(start, end + suffix.length);
 }
 
 describe("supplier cost and payable migration contract", () => {
@@ -82,7 +77,9 @@ describe("supplier cost and payable migration contract", () => {
         /currency char\(3\) NOT NULL DEFAULT 'CNY'/,
         /amount numeric\(18, 2\) NOT NULL/,
         /accepted_quantity numeric\(18, 4\) NOT NULL/,
+        /created_by_employee_id uuid NOT NULL/,
         /FOREIGN KEY \(project_id, tenant_id\)[\s\S]*projects\(id, tenant_id\)/,
+        /FOREIGN KEY \(created_by_employee_id, tenant_id\)[\s\S]*employees\(id, tenant_id\)/,
         /FOREIGN KEY \(cost_category_id, tenant_id\)[\s\S]*finance_cost_categories\(id, tenant_id\)/,
         /FOREIGN KEY \(tenant_supplier_id, tenant_id, supplier_id\)[\s\S]*tenant_suppliers\(id, tenant_id, supplier_id\)/,
         /FOREIGN KEY \(supplier_purchase_order_id, tenant_id, supplier_id\)[\s\S]*supplier_purchase_orders\(id, tenant_id, supplier_id\)/,
@@ -403,6 +400,8 @@ describe("supplier cost and payable migration contract", () => {
       /WHERE financial_line\.accepted_quantity > 0/,
       /INSERT INTO public\.project_cost_events/,
       /INSERT INTO public\.supplier_payable_events/,
+      /INSERT INTO public\.project_cost_events \([\s\S]*?occurred_at,\s*created_by_employee_id\s*\)[\s\S]*?allocated\.recognized_amount,\s*p_received_at,\s*p_actor_employee_id/,
+      /INSERT INTO public\.supplier_payable_events \([\s\S]*?invoice_required_before_payment,\s*created_by_employee_id\s*\)[\s\S]*?v_order\.invoice_required_before_payment_snapshot,\s*cost_event\.created_by_employee_id/,
       /p_received_at \+ make_interval\(\s*days => v_order\.settlement_term_days_snapshot\s*\)/,
       /invoice_required_before_payment_snapshot/,
       /FROM public\.project_cost_commitments AS commitment[\s\S]*ORDER BY commitment\.cost_category_id, commitment\.id[\s\S]*FOR UPDATE/,
@@ -435,11 +434,16 @@ describe("supplier cost and payable migration contract", () => {
       ),
     );
     contracts(backfill, [
+      /receipt\.received_by_employee_id/,
       /SUM\(receipt_item\.accepted_quantity\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW[\s\S]*AS cumulative_accepted_quantity/,
       /targeted AS MATERIALIZED/,
       /least\(\s*historical_line\.line_total_amount,\s*CASE[\s\S]*historical_line\.cumulative_accepted_quantity >=\s*historical_line\.ordered_quantity[\s\S]*historical_line\.line_total_amount[\s\S]*round\(\s*historical_line\.line_total_amount \*\s*historical_line\.cumulative_accepted_quantity \/\s*historical_line\.ordered_quantity,\s*2\s*\)[\s\S]*END\s*\)[\s\S]*AS cumulative_target_amount/,
       /greatest\(\s*targeted\.cumulative_target_amount - COALESCE\(\s*lag\(targeted\.cumulative_target_amount\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING[\s\S]*\),\s*0\s*\),\s*0\s*\)[\s\S]*AS recognized_amount/,
+      /INSERT INTO public\.project_cost_events \([\s\S]*?occurred_at,\s*created_by_employee_id\s*\)[\s\S]*?allocated\.received_at,\s*allocated\.received_by_employee_id/,
     ]);
+    expect(migration).toMatch(
+      /-- Backfill financializable accepted receipt items[\s\S]*?INSERT INTO public\.supplier_payable_events \([\s\S]*?invoice_required_before_payment,\s*created_by_employee_id\s*\)[\s\S]*?purchase_order\.invoice_required_before_payment_snapshot,\s*cost_event\.created_by_employee_id/,
+    );
     expect(backfill).not.toMatch(
       /line_total_amount \*\s*historical_line\.accepted_quantity \/\s*historical_line\.ordered_quantity/,
     );

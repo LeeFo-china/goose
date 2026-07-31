@@ -184,16 +184,19 @@ describe("supplier payable and payment database records", () => {
     ]) {
       expect(select).toContain("amount::text");
     }
-    expect(SUPPLIER_PAYMENT_REQUEST_SELECT).toContain(
-      "requested_amount::text",
+    for (const field of ["requested_amount::text", "paid_amount::text"]) {
+      expect(SUPPLIER_PAYMENT_REQUEST_SELECT).toContain(field);
+      expect(SUPPLIER_PAYMENT_REQUEST_ALLOCATION_SELECT).toContain(field);
+    }
+    const payableFields = SUPPLIER_PAYABLE_EVENT_SELECT.split(",");
+    expect(payableFields).toContain(
+      "receipt_id:supplier_purchase_order_receipt_id",
     );
-    expect(SUPPLIER_PAYMENT_REQUEST_SELECT).toContain("paid_amount::text");
-    expect(SUPPLIER_PAYMENT_REQUEST_ALLOCATION_SELECT).toContain(
-      "requested_amount::text",
+    expect(payableFields).toContain(
+      "receipt_item_id:supplier_purchase_order_receipt_item_id",
     );
-    expect(SUPPLIER_PAYMENT_REQUEST_ALLOCATION_SELECT).toContain(
-      "paid_amount::text",
-    );
+    expect(payableFields).not.toContain("receipt_id");
+    expect(payableFields).not.toContain("receipt_item_id");
   });
 
   test("strictly parses project cost and supplier payable events", () => {
@@ -322,12 +325,7 @@ describe("supplier payable and payment database records", () => {
         [field]: "9999999999999999.99",
       }).success).toBe(true);
       for (const value of [
-        1,
-        "-0.01",
-        "1",
-        "01.00",
-        "1.001",
-        "10000000000000000.00",
+        1, "-0.01", "1", "01.00", "1.001", "10000000000000000.00",
       ]) {
         expect(schema.safeParse({ ...record, [field]: value }).success)
           .toBe(false);
