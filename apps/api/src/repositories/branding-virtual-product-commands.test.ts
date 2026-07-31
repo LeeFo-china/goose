@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -29,12 +30,6 @@ function createClient(options: {
       calls.push(["select", columns]);
       return query;
     },
-    insert() {
-      return query;
-    },
-    update() {
-      return query;
-    },
     eq(column: string, value: unknown) {
       calls.push(["eq", column, value]);
       return query;
@@ -48,7 +43,6 @@ function createClient(options: {
       return { data: options.listData ?? [], error: null };
     }),
     maybeSingle: mock(async () => ({ data: null, error: null })),
-    single: mock(async () => ({ data: null, error: null })),
   };
   const rpc = mock(async (name: string, params: Record<string, unknown>) => {
     calls.push(["rpc", name, params]);
@@ -67,6 +61,18 @@ function createClient(options: {
 }
 
 describe("BrandingVirtualProductRepository management commands", () => {
+  test("does not expose direct mapping table write methods", () => {
+    const source = readFileSync(new URL(
+      "./branding-virtual-products.ts",
+      import.meta.url,
+    ), "utf8");
+
+    expect(source).not.toMatch(/\bcreateMapping\b|\bupdateMapping\b/);
+    expect(source).not.toMatch(/\.insert\s*\(|\.update\s*\(/);
+    expect(source).not.toContain("insert(input: Record<string, unknown>)");
+    expect(source).not.toContain("update(input: Record<string, unknown>)");
+  });
+
   test("lists both environments with explicit ordering and a fixed maximum", async () => {
     const fixture = createClient();
     const repository = new BrandingVirtualProductRepository(() => fixture.client);

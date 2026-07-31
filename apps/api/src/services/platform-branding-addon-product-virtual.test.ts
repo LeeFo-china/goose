@@ -147,8 +147,6 @@ function createFixture(options: {
   });
   return {
     service,
-    updateProduct: manageConfiguration,
-    updateMapping: manageConfiguration,
     manageConfiguration,
     recordBestEffort,
     getSecretString,
@@ -216,7 +214,7 @@ describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW",
     });
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
   });
 
   test("updates a validated mapping without auditing the AppKey", async () => {
@@ -257,8 +255,7 @@ describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PRODUCT_REVALIDATION_REQUIRED",
     });
-    expect(fixture.updateMapping).not.toHaveBeenCalled();
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
   });
 
   test("allows saving a draft before its protected secret is configured", async () => {
@@ -272,7 +269,7 @@ describe("PlatformBrandingAddonProductService virtual mapping writes", () => {
       version: 1,
     });
 
-    expect(fixture.updateMapping).toHaveBeenCalled();
+    expect(fixture.manageConfiguration).toHaveBeenCalled();
     expect(fixture.getSecretString).toHaveBeenCalledWith(
       "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
     );

@@ -13,13 +13,10 @@ type QueryResult = {
 
 type VirtualProductQuery = {
   select(columns: string): VirtualProductQuery;
-  insert(input: Record<string, unknown>): VirtualProductQuery;
-  update(input: Record<string, unknown>): VirtualProductQuery;
   eq(column: string, value: unknown): VirtualProductQuery;
   order?(column: string, options: { ascending: boolean }): VirtualProductQuery;
   limit?(count: number): Promise<QueryResult>;
   maybeSingle(): Promise<QueryResult>;
-  single(): Promise<QueryResult>;
 };
 
 type VirtualProductClient = {
@@ -58,26 +55,6 @@ export type BrandingVirtualProductRecord = {
   created_at: string;
   updated_at: string;
 };
-
-export type SaveBrandingVirtualProductInput = {
-  addonProductId: string;
-  environment: BrandingVirtualPaymentEnvironment;
-  appId: string;
-  virtualMerchantId: string;
-  offerId: string;
-  providerProductId: string;
-  expectedAmountFen: number;
-  encryptedSecretRef: BrandingVirtualPaymentSecretSettingKey;
-  secretRevision: number;
-  status: BrandingVirtualProductStatus;
-  updatedByEmployeeId: string;
-};
-
-export type UpdateBrandingVirtualProductInput =
-  SaveBrandingVirtualProductInput & {
-    id: string;
-    expectedVersion: number;
-  };
 
 export type ManageBrandingVirtualProductConfigurationInput = {
   expectedProductVersion: number;
@@ -218,57 +195,6 @@ export class BrandingVirtualProductRepository {
     return record as BrandingVirtualProductRecord;
   }
 
-  async createMapping(input: SaveBrandingVirtualProductInput) {
-    const { data, error } = await this.clientProvider()
-      .from("platform_virtual_payment_products")
-      .insert(toPersistence(input, {
-        version: 1,
-        created_by: input.updatedByEmployeeId,
-        updated_by: input.updatedByEmployeeId,
-      }))
-      .select(VIRTUAL_PRODUCT_COLUMNS)
-      .single();
-    if (error) throw Errors.dbError("创建品牌权益虚拟商品映射失败");
-    return data as BrandingVirtualProductRecord;
-  }
-
-  async updateMapping(input: UpdateBrandingVirtualProductInput) {
-    const { data, error } = await this.clientProvider()
-      .from("platform_virtual_payment_products")
-      .update(toPersistence(input, {
-        version: input.expectedVersion + 1,
-        updated_by: input.updatedByEmployeeId,
-      }))
-      .eq("id", input.id)
-      .eq("addon_product_id", input.addonProductId)
-      .eq("environment", input.environment)
-      .eq("version", input.expectedVersion)
-      .select(VIRTUAL_PRODUCT_COLUMNS)
-      .maybeSingle();
-    if (error) throw Errors.dbError("更新品牌权益虚拟商品映射失败");
-    return (data as BrandingVirtualProductRecord | null) ?? null;
-  }
-}
-
-function toPersistence(
-  input: SaveBrandingVirtualProductInput,
-  auditFields: Record<string, unknown>,
-) {
-  return {
-    addon_product_id: input.addonProductId,
-    provider: "wechat_virtual",
-    environment: input.environment,
-    app_id: input.appId,
-    virtual_merchant_id: input.virtualMerchantId,
-    offer_id: input.offerId,
-    provider_product_id: input.providerProductId,
-    goods_quantity: 1,
-    expected_amount_fen: input.expectedAmountFen,
-    encrypted_secret_ref: input.encryptedSecretRef,
-    secret_revision: input.secretRevision,
-    status: input.status,
-    ...auditFields,
-  };
 }
 
 export const brandingVirtualProductRepository =

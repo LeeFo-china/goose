@@ -349,4 +349,11 @@ FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.branding_set_virtual_product_configuration_validation(uuid, text, integer, integer, text, timestamptz, uuid)
 TO service_role;
 
+-- Task 1 temporarily granted table writes so the mapping could be introduced
+-- before its command boundary existed. From this migration onward all writes
+-- must pass through one of the two audited, optimistic-locking RPCs above.
+REVOKE INSERT, UPDATE
+ON TABLE public.platform_virtual_payment_products
+FROM service_role;
+
 COMMIT;

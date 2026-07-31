@@ -273,20 +273,11 @@ describe("BrandingVirtualProductRepository mapping persistence", () => {
         calls.push(["select", columns]);
         return query;
       },
-      insert(input: Record<string, unknown>) {
-        calls.push(["insert", input]);
-        return query;
-      },
-      update(input: Record<string, unknown>) {
-        calls.push(["update", input]);
-        return query;
-      },
       eq(column: string, value: unknown) {
         calls.push(["eq", column, value]);
         return query;
       },
       maybeSingle: mock(async () => ({ data: baseMapping, error: null })),
-      single: mock(async () => ({ data: baseMapping, error: null })),
     };
     const { BrandingVirtualProductRepository } = await import(
       "@/repositories/branding-virtual-products"
@@ -314,70 +305,4 @@ describe("BrandingVirtualProductRepository mapping persistence", () => {
     expect(calls).toContainEqual(["eq", "environment", "production"]);
   });
 
-  test("updates a mapping through both identity and optimistic version guards", async () => {
-    const calls: Array<[string, ...unknown[]]> = [];
-    const query = {
-      select(columns: string) {
-        calls.push(["select", columns]);
-        return query;
-      },
-      insert(input: Record<string, unknown>) {
-        calls.push(["insert", input]);
-        return query;
-      },
-      update(input: Record<string, unknown>) {
-        calls.push(["update", input]);
-        return query;
-      },
-      eq(column: string, value: unknown) {
-        calls.push(["eq", column, value]);
-        return query;
-      },
-      maybeSingle: mock(async () => ({
-        data: { ...baseMapping, version: 3 },
-        error: null,
-      })),
-      single: mock(async () => ({ data: baseMapping, error: null })),
-    };
-    const { BrandingVirtualProductRepository } = await import(
-      "@/repositories/branding-virtual-products"
-    );
-    const repository = new BrandingVirtualProductRepository(() => ({
-      from() {
-        return query;
-      },
-    }));
-
-    await repository.updateMapping({
-      id: baseMapping.id,
-      addonProductId: PRODUCT_ID,
-      environment: "production",
-      appId: "wx-test-app",
-      virtualMerchantId: "virtual-merchant",
-      offerId: "offer-annual",
-      providerProductId: "branding-annual",
-      expectedAmountFen: 9_900,
-      encryptedSecretRef:
-        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
-      secretRevision: 2,
-      status: "active",
-      expectedVersion: 2,
-      updatedByEmployeeId: EMPLOYEE_ID,
-    });
-
-    expect(calls).toContainEqual(["eq", "id", baseMapping.id]);
-    expect(calls).toContainEqual(["eq", "addon_product_id", PRODUCT_ID]);
-    expect(calls).toContainEqual(["eq", "environment", "production"]);
-    expect(calls).toContainEqual(["eq", "version", 2]);
-    const update = calls.find(([method]) => method === "update");
-    expect(update?.[1]).toMatchObject({
-      expected_amount_fen: 9_900,
-      encrypted_secret_ref:
-        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
-      secret_revision: 2,
-      version: 3,
-      updated_by: EMPLOYEE_ID,
-    });
-    expect(JSON.stringify(update)).not.toContain("appKey");
-  });
 });

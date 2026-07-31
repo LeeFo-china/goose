@@ -84,4 +84,22 @@ describe("branding virtual product management migration", () => {
     }
     expect(sql).not.toContain("grant execute on function public.branding_manage_virtual_product_configuration() to authenticated");
   });
+
+  test("removes service-role table writes after the foundation grant", () => {
+    const sql = normalizedSql();
+    const foundation = readFileSync(new URL(
+      "../../../../supabase/migrations/20260731130000_create_branding_virtual_payment_foundation.sql",
+      import.meta.url,
+    ), "utf8").replace(/\s+/g, " ").toLowerCase();
+
+    expect(foundation).toContain(
+      "grant select, insert, update on table public.platform_virtual_payment_products to service_role",
+    );
+    expect(sql).toContain(
+      "revoke insert, update on table public.platform_virtual_payment_products from service_role",
+    );
+    expect(sql).not.toContain(
+      "revoke select on table public.platform_virtual_payment_products from service_role",
+    );
+  });
 });

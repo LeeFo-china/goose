@@ -135,16 +135,6 @@ function createFixture(options: {
   const findByProductAndEnvironment = mock(async () =>
     options.mapping === undefined ? productionMapping : options.mapping
   );
-  const createMapping = mock(async () =>
-    options.updatedMapping === undefined || options.updatedMapping === null
-      ? productionMapping
-      : options.updatedMapping
-  );
-  const updateMapping = mock(async () =>
-    options.updatedMapping === undefined
-      ? { ...productionMapping, version: 2 }
-      : options.updatedMapping
-  );
   const getSecretString = mock(async () =>
     options.secretBundle ?? JSON.stringify({
       appKey: "production-secret",
@@ -174,13 +164,10 @@ function createFixture(options: {
   return {
     service,
     getProduct,
-    updateProduct: manageConfiguration,
     manageConfiguration,
     assertPermission,
     recordBestEffort,
     findByProductAndEnvironment,
-    createMapping,
-    updateMapping,
     getSecretString,
   };
 }
@@ -209,7 +196,7 @@ describe("PlatformBrandingAddonProductService access", () => {
         code: "FORBIDDEN",
       });
       expect(fixture.getProduct).not.toHaveBeenCalled();
-      expect(fixture.updateProduct).not.toHaveBeenCalled();
+      expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     },
   );
 
@@ -378,7 +365,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_PRODUCT_PRICE_REQUIRED",
     });
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
 
@@ -409,7 +396,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
         statusCode: 400,
         code: "VALIDATION_ERROR",
       });
-      expect(fixture.updateProduct).not.toHaveBeenCalled();
+      expect(fixture.manageConfiguration).not.toHaveBeenCalled();
       expect(fixture.recordBestEffort).not.toHaveBeenCalled();
     }
   });
@@ -426,7 +413,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
     });
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
 
