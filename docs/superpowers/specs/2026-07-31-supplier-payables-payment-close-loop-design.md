@@ -413,6 +413,9 @@ partially_paid
 
 终态为 `paid`、`rejected`、`cancelled` 和 `closed`。
 
+付款申请提交人不能审批自己的申请。审批 RPC 在数据库锁内比较提交人与审批人，
+相同时返回稳定业务错误；付款确认只由独立付款权限控制，本阶段不额外要求第三名员工。
+
 ### 6.2 发票门禁
 
 发票门禁只在确认付款时检查订单快照。付款申请可以正常审批，以便财务提前完成
@@ -612,6 +615,7 @@ service 将 RPC 结果映射为 `error-factory.ts` 的稳定业务错误，至�
 | `SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT` | 当前状态不允许执行动作 |
 | `SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT` | 乐观锁版本不一致 |
 | `SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH` | 项目、供应商或币种范围不一致 |
+| `SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN` | 提交人不能审批自己的付款申请 |
 | `SUPPLIER_PAYMENT_ALLOCATION_INVALID` | 付款分配为空、超额或合计不一致 |
 | `SUPPLIER_PAYMENT_EVIDENCE_REQUIRED` | 没有付款凭证 |
 | `SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED` | 合同要求发票但正式发票能力尚未满足 |
@@ -706,6 +710,7 @@ migration 执行：
 - 拒收数量不形成成本或应付。
 - 同一收货幂等重放不重复生成事件。
 - 两个并发付款申请不能超额占用同一应付。
+- 付款申请提交人不能批准或驳回自己的申请。
 - 驳回、取消和部分付款后关闭正确释放余额。
 - 一张申请支持部分付款和多次付款。
 - 重复付款幂等重放不重复写付款或现金台账。
