@@ -80,13 +80,20 @@ describe('branding virtual payment domain', () => {
   });
 
   test('exposes a union type for each controlled value catalog', () => {
-    const values = {
-      purchaseMode: 'wechat_virtual' as BrandingPurchaseMode,
-      environment: 'sandbox' as BrandingVirtualPaymentEnvironment,
-      platform: 'harmony' as BrandingVirtualPaymentPlatform,
-      paymentStatus: 'succeeded' as BrandingVirtualPaymentStatus,
-      fulfillmentStatus: 'grant_failed' as BrandingVirtualFulfillmentStatus,
-      refundStatus: 'external_required' as BrandingVirtualRefundStatus,
+    const values: {
+      purchaseMode: BrandingPurchaseMode;
+      environment: BrandingVirtualPaymentEnvironment;
+      platform: BrandingVirtualPaymentPlatform;
+      paymentStatus: BrandingVirtualPaymentStatus;
+      fulfillmentStatus: BrandingVirtualFulfillmentStatus;
+      refundStatus: BrandingVirtualRefundStatus;
+    } = {
+      purchaseMode: 'wechat_virtual',
+      environment: 'sandbox',
+      platform: 'harmony',
+      paymentStatus: 'succeeded',
+      fulfillmentStatus: 'grant_failed',
+      refundStatus: 'external_required',
     };
 
     expect(values).toEqual({

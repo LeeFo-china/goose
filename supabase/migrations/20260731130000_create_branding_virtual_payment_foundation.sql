@@ -174,14 +174,17 @@ CREATE TABLE IF NOT EXISTS public.tenant_virtual_addon_orders (
   reconcile_claim_expires_at timestamptz NULL,
   reconcile_attempt_count integer NOT NULL DEFAULT 0,
   reconcile_last_error text NULL,
-  created_by uuid NOT NULL
-    REFERENCES public.employees(id) ON DELETE RESTRICT,
+  created_by uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT tenant_virtual_addon_orders_tenant_idempotency_key
     UNIQUE (tenant_id, idempotency_key),
   CONSTRAINT tenant_virtual_addon_orders_identity_key
     UNIQUE (id, tenant_id),
+  CONSTRAINT tenant_virtual_addon_orders_created_employee_tenant_fkey
+    FOREIGN KEY (created_by, tenant_id)
+    REFERENCES public.employees(id, tenant_id)
+    ON DELETE RESTRICT,
   CONSTRAINT tenant_virtual_addon_orders_product_identity_fkey
     FOREIGN KEY (product_id, product_code)
     REFERENCES public.platform_addon_products(id, code)
@@ -690,6 +693,18 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
+    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+    END IF;
+
+    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
+    END IF;
+
     RETURN v_order;
   END IF;
 
@@ -702,6 +717,18 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
+    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+    END IF;
+
+    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
+    END IF;
+
     RETURN v_order;
   END IF;
 
@@ -838,6 +865,18 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
+    IF v_order.payer_openid IS DISTINCT FROM p_payer_openid THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_PAYER_MISMATCH';
+    END IF;
+
+    IF v_order.created_by IS DISTINCT FROM p_created_by THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_ORDER_ACTOR_MISMATCH';
+    END IF;
+
     RETURN v_order;
   END IF;
 
@@ -884,8 +923,7 @@ FROM service_role;
 GRANT SELECT, INSERT, UPDATE
 ON TABLE public.platform_virtual_payment_products
 TO service_role;
-GRANT SELECT, INSERT, UPDATE
-ON TABLE public.tenant_virtual_addon_orders
+GRANT SELECT ON TABLE public.tenant_virtual_addon_orders
 TO service_role;
 
 COMMENT ON TABLE public.platform_virtual_payment_products

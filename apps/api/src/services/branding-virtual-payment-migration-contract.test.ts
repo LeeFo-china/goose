@@ -67,7 +67,26 @@ function extractTriggerUpdateColumns(
 
 describe("branding virtual payment foundation migration", () => {
   test("re-exports shared states and keeps server-only codes stable", () => {
-    expect(apiContractsSource).toContain('export * from "@gooes/domain";');
+    const normalized = apiContractsSource.replace(/\s+/g, " ");
+    const valueExports = (normalized.match(
+      /export \{([^}]*)\} from "@gooes\/domain";/,
+    )?.[1] ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+    const typeExports = (normalized.match(
+      /export type \{([^}]*)\} from "@gooes\/domain";/,
+    )?.[1] ?? "").split(",").map((name) => name.trim()).filter(Boolean);
+    expect(normalized).not.toContain('export * from "@gooes/domain";');
+    expect(valueExports).toEqual([
+      "BRANDING_PURCHASE_MODES", "BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN",
+      "VIRTUAL_FULFILLMENT_STATUSES", "VIRTUAL_PAYMENT_ENVIRONMENTS",
+      "VIRTUAL_PAYMENT_PLATFORMS", "VIRTUAL_PAYMENT_STATUSES",
+      "VIRTUAL_REFUND_STATUSES",
+    ]);
+    expect(typeExports).toEqual([
+      "BrandingPurchaseMode", "BrandingVirtualFulfillmentStatus",
+      "BrandingVirtualPaymentEnvironment", "BrandingVirtualPaymentPlatform",
+      "BrandingVirtualPaymentRequest", "BrandingVirtualPaymentStatus",
+      "BrandingVirtualRefundStatus",
+    ]);
     expect(apiContractsSource).toContain(
       '"BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED" as const',
     );
@@ -210,7 +229,8 @@ describe("branding virtual payment foundation migration", () => {
       "reconcile_claim_token uuid null",
       "reconcile_claim_expires_at timestamptz null",
       "check (reconcile_attempt_count >= 0)",
-      "created_by uuid not null references public.employees(id) on delete restrict",
+      "created_by uuid not null",
+      "constraint tenant_virtual_addon_orders_created_employee_tenant_fkey foreign key (created_by, tenant_id) references public.employees(id, tenant_id) on delete restrict",
     ]) {
       expect(table).toContain(contract);
     }
@@ -290,6 +310,17 @@ describe("branding virtual payment foundation migration", () => {
       "v_virtual_product.secret_revision",
     ]) {
       expect(command).toContain(contract);
+    }
+    const reuseSegments = [
+      command.match(/where orders\.tenant_id = p_tenant_id and orders\.idempotency_key = p_idempotency_key for update;[\s\S]*?(?=select orders\.\* into v_order from public\.tenant_virtual_addon_orders as orders where orders\.tenant_id = p_tenant_id and orders\.product_code)/)?.[0] ?? "",
+      command.match(/where orders\.tenant_id = p_tenant_id and orders\.product_code = v_product\.code and orders\.payment_status = 'pending' for update;[\s\S]*?(?=if v_product\.purchase_mode)/)?.[0] ?? "",
+      command.match(/order by \(orders\.idempotency_key = p_idempotency_key\) desc, orders\.created_at desc, orders\.id desc limit 1 for update;[\s\S]*?(?=raise exception using errcode = 'p0001', message = 'branding_virtual_order_conflict')/)?.[0] ?? "",
+    ];
+    const buyerGuard = /if found then if v_order\.payer_openid is distinct from p_payer_openid then raise exception using errcode = 'p0001', message = 'branding_virtual_order_payer_mismatch'; end if; if v_order\.created_by is distinct from p_created_by then raise exception using errcode = 'p0001', message = 'branding_virtual_order_actor_mismatch'; end if; return v_order; end if;/;
+    expect(reuseSegments).toHaveLength(3);
+    for (const segment of reuseSegments) {
+      expect(segment).not.toBe("");
+      expect(segment).toMatch(buyerGuard);
     }
     expect(command).toMatch(/'bvo-' \|\| to_char\([\s\S]*?'yyyymmddhh24missms'/);
     expect(command).toMatch(/'bv' \|\| to_char\([\s\S]*?'yyyymmddhh24miss'/);
@@ -431,10 +462,16 @@ describe("branding virtual payment foundation migration", () => {
       expect(normalized).toContain(
         `revoke all on table public.${table} from service_role`,
       );
-      expect(normalized).toContain(
-        `grant select, insert, update on table public.${table} to service_role`,
-      );
     }
+    expect(normalized).toContain(
+      "grant select, insert, update on table public.platform_virtual_payment_products to service_role",
+    );
+    expect(normalized).toContain(
+      "grant select on table public.tenant_virtual_addon_orders to service_role",
+    );
+    expect(normalized).not.toMatch(
+      /grant [^;]*(?:insert|update)[^;]* on table public\.tenant_virtual_addon_orders to service_role/,
+    );
     expect(normalized).not.toMatch(/create policy[\s\S]*(?:anon|authenticated)/);
   });
 
