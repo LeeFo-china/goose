@@ -45,6 +45,7 @@
 - `apps/api/src/services/wechat-virtual-payment-signatures.ts`：用户态签名与支付请求签名的纯函数。
 - `apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts`：虚拟支付服务器 API 输入、归一化结果和网关端口。
 - `apps/api/src/services/wechat-virtual-payment-gateway-response.ts`：XPay 小写应答信封、订单与退款结果的严格运行时归一化。
+- `apps/api/src/services/wechat-virtual-payment-response-reader.ts`：XPay 响应体 64 KiB 内部防御上限、流式读取和安全 requestId 归一化。
 - `apps/api/src/services/wechat-virtual-payment-gateway.ts`：`query_order`、`refund_order`、`notify_provide_goods` 和账单 HTTP 边界。
 - `apps/api/src/repositories/branding-virtual-orders.ts`：虚拟订单创建、查询、claim 和履约 RPC。
 - `apps/api/src/services/tenant-branding-virtual-orders.ts`：租户订单创建与支付参数编排。
@@ -596,8 +597,11 @@ git commit -m "feat(payments): 增加虚拟商品配置与购买能力"
 - Create: `apps/api/src/services/wechat-virtual-payment-signatures.test.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway-response.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-response-reader.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-response-reader.test.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway.ts`
 - Create: `apps/api/src/services/wechat-virtual-payment-gateway.test.ts`
+- Create: `apps/api/src/services/wechat-virtual-payment-gateway-hardening.test.ts`
 
 - [ ] **Step 1: 固化官方请求字段并写签名向量测试**
 
@@ -705,12 +709,12 @@ Gateway 只返回经过严格运行时验证的归一化结果。HTTP 非 2xx、
 
 - [ ] **Step 5: 验证并提交**
 
-Run: `cd apps/api && bun test src/services/wechat-virtual-payment-signatures.test.ts src/services/wechat-virtual-payment-gateway.test.ts && bun run typecheck`
+Run: `cd apps/api && bun test src/services/wechat-virtual-payment-signatures.test.ts src/services/wechat-virtual-payment-response-reader.test.ts src/services/wechat-virtual-payment-gateway.test.ts src/services/wechat-virtual-payment-gateway-hardening.test.ts && bun run typecheck`
 
-Expected: 固定签名向量、超时、非 2xx、微信错误码和环境隔离测试全部 PASS。
+Expected: 固定签名向量、响应体上限、流读取异常、requestId、凭证失效竞态、输入边界、非 2xx、微信错误码和环境隔离测试全部 PASS。
 
 ```bash
-git add apps/api/src/services/wechat-virtual-payment-signatures.ts apps/api/src/services/wechat-virtual-payment-signatures.test.ts apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts apps/api/src/services/wechat-virtual-payment-gateway-response.ts apps/api/src/services/wechat-virtual-payment-gateway.ts apps/api/src/services/wechat-virtual-payment-gateway.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
+git add apps/api/src/services/wechat-virtual-payment-signatures.ts apps/api/src/services/wechat-virtual-payment-signatures.test.ts apps/api/src/services/wechat-virtual-payment-gateway-contracts.ts apps/api/src/services/wechat-virtual-payment-gateway-response.ts apps/api/src/services/wechat-virtual-payment-response-reader.ts apps/api/src/services/wechat-virtual-payment-response-reader.test.ts apps/api/src/services/wechat-virtual-payment-gateway.ts apps/api/src/services/wechat-virtual-payment-gateway.test.ts apps/api/src/services/wechat-virtual-payment-gateway-hardening.test.ts docs/superpowers/plans/2026-07-31-platform-digital-entitlement-virtual-payment-migration.md
 git commit -m "feat(payments): 实现微信虚拟支付网关"
 ```
 

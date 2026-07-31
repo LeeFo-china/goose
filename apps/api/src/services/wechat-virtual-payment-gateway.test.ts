@@ -274,7 +274,7 @@ describe("WechatVirtualPaymentGateway failures and validation", () => {
       details: {
         httpStatus: 401,
         wechatErrcode: 40013,
-        requestId: "R".repeat(128),
+        requestId: null,
       },
     });
     const serialized = JSON.stringify(error);

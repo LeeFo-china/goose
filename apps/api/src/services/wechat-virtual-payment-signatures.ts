@@ -7,6 +7,12 @@ import type { BrandingVirtualPaymentEnvironment } from "@gooes/domain";
 const PROVIDER_IDENTIFIER_MAX_LENGTH = 128;
 const OUT_TRADE_NO_PATTERN = /^(?!_)[A-Za-z0-9_|*@-]{8,32}$/;
 
+// Internal defensive limits; they do not claim broader upstream protocol
+// limits beyond the documented order-number rules.
+export const MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH = 512;
+export const MAX_WECHAT_VIRTUAL_PAYMENT_ATTACH_LENGTH = 1_024;
+export const MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN = 2_147_483_647;
+
 export type WechatVirtualPaymentSigningSecret = {
   environment: BrandingVirtualPaymentEnvironment;
   appKey: string;
@@ -38,9 +44,12 @@ export function buildVirtualPaymentRequest(
     !isBoundedIdentifier(input.offerId) ||
     !isBoundedIdentifier(input.productId) ||
     !isNonBlankString(input.attach) ||
+    input.attach.length > MAX_WECHAT_VIRTUAL_PAYMENT_ATTACH_LENGTH ||
     !isNonBlankString(input.sessionKey) ||
+    input.sessionKey.length > MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH ||
     !Number.isSafeInteger(input.goodsPrice) ||
     input.goodsPrice < BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN ||
+    input.goodsPrice > MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN ||
     !OUT_TRADE_NO_PATTERN.test(input.outTradeNo)
   ) {
     throwInvalidRequest();
@@ -95,7 +104,11 @@ export function assertSigningSecret(
   environment: BrandingVirtualPaymentEnvironment,
   secret: WechatVirtualPaymentSigningSecret | null | undefined,
 ): void {
-  if (!secret || !isNonBlankString(secret.appKey)) throwInvalidRequest();
+  if (
+    !secret ||
+    !isNonBlankString(secret.appKey) ||
+    secret.appKey.length > MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH
+  ) throwInvalidRequest();
   if (secret.environment !== environment) {
     throw Errors.business(
       409,

@@ -167,4 +167,36 @@ describe("wechat virtual payment signatures", () => {
       code: "WECHAT_VIRTUAL_PAYMENT_REQUEST_INVALID",
     }));
   });
+
+  test("accepts the internal defensive boundaries", () => {
+    expect(() => buildVirtualPaymentRequest({
+      ...productionInput,
+      signingSecret: {
+        environment: "production",
+        appKey: "a".repeat(512),
+      },
+      sessionKey: "s".repeat(512),
+      goodsPrice: 2_147_483_647,
+      outTradeNo: "O".repeat(32),
+      attach: "x".repeat(1_024),
+    })).not.toThrow();
+  });
+
+  test.each([
+    ["AppKey", { signingSecret: {
+      environment: "production" as const,
+      appKey: "a".repeat(513),
+    } }],
+    ["sessionKey", { sessionKey: "s".repeat(513) }],
+    ["attach", { attach: "x".repeat(1_025) }],
+    ["goodsPrice", { goodsPrice: 2_147_483_648 }],
+  ])("rejects %s beyond the internal defensive boundary", (_label, patch) => {
+    const invalidInput = Object.assign({ ...productionInput }, patch);
+    expect(() => buildVirtualPaymentRequest(invalidInput)).toThrow(
+      expect.objectContaining({
+        statusCode: 400,
+        code: "WECHAT_VIRTUAL_PAYMENT_REQUEST_INVALID",
+      }),
+    );
+  });
 });

@@ -1,3 +1,4 @@
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
   BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED,
@@ -26,15 +27,23 @@ import {
   type WechatVirtualPaymentJsonResponse,
 } from "./wechat-virtual-payment-gateway-response";
 import {
+  normalizeWechatVirtualPaymentRequestId,
+  readWechatVirtualPaymentResponseBody,
+} from "./wechat-virtual-payment-response-reader";
+import {
   assertSigningSecret,
   calculateVirtualPaymentPaySig,
   calculateVirtualPaymentUserSignature,
+  MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN,
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
   virtualPaymentEnv,
 } from "./wechat-virtual-payment-signatures";
 
 const DEFAULT_BASE_URL = "https://api.weixin.qq.com";
 const REQUEST_TIMEOUT_MS = 8_000;
-const MAX_REQUEST_ID_LENGTH = 128;
+const MAX_ACCESS_TOKEN_LENGTH = 4_096;
+const MAX_OPENID_LENGTH = 128;
+const MAX_WECHAT_ORDER_ID_LENGTH = 128;
 const OUT_TRADE_NO_PATTERN = /^(?!_)[A-Za-z0-9_|*@-]{8,32}$/;
 const REFUND_ORDER_NO_PATTERN = /^[A-Za-z0-9_-]{8,32}$/;
 const REFUND_REASONS = new Set(["0", "1", "2", "3", "4", "5"]);
@@ -170,7 +179,12 @@ export class WechatVirtualPaymentGateway
         credentialId: input.credential.credentialId,
         sessionRevision: input.credential.sessionRevision,
       });
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof AppError &&
+        error.statusCode === 409 &&
+        error.code === BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED
+      ) return;
       throw Errors.business(
         500,
         "微信会话失效状态保存失败",
@@ -233,12 +247,10 @@ export class WechatVirtualPaymentGateway
     }
 
     const requestId = boundedRequestId(response);
-    let rawBody: string;
-    try {
-      rawBody = await response.text();
-    } catch {
-      throwInvalidResponse(requestId, response.status);
-    }
+    const rawBody = await readWechatVirtualPaymentResponseBody(
+      response,
+      requestId,
+    );
     const payload = parseJsonRecord(rawBody);
     const wechatErrcode = payload && Number.isSafeInteger(payload.errcode)
       ? Number(payload.errcode)
@@ -265,7 +277,10 @@ export class WechatVirtualPaymentGateway
 
 function assertSignedInput(input: QueryVirtualOrderInput): void {
   assertAccessToken(input.accessToken);
-  if (!isNonBlankString(input.openid)) throwInvalidRequest();
+  if (
+    !isNonBlankString(input.openid) ||
+    input.openid.length > MAX_OPENID_LENGTH
+  ) throwInvalidRequest();
   assertSigningSecret(input.environment, input.signingSecret);
   buildOrderReference(input);
 }
@@ -274,6 +289,7 @@ function assertRefundInput(input: RefundVirtualOrderInput): void {
   assertSignedInput(input);
   if (
     !isNonBlankString(input.sessionKey) ||
+    input.sessionKey.length > MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH ||
     !input.credential ||
     !isNonBlankString(input.credential.userId) ||
     !isNonBlankString(input.credential.credentialId) ||
@@ -282,8 +298,10 @@ function assertRefundInput(input: RefundVirtualOrderInput): void {
     !REFUND_ORDER_NO_PATTERN.test(input.refundOrderId) ||
     !Number.isSafeInteger(input.leftFee) ||
     input.leftFee <= 0 ||
+    input.leftFee > MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN ||
     !Number.isSafeInteger(input.refundFee) ||
     input.refundFee <= 0 ||
+    input.refundFee > MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN ||
     input.refundFee > input.leftFee ||
     typeof input.bizMeta !== "string" ||
     input.bizMeta.length > 1_024 ||
@@ -293,7 +311,10 @@ function assertRefundInput(input: RefundVirtualOrderInput): void {
 }
 
 function assertAccessToken(accessToken: string): void {
-  if (!isNonBlankString(accessToken)) throwInvalidRequest();
+  if (
+    !isNonBlankString(accessToken) ||
+    accessToken.length > MAX_ACCESS_TOKEN_LENGTH
+  ) throwInvalidRequest();
 }
 
 function buildOrderReference(
@@ -306,14 +327,22 @@ function buildOrderReference(
     if (!OUT_TRADE_NO_PATTERN.test(input.orderId)) throwInvalidRequest();
     return { order_id: input.orderId };
   }
-  if (input.wechatOrderId) return { wx_order_id: input.wechatOrderId };
+  if (input.wechatOrderId) {
+    if (
+      input.wechatOrderId !== input.wechatOrderId.trim() ||
+      input.wechatOrderId.length > MAX_WECHAT_ORDER_ID_LENGTH
+    ) throwInvalidRequest();
+    return { wx_order_id: input.wechatOrderId };
+  }
   throwInvalidRequest();
 }
 
 function boundedRequestId(response: Response): string | null {
-  const value = response.headers.get("request-id")?.trim() ||
-    response.headers.get("x-request-id")?.trim();
-  return value ? value.slice(0, MAX_REQUEST_ID_LENGTH) : null;
+  return normalizeWechatVirtualPaymentRequestId(
+    response.headers.get("request-id"),
+  ) ?? normalizeWechatVirtualPaymentRequestId(
+    response.headers.get("x-request-id"),
+  );
 }
 
 function emptyRequestMetadata(): RequestMetadata {
