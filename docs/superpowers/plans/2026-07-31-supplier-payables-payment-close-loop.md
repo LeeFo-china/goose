@@ -919,7 +919,7 @@ git commit -m "feat(api): 接入供应商应付付款接口"
 - Modify: `apps/api/src/services/finance-project-summary.ts`
 - Modify: `apps/api/src/services/finance-project-summary.test.ts`
 
-- [ ] **Step 1: 写采购单财务摘要 RED 测试**
+- [x] **Step 1: 写采购单财务摘要 RED 测试**
 
 期望 DTO：
 
@@ -943,13 +943,13 @@ GET /supplier-purchase-orders/:id/financial-summary
 
 必须复用采购单读取权限和项目读取权限。
 
-- [ ] **Step 2: 实现采购单摘要**
+- [x] **Step 2: 实现采购单摘要**
 
 repository 调 `get_supplier_purchase_order_financial_summary`，service 复用
 `supplierPurchaseOrderAccessService.requireRead()` 与 `assertProjectRead()`，
 controller 只校验 `id`。
 
-- [ ] **Step 3: 写预算承诺/实际成本 RED 测试**
+- [x] **Step 3: 写预算承诺/实际成本 RED 测试**
 
 构造：
 
@@ -972,7 +972,7 @@ expect(summary).toMatchObject({
 
 断言活动承诺为 60、实际供应商成本为 40，供应商付款现金不会使实际成本变成 60。
 
-- [ ] **Step 4: 实现项目预算聚合**
+- [x] **Step 4: 实现项目预算聚合**
 
 `project-cost-budgets` repository：
 
@@ -988,7 +988,7 @@ supplier_cost_amount: number;
 active_commitment_amount: number;
 ```
 
-- [ ] **Step 5: 写项目财务摘要 RED 测试**
+- [x] **Step 5: 写项目财务摘要 RED 测试**
 
 项目摘要新增：
 
@@ -1001,12 +1001,12 @@ supplier_cash_paid_amount: number;
 断言利润计算使用 `supplier_cost_amount`，但不再次使用
 `supplier_cash_paid_amount`。
 
-- [ ] **Step 6: 实现项目财务摘要**
+- [x] **Step 6: 实现项目财务摘要**
 
 repository 使用三个受边界查询或一个受控汇总 RPC，不逐项目 N+1。service 序列化
 新增字段并保持旧字段兼容。
 
-- [ ] **Step 7: 运行财务回归**
+- [x] **Step 7: 运行财务回归**
 
 Run:
 
@@ -1023,7 +1023,7 @@ bun run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交财务聚合**
+- [x] **Step 8: 提交财务聚合**
 
 ```bash
 git add apps/api/src/schema/supplier-purchase-orders.ts \
