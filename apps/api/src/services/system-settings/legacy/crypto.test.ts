@@ -39,4 +39,29 @@ describe("system setting value validation", () => {
       Buffer.from(validPublicKey).toString("base64"),
     )).toThrow("身份证识别加密公钥必须是腾讯OCR提供的1024位PKCS#1 RSA公钥PEM");
   });
+
+  test.each([
+    "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+  ])("strictly validates virtual payment secret bundle %s", (key) => {
+    const paymentRecord = {
+      ...record,
+      key,
+      value_type: "json" as const,
+    };
+    const valid = JSON.stringify({ appKey: "app-key", revision: 2 });
+
+    expect(validateSettingValue(paymentRecord, valid)).toBe(valid);
+    for (const invalid of [
+      JSON.stringify({ appKey: "app-key", revision: 0 }),
+      JSON.stringify({ appKey: "app-key", revision: 1.5 }),
+      JSON.stringify({ appKey: "", revision: 2 }),
+      JSON.stringify({ appKey: "app-key", revision: 2, extra: true }),
+      JSON.stringify({ app_key: "app-key", revision: 2 }),
+    ]) {
+      expect(() => validateSettingValue(paymentRecord, invalid)).toThrow(
+        "微信虚拟支付密钥包格式不正确",
+      );
+    }
+  });
 });

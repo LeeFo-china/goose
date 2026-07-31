@@ -13,6 +13,9 @@ import {
   platformBrandingAddonProductService,
 } from "@/services/platform-branding-addon-product";
 import {
+  brandingVirtualProductService,
+} from "@/services/branding-virtual-products";
+import {
   platformBrandingAddonOrdersService,
 } from "@/services/platform-branding-addon-orders";
 import {
@@ -102,7 +105,7 @@ class TenantBrandingAddonController extends TenantBaseController {
     const authContext = await this.getRequiredTenantContext(request);
     parse(BrandingAddonEmptySchema, request.query);
     return ResponseHandler.success(
-      await tenantBrandingAddonOrderService.getProduct(authContext),
+      await brandingVirtualProductService.getTenantProduct(authContext),
     );
   }
 

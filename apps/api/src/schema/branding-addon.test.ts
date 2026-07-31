@@ -24,7 +24,23 @@ describe("BrandingAddonProductPatchSchema", () => {
       { amount_fen: 1 },
       { purchase_notes: "支付成功后自动开通一年" },
       { enabled: true },
-    ]) {
+      { purchase_mode: "maintenance" },
+      {
+        virtual_product: {
+          environment: "production",
+          app_id: "wx-app",
+          virtual_merchant_id: "merchant",
+          offer_id: "offer",
+          provider_product_id: "product",
+          expected_amount_fen: 9_900,
+          encrypted_secret_ref:
+            "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+          secret_revision: 2,
+          status: "active",
+          version: 1,
+        },
+      },
+    ] as const) {
       expect(BrandingAddonProductPatchSchema.parse({
         ...patch,
         version: 1,
@@ -33,6 +49,25 @@ describe("BrandingAddonProductPatchSchema", () => {
         version: 1,
       });
     }
+  });
+
+  test("rejects cross-environment virtual payment secret references", () => {
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      virtual_product: {
+        environment: "production",
+        app_id: "wx-app",
+        virtual_merchant_id: "merchant",
+        offer_id: "offer",
+        provider_product_id: "product",
+        expected_amount_fen: 9_900,
+        encrypted_secret_ref:
+          "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+        secret_revision: 2,
+        status: "active",
+        version: 1,
+      },
+      version: 1,
+    })).toThrow();
   });
 
   test("rejects a patch containing only the version", () => {

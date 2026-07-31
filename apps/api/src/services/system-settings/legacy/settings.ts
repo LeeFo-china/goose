@@ -19,6 +19,7 @@ import {
   TENANT_CUSTOMER_SERVICE_SETTING_KEYS,
   TENANT_SETTING_KEYS_HIDE_PLATFORM_VALUE,
   LEGACY_PARTIAL_TENANT_SMS_SETTING_KEYS,
+  PLATFORM_PAYMENT_SECRET_SETTING_KEYS,
 } from './definitions';
 import {
   decryptSecretValue,
@@ -29,11 +30,6 @@ import {
   resolveEffectiveValue,
   validateSettingValue,
 } from './crypto';
-
-const PLATFORM_PAYMENT_SECRET_SETTING_KEYS = new Set([
-  'PLATFORM_WECHAT_PAY_SECRET_BUNDLE',
-  'PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE',
-]);
 
 export async function listSettings(this: any, authContext?: AuthContext) {
     const records = await this.listRecords();

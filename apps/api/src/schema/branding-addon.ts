@@ -5,6 +5,10 @@ import {
   BRANDING_ADDON_PRODUCT_CODE,
   MAX_POSTGRES_INTEGER_FEN,
 } from "../services/branding-addon-contracts";
+import {
+  BRANDING_PURCHASE_MODES,
+  VIRTUAL_PAYMENT_ENVIRONMENTS,
+} from "../services/branding-virtual-payment-contracts";
 import { PaginationQuerySchema } from "./request";
 
 const PRODUCT_NAME_MAX_LENGTH = 100;
@@ -15,12 +19,42 @@ const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "amount_fen",
   "purchase_notes",
   "enabled",
+  "purchase_mode",
+  "virtual_product",
 ] as const;
+
+const VirtualPaymentSecretRefSchema = z.enum([
+  "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+  "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+]);
 
 export const BrandingAddonAmountFenSchema = z.number()
   .int("金额必须是整数分")
   .positive("金额必须大于 0")
   .max(MAX_POSTGRES_INTEGER_FEN, "金额超出支持范围");
+
+export const BrandingVirtualProductPatchSchema = z.object({
+  environment: z.enum(VIRTUAL_PAYMENT_ENVIRONMENTS),
+  app_id: z.string().trim().min(1).max(64),
+  virtual_merchant_id: z.string().trim().min(1).max(64),
+  offer_id: z.string().trim().min(1).max(128),
+  provider_product_id: z.string().trim().min(1).max(128),
+  expected_amount_fen: BrandingAddonAmountFenSchema,
+  encrypted_secret_ref: VirtualPaymentSecretRefSchema,
+  secret_revision: z.number().int().positive(),
+  status: z.enum(["draft", "active", "disabled"]),
+  version: z.number().int().positive(),
+}).strict().refine(
+  (input) => input.encrypted_secret_ref === (
+    input.environment === "production"
+      ? "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE"
+      : "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"
+  ),
+  {
+    message: "虚拟支付密钥引用必须与环境一致",
+    path: ["encrypted_secret_ref"],
+  },
+);
 
 export const BrandingAddonProductPatchSchema = z.object({
   name: z.string()
@@ -35,6 +69,8 @@ export const BrandingAddonProductPatchSchema = z.object({
     .max(PURCHASE_NOTES_MAX_LENGTH, "购买说明不能超过 500 个字符")
     .optional(),
   enabled: z.boolean().optional(),
+  purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
+  virtual_product: BrandingVirtualProductPatchSchema.optional(),
   version: z.number().int("版本号必须是整数").positive("版本号必须大于 0"),
 }).strict().refine(
   (input) => PRODUCT_PATCH_MUTABLE_FIELDS.some(
@@ -85,6 +121,8 @@ export const PlatformBrandingAddonOrderListQuerySchema =
 
 export type BrandingAddonProductPatchInput =
   z.infer<typeof BrandingAddonProductPatchSchema>;
+export type BrandingVirtualProductPatchInput =
+  z.infer<typeof BrandingVirtualProductPatchSchema>;
 export type BrandingAddonCreateOrderInput =
   z.infer<typeof BrandingAddonCreateOrderSchema>;
 export type BrandingAddonOrderListQuery =

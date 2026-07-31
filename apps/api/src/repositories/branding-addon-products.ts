@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
 import { BRANDING_ADDON_PRODUCT_CODE } from "@/services/branding-addon-contracts";
 import { SupabaseDB } from "@/utils/supabase";
+import type { BrandingPurchaseMode } from "@gooes/domain";
 
 type QueryResult = {
   data: unknown;
@@ -28,6 +29,7 @@ export type BrandingAddonProductRecord = {
   purchase_notes: string;
   refund_policy: string;
   enabled: boolean;
+  purchase_mode: BrandingPurchaseMode;
   version: number;
   updated_by_employee_id: string | null;
   created_at: string;
@@ -39,6 +41,7 @@ export type UpdateBrandingAddonProductInput = {
   amountFen?: number;
   purchaseNotes?: string;
   enabled?: boolean;
+  purchaseMode?: BrandingPurchaseMode;
   expectedVersion: number;
   updatedByEmployeeId: string;
 };
@@ -53,6 +56,7 @@ const PRODUCT_COLUMNS = [
   "purchase_notes",
   "refund_policy",
   "enabled",
+  "purchase_mode",
   "version",
   "updated_by_employee_id",
   "created_at",
@@ -86,6 +90,9 @@ export class BrandingAddonProductRepository {
       patch.purchase_notes = input.purchaseNotes;
     }
     if (input.enabled !== undefined) patch.enabled = input.enabled;
+    if (input.purchaseMode !== undefined) {
+      patch.purchase_mode = input.purchaseMode;
+    }
 
     const { data, error } = await this.clientProvider()
       .from("platform_addon_products")

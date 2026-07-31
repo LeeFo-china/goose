@@ -19,4 +19,22 @@ export const DEFINITIONS_PAYMENT: SettingDefinition[] = [
     envNames: ["PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE"],
     isSecret: true,
   },
+  {
+    key: "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+    groupCode: "payment",
+    name: "微信虚拟支付沙箱密钥包",
+    description: "微信小程序虚拟支付沙箱 AppKey，按结构化数据加密存储。",
+    valueType: "json",
+    envNames: ["WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"],
+    isSecret: true,
+  },
+  {
+    key: "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+    groupCode: "payment",
+    name: "微信虚拟支付生产密钥包",
+    description: "微信小程序虚拟支付生产 AppKey，按结构化数据加密存储。",
+    valueType: "json",
+    envNames: ["WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE"],
+    isSecret: true,
+  },
 ];

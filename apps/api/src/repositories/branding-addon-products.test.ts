@@ -48,6 +48,7 @@ describe("BrandingAddonProductRepository", () => {
     expect(calls).toContainEqual(["from", "platform_addon_products"]);
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).toContain("amount_fen");
+    expect(selectCall?.[1]).toContain("purchase_mode");
     expect(selectCall?.[1]).not.toBe("*");
     expect(calls).toContainEqual([
       "eq",
@@ -73,6 +74,7 @@ describe("BrandingAddonProductRepository", () => {
       amountFen: 1,
       purchaseNotes: "支付成功后自动开通一年",
       enabled: true,
+      purchaseMode: "maintenance",
       expectedVersion: 3,
       updatedByEmployeeId: "employee-1",
     });
@@ -84,6 +86,7 @@ describe("BrandingAddonProductRepository", () => {
         amount_fen: 1,
         purchase_notes: "支付成功后自动开通一年",
         enabled: true,
+        purchase_mode: "maintenance",
         version: 4,
         updated_by_employee_id: "employee-1",
       },

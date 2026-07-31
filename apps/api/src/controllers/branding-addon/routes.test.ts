@@ -62,17 +62,20 @@ async function loadHarness() {
     { default: controller },
     { authorizationService },
     { platformBrandingAddonProductService },
+    { brandingVirtualProductService },
     { tenantBrandingAddonOrderService },
   ] = await Promise.all([
     import("."),
     import("@/services/authorization"),
     import("@/services/platform-branding-addon-product"),
+    import("@/services/branding-virtual-products"),
     import("@/services/tenant-branding-addon-orders"),
   ]);
   return {
     controller,
     authorizationService,
     platformBrandingAddonProductService,
+    brandingVirtualProductService,
     tenantBrandingAddonOrderService,
   };
 }
@@ -254,6 +257,7 @@ describe("BrandingAddonController routes", () => {
     const {
       authorizationService,
       controller,
+      brandingVirtualProductService,
       tenantBrandingAddonOrderService,
     } = await loadHarness();
     const originals = {
@@ -336,11 +340,12 @@ describe("BrandingAddonController routes", () => {
     const {
       authorizationService,
       controller,
+      brandingVirtualProductService,
       tenantBrandingAddonOrderService,
     } = await loadHarness();
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
-      product: tenantBrandingAddonOrderService.getProduct,
+      product: brandingVirtualProductService.getTenantProduct,
       list: tenantBrandingAddonOrderService.listOrders,
       detail: tenantBrandingAddonOrderService.getOrder,
     };
@@ -348,7 +353,7 @@ describe("BrandingAddonController routes", () => {
     const listOrders = mock(async () => ({ list: [] }));
     const getOrder = mock(async () => ({ order: { id: ORDER_ID } }));
     authorizationService.getRequiredAuthContext = mock(async () => tenantAuth);
-    replaceMethod(tenantBrandingAddonOrderService, "getProduct", getProduct);
+    replaceMethod(brandingVirtualProductService, "getTenantProduct", getProduct);
     replaceMethod(tenantBrandingAddonOrderService, "listOrders", listOrders);
     replaceMethod(tenantBrandingAddonOrderService, "getOrder", getOrder);
 
@@ -395,8 +400,8 @@ describe("BrandingAddonController routes", () => {
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(
-        tenantBrandingAddonOrderService,
-        "getProduct",
+        brandingVirtualProductService,
+        "getTenantProduct",
         originals.product,
       );
       replaceMethod(

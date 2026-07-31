@@ -154,6 +154,8 @@ describe("platform system settings payment secret update", () => {
   test.each([
     "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
     "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
   ])("blocks generic writes to protected payment secret %s", async (key) => {
     const { SystemSettingsService } = await import(
       "@/services/system-settings/legacy-service"

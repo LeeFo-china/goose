@@ -14,4 +14,17 @@ describe("payment system setting definitions", () => {
       isSecret: true,
     });
   });
+
+  test.each([
+    "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+  ])("defines protected virtual payment bundle %s", (key) => {
+    expect(SETTING_DEFINITIONS.find((item) => item.key === key)).toMatchObject({
+      key,
+      groupCode: "payment",
+      valueType: "json",
+      isSecret: true,
+      envNames: [key],
+    });
+  });
 });

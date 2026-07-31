@@ -51,6 +51,7 @@ export const product = {
   purchase_notes: "支付成功后自动开通或续期一年",
   refund_policy: "数字权益支付成功并开通后不支持退款",
   enabled: true,
+  purchase_mode: "direct_legacy",
   version: 2,
   updated_by_employee_id: null,
   created_at: "2026-07-28T00:00:00.000Z",
