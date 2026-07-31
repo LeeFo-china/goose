@@ -58,6 +58,83 @@ VALIDATE CONSTRAINT finance_ledger_entries_entry_type_check;
 ALTER TABLE public.finance_ledger_entries
 ALTER COLUMN amount TYPE numeric(18, 2);
 
+DO $supplier_payment_aggregate_patch$
+DECLARE
+  v_definition text;
+  v_occurrences integer;
+BEGIN
+  SELECT pg_get_functiondef(
+    'public.list_project_cost_expense_totals(uuid,uuid)'::regprocedure
+  )
+  INTO v_definition;
+  v_occurrences := (
+    length(v_definition) -
+      length(replace(v_definition, 'ledger.direction = ''out''', ''))
+  ) / length('ledger.direction = ''out''');
+  IF v_occurrences <> 2 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(
+    v_definition,
+    'ledger.direction = ''out''',
+    'ledger.direction = ''out'' ' ||
+      'AND ledger.entry_type <> ''supplier_payment'''
+  );
+  EXECUTE v_definition;
+
+  SELECT pg_get_functiondef(
+    (
+      'public.search_finance_project_risk_ids(' ||
+        'uuid,integer,integer,text,text,text,text,' ||
+        'boolean,boolean,boolean,numeric,numeric)'
+    )::regprocedure
+  )
+  INTO v_definition;
+  v_occurrences := (
+    length(v_definition) -
+      length(replace(v_definition, 'l.direction = ''out''', ''))
+  ) / length('l.direction = ''out''');
+  IF v_occurrences <> 3 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(
+    v_definition,
+    'l.direction = ''out''',
+    'l.direction = ''out'' ' ||
+      'AND l.entry_type <> ''supplier_payment'''
+  );
+  EXECUTE v_definition;
+
+  SELECT pg_get_functiondef(
+    (
+      'public.submit_supplier_purchase_requisition(' ||
+        'uuid,uuid,integer,uuid,uuid,text)'
+    )::regprocedure
+  )
+  INTO v_definition;
+  v_occurrences := (
+    length(v_definition) -
+      length(replace(v_definition, 'ledger.direction = ''out''', ''))
+  ) / length('ledger.direction = ''out''');
+  IF v_occurrences <> 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH';
+  END IF;
+  v_definition := replace(
+    v_definition,
+    'ledger.direction = ''out''',
+    'ledger.direction = ''out'' ' ||
+      'AND ledger.entry_type <> ''supplier_payment'''
+  );
+  EXECUTE v_definition;
+END;
+$supplier_payment_aggregate_patch$;
+
 ALTER TABLE public.employees
 ADD CONSTRAINT employees_id_tenant_key UNIQUE (id, tenant_id);
 
@@ -171,6 +248,30 @@ CREATE TABLE public.supplier_payment_requests (
     requested_amount >= 0
     AND paid_amount >= 0
     AND paid_amount <= requested_amount
+  ),
+  CONSTRAINT supplier_payment_requests_state_amount_check CHECK (
+    (
+      status IN (
+        'draft',
+        'pending_approval',
+        'approved'
+      )
+      AND paid_amount = 0
+    )
+    OR (
+      status IN ('rejected', 'cancelled')
+      AND paid_amount = 0
+    )
+    OR (
+      status IN ('partially_paid', 'closed')
+      AND paid_amount > 0
+      AND paid_amount < requested_amount
+    )
+    OR (
+      status = 'paid'
+      AND requested_amount > 0
+      AND paid_amount = requested_amount
+    )
   ),
   CONSTRAINT supplier_payment_requests_text_check CHECK (
     reason = btrim(reason)
@@ -330,7 +431,7 @@ CREATE TABLE public.supplier_payment_request_allocations (
   CONSTRAINT supplier_payment_request_allocations_request_payable_key
     UNIQUE (payment_request_id, payable_event_id),
   CONSTRAINT supplier_payment_request_allocations_id_scope_key
-    UNIQUE (id, tenant_id, payable_event_id)
+    UNIQUE (id, tenant_id, payment_request_id, payable_event_id)
 );
 
 CREATE TABLE public.supplier_payments (
@@ -358,7 +459,7 @@ CREATE TABLE public.supplier_payments (
   evidence_images jsonb NOT NULL,
   remark text NULL,
   confirmed_by_employee_id uuid NOT NULL,
-  idempotency_key text NOT NULL,
+  idempotency_key uuid NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT supplier_payments_request_scope_fkey
     FOREIGN KEY (
@@ -427,12 +528,9 @@ CREATE TABLE public.supplier_payments (
       AND char_length(remark) <= 500
     )
   ),
-  CONSTRAINT supplier_payments_idempotency_key_check CHECK (
-    idempotency_key = btrim(idempotency_key)
-    AND idempotency_key <> ''
-    AND char_length(idempotency_key) <= 120
-  ),
   CONSTRAINT supplier_payments_id_tenant_key UNIQUE (id, tenant_id),
+  CONSTRAINT supplier_payments_id_request_scope_key
+    UNIQUE (id, tenant_id, payment_request_id),
   CONSTRAINT supplier_payments_tenant_payment_no_key
     UNIQUE (tenant_id, payment_no),
   CONSTRAINT supplier_payments_tenant_idempotency_key
@@ -444,23 +542,34 @@ CREATE TABLE public.supplier_payment_allocations (
   tenant_id uuid NOT NULL
     REFERENCES public.tenants(id) ON DELETE RESTRICT,
   supplier_payment_id uuid NOT NULL,
+  payment_request_id uuid NOT NULL,
   payment_request_allocation_id uuid NOT NULL,
   payable_event_id uuid NOT NULL,
   amount numeric(18, 2) NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT supplier_payment_allocations_payment_tenant_fkey
-    FOREIGN KEY (supplier_payment_id, tenant_id)
-    REFERENCES public.supplier_payments(id, tenant_id)
+    FOREIGN KEY (
+      supplier_payment_id,
+      tenant_id,
+      payment_request_id
+    )
+    REFERENCES public.supplier_payments(
+      id,
+      tenant_id,
+      payment_request_id
+    )
     ON DELETE RESTRICT,
   CONSTRAINT supplier_payment_allocations_request_payable_tenant_fkey
     FOREIGN KEY (
       payment_request_allocation_id,
       tenant_id,
+      payment_request_id,
       payable_event_id
     )
     REFERENCES public.supplier_payment_request_allocations(
       id,
       tenant_id,
+      payment_request_id,
       payable_event_id
     )
     ON DELETE RESTRICT,
@@ -470,7 +579,11 @@ CREATE TABLE public.supplier_payment_allocations (
     ON DELETE RESTRICT,
   CONSTRAINT supplier_payment_allocations_amount_check CHECK (amount > 0),
   CONSTRAINT supplier_payment_allocations_payment_request_key
-    UNIQUE (supplier_payment_id, payment_request_allocation_id)
+    UNIQUE (
+      supplier_payment_id,
+      payment_request_id,
+      payment_request_allocation_id
+    )
 );
 
 CREATE INDEX supplier_payable_events_tenant_status_query_idx
@@ -632,7 +745,7 @@ CREATE FUNCTION public.review_supplier_payment_request(
   p_remark text,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -662,8 +775,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -691,7 +802,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -699,7 +810,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
@@ -708,12 +819,13 @@ BEGIN
       OR v_event.command <> 'review_supplier_payment_request'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -727,8 +839,7 @@ BEGIN
   IF NOT FOUND THEN
     v_result := jsonb_build_object(
       'status', 'not_found',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_NOT_FOUND',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_NOT_FOUND'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -739,8 +850,7 @@ BEGIN
   IF v_payment_request.version <> p_expected_version THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -752,8 +862,7 @@ BEGIN
   IF v_payment_request.status <> 'pending_approval' THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -765,9 +874,7 @@ BEGIN
   IF v_payment_request.submitted_by_employee_id = p_actor_employee_id THEN
     v_result := jsonb_build_object(
       'status', 'self_review',
-      'error_code',
-        'SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_SELF_REVIEW'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -833,7 +940,7 @@ CREATE FUNCTION public.cancel_supplier_payment_request(
   p_reason text,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -856,8 +963,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -880,7 +985,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -888,7 +993,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
@@ -897,12 +1002,13 @@ BEGIN
       OR v_event.command <> 'cancel_supplier_payment_request'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -915,8 +1021,7 @@ BEGIN
   IF NOT FOUND THEN
     v_result := jsonb_build_object(
       'status', 'not_found',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_NOT_FOUND',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_NOT_FOUND'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -927,8 +1032,7 @@ BEGIN
   IF v_payment_request.version <> p_expected_version THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -942,8 +1046,7 @@ BEGIN
   ) OR v_payment_request.paid_amount <> 0 THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -989,7 +1092,7 @@ CREATE FUNCTION public.close_supplier_payment_request(
   p_reason text,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1012,8 +1115,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -1036,7 +1137,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -1044,7 +1145,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
@@ -1053,12 +1154,13 @@ BEGIN
       OR v_event.command <> 'close_supplier_payment_request'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -1071,8 +1173,7 @@ BEGIN
   IF NOT FOUND THEN
     v_result := jsonb_build_object(
       'status', 'not_found',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_NOT_FOUND',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_NOT_FOUND'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -1083,8 +1184,7 @@ BEGIN
   IF v_payment_request.version <> p_expected_version THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -1096,8 +1196,7 @@ BEGIN
   IF v_payment_request.status <> 'partially_paid' THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -1149,7 +1248,7 @@ CREATE FUNCTION public.confirm_supplier_payment(
   p_allocations jsonb,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1204,8 +1303,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -1238,7 +1335,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -1246,7 +1343,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
@@ -1255,12 +1352,13 @@ BEGIN
       OR v_event.command <> 'confirm_supplier_payment'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -1274,8 +1372,7 @@ BEGIN
   IF NOT FOUND THEN
     v_result := jsonb_build_object(
       'status', 'not_found',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_NOT_FOUND',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_NOT_FOUND'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1286,8 +1383,7 @@ BEGIN
   IF v_payment_request.version <> p_expected_version THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1299,8 +1395,7 @@ BEGIN
   IF v_payment_request.status NOT IN ('approved', 'partially_paid') THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1323,8 +1418,7 @@ BEGIN
   THEN
     v_result := jsonb_build_object(
       'status', 'evidence_required',
-      'error_code', 'SUPPLIER_PAYMENT_EVIDENCE_REQUIRED',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_EVIDENCE_REQUIRED'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1357,8 +1451,7 @@ BEGIN
   ) THEN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
-      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1389,8 +1482,7 @@ BEGIN
   IF v_input_count <> v_resolved_count OR v_payment_amount <= 0 THEN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
-      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1473,8 +1565,7 @@ BEGIN
   THEN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
-      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1518,8 +1609,7 @@ BEGIN
   ) THEN
     v_result := jsonb_build_object(
       'status', 'amount_unavailable',
-      'error_code', 'SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1531,21 +1621,17 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
-    FROM public.supplier_payable_events AS payable
-    JOIN (
-      SELECT
-        (item.value ->> 'payable_event_id')::uuid AS payable_event_id
-      FROM jsonb_array_elements(p_allocations) AS item(value)
-    ) AS input
-      ON input.payable_event_id = payable.id
-    WHERE payable.tenant_id = p_tenant_id
+    FROM public.supplier_payment_request_allocations AS allocation
+    JOIN public.supplier_payable_events AS payable
+      ON payable.id = allocation.payable_event_id
+      AND payable.tenant_id = allocation.tenant_id
+    WHERE allocation.payment_request_id = p_payment_request_id
+      AND allocation.tenant_id = p_tenant_id
       AND payable.invoice_required_before_payment
   ) THEN
     v_result := jsonb_build_object(
       'status', 'invoice_required',
-      'error_code',
-        'SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_INVOICE_REQUIRED'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment', p_payment_id,
@@ -1590,13 +1676,14 @@ BEGIN
     p_evidence_images,
     CASE WHEN p_remark IS NULL THEN NULL ELSE btrim(p_remark) END,
     p_actor_employee_id,
-    btrim(p_idempotency_key)
+    p_idempotency_key
   )
   RETURNING * INTO v_payment;
 
   INSERT INTO public.supplier_payment_allocations (
     tenant_id,
     supplier_payment_id,
+    payment_request_id,
     payment_request_allocation_id,
     payable_event_id,
     amount
@@ -1604,6 +1691,7 @@ BEGIN
   SELECT
     p_tenant_id,
     p_payment_id,
+    p_payment_request_id,
     (item.value ->> 'payment_request_allocation_id')::uuid,
     (item.value ->> 'payable_event_id')::uuid,
     (item.value ->> 'amount')::numeric(18, 2)
@@ -1707,7 +1795,7 @@ CREATE FUNCTION public.save_supplier_payment_request_draft(
   p_allocations jsonb,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1747,8 +1835,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -1780,7 +1866,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -1789,7 +1875,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
 
   IF FOUND THEN
@@ -1799,12 +1885,13 @@ BEGIN
       OR v_event.command <> 'save_supplier_payment_request_draft'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -1833,8 +1920,7 @@ BEGIN
   ) THEN
     v_result := jsonb_build_object(
       'status', 'validation_error',
-      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VALIDATION_ERROR'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -1870,8 +1956,7 @@ BEGIN
   IF v_allocation_count <> v_resolved_count THEN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
-      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -1931,8 +2016,7 @@ BEGIN
   THEN
     v_result := jsonb_build_object(
       'status', 'scope_mismatch',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_SCOPE_MISMATCH'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -1960,8 +2044,7 @@ BEGIN
   THEN
     v_result := jsonb_build_object(
       'status', 'scope_mismatch',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_SCOPE_MISMATCH'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -1982,8 +2065,7 @@ BEGIN
   THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -2002,8 +2084,7 @@ BEGIN
   IF v_request_exists AND v_payment_request.status <> 'draft' THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -2022,8 +2103,7 @@ BEGIN
   IF NOT v_request_exists AND p_expected_version <> 0 THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id,
@@ -2132,7 +2212,7 @@ CREATE FUNCTION public.submit_supplier_payment_request(
   p_expected_version integer,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text
+  p_idempotency_key uuid
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2154,8 +2234,6 @@ BEGIN
     OR p_actor_user_id IS NULL
     OR p_actor_employee_id IS NULL
     OR p_idempotency_key IS NULL
-    OR btrim(p_idempotency_key) = ''
-    OR char_length(btrim(p_idempotency_key)) > 120
   THEN
     RETURN jsonb_build_object(
       'status', 'validation_error',
@@ -2178,7 +2256,7 @@ BEGIN
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
-        p_idempotency_key,
+        p_idempotency_key::text,
       0
     )
   );
@@ -2186,7 +2264,7 @@ BEGIN
   INTO v_event
   FROM public.supplier_command_events AS event
   WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
+    AND event.idempotency_key = p_idempotency_key::text
   FOR UPDATE;
   IF FOUND THEN
     IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
@@ -2195,12 +2273,13 @@ BEGIN
       OR v_event.command <> 'submit_supplier_payment_request'
       OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
     THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+      RETURN jsonb_build_object(
+        'status', 'idempotency_conflict',
+        'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'
+      );
     END IF;
-    RETURN v_event.to_state || jsonb_build_object(
-      'idempotent', true
+    RETURN public.replay_supplier_payment_command_result(
+      v_event.to_state
     );
   END IF;
 
@@ -2214,8 +2293,7 @@ BEGIN
   IF NOT FOUND THEN
     v_result := jsonb_build_object(
       'status', 'not_found',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_NOT_FOUND',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_NOT_FOUND'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2227,8 +2305,7 @@ BEGIN
   IF v_payment_request.version <> p_expected_version THEN
     v_result := jsonb_build_object(
       'status', 'version_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_VERSION_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2241,8 +2318,7 @@ BEGIN
   IF v_payment_request.status <> 'draft' THEN
     v_result := jsonb_build_object(
       'status', 'state_conflict',
-      'error_code', 'SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_STATE_CONFLICT'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2353,8 +2429,7 @@ BEGIN
   IF v_requested_amount IS NULL OR v_requested_amount <= 0 THEN
     v_result := jsonb_build_object(
       'status', 'allocation_invalid',
-      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_ALLOCATION_INVALID'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2367,8 +2442,7 @@ BEGIN
   IF v_unavailable_count > 0 THEN
     v_result := jsonb_build_object(
       'status', 'amount_unavailable',
-      'error_code', 'SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE',
-      'idempotent', false
+      'error_code', 'SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE'
     );
     RETURN public.record_supplier_payment_command_result(
       p_tenant_id, 'supplier_payment_request', p_payment_request_id,
@@ -2406,13 +2480,6 @@ BEGIN
   );
 END;
 $$;
-
-GRANT SELECT ON TABLE
-  public.supplier_payment_requests,
-  public.supplier_payment_request_allocations,
-  public.supplier_payments,
-  public.supplier_payment_allocations
-TO service_role;
 
 REVOKE ALL ON FUNCTION
   public.prevent_supplier_payment_fact_mutation(),
@@ -2488,6 +2555,31 @@ AS $$
   );
 $$;
 
+CREATE FUNCTION public.replay_supplier_payment_command_result(
+  p_result jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_result ->> 'status' IN (
+    'saved',
+    'submitted',
+    'approved',
+    'rejected',
+    'cancelled',
+    'closed',
+    'partially_paid',
+    'paid'
+  ) THEN
+    RETURN p_result || jsonb_build_object('idempotent', true);
+  END IF;
+  RETURN p_result;
+END;
+$$;
+
 CREATE FUNCTION public.record_supplier_payment_command_result(
   p_tenant_id uuid,
   p_resource_type text,
@@ -2497,7 +2589,7 @@ CREATE FUNCTION public.record_supplier_payment_command_result(
   p_result jsonb,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
-  p_idempotency_key text,
+  p_idempotency_key uuid,
   p_result_version integer
 )
 RETURNS jsonb
@@ -2524,10 +2616,13 @@ BEGIN
     p_resource_id,
     p_command,
     jsonb_build_object('_request', p_request),
-    p_result - 'idempotent',
+    CASE
+      WHEN p_result ? 'error_code' THEN p_result
+      ELSE p_result - 'idempotent'
+    END,
     p_actor_user_id,
     p_actor_employee_id,
-    p_idempotency_key,
+    p_idempotency_key::text,
     GREATEST(p_result_version, 1)
   );
   RETURN p_result;
@@ -2539,6 +2634,7 @@ REVOKE ALL ON FUNCTION
     public.supplier_payment_requests
   ),
   public.supplier_payment_to_jsonb(public.supplier_payments),
+  public.replay_supplier_payment_command_result(jsonb),
   public.record_supplier_payment_command_result(
     uuid,
     text,
@@ -2548,7 +2644,7 @@ REVOKE ALL ON FUNCTION
     jsonb,
     uuid,
     uuid,
-    text,
+    uuid,
     integer
   )
 FROM PUBLIC, anon, authenticated, service_role;
@@ -3061,7 +3157,7 @@ REVOKE ALL ON FUNCTION
     jsonb,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.submit_supplier_payment_request(
     uuid,
@@ -3069,7 +3165,7 @@ REVOKE ALL ON FUNCTION
     integer,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.review_supplier_payment_request(
     uuid,
@@ -3079,7 +3175,7 @@ REVOKE ALL ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.cancel_supplier_payment_request(
     uuid,
@@ -3088,7 +3184,7 @@ REVOKE ALL ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.close_supplier_payment_request(
     uuid,
@@ -3097,7 +3193,7 @@ REVOKE ALL ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.confirm_supplier_payment(
     uuid,
@@ -3112,7 +3208,7 @@ REVOKE ALL ON FUNCTION
     jsonb,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.list_supplier_payables(
     uuid,
@@ -3158,7 +3254,7 @@ GRANT EXECUTE ON FUNCTION
     jsonb,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.submit_supplier_payment_request(
     uuid,
@@ -3166,7 +3262,7 @@ GRANT EXECUTE ON FUNCTION
     integer,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.review_supplier_payment_request(
     uuid,
@@ -3176,7 +3272,7 @@ GRANT EXECUTE ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.cancel_supplier_payment_request(
     uuid,
@@ -3185,7 +3281,7 @@ GRANT EXECUTE ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.close_supplier_payment_request(
     uuid,
@@ -3194,7 +3290,7 @@ GRANT EXECUTE ON FUNCTION
     text,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.confirm_supplier_payment(
     uuid,
@@ -3209,7 +3305,7 @@ GRANT EXECUTE ON FUNCTION
     jsonb,
     uuid,
     uuid,
-    text
+    uuid
   ),
   public.list_supplier_payables(
     uuid,

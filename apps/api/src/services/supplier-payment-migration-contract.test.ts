@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
+import {
+  SUPPLIER_PAYMENT_COMMAND_ERROR_CODES,
+  SupplierPaymentCommandEnvelopeSchema,
+} from "../repositories/supplier-payment-records";
 
 const migrationUrl = new URL(
   "../../../../supabase/migrations/20260731110000_create_supplier_payment_requests.sql",
@@ -11,6 +15,27 @@ const migration = existsSync(migrationUrl)
 const financeMigration = readFileSync(
   new URL(
     "../../../../supabase/migrations/20260616170000_decoration_finance_phase1.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const expenseTotalsMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260730150000_create_supplier_purchase_requisitions.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const projectRiskMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260624160000_finance_project_risk_search.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const latestSupplierCostMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260731100000_create_supplier_cost_payable_facts.sql",
     import.meta.url,
   ),
   "utf8",
@@ -67,6 +92,9 @@ describe("supplier payment data migration contract", () => {
       /UNIQUE \(tenant_id, request_no\)/,
       /status IN \([\s\S]*'draft'[\s\S]*'pending_approval'[\s\S]*'approved'[\s\S]*'partially_paid'[\s\S]*'paid'[\s\S]*'rejected'[\s\S]*'cancelled'[\s\S]*'closed'[\s\S]*\)/,
       /requested_amount >= 0[\s\S]*paid_amount >= 0[\s\S]*paid_amount <= requested_amount/,
+      /status = 'paid'[\s\S]*paid_amount = requested_amount/,
+      /status IN \('partially_paid', 'closed'\)[\s\S]*paid_amount > 0[\s\S]*paid_amount < requested_amount/,
+      /status IN \('rejected', 'cancelled'\)[\s\S]*paid_amount = 0/,
       /supplier_payment_requests_state_audit_check/,
     ]);
     contracts(requestAllocation, [
@@ -89,7 +117,7 @@ describe("supplier payment data migration contract", () => {
       /paid_at timestamptz NOT NULL/,
       /evidence_images jsonb NOT NULL/,
       /confirmed_by_employee_id uuid NOT NULL/,
-      /idempotency_key text NOT NULL/,
+      /idempotency_key uuid NOT NULL/,
       /FOREIGN KEY \([\s\S]*payment_request_id,[\s\S]*tenant_id,[\s\S]*project_id,[\s\S]*tenant_supplier_id,[\s\S]*supplier_id,[\s\S]*currency[\s\S]*supplier_payment_requests/,
       /payment_method IN \(\s*'bank_transfer',\s*'wechat',\s*'alipay',\s*'cash',\s*'other'\s*\)/,
       /jsonb_typeof\(evidence_images\) = 'array'/,
@@ -99,12 +127,13 @@ describe("supplier payment data migration contract", () => {
     ]);
     contracts(paymentAllocation, [
       /supplier_payment_id uuid NOT NULL/,
+      /payment_request_id uuid NOT NULL/,
       /payment_request_allocation_id uuid NOT NULL/,
       /payable_event_id uuid NOT NULL/,
       /amount numeric\(18, 2\) NOT NULL/,
-      /FOREIGN KEY \(supplier_payment_id, tenant_id\)[\s\S]*supplier_payments\(id, tenant_id\)/,
-      /FOREIGN KEY \(\s*payment_request_allocation_id,\s*tenant_id,\s*payable_event_id\s*\)[\s\S]*supplier_payment_request_allocations/,
-      /UNIQUE \(supplier_payment_id, payment_request_allocation_id\)/,
+      /FOREIGN KEY \(\s*supplier_payment_id,\s*tenant_id,\s*payment_request_id\s*\)[\s\S]*supplier_payments\(\s*id,\s*tenant_id,\s*payment_request_id\s*\)/,
+      /FOREIGN KEY \(\s*payment_request_allocation_id,\s*tenant_id,\s*payment_request_id,\s*payable_event_id\s*\)[\s\S]*supplier_payment_request_allocations\(\s*id,\s*tenant_id,\s*payment_request_id,\s*payable_event_id\s*\)/,
+      /UNIQUE \(\s*supplier_payment_id,\s*payment_request_id,\s*payment_request_allocation_id\s*\)/,
       /CHECK \(amount > 0\)/,
     ]);
   });
@@ -165,7 +194,7 @@ describe("supplier payment data migration contract", () => {
     expect(migration).toMatch(
       /REVOKE ALL ON TABLE[\s\S]*supplier_payment_requests[\s\S]*supplier_payment_request_allocations[\s\S]*supplier_payments[\s\S]*supplier_payment_allocations[\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
     );
-    expect(migration).toMatch(
+    expect(migration).not.toMatch(
       /GRANT SELECT ON TABLE[\s\S]*supplier_payment_requests[\s\S]*supplier_payment_request_allocations[\s\S]*supplier_payments[\s\S]*supplier_payment_allocations[\s\S]*TO service_role/,
     );
     expect(migration).not.toMatch(
@@ -188,6 +217,100 @@ describe("supplier payment data migration contract", () => {
       /INSERT INTO public\.finance_ledger_entries[\s\S]*'out'[\s\S]*'supplier_payment'[\s\S]*'supplier_payment'/,
     );
     expect(paymentCommand).not.toMatch(/INSERT INTO public\.project_cost_events/);
+
+    const aggregatePatch = migration.slice(
+      migration.indexOf("DO $supplier_payment_aggregate_patch$"),
+      migration.indexOf("$supplier_payment_aggregate_patch$;", 1),
+    );
+    contracts(aggregatePatch, [
+      /list_project_cost_expense_totals\(uuid,uuid\)/,
+      /ledger\.direction = ''out''[\s\S]*ledger\.entry_type <> ''supplier_payment''/,
+      /search_finance_project_risk_ids\(/,
+      /l\.direction = ''out''[\s\S]*l\.entry_type <> ''supplier_payment''/,
+      /submit_supplier_purchase_requisition\(/,
+      /pg_get_functiondef/,
+      /v_occurrences <> 2/,
+      /v_occurrences <> 3/,
+      /v_occurrences <> 1/,
+      /SUPPLIER_PAYMENT_AGGREGATE_PATCH_SOURCE_MISMATCH/,
+    ]);
+    expect(expenseTotalsMigration).toContain(
+      "CREATE FUNCTION public.list_project_cost_expense_totals(",
+    );
+    expect(projectRiskMigration).toContain(
+      "create or replace function public.search_finance_project_risk_ids(",
+    );
+    expect(latestSupplierCostMigration).toContain(
+      "CREATE OR REPLACE FUNCTION public.submit_supplier_purchase_requisition(",
+    );
+  });
+
+  test("uses the frozen command envelope and error code contract", () => {
+    const errorEnvelopes = [
+      {
+        status: "not_found",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.not_found,
+      },
+      {
+        status: "validation_error",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.validation_error,
+      },
+      {
+        status: "state_conflict",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.state_conflict,
+      },
+      {
+        status: "version_conflict",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.version_conflict,
+      },
+      {
+        status: "scope_mismatch",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.scope_mismatch,
+      },
+      {
+        status: "amount_unavailable",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.amount_unavailable,
+      },
+      {
+        status: "allocation_invalid",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.allocation_invalid,
+      },
+      {
+        status: "evidence_required",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.evidence_required,
+      },
+      {
+        status: "invoice_required",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.invoice_required,
+      },
+      {
+        status: "self_review",
+        error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.self_review,
+      },
+      {
+        status: "idempotency_conflict",
+        error_code:
+          SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.idempotency_conflict,
+      },
+    ] as const;
+    for (const envelope of errorEnvelopes) {
+      expect(
+        SupplierPaymentCommandEnvelopeSchema.parse(envelope),
+      ).toEqual(envelope);
+      expect(migration).toContain(`'${envelope.error_code}'`);
+    }
+    for (const obsoleteCode of [
+      "SUPPLIER_PAYMENT_REQUEST_NOT_FOUND",
+      "SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT",
+      "SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT",
+      "SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH",
+      "SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN",
+      "SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE",
+      "SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED",
+      "SUPPLIER_IDEMPOTENCY_CONFLICT",
+    ]) {
+      expect(migration).not.toContain(obsoleteCode);
+    }
   });
 
   test("seeds five tenant administrator permissions", () => {

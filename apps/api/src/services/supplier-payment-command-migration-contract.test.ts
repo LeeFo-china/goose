@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
+import {
+  SUPPLIER_PAYMENT_COMMAND_ERROR_CODES,
+  SupplierPaymentCommandEnvelopeSchema,
+} from "../repositories/supplier-payment-records";
 
 const migrationUrl = new URL(
   "../../../../supabase/migrations/20260731110000_create_supplier_payment_requests.sql",
@@ -76,17 +80,24 @@ describe("supplier payment atomic command migration contract", () => {
         /pg_advisory_xact_lock/,
         /supplier_command_events/,
         /v_event\.from_state -> '_request' IS DISTINCT FROM v_request/,
-        /SUPPLIER_IDEMPOTENCY_CONFLICT/,
-        /'idempotent', true/,
+        /SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT/,
+        /replay_supplier_payment_command_result/,
         /record_supplier_payment_command_result/,
       ]);
+      expect(command).toMatch(/p_idempotency_key uuid/);
+      expect(command).toMatch(/p_idempotency_key::text/);
       expect(commandRevoke).toContain(`public.${name}(`);
       expect(commandGrant).toContain(`public.${name}(`);
     }
     contracts(fn("record_supplier_payment_command_result"), [
       /INSERT INTO public\.supplier_command_events/,
       /jsonb_build_object\('_request', p_request\)/,
-      /p_result - 'idempotent'/,
+      /CASE[\s\S]*WHEN p_result \? 'error_code' THEN p_result[\s\S]*ELSE p_result - 'idempotent'/,
+    ]);
+    contracts(fn("replay_supplier_payment_command_result"), [
+      /p_result jsonb/,
+      /RETURN p_result \|\| jsonb_build_object\([\s\S]*'idempotent', true/,
+      /RETURN p_result;/,
     ]);
   });
 
@@ -107,8 +118,8 @@ describe("supplier payment atomic command migration contract", () => {
       /INSERT INTO public\.supplier_payment_request_allocations/,
       /DELETE FROM public\.supplier_payment_request_allocations/,
       /status = 'draft'/,
-      /SUPPLIER_PAYMENT_REQUEST_SCOPE_MISMATCH/,
-      /SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT/,
+      /SUPPLIER_PAYMENT_SCOPE_MISMATCH/,
+      /SUPPLIER_PAYMENT_VERSION_CONFLICT/,
     ]);
     expect(save).not.toMatch(/reserved_unpaid_amount/);
   });
@@ -120,7 +131,7 @@ describe("supplier payment atomic command migration contract", () => {
       /FROM public\.supplier_payable_events[\s\S]*?ORDER BY payable\.id[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_payment_request_allocations AS active_allocation[\s\S]*?ORDER BY\s*active_allocation\.payment_request_id,\s*active_allocation\.payable_event_id[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_payment_request_allocations AS current_allocation[\s\S]*?ORDER BY current_allocation\.payable_event_id[\s\S]*?FOR UPDATE/,
-      /SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE/,
+      /SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE/,
       /status = 'pending_approval'/,
     ]);
     contracts(submit, [
@@ -138,7 +149,7 @@ describe("supplier payment atomic command migration contract", () => {
       /p_action NOT IN \('approve', 'reject'\)/,
       /v_payment_request\.status <> 'pending_approval'/,
       /v_payment_request\.submitted_by_employee_id = p_actor_employee_id/,
-      /SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN/,
+      /SUPPLIER_PAYMENT_SELF_REVIEW/,
       /p_action = 'reject'[\s\S]*btrim\(p_remark\) = ''/,
       /p_action = 'approve'[\s\S]*status = 'approved'/,
       /ELSE[\s\S]*status = 'rejected'/,
@@ -153,23 +164,25 @@ describe("supplier payment atomic command migration contract", () => {
       /paid_amount <> 0/,
       /status = 'cancelled'/,
       /cancel_reason = btrim\(p_reason\)/,
-      /SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT/,
+      /SUPPLIER_PAYMENT_STATE_CONFLICT/,
     ]);
     const close = fn("close_supplier_payment_request");
     contracts(close, [
       /status <> 'partially_paid'/,
       /status = 'closed'/,
       /close_reason = btrim\(p_reason\)/,
-      /SUPPLIER_PAYMENT_REQUEST_STATE_CONFLICT/,
+      /SUPPLIER_PAYMENT_STATE_CONFLICT/,
     ]);
   });
 
   test("checks invoice capability before any payment side effect", () => {
     const confirm = fn("confirm_supplier_payment");
     const invoiceGate = confirm.indexOf(
-      "SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED",
+      "SUPPLIER_PAYMENT_INVOICE_REQUIRED",
     );
+    const invoiceGateStart = confirm.lastIndexOf("IF EXISTS (", invoiceGate);
     expect(invoiceGate).toBeGreaterThan(0);
+    expect(invoiceGateStart).toBeGreaterThan(0);
     for (const sideEffect of [
       "INSERT INTO public.supplier_payments",
       "INSERT INTO public.supplier_payment_allocations",
@@ -178,13 +191,19 @@ describe("supplier payment atomic command migration contract", () => {
     ]) {
       expect(confirm.indexOf(sideEffect)).toBeGreaterThan(invoiceGate);
     }
-    contracts(confirm.slice(0, invoiceGate), [
+    const invoiceGateSource = confirm.slice(invoiceGateStart, invoiceGate);
+    contracts(invoiceGateSource, [
+      /supplier_payment_request_allocations/,
+      /allocation\.payment_request_id = p_payment_request_id/,
       /supplier_payable_events/,
       /invoice_required_before_payment/,
     ]);
+    expect(invoiceGateSource).not.toMatch(
+      /jsonb_array_elements\(p_allocations\)/,
+    );
     contracts(confirm, [
       /'status', 'invoice_required'/,
-      /'error_code',\s*'SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED'/,
+      /'error_code',\s*'SUPPLIER_PAYMENT_INVOICE_REQUIRED'/,
     ]);
   });
 
@@ -195,7 +214,7 @@ describe("supplier payment atomic command migration contract", () => {
       /FROM public\.supplier_payable_events[\s\S]*?ORDER BY payable\.id[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_payment_request_allocations AS active_allocation[\s\S]*?ORDER BY\s*active_allocation\.payment_request_id,\s*active_allocation\.payable_event_id[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_payment_request_allocations AS current_allocation[\s\S]*?ORDER BY current_allocation\.payable_event_id[\s\S]*?FOR UPDATE/,
-      /SUPPLIER_PAYMENT_INVOICE_CAPABILITY_REQUIRED/,
+      /SUPPLIER_PAYMENT_INVOICE_REQUIRED/,
       /INSERT INTO public\.supplier_payments/,
       /INSERT INTO public\.supplier_payment_allocations/,
       /UPDATE public\.supplier_payment_request_allocations/,
@@ -214,7 +233,7 @@ describe("supplier payment atomic command migration contract", () => {
       /allocation\.requested_amount - allocation\.paid_amount/,
       /payable\.amount - COALESCE\([\s\S]*supplier_payment_allocations/,
       /SUPPLIER_PAYMENT_ALLOCATION_INVALID/,
-      /SUPPLIER_PAYABLE_AMOUNT_UNAVAILABLE/,
+      /SUPPLIER_PAYMENT_AMOUNT_UNAVAILABLE/,
       /SET paid_amount = paid_amount \+ v_payment_amount/,
       /status = CASE[\s\S]*'paid'[\s\S]*'partially_paid'/,
       /VALUES \([\s\S]*'out',[\s\S]*'supplier_payment',[\s\S]*'supplier_payment'/,
@@ -230,19 +249,32 @@ describe("supplier payment atomic command migration contract", () => {
     for (const name of commands) {
       const command = fn(name);
       expect(command).toMatch(
-        /IF FOUND THEN[\s\S]*v_event\.from_state -> '_request' IS DISTINCT FROM v_request[\s\S]*RETURN v_event\.to_state \|\| jsonb_build_object\(\s*'idempotent', true\s*\)/,
+        /IF FOUND THEN[\s\S]*v_event\.from_state -> '_request' IS DISTINCT FROM v_request[\s\S]*RETURN jsonb_build_object\([\s\S]*'status', 'idempotency_conflict'[\s\S]*'error_code', 'SUPPLIER_PAYMENT_IDEMPOTENCY_CONFLICT'[\s\S]*END IF;[\s\S]*RETURN public\.replay_supplier_payment_command_result\(\s*v_event\.to_state\s*\)/,
       );
     }
     expect(migration).toMatch(
       /CREATE FUNCTION public\.record_supplier_payment_command_result\([\s\S]*p_result jsonb[\s\S]*to_state[\s\S]*p_result - 'idempotent'/,
     );
+    const errorEnvelope = {
+      status: "state_conflict",
+      error_code: SUPPLIER_PAYMENT_COMMAND_ERROR_CODES.state_conflict,
+    } as const;
+    expect(SupplierPaymentCommandEnvelopeSchema.parse(errorEnvelope)).toEqual(
+      errorEnvelope,
+    );
+    expect(() =>
+      SupplierPaymentCommandEnvelopeSchema.parse({
+        ...errorEnvelope,
+        idempotent: false,
+      })
+    ).toThrow();
   });
 
   test("uses stable version-conflict envelopes in every versioned command", () => {
     for (const name of commands) {
       const command = fn(name);
       expect(command).toMatch(
-        /'status', 'version_conflict'[\s\S]*'error_code',\s*'SUPPLIER_PAYMENT_REQUEST_VERSION_CONFLICT'/,
+        /'status', 'version_conflict'[\s\S]*'error_code',\s*'SUPPLIER_PAYMENT_VERSION_CONFLICT'/,
       );
     }
   });
