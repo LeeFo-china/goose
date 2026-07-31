@@ -359,8 +359,22 @@ ON public.tenant_virtual_addon_orders(
   id DESC
 );
 
+CREATE INDEX tenant_virtual_addon_orders_tenant_created_idx
+ON public.tenant_virtual_addon_orders(
+  tenant_id,
+  created_at DESC,
+  id DESC
+);
+
 CREATE INDEX tenant_virtual_addon_orders_platform_created_idx
 ON public.tenant_virtual_addon_orders(created_at DESC, id DESC);
+
+CREATE INDEX tenant_virtual_addon_orders_status_created_idx
+ON public.tenant_virtual_addon_orders(
+  payment_status,
+  created_at DESC,
+  id DESC
+);
 
 CREATE INDEX tenant_virtual_addon_orders_reconcile_idx
 ON public.tenant_virtual_addon_orders(
