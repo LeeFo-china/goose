@@ -703,7 +703,7 @@ git commit -m "feat(db): 建立供应商付款原子命令"
 - Create: `apps/api/src/controllers/supplier-payment-requests/routes.test.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
-- [ ] **Step 1: 写 repository RED 测试**
+- [x] **Step 1: 写 repository RED 测试**
 
 用 typed fake Supabase client 断言：
 
@@ -730,7 +730,7 @@ expect(rpc).toHaveBeenCalledWith("list_supplier_payables", {
 付款 repository 覆盖 list/detail/payments 和六个命令的精确 RPC 参数。所有返回先经
 Task 1 的 Zod record schema 解析；数据库 error 经 `Errors.dbError()`。
 
-- [ ] **Step 2: 运行 repository RED**
+- [x] **Step 2: 运行 repository RED**
 
 Run:
 
@@ -742,7 +742,7 @@ bun test src/repositories/supplier-payables.test.ts \
 
 Expected: FAIL，repository 不存在。
 
-- [ ] **Step 3: 实现 repository**
+- [x] **Step 3: 实现 repository**
 
 导出端口：
 
@@ -768,7 +768,7 @@ export class SupplierPaymentRequestsRepository {
 }
 ```
 
-- [ ] **Step 4: 写 access 与 service RED 测试**
+- [x] **Step 4: 写 access 与 service RED 测试**
 
 覆盖：
 
@@ -796,7 +796,7 @@ service 测试继续覆盖：
 - 提交人自审映射为 `SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN`。
 - actor 和 tenant 只从 auth scope 注入。
 
-- [ ] **Step 5: 运行 service RED**
+- [x] **Step 5: 运行 service RED**
 
 Run:
 
@@ -809,7 +809,7 @@ bun test src/services/supplier-payment-access.test.ts \
 
 Expected: FAIL，service 不存在。
 
-- [ ] **Step 6: 实现 access 和 service**
+- [x] **Step 6: 实现 access 和 service**
 
 保持小接口：
 
@@ -833,7 +833,7 @@ Errors.business(409, message, errorCode)
 
 数据库异常继续由 repository 包装，不在 service 吞错。
 
-- [ ] **Step 7: 写 controller route RED 测试**
+- [x] **Step 7: 写 controller route RED 测试**
 
 断言以下路由只注册一次：
 
@@ -854,7 +854,7 @@ POST /supplier-payment-requests/:id/payments
 
 命令必须调用 `requireSupplierIdempotencyKey(request)`；controller 不访问 Supabase。
 
-- [ ] **Step 8: 实现 controller 并注册**
+- [x] **Step 8: 实现 controller 并注册**
 
 controller 统一使用：
 
@@ -869,7 +869,7 @@ return ResponseHandler.success(
 
 在 `apps/api/src/routes/index.ts` 导入并注册两个 controller。
 
-- [ ] **Step 9: 运行 API 层 GREEN**
+- [x] **Step 9: 运行 API 层 GREEN**
 
 Run:
 
@@ -887,7 +887,7 @@ bun run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 10: 提交 API**
+- [x] **Step 10: 提交 API**
 
 ```bash
 git add apps/api/src/repositories/supplier-payables* \
