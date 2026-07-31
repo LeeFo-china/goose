@@ -1157,7 +1157,7 @@ git commit -m "test(supplier): 建立应付付款数据库烟测"
 - Create: `apps/admin/components/supplier-payment-requests/payment-request-command-refresh.ts`
 - Create: `apps/admin/components/supplier-payment-requests/payment-request-command-refresh.test.ts`
 
-- [ ] **Step 1: 写 API RED 测试**
+- [x] **Step 1: 写 API RED 测试**
 
 断言：
 
@@ -1176,7 +1176,7 @@ expect(headers.get("Idempotency-Key")).toBe("request-submit-key");
 
 付款 payload 不包含 tenant、actor、应付余额、项目成本或服务端合计金额。
 
-- [ ] **Step 2: 写规则 RED 测试**
+- [x] **Step 2: 写规则 RED 测试**
 
 ```ts
 expect(paymentRequestActions(draft, permissions))
@@ -1195,7 +1195,7 @@ expect(paymentRequestActions(invoiceBlocked, permissions))
 - 只能合并同一项目、供应商和币种。
 - 逾期由 `due_at < now && open_amount > 0` 派生。
 
-- [ ] **Step 3: 实现类型、API 和规则**
+- [x] **Step 3: 实现类型、API 和规则**
 
 类型与 Task 1 DTO 一致，numeric 保持字符串。API client 复用现有
 `apiRequest`/认证封装，不直接使用裸 `fetch`。
@@ -1212,7 +1212,7 @@ command refresh 返回：
 }
 ```
 
-- [ ] **Step 4: 运行 Admin 契约 GREEN**
+- [x] **Step 4: 运行 Admin 契约 GREEN**
 
 Run:
 
@@ -1225,7 +1225,7 @@ pnpm run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交 Admin 契约**
+- [x] **Step 5: 提交 Admin 契约**
 
 ```bash
 git add apps/admin/components/supplier-payables \
