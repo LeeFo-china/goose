@@ -38,7 +38,7 @@
 - Create: `apps/api/src/repositories/supplier-payment-records.ts`
 - Create: `apps/api/src/repositories/supplier-payment-records.test.ts`
 
-- [ ] **Step 1: 写共享领域 RED 测试**
+- [x] **Step 1: 写共享领域 RED 测试**
 
 ```ts
 import { describe, expect, test } from "bun:test";
@@ -89,7 +89,7 @@ describe("supplier payment domain", () => {
 });
 ```
 
-- [ ] **Step 2: 运行领域测试确认 RED**
+- [x] **Step 2: 运行领域测试确认 RED**
 
 Run:
 
@@ -100,7 +100,7 @@ bun test src/supplier-payment.test.ts
 
 Expected: FAIL，`supplier-payment` 模块不存在。
 
-- [ ] **Step 3: 实现共享领域并导出**
+- [x] **Step 3: 实现共享领域并导出**
 
 ```ts
 export const SUPPLIER_PAYMENT_REQUEST_STATUSES = [
@@ -152,7 +152,7 @@ export function canCloseSupplierPaymentRequest(
 export * from "./supplier-payment";
 ```
 
-- [ ] **Step 4: 写 HTTP schema RED 测试**
+- [x] **Step 4: 写 HTTP schema RED 测试**
 
 覆盖分页、筛选、草稿、审核、取消、关闭和付款：
 
@@ -202,7 +202,7 @@ expect(() => SupplierPaymentConfirmSchema.parse({
 - 付款凭证 1 至 9 张，分配 1 至 100 行。
 - 所有对象 `.strict()`，拒绝客户端 tenant、actor 和服务端金额字段。
 
-- [ ] **Step 5: 运行 schema 测试确认 RED**
+- [x] **Step 5: 运行 schema 测试确认 RED**
 
 Run:
 
@@ -213,7 +213,7 @@ bun test src/schema/supplier-payments.test.ts
 
 Expected: FAIL，schema 模块不存在。
 
-- [ ] **Step 6: 实现 schema**
+- [x] **Step 6: 实现 schema**
 
 导出：
 
@@ -238,7 +238,7 @@ const money = z.string().regex(
 ).refine((value) => Number(value) > 0, "金额必须大于 0");
 ```
 
-- [ ] **Step 7: 写数据库记录 RED 测试**
+- [x] **Step 7: 写数据库记录 RED 测试**
 
 严格解析：
 
@@ -260,7 +260,7 @@ expect(SupplierPaymentCommandEnvelopeSchema.parse(envelope))
 
 numeric 金额使用字符串；时间、nullable 审计字段、状态和命令 envelope 均严格。
 
-- [ ] **Step 8: 实现数据库记录 schema 并运行 GREEN**
+- [x] **Step 8: 实现数据库记录 schema 并运行 GREEN**
 
 Run:
 
@@ -274,7 +274,7 @@ bun test src/supplier-payment.test.ts
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交契约**
+- [x] **Step 9: 提交契约**
 
 ```bash
 git add packages/domain/src/supplier-payment.ts \
