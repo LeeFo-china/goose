@@ -384,14 +384,17 @@ describe("supplier payment data migration contract", () => {
       /supplier_payment_requests/,
       /payment_request\.status IN \(\s*'pending_approval',\s*'approved',\s*'partially_paid'\s*\)/,
       /allocation\.requested_amount - allocation\.paid_amount/,
+      /paid AS \([\s\S]*?COALESCE\(SUM\(payment_allocation\.amount\), 0\) AS amount[\s\S]*?\),\s*reserved AS/,
+      /reserved AS \([\s\S]*?COALESCE\([\s\S]*?SUM\([\s\S]*?allocation\.requested_amount - allocation\.paid_amount[\s\S]*?\),\s*0\s*\) AS amount/,
       /'purchase_order_id', p_supplier_purchase_order_id/,
-      /'accepted_amount', accepted\.amount::text/,
-      /'payable_amount', payables\.amount::text/,
-      /'reserved_request_amount', reserved\.amount::text/,
-      /'paid_amount', paid\.amount::text/,
-      /'open_amount',\s*GREATEST\([\s\S]*payables\.amount - paid\.amount/,
-      /'available_to_request_amount',[\s\S]*GREATEST\([\s\S]*payables\.amount - paid\.amount - reserved\.amount/,
+      /'accepted_amount',\s*round\(accepted\.amount, 2\)::numeric\(18, 2\)::text/,
+      /'payable_amount',\s*round\(payables\.amount, 2\)::numeric\(18, 2\)::text/,
+      /'reserved_request_amount',\s*round\(reserved\.amount, 2\)::numeric\(18, 2\)::text/,
+      /'paid_amount',\s*round\(paid\.amount, 2\)::numeric\(18, 2\)::text/,
+      /'open_amount',\s*round\(\s*GREATEST\(\s*payables\.amount - paid\.amount,\s*0\s*\),\s*2\s*\)::numeric\(18, 2\)::text/,
+      /'available_to_request_amount',\s*round\(\s*GREATEST\(\s*payables\.amount - paid\.amount - reserved\.amount,\s*0\s*\),\s*2\s*\)::numeric\(18, 2\)::text/,
     ]);
+    expect(summary.match(/::numeric\(18, 2\)::text/g)).toHaveLength(6);
   });
 
   test("adds indexes for payable, request, allocation, payment and PO reads", () => {

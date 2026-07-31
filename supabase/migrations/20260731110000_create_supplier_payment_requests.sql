@@ -3323,17 +3323,27 @@ AS $$
   )
   SELECT jsonb_build_object(
     'purchase_order_id', p_supplier_purchase_order_id,
-    'accepted_amount', accepted.amount::text,
-    'payable_amount', payables.amount::text,
-    'reserved_request_amount', reserved.amount::text,
-    'paid_amount', paid.amount::text,
+    'accepted_amount',
+      round(accepted.amount, 2)::numeric(18, 2)::text,
+    'payable_amount',
+      round(payables.amount, 2)::numeric(18, 2)::text,
+    'reserved_request_amount',
+      round(reserved.amount, 2)::numeric(18, 2)::text,
+    'paid_amount',
+      round(paid.amount, 2)::numeric(18, 2)::text,
     'open_amount',
-      GREATEST(payables.amount - paid.amount, 0)::text,
+      round(
+        GREATEST(payables.amount - paid.amount, 0),
+        2
+      )::numeric(18, 2)::text,
     'available_to_request_amount',
-      GREATEST(
-        payables.amount - paid.amount - reserved.amount,
-        0
-      )::text
+      round(
+        GREATEST(
+          payables.amount - paid.amount - reserved.amount,
+          0
+        ),
+        2
+      )::numeric(18, 2)::text
   )
   FROM accepted
   CROSS JOIN payables
