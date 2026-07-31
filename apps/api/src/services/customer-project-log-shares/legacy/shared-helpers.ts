@@ -74,6 +74,11 @@ import {
 } from "@/services/files/file-url-resolver";
 
 import {
+  getShareCopyLengthInstruction,
+  normalizeShareCopies,
+} from "../share-copy-policy";
+
+import {
   DEFAULT_SHARE_CAMPAIGN_CLAIM_VOUCHER_PAGE,
   DEFAULT_SHARE_CAMPAIGN_PAGE,
   DEFAULT_SHARE_REWARD_REMARK,
@@ -311,10 +316,11 @@ export function buildCopyPrompt(
 要求：
 1. 文风选择：${input.style}
 2. 长度选择：${input.length}
-3. 每条 1-2 句话，真实、温暖、克制，不要销售腔。
-4. 不要夸大宣传，不要编造未提供的信息。
-5. 不要出现“欢迎咨询”“扫码联系”等广告导流话术。
-6. 严格返回 JSON：
+3. ${getShareCopyLengthInstruction(input.length)}
+4. 真实、温暖、克制，不要销售腔。
+5. 不要夸大宣传，不要编造未提供的信息。
+6. 不要出现“欢迎咨询”“扫码联系”等广告导流话术。
+7. 严格返回 JSON：
 {
   "copies": [
     { "id": "copy_1", "text": "..." },
@@ -360,7 +366,11 @@ export function fallbackCopies(
   ];
 }
 
-export function parseCopiesResult(rawContent: string, context: CustomerProjectLogShareContext) {
+export function parseCopiesResult(
+  rawContent: string,
+  context: CustomerProjectLogShareContext,
+  length: GenerateCustomerProjectLogShareCopyInput["length"],
+) {
   try {
     const start = rawContent.indexOf("{");
     const end = rawContent.lastIndexOf("}");
@@ -381,8 +391,8 @@ export function parseCopiesResult(rawContent: string, context: CustomerProjectLo
       .filter((item) => item.text)
       .slice(0, 3);
 
-    return copies.length > 0 ? copies : fallbackCopies(context);
+    return normalizeShareCopies(copies, length, fallbackCopies(context));
   } catch {
-    return fallbackCopies(context);
+    return normalizeShareCopies([], length, fallbackCopies(context));
   }
 }
