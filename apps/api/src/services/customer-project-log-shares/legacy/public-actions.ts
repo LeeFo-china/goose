@@ -73,6 +73,8 @@ import {
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
 
+import { serializeShareRewardCode } from "../share-reward-code";
+
 import {
   buildCampaignRewardTitle,
   CUSTOMER_APPOINTMENT_REWARD_CAMPAIGN_CACHE_TTL_MS,
@@ -86,7 +88,6 @@ import {
   buildDefaultConfigRewardTitle,
   buildMiniProgramScene,
   buildRewardClaimCode,
-  buildShareRewardCode,
   buildShareToken,
   buildVoucherMiniProgramScene,
   fallbackCopies,
@@ -166,11 +167,13 @@ export async function getShareCard(this: any,
     designer_name: context.designer_name,
     share_reward_title: campaign ? getCampaignRewardTitle(campaign) : null,
     share_reward_code: campaign
-      ? (campaign.reward_claim_code || buildShareRewardCode({
-        customerId: context.customer_id,
-        projectId: context.project_id,
-        logId: context.log_id,
-      }))
+      ? serializeShareRewardCode({
+        status: campaign.status,
+        achievedAt: campaign.achieved_at,
+        assistCount: campaign.assist_count,
+        targetAssistCount: campaign.target_assist_count,
+        rewardClaimCode: campaign.reward_claim_code,
+      })
       : null,
     share_reward_remark: campaign ? getCampaignRewardRemark(campaign) : null,
     share_token: campaign?.share_token || null,
