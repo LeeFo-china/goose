@@ -459,6 +459,9 @@ ALTER COLUMN settlement_term_days_snapshot SET NOT NULL,
 ALTER COLUMN invoice_required_before_payment_snapshot SET NOT NULL,
 ALTER COLUMN commercial_snapshot_source SET NOT NULL;
 
+ALTER TABLE public.employees
+ADD CONSTRAINT employees_id_tenant_key UNIQUE (id, tenant_id);
+
 CREATE TABLE public.project_cost_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL

@@ -135,9 +135,6 @@ BEGIN
 END;
 $supplier_payment_aggregate_patch$;
 
-ALTER TABLE public.employees
-ADD CONSTRAINT employees_id_tenant_key UNIQUE (id, tenant_id);
-
 ALTER TABLE public.supplier_payable_events
 ADD CONSTRAINT supplier_payable_events_id_tenant_key
 UNIQUE (id, tenant_id);

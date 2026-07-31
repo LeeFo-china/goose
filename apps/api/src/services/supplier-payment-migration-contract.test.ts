@@ -63,6 +63,10 @@ function contracts(source: string, patterns: readonly RegExp[]) {
 
 describe("supplier payment data migration contract", () => {
   test("creates tenant-safe payment request and payment facts", () => {
+    const employeeScopeKey =
+      /ALTER TABLE public\.employees\s*ADD CONSTRAINT employees_id_tenant_key\s*UNIQUE \(id, tenant_id\)/;
+    expect(latestSupplierCostMigration).toMatch(employeeScopeKey);
+    expect(migration).not.toMatch(employeeScopeKey);
     const request = table("supplier_payment_requests");
     const requestAllocation = table(
       "supplier_payment_request_allocations",

@@ -40,7 +40,6 @@ function sqlFunctionFrom(source: string, schema: string, name: string) {
 
 const sqlFunction = (schema: string, name: string) =>
   sqlFunctionFrom(migration, schema, name);
-
 function sqlTable(name: string) {
   const start = migration.indexOf(`CREATE TABLE public.${name}`);
   if (start < 0) return "";
@@ -108,6 +107,7 @@ describe("supplier cost and payable migration contract", () => {
       /CHECK \(due_at >= occurred_at\)/,
     ]);
     contracts(migration, [
+      /ALTER TABLE public\.employees\s*ADD CONSTRAINT employees_id_tenant_key\s*UNIQUE \(id, tenant_id\)[\s\S]*CREATE TABLE public\.project_cost_events[\s\S]*?FOREIGN KEY \(created_by_employee_id, tenant_id\)[\s\S]*CREATE TABLE public\.supplier_payable_events[\s\S]*?FOREIGN KEY \(created_by_employee_id, tenant_id\)/,
       /ADD CONSTRAINT supplier_purchase_order_receipt_items_id_tenant_receipt_order_item_key[\s\S]*UNIQUE \(\s*id,\s*tenant_id,\s*receipt_id,\s*supplier_purchase_order_id,\s*supplier_purchase_order_item_id\s*\)/,
     ]);
   });
