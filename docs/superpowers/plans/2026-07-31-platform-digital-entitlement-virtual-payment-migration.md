@@ -932,21 +932,33 @@ CREATE TABLE public.wechat_virtual_payment_notifications (
   event_key text NOT NULL UNIQUE,
   event_type text NOT NULL CHECK (event_type IN ('xpay_goods_deliver_notify', 'xpay_refund_notify', 'xpay_refund_inquiry')),
   environment text NOT NULL CHECK (environment IN ('sandbox', 'production')),
-  order_id uuid REFERENCES public.tenant_virtual_addon_orders(id),
-  out_trade_no text,
-  provider_product_id text,
-  openid_hash text,
-  authentication_method text NOT NULL,
-  authentication_status text NOT NULL CHECK (authentication_status IN ('verified', 'rejected')),
+  recipient_original_id text NOT NULL,
+  sender_id_hash text NOT NULL,
+  provider_created_at bigint NOT NULL,
+  msg_type text NOT NULL CHECK (msg_type = 'event'),
+  order_id uuid NULL REFERENCES public.tenant_virtual_addon_orders(id) ON DELETE RESTRICT,
+  out_trade_no text NULL,
+  provider_product_id text NULL,
+  openid_hash text NULL,
+  provider_order_no text NULL,
+  transaction_id text NULL,
+  paid_at timestamptz NULL,
+  quantity integer NULL,
+  orig_price_fen integer NULL,
+  actual_price_fen integer NULL,
+  attach text NULL,
+  authentication_method text NOT NULL CHECK (authentication_method = 'wechat_plaintext_sha1'),
+  authentication_status text NOT NULL CHECK (authentication_status = 'verified'),
   normalized_payload jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(normalized_payload) = 'object'),
-  payload_sha256 text NOT NULL CHECK (length(payload_sha256) = 64),
+  payload_sha256 text NOT NULL CHECK (payload_sha256 ~ '^[0-9a-f]{64}$'),
   status text NOT NULL DEFAULT 'processing' CHECK (status IN ('processing', 'processed', 'failed')),
   retry_count integer NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
-  last_error_code text,
-  last_error_summary text,
-  request_id text,
+  last_error_code text NULL,
+  last_error_summary text NULL,
+  result_summary jsonb NOT NULL DEFAULT '{}'::jsonb CHECK (jsonb_typeof(result_summary) = 'object'),
+  request_id text NULL,
   received_at timestamptz NOT NULL DEFAULT now(),
-  processed_at timestamptz,
+  processed_at timestamptz NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -956,7 +968,7 @@ ON public.wechat_virtual_payment_notifications(status, received_at, id)
 WHERE status IN ('processing', 'failed');
 ```
 
-收件箱表只向 `service_role` 开放读取，写入、完成和失败迁移只能调用三个定向 `SECURITY DEFINER` RPC。接收 RPC 仅接受强类型事实，由数据库生成稳定事件键、规范化快照、载荷哈希和固定认证结论；应用层不能提交任意 JSON、伪造 `verified` 或自行计算重试次数。触发器保持快照、订单绑定和完成结果不可变，`processed` 为终态，每次写入 `failed` 必须原子递增一次重试计数。表级事件枚举保留后续 `xpay_refund_notify` / `xpay_refund_inquiry`，当前仅发货事件有可执行接收 RPC，并由事件专属 CHECK 要求完整商品上下文。
+收件箱表撤销 `service_role` 的整表读写权限，接收、读取幂等结果、完成和失败迁移均封装在三个定向 `SECURITY DEFINER` RPC 的有界返回中。接收 RPC 仅接受强类型事实，由数据库生成稳定事件键、规范化快照、载荷哈希和固定认证结论；应用层不能提交任意 JSON、伪造 `verified` 或自行计算重试次数。触发器保持快照、订单绑定和完成结果不可变，`processed` 为终态，每次写入 `failed` 必须原子递增一次重试计数。表级事件枚举保留后续 `xpay_refund_notify` / `xpay_refund_inquiry`，当前仅发货事件有可执行接收 RPC，并由事件专属 CHECK 要求完整商品上下文。
 
 同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`。事务锁顺序固定为：租户权益 advisory lock、微信 transaction/provider order advisory lock、order row、entitlement row；完整比对服务端订单、通知收件箱和微信支付事实，包括接收方原始 ID、发送方哈希、微信创建时间和消息类型。支付事实先落为 `succeeded + grant_failed`，权益更新与 purchase event 位于可回滚子事务；发放失败必须保留真实收款事实供重试。若已有 `entitlement_event_id` 则返回原事实；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；暂停或撤销的权益只延长期限，不静默恢复状态。RPC 以 order、notification、transaction 和 provider order identity 共同约束幂等，并拒绝 NULL 或不匹配的 source/event 组合。
 

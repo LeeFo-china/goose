@@ -157,13 +157,34 @@ CREATE TABLE public.wechat_virtual_payment_notifications (
       OR (
         (
           status = 'processed'
-          AND jsonb_object_length(result_summary) = 4
-          AND result_summary->>'payment_recorded' = 'true'
-          AND result_summary->>'fulfilled' = 'true'
-          AND result_summary->>'entitlement_event_id'
-            ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-          AND result_summary->>'entitlement_status'
-            IN ('active', 'suspended', 'expired', 'revoked')
+          AND (
+            result_summary ?& ARRAY[
+              'payment_recorded',
+              'fulfilled',
+              'entitlement_event_id',
+              'entitlement_status'
+            ]
+          ) IS TRUE
+          AND (
+            (
+              result_summary - ARRAY[
+                'payment_recorded',
+                'fulfilled',
+                'entitlement_event_id',
+                'entitlement_status'
+              ]::text[]
+            ) = '{}'::jsonb
+          ) IS TRUE
+          AND (result_summary->>'payment_recorded' = 'true') IS TRUE
+          AND (result_summary->>'fulfilled' = 'true') IS TRUE
+          AND (
+            result_summary->>'entitlement_event_id'
+              ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          ) IS TRUE
+          AND (
+            result_summary->>'entitlement_status'
+              IN ('active', 'suspended', 'expired', 'revoked')
+          ) IS TRUE
         )
         OR (status <> 'processed' AND result_summary = '{}'::jsonb)
       )
@@ -367,9 +388,6 @@ ALTER TABLE public.wechat_virtual_payment_notifications
 
 REVOKE ALL ON TABLE public.wechat_virtual_payment_notifications
 FROM PUBLIC, anon, authenticated, service_role;
-GRANT SELECT
-ON TABLE public.wechat_virtual_payment_notifications
-TO service_role;
 
 CREATE OR REPLACE FUNCTION public.wechat_accept_virtual_payment_notification(
   p_event_type text,

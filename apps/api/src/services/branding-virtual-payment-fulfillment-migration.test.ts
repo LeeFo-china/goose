@@ -15,7 +15,7 @@ describe("branding virtual-payment fulfillment migration", () => {
     expect(migration).toContain("ENABLE ROW LEVEL SECURITY");
     expect(migration).toContain("FORCE ROW LEVEL SECURITY");
     expect(migration).toMatch(/REVOKE ALL ON TABLE public\.wechat_virtual_payment_notifications[\s\S]*FROM PUBLIC, anon, authenticated, service_role/);
-    expect(migration).toMatch(/GRANT SELECT\s+ON TABLE public\.wechat_virtual_payment_notifications\s+TO service_role/);
+    expect(migration).not.toMatch(/GRANT SELECT\s+ON TABLE public\.wechat_virtual_payment_notifications\s+TO service_role/);
     expect(migration).not.toMatch(/GRANT[^;]*(?:INSERT|UPDATE|DELETE)[^;]*ON TABLE public\.wechat_virtual_payment_notifications/);
     for (const column of [
       "recipient_original_id text NOT NULL",
@@ -66,7 +66,17 @@ describe("branding virtual-payment fulfillment migration", () => {
     expect(migration).toContain("NEW.status = 'failed'");
     expect(migration).toContain("NEW.retry_count <> OLD.retry_count + 1");
     expect(migration).toContain("p_payment_recorded IS DISTINCT FROM true");
-    expect(migration).toContain("result_summary->>'payment_recorded' = 'true'");
+    expect(migration).not.toContain("jsonb_object_length");
+    expect(migration).toContain("result_summary ?& ARRAY[");
+    expect(migration).toContain("result_summary - ARRAY[");
+    for (const condition of [
+      "result_summary->>'payment_recorded' = 'true'",
+      "result_summary->>'fulfilled' = 'true'",
+      "result_summary->>'entitlement_event_id'",
+      "result_summary->>'entitlement_status'",
+    ]) {
+      expect(migration).toMatch(new RegExp(`${condition.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}[\\s\\S]{0,180}IS TRUE`));
+    }
   });
 
   test("uses the shared tenant lock before order and entitlement locks", async () => {
