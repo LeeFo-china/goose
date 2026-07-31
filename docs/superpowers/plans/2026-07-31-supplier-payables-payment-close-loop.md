@@ -1048,7 +1048,7 @@ git commit -m "feat(finance): 接入供应商采购成本摘要"
 - Create: `apps/api/src/scripts/supplier-payment-explain.test.ts`
 - Modify: `apps/api/package.json`
 
-- [ ] **Step 1: 写 smoke summary RED 测试**
+- [x] **Step 1: 写 smoke summary RED 测试**
 
 固定严格结果：
 
@@ -1075,7 +1075,7 @@ git commit -m "feat(finance): 接入供应商采购成本摘要"
 
 helper 必须拒绝缺键、多键或任一非 `true`。
 
-- [ ] **Step 2: 实现事务回滚 fixture**
+- [x] **Step 2: 实现事务回滚 fixture**
 
 复用 `supplier-purchase-fulfillment-smoke` 的：
 
@@ -1087,7 +1087,7 @@ closeDatabasePreservingPrimaryFailure();
 fixture 使用稳定 UUID，建立两个租户、项目、成本分类、供应商、合作关系、合同、
 SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个强制回滚事务。
 
-- [ ] **Step 3: 实现 smoke 命令与断言**
+- [x] **Step 3: 实现 smoke 命令与断言**
 
 场景顺序：
 
@@ -1104,7 +1104,7 @@ SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个�
 11. 校验其他租户不可见。
 12. 事务回滚后查询 fixture 残留为 0。
 
-- [ ] **Step 4: 写 EXPLAIN RED 测试**
+- [x] **Step 4: 写 EXPLAIN RED 测试**
 
 脚本必须对以下查询运行 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`：
 
@@ -1115,7 +1115,7 @@ SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个�
 断言 populated fixture 下出现设计索引名；若数据量不足以使 planner 选索引，先在
 回滚事务中批量生成至少 5000 条无业务外溢的 fixture。
 
-- [ ] **Step 5: 本地 helper GREEN**
+- [x] **Step 5: 本地 helper GREEN**
 
 Run:
 
@@ -1127,7 +1127,7 @@ bun test src/scripts/supplier-payment-smoke.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 6: 注册脚本并提交**
+- [x] **Step 6: 注册脚本并提交**
 
 `apps/api/package.json` 增加：
 
