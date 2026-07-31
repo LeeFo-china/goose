@@ -253,6 +253,77 @@ describe("SupplierPaymentRequestsService commands", () => {
     );
   });
 
+  test("normalizes empty optional remarks at the repository boundary", async () => {
+    const deps = dependencies();
+    const { SupplierPaymentRequestsService } = await import(
+      "./supplier-payment-requests"
+    );
+    const service = new SupplierPaymentRequestsService(deps as never);
+    const draft = (remark: string) => ({
+      id: ID.request,
+      project_id: ID.project,
+      tenant_supplier_id: ID.relationship,
+      expected_version: 0,
+      reason: "材料款",
+      remark,
+      allocations: [{
+        payable_event_id: ID.payable,
+        requested_amount: "100.00",
+      }],
+    });
+    const payment = (remark: string) => ({
+      id: ID.payment,
+      expected_version: 1,
+      payment_method: "bank_transfer" as const,
+      payment_reference: "BANK-001",
+      paid_at: "2026-07-31T08:00:00.000Z",
+      evidence_images: ["evidence/1.png"],
+      remark,
+      allocations: [{
+        payment_request_allocation_id: ID.allocation,
+        payable_event_id: ID.payable,
+        amount: "100.00",
+      }],
+    });
+
+    await service.saveDraft(auth, ID.request, draft(""), ID.idempotency);
+    await service.saveDraft(
+      auth,
+      ID.request,
+      draft("草稿备注"),
+      ID.idempotency,
+    );
+    await service.confirmPayment(
+      auth,
+      ID.request,
+      payment(""),
+      ID.idempotency,
+    );
+    await service.confirmPayment(
+      auth,
+      ID.request,
+      payment("付款备注"),
+      ID.idempotency,
+    );
+
+    expect(deps.repository.saveDraft).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ remark: null }),
+    );
+    expect(deps.repository.saveDraft).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ remark: "草稿备注" }),
+    );
+    expect(deps.repository.confirmPayment).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ remark: null }),
+    );
+    expect(deps.repository.confirmPayment).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ remark: "付款备注" }),
+    );
+  });
+
   test("rejects a path/body draft ID mismatch before repository access", async () => {
     const deps = dependencies();
     const { SupplierPaymentRequestsService } = await import(

@@ -87,6 +87,9 @@ const SupplierPaymentRequestDetailAllocationSchema = z.object({
   payable_amount: money,
   due_at: dateTime,
   supplier_purchase_order_id: uuid,
+  receipt_id: uuid,
+  receipt_item_id: uuid,
+  invoice_required_before_payment: z.boolean(),
 }).strict();
 const SupplierPaymentRequestDetailSchema = z.object({
   payment_request: SupplierPaymentRequestSchema,

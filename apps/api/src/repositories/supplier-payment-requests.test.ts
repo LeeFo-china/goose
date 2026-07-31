@@ -18,6 +18,8 @@ const ID = {
   user: "81000000-0000-4000-8000-000000000010",
   employee: "81000000-0000-4000-8000-000000000011",
   idempotency: "81000000-0000-4000-8000-000000000012",
+  receipt: "81000000-0000-4000-8000-000000000013",
+  receiptItem: "81000000-0000-4000-8000-000000000014",
 };
 const timestamp = "2026-07-31T08:00:00.000Z";
 const requestRecord = {
@@ -104,6 +106,9 @@ describe("SupplierPaymentRequestsRepository", () => {
       payable_amount: "100.00",
       due_at: timestamp,
       supplier_purchase_order_id: ID.order,
+      receipt_id: ID.receipt,
+      receipt_item_id: ID.receiptItem,
+      invoice_required_before_payment: true,
     };
     const payment = {
       id: ID.payment,
@@ -114,7 +119,7 @@ describe("SupplierPaymentRequestsRepository", () => {
       payment_reference: "BANK-001",
       paid_at: timestamp,
       evidence_images: ["evidence/1.png"],
-      remark: null,
+      remark: "付款备注",
       confirmed_by_employee_id: ID.employee,
       created_at: timestamp,
     };
@@ -270,7 +275,7 @@ describe("SupplierPaymentRequestsRepository", () => {
       payment_reference: "BANK-001",
       paid_at: timestamp,
       evidence_images: ["evidence/1.png"],
-      remark: null,
+      remark: "付款备注",
       allocations: [{
         payment_request_allocation_id: ID.allocation,
         payable_event_id: ID.payable,
@@ -318,6 +323,7 @@ describe("SupplierPaymentRequestsRepository", () => {
     expect(bodies[3]?.p_action).toBe("reject");
     expect(bodies[4]?.p_reason).toBe("取消");
     expect(bodies[5]?.p_reason).toBe("关闭");
+    expect(bodies[6]?.p_remark).toBe("付款备注");
     expect(Object.keys(bodies[6]!).sort()).toEqual([
       "p_actor_employee_id",
       "p_actor_user_id",
@@ -365,5 +371,37 @@ describe("SupplierPaymentRequestsRepository", () => {
       page: 1,
       pageSize: 20,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+
+    const allocation = {
+      id: ID.allocation,
+      payable_event_id: ID.payable,
+      requested_amount: "100.00",
+      paid_amount: "0.00",
+      payable_amount: "100.00",
+      due_at: timestamp,
+      supplier_purchase_order_id: ID.order,
+      receipt_id: ID.receipt,
+      receipt_item_id: ID.receiptItem,
+      invoice_required_before_payment: true,
+    };
+    const { invoice_required_before_payment: _invoiceRequired, ...missing } =
+      allocation;
+    for (const malformedAllocation of [
+      missing,
+      { ...allocation, receipt_id: 1 },
+      { ...allocation, receipt_item_id: null },
+      { ...allocation, invoice_required_before_payment: "true" },
+    ]) {
+      const malformedDetail = await repositoryFor(() => ({
+        body: {
+          payment_request: requestRecord,
+          allocations: [malformedAllocation],
+        },
+      }));
+      await expect(malformedDetail.repository.detail(
+        ID.tenant,
+        ID.request,
+      )).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    }
   });
 });

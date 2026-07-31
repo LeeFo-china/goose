@@ -11,6 +11,8 @@ const RELATIONSHIP_ID = "80000000-0000-4000-8000-000000000003";
 const ORDER_ID = "80000000-0000-4000-8000-000000000004";
 const PAYABLE_ID = "80000000-0000-4000-8000-000000000005";
 const SUPPLIER_ID = "80000000-0000-4000-8000-000000000006";
+const RECEIPT_ID = "80000000-0000-4000-8000-000000000007";
+const RECEIPT_ITEM_ID = "80000000-0000-4000-8000-000000000008";
 
 async function repositoryFor(responder: (
   request: Request,
@@ -43,6 +45,9 @@ const payable = {
   tenant_supplier_id: RELATIONSHIP_ID,
   supplier_id: SUPPLIER_ID,
   supplier_purchase_order_id: ORDER_ID,
+  receipt_id: RECEIPT_ID,
+  receipt_item_id: RECEIPT_ITEM_ID,
+  invoice_required_before_payment: true,
   amount: "100.00",
   paid_amount: "20.00",
   reserved_amount: "30.00",
@@ -170,20 +175,23 @@ describe("SupplierPayablesRepository", () => {
   });
 
   test("rejects malformed RPC data and wraps database failures", async () => {
-    const malformed = await repositoryFor(() => ({
-      body: {
-        items: [{ ...payable, amount: 100 }],
-        total: 1,
+    const { receipt_id: _receiptId, ...missingReceiptId } = payable;
+    for (const item of [
+      { ...payable, amount: 100 },
+      missingReceiptId,
+      { ...payable, receipt_item_id: 1 },
+      { ...payable, invoice_required_before_payment: "true" },
+    ]) {
+      const malformed = await repositoryFor(() => ({
+        body: { items: [item], total: 1, page: 1, page_size: 20 },
+      }));
+      await expect(malformed.repository.list({
+        tenant_id: TENANT_ID,
+        visible_project_ids: null,
         page: 1,
-        page_size: 20,
-      },
-    }));
-    await expect(malformed.repository.list({
-      tenant_id: TENANT_ID,
-      visible_project_ids: null,
-      page: 1,
-      pageSize: 20,
-    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+        pageSize: 20,
+      })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    }
 
     const failed = await repositoryFor(() => ({
       body: { message: "db unavailable" },

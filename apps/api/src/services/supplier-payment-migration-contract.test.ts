@@ -362,6 +362,11 @@ describe("supplier payment data migration contract", () => {
       /p_visible_project_ids IS NULL[\s\S]*payable\.project_id = ANY\s*\(\s*p_visible_project_ids\s*\)/,
       /p_project_id IS NULL[\s\S]*payable\.project_id = p_project_id/,
       /FROM filtered\)/,
+      /IF p_visible_project_ids IS NOT NULL[\s\S]*cardinality\(p_visible_project_ids\) = 0[\s\S]*RETURN jsonb_build_object/,
+      /WITH target_payables AS MATERIALIZED \([\s\S]*?FROM public\.supplier_payable_events AS payable[\s\S]*?\),\s*paid AS MATERIALIZED \([\s\S]*?JOIN target_payables AS target_payable[\s\S]*?\),\s*reserved AS MATERIALIZED \([\s\S]*?JOIN target_payables AS target_payable[\s\S]*?\),\s*balances AS MATERIALIZED \([\s\S]*?FROM target_payables AS payable/,
+      /'receipt_id',\s*page_rows\.supplier_purchase_order_receipt_id/,
+      /'receipt_item_id',\s*page_rows\.supplier_purchase_order_receipt_item_id/,
+      /'invoice_required_before_payment',\s*page_rows\.invoice_required_before_payment/,
     ]);
     contracts(requests, [
       /p_visible_project_ids uuid\[\] DEFAULT NULL/,
@@ -385,6 +390,9 @@ describe("supplier payment data migration contract", () => {
       /supplier_payment_requests/,
       /supplier_payment_request_allocations/,
       /jsonb_agg/,
+      /'receipt_id',\s*payable\.supplier_purchase_order_receipt_id/,
+      /'receipt_item_id',\s*payable\.supplier_purchase_order_receipt_item_id/,
+      /'invoice_required_before_payment',\s*payable\.invoice_required_before_payment/,
     ]);
     contracts(fn("get_supplier_purchase_order_financial_summary"), [
       /project_cost_events/,

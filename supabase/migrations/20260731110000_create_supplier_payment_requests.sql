@@ -2848,55 +2848,32 @@ BEGIN
       MESSAGE = 'SUPPLIER_PAYMENT_PAGINATION_INVALID';
   END IF;
 
-  WITH paid AS MATERIALIZED (
-    SELECT
-      payment_allocation.payable_event_id,
-      SUM(payment_allocation.amount)::numeric(18, 2) AS paid_amount
-    FROM public.supplier_payment_allocations AS payment_allocation
-    JOIN public.supplier_payable_events AS payable
-      ON payable.id = payment_allocation.payable_event_id
-      AND payable.tenant_id = payment_allocation.tenant_id
-    WHERE payment_allocation.tenant_id = p_tenant_id
-    GROUP BY payment_allocation.payable_event_id
-  ),
-  reserved AS MATERIALIZED (
-    SELECT
-      allocation.payable_event_id,
-      SUM(
-        allocation.requested_amount - allocation.paid_amount
-      )::numeric(18, 2) AS reserved_amount
-    FROM public.supplier_payment_request_allocations AS allocation
-    JOIN public.supplier_payment_requests AS payment_request
-      ON payment_request.id = allocation.payment_request_id
-      AND payment_request.tenant_id = allocation.tenant_id
-    WHERE allocation.tenant_id = p_tenant_id
-      AND payment_request.status IN (
-        'pending_approval',
-        'approved',
-        'partially_paid'
-      )
-    GROUP BY allocation.payable_event_id
-  ),
-  balances AS MATERIALIZED (
+  IF p_visible_project_ids IS NOT NULL
+    AND cardinality(p_visible_project_ids) = 0
+  THEN
+    RETURN jsonb_build_object(
+      'items', '[]'::jsonb,
+      'total', 0,
+      'page', p_page,
+      'page_size', p_page_size
+    );
+  END IF;
+
+  WITH target_payables AS MATERIALIZED (
     SELECT
       payable.id,
       payable.project_id,
       payable.tenant_supplier_id,
       payable.supplier_id,
       payable.supplier_purchase_order_id,
+      payable.supplier_purchase_order_receipt_id,
+      payable.supplier_purchase_order_receipt_item_id,
+      payable.invoice_required_before_payment,
       payable.amount,
       payable.currency,
       payable.occurred_at,
-      payable.due_at,
-      COALESCE(paid.paid_amount, 0)::numeric(18, 2) AS paid_amount,
-      COALESCE(reserved.reserved_amount, 0)::numeric(18, 2)
-        AS reserved_amount,
-      (
-        payable.amount - COALESCE(paid.paid_amount, 0)
-      )::numeric(18, 2) AS open_amount
+      payable.due_at
     FROM public.supplier_payable_events AS payable
-    LEFT JOIN paid ON paid.payable_event_id = payable.id
-    LEFT JOIN reserved ON reserved.payable_event_id = payable.id
     WHERE payable.tenant_id = p_tenant_id
       AND (
         p_visible_project_ids IS NULL
@@ -2916,6 +2893,60 @@ BEGIN
       )
       AND (p_due_from IS NULL OR payable.due_at >= p_due_from)
       AND (p_due_to IS NULL OR payable.due_at <= p_due_to)
+  ),
+  paid AS MATERIALIZED (
+    SELECT
+      payment_allocation.payable_event_id,
+      SUM(payment_allocation.amount)::numeric(18, 2) AS paid_amount
+    FROM public.supplier_payment_allocations AS payment_allocation
+    JOIN target_payables AS target_payable
+      ON target_payable.id = payment_allocation.payable_event_id
+    WHERE payment_allocation.tenant_id = p_tenant_id
+    GROUP BY payment_allocation.payable_event_id
+  ),
+  reserved AS MATERIALIZED (
+    SELECT
+      allocation.payable_event_id,
+      SUM(
+        allocation.requested_amount - allocation.paid_amount
+      )::numeric(18, 2) AS reserved_amount
+    FROM public.supplier_payment_request_allocations AS allocation
+    JOIN target_payables AS target_payable
+      ON target_payable.id = allocation.payable_event_id
+    JOIN public.supplier_payment_requests AS payment_request
+      ON payment_request.id = allocation.payment_request_id
+      AND payment_request.tenant_id = allocation.tenant_id
+    WHERE allocation.tenant_id = p_tenant_id
+      AND payment_request.status IN (
+        'pending_approval',
+        'approved',
+        'partially_paid'
+      )
+    GROUP BY allocation.payable_event_id
+  ),
+  balances AS MATERIALIZED (
+    SELECT
+      payable.id,
+      payable.project_id,
+      payable.tenant_supplier_id,
+      payable.supplier_id,
+      payable.supplier_purchase_order_id,
+      payable.supplier_purchase_order_receipt_id,
+      payable.supplier_purchase_order_receipt_item_id,
+      payable.invoice_required_before_payment,
+      payable.amount,
+      payable.currency,
+      payable.occurred_at,
+      payable.due_at,
+      COALESCE(paid.paid_amount, 0)::numeric(18, 2) AS paid_amount,
+      COALESCE(reserved.reserved_amount, 0)::numeric(18, 2)
+        AS reserved_amount,
+      (
+        payable.amount - COALESCE(paid.paid_amount, 0)
+      )::numeric(18, 2) AS open_amount
+    FROM target_payables AS payable
+    LEFT JOIN paid ON paid.payable_event_id = payable.id
+    LEFT JOIN reserved ON reserved.payable_event_id = payable.id
   ),
   classified AS MATERIALIZED (
     SELECT
@@ -2953,6 +2984,12 @@ BEGIN
           'supplier_id', page_rows.supplier_id,
           'supplier_purchase_order_id',
             page_rows.supplier_purchase_order_id,
+          'receipt_id',
+            page_rows.supplier_purchase_order_receipt_id,
+          'receipt_item_id',
+            page_rows.supplier_purchase_order_receipt_item_id,
+          'invoice_required_before_payment',
+            page_rows.invoice_required_before_payment,
           'amount', page_rows.amount::text,
           'paid_amount', page_rows.paid_amount::text,
           'reserved_amount', page_rows.reserved_amount::text,
@@ -3157,7 +3194,13 @@ BEGIN
         'payable_amount', payable.amount::text,
         'due_at', payable.due_at,
         'supplier_purchase_order_id',
-          payable.supplier_purchase_order_id
+          payable.supplier_purchase_order_id,
+        'receipt_id',
+          payable.supplier_purchase_order_receipt_id,
+        'receipt_item_id',
+          payable.supplier_purchase_order_receipt_item_id,
+        'invoice_required_before_payment',
+          payable.invoice_required_before_payment
       )
       ORDER BY payable.due_at, allocation.payable_event_id
     ),

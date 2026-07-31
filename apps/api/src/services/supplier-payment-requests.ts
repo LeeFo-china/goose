@@ -174,7 +174,7 @@ export class SupplierPaymentRequestsService {
         project_id: input.project_id,
         tenant_supplier_id: input.tenant_supplier_id,
         reason: input.reason,
-        remark: input.remark ?? null,
+        remark: normalizeOptionalRemark(input.remark),
         allocations: input.allocations,
       }),
       ["saved"],
@@ -281,7 +281,7 @@ export class SupplierPaymentRequestsService {
         payment_reference: input.payment_reference,
         paid_at: input.paid_at,
         evidence_images: input.evidence_images,
-        remark: input.remark ?? null,
+        remark: normalizeOptionalRemark(input.remark),
         allocations: input.allocations,
       }),
       ["partially_paid", "paid"],
@@ -379,6 +379,14 @@ function commandContext(
     actor_employee_id: scope.employeeId,
     idempotency_key: idempotencyKey,
   };
+}
+
+function normalizeOptionalRemark(
+  value: string | null | undefined,
+): string | null {
+  return value === undefined || value === null || value.length === 0
+    ? null
+    : value;
 }
 
 export const supplierPaymentRequestsService =
