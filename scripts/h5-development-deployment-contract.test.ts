@@ -103,3 +103,52 @@ describe("H5 development image", () => {
     );
   });
 });
+
+describe("H5 development hostname cutover", () => {
+  test("routes H5 pages to H5 and compatibility APIs to API", () => {
+    const nginx = readRepositoryFile("deploy/nginx/gooes-dev.conf");
+    const workflow = readRepositoryFile(".github/workflows/deploy-dev.yml");
+
+    expect(nginx).toContain("server_name h5-dev.goodcms.cn;");
+    expect(nginx).toContain("location = /public/marketing-pages {");
+    expect(nginx).toContain("location ^~ /public/marketing-pages/ {");
+    expect(nginx).toContain("location ^~ /public/tenants/ {");
+    expect(nginx).toContain("location = /wechat/h5-session {");
+    expect(nginx.match(/proxy_pass http:\/\/127\.0\.0\.1:13000;/g)).toHaveLength(
+      5,
+    );
+    expect(nginx).toContain(
+      "location / {\n        proxy_pass http://127.0.0.1:13030;",
+    );
+
+    expect(workflow).toContain(
+      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]",
+    );
+    expect(workflow).toContain(
+      "h5) DEPLOY_SERVICES=h5; MANIFEST_SERVICE=h5 ;;",
+    );
+    expect(workflow).toContain("h5) manifest_repository=goose-h5 ;;");
+    expect(workflow).toContain(
+      'export GOOES_H5_IMAGE="${image_base}/goose-h5:${SOURCE_SHA}"',
+    );
+    expect(workflow).toContain(
+      'h5) compose_service=gooes-h5-dev; export GOOES_H5_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+    );
+    expect(workflow).toContain(
+      "h5) container=gooes-h5-dev; url=https://h5-dev.goodcms.cn/config.js ;;",
+    );
+    expect(workflow).toContain("- name: Cut over dev H5 route");
+    expect(workflow).toContain(
+      'nginx_target="/etc/nginx/conf.d/gooes-dev.conf"',
+    );
+    expect(workflow).toContain(
+      'sudo install -m 0644 deploy/nginx/gooes-dev.conf "${nginx_target}"',
+    );
+    expect(workflow).toContain("sudo nginx -t");
+    expect(workflow).toContain("sudo systemctl reload nginx");
+    expect(workflow).toContain(
+      "https://h5-dev.goodcms.cn/p/h5-deployment-smoke",
+    );
+    expect(workflow).toContain('restore_h5_nginx "external smoke failed"');
+  });
+});

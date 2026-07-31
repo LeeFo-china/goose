@@ -55,6 +55,7 @@ const requiredImmutableDeploymentFragments = [
   'echo "DEPLOY_IMAGE_REF=${DEPLOY_IMAGE_REF}" >> "${GITHUB_ENV}"',
   'api) compose_service=gooes-api-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+  'h5) compose_service=gooes-h5-dev; export GOOES_H5_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
   'billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
@@ -149,6 +150,7 @@ describe("deploy-dev workflow", () => {
       'case "${MANIFEST_SERVICE}" in\n            api) manifest_repository=goose-api ;;',
     );
     expect(loginStep).toContain("admin) manifest_repository=goose-admin ;;");
+    expect(loginStep).toContain("h5) manifest_repository=goose-h5 ;;");
     expect(loginStep).toContain("web) manifest_repository=goose-web ;;");
     expect(loginStep).toContain(
       "social-video-worker) manifest_repository=goose-social-video-worker ;;",
@@ -197,6 +199,7 @@ describe("deploy-dev workflow", () => {
     expect(deployStep).toContain(
       'export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"',
     );
+    expect(deployStep).toContain('export GOOES_H5_IMAGE="${image_base}/goose-h5:${SOURCE_SHA}"');
     expect(deployStep).toContain('export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"');
     expect(deployStep).toContain(
       'export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${image_base}/goose-social-video-worker:${SOURCE_SHA}"',
@@ -206,6 +209,9 @@ describe("deploy-dev workflow", () => {
     );
     expect(deployStep).toContain(
       'admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
+    );
+    expect(deployStep).toContain(
+      'h5) compose_service=gooes-h5-dev; export GOOES_H5_IMAGE="${DEPLOY_IMAGE_REF}" ;;',
     );
     expect(deployStep).toContain(
       'social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;',

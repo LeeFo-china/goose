@@ -44,7 +44,7 @@ on:
         description: "Service to deploy"
         required: true
         type: choice
-        options: [api, admin, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]
+        options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]
       commit_sha:
         description: "Exact 40-character commit SHA already built for development"
         required: true
@@ -100,6 +100,7 @@ jobs:
           case "${RELEASE_SERVICE}" in
             api) DEPLOY_SERVICES=api; MANIFEST_SERVICE=api ;;
             admin) DEPLOY_SERVICES=admin; MANIFEST_SERVICE=admin ;;
+            h5) DEPLOY_SERVICES=h5; MANIFEST_SERVICE=h5 ;;
             web) DEPLOY_SERVICES=web; MANIFEST_SERVICE=web ;;
             social-video-worker) DEPLOY_SERVICES=social-video-worker; MANIFEST_SERVICE=social-video-worker ;;
             cos-reconcile-worker) DEPLOY_SERVICES=cos-reconcile-worker; MANIFEST_SERVICE=api ;;
@@ -254,6 +255,7 @@ jobs:
           case "${MANIFEST_SERVICE}" in
             api) manifest_repository=goose-api ;;
             admin) manifest_repository=goose-admin ;;
+            h5) manifest_repository=goose-h5 ;;
             web) manifest_repository=goose-web ;;
             social-video-worker) manifest_repository=goose-social-video-worker ;;
             *) exit 1 ;;
@@ -303,11 +305,13 @@ jobs:
           image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"
           export GOOES_API_IMAGE="${image_base}/goose-api:${SOURCE_SHA}"
           export GOOES_ADMIN_IMAGE="${image_base}/goose-admin:${SOURCE_SHA}"
+          export GOOES_H5_IMAGE="${image_base}/goose-h5:${SOURCE_SHA}"
           export GOOES_WEB_IMAGE="${image_base}/goose-web:${SOURCE_SHA}"
           export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${image_base}/goose-social-video-worker:${SOURCE_SHA}"
           case "${RELEASE_SERVICE}" in
             api) compose_service=gooes-api-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             admin) compose_service=gooes-admin-dev; export GOOES_ADMIN_IMAGE="${DEPLOY_IMAGE_REF}" ;;
+            h5) compose_service=gooes-h5-dev; export GOOES_H5_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             social-video-worker) compose_service=gooes-social-video-worker-dev; export GOOES_SOCIAL_VIDEO_WORKER_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             cos-reconcile-worker) compose_service=gooes-cos-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
             billing-reconcile-worker) compose_service=gooes-billing-reconcile-worker-dev; export GOOES_API_IMAGE="${DEPLOY_IMAGE_REF}" ;;
@@ -316,6 +320,59 @@ jobs:
           docker compose -f docker-compose.dev.yml --profile workers pull "${compose_service}"
           docker compose -f docker-compose.dev.yml --profile workers up -d --no-deps --force-recreate "${compose_service}"
 
+      - name: Cut over dev H5 route
+        if: ${{ inputs.service == 'h5' }}
+        run: |
+          set -euo pipefail
+          container=gooes-h5-dev
+          for _ in $(seq 1 60); do
+            health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' "${container}" 2>/dev/null || true)"
+            revision="$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${container}" 2>/dev/null || true)"
+            run_id="$(docker inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${container}" 2>/dev/null || true)"
+            configured_image="$(docker inspect -f '{{.Config.Image}}' "${container}" 2>/dev/null || true)"
+            if [ "${configured_image}" = "${DEPLOY_IMAGE_REF}" ] && [ "${health}" = healthy ] && [ "${revision}" = "${SOURCE_SHA}" ] && [ "${run_id}" = "${INPUT_BUILD_RUN_ID}" ]; then break; fi
+            sleep 5
+          done
+          test "${configured_image}" = "${DEPLOY_IMAGE_REF}"
+          test "${health}" = healthy
+          test "${revision}" = "${SOURCE_SHA}"
+          test "${run_id}" = "${INPUT_BUILD_RUN_ID}"
+
+          nginx_target="/etc/nginx/conf.d/gooes-dev.conf"
+          nginx_backup="$(mktemp)"
+          sudo cp "${nginx_target}" "${nginx_backup}"
+
+          restore_h5_nginx() {
+            local reason="$1"
+            set +e
+            echo "::error::H5 Nginx cutover failed: ${reason}"
+            sudo install -m 0644 "${nginx_backup}" "${nginx_target}"
+            sudo nginx -t
+            sudo systemctl reload nginx
+            rm -f "${nginx_backup}"
+            exit 1
+          }
+
+          sudo install -m 0644 deploy/nginx/gooes-dev.conf "${nginx_target}"
+          sudo nginx -t || restore_h5_nginx "nginx configuration is invalid"
+          sudo systemctl reload nginx || restore_h5_nginx "nginx reload failed"
+
+          headers="$(curl -fsS -D - -o /dev/null --retry 8 --retry-delay 3 https://h5-dev.goodcms.cn/config.js)" \
+            || restore_h5_nginx "external smoke failed"
+          grep -iq '^x-gooes-service: h5' <<< "${headers}" \
+            || restore_h5_nginx "external smoke failed"
+          grep -iq "^x-gooes-revision: ${SOURCE_SHA}" <<< "${headers}" \
+            || restore_h5_nginx "external smoke failed"
+          curl -fsS --retry 8 --retry-delay 3 \
+            https://h5-dev.goodcms.cn/p/h5-deployment-smoke \
+            | grep -q '<main id="app"' \
+            || restore_h5_nginx "external smoke failed"
+          curl -fsS --retry 8 --retry-delay 3 -o /dev/null \
+            'https://h5-dev.goodcms.cn/public/marketing-pages?scene=home' \
+            || restore_h5_nginx "external smoke failed"
+
+          rm -f "${nginx_backup}"
+
       - name: Check dev services
         if: ${{ inputs.service != 'web' }}
         run: |
@@ -323,6 +380,7 @@ jobs:
           case "${RELEASE_SERVICE}" in
             api) container=gooes-api-dev; url=https://api-dev.goodcms.cn/ ;;
             admin) container=gooes-admin-dev; url=https://admin-dev.goodcms.cn/login ;;
+            h5) container=gooes-h5-dev; url=https://h5-dev.goodcms.cn/config.js ;;
             social-video-worker) container=gooes-social-video-worker-dev; url= ;;
             cos-reconcile-worker) container=gooes-cos-reconcile-worker-dev; url= ;;
             billing-reconcile-worker) container=gooes-billing-reconcile-worker-dev; url= ;;
