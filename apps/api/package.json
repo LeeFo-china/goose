@@ -27,6 +27,8 @@
     "supplier:purchase-order-smoke": "bun src/scripts/supplier-purchase-order-smoke.ts",
     "supplier:purchase-requisition:smoke": "bun src/scripts/supplier-purchase-requisition-smoke.ts",
     "supplier:purchase-fulfillment-smoke": "bun src/scripts/supplier-purchase-fulfillment-smoke.ts",
+    "supplier:payment:smoke": "bun src/scripts/supplier-payment-smoke.ts",
+    "supplier:payment:explain": "bun src/scripts/supplier-payment-explain.ts",
     "smoke:supplier-purchase-fulfillment": "bun src/scripts/supplier-purchase-fulfillment-smoke.ts",
     "billing:subscription-lock": "bun --env-file=.env src/scripts/tenant-subscription-billing-lock.ts",
     "workflow:cleanup-readiness": "bun src/scripts/workflow-cleanup-readiness.ts",
