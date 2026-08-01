@@ -18,10 +18,31 @@ describe("atomic platform payment secret settings migration", () => {
     expect(body).toContain("INSERT INTO public.system_settings");
     expect(body).toContain("ON CONFLICT (key) WHERE tenant_id IS NULL");
     expect(body).toContain("INSERT INTO public.system_setting_change_logs");
-    expect(body).toContain("p_value_text NOT LIKE 'enc:v1:%'");
     expect(body).toMatch(/old_value_text,[\s\S]+new_value_text/);
     expect(body).toMatch(/VALUES \([\s\S]+NULL,[\s\S]+NULL,/);
     expect(body).not.toMatch(/EXCEPTION\s+WHEN/i);
+  });
+
+  test("accepts only the AES-GCM base64url envelope emitted by the service", async () => {
+    const sql = await Bun.file(MIGRATION_PATH).text();
+    const encryptedPattern = sql.match(/p_value_text !~\s*'([^']+)'/)?.[1];
+
+    expect(encryptedPattern).toBeDefined();
+    const matchesEncryptedEnvelope = new RegExp(encryptedPattern ?? "");
+    expect(matchesEncryptedEnvelope.test(
+      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStUv:ciphertext_123-ABC",
+    )).toBe(true);
+
+    for (const malformed of [
+      "enc:v1:",
+      "enc:v1:AbCdEfGhIjKlMnO:AbCdEfGhIjKlMnOpQrStUv:ciphertext",
+      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStU:ciphertext",
+      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStUv:",
+      "enc:v1:AbCdEfGhIjKlMnO+:AbCdEfGhIjKlMnOpQrStUv:ciphertext",
+      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStUv:cipher:text",
+    ]) {
+      expect(matchesEncryptedEnvelope.test(malformed)).toBe(false);
+    }
   });
 
   test("keeps the whitelist and execute privileges fixed", async () => {

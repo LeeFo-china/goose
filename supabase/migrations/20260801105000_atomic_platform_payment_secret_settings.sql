@@ -35,7 +35,8 @@ BEGIN
      OR NULLIF(btrim(p_name), '') IS NULL
      OR NULLIF(btrim(p_description), '') IS NULL
      OR NULLIF(btrim(p_value_text), '') IS NULL
-     OR p_value_text NOT LIKE 'enc:v1:%'
+     OR p_value_text !~
+       '^enc:v1:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:[A-Za-z0-9_-]+$'
      OR p_status <> 'active'
      OR (
        p_setting_key = 'WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN'
