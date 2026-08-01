@@ -221,7 +221,48 @@ export async function updatePlatformPaymentSecretSetting(
         'SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID',
       );
     }
-    return persistSetting.call(this, authContext, key, value);
+    const tenantId = authContext.isPlatformAdmin
+      ? null
+      : accessPolicyService.assertTenantId(authContext);
+    if (tenantId) {
+      throw Errors.business(
+        403,
+        "该配置为平台级配置，不支持租户覆盖",
+        "SYSTEM_SETTING_PLATFORM_ONLY",
+      );
+    }
+    const definition = definitionByKey.get(key);
+    if (!definition?.isSecret) {
+      throw Errors.business(
+        409,
+        '支付密钥专用接口不支持该配置项',
+        'SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID',
+      );
+    }
+    const record = this.buildDefinitionRecord(definition);
+    const validatedValue = validateSettingValue(
+      record,
+      normalizeStoredValue(value),
+    );
+    if (!validatedValue) {
+      throw Errors.badRequest("支付密钥不能为空");
+    }
+    const updated = await this.systemSettingRepository
+      .upsertPlatformPaymentSecret({
+        key: definition.key,
+        groupCode: definition.groupCode,
+        name: definition.name,
+        description: definition.description,
+        valueType: definition.valueType,
+        valueText: encryptSecretValue(validatedValue),
+        status: record.status,
+        employeeId: authContext.employeeId,
+      });
+    this.clearCache();
+    return this.toEffective({
+      ...updated,
+      value_text: updated.value_text ? "******" : null,
+    });
   }
 
 async function persistSetting(

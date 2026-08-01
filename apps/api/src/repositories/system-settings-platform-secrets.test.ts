@@ -18,6 +18,10 @@ type ServiceConstructor = typeof import(
 let SystemSettingRepository: RepositoryConstructor;
 let SystemSettingsService: ServiceConstructor;
 
+const unusedAtomicWriter = mock(async () => {
+  throw new TypeError("not used");
+});
+
 beforeAll(async () => {
   ({ SystemSettingRepository } = await import("./system-settings"));
   ({ SystemSettingsService } = await import(
@@ -154,6 +158,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     const result = await service.getPlatformSecretStrings(KEYS);
@@ -182,6 +187,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     expect(await service.getPlatformSecretString(KEYS[1])).toContain(
@@ -212,6 +218,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     const result = await service.getPlatformSettingStatus(KEYS[0]);
@@ -247,6 +254,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     try {
@@ -286,6 +294,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     try {

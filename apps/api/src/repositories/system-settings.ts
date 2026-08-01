@@ -27,6 +27,19 @@ export type PlatformSecretSettingRecord = Pick<
   "key" | "value_text" | "is_secret" | "status"
 >;
 
+type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
+
+export type PlatformPaymentSecretSettingInput = {
+  key: string;
+  groupCode: string;
+  name: string;
+  description: string | null;
+  valueType: SystemSettingValueType;
+  valueText: string;
+  status: SystemSettingStatus;
+  employeeId: string | null;
+};
+
 export class SystemSettingRepository {
   constructor(
     private readonly client: unknown = SupabaseDB.getAdminClient(),
@@ -42,6 +55,36 @@ export class SystemSettingRepository {
     return (this.client as unknown as {
       from: (table: string) => any;
     }).from("system_setting_change_logs");
+  }
+
+  async upsertPlatformPaymentSecret(
+    input: PlatformPaymentSecretSettingInput,
+  ): Promise<SystemSettingRecord> {
+    const client = this.client as Pick<AdminClient, "rpc">;
+    const { data, error } = await client.rpc(
+      "upsert_platform_payment_secret_setting",
+      {
+        p_setting_key: input.key,
+        p_group_code: input.groupCode,
+        p_name: input.name,
+        p_description: input.description,
+        p_value_type: input.valueType,
+        p_value_text: input.valueText,
+        p_status: input.status,
+        p_changed_by_employee_id: input.employeeId,
+      },
+    );
+    if (error) {
+      throwSystemSettingMutationError(
+        error,
+        "保存平台支付密钥配置失败",
+        true,
+      );
+    }
+    if (!data) {
+      throw Errors.dbError("保存平台支付密钥配置失败");
+    }
+    return data as SystemSettingRecord;
   }
 
   async listAll(): Promise<SystemSettingRecord[]> {
@@ -147,8 +190,8 @@ export class SystemSettingRepository {
       .insert({
         tenant_id: input.tenantId || null,
         setting_key: input.key,
-        old_value_text: existing.value_text,
-        new_value_text: input.valueText,
+        old_value_text: existing.is_secret ? null : existing.value_text,
+        new_value_text: existing.is_secret ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 
@@ -196,7 +239,7 @@ export class SystemSettingRepository {
         tenant_id: input.tenantId,
         setting_key: input.key,
         old_value_text: null,
-        new_value_text: input.valueText,
+        new_value_text: input.isSecret ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 
@@ -241,14 +284,23 @@ const SYSTEM_SETTING_MUTATION_ERRORS = [
   },
 ] as const;
 
-function throwSystemSettingMutationError(error: unknown, fallback: string): never {
-  if (error instanceof AppError) throw error;
+function throwSystemSettingMutationError(
+  error: unknown,
+  fallback: string,
+  sanitizeUnknown = false,
+): never {
+  if (error instanceof AppError) {
+    if (sanitizeUnknown) throw Errors.dbError(fallback);
+    throw error;
+  }
   for (const mapped of SYSTEM_SETTING_MUTATION_ERRORS) {
     if (matchesPostgresError(error, mapped.postgresCode, mapped.code)) {
       throw Errors.business(409, mapped.message, mapped.code);
     }
   }
-  throw Errors.dbError(fallback, error);
+  throw sanitizeUnknown
+    ? Errors.dbError(fallback)
+    : Errors.dbError(fallback, error);
 }
 
 export const systemSettingRepository = new SystemSettingRepository();

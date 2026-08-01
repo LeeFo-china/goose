@@ -35,7 +35,7 @@ import {
 type SystemSettingRepositoryPort = Pick<
   SystemSettingRepository,
   'findByKey' | 'updateValue' | 'createValue' | 'findPlatformByKeys'
-  | 'findPlatformSecretByKey'
+  | 'findPlatformSecretByKey' | 'upsertPlatformPaymentSecret'
 >;
 
 export class SystemSettingsService {
