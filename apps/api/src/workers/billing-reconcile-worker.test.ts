@@ -401,15 +401,16 @@ describe("tick", () => {
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
     const brandingVirtualPaymentReconciliationService =
       createBrandingVirtualPaymentService();
+    const markHealthy = mock(async () => {});
     const logger = mock(() => {});
     const { tick } = await import("./billing-reconcile-worker");
-
     const firstTick = tick({
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
+      healthEvidence: { markHealthy },
       logger,
     });
     await Promise.resolve();
@@ -417,15 +418,16 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       refundReconciliationService,
+      healthEvidence: { markHealthy },
       logger,
     });
-
     expect(subscriptionService.runDueChecks).toHaveBeenCalledTimes(1);
     expect(rechargeExpirationService.runExpiredOrderChecks).toHaveBeenCalledTimes(0);
     expect(
       brandingAddonExpirationService.runExpiredOrderChecks,
     ).toHaveBeenCalledTimes(0);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(0);
+    expect(markHealthy).not.toHaveBeenCalled();
     expect(logger).toHaveBeenCalledWith("warn", "previous tick still running");
 
     releaseSubscription?.();
@@ -435,6 +437,7 @@ describe("tick", () => {
       brandingAddonExpirationService.runExpiredOrderChecks,
     ).toHaveBeenCalledTimes(1);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(1);
+    expect(markHealthy).toHaveBeenCalledTimes(1);
   });
 
   test("refreshes health only after all children succeed and recovers later", async () => {
