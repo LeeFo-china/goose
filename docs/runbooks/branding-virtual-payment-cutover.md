@@ -91,6 +91,69 @@ dry-run 应只新增以下十一项，按版本号顺序显示：
 `20260731135500_guard_legacy_branding_payment_cutover.sql` 的前向恢复策略是新增修复 migration；
 不得删除已应用 migration，也不得恢复允许旧渠道写入的函数体。
 
+若隔离 worktree 没有 Supabase link 元数据，由受控密钥管理器只注入
+`SUPABASE_DB_DIRECT_URL`，不要为了 dry-run 临时运行 `supabase link`，也不要把整份 `.env`
+导出到当前 shell。交互式本地检查可静默读取该单一变量：
+
+```bash
+read -rs 'SUPABASE_DB_DIRECT_URL?Supabase DB URL: '
+export SUPABASE_DB_DIRECT_URL
+supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
+supabase db push --dry-run --db-url "$SUPABASE_DB_DIRECT_URL"
+unset SUPABASE_DB_DIRECT_URL
+```
+
+2026-07-31 的本地发布前检查结果：远端历史 migration 与本地历史一致，以上十一条
+migration 仅存在于 Local，dry-run 仅列出这十一条，未执行应用。dev 发布后必须重新保存
+Local/Remote 对齐证据；当前结果不能替代发布后检查。
+
+### 4.1 共享包和只读 smoke
+
+发布候选构建时先生成共享契约制品：
+
+```bash
+pnpm --dir packages/domain run build
+npm pack ./packages/domain --ignore-scripts --pack-destination ./packages/domain
+shasum -a 256 packages/domain/gooes-domain-1.14.0.tgz
+```
+
+`@gooes/domain@1.14.0` 当前本机构建 SHA-256：
+
+```text
+06b02cb2f21dc56edfd69aa6c7e1ac9dd4e97f14a8e337eed3dc2038532df3ac
+```
+
+tarball 不加入 Git。其他开发机和 CI 必须使用相同版本的不可变制品地址并核验 SHA-256。
+
+dev migration 应用并配置两套 smoke 身份后，默认执行只读检查：
+
+```bash
+cd apps/api
+API_BASE_URL=https://api-dev.goodcms.cn \
+VIRTUAL_PAYMENT_SMOKE_TENANT_TOKEN='<tenant-jwt>' \
+VIRTUAL_PAYMENT_SMOKE_PLATFORM_TOKEN='<platform-jwt>' \
+bun run branding:virtual-payment:smoke
+```
+
+两枚 token 必须属于不同权限边界，且不得落盘。默认 smoke 只检查 API 健康、capability、
+sandbox/production mapping、创建 schema、统一列表分页和 callback route，不调用客户端支付、
+不退款，也不创建有效订单。远端地址必须使用 HTTPS；HTTP 只允许 `localhost`、
+`127.0.0.1` 或 `[::1]`。
+
+只有专用 sandbox 环境才允许增加：
+
+```bash
+VIRTUAL_PAYMENT_SMOKE_ALLOW_SANDBOX_ORDER=true
+VIRTUAL_PAYMENT_SMOKE_REQUESTED_PLATFORM=android
+```
+
+脚本会先要求 active/valid sandbox mapping，并要求租户 capability 同时明确返回
+`environment=sandbox` 和 `sandbox_order_creation_supported=true`。当前租户 API 只允许
+production mapping，capability 尚未提供这两个沙箱声明，脚本会在创建订单前返回
+`VIRTUAL_PAYMENT_SMOKE_SANDBOX_RUNTIME_UNCONFIRMED`；禁止绕过此保护在 production mapping
+下做自动建单。待后端另行设计服务端运行环境门禁并完成数据库 claim 链路评审后，才可同时
+开放这两个声明。日志只保留 requestId、订单 ID、交易号哈希、环境和状态。
+
 ## 5. 进入 maintenance
 
 在 Admin「品牌权益商品」页面读取当前商品和映射版本，确认当前模式为“普通支付（历史）”，
