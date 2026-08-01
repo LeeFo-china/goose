@@ -140,10 +140,22 @@ export const PlatformWechatVirtualEnvironmentSchema = z.enum([
   "production",
 ]);
 
+export const PlatformWechatVirtualProductPatchSchema = z.object({
+  environment: PlatformWechatVirtualEnvironmentSchema,
+  app_id: z.string().trim().min(1).max(64),
+  virtual_merchant_id: z.string().trim().min(1).max(64),
+  offer_id: z.string().trim().min(1).max(128),
+  provider_product_id: z.string().trim().min(1).max(128),
+  expected_amount_fen: z.number().int().positive(),
+  secret_revision: z.number().int().positive(),
+  status: z.enum(["draft", "active", "disabled"]),
+  version: z.number().int().positive(),
+}).strict();
+
 export const UpdatePlatformWechatVirtualSettingsSchema = z.object({
   version: z.number().int().positive(),
   purchase_mode: z.enum(["direct_legacy", "maintenance", "wechat_virtual"]).optional(),
-  virtual_product: BrandingVirtualProductPatchSchema.optional(),
+  virtual_product: PlatformWechatVirtualProductPatchSchema.optional(),
 }).strict();
 
 export const UpdatePlatformWechatVirtualSecretBundleSchema = z.object({
@@ -181,7 +193,7 @@ class PlatformBrandingVirtualPaymentSettingsService {
 }
 ```
 
-`get()` 并行读取固定单商品/双环境快照、两个 AppKey 元数据和消息令牌元数据；`update()` 复用 `manageConfiguration` 原子 RPC 与现有前向模式状态机；`validate()` 复用现有本地/微信校验逻辑。所有 repository 异常用 `Errors.dbError()` 包装。
+`get()` 并行读取固定单商品/双环境快照、两个 AppKey 元数据和消息令牌元数据；`update()` 复用 `manageConfiguration` 原子 RPC 与现有前向模式状态机，并按 `environment` 在服务端注入固定 `encrypted_secret_ref`，绝不信任客户端设置键；`validate()` 复用现有本地/微信校验逻辑。所有 repository 异常用 `Errors.dbError()` 包装。
 
 - [ ] **Step 4: 运行聚焦测试**
 
@@ -324,7 +336,6 @@ expect(buildVirtualMappingPatch(summary, draft, 9900)).toEqual({
   offer_id: "offer",
   provider_product_id: "branding-annual",
   expected_amount_fen: 9900,
-  encrypted_secret_ref: "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
   secret_revision: 3,
   status: "draft",
   version: 2,
