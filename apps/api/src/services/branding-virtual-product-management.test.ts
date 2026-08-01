@@ -33,7 +33,7 @@ const platformAuth = {
   avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
-  permissions: [{ code: "platform.branding_product.manage", scope: "all" }],
+  permissions: [{ code: "platform.payment.config.manage", scope: "all" }],
 } satisfies AuthContext;
 
 const product: BrandingAddonProductRecord = {
@@ -137,7 +137,15 @@ function createFixture(options: {
     if (options.secretError) throw options.secretError;
     return secretValues;
   });
-  const assertPermission = mock(() => "all" as const);
+  const assertPermission = mock((
+    authContext: AuthContext,
+    permission: string,
+  ) => {
+    if (!authContext.permissions.some(({ code }) => code === permission)) {
+      throw Errors.forbidden();
+    }
+    return "all" as const;
+  });
   const recordBestEffort = mock(async () => null);
   const service = new BrandingVirtualProductManagementService({
     virtualProductRepository: {
@@ -246,6 +254,20 @@ describe("BrandingVirtualProductManagementService local validation", () => {
     expect(PlatformAuditLogActionSchema.safeParse(
       "branding_virtual_product.validate",
     ).success).toBe(true);
+  });
+
+  test("rejects the branding-product permission before reading configuration", async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.service.validateConfiguration(
+      {
+        ...platformAuth,
+        permissions: [{ code: "platform.branding_product.manage", scope: "all" }],
+      },
+      { environment: "production", version: 3 },
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(fixture.getManagementSnapshot).not.toHaveBeenCalled();
+    expect(fixture.setConfigurationValidation).not.toHaveBeenCalled();
   });
 
   test("validates a pending mapping and persists valid with both versions", async () => {

@@ -21,7 +21,7 @@ import {
   type BrandingVirtualPaymentEnvironment,
 } from "@gooes/domain";
 
-const MANAGE_PERMISSION = "platform.branding_product.manage";
+const MANAGE_PERMISSION = "platform.payment.config.manage";
 const SECRET_KEYS = [
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.sandbox,
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
