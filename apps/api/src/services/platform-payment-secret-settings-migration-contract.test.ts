@@ -29,9 +29,22 @@ describe("atomic platform payment secret settings migration", () => {
 
     expect(encryptedPattern).toBeDefined();
     const matchesEncryptedEnvelope = new RegExp(encryptedPattern ?? "");
+    const envelopePrefix =
+      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStUv:";
     expect(matchesEncryptedEnvelope.test(
-      "enc:v1:AbCdEfGhIjKlMnOp:AbCdEfGhIjKlMnOpQrStUv:ciphertext_123-ABC",
+      `${envelopePrefix}ciphertext_123-ABC`,
     )).toBe(true);
+
+    for (const length of [2, 3, 4, 6, 7, 8]) {
+      expect(matchesEncryptedEnvelope.test(
+        `${envelopePrefix}${"A".repeat(length)}`,
+      )).toBe(true);
+    }
+    for (const length of [1, 5, 9]) {
+      expect(matchesEncryptedEnvelope.test(
+        `${envelopePrefix}${"A".repeat(length)}`,
+      )).toBe(false);
+    }
 
     for (const malformed of [
       "enc:v1:",
