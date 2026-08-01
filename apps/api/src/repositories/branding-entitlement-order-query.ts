@@ -179,14 +179,24 @@ export class BrandingEntitlementOrderQueryRepository {
     if (error) throw Errors.dbError("查询品牌权益订单列表失败");
     const parsed = z.array(RawListRowSchema).min(1).safeParse(data ?? []);
     if (!parsed.success) throw Errors.dbError("查询品牌权益订单列表失败");
-    const totals = new Set(parsed.data.map((row) => parseTotal(row.total_count)));
+    const totals = new Set<number>();
+    for (const row of parsed.data) {
+      const parsedTotal = parseTotal(row.total_count);
+      if (parsedTotal === null) {
+        throw Errors.dbError("查询品牌权益订单列表失败");
+      }
+      totals.add(parsedTotal);
+    }
     const countOnlyRows = parsed.data.filter((row) => row.count_only);
+    const dataRowCount = parsed.data.length - countOnlyRows.length;
+    const total = totals.values().next().value ?? 0;
     if (
       totals.size !== 1 ||
       countOnlyRows.length > 1 ||
-      (countOnlyRows.length === 1 && parsed.data.length !== 1)
+      (countOnlyRows.length === 1 && parsed.data.length !== 1) ||
+      dataRowCount > pageSize ||
+      total < dataRowCount
     ) throw Errors.dbError("查询品牌权益订单列表失败");
-    const total = totals.values().next().value ?? 0;
     return {
       list: parsed.data.flatMap((row) => {
         if (row.count_only) return [];
@@ -219,10 +229,10 @@ export class BrandingEntitlementOrderQueryRepository {
   }
 }
 
-function parseTotal(value: number | string | undefined): number {
-  if (value === undefined) return 0;
+function parseTotal(value: number | string): number | null {
+  if (typeof value === "string" && !/^(0|[1-9]\d*)$/.test(value)) return null;
   const total = Number(value);
-  return Number.isSafeInteger(total) && total >= 0 ? total : 0;
+  return Number.isSafeInteger(total) && total >= 0 ? total : null;
 }
 
 export const brandingEntitlementOrderQueryRepository =

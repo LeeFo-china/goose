@@ -9,6 +9,39 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
 const ORDER_ID = "44444444-4444-4444-8444-444444444444";
 
+function createListRow(overrides: Record<string, unknown> = {}) {
+  return {
+    payment_channel: "wechat_virtual",
+    payment_platform: "ios",
+    payment_status: "succeeded",
+    fulfillment_status: "granted",
+    refund_status: "none",
+    id: ORDER_ID,
+    tenant_id: TENANT_ID,
+    order_no: "BVO-20260731-1",
+    product_code: "custom_support_branding_annual",
+    product_name: "年度品牌技术支持",
+    amount_fen: 100,
+    term_years: 1,
+    payment_expires_at: "2026-07-31T08:05:00.000Z",
+    paid_at: "2026-07-31T08:01:00.000Z",
+    closed_at: null,
+    failure_code: null,
+    created_at: "2026-07-31T08:00:00.000Z",
+    updated_at: "2026-07-31T08:01:00.000Z",
+    tenant_name: "测试租户",
+    tenant_slug: "test-tenant",
+    entitlement_starts_at: "2026-07-31T08:01:00.000Z",
+    entitlement_expires_at: "2027-07-31T08:01:00.000Z",
+    entitlement_status: "active",
+    entitlement_source: "purchase",
+    entitlement_source_id: ORDER_ID,
+    total_count: 1,
+    count_only: false,
+    ...overrides,
+  };
+}
+
 describe("BrandingEntitlementOrderQueryRepository", () => {
   test("uses one bounded RPC for a filtered platform page", async () => {
     const rpc = mock(async () => ({
@@ -224,6 +257,75 @@ describe("BrandingEntitlementOrderQueryRepository", () => {
     expect(result.pagination.totalPages).toBe(0);
   });
 
+  test.each([
+    ["a non-decimal", "not-a-count"],
+    ["an unsafe", "9007199254740992"],
+    ["a negative", "-1"],
+    ["a fractional", "1.5"],
+  ])("rejects %s total count", async (_label, totalCount) => {
+    const rpc = mock(async () => ({
+      data: [createListRow({ total_count: totalCount })],
+      error: null,
+    }));
+    const { BrandingEntitlementOrderQueryRepository } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const repository = new BrandingEntitlementOrderQueryRepository(
+      () => ({ rpc }),
+    );
+
+    await expect(repository.list({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      details: undefined,
+    });
+  });
+
+  test("rejects a total smaller than the returned data row count", async () => {
+    const rpc = mock(async () => ({
+      data: [createListRow(), createListRow()],
+      error: null,
+    }));
+    const { BrandingEntitlementOrderQueryRepository } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const repository = new BrandingEntitlementOrderQueryRepository(
+      () => ({ rpc }),
+    );
+
+    await expect(repository.list({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+  });
+
+  test("rejects more data rows than the bounded page size", async () => {
+    const rpc = mock(async () => ({
+      data: [
+        createListRow({ total_count: 2 }),
+        createListRow({ total_count: 2 }),
+      ],
+      error: null,
+    }));
+    const { BrandingEntitlementOrderQueryRepository } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const repository = new BrandingEntitlementOrderQueryRepository(
+      () => ({ rpc }),
+    );
+
+    await expect(repository.list({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 1,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+  });
+
   test("sanitizes unknown database diagnostics", async () => {
     const rpc = mock(async () => ({
       data: null,
@@ -280,5 +382,25 @@ describe("branding entitlement order query migration contract", () => {
     expect(migration).not.toContain("SET search_path = public, pg_temp");
     expect(migration).not.toContain("wechat_virtual_payment_notifications");
     expect(migration).not.toContain("reconcile_query_");
+  });
+
+  test("fails closed when a purchase source UUID exists in both order tables", () => {
+    const migration = readFileSync(resolve(
+      import.meta.dir,
+      "../../../../supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql",
+    ), "utf8");
+
+    expect(migration).toMatch(
+      /SELECT entitlement\.source_id\s+INTO v_source_order_id[\s\S]*entitlement\.tenant_id = v_order_tenant_id[\s\S]*entitlement\.entitlement_code = v_entitlement_code[\s\S]*entitlement\.source_type = 'purchase'/i,
+    );
+    expect(migration).toMatch(
+      /SELECT count\(\*\)\s+INTO v_source_candidate_count\s+FROM \([\s\S]*FROM public\.tenant_addon_orders AS source_legacy[\s\S]*source_legacy\.tenant_id = v_order_tenant_id[\s\S]*source_legacy\.id = v_source_order_id[\s\S]*UNION ALL[\s\S]*FROM public\.tenant_virtual_addon_orders AS source_virtual[\s\S]*source_virtual\.tenant_id = v_order_tenant_id[\s\S]*source_virtual\.id = v_source_order_id[\s\S]*\) AS source_candidate/i,
+    );
+    expect(migration).toMatch(
+      /IF v_source_candidate_count > 1 THEN[\s\S]*DETAIL = 'BRANDING_ENTITLEMENT_SOURCE_ORDER_ID_COLLISION'/i,
+    );
+    expect(migration).not.toMatch(
+      /v_source_candidate_count\s*(?:<>|!=|>=)\s*1/i,
+    );
   });
 });

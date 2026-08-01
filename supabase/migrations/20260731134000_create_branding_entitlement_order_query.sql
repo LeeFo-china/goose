@@ -278,7 +278,11 @@ AS $$
 DECLARE
   v_candidate_count integer;
   v_channel text;
+  v_entitlement_code text;
+  v_order_tenant_id uuid;
   v_result jsonb;
+  v_source_candidate_count integer;
+  v_source_order_id uuid;
 BEGIN
   SELECT count(*), min(candidate.payment_channel)
   INTO v_candidate_count, v_channel
@@ -305,6 +309,50 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'Branding entitlement order identity collision',
       DETAIL = 'BRANDING_ENTITLEMENT_ORDER_ID_COLLISION';
+  END IF;
+
+  IF v_channel = 'legacy_direct' THEN
+    SELECT legacy.tenant_id, legacy.entitlement_code
+    INTO v_order_tenant_id, v_entitlement_code
+    FROM public.tenant_addon_orders AS legacy
+    WHERE legacy.id = p_order_id
+      AND (p_tenant_id IS NULL OR legacy.tenant_id = p_tenant_id);
+  ELSE
+    SELECT virtual.tenant_id, virtual.entitlement_code
+    INTO v_order_tenant_id, v_entitlement_code
+    FROM public.tenant_virtual_addon_orders AS virtual
+    WHERE virtual.id = p_order_id
+      AND (p_tenant_id IS NULL OR virtual.tenant_id = p_tenant_id);
+  END IF;
+
+  SELECT entitlement.source_id
+  INTO v_source_order_id
+  FROM public.tenant_entitlements AS entitlement
+  WHERE entitlement.tenant_id = v_order_tenant_id
+    AND entitlement.entitlement_code = v_entitlement_code
+    AND entitlement.source_type = 'purchase';
+
+  SELECT count(*)
+  INTO v_source_candidate_count
+  FROM (
+    SELECT 1
+    FROM public.tenant_addon_orders AS source_legacy
+    WHERE source_legacy.tenant_id = v_order_tenant_id
+      AND source_legacy.id = v_source_order_id
+
+    UNION ALL
+
+    SELECT 1
+    FROM public.tenant_virtual_addon_orders AS source_virtual
+    WHERE source_virtual.tenant_id = v_order_tenant_id
+      AND source_virtual.id = v_source_order_id
+  ) AS source_candidate;
+
+  IF v_source_candidate_count > 1 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'Branding entitlement source order identity collision',
+      DETAIL = 'BRANDING_ENTITLEMENT_SOURCE_ORDER_ID_COLLISION';
   END IF;
 
   IF v_channel = 'legacy_direct' THEN
