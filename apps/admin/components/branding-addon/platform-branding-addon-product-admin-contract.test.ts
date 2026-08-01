@@ -18,7 +18,8 @@ describe("platform branding addon product admin contract", () => {
     expect(page).toContain("getAdminToken");
     expect(page).toContain("parseBackendJson");
     expect(page).toContain("PlatformBrandingVirtualProductForm");
-    expect(page).toContain("initialVirtualProducts");
+    expect(page).toContain("paymentSummaries");
+    expect(page).not.toContain("initialVirtualProducts");
   });
 
   test("keeps the product card filling the fixed admin workspace", () => {
@@ -35,21 +36,54 @@ describe("platform branding addon product admin contract", () => {
     expect(form).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
     expect(form).toContain('CardContent className="min-h-0 flex-1 overflow-auto p-5"');
     expect(loading).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
-    expect(loading).toContain('CardContent className="flex min-h-0 flex-1 flex-col p-0"');
+    expect(loading).toContain('CardContent className="min-h-0 flex-1 overflow-auto p-5"');
   });
 
-  test("patches editable fields with optimistic version handling", () => {
+  test("patches only product fields with optimistic version handling", () => {
     const form = readSource("./platform-branding-virtual-product-form.tsx");
     const fields = readSource("./platform-branding-addon-product-form.tsx");
+    const retiredData = readSource(
+      "./platform-branding-virtual-product-form-data.ts",
+    );
 
     expect(form).toContain("requestBackendJson");
     expect(form).toContain('method: "PATCH"');
     expect(form).toContain("buildProductPatch");
     expect(form).toContain("BRANDING_ADDON_PRODUCT_VERSION_CONFLICT");
     expect(form).toContain("window.location.reload()");
+    expect(form).toContain("JSON.stringify(payload)");
+    expect(form).not.toContain("purchase_mode");
+    expect(form).not.toContain("virtual_product");
+    expect(form).not.toContain("/validate");
+    expect(form).not.toContain("Legacy");
+    expect(form).not.toContain("buildModePatch");
+    expect(form).not.toContain("buildMappingPatch");
+    expect(retiredData).not.toContain("Legacy");
+    expect(retiredData).not.toContain("encrypted_secret_ref");
     expect(fields).toContain("FieldGroup");
     expect(fields).toContain("Switch");
     expect(form).toContain("历史订单继续使用创建时快照");
+  });
+
+  test("shows a read-only payment summary with the centralized settings deep link", () => {
+    const form = readSource("./platform-branding-virtual-product-form.tsx");
+    const summary = readSource("./platform-branding-payment-summary.tsx");
+
+    expect(form).toContain("PlatformBrandingPaymentSummary");
+    expect(summary).toContain("支付配置摘要");
+    expect(summary).toContain("沙箱环境");
+    expect(summary).toContain("生产环境");
+    expect(summary).toContain("映射状态");
+    expect(summary).toContain("校验状态");
+    expect(summary).toContain("密钥状态");
+    expect(summary).toContain("阻塞项");
+    expect(summary).toContain(
+      "/settings?group=payment&section=virtual&environment=production",
+    );
+    expect(summary).toContain("去支付配置");
+    expect(summary).not.toContain("requestBackendJson");
+    expect(summary).not.toContain("validate");
+    expect(summary).not.toContain("Input");
   });
 
   test("uses accessible fields and exposes the immutable product facts", () => {

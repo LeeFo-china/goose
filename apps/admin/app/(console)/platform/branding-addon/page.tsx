@@ -173,7 +173,7 @@ export default async function PlatformBrandingAddonPage({
               <PlatformBrandingVirtualProductForm
                 key={`${productResult.product.version}-${productResult.virtual_products?.map((item) => item.mapping?.version ?? 0).join("-")}`}
                 initialProduct={productResult.product}
-                initialVirtualProducts={productResult.virtual_products ?? []}
+                paymentSummaries={productResult.virtual_products ?? []}
               />
             </TabsContent>
           ) : null}

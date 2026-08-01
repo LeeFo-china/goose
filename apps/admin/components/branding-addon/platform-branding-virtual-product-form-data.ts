@@ -4,6 +4,9 @@ import type {
   PlatformBrandingVirtualProductSummary,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
 import type {
+  PlatformVirtualPaymentMappingPatch,
+} from "@/components/settings/platform-virtual-payment-settings-types";
+import type {
   BrandingPurchaseMode,
   BrandingVirtualPaymentEnvironment,
 } from "@gooes/domain";
@@ -14,21 +17,6 @@ export type MappingDraft = {
   offerId: string;
   providerProductId: string;
   status: PlatformBrandingVirtualProductStatus;
-};
-
-export type LegacyPlatformBrandingVirtualProductPatch = {
-  environment: BrandingVirtualPaymentEnvironment;
-  app_id: string;
-  virtual_merchant_id: string;
-  offer_id: string;
-  provider_product_id: string;
-  expected_amount_fen: number;
-  encrypted_secret_ref:
-    | "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"
-    | "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE";
-  secret_revision: number;
-  status: PlatformBrandingVirtualProductStatus;
-  version: number;
 };
 
 export const modeLabels: Record<BrandingPurchaseMode, string> = {
@@ -87,7 +75,7 @@ export function buildMappingPatch(input: {
   draft: MappingDraft;
   summary: PlatformBrandingVirtualProductSummary;
   amountFen: number | null;
-}): { ok: true; patch: LegacyPlatformBrandingVirtualProductPatch } | {
+}): { ok: true; patch: PlatformVirtualPaymentMappingPatch } | {
   ok: false;
   message: string;
 } {
@@ -124,9 +112,6 @@ export function buildMappingPatch(input: {
       offer_id: offerId,
       provider_product_id: providerProductId,
       expected_amount_fen: input.amountFen,
-      encrypted_secret_ref: input.environment === "production"
-        ? "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE"
-        : "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
       secret_revision: input.summary.secret.revision,
       status,
       version: input.summary.mapping?.version ?? 1,

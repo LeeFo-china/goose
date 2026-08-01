@@ -48,7 +48,7 @@ export function PlatformBrandingAdminTabs({
             className={platformTabsTriggerClassName}
             disabled={pending}
           >
-            商品与支付通道
+            权益商品
           </TabsTrigger>
         ) : null}
         {canReadOrders ? (

@@ -19,8 +19,16 @@ describe("platform branding virtual-payment admin contract", () => {
     expect(page).toContain('view === "orders"');
     expect(page).toContain('view === "refunds"');
     expect(page).toContain("PlatformBrandingVirtualProductForm");
+    expect(page).toContain("paymentSummaries");
     expect(page).toContain("PlatformBrandingEntitlementOrders");
     expect(page).toContain("PlatformBrandingVirtualRefunds");
+  });
+
+  test("labels the product workspace without payment editing language", () => {
+    const tabs = readSource("./platform-branding-admin-tabs.tsx");
+
+    expect(tabs).toContain("权益商品");
+    expect(tabs).not.toContain("商品与支付通道");
   });
 
   test("navigates controlled tabs through the Next router", () => {
@@ -45,27 +53,31 @@ describe("platform branding virtual-payment admin contract", () => {
     expect(source).toContain("Apple 外部处理");
   });
 
-  test("keeps secrets masked and excludes platform-specific pricing", () => {
-    const source = readSource(
-      "./platform-branding-virtual-product-form.tsx",
-    );
+  test("keeps payment state read-only and excludes platform-specific pricing", () => {
+    const source = readSource("./platform-branding-payment-summary.tsx");
+    const form = readSource("./platform-branding-virtual-product-form.tsx");
 
     expect(source).toContain("secret.configured");
     expect(source).toContain("secret.revision");
     expect(source).not.toContain('id="app-key"');
     expect(source).not.toContain("requested_platform_price");
     expect(source).not.toContain("客户端平台加价");
+    expect(form).not.toContain("MappingInput");
+    expect(form).not.toContain("Select");
+    expect(form).not.toContain("Tabs");
   });
 
-  test("keeps loading structure aligned with tabs and table rows", () => {
+  test("keeps the loading structure aligned with product fields and payment summary", () => {
     const loading = readSource(
       "../../app/(console)/platform/branding-addon/loading.tsx",
     );
 
     expect(loading).toContain("platform-branding-loading-tabs");
-    expect(loading).toContain("platform-branding-loading-configuration");
-    expect(loading).toContain("platform-branding-loading-filters");
-    expect(loading).toContain("Array.from({ length: 8 })");
+    expect(loading).toContain("platform-branding-loading-product-fields");
+    expect(loading).toContain("platform-branding-loading-payment-summary");
+    expect(loading).not.toContain("platform-branding-loading-configuration");
+    expect(loading).not.toContain("platform-branding-loading-filters");
+    expect(loading).not.toContain("Array.from({ length: 8 })");
     expect(loading).toContain("min-h-0 flex-1");
   });
 });
