@@ -8,6 +8,7 @@ const KEYS = [
   "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
   "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
 ] as const;
+const UPDATED_AT = "2026-08-01T10:00:00.000Z";
 
 type RepositoryConstructor = typeof import(
   "./system-settings"
@@ -55,6 +56,7 @@ describe("bounded platform secret settings query", () => {
           value_text: JSON.stringify({ appKey: "production", revision: 3 }),
           is_secret: true,
           status: "active",
+          updated_at: UPDATED_AT,
         },
         error: null,
       })),
@@ -74,7 +76,7 @@ describe("bounded platform secret settings query", () => {
     expect(calls).toContainEqual(["limit", 1]);
     expect(calls).toContainEqual([
       "select",
-      "key,value_text,is_secret,status",
+      "key,value_text,is_secret,status,updated_at",
     ]);
   });
 
@@ -174,6 +176,7 @@ describe("bounded platform secret settings query", () => {
       value_text: JSON.stringify({ appKey: "production", revision: 3 }),
       is_secret: false,
       status: "active" as const,
+      updated_at: UPDATED_AT,
     }));
     const service = new SystemSettingsService({
       findPlatformSecretByKey,
@@ -203,6 +206,7 @@ describe("bounded platform secret settings query", () => {
       value_text: storedValue,
       is_secret: true,
       status: "active" as const,
+      updated_at: UPDATED_AT,
     }));
     const service = new SystemSettingsService({
       findPlatformSecretByKey,
@@ -242,6 +246,7 @@ describe("bounded platform secret settings query", () => {
         value_text: "ignored-inactive-value",
         is_secret: true,
         status: "inactive" as const,
+        updated_at: UPDATED_AT,
       }
       : null);
     const service = new SystemSettingsService({

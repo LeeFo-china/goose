@@ -36,6 +36,7 @@ import type {
   PlatformSecretSettingRecord,
   SystemSettingRepository,
 } from '@/repositories/system-settings';
+import { resolvePaymentSecretWrite } from './payment-secret-write';
 
 export async function getPlatformSecretStrings(
   repository: Pick<SystemSettingRepository, "findPlatformByKeys">,
@@ -247,6 +248,16 @@ export async function updatePlatformPaymentSecretSetting(
     if (!validatedValue) {
       throw Errors.badRequest("支付密钥不能为空");
     }
+    const snapshot = await this.systemSettingRepository
+      .findPlatformSecretByKey(key);
+    if (resolvePaymentSecretWrite(snapshot, key, validatedValue) === "noop") {
+      return this.toEffective({
+        ...record,
+        value_text: "******",
+        status: snapshot?.status ?? record.status,
+        updated_at: snapshot?.updated_at ?? record.updated_at,
+      });
+    }
     const updated = await this.systemSettingRepository
       .upsertPlatformPaymentSecret({
         key: definition.key,
@@ -257,6 +268,7 @@ export async function updatePlatformPaymentSecretSetting(
         valueText: encryptSecretValue(validatedValue),
         status: record.status,
         employeeId: authContext.employeeId,
+        expectedUpdatedAt: snapshot?.updated_at ?? null,
       });
     this.clearCache();
     return this.toEffective({

@@ -27,6 +27,11 @@ export type PlatformSecretSettingRecord = Pick<
   "key" | "value_text" | "is_secret" | "status"
 >;
 
+export type PlatformSecretSettingSnapshot = PlatformSecretSettingRecord & Pick<
+  SystemSettingRecord,
+  "updated_at"
+>;
+
 type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
 
 export type PlatformPaymentSecretSettingInput = {
@@ -38,6 +43,7 @@ export type PlatformPaymentSecretSettingInput = {
   valueText: string;
   status: SystemSettingStatus;
   employeeId: string | null;
+  expectedUpdatedAt: string | null;
 };
 
 export class SystemSettingRepository {
@@ -72,6 +78,7 @@ export class SystemSettingRepository {
         p_value_text: input.valueText,
         p_status: input.status,
         p_changed_by_employee_id: input.employeeId,
+        p_expected_updated_at: input.expectedUpdatedAt,
       },
     );
     if (error) {
@@ -81,10 +88,10 @@ export class SystemSettingRepository {
         true,
       );
     }
-    if (!data) {
+    if (!isPlatformPaymentSecretRecord(data, input.key)) {
       throw Errors.dbError("保存平台支付密钥配置失败");
     }
-    return data as SystemSettingRecord;
+    return data;
   }
 
   async listAll(): Promise<SystemSettingRecord[]> {
@@ -141,9 +148,9 @@ export class SystemSettingRepository {
 
   async findPlatformSecretByKey(
     key: string,
-  ): Promise<PlatformSecretSettingRecord | null> {
+  ): Promise<PlatformSecretSettingSnapshot | null> {
     const { data, error } = await this.table()
-      .select("key,value_text,is_secret,status")
+      .select("key,value_text,is_secret,status,updated_at")
       .eq("key", key)
       .is("tenant_id", null)
       .limit(1)
@@ -151,7 +158,7 @@ export class SystemSettingRepository {
     if (error) {
       throw Errors.dbError("查询平台支付密钥配置失败");
     }
-    return (data as PlatformSecretSettingRecord | null) ?? null;
+    return (data as PlatformSecretSettingSnapshot | null) ?? null;
   }
 
   async updateValue(input: {
@@ -253,6 +260,11 @@ export class SystemSettingRepository {
 
 const SYSTEM_SETTING_MUTATION_ERRORS = [
   {
+    postgresCode: "P0001",
+    code: "SYSTEM_SETTING_PAYMENT_SECRET_VERSION_CONFLICT",
+    message: "支付密钥配置已变化，请刷新后重试",
+  },
+  {
     postgresCode: "23514",
     code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
     message: "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
@@ -283,6 +295,34 @@ const SYSTEM_SETTING_MUTATION_ERRORS = [
     message: "虚拟支付消息令牌必须是平台级加密配置",
   },
 ] as const;
+
+const ENCRYPTED_SECRET_ENVELOPE_PATTERN =
+  /^enc:v1:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:([A-Za-z0-9_-]{4})*([A-Za-z0-9_-]{2,4})$/;
+
+function isPlatformPaymentSecretRecord(
+  value: unknown,
+  expectedKey: string,
+): value is SystemSettingRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === "string" && record.id.length > 0 &&
+    record.tenant_id === null &&
+    record.key === expectedKey &&
+    record.group_code === "payment" &&
+    typeof record.name === "string" && record.name.length > 0 &&
+    (record.description === null || typeof record.description === "string") &&
+    record.value_type === (expectedKey === "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN"
+      ? "string"
+      : "json") &&
+    typeof record.value_text === "string" &&
+    ENCRYPTED_SECRET_ENVELOPE_PATTERN.test(record.value_text) &&
+    record.is_secret === true &&
+    record.status === "active" &&
+    (record.updated_by_employee_id === null ||
+      typeof record.updated_by_employee_id === "string") &&
+    typeof record.created_at === "string" && record.created_at.length > 0 &&
+    typeof record.updated_at === "string" && record.updated_at.length > 0;
+}
 
 function throwSystemSettingMutationError(
   error: unknown,

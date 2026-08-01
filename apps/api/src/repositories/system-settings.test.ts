@@ -18,7 +18,7 @@ const existingSetting = {
   name: "平台微信支付密钥包",
   description: null,
   value_type: "json",
-  value_text: "encrypted-old-value",
+  value_text: "enc:v1:AAAAAAAAAAAAAAAA:BBBBBBBBBBBBBBBBBBBBBB:QUJD",
   is_secret: true,
   status: "active",
   updated_by_employee_id: "employee-old",
@@ -38,6 +38,7 @@ const query = {
   update: mock(() => query),
   eq: mock(() => query),
   is: mock(() => query),
+  limit: mock(() => query),
   order: mock(() => query),
   maybeSingle,
   single,
@@ -71,7 +72,6 @@ const updateInput = {
   valueText: "encrypted-new-value",
   employeeId: "employee-platform",
 };
-
 const platformAuth = {
   authUserId: "auth-platform",
   employeeId: "employee-platform",
@@ -108,6 +108,7 @@ const atomicInput = {
   valueText: "encrypted-new-value",
   status: existingSetting.status,
   employeeId: "employee-platform",
+  expectedUpdatedAt: existingSetting.updated_at,
 };
 
 describe("SystemSettingRepository atomic payment secret write", () => {
@@ -130,6 +131,7 @@ describe("SystemSettingRepository atomic payment secret write", () => {
         p_value_text: atomicInput.valueText,
         p_status: atomicInput.status,
         p_changed_by_employee_id: atomicInput.employeeId,
+        p_expected_updated_at: atomicInput.expectedUpdatedAt,
       },
     );
     expect(result).toEqual(existingSetting);
@@ -425,7 +427,7 @@ describe("platform system settings payment secret update", () => {
     value,
   ) => {
     rpc.mockImplementationOnce(async () => ({
-      data: { ...existingSetting, key },
+      data: { ...existingSetting, key, value_type: key.endsWith("MESSAGE_TOKEN") ? "string" : "json" },
       error: null,
     }));
     const { SystemSettingsService } = await import(
@@ -449,9 +451,8 @@ describe("platform system settings payment secret update", () => {
     expect(JSON.stringify(result)).not.toContain(existingSetting.value_text);
     expect(rpc).toHaveBeenCalledTimes(1);
     expect(query.update).not.toHaveBeenCalled();
-    expect(maybeSingle).not.toHaveBeenCalled();
+    expect(maybeSingle).toHaveBeenCalledTimes(1);
   });
-
   test("rejects non-payment keys through the dedicated internal writer", async () => {
     const { SystemSettingsService } = await import(
       "@/services/system-settings/legacy-service"
