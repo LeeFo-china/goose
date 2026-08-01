@@ -27,6 +27,9 @@ import {
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS,
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import {
+  platformBrandingVirtualPaymentSecretService,
+} from "@/services/platform-branding-virtual-payment-secrets";
 import { systemSettingsService } from "@/services/system-settings";
 import {
   BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN,
@@ -54,6 +57,10 @@ type ManagementServicePort = Pick<
   typeof brandingVirtualProductManagementService,
   "getConfiguration" | "validateConfiguration"
 >;
+type SecretStatusReaderPort = Pick<
+  typeof platformBrandingVirtualPaymentSecretService,
+  "getStatuses"
+>;
 type VirtualProductInput = NonNullable<
   UpdatePlatformWechatVirtualSettingsInput["virtual_product"]
 >;
@@ -70,6 +77,7 @@ export type PlatformBrandingVirtualPaymentSettingsDependencies = {
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
   managementService?: ManagementServicePort;
+  secretStatusReader?: SecretStatusReaderPort;
 };
 
 export class PlatformBrandingVirtualPaymentSettingsService {
@@ -79,6 +87,7 @@ export class PlatformBrandingVirtualPaymentSettingsService {
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
   private readonly managementService: ManagementServicePort;
+  private readonly secretStatusReader: SecretStatusReaderPort;
 
   constructor(
     dependencies: PlatformBrandingVirtualPaymentSettingsDependencies = {},
@@ -92,12 +101,19 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     this.audit = dependencies.audit ?? platformAuditLogService;
     this.managementService = dependencies.managementService ??
       brandingVirtualProductManagementService;
+    this.secretStatusReader = dependencies.secretStatusReader ??
+      platformBrandingVirtualPaymentSecretService;
   }
 
   async get(authContext: AuthContext) {
     this.requireReadable(authContext);
+    const [configuration, secretStatuses] = await Promise.all([
+      this.managementService.getConfiguration(),
+      this.secretStatusReader.getStatuses(authContext),
+    ]);
     return {
-      ...await this.managementService.getConfiguration(),
+      ...configuration,
+      ...secretStatuses,
       can_manage: this.canManage(authContext),
     };
   }

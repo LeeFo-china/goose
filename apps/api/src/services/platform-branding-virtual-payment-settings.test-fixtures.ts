@@ -77,6 +77,32 @@ export const managementConfiguration = {
   }],
 };
 
+export const secretStatuses = {
+  virtual_secret_sources: {
+    sandbox: {
+      configured: true,
+      source: "database" as const,
+    },
+    production: {
+      configured: false,
+      source: "empty" as const,
+    },
+  },
+  message_auth: {
+    message_token: {
+      configured: true,
+      source: "database" as const,
+      valid: true,
+    },
+    original_id: {
+      configured: true,
+      source: "env" as const,
+      valid: true,
+      settings_href: "/settings?group=wechat",
+    },
+  },
+};
+
 export function auth(
   permission: string,
   overrides: Partial<AuthContext> = {},
@@ -136,6 +162,7 @@ export type FixtureOptions = {
   saveError?: unknown;
   secretBundle?: string;
   secretError?: unknown;
+  secretStatusError?: unknown;
 };
 
 type ServiceConstructor = new (
@@ -184,6 +211,10 @@ export function buildFixture(
     revision: 2,
   }));
   const getConfiguration = mock(async () => managementConfiguration);
+  const getStatuses = mock(async () => {
+    if (options.secretStatusError) throw options.secretStatusError;
+    return secretStatuses;
+  });
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,
     validation: {
@@ -206,6 +237,7 @@ export function buildFixture(
     accessPolicy: { hasPermission },
     audit: { recordBestEffort },
     managementService: { getConfiguration, validateConfiguration },
+    secretStatusReader: { getStatuses },
   });
   return {
     service,
@@ -215,6 +247,7 @@ export function buildFixture(
     getPlatformSecretString,
     getSecretString,
     getConfiguration,
+    getStatuses,
     validateConfiguration,
     recordBestEffort,
   };

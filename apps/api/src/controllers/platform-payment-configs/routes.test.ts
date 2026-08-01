@@ -113,7 +113,12 @@ describe("PlatformPaymentConfigsController routes", () => {
       bundle: platformBrandingVirtualPaymentSecretService.saveSecretBundle,
       token: platformBrandingVirtualPaymentSecretService.saveMessageToken,
     };
-    const get = mock(async () => ({ product: { version: 3 }, can_manage: true }));
+    const get = mock(async () => ({
+      product: { version: 3 },
+      can_manage: true,
+      virtual_secret_sources: { sandbox: { configured: true } },
+      message_auth: { message_token: { configured: true } },
+    }));
     const getStatuses = mock(async () => ({
       virtual_secret_sources: { sandbox: { configured: true } },
       message_auth: { message_token: { configured: true } },
@@ -167,7 +172,7 @@ describe("PlatformPaymentConfigsController routes", () => {
         message: "success",
       });
       expect(get).toHaveBeenCalledWith(platformAuth);
-      expect(getStatuses).toHaveBeenCalledWith(platformAuth);
+      expect(getStatuses).not.toHaveBeenCalled();
 
       const patch = { version: 3, purchase_mode: "maintenance" } as const;
       await requiredHandler(

@@ -12,6 +12,7 @@ import {
   managementConfiguration,
   product,
   productionMapping,
+  secretStatuses,
   TENANT_ID,
   virtualPatch,
 } from "@/services/platform-branding-virtual-payment-settings.test-fixtures";
@@ -43,11 +44,19 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
 
     await expect(readFixture.service.get(
       auth("platform.payment.config.read", { employeeId: null, authUserId: "" }),
-    )).resolves.toEqual({ ...managementConfiguration, can_manage: false });
+    )).resolves.toEqual({
+      ...managementConfiguration,
+      can_manage: false,
+      ...secretStatuses,
+    });
     await expect(manageFixture.service.get(manageAuth)).resolves.toEqual({
       ...managementConfiguration,
       can_manage: true,
+      ...secretStatuses,
     });
+    expect(readFixture.getStatuses).toHaveBeenCalledWith(
+      auth("platform.payment.config.read", { employeeId: null, authUserId: "" }),
+    );
   });
 
   test("reports a partial payment manager as read-only", async () => {
@@ -56,7 +65,26 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
     await expect(fixture.service.get(auth(
       "platform.payment.config.manage",
       { employeeId: null, authUserId: "" },
-    ))).resolves.toEqual({ ...managementConfiguration, can_manage: false });
+    ))).resolves.toEqual({
+      ...managementConfiguration,
+      can_manage: false,
+      ...secretStatuses,
+    });
+  });
+
+  test("propagates the sanitized secret-status error without partial data", async () => {
+    const expected = Errors.business(
+      503,
+      "读取虚拟支付密钥状态失败",
+      "PLATFORM_PAYMENT_SECRET_STATUS_UNAVAILABLE",
+    );
+    const fixture = createFixture({ secretStatusError: expected });
+
+    await expect(fixture.service.get(
+      auth("platform.payment.config.read"),
+    )).rejects.toBe(expected);
+    expect(fixture.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.getStatuses).toHaveBeenCalledTimes(1);
   });
 
   test.each([
@@ -72,6 +100,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
         code: "FORBIDDEN",
       });
       expect(fixture.getConfiguration).not.toHaveBeenCalled();
+      expect(fixture.getStatuses).not.toHaveBeenCalled();
     },
   );
 

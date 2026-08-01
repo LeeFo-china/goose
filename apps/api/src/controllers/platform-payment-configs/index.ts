@@ -146,11 +146,10 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
   ) {
     const authContext = await this.getRequiredPlatformAdminContext(request);
     this.parseEmptyQuery(request);
-    const [settings, secretStatuses] = await Promise.all([
-      platformBrandingVirtualPaymentSettingsService.get(authContext),
-      platformBrandingVirtualPaymentSecretService.getStatuses(authContext),
-    ]);
-    return ResponseHandler.success({ ...settings, ...secretStatuses });
+    const data = await platformBrandingVirtualPaymentSettingsService.get(
+      authContext,
+    );
+    return ResponseHandler.success(data);
   }
 
   @Patch("/platform/payment/wechat-virtual/branding-entitlement")
