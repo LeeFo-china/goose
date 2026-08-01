@@ -153,20 +153,21 @@ describe("platform branding addon product form data", () => {
   });
 
   test("builds the patch with trimmed fields and the current version", () => {
-    expect(
-      buildProductPatch(product, {
-        name: "  年度品牌技术支持  ",
-        amountYuan: "99.00",
-        purchaseNotes: "  支付成功后自动开通或续期一年  ",
-        enabled: true,
-      }),
-    ).toEqual({
+    const patch = buildProductPatch(product, {
+      name: "  年度品牌技术支持  ",
+      amountYuan: "99.00",
+      purchaseNotes: "  支付成功后自动开通或续期一年  ",
+      enabled: true,
+    });
+    expect(patch).toEqual({
       name: "年度品牌技术支持",
       amount_fen: 9_900,
       purchase_notes: "支付成功后自动开通或续期一年",
       enabled: true,
       version: 2,
     });
+    expect(Object.hasOwn(patch, "purchase_mode")).toBe(false);
+    expect(Object.hasOwn(patch, "virtual_product")).toBe(false);
   });
 
   test("allows an unconfigured disabled product to save without a price", () => {

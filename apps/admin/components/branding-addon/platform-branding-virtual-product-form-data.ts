@@ -1,6 +1,5 @@
 import type {
   PlatformBrandingVirtualProduct,
-  PlatformBrandingVirtualProductPatch,
   PlatformBrandingVirtualProductStatus,
   PlatformBrandingVirtualProductSummary,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
@@ -15,6 +14,21 @@ export type MappingDraft = {
   offerId: string;
   providerProductId: string;
   status: PlatformBrandingVirtualProductStatus;
+};
+
+export type LegacyPlatformBrandingVirtualProductPatch = {
+  environment: BrandingVirtualPaymentEnvironment;
+  app_id: string;
+  virtual_merchant_id: string;
+  offer_id: string;
+  provider_product_id: string;
+  expected_amount_fen: number;
+  encrypted_secret_ref:
+    | "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"
+    | "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE";
+  secret_revision: number;
+  status: PlatformBrandingVirtualProductStatus;
+  version: number;
 };
 
 export const modeLabels: Record<BrandingPurchaseMode, string> = {
@@ -73,7 +87,7 @@ export function buildMappingPatch(input: {
   draft: MappingDraft;
   summary: PlatformBrandingVirtualProductSummary;
   amountFen: number | null;
-}): { ok: true; patch: PlatformBrandingVirtualProductPatch } | {
+}): { ok: true; patch: LegacyPlatformBrandingVirtualProductPatch } | {
   ok: false;
   message: string;
 } {

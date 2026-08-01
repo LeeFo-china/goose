@@ -34,6 +34,7 @@ import {
   emptySummary,
   environmentLabels,
   getAvailableModes,
+  type LegacyPlatformBrandingVirtualProductPatch,
   type MappingDraft,
   modeLabels,
   replaceMapping,
@@ -70,6 +71,12 @@ const VERSION_CONFLICT_CODES = new Set([
   "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
   "BRANDING_VIRTUAL_PRODUCT_VERSION_CONFLICT",
 ]);
+
+type LegacyBrandingPaymentConfigurationPatch =
+  PlatformBrandingAddonProductPatch & {
+    purchase_mode?: BrandingPurchaseMode;
+    virtual_product?: LegacyPlatformBrandingVirtualProductPatch;
+  };
 
 export function PlatformBrandingVirtualProductForm({
   initialProduct,
@@ -141,7 +148,7 @@ export function PlatformBrandingVirtualProductForm({
     event.preventDefault();
     clearFeedback();
 
-    let payload: PlatformBrandingAddonProductPatch;
+    let payload: LegacyBrandingPaymentConfigurationPatch;
     try {
       payload = buildProductPatch(product, values);
     } catch (validationError) {
