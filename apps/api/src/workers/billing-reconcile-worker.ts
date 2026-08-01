@@ -9,6 +9,9 @@ import {
 } from "@/services/billing-recharge-refund-reconciliation";
 import type { BillingRechargeExpirationTelemetry } from "@/services/billing-recharge-expiration";
 import type { BrandingAddonExpirationTelemetry } from "@/services/branding-addon-expiration";
+import type {
+  BrandingVirtualReconciliationTelemetry,
+} from "@/services/branding-virtual-payment-reconciliation";
 import { markBillingReconcileWorkerHealthy } from "@/workers/billing-reconcile-worker-health";
 
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -17,6 +20,7 @@ const MAX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE = 50;
 const DEFAULT_BRANDING_ADDON_EXPIRATION_BATCH_SIZE = 50;
+const DEFAULT_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE = 20;
 const DEFAULT_REFUND_BATCH_SIZE = 20;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
@@ -27,6 +31,7 @@ export type BillingReconcileWorkerConfig = {
   batchSize: number;
   rechargeExpirationBatchSize: number;
   brandingAddonExpirationBatchSize: number;
+  brandingVirtualPaymentBatchSize: number;
   refundBatchSize: number;
 };
 
@@ -49,6 +54,11 @@ type BillingReconcileWorkerDependencies = {
     runExpiredOrderChecks(input: {
       batchSize: number;
     }): Promise<BrandingAddonExpirationTelemetry>;
+  };
+  brandingVirtualPaymentReconciliationService?: {
+    reconcile(input: {
+      batchSize: number;
+    }): Promise<BrandingVirtualReconciliationTelemetry>;
   };
   refundReconciliationService?: {
     runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
@@ -74,6 +84,9 @@ type BillingReconcileTickResults = {
   brandingAddonExpiration: ChildResult<
     ReturnType<typeof summarizeBrandingAddonExpirationResult>
   >;
+  brandingVirtualPayment: ChildResult<
+    ReturnType<typeof summarizeBrandingVirtualPaymentResult>
+  >;
   refund: ChildResult<ReturnType<typeof summarizeRefundResult>>;
 };
 
@@ -86,6 +99,9 @@ type SuccessfulBillingReconcileTickResults = {
   >;
   brandingAddonExpiration: FulfilledChildResult<
     ReturnType<typeof summarizeBrandingAddonExpirationResult>
+  >;
+  brandingVirtualPayment: FulfilledChildResult<
+    ReturnType<typeof summarizeBrandingVirtualPaymentResult>
   >;
   refund: FulfilledChildResult<ReturnType<typeof summarizeRefundResult>>;
 };
@@ -168,6 +184,12 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    brandingVirtualPaymentBatchSize: parseNumberEnv(
+      "BILLING_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE",
+      DEFAULT_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
     refundBatchSize: parseNumberEnv(
       "BILLING_REFUND_RECONCILE_BATCH_SIZE",
       DEFAULT_REFUND_BATCH_SIZE,
@@ -225,6 +247,17 @@ export async function tick(
       },
       summarizeBrandingAddonExpirationResult,
     );
+    const brandingVirtualPayment = await runChild(
+      async () => {
+        const service =
+          dependencies.brandingVirtualPaymentReconciliationService ??
+            await loadDefaultBrandingVirtualPaymentReconciliationService();
+        return service.reconcile({
+          batchSize: config.brandingVirtualPaymentBatchSize,
+        });
+      },
+      summarizeBrandingVirtualPaymentResult,
+    );
     const refund = await runChild(
       () => refundReconciliationService.runBatch({
         limit: config.refundBatchSize,
@@ -235,6 +268,7 @@ export async function tick(
       subscription,
       rechargeExpiration,
       brandingAddonExpiration,
+      brandingVirtualPayment,
       refund,
     };
     const childrenSucceeded = isSuccessfulBillingReconcileTick(tickResults);
@@ -259,6 +293,7 @@ export async function tick(
         subscription,
         recharge_expiration: rechargeExpiration,
         branding_addon_expiration: brandingAddonExpiration,
+        branding_virtual_payment: brandingVirtualPayment,
         refund,
       },
       ...(healthEvidenceFailed
@@ -277,6 +312,7 @@ function isSuccessfulBillingReconcileTick(
     results.subscription.status !== "fulfilled" ||
     results.rechargeExpiration.status !== "fulfilled" ||
     results.brandingAddonExpiration.status !== "fulfilled" ||
+    results.brandingVirtualPayment.status !== "fulfilled" ||
     results.refund.status !== "fulfilled"
   ) {
     return false;
@@ -287,6 +323,7 @@ function isSuccessfulBillingReconcileTick(
     results.rechargeExpiration.result.release_failed === 0 &&
     results.brandingAddonExpiration.result.failed === 0 &&
     results.brandingAddonExpiration.result.release_failed === 0 &&
+    results.brandingVirtualPayment.result.failed === 0 &&
     results.refund.result.failed === 0;
 }
 
@@ -350,6 +387,19 @@ function summarizeBrandingAddonExpirationResult(
   };
 }
 
+function summarizeBrandingVirtualPaymentResult(
+  result: BrandingVirtualReconciliationTelemetry,
+) {
+  return {
+    claimed: result.claimed,
+    queried: result.queried,
+    confirmed: result.confirmed,
+    closed: result.closed,
+    failed: result.failed,
+    grant_recovered: result.grantRecovered,
+  };
+}
+
 async function loadDefaultRechargeExpirationService() {
   const { billingRechargeExpirationService } = await import(
     "@/services/billing-recharge-expiration"
@@ -362,6 +412,13 @@ async function loadDefaultBrandingAddonExpirationService() {
     "@/services/branding-addon-expiration"
   );
   return brandingAddonExpirationService;
+}
+
+async function loadDefaultBrandingVirtualPaymentReconciliationService() {
+  const { brandingVirtualPaymentReconciliationService } = await import(
+    "@/services/branding-virtual-payment-reconciliation"
+  );
+  return brandingVirtualPaymentReconciliationService;
 }
 
 function registerShutdownSignalHandlers(): void {

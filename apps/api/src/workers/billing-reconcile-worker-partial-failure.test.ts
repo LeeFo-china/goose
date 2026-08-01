@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 import type { BillingDueCheckResult } from "@/services/billing-subscriptions";
 
+import { BRANDING_VIRTUAL_PAYMENT_RESULT } from "./billing-reconcile-worker-test-fixtures";
+
 const SUBSCRIPTION_RESULT: BillingDueCheckResult = {
   ensured: 1,
   reminded: 2,
@@ -176,6 +178,9 @@ describe("billing reconcile worker partial failures", () => {
     const brandingAddonExpirationService = {
       runExpiredOrderChecks: mock(async () => BRANDING_ADDON_EXPIRATION_RESULT),
     };
+    const brandingVirtualPaymentReconciliationService = {
+      reconcile: mock(async () => BRANDING_VIRTUAL_PAYMENT_RESULT),
+    };
     const refundReconciliationService = {
       runBatch: mock(async () => ({
         ...REFUND_RESULT,
@@ -189,6 +194,7 @@ describe("billing reconcile worker partial failures", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -237,6 +243,9 @@ async function runTick(overrides: TickOverrides) {
   const brandingAddonExpirationService = {
     runExpiredOrderChecks: mock(async () => BRANDING_ADDON_EXPIRATION_RESULT),
   };
+  const brandingVirtualPaymentReconciliationService = {
+    reconcile: mock(async () => BRANDING_VIRTUAL_PAYMENT_RESULT),
+  };
   const refundReconciliationService = {
     runBatch: mock(async () => overrides.refund ?? REFUND_RESULT),
   };
@@ -248,6 +257,7 @@ async function runTick(overrides: TickOverrides) {
     subscriptionService,
     rechargeExpirationService,
     brandingAddonExpirationService,
+    brandingVirtualPaymentReconciliationService,
     refundReconciliationService,
     healthEvidence: { markHealthy },
     logger,
@@ -257,6 +267,7 @@ async function runTick(overrides: TickOverrides) {
     subscriptionService,
     rechargeExpirationService,
     brandingAddonExpirationService,
+    brandingVirtualPaymentReconciliationService,
     refundReconciliationService,
     markHealthy,
     logger,
@@ -268,6 +279,8 @@ function assertEveryChildExecuted(result: Awaited<ReturnType<typeof runTick>>): 
   expect(result.rechargeExpirationService.runExpiredOrderChecks)
     .toHaveBeenCalledTimes(1);
   expect(result.brandingAddonExpirationService.runExpiredOrderChecks)
+    .toHaveBeenCalledTimes(1);
+  expect(result.brandingVirtualPaymentReconciliationService.reconcile)
     .toHaveBeenCalledTimes(1);
   expect(result.refundReconciliationService.runBatch).toHaveBeenCalledTimes(1);
 }
