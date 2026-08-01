@@ -1,17 +1,106 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 function readSource(path: string) {
   return readFileSync(new URL(path, import.meta.url), "utf8");
 }
 
+function readOptionalSource(path: string) {
+  const sourceUrl = new URL(path, import.meta.url);
+  return existsSync(sourceUrl) ? readFileSync(sourceUrl, "utf8") : "";
+}
+
 describe("platform virtual payment settings", () => {
+  test("superseded refresh callers share the latest final result", async () => {
+    const coordinatorSource = readOptionalSource(
+      "./platform-virtual-payment-refresh-coordinator.ts",
+    );
+    expect(coordinatorSource).toContain("createLatestRefreshCoordinator");
+    if (!coordinatorSource) return;
+
+    const { createLatestRefreshCoordinator } = await import(
+      "./platform-virtual-payment-refresh-coordinator"
+    );
+    const coordinator = createLatestRefreshCoordinator();
+    const committed: string[] = [];
+    const failed: string[] = [];
+    let resolveFirst = (_value: string) => {};
+    let resolveSecond = (_value: string) => {};
+    const firstRequest = new Promise<string>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondRequest = new Promise<string>((resolve) => {
+      resolveSecond = resolve;
+    });
+    const firstRun = coordinator.run(
+      () => firstRequest,
+      {
+        onSuccess: (value) => committed.push(value),
+        onError: () => failed.push("first"),
+      },
+    );
+    const secondRun = coordinator.run(
+      () => secondRequest,
+      {
+        onSuccess: (value) => committed.push(value),
+        onError: () => failed.push("second"),
+      },
+    );
+
+    resolveFirst("stale");
+    resolveSecond("latest");
+    expect(await Promise.all([firstRun, secondRun])).toEqual([true, true]);
+    expect(committed).toEqual(["latest"]);
+    expect(failed).toEqual([]);
+  });
+
+  test("superseded refresh callers share a real latest failure", async () => {
+    const coordinatorSource = readOptionalSource(
+      "./platform-virtual-payment-refresh-coordinator.ts",
+    );
+    expect(coordinatorSource).toContain("createLatestRefreshCoordinator");
+    if (!coordinatorSource) return;
+
+    const { createLatestRefreshCoordinator } = await import(
+      "./platform-virtual-payment-refresh-coordinator"
+    );
+    const coordinator = createLatestRefreshCoordinator();
+    let resolveFirst = () => {};
+    let rejectSecond = (_error: Error) => {};
+    const firstRequest = new Promise<void>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const secondRequest = new Promise<void>((_resolve, reject) => {
+      rejectSecond = reject;
+    });
+    const failures: string[] = [];
+    const firstRun = coordinator.run(() => firstRequest, {
+      onSuccess: () => {},
+      onError: () => failures.push("first"),
+    });
+    const secondRun = coordinator.run(() => secondRequest, {
+      onSuccess: () => {},
+      onError: () => failures.push("second"),
+    });
+
+    resolveFirst();
+    rejectSecond(new Error("latest failed"));
+    expect(await Promise.all([firstRun, secondRun])).toEqual([false, false]);
+    expect(failures).toEqual(["second"]);
+  });
+
   test("mutation success waits for the latest snapshot refresh", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
+    const coordinatorSource = readSource(
+      "./platform-virtual-payment-refresh-coordinator.ts",
+    );
 
     expect(virtualSource).toContain("async function refreshSnapshot(): Promise<boolean>");
-    expect(virtualSource).toContain("return true;");
-    expect(virtualSource).toContain("return false;");
+    expect(virtualSource).toContain("createLatestRefreshCoordinator");
+    expect(virtualSource).toContain("refreshCoordinator.current.run");
+    expect(virtualSource).toContain("refreshCoordinator.current.invalidate");
+    expect(coordinatorSource).toContain("return true;");
+    expect(coordinatorSource).toContain("return false;");
     expect(virtualSource).toContain("ensureSnapshotRefreshed");
     expect(virtualSource).toContain(
       "已提交，但最新状态刷新失败，请重新加载。",

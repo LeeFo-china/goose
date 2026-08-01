@@ -19,6 +19,7 @@ import {
 } from "@/components/settings/platform-virtual-payment-errors";
 import { VirtualPaymentMappingCard } from "@/components/settings/platform-virtual-payment-mapping-card";
 import { VirtualPaymentModeCard } from "@/components/settings/platform-virtual-payment-mode-card";
+import { createLatestRefreshCoordinator } from "@/components/settings/platform-virtual-payment-refresh-coordinator";
 import { PlatformVirtualPaymentSecretForm } from "@/components/settings/platform-virtual-payment-secret-form";
 import type {
   PlatformVirtualPaymentProductSummary,
@@ -72,29 +73,29 @@ export function PlatformVirtualPaymentSettings({
       environment: BrandingVirtualPaymentEnvironment;
     }) | null
   >(null);
-  const requestSequence = useRef(0);
+  const refreshCoordinator = useRef(createLatestRefreshCoordinator());
 
   const refreshSnapshot = useCallback(
     async function refreshSnapshot(): Promise<boolean> {
-      const sequence = ++requestSequence.current;
       setLoading(true);
       setLoadError("");
-      try {
-        const result = await requestBackendJson<PlatformVirtualPaymentSettingsView>(
-          "/platform/payment/wechat-virtual/branding-entitlement",
-          { fallbackMessage: "微信虚拟支付配置加载失败" },
-        );
-        if (sequence !== requestSequence.current) return false;
-        setSnapshot(result);
-        return true;
-      } catch {
-        if (sequence === requestSequence.current) {
-          setLoadError("微信虚拟支付配置加载失败，请稍后重试。");
-        }
-        return false;
-      } finally {
-        if (sequence === requestSequence.current) setLoading(false);
-      }
+      return refreshCoordinator.current.run(
+        () =>
+          requestBackendJson<PlatformVirtualPaymentSettingsView>(
+            "/platform/payment/wechat-virtual/branding-entitlement",
+            { fallbackMessage: "微信虚拟支付配置加载失败" },
+          ),
+        {
+          onSuccess: (result) => {
+            setSnapshot(result);
+            setLoading(false);
+          },
+          onError: () => {
+            setLoadError("微信虚拟支付配置加载失败，请稍后重试。");
+            setLoading(false);
+          },
+        },
+      );
     },
     [],
   );
@@ -102,7 +103,7 @@ export function PlatformVirtualPaymentSettings({
   useEffect(() => {
     void refreshSnapshot();
     return () => {
-      requestSequence.current += 1;
+      refreshCoordinator.current.invalidate();
     };
   }, [refreshSnapshot]);
 
