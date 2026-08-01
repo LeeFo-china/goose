@@ -6,6 +6,7 @@ import {
   type SettingDefinition,
   type EffectiveSetting,
   type SettingScope,
+  type SettingSource,
   CACHE_TTL_MS,
 } from './shared';
 import {
@@ -92,6 +93,30 @@ export async function getPlatformSecretString(
   return readEnvValue(definition?.envNames ?? [key]) ??
     definition?.defaultValue ??
     "";
+}
+
+export type PlatformSettingStatus = {
+  configured: boolean;
+  source: SettingSource;
+};
+
+export async function getPlatformSettingStatus(
+  repository: Pick<SystemSettingRepository, "findPlatformSecretByKey">,
+  key: string,
+): Promise<PlatformSettingStatus> {
+  const record = await repository.findPlatformSecretByKey(key);
+  if (record?.status === "active" && normalizeStoredValue(record.value_text)) {
+    return { configured: true, source: "database" };
+  }
+
+  const definition = definitionByKey.get(key);
+  if (readEnvValue(definition?.envNames ?? [key])) {
+    return { configured: true, source: "env" };
+  }
+  if (normalizeStoredValue(definition?.defaultValue)) {
+    return { configured: true, source: "default" };
+  }
+  return { configured: false, source: "empty" };
 }
 
 export async function listSettings(this: any, authContext?: AuthContext) {

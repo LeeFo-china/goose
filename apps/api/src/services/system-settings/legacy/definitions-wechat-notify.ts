@@ -38,7 +38,7 @@ export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [
   },
   {
     key: "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN",
-    groupCode: "wechat",
+    groupCode: "payment",
     name: "微信虚拟支付消息令牌",
     description: "仅用于微信小程序虚拟支付消息推送的非空 SHA-1 验签令牌（最长 512 字符），加密存储；不得复用 AppSecret 或虚拟支付 AppKey。",
     valueType: "string",
