@@ -19,7 +19,8 @@ const EntitlementStatusSchema = z.enum([
 ]);
 const NullableTextSchema = z.string().nullable();
 
-const ListRowSchema = z.object({
+const ListDataRowSchema = z.object({
+  count_only: z.literal(false),
   payment_channel: PaymentChannelSchema,
   payment_platform: z.enum(VIRTUAL_PAYMENT_PLATFORMS),
   payment_status: z.enum(VIRTUAL_PAYMENT_STATUSES),
@@ -48,12 +49,26 @@ const ListRowSchema = z.object({
   total_count: z.union([z.number().int().nonnegative(), z.string()]),
 });
 
+const CountOnlyRowSchema = z.object({
+  count_only: z.literal(true),
+  id: z.null(),
+  total_count: z.union([z.number().int().nonnegative(), z.string()]),
+});
+
+const RawListRowSchema = z.discriminatedUnion("count_only", [
+  ListDataRowSchema,
+  CountOnlyRowSchema,
+]);
+
 export type BrandingEntitlementOrderListRecord = Omit<
-  z.infer<typeof ListRowSchema>,
-  "total_count"
+  z.infer<typeof ListDataRowSchema>,
+  "count_only" | "total_count"
 >;
 
-const DetailOrderSchema = ListRowSchema.omit({ total_count: true }).extend({
+const DetailOrderSchema = ListDataRowSchema.omit({
+  count_only: true,
+  total_count: true,
+}).extend({
   out_trade_no: z.string(),
   entitlement_code: z.literal("custom_support_branding"),
   purchase_notes: z.string(),
@@ -162,11 +177,26 @@ export class BrandingEntitlementOrderQueryRepository {
       },
     );
     if (error) throw Errors.dbError("查询品牌权益订单列表失败");
-    const parsed = z.array(ListRowSchema).safeParse(data ?? []);
+    const parsed = z.array(RawListRowSchema).min(1).safeParse(data ?? []);
     if (!parsed.success) throw Errors.dbError("查询品牌权益订单列表失败");
-    const total = parseTotal(parsed.data[0]?.total_count);
+    const totals = new Set(parsed.data.map((row) => parseTotal(row.total_count)));
+    const countOnlyRows = parsed.data.filter((row) => row.count_only);
+    if (
+      totals.size !== 1 ||
+      countOnlyRows.length > 1 ||
+      (countOnlyRows.length === 1 && parsed.data.length !== 1)
+    ) throw Errors.dbError("查询品牌权益订单列表失败");
+    const total = totals.values().next().value ?? 0;
     return {
-      list: parsed.data.map(({ total_count: _totalCount, ...row }) => row),
+      list: parsed.data.flatMap((row) => {
+        if (row.count_only) return [];
+        const {
+          count_only: _countOnly,
+          total_count: _totalCount,
+          ...record
+        } = row;
+        return [record];
+      }),
       pagination: {
         page,
         pageSize,

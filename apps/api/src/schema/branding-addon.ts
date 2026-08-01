@@ -129,7 +129,7 @@ export const BrandingEntitlementPaymentChannelSchema = z.enum([
   "wechat_virtual",
 ]);
 
-export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
+const BrandingAddonOrderListQueryBaseSchema = PaginationQuerySchema.extend({
   status: BrandingAddonOrderStatusSchema.optional(),
   payment_channel: BrandingEntitlementPaymentChannelSchema.optional(),
   payment_status: z.enum(VIRTUAL_PAYMENT_STATUSES).optional(),
@@ -143,8 +143,19 @@ export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
     .optional(),
 }).strict();
 
+export const BrandingAddonOrderListQuerySchema =
+  BrandingAddonOrderListQueryBaseSchema.refine(
+    (input) => !input.status ||
+      !input.payment_status ||
+      mapLegacyPaymentStatus(input.status) === input.payment_status,
+    {
+      message: "旧版订单状态与支付状态冲突",
+      path: ["payment_status"],
+    },
+  );
+
 export const PlatformBrandingAddonOrderListQuerySchema =
-  BrandingAddonOrderListQuerySchema.extend({
+  BrandingAddonOrderListQuerySchema.safeExtend({
     tenant_id: z.uuid("租户 ID 格式不正确").optional(),
     created_from: z.iso.datetime("开始时间格式不正确").optional(),
     created_to: z.iso.datetime("结束时间格式不正确").optional(),
@@ -157,6 +168,12 @@ export const PlatformBrandingAddonOrderListQuerySchema =
       path: ["created_from"],
     },
   );
+
+function mapLegacyPaymentStatus(
+  status: z.infer<typeof BrandingAddonOrderStatusSchema>,
+) {
+  return status === "paid" ? "succeeded" : status;
+}
 
 export type BrandingAddonProductPatchInput =
   z.infer<typeof BrandingAddonProductPatchSchema>;

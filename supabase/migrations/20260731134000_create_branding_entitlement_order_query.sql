@@ -63,6 +63,7 @@ RETURNS TABLE (
   entitlement_status text,
   entitlement_source text,
   entitlement_source_id uuid,
+  count_only boolean,
   total_count bigint
 )
 LANGUAGE sql
@@ -168,40 +169,93 @@ AS $$
         OR unified.out_trade_no ILIKE '%' || p_keyword || '%'
         OR unified.transaction_id ILIKE '%' || p_keyword || '%'
       )
+  ),
+  statistics AS (
+    SELECT count(*)::bigint AS total_count
+    FROM filtered
+  ),
+  paged AS (
+    SELECT
+      filtered.*,
+      statistics.total_count
+    FROM filtered
+    CROSS JOIN statistics
+    ORDER BY filtered.created_at DESC, filtered.id DESC
+    OFFSET (
+      GREATEST(COALESCE(p_page, 1), 1)::bigint - 1
+    ) * LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 100)::bigint
+    LIMIT LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 100)
+  ),
+  result_rows AS (
+    SELECT
+      paged.payment_channel,
+      paged.payment_platform,
+      paged.payment_status,
+      paged.fulfillment_status,
+      paged.refund_status,
+      paged.id,
+      paged.tenant_id,
+      paged.order_no,
+      paged.product_code,
+      paged.product_name,
+      paged.amount_fen,
+      paged.term_years,
+      paged.payment_expires_at,
+      paged.paid_at,
+      paged.closed_at,
+      paged.failure_code,
+      paged.created_at,
+      paged.updated_at,
+      paged.tenant_name,
+      paged.tenant_slug,
+      paged.entitlement_starts_at,
+      paged.entitlement_expires_at,
+      paged.entitlement_status,
+      paged.entitlement_source,
+      paged.entitlement_source_id,
+      false AS count_only,
+      paged.total_count
+    FROM paged
+
+    UNION ALL
+
+    SELECT
+      NULL::text AS payment_channel,
+      NULL::text AS payment_platform,
+      NULL::text AS payment_status,
+      NULL::text AS fulfillment_status,
+      NULL::text AS refund_status,
+      NULL::uuid AS id,
+      NULL::uuid AS tenant_id,
+      NULL::text AS order_no,
+      NULL::text AS product_code,
+      NULL::text AS product_name,
+      NULL::integer AS amount_fen,
+      NULL::integer AS term_years,
+      NULL::timestamptz AS payment_expires_at,
+      NULL::timestamptz AS paid_at,
+      NULL::timestamptz AS closed_at,
+      NULL::text AS failure_code,
+      NULL::timestamptz AS created_at,
+      NULL::timestamptz AS updated_at,
+      NULL::text AS tenant_name,
+      NULL::text AS tenant_slug,
+      NULL::timestamptz AS entitlement_starts_at,
+      NULL::timestamptz AS entitlement_expires_at,
+      NULL::text AS entitlement_status,
+      NULL::text AS entitlement_source,
+      NULL::uuid AS entitlement_source_id,
+      true AS count_only,
+      statistics.total_count
+    FROM statistics
+    WHERE NOT EXISTS (SELECT 1 FROM paged)
   )
-  SELECT
-    filtered.payment_channel,
-    filtered.payment_platform,
-    filtered.payment_status,
-    filtered.fulfillment_status,
-    filtered.refund_status,
-    filtered.id,
-    filtered.tenant_id,
-    filtered.order_no,
-    filtered.product_code,
-    filtered.product_name,
-    filtered.amount_fen,
-    filtered.term_years,
-    filtered.payment_expires_at,
-    filtered.paid_at,
-    filtered.closed_at,
-    filtered.failure_code,
-    filtered.created_at,
-    filtered.updated_at,
-    filtered.tenant_name,
-    filtered.tenant_slug,
-    filtered.entitlement_starts_at,
-    filtered.entitlement_expires_at,
-    filtered.entitlement_status,
-    filtered.entitlement_source,
-    filtered.entitlement_source_id,
-    count(*) over()::bigint AS total_count
-  FROM filtered
-  ORDER BY filtered.created_at DESC, filtered.id DESC
-  OFFSET (
-    GREATEST(COALESCE(p_page, 1), 1)::bigint - 1
-  ) * LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 100)::bigint
-  LIMIT LEAST(GREATEST(COALESCE(p_page_size, 20), 1), 100);
+  SELECT result_rows.*
+  FROM result_rows
+  ORDER BY
+    result_rows.count_only ASC,
+    result_rows.created_at DESC NULLS LAST,
+    result_rows.id DESC NULLS LAST;
 $$;
 
 REVOKE ALL ON FUNCTION public.branding_list_entitlement_orders(

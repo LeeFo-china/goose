@@ -377,6 +377,34 @@ describe("BrandingAddonOrderListQuerySchema", () => {
       payment_status: "paid",
     })).toThrow();
   });
+
+  test("allows equivalent legacy and unified payment statuses", () => {
+    expect(BrandingAddonOrderListQuerySchema.parse({
+      status: "paid",
+      payment_status: "succeeded",
+    })).toMatchObject({
+      status: "paid",
+      payment_status: "succeeded",
+    });
+    expect(PlatformBrandingAddonOrderListQuerySchema.parse({
+      status: "pending",
+      payment_status: "pending",
+    })).toMatchObject({
+      status: "pending",
+      payment_status: "pending",
+    });
+  });
+
+  test("rejects conflicting legacy and unified payment statuses", () => {
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      status: "paid",
+      payment_status: "closed",
+    })).toThrow();
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      status: "failed",
+      payment_status: "pending",
+    })).toThrow();
+  });
 });
 
 describe("PlatformBrandingAddonOrderListQuerySchema", () => {

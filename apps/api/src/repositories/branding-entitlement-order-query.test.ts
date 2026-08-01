@@ -39,6 +39,7 @@ describe("BrandingEntitlementOrderQueryRepository", () => {
         entitlement_source: "purchase",
         entitlement_source_id: ORDER_ID,
         total_count: 1,
+        count_only: false,
         payer_openid: "sensitive-openid",
         metadata: { secret: "must-not-leak" },
       }],
@@ -161,6 +162,68 @@ describe("BrandingEntitlementOrderQueryRepository", () => {
     expect(result?.payment_channel).toBe("legacy_direct");
   });
 
+  test("keeps the total for an out-of-range page and removes its sentinel", async () => {
+    const rpc = mock(async () => ({
+      data: [{
+        count_only: true,
+        id: null,
+        total_count: 37,
+      }],
+      error: null,
+    }));
+    const { BrandingEntitlementOrderQueryRepository } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const repository = new BrandingEntitlementOrderQueryRepository(
+      () => ({ rpc }),
+    );
+
+    const result = await repository.list({
+      tenantId: TENANT_ID,
+      page: 3,
+      pageSize: 20,
+    });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({
+      list: [],
+      pagination: {
+        page: 3,
+        pageSize: 20,
+        total: 37,
+        totalPages: 2,
+      },
+    });
+  });
+
+  test("distinguishes a truly empty result from a missing count", async () => {
+    const rpc = mock(async () => ({
+      data: [{
+        count_only: true,
+        id: null,
+        total_count: 0,
+      }],
+      error: null,
+    }));
+    const { BrandingEntitlementOrderQueryRepository } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const repository = new BrandingEntitlementOrderQueryRepository(
+      () => ({ rpc }),
+    );
+
+    const result = await repository.list({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(result.list).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(result.pagination.totalPages).toBe(0);
+  });
+
   test("sanitizes unknown database diagnostics", async () => {
     const rpc = mock(async () => ({
       data: null,
@@ -198,7 +261,12 @@ describe("branding entitlement order query migration contract", () => {
     expect(migration).toContain("branding_list_entitlement_orders");
     expect(migration).toContain("branding_get_entitlement_order_detail");
     expect(migration).toContain("UNION ALL");
-    expect(migration).toMatch(/count\(\*\) over\(\)::bigint AS total_count/i);
+    expect(migration).toMatch(
+      /statistics AS \(\s*SELECT count\(\*\)::bigint AS total_count\s+FROM filtered/i,
+    );
+    expect(migration).toContain("count_only boolean");
+    expect(migration).toMatch(/NULL::uuid AS id[\s\S]*true AS count_only/i);
+    expect(migration).toMatch(/NOT EXISTS \(SELECT 1 FROM paged\)/i);
     expect(migration).toMatch(
       /WHERE \(p_tenant_id IS NULL OR unified\.tenant_id = p_tenant_id\)/i,
     );

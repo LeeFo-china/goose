@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { readFileSync } from "node:fs";
 
 import type { PlatformBrandingAddonOrderListQuery } from "@/schema/branding-addon";
 import type { AuthContext } from "@/services/authorization";
@@ -63,54 +64,28 @@ function createFixture() {
   };
   const listPlatform = mock(async () => listResult);
   const getPlatform = mock(async () => detailResult);
-  const assertPermission = mock((authContext: AuthContext, code: string) => {
-    if (!authContext.permissions.some((permission) => permission.code === code)) {
-      throw Object.assign(new Error("forbidden"), {
-        statusCode: 403,
-        code: "FORBIDDEN",
-      });
-    }
-    return "all" as const;
-  });
   return {
     service: new PlatformBrandingAddonOrdersService({
       queryService: { listPlatform, getPlatform },
-      accessPolicy: { assertPermission },
     }),
     listPlatform,
     getPlatform,
-    assertPermission,
     listResult,
     detailResult,
   };
 }
 
-describe("PlatformBrandingAddonOrdersService access", () => {
-  test.each([
-    ["non-platform identity", { ...platformAuth, isPlatformAdmin: false }],
-    ["tenant-scoped platform flag", { ...platformAuth, tenantId: TENANT_ID }],
-    ["missing employee", { ...platformAuth, employeeId: null }],
-    ["inactive employee", { ...platformAuth, employeeStatus: "inactive" }],
-    ["missing auth user", { ...platformAuth, authUserId: "" }],
-    ["missing permission", { ...platformAuth, permissions: [] }],
-  ] satisfies Array<[string, AuthContext]>)(
-    "rejects %s before querying unified orders",
-    async (_name, authContext) => {
-      const fixture = createFixture();
-
-      await expect(fixture.service.list(authContext, {
-        page: 1,
-        pageSize: 20,
-      })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
-      await expect(fixture.service.get(authContext, ORDER_ID)).rejects
-        .toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
-      expect(fixture.listPlatform).not.toHaveBeenCalled();
-      expect(fixture.getPlatform).not.toHaveBeenCalled();
-    },
-  );
-});
-
 describe("PlatformBrandingAddonOrdersService unified query delegation", () => {
+  test("keeps authorization exclusively in the unified query service", () => {
+    const source = readFileSync(
+      new URL("./platform-branding-addon-orders.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toContain("requirePlatformReader");
+    expect(source).not.toContain("assertPermission");
+  });
+
   test("keeps the existing list method and delegates all filters unchanged", async () => {
     const fixture = createFixture();
     const query = {
@@ -131,10 +106,6 @@ describe("PlatformBrandingAddonOrdersService unified query delegation", () => {
       .toEqual(fixture.listResult);
     expect(fixture.listPlatform).toHaveBeenCalledTimes(1);
     expect(fixture.listPlatform).toHaveBeenCalledWith(platformAuth, query);
-    expect(fixture.assertPermission).toHaveBeenCalledWith(
-      platformAuth,
-      "platform.branding_order.read",
-    );
   });
 
   test("keeps the existing detail method and unified audit result", async () => {

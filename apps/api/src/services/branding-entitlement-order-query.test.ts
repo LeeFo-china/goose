@@ -85,47 +85,62 @@ const virtualRow: BrandingEntitlementOrderListRecord = {
   order_no: "BVO-20260731-1",
 };
 
-function createFixture() {
+const virtualDetail = {
+  payment_channel: "wechat_virtual" as const,
+  order: {
+    ...virtualRow,
+    out_trade_no: "BV202607310001",
+    entitlement_code: "custom_support_branding" as const,
+    purchase_notes: "支付成功后自动开通一年",
+    refund_policy: "按数字权益规则处理",
+    paid_amount_fen: 100,
+    failure_message: null,
+    entitlement_event_id: "66666666-6666-4666-8666-666666666666",
+    created_by: EMPLOYEE_ID,
+    environment: "production" as const,
+    settlement_channel: "wechat" as const,
+    provider_order_no: "provider-order",
+    transaction_id: "transaction-id",
+    payer_openid: "sensitive-openid",
+    secret_revision: 7,
+  },
+  entitlement: {
+    starts_at: "2026-07-31T08:01:00.000Z",
+    expires_at: "2027-07-31T08:01:00.000Z",
+    status: "active" as const,
+    source: "purchase" as const,
+    order_no: "BVO-20260731-1",
+  },
+  entitlement_event: null,
+  audit: null,
+  audit_summary: {
+    source: "virtual_order" as const,
+    payment_status: "succeeded" as const,
+    fulfillment_status: "granted" as const,
+    refund_status: "none" as const,
+    failure_code: null,
+    failure_message: null,
+    updated_at: "2026-07-31T08:01:00.000Z",
+  },
+};
+
+function createFixture(options: {
+  detailResult?: BrandingEntitlementOrderDetail | null;
+  detailError?: unknown;
+} = {}) {
   const list = mock(async () => ({
-    list: [legacyRow, virtualRow],
+    list: [
+      { ...legacyRow, payer_openid: "sensitive-legacy-openid" },
+      { ...virtualRow, metadata: { secret: "must-not-leak" } },
+    ],
     pagination: { page: 1, pageSize: 20, total: 2, totalPages: 1 },
   }));
-  const findDetail = mock(async (): Promise<BrandingEntitlementOrderDetail> => ({
-    payment_channel: "wechat_virtual" as const,
-    order: {
-      ...virtualRow,
-      out_trade_no: "BV202607310001",
-      entitlement_code: "custom_support_branding",
-      purchase_notes: "支付成功后自动开通一年",
-      refund_policy: "按数字权益规则处理",
-      paid_amount_fen: 100,
-      failure_message: null,
-      entitlement_event_id: "66666666-6666-4666-8666-666666666666",
-      created_by: EMPLOYEE_ID,
-      environment: "production",
-      settlement_channel: "wechat",
-      provider_order_no: "provider-order",
-      transaction_id: "transaction-id",
-    },
-    entitlement: {
-      starts_at: "2026-07-31T08:01:00.000Z",
-      expires_at: "2027-07-31T08:01:00.000Z",
-      status: "active" as const,
-      source: "purchase" as const,
-      order_no: "BVO-20260731-1",
-    },
-    entitlement_event: null,
-    audit: null,
-    audit_summary: {
-      source: "virtual_order" as const,
-      payment_status: "succeeded" as const,
-      fulfillment_status: "granted" as const,
-      refund_status: "none" as const,
-      failure_code: null,
-      failure_message: null,
-      updated_at: "2026-07-31T08:01:00.000Z",
-    },
-  }));
+  const findDetail = mock(async () => {
+    if (options.detailError) throw options.detailError;
+    return options.detailResult === undefined
+      ? virtualDetail
+      : options.detailResult;
+  });
   const assertTenantContext = mock((auth: AuthContext) => {
     if (!auth.tenantId) throw Object.assign(new Error("forbidden"), { statusCode: 403 });
     return auth.tenantId;
@@ -133,7 +148,15 @@ function createFixture() {
   const hasPermission = mock((auth: AuthContext, permission: string) =>
     auth.permissions.some(({ code }) => code === permission)
   );
-  const assertPermission = mock(() => "all" as const);
+  const assertPermission = mock((auth: AuthContext, permission: string) => {
+    if (!auth.permissions.some(({ code }) => code === permission)) {
+      throw Object.assign(new Error("forbidden"), {
+        statusCode: 403,
+        code: "FORBIDDEN",
+      });
+    }
+    return "all" as const;
+  });
   return { list, findDetail, assertTenantContext, hasPermission, assertPermission };
 }
 
@@ -209,6 +232,168 @@ describe("BrandingEntitlementOrderQueryService", () => {
     });
   });
 
+  test.each([
+    ["non-platform", { ...platformAuth, isPlatformAdmin: false }],
+    ["tenant-scoped", { ...platformAuth, tenantId: TENANT_ID }],
+    ["inactive employee", { ...platformAuth, employeeStatus: "inactive" }],
+    ["missing permission", { ...platformAuth, permissions: [] }],
+  ] satisfies Array<[string, AuthContext]>)(
+    "rejects %s platform access before repository reads",
+    async (_label, authContext) => {
+      const fixture = createFixture();
+      const { BrandingEntitlementOrderQueryService } = await import(
+        "./branding-entitlement-order-query"
+      );
+      const service = new BrandingEntitlementOrderQueryService({
+        repository: { list: fixture.list, findDetail: fixture.findDetail },
+        accessPolicy: fixture,
+      });
+
+      await expect(service.listPlatform(authContext, {
+        page: 1,
+        pageSize: 20,
+      })).rejects.toMatchObject({ statusCode: 403 });
+      expect(fixture.list).not.toHaveBeenCalled();
+    },
+  );
+
+  test("returns the complete safe platform list shape", async () => {
+    const fixture = createFixture();
+    const { BrandingEntitlementOrderQueryService } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const service = new BrandingEntitlementOrderQueryService({
+      repository: { list: fixture.list, findDetail: fixture.findDetail },
+      accessPolicy: fixture,
+    });
+
+    const result = await service.listPlatform(platformAuth, {
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.list[0]).toEqual({
+      id: LEGACY_ID,
+      tenant_id: TENANT_ID,
+      order_no: legacyRow.order_no,
+      product_code: legacyRow.product_code,
+      product_name: legacyRow.product_name,
+      amount_fen: 100,
+      term_years: 1,
+      status: "paid",
+      payment_channel: "legacy_direct",
+      payment_platform: "unknown",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+      payment_expires_at: legacyRow.payment_expires_at,
+      paid_at: legacyRow.paid_at,
+      closed_at: null,
+      failure_code: null,
+      created_at: legacyRow.created_at,
+      updated_at: legacyRow.updated_at,
+      tenant: { id: TENANT_ID, name: "测试租户", slug: "test-tenant" },
+    });
+    expect(JSON.stringify(result)).not.toContain("sensitive-legacy-openid");
+    expect(JSON.stringify(result)).not.toContain("must-not-leak");
+  });
+
+  test("returns the complete safe virtual platform detail shape", async () => {
+    const fixture = createFixture();
+    const { BrandingEntitlementOrderQueryService } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const service = new BrandingEntitlementOrderQueryService({
+      repository: { list: fixture.list, findDetail: fixture.findDetail },
+      accessPolicy: fixture,
+    });
+
+    const result = await service.getPlatform(platformAuth, VIRTUAL_ID);
+
+    expect(result).toMatchObject({
+      order: {
+        id: VIRTUAL_ID,
+        payment_channel: "wechat_virtual",
+        payment_platform: "ios",
+        payment_status: "succeeded",
+        fulfillment_status: "granted",
+        refund_status: "none",
+        out_trade_no: "BV202607310001",
+        environment: "production",
+        settlement_channel: "wechat",
+        provider_order_no: "provider-order",
+        transaction_id: "transaction-id",
+      },
+      audit_summary: {
+        source: "virtual_order",
+        payment_status: "succeeded",
+        fulfillment_status: "granted",
+        refund_status: "none",
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("sensitive-openid");
+    expect(JSON.stringify(result)).not.toContain("secret_revision");
+  });
+
+  test("maps a missing platform detail to the stable 404", async () => {
+    const fixture = createFixture({ detailResult: null });
+    const { BrandingEntitlementOrderQueryService } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const service = new BrandingEntitlementOrderQueryService({
+      repository: { list: fixture.list, findDetail: fixture.findDetail },
+      accessPolicy: fixture,
+    });
+
+    await expect(service.getPlatform(platformAuth, VIRTUAL_ID)).rejects
+      .toMatchObject({
+        statusCode: 404,
+        code: "BRANDING_ADDON_ORDER_NOT_FOUND",
+      });
+  });
+
+  test("sanitizes platform detail repository failures", async () => {
+    const fixture = createFixture({
+      detailError: {
+        message: "select payer_openid, secret_revision",
+        details: "private database layout",
+      },
+    });
+    const { BrandingEntitlementOrderQueryService } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const service = new BrandingEntitlementOrderQueryService({
+      repository: { list: fixture.list, findDetail: fixture.findDetail },
+      accessPolicy: fixture,
+    });
+
+    await expect(service.getPlatform(platformAuth, VIRTUAL_ID)).rejects
+      .toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+        details: undefined,
+      });
+  });
+
+  test("keeps the virtual audit summary in tenant detail responses", async () => {
+    const fixture = createFixture();
+    const { BrandingEntitlementOrderQueryService } = await import(
+      "./branding-entitlement-order-query"
+    );
+    const service = new BrandingEntitlementOrderQueryService({
+      repository: { list: fixture.list, findDetail: fixture.findDetail },
+      accessPolicy: fixture,
+    });
+
+    const result = await service.getTenant(tenantAuth, VIRTUAL_ID);
+
+    expect(result).toMatchObject({
+      order: { id: VIRTUAL_ID, payment_channel: "wechat_virtual" },
+      audit_summary: { source: "virtual_order" },
+      server_time: expect.any(String),
+    });
+  });
+
   test("keeps virtual-only detail fields absent from legacy details", async () => {
     const fixture = createFixture();
     fixture.findDetail.mockImplementation(async () => ({
@@ -253,6 +438,13 @@ describe("BrandingEntitlementOrderQueryService", () => {
     expect(result.order).not.toHaveProperty("environment");
     expect(result.order).not.toHaveProperty("provider_order_no");
     expect(result.audit_summary.source).toBe("legacy_order");
+
+    const tenantResult = await service.getTenant(tenantAuth, LEGACY_ID);
+    expect(tenantResult).toMatchObject({
+      order: { id: LEGACY_ID, payment_channel: "legacy_direct" },
+      audit_summary: { source: "legacy_order" },
+      server_time: expect.any(String),
+    });
   });
 
   test("does not expose repository diagnostics", async () => {

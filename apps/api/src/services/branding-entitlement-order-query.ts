@@ -70,6 +70,7 @@ export class BrandingEntitlementOrderQueryService {
     const now = this.nowFactory();
     return {
       order: serializeTenantOrder(detail.order, now, true),
+      audit_summary: detail.audit_summary,
       server_time: now.toISOString(),
     };
   }
