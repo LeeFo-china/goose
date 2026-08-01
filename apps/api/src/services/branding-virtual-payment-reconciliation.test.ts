@@ -81,7 +81,7 @@ function createQueryResult(
     paidAt: 1_785_546_060,
     providedAt: 0,
     wechatOrderId: "wechat-order-1",
-    channelOrderId: "BV202608010001",
+    channelOrderId: "independent-channel-order-1",
     wechatPayOrderId: "wechat-pay-order-1",
     settledAt: null,
     settlementState: null,
@@ -146,7 +146,7 @@ describe("BrandingVirtualPaymentReconciliationService", () => {
       .toHaveBeenCalledWith({ limit: 100, leaseSeconds: 120 });
   });
 
-  test("routes official paid status through prepare and shared confirmation", async () => {
+  test("accepts an independent channel order id for paid status 2", async () => {
     const { BrandingVirtualPaymentReconciliationService } = await import(
       "./branding-virtual-payment-reconciliation"
     );
@@ -427,5 +427,50 @@ describe("BrandingVirtualPaymentReconciliationService", () => {
         status: "succeeded",
         attemptKey,
       }));
+  });
+
+  test("processes at most twenty claims concurrently within the lease budget", async () => {
+    const { BrandingVirtualPaymentReconciliationService } = await import(
+      "./branding-virtual-payment-reconciliation"
+    );
+    let releaseGate = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    let active = 0;
+    let peak = 0;
+    let started = 0;
+    const claims = Array.from({ length: 25 }, (_, index) => createClaim({
+      id: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
+      out_trade_no: `BV20260801${String(index + 1).padStart(4, "0")}`,
+    }));
+    const dependencies = createHarness(claims);
+    dependencies.gateway.queryOrder.mockImplementation(async (input) => {
+      started += 1;
+      active += 1;
+      peak = Math.max(peak, active);
+      await gate;
+      active -= 1;
+      return createQueryResult({
+        orderId: input.orderId ?? "",
+        status: 6,
+        paidFee: 0,
+        paidAt: 0,
+        wechatOrderId: null,
+        wechatPayOrderId: null,
+      });
+    });
+    const service = new BrandingVirtualPaymentReconciliationService(dependencies);
+
+    const reconciliation = service.reconcile({ batchSize: 100 });
+    for (let index = 0; index < 20; index += 1) await Promise.resolve();
+    const startedBeforeRelease = started;
+    releaseGate();
+    await reconciliation;
+
+    expect(startedBeforeRelease).toBe(20);
+    expect(peak).toBe(20);
+    expect(dependencies.repository.closeUnpaidReconciliation)
+      .toHaveBeenCalledTimes(25);
   });
 });

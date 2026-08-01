@@ -5,6 +5,7 @@ const TOKEN_ENDPOINT = "https://api.weixin.qq.com/cgi-bin/token";
 const MAX_ACCESS_TOKEN_LENGTH = 4_096;
 const DEFAULT_EXPIRES_SECONDS = 7_200;
 const EXPIRY_SAFETY_SECONDS = 300;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 type SettingsPort = Pick<typeof systemSettingsService, "getSecretString">;
 type FetchPort = (
@@ -16,6 +17,7 @@ type Dependencies = {
   settingsService?: SettingsPort;
   fetchImpl?: FetchPort;
   nowFactory?: () => number;
+  requestTimeoutMs?: number;
 };
 
 export interface WechatMiniProgramAccessTokenPort {
@@ -27,6 +29,7 @@ export class WechatMiniProgramAccessTokenProvider
   private readonly settingsService: SettingsPort;
   private readonly fetchImpl: FetchPort;
   private readonly nowFactory: () => number;
+  private readonly requestTimeoutMs: number;
   private cached: { token: string; expiresAt: number } | null = null;
   private pending: Promise<string> | null = null;
 
@@ -34,6 +37,7 @@ export class WechatMiniProgramAccessTokenProvider
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.nowFactory = dependencies.nowFactory ?? Date.now;
+    this.requestTimeoutMs = normalizeTimeout(dependencies.requestTimeoutMs);
   }
 
   async getAccessToken(): Promise<string> {
@@ -68,8 +72,17 @@ export class WechatMiniProgramAccessTokenProvider
 
     let response: Response;
     try {
-      response = await this.fetchImpl(url);
-    } catch {
+      response = await this.fetchImpl(url, {
+        signal: AbortSignal.timeout(this.requestTimeoutMs),
+      });
+    } catch (error) {
+      if (isTimeoutError(error)) {
+        throw Errors.business(
+          504,
+          "获取微信 access_token 请求超时",
+          "WECHAT_MINIPROGRAM_ACCESS_TOKEN_TIMEOUT",
+        );
+      }
       throw Errors.business(
         502,
         "获取微信 access_token 请求失败",
@@ -102,6 +115,19 @@ export class WechatMiniProgramAccessTokenProvider
     };
     return payload.access_token;
   }
+}
+
+function normalizeTimeout(value: number | undefined): number {
+  if (value === undefined) return REQUEST_TIMEOUT_MS;
+  if (!Number.isSafeInteger(value) || value < 1 || value > REQUEST_TIMEOUT_MS) {
+    return REQUEST_TIMEOUT_MS;
+  }
+  return value;
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== "object" || !("name" in error)) return false;
+  return error.name === "TimeoutError" || error.name === "AbortError";
 }
 
 async function parseTokenResponse(response: Response): Promise<{

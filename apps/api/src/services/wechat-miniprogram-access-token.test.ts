@@ -28,7 +28,85 @@ describe("WechatMiniProgramAccessTokenProvider", () => {
     ])).toEqual(["access-token", "access-token"]);
     expect(await provider.getAccessToken()).toBe("access-token");
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.any(URL),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(getSecretString).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(["AbortError", "TimeoutError"])(
+    "wraps %s as a stable timeout error",
+    async (name) => {
+      const { WechatMiniProgramAccessTokenProvider } = await import(
+        "./wechat-miniprogram-access-token"
+      );
+      const failure = Object.assign(new TypeError("private fetch detail"), {
+        name,
+      });
+      const provider = new WechatMiniProgramAccessTokenProvider({
+        settingsService: { getSecretString: mock(async () => "configured") },
+        fetchImpl: mock(async () => Promise.reject(failure)),
+      });
+
+      await expect(provider.getAccessToken()).rejects.toMatchObject({
+        statusCode: 504,
+        code: "WECHAT_MINIPROGRAM_ACCESS_TOKEN_TIMEOUT",
+      });
+    },
+  );
+
+  test("wraps a transport rejection without exposing its message", async () => {
+    const { WechatMiniProgramAccessTokenProvider } = await import(
+      "./wechat-miniprogram-access-token"
+    );
+    const provider = new WechatMiniProgramAccessTokenProvider({
+      settingsService: { getSecretString: mock(async () => "configured") },
+      fetchImpl: mock(async () =>
+        Promise.reject(new TypeError("private network detail"))
+      ),
+    });
+
+    try {
+      await provider.getAccessToken();
+      throw new TypeError("expected rejection");
+    } catch (error) {
+      expect(error).toMatchObject({
+        statusCode: 502,
+        code: "WECHAT_MINIPROGRAM_ACCESS_TOKEN_TRANSPORT_FAILED",
+      });
+      expect(String(error)).not.toContain("private network detail");
+    }
+  });
+
+  test("aborts a half-open token request at the configured test timeout", async () => {
+    const { WechatMiniProgramAccessTokenProvider } = await import(
+      "./wechat-miniprogram-access-token"
+    );
+    const fetchImpl = mock(async (
+      _input: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => new Promise((_resolve, reject) => {
+      const signal = init?.signal;
+      if (!signal) {
+        reject(new TypeError("missing timeout signal"));
+        return;
+      }
+      signal.addEventListener("abort", () => reject(signal.reason), {
+        once: true,
+      });
+    }));
+    const provider = new WechatMiniProgramAccessTokenProvider({
+      settingsService: { getSecretString: mock(async () => "configured") },
+      fetchImpl,
+      requestTimeoutMs: 1,
+    });
+
+    await expect(provider.getAccessToken()).rejects.toMatchObject({
+      statusCode: 504,
+      code: "WECHAT_MINIPROGRAM_ACCESS_TOKEN_TIMEOUT",
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   test("returns a bounded stable error without provider text", async () => {

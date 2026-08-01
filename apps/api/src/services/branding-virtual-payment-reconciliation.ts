@@ -39,6 +39,9 @@ import { WechatVirtualPaymentGateway } from "@/services/wechat-virtual-payment-g
 import type { WechatVirtualPaymentGatewayPort } from "@/services/wechat-virtual-payment-gateway-contracts";
 
 const CLAIM_LEASE_SECONDS = 120;
+// One status-2 item may spend 8s querying and 8s notifying delivery. Twenty
+// workers keep a 100-row batch near 80s, leaving lease headroom for token/DB IO.
+const CLAIM_CONCURRENCY = 20;
 
 type RepositoryPort = Pick<
   typeof brandingVirtualOrderRepository,
@@ -123,7 +126,7 @@ export class BrandingVirtualPaymentReconciliationService {
     const telemetry = createTelemetry(claims.length);
     const resources = this.createBatchResources();
 
-    for (const claim of claims) {
+    await runWithConcurrency(claims, CLAIM_CONCURRENCY, async (claim) => {
       const context: ProcessContext = { officialStatus: null };
       try {
         await this.processClaim(claim, telemetry, resources, context);
@@ -131,7 +134,7 @@ export class BrandingVirtualPaymentReconciliationService {
         telemetry.failed += 1;
         await this.rescheduleBestEffort(claim, context.officialStatus, error);
       }
-    }
+    });
     return telemetry;
   }
 
@@ -373,6 +376,22 @@ export class BrandingVirtualPaymentReconciliationService {
 function createTelemetry(claimed: number): BrandingVirtualReconciliationTelemetry {
   return { claimed, queried: 0, confirmed: 0, closed: 0, failed: 0,
     grantRecovered: 0 };
+}
+
+async function runWithConcurrency<T>(
+  items: readonly T[],
+  concurrency: number,
+  processItem: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < items.length) {
+      const item = items[nextIndex];
+      nextIndex += 1;
+      if (item !== undefined) await processItem(item);
+    }
+  }));
 }
 
 export const brandingVirtualPaymentReconciliationService =

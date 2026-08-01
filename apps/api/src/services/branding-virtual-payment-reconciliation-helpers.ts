@@ -100,8 +100,6 @@ export function assertQueryBinding(
   if (
     result.environment !== claim.environment ||
     result.orderId !== claim.out_trade_no ||
-    (result.channelOrderId !== null &&
-      result.channelOrderId !== claim.out_trade_no) ||
     result.orderFee !== claim.amount_fen ||
     (result.status >= 2 && result.status <= 4 && (
       result.paidFee !== claim.amount_fen ||
