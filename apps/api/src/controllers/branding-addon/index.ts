@@ -10,6 +10,9 @@ import {
   BrandingVirtualProductEnvironmentParamsSchema,
   BrandingVirtualProductValidationSchema,
   BrandingVirtualCreateOrderSchema,
+  BrandingVirtualRefundCreateSchema,
+  BrandingVirtualRefundListQuerySchema,
+  BrandingVirtualRefundParamsSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "@/schema/branding-addon";
 import {
@@ -27,6 +30,7 @@ import {
 import {
   tenantBrandingVirtualOrderService,
 } from "@/services/tenant-branding-virtual-orders";
+import { brandingVirtualRefundService } from "@/services/branding-virtual-refunds";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -114,6 +118,40 @@ class PlatformBrandingAddonController extends PlatformBaseController {
     parse(BrandingAddonEmptySchema, request.query);
     return ResponseHandler.success(
       await platformBrandingAddonOrdersService.get(authContext, id),
+    );
+  }
+
+  @Post("/platform/branding/virtual-payment/refunds")
+  async createVirtualRefund(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const input = parse(BrandingVirtualRefundCreateSchema, request.body);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.create(authContext, input),
+    );
+  }
+
+  @Get("/platform/branding/virtual-payment/refunds")
+  async listVirtualRefunds(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const query = parse(BrandingVirtualRefundListQuerySchema, request.query);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.list(authContext, {
+        page: query.page,
+        pageSize: query.pageSize,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.tenant_id ? { tenantId: query.tenant_id } : {}),
+      }),
+    );
+  }
+
+  @Get("/platform/branding/virtual-payment/refunds/:id")
+  async getVirtualRefund(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const { id } = parse(BrandingVirtualRefundParamsSchema, request.params);
+    parse(BrandingAddonEmptySchema, request.query);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.get(authContext, id),
     );
   }
 }

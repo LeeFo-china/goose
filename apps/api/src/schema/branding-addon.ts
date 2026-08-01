@@ -120,6 +120,25 @@ export const BrandingAddonOrderParamsSchema = z.object({
   id: z.uuid("订单 ID 格式不正确"),
 }).strict();
 
+export const BrandingVirtualRefundCreateSchema = z.object({
+  order_id: z.uuid("订单 ID 格式不正确"),
+  idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
+  reason: z.string().trim().min(1, "退款原因不能为空").max(500),
+  evidence_summary: z.string().trim().max(1_000).default(""),
+}).strict();
+
+export const BrandingVirtualRefundParamsSchema = z.object({
+  id: z.uuid("退款 ID 格式不正确"),
+}).strict();
+
+export const BrandingVirtualRefundListQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum([
+    "reviewing", "submitted", "external_required", "succeeded", "failed",
+    "rejected",
+  ]).optional(),
+  tenant_id: z.uuid("租户 ID 格式不正确").optional(),
+}).strict();
+
 export const BrandingAddonOrderStatusSchema = z.enum(
   BRANDING_ADDON_ORDER_STATUSES,
 );
@@ -189,3 +208,7 @@ export type BrandingAddonOrderListQuery =
   z.infer<typeof BrandingAddonOrderListQuerySchema>;
 export type PlatformBrandingAddonOrderListQuery =
   z.infer<typeof PlatformBrandingAddonOrderListQuerySchema>;
+export type BrandingVirtualRefundCreateInput =
+  z.infer<typeof BrandingVirtualRefundCreateSchema>;
+export type BrandingVirtualRefundListQuery =
+  z.infer<typeof BrandingVirtualRefundListQuerySchema>;
