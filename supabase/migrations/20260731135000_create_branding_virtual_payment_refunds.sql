@@ -96,6 +96,7 @@ CREATE TABLE public.tenant_virtual_addon_refunds (
   compensation_entitlement_event_id uuid NULL UNIQUE
     REFERENCES public.tenant_entitlement_events(id) ON DELETE RESTRICT,
   provider_refund_started_at timestamptz NULL,
+  provider_refund_succeeded_at timestamptz NULL,
   submitted_at timestamptz NULL,
   succeeded_at timestamptz NULL,
   failed_at timestamptz NULL,
@@ -151,6 +152,13 @@ CREATE TABLE public.tenant_virtual_addon_refunds (
     OR (status = 'failed' AND failed_at IS NOT NULL)
     OR (status = 'rejected' AND rejected_at IS NOT NULL)
     OR status IN ('reviewing', 'submitted', 'external_required')
+  ),
+  CONSTRAINT tenant_virtual_addon_refunds_provider_time_check CHECK (
+    provider_refund_succeeded_at IS NULL OR (
+      status = 'succeeded'
+      AND provider_refund_started_at IS NOT NULL
+      AND provider_refund_succeeded_at >= provider_refund_started_at
+    )
   ),
   CONSTRAINT tenant_virtual_addon_refunds_compensation_check CHECK (
     (

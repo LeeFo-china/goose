@@ -71,6 +71,14 @@ export type BrandingVirtualReconciliationTelemetry = {
   closed: number;
   failed: number;
   grantRecovered: number;
+  refundClaimed?: number;
+  refundQueried?: number;
+  refundSucceeded?: number;
+  refundFailed?: number;
+  refundCompensated?: number;
+  refundPending?: number;
+  refundRescheduled?: number;
+  refundTerminalFailed?: number;
 };
 
 type Dependencies = {

@@ -324,6 +324,7 @@ function isSuccessfulBillingReconcileTick(
     results.brandingAddonExpiration.result.failed === 0 &&
     results.brandingAddonExpiration.result.release_failed === 0 &&
     results.brandingVirtualPayment.result.failed === 0 &&
+    (results.brandingVirtualPayment.result.refund_failed ?? 0) === 0 &&
     results.refund.result.failed === 0;
 }
 
@@ -397,6 +398,16 @@ function summarizeBrandingVirtualPaymentResult(
     closed: result.closed,
     failed: result.failed,
     grant_recovered: result.grantRecovered,
+    ...(result.refundClaimed === undefined ? {} : {
+      refund_claimed: result.refundClaimed,
+      refund_queried: result.refundQueried ?? 0,
+      refund_succeeded: result.refundSucceeded ?? 0,
+      refund_failed: result.refundFailed ?? 0,
+      refund_compensated: result.refundCompensated ?? 0,
+      refund_pending: result.refundPending ?? 0,
+      refund_rescheduled: result.refundRescheduled ?? 0,
+      refund_terminal_failed: result.refundTerminalFailed ?? 0,
+    }),
   };
 }
 
@@ -415,10 +426,23 @@ async function loadDefaultBrandingAddonExpirationService() {
 }
 
 async function loadDefaultBrandingVirtualPaymentReconciliationService() {
-  const { brandingVirtualPaymentReconciliationService } = await import(
-    "@/services/branding-virtual-payment-reconciliation"
-  );
-  return brandingVirtualPaymentReconciliationService;
+  const [paymentModule, refundModule] = await Promise.all([
+    import("@/services/branding-virtual-payment-reconciliation"),
+    import("@/services/branding-virtual-refund-reconciliation"),
+  ]);
+  return {
+    reconcile: async (input: { batchSize: number }) => {
+      const [payment, refund] = await Promise.all([
+        paymentModule.brandingVirtualPaymentReconciliationService.reconcile(input),
+        refundModule.brandingVirtualRefundReconciliationService.reconcile(input),
+      ]);
+      return {
+        ...payment,
+        ...refund,
+        failed: payment.failed + refund.refundFailed,
+      };
+    },
+  };
 }
 
 function registerShutdownSignalHandlers(): void {

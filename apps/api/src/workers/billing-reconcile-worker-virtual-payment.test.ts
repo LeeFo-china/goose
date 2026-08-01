@@ -86,6 +86,11 @@ describe("billing reconcile worker virtual payment child", () => {
     const brandingVirtualPaymentReconciliationService = {
       reconcile: mock(async () => ({
         ...VIRTUAL_PAYMENT_RESULT,
+        refundClaimed: 3,
+        refundQueried: 2,
+        refundSucceeded: 1,
+        refundFailed: 0,
+        refundCompensated: 1,
         raw_secret: "distinctive virtual payment secret",
       })),
     };
@@ -115,6 +120,14 @@ describe("billing reconcile worker virtual payment child", () => {
               closed: 1,
               failed: 0,
               grant_recovered: 2,
+              refund_claimed: 3,
+              refund_queried: 2,
+              refund_succeeded: 1,
+              refund_failed: 0,
+              refund_compensated: 1,
+              refund_pending: 0,
+              refund_rescheduled: 0,
+              refund_terminal_failed: 0,
             },
           },
         }),
@@ -166,7 +179,8 @@ describe("billing reconcile worker virtual payment child", () => {
       brandingVirtualPaymentReconciliationService: {
         reconcile: mock(async () => ({
           ...VIRTUAL_PAYMENT_RESULT,
-          failed: 1,
+          refundClaimed: 1,
+          refundFailed: 1,
         })),
       },
       healthEvidence: { markHealthy },
@@ -181,7 +195,7 @@ describe("billing reconcile worker virtual payment child", () => {
         result: expect.objectContaining({
           branding_virtual_payment: {
             status: "fulfilled",
-            result: expect.objectContaining({ failed: 1 }),
+            result: expect.objectContaining({ failed: 0, refund_failed: 1 }),
           },
         }),
       }),

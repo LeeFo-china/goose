@@ -38,6 +38,7 @@ const RefundRecordSchema = z.object({
   purchase_entitlement_event_id: z.uuid(),
   compensation_entitlement_event_id: z.uuid().nullable(),
   provider_refund_started_at: nullableDateTime.optional().default(null),
+  provider_refund_succeeded_at: nullableDateTime.optional().default(null),
   submitted_at: nullableDateTime,
   succeeded_at: nullableDateTime,
   failed_at: nullableDateTime,

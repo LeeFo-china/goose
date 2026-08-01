@@ -188,6 +188,7 @@ function createHarness(
     purchase_entitlement_event_id: context.entitlement_event_id,
     compensation_entitlement_event_id: null,
     provider_refund_started_at: null,
+    provider_refund_succeeded_at: null,
     submitted_at: existingStatus ? "2026-08-01T00:01:00.000Z" : null,
     succeeded_at: null,
     failed_at: null,

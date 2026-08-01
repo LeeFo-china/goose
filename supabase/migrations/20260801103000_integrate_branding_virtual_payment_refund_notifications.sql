@@ -150,6 +150,7 @@ BEGIN
       platform_mode, status, provider_refund_no, provider_refund_id,
       provider_refund_transaction_id, apple_receipt_hash,
       purchase_entitlement_event_id, provider_refund_started_at,
+      provider_refund_succeeded_at,
       succeeded_at, failed_at, last_error_code, last_error_summary
     ) VALUES (
       'BVR' || to_char(clock_timestamp(), 'YYYYMMDDHH24MISSMS') ||
@@ -160,7 +161,7 @@ BEGIN
       p_local_refund_no,
       p_provider_refund_id, p_provider_refund_transaction_id,
       NULL,
-      v_order.entitlement_event_id, p_refund_started_at,
+      v_order.entitlement_event_id, p_refund_started_at, p_refund_succeeded_at,
       CASE WHEN p_successful THEN p_refund_succeeded_at END,
       CASE WHEN NOT p_successful THEN now() END,
       CASE WHEN NOT p_successful THEN 'WECHAT_VIRTUAL_REFUND_FAILED' END,
@@ -186,6 +187,10 @@ BEGIN
           AND v_refund.provider_refund_id <> p_provider_refund_id)
       OR (v_refund.provider_refund_transaction_id IS NOT NULL
           AND v_refund.provider_refund_transaction_id <> p_provider_refund_transaction_id)
+      OR (v_refund.provider_refund_started_at IS NOT NULL
+          AND v_refund.provider_refund_started_at <> p_refund_started_at)
+      OR (v_refund.provider_refund_succeeded_at IS NOT NULL
+          AND v_refund.provider_refund_succeeded_at IS DISTINCT FROM p_refund_succeeded_at)
       OR EXISTS (
         SELECT 1 FROM public.tenant_virtual_addon_refunds AS conflicting
         WHERE conflicting.id <> v_refund.id AND (
@@ -203,11 +208,57 @@ BEGIN
         RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_FACT_CONFLICT' USING ERRCODE = 'P0001';
       END IF;
       -- Same successful fact is terminal and does not increment version.
+      IF v_refund.provider_refund_no IS NULL
+        OR v_refund.provider_refund_id IS NULL
+        OR v_refund.provider_refund_id = v_refund.refund_no
+        OR v_refund.provider_refund_transaction_id IS NULL
+        OR v_refund.provider_refund_started_at IS NULL
+        OR v_refund.provider_refund_succeeded_at IS NULL
+      THEN
+        UPDATE public.tenant_virtual_addon_refunds
+        SET provider_refund_no = coalesce(provider_refund_no, p_local_refund_no),
+            provider_refund_id = CASE
+              WHEN provider_refund_id IS NULL OR provider_refund_id = refund_no
+                THEN p_provider_refund_id ELSE provider_refund_id END,
+            provider_refund_transaction_id = coalesce(
+              provider_refund_transaction_id, p_provider_refund_transaction_id
+            ),
+            provider_refund_started_at = coalesce(
+              provider_refund_started_at, p_refund_started_at
+            ),
+            provider_refund_succeeded_at = coalesce(
+              provider_refund_succeeded_at, p_refund_succeeded_at
+            ),
+            succeeded_at = p_refund_succeeded_at,
+            version = version + 1
+        WHERE id = v_refund.id RETURNING * INTO v_refund;
+      END IF;
     ELSIF v_refund.status = 'failed' THEN
       IF p_successful THEN
         RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_FACT_CONFLICT' USING ERRCODE = 'P0001';
       END IF;
       -- Same failed fact is terminal and does not increment version.
+      IF v_refund.provider_refund_no IS NULL
+        OR v_refund.provider_refund_id IS NULL
+        OR v_refund.provider_refund_id = v_refund.refund_no
+        OR v_refund.provider_refund_transaction_id IS NULL
+        OR v_refund.provider_refund_started_at IS NULL
+      THEN
+        UPDATE public.tenant_virtual_addon_refunds
+        SET provider_refund_no = coalesce(provider_refund_no, p_local_refund_no),
+            provider_refund_id = CASE
+              WHEN provider_refund_id IS NULL OR provider_refund_id = refund_no
+                THEN p_provider_refund_id ELSE provider_refund_id END,
+            provider_refund_transaction_id = coalesce(
+              provider_refund_transaction_id, p_provider_refund_transaction_id
+            ),
+            provider_refund_started_at = coalesce(
+              provider_refund_started_at, p_refund_started_at
+            ),
+            provider_refund_succeeded_at = NULL,
+            version = version + 1
+        WHERE id = v_refund.id RETURNING * INTO v_refund;
+      END IF;
     ELSIF v_refund.status = 'rejected' THEN
       RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_FACT_CONFLICT' USING ERRCODE = 'P0001';
     ELSE
@@ -234,6 +285,7 @@ BEGIN
         provider_refund_id = p_provider_refund_id,
         provider_refund_transaction_id = p_provider_refund_transaction_id,
         provider_refund_started_at = p_refund_started_at,
+        provider_refund_succeeded_at = p_refund_succeeded_at,
         succeeded_at = CASE WHEN p_successful THEN p_refund_succeeded_at ELSE succeeded_at END,
         failed_at = CASE WHEN NOT p_successful THEN now() ELSE failed_at END,
         last_error_code = CASE WHEN NOT p_successful THEN 'WECHAT_VIRTUAL_REFUND_FAILED' END,

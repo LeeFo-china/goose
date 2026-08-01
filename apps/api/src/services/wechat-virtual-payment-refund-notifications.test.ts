@@ -83,4 +83,30 @@ describe("virtual refund notifications", () => {
     );
     expect(ports.compensate).toHaveBeenCalledTimes(1);
   });
+
+  test("returns retry when compensation fails and recovers idempotently", async () => {
+    const ports = await service();
+    ports.compensate.mockRejectedValueOnce({ code: "DB_ERROR" });
+    const rawBody = JSON.stringify({
+      ToUserName: "gh_original", FromUserName: "official-account",
+      CreateTime: 1_714_037_059, MsgType: "event", Event: "xpay_refund_notify",
+      OpenId: "payer-openid", WxRefundId: "wx-refund-1", MchRefundId: "BVR-1",
+      WxOrderId: "wx-order-1", MchOrderId: "BV202608010001", RefundFee: 100,
+      RetCode: 0, RetMsg: "SUCCESS", RefundStartTimestamp: 1_714_037_060,
+      RefundSuccTimestamp: 1_714_037_061,
+      WxpayRefundTransactionId: "wx-refund-transaction-1", RetryTimes: 0,
+    });
+    const first = await ports.instance.handle({ rawBody,
+      contentType: "application/json", query, requestId: "refund-fail" });
+    expect(first).toMatchObject({ kind: "ack",
+      body: { ErrCode: 1, ErrMsg: "retry" }, errorCode: "DB_ERROR" });
+    expect(ports.processProviderNotification).toHaveBeenCalledTimes(1);
+    expect(ports.compensate).toHaveBeenCalledTimes(1);
+
+    const retried = await ports.instance.handle({ rawBody,
+      contentType: "application/json", query, requestId: "refund-retry" });
+    expect(retried.body).toEqual({ ErrCode: 0, ErrMsg: "success" });
+    expect(ports.processProviderNotification).toHaveBeenCalledTimes(2);
+    expect(ports.compensate).toHaveBeenCalledTimes(2);
+  });
 });

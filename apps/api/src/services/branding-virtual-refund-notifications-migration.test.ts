@@ -27,6 +27,11 @@ describe("virtual refund notification migrations", () => {
     expect(migration).toContain("p_successful <> (p_refund_succeeded_at IS NOT NULL)");
     expect(migration).toContain("provider_refund_no = p_local_refund_no");
     expect(refundMigration).toContain("provider_refund_no = refund_no");
+    expect(migration).toContain("provider_refund_succeeded_at = coalesce");
+    expect(migration).toContain("succeeded_at = p_refund_succeeded_at");
+    expect(migration).toContain(
+      "v_refund.provider_refund_started_at <> p_refund_started_at",
+    );
     expect(migration).not.toContain(
       "apple_receipt_hash,\n      encode(public.digest(p_provider_refund_id",
     );
