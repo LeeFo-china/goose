@@ -1,3 +1,7 @@
+import {
+  BRANDING_PURCHASE_MODES,
+  VIRTUAL_PAYMENT_ENVIRONMENTS,
+} from "@gooes/domain";
 import { z } from "zod";
 
 import { MAX_POSTGRES_INTEGER_FEN } from "../services/branding-addon-contracts";
@@ -80,17 +84,17 @@ export type UpdatePlatformWechatPaySecretBundleInput =
 
 const positiveInteger = (label: string) => z.number()
   .int(`${label}必须是整数`)
-  .positive(`${label}必须大于 0`);
+  .positive(`${label}必须大于 0`)
+  .max(MAX_POSTGRES_INTEGER_FEN, `${label}超出支持范围`);
 
 const requiredTrimmedText = (max: number, label: string) => z.string()
   .trim()
   .min(1, `${label}不能为空`)
   .max(max, `${label}不能超过 ${max} 个字符`);
 
-export const PlatformWechatVirtualEnvironmentSchema = z.enum([
-  "sandbox",
-  "production",
-]);
+export const PlatformWechatVirtualEnvironmentSchema = z.enum(
+  VIRTUAL_PAYMENT_ENVIRONMENTS,
+);
 
 export const PlatformWechatVirtualProductPatchSchema = z.object({
   environment: PlatformWechatVirtualEnvironmentSchema,
@@ -109,11 +113,7 @@ export const PlatformWechatVirtualProductPatchSchema = z.object({
 
 export const UpdatePlatformWechatVirtualSettingsSchema = z.object({
   version: positiveInteger("版本号"),
-  purchase_mode: z.enum([
-    "direct_legacy",
-    "maintenance",
-    "wechat_virtual",
-  ]).optional(),
+  purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
   virtual_product: PlatformWechatVirtualProductPatchSchema.optional(),
 }).strict().refine(
   (input) => input.purchase_mode !== undefined ||

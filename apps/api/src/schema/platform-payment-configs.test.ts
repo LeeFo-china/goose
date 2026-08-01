@@ -10,6 +10,7 @@ import {
   UpdatePlatformWechatVirtualSecretBundleSchema,
   UpdatePlatformWechatVirtualSettingsSchema,
 } from "./platform-payment-configs";
+import { MAX_POSTGRES_INTEGER_FEN } from "../services/branding-addon-contracts";
 
 const validVirtualProduct = {
   environment: "sandbox",
@@ -143,17 +144,87 @@ describe("PlatformWechatVirtualProductPatchSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  test.each([
-    ["unsafe integer", Number.MAX_SAFE_INTEGER + 1],
-    ["PostgreSQL integer overflow", 2_147_483_648],
-  ])("rejects %s as expected amount", (_label, expectedAmountFen) => {
+  test("rejects an unsafe integer as expected amount", () => {
     const result = PlatformWechatVirtualProductPatchSchema.safeParse({
       ...validVirtualProduct,
-      expected_amount_fen: expectedAmountFen,
+      expected_amount_fen: Number.MAX_SAFE_INTEGER + 1,
     });
 
     expect(result.success).toBe(false);
   });
+
+  test("accepts the maximum amount and reports PostgreSQL integer overflow", () => {
+    expect(PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      expected_amount_fen: MAX_POSTGRES_INTEGER_FEN,
+    }).success).toBe(true);
+
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      expected_amount_fen: MAX_POSTGRES_INTEGER_FEN + 1,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(expect.objectContaining({
+        message: "金额超出支持范围",
+        path: ["expected_amount_fen"],
+      }));
+    }
+  });
+
+  test.each([
+    {
+      label: "mapping secret revision",
+      parse: (value: number) => PlatformWechatVirtualProductPatchSchema
+        .safeParse({ ...validVirtualProduct, secret_revision: value }),
+      message: "密钥版本号超出支持范围",
+      path: ["secret_revision"],
+    },
+    {
+      label: "mapping version",
+      parse: (value: number) => PlatformWechatVirtualProductPatchSchema
+        .safeParse({ ...validVirtualProduct, version: value }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "top-level update version",
+      parse: (value: number) => UpdatePlatformWechatVirtualSettingsSchema
+        .safeParse({ version: value, purchase_mode: "maintenance" }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "validation version",
+      parse: (value: number) => PlatformWechatVirtualProductValidationSchema
+        .safeParse({ version: value }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "secret-bundle revision",
+      parse: (value: number) => UpdatePlatformWechatVirtualSecretBundleSchema
+        .safeParse({ app_key: "app-secret", revision: value }),
+      message: "密钥版本号超出支持范围",
+      path: ["revision"],
+    },
+  ])(
+    "accepts the PostgreSQL integer maximum and rejects overflow for $label",
+    ({ parse, message, path }) => {
+      expect(parse(MAX_POSTGRES_INTEGER_FEN).success).toBe(true);
+
+      const result = parse(MAX_POSTGRES_INTEGER_FEN + 1);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toContainEqual(expect.objectContaining({
+          message,
+          path,
+        }));
+      }
+    },
+  );
 
   test.each([
     ["secret_revision", { secret_revision: 0 }],
