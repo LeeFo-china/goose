@@ -160,6 +160,8 @@
 - GET 响应只返回 `configured`、`source`、`revision` 等元数据。
 - 日志、错误响应、审计详情和浏览器状态不得包含 AppKey、消息令牌或解密后的 secret bundle。
 - 写入采用独立请求，商品或环境映射更新不得携带密钥。
+- 支付密钥写入与 `system_setting_change_logs` 必须在同一数据库事务内完成；日志失败时密钥写入和关联触发器副作用一并回滚。
+- 所有敏感系统设置的变更日志只记录设置键、操作者和时间，不保存明文、密文或可解密的历史载荷。
 
 ## 8. 状态、校验与切换
 
@@ -184,7 +186,9 @@
 - `platform.payment.config.manage`
 - `branding_manage_virtual_product_configuration(...)`
 
-`WECHAT_VIRTUAL_MESSAGE_TOKEN` 已有代码定义和数据库保护触发器，本次只调整其配置分组并加入支付专用安全写入白名单，不创建重复定义或数据库 migration。只有实际新增数据库字典数据、权限、约束、索引、函数或策略时才新增前向 migration，并在应用后核对 Local/Remote migration 对齐。禁止修改已经应用的 migration。
+`WECHAT_VIRTUAL_MESSAGE_TOKEN` 已有代码定义和数据库保护触发器，本次只调整其配置分组并加入支付专用安全写入白名单，不创建重复定义。审查确认现有系统设置写入与变更日志不是原子操作，且敏感设置日志会保存密文，因此新增一个前向 migration：提供仅 `service_role` 可执行的平台支付密钥原子写入 RPC，并让敏感设置变更日志的旧值/新值保持 `NULL`。应用后必须核对 Local/Remote migration 对齐，禁止修改已经应用的 migration。
+
+回滚采用前向修复：若新 RPC 需要停用，先发布暂停密钥写入的 API，再通过后续 migration 撤销函数授权或函数本身；不得回退到“先写密钥、后写日志”的非原子路径，也不得恢复密文历史日志。
 
 ## 10. 兼容与发布策略
 

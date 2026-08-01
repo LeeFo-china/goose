@@ -31,6 +31,9 @@
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts` — 将既有 `WECHAT_VIRTUAL_MESSAGE_TOKEN` 归入支付配置分组，不创建重复定义。
 - Modify: `apps/api/src/services/system-settings/legacy/definitions.ts` — 将消息令牌加入支付专用安全写入白名单。
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts` — 验证消息令牌定义、平台作用域和敏感属性。
+- Create: `supabase/migrations/20260801105000_atomic_platform_payment_secret_settings.sql` — 原子写入支付密钥并写入脱敏变更日志，仅授权 `service_role`。
+- Modify: `apps/api/src/repositories/system-settings.ts` — 支付密钥使用原子 RPC；所有 secret 的通用变更日志不保存值。
+- Modify: `apps/api/src/repositories/system-settings.test.ts` — 密钥日志脱敏、RPC 错误映射与事务入口契约。
 
 ### Admin
 
@@ -216,6 +219,9 @@ git commit -m "feat(payments): 新增虚拟支付配置服务"
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts`
 - Modify: `apps/api/src/services/platform-branding-virtual-payment-settings.ts`
 - Modify: `apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
+- Create: `supabase/migrations/20260801105000_atomic_platform_payment_secret_settings.sql`
+- Modify: `apps/api/src/repositories/system-settings.ts`
+- Modify: `apps/api/src/repositories/system-settings.test.ts`
 
 - [ ] **Step 1: 写失败的密钥安全测试**
 
@@ -255,16 +261,18 @@ const VIRTUAL_SECRET_KEYS = {
 
 消息令牌固定使用 `WECHAT_VIRTUAL_MESSAGE_TOKEN`。小程序原始 ID 继续归属微信配置，只在虚拟支付就绪信息中返回合法性状态和微信配置修复入口。审计只记录设置键、环境、修订号和 configured，不记录值。
 
+新增 `upsert_platform_payment_secret_setting(...)` 安全函数，在单个事务内 upsert 平台级敏感设置并插入 `system_setting_change_logs`。函数只接受服务端白名单支付密钥，强制 `tenant_id IS NULL`、`is_secret=true`，日志的 `old_value_text/new_value_text` 固定为 `NULL`，仅授权 `service_role`。repository 的支付密钥专用方法只调用该 RPC；通用 `updateValue/createValue` 遇到 secret 记录时同样不得把值写入日志。
+
 - [ ] **Step 4: 运行测试**
 
-Run: `bun test apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/system-settings/legacy/crypto.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
+Run: `bun test apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/system-settings/legacy/crypto.test.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
 
 Expected: PASS。
 
 - [ ] **Step 5: 提交**
 
 ```bash
-git add apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts apps/api/src/services/system-settings/legacy/definitions.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts
+git add supabase/migrations/20260801105000_atomic_platform_payment_secret_settings.sql apps/api/src/repositories/system-settings.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts apps/api/src/services/system-settings/legacy/definitions.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts
 git commit -m "feat(payments): 管理虚拟支付密钥与消息令牌"
 ```
 
@@ -504,11 +512,11 @@ git diff --check
 
 Expected: 全部退出码为 0，无类型、文件大小、构建或空白错误。
 
-- [ ] **Step 3: 确认无需数据库 migration**
+- [ ] **Step 3: 验证并应用支付密钥原子 migration**
 
-Run: `git diff origin/main...HEAD -- supabase/migrations && supabase migration list`
+Run: `git diff origin/main...HEAD -- supabase/migrations && supabase db push --include-all && supabase migration list`
 
-Expected: 本功能没有新增 migration；Local/Remote 现有 migration 列表保持对齐。若实际实现因数据库约束必须新增 migration，则先补前向 migration、回滚说明并重新执行对齐检查。
+Expected: 只新增 `20260801105000_atomic_platform_payment_secret_settings.sql`；应用成功后 Local/Remote migration 列表对齐。执行前先确认目标 project 来自当前开发环境配置；不得对未确认的生产项目执行。
 
 - [ ] **Step 4: 浏览器验收**
 
