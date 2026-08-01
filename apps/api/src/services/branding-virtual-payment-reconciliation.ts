@@ -180,11 +180,14 @@ export class BrandingVirtualPaymentReconciliationService {
       return;
     }
 
+    const accessToken = await resources.accessToken();
+    const signingSecret = await resources.signingSecret(claim);
+    assertReconciliationLeaseBudget(claim, this.nowFactory());
     const result = await this.gateway.queryOrder({
-      accessToken: await resources.accessToken(),
+      accessToken,
       openid: claim.payer_openid,
       environment: claim.environment,
-      signingSecret: await resources.signingSecret(claim),
+      signingSecret,
       orderId: claim.out_trade_no,
     });
     telemetry.queried += 1;
@@ -234,6 +237,7 @@ export class BrandingVirtualPaymentReconciliationService {
     telemetry: BrandingVirtualReconciliationTelemetry,
     resources: BatchResources,
   ): Promise<void> {
+    assertReconciliationLeaseBudget(claim, this.nowFactory());
     const result = await this.confirmation.confirm({
       source: "reconciliation",
       order: confirmationOrder(claim),
@@ -268,6 +272,7 @@ export class BrandingVirtualPaymentReconciliationService {
     claim: BrandingVirtualPaymentReconciliationClaim,
     telemetry: BrandingVirtualReconciliationTelemetry,
   ): Promise<void> {
+    assertReconciliationLeaseBudget(claim, this.nowFactory());
     const result = await this.confirmation.confirm({
       source: "reconciliation",
       order: confirmationOrder(claim),
@@ -296,12 +301,15 @@ export class BrandingVirtualPaymentReconciliationService {
     telemetry: BrandingVirtualReconciliationTelemetry,
     resources: BatchResources,
   ): Promise<void> {
+    const accessToken = await resources.accessToken();
+    assertReconciliationLeaseBudget(claim, this.nowFactory());
+    const wechatOrderId = requireText(claim.provider_order_no);
     let result: Awaited<ReturnType<GatewayPort["notifyProvideGoods"]>>;
     try {
       result = await this.gateway.notifyProvideGoods({
-        accessToken: await resources.accessToken(),
+        accessToken,
         environment: claim.environment,
-        wechatOrderId: requireText(claim.provider_order_no),
+        wechatOrderId,
       });
     } catch (error) {
       await this.repository.markReconciliationDelivery({
