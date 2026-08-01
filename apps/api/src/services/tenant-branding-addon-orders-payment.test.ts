@@ -270,9 +270,8 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
       keyword: "BA2026",
     });
 
-    expect(fixture.dependencies.orderRepository.listTenantOrders)
-      .toHaveBeenCalledWith({
-        tenantId: TENANT_ID,
+    expect(fixture.dependencies.orderQueryService.listTenant)
+      .toHaveBeenCalledWith(authContext, {
         page: 2,
         pageSize: 20,
         status: "paid",
@@ -316,11 +315,11 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
       statusCode: 404,
       code: "BRANDING_ADDON_ORDER_NOT_FOUND",
     });
-    expect(dependencies.orderRepository.findTenantOrderById)
-      .toHaveBeenCalledWith({
-        tenantId: OTHER_TENANT_ID,
-        orderId: ORDER_ID,
-      });
+    expect(dependencies.orderQueryService.getTenant)
+      .toHaveBeenCalledWith(
+        { ...authContext, tenantId: OTHER_TENANT_ID },
+        ORDER_ID,
+      );
   });
 
   test("rejects order reads without the dedicated read permission", async () => {
@@ -335,7 +334,7 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
     await expect(
       fixture.service.listOrders(withoutRead, { page: 1, pageSize: 20 }),
     ).rejects.toMatchObject({ statusCode: 403 });
-    expect(fixture.dependencies.orderRepository.listTenantOrders)
-      .not.toHaveBeenCalled();
+    expect(fixture.dependencies.orderQueryService.listTenant)
+      .toHaveBeenCalledWith(withoutRead, { page: 1, pageSize: 20 });
   });
 });

@@ -357,6 +357,26 @@ describe("BrandingAddonOrderListQuerySchema", () => {
       keyword: "(),\"%_\\",
     })).toThrow();
   });
+
+  test("accepts independent unified order status filters", () => {
+    expect(BrandingAddonOrderListQuerySchema.parse({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    })).toMatchObject({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    });
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      payment_channel: "wechat_pay",
+    })).toThrow();
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      payment_status: "paid",
+    })).toThrow();
+  });
 });
 
 describe("PlatformBrandingAddonOrderListQuerySchema", () => {

@@ -7,8 +7,11 @@ import {
 } from "../services/branding-addon-contracts";
 import {
   BRANDING_PURCHASE_MODES,
+  VIRTUAL_FULFILLMENT_STATUSES,
   VIRTUAL_PAYMENT_ENVIRONMENTS,
   VIRTUAL_PAYMENT_PLATFORMS,
+  VIRTUAL_PAYMENT_STATUSES,
+  VIRTUAL_REFUND_STATUSES,
 } from "../services/branding-virtual-payment-contracts";
 import { PaginationQuerySchema } from "./request";
 
@@ -121,8 +124,17 @@ export const BrandingAddonOrderStatusSchema = z.enum(
   BRANDING_ADDON_ORDER_STATUSES,
 );
 
+export const BrandingEntitlementPaymentChannelSchema = z.enum([
+  "legacy_direct",
+  "wechat_virtual",
+]);
+
 export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
   status: BrandingAddonOrderStatusSchema.optional(),
+  payment_channel: BrandingEntitlementPaymentChannelSchema.optional(),
+  payment_status: z.enum(VIRTUAL_PAYMENT_STATUSES).optional(),
+  fulfillment_status: z.enum(VIRTUAL_FULFILLMENT_STATUSES).optional(),
+  refund_status: z.enum(VIRTUAL_REFUND_STATUSES).optional(),
   keyword: z.string()
     .trim()
     .min(1, "关键词不能为空")
