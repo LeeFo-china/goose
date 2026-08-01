@@ -77,6 +77,28 @@ export type PlatformVirtualPaymentMessageAuth =
   Record<PlatformVirtualPaymentMessageTokenKey, PlatformVirtualPaymentMessageStatus> &
   { original_id: PlatformVirtualPaymentOriginalIdStatus };
 
+export type PlatformVirtualPaymentReadinessCode =
+  | "PRODUCT_DISABLED"
+  | "PRODUCT_AMOUNT"
+  | "PRODUCTION_MAPPING_REQUIRED"
+  | "PRODUCTION_MAPPING_DISABLED"
+  | "PRODUCTION_MAPPING_INVALID"
+  | "PRODUCTION_MAPPING_AMOUNT_MISMATCH"
+  | "PRODUCTION_MAPPING_SECRET"
+  | "MESSAGE_TOKEN_MISSING"
+  | "MESSAGE_TOKEN_INVALID"
+  | "ORIGINAL_ID_MISSING"
+  | "ORIGINAL_ID_INVALID";
+
+export type PlatformVirtualPaymentReadiness = {
+  ready: boolean;
+  blockers: Array<{
+    code: PlatformVirtualPaymentReadinessCode;
+    message: string;
+    settings_href?: string;
+  }>;
+};
+
 export type PlatformVirtualPaymentSettingsView = {
   product: PlatformVirtualPaymentProduct;
   virtual_products: PlatformVirtualPaymentProductSummary[];
@@ -85,6 +107,7 @@ export type PlatformVirtualPaymentSettingsView = {
     PlatformVirtualPaymentSecretSourceStatus
   >;
   message_auth: PlatformVirtualPaymentMessageAuth;
+  readiness: PlatformVirtualPaymentReadiness;
   can_manage: boolean;
 };
 

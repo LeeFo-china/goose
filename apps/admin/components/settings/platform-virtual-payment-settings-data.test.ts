@@ -36,6 +36,23 @@ const summary: PlatformVirtualPaymentProductSummary = {
   },
 };
 
+type DeepKeys<T> = T extends readonly (infer Item)[]
+  ? DeepKeys<Item>
+  : T extends object
+  ? keyof T | { [Key in keyof T]: DeepKeys<T[Key]> }[keyof T]
+  : never;
+type ForbiddenPlaintextKey =
+  | "app_key"
+  | "message_token_value"
+  | "secret_value"
+  | "plaintext";
+type Assert<T extends true> = T;
+type HasNoPlaintextLeafKeys = [Extract<
+  DeepKeys<PlatformVirtualPaymentSettingsView>,
+  ForbiddenPlaintextKey
+>] extends [never] ? true : false;
+const hasNoPlaintextLeafKeys: Assert<HasNoPlaintextLeafKeys> = true;
+
 describe("platform virtual-payment settings data", () => {
   test("reuses exact yuan-to-fen parsing and rejects unsupported prices", () => {
     expect(parseVirtualPaymentAmountInput("99.00")).toEqual({
@@ -182,15 +199,28 @@ describe("platform virtual-payment settings data", () => {
           settings_href: "/settings?group=wechat",
         },
       },
+      readiness: {
+        ready: false,
+        blockers: [{
+          code: "ORIGINAL_ID_MISSING",
+          message: "请先配置小程序原始 ID",
+          settings_href: "/settings?group=wechat",
+        }],
+      },
       can_manage: true,
     };
     expect(response.virtual_secret_sources.production.source).toBe("database");
+    expect(hasNoPlaintextLeafKeys).toBe(true);
+    expect(response.readiness.blockers[0]?.code).toBe("ORIGINAL_ID_MISSING");
+    const serialized = JSON.stringify(response);
+    expect(serialized).not.toContain("app-key-must-never-leak");
+    expect(serialized).not.toContain("message-token-must-never-leak");
 
     const source = readFileSync(
       new URL("./platform-virtual-payment-settings-types.ts", import.meta.url),
       "utf8",
     );
-    expect(source).not.toMatch(/\bapp_key\s*:/);
-    expect(source).not.toMatch(/\bmessage_token\s*:/);
+    expect(source).not.toMatch(/\bapp_key\s*:\s*string/);
+    expect(source).not.toMatch(/\bmessage_token_value\s*:/);
   });
 });

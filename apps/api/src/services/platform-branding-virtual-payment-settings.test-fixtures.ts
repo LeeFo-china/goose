@@ -152,6 +152,23 @@ export function virtualPatch(
   };
 }
 
+type SettingSource = "database" | "env" | "default" | "empty";
+type SecretStatusesFixture = {
+  virtual_secret_sources: Record<"sandbox" | "production", {
+    configured: boolean;
+    source: SettingSource;
+  }>;
+  message_auth: {
+    message_token: { configured: boolean; source: SettingSource; valid: boolean };
+    original_id: {
+      configured: boolean;
+      source: SettingSource;
+      valid: boolean;
+      settings_href: string;
+    };
+  };
+};
+
 export type FixtureOptions = {
   current?: BrandingAddonProductRecord | null;
   mapping?: BrandingVirtualProductRecord | null;
@@ -163,6 +180,8 @@ export type FixtureOptions = {
   secretBundle?: string;
   secretError?: unknown;
   secretStatusError?: unknown;
+  configuration?: typeof managementConfiguration;
+  statuses?: SecretStatusesFixture;
 };
 
 type ServiceConstructor = new (
@@ -210,10 +229,12 @@ export function buildFixture(
     appKey: "legacy-cached-app-key",
     revision: 2,
   }));
-  const getConfiguration = mock(async () => managementConfiguration);
+  const getConfiguration = mock(async () =>
+    options.configuration ?? managementConfiguration
+  );
   const getStatuses = mock(async () => {
     if (options.secretStatusError) throw options.secretStatusError;
-    return secretStatuses;
+    return options.statuses ?? secretStatuses;
   });
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,

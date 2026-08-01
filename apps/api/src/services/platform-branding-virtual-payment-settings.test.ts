@@ -48,11 +48,13 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
       ...managementConfiguration,
       can_manage: false,
       ...secretStatuses,
+      readiness: { ready: true, blockers: [] },
     });
     await expect(manageFixture.service.get(manageAuth)).resolves.toEqual({
       ...managementConfiguration,
       can_manage: true,
       ...secretStatuses,
+      readiness: { ready: true, blockers: [] },
     });
     expect(readFixture.getStatuses).toHaveBeenCalledWith(
       auth("platform.payment.config.read", { employeeId: null, authUserId: "" }),
@@ -69,6 +71,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
       ...managementConfiguration,
       can_manage: false,
       ...secretStatuses,
+      readiness: { ready: true, blockers: [] },
     });
   });
 
@@ -221,22 +224,22 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
     [
       "inactive production mapping",
       { status: "draft" },
-      "BRANDING_VIRTUAL_PRODUCT_DISABLED",
+      "PRODUCTION_MAPPING_DISABLED",
     ],
     [
       "invalid production mapping",
       { validation_status: "pending" },
-      "BRANDING_VIRTUAL_PRODUCT_INVALID",
+      "PRODUCTION_MAPPING_INVALID",
     ],
     [
       "amount mismatch",
       { expected_amount_fen: 9_800 },
-      "BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH",
+      "PRODUCTION_MAPPING_AMOUNT_MISMATCH",
     ],
     [
       "wrong secret key",
       { encrypted_secret_ref: "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE" },
-      "BRANDING_VIRTUAL_PRODUCT_SECRET_ENVIRONMENT_MISMATCH",
+      "PRODUCTION_MAPPING_SECRET",
     ],
   ] as const)("rejects wechat mode with %s", async (_name, mappingPatch, code) => {
     const fixture = createFixture({
@@ -246,7 +249,11 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
     await expect(fixture.service.update(manageAuth, {
       version: 4,
       purchase_mode: "wechat_virtual",
-    })).rejects.toMatchObject({ statusCode: 409, code });
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_VIRTUAL_PAYMENT_NOT_READY",
+      details: { blocker_codes: expect.arrayContaining([code]) },
+    });
     expect(fixture.manageConfiguration).not.toHaveBeenCalled();
   });
 
@@ -259,7 +266,8 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       purchase_mode: "wechat_virtual",
     })).rejects.toMatchObject({
       statusCode: 409,
-      code: "BRANDING_VIRTUAL_PRODUCT_SECRET_INVALID",
+      code: "BRANDING_VIRTUAL_PAYMENT_NOT_READY",
+      details: { blocker_codes: ["PRODUCTION_MAPPING_SECRET"] },
     });
   });
 

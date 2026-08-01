@@ -28,13 +28,15 @@ import {
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import {
+  assertBrandingVirtualPaymentModeTransition,
+  assertPlatformBrandingVirtualPaymentReady,
+  evaluatePlatformBrandingVirtualPaymentReadiness,
+} from "@/services/platform-branding-virtual-payment-readiness";
+import {
   platformBrandingVirtualPaymentSecretService,
 } from "@/services/platform-branding-virtual-payment-secrets";
 import { systemSettingsService } from "@/services/system-settings";
-import {
-  BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN,
-  type BrandingPurchaseMode,
-} from "@gooes/domain";
+import { BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN } from "@gooes/domain";
 
 const READ_PERMISSION = "platform.payment.config.read";
 const MANAGE_PERMISSION = "platform.payment.config.manage";
@@ -114,6 +116,10 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     return {
       ...configuration,
       ...secretStatuses,
+      readiness: evaluatePlatformBrandingVirtualPaymentReadiness(
+        configuration,
+        secretStatuses,
+      ),
       can_manage: this.canManage(authContext),
     };
   }
@@ -127,7 +133,10 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     if (current.version !== input.version) throw productVersionConflict();
 
     const finalPurchaseMode = input.purchase_mode ?? current.purchase_mode;
-    assertPurchaseModeTransition(current.purchase_mode, finalPurchaseMode);
+    assertBrandingVirtualPaymentModeTransition(
+      current.purchase_mode,
+      finalPurchaseMode,
+    );
 
     const enrichedInput = input.virtual_product
       ? enrichVirtualProductInput(input.virtual_product)
@@ -148,7 +157,22 @@ export class PlatformBrandingVirtualPaymentSettingsService {
       const production = enrichedInput?.environment === "production"
         ? mergeBrandingVirtualProduct(current.id, requestedMapping, enrichedInput)
         : await this.findMapping(current.id, "production");
-      await this.assertProductionMappingReady(production, current.amount_fen);
+      const productionSecretConfigured = enrichedInput?.environment === "production" &&
+          secretConfigured !== null
+        ? secretConfigured
+        : production
+        ? await this.hasConfiguredSecretBundle(
+          WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
+          production.secret_revision,
+        )
+        : false;
+      const messageStatuses = await this.secretStatusReader.getStatuses(authContext);
+      assertPlatformBrandingVirtualPaymentReady({
+        product: current,
+        production,
+        productionSecretConfigured,
+        secretStatuses: messageStatuses,
+      });
     }
 
     const result = await this.saveConfiguration({
@@ -434,21 +458,6 @@ function enrichVirtualProductInput(
   };
 }
 
-function assertPurchaseModeTransition(
-  from: BrandingPurchaseMode,
-  to: BrandingPurchaseMode,
-) {
-  if (from === to ||
-    (from === "direct_legacy" && to === "maintenance") ||
-    (from === "maintenance" && to === "wechat_virtual") ||
-    (from === "wechat_virtual" && to === "maintenance")) return;
-  throw Errors.business(
-    409,
-    "不支持当前商品购买模式切换",
-    "BRANDING_ADDON_PURCHASE_MODE_TRANSITION_INVALID",
-  );
-}
-
 function serializeProduct(product: BrandingAddonProductRecord) {
   return {
     code: product.code,
@@ -487,5 +496,4 @@ function secretInvalid() {
   );
 }
 
-export const platformBrandingVirtualPaymentSettingsService =
-  new PlatformBrandingVirtualPaymentSettingsService();
+export const platformBrandingVirtualPaymentSettingsService = new PlatformBrandingVirtualPaymentSettingsService();
