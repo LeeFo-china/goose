@@ -40,6 +40,10 @@ const ReconciliationClaimSchema = z.object({
   reconcile_next_at: nullableDateTime,
   reconcile_last_checked_at: nullableDateTime,
   reconcile_last_provider_status: officialStatus,
+  reconcile_query_provider_order_no: nullableText(128),
+  reconcile_query_transaction_id: nullableText(128),
+  reconcile_query_paid_amount_fen: z.number().int().min(100).nullable(),
+  reconcile_query_paid_at: nullableDateTime,
   provider_delivery_status: z.enum([
     "not_required", "pending", "succeeded", "failed",
   ]),
@@ -119,14 +123,54 @@ export class BrandingVirtualPaymentReconciliationRepository {
     );
   }
 
-  async finalizeReconciliationAfterConfirmation(input: {
+  async prepareSuccessfulQueryReconciliation(input: {
     orderId: string;
     claimToken: string;
     officialStatus: 2 | 3 | 4;
+    environment: "sandbox" | "production";
+    openid: string;
+    outTradeNo: string;
+    providerProductId: string;
+    quantity: 1;
+    currency: "CNY" | null;
+    origPriceFen: number;
+    actualPriceFen: number;
     providerOrderNo: string;
     transactionId: string;
-    paidAmountFen: number;
     paidAt: string;
+    attach: string;
+  }): Promise<boolean> {
+    return this.reconciliationBooleanCommand(
+      "branding_prepare_successful_query_reconciliation",
+      {
+        p_order_id: input.orderId,
+        p_claim_token: input.claimToken,
+        p_official_status: input.officialStatus,
+        p_environment: input.environment,
+        p_openid: input.openid,
+        p_out_trade_no: input.outTradeNo,
+        p_provider_product_id: input.providerProductId,
+        p_quantity: input.quantity,
+        p_currency: input.currency,
+        p_orig_price_fen: input.origPriceFen,
+        p_actual_price_fen: input.actualPriceFen,
+        p_provider_order_no: input.providerOrderNo,
+        p_transaction_id: input.transactionId,
+        p_paid_at: input.paidAt,
+        p_attach: input.attach,
+      },
+      "准备虚拟支付查询补偿失败",
+    );
+  }
+
+  async finalizeReconciliationAfterConfirmation(input: {
+    orderId: string;
+    claimToken: string;
+    officialStatus: 2 | 3 | 4 | null;
+    providerOrderNo: string | null;
+    transactionId: string | null;
+    paidAmountFen: number | null;
+    paidAt: string | null;
     deliveryAttemptKey: string | null;
   }): Promise<boolean> {
     return this.reconciliationBooleanCommand(

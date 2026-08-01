@@ -9,6 +9,10 @@ ALTER TABLE public.tenant_virtual_addon_orders
   ADD COLUMN reconcile_last_checked_at timestamptz NULL,
   ADD COLUMN reconcile_last_provider_status integer NULL,
   ADD COLUMN reconcile_last_error_code text NULL,
+  ADD COLUMN reconcile_query_provider_order_no text NULL,
+  ADD COLUMN reconcile_query_transaction_id text NULL,
+  ADD COLUMN reconcile_query_paid_amount_fen integer NULL,
+  ADD COLUMN reconcile_query_paid_at timestamptz NULL,
   ADD COLUMN provider_delivery_status text NOT NULL DEFAULT 'not_required',
   ADD COLUMN provider_delivery_attempt_count integer NOT NULL DEFAULT 0,
   ADD COLUMN provider_delivery_attempt_key uuid NULL,
@@ -27,6 +31,31 @@ ALTER TABLE public.tenant_virtual_addon_orders
       OR (
         btrim(reconcile_last_error_code) <> ''
         AND char_length(reconcile_last_error_code) <= 100
+      )
+    ),
+  ADD CONSTRAINT tenant_virtual_addon_orders_reconcile_query_audit_check
+    CHECK (
+      (
+        reconcile_query_provider_order_no IS NULL
+        AND reconcile_query_transaction_id IS NULL
+        AND reconcile_query_paid_amount_fen IS NULL
+        AND reconcile_query_paid_at IS NULL
+        AND (
+          reconcile_last_provider_status IS NULL
+          OR reconcile_last_provider_status NOT IN (2, 3, 4)
+        )
+      )
+      OR (
+        reconcile_last_provider_status IN (2, 3, 4)
+        AND reconcile_query_provider_order_no IS NOT NULL
+        AND btrim(reconcile_query_provider_order_no) <> ''
+        AND char_length(reconcile_query_provider_order_no) <= 128
+        AND reconcile_query_transaction_id IS NOT NULL
+        AND btrim(reconcile_query_transaction_id) <> ''
+        AND char_length(reconcile_query_transaction_id) <= 128
+        AND reconcile_query_paid_amount_fen IS NOT NULL
+        AND reconcile_query_paid_amount_fen >= 100
+        AND reconcile_query_paid_at IS NOT NULL
       )
     ),
   ADD CONSTRAINT tenant_virtual_addon_orders_delivery_status_check
@@ -134,6 +163,15 @@ BEGIN
       NEW.reconcile_next_at,
       clock_timestamp()
     );
+  ELSIF NEW.payment_status = 'succeeded'
+        AND NEW.fulfillment_status = 'granted'
+        AND NEW.provider_delivery_status = 'not_required'
+        AND NEW.reconcile_claim_token IS NOT NULL
+  THEN
+    NEW.reconcile_next_at := COALESCE(
+      NEW.reconcile_next_at,
+      clock_timestamp()
+    );
   ELSE
     NEW.reconcile_next_at := NULL;
   END IF;
@@ -183,6 +221,12 @@ WHERE reconcile_next_at IS NOT NULL
       AND fulfillment_status = 'granted'
       AND provider_delivery_status IN ('pending', 'failed')
     )
+    OR (
+      payment_status = 'succeeded'
+      AND fulfillment_status = 'granted'
+      AND provider_delivery_status = 'not_required'
+      AND reconcile_claim_token IS NOT NULL
+    )
   );
 
 CREATE FUNCTION public.branding_claim_virtual_payment_reconciliation_batch(
@@ -215,6 +259,10 @@ RETURNS TABLE(
   reconcile_next_at timestamptz,
   reconcile_last_checked_at timestamptz,
   reconcile_last_provider_status integer,
+  reconcile_query_provider_order_no text,
+  reconcile_query_transaction_id text,
+  reconcile_query_paid_amount_fen integer,
+  reconcile_query_paid_at timestamptz,
   provider_delivery_status text,
   provider_delivery_attempt_count integer,
   provider_delivery_attempt_key uuid,
@@ -260,6 +308,12 @@ BEGIN
           AND orders.fulfillment_status = 'granted'
           AND orders.provider_delivery_status IN ('pending', 'failed')
         )
+        OR (
+          orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'granted'
+          AND orders.provider_delivery_status = 'not_required'
+          AND orders.reconcile_claim_token IS NOT NULL
+        )
       )
     ORDER BY orders.reconcile_next_at, orders.payment_expires_at, orders.id
     LIMIT v_limit
@@ -300,6 +354,10 @@ BEGIN
     orders.reconcile_next_at,
     orders.reconcile_last_checked_at,
     orders.reconcile_last_provider_status,
+    orders.reconcile_query_provider_order_no,
+    orders.reconcile_query_transaction_id,
+    orders.reconcile_query_paid_amount_fen,
+    orders.reconcile_query_paid_at,
     orders.provider_delivery_status,
     orders.provider_delivery_attempt_count,
     orders.provider_delivery_attempt_key,
@@ -374,6 +432,12 @@ BEGIN
       AND v_order.fulfillment_status = 'granted'
       AND v_order.provider_delivery_status IN ('pending', 'failed')
     )
+    OR (
+      v_order.payment_status = 'succeeded'
+      AND v_order.fulfillment_status = 'granted'
+      AND v_order.provider_delivery_status = 'not_required'
+      AND v_order.reconcile_claim_token IS NOT NULL
+    )
   ) THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -386,6 +450,30 @@ BEGIN
       reconcile_last_provider_status = p_official_status,
       reconcile_last_error_code = left(nullif(btrim(p_error_code), ''), 100),
       reconcile_last_error = left(nullif(btrim(p_error_summary), ''), 500),
+      reconcile_query_provider_order_no = CASE
+        WHEN p_official_status IN (2, 3, 4)
+          AND p_official_status = orders.reconcile_last_provider_status
+        THEN orders.reconcile_query_provider_order_no
+        ELSE NULL
+      END,
+      reconcile_query_transaction_id = CASE
+        WHEN p_official_status IN (2, 3, 4)
+          AND p_official_status = orders.reconcile_last_provider_status
+        THEN orders.reconcile_query_transaction_id
+        ELSE NULL
+      END,
+      reconcile_query_paid_amount_fen = CASE
+        WHEN p_official_status IN (2, 3, 4)
+          AND p_official_status = orders.reconcile_last_provider_status
+        THEN orders.reconcile_query_paid_amount_fen
+        ELSE NULL
+      END,
+      reconcile_query_paid_at = CASE
+        WHEN p_official_status IN (2, 3, 4)
+          AND p_official_status = orders.reconcile_last_provider_status
+        THEN orders.reconcile_query_paid_at
+        ELSE NULL
+      END,
       reconcile_claim_token = NULL,
       reconcile_claim_expires_at = NULL
   WHERE orders.id = p_order_id
@@ -457,8 +545,144 @@ BEGIN
       reconcile_last_provider_status = p_official_status,
       reconcile_last_error_code = NULL,
       reconcile_last_error = NULL,
+      reconcile_query_provider_order_no = NULL,
+      reconcile_query_transaction_id = NULL,
+      reconcile_query_paid_amount_fen = NULL,
+      reconcile_query_paid_at = NULL,
       reconcile_claim_token = NULL,
       reconcile_claim_expires_at = NULL
+  WHERE orders.id = p_order_id
+    AND orders.reconcile_claim_token = p_claim_token
+    AND orders.reconcile_claim_expires_at > clock_timestamp();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_CLAIM_INVALID';
+  END IF;
+  RETURN true;
+END;
+$$;
+
+CREATE FUNCTION public.branding_prepare_successful_query_reconciliation(
+  p_order_id uuid,
+  p_claim_token uuid,
+  p_official_status integer,
+  p_environment text,
+  p_openid text,
+  p_out_trade_no text,
+  p_provider_product_id text,
+  p_quantity integer,
+  p_currency text,
+  p_orig_price_fen integer,
+  p_actual_price_fen integer,
+  p_provider_order_no text,
+  p_transaction_id text,
+  p_paid_at timestamptz,
+  p_attach text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_order public.tenant_virtual_addon_orders%ROWTYPE;
+  v_now timestamptz;
+  v_has_query_audit boolean;
+BEGIN
+  IF p_order_id IS NULL OR p_claim_token IS NULL
+     OR p_official_status IS NULL OR p_official_status NOT IN (2, 3, 4)
+     OR p_environment IS NULL
+     OR p_openid IS NULL OR btrim(p_openid) = ''
+     OR char_length(p_openid) > 128
+     OR p_out_trade_no IS NULL OR btrim(p_out_trade_no) = ''
+     OR char_length(p_out_trade_no) > 32
+     OR p_provider_product_id IS NULL
+     OR btrim(p_provider_product_id) = ''
+     OR char_length(p_provider_product_id) > 128
+     OR p_quantity IS NULL
+     OR (p_currency IS NOT NULL AND p_currency <> 'CNY')
+     OR p_orig_price_fen IS NULL OR p_actual_price_fen IS NULL
+     OR p_provider_order_no IS NULL OR btrim(p_provider_order_no) = ''
+     OR char_length(p_provider_order_no) > 128
+     OR p_transaction_id IS NULL OR btrim(p_transaction_id) = ''
+     OR char_length(p_transaction_id) > 128
+     OR p_paid_at IS NULL
+     OR p_attach IS NULL OR btrim(p_attach) = ''
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_INPUT_INVALID';
+  END IF;
+
+  SELECT orders.* INTO v_order
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = p_order_id
+  FOR UPDATE;
+  v_now := clock_timestamp();
+  IF NOT FOUND
+     OR v_order.reconcile_claim_token IS DISTINCT FROM p_claim_token
+     OR v_order.reconcile_claim_expires_at IS NULL
+     OR v_order.reconcile_claim_expires_at <= v_now
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_CLAIM_INVALID';
+  END IF;
+  IF v_order.payment_status <> 'pending'
+     OR v_order.payment_request_issued_at IS NULL
+     OR v_order.payment_expires_at > v_now
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_STATE_INVALID';
+  END IF;
+  IF v_order.environment IS DISTINCT FROM p_environment
+     OR v_order.payer_openid IS DISTINCT FROM p_openid
+     OR v_order.out_trade_no IS DISTINCT FROM p_out_trade_no
+     OR v_order.provider_product_id IS DISTINCT FROM p_provider_product_id
+     OR p_quantity <> 1
+     OR p_orig_price_fen <> v_order.amount_fen
+     OR p_actual_price_fen <> v_order.amount_fen
+     OR p_attach IS DISTINCT FROM v_order.id::text
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
+  END IF;
+
+  v_has_query_audit :=
+    v_order.reconcile_query_provider_order_no IS NOT NULL
+    OR v_order.reconcile_query_transaction_id IS NOT NULL
+    OR v_order.reconcile_query_paid_amount_fen IS NOT NULL
+    OR v_order.reconcile_query_paid_at IS NOT NULL
+    OR v_order.reconcile_last_provider_status IN (2, 3, 4);
+  IF v_has_query_audit THEN
+    IF v_order.reconcile_last_provider_status IS DISTINCT FROM p_official_status
+       OR v_order.reconcile_query_provider_order_no
+         IS DISTINCT FROM p_provider_order_no
+       OR v_order.reconcile_query_transaction_id
+         IS DISTINCT FROM p_transaction_id
+       OR v_order.reconcile_query_paid_amount_fen
+         IS DISTINCT FROM p_actual_price_fen
+       OR v_order.reconcile_query_paid_at IS DISTINCT FROM p_paid_at
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
+    END IF;
+  END IF;
+
+  UPDATE public.tenant_virtual_addon_orders AS orders
+  SET reconcile_last_checked_at = v_now,
+      reconcile_last_provider_status = p_official_status,
+      reconcile_last_error_code = NULL,
+      reconcile_last_error = NULL,
+      reconcile_query_provider_order_no = p_provider_order_no,
+      reconcile_query_transaction_id = p_transaction_id,
+      reconcile_query_paid_amount_fen = p_actual_price_fen,
+      reconcile_query_paid_at = p_paid_at,
+      reconcile_next_at = COALESCE(orders.reconcile_next_at, v_now)
   WHERE orders.id = p_order_id
     AND orders.reconcile_claim_token = p_claim_token
     AND orders.reconcile_claim_expires_at > clock_timestamp();
@@ -490,29 +714,17 @@ DECLARE
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
   v_now timestamptz;
 BEGIN
-  IF p_order_id IS NULL OR p_claim_token IS NULL
-     OR p_provider_order_no IS NULL OR btrim(p_provider_order_no) = ''
-     OR char_length(p_provider_order_no) > 128
-     OR p_transaction_id IS NULL OR btrim(p_transaction_id) = ''
-     OR char_length(p_transaction_id) > 128
-     OR p_paid_amount_fen IS NULL OR p_paid_amount_fen <= 0
-     OR p_paid_at IS NULL
-  THEN
+  IF p_order_id IS NULL OR p_claim_token IS NULL THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_INPUT_INVALID';
   END IF;
-  IF p_official_status IS NULL OR p_official_status NOT IN (2, 3, 4) THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_OFFICIAL_STATUS_INVALID';
-  END IF;
-  IF (p_official_status = 2 AND p_delivery_attempt_key IS NULL)
-     OR (p_official_status IN (3, 4) AND p_delivery_attempt_key IS NOT NULL)
+  IF p_official_status IS NOT NULL
+     AND p_official_status NOT IN (2, 3, 4)
   THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
-      MESSAGE = 'BRANDING_VIRTUAL_DELIVERY_REQUEST_INVALID';
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_OFFICIAL_STATUS_INVALID';
   END IF;
 
   SELECT orders.* INTO v_order
@@ -536,45 +748,32 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_STATE_INVALID';
   END IF;
-  IF v_order.provider_order_no IS DISTINCT FROM p_provider_order_no
-     OR v_order.transaction_id IS DISTINCT FROM p_transaction_id
-     OR v_order.paid_amount_fen IS DISTINCT FROM p_paid_amount_fen
-     OR v_order.paid_at IS DISTINCT FROM p_paid_at
-  THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
-  END IF;
 
-  IF p_official_status = 2 THEN
+  IF p_official_status IS NULL THEN
+    IF p_provider_order_no IS NOT NULL
+       OR p_transaction_id IS NOT NULL
+       OR p_paid_amount_fen IS NOT NULL
+       OR p_paid_at IS NOT NULL
+       OR p_delivery_attempt_key IS NOT NULL
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_INPUT_INVALID';
+    END IF;
+    IF v_order.reconcile_last_provider_status IS NOT NULL
+       OR v_order.reconcile_query_provider_order_no IS NOT NULL
+       OR v_order.reconcile_query_transaction_id IS NOT NULL
+       OR v_order.reconcile_query_paid_amount_fen IS NOT NULL
+       OR v_order.reconcile_query_paid_at IS NOT NULL
+       OR v_order.provider_delivery_status <> 'not_required'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_STATE_INVALID';
+    END IF;
     UPDATE public.tenant_virtual_addon_orders AS orders
-    SET provider_delivery_status = 'pending',
-        provider_delivery_attempt_count =
-          orders.provider_delivery_attempt_count + 1,
-        provider_delivery_attempt_key = p_delivery_attempt_key,
-        provider_delivery_request_id = NULL,
-        provider_delivery_provided_at = NULL,
-        provider_delivery_last_error_code = NULL,
-        provider_delivery_last_error = NULL,
-        reconcile_next_at = v_now,
+    SET reconcile_next_at = NULL,
         reconcile_last_checked_at = v_now,
-        reconcile_last_provider_status = p_official_status,
-        reconcile_last_error_code = NULL,
-        reconcile_last_error = NULL
-    WHERE orders.id = p_order_id
-      AND orders.reconcile_claim_token = p_claim_token
-      AND orders.reconcile_claim_expires_at > clock_timestamp();
-  ELSE
-    UPDATE public.tenant_virtual_addon_orders AS orders
-    SET provider_delivery_status = 'succeeded',
-        provider_delivery_attempt_key = p_delivery_attempt_key,
-        provider_delivery_request_id = NULL,
-        provider_delivery_provided_at = v_now,
-        provider_delivery_last_error_code = NULL,
-        provider_delivery_last_error = NULL,
-        reconcile_next_at = NULL,
-        reconcile_last_checked_at = v_now,
-        reconcile_last_provider_status = p_official_status,
         reconcile_last_error_code = NULL,
         reconcile_last_error = NULL,
         reconcile_claim_token = NULL,
@@ -582,6 +781,79 @@ BEGIN
     WHERE orders.id = p_order_id
       AND orders.reconcile_claim_token = p_claim_token
       AND orders.reconcile_claim_expires_at > clock_timestamp();
+  ELSE
+    IF p_provider_order_no IS NULL OR btrim(p_provider_order_no) = ''
+       OR char_length(p_provider_order_no) > 128
+       OR p_transaction_id IS NULL OR btrim(p_transaction_id) = ''
+       OR char_length(p_transaction_id) > 128
+       OR p_paid_amount_fen IS NULL OR p_paid_amount_fen <= 0
+       OR p_paid_at IS NULL
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_INPUT_INVALID';
+    END IF;
+    IF (p_official_status = 2 AND p_delivery_attempt_key IS NULL)
+       OR (p_official_status IN (3, 4) AND p_delivery_attempt_key IS NOT NULL)
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_DELIVERY_REQUEST_INVALID';
+    END IF;
+    IF v_order.reconcile_last_provider_status
+         IS DISTINCT FROM p_official_status
+       OR v_order.reconcile_query_provider_order_no
+         IS DISTINCT FROM p_provider_order_no
+       OR v_order.reconcile_query_transaction_id
+         IS DISTINCT FROM p_transaction_id
+       OR v_order.reconcile_query_paid_amount_fen
+         IS DISTINCT FROM p_paid_amount_fen
+       OR v_order.reconcile_query_paid_at IS DISTINCT FROM p_paid_at
+       OR v_order.provider_order_no IS DISTINCT FROM p_provider_order_no
+       OR v_order.transaction_id IS DISTINCT FROM p_transaction_id
+       OR v_order.paid_amount_fen IS DISTINCT FROM p_paid_amount_fen
+       OR v_order.paid_at IS DISTINCT FROM p_paid_at
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
+    END IF;
+
+    IF p_official_status = 2 THEN
+      UPDATE public.tenant_virtual_addon_orders AS orders
+      SET provider_delivery_status = 'pending',
+          provider_delivery_attempt_count =
+            orders.provider_delivery_attempt_count + 1,
+          provider_delivery_attempt_key = p_delivery_attempt_key,
+          provider_delivery_request_id = NULL,
+          provider_delivery_provided_at = NULL,
+          provider_delivery_last_error_code = NULL,
+          provider_delivery_last_error = NULL,
+          reconcile_next_at = v_now,
+          reconcile_last_checked_at = v_now,
+          reconcile_last_error_code = NULL,
+          reconcile_last_error = NULL
+      WHERE orders.id = p_order_id
+        AND orders.reconcile_claim_token = p_claim_token
+        AND orders.reconcile_claim_expires_at > clock_timestamp();
+    ELSE
+      UPDATE public.tenant_virtual_addon_orders AS orders
+      SET provider_delivery_status = 'succeeded',
+          provider_delivery_attempt_key = p_delivery_attempt_key,
+          provider_delivery_request_id = NULL,
+          provider_delivery_provided_at = v_now,
+          provider_delivery_last_error_code = NULL,
+          provider_delivery_last_error = NULL,
+          reconcile_next_at = NULL,
+          reconcile_last_checked_at = v_now,
+          reconcile_last_error_code = NULL,
+          reconcile_last_error = NULL,
+          reconcile_claim_token = NULL,
+          reconcile_claim_expires_at = NULL
+      WHERE orders.id = p_order_id
+        AND orders.reconcile_claim_token = p_claim_token
+        AND orders.reconcile_claim_expires_at > clock_timestamp();
+    END IF;
   END IF;
   IF NOT FOUND THEN
     RAISE EXCEPTION USING
@@ -742,6 +1014,15 @@ REVOKE ALL ON FUNCTION public.branding_close_unpaid_virtual_payment_reconciliati
 ) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.branding_close_unpaid_virtual_payment_reconciliation(
   uuid, uuid, integer
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.branding_prepare_successful_query_reconciliation(
+  uuid, uuid, integer, text, text, text, text, integer, text, integer,
+  integer, text, text, timestamptz, text
+) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.branding_prepare_successful_query_reconciliation(
+  uuid, uuid, integer, text, text, text, text, integer, text, integer,
+  integer, text, text, timestamptz, text
 ) TO service_role;
 
 REVOKE ALL ON FUNCTION public.branding_finalize_virtual_payment_reconciliation(

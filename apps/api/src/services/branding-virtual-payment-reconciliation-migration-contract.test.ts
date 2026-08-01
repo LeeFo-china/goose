@@ -31,6 +31,16 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(normalized).toContain("provider_delivery_attempt_key uuid");
     expect(normalized).toContain("provider_delivery_request_id text");
     expect(normalized).toContain("provider_delivery_provided_at timestamptz");
+    expect(normalized).toContain("reconcile_query_provider_order_no text");
+    expect(normalized).toContain("reconcile_query_transaction_id text");
+    expect(normalized).toContain("reconcile_query_paid_amount_fen integer");
+    expect(normalized).toContain("reconcile_query_paid_at timestamptz");
+    expect(normalized).toContain(
+      "reconcile_last_provider_status in (2, 3, 4) and reconcile_query_provider_order_no is not null",
+    );
+    expect(normalized).toContain(
+      "reconcile_query_paid_at is null and (reconcile_last_provider_status is null or reconcile_last_provider_status not in (2, 3, 4))",
+    );
     expect(normalized).toContain(
       "provider_delivery_status in ('not_required', 'pending', 'succeeded', 'failed')",
     );
@@ -63,6 +73,9 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(scheduling).toMatch(
       /fulfillment_status = 'grant_failed'[\s\S]*old\.fulfillment_status is distinct from new\.fulfillment_status[\s\S]*new\.reconcile_next_at := clock_timestamp\(\)/,
     );
+    expect(scheduling).toMatch(
+      /payment_status = 'succeeded'[\s\S]*fulfillment_status = 'granted'[\s\S]*provider_delivery_status = 'not_required'[\s\S]*reconcile_claim_token is not null[\s\S]*new\.reconcile_next_at := coalesce/,
+    );
     expect(normalized).toContain(
       "set reconcile_next_at = payment_expires_at where payment_status = 'pending' and payment_request_issued_at is not null",
     );
@@ -76,6 +89,9 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(claim).toContain(
       "orders.payment_status = 'pending' and orders.payment_expires_at <= v_now and orders.payment_request_issued_at is not null",
     );
+    expect(claim).toContain(
+      "orders.payment_status = 'succeeded' and orders.fulfillment_status = 'granted' and orders.provider_delivery_status = 'not_required' and orders.reconcile_claim_token is not null",
+    );
     const returned = claim.slice(claim.lastIndexOf("returning"));
     for (const fact of [
       "orders.id",
@@ -85,6 +101,10 @@ describe("branding virtual payment reconciliation migration", () => {
       "orders.paid_amount_fen",
       "orders.paid_at",
       "orders.reconcile_claim_token",
+      "orders.reconcile_query_provider_order_no",
+      "orders.reconcile_query_transaction_id",
+      "orders.reconcile_query_paid_amount_fen",
+      "orders.reconcile_query_paid_at",
     ]) {
       expect(returned).toContain(fact);
     }
@@ -100,7 +120,66 @@ describe("branding virtual payment reconciliation migration", () => {
     }
   });
 
-  test("finalizes only application-confirmed facts for statuses 2, 3, and 4", () => {
+  test("prepares a durable successful-query checkpoint without confirming payment", () => {
+    const prepare = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_prepare_successful_query_reconciliation",
+    ));
+
+    expect(prepare).toContain("p_official_status not in (2, 3, 4)");
+    expect(prepare).toContain("v_order.payment_status <> 'pending'");
+    expect(prepare).toContain("v_order.payment_request_issued_at is null");
+    expect(prepare).toContain("v_order.payment_expires_at > v_now");
+    for (const binding of [
+      "v_order.environment is distinct from p_environment",
+      "v_order.payer_openid is distinct from p_openid",
+      "v_order.out_trade_no is distinct from p_out_trade_no",
+      "v_order.provider_product_id is distinct from p_provider_product_id",
+      "p_quantity <> 1",
+      "p_orig_price_fen <> v_order.amount_fen",
+      "p_actual_price_fen <> v_order.amount_fen",
+      "p_attach is distinct from v_order.id::text",
+    ]) {
+      expect(prepare).toContain(binding);
+    }
+    expect(prepare).toContain(
+      "reconcile_last_provider_status = p_official_status",
+    );
+    expect(prepare).toContain(
+      "reconcile_query_provider_order_no = p_provider_order_no",
+    );
+    expect(prepare).toContain(
+      "reconcile_query_transaction_id = p_transaction_id",
+    );
+    expect(prepare).toContain(
+      "reconcile_query_paid_amount_fen = p_actual_price_fen",
+    );
+    expect(prepare).toContain("reconcile_query_paid_at = p_paid_at");
+    expect(prepare).toContain(
+      "reconcile_next_at = coalesce(orders.reconcile_next_at, v_now)",
+    );
+    expect(prepare).not.toContain("set payment_status = 'succeeded'");
+    expect(prepare).not.toMatch(/\bprovider_order_no\s*=\s*p_provider_order_no/);
+    expect(prepare).not.toMatch(/\btransaction_id\s*=\s*p_transaction_id/);
+    expect(prepare).not.toMatch(/\bpaid_amount_fen\s*=\s*p_actual_price_fen/);
+    expect(prepare).not.toMatch(/\bpaid_at\s*=\s*p_paid_at/);
+    expect(prepare).not.toContain("branding_confirm_virtual_addon_purchase");
+    expect(prepare).not.toContain("tenant_entitlements");
+    expect(prepare).toContain(
+      "branding_virtual_reconciliation_facts_mismatch",
+    );
+    for (const conflict of [
+      "v_order.reconcile_last_provider_status is distinct from p_official_status",
+      "v_order.reconcile_query_provider_order_no is distinct from p_provider_order_no",
+      "v_order.reconcile_query_transaction_id is distinct from p_transaction_id",
+      "v_order.reconcile_query_paid_amount_fen is distinct from p_actual_price_fen",
+      "v_order.reconcile_query_paid_at is distinct from p_paid_at",
+    ]) {
+      expect(prepare).toContain(conflict);
+    }
+  });
+
+  test("finalizes query and grant recovery only after application confirmation", () => {
     const finalize = normalizeSql(extractFunction(
       migrationSql,
       "branding_finalize_virtual_payment_reconciliation",
@@ -109,10 +188,17 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(finalize).not.toContain("branding_confirm_virtual_addon_purchase");
     expect(finalize).not.toContain("tenant_entitlements");
     expect(finalize).not.toContain("tenant_entitlement_events");
-    expect(finalize).toContain("p_official_status not in (2, 3, 4)");
+    expect(finalize).toContain(
+      "p_official_status is not null and p_official_status not in (2, 3, 4)",
+    );
     expect(finalize).toContain("v_order.payment_status <> 'succeeded'");
     expect(finalize).toContain("v_order.fulfillment_status <> 'granted'");
     for (const fact of [
+      "v_order.reconcile_last_provider_status is distinct from p_official_status",
+      "v_order.reconcile_query_provider_order_no is distinct from p_provider_order_no",
+      "v_order.reconcile_query_transaction_id is distinct from p_transaction_id",
+      "v_order.reconcile_query_paid_amount_fen is distinct from p_paid_amount_fen",
+      "v_order.reconcile_query_paid_at is distinct from p_paid_at",
       "v_order.provider_order_no is distinct from p_provider_order_no",
       "v_order.transaction_id is distinct from p_transaction_id",
       "v_order.paid_amount_fen is distinct from p_paid_amount_fen",
@@ -145,6 +231,54 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(alreadyDeliveredBranch).not.toContain(
       "provider_delivery_attempt_count =",
     );
+    const grantRecoveryBranch = finalize.slice(
+      finalize.indexOf("if p_official_status is null then"),
+      finalize.indexOf("else", finalize.indexOf("if p_official_status is null then")),
+    );
+    expect(grantRecoveryBranch).toContain(
+      "v_order.reconcile_last_provider_status is not null",
+    );
+    expect(grantRecoveryBranch).toContain(
+      "v_order.provider_delivery_status <> 'not_required'",
+    );
+    expect(grantRecoveryBranch).toContain("reconcile_next_at = null");
+    expect(grantRecoveryBranch).toContain("reconcile_claim_token = null");
+    expect(grantRecoveryBranch).not.toContain("provider_delivery_status =");
+  });
+
+  test("keeps both confirmation crash windows reclaimable", () => {
+    const normalized = normalizeSql(migrationSql);
+    const scheduling = normalizeSql(extractFunction(
+      migrationSql,
+      "schedule_tenant_virtual_addon_order_reconciliation",
+    ));
+    const claim = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_claim_virtual_payment_reconciliation_batch",
+    ));
+    const dueIndex = normalized.slice(
+      normalized.indexOf("create index tenant_virtual_addon_orders_reconciliation_due_idx"),
+      normalized.indexOf("create function public.branding_claim_virtual_payment_reconciliation_batch"),
+    );
+
+    expect(scheduling).toContain(
+      "new.provider_delivery_status = 'not_required' and new.reconcile_claim_token is not null",
+    );
+    expect(claim).toContain(
+      "orders.reconcile_claim_token is null or orders.reconcile_claim_expires_at <= v_now",
+    );
+    expect(claim).toContain(
+      "orders.provider_delivery_status = 'not_required' and orders.reconcile_claim_token is not null",
+    );
+    expect(dueIndex).toContain(
+      "provider_delivery_status = 'not_required' and reconcile_claim_token is not null",
+    );
+    expect(claim).toContain(
+      "orders.payment_status = 'pending' and orders.payment_expires_at <= v_now",
+    );
+    expect(scheduling).toMatch(
+      /provider_delivery_status = 'not_required'[\s\S]*reconcile_claim_token is not null[\s\S]*else new\.reconcile_next_at := null/,
+    );
   });
 
   test("reschedules full official audit but closes only 0, 1, and 6", () => {
@@ -163,7 +297,7 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(reschedule).toContain(
       "reconcile_last_provider_status = p_official_status",
     );
-    expect(reschedule).not.toMatch(/p_official_status\s+in\s*\([^)]*\)/);
+    expect(reschedule).not.toContain("p_official_status not in (");
     expect(close).toContain("p_official_status not in (0, 1, 6)");
   });
 
@@ -171,6 +305,7 @@ describe("branding virtual payment reconciliation migration", () => {
     for (const name of [
       "branding_reschedule_virtual_payment_reconciliation",
       "branding_close_unpaid_virtual_payment_reconciliation",
+      "branding_prepare_successful_query_reconciliation",
       "branding_finalize_virtual_payment_reconciliation",
       "branding_mark_virtual_payment_delivery",
     ]) {
@@ -212,6 +347,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "branding_claim_virtual_payment_reconciliation_batch(integer, integer)",
       "branding_reschedule_virtual_payment_reconciliation(uuid, uuid, timestamptz, integer, text, text)",
       "branding_close_unpaid_virtual_payment_reconciliation(uuid, uuid, integer)",
+      "branding_prepare_successful_query_reconciliation(uuid, uuid, integer, text, text, text, text, integer, text, integer, integer, text, text, timestamptz, text)",
       "branding_finalize_virtual_payment_reconciliation(uuid, uuid, integer, text, text, integer, timestamptz, uuid)",
       "branding_mark_virtual_payment_delivery(uuid, uuid, text, uuid, text, text, text)",
     ]) {

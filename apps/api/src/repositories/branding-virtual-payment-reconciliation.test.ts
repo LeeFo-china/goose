@@ -14,6 +14,20 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const ATTEMPT_KEY = "88888888-8888-4888-8888-888888888888";
+const successfulQueryFacts = {
+  environment: "production" as const,
+  openid: order.payer_openid,
+  outTradeNo: order.out_trade_no,
+  providerProductId: order.provider_product_id,
+  quantity: 1 as const,
+  currency: "CNY" as const,
+  origPriceFen: order.amount_fen,
+  actualPriceFen: order.amount_fen,
+  providerOrderNo: "provider-order-1",
+  transactionId: "transaction-1",
+  paidAt: "2026-08-01T01:01:00.000Z",
+  attach: ORDER_ID,
+};
 const reconciliationClaim = {
   id: ORDER_ID,
   tenant_id: TENANT_ID,
@@ -40,6 +54,10 @@ const reconciliationClaim = {
   reconcile_next_at: "2026-08-01T01:05:00.000Z",
   reconcile_last_checked_at: null,
   reconcile_last_provider_status: 10,
+  reconcile_query_provider_order_no: null,
+  reconcile_query_transaction_id: null,
+  reconcile_query_paid_amount_fen: null,
+  reconcile_query_paid_at: null,
   provider_delivery_status: "not_required",
   provider_delivery_attempt_count: 0,
   provider_delivery_attempt_key: null,
@@ -66,6 +84,29 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
     expect(reconciliationClaim).not.toHaveProperty("purchase_notes");
     expect(reconciliationClaim).not.toHaveProperty("refund_policy");
     expect(reconciliationClaim).not.toHaveProperty("created_by");
+  });
+
+  test("returns prepared query facts needed to resume after a crash", async () => {
+    const preparedClaim = {
+      ...reconciliationClaim,
+      provider_order_no: null,
+      transaction_id: null,
+      payment_status: "pending" as const,
+      fulfillment_status: "pending" as const,
+      paid_amount_fen: null,
+      paid_at: null,
+      reconcile_last_provider_status: 2,
+      reconcile_query_provider_order_no: successfulQueryFacts.providerOrderNo,
+      reconcile_query_transaction_id: successfulQueryFacts.transactionId,
+      reconcile_query_paid_amount_fen: successfulQueryFacts.actualPriceFen,
+      reconcile_query_paid_at: successfulQueryFacts.paidAt,
+    } satisfies BrandingVirtualPaymentReconciliationClaim;
+    const f = await repositoryWith({ rpcData: [preparedClaim] });
+
+    expect(await f.repository.claimReconciliationBatch({
+      limit: 1,
+      leaseSeconds: 120,
+    })).toEqual([preparedClaim]);
   });
 
   test("reschedules with a nullable full-range official status", async () => {
@@ -131,6 +172,41 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
   });
 
   test.each([2, 3, 4] as const)(
+    "prepares successful query status %i before shared confirmation",
+    async (officialStatus) => {
+      const f = await repositoryWith({ rpcData: true });
+
+      expect(await f.repository.prepareSuccessfulQueryReconciliation({
+        orderId: ORDER_ID,
+        claimToken: CLAIM_TOKEN,
+        officialStatus,
+        ...successfulQueryFacts,
+      })).toBe(true);
+      expect(f.calls).toContainEqual([
+        "rpc",
+        "branding_prepare_successful_query_reconciliation",
+        {
+          p_order_id: ORDER_ID,
+          p_claim_token: CLAIM_TOKEN,
+          p_official_status: officialStatus,
+          p_environment: "production",
+          p_openid: order.payer_openid,
+          p_out_trade_no: order.out_trade_no,
+          p_provider_product_id: order.provider_product_id,
+          p_quantity: 1,
+          p_currency: "CNY",
+          p_orig_price_fen: order.amount_fen,
+          p_actual_price_fen: order.amount_fen,
+          p_provider_order_no: "provider-order-1",
+          p_transaction_id: "transaction-1",
+          p_paid_at: "2026-08-01T01:01:00.000Z",
+          p_attach: ORDER_ID,
+        },
+      ]);
+    },
+  );
+
+  test.each([2, 3, 4] as const)(
     "finalizes already-confirmed payment for official status %i",
     async (officialStatus) => {
       const f = await repositoryWith({ rpcData: true });
@@ -160,6 +236,35 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
       ]);
     },
   );
+
+  test("finalizes grant recovery without inventing an official status", async () => {
+    const f = await repositoryWith({ rpcData: true });
+
+    expect(await f.repository.finalizeReconciliationAfterConfirmation({
+      orderId: ORDER_ID,
+      claimToken: CLAIM_TOKEN,
+      officialStatus: null,
+      providerOrderNo: null,
+      transactionId: null,
+      paidAmountFen: null,
+      paidAt: null,
+      deliveryAttemptKey: null,
+    })).toBe(true);
+    expect(f.calls).toContainEqual([
+      "rpc",
+      "branding_finalize_virtual_payment_reconciliation",
+      {
+        p_order_id: ORDER_ID,
+        p_claim_token: CLAIM_TOKEN,
+        p_official_status: null,
+        p_provider_order_no: null,
+        p_transaction_id: null,
+        p_paid_amount_fen: null,
+        p_paid_at: null,
+        p_delivery_attempt_key: null,
+      },
+    ]);
+  });
 
   test("marks delivery by local attempt key and nullable provider request id", async () => {
     const f = await repositoryWith({ rpcData: true });
