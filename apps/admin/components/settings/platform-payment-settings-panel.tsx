@@ -8,7 +8,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { CreditCard, Loader2, Save } from "lucide-react";
 import { adminTabsListClassName, adminTabsTriggerWithBadgeClassName } from "@/components/admin/admin-tabs";
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -18,6 +18,7 @@ import {
   type LatestRequestCoordinator,
 } from "@/components/settings/platform-payment-readiness-request-coordinator";
 import { SecretBundleForm } from "@/components/settings/platform-payment-secret-form";
+import { PlatformVirtualPaymentSettings } from "@/components/settings/platform-virtual-payment-settings";
 import {
   definitionFor,
   emptyProfile,
@@ -47,8 +48,70 @@ import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requestBackendJson } from "@/lib/backend-client";
+import type { BrandingVirtualPaymentEnvironment } from "@gooes/domain";
+
+type PaymentSection = "ordinary" | "virtual";
 
 export function PlatformPaymentSettingsPanel({
+  paymentProfiles,
+}: {
+  paymentProfiles: PlatformWechatPayProfileListResult;
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const section: PaymentSection = searchParams.get("section") === "virtual"
+    ? "virtual"
+    : "ordinary";
+  const environment: BrandingVirtualPaymentEnvironment =
+    searchParams.get("environment") === "production"
+      ? "production"
+      : "sandbox";
+
+  function updateSection(section: PaymentSection) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("group", "payment");
+    params.set("section", section);
+    if (section === "virtual") params.set("environment", environment);
+    else params.delete("environment");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function updateEnvironment(environment: BrandingVirtualPaymentEnvironment) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("group", "payment");
+    params.set("section", "virtual");
+    params.set("environment", environment);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  return (
+    <div className="flex min-h-0 flex-col gap-4 p-4">
+      <Tabs
+        value={section}
+        onValueChange={(value) => updateSection(value as PaymentSection)}
+        className="flex min-h-0 flex-col gap-4"
+      >
+        <div className="-mx-4 overflow-x-auto overflow-y-hidden px-4">
+          <TabsList className={adminTabsListClassName}>
+            <TabsTrigger value="ordinary">普通微信支付</TabsTrigger>
+            <TabsTrigger value="virtual">数字权益虚拟支付</TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="ordinary" className="m-0 data-[state=inactive]:hidden">
+          <OrdinaryPaymentSettingsPanel paymentProfiles={paymentProfiles} />
+        </TabsContent>
+        <TabsContent value="virtual" className="m-0 data-[state=inactive]:hidden">
+          <PlatformVirtualPaymentSettings
+            environment={environment}
+            onEnvironmentChange={updateEnvironment}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+function OrdinaryPaymentSettingsPanel({
   paymentProfiles,
 }: {
   paymentProfiles: PlatformWechatPayProfileListResult;
@@ -106,7 +169,7 @@ export function PlatformPaymentSettingsPanel({
   }, [refreshReadiness]);
 
   return (
-    <div className="flex min-h-0 flex-col gap-4 p-4">
+    <div className="flex min-h-0 flex-col gap-4">
       {paymentProfiles.error ? (
         <StatusAlert>{paymentProfiles.error}</StatusAlert>
       ) : null}
