@@ -345,17 +345,55 @@ describe("PlatformBrandingAddonProductService updates", () => {
     });
   });
 
+  test("writes only business product fields without reading payment configuration", async () => {
+    const current = {
+      ...product,
+      amount_fen: 9_900,
+      enabled: true,
+      purchase_mode: "wechat_virtual",
+    } satisfies BrandingAddonProductRecord;
+    const fixture = createFixture({
+      current,
+      updated: {
+        ...current,
+        name: "年度品牌支持服务",
+        amount_fen: 10_000,
+        purchase_notes: "更新后的购买说明",
+        enabled: false,
+        version: 2,
+      },
+    });
+    await fixture.service.update(platformAuth, {
+      name: "年度品牌支持服务",
+      amount_fen: 10_000,
+      purchase_notes: "更新后的购买说明",
+      enabled: false,
+      version: 1,
+    });
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: {
+        name: "年度品牌支持服务",
+        amount_fen: 10_000,
+        purchase_notes: "更新后的购买说明",
+        enabled: false,
+      },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
+    });
+    expect(fixture.findByProductAndEnvironment).not.toHaveBeenCalled();
+    expect(fixture.getSecretString).not.toHaveBeenCalled();
+  });
+
   test("can enable after the final merged state has a positive integer price", async () => {
     const fixture = createFixture({
       current: { ...product, amount_fen: 1 },
       updated: { ...product, amount_fen: 1, enabled: true, version: 2 },
     });
-
     await fixture.service.update(platformAuth, {
       enabled: true,
       version: 1,
     });
-
     expect(fixture.manageConfiguration).toHaveBeenCalledWith({
       expectedProductVersion: 1,
       productPatch: { enabled: true },
@@ -458,37 +496,4 @@ describe("PlatformBrandingAddonProductService updates", () => {
     });
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
-
-  test("switches to virtual payment only with a valid active production mapping", async () => {
-    const current = {
-      ...product,
-      amount_fen: 9_900,
-      enabled: true,
-    } satisfies BrandingAddonProductRecord;
-    const fixture = createFixture({
-      current,
-      updated: {
-        ...current,
-        purchase_mode: "wechat_virtual",
-        version: 2,
-      },
-    });
-
-    await fixture.service.update(platformAuth, {
-      purchase_mode: "wechat_virtual",
-      version: 1,
-    });
-
-    expect(fixture.findByProductAndEnvironment).toHaveBeenCalledWith({
-      addonProductId: product.id,
-      environment: "production",
-    });
-    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
-      expectedProductVersion: 1,
-      productPatch: { purchase_mode: "wechat_virtual" },
-      virtualProductPatch: {},
-      actorEmployeeId: EMPLOYEE_ID,
-    });
-  });
-
 });

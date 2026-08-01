@@ -8,10 +8,7 @@ import {
   type BrandingVirtualPaymentSecretSettingKey,
   type BrandingVirtualProductRecord,
 } from "@/repositories/branding-virtual-products";
-import type {
-  BrandingAddonProductPatchInput,
-  BrandingVirtualProductPatchInput,
-} from "@/schema/branding-addon";
+import type { BrandingVirtualProductPatchInput } from "@/schema/branding-addon";
 import {
   tenantEntitlementsRepository,
   type TenantEntitlementRecord,
@@ -312,16 +309,6 @@ export function hasVirtualProductValidationInputChanged(
     current.expected_amount_fen !== input.expected_amount_fen ||
     current.encrypted_secret_ref !== input.encrypted_secret_ref ||
     current.secret_revision !== input.secret_revision;
-}
-
-export function hasBrandingAddonProductMutation(
-  input: BrandingAddonProductPatchInput,
-): boolean {
-  return input.name !== undefined ||
-    input.amount_fen !== undefined ||
-    input.purchase_notes !== undefined ||
-    input.enabled !== undefined ||
-    input.purchase_mode !== undefined;
 }
 
 export function brandingVirtualProductVersionConflict() {

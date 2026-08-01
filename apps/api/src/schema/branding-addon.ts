@@ -6,7 +6,6 @@ import {
   MAX_POSTGRES_INTEGER_FEN,
 } from "../services/branding-addon-contracts";
 import {
-  BRANDING_PURCHASE_MODES,
   VIRTUAL_FULFILLMENT_STATUSES,
   VIRTUAL_PAYMENT_ENVIRONMENTS,
   VIRTUAL_PAYMENT_PLATFORMS,
@@ -23,8 +22,6 @@ const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "amount_fen",
   "purchase_notes",
   "enabled",
-  "purchase_mode",
-  "virtual_product",
 ] as const;
 
 const VirtualPaymentSecretRefSchema = z.enum([
@@ -79,8 +76,6 @@ export const BrandingAddonProductPatchSchema = z.object({
     .max(PURCHASE_NOTES_MAX_LENGTH, "购买说明不能超过 500 个字符")
     .optional(),
   enabled: z.boolean().optional(),
-  purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
-  virtual_product: BrandingVirtualProductPatchSchema.optional(),
   version: z.number()
     .int("版本号必须是整数")
     .positive("版本号必须大于 0")
