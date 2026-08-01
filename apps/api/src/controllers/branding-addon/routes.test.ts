@@ -34,7 +34,7 @@ const platformAuth = {
   avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
-  permissions: [{ code: "platform.branding_product.manage", scope: "all" }],
+  permissions: [{ code: "platform.payment.config.manage", scope: "all" }],
 } satisfies AuthContext;
 
 const tenantAuth = {
@@ -62,12 +62,14 @@ async function loadHarness() {
     { default: controller },
     { authorizationService },
     { platformBrandingAddonProductService },
+    { platformBrandingVirtualPaymentSettingsService },
     { brandingVirtualProductService },
     { tenantBrandingAddonOrderService },
   ] = await Promise.all([
     import("."),
     import("@/services/authorization"),
     import("@/services/platform-branding-addon-product"),
+    import("@/services/platform-branding-virtual-payment-settings"),
     import("@/services/branding-virtual-products"),
     import("@/services/tenant-branding-addon-orders"),
   ]);
@@ -75,6 +77,7 @@ async function loadHarness() {
     controller,
     authorizationService,
     platformBrandingAddonProductService,
+    platformBrandingVirtualPaymentSettingsService,
     brandingVirtualProductService,
     tenantBrandingAddonOrderService,
   };
@@ -121,6 +124,9 @@ describe("BrandingAddonController routes", () => {
       "POST /platform/branding/entitlement-product/virtual-products/:environment/validate",
       "GET /platform/branding/entitlement-orders",
       "GET /platform/branding/entitlement-orders/:id",
+      "POST /platform/branding/virtual-payment/refunds",
+      "GET /platform/branding/virtual-payment/refunds",
+      "GET /platform/branding/virtual-payment/refunds/:id",
       "GET /tenant/branding/entitlement-product",
       "POST /tenant/branding/entitlement-orders",
       "POST /tenant/branding/entitlement-orders/:id/payment-request",
@@ -136,12 +142,13 @@ describe("BrandingAddonController routes", () => {
       authorizationService,
       controller,
       platformBrandingAddonProductService,
+      platformBrandingVirtualPaymentSettingsService,
     } = await loadHarness();
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
       get: platformBrandingAddonProductService.get,
       update: platformBrandingAddonProductService.update,
-      validate: platformBrandingAddonProductService.validateVirtualProduct,
+      validate: platformBrandingVirtualPaymentSettingsService.validate,
     };
     const get = mock(async () => ({ product: { version: 1 } }));
     const update = mock(async () => ({ product: { version: 2 } }));
@@ -152,8 +159,8 @@ describe("BrandingAddonController routes", () => {
     replaceMethod(platformBrandingAddonProductService, "get", get);
     replaceMethod(platformBrandingAddonProductService, "update", update);
     replaceMethod(
-      platformBrandingAddonProductService,
-      "validateVirtualProduct",
+      platformBrandingVirtualPaymentSettingsService,
+      "validate",
       validate,
     );
 
@@ -192,10 +199,11 @@ describe("BrandingAddonController routes", () => {
         query: {},
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {});
-      expect(validate).toHaveBeenCalledWith(platformAuth, {
-        environment: "production",
-        version: 1,
-      });
+      expect(validate).toHaveBeenCalledWith(
+        platformAuth,
+        "production",
+        { version: 1 },
+      );
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingAddonProductService, "get", originals.get);
@@ -205,8 +213,8 @@ describe("BrandingAddonController routes", () => {
         originals.update,
       );
       replaceMethod(
-        platformBrandingAddonProductService,
-        "validateVirtualProduct",
+        platformBrandingVirtualPaymentSettingsService,
+        "validate",
         originals.validate,
       );
     }
