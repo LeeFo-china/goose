@@ -7,6 +7,7 @@ import {
   ORDER_ID,
   order,
   OTHER_TENANT_ID,
+  product,
   TENANT_ID,
   createDependencies,
 } from "./tenant-branding-addon-orders.test-fixtures";
@@ -32,6 +33,52 @@ async function createService(
 }
 
 describe("TenantBrandingAddonOrderService payment requests", () => {
+  test.each(["maintenance", "wechat_virtual"] as const)(
+    "blocks legacy order creation while purchase mode is %s",
+    async (purchaseMode) => {
+      const dependencies = createDependencies({
+        product: { ...product, purchase_mode: purchaseMode },
+      });
+      const fixture = await createService(dependencies);
+
+      await expect(fixture.service.createOrder(
+        authContext,
+        {
+          product_code: "custom_support_branding_annual",
+          idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+        order.payer_openid,
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      });
+      expect(dependencies.orderRepository.findByIdempotencyKey)
+        .not.toHaveBeenCalled();
+      expect(dependencies.orderRepository.createOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(["maintenance", "wechat_virtual"] as const)(
+    "blocks legacy payment-request creation while purchase mode is %s",
+    async (purchaseMode) => {
+      const dependencies = createDependencies({
+        product: { ...product, purchase_mode: purchaseMode },
+      });
+      const fixture = await createService(dependencies);
+
+      await expect(fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        order.payer_openid,
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      });
+      expect(dependencies.orderRepository.findInternalTenantOrderById)
+        .not.toHaveBeenCalled();
+    },
+  );
+
   test("rejects a payment request bound to another authenticated OpenID", async () => {
     const fixture = await createService();
 

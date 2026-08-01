@@ -23,7 +23,9 @@ type ExpirationClient = {
   rpc(
     name:
       | "branding_claim_expired_addon_orders"
-      | "branding_renew_addon_close_claim",
+      | "branding_renew_addon_close_claim"
+      | "branding_claim_legacy_pending_orders"
+      | "branding_assert_virtual_cutover_ready",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -45,6 +47,8 @@ export type MarkBrandingAddonOrderClosedInput = {
   claimToken: string;
   closedAt: Date;
   requireMissingPrepay?: boolean;
+  failureCode?: "PAYMENT_CHANNEL_MIGRATED";
+  failureMessage?: string;
 };
 
 export type ReleaseBrandingAddonCloseClaimInput = {
@@ -102,6 +106,30 @@ export class BrandingAddonExpirationRepository {
     return (data as BrandingAddonExpirationOrderRecord | null) ?? null;
   }
 
+  async claimLegacyPendingOrders(input: {
+    batchSize: number;
+    leaseSeconds: number;
+  }) {
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_claim_legacy_pending_orders",
+      {
+        p_limit: clampInteger(input.batchSize, 1, 100),
+        p_lease_seconds: clampInteger(input.leaseSeconds, 10, 600),
+      },
+    );
+    if (error) throw Errors.dbError("领取旧品牌权益待支付订单失败");
+    return (data ?? []) as BrandingAddonExpirationOrderRecord[];
+  }
+
+  async assertVirtualCutoverReady() {
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_assert_virtual_cutover_ready",
+      {},
+    );
+    if (error) throw Errors.dbError("检查虚拟支付切换条件失败");
+    return data === true;
+  }
+
   async markOrderClosed(input: MarkBrandingAddonOrderClosedInput) {
     return this.updateClaimedOrder(
       input.orderId,
@@ -109,6 +137,14 @@ export class BrandingAddonExpirationRepository {
       {
         status: "closed",
         closed_at: input.closedAt.toISOString(),
+        ...(input.failureCode
+          ? {
+            failure_code: input.failureCode,
+            failure_message: boundedOptionalText(
+              input.failureMessage ?? "旧普通支付渠道已关闭",
+            ),
+          }
+          : {}),
         close_claim_token: null,
         close_claim_expires_at: null,
         close_last_error: null,

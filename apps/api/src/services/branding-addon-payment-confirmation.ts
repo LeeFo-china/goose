@@ -12,7 +12,8 @@ import {
 
 export type BrandingAddonPaymentConfirmationSource =
   | "wechat_callback"
-  | "expiration_reconcile";
+  | "expiration_reconcile"
+  | "virtual_payment_cutover";
 
 export type BrandingAddonValidatedSuccessTransaction =
   WechatPayValidatedSuccessTransaction & {

@@ -150,6 +150,7 @@ export class TenantBrandingAddonOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
+    const product = await this.requireEnabledLegacyProduct();
     const entitlement = await this.findEntitlement(actor.tenantId);
     assertEntitlementAllowsPurchase(entitlement);
 
@@ -181,7 +182,6 @@ export class TenantBrandingAddonOrderService {
       );
     }
 
-    const product = await this.requireEnabledProduct();
     const preflight = await this.payment.preflight();
     const tradeNo = this.tradeNoFactory();
     const creationNow = this.nowFactory();
@@ -251,6 +251,7 @@ export class TenantBrandingAddonOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
+    await this.requireEnabledLegacyProduct();
     const entitlement = await this.findEntitlement(actor.tenantId);
     assertEntitlementAllowsPurchase(entitlement);
     const order = await this.orderRepository.findInternalTenantOrderById({
@@ -318,6 +319,18 @@ export class TenantBrandingAddonOrderService {
       );
     }
     return product as BrandingAddonProductRecord & { amount_fen: number };
+  }
+
+  private async requireEnabledLegacyProduct() {
+    const product = await this.requireEnabledProduct();
+    if (product.purchase_mode !== "direct_legacy") {
+      throw Errors.business(
+        409,
+        "品牌权益购买渠道已迁移",
+        "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      );
+    }
+    return product;
   }
 
   private async findEntitlement(tenantId: string) {
