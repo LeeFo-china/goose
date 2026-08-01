@@ -987,6 +987,79 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION public.branding_begin_virtual_payment_delivery_retry(
+  p_order_id uuid,
+  p_claim_token uuid,
+  p_attempt_key uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_order public.tenant_virtual_addon_orders%ROWTYPE;
+  v_now timestamptz;
+BEGIN
+  IF p_order_id IS NULL
+     OR p_claim_token IS NULL
+     OR p_attempt_key IS NULL
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_DELIVERY_REQUEST_INVALID';
+  END IF;
+
+  SELECT orders.* INTO v_order
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = p_order_id
+  FOR UPDATE;
+  v_now := clock_timestamp();
+  IF NOT FOUND
+     OR v_order.reconcile_claim_token IS DISTINCT FROM p_claim_token
+     OR v_order.reconcile_claim_expires_at IS NULL
+     OR v_order.reconcile_claim_expires_at <= v_now
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_CLAIM_INVALID';
+  END IF;
+  IF v_order.payment_status <> 'succeeded'
+     OR v_order.fulfillment_status <> 'granted'
+     OR v_order.provider_delivery_status <> 'failed'
+     OR v_order.provider_delivery_attempt_key
+       IS NOT DISTINCT FROM p_attempt_key
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_DELIVERY_STATE_INVALID';
+  END IF;
+
+  UPDATE public.tenant_virtual_addon_orders AS orders
+  SET provider_delivery_status = 'pending',
+      provider_delivery_attempt_count =
+        orders.provider_delivery_attempt_count + 1,
+      provider_delivery_attempt_key = p_attempt_key,
+      provider_delivery_request_id = NULL,
+      provider_delivery_provided_at = NULL,
+      provider_delivery_last_error_code = NULL,
+      provider_delivery_last_error = NULL,
+      reconcile_next_at = v_now,
+      reconcile_last_checked_at = v_now,
+      reconcile_last_error_code = NULL,
+      reconcile_last_error = NULL
+  WHERE orders.id = p_order_id
+    AND orders.reconcile_claim_token = p_claim_token
+    AND orders.reconcile_claim_expires_at > clock_timestamp();
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_CLAIM_INVALID';
+  END IF;
+  RETURN true;
+END;
+$$;
+
 CREATE FUNCTION public.branding_mark_virtual_payment_delivery(
   p_order_id uuid,
   p_claim_token uuid,
@@ -1153,6 +1226,13 @@ REVOKE ALL ON FUNCTION public.branding_finalize_virtual_payment_reconciliation(
 ) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.branding_finalize_virtual_payment_reconciliation(
   uuid, uuid, integer, text, text, integer, timestamptz, uuid
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.branding_begin_virtual_payment_delivery_retry(
+  uuid, uuid, uuid
+) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.branding_begin_virtual_payment_delivery_retry(
+  uuid, uuid, uuid
 ) TO service_role;
 
 REVOKE ALL ON FUNCTION public.branding_mark_virtual_payment_delivery(

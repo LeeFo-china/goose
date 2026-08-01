@@ -214,6 +214,22 @@ export class BrandingVirtualPaymentReconciliationRepository {
     );
   }
 
+  async beginReconciliationDeliveryRetry(input: {
+    orderId: string;
+    claimToken: string;
+    attemptKey: string;
+  }): Promise<boolean> {
+    return this.reconciliationBooleanCommand(
+      "branding_begin_virtual_payment_delivery_retry",
+      {
+        p_order_id: input.orderId,
+        p_claim_token: input.claimToken,
+        p_attempt_key: input.attemptKey,
+      },
+      "开始虚拟支付发货重试失败",
+    );
+  }
+
   private async reconciliationBooleanCommand(
     functionName: string,
     parameters: Record<string, unknown>,

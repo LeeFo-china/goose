@@ -429,6 +429,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "branding_close_unpaid_virtual_payment_reconciliation",
       "branding_prepare_successful_query_reconciliation",
       "branding_finalize_virtual_payment_reconciliation",
+      "branding_begin_virtual_payment_delivery_retry",
       "branding_mark_virtual_payment_delivery",
     ]) {
       const command = normalizeSql(extractFunction(migrationSql, name));
@@ -471,6 +472,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "branding_close_unpaid_virtual_payment_reconciliation(uuid, uuid, integer)",
       "branding_prepare_successful_query_reconciliation(uuid, uuid, integer, text, text, text, text, integer, text, integer, integer, text, text, timestamptz, text)",
       "branding_finalize_virtual_payment_reconciliation(uuid, uuid, integer, text, text, integer, timestamptz, uuid)",
+      "branding_begin_virtual_payment_delivery_retry(uuid, uuid, uuid)",
       "branding_mark_virtual_payment_delivery(uuid, uuid, text, uuid, text, text, text)",
     ]) {
       expect(normalized).toContain(

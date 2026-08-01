@@ -14,6 +14,7 @@ process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const ATTEMPT_KEY = "88888888-8888-4888-8888-888888888888";
+const RETRY_ATTEMPT_KEY = "99999999-9999-4999-8999-999999999999";
 const successfulQueryFacts = {
   environment: "production" as const,
   openid: order.payer_openid,
@@ -291,6 +292,25 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
         p_provider_request_id: null,
         p_error_code: "PROVIDER_TIMEOUT",
         p_error_summary: "请求超时",
+      },
+    ]);
+  });
+
+  test("begins a failed delivery retry with a new local attempt key", async () => {
+    const f = await repositoryWith({ rpcData: true });
+
+    expect(await f.repository.beginReconciliationDeliveryRetry({
+      orderId: ORDER_ID,
+      claimToken: CLAIM_TOKEN,
+      attemptKey: RETRY_ATTEMPT_KEY,
+    })).toBe(true);
+    expect(f.calls).toContainEqual([
+      "rpc",
+      "branding_begin_virtual_payment_delivery_retry",
+      {
+        p_order_id: ORDER_ID,
+        p_claim_token: CLAIM_TOKEN,
+        p_attempt_key: RETRY_ATTEMPT_KEY,
       },
     ]);
   });
