@@ -1,6 +1,7 @@
 import {
   brandingVirtualOrderRepository,
 } from "@/repositories/branding-virtual-orders";
+import { Errors } from "@/errors/error-factory";
 import type {
   BrandingVirtualOfficialStatus,
   BrandingVirtualPaymentReconciliationClaim,
@@ -79,6 +80,7 @@ export type BrandingVirtualReconciliationTelemetry = {
   refundPending?: number;
   refundRescheduled?: number;
   refundTerminalFailed?: number;
+  refundConflicts?: number;
 };
 
 type Dependencies = {
@@ -211,11 +213,16 @@ export class BrandingVirtualPaymentReconciliationService {
       return;
     }
     if (result.status === 2 || result.status === 3 || result.status === 4) {
+      if (result.orderType !== 0 && result.orderType !== 7) {
+        throw Errors.business(409, "微信虚拟支付订单类型不是支付事实",
+          "BRANDING_VIRTUAL_PAYMENT_ORDER_TYPE_CONFLICT");
+      }
       const transaction = queriedTransaction(claim, result);
       await this.repository.prepareSuccessfulQueryReconciliation({
         orderId: claim.id,
         claimToken: claim.reconcile_claim_token,
         officialStatus: result.status,
+        providerOrderType: result.orderType,
         ...transaction,
       });
       await this.confirmAndFinalizeQuery(

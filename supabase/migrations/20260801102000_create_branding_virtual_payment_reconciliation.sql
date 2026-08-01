@@ -678,6 +678,7 @@ CREATE FUNCTION public.branding_prepare_successful_query_reconciliation(
   p_order_id uuid,
   p_claim_token uuid,
   p_official_status integer,
+  p_provider_order_type integer,
   p_environment text,
   p_openid text,
   p_out_trade_no text,
@@ -703,6 +704,7 @@ DECLARE
 BEGIN
   IF p_order_id IS NULL OR p_claim_token IS NULL
      OR p_official_status IS NULL OR p_official_status NOT IN (2, 3, 4)
+     OR p_provider_order_type NOT IN (0, 7)
      OR p_environment IS NULL
      OR p_openid IS NULL OR btrim(p_openid) = ''
      OR char_length(p_openid) > 128
@@ -768,6 +770,11 @@ BEGIN
       ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
   END IF;
+  IF v_order.provider_order_type IS NOT NULL
+    AND v_order.provider_order_type <> p_provider_order_type THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH';
+  END IF;
 
   v_has_query_audit :=
     v_order.reconcile_query_provider_order_no IS NOT NULL
@@ -797,6 +804,7 @@ BEGIN
       reconcile_last_error_code = NULL,
       reconcile_last_error = NULL,
       reconcile_completion_kind = 'query',
+      provider_order_type = COALESCE(orders.provider_order_type, p_provider_order_type),
       reconcile_query_provider_order_no = p_provider_order_no,
       reconcile_query_transaction_id = p_transaction_id,
       reconcile_query_paid_amount_fen = p_actual_price_fen,
@@ -1215,11 +1223,11 @@ GRANT EXECUTE ON FUNCTION public.branding_close_unpaid_virtual_payment_reconcili
 ) TO service_role;
 
 REVOKE ALL ON FUNCTION public.branding_prepare_successful_query_reconciliation(
-  uuid, uuid, integer, text, text, text, text, integer, text, integer,
+  uuid, uuid, integer, integer, text, text, text, text, integer, text, integer,
   integer, text, text, timestamptz, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.branding_prepare_successful_query_reconciliation(
-  uuid, uuid, integer, text, text, text, text, integer, text, integer,
+  uuid, uuid, integer, integer, text, text, text, text, integer, text, integer,
   integer, text, text, timestamptz, text
 ) TO service_role;
 

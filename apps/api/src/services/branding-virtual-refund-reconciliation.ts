@@ -20,6 +20,7 @@ export type BrandingVirtualRefundReconciliationTelemetry = {
   refundClaimed: number; refundQueried: number; refundSucceeded: number;
   refundFailed: number; refundCompensated: number; refundPending: number;
   refundRescheduled: number; refundTerminalFailed: number;
+  refundConflicts: number;
 };
 
 export class BrandingVirtualRefundReconciliationService {
@@ -35,7 +36,8 @@ export class BrandingVirtualRefundReconciliationService {
     const claims = await repository.claim({ limit: input.batchSize, leaseSeconds: 120 });
     const telemetry = { refundClaimed: claims.length, refundQueried: 0,
       refundSucceeded: 0, refundFailed: 0, refundCompensated: 0,
-      refundPending: 0, refundRescheduled: 0, refundTerminalFailed: 0 };
+      refundPending: 0, refundRescheduled: 0, refundTerminalFailed: 0,
+      refundConflicts: 0 };
     const resources = this.createResources();
     await runBounded(claims, 20, async (claim) => {
       try {
@@ -77,7 +79,11 @@ export class BrandingVirtualRefundReconciliationService {
       orderId: claim.out_trade_no,
     });
     telemetry.refundQueried += 1;
-    const expectedOrderType = claim.platform_mode === "merchant_initiated" ? 0 : 7;
+    const expectedOrderType = result.status === 5 ? 1
+      : result.status === 8 ? 8
+      : result.status === 7
+        ? (claim.platform_mode === "merchant_initiated" ? 1 : 8)
+        : (claim.platform_mode === "merchant_initiated" ? 0 : 7);
     if (result.orderId !== claim.out_trade_no || result.environment !== claim.environment
       || result.orderFee !== claim.amount_fen || result.paidFee !== claim.amount_fen
       || result.orderType !== expectedOrderType) {
@@ -86,6 +92,23 @@ export class BrandingVirtualRefundReconciliationService {
     }
     const terminal = claim.platform_mode === "merchant_initiated"
       ? result.status === 5 : result.status === 8;
+    const crossTerminal = (claim.platform_mode === "merchant_initiated" &&
+      result.status === 8) || (claim.platform_mode === "apple_external" &&
+      result.status === 5);
+    if (crossTerminal) {
+      const code = "BRANDING_VIRTUAL_REFUND_CROSS_CHANNEL_TERMINAL_CONFLICT";
+      telemetry.refundConflicts += 1;
+      if (claim.attempt_count >= 3) {
+        await (this.dependencies.repository ??
+          brandingVirtualRefundReconciliationRepository).markConflict({
+          refundId: claim.refund_id, claimToken: claim.claim_token,
+          errorCode: code,
+        });
+        telemetry.refundFailed += 1;
+        return;
+      }
+      throw Errors.business(409, "微信退款终态与可信支付渠道冲突", code);
+    }
     if (terminal || result.status === 7) {
       this.assertLease(claim);
       await (this.dependencies.repository ?? brandingVirtualRefundReconciliationRepository)

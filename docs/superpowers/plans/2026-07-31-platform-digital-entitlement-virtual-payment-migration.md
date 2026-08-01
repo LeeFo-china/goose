@@ -29,10 +29,14 @@
 - `supabase/migrations/20260731130000_create_branding_virtual_payment_foundation.sql`：商品购买模式、虚拟商品映射、虚拟订单、权限、RLS、索引和订单创建 RPC。
 - `supabase/migrations/20260731131000_create_wechat_mini_session_credentials.sql`：加密微信会话凭据、轮换 RPC、撤销触发器和访问边界。
 - `supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql`：虚拟商品验证生命周期、商品与映射原子管理 RPC、验证结果 RPC。
+- `supabase/migrations/20260801100000_harden_branding_virtual_order_payment_window.sql`：支付请求短租约、时窗和服务端 attempt 事实。
 - `supabase/migrations/20260801101000_create_branding_virtual_payment_fulfillment.sql`：虚拟支付消息收件箱、支付确认与权益履约原子 RPC。
+- `supabase/migrations/20260801102000_create_branding_virtual_payment_reconciliation.sql`：支付查单、履约恢复和发货通知对账。
 - `supabase/migrations/20260731134000_create_branding_entitlement_order_query.sql`：新旧订单统一分页、详情与筛选 RPC。
 - `supabase/migrations/20260731135000_create_branding_virtual_payment_refunds.sql`：人工退款、退款状态、退款补偿事件和原子补偿 RPC。
-- `supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql`：旧普通支付写入数据库保护、旧 pending claim 和切换前置校验。
+- `supabase/migrations/20260801103000_integrate_branding_virtual_payment_refund_notifications.sql`：退款结果通知与 Apple 退款问询收件箱。
+- `supabase/migrations/20260801104000_create_branding_virtual_refund_reconciliation.sql`：退款终态查单、补偿重试和人工冲突收口。
+- `supabase/migrations/20260731135500_guard_legacy_branding_payment_cutover.sql`：Task 11 创建；阻断切换后的旧品牌权益普通支付写入，并提供旧 pending 订单收敛 claim RPC。
 
 ### API
 
@@ -930,7 +934,7 @@ Expected: FAIL，新模块和路由不存在。
 CREATE TABLE public.wechat_virtual_payment_notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_key text NOT NULL UNIQUE,
-  event_type text NOT NULL CHECK (event_type IN ('xpay_goods_deliver_notify', 'xpay_refund_notify', 'xpay_refund_inquiry')),
+  event_type text NOT NULL CHECK (event_type IN ('xpay_goods_deliver_notify', 'xpay_refund_notify', 'xpay_subscribe_ios_refund_query_notify')),
   environment text NOT NULL CHECK (environment IN ('sandbox', 'production')),
   recipient_original_id text NOT NULL,
   sender_id_hash text NOT NULL,
@@ -968,7 +972,7 @@ ON public.wechat_virtual_payment_notifications(status, received_at, id)
 WHERE status IN ('processing', 'failed');
 ```
 
-收件箱表撤销 `service_role` 的整表读写权限，接收、读取幂等结果、完成和失败迁移均封装在三个定向 `SECURITY DEFINER` RPC 的有界返回中。接收 RPC 仅接受强类型事实，由数据库生成稳定事件键、规范化快照、载荷哈希和固定认证结论；应用层不能提交任意 JSON、伪造 `verified` 或自行计算重试次数。触发器保持快照、订单绑定和完成结果不可变，`processed` 为终态，每次写入 `failed` 必须原子递增一次重试计数。表级事件枚举保留后续 `xpay_refund_notify` / `xpay_refund_inquiry`，当前仅发货事件有可执行接收 RPC，并由事件专属 CHECK 要求完整商品上下文。
+收件箱表撤销 `service_role` 的整表读写权限，接收、读取幂等结果、完成和失败迁移均封装在三个定向 `SECURITY DEFINER` RPC 的有界返回中。接收 RPC 仅接受强类型事实，由数据库生成稳定事件键、规范化快照、载荷哈希和固定认证结论；应用层不能提交任意 JSON、伪造 `verified` 或自行计算重试次数。触发器保持快照、订单绑定和完成结果不可变，`processed` 为终态，每次写入 `failed` 必须原子递增一次重试计数。表级事件枚举保留后续 `xpay_refund_notify` / `xpay_subscribe_ios_refund_query_notify`，当前仅发货事件有可执行接收 RPC，并由事件专属 CHECK 要求完整商品上下文。
 
 同一 migration 新建 `branding_confirm_virtual_addon_purchase(...)`。事务锁顺序固定为：租户权益 advisory lock、微信 transaction/provider order advisory lock、order row、entitlement row；完整比对服务端订单、通知收件箱和微信支付事实，包括接收方原始 ID、发送方哈希、微信创建时间和消息类型。支付事实先落为 `succeeded + grant_failed`，权益更新与 purchase event 位于可回滚子事务；发放失败必须保留真实收款事实供重试。若已有 `entitlement_event_id` 则返回原事实；按 `timestamptz + interval '1 year'` 计算首次或顺延到期时间；暂停或撤销的权益只延长期限，不静默恢复状态。RPC 以 order、notification、transaction 和 provider order identity 共同约束幂等，并拒绝 NULL 或不匹配的 source/event 组合。
 
@@ -1250,7 +1254,7 @@ ON public.tenant_virtual_addon_refunds(status, created_at, id)
 WHERE status IN ('reviewing', 'submitted', 'external_required', 'succeeded');
 ```
 
-`branding_compensate_virtual_addon_refund(...)` 必须锁定 refund、order、原 purchase event 和 tenant entitlement；`source_type='refund'`、`source_id=refund.id`、`reverses_event_id=purchase_event.id`；按原购买事件的一年期事实扣减到期日；active 到期则转 expired，suspended/revoked 保持状态；链路不一致时返回稳定人工处理错误，不自动猜测日期。微信退款事实最终成功时，order/refund 的退款状态立即保持 `succeeded`，权益补偿通过独立 `compensation_status` 重试，补偿失败不能把退款改回 failed。
+`branding_compensate_virtual_addon_refund(...)` 必须锁定 refund、order、原 purchase event 和 tenant entitlement；`source_type='refund'`、`source_id=refund.id`、`reverses_event_id=purchase_event.id`；精确恢复原购买事件 `old_value.expires_at`，首次开通没有旧到期日时恢复到该事件的 `new_value.starts_at`，禁止按当前到期日减一年；active 到期则转 expired，suspended/revoked 保持状态；链路不一致时返回稳定人工处理错误，不自动猜测日期。微信退款事实最终成功时，order/refund 的退款状态立即保持 `succeeded`，权益补偿通过独立 `compensation_status` 重试，补偿失败不能把退款改回 failed。
 
 种子权限：
 
@@ -1273,7 +1277,7 @@ export const BrandingVirtualRefundCreateSchema = z.object({
 }).strict();
 ```
 
-新增 POST `/platform/branding/virtual-payment/refunds`、GET 列表和 GET 详情；列表使用统一分页最大 100。Android/鸿蒙/Windows 审核通过调用 gateway 后进入 submitted；iOS 只进入 external_required。`xpay_refund_inquiry` 在官方时限内依据订单、已履约事实和售后证据返回建议并保存审计，但绝不标记退款成功。`xpay_refund_notify` 最终成功后写退款事实；若 Apple 通知先于本地申请，则以 `request_source='apple_notification'` 和微信稳定标识幂等创建外部退款记录，再独立重试权益补偿。
+新增 POST `/platform/branding/virtual-payment/refunds`、GET 列表和 GET 详情；列表使用统一分页最大 100。退款路由只使用微信查单确认并持久化的支付 `order_type`：普通支付进入 submitted，Apple 支付进入 external_required；客户端 `requested_platform` 仅用于诊断。`xpay_subscribe_ios_refund_query_notify` 在官方时限内依据订单、已履约事实和售后证据返回建议并保存审计，但绝不标记退款成功。`xpay_refund_notify` 最终成功后写退款事实；若 Apple 通知先于本地申请，则以 `request_source='apple_notification'` 和微信稳定标识幂等创建外部退款记录，再独立重试权益补偿。
 
 扩展 `BrandingVirtualReconciliationService` 和现有 billing worker：每批 claim 最多 100 个 submitted/external_required 退款查询最终状态，并对 `status='succeeded' AND compensation_status IN ('pending','failed')` 的记录重试补偿；退款子任务失败仍按现有 partial-failure 语义隔离。
 
@@ -1531,9 +1535,11 @@ supabase migration list
 supabase db push --dry-run
 ```
 
-Expected: dry-run 仅列出本计划六个 migration，顺序为 `130000`、`131000`、`132000`、`133000`、`134000`、`135000`，无历史 migration 重写。
+Task 9 完成时，当前工作树已有十个实际 migration：`20260731130000`、`20260731131000`、`20260731132000`、`20260731134000`、`20260731135000`、`20260801100000`、`20260801101000`、`20260801102000`、`20260801103000`、`20260801104000`。Task 11 再创建 `20260731135500_guard_legacy_branding_payment_cutover.sql`。
 
-按仓库部署流程应用 dev 后再次运行 `supabase migration list`；Expected: Local/Remote 六个版本全部对齐。随后运行统一列表的 `EXPLAIN (ANALYZE, BUFFERS)`、`bun --env-file=/dev/null apps/api/src/scripts/branding-virtual-payment-smoke.ts`，记录 requestId 和脱敏结果。
+Expected: Task 12 最终 dry-run 仅列出本计划十一个 migration，按版本顺序为 `20260731130000`、`20260731131000`、`20260731132000`、`20260731134000`、`20260731135000`、`20260731135500`、`20260801100000`、`20260801101000`、`20260801102000`、`20260801103000`、`20260801104000`，无历史 migration 重写。
+
+按仓库部署流程应用 dev 后再次运行 `supabase migration list`；Expected: Local/Remote 上述十一个版本全部对齐。随后运行统一列表的 `EXPLAIN (ANALYZE, BUFFERS)`、`bun --env-file=/dev/null apps/api/src/scripts/branding-virtual-payment-smoke.ts`，记录 requestId 和脱敏结果。
 
 - [ ] **Step 7: 回归独立商户号普通支付**
 

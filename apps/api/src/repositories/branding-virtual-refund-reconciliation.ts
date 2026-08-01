@@ -81,6 +81,17 @@ export class BrandingVirtualRefundReconciliationRepository {
     );
     if (error || data !== true) throw Errors.dbError("重排虚拟支付退款对账失败");
   }
+
+  async markConflict(input: {
+    refundId: string; claimToken: string; errorCode: string;
+  }): Promise<void> {
+    const { data, error } = await this.clientProvider().rpc(
+      "branding_mark_virtual_refund_reconciliation_conflict",
+      { p_refund_id: input.refundId, p_claim_token: input.claimToken,
+        p_error_code: input.errorCode.slice(0, 100) },
+    );
+    if (error || data !== true) throw Errors.dbError("标记虚拟支付退款终态冲突失败");
+  }
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

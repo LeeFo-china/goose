@@ -14,7 +14,12 @@ const query = {
 };
 
 async function service() {
-  const processProviderNotification = mock(async () => ({
+  const processProviderNotification = mock(async (): Promise<{
+    notification_id: string;
+    refund_id: string;
+    refund_status: "succeeded" | "failed";
+    compensation_status: "pending";
+  }> => ({
     notification_id: "11111111-1111-4111-8111-111111111111",
     refund_id: "22222222-2222-4222-8222-222222222222",
     refund_status: "succeeded" as const,
@@ -108,5 +113,32 @@ describe("virtual refund notifications", () => {
     expect(retried.body).toEqual({ ErrCode: 0, ErrMsg: "success" });
     expect(ports.processProviderNotification).toHaveBeenCalledTimes(2);
     expect(ports.compensate).toHaveBeenCalledTimes(2);
+  });
+
+  test("records a failed refund notification without compensation", async () => {
+    const ports = await service();
+    ports.processProviderNotification.mockResolvedValueOnce({
+      notification_id: "11111111-1111-4111-8111-111111111111",
+      refund_id: "22222222-2222-4222-8222-222222222222",
+      refund_status: "failed",
+      compensation_status: "pending",
+    });
+    const result = await ports.instance.handle({
+      rawBody: JSON.stringify({
+        ToUserName: "gh_original", FromUserName: "official-account",
+        CreateTime: 1_714_037_059, MsgType: "event", Event: "xpay_refund_notify",
+        OpenId: "payer-openid", WxRefundId: "wx-refund-1", MchRefundId: "BVR-1",
+        WxOrderId: "wx-order-1", MchOrderId: "BV202608010001", RefundFee: 100,
+        RetCode: 1, RetMsg: "FAILED", RefundStartTimestamp: 1_714_037_060,
+        RefundSuccTimestamp: 0,
+        WxpayRefundTransactionId: "wx-refund-transaction-1", RetryTimes: 0,
+      }),
+      contentType: "application/json", query, requestId: "refund-failed",
+    });
+    expect(result.body).toEqual({ ErrCode: 0, ErrMsg: "success" });
+    expect(ports.processProviderNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ successful: false, refundSucceededAt: null }),
+    );
+    expect(ports.compensate).not.toHaveBeenCalled();
   });
 });

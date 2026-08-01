@@ -26,6 +26,7 @@ const MANAGE_PERMISSION = "platform.branding_virtual_refund.manage";
 type RepositoryPort = Pick<
   typeof brandingVirtualRefundRepository,
   | "findOrderContext"
+  | "recordProviderOrderTypeFact"
   | "create"
   | "claimSubmission"
   | "renewSubmissionClaim"
@@ -39,7 +40,7 @@ type CredentialsPort = Pick<
   typeof wechatMiniSessionCredentialService,
   "getActiveForUser"
 >;
-type GatewayPort = Pick<WechatVirtualPaymentGatewayPort, "refundOrder">;
+type GatewayPort = Pick<WechatVirtualPaymentGatewayPort, "queryOrder" | "refundOrder">;
 type SettingsPort = Pick<
   typeof systemSettingsService,
   "getPlatformSecretString"
@@ -102,6 +103,34 @@ export class BrandingVirtualRefundService {
     if (!order) throw refundOrderNotFound();
     assertRefundableOrder(order);
 
+    let accessToken: string | null = null;
+    let signingSecret: { environment: "sandbox" | "production"; appKey: string } | null = null;
+    if (order.provider_order_type === null) {
+      [accessToken, signingSecret] = await Promise.all([
+        this.accessTokenProvider.getAccessToken(),
+        this.requireBoundSecret(order),
+      ]);
+      const providerFact = await this.gateway.queryOrder({
+        accessToken,
+        openid: order.payer_openid,
+        environment: order.environment,
+        signingSecret,
+        orderId: order.out_trade_no,
+      });
+      assertProviderRefundableFact(order, providerFact);
+      await this.repository.recordProviderOrderTypeFact({
+        orderId: order.id,
+        officialStatus: providerFact.status,
+        providerOrderType: providerFact.orderType,
+        outTradeNo: providerFact.orderId,
+        environment: providerFact.environment,
+        providerOrderNo: providerFact.wechatOrderId,
+        orderFeeFen: providerFact.orderFee,
+        paidFeeFen: providerFact.paidFee,
+        leftFeeFen: providerFact.leftFee,
+      });
+    }
+
     const refund = await this.repository.create({
       orderId: input.order_id,
       idempotencyKey: input.idempotency_key,
@@ -121,14 +150,15 @@ export class BrandingVirtualRefundService {
     });
     if (!claim) return refund;
     try {
-      const [credential, accessToken, signingSecret] = await Promise.all([
+      [accessToken, signingSecret] = await Promise.all([
+        accessToken ?? this.accessTokenProvider.getAccessToken(),
+        signingSecret ?? this.requireBoundSecret(order),
+      ]);
+      const credential = await
         this.credentials.getActiveForUser({
           userId: order.created_by_user_id,
           openid: order.payer_openid,
-        }),
-        this.accessTokenProvider.getAccessToken(),
-        this.requireBoundSecret(order),
-      ]);
+        });
       const renewed = await this.repository.renewSubmissionClaim({
         refundId: refund.id,
         claimToken: claim.claimToken,
@@ -260,6 +290,32 @@ function assertRefundableOrder(order: BrandingVirtualRefundOrderContext): void {
       "当前虚拟支付订单不可退款",
       "BRANDING_VIRTUAL_REFUND_ORDER_NOT_REFUNDABLE",
     );
+  }
+  if (order.refund_status === "succeeded") {
+    throw Errors.business(409, "虚拟支付订单已退款",
+      "BRANDING_VIRTUAL_REFUND_ALREADY_EXISTS");
+  }
+}
+
+function assertProviderRefundableFact(
+  order: BrandingVirtualRefundOrderContext,
+  fact: Awaited<ReturnType<GatewayPort["queryOrder"]>>,
+): asserts fact is typeof fact & {
+  status: 2 | 3 | 4;
+  orderType: 0 | 7;
+  wechatOrderId: string;
+} {
+  if (
+    ![2, 3, 4].includes(fact.status) ||
+    (fact.orderType !== 0 && fact.orderType !== 7) ||
+    fact.orderId !== order.out_trade_no ||
+    fact.environment !== order.environment ||
+    !fact.wechatOrderId || fact.wechatOrderId !== order.provider_order_no ||
+    fact.orderFee !== order.amount_fen || fact.paidFee !== order.amount_fen ||
+    fact.leftFee !== order.amount_fen
+  ) {
+    throw Errors.business(409, "微信虚拟支付订单事实不可退款",
+      "BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_CONFLICT");
   }
 }
 

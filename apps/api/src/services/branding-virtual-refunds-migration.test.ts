@@ -17,13 +17,45 @@ describe("品牌权益虚拟支付退款 migration", () => {
     expect(migration).toContain("WHERE status IN ('submitted', 'external_required', 'succeeded')");
   });
 
-  test("反向权益事件以原购买事件为唯一幂等键", () => {
+  test("成功退款只生成一个反向权益事件并精确恢复购买快照", () => {
     const migration = readFileSync(MIGRATION_PATH, "utf8");
 
     expect(migration).toContain("ADD COLUMN reverses_event_id uuid");
     expect(migration).toContain("tenant_entitlement_events_reverses_event_unique_idx");
     expect(migration).toContain("branding_compensate_virtual_addon_refund");
     expect(migration).toContain("'refunded', 'refund'");
+    expect(migration).toContain("v_purchase_event.old_value->>'expires_at'");
+    expect(migration).toContain("v_purchase_event.new_value->>'starts_at'");
+    expect(migration).toContain(
+      "WHERE events.reverses_event_id = v_purchase_event.id",
+    );
+    expect(migration).toContain(
+      "compensation_entitlement_event_id = v_reversal.id",
+    );
+    expect(migration).toContain(
+      "v_entitlement.expires_at\n        <> (v_purchase_event.new_value->>'expires_at')::timestamptz",
+    );
+    expect(migration).not.toContain(
+      "v_entitlement.expires_at - interval '1 year'",
+    );
+  });
+
+  test("退款模式只使用微信确认的支付 order_type", () => {
+    const migration = readFileSync(MIGRATION_PATH, "utf8");
+    const createStart = migration.indexOf(
+      "FUNCTION public.branding_create_virtual_addon_refund",
+    );
+    const createEnd = migration.indexOf(
+      "FUNCTION public.branding_claim_virtual_addon_refund_submission",
+      createStart,
+    );
+    const createFunction = migration.slice(createStart, createEnd);
+    expect(migration).toContain("ADD COLUMN provider_order_type integer");
+    expect(migration).toContain("branding_record_virtual_order_type_fact");
+    expect(createFunction).toContain("v_order.provider_order_type = 7");
+    expect(createFunction).not.toContain("v_order.requested_platform");
+    expect(migration).toContain("provider_channel");
+    expect(migration).not.toContain("provider_platform");
   });
 
   test("使用官方 iOS 退款问询事件名并移除错误占位名", () => {

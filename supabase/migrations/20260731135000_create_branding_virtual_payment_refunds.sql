@@ -3,6 +3,11 @@
 -- The later message inbox integration uses the official iOS inquiry event:
 -- xpay_subscribe_ios_refund_query_notify.
 
+ALTER TABLE public.tenant_virtual_addon_orders
+  ADD COLUMN provider_order_type integer NULL CHECK (
+    provider_order_type IN (0, 7)
+  );
+
 ALTER TABLE public.tenant_entitlements
   DROP CONSTRAINT tenant_entitlements_term_check,
   ADD CONSTRAINT tenant_entitlements_term_check
@@ -181,6 +186,56 @@ CREATE TABLE public.tenant_virtual_addon_refunds (
   )
 );
 
+CREATE OR REPLACE FUNCTION public.branding_record_virtual_order_type_fact(
+  p_order_id uuid,
+  p_official_status integer,
+  p_provider_order_type integer,
+  p_out_trade_no text,
+  p_environment text,
+  p_provider_order_no text,
+  p_order_fee_fen integer,
+  p_paid_fee_fen integer,
+  p_left_fee_fen integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_order public.tenant_virtual_addon_orders%ROWTYPE;
+BEGIN
+  IF auth.role() <> 'service_role'
+    OR p_official_status NOT IN (2, 3, 4)
+    OR p_provider_order_type NOT IN (0, 7)
+  THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_INVALID' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO v_order FROM public.tenant_virtual_addon_orders
+  WHERE id = p_order_id FOR UPDATE;
+  IF NOT FOUND OR v_order.payment_status <> 'succeeded'
+    OR v_order.fulfillment_status <> 'granted'
+    OR v_order.refund_status <> 'none'
+    OR v_order.out_trade_no IS DISTINCT FROM p_out_trade_no
+    OR v_order.environment IS DISTINCT FROM p_environment
+    OR v_order.provider_order_no IS DISTINCT FROM p_provider_order_no
+    OR v_order.amount_fen IS DISTINCT FROM p_order_fee_fen
+    OR v_order.amount_fen IS DISTINCT FROM p_paid_fee_fen
+    OR v_order.amount_fen IS DISTINCT FROM p_left_fee_fen
+  THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_CONFLICT' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_order.provider_order_type IS NOT NULL
+    AND v_order.provider_order_type <> p_provider_order_type THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_CONFLICT' USING ERRCODE = 'P0001';
+  END IF;
+  UPDATE public.tenant_virtual_addon_orders
+  SET provider_order_type = p_provider_order_type
+  WHERE id = p_order_id AND provider_order_type IS NULL;
+  RETURN true;
+END;
+$$;
+
 CREATE TRIGGER tr_tenant_virtual_addon_refunds_updated_at
 BEFORE UPDATE ON public.tenant_virtual_addon_refunds
 FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
@@ -302,13 +357,12 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_ALREADY_EXISTS';
   END IF;
-  IF v_order.requested_platform NOT IN ('android', 'harmony', 'windows', 'ios')
-  THEN
+  IF v_order.provider_order_type NOT IN (0, 7) THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_PLATFORM_UNSUPPORTED';
   END IF;
 
-  v_platform_mode := CASE WHEN v_order.requested_platform = 'ios'
+  v_platform_mode := CASE WHEN v_order.provider_order_type = 7
     THEN 'apple_external' ELSE 'merchant_initiated' END;
 
   INSERT INTO public.tenant_virtual_addon_refunds (
@@ -588,6 +642,7 @@ BEGIN
     OR v_purchase_event.tenant_id <> v_refund.tenant_id
     OR v_purchase_event.entitlement_code <> v_entitlement.entitlement_code
     OR NOT (v_purchase_event.new_value ? 'expires_at')
+    OR NOT (v_purchase_event.new_value ? 'starts_at')
   THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_ENTITLEMENT_CHAIN_INVALID';
@@ -614,8 +669,26 @@ BEGIN
     RETURN;
   END IF;
 
+  BEGIN
+    IF v_purchase_event.old_value ? 'expires_at' THEN
+      v_reversed_expiry := (v_purchase_event.old_value->>'expires_at')::timestamptz;
+    ELSIF v_purchase_event.old_value = '{}'::jsonb THEN
+      v_reversed_expiry := (v_purchase_event.new_value->>'starts_at')::timestamptz;
+    ELSE
+      RAISE EXCEPTION 'invalid purchase old value';
+    END IF;
+    IF v_reversed_expiry >=
+        (v_purchase_event.new_value->>'expires_at')::timestamptz
+      OR v_entitlement.expires_at
+        <> (v_purchase_event.new_value->>'expires_at')::timestamptz
+    THEN
+      RAISE EXCEPTION 'purchase event chain changed';
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_ENTITLEMENT_CHAIN_INVALID';
+  END;
   v_old_value := to_jsonb(v_entitlement);
-  v_reversed_expiry := v_entitlement.expires_at - interval '1 year';
   UPDATE public.tenant_entitlements
   SET expires_at = v_reversed_expiry,
       status = CASE
@@ -665,7 +738,9 @@ AS $$
     'tenant_id', orders.tenant_id,
     'out_trade_no', orders.out_trade_no,
     'environment', orders.environment,
-    'requested_platform', orders.requested_platform,
+    'provider_order_type', orders.provider_order_type,
+    'provider_channel', CASE orders.provider_order_type
+      WHEN 0 THEN 'merchant' WHEN 7 THEN 'apple' END,
     'payer_openid', orders.payer_openid,
     'provider_order_no', orders.provider_order_no,
     'payment_status', orders.payment_status,
@@ -720,7 +795,10 @@ BEGIN
 
   FOR v_row IN
     SELECT refunds.*, tenants.name AS tenant_name,
-      orders.out_trade_no, orders.requested_platform, orders.environment,
+      orders.out_trade_no, orders.provider_order_type,
+      CASE orders.provider_order_type
+        WHEN 0 THEN 'merchant' WHEN 7 THEN 'apple' END AS provider_channel,
+      orders.environment,
       orders.product_name
     FROM public.tenant_virtual_addon_refunds AS refunds
     JOIN public.tenant_virtual_addon_orders AS orders
@@ -779,7 +857,8 @@ BEGIN
       'updated_at', clock_timestamp(),
       'tenant_name', 'count_only',
       'out_trade_no', 'COUNTONLY',
-      'requested_platform', 'android',
+      'provider_order_type', 0,
+      'provider_channel', 'merchant',
       'environment', 'production',
       'product_name', 'count_only',
       'total_count', v_total,
@@ -801,7 +880,9 @@ AS $$
   SELECT to_jsonb(refunds) || jsonb_build_object(
     'order', jsonb_build_object(
       'out_trade_no', orders.out_trade_no,
-      'requested_platform', orders.requested_platform,
+      'provider_order_type', orders.provider_order_type,
+      'provider_channel', CASE orders.provider_order_type
+        WHEN 0 THEN 'merchant' WHEN 7 THEN 'apple' END,
       'environment', orders.environment,
       'provider_order_no', orders.provider_order_no,
       'transaction_id', orders.transaction_id,
@@ -821,6 +902,12 @@ $$;
 REVOKE ALL ON FUNCTION public.branding_create_virtual_addon_refund(
   uuid, uuid, text, text, uuid
 ) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.branding_record_virtual_order_type_fact(
+  uuid, integer, integer, text, text, text, integer, integer, integer
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_record_virtual_order_type_fact(
+  uuid, integer, integer, text, text, text, integer, integer, integer
+) TO service_role;
 REVOKE ALL ON FUNCTION public.branding_mark_virtual_addon_refund_submitted(
   uuid, uuid, text, text
 ) FROM PUBLIC, anon, authenticated;

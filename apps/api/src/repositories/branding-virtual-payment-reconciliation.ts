@@ -129,6 +129,7 @@ export class BrandingVirtualPaymentReconciliationRepository {
     orderId: string;
     claimToken: string;
     officialStatus: 2 | 3 | 4;
+    providerOrderType: 0 | 7;
     environment: "sandbox" | "production";
     openid: string;
     outTradeNo: string;
@@ -148,6 +149,7 @@ export class BrandingVirtualPaymentReconciliationRepository {
         p_order_id: input.orderId,
         p_claim_token: input.claimToken,
         p_official_status: input.officialStatus,
+        p_provider_order_type: input.providerOrderType,
         p_environment: input.environment,
         p_openid: input.openid,
         p_out_trade_no: input.outTradeNo,

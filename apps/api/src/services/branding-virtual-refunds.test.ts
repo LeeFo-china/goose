@@ -15,14 +15,12 @@ const CLAIM_TOKEN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("BrandingVirtualRefundService", () => {
   test.each([
-    ["android", "merchant_initiated", "submitted", 1],
-    ["harmony", "merchant_initiated", "submitted", 1],
-    ["windows", "merchant_initiated", "submitted", 1],
-    ["ios", "apple_external", "external_required", 0],
+    [0, "merchant_initiated", "submitted", 1],
+    [7, "apple_external", "external_required", 0],
   ] as const)(
-    "按 %s 平台路由退款",
-    async (platform, mode, status, gatewayCalls) => {
-      const harness = createHarness(platform);
+    "只按微信可信 order_type=%i 路由退款",
+    async (providerOrderType, mode, status, gatewayCalls) => {
+      const harness = createHarness(providerOrderType);
       const { BrandingVirtualRefundService } = await import(
         "./branding-virtual-refunds"
       );
@@ -41,7 +39,7 @@ describe("BrandingVirtualRefundService", () => {
   );
 
   test("缺少独立退款权限时在读取订单前拒绝", async () => {
-    const harness = createHarness("android");
+    const harness = createHarness(0);
     harness.accessPolicy.assertPermission.mockImplementation(() => {
       throw Object.assign(new Error("forbidden"), { code: "FORBIDDEN" });
     });
@@ -55,8 +53,55 @@ describe("BrandingVirtualRefundService", () => {
     expect(harness.repository.findOrderContext).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ["未支付", { payment_status: "pending" }],
+    ["非全额支付", { paid_amount_fen: 99 }],
+    ["已成功退款", { refund_status: "succeeded" }],
+  ] as const)("%s订单在微信查单前拒绝", async (_label, patch) => {
+    const harness = createHarness(0);
+    const context = await harness.repository.findOrderContext();
+    harness.repository.findOrderContext.mockClear();
+    harness.repository.findOrderContext.mockResolvedValueOnce({
+      ...context, ...patch,
+    } as never);
+    const { BrandingVirtualRefundService } = await import(
+      "./branding-virtual-refunds"
+    );
+    const service = new BrandingVirtualRefundService(harness);
+
+    await expect(service.create(platformAdmin(), createInput())).rejects
+      .toMatchObject({ code: "refund_status" in patch
+        ? "BRANDING_VIRTUAL_REFUND_ALREADY_EXISTS"
+        : "BRANDING_VIRTUAL_REFUND_ORDER_NOT_REFUNDABLE" });
+    expect(harness.gateway.queryOrder).not.toHaveBeenCalled();
+    expect(harness.repository.create).not.toHaveBeenCalled();
+  });
+
+  test("微信已退款或金额事实不一致时拒绝创建本地退款", async () => {
+    for (const providerPatch of [
+      { status: 5 as const },
+      { paidFee: 99 },
+      { orderType: 1 as const },
+    ]) {
+      const harness = createHarness(0);
+      const fact = await harness.gateway.queryOrder();
+      harness.gateway.queryOrder.mockClear();
+      harness.gateway.queryOrder.mockResolvedValueOnce({
+        ...fact, ...providerPatch,
+      } as never);
+      const { BrandingVirtualRefundService } = await import(
+        "./branding-virtual-refunds"
+      );
+      const service = new BrandingVirtualRefundService(harness);
+      await expect(service.create(platformAdmin(), createInput())).rejects
+        .toMatchObject({ code: "BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_CONFLICT" });
+      expect(harness.repository.recordProviderOrderTypeFact).not.toHaveBeenCalled();
+      expect(harness.repository.create).not.toHaveBeenCalled();
+    }
+  });
+
   test("重复幂等请求在已提交后不重复调用微信", async () => {
-    const harness = createHarness("android", "submitted");
+    const harness = createHarness(0, "submitted");
     const { BrandingVirtualRefundService } = await import(
       "./branding-virtual-refunds"
     );
@@ -65,11 +110,13 @@ describe("BrandingVirtualRefundService", () => {
     const result = await service.create(platformAdmin(), createInput());
 
     expect(result.status).toBe("submitted");
+    expect(harness.gateway.queryOrder).not.toHaveBeenCalled();
+    expect(harness.repository.recordProviderOrderTypeFact).not.toHaveBeenCalled();
     expect(harness.gateway.refundOrder).not.toHaveBeenCalled();
   });
 
   test("付款人凭据缺失时保持 reviewing 且同一申请可恢复", async () => {
-    const harness = createHarness("android");
+    const harness = createHarness(0);
     harness.credentials.getActiveForUser
       .mockRejectedValueOnce(Object.assign(new Error("refresh"), {
         code: "BRANDING_VIRTUAL_PAYMENT_SESSION_REFRESH_REQUIRED",
@@ -97,7 +144,7 @@ describe("BrandingVirtualRefundService", () => {
   });
 
   test("只用订单付款人的用户与 openid 获取凭据并签署退款", async () => {
-    const harness = createHarness("android");
+    const harness = createHarness(0);
     const { BrandingVirtualRefundService } = await import(
       "./branding-virtual-refunds"
     );
@@ -120,7 +167,7 @@ describe("BrandingVirtualRefundService", () => {
   });
 
   test("同一幂等退款并发只允许一个 submission claim 调用微信", async () => {
-    const harness = createHarness("android");
+    const harness = createHarness(0);
     harness.repository.claimSubmission
       .mockResolvedValueOnce({ refund: await harness.repository.create(),
         claimToken: CLAIM_TOKEN })
@@ -143,15 +190,18 @@ describe("BrandingVirtualRefundService", () => {
 });
 
 function createHarness(
-  platform: "android" | "harmony" | "windows" | "ios",
+  providerOrderTypeFact: 0 | 7,
   existingStatus?: "submitted",
 ) {
+  let providerOrderType: 0 | 7 | null = existingStatus
+    ? providerOrderTypeFact
+    : null;
   const context = {
     id: ORDER_ID,
     tenant_id: "66666666-6666-4666-8666-666666666666",
     out_trade_no: "BV202608010001",
     environment: "production" as const,
-    requested_platform: platform,
+    provider_order_type: providerOrderType,
     payer_openid: "openid-1",
     provider_order_no: "wx-order-1",
     payment_status: "succeeded" as const,
@@ -176,9 +226,9 @@ function createHarness(
     request_source: "platform_admin" as const,
     requested_by: ACTOR_ID,
     reviewed_by: ACTOR_ID,
-    platform_mode: platform === "ios" ? "apple_external" as const :
+    platform_mode: providerOrderTypeFact === 7 ? "apple_external" as const :
       "merchant_initiated" as const,
-    status: platform === "ios" ? "external_required" as const :
+    status: providerOrderTypeFact === 7 ? "external_required" as const :
       existingStatus ?? "reviewing" as const,
     provider_refund_id: existingStatus ? "refund-wx-1" : null,
     provider_refund_no: existingStatus ? "BVR202608010001" : null,
@@ -210,7 +260,14 @@ function createHarness(
     claimToken: string;
   } | null> => ({ refund, claimToken: CLAIM_TOKEN }));
   const repository = {
-    findOrderContext: mock(async () => context),
+    findOrderContext: mock(async () => ({
+      ...context,
+      provider_order_type: providerOrderType,
+    })),
+    recordProviderOrderTypeFact: mock(async (fact: { providerOrderType: 0 | 7 }) => {
+      providerOrderType = fact.providerOrderType;
+      return true;
+    }),
     create: mock(async () => refund),
     markSubmitted: mock(async () => ({
       ...refund,
@@ -230,7 +287,9 @@ function createHarness(
       ...refund,
       order: {
         out_trade_no: context.out_trade_no,
-        requested_platform: context.requested_platform,
+        provider_order_type: providerOrderTypeFact,
+        provider_channel: providerOrderTypeFact === 7
+          ? "apple" as const : "merchant" as const,
         environment: context.environment,
         provider_order_no: context.provider_order_no,
         transaction_id: null,
@@ -246,6 +305,30 @@ function createHarness(
     repository,
     accessPolicy: { assertPermission: mock(() => "all" as const) },
     gateway: {
+      queryOrder: mock(async () => ({
+        requestId: "query-1",
+        environment: context.environment,
+        orderId: context.out_trade_no,
+        status: 2 as const,
+        businessType: 0 as const,
+        orderType: providerOrderTypeFact,
+        orderFee: 100,
+        couponFee: null,
+        paidFee: 100,
+        refundFee: 0,
+        leftFee: 100,
+        createdAt: 1,
+        updatedAt: 2,
+        paidAt: 1,
+        providedAt: 1,
+        wechatOrderId: context.provider_order_no,
+        channelOrderId: null,
+        wechatPayOrderId: null,
+        settledAt: null,
+        settlementState: null,
+        platformFeeFen: null,
+        cpsFeeFen: null,
+      })),
       refundOrder: mock(async () => ({
         status: "submitted" as const,
         requestId: "request-1",

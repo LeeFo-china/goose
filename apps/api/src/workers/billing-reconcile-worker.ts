@@ -407,6 +407,7 @@ function summarizeBrandingVirtualPaymentResult(
       refund_pending: result.refundPending ?? 0,
       refund_rescheduled: result.refundRescheduled ?? 0,
       refund_terminal_failed: result.refundTerminalFailed ?? 0,
+      refund_conflicts: result.refundConflicts ?? 0,
     }),
   };
 }

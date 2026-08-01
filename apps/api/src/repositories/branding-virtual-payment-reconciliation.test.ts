@@ -184,6 +184,7 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
         orderId: ORDER_ID,
         claimToken: CLAIM_TOKEN,
         officialStatus,
+        providerOrderType: 0,
         ...successfulQueryFacts,
       })).toBe(true);
       expect(f.calls).toContainEqual([
@@ -193,6 +194,7 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
           p_order_id: ORDER_ID,
           p_claim_token: CLAIM_TOKEN,
           p_official_status: officialStatus,
+          p_provider_order_type: 0,
           p_environment: "production",
           p_openid: order.payer_openid,
           p_out_trade_no: order.out_trade_no,

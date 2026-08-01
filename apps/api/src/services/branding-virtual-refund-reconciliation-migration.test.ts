@@ -20,7 +20,9 @@ describe("virtual refund reconciliation migration", () => {
     expect(sql).toContain("p_left_fee_fen <> 0");
     expect(sql).toContain("p_left_fee_fen <> v_refund.amount_fen");
     expect(sql).toContain("v_refund.platform_mode = 'apple_external'");
-    expect(sql.match(/SET search_path = pg_catalog, public/g)?.length).toBe(3);
+    expect(sql.match(/SET search_path = pg_catalog, public/g)?.length).toBe(4);
     expect(sql).toContain("TO service_role");
+    expect(sql).toContain("branding_mark_virtual_refund_reconciliation_conflict");
+    expect(sql).toContain("'infinity'::timestamptz");
   });
 });

@@ -141,7 +141,7 @@ BEGIN
     ) THEN
       RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_FACT_CONFLICT' USING ERRCODE = 'P0001';
     END IF;
-    IF v_order.requested_platform <> 'ios' THEN
+    IF v_order.provider_order_type IS DISTINCT FROM 7 THEN
       RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_REFUND_NOT_FOUND' USING ERRCODE = 'P0001';
     END IF;
     INSERT INTO public.tenant_virtual_addon_refunds (
@@ -394,7 +394,7 @@ BEGIN
     v_result_code := 0;
     v_result_info := '建议退款';
     v_evidence := '平台已完成售后申请核验';
-  ELSIF FOUND AND v_order.requested_platform = 'ios'
+  ELSIF FOUND AND v_order.provider_order_type = 7
     AND v_order.payment_status = 'succeeded'
     AND v_order.paid_amount_fen = v_order.amount_fen
     AND v_order.provider_product_id = p_provider_product_id

@@ -22,7 +22,8 @@ const claim: BrandingVirtualRefundReconciliationClaim = {
 const queryResult = (status: 5 | 7 | 8) => ({
   requestId: null, environment: "production" as const,
   orderId: claim.out_trade_no, status, businessType: 0 as const,
-  orderType: 0 as const, orderFee: 100, couponFee: null,
+  orderType: status === 8 ? 8 as const : 1 as const,
+  orderFee: 100, couponFee: null,
   paidFee: 100, refundFee: status === 7 ? 0 : 100,
   leftFee: status === 7 ? 100 : 0,
   createdAt: 1, updatedAt: 2, paidAt: 1, providedAt: 1,
@@ -39,13 +40,15 @@ async function setup(
   const repository = {
     claim: mock(async () => [current]), finalize: mock(async () => undefined),
     reschedule: mock(async () => undefined),
+    markConflict: mock(async () => undefined),
   };
   const compensate = mock(async () => ({ refund_id: current.refund_id,
     compensation_status: "succeeded" as const,
     compensation_entitlement_event_id: "44444444-4444-4444-8444-444444444444" }));
   const gateway = { queryOrder: mock(async () => ({
-    ...queryResult(status), orderType: current.platform_mode === "apple_external"
-      ? 7 as const : 0 as const,
+    ...queryResult(status), orderType: status === 5 ? 1 as const
+      : status === 8 ? 8 as const
+      : current.platform_mode === "apple_external" ? 8 as const : 1 as const,
   })) };
   const { BrandingVirtualRefundReconciliationService } = await import(
     "./branding-virtual-refund-reconciliation"
@@ -80,9 +83,23 @@ describe("virtual refund reconciliation", () => {
       const telemetry = await subject.service.reconcile({ batchSize: 20 });
       expect(subject.repository.finalize).not.toHaveBeenCalled();
       expect(subject.repository.reschedule).toHaveBeenCalledTimes(1);
-      expect(telemetry.refundFailed).toBe(0);
-      expect(telemetry.refundPending).toBe(1);
+      expect(telemetry.refundFailed).toBe(1);
+      expect(telemetry.refundPending).toBe(0);
+      expect(telemetry.refundConflicts).toBe(1);
     }
+  });
+
+  test("moves a repeated cross-channel terminal conflict to manual handling", async () => {
+    const subject = await setup({ attempt_count: 3 }, 8);
+    const telemetry = await subject.service.reconcile({ batchSize: 20 });
+    expect(subject.repository.markConflict).toHaveBeenCalledWith({
+      refundId: claim.refund_id,
+      claimToken: claim.claim_token,
+      errorCode: "BRANDING_VIRTUAL_REFUND_CROSS_CHANNEL_TERMINAL_CONFLICT",
+    });
+    expect(subject.repository.reschedule).not.toHaveBeenCalled();
+    expect(telemetry).toMatchObject({ refundConflicts: 1, refundFailed: 1,
+      refundPending: 0 });
   });
 
   test("accepts Apple status 8 and status 7 as a terminal failure", async () => {
@@ -143,7 +160,7 @@ describe("virtual refund reconciliation", () => {
     });
     const service = new BrandingVirtualRefundReconciliationService({
       repository: { claim: async () => claims, finalize: async () => undefined,
-        reschedule: async () => undefined } as never,
+        reschedule: async () => undefined, markConflict: async () => undefined } as never,
       refunds: { compensate }, now: () => new Date("2026-08-01T00:00:00Z"),
     });
     await service.reconcile({ batchSize: 100 });
@@ -164,9 +181,10 @@ describe("virtual refund reconciliation", () => {
     const setting = mock(async () => JSON.stringify({ revision: 1, appKey: "a".repeat(32) }));
     const service = new BrandingVirtualRefundReconciliationService({
       repository: { claim: async () => claims, finalize: async () => undefined,
-        reschedule: async () => undefined } as never,
+        reschedule: async () => undefined, markConflict: async () => undefined } as never,
       gateway: { queryOrder: async (input) => ({
-        ...queryResult(5), status: 0 as const, orderId: input.orderId!,
+        ...queryResult(5), status: 0 as const, orderType: 0 as const,
+        orderId: input.orderId!,
         environment: input.environment,
       }) },
       accessToken: { getAccessToken: token },
@@ -186,7 +204,7 @@ describe("virtual refund reconciliation", () => {
     const subject = await setup({}, 5);
     subject.gateway.queryOrder.mockResolvedValueOnce({
       ...queryResult(5), [field]: value,
-    });
+    } as never);
     const telemetry = await subject.service.reconcile({ batchSize: 20 });
     expect(subject.repository.finalize).not.toHaveBeenCalled();
     expect(subject.repository.reschedule).toHaveBeenCalledTimes(1);

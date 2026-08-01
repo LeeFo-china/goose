@@ -59,7 +59,8 @@ const RefundRecordSchema = z.object({
 const ListRowSchema = RefundRecordSchema.extend({
   tenant_name: z.string().trim().min(1).max(200),
   out_trade_no: z.string().trim().min(8).max(32),
-  requested_platform: z.enum(["android", "harmony", "windows", "ios"]),
+  provider_order_type: z.union([z.literal(0), z.literal(7)]),
+  provider_channel: z.enum(["merchant", "apple"]),
   environment: z.enum(["sandbox", "production"]),
   product_name: z.string().trim().min(1).max(100),
   total_count: z.union([z.number().int().nonnegative(), z.string()]),
@@ -77,7 +78,9 @@ const RefundOrderContextSchema = z.object({
   tenant_id: z.uuid(),
   out_trade_no: z.string().trim().min(8).max(32),
   environment: z.enum(["sandbox", "production"]),
-  requested_platform: z.enum(["android", "harmony", "windows", "ios"]),
+  provider_order_type: z.union([
+    z.literal(0), z.literal(7), z.null(),
+  ]),
   payer_openid: z.string().trim().min(1).max(128),
   provider_order_no: nullableText(128),
   payment_status: z.enum(["pending", "succeeded", "closed", "failed"]),
@@ -97,7 +100,8 @@ const RefundOrderContextSchema = z.object({
 const RefundDetailSchema = RefundRecordSchema.extend({
   order: z.object({
     out_trade_no: z.string().trim().min(8).max(32),
-    requested_platform: z.enum(["android", "harmony", "windows", "ios"]),
+    provider_order_type: z.union([z.literal(0), z.literal(7)]),
+    provider_channel: z.enum(["merchant", "apple"]),
     environment: z.enum(["sandbox", "production"]),
     provider_order_no: nullableText(128),
     transaction_id: nullableText(128),
@@ -163,6 +167,14 @@ const COMMAND_ERRORS: Record<string, { statusCode: number; message: string }> = 
     statusCode: 409,
     message: "微信虚拟支付退款标识冲突",
   },
+  BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_INVALID: {
+    statusCode: 400,
+    message: "微信虚拟支付订单事实参数无效",
+  },
+  BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_CONFLICT: {
+    statusCode: 409,
+    message: "微信虚拟支付订单事实不一致",
+  },
   BRANDING_VIRTUAL_REFUND_NOT_SUCCEEDED: {
     statusCode: 409,
     message: "退款尚未成功，不能补偿权益",
@@ -197,6 +209,30 @@ export class BrandingVirtualRefundRepository {
       p_evidence_summary: input.evidenceSummary,
       p_requested_by: input.requestedBy,
     }, "创建虚拟支付退款失败");
+  }
+
+  async recordProviderOrderTypeFact(input: {
+    orderId: string;
+    officialStatus: 2 | 3 | 4;
+    providerOrderType: 0 | 7;
+    outTradeNo: string;
+    environment: "sandbox" | "production";
+    providerOrderNo: string;
+    orderFeeFen: number;
+    paidFeeFen: number;
+    leftFeeFen: number;
+  }): Promise<boolean> {
+    return this.booleanCommand("branding_record_virtual_order_type_fact", {
+      p_order_id: input.orderId,
+      p_official_status: input.officialStatus,
+      p_provider_order_type: input.providerOrderType,
+      p_out_trade_no: input.outTradeNo,
+      p_environment: input.environment,
+      p_provider_order_no: input.providerOrderNo,
+      p_order_fee_fen: input.orderFeeFen,
+      p_paid_fee_fen: input.paidFeeFen,
+      p_left_fee_fen: input.leftFeeFen,
+    }, "记录微信虚拟支付订单类型失败");
   }
 
   async markSubmitted(input: {

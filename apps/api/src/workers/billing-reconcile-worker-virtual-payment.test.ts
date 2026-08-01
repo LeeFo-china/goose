@@ -128,6 +128,7 @@ describe("billing reconcile worker virtual payment child", () => {
               refund_pending: 0,
               refund_rescheduled: 0,
               refund_terminal_failed: 0,
+              refund_conflicts: 0,
             },
           },
         }),

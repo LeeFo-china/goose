@@ -45,7 +45,7 @@ describe("virtual refund notification migrations", () => {
 
   test("only recommends blocking an iOS refund from complete local facts", () => {
     for (const fact of [
-      "v_order.requested_platform = 'ios'",
+      "v_order.provider_order_type = 7",
       "v_order.payment_status = 'succeeded'",
       "v_order.paid_amount_fen = v_order.amount_fen",
       "v_order.fulfillment_status = 'granted'",

@@ -151,6 +151,30 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.branding_mark_virtual_refund_reconciliation_conflict(
+  p_refund_id uuid, p_claim_token uuid, p_error_code text
+)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF auth.role() <> 'service_role'
+    OR char_length(p_error_code) NOT BETWEEN 1 AND 100 THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_INPUT_INVALID' USING ERRCODE = 'P0001';
+  END IF;
+  UPDATE public.tenant_virtual_addon_refunds
+  SET reconcile_claim_token = NULL, reconcile_claim_expires_at = NULL,
+      reconcile_next_at = 'infinity'::timestamptz,
+      last_error_code = p_error_code,
+      last_error_summary = '微信退款终态与可信支付渠道冲突，需人工处理',
+      version = version + 1
+  WHERE id = p_refund_id AND reconcile_claim_token = p_claim_token
+    AND reconcile_claim_expires_at > clock_timestamp();
+  RETURN FOUND;
+END;
+$$;
+
 REVOKE ALL ON FUNCTION public.branding_claim_virtual_refund_reconciliation_batch(integer, integer)
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.branding_claim_virtual_refund_reconciliation_batch(integer, integer)
@@ -162,4 +186,8 @@ TO service_role;
 REVOKE ALL ON FUNCTION public.branding_reschedule_virtual_refund_reconciliation(uuid, uuid, timestamptz, text, text)
 FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.branding_reschedule_virtual_refund_reconciliation(uuid, uuid, timestamptz, text, text)
+TO service_role;
+REVOKE ALL ON FUNCTION public.branding_mark_virtual_refund_reconciliation_conflict(uuid, uuid, text)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_mark_virtual_refund_reconciliation_conflict(uuid, uuid, text)
 TO service_role;
