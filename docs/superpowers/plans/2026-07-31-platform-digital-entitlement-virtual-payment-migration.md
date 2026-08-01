@@ -1277,7 +1277,7 @@ export const BrandingVirtualRefundCreateSchema = z.object({
 }).strict();
 ```
 
-新增 POST `/platform/branding/virtual-payment/refunds`、GET 列表和 GET 详情；列表使用统一分页最大 100。退款路由只使用微信查单确认并持久化的支付 `order_type`：普通支付进入 submitted，Apple 支付进入 external_required；客户端 `requested_platform` 仅用于诊断。`xpay_subscribe_ios_refund_query_notify` 在官方时限内依据订单、已履约事实和售后证据返回建议并保存审计，但绝不标记退款成功。`xpay_refund_notify` 最终成功后写退款事实；若 Apple 通知先于本地申请，则以 `request_source='apple_notification'` 和微信稳定标识幂等创建外部退款记录，再独立重试权益补偿。
+新增 POST `/platform/branding/virtual-payment/refunds`、GET 列表和 GET 详情；列表使用统一分页最大 100。退款路由只使用微信查单确认并持久化的支付 `order_type`：普通支付进入 submitted，Apple 支付进入 external_required；客户端 `requested_platform` 仅用于诊断。`xpay_subscribe_ios_refund_query_notify` 在官方时限内依据订单、已履约事实和售后证据返回建议并保存审计，但绝不标记退款成功。`xpay_refund_notify` 最终成功后写退款事实；若 Apple 通知先于本地申请且订单尚无可信支付类型，消息服务先以订单原始 OpenID 主动查单，只接受完整绑定的 Apple 退款终态 `status/order_type=8/8`（失败事实为 `7/8`）并原子落为可信 Apple 支付类型，再以 `request_source='apple_notification'` 和微信稳定标识幂等创建外部退款记录、独立重试权益补偿；查单或落库失败必须返回官方 retry，不得使用 `requested_platform` 降级。
 
 扩展 `BrandingVirtualReconciliationService` 和现有 billing worker：每批 claim 最多 100 个 submitted/external_required 退款查询最终状态，并对 `status='succeeded' AND compensation_status IN ('pending','failed')` 的记录重试补偿；退款子任务失败仍按现有 partial-failure 语义隔离。
 

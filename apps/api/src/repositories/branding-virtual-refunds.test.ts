@@ -101,6 +101,40 @@ describe("BrandingVirtualRefundRepository", () => {
     );
   });
 
+  test("Apple 通知先到时只提交微信退款查单的完整可信事实", async () => {
+    const BrandingVirtualRefundRepository = await repositoryClass();
+    const rpc = mock(async () => ({ data: true, error: null }));
+    const repository = new BrandingVirtualRefundRepository(() => ({ rpc }));
+
+    expect(await repository.recordAppleRefundOrderTypeFact({
+      orderId: ORDER_ID,
+      officialStatus: 8,
+      providerOrderType: 8,
+      outTradeNo: "BV202608010001",
+      environment: "production",
+      providerOrderNo: "wx-order-1",
+      orderFeeFen: 100,
+      paidFeeFen: 100,
+      refundFeeFen: 100,
+      leftFeeFen: 0,
+    })).toBe(true);
+    expect(rpc).toHaveBeenCalledWith(
+      "branding_record_apple_virtual_order_type_from_refund_fact",
+      {
+        p_order_id: ORDER_ID,
+        p_official_status: 8,
+        p_provider_order_type: 8,
+        p_out_trade_no: "BV202608010001",
+        p_environment: "production",
+        p_provider_order_no: "wx-order-1",
+        p_order_fee_fen: 100,
+        p_paid_fee_fen: 100,
+        p_refund_fee_fen: 100,
+        p_left_fee_fen: 0,
+      },
+    );
+  });
+
   test("补偿命令使用退款ID且返回同一反向事件", async () => {
     const BrandingVirtualRefundRepository = await repositoryClass();
     const rpc = mock(async () => ({

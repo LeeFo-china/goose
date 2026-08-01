@@ -24,6 +24,10 @@ import {
   isValidWechatVirtualPaymentMessageToken,
 } from "@/services/wechat-virtual-payment-message-config";
 import { systemSettingsService } from "@/services/system-settings";
+import {
+  wechatVirtualPaymentRefundChannelVerifier,
+  type WechatVirtualPaymentRefundChannelPort,
+} from "@/services/wechat-virtual-payment-refund-channel";
 
 export const WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN =
   "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN";
@@ -84,6 +88,7 @@ export class WechatVirtualPaymentNotificationService {
   private readonly orders: OrdersPort;
   private readonly confirmation: ConfirmationPort;
   private readonly refunds: RefundsPort;
+  private readonly refundChannelVerifier: WechatVirtualPaymentRefundChannelPort;
 
   constructor(dependencies: {
     settings?: SettingsPort;
@@ -91,6 +96,7 @@ export class WechatVirtualPaymentNotificationService {
     orders?: OrdersPort;
     confirmation?: ConfirmationPort;
     refunds?: RefundsPort;
+    refundChannelVerifier?: WechatVirtualPaymentRefundChannelPort;
   } = {}) {
     this.settings = dependencies.settings ?? systemSettingsService;
     this.notifications = dependencies.notifications ??
@@ -105,6 +111,8 @@ export class WechatVirtualPaymentNotificationService {
       processIosInquiry: (input) =>
         brandingVirtualRefundNotificationRepository.processIosInquiry(input),
     };
+    this.refundChannelVerifier = dependencies.refundChannelVerifier ??
+      wechatVirtualPaymentRefundChannelVerifier;
   }
 
   async verifyEndpoint(query: SignatureQuery): Promise<string> {
@@ -224,6 +232,7 @@ export class WechatVirtualPaymentNotificationService {
       };
     }
     if (message.eventType === "xpay_refund_notify") {
+      await this.refundChannelVerifier.ensureTrusted(message);
       const result = await this.refunds.processProviderNotification({
         recipientOriginalId: message.toUserName,
         senderIdHash: sha256(message.fromUserName),
@@ -337,6 +346,7 @@ export class WechatVirtualPaymentNotificationService {
       );
     }
   }
+
 
   private async failPersisted(
     notification: WechatVirtualPaymentNotificationRecord,

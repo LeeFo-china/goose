@@ -175,6 +175,14 @@ const COMMAND_ERRORS: Record<string, { statusCode: number; message: string }> = 
     statusCode: 409,
     message: "微信虚拟支付订单事实不一致",
   },
+  BRANDING_VIRTUAL_REFUND_NOTIFICATION_QUERY_INVALID: {
+    statusCode: 400,
+    message: "微信虚拟支付退款通知查单参数无效",
+  },
+  BRANDING_VIRTUAL_REFUND_NOTIFICATION_QUERY_CONFLICT: {
+    statusCode: 409,
+    message: "微信虚拟支付退款通知查单事实不一致",
+  },
   BRANDING_VIRTUAL_REFUND_NOT_SUCCEEDED: {
     statusCode: 409,
     message: "退款尚未成功，不能补偿权益",
@@ -233,6 +241,36 @@ export class BrandingVirtualRefundRepository {
       p_paid_fee_fen: input.paidFeeFen,
       p_left_fee_fen: input.leftFeeFen,
     }, "记录微信虚拟支付订单类型失败");
+  }
+
+  async recordAppleRefundOrderTypeFact(input: {
+    orderId: string;
+    officialStatus: 7 | 8;
+    providerOrderType: 8;
+    outTradeNo: string;
+    environment: "sandbox" | "production";
+    providerOrderNo: string;
+    orderFeeFen: number;
+    paidFeeFen: number;
+    refundFeeFen: number;
+    leftFeeFen: number;
+  }): Promise<boolean> {
+    return this.booleanCommand(
+      "branding_record_apple_virtual_order_type_from_refund_fact",
+      {
+        p_order_id: input.orderId,
+        p_official_status: input.officialStatus,
+        p_provider_order_type: input.providerOrderType,
+        p_out_trade_no: input.outTradeNo,
+        p_environment: input.environment,
+        p_provider_order_no: input.providerOrderNo,
+        p_order_fee_fen: input.orderFeeFen,
+        p_paid_fee_fen: input.paidFeeFen,
+        p_refund_fee_fen: input.refundFeeFen,
+        p_left_fee_fen: input.leftFeeFen,
+      },
+      "记录 Apple 虚拟支付退款通知渠道事实失败",
+    );
   }
 
   async markSubmitted(input: {

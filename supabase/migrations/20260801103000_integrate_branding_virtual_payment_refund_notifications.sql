@@ -48,6 +48,79 @@ ALTER TABLE public.wechat_virtual_refund_event_inbox FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.wechat_virtual_refund_event_inbox
 FROM anon, authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.branding_record_apple_virtual_order_type_from_refund_fact(
+  p_order_id uuid,
+  p_official_status integer,
+  p_provider_order_type integer,
+  p_out_trade_no text,
+  p_environment text,
+  p_provider_order_no text,
+  p_order_fee_fen integer,
+  p_paid_fee_fen integer,
+  p_refund_fee_fen integer,
+  p_left_fee_fen integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_order public.tenant_virtual_addon_orders%ROWTYPE;
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_order_id IS NULL
+    OR p_official_status IS NULL OR p_official_status NOT IN (7, 8)
+    OR p_provider_order_type IS DISTINCT FROM 8
+    OR p_out_trade_no IS NULL OR btrim(p_out_trade_no) = ''
+    OR p_environment IS NULL OR p_environment NOT IN ('sandbox', 'production')
+    OR p_provider_order_no IS NULL OR btrim(p_provider_order_no) = ''
+    OR p_order_fee_fen IS NULL OR p_order_fee_fen <= 0
+    OR p_paid_fee_fen IS NULL OR p_paid_fee_fen <= 0
+    OR p_refund_fee_fen IS NULL OR p_refund_fee_fen < 0
+    OR p_left_fee_fen IS NULL OR p_left_fee_fen < 0
+    OR (
+      p_official_status = 8
+      AND (p_refund_fee_fen <> p_order_fee_fen OR p_left_fee_fen <> 0)
+    )
+    OR (
+      p_official_status = 7
+      AND (p_refund_fee_fen <> 0 OR p_left_fee_fen <> p_order_fee_fen)
+    )
+  THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_QUERY_INVALID'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT orders.* INTO v_order
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = p_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+    OR v_order.out_trade_no IS DISTINCT FROM p_out_trade_no
+    OR v_order.environment IS DISTINCT FROM p_environment
+    OR v_order.provider_order_no IS DISTINCT FROM p_provider_order_no
+    OR v_order.amount_fen IS DISTINCT FROM p_order_fee_fen
+    OR v_order.amount_fen IS DISTINCT FROM p_paid_fee_fen
+    OR v_order.paid_amount_fen IS DISTINCT FROM v_order.amount_fen
+    OR v_order.payment_status <> 'succeeded'
+    OR v_order.fulfillment_status <> 'granted'
+    OR v_order.entitlement_event_id IS NULL
+    OR v_order.provider_order_type = 0
+  THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_QUERY_CONFLICT'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  UPDATE public.tenant_virtual_addon_orders AS orders
+  SET provider_order_type = 7
+  WHERE orders.id = v_order.id
+    AND orders.provider_order_type IS NULL;
+  RETURN true;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.branding_process_virtual_refund_notification(
   p_recipient_original_id text,
   p_sender_id_hash text,
@@ -449,6 +522,12 @@ REVOKE ALL ON FUNCTION public.branding_process_virtual_refund_notification(
   text, text, bigint, text, text, text, text, text, text, integer, boolean,
   integer, text, timestamptz, timestamptz, integer, text
 ) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.branding_record_apple_virtual_order_type_from_refund_fact(
+  uuid, integer, integer, text, text, text, integer, integer, integer, integer
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.branding_record_apple_virtual_order_type_from_refund_fact(
+  uuid, integer, integer, text, text, text, integer, integer, integer, integer
+) TO service_role;
 GRANT EXECUTE ON FUNCTION public.branding_process_virtual_refund_notification(
   text, text, bigint, text, text, text, text, text, text, integer, boolean,
   integer, text, timestamptz, timestamptz, integer, text

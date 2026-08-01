@@ -14,9 +14,28 @@ describe("virtual refund notification migrations", () => {
   test("uses the official inquiry event and service-role-only RPCs", () => {
     expect(migration).toContain("xpay_subscribe_ios_refund_query_notify");
     expect(migration).not.toContain("'xpay_refund_inquiry'");
-    expect(migration.match(/SET search_path = pg_catalog, public/g)?.length).toBe(2);
+    expect(migration.match(/SET search_path = pg_catalog, public/g)?.length).toBe(3);
     expect(migration).toContain("FROM PUBLIC, anon, authenticated");
     expect(migration).toContain("TO service_role");
+  });
+
+  test("records a notification-first Apple channel only from a full refund fact", () => {
+    expect(migration).toContain(
+      "branding_record_apple_virtual_order_type_from_refund_fact",
+    );
+    for (const fact of [
+      "p_official_status NOT IN (7, 8)",
+      "p_provider_order_type IS DISTINCT FROM 8",
+      "p_refund_fee_fen <> p_order_fee_fen OR p_left_fee_fen <> 0",
+      "p_refund_fee_fen <> 0 OR p_left_fee_fen <> p_order_fee_fen",
+      "v_order.provider_order_no IS DISTINCT FROM p_provider_order_no",
+      "v_order.paid_amount_fen IS DISTINCT FROM v_order.amount_fen",
+      "v_order.provider_order_type = 0",
+      "SET provider_order_type = 7",
+    ]) expect(migration).toContain(fact);
+    expect(migration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.branding_record_apple_virtual_order_type_from_refund_fact",
+    );
   });
 
   test("keeps success terminal and rejects crossed provider facts", () => {
