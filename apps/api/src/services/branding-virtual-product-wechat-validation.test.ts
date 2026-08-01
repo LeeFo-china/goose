@@ -125,9 +125,12 @@ describe("BrandingVirtualProductWechatValidator", () => {
       });
   });
 
-  test.each([["no-task", 0], ["running", 1]] as const)(
+  test.each([
+    ["no-task", 0, "微信暂无最近批量上传任务可供校验"],
+    ["running", 1, "微信最近一次批量上传任务仍在处理中，请稍后重试"],
+  ] as const)(
     "reports upload %s task as unconfirmed",
-    async (_label, status) => {
+    async (_label, status, message) => {
       const fixture = createValidator({
         upload: { ...successUpload, status, items: [] },
       });
@@ -136,14 +139,18 @@ describe("BrandingVirtualProductWechatValidator", () => {
         .toMatchObject({
           statusCode: 409,
           code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          message,
           details: { requestId: "upload-request-id" },
         });
     },
   );
 
-  test.each([["no-task", 0], ["running", 1]] as const)(
+  test.each([
+    ["no-task", 0, "微信暂无最近批量发布任务可供校验"],
+    ["running", 1, "微信最近一次批量发布任务仍在处理中，请稍后重试"],
+  ] as const)(
     "reports publish %s task as unconfirmed",
-    async (_label, status) => {
+    async (_label, status, message) => {
       const fixture = createValidator({
         publish: { ...successPublish, status, items: [] },
       });
@@ -152,6 +159,7 @@ describe("BrandingVirtualProductWechatValidator", () => {
         .toMatchObject({
           statusCode: 409,
           code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          message,
           details: { requestId: "publish-request-id" },
         });
     },
@@ -193,7 +201,7 @@ describe("classifyWechatGoodsFailure", () => {
       "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED",
       "WECHAT_VIRTUAL_PAYMENT_HTTP_ERROR",
     ].flatMap((gatewayCode) =>
-      [-1, 268490011, 268490012, 268490015].map((wechatErrcode) => [
+      [-1, 268490002, 268490011, 268490012, 268490015].map((wechatErrcode) => [
         `${gatewayCode}:${wechatErrcode}`,
         gatewayCode,
         wechatErrcode,
