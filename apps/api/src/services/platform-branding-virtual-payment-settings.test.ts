@@ -143,6 +143,7 @@ function createFixture(options: {
   mappingError?: unknown;
   saveError?: unknown;
   secretBundle?: string;
+  secretError?: unknown;
 } = {}) {
   const current = options.current === undefined ? product : options.current;
   const mapping = options.mapping === undefined ? productionMapping : options.mapping;
@@ -163,10 +164,13 @@ function createFixture(options: {
         : options.savedMapping,
     };
   });
-  const getSecretString = mock(async () => options.secretBundle ?? JSON.stringify({
-    appKey: "never-expose-this-app-key",
-    revision: 2,
-  }));
+  const getSecretString = mock(async () => {
+    if (options.secretError) throw options.secretError;
+    return options.secretBundle ?? JSON.stringify({
+      appKey: "never-expose-this-app-key",
+      revision: 2,
+    });
+  });
   const getConfiguration = mock(async () => managementConfiguration);
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,
@@ -389,6 +393,35 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PRODUCT_SECRET_INVALID",
     });
+  });
+
+  test("preserves an application error when reading a secret for a draft mapping", async () => {
+    const settingsError = Errors.dbError("读取系统配置失败");
+    const fixture = createFixture({ mapping: null, secretError: settingsError });
+
+    await expect(fixture.service.update(manageAuth, {
+      version: 4,
+      virtual_product: virtualPatch({ status: "draft", version: 1 }),
+    })).rejects.toBe(settingsError);
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+  });
+
+  test("wraps an unknown secret read outage and does not save a draft mapping", async () => {
+    const fixture = createFixture({
+      mapping: null,
+      secretError: new Error("private settings outage"),
+    });
+
+    await expect(fixture.service.update(manageAuth, {
+      version: 4,
+      virtual_product: virtualPatch({ status: "draft", version: 1 }),
+    })).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "读取平台支付密钥配置失败",
+      details: undefined,
+    });
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
   });
 
   test("preserves business errors, wraps unknown writes, and does not audit failures", async () => {

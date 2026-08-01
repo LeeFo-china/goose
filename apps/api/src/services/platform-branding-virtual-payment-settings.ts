@@ -322,8 +322,9 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     try {
       const raw = await this.settingsService.getSecretString(key);
       return parseWechatVirtualPaymentSecretBundle(raw)?.revision === revision;
-    } catch {
-      return false;
+    } catch (error) {
+      if (isApplicationErrorLike(error)) throw error;
+      throw Errors.dbError("读取平台支付密钥配置失败");
     }
   }
 
