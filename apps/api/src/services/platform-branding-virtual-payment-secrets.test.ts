@@ -116,6 +116,10 @@ describe("PlatformBrandingVirtualPaymentSecretService permissions", () => {
   test.each([
     ["payment read", auth("platform.payment.config.read")],
     ["full payment manage", auth("platform.payment.config.manage")],
+    ["payment manage without a write actor", auth(
+      "platform.payment.config.manage",
+      { employeeId: null, authUserId: "" },
+    )],
   ] satisfies Array<[string, AuthContext]>) (
     "allows %s to read safe statuses",
     async (_name, context) => {

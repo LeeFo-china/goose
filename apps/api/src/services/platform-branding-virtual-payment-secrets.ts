@@ -174,7 +174,7 @@ export class PlatformBrandingVirtualPaymentSecretService {
 
   private requireReadable(authContext: AuthContext) {
     this.requirePlatformContext(authContext);
-    if (!this.canManage(authContext) &&
+    if (!this.hasManagePermission(authContext) &&
       !this.accessPolicy.hasPermission(authContext, READ_PERMISSION)) {
       throw Errors.forbidden();
     }
@@ -204,7 +204,11 @@ export class PlatformBrandingVirtualPaymentSecretService {
       authContext.tenantId === null &&
       Boolean(authContext.employeeId) &&
       Boolean(authContext.authUserId) &&
-      this.accessPolicy.hasPermission(authContext, MANAGE_PERMISSION);
+      this.hasManagePermission(authContext);
+  }
+
+  private hasManagePermission(authContext: AuthContext) {
+    return this.accessPolicy.hasPermission(authContext, MANAGE_PERMISSION);
   }
 
   private async updateSetting(
