@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_POSTGRES_INTEGER_FEN } from "../services/branding-addon-contracts";
+
 const nullableText = (max: number, message: string) =>
   z.preprocess((value) => {
     if (value === undefined) return undefined;
@@ -75,3 +77,72 @@ export const UpdatePlatformWechatPaySecretBundleSchema = z.object({
 
 export type UpdatePlatformWechatPaySecretBundleInput =
   z.infer<typeof UpdatePlatformWechatPaySecretBundleSchema>;
+
+const positiveInteger = (label: string) => z.number()
+  .int(`${label}必须是整数`)
+  .positive(`${label}必须大于 0`);
+
+const requiredTrimmedText = (max: number, label: string) => z.string()
+  .trim()
+  .min(1, `${label}不能为空`)
+  .max(max, `${label}不能超过 ${max} 个字符`);
+
+export const PlatformWechatVirtualEnvironmentSchema = z.enum([
+  "sandbox",
+  "production",
+]);
+
+export const PlatformWechatVirtualProductPatchSchema = z.object({
+  environment: PlatformWechatVirtualEnvironmentSchema,
+  app_id: requiredTrimmedText(64, "AppID"),
+  virtual_merchant_id: requiredTrimmedText(64, "虚拟支付商户号"),
+  offer_id: requiredTrimmedText(128, "Offer ID"),
+  provider_product_id: requiredTrimmedText(128, "支付渠道商品 ID"),
+  expected_amount_fen: z.number()
+    .int("金额必须是整数分")
+    .positive("金额必须大于 0")
+    .max(MAX_POSTGRES_INTEGER_FEN, "金额超出支持范围"),
+  secret_revision: positiveInteger("密钥版本号"),
+  status: z.enum(["draft", "active", "disabled"]),
+  version: positiveInteger("版本号"),
+}).strict();
+
+export const UpdatePlatformWechatVirtualSettingsSchema = z.object({
+  version: positiveInteger("版本号"),
+  purchase_mode: z.enum([
+    "direct_legacy",
+    "maintenance",
+    "wechat_virtual",
+  ]).optional(),
+  virtual_product: PlatformWechatVirtualProductPatchSchema.optional(),
+}).strict().refine(
+  (input) => input.purchase_mode !== undefined ||
+    input.virtual_product !== undefined,
+  { message: "至少提交购买模式或虚拟商品配置" },
+);
+
+export const PlatformWechatVirtualProductValidationSchema = z.object({
+  version: positiveInteger("版本号"),
+}).strict();
+
+export const UpdatePlatformWechatVirtualSecretBundleSchema = z.object({
+  app_key: requiredTrimmedText(512, "App Key"),
+  revision: positiveInteger("密钥版本号"),
+}).strict();
+
+export const UpdatePlatformWechatVirtualMessageTokenSchema = z.object({
+  message_token: requiredTrimmedText(512, "消息令牌"),
+}).strict();
+
+export type PlatformWechatVirtualEnvironmentInput =
+  z.infer<typeof PlatformWechatVirtualEnvironmentSchema>;
+export type PlatformWechatVirtualProductPatchInput =
+  z.infer<typeof PlatformWechatVirtualProductPatchSchema>;
+export type UpdatePlatformWechatVirtualSettingsInput =
+  z.infer<typeof UpdatePlatformWechatVirtualSettingsSchema>;
+export type PlatformWechatVirtualProductValidationInput =
+  z.infer<typeof PlatformWechatVirtualProductValidationSchema>;
+export type UpdatePlatformWechatVirtualSecretBundleInput =
+  z.infer<typeof UpdatePlatformWechatVirtualSecretBundleSchema>;
+export type UpdatePlatformWechatVirtualMessageTokenInput =
+  z.infer<typeof UpdatePlatformWechatVirtualMessageTokenSchema>;
