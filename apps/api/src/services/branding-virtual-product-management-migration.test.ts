@@ -5,6 +5,10 @@ const migrationUrl = new URL(
   "../../../../supabase/migrations/20260731132000_create_branding_virtual_product_management_rpcs.sql",
   import.meta.url,
 );
+const remoteValidationMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260801110000_support_pending_branding_virtual_product_validation.sql",
+  import.meta.url,
+);
 
 function normalizedSql(): string {
   return readFileSync(migrationUrl, "utf8")
@@ -15,6 +19,36 @@ function normalizedSql(): string {
 }
 
 describe("branding virtual product management migration", () => {
+  test("persists unconfirmed remote validation as pending without stale evidence", () => {
+    const sql = readFileSync(remoteValidationMigrationUrl, "utf8")
+      .replace(/--.*$/gm, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+    expect(sql).toContain(
+      "p_validation_status not in ('pending', 'valid', 'invalid')",
+    );
+    expect(sql).toContain("p_validation_status is null");
+    expect(sql).toContain(
+      "p_environment not in ('sandbox', 'production')",
+    );
+    expect(sql).toContain("p_environment is null");
+    expect(sql).toContain(
+      "when p_validation_status = 'pending' then null else p_validated_at end",
+    );
+    expect(sql).toContain(
+      "when p_validation_status = 'invalid' and status = 'active' then 'disabled'",
+    );
+    expect(sql).not.toContain(
+      "when p_validation_status in ('pending', 'invalid') and status = 'active'",
+    );
+    expect(sql).toContain("version = version + 1");
+    expect(sql).toContain(
+      "grant execute on function public.branding_set_virtual_product_configuration_validation(uuid, text, integer, integer, text, timestamptz, uuid) to service_role",
+    );
+  });
+
   test("takes the shared config lock before every management product lock", () => {
     const sql = normalizedSql();
     for (const rpc of [

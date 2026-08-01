@@ -1,6 +1,9 @@
 import { Errors } from "@/errors/error-factory";
 
 import type {
+  QueryVirtualGoodsPublishResult,
+  QueryVirtualGoodsTaskInput,
+  QueryVirtualGoodsUploadResult,
   QueryVirtualOrderInput,
   QueryVirtualOrderResult,
   RefundVirtualOrderInput,
@@ -9,6 +12,14 @@ import type {
   VirtualOrderType,
   VirtualSettlementState,
 } from "./wechat-virtual-payment-gateway-contracts";
+
+const MAX_VIRTUAL_GOODS_TASK_ITEMS = 100;
+const MAX_VIRTUAL_GOODS_ID_LENGTH = 20;
+const MAX_VIRTUAL_GOODS_NAME_LENGTH = 20;
+const MAX_VIRTUAL_GOODS_REMARK_LENGTH = 1_024;
+const MAX_VIRTUAL_GOODS_URL_LENGTH = 2_048;
+const MAX_VIRTUAL_GOODS_ERROR_LENGTH = 1_024;
+const VIRTUAL_GOODS_ID_PATTERN = /^[A-Za-z0-9_-]{1,20}$/;
 
 export type WechatVirtualPaymentJsonResponse = {
   payload: Record<string, unknown>;
@@ -125,6 +136,65 @@ export function normalizeRefundSubmission(
   };
 }
 
+export function normalizeQueryGoodsUpload(
+  response: WechatVirtualPaymentJsonResponse,
+  input: QueryVirtualGoodsTaskInput,
+): QueryVirtualGoodsUploadResult {
+  const status = parseGoodsTaskStatus(response.payload.status, response);
+  const items = requireGoodsTaskItems(
+    response.payload.upload_item,
+    status,
+    response,
+  );
+  return {
+    requestId: response.requestId,
+    environment: input.environment,
+    status,
+    items: items.map((value) => {
+      const item = requireRecord(value, response.requestId, response.httpStatus);
+      requireBoundedString(item, "remark", MAX_VIRTUAL_GOODS_REMARK_LENGTH, response);
+      requireBoundedString(item, "item_url", MAX_VIRTUAL_GOODS_URL_LENGTH, response);
+      requireBoundedString(item, "errmsg", MAX_VIRTUAL_GOODS_ERROR_LENGTH, response);
+      return {
+        id: requireGoodsId(item, response),
+        name: requireBoundedString(
+          item,
+          "name",
+          MAX_VIRTUAL_GOODS_NAME_LENGTH,
+          response,
+        ),
+        price: requirePositiveInteger(item, "price", response),
+        uploadStatus: parseGoodsItemStatus(item.upload_status, response),
+      };
+    }),
+  };
+}
+
+export function normalizeQueryGoodsPublish(
+  response: WechatVirtualPaymentJsonResponse,
+  input: QueryVirtualGoodsTaskInput,
+): QueryVirtualGoodsPublishResult {
+  const status = parseGoodsTaskStatus(response.payload.status, response);
+  const items = requireGoodsTaskItems(
+    response.payload.publish_item,
+    status,
+    response,
+  );
+  return {
+    requestId: response.requestId,
+    environment: input.environment,
+    status,
+    items: items.map((value) => {
+      const item = requireRecord(value, response.requestId, response.httpStatus);
+      requireBoundedString(item, "errmsg", MAX_VIRTUAL_GOODS_ERROR_LENGTH, response);
+      return {
+        id: requireGoodsId(item, response),
+        publishStatus: parseGoodsItemStatus(item.publish_status, response),
+      };
+    }),
+  };
+}
+
 export function parseJsonRecord(rawBody: string): Record<string, unknown> | null {
   if (!rawBody) return null;
   try {
@@ -188,6 +258,54 @@ function requireNonBlankString(
   return value;
 }
 
+function requireBoundedString(
+  record: Record<string, unknown>,
+  key: string,
+  maxLength: number,
+  response: WechatVirtualPaymentJsonResponse,
+): string {
+  const value = record[key];
+  if (typeof value !== "string" || value.length > maxLength) {
+    throwInvalidResponse(response.requestId, response.httpStatus);
+  }
+  return value;
+}
+
+function requireGoodsId(
+  record: Record<string, unknown>,
+  response: WechatVirtualPaymentJsonResponse,
+): string {
+  const value = requireBoundedString(
+    record,
+    "id",
+    MAX_VIRTUAL_GOODS_ID_LENGTH,
+    response,
+  );
+  if (!VIRTUAL_GOODS_ID_PATTERN.test(value)) {
+    throwInvalidResponse(response.requestId, response.httpStatus);
+  }
+  return value;
+}
+
+function requireBoundedArray(
+  value: unknown,
+  response: WechatVirtualPaymentJsonResponse,
+): unknown[] {
+  if (!Array.isArray(value) || value.length > MAX_VIRTUAL_GOODS_TASK_ITEMS) {
+    throwInvalidResponse(response.requestId, response.httpStatus);
+  }
+  return value;
+}
+
+function requireGoodsTaskItems(
+  value: unknown,
+  status: 0 | 1 | 2 | 3,
+  response: WechatVirtualPaymentJsonResponse,
+): unknown[] {
+  if (status === 0 && value === undefined) return [];
+  return requireBoundedArray(value, response);
+}
+
 function optionalProviderId(
   record: Record<string, unknown>,
   key: string,
@@ -210,6 +328,31 @@ function requireUnsignedInteger(
     throwInvalidResponse(response.requestId, response.httpStatus);
   }
   return Number(value);
+}
+
+function requirePositiveInteger(
+  record: Record<string, unknown>,
+  key: string,
+  response: WechatVirtualPaymentJsonResponse,
+): number {
+  const value = requireUnsignedInteger(record, key, response);
+  if (value === 0) throwInvalidResponse(response.requestId, response.httpStatus);
+  return value;
+}
+
+function parseGoodsTaskStatus(
+  value: unknown,
+  response: WechatVirtualPaymentJsonResponse,
+): 0 | 1 | 2 | 3 {
+  if (value === 0 || value === 1 || value === 2 || value === 3) return value;
+  throwInvalidResponse(response.requestId, response.httpStatus);
+}
+
+function parseGoodsItemStatus(
+  value: unknown,
+  response: WechatVirtualPaymentJsonResponse,
+): 0 | 1 | 2 | 3 {
+  return parseGoodsTaskStatus(value, response);
 }
 
 function optionalUnsignedInteger(

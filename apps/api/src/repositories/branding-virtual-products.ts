@@ -82,8 +82,8 @@ export type SetBrandingVirtualProductValidationInput = {
   environment: BrandingVirtualPaymentEnvironment;
   expectedProductVersion: number;
   expectedMappingVersion: number;
-  validationStatus: "valid" | "invalid";
-  validatedAt: string;
+  validationStatus: BrandingVirtualProductValidationStatus;
+  validatedAt: string | null;
   updatedByEmployeeId: string;
 };
 

@@ -151,8 +151,9 @@ function createFixture(options: {
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,
     validation: {
-      kind: "server_configuration" as const,
+      kind: "wechat_goods" as const,
       validated_at: "2026-08-01T00:00:00.000Z",
+      request_ids: { upload: "upload-request-id", publish: "publish-request-id" },
     },
   }));
   const service = new PlatformBrandingAddonProductService({
