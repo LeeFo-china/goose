@@ -44,7 +44,10 @@ type VirtualProductRepositoryPort = Pick<
   typeof brandingVirtualProductRepository,
   "findByProductAndEnvironment" | "manageConfiguration"
 >;
-type SettingsServicePort = Pick<typeof systemSettingsService, "getSecretString">;
+type SettingsServicePort = Pick<
+  typeof systemSettingsService,
+  "getPlatformSecretString"
+>;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "hasPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 type ManagementServicePort = Pick<
@@ -172,16 +175,14 @@ export class PlatformBrandingVirtualPaymentSettingsService {
 
   private requireReadable(authContext: AuthContext) {
     this.requirePlatformContext(authContext);
-    if (!this.canManage(authContext) &&
+    if (!this.hasManagePermission(authContext) &&
       !this.accessPolicy.hasPermission(authContext, READ_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private requireManageable(authContext: AuthContext) {
-    this.requirePlatformContext(authContext);
-    if (!authContext.employeeId || !authContext.authUserId ||
-      !this.canManage(authContext)) {
+    if (!this.canManage(authContext)) {
       throw Errors.forbidden();
     }
     return {
@@ -196,7 +197,20 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     }
   }
 
-  private canManage(authContext: AuthContext) {
+  private canManage(authContext: AuthContext): authContext is AuthContext & {
+    authUserId: string;
+    employeeId: string;
+    tenantId: null;
+    isPlatformAdmin: true;
+  } {
+    return authContext.isPlatformAdmin &&
+      authContext.tenantId === null &&
+      Boolean(authContext.employeeId) &&
+      Boolean(authContext.authUserId) &&
+      this.hasManagePermission(authContext);
+  }
+
+  private hasManagePermission(authContext: AuthContext) {
     return this.accessPolicy.hasPermission(authContext, MANAGE_PERMISSION);
   }
 
@@ -320,10 +334,21 @@ export class PlatformBrandingVirtualPaymentSettingsService {
 
   private async hasConfiguredSecretBundle(key: string, revision: number) {
     try {
-      const raw = await this.settingsService.getSecretString(key);
+      const raw = await this.settingsService.getPlatformSecretString(key);
       return parseWechatVirtualPaymentSecretBundle(raw)?.revision === revision;
     } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
+      if (isApplicationErrorLike(error)) {
+        const applicationError = error as {
+          statusCode: number;
+          message: string;
+          code: string;
+        };
+        throw Errors.business(
+          applicationError.statusCode,
+          applicationError.message,
+          applicationError.code,
+        );
+      }
       throw Errors.dbError("读取平台支付密钥配置失败");
     }
   }

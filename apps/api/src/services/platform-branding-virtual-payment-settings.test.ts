@@ -1,109 +1,24 @@
-import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { beforeAll, describe, expect, test } from "bun:test";
 
 import { Errors } from "@/errors/error-factory";
-import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
-import type { UpdatePlatformWechatVirtualSettingsInput } from "@/schema/platform-payment-configs";
 import type { AuthContext } from "@/services/authorization";
+import {
+  auth,
+  buildFixture,
+  EMPLOYEE_ID,
+  type FixtureOptions,
+  manageAuth,
+  managementConfiguration,
+  product,
+  productionMapping,
+  TENANT_ID,
+  virtualPatch,
+} from "@/services/platform-branding-virtual-payment-settings.test-fixtures";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const EMPLOYEE_ID = "11111111-1111-4111-8111-111111111111";
-const AUTH_USER_ID = "22222222-2222-4222-8222-222222222222";
-const PRODUCT_ID = "33333333-3333-4333-8333-333333333333";
-const TENANT_ID = "44444444-4444-4444-8444-444444444444";
-
-const product = {
-  id: PRODUCT_ID,
-  code: "custom_support_branding_annual",
-  entitlement_code: "custom_support_branding",
-  name: "年度品牌技术支持",
-  amount_fen: 9_900,
-  term_years: 1,
-  purchase_notes: "支付成功后自动开通一年",
-  refund_policy: "数字权益支付成功并开通后不支持退款",
-  enabled: true,
-  purchase_mode: "maintenance",
-  version: 4,
-  updated_by_employee_id: null,
-  created_at: "2026-07-28T00:00:00.000Z",
-  updated_at: "2026-07-28T00:00:00.000Z",
-} satisfies BrandingAddonProductRecord;
-
-const productionMapping = {
-  id: "55555555-5555-4555-8555-555555555555",
-  addon_product_id: PRODUCT_ID,
-  provider: "wechat_virtual",
-  environment: "production",
-  app_id: "wx-app",
-  virtual_merchant_id: "virtual-merchant",
-  offer_id: "offer-annual",
-  provider_product_id: "branding-annual",
-  goods_quantity: 1,
-  expected_amount_fen: 9_900,
-  encrypted_secret_ref: "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
-  secret_revision: 2,
-  status: "active",
-  validation_status: "valid",
-  validated_at: "2026-07-31T00:00:00.000Z",
-  version: 3,
-  created_by: EMPLOYEE_ID,
-  updated_by: EMPLOYEE_ID,
-  created_at: "2026-07-31T00:00:00.000Z",
-  updated_at: "2026-07-31T00:00:00.000Z",
-} satisfies BrandingVirtualProductRecord;
-
-const managementConfiguration = {
-  product: {
-    code: product.code,
-    entitlement_code: product.entitlement_code,
-    name: product.name,
-    amount_fen: product.amount_fen,
-    term_years: product.term_years,
-    purchase_notes: product.purchase_notes,
-    enabled: product.enabled,
-    purchase_mode: product.purchase_mode,
-    version: product.version,
-  },
-  virtual_products: [{
-    environment: "production" as const,
-    mapping: productionMapping,
-    secret: {
-      key: "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
-      revision: 2,
-      configured: true,
-    },
-  }],
-};
-
-function auth(permission: string, overrides: Partial<AuthContext> = {}): AuthContext {
-  return {
-    authUserId: AUTH_USER_ID,
-    employeeId: EMPLOYEE_ID,
-    tenantId: null,
-    tenantName: null,
-    tenantSlug: null,
-    tenantStatus: null,
-    isPlatformAdmin: true,
-    employeeName: "平台管理员",
-    employeeStatus: "active",
-    departmentId: null,
-    tenantDepartmentId: null,
-    departmentCode: null,
-    departmentName: null,
-    postId: null,
-    postName: null,
-    avatar: null,
-    roleCodes: ["platform_admin"],
-    roles: [],
-    permissions: [{ code: permission, scope: "all" }],
-    ...overrides,
-  };
-}
-
-const manageAuth = auth("platform.payment.config.manage");
 
 type ServiceConstructor = typeof import(
   "./platform-branding-virtual-payment-settings"
@@ -117,93 +32,8 @@ beforeAll(async () => {
   ));
 });
 
-function virtualPatch(
-  overrides: Partial<NonNullable<UpdatePlatformWechatVirtualSettingsInput["virtual_product"]>> = {},
-) {
-  return {
-    environment: "production" as const,
-    app_id: "wx-app",
-    virtual_merchant_id: "virtual-merchant",
-    offer_id: "offer-annual",
-    provider_product_id: "branding-annual",
-    expected_amount_fen: 9_900,
-    secret_revision: 2,
-    status: "active" as const,
-    version: 3,
-    ...overrides,
-  };
-}
-
-function createFixture(options: {
-  current?: BrandingAddonProductRecord | null;
-  mapping?: BrandingVirtualProductRecord | null;
-  savedProduct?: BrandingAddonProductRecord;
-  savedMapping?: BrandingVirtualProductRecord | null;
-  productError?: unknown;
-  mappingError?: unknown;
-  saveError?: unknown;
-  secretBundle?: string;
-  secretError?: unknown;
-} = {}) {
-  const current = options.current === undefined ? product : options.current;
-  const mapping = options.mapping === undefined ? productionMapping : options.mapping;
-  const getProduct = mock(async () => {
-    if (options.productError) throw options.productError;
-    return current;
-  });
-  const findByProductAndEnvironment = mock(async () => {
-    if (options.mappingError) throw options.mappingError;
-    return mapping;
-  });
-  const manageConfiguration = mock(async () => {
-    if (options.saveError) throw options.saveError;
-    return {
-      product: options.savedProduct ?? { ...product, version: 5 },
-      virtual_product: options.savedMapping === undefined
-        ? mapping
-        : options.savedMapping,
-    };
-  });
-  const getSecretString = mock(async () => {
-    if (options.secretError) throw options.secretError;
-    return options.secretBundle ?? JSON.stringify({
-      appKey: "never-expose-this-app-key",
-      revision: 2,
-    });
-  });
-  const getConfiguration = mock(async () => managementConfiguration);
-  const validateConfiguration = mock(async () => ({
-    virtual_product: productionMapping,
-    validation: {
-      kind: "server_configuration" as const,
-      validated_at: "2026-08-01T01:02:03.000Z",
-    },
-  }));
-  const hasPermission = mock((context: AuthContext, permission: string) =>
-    context.permissions.some(({ code }) => code === permission)
-  );
-  const recordBestEffort = mock(async () => null);
-  const service = new PlatformBrandingVirtualPaymentSettingsService({
-    productRepository: { getProduct },
-    virtualProductRepository: {
-      findByProductAndEnvironment,
-      manageConfiguration,
-    },
-    settingsService: { getSecretString },
-    accessPolicy: { hasPermission },
-    audit: { recordBestEffort },
-    managementService: { getConfiguration, validateConfiguration },
-  });
-  return {
-    service,
-    getProduct,
-    findByProductAndEnvironment,
-    manageConfiguration,
-    getSecretString,
-    getConfiguration,
-    validateConfiguration,
-    recordBestEffort,
-  };
+function createFixture(options: FixtureOptions = {}) {
+  return buildFixture(PlatformBrandingVirtualPaymentSettingsService, options);
 }
 
 describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
@@ -218,6 +48,15 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
       ...managementConfiguration,
       can_manage: true,
     });
+  });
+
+  test("reports a partial payment manager as read-only", async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.service.get(auth(
+      "platform.payment.config.manage",
+      { employeeId: null, authUserId: "" },
+    ))).resolves.toEqual({ ...managementConfiguration, can_manage: false });
   });
 
   test.each([
@@ -395,14 +234,31 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
     });
   });
 
-  test("preserves an application error when reading a secret for a draft mapping", async () => {
-    const settingsError = Errors.dbError("读取系统配置失败");
+  test("sanitizes an application error from the uncached platform secret accessor", async () => {
+    const sensitiveDetails = { ciphertext: "must-not-leak" };
+    const settingsError = Errors.business(
+      503,
+      "平台支付密钥暂不可用",
+      "CONFIG_SECRET_DECRYPT_FAILED",
+      sensitiveDetails,
+    );
     const fixture = createFixture({ mapping: null, secretError: settingsError });
 
-    await expect(fixture.service.update(manageAuth, {
+    const error = await fixture.service.update(manageAuth, {
       version: 4,
       virtual_product: virtualPatch({ status: "draft", version: 1 }),
-    })).rejects.toBe(settingsError);
+    }).catch((caught) => caught);
+    expect(error).toMatchObject({
+      statusCode: 503,
+      code: "CONFIG_SECRET_DECRYPT_FAILED",
+      message: "平台支付密钥暂不可用",
+      details: undefined,
+    });
+    expect(JSON.stringify(error)).not.toContain("must-not-leak");
+    expect(fixture.getPlatformSecretString).toHaveBeenCalledWith(
+      "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+    );
+    expect(fixture.getSecretString).not.toHaveBeenCalled();
     expect(fixture.manageConfiguration).not.toHaveBeenCalled();
   });
 
@@ -422,6 +278,37 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       details: undefined,
     });
     expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+  });
+
+  test("switches maintenance to wechat virtual with an uncached ready secret", async () => {
+    const fixture = createFixture();
+
+    const result = await fixture.service.update(manageAuth, {
+      version: 4,
+      purchase_mode: "wechat_virtual",
+    });
+
+    expect(fixture.getPlatformSecretString).toHaveBeenCalledTimes(1);
+    expect(fixture.getPlatformSecretString).toHaveBeenCalledWith(
+      "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+    );
+    expect(fixture.getSecretString).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 4,
+      productPatch: { purchase_mode: "wechat_virtual" },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
+    });
+    expect(result).toMatchObject({
+      can_manage: true,
+      product: { purchase_mode: "wechat_virtual", version: 5 },
+    });
+    const audit = JSON.stringify(fixture.recordBestEffort.mock.calls);
+    expect(audit).toContain('"from":"maintenance"');
+    expect(audit).toContain('"to":"wechat_virtual"');
+    expect(audit).not.toContain("never-expose-this-app-key");
+    expect(audit).not.toContain("appKey");
   });
 
   test("preserves business errors, wraps unknown writes, and does not audit failures", async () => {
