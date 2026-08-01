@@ -20,6 +20,7 @@ const ReconciliationClaimSchema = z.object({
   out_trade_no: z.string().trim().min(1).max(32),
   environment: z.enum(["sandbox", "production"]),
   offer_id: z.string().trim().min(1).max(128),
+  secret_revision: z.number().int().positive(),
   provider_product_id: z.string().trim().min(1).max(128),
   payer_openid: z.string().trim().min(1).max(128),
   amount_fen: z.number().int().min(100),

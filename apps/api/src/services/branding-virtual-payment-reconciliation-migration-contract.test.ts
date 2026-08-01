@@ -105,10 +105,12 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(claim).toContain(
       "orders.payment_status = 'succeeded' and orders.fulfillment_status = 'granted' and orders.provider_delivery_status = 'not_required' and orders.reconcile_completion_kind is not null",
     );
+    expect(claim).toContain("secret_revision integer");
     const returned = claim.slice(claim.lastIndexOf("returning"));
     for (const fact of [
       "orders.id",
       "orders.out_trade_no",
+      "orders.secret_revision",
       "orders.provider_order_no",
       "orders.transaction_id",
       "orders.paid_amount_fen",

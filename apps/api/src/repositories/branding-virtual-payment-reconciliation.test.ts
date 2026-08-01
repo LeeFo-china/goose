@@ -35,6 +35,7 @@ const reconciliationClaim = {
   out_trade_no: order.out_trade_no,
   environment: "production",
   offer_id: order.offer_id,
+  secret_revision: 1,
   provider_product_id: order.provider_product_id,
   payer_openid: order.payer_openid,
   amount_fen: order.amount_fen,
