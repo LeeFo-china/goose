@@ -312,6 +312,50 @@ describe("branding virtual payment reconciliation migration", () => {
     );
   });
 
+  test("normalizes a status-5 grant failure without aborting its claim batch", () => {
+    const scheduling = normalizeSql(extractFunction(
+      migrationSql,
+      "schedule_tenant_virtual_addon_order_reconciliation",
+    ));
+    const reschedule = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_reschedule_virtual_payment_reconciliation",
+    ));
+    const claim = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_claim_virtual_payment_reconciliation_batch",
+    ));
+    const recoveryFromUnmarkedGrantFailure =
+      "orders.payment_status = 'succeeded' and orders.fulfillment_status = 'grant_failed' and orders.reconcile_completion_kind is null";
+
+    expect(reschedule).toContain(
+      "p_official_status is not null and p_official_status not between 0 and 10",
+    );
+    expect(reschedule).toContain(
+      "when orders.reconcile_completion_kind is null then p_official_status",
+    );
+    expect(scheduling).toMatch(
+      /fulfillment_status = 'grant_failed'[\s\S]*new\.reconcile_next_at := clock_timestamp\(\)/,
+    );
+    for (const audit of [
+      "reconcile_last_provider_status",
+      "reconcile_query_provider_order_no",
+      "reconcile_query_transaction_id",
+      "reconcile_query_paid_amount_fen",
+      "reconcile_query_paid_at",
+    ]) {
+      expect(claim).toContain(
+        `${audit} = case when ${recoveryFromUnmarkedGrantFailure} then null else orders.${audit} end`,
+      );
+    }
+    expect(claim).toContain(
+      "reconcile_completion_kind = case when orders.payment_status = 'succeeded' and orders.fulfillment_status = 'grant_failed' then coalesce(orders.reconcile_completion_kind, 'grant_recovery') else orders.reconcile_completion_kind end",
+    );
+    expect(claim).toContain(
+      "from candidates where orders.id = candidates.id returning",
+    );
+  });
+
   test("reschedule preserves completion checkpoints across lease release", () => {
     const reschedule = normalizeSql(extractFunction(
       migrationSql,

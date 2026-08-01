@@ -353,6 +353,42 @@ BEGIN
       reconcile_attempt_count = orders.reconcile_attempt_count + 1,
       reconcile_last_error_code = NULL,
       reconcile_last_error = NULL,
+      -- SET expressions read the pre-update row, preserving an existing query.
+      reconcile_last_provider_status = CASE
+        WHEN orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'grant_failed'
+          AND orders.reconcile_completion_kind IS NULL
+        THEN NULL
+        ELSE orders.reconcile_last_provider_status
+      END,
+      reconcile_query_provider_order_no = CASE
+        WHEN orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'grant_failed'
+          AND orders.reconcile_completion_kind IS NULL
+        THEN NULL
+        ELSE orders.reconcile_query_provider_order_no
+      END,
+      reconcile_query_transaction_id = CASE
+        WHEN orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'grant_failed'
+          AND orders.reconcile_completion_kind IS NULL
+        THEN NULL
+        ELSE orders.reconcile_query_transaction_id
+      END,
+      reconcile_query_paid_amount_fen = CASE
+        WHEN orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'grant_failed'
+          AND orders.reconcile_completion_kind IS NULL
+        THEN NULL
+        ELSE orders.reconcile_query_paid_amount_fen
+      END,
+      reconcile_query_paid_at = CASE
+        WHEN orders.payment_status = 'succeeded'
+          AND orders.fulfillment_status = 'grant_failed'
+          AND orders.reconcile_completion_kind IS NULL
+        THEN NULL
+        ELSE orders.reconcile_query_paid_at
+      END,
       reconcile_completion_kind = CASE
         WHEN orders.payment_status = 'succeeded'
           AND orders.fulfillment_status = 'grant_failed'
