@@ -52,7 +52,7 @@
 1. 总体状态：当前销售模式、沙箱/生产就绪状态、主要阻塞项。
 2. 环境配置：沙箱和生产环境页签，编辑 AppID、虚拟商户号、Offer ID、微信 Product ID、预期金额和启用状态。
 3. 密钥配置：AppKey 和配置修订号；只显示是否已配置、来源和版本。
-4. 消息认证：微信虚拟支付消息令牌；只允许覆盖写入，不回显明文。
+4. 消息认证：微信虚拟支付消息令牌；只允许覆盖写入，不回显明文。小程序原始 ID 作为共享微信基础配置保留在微信配置分组，本页只显示其就绪状态和修复入口。
 5. 配置校验：按环境调用微信校验并展示最近结果、时间和错误原因。
 6. 销售模式：执行 `direct_legacy → maintenance → wechat_virtual` 或 `wechat_virtual → maintenance → wechat_virtual` 的受控切换。
 
@@ -155,7 +155,8 @@
 
 - 沙箱 AppKey 使用 `WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE`。
 - 生产 AppKey 使用 `WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE`。
-- 回调消息认证使用 `WECHAT_VIRTUAL_MESSAGE_TOKEN`。
+- 回调消息认证使用既有的 `WECHAT_VIRTUAL_MESSAGE_TOKEN` 定义，并将其纳入支付专用安全写入白名单；不重复创建同名定义。
+- `WECHAT_MINIPROGRAM_ORIGINAL_ID` 是微信消息共享身份配置，继续归属微信配置分组；虚拟支付总体就绪检查必须校验它是否存在且格式正确。
 - GET 响应只返回 `configured`、`source`、`revision` 等元数据。
 - 日志、错误响应、审计详情和浏览器状态不得包含 AppKey、消息令牌或解密后的 secret bundle。
 - 写入采用独立请求，商品或环境映射更新不得携带密钥。
@@ -168,6 +169,7 @@
 - 目标环境映射字段完整，数量和预期金额与业务商品一致。
 - 对应环境 AppKey 已配置。
 - 消息令牌已配置。
+- 小程序原始 ID 已配置且为合法的 `gh_` 标识。
 - 微信侧商品校验通过且校验结果对应当前映射版本。
 
 生产环境未就绪时，服务端拒绝切换到 `wechat_virtual`。商品价格变化后，即使历史校验仍存在，金额不一致也必须使生产就绪状态变为阻断，直至重新保存映射并校验。
@@ -182,7 +184,7 @@
 - `platform.payment.config.manage`
 - `branding_manage_virtual_product_configuration(...)`
 
-若 `WECHAT_VIRTUAL_MESSAGE_TOKEN` 仅需加入代码内系统设置定义，则不创建数据库 migration。只有实际新增数据库字典数据、权限、约束、索引、函数或策略时才新增前向 migration，并在应用后核对 Local/Remote migration 对齐。禁止修改已经应用的 migration。
+`WECHAT_VIRTUAL_MESSAGE_TOKEN` 已有代码定义和数据库保护触发器，本次只调整其配置分组并加入支付专用安全写入白名单，不创建重复定义或数据库 migration。只有实际新增数据库字典数据、权限、约束、索引、函数或策略时才新增前向 migration，并在应用后核对 Local/Remote migration 对齐。禁止修改已经应用的 migration。
 
 ## 10. 兼容与发布策略
 
@@ -204,4 +206,3 @@
 - GET、日志和错误中均无法获取密钥明文。
 - 版本冲突、远端校验失败、未就绪切换和无权限操作均返回稳定业务错误。
 - API 聚焦测试、Admin 类型检查、相关构建和浏览器 smoke 通过，骨架屏与新布局一致。
-

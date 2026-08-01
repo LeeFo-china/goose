@@ -28,7 +28,8 @@
 - Modify: `apps/api/src/services/platform-branding-addon-product.test.ts` — 商品权限不能再修改支付配置。
 - Modify: `apps/api/src/services/branding-virtual-product-management.ts` — 将可复用的快照/校验逻辑开放给支付域，权限由调用方明确传入。
 - Modify: `apps/api/src/services/branding-virtual-product-management.test.ts` — 校验使用支付权限。
-- Modify: `apps/api/src/services/system-settings/legacy/definitions-payment.ts` — 登记 `WECHAT_VIRTUAL_MESSAGE_TOKEN` 平台级敏感支付设置。
+- Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts` — 将既有 `WECHAT_VIRTUAL_MESSAGE_TOKEN` 归入支付配置分组，不创建重复定义。
+- Modify: `apps/api/src/services/system-settings/legacy/definitions.ts` — 将消息令牌加入支付专用安全写入白名单。
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts` — 验证消息令牌定义、平台作用域和敏感属性。
 
 ### Admin
@@ -198,7 +199,8 @@ git commit -m "feat(payments): 新增虚拟支付配置服务"
 ## Task 3: 接入 AppKey 与消息令牌安全写入
 
 **Files:**
-- Modify: `apps/api/src/services/system-settings/legacy/definitions-payment.ts`
+- Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts`
+- Modify: `apps/api/src/services/system-settings/legacy/definitions.ts`
 - Modify: `apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts`
 - Modify: `apps/api/src/services/platform-branding-virtual-payment-settings.ts`
 - Modify: `apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
@@ -209,12 +211,12 @@ git commit -m "feat(payments): 新增虚拟支付配置服务"
 
 ```ts
 expect(definition.key).toBe("WECHAT_VIRTUAL_MESSAGE_TOKEN");
-expect(definition.group).toBe("payment");
-expect(definition.scope).toBe("platform");
+expect(definition.groupCode).toBe("payment");
 expect(definition.isSecret).toBe(true);
+expect(PLATFORM_PAYMENT_SECRET_SETTING_KEYS.has(definition.key)).toBe(true);
 ```
 
-测试 AppKey 保存值固定序列化为 `{ app_key, revision }`，消息令牌保存到固定键，响应只返回：
+测试接口输入 `{ app_key, revision }` 按既有运行时契约固定序列化为 `{ appKey, revision }`，消息令牌保存到固定键，响应只返回：
 
 ```ts
 { configured: true, source: "database", revision: 3 }
@@ -226,11 +228,11 @@ expect(definition.isSecret).toBe(true);
 
 Run: `bun test apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
 
-Expected: FAIL，因为消息令牌尚未登记且支付 service 尚未实现安全写入。
+Expected: FAIL，因为既有消息令牌仍归属微信分组、尚未进入支付专用写入白名单，且支付 service 尚未实现安全写入。
 
 - [ ] **Step 3: 实现设置定义和覆盖写入**
 
-在 payment definitions 中添加平台 secret 定义，并通过现有 `updatePlatformPaymentSecretSetting()` 写入。环境到键的映射只能来自：
+把既有消息令牌定义的 `groupCode` 调整为 `payment`，并加入 `PLATFORM_PAYMENT_SECRET_SETTING_KEYS`；不得再创建同名定义。通过现有 `updatePlatformPaymentSecretSetting()` 写入。环境到键的映射只能来自：
 
 ```ts
 const VIRTUAL_SECRET_KEYS = {
@@ -239,7 +241,7 @@ const VIRTUAL_SECRET_KEYS = {
 } as const;
 ```
 
-消息令牌固定使用 `WECHAT_VIRTUAL_MESSAGE_TOKEN`。审计只记录设置键、环境、修订号和 configured，不记录值。
+消息令牌固定使用 `WECHAT_VIRTUAL_MESSAGE_TOKEN`。小程序原始 ID 继续归属微信配置，只在虚拟支付就绪信息中返回合法性状态和微信配置修复入口。审计只记录设置键、环境、修订号和 configured，不记录值。
 
 - [ ] **Step 4: 运行测试**
 
@@ -250,7 +252,7 @@ Expected: PASS。
 - [ ] **Step 5: 提交**
 
 ```bash
-git add apps/api/src/services/system-settings/legacy/definitions-payment.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts
+git add apps/api/src/services/system-settings/legacy/definitions-wechat-notify.ts apps/api/src/services/system-settings/legacy/definitions.ts apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts
 git commit -m "feat(payments): 管理虚拟支付密钥与消息令牌"
 ```
 
@@ -525,4 +527,3 @@ git commit -m "fix(payments): 修正虚拟支付配置验收问题"
 ```
 
 若没有代码变化，不创建空提交。
-
