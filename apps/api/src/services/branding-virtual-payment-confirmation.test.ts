@@ -2,7 +2,10 @@ import { describe, expect, mock, test } from "bun:test";
 
 import type { BrandingVirtualOrderRecord } from "@/repositories/branding-virtual-orders";
 import type { BrandingVirtualPurchaseConfirmationResult } from "@/repositories/branding-virtual-orders";
-import type { BrandingVirtualSuccessfulTransaction } from "./branding-virtual-payment-confirmation";
+import type {
+  BrandingVirtualPaymentConfirmationOrder,
+  BrandingVirtualSuccessfulTransaction,
+} from "./branding-virtual-payment-confirmation";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -73,6 +76,49 @@ const transaction = {
 };
 
 describe("BrandingVirtualPaymentConfirmation", () => {
+  test("accepts the minimal claimed-order facts used by reconciliation", async () => {
+    const { BrandingVirtualPaymentConfirmation } = await import(
+      "./branding-virtual-payment-confirmation"
+    );
+    const minimalOrder = {
+      id: order.id,
+      out_trade_no: order.out_trade_no,
+      environment: order.environment,
+      provider_product_id: order.provider_product_id,
+      payer_openid: order.payer_openid,
+      amount_fen: order.amount_fen,
+      provider_order_no: null,
+      transaction_id: null,
+    } satisfies BrandingVirtualPaymentConfirmationOrder;
+    const confirmPurchase = mock(async () => ({
+      idempotent: false,
+      payment_recorded: true,
+      fulfilled: true,
+      recoverable: false,
+      entitlement_event_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      entitlement_status: "active" as const,
+      failure_code: null,
+    }));
+    const confirmation = new BrandingVirtualPaymentConfirmation({ confirmPurchase });
+
+    await confirmation.confirm({
+      source: "reconciliation",
+      order: minimalOrder,
+      transaction: {
+        ...transaction,
+        eventType: "query_order",
+        recipientOriginalId: null,
+        senderIdHash: null,
+        providerCreatedAtUnix: null,
+        messageType: null,
+      },
+      notificationId: null,
+      allowLateClosedRecovery: true,
+    });
+
+    expect(confirmPurchase).toHaveBeenCalledTimes(1);
+  });
+
   test("passes every server-owned payment binding to the shared RPC", async () => {
     const { BrandingVirtualPaymentConfirmation } = await import(
       "./branding-virtual-payment-confirmation"

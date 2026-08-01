@@ -12,6 +12,18 @@ export type BrandingVirtualPaymentConfirmationSource =
   | "query"
   | "reconciliation";
 
+export type BrandingVirtualPaymentConfirmationOrder = Pick<
+  BrandingVirtualOrderRecord,
+  | "id"
+  | "out_trade_no"
+  | "environment"
+  | "provider_product_id"
+  | "payer_openid"
+  | "amount_fen"
+  | "transaction_id"
+  | "provider_order_no"
+>;
+
 export type BrandingVirtualSuccessfulTransaction = {
   eventType: "xpay_goods_deliver_notify" | "query_order";
   successful: true;
@@ -35,7 +47,7 @@ export type BrandingVirtualSuccessfulTransaction = {
 
 export type BrandingVirtualPaymentConfirmationInput = {
   source: BrandingVirtualPaymentConfirmationSource;
-  order: BrandingVirtualOrderRecord;
+  order: BrandingVirtualPaymentConfirmationOrder;
   transaction: BrandingVirtualSuccessfulTransaction;
   notificationId: string | null;
   allowLateClosedRecovery?: boolean;
@@ -98,7 +110,7 @@ function assertSourceBinding(input: BrandingVirtualPaymentConfirmationInput): vo
 }
 
 function assertTransactionBinding(
-  order: BrandingVirtualOrderRecord,
+  order: BrandingVirtualPaymentConfirmationOrder,
   transaction: BrandingVirtualSuccessfulTransaction,
 ): void {
   if (order.out_trade_no !== transaction.outTradeNo) {

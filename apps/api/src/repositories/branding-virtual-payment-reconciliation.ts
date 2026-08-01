@@ -3,58 +3,60 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { matchesPostgresError } from "@/errors/postgres-error-details";
 
-import {
-  BrandingVirtualOrderRecordSchema,
-  NullableBoundedText,
-} from "./branding-virtual-order-record";
-
 type QueryResult = { data: unknown; error: unknown };
 type ReconciliationClient = {
   rpc(name: string, parameters: Record<string, unknown>): Promise<QueryResult>;
 };
 
-const ReconciliationClaimSchema = BrandingVirtualOrderRecordSchema.extend({
+const isoDateTime = z.iso.datetime({ offset: true });
+const nullableDateTime = isoDateTime.nullable();
+const nullableText = (maximum: number) => z.string().trim().min(1)
+  .max(maximum).nullable();
+const officialStatus = z.number().int().min(0).max(10).nullable();
+
+const ReconciliationClaimSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  out_trade_no: z.string().trim().min(1).max(32),
+  environment: z.enum(["sandbox", "production"]),
+  offer_id: z.string().trim().min(1).max(128),
+  provider_product_id: z.string().trim().min(1).max(128),
+  payer_openid: z.string().trim().min(1).max(128),
+  amount_fen: z.number().int().min(100),
+  provider_order_no: nullableText(128),
+  transaction_id: nullableText(128),
+  payment_status: z.enum(["pending", "succeeded", "failed", "closed"]),
+  fulfillment_status: z.enum(["pending", "granted", "grant_failed"]),
+  paid_amount_fen: z.number().int().nonnegative().nullable(),
+  paid_at: nullableDateTime,
+  payment_expires_at: isoDateTime,
+  payment_request_issued_at: nullableDateTime,
+  entitlement_event_id: z.uuid().nullable(),
   reconcile_claim_token: z.uuid(),
-  reconcile_claim_expires_at: z.string(),
+  reconcile_claim_expires_at: isoDateTime,
   reconcile_attempt_count: z.number().int().nonnegative(),
-  reconcile_last_error_code: NullableBoundedText,
-  reconcile_last_error: NullableBoundedText,
-  reconcile_next_at: z.string().nullable(),
-  reconcile_last_checked_at: z.string().nullable(),
-  reconcile_last_provider_status: z.union([
-    z.literal(0), z.literal(1), z.literal(6),
-  ]).nullable(),
+  reconcile_last_error_code: nullableText(100),
+  reconcile_last_error: nullableText(1_000),
+  reconcile_next_at: nullableDateTime,
+  reconcile_last_checked_at: nullableDateTime,
+  reconcile_last_provider_status: officialStatus,
   provider_delivery_status: z.enum([
     "not_required", "pending", "succeeded", "failed",
   ]),
   provider_delivery_attempt_count: z.number().int().nonnegative(),
-  provider_delivery_last_error_code: NullableBoundedText,
-  provider_delivery_last_error: NullableBoundedText,
-  provider_delivery_notified_at: z.string().nullable(),
-  provider_delivery_request_id: NullableBoundedText,
+  provider_delivery_attempt_key: z.uuid().nullable(),
+  provider_delivery_last_error_code: nullableText(100),
+  provider_delivery_last_error: nullableText(500),
+  provider_delivery_provided_at: nullableDateTime,
+  provider_delivery_request_id: nullableText(128),
 });
 
 export type BrandingVirtualPaymentReconciliationClaim = z.infer<
   typeof ReconciliationClaimSchema
 >;
 
-type CompleteReconciliationInput = {
-  orderId: string;
-  claimToken: string;
-  environment: "sandbox" | "production";
-  openid: string;
-  outTradeNo: string;
-  providerProductId: string;
-  quantity: 1;
-  currency: "CNY" | null;
-  origPriceFen: number;
-  actualPriceFen: number;
-  providerOrderNo: string;
-  transactionId: string;
-  paidAt: string;
-  attach: string;
-  deliveryRequestId: string | null;
-};
+export type BrandingVirtualOfficialStatus =
+  | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export class BrandingVirtualPaymentReconciliationRepository {
   constructor(
@@ -83,6 +85,7 @@ export class BrandingVirtualPaymentReconciliationRepository {
     orderId: string;
     claimToken: string;
     nextAt: string;
+    officialStatus: BrandingVirtualOfficialStatus | null;
     errorCode: string | null;
     errorSummary: string | null;
   }): Promise<boolean> {
@@ -92,6 +95,7 @@ export class BrandingVirtualPaymentReconciliationRepository {
         p_order_id: input.orderId,
         p_claim_token: input.claimToken,
         p_next_at: input.nextAt,
+        p_official_status: input.officialStatus,
         p_error_code: sanitizeText(input.errorCode, 100),
         p_error_summary: sanitizeText(input.errorSummary, 500),
       },
@@ -115,27 +119,27 @@ export class BrandingVirtualPaymentReconciliationRepository {
     );
   }
 
-  async completeReconciliation(
-    input: CompleteReconciliationInput,
-  ): Promise<boolean> {
+  async finalizeReconciliationAfterConfirmation(input: {
+    orderId: string;
+    claimToken: string;
+    officialStatus: 2 | 3 | 4;
+    providerOrderNo: string;
+    transactionId: string;
+    paidAmountFen: number;
+    paidAt: string;
+    deliveryAttemptKey: string | null;
+  }): Promise<boolean> {
     return this.reconciliationBooleanCommand(
-      "branding_complete_virtual_payment_reconciliation",
+      "branding_finalize_virtual_payment_reconciliation",
       {
         p_order_id: input.orderId,
         p_claim_token: input.claimToken,
-        p_environment: input.environment,
-        p_openid: input.openid,
-        p_out_trade_no: input.outTradeNo,
-        p_provider_product_id: input.providerProductId,
-        p_quantity: input.quantity,
-        p_currency: input.currency,
-        p_orig_price_fen: input.origPriceFen,
-        p_actual_price_fen: input.actualPriceFen,
+        p_official_status: input.officialStatus,
         p_provider_order_no: input.providerOrderNo,
         p_transaction_id: input.transactionId,
+        p_paid_amount_fen: input.paidAmountFen,
         p_paid_at: input.paidAt,
-        p_attach: input.attach,
-        p_delivery_request_id: input.deliveryRequestId,
+        p_delivery_attempt_key: input.deliveryAttemptKey,
       },
       "完成虚拟支付补偿确认失败",
     );
@@ -144,8 +148,9 @@ export class BrandingVirtualPaymentReconciliationRepository {
   async markReconciliationDelivery(input: {
     orderId: string;
     claimToken: string;
-    status: "pending" | "succeeded" | "failed";
-    requestId: string;
+    status: "succeeded" | "failed";
+    attemptKey: string;
+    providerRequestId: string | null;
     errorCode: string | null;
     errorSummary: string | null;
   }): Promise<boolean> {
@@ -155,7 +160,8 @@ export class BrandingVirtualPaymentReconciliationRepository {
         p_order_id: input.orderId,
         p_claim_token: input.claimToken,
         p_delivery_status: input.status,
-        p_request_id: sanitizeText(input.requestId, 128),
+        p_attempt_key: input.attemptKey,
+        p_provider_request_id: sanitizeText(input.providerRequestId, 128),
         p_error_code: sanitizeText(input.errorCode, 100),
         p_error_summary: sanitizeText(input.errorSummary, 500),
       },
@@ -193,7 +199,10 @@ const RECONCILIATION_ERRORS: Record<
     statusCode: 409, message: "虚拟支付订单状态不支持当前补偿操作",
   },
   BRANDING_VIRTUAL_RECONCILIATION_OFFICIAL_STATUS_INVALID: {
-    statusCode: 400, message: "虚拟支付官方状态不支持关闭订单",
+    statusCode: 400, message: "虚拟支付官方状态不支持当前操作",
+  },
+  BRANDING_VIRTUAL_RECONCILIATION_FACTS_MISMATCH: {
+    statusCode: 409, message: "虚拟支付确认事实不一致",
   },
   BRANDING_VIRTUAL_DELIVERY_STATE_INVALID: {
     statusCode: 409, message: "虚拟支付发货通知状态冲突",
@@ -203,34 +212,10 @@ const RECONCILIATION_ERRORS: Record<
   },
 };
 
-const CONFIRMATION_ERROR_STATUS: Record<string, number> = {
-  BRANDING_VIRTUAL_CONFIRM_INPUT_INVALID: 400,
-  BRANDING_VIRTUAL_ORDER_NOT_FOUND: 404,
-  BRANDING_VIRTUAL_PAYMENT_OPENID_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_OUT_TRADE_NO_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_PRODUCT_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_QUANTITY_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_AMOUNT_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_ENVIRONMENT_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_TRANSACTION_CONFLICT: 409,
-  BRANDING_VIRTUAL_PAYMENT_PROVIDER_ORDER_CONFLICT: 409,
-  BRANDING_VIRTUAL_PAYMENT_CURRENCY_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_ATTACH_MISMATCH: 409,
-  BRANDING_VIRTUAL_PAYMENT_STATE_INVALID: 409,
-  BRANDING_VIRTUAL_PAYMENT_ORDER_STATUS_INVALID: 409,
-  BRANDING_VIRTUAL_PAYMENT_LATE_UNISSUED_ORDER: 409,
-  BRANDING_VIRTUAL_NOTIFICATION_MISMATCH: 409,
-};
-
 function throwReconciliationError(error: unknown, fallback: string): never {
   for (const [code, mapped] of Object.entries(RECONCILIATION_ERRORS)) {
     if (matchesPostgresError(error, "P0001", code)) {
       throw Errors.business(mapped.statusCode, mapped.message, code);
-    }
-  }
-  for (const [code, statusCode] of Object.entries(CONFIRMATION_ERROR_STATUS)) {
-    if (matchesPostgresError(error, "P0001", code)) {
-      throw Errors.business(statusCode, "虚拟支付补偿确认失败", code);
     }
   }
   throw Errors.dbError(fallback);
