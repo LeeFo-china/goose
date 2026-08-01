@@ -118,4 +118,59 @@ describe("品牌权益虚拟支付退款 migration", () => {
       "branding_release_virtual_addon_refund_submission_claim",
     );
   });
+
+  test("所有服务入口鉴权空值安全且跨表写遵循统一锁序", () => {
+    const migration = readFileSync(MIGRATION_PATH, "utf8");
+    expect(migration).not.toContain("auth.role() <> 'service_role'");
+    expect(migration.match(/SECURITY DEFINER/g)?.length).toBe(10);
+    expect(migration.match(/auth\.role\(\)/g)?.length).toBe(10);
+    expect(migration).toContain("v_order.provider_order_type IS NULL");
+    expect(migration).toContain(
+      "v_refund.reconcile_claim_expires_at IS NULL",
+    );
+
+    for (const [name, nextName] of [
+      ["branding_record_virtual_order_type_fact",
+        "branding_create_virtual_addon_refund"],
+      ["branding_create_virtual_addon_refund",
+        "branding_claim_virtual_addon_refund_submission"],
+      ["branding_mark_virtual_addon_refund_submitted",
+        "branding_compensate_virtual_addon_refund"],
+      ["branding_compensate_virtual_addon_refund",
+        "branding_get_virtual_refund_order_context"],
+    ] as const) {
+      const body = functionBody(migration, name, nextName);
+      const advisory = body.indexOf("pg_advisory_xact_lock");
+      const orderLock = body.indexOf("tenant_virtual_addon_orders", advisory);
+      const refundLock = body.indexOf("tenant_virtual_addon_refunds", orderLock);
+      expect(advisory).toBeGreaterThan(0);
+      expect(orderLock).toBeGreaterThan(advisory);
+      if (name !== "branding_record_virtual_order_type_fact") {
+        expect(refundLock).toBeGreaterThan(orderLock);
+      }
+    }
+  });
+
+  test("Admin 列表和详情显式白名单排除内部租约", () => {
+    const migration = readFileSync(MIGRATION_PATH, "utf8");
+    const list = functionBody(migration, "branding_list_virtual_addon_refunds",
+      "branding_get_virtual_addon_refund_detail");
+    const detail = functionBody(migration,
+      "branding_get_virtual_addon_refund_detail", "REVOKE ALL ON FUNCTION");
+    for (const body of [list, detail]) {
+      expect(body).not.toContain("refunds.*");
+      expect(body).not.toContain("to_jsonb(refunds)");
+      expect(body).not.toContain("'reconcile_claim_token'");
+      expect(body).not.toContain("'reconcile_claim_expires_at'");
+      expect(body).toContain("jsonb_build_object(");
+    }
+  });
 });
+
+function functionBody(migration: string, name: string, nextName: string): string {
+  const start = migration.indexOf(`FUNCTION public.${name}`);
+  const marker = nextName.startsWith("branding_")
+    ? `FUNCTION public.${nextName}` : nextName;
+  const end = migration.indexOf(marker, start + 1);
+  return migration.slice(start, end);
+}

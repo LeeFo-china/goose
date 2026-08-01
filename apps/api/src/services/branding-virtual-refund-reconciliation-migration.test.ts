@@ -25,4 +25,38 @@ describe("virtual refund reconciliation migration", () => {
     expect(sql).toContain("branding_mark_virtual_refund_reconciliation_conflict");
     expect(sql).toContain("'infinity'::timestamptz");
   });
+
+  test("fails closed on null inputs and locks order before refund", () => {
+    expect(sql).not.toContain("auth.role() <> 'service_role'");
+    expect(sql.match(/auth\.role\(\) IS DISTINCT FROM 'service_role'/g)?.length)
+      .toBe(4);
+    for (const required of [
+      "p_refund_id IS NULL", "p_claim_token IS NULL",
+      "p_official_status IS NULL", "p_refund_fee_fen IS NULL",
+      "p_left_fee_fen IS NULL", "p_error_code IS NULL",
+      "p_error_summary IS NULL",
+    ]) expect(sql).toContain(required);
+    expect(sql).toContain(
+      "v_refund.reconcile_claim_token IS DISTINCT FROM p_claim_token",
+    );
+
+    const finalize = functionBody(
+      "branding_finalize_virtual_refund_reconciliation",
+      "branding_reschedule_virtual_refund_reconciliation",
+    );
+    const advisory = finalize.indexOf("pg_advisory_xact_lock");
+    const orderLock = finalize.indexOf("tenant_virtual_addon_orders");
+    const refundLock = finalize.indexOf(
+      "tenant_virtual_addon_refunds", orderLock + 1,
+    );
+    expect(advisory).toBeGreaterThan(0);
+    expect(orderLock).toBeGreaterThan(advisory);
+    expect(refundLock).toBeGreaterThan(orderLock);
+  });
 });
+
+function functionBody(name: string, nextName: string): string {
+  const start = sql.indexOf(`FUNCTION public.${name}`);
+  const end = sql.indexOf(`FUNCTION public.${nextName}`, start);
+  return sql.slice(start, end);
+}

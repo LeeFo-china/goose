@@ -1,4 +1,5 @@
 -- Authenticated WeChat virtual-payment refund completion and iOS inquiry inbox.
+-- Cross-table writes share the order advisory -> order -> refund lock order.
 
 ALTER TABLE public.wechat_virtual_payment_notifications
   DROP CONSTRAINT wechat_virtual_payment_notifications_event_type_check,
@@ -92,6 +93,8 @@ BEGIN
       USING ERRCODE = 'P0001';
   END IF;
 
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_order_id::text, 0));
+
   SELECT orders.* INTO v_order
   FROM public.tenant_virtual_addon_orders AS orders
   WHERE orders.id = p_order_id
@@ -151,6 +154,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_order_id uuid;
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
   v_refund public.tenant_virtual_addon_refunds%ROWTYPE;
   v_inbox public.wechat_virtual_refund_event_inbox%ROWTYPE;
@@ -158,12 +162,27 @@ DECLARE
   v_payload_hash text;
   v_summary jsonb;
 BEGIN
-  IF auth.role() <> 'service_role' THEN
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_FORBIDDEN' USING ERRCODE = 'P0001';
   END IF;
-  IF p_successful <> (p_provider_result_code = 0)
-    OR p_successful <> (p_refund_succeeded_at IS NOT NULL)
+  IF p_recipient_original_id IS NULL OR btrim(p_recipient_original_id) = ''
+    OR p_sender_id_hash IS NULL
+    OR p_provider_created_at IS NULL OR p_provider_created_at < 0
+    OR p_out_trade_no IS NULL OR btrim(p_out_trade_no) = ''
+    OR p_openid_hash IS NULL
+    OR p_local_refund_no IS NULL OR btrim(p_local_refund_no) = ''
+    OR p_provider_order_id IS NULL OR btrim(p_provider_order_id) = ''
+    OR p_provider_refund_id IS NULL OR btrim(p_provider_refund_id) = ''
+    OR p_provider_refund_transaction_id IS NULL
+      OR btrim(p_provider_refund_transaction_id) = ''
+    OR p_refund_fee_fen IS NULL
+    OR p_successful IS NULL
+    OR p_provider_result_code IS NULL
+    OR p_provider_result_message IS NULL
     OR p_refund_started_at IS NULL
+    OR p_retry_times IS NULL
+    OR p_successful <> (p_provider_result_code = 0)
+    OR p_successful <> (p_refund_succeeded_at IS NOT NULL)
     OR (p_refund_succeeded_at IS NOT NULL
         AND p_refund_succeeded_at < p_refund_started_at)
     OR p_refund_fee_fen <= 0 OR p_retry_times < 0
@@ -173,9 +192,16 @@ BEGIN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_NOTIFICATION_INPUT_INVALID' USING ERRCODE = 'P0001';
   END IF;
 
+  SELECT orders.id INTO v_order_id
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.out_trade_no = p_out_trade_no;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_ORDER_NOT_FOUND' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_order_id::text, 0));
   SELECT orders.* INTO v_order
   FROM public.tenant_virtual_addon_orders AS orders
-  WHERE orders.out_trade_no = p_out_trade_no
+  WHERE orders.id = v_order_id
   FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_ORDER_NOT_FOUND' USING ERRCODE = 'P0001';
@@ -436,10 +462,22 @@ DECLARE
   v_evidence text;
   v_platform_approved boolean := false;
 BEGIN
-  IF auth.role() <> 'service_role' THEN
+  IF auth.role() IS DISTINCT FROM 'service_role' THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_INQUIRY_FORBIDDEN' USING ERRCODE = 'P0001';
   END IF;
-  IF p_sender_id_hash !~ '^[0-9a-f]{64}$'
+  IF p_recipient_original_id IS NULL OR btrim(p_recipient_original_id) = ''
+    OR p_sender_id_hash IS NULL
+    OR p_provider_created_at IS NULL OR p_provider_created_at < 0
+    OR p_out_trade_no IS NULL OR btrim(p_out_trade_no) = ''
+    OR p_refund_time IS NULL
+    OR p_order_time IS NULL
+    OR p_channel_bill_hash IS NULL
+    OR p_bundle_id IS NULL OR btrim(p_bundle_id) = ''
+    OR p_provider_product_id IS NULL OR btrim(p_provider_product_id) = ''
+    OR p_quantity IS NULL
+    OR p_refund_request_reason IS NULL
+    OR p_provide_status IS NULL
+    OR p_sender_id_hash !~ '^[0-9a-f]{64}$'
     OR p_channel_bill_hash !~ '^[0-9a-f]{64}$'
     OR p_quantity <= 0 OR p_provide_status NOT IN (0, 1, 2)
   THEN

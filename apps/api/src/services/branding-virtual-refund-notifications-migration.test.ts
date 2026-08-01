@@ -77,4 +77,42 @@ describe("virtual refund notification migrations", () => {
     expect(migration).toContain("IF v_platform_approved THEN");
     expect(migration).toContain("平台已完成售后申请核验");
   });
+
+  test("notification entrypoints fail closed on null and follow the order lock", () => {
+    expect(migration).not.toContain("auth.role() <> 'service_role'");
+    expect(migration.match(
+      /auth\.role\(\) IS DISTINCT FROM 'service_role'/g,
+    )?.length).toBe(3);
+    for (const required of [
+      "p_recipient_original_id IS NULL", "p_sender_id_hash IS NULL",
+      "p_provider_created_at IS NULL", "p_out_trade_no IS NULL",
+      "p_openid_hash IS NULL", "p_local_refund_no IS NULL",
+      "p_provider_order_id IS NULL", "p_provider_refund_id IS NULL",
+      "p_provider_refund_transaction_id IS NULL",
+      "p_refund_fee_fen IS NULL", "p_successful IS NULL",
+      "p_provider_result_code IS NULL", "p_provider_result_message IS NULL",
+      "p_refund_started_at IS NULL", "p_retry_times IS NULL",
+      "p_refund_time IS NULL", "p_order_time IS NULL",
+      "p_channel_bill_hash IS NULL", "p_bundle_id IS NULL",
+      "p_provider_product_id IS NULL", "p_quantity IS NULL",
+      "p_refund_request_reason IS NULL", "p_provide_status IS NULL",
+    ]) expect(migration).toContain(required);
+
+    const notification = functionBody(
+      "branding_process_virtual_refund_notification",
+      "branding_process_virtual_ios_refund_inquiry",
+    );
+    const advisory = notification.indexOf("pg_advisory_xact_lock");
+    const orderLock = notification.indexOf("FOR UPDATE");
+    const refundLock = notification.indexOf("FOR UPDATE", orderLock + 1);
+    expect(advisory).toBeGreaterThan(0);
+    expect(orderLock).toBeGreaterThan(advisory);
+    expect(refundLock).toBeGreaterThan(orderLock);
+  });
 });
+
+function functionBody(name: string, nextName: string): string {
+  const start = migration.indexOf(`FUNCTION public.${name}`);
+  const end = migration.indexOf(`FUNCTION public.${nextName}`, start);
+  return migration.slice(start, end);
+}

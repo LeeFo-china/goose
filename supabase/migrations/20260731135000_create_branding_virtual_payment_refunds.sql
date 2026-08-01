@@ -2,6 +2,8 @@
 -- This migration intentionally depends only on migrations through 20260731134000.
 -- The later message inbox integration uses the official iOS inquiry event:
 -- xpay_subscribe_ios_refund_query_notify.
+-- Cross-table writers lock: order advisory -> order -> refund -> purchase event
+-- -> entitlement. Refund-only lease functions never acquire an order row lock.
 
 ALTER TABLE public.tenant_virtual_addon_orders
   ADD COLUMN provider_order_type integer NULL CHECK (
@@ -205,12 +207,20 @@ AS $$
 DECLARE
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
 BEGIN
-  IF auth.role() <> 'service_role'
-    OR p_official_status NOT IN (2, 3, 4)
-    OR p_provider_order_type NOT IN (0, 7)
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_order_id IS NULL
+    OR p_official_status IS NULL OR p_official_status NOT IN (2, 3, 4)
+    OR p_provider_order_type IS NULL OR p_provider_order_type NOT IN (0, 7)
+    OR p_out_trade_no IS NULL OR btrim(p_out_trade_no) = ''
+    OR p_environment IS NULL OR p_environment NOT IN ('sandbox', 'production')
+    OR p_provider_order_no IS NULL OR btrim(p_provider_order_no) = ''
+    OR p_order_fee_fen IS NULL OR p_order_fee_fen <= 0
+    OR p_paid_fee_fen IS NULL OR p_paid_fee_fen <= 0
+    OR p_left_fee_fen IS NULL OR p_left_fee_fen < 0
   THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_PROVIDER_FACT_INVALID' USING ERRCODE = 'P0001';
   END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_order_id::text, 0));
   SELECT * INTO v_order FROM public.tenant_virtual_addon_orders
   WHERE id = p_order_id FOR UPDATE;
   IF NOT FOUND OR v_order.payment_status <> 'succeeded'
@@ -301,7 +311,8 @@ DECLARE
   v_actor_user_id uuid;
   v_platform_mode text;
 BEGIN
-  IF p_order_id IS NULL OR p_idempotency_key IS NULL OR p_requested_by IS NULL
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_order_id IS NULL OR p_idempotency_key IS NULL OR p_requested_by IS NULL
     OR p_reason IS NULL OR btrim(p_reason) = ''
     OR char_length(p_reason) > 500
     OR p_evidence_summary IS NULL OR char_length(p_evidence_summary) > 1000
@@ -309,6 +320,8 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
   END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_order_id::text, 0));
 
   SELECT employees.tenant_id, employees.user_id
   INTO v_actor_tenant_id, v_actor_user_id
@@ -357,7 +370,8 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_ALREADY_EXISTS';
   END IF;
-  IF v_order.provider_order_type NOT IN (0, 7) THEN
+  IF v_order.provider_order_type IS NULL
+    OR v_order.provider_order_type NOT IN (0, 7) THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_PLATFORM_UNSUPPORTED';
   END IF;
@@ -415,7 +429,9 @@ DECLARE
   v_refund public.tenant_virtual_addon_refunds%ROWTYPE;
   v_now timestamptz;
 BEGIN
-  IF p_refund_id IS NULL OR p_lease_seconds < 30 OR p_lease_seconds > 600 THEN
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_lease_seconds IS NULL
+    OR p_lease_seconds < 30 OR p_lease_seconds > 600 THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
   END IF;
@@ -465,8 +481,9 @@ AS $$
 DECLARE
   v_now timestamptz;
 BEGIN
-  IF p_refund_id IS NULL OR p_claim_token IS NULL
-    OR p_lease_seconds < 30 OR p_lease_seconds > 600
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL
+    OR p_lease_seconds IS NULL OR p_lease_seconds < 30 OR p_lease_seconds > 600
   THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
@@ -478,7 +495,7 @@ BEGIN
   SET reconcile_claim_expires_at = v_now + make_interval(secs => p_lease_seconds)
   WHERE id = p_refund_id
     AND status = 'reviewing'
-    AND reconcile_claim_token = p_claim_token
+    AND reconcile_claim_token IS NOT DISTINCT FROM p_claim_token
     AND reconcile_claim_expires_at > v_now;
   RETURN FOUND;
 END;
@@ -494,7 +511,8 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF p_refund_id IS NULL OR p_claim_token IS NULL THEN
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
   END IF;
@@ -502,7 +520,7 @@ BEGIN
   SET reconcile_claim_token = NULL, reconcile_claim_expires_at = NULL
   WHERE id = p_refund_id
     AND status = 'reviewing'
-    AND reconcile_claim_token = p_claim_token;
+    AND reconcile_claim_token IS NOT DISTINCT FROM p_claim_token;
   RETURN FOUND;
 END;
 $$;
@@ -520,14 +538,31 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_refund public.tenant_virtual_addon_refunds%ROWTYPE;
+  v_order_id uuid;
 BEGIN
-  IF p_refund_id IS NULL OR p_claim_token IS NULL
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL
     OR p_provider_refund_id IS NULL OR btrim(p_provider_refund_id) = ''
     OR char_length(p_provider_refund_id) > 128
     OR (p_provider_request_id IS NOT NULL AND char_length(p_provider_request_id) > 128)
   THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
+  END IF;
+
+  SELECT refunds.order_id INTO v_order_id
+  FROM public.tenant_virtual_addon_refunds AS refunds
+  WHERE refunds.id = p_refund_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_NOT_FOUND';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_order_id::text, 0));
+  PERFORM 1 FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = v_order_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_ORDER_NOT_FOUND';
   END IF;
 
   SELECT refunds.* INTO v_refund
@@ -539,7 +574,7 @@ BEGIN
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_STATE_CONFLICT';
   END IF;
   IF v_refund.status = 'submitted' THEN
-    IF v_refund.provider_refund_id <> p_provider_refund_id THEN
+    IF v_refund.provider_refund_id IS DISTINCT FROM p_provider_refund_id THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001',
         MESSAGE = 'BRANDING_VIRTUAL_REFUND_PROVIDER_CONFLICT';
     END IF;
@@ -547,7 +582,8 @@ BEGIN
     RETURN;
   END IF;
   IF v_refund.status <> 'reviewing'
-    OR v_refund.reconcile_claim_token <> p_claim_token
+    OR v_refund.reconcile_claim_token IS DISTINCT FROM p_claim_token
+    OR v_refund.reconcile_claim_expires_at IS NULL
     OR v_refund.reconcile_claim_expires_at <= clock_timestamp()
   THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
@@ -589,6 +625,7 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_refund public.tenant_virtual_addon_refunds%ROWTYPE;
+  v_order_id uuid;
   v_order public.tenant_virtual_addon_orders%ROWTYPE;
   v_purchase_event public.tenant_entitlement_events%ROWTYPE;
   v_entitlement public.tenant_entitlements%ROWTYPE;
@@ -596,9 +633,25 @@ DECLARE
   v_old_value jsonb;
   v_reversed_expiry timestamptz;
 BEGIN
-  IF p_refund_id IS NULL THEN
+  IF auth.role() IS DISTINCT FROM 'service_role' OR p_refund_id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
+  END IF;
+  SELECT refunds.order_id INTO v_order_id
+  FROM public.tenant_virtual_addon_refunds AS refunds
+  WHERE refunds.id = p_refund_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_NOT_FOUND';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_order_id::text, 0));
+  SELECT orders.* INTO v_order
+  FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = v_order_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_ORDER_NOT_FOUND';
   END IF;
   SELECT refunds.* INTO v_refund
   FROM public.tenant_virtual_addon_refunds AS refunds
@@ -617,11 +670,6 @@ BEGIN
       v_refund.compensation_entitlement_event_id;
     RETURN;
   END IF;
-
-  SELECT orders.* INTO v_order
-  FROM public.tenant_virtual_addon_orders AS orders
-  WHERE orders.id = v_refund.order_id
-  FOR UPDATE;
   SELECT events.* INTO v_purchase_event
   FROM public.tenant_entitlement_events AS events
   WHERE events.id = v_refund.purchase_entitlement_event_id
@@ -728,11 +776,18 @@ CREATE OR REPLACE FUNCTION public.branding_get_virtual_refund_order_context(
   p_order_id uuid
 )
 RETURNS jsonb
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' OR p_order_id IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
+  END IF;
   SELECT jsonb_build_object(
     'id', orders.id,
     'tenant_id', orders.tenant_id,
@@ -752,13 +807,15 @@ AS $$
     'entitlement_event_id', orders.entitlement_event_id,
     'secret_revision', orders.secret_revision,
     'created_by_user_id', employees.user_id
-  )
+  ) INTO v_result
   FROM public.tenant_virtual_addon_orders AS orders
   JOIN public.employees
     ON employees.id = orders.created_by
    AND employees.tenant_id = orders.tenant_id
   WHERE orders.id = p_order_id
-  LIMIT 1
+  LIMIT 1;
+  RETURN v_result;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.branding_list_virtual_addon_refunds(
@@ -780,10 +837,11 @@ DECLARE
   v_row record;
   v_returned integer := 0;
 BEGIN
-  IF p_status IS NOT NULL AND p_status NOT IN (
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR (p_status IS NOT NULL AND p_status NOT IN (
     'reviewing', 'submitted', 'external_required', 'succeeded', 'failed',
     'rejected'
-  ) THEN
+  )) THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
   END IF;
@@ -794,12 +852,51 @@ BEGIN
     AND (p_tenant_id IS NULL OR refunds.tenant_id = p_tenant_id);
 
   FOR v_row IN
-    SELECT refunds.*, tenants.name AS tenant_name,
-      orders.out_trade_no, orders.provider_order_type,
-      CASE orders.provider_order_type
-        WHEN 0 THEN 'merchant' WHEN 7 THEN 'apple' END AS provider_channel,
-      orders.environment,
-      orders.product_name
+    SELECT jsonb_build_object(
+      'id', refunds.id,
+      'refund_no', refunds.refund_no,
+      'order_id', refunds.order_id,
+      'tenant_id', refunds.tenant_id,
+      'idempotency_key', refunds.idempotency_key,
+      'amount_fen', refunds.amount_fen,
+      'reason', refunds.reason,
+      'evidence_summary', refunds.evidence_summary,
+      'request_source', refunds.request_source,
+      'requested_by', refunds.requested_by,
+      'reviewed_by', refunds.reviewed_by,
+      'platform_mode', refunds.platform_mode,
+      'status', refunds.status,
+      'provider_refund_id', refunds.provider_refund_id,
+      'provider_refund_no', refunds.provider_refund_no,
+      'provider_refund_transaction_id', refunds.provider_refund_transaction_id,
+      'provider_request_id', refunds.provider_request_id,
+      'apple_receipt_hash', refunds.apple_receipt_hash,
+      'purchase_entitlement_event_id', refunds.purchase_entitlement_event_id,
+      'compensation_entitlement_event_id',
+        refunds.compensation_entitlement_event_id,
+      'provider_refund_started_at', refunds.provider_refund_started_at,
+      'provider_refund_succeeded_at', refunds.provider_refund_succeeded_at,
+      'submitted_at', refunds.submitted_at,
+      'succeeded_at', refunds.succeeded_at,
+      'failed_at', refunds.failed_at,
+      'rejected_at', refunds.rejected_at,
+      'last_error_code', refunds.last_error_code,
+      'last_error_summary', refunds.last_error_summary,
+      'compensation_status', refunds.compensation_status,
+      'compensation_last_error', refunds.compensation_last_error,
+      'reconcile_attempt_count', refunds.reconcile_attempt_count,
+      'reconcile_next_at', refunds.reconcile_next_at,
+      'version', refunds.version,
+      'created_at', refunds.created_at,
+      'updated_at', refunds.updated_at,
+      'tenant_name', tenants.name,
+      'out_trade_no', orders.out_trade_no,
+      'provider_order_type', orders.provider_order_type,
+      'provider_channel', CASE orders.provider_order_type
+        WHEN 0 THEN 'merchant' WHEN 7 THEN 'apple' END,
+      'environment', orders.environment,
+      'product_name', orders.product_name
+    ) AS payload
     FROM public.tenant_virtual_addon_refunds AS refunds
     JOIN public.tenant_virtual_addon_orders AS orders
       ON orders.id = refunds.order_id
@@ -812,7 +909,7 @@ BEGIN
     LIMIT v_page_size
   LOOP
     v_returned := v_returned + 1;
-    RETURN NEXT to_jsonb(v_row) || jsonb_build_object(
+    RETURN NEXT v_row.payload || jsonb_build_object(
       'total_count', v_total,
       'count_only', false
     );
@@ -834,12 +931,14 @@ BEGIN
       'platform_mode', 'merchant_initiated',
       'status', 'reviewing',
       'provider_refund_id', NULL,
+      'provider_refund_no', NULL,
       'provider_refund_transaction_id', NULL,
       'provider_request_id', NULL,
       'apple_receipt_hash', NULL,
       'purchase_entitlement_event_id', gen_random_uuid(),
       'compensation_entitlement_event_id', NULL,
       'provider_refund_started_at', NULL,
+      'provider_refund_succeeded_at', NULL,
       'submitted_at', NULL,
       'succeeded_at', NULL,
       'failed_at', NULL,
@@ -848,8 +947,6 @@ BEGIN
       'last_error_summary', NULL,
       'compensation_status', 'pending',
       'compensation_last_error', NULL,
-      'reconcile_claim_token', NULL,
-      'reconcile_claim_expires_at', NULL,
       'reconcile_attempt_count', 0,
       'reconcile_next_at', NULL,
       'version', 1,
@@ -872,12 +969,54 @@ CREATE OR REPLACE FUNCTION public.branding_get_virtual_addon_refund_detail(
   p_refund_id uuid
 )
 RETURNS jsonb
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
-  SELECT to_jsonb(refunds) || jsonb_build_object(
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF auth.role() IS DISTINCT FROM 'service_role' OR p_refund_id IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001',
+      MESSAGE = 'BRANDING_VIRTUAL_REFUND_INPUT_INVALID';
+  END IF;
+  SELECT jsonb_build_object(
+    'id', refunds.id,
+    'refund_no', refunds.refund_no,
+    'order_id', refunds.order_id,
+    'tenant_id', refunds.tenant_id,
+    'idempotency_key', refunds.idempotency_key,
+    'amount_fen', refunds.amount_fen,
+    'reason', refunds.reason,
+    'evidence_summary', refunds.evidence_summary,
+    'request_source', refunds.request_source,
+    'requested_by', refunds.requested_by,
+    'reviewed_by', refunds.reviewed_by,
+    'platform_mode', refunds.platform_mode,
+    'status', refunds.status,
+    'provider_refund_id', refunds.provider_refund_id,
+    'provider_refund_no', refunds.provider_refund_no,
+    'provider_refund_transaction_id', refunds.provider_refund_transaction_id,
+    'provider_request_id', refunds.provider_request_id,
+    'apple_receipt_hash', refunds.apple_receipt_hash,
+    'purchase_entitlement_event_id', refunds.purchase_entitlement_event_id,
+    'compensation_entitlement_event_id', refunds.compensation_entitlement_event_id,
+    'provider_refund_started_at', refunds.provider_refund_started_at,
+    'provider_refund_succeeded_at', refunds.provider_refund_succeeded_at,
+    'submitted_at', refunds.submitted_at,
+    'succeeded_at', refunds.succeeded_at,
+    'failed_at', refunds.failed_at,
+    'rejected_at', refunds.rejected_at,
+    'last_error_code', refunds.last_error_code,
+    'last_error_summary', refunds.last_error_summary,
+    'compensation_status', refunds.compensation_status,
+    'compensation_last_error', refunds.compensation_last_error,
+    'reconcile_attempt_count', refunds.reconcile_attempt_count,
+    'reconcile_next_at', refunds.reconcile_next_at,
+    'version', refunds.version,
+    'created_at', refunds.created_at,
+    'updated_at', refunds.updated_at,
     'order', jsonb_build_object(
       'out_trade_no', orders.out_trade_no,
       'provider_order_type', orders.provider_order_type,
@@ -892,11 +1031,13 @@ AS $$
       'paid_amount_fen', orders.paid_amount_fen,
       'paid_at', orders.paid_at
     )
-  )
+  ) INTO v_result
   FROM public.tenant_virtual_addon_refunds AS refunds
   JOIN public.tenant_virtual_addon_orders AS orders ON orders.id = refunds.order_id
   WHERE refunds.id = p_refund_id
-  LIMIT 1
+  LIMIT 1;
+  RETURN v_result;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.branding_create_virtual_addon_refund(

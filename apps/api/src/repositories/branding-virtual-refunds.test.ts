@@ -67,6 +67,58 @@ describe("BrandingVirtualRefundRepository", () => {
       product_name: "年度品牌技术支持",
     });
     expect(JSON.stringify(result.list[0])).not.toContain("openid-1");
+    expect(JSON.stringify(result.list[0])).not.toContain("claim-token");
+    expect(result.list[0]).not.toHaveProperty("reconcile_claim_token");
+    expect(result.list[0]).not.toHaveProperty("reconcile_claim_expires_at");
+  });
+
+  test("详情响应剥离数据库返回的内部租约字段", async () => {
+    const BrandingVirtualRefundRepository = await repositoryClass();
+    const rpc = mock(async () => ({ data: [{
+      ...refundRow(),
+      reconcile_claim_token: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      reconcile_claim_expires_at: "2026-08-01T00:02:00.000Z",
+    }], error: null }));
+    const repository = new BrandingVirtualRefundRepository(() => ({ rpc }));
+
+    const result = await repository.findDetail(REFUND_ID);
+
+    expect(result).not.toHaveProperty("reconcile_claim_token");
+    expect(result).not.toHaveProperty("reconcile_claim_expires_at");
+    expect(JSON.stringify(result)).not.toContain("aaaaaaaa-aaaa");
+  });
+
+  test("空列表 count-only 行可解析且不会暴露租约字段", async () => {
+    const BrandingVirtualRefundRepository = await repositoryClass();
+    const rpc = mock(async () => ({ data: [{
+      ...refundRow(),
+      refund_no: "COUNTONLY",
+      amount_fen: 1,
+      reason: "count_only",
+      evidence_summary: "",
+      requested_by: null,
+      reviewed_by: null,
+      provider_refund_no: null,
+      provider_refund_started_at: null,
+      provider_refund_succeeded_at: null,
+      tenant_name: "count_only",
+      out_trade_no: "COUNTONLY",
+      product_name: "count_only",
+      total_count: "0",
+      count_only: true,
+      reconcile_claim_token: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      reconcile_claim_expires_at: "2026-08-01T00:02:00.000Z",
+    }], error: null }));
+    const repository = new BrandingVirtualRefundRepository(() => ({ rpc }));
+
+    const result = await repository.list({ page: 1, pageSize: 20 });
+
+    expect(result).toEqual({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    });
+    expect(JSON.stringify(result)).not.toContain("reconcile_claim");
+    expect(JSON.stringify(result)).not.toContain("aaaaaaaa-aaaa");
   });
 
   test("只记录微信查单确认的支付 order_type 事实", async () => {

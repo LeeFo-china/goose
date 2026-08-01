@@ -1,4 +1,5 @@
 -- Bounded lease-based reconciliation for submitted refunds and compensation.
+-- Finalization shares the order advisory -> order -> refund lock order.
 
 CREATE OR REPLACE FUNCTION public.branding_claim_virtual_refund_reconciliation_batch(
   p_limit integer DEFAULT 20,
@@ -15,8 +16,9 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF auth.role() <> 'service_role' OR p_limit NOT BETWEEN 1 AND 100
-    OR p_lease_seconds NOT BETWEEN 30 AND 600 THEN
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_limit IS NULL OR p_limit NOT BETWEEN 1 AND 100
+    OR p_lease_seconds IS NULL OR p_lease_seconds NOT BETWEEN 30 AND 600 THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_INPUT_INVALID' USING ERRCODE = 'P0001';
   END IF;
   RETURN QUERY
@@ -64,18 +66,35 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_order_id uuid;
   v_refund public.tenant_virtual_addon_refunds%ROWTYPE;
   v_status text;
   v_previous_status text;
 BEGIN
-  IF auth.role() <> 'service_role' OR p_official_status NOT IN (5, 7, 8)
-    OR p_refund_fee_fen < 0 OR p_left_fee_fen < 0 THEN
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL
+    OR p_official_status IS NULL OR p_official_status NOT IN (5, 7, 8)
+    OR p_refund_fee_fen IS NULL OR p_refund_fee_fen < 0
+    OR p_left_fee_fen IS NULL OR p_left_fee_fen < 0 THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_INPUT_INVALID' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT refunds.order_id INTO v_order_id
+  FROM public.tenant_virtual_addon_refunds AS refunds
+  WHERE refunds.id = p_refund_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_CLAIM_LOST' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_order_id::text, 0));
+  PERFORM 1 FROM public.tenant_virtual_addon_orders AS orders
+  WHERE orders.id = v_order_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_ORDER_NOT_FOUND' USING ERRCODE = 'P0001';
   END IF;
   SELECT * INTO v_refund FROM public.tenant_virtual_addon_refunds
   WHERE id = p_refund_id FOR UPDATE;
   IF NOT FOUND OR v_refund.status NOT IN ('submitted', 'external_required')
-    OR v_refund.reconcile_claim_token <> p_claim_token
+    OR v_refund.reconcile_claim_token IS DISTINCT FROM p_claim_token
+    OR v_refund.reconcile_claim_expires_at IS NULL
     OR v_refund.reconcile_claim_expires_at <= clock_timestamp() THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_CLAIM_LOST' USING ERRCODE = 'P0001';
   END IF;
@@ -124,7 +143,9 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF auth.role() <> 'service_role' OR p_next_at IS NULL
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL OR p_next_at IS NULL
+    OR p_error_code IS NULL OR p_error_summary IS NULL
     OR char_length(p_error_code) NOT BETWEEN 1 AND 100
     OR char_length(p_error_summary) NOT BETWEEN 1 AND 500 THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_INPUT_INVALID' USING ERRCODE = 'P0001';
@@ -145,7 +166,8 @@ BEGIN
         WHEN status IN ('submitted', 'external_required') THEN p_error_summary
         ELSE last_error_summary END,
       version = version + 1
-  WHERE id = p_refund_id AND reconcile_claim_token = p_claim_token
+  WHERE id = p_refund_id
+    AND reconcile_claim_token IS NOT DISTINCT FROM p_claim_token
     AND reconcile_claim_expires_at > clock_timestamp();
   RETURN FOUND;
 END;
@@ -159,7 +181,8 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF auth.role() <> 'service_role'
+  IF auth.role() IS DISTINCT FROM 'service_role'
+    OR p_refund_id IS NULL OR p_claim_token IS NULL OR p_error_code IS NULL
     OR char_length(p_error_code) NOT BETWEEN 1 AND 100 THEN
     RAISE EXCEPTION 'BRANDING_VIRTUAL_REFUND_RECONCILIATION_INPUT_INVALID' USING ERRCODE = 'P0001';
   END IF;
@@ -169,7 +192,8 @@ BEGIN
       last_error_code = p_error_code,
       last_error_summary = '微信退款终态与可信支付渠道冲突，需人工处理',
       version = version + 1
-  WHERE id = p_refund_id AND reconcile_claim_token = p_claim_token
+  WHERE id = p_refund_id
+    AND reconcile_claim_token IS NOT DISTINCT FROM p_claim_token
     AND reconcile_claim_expires_at > clock_timestamp();
   RETURN FOUND;
 END;

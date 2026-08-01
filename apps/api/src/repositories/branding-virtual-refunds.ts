@@ -47,13 +47,16 @@ const RefundRecordSchema = z.object({
   last_error_summary: nullableText(500),
   compensation_status: z.enum(["pending", "succeeded", "failed"]),
   compensation_last_error: nullableText(500),
-  reconcile_claim_token: z.uuid().nullable(),
-  reconcile_claim_expires_at: nullableDateTime,
   reconcile_attempt_count: z.number().int().nonnegative(),
   reconcile_next_at: nullableDateTime,
   version: z.number().int().positive(),
   created_at: z.iso.datetime({ offset: true }),
   updated_at: z.iso.datetime({ offset: true }),
+});
+
+const InternalRefundRecordSchema = RefundRecordSchema.extend({
+  reconcile_claim_token: z.uuid().nullable(),
+  reconcile_claim_expires_at: nullableDateTime,
 });
 
 const ListRowSchema = RefundRecordSchema.extend({
@@ -304,12 +307,12 @@ export class BrandingVirtualRefundRepository {
     if (error) throwCommandError(error, "领取虚拟支付退款提交租约失败");
     const first = firstRow(data);
     if (first === undefined || first === null) return null;
-    const parsed = RefundRecordSchema.safeParse(first);
+    const parsed = InternalRefundRecordSchema.safeParse(first);
     if (!parsed.success || !parsed.data.reconcile_claim_token) {
       throw Errors.dbError("虚拟支付退款提交租约格式错误");
     }
     return {
-      refund: parsed.data,
+      refund: RefundRecordSchema.parse(parsed.data),
       claimToken: parsed.data.reconcile_claim_token,
     };
   }
