@@ -10,6 +10,7 @@ import type {
   QueryVirtualGoodsUploadResult,
 } from "@/services/wechat-virtual-payment-gateway-contracts";
 
+
 const successUpload = {
   requestId: "upload-request-id",
   environment: "production" as const,
@@ -83,7 +84,6 @@ describe("BrandingVirtualProductWechatValidator", () => {
         uploadStatus: 2 as const,
       }],
     }],
-    ["no latest task", { ...successUpload, status: 0 as const, items: [] }],
     ["failed latest task", { ...successUpload, status: 2 as const }],
     ["multiple goods", {
       ...successUpload,
@@ -125,18 +125,37 @@ describe("BrandingVirtualProductWechatValidator", () => {
       });
   });
 
-  test("reports a running latest batch task as unconfirmed", async () => {
-    const fixture = createValidator({
-      upload: { ...successUpload, status: 1, items: [] },
-    });
-
-    await expect(fixture.validator.validate(validationInput)).rejects
-      .toMatchObject({
-        statusCode: 409,
-        code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
-        details: { requestId: "upload-request-id" },
+  test.each([["no-task", 0], ["running", 1]] as const)(
+    "reports upload %s task as unconfirmed",
+    async (_label, status) => {
+      const fixture = createValidator({
+        upload: { ...successUpload, status, items: [] },
       });
-  });
+
+      await expect(fixture.validator.validate(validationInput)).rejects
+        .toMatchObject({
+          statusCode: 409,
+          code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          details: { requestId: "upload-request-id" },
+        });
+    },
+  );
+
+  test.each([["no-task", 0], ["running", 1]] as const)(
+    "reports publish %s task as unconfirmed",
+    async (_label, status) => {
+      const fixture = createValidator({
+        publish: { ...successPublish, status, items: [] },
+      });
+
+      await expect(fixture.validator.validate(validationInput)).rejects
+        .toMatchObject({
+          statusCode: 409,
+          code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          details: { requestId: "publish-request-id" },
+        });
+    },
+  );
 });
 
 describe("classifyWechatGoodsFailure", () => {
@@ -167,6 +186,54 @@ describe("classifyWechatGoodsFailure", () => {
       },
     });
     expect(JSON.stringify(failure)).not.toContain("must-not-leak");
+  });
+
+  test.each(
+    [
+      "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED",
+      "WECHAT_VIRTUAL_PAYMENT_HTTP_ERROR",
+    ].flatMap((gatewayCode) =>
+      [-1, 268490011, 268490012, 268490015].map((wechatErrcode) => [
+        `${gatewayCode}:${wechatErrcode}`,
+        gatewayCode,
+        wechatErrcode,
+      ] as const)
+    ),
+  )("keeps transient %s unconfirmed", (_label, gatewayCode, wechatErrcode) => {
+    const failure = classifyWechatGoodsFailure(Errors.business(
+      502,
+      "微信暂时拒绝请求",
+      gatewayCode,
+      {
+        requestId: "safe-request-id",
+        wechatErrcode,
+        errmsg: "must-not-leak",
+      },
+    ));
+
+    expect(failure).toMatchObject({
+      confirmedInvalid: false,
+      error: {
+        code: gatewayCode,
+        details: { requestId: "safe-request-id", wechatErrcode },
+      },
+    });
+    expect(JSON.stringify(failure)).not.toContain("must-not-leak");
+  });
+
+  test("keeps an unknown WeChat rejection unconfirmed", () => {
+    const failure = classifyWechatGoodsFailure(Errors.business(
+      502,
+      "微信拒绝请求",
+      "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED",
+      { requestId: "safe-request-id", wechatErrcode: 268499999 },
+    ));
+
+    expect(failure.confirmedInvalid).toBe(false);
+    expect(failure.error).toMatchObject({
+      code: "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED",
+      details: { requestId: "safe-request-id", wechatErrcode: 268499999 },
+    });
   });
 
   test("keeps an invalid response unconfirmed and strips unsafe details", () => {

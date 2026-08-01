@@ -15,8 +15,14 @@ import {
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { systemSettingsService } from "@/services/system-settings";
-import type { WechatMiniProgramAccessTokenPort } from
-  "@/services/wechat-miniprogram-access-token";
+import {
+  wechatMiniProgramAccessTokenProvider,
+  type WechatMiniProgramAccessTokenPort,
+} from "@/services/wechat-miniprogram-access-token";
+import { wechatMiniSessionCredentialService } from
+  "@/services/wechat-mini-session-credentials";
+import { WechatVirtualPaymentGateway } from
+  "@/services/wechat-virtual-payment-gateway";
 import type {
   WechatVirtualPaymentGatewayPort,
 } from "@/services/wechat-virtual-payment-gateway-contracts";
@@ -80,8 +86,11 @@ export class BrandingVirtualProductManagementService {
     this.audit = dependencies.audit ?? platformAuditLogService;
     this.wechatValidator = dependencies.wechatValidator ??
       new BrandingVirtualProductWechatValidator({
-        gateway: dependencies.gateway,
-        accessTokenProvider: dependencies.accessTokenProvider,
+        gateway: dependencies.gateway ?? new WechatVirtualPaymentGateway({
+          credentialInvalidation: wechatMiniSessionCredentialService,
+        }),
+        accessTokenProvider: dependencies.accessTokenProvider ??
+          wechatMiniProgramAccessTokenProvider,
       });
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }

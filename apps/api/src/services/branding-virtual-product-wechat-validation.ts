@@ -1,13 +1,7 @@
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
-import {
-  wechatMiniProgramAccessTokenProvider,
-  type WechatMiniProgramAccessTokenPort,
-} from "@/services/wechat-miniprogram-access-token";
-import { wechatMiniSessionCredentialService } from
-  "@/services/wechat-mini-session-credentials";
-import { WechatVirtualPaymentGateway } from
-  "@/services/wechat-virtual-payment-gateway";
+import type { WechatMiniProgramAccessTokenPort } from
+  "@/services/wechat-miniprogram-access-token";
 import type {
   QueryVirtualGoodsPublishResult,
   QueryVirtualGoodsUploadResult,
@@ -21,6 +15,12 @@ type GatewayPort = Pick<
   WechatVirtualPaymentGatewayPort,
   "queryUploadGoods" | "queryPublishGoods"
 >;
+
+// Only errors that prove the saved request coordinates or signature are
+// unusable invalidate the mapping. System, generation, running-task, rate
+// limit, and unknown codes remain unconfirmed so transient WeChat failures do
+// not disable an otherwise active mapping.
+const PERMANENT_GOODS_QUERY_REJECTION_CODES = new Set([268490002, 268490003]);
 
 export type WechatGoodsValidationResult = {
   uploadRequestId: string | null;
@@ -47,14 +47,11 @@ export class BrandingVirtualProductWechatValidator
   private readonly accessTokenProvider: WechatMiniProgramAccessTokenPort;
 
   constructor(dependencies: {
-    gateway?: GatewayPort;
-    accessTokenProvider?: WechatMiniProgramAccessTokenPort;
-  } = {}) {
-    this.gateway = dependencies.gateway ?? new WechatVirtualPaymentGateway({
-      credentialInvalidation: wechatMiniSessionCredentialService,
-    });
-    this.accessTokenProvider = dependencies.accessTokenProvider ??
-      wechatMiniProgramAccessTokenProvider;
+    gateway: GatewayPort;
+    accessTokenProvider: WechatMiniProgramAccessTokenPort;
+  }) {
+    this.gateway = dependencies.gateway;
+    this.accessTokenProvider = dependencies.accessTokenProvider;
   }
 
   async validate(input: {
@@ -85,11 +82,7 @@ export function classifyWechatGoodsFailure(
 ): WechatGoodsValidationFailure {
   if (error instanceof AppError) {
     const details = safeWechatFailureDetails(error.details);
-    if (
-      error.code === "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED" ||
-      (error.code === "WECHAT_VIRTUAL_PAYMENT_HTTP_ERROR" &&
-        details.wechatErrcode !== null)
-    ) {
+    if (isPermanentGoodsQueryRejection(error.code, details.wechatErrcode)) {
       return {
         confirmedInvalid: true,
         error: Errors.business(
@@ -135,7 +128,9 @@ function assertUploadTaskMatches(
   providerProductId: string,
   expectedAmountFen: number,
 ): void {
-  if (result.status === 1) throwGoodsTaskPending(result.requestId, "上传");
+  if (result.status === 0 || result.status === 1) {
+    throwGoodsTaskPending(result.requestId, "上传");
+  }
   // The official query returns only the latest batch task, not a complete
   // goods catalog. This application owns exactly one virtual goods mapping,
   // so that latest task must contain exactly that one successfully uploaded
@@ -159,7 +154,9 @@ function assertPublishTaskMatches(
   result: QueryVirtualGoodsPublishResult,
   providerProductId: string,
 ): void {
-  if (result.status === 1) throwGoodsTaskPending(result.requestId, "发布");
+  if (result.status === 0 || result.status === 1) {
+    throwGoodsTaskPending(result.requestId, "发布");
+  }
   // See the upload assertion above: this is a latest-task check under the
   // fixed single-goods product boundary, not a full remote catalog lookup.
   const item = result.items[0];
@@ -204,4 +201,15 @@ function safeWechatFailureDetails(value: unknown): {
       ? Number(record.wechatErrcode)
       : null,
   };
+}
+
+function isPermanentGoodsQueryRejection(
+  gatewayCode: string,
+  wechatErrcode: number | null,
+): boolean {
+  return (
+    gatewayCode === "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED" ||
+    gatewayCode === "WECHAT_VIRTUAL_PAYMENT_HTTP_ERROR"
+  ) && wechatErrcode !== null &&
+    PERMANENT_GOODS_QUERY_REJECTION_CODES.has(wechatErrcode);
 }
