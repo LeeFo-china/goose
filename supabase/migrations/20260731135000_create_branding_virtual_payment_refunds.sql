@@ -73,6 +73,11 @@ CREATE TABLE public.tenant_virtual_addon_refunds (
     provider_refund_id IS NULL
     OR (btrim(provider_refund_id) <> '' AND char_length(provider_refund_id) <= 128)
   ),
+  provider_refund_no text NULL UNIQUE CHECK (
+    provider_refund_no IS NULL OR (
+      btrim(provider_refund_no) <> '' AND char_length(provider_refund_no) <= 64
+    )
+  ),
   provider_refund_transaction_id text NULL UNIQUE CHECK (
     provider_refund_transaction_id IS NULL
     OR (
@@ -315,11 +320,20 @@ BEGIN
   ) RETURNING * INTO v_refund;
 
   UPDATE public.tenant_virtual_addon_orders
-  SET refund_status = v_refund.status
+  SET refund_status = 'reviewing'
   WHERE id = v_order.id AND refund_status = 'none';
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'BRANDING_VIRTUAL_REFUND_ORDER_STATE_CONFLICT';
+  END IF;
+  IF v_refund.status = 'external_required' THEN
+    UPDATE public.tenant_virtual_addon_orders
+    SET refund_status = 'external_required'
+    WHERE id = v_order.id AND refund_status = 'reviewing';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING ERRCODE = 'P0001',
+        MESSAGE = 'BRANDING_VIRTUAL_REFUND_ORDER_STATE_CONFLICT';
+    END IF;
   END IF;
 
   RETURN NEXT v_refund;
@@ -479,7 +493,8 @@ BEGIN
   END IF;
 
   UPDATE public.tenant_virtual_addon_refunds
-  SET status = 'submitted', provider_refund_id = btrim(p_provider_refund_id),
+  SET status = 'submitted', provider_refund_no = refund_no,
+      provider_refund_id = btrim(p_provider_refund_id),
       provider_request_id = NULLIF(btrim(p_provider_request_id), ''),
       submitted_at = clock_timestamp(), reconcile_next_at = clock_timestamp(),
       last_error_code = NULL, last_error_summary = NULL,

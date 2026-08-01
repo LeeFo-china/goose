@@ -455,4 +455,5 @@ describe("WechatVirtualPaymentNotificationService", () => {
       errorCode: "DB_ERROR",
     });
   });
+
 });

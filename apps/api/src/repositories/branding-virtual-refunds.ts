@@ -31,6 +31,7 @@ const RefundRecordSchema = z.object({
     "rejected",
   ]),
   provider_refund_id: nullableText(128),
+  provider_refund_no: nullableText(64).optional().default(null),
   provider_refund_transaction_id: nullableText(128),
   provider_request_id: nullableText(128),
   apple_receipt_hash: z.string().length(64).nullable(),

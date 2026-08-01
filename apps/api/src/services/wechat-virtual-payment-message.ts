@@ -27,6 +27,51 @@ export type WechatVirtualGoodsDeliveryMessage = {
   attach: string;
 };
 
+export type WechatVirtualRefundNotificationMessage = {
+  format: WechatVirtualMessageFormat;
+  eventType: "xpay_refund_notify";
+  toUserName: string;
+  fromUserName: string;
+  providerCreatedAtUnix: number;
+  messageType: "event";
+  openid: string;
+  outTradeNo: string;
+  providerOrderId: string;
+  localRefundNo: string;
+  providerRefundId: string;
+  providerRefundTransactionId: string;
+  refundFeeFen: number;
+  refundSuccessful: boolean;
+  providerResultCode: number;
+  providerResultMessage: string;
+  refundStartedAt: string;
+  refundSucceededAt: string | null;
+  retryTimes: number;
+};
+
+export type WechatVirtualIosRefundInquiryMessage = {
+  format: WechatVirtualMessageFormat;
+  eventType: "xpay_subscribe_ios_refund_query_notify";
+  toUserName: string;
+  fromUserName: string;
+  providerCreatedAtUnix: number;
+  messageType: "event";
+  outTradeNo: string;
+  refundTime: string;
+  orderTime: string;
+  channelBill: string;
+  bundleId: string;
+  providerProductId: string;
+  quantity: number;
+  refundRequestReason: string;
+  provideStatus: number;
+};
+
+export type WechatVirtualPaymentMessage =
+  | WechatVirtualGoodsDeliveryMessage
+  | WechatVirtualRefundNotificationMessage
+  | WechatVirtualIosRefundInquiryMessage;
+
 type MessageSignatureInput = {
   token: string;
   timestamp: string;
@@ -82,6 +127,60 @@ const WechatVirtualGoodsDeliverySchema = z.object({
   }).strict().optional(),
 }).strict();
 
+const CommonEventSchema = {
+  ToUserName: exactText(128),
+  FromUserName: exactText(128),
+  CreateTime: integerField(4_102_444_800),
+  MsgType: z.literal("event"),
+} as const;
+
+const WechatVirtualRefundNotificationSchema = z.object({
+  ...CommonEventSchema,
+  Event: z.literal("xpay_refund_notify"),
+  OpenId: exactText(128),
+  WxRefundId: exactText(128),
+  MchRefundId: exactText(64),
+  WxOrderId: exactText(128),
+  MchOrderId: exactText(32),
+  RefundFee: integerField(2_147_483_647),
+  RetCode: integerField(2_147_483_647),
+  RetMsg: z.string().max(500),
+  RefundStartTimestamp: integerField(4_102_444_800),
+  RefundSuccTimestamp: integerField(4_102_444_800),
+  WxpayRefundTransactionId: exactText(128),
+  RetryTimes: integerField(100),
+}).strict();
+
+const WechatVirtualIosRefundInquirySchema = z.object({
+  ...CommonEventSchema,
+  Event: z.literal("xpay_subscribe_ios_refund_query_notify"),
+  refund_time: integerField(4_102_444_800),
+  order_time: integerField(4_102_444_800),
+  channel_bill: exactText(128),
+  bundleid: exactText(256),
+  product_id: exactText(128),
+  p_count: z.preprocess(
+    (value) => typeof value === "string" && /^\d+$/.test(value)
+      ? Number(value)
+      : value,
+    z.number().int().positive().max(10_000),
+  ),
+  refund_request_reason: z.string().trim().max(500),
+  provide_status: z.preprocess(
+    (value) => typeof value === "string" && /^[012]$/.test(value)
+      ? Number(value)
+      : value,
+    z.union([z.literal(0), z.literal(1), z.literal(2)]),
+  ),
+  pay_order_id: exactText(32),
+}).strict();
+
+const WechatVirtualPaymentMessageSchema = z.discriminatedUnion("Event", [
+  WechatVirtualGoodsDeliverySchema,
+  WechatVirtualRefundNotificationSchema,
+  WechatVirtualIosRefundInquirySchema,
+]);
+
 export function buildWechatMessageSignature(
   input: MessageSignatureInput,
 ): string {
@@ -102,7 +201,7 @@ export function verifyWechatMessageSignature(
 export function parseWechatVirtualPaymentMessage(input: {
   contentType: string;
   rawBody: string;
-}): WechatVirtualGoodsDeliveryMessage {
+}): WechatVirtualPaymentMessage {
   if (Buffer.byteLength(input.rawBody, "utf8") > WECHAT_VIRTUAL_MESSAGE_BODY_LIMIT) {
     throw Errors.business(
       413,
@@ -115,7 +214,7 @@ export function parseWechatVirtualPaymentMessage(input: {
   const decoded = format === "json"
     ? parseJsonPayload(input.rawBody)
     : parseXmlPayload(input.rawBody);
-  const parsed = WechatVirtualGoodsDeliverySchema.safeParse(decoded);
+  const parsed = WechatVirtualPaymentMessageSchema.safeParse(decoded);
   if (!parsed.success) {
     throw Errors.business(
       400,
@@ -126,25 +225,68 @@ export function parseWechatVirtualPaymentMessage(input: {
   }
 
   const payload = parsed.data;
-  return {
+  const common = {
     format,
-    eventType: payload.Event,
     toUserName: payload.ToUserName,
     fromUserName: payload.FromUserName,
     providerCreatedAtUnix: payload.CreateTime,
     messageType: payload.MsgType,
+  } as const;
+  if (payload.Event === "xpay_refund_notify") {
+    return {
+      ...common,
+      eventType: payload.Event,
+      openid: payload.OpenId,
+      outTradeNo: payload.MchOrderId,
+      providerOrderId: payload.WxOrderId,
+      localRefundNo: payload.MchRefundId,
+      providerRefundId: payload.WxRefundId,
+      providerRefundTransactionId: payload.WxpayRefundTransactionId,
+      refundFeeFen: payload.RefundFee,
+      refundSuccessful: payload.RetCode === 0,
+      providerResultCode: payload.RetCode,
+      providerResultMessage: payload.RetMsg,
+      refundStartedAt: unixTime(payload.RefundStartTimestamp),
+      refundSucceededAt: payload.RetCode === 0
+        ? unixTime(payload.RefundSuccTimestamp)
+        : null,
+      retryTimes: payload.RetryTimes,
+    };
+  }
+  if (payload.Event === "xpay_subscribe_ios_refund_query_notify") {
+    return {
+      ...common,
+      eventType: payload.Event,
+      outTradeNo: payload.pay_order_id,
+      refundTime: unixTime(payload.refund_time),
+      orderTime: unixTime(payload.order_time),
+      channelBill: payload.channel_bill,
+      bundleId: payload.bundleid,
+      providerProductId: payload.product_id,
+      quantity: payload.p_count,
+      refundRequestReason: payload.refund_request_reason,
+      provideStatus: payload.provide_status,
+    };
+  }
+  return {
+    ...common,
+    eventType: payload.Event,
     openid: payload.OpenId,
     outTradeNo: payload.OutTradeNo,
     environment: payload.Env === 1 ? "sandbox" : "production",
     providerOrderNo: payload.WeChatPayInfo.MchOrderNo,
     transactionId: payload.WeChatPayInfo.TransactionId,
-    paidAt: new Date(payload.WeChatPayInfo.PaidTime * 1_000).toISOString(),
+    paidAt: unixTime(payload.WeChatPayInfo.PaidTime),
     providerProductId: payload.GoodsInfo.ProductId,
     quantity: payload.GoodsInfo.Quantity,
     origPriceFen: payload.GoodsInfo.OrigPrice,
     actualPriceFen: payload.GoodsInfo.ActualPrice,
     attach: payload.GoodsInfo.Attach,
   };
+}
+
+function unixTime(value: number): string {
+  return new Date(value * 1_000).toISOString();
 }
 
 function resolveMessageFormat(contentType: string): WechatVirtualMessageFormat {

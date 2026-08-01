@@ -5,6 +5,8 @@ import {
   brandingVirtualOrderRepository,
   type BrandingVirtualOrderRecord,
 } from "@/repositories/branding-virtual-orders";
+import { brandingVirtualRefundRepository } from "@/repositories/branding-virtual-refunds";
+import { brandingVirtualRefundNotificationRepository } from "@/repositories/branding-virtual-refund-notifications";
 import {
   wechatVirtualPaymentNotificationRepository,
   type WechatVirtualPaymentNotificationRecord,
@@ -52,8 +54,12 @@ type ConfirmationPort = Pick<
   typeof brandingVirtualPaymentConfirmation,
   "confirm"
 >;
+type RefundsPort = Pick<typeof brandingVirtualRefundRepository, "compensate"> &
+  Pick<typeof brandingVirtualRefundNotificationRepository,
+    "processProviderNotification" | "processIosInquiry">;
 
-export type WechatVirtualPaymentMessageResult = {
+type WechatVirtualPaymentAckResult = {
+  kind: "ack";
   httpStatus: number;
   format: WechatVirtualMessageFormat;
   body: { ErrCode: number; ErrMsg: "success" | "retry" };
@@ -61,17 +67,30 @@ export type WechatVirtualPaymentMessageResult = {
   failurePersistenceErrorCode?: string;
 };
 
+type WechatVirtualPaymentInquiryResult = {
+  kind: "ios_refund_inquiry";
+  httpStatus: 200;
+  format: WechatVirtualMessageFormat;
+  body: { result_code: 0 | 1; result_info: string; evidence: string };
+};
+
+export type WechatVirtualPaymentMessageResult =
+  | WechatVirtualPaymentAckResult
+  | WechatVirtualPaymentInquiryResult;
+
 export class WechatVirtualPaymentNotificationService {
   private readonly settings: SettingsPort;
   private readonly notifications: NotificationsPort;
   private readonly orders: OrdersPort;
   private readonly confirmation: ConfirmationPort;
+  private readonly refunds: RefundsPort;
 
   constructor(dependencies: {
     settings?: SettingsPort;
     notifications?: NotificationsPort;
     orders?: OrdersPort;
     confirmation?: ConfirmationPort;
+    refunds?: RefundsPort;
   } = {}) {
     this.settings = dependencies.settings ?? systemSettingsService;
     this.notifications = dependencies.notifications ??
@@ -79,6 +98,13 @@ export class WechatVirtualPaymentNotificationService {
     this.orders = dependencies.orders ?? brandingVirtualOrderRepository;
     this.confirmation = dependencies.confirmation ??
       brandingVirtualPaymentConfirmation;
+    this.refunds = dependencies.refunds ?? {
+      compensate: (input) => brandingVirtualRefundRepository.compensate(input),
+      processProviderNotification: (input) =>
+        brandingVirtualRefundNotificationRepository.processProviderNotification(input),
+      processIosInquiry: (input) =>
+        brandingVirtualRefundNotificationRepository.processIosInquiry(input),
+    };
   }
 
   async verifyEndpoint(query: SignatureQuery): Promise<string> {
@@ -169,6 +195,59 @@ export class WechatVirtualPaymentNotificationService {
         "WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_MISMATCH",
         { field: "ToUserName" },
       );
+    }
+    if (message.eventType === "xpay_subscribe_ios_refund_query_notify") {
+      const decision = await this.refunds.processIosInquiry({
+        recipientOriginalId: message.toUserName,
+        senderIdHash: sha256(message.fromUserName),
+        providerCreatedAtUnix: message.providerCreatedAtUnix,
+        outTradeNo: message.outTradeNo,
+        refundTime: message.refundTime,
+        orderTime: message.orderTime,
+        channelBillHash: sha256(message.channelBill),
+        bundleId: message.bundleId,
+        providerProductId: message.providerProductId,
+        quantity: message.quantity,
+        refundRequestReason: message.refundRequestReason,
+        provideStatus: message.provideStatus,
+        requestId: input.requestId?.slice(0, 128) ?? null,
+      });
+      return {
+        kind: "ios_refund_inquiry",
+        httpStatus: 200,
+        format: input.format,
+        body: {
+          result_code: decision.result_code,
+          result_info: decision.result_info,
+          evidence: decision.evidence,
+        },
+      };
+    }
+    if (message.eventType === "xpay_refund_notify") {
+      const result = await this.refunds.processProviderNotification({
+        recipientOriginalId: message.toUserName,
+        senderIdHash: sha256(message.fromUserName),
+        providerCreatedAtUnix: message.providerCreatedAtUnix,
+        outTradeNo: message.outTradeNo,
+        openidHash: sha256(message.openid),
+        localRefundNo: message.localRefundNo,
+        providerOrderId: message.providerOrderId,
+        providerRefundId: message.providerRefundId,
+        providerRefundTransactionId: message.providerRefundTransactionId,
+        refundFeeFen: message.refundFeeFen,
+        successful: message.refundSuccessful,
+        providerResultCode: message.providerResultCode,
+        providerResultMessage: message.providerResultMessage,
+        refundStartedAt: message.refundStartedAt,
+        refundSucceededAt: message.refundSucceededAt,
+        retryTimes: message.retryTimes,
+        requestId: input.requestId?.slice(0, 128) ?? null,
+      });
+      if (result.refund_status === "succeeded" &&
+        result.compensation_status !== "succeeded") {
+        await this.refunds.compensate({ refundId: result.refund_id });
+      }
+      return successResult(input.format);
     }
     const persisted = await this.notifications.createOrGet({
       eventType: message.eventType,
@@ -326,8 +405,9 @@ function invalidSignature() {
 
 function successResult(
   format: WechatVirtualMessageFormat,
-): WechatVirtualPaymentMessageResult {
+): WechatVirtualPaymentAckResult {
   return {
+    kind: "ack",
     httpStatus: 200,
     format,
     body: { ErrCode: 0, ErrMsg: "success" },
@@ -337,8 +417,9 @@ function successResult(
 function retryResult(
   format: WechatVirtualMessageFormat,
   errorCode: string,
-): WechatVirtualPaymentMessageResult {
+): WechatVirtualPaymentAckResult {
   return {
+    kind: "ack",
     httpStatus: 200,
     format,
     body: { ErrCode: 1, ErrMsg: "retry" },

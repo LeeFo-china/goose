@@ -181,6 +181,7 @@ function createHarness(
     status: platform === "ios" ? "external_required" as const :
       existingStatus ?? "reviewing" as const,
     provider_refund_id: existingStatus ? "refund-wx-1" : null,
+    provider_refund_no: existingStatus ? "BVR202608010001" : null,
     provider_refund_transaction_id: null,
     provider_request_id: null,
     apple_receipt_hash: null,
@@ -214,6 +215,7 @@ function createHarness(
       ...refund,
       status: "submitted" as const,
       provider_refund_id: "refund-wx-1",
+      provider_refund_no: "BVR202608010001",
       submitted_at: "2026-08-01T00:01:00.000Z",
     })),
     claimSubmission,

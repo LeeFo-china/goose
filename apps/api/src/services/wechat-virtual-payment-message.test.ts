@@ -112,4 +112,109 @@ describe("WeChat virtual-payment message protocol", () => {
       rawBody: "x".repeat(65_537),
     })).toThrow();
   });
+
+  test.each(["application/json", "application/xml"])(
+    "parses the official refund completion payload from %s",
+    (contentType) => {
+      const payload = {
+        ToUserName: "gh_original",
+        FromUserName: "official-account",
+        CreateTime: 1_714_037_059,
+        MsgType: "event",
+        Event: "xpay_refund_notify",
+        OpenId: "payer-openid",
+        WxRefundId: "wx-refund-1",
+        MchRefundId: "BVR-1",
+        WxOrderId: "wx-order-1",
+        MchOrderId: "BV202608010001",
+        RefundFee: 100,
+        RetCode: 0,
+        RetMsg: "SUCCESS",
+        RefundStartTimestamp: 1_714_037_060,
+        RefundSuccTimestamp: 1_714_037_061,
+        WxpayRefundTransactionId: "wx-refund-transaction-1",
+        RetryTimes: 0,
+      };
+      const raw = contentType === "application/json"
+        ? JSON.stringify(payload)
+        : objectToXml(payload);
+      expect(parseWechatVirtualPaymentMessage({ contentType, rawBody: raw }))
+        .toMatchObject({
+          eventType: "xpay_refund_notify",
+          refundSuccessful: true,
+          openid: "payer-openid",
+          outTradeNo: "BV202608010001",
+          localRefundNo: "BVR-1",
+          providerRefundId: "wx-refund-1",
+          providerRefundTransactionId: "wx-refund-transaction-1",
+          refundFeeFen: 100,
+        });
+    },
+  );
+
+  test.each([
+    ["p_count", 0],
+    ["provide_status", 3],
+  ])("rejects an out-of-contract iOS inquiry %s", (field, value) => {
+    expect(() => parseWechatVirtualPaymentMessage({
+      contentType: "application/json",
+      rawBody: JSON.stringify({
+        ToUserName: "gh_original",
+        FromUserName: "official-account",
+        CreateTime: 1_714_037_059,
+        MsgType: "event",
+        Event: "xpay_subscribe_ios_refund_query_notify",
+        refund_time: 1_714_037_061,
+        order_time: 1_714_037_060,
+        channel_bill: "apple-bill-1",
+        bundleid: "com.goodcms.mini",
+        product_id: "branding-annual",
+        p_count: 1,
+        refund_request_reason: "用户申请退款",
+        provide_status: 1,
+        pay_order_id: "BV202608010001",
+        [field]: value,
+      }),
+    })).toThrow();
+  });
+
+  test.each(["application/json", "application/xml"])(
+    "parses the official iOS refund inquiry payload from %s",
+    (contentType) => {
+      const payload = {
+        ToUserName: "gh_original",
+        FromUserName: "official-account",
+        CreateTime: 1_714_037_059,
+        MsgType: "event",
+        Event: "xpay_subscribe_ios_refund_query_notify",
+        refund_time: 1_714_037_061,
+        order_time: 1_714_037_060,
+        channel_bill: "apple-bill-1",
+        bundleid: "com.goodcms.mini",
+        product_id: "branding-annual",
+        p_count: 1,
+        refund_request_reason: "用户申请退款",
+        provide_status: 1,
+        pay_order_id: "BV202608010001",
+      };
+      const raw = contentType === "application/json"
+        ? JSON.stringify(payload)
+        : objectToXml(payload);
+      expect(parseWechatVirtualPaymentMessage({ contentType, rawBody: raw }))
+        .toMatchObject({
+          eventType: "xpay_subscribe_ios_refund_query_notify",
+          outTradeNo: "BV202608010001",
+          channelBill: "apple-bill-1",
+          providerProductId: "branding-annual",
+          quantity: 1,
+          provideStatus: 1,
+        });
+    },
+  );
 });
+
+function objectToXml(payload: Record<string, string | number>): string {
+  return `<xml>${Object.entries(payload).map(([key, value]) =>
+    `<${key}><![CDATA[${value}]]></${key}>`
+  ).join("")}</xml>`;
+}

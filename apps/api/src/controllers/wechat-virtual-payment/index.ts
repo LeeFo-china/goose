@@ -76,7 +76,8 @@ export class WechatVirtualPaymentController {
         query: request.query as Record<string, unknown>,
         requestId: String(request.id).slice(0, 128),
       });
-      if (result.errorCode || result.failurePersistenceErrorCode) {
+      if (result.kind === "ack" &&
+        (result.errorCode || result.failurePersistenceErrorCode)) {
         request.log.warn({
           code: result.errorCode,
           persistenceCode: result.failurePersistenceErrorCode,
@@ -92,6 +93,7 @@ export class WechatVirtualPaymentController {
         statusCode: appError.statusCode,
       }, "拒绝微信虚拟支付消息");
       return sendProtocolResponse(reply, {
+        kind: "ack",
         httpStatus: appError.statusCode,
         format: isXmlContentType(contentType) ? "xml" : "json",
         body: { ErrCode: 1, ErrMsg: "retry" },
@@ -150,8 +152,21 @@ function sendProtocolResponse(
   result: WechatVirtualPaymentMessageResult,
 ): FastifyReply {
   if (result.format === "xml") {
-    const xml = `<xml><ErrCode>${result.body.ErrCode}</ErrCode>` +
-      `<ErrMsg><![CDATA[${result.body.ErrMsg}]]></ErrMsg></xml>`;
+    if (result.kind === "ack") {
+      const xml = `<xml><ErrCode>${result.body.ErrCode}</ErrCode>` +
+        `<ErrMsg><![CDATA[${result.body.ErrMsg}]]></ErrMsg></xml>`;
+      return reply.type("application/xml; charset=utf-8")
+        .status(result.httpStatus)
+        .send(xml);
+    }
+    const fields = {
+      result_code: result.body.result_code,
+      result_info: result.body.result_info,
+      evidence: result.body.evidence,
+    };
+    const xml = `<xml>${Object.entries(fields).map(([key, value]) =>
+      `<${key}>${escapeXml(String(value))}</${key}>`
+    ).join("")}</xml>`;
     return reply.type("application/xml; charset=utf-8")
       .status(result.httpStatus)
       .send(xml);
@@ -159,6 +174,16 @@ function sendProtocolResponse(
   return reply.type("application/json; charset=utf-8")
     .status(result.httpStatus)
     .send(result.body);
+}
+
+function escapeXml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&apos;",
+  })[character] ?? character);
 }
 
 function headerText(value: string | string[] | undefined): string {
