@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  buildModePatch,
   buildProductPatch,
   createProductFormValues,
   formatFenAsYuanInput,
+  isOrderRefundable,
   parseYuanInputToFen,
   ProductFormValidationError,
 } from "./platform-branding-addon-product-form-data";
@@ -17,6 +19,7 @@ const product: PlatformBrandingAddonProduct = {
   term_years: 1,
   purchase_notes: "支付成功后自动开通或续期一年",
   enabled: true,
+  purchase_mode: "direct_legacy",
   version: 2,
 };
 
@@ -36,6 +39,66 @@ function expectValidationError(
 }
 
 describe("platform branding addon product form data", () => {
+  test("requires maintenance before switching to virtual payment", () => {
+    expect(buildModePatch({
+      current: "direct_legacy",
+      next: "wechat_virtual",
+      version: 3,
+    })).toEqual({
+      ok: false,
+      message: "请先切换到维护模式并收敛旧待支付订单",
+    });
+
+    expect(buildModePatch({
+      current: "direct_legacy",
+      next: "maintenance",
+      version: 3,
+    })).toEqual({
+      ok: true,
+      patch: { purchase_mode: "maintenance", version: 3 },
+    });
+  });
+
+  test("allows virtual payment to pause but never fall back to direct payment", () => {
+    expect(buildModePatch({
+      current: "wechat_virtual",
+      next: "maintenance",
+      version: 4,
+    })).toEqual({
+      ok: true,
+      patch: { purchase_mode: "maintenance", version: 4 },
+    });
+    expect(buildModePatch({
+      current: "wechat_virtual",
+      next: "direct_legacy",
+      version: 4,
+    })).toEqual({
+      ok: false,
+      message: "虚拟支付启用后只能暂停，不能回退到普通支付",
+    });
+  });
+
+  test("enables refunds only for fulfilled successful virtual orders", () => {
+    expect(isOrderRefundable({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    })).toBe(true);
+    expect(isOrderRefundable({
+      payment_channel: "legacy_direct",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    })).toBe(false);
+    expect(isOrderRefundable({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "grant_failed",
+      refund_status: "none",
+    })).toBe(false);
+  });
+
   test("formats integer fen as an exact yuan input value", () => {
     expect(formatFenAsYuanInput(null)).toBe("");
     expect(formatFenAsYuanInput(1)).toBe("0.01");
