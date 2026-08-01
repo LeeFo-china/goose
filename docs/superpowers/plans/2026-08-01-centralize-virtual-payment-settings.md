@@ -196,7 +196,7 @@ class PlatformBrandingVirtualPaymentSettingsService {
 }
 ```
 
-`get()` 并行读取固定单商品/双环境快照、两个 AppKey 元数据和消息令牌元数据；`update()` 复用 `manageConfiguration` 原子 RPC 与现有前向模式状态机，并按 `environment` 在服务端注入固定 `encrypted_secret_ref`，绝不信任客户端设置键；`validate()` 复用现有本地/微信校验逻辑。所有 repository 异常用 `Errors.dbError()` 包装。
+`get()` 并行读取固定单商品/双环境快照、两个 AppKey 元数据和消息令牌元数据；`update()` 复用 `manageConfiguration` 原子 RPC 与现有前向模式状态机，并按 `environment` 在服务端注入固定 `encrypted_secret_ref`，绝不信任客户端设置键；`validate()` 先做本地校验，再只读查询微信最近一次上传和发布任务。在固定单商品边界内，只有商品 ID、价格、上传态和发布态全部一致才写入 `valid`；处理中或无法确认写入 `pending`，明确不匹配写入 `invalid`。校验不得调用微信上传或发布接口。所有 repository 异常用 `Errors.dbError()` 包装。
 
 - [ ] **Step 4: 运行聚焦测试**
 
@@ -516,7 +516,7 @@ Expected: 全部退出码为 0，无类型、文件大小、构建或空白错�
 
 Run: `git diff origin/main...HEAD -- supabase/migrations && supabase db push --include-all && supabase migration list`
 
-Expected: 只新增 `20260801105000_atomic_platform_payment_secret_settings.sql`；应用成功后 Local/Remote migration 列表对齐。执行前先确认目标 project 来自当前开发环境配置；不得对未确认的生产项目执行。
+Expected: 只新增 `20260801105000_atomic_platform_payment_secret_settings.sql` 和 `20260801110000_support_pending_branding_virtual_product_validation.sql`；应用成功后 Local/Remote migration 列表对齐。执行前先确认目标 project 来自当前开发环境配置；不得对未确认的生产项目执行。
 
 - [ ] **Step 4: 浏览器验收**
 

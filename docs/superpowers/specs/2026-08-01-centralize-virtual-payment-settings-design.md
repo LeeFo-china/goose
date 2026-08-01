@@ -129,7 +129,12 @@
   - 覆盖写入 `WECHAT_VIRTUAL_MESSAGE_TOKEN`，不返回明文。
 - `POST /platform/payment/wechat-virtual/branding-entitlement/:environment/validate`
   - 权限：`platform.payment.config.manage`
-  - 执行环境映射与微信侧商品校验，返回结构化校验结果。
+  - 先执行本地映射、价格和 AppKey 版本校验，再只读调用微信
+    `query_upload_goods` 与 `query_publish_goods` 查询最近一次任务。
+  - 当前系统固定只经营一个数字权益商品，因此最近任务必须只包含该商品，且商品 ID、上传价格、上传成功态和发布成功态全部一致，才能写入 `valid`。
+  - 该校验不调用上传或发布接口，不会改变微信侧商品；微信查询接口返回的是最近任务而非完整商品目录，此单商品约束是当前校验成立的明确业务边界。
+  - 明确的不匹配结果写入 `invalid`；处理中、网络失败、超时或无法确认的响应写入 `pending`，清除旧校验时间但保留管理员设置的启用意图。
+  - 返回结构化校验结果，并且仅暴露经过约束的错误码和 request ID，不返回微信错误原文或密钥。
 
 旧品牌权益虚拟商品校验路径保留一个版本作为兼容入口，但改用支付配置管理权限，并在代码中标记弃用；Admin 新代码不得继续调用。
 
@@ -186,7 +191,7 @@
 - `platform.payment.config.manage`
 - `branding_manage_virtual_product_configuration(...)`
 
-`WECHAT_VIRTUAL_MESSAGE_TOKEN` 已有代码定义和数据库保护触发器，本次只调整其配置分组并加入支付专用安全写入白名单，不创建重复定义。审查确认现有系统设置写入与变更日志不是原子操作，且敏感设置日志会保存密文，因此新增一个前向 migration：提供仅 `service_role` 可执行的平台支付密钥原子写入 RPC，并让敏感设置变更日志的旧值/新值保持 `NULL`。应用后必须核对 Local/Remote migration 对齐，禁止修改已经应用的 migration。
+`WECHAT_VIRTUAL_MESSAGE_TOKEN` 已有代码定义和数据库保护触发器，本次只调整其配置分组并加入支付专用安全写入白名单，不创建重复定义。审查确认现有系统设置写入与变更日志不是原子操作，且敏感设置日志会保存密文，因此新增前向 migration：`20260801105000` 提供仅 `service_role` 可执行的平台支付密钥原子写入 RPC，并让敏感设置变更日志的旧值/新值保持 `NULL`；`20260801110000` 让校验 RPC 支持 `pending`，且只有已确认的 `invalid` 才停用当前 active 映射。应用后必须核对 Local/Remote migration 对齐，禁止修改已经应用的 migration。
 
 回滚采用前向修复：若新 RPC 需要停用，先发布暂停密钥写入的 API，再通过后续 migration 撤销函数授权或函数本身；不得回退到“先写密钥、后写日志”的非原子路径，也不得恢复密文历史日志。
 
