@@ -328,11 +328,11 @@ BEGIN
     THEN
       RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_AMOUNT_TOO_LOW';
     END IF;
-    IF p_virtual_product_patch->>'encrypted_secret_ref' <> CASE
+    IF p_virtual_product_patch->>'encrypted_secret_ref' <> (CASE
       WHEN v_environment = 'production'
         THEN 'WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE'
       ELSE 'WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE'
-    END THEN
+    END) THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001',
         MESSAGE = 'BRANDING_VIRTUAL_PRODUCT_SECRET_ENVIRONMENT_MISMATCH';
