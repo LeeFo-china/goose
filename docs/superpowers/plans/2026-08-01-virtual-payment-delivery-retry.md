@@ -82,12 +82,14 @@ pass.
 ### Task 2: Database delivery retry state transition
 
 **Files:**
+- Create: `apps/api/src/services/branding-virtual-payment-delivery-retry-migration-contract.test.ts`
 - Modify: `apps/api/src/services/branding-virtual-payment-reconciliation-migration-contract.test.ts`
 - Modify: `supabase/migrations/20260801102000_create_branding_virtual_payment_reconciliation.sql`
 
 - [ ] **Step 1: Write the failing migration contract tests**
 
-Extract `branding_begin_virtual_payment_delivery_retry` and assert it:
+Create the focused delivery-retry contract file, extract
+`branding_begin_virtual_payment_delivery_retry`, and assert it:
 
 ```ts
 expect(beginRetry).toContain("v_order.provider_delivery_status <> 'failed'");
@@ -106,9 +108,10 @@ expect(beginRetry).not.toContain("reconcile_claim_expires_at = null");
 
 Also assert the existing terminal function still requires `pending` plus the
 exact attempt key, failure retains the counter and schedules five minutes,
-success releases the claim, the trigger covers `pending | failed`, the table
-constraint accepts the pending shape, the new command performs its fresh
-post-lock lease check, and only `service_role` receives execute permission.
+success releases the claim, the trigger covers `pending | failed`, and the
+table constraint accepts the pending shape. In the existing reconciliation
+contract file, add the new command to the shared fresh post-lock lease check and
+service-role-only function signature checks.
 
 - [ ] **Step 2: Run the migration contract test and verify RED**
 
@@ -116,7 +119,9 @@ Run:
 
 ```bash
 cd apps/api
-bun test src/services/branding-virtual-payment-reconciliation-migration-contract.test.ts
+bun test \
+  src/services/branding-virtual-payment-delivery-retry-migration-contract.test.ts \
+  src/services/branding-virtual-payment-reconciliation-migration-contract.test.ts
 ```
 
 Expected: failures because the begin function and grant do not exist.
@@ -153,6 +158,7 @@ Run:
 cd apps/api
 bun test \
   src/repositories/branding-virtual-payment-reconciliation.test.ts \
+  src/services/branding-virtual-payment-delivery-retry-migration-contract.test.ts \
   src/services/branding-virtual-payment-reconciliation-migration-contract.test.ts \
   src/services/branding-virtual-payment-confirmation.test.ts
 ```
@@ -200,6 +206,7 @@ git add \
   docs/superpowers/plans/2026-08-01-virtual-payment-delivery-retry.md \
   apps/api/src/repositories/branding-virtual-payment-reconciliation.ts \
   apps/api/src/repositories/branding-virtual-payment-reconciliation.test.ts \
+  apps/api/src/services/branding-virtual-payment-delivery-retry-migration-contract.test.ts \
   apps/api/src/services/branding-virtual-payment-reconciliation-migration-contract.test.ts \
   supabase/migrations/20260801102000_create_branding_virtual_payment_reconciliation.sql
 git commit -m "fix(payments): 恢复虚拟支付发货重试"
