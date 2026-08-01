@@ -368,4 +368,14 @@ describe("BrandingVirtualOrderRepository reconciliation", () => {
       details: undefined,
     });
   });
+
+  test("rejects a false exact-command result instead of continuing", async () => {
+    const f = await repositoryWith({ rpcData: false });
+
+    await expect(f.repository.beginReconciliationDeliveryRetry({
+      orderId: ORDER_ID,
+      claimToken: CLAIM_TOKEN,
+      attemptKey: RETRY_ATTEMPT_KEY,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+  });
 });

@@ -12,6 +12,21 @@ import type {
 
 const RETRY_MINUTES = 5;
 const MAX_RETRY_MINUTES = 30;
+const MINIMUM_LEASE_BUDGET_MS = 30_000;
+
+export function assertReconciliationLeaseBudget(
+  claim: BrandingVirtualPaymentReconciliationClaim,
+  now: Date,
+): void {
+  const remainingMs = new Date(claim.reconcile_claim_expires_at).getTime()
+    - now.getTime();
+  if (remainingMs >= MINIMUM_LEASE_BUDGET_MS) return;
+  throw Errors.business(
+    409,
+    "虚拟支付补偿租约剩余时间不足",
+    "BRANDING_VIRTUAL_RECONCILIATION_LEASE_BUDGET_LOW",
+  );
+}
 
 export function confirmationOrder(
   claim: BrandingVirtualPaymentReconciliationClaim,

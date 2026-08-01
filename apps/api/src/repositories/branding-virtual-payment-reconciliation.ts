@@ -242,8 +242,10 @@ export class BrandingVirtualPaymentReconciliationRepository {
     );
     if (error) throwReconciliationError(error, fallbackMessage);
     const parsed = z.boolean().safeParse(data);
-    if (!parsed.success) throw Errors.dbError(fallbackMessage);
-    return parsed.data;
+    if (!parsed.success || parsed.data !== true) {
+      throw Errors.dbError(fallbackMessage);
+    }
+    return true;
   }
 }
 

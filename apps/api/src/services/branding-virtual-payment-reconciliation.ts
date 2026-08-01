@@ -11,6 +11,7 @@ import {
 } from "@/services/branding-virtual-payment-confirmation";
 import {
   assertQueryBinding,
+  assertReconciliationLeaseBudget,
   clampBatchSize,
   confirmationOrder,
   persistedTransaction,
@@ -144,6 +145,7 @@ export class BrandingVirtualPaymentReconciliationService {
     resources: BatchResources,
     context: ProcessContext,
   ): Promise<void> {
+    assertReconciliationLeaseBudget(claim, this.nowFactory());
     if (claim.provider_delivery_status === "pending") {
       await this.deliver(claim, requireAttemptKey(claim), telemetry, resources);
       return;
@@ -294,20 +296,12 @@ export class BrandingVirtualPaymentReconciliationService {
     telemetry: BrandingVirtualReconciliationTelemetry,
     resources: BatchResources,
   ): Promise<void> {
+    let result: Awaited<ReturnType<GatewayPort["notifyProvideGoods"]>>;
     try {
-      const result = await this.gateway.notifyProvideGoods({
+      result = await this.gateway.notifyProvideGoods({
         accessToken: await resources.accessToken(),
         environment: claim.environment,
         wechatOrderId: requireText(claim.provider_order_no),
-      });
-      await this.repository.markReconciliationDelivery({
-        orderId: claim.id,
-        claimToken: claim.reconcile_claim_token,
-        status: "succeeded",
-        attemptKey,
-        providerRequestId: result.requestId,
-        errorCode: null,
-        errorSummary: null,
       });
     } catch (error) {
       await this.repository.markReconciliationDelivery({
@@ -320,7 +314,17 @@ export class BrandingVirtualPaymentReconciliationService {
         errorSummary: "微信虚拟支付发货通知暂时失败",
       });
       telemetry.failed += 1;
+      return;
     }
+    await this.repository.markReconciliationDelivery({
+      orderId: claim.id,
+      claimToken: claim.reconcile_claim_token,
+      status: "succeeded",
+      attemptKey,
+      providerRequestId: result.requestId,
+      errorCode: null,
+      errorSummary: null,
+    });
   }
 
   private createBatchResources(): BatchResources {
