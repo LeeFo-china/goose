@@ -80,7 +80,7 @@ expect(BrandingAddonProductPatchSchema.safeParse({
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/api/src/schema/branding-addon.test.ts apps/api/src/services/platform-branding-addon-product.test.ts`
+Run: `bun --cwd=apps/api test src/schema/branding-addon.test.ts src/services/platform-branding-addon-product.test.ts`
 
 Expected: FAIL，因为当前 schema 和 service 仍接受 `purchase_mode`、`virtual_product`。
 
@@ -112,7 +112,7 @@ await this.virtualProductRepository.manageConfiguration({
 
 - [ ] **Step 4: 运行聚焦测试**
 
-Run: `bun test apps/api/src/schema/branding-addon.test.ts apps/api/src/services/platform-branding-addon-product.test.ts apps/api/src/services/platform-branding-addon-product-virtual.test.ts`
+Run: `bun --cwd=apps/api test src/schema/branding-addon.test.ts src/services/platform-branding-addon-product.test.ts src/services/platform-branding-addon-product-virtual.test.ts`
 
 Expected: PASS；旧 virtual service 测试如依赖商品写接口，应改为覆盖新支付 service，而不是放宽商品 schema。
 
@@ -175,7 +175,7 @@ Service 测试覆盖：read 权限可读取、manage 权限可写、品牌商品
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/api/src/schema/platform-payment-configs.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
+Run: `bun --cwd=apps/api test src/schema/platform-payment-configs.test.ts src/services/platform-branding-virtual-payment-settings.test.ts`
 
 Expected: FAIL，因为 schema 和 service 尚不存在。
 
@@ -200,7 +200,7 @@ class PlatformBrandingVirtualPaymentSettingsService {
 
 - [ ] **Step 4: 运行聚焦测试**
 
-Run: `bun test apps/api/src/schema/platform-payment-configs.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts apps/api/src/services/branding-virtual-product-management.test.ts`
+Run: `bun --cwd=apps/api test src/schema/platform-payment-configs.test.ts src/services/platform-branding-virtual-payment-settings.test.ts src/services/branding-virtual-product-management.test.ts`
 
 Expected: PASS，且品牌商品权限不能调用支付写方法。
 
@@ -244,7 +244,7 @@ expect(PLATFORM_PAYMENT_SECRET_SETTING_KEYS.has(definition.key)).toBe(true);
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
+Run: `bun --cwd=apps/api test src/services/system-settings/legacy/definitions-wechat-notify.test.ts src/services/platform-branding-virtual-payment-settings.test.ts`
 
 Expected: FAIL，因为既有消息令牌仍归属微信分组、尚未进入支付专用写入白名单，且支付 service 尚未实现安全写入。
 
@@ -265,7 +265,7 @@ const VIRTUAL_SECRET_KEYS = {
 
 - [ ] **Step 4: 运行测试**
 
-Run: `bun test apps/api/src/services/system-settings/legacy/definitions-wechat-notify.test.ts apps/api/src/services/system-settings/legacy/crypto.test.ts apps/api/src/repositories/system-settings.test.ts apps/api/src/services/platform-branding-virtual-payment-settings.test.ts`
+Run: `bun --cwd=apps/api test src/services/system-settings/legacy/definitions-wechat-notify.test.ts src/services/system-settings/legacy/crypto.test.ts src/repositories/system-settings.test.ts src/services/platform-branding-virtual-payment-settings.test.ts`
 
 Expected: PASS。
 
@@ -302,7 +302,7 @@ git commit -m "feat(payments): 管理虚拟支付密钥与消息令牌"
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/api/src/controllers/platform-payment-configs/routes.test.ts apps/api/src/controllers/branding-addon/routes.test.ts`
+Run: `bun --cwd=apps/api test src/controllers/platform-payment-configs/routes.test.ts src/controllers/branding-addon/routes.test.ts`
 
 Expected: FAIL，因为新路由尚未注册。
 
@@ -312,7 +312,7 @@ Expected: FAIL，因为新路由尚未注册。
 
 - [ ] **Step 4: 运行 controller 与 typecheck**
 
-Run: `bun test apps/api/src/controllers/platform-payment-configs/routes.test.ts apps/api/src/controllers/branding-addon/routes.test.ts && pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit`
+Run: `bun --cwd=apps/api test src/controllers/platform-payment-configs/routes.test.ts src/controllers/branding-addon/routes.test.ts && pnpm --dir apps/api exec tsc -p tsconfig.json --noEmit`
 
 Expected: PASS，TypeScript 零错误。
 
@@ -352,7 +352,7 @@ expect(buildVirtualMappingPatch(summary, draft, 9900)).toEqual({
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/admin/components/settings/platform-virtual-payment-settings-data.test.ts apps/admin/components/branding-addon/platform-branding-addon-product-form-data.test.ts`
+Run: `bun --cwd=apps/admin test components/settings/platform-virtual-payment-settings-data.test.ts components/branding-addon/platform-branding-addon-product-form-data.test.ts`
 
 Expected: FAIL，因为新数据层不存在且旧商品 PATCH 类型仍包含支付字段。
 
@@ -372,7 +372,7 @@ type PlatformVirtualSecretStatus = {
 
 - [ ] **Step 4: 运行测试**
 
-Run: `bun test apps/admin/components/settings/platform-virtual-payment-settings-data.test.ts apps/admin/components/branding-addon/platform-branding-addon-product-form-data.test.ts`
+Run: `bun --cwd=apps/admin test components/settings/platform-virtual-payment-settings-data.test.ts components/branding-addon/platform-branding-addon-product-form-data.test.ts`
 
 Expected: PASS。
 
@@ -397,7 +397,7 @@ git commit -m "refactor(admin): 分离虚拟支付配置类型"
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/admin/components/settings/platform-payment-settings-panel.test.ts`
+Run: `bun --cwd=apps/admin test components/settings/platform-payment-settings-panel.test.ts`
 
 Expected: FAIL，因为虚拟支付页签与组件不存在。
 
@@ -418,7 +418,7 @@ const section = searchParams.get("section") === "virtual" ? "virtual" : "ordinar
 
 - [ ] **Step 5: 运行测试与 Admin 静态检查**
 
-Run: `bun test apps/admin/components/settings/platform-payment-settings-panel.test.ts apps/admin/components/settings/platform-virtual-payment-settings-data.test.ts && pnpm --dir apps/admin check`
+Run: `bun --cwd=apps/admin test components/settings/platform-payment-settings-panel.test.ts components/settings/platform-virtual-payment-settings-data.test.ts && pnpm --dir apps/admin check`
 
 Expected: PASS，文件大小检查和 TypeScript 零错误。
 
@@ -446,7 +446,7 @@ git commit -m "feat(admin): 统一虚拟支付配置入口"
 
 - [ ] **Step 2: 运行测试确认失败**
 
-Run: `bun test apps/admin/components/branding-addon/platform-branding-addon-product-admin-contract.test.ts apps/admin/components/branding-addon/platform-branding-virtual-admin-contract.test.ts`
+Run: `bun --cwd=apps/admin test components/branding-addon/platform-branding-addon-product-admin-contract.test.ts components/branding-addon/platform-branding-virtual-admin-contract.test.ts`
 
 Expected: FAIL，因为旧页面仍编辑支付参数。
 
@@ -466,7 +466,7 @@ Expected: FAIL，因为旧页面仍编辑支付参数。
 
 - [ ] **Step 4: 同步骨架屏并运行测试**
 
-Run: `bun test apps/admin/components/branding-addon/platform-branding-addon-product-admin-contract.test.ts apps/admin/components/branding-addon/platform-branding-virtual-admin-contract.test.ts && pnpm --dir apps/admin check`
+Run: `bun --cwd=apps/admin test components/branding-addon/platform-branding-addon-product-admin-contract.test.ts components/branding-addon/platform-branding-virtual-admin-contract.test.ts && pnpm --dir apps/admin check`
 
 Expected: PASS，骨架和真实商品页均填满固定工作区且无截断。
 
@@ -487,14 +487,14 @@ git commit -m "refactor(admin): 精简品牌权益商品配置"
 Run:
 
 ```bash
-bun test \
-  apps/api/src/schema/branding-addon.test.ts \
-  apps/api/src/schema/platform-payment-configs.test.ts \
-  apps/api/src/services/platform-branding-addon-product.test.ts \
-  apps/api/src/services/platform-branding-virtual-payment-settings.test.ts \
-  apps/api/src/services/branding-virtual-product-management.test.ts \
-  apps/api/src/controllers/platform-payment-configs/routes.test.ts \
-  apps/api/src/controllers/branding-addon/routes.test.ts
+bun --cwd=apps/api test \
+  src/schema/branding-addon.test.ts \
+  src/schema/platform-payment-configs.test.ts \
+  src/services/platform-branding-addon-product.test.ts \
+  src/services/platform-branding-virtual-payment-settings.test.ts \
+  src/services/branding-virtual-product-management.test.ts \
+  src/controllers/platform-payment-configs/routes.test.ts \
+  src/controllers/branding-addon/routes.test.ts
 ```
 
 Expected: 全部 PASS。
