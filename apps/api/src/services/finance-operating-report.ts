@@ -3,6 +3,7 @@ import {
   financeOperatingReportRepository,
   type FinanceOperatingReportLedgerRow,
   type FinanceOperatingReportReceivableRow,
+  type FinanceOperatingReportSupplierCostRow,
 } from "@/repositories/finance-operating-report";
 import type {
   FinanceOperatingReportGroupBy,
@@ -10,6 +11,10 @@ import type {
 } from "@/schema/finance-reports";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  aggregateSupplierCostCentsBy,
+  supplierCostCentsToNumber,
+} from "@/services/finance-report-supplier-costs";
 
 const MAX_REPORT_RANGE_DAYS = 366;
 const DEFAULT_REPORT_RANGE_DAYS = 30;
@@ -18,7 +23,7 @@ const SOURCE_LIMIT = 10_000;
 type FinanceOperatingReportServiceDependencies = {
   repository: Pick<
     typeof financeOperatingReportRepository,
-    "listLedgerRows" | "listReceivableRows"
+    "listLedgerRows" | "listReceivableRows" | "listSupplierCostRows"
   >;
   accessPolicyService: Pick<
     typeof accessPolicyService,
@@ -69,8 +74,16 @@ export class FinanceOperatingReportService {
 
     const range = this.resolveDateRange(query);
     const groupBy = query.group_by ?? "month";
-    const [ledgerRows, receivableRows] = await Promise.all([
+    const [ledgerRows, supplierCostRows, receivableRows] = await Promise.all([
       this.dependencies.repository.listLedgerRows({
+        tenantId,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        projectId: query.project_id,
+        projectStatus: query.project_status,
+        sourceLimit: SOURCE_LIMIT,
+      }),
+      this.dependencies.repository.listSupplierCostRows({
         tenantId,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
@@ -90,10 +103,16 @@ export class FinanceOperatingReportService {
 
     return {
       summary: summarizeGroup(
-        this.buildSummaryRows(ledgerRows, receivableRows, range.dateTo),
+        this.buildSummaryRows(
+          ledgerRows,
+          supplierCostRows,
+          receivableRows,
+          range.dateTo,
+        ),
       ),
       groups: this.buildGroups({
         ledgerRows,
+        supplierCostRows,
         receivableRows,
         groupBy,
         tenantToday: range.dateTo,
@@ -104,6 +123,7 @@ export class FinanceOperatingReportService {
         group_by: groupBy,
         source_limit: SOURCE_LIMIT,
         truncated: ledgerRows.length >= SOURCE_LIMIT ||
+          supplierCostRows.length >= SOURCE_LIMIT ||
           receivableRows.length >= SOURCE_LIMIT,
       },
     };
@@ -111,6 +131,7 @@ export class FinanceOperatingReportService {
 
   private buildGroups(input: {
     ledgerRows: FinanceOperatingReportLedgerRow[];
+    supplierCostRows: FinanceOperatingReportSupplierCostRow[];
     receivableRows: FinanceOperatingReportReceivableRow[];
     groupBy: FinanceOperatingReportGroupBy;
     tenantToday: string;
@@ -123,6 +144,16 @@ export class FinanceOperatingReportService {
       applyLedgerToGroup(current, row);
       groups.set(key.key, current);
     }
+    for (const row of input.supplierCostRows) {
+      const key = supplierCostGroupKey(row, input.groupBy);
+      const current = groups.get(key.key) || emptyGroup(key.key, key.label);
+      groups.set(key.key, current);
+    }
+    applySupplierCostCents(
+      groups,
+      input.supplierCostRows,
+      (row) => supplierCostGroupKey(row, input.groupBy).key,
+    );
 
     for (const row of input.receivableRows) {
       const key = receivableGroupKey(row, input.groupBy);
@@ -138,11 +169,17 @@ export class FinanceOperatingReportService {
 
   private buildSummaryRows(
     ledgerRows: FinanceOperatingReportLedgerRow[],
+    supplierCostRows: FinanceOperatingReportSupplierCostRow[],
     receivableRows: FinanceOperatingReportReceivableRow[],
     tenantToday: string,
   ) {
     const group = emptyGroup("summary", "汇总");
     for (const row of ledgerRows) applyLedgerToGroup(group, row);
+    applySupplierCostCents(
+      new Map([["summary", group]]),
+      supplierCostRows,
+      () => "summary",
+    );
     for (const row of receivableRows) {
       applyReceivableToGroup(group, row, tenantToday);
     }
@@ -210,12 +247,44 @@ function applyLedgerToGroup(
 ) {
   if (row.direction === "in") {
     group.received_amount += row.amount;
-  } else if (row.direction === "out") {
+  } else if (
+    row.direction === "out" &&
+    row.entry_type !== "supplier_payment"
+  ) {
     group.expense_amount += row.amount;
     if (!row.cost_category_id) {
       group.unallocated_expense_amount += row.amount;
     }
   }
+}
+
+function applySupplierCostCents(
+  groups: Map<string, FinanceOperatingReportGroup>,
+  rows: FinanceOperatingReportSupplierCostRow[],
+  getKey: (row: FinanceOperatingReportSupplierCostRow) => string,
+) {
+  const centsByGroup = aggregateSupplierCostCentsBy(rows, getKey);
+  for (const [key, cents] of centsByGroup) {
+    groups.get(key)!.expense_amount += supplierCostCentsToNumber(cents, rows);
+  }
+}
+
+function supplierCostGroupKey(
+  row: FinanceOperatingReportSupplierCostRow,
+  groupBy: FinanceOperatingReportGroupBy,
+) {
+  if (groupBy === "day") return dateKey(row.occurred_at, 10);
+  if (groupBy === "month") return dateKey(row.occurred_at, 7);
+  if (groupBy === "project") {
+    return { key: row.project_id, label: row.project_name || "未关联项目" };
+  }
+  if (groupBy === "cost_category") {
+    return {
+      key: row.cost_category_id,
+      label: row.cost_category_name || "未归集",
+    };
+  }
+  return { key: "unclassified", label: "未分类" };
 }
 
 function applyReceivableToGroup(

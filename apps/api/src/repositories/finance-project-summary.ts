@@ -9,6 +9,13 @@ import {
   listFinanceProjectUnallocatedExpenseItems,
   type FinanceProjectUnallocatedExpenseItem,
 } from "@/repositories/finance-project-summary-unallocated-items";
+import {
+  listFinanceProjectLedgerTotals,
+  listFinanceProjectSupplierTotals,
+} from "@/repositories/finance-project-summary-supplier-totals";
+import {
+  listFinanceProjectLedgerTrend,
+} from "@/repositories/finance-project-summary-trend";
 import type { FinanceProjectSummaryListQuery } from "@/schema/finance";
 import { SupabaseDB } from "@/utils/supabase/index";
 
@@ -26,6 +33,13 @@ export type FinanceProjectLedgerTotals = {
   unallocated_expense_amount: number;
   ledger_entry_count: number;
   expense_by_category: Map<string, number>;
+};
+
+export type FinanceProjectSupplierTotals = {
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
+  supplier_cost_by_category: Map<string, number>;
 };
 
 export type { FinanceProjectUnallocatedExpenseItem };
@@ -76,13 +90,6 @@ type FinanceProjectBudgetRow = {
 type FinanceProjectRiskSearchRow = {
   project_id: string;
   total_count: number | string | null;
-};
-
-type FinanceProjectLedgerTrendRow = {
-  project_id: string | null;
-  direction: string | null;
-  amount: number | string | null;
-  occurred_at: string | null;
 };
 
 class FinanceProjectSummaryRepository {
@@ -285,56 +292,14 @@ class FinanceProjectSummaryRepository {
     tenantId: string;
     projectIds: string[];
   }): Promise<Map<string, FinanceProjectLedgerTotals>> {
-    if (input.projectIds.length === 0) {
-      return new Map();
-    }
+    return listFinanceProjectLedgerTotals(input);
+  }
 
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("finance_ledger_entries")
-      .select("project_id, direction, amount, cost_category_id")
-      .eq("tenant_id", input.tenantId)
-      .in("project_id", input.projectIds);
-
-    if (error) {
-      throw Errors.dbError("查询项目财务流水汇总失败", error);
-    }
-
-    const totals = new Map<string, FinanceProjectLedgerTotals>();
-    for (const row of (data || []) as Array<{
-      project_id: string | null;
-      direction: string | null;
-      amount: number | string | null;
-      cost_category_id: string | null;
-    }>) {
-      if (!row.project_id) continue;
-      const current = totals.get(row.project_id) || {
-        income_amount: 0,
-        expense_amount: 0,
-        unallocated_expense_amount: 0,
-        ledger_entry_count: 0,
-        expense_by_category: new Map<string, number>(),
-      };
-      const amount = normalizeMoney(row.amount);
-      if (row.direction === "in") {
-        current.income_amount += amount;
-      } else if (row.direction === "out") {
-        current.expense_amount += amount;
-        if (!row.cost_category_id) {
-          current.unallocated_expense_amount += amount;
-        }
-        if (row.cost_category_id) {
-          current.expense_by_category.set(
-            row.cost_category_id,
-            (current.expense_by_category.get(row.cost_category_id) ?? 0) +
-              amount,
-          );
-        }
-      }
-      current.ledger_entry_count += 1;
-      totals.set(row.project_id, current);
-    }
-
-    return totals;
+  async listSupplierTotals(input: {
+    tenantId: string;
+    projectIds: string[];
+  }): Promise<Map<string, FinanceProjectSupplierTotals>> {
+    return listFinanceProjectSupplierTotals(input);
   }
 
   async listUnallocatedExpenseItems(input: {
@@ -353,46 +318,9 @@ class FinanceProjectSummaryRepository {
     date: string;
     income_amount: number;
     expense_amount: number;
+    supplier_cash_paid_amount: number;
   }>> {
-    if (input.projectIds.length === 0) {
-      return [];
-    }
-
-    const { data, error } = await SupabaseDB.getAdminClient()
-      .from("finance_ledger_entries")
-      .select("project_id, direction, amount, occurred_at")
-      .eq("tenant_id", input.tenantId)
-      .in("project_id", input.projectIds)
-      .gte("occurred_at", `${input.dateFrom}T00:00:00`);
-
-    if (error) {
-      throw Errors.dbError("查询项目财务趋势失败", error);
-    }
-
-    const byDate = new Map<string, {
-      date: string;
-      income_amount: number;
-      expense_amount: number;
-    }>();
-    for (const row of ((data as FinanceProjectLedgerTrendRow[] | null) || [])) {
-      if (!row.project_id || !row.occurred_at) continue;
-      const date = row.occurred_at.slice(0, 10);
-      const current = byDate.get(date) || {
-        date,
-        income_amount: 0,
-        expense_amount: 0,
-      };
-      const amount = normalizeMoney(row.amount);
-      if (row.direction === "in") {
-        current.income_amount += amount;
-      } else if (row.direction === "out") {
-        current.expense_amount += amount;
-      }
-      byDate.set(date, current);
-    }
-
-    return Array.from(byDate.values())
-      .sort((left, right) => left.date.localeCompare(right.date));
+    return listFinanceProjectLedgerTrend(input);
   }
 
   async listReceivableTotals(input: {

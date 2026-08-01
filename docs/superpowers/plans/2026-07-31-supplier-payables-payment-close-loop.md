@@ -4,7 +4,7 @@
 
 **Goal:** 交付合格收货原子形成项目成本和供应商应付、付款申请审批、部分付款、多次付款、应付核销及现金台账的完整闭环。
 
-**Architecture:** 两组 additive Supabase migration 分别建立收货财务事实和付款申请/付款事实，所有关键状态变化由带租户范围、乐观锁和幂等快照的原子 RPC 完成。Fastify 保持 controller/service/repository 分层，Next.js Admin 在“采购供应”下增加应付和付款申请工作区；项目经营成本与供应商付款现金分开聚合，避免重复成本。
+**Architecture:** 三版 additive Supabase migration 分别建立收货财务事实、付款申请/付款事实和受限 batch 读取，所有关键状态变化由带租户范围、乐观锁和幂等快照的原子 RPC 完成。Fastify 保持 controller/service/repository 分层，Next.js Admin 在“采购供应”下增加应付和付款申请工作区；项目经营成本与供应商付款现金分开聚合，避免重复成本。
 
 **Tech Stack:** Bun、TypeScript、Fastify、Zod、Supabase/PostgreSQL、Next.js 15、React 19、shadcn/Radix、Playwright
 
@@ -38,7 +38,7 @@
 - Create: `apps/api/src/repositories/supplier-payment-records.ts`
 - Create: `apps/api/src/repositories/supplier-payment-records.test.ts`
 
-- [ ] **Step 1: 写共享领域 RED 测试**
+- [x] **Step 1: 写共享领域 RED 测试**
 
 ```ts
 import { describe, expect, test } from "bun:test";
@@ -89,7 +89,7 @@ describe("supplier payment domain", () => {
 });
 ```
 
-- [ ] **Step 2: 运行领域测试确认 RED**
+- [x] **Step 2: 运行领域测试确认 RED**
 
 Run:
 
@@ -100,7 +100,7 @@ bun test src/supplier-payment.test.ts
 
 Expected: FAIL，`supplier-payment` 模块不存在。
 
-- [ ] **Step 3: 实现共享领域并导出**
+- [x] **Step 3: 实现共享领域并导出**
 
 ```ts
 export const SUPPLIER_PAYMENT_REQUEST_STATUSES = [
@@ -152,7 +152,7 @@ export function canCloseSupplierPaymentRequest(
 export * from "./supplier-payment";
 ```
 
-- [ ] **Step 4: 写 HTTP schema RED 测试**
+- [x] **Step 4: 写 HTTP schema RED 测试**
 
 覆盖分页、筛选、草稿、审核、取消、关闭和付款：
 
@@ -202,7 +202,7 @@ expect(() => SupplierPaymentConfirmSchema.parse({
 - 付款凭证 1 至 9 张，分配 1 至 100 行。
 - 所有对象 `.strict()`，拒绝客户端 tenant、actor 和服务端金额字段。
 
-- [ ] **Step 5: 运行 schema 测试确认 RED**
+- [x] **Step 5: 运行 schema 测试确认 RED**
 
 Run:
 
@@ -213,7 +213,7 @@ bun test src/schema/supplier-payments.test.ts
 
 Expected: FAIL，schema 模块不存在。
 
-- [ ] **Step 6: 实现 schema**
+- [x] **Step 6: 实现 schema**
 
 导出：
 
@@ -238,7 +238,7 @@ const money = z.string().regex(
 ).refine((value) => Number(value) > 0, "金额必须大于 0");
 ```
 
-- [ ] **Step 7: 写数据库记录 RED 测试**
+- [x] **Step 7: 写数据库记录 RED 测试**
 
 严格解析：
 
@@ -260,7 +260,7 @@ expect(SupplierPaymentCommandEnvelopeSchema.parse(envelope))
 
 numeric 金额使用字符串；时间、nullable 审计字段、状态和命令 envelope 均严格。
 
-- [ ] **Step 8: 实现数据库记录 schema 并运行 GREEN**
+- [x] **Step 8: 实现数据库记录 schema 并运行 GREEN**
 
 Run:
 
@@ -274,7 +274,7 @@ bun test src/supplier-payment.test.ts
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交契约**
+- [x] **Step 9: 提交契约**
 
 ```bash
 git add packages/domain/src/supplier-payment.ts \
@@ -293,7 +293,7 @@ git commit -m "feat(supplier): 定义应付付款领域契约"
 - Create: `apps/api/src/services/supplier-cost-payable-migration-contract.test.ts`
 - Create: `supabase/migrations/20260731100000_create_supplier_cost_payable_facts.sql`
 
-- [ ] **Step 1: 写 migration 契约 RED 测试**
+- [x] **Step 1: 写 migration 契约 RED 测试**
 
 测试读取指定 migration 并断言：
 
@@ -323,7 +323,7 @@ expect(sql).toContain("'consumed'");
 - 两张事件表的列表和项目汇总索引。
 - rollback 注释明确保留经营事实。
 
-- [ ] **Step 2: 运行 migration 测试确认 RED**
+- [x] **Step 2: 运行 migration 测试确认 RED**
 
 Run:
 
@@ -334,7 +334,7 @@ bun test src/services/supplier-cost-payable-migration-contract.test.ts
 
 Expected: FAIL，migration 不存在。
 
-- [ ] **Step 3: 建立订单快照和不可变事实表**
+- [x] **Step 3: 建立订单快照和不可变事实表**
 
 核心约束使用：
 
@@ -356,7 +356,7 @@ CONSTRAINT supplier_payable_events_due_check
 `set_config('app.supplier_accounting_write', 'on', true)` 的受控命令上下文写入，
 service role 不能直接改事件。
 
-- [ ] **Step 4: 扩展预算承诺**
+- [x] **Step 4: 扩展预算承诺**
 
 加入：
 
@@ -377,7 +377,7 @@ CONSTRAINT project_cost_commitments_recognized_check
 - `released` 保留原释放操作人、时间和原因。
 - 活动预算承诺查询只计算未确认余额。
 
-- [ ] **Step 5: 实现订单快照与历史回填**
+- [x] **Step 5: 实现订单快照与历史回填**
 
 扩展采购申请转订单 RPC，使采购行插入包含：
 
@@ -405,7 +405,7 @@ public.list_supplier_accounting_legacy_gaps(
 
 函数分页且最大 100，返回未映射采购行和未财务化收货行。
 
-- [ ] **Step 6: 扩展收货 RPC**
+- [x] **Step 6: 扩展收货 RPC**
 
 在现有 `create_supplier_purchase_order_receipt` 的收货行循环内：
 
@@ -439,7 +439,7 @@ INSERT INTO public.supplier_payable_events (...);
 }
 ```
 
-- [ ] **Step 7: 加固幂等和租户边界**
+- [x] **Step 7: 加固幂等和租户边界**
 
 命令重放必须返回原结果且不重复事件；同幂等键不同请求继续抛
 `SUPPLIER_IDEMPOTENCY_CONFLICT`。所有来源复合外键带 `tenant_id`，所有 SECURITY
@@ -449,7 +449,7 @@ DEFINER 函数固定：
 SET search_path = pg_catalog, public
 ```
 
-- [ ] **Step 8: 运行 migration 契约 GREEN**
+- [x] **Step 8: 运行 migration 契约 GREEN**
 
 Run:
 
@@ -462,7 +462,7 @@ bun test src/services/supplier-cost-payable-migration-contract.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交成本和应付 migration**
+- [x] **Step 9: 提交成本和应付 migration**
 
 ```bash
 git add apps/api/src/services/supplier-cost-payable-migration-contract.test.ts \
@@ -477,7 +477,7 @@ git commit -m "feat(db): 建立供应商成本应付事实"
 - Create: `apps/api/src/services/supplier-payment-command-migration-contract.test.ts`
 - Create: `supabase/migrations/20260731110000_create_supplier_payment_requests.sql`
 
-- [ ] **Step 1: 写付款表 migration RED 测试**
+- [x] **Step 1: 写付款表 migration RED 测试**
 
 ```ts
 for (const table of [
@@ -512,7 +512,7 @@ for (const permission of [
 - `supplier_command_events.resource_type` 接受
   `supplier_payment_request` 和 `supplier_payment`。
 
-- [ ] **Step 2: 写命令 RED 测试**
+- [x] **Step 2: 写命令 RED 测试**
 
 固定以下 RPC：
 
@@ -543,7 +543,7 @@ for (const name of functions) {
 - 发票门禁先于任何付款插入。
 - 付款、分配、申请 paid amount、状态和现金台账同事务。
 
-- [ ] **Step 3: 运行付款 migration 测试确认 RED**
+- [x] **Step 3: 运行付款 migration 测试确认 RED**
 
 Run:
 
@@ -555,7 +555,7 @@ bun test src/services/supplier-payment-migration-contract.test.ts \
 
 Expected: FAIL，migration 不存在。
 
-- [ ] **Step 4: 建立表和不可变付款**
+- [x] **Step 4: 建立表和不可变付款**
 
 状态 check 固定：
 
@@ -587,7 +587,7 @@ CHECK (payment_method IN (
 为 `supplier_payments`、`supplier_payment_allocations` 安装
 `BEFORE UPDATE OR DELETE` 不可变保护。申请与申请分配只允许受控 RPC 变更。
 
-- [ ] **Step 5: 实现草稿、提交和审核**
+- [x] **Step 5: 实现草稿、提交和审核**
 
 `save_supplier_payment_request_draft`：
 
@@ -613,7 +613,7 @@ CHECK (payment_method IN (
   `SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN`。
 - 不创建 workflow 业务事实。
 
-- [ ] **Step 6: 实现取消、关闭和付款**
+- [x] **Step 6: 实现取消、关闭和付款**
 
 `cancel_supplier_payment_request` 允许：
 
@@ -648,7 +648,7 @@ draft | pending_approval | approved
 
 部分付款使用 `"status": "partially_paid"`。
 
-- [ ] **Step 7: 建立查询和索引**
+- [x] **Step 7: 建立查询和索引**
 
 创建受控分页函数：
 
@@ -663,7 +663,7 @@ get_supplier_purchase_order_financial_summary(...)
 所有列表要求 `p_page >= 1`、`1 <= p_page_size <= 100`，返回总数和稳定分页。
 索引逐项覆盖设计第 12 节。
 
-- [ ] **Step 8: 运行付款 migration GREEN**
+- [x] **Step 8: 运行付款 migration GREEN**
 
 Run:
 
@@ -675,7 +675,7 @@ bun test src/services/supplier-payment-migration-contract.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 9: 提交付款 migration**
+- [x] **Step 9: 提交付款 migration**
 
 ```bash
 git add apps/api/src/services/supplier-payment-migration-contract.test.ts \
@@ -703,7 +703,7 @@ git commit -m "feat(db): 建立供应商付款原子命令"
 - Create: `apps/api/src/controllers/supplier-payment-requests/routes.test.ts`
 - Modify: `apps/api/src/routes/index.ts`
 
-- [ ] **Step 1: 写 repository RED 测试**
+- [x] **Step 1: 写 repository RED 测试**
 
 用 typed fake Supabase client 断言：
 
@@ -730,7 +730,7 @@ expect(rpc).toHaveBeenCalledWith("list_supplier_payables", {
 付款 repository 覆盖 list/detail/payments 和六个命令的精确 RPC 参数。所有返回先经
 Task 1 的 Zod record schema 解析；数据库 error 经 `Errors.dbError()`。
 
-- [ ] **Step 2: 运行 repository RED**
+- [x] **Step 2: 运行 repository RED**
 
 Run:
 
@@ -742,7 +742,7 @@ bun test src/repositories/supplier-payables.test.ts \
 
 Expected: FAIL，repository 不存在。
 
-- [ ] **Step 3: 实现 repository**
+- [x] **Step 3: 实现 repository**
 
 导出端口：
 
@@ -768,7 +768,7 @@ export class SupplierPaymentRequestsRepository {
 }
 ```
 
-- [ ] **Step 4: 写 access 与 service RED 测试**
+- [x] **Step 4: 写 access 与 service RED 测试**
 
 覆盖：
 
@@ -796,7 +796,7 @@ service 测试继续覆盖：
 - 提交人自审映射为 `SUPPLIER_PAYMENT_REQUEST_SELF_REVIEW_FORBIDDEN`。
 - actor 和 tenant 只从 auth scope 注入。
 
-- [ ] **Step 5: 运行 service RED**
+- [x] **Step 5: 运行 service RED**
 
 Run:
 
@@ -809,7 +809,7 @@ bun test src/services/supplier-payment-access.test.ts \
 
 Expected: FAIL，service 不存在。
 
-- [ ] **Step 6: 实现 access 和 service**
+- [x] **Step 6: 实现 access 和 service**
 
 保持小接口：
 
@@ -833,7 +833,7 @@ Errors.business(409, message, errorCode)
 
 数据库异常继续由 repository 包装，不在 service 吞错。
 
-- [ ] **Step 7: 写 controller route RED 测试**
+- [x] **Step 7: 写 controller route RED 测试**
 
 断言以下路由只注册一次：
 
@@ -854,7 +854,7 @@ POST /supplier-payment-requests/:id/payments
 
 命令必须调用 `requireSupplierIdempotencyKey(request)`；controller 不访问 Supabase。
 
-- [ ] **Step 8: 实现 controller 并注册**
+- [x] **Step 8: 实现 controller 并注册**
 
 controller 统一使用：
 
@@ -869,7 +869,7 @@ return ResponseHandler.success(
 
 在 `apps/api/src/routes/index.ts` 导入并注册两个 controller。
 
-- [ ] **Step 9: 运行 API 层 GREEN**
+- [x] **Step 9: 运行 API 层 GREEN**
 
 Run:
 
@@ -887,7 +887,7 @@ bun run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 10: 提交 API**
+- [x] **Step 10: 提交 API**
 
 ```bash
 git add apps/api/src/repositories/supplier-payables* \
@@ -919,7 +919,7 @@ git commit -m "feat(api): 接入供应商应付付款接口"
 - Modify: `apps/api/src/services/finance-project-summary.ts`
 - Modify: `apps/api/src/services/finance-project-summary.test.ts`
 
-- [ ] **Step 1: 写采购单财务摘要 RED 测试**
+- [x] **Step 1: 写采购单财务摘要 RED 测试**
 
 期望 DTO：
 
@@ -943,13 +943,13 @@ GET /supplier-purchase-orders/:id/financial-summary
 
 必须复用采购单读取权限和项目读取权限。
 
-- [ ] **Step 2: 实现采购单摘要**
+- [x] **Step 2: 实现采购单摘要**
 
 repository 调 `get_supplier_purchase_order_financial_summary`，service 复用
 `supplierPurchaseOrderAccessService.requireRead()` 与 `assertProjectRead()`，
 controller 只校验 `id`。
 
-- [ ] **Step 3: 写预算承诺/实际成本 RED 测试**
+- [x] **Step 3: 写预算承诺/实际成本 RED 测试**
 
 构造：
 
@@ -972,7 +972,7 @@ expect(summary).toMatchObject({
 
 断言活动承诺为 60、实际供应商成本为 40，供应商付款现金不会使实际成本变成 60。
 
-- [ ] **Step 4: 实现项目预算聚合**
+- [x] **Step 4: 实现项目预算聚合**
 
 `project-cost-budgets` repository：
 
@@ -988,7 +988,7 @@ supplier_cost_amount: number;
 active_commitment_amount: number;
 ```
 
-- [ ] **Step 5: 写项目财务摘要 RED 测试**
+- [x] **Step 5: 写项目财务摘要 RED 测试**
 
 项目摘要新增：
 
@@ -1001,12 +1001,12 @@ supplier_cash_paid_amount: number;
 断言利润计算使用 `supplier_cost_amount`，但不再次使用
 `supplier_cash_paid_amount`。
 
-- [ ] **Step 6: 实现项目财务摘要**
+- [x] **Step 6: 实现项目财务摘要**
 
 repository 使用三个受边界查询或一个受控汇总 RPC，不逐项目 N+1。service 序列化
 新增字段并保持旧字段兼容。
 
-- [ ] **Step 7: 运行财务回归**
+- [x] **Step 7: 运行财务回归**
 
 Run:
 
@@ -1023,7 +1023,7 @@ bun run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交财务聚合**
+- [x] **Step 8: 提交财务聚合**
 
 ```bash
 git add apps/api/src/schema/supplier-purchase-orders.ts \
@@ -1048,7 +1048,7 @@ git commit -m "feat(finance): 接入供应商采购成本摘要"
 - Create: `apps/api/src/scripts/supplier-payment-explain.test.ts`
 - Modify: `apps/api/package.json`
 
-- [ ] **Step 1: 写 smoke summary RED 测试**
+- [x] **Step 1: 写 smoke summary RED 测试**
 
 固定严格结果：
 
@@ -1075,7 +1075,7 @@ git commit -m "feat(finance): 接入供应商采购成本摘要"
 
 helper 必须拒绝缺键、多键或任一非 `true`。
 
-- [ ] **Step 2: 实现事务回滚 fixture**
+- [x] **Step 2: 实现事务回滚 fixture**
 
 复用 `supplier-purchase-fulfillment-smoke` 的：
 
@@ -1087,7 +1087,7 @@ closeDatabasePreservingPrimaryFailure();
 fixture 使用稳定 UUID，建立两个租户、项目、成本分类、供应商、合作关系、合同、
 SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个强制回滚事务。
 
-- [ ] **Step 3: 实现 smoke 命令与断言**
+- [x] **Step 3: 实现 smoke 命令与断言**
 
 场景顺序：
 
@@ -1104,7 +1104,7 @@ SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个�
 11. 校验其他租户不可见。
 12. 事务回滚后查询 fixture 残留为 0。
 
-- [ ] **Step 4: 写 EXPLAIN RED 测试**
+- [x] **Step 4: 写 EXPLAIN RED 测试**
 
 脚本必须对以下查询运行 `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`：
 
@@ -1115,7 +1115,7 @@ SKU、价格、采购申请、预算承诺和订单。全部 smoke 写入一个�
 断言 populated fixture 下出现设计索引名；若数据量不足以使 planner 选索引，先在
 回滚事务中批量生成至少 5000 条无业务外溢的 fixture。
 
-- [ ] **Step 5: 本地 helper GREEN**
+- [x] **Step 5: 本地 helper GREEN**
 
 Run:
 
@@ -1127,7 +1127,7 @@ bun test src/scripts/supplier-payment-smoke.test.ts \
 
 Expected: PASS。
 
-- [ ] **Step 6: 注册脚本并提交**
+- [x] **Step 6: 注册脚本并提交**
 
 `apps/api/package.json` 增加：
 
@@ -1157,7 +1157,7 @@ git commit -m "test(supplier): 建立应付付款数据库烟测"
 - Create: `apps/admin/components/supplier-payment-requests/payment-request-command-refresh.ts`
 - Create: `apps/admin/components/supplier-payment-requests/payment-request-command-refresh.test.ts`
 
-- [ ] **Step 1: 写 API RED 测试**
+- [x] **Step 1: 写 API RED 测试**
 
 断言：
 
@@ -1176,7 +1176,7 @@ expect(headers.get("Idempotency-Key")).toBe("request-submit-key");
 
 付款 payload 不包含 tenant、actor、应付余额、项目成本或服务端合计金额。
 
-- [ ] **Step 2: 写规则 RED 测试**
+- [x] **Step 2: 写规则 RED 测试**
 
 ```ts
 expect(paymentRequestActions(draft, permissions))
@@ -1195,7 +1195,7 @@ expect(paymentRequestActions(invoiceBlocked, permissions))
 - 只能合并同一项目、供应商和币种。
 - 逾期由 `due_at < now && open_amount > 0` 派生。
 
-- [ ] **Step 3: 实现类型、API 和规则**
+- [x] **Step 3: 实现类型、API 和规则**
 
 类型与 Task 1 DTO 一致，numeric 保持字符串。API client 复用现有
 `apiRequest`/认证封装，不直接使用裸 `fetch`。
@@ -1212,7 +1212,7 @@ command refresh 返回：
 }
 ```
 
-- [ ] **Step 4: 运行 Admin 契约 GREEN**
+- [x] **Step 4: 运行 Admin 契约 GREEN**
 
 Run:
 
@@ -1225,7 +1225,7 @@ pnpm run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交 Admin 契约**
+- [x] **Step 5: 提交 Admin 契约**
 
 ```bash
 git add apps/admin/components/supplier-payables \
@@ -1246,7 +1246,7 @@ git commit -m "feat(admin): 定义应付付款页面契约"
 - Create: `apps/admin/components/supplier-payables/payable-page.test.ts`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: 写页面 RED 测试**
+- [x] **Step 1: 写页面 RED 测试**
 
 检查源码和纯规则：
 
@@ -1268,7 +1268,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 - 跨范围多选自动清除或禁用，不提交非法组合。
 - 列表没有无限全量请求。
 
-- [ ] **Step 2: 实现页面骨架和筛选**
+- [x] **Step 2: 实现页面骨架和筛选**
 
 使用现有 Admin 组件：
 
@@ -1291,7 +1291,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 已付 | 可申请 | 状态 | 操作
 ```
 
-- [ ] **Step 3: 实现选择和创建申请入口**
+- [x] **Step 3: 实现选择和创建申请入口**
 
 多选时第一条锁定 `project_id + tenant_supplier_id + currency`，不匹配行禁用。创建
 按钮深链到：
@@ -1302,7 +1302,7 @@ expect(menuSource).toContain('href: "/supplier-payables"');
 
 URL 最多承载 100 个 UUID，不使用 localStorage 保存金额。
 
-- [ ] **Step 4: 注册菜单和权限**
+- [x] **Step 4: 注册菜单和权限**
 
 在“采购供应”组加入：
 
@@ -1314,7 +1314,7 @@ URL 最多承载 100 个 UUID，不使用 localStorage 保存金额。
 }
 ```
 
-- [ ] **Step 5: 运行页面 GREEN**
+- [x] **Step 5: 运行页面 GREEN**
 
 Run:
 
@@ -1326,7 +1326,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交应付页面**
+- [x] **Step 6: 提交应付页面**
 
 ```bash
 git add 'apps/admin/app/(console)/supplier-payables' \
@@ -1351,7 +1351,7 @@ git commit -m "feat(admin): 实现供应商应付工作区"
 - Create: `apps/admin/components/supplier-payment-requests/payment-dialog.test.ts`
 - Modify: `apps/admin/components/layout/menu-config.ts`
 
-- [ ] **Step 1: 写付款申请页面 RED 测试**
+- [x] **Step 1: 写付款申请页面 RED 测试**
 
 断言权限：
 
@@ -1372,7 +1372,7 @@ expect(pageSource).toContain(
 
 继续断言列表分页、深链 `payableIds` 校验、状态动作、命令后刷新和并发冲突刷新。
 
-- [ ] **Step 2: 实现列表和草稿编辑器**
+- [x] **Step 2: 实现列表和草稿编辑器**
 
 编辑器字段：
 
@@ -1388,12 +1388,12 @@ expect(pageSource).toContain(
 从深链读取应付 ID 后重新请求服务端事实；客户端不信任 URL 金额。保存草稿使用
 稳定 client UUID 和 `expected_version`。
 
-- [ ] **Step 3: 实现提交、审批、取消和关闭**
+- [x] **Step 3: 实现提交、审批、取消和关闭**
 
 所有对话框显示申请号、项目、供应商、金额和状态版本。驳回、取消、关闭要求原因。
 命令 pending 时禁用同一资源全部动作。
 
-- [ ] **Step 4: 写付款对话框 RED 测试**
+- [x] **Step 4: 写付款对话框 RED 测试**
 
 覆盖：
 
@@ -1426,12 +1426,12 @@ expect(buildPaymentPayload({
 - `other` 要求备注。
 - 发票阻断显示且不提供绕过参数。
 
-- [ ] **Step 5: 实现付款与凭证**
+- [x] **Step 5: 实现付款与凭证**
 
 复用 `apps/admin/components/expenses/expense-mutation-shared.ts` 的上传限制和既有
 上传 client，不复制存储实现。付款命令成功后显示付款号并刷新全部相关资源。
 
-- [ ] **Step 6: 注册菜单**
+- [x] **Step 6: 注册菜单**
 
 ```ts
 {
@@ -1441,7 +1441,7 @@ expect(buildPaymentPayload({
 }
 ```
 
-- [ ] **Step 7: 运行付款申请 GREEN**
+- [x] **Step 7: 运行付款申请 GREEN**
 
 Run:
 
@@ -1454,7 +1454,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 8: 提交付款申请页面**
+- [x] **Step 8: 提交付款申请页面**
 
 ```bash
 git add 'apps/admin/app/(console)/supplier-payment-requests' \
@@ -1476,7 +1476,7 @@ git commit -m "feat(admin): 实现供应商付款申请工作区"
 - Modify: `apps/admin/components/projects/project-finance-operating-summary-widgets.tsx`
 - Create: `apps/admin/components/finance/finance-supplier-cost-summary.test.ts`
 
-- [ ] **Step 1: 写采购单摘要 RED 测试**
+- [x] **Step 1: 写采购单摘要 RED 测试**
 
 断言采购单详情加载：
 
@@ -1492,7 +1492,7 @@ GET /supplier-purchase-orders/:id/financial-summary
 
 金额权限不足时不请求财务摘要、不渲染金额占位。
 
-- [ ] **Step 2: 实现采购单摘要**
+- [x] **Step 2: 实现采购单摘要**
 
 组件 props：
 
@@ -1506,7 +1506,7 @@ type PurchaseOrderFinancialSummaryProps = {
 
 使用现有 Card、Skeleton、Alert 和金额格式工具。
 
-- [ ] **Step 3: 写项目摘要 RED 测试**
+- [x] **Step 3: 写项目摘要 RED 测试**
 
 ```ts
 expect(renderedText).toContain("已发生供应商成本");
@@ -1519,12 +1519,12 @@ expect(calculateDisplayedProjectCost(summary)).toBe(
 
 断言 `supplier_cash_paid_amount` 不加入项目成本。
 
-- [ ] **Step 4: 实现项目财务摘要**
+- [x] **Step 4: 实现项目财务摘要**
 
 更新类型、表格和项目 widget，保持原费用、预算、利润字段不变。新增字段为空时按 0
 展示，但 API schema 仍要求服务端返回完整字段，避免静默兼容错误。
 
-- [ ] **Step 5: 运行摘要 GREEN**
+- [x] **Step 5: 运行摘要 GREEN**
 
 Run:
 
@@ -1537,7 +1537,7 @@ pnpm run check
 
 Expected: PASS。
 
-- [ ] **Step 6: 提交摘要**
+- [x] **Step 6: 提交摘要**
 
 ```bash
 git add apps/admin/components/supplier-purchase-orders \
@@ -1560,7 +1560,7 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 - Modify: `apps/api/src/types/database.ts`
 - Modify: `docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md`
 
-- [ ] **Step 1: 写 Playwright RED 工作流**
+- [x] **Step 1: 写 Playwright RED 工作流**
 
 一个确定性场景完成：
 
@@ -1574,12 +1574,12 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 8. 打开要求发票的申请并看到不可绕过阻断。
 9. mutation journal 证明客户端没有提交 tenant、actor、成本或可用余额。
 
-- [ ] **Step 2: 实现独立 Mock Backend**
+- [x] **Step 2: 实现独立 Mock Backend**
 
 使用端口 `3995`，只实现新 E2E 和页面 session 所需路由。所有列表严格分页；状态机、
 余额和 mutation journal 固定可预测。不要依赖真实数据库或修改现有采购 E2E fixture。
 
-- [ ] **Step 3: 注册 Playwright 和 package script**
+- [x] **Step 3: 注册 Playwright 和 package script**
 
 `apps/admin/package.json` 增加：
 
@@ -1587,7 +1587,7 @@ git commit -m "feat(admin): 展示采购财务闭环摘要"
 "test:e2e:supplier-payment": "env -u NO_COLOR playwright test --config=playwright.supplier-payment.config.ts"
 ```
 
-- [ ] **Step 4: 运行 E2E GREEN**
+- [x] **Step 4: 运行 E2E GREEN**
 
 Run:
 
@@ -1598,7 +1598,7 @@ bunx playwright test --config=playwright.supplier-payment.config.ts
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交 E2E**
+- [x] **Step 5: 提交 E2E**
 
 ```bash
 git add apps/admin/e2e/supplier-payment-* \
@@ -1607,7 +1607,7 @@ git add apps/admin/e2e/supplier-payment-* \
 git commit -m "test(admin): 覆盖供应商付款闭环"
 ```
 
-- [ ] **Step 6: migration 应用前检查**
+- [x] **Step 6: migration 应用前检查**
 
 从仓库根目录加载用户指定 env，但禁止输出其内容：
 
@@ -1615,24 +1615,25 @@ git commit -m "test(admin): 覆盖供应商付款闭环"
 supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"
 ```
 
-Expected: 仅 `20260731100000`、`20260731110000` 为 Local pending；其他
+Expected: 仅 `20260731100000`、`20260731110000`、`20260731120000` 为 Local pending；其他
 Local/Remote 对齐。
 
-先在事务回滚或 shadow 环境执行两版 migration 和 Task 6 smoke。任何失败先修
+先在事务回滚或 shadow 环境执行三版 migration 和 Task 6 smoke。任何失败先修
 migration，禁止手工远端 DDL/DML。
 
-- [ ] **Step 7: 正式应用 migration**
+- [x] **Step 7: 正式应用 migration**
 
-使用仓库 `Migrate Dev Database` 工作流：
+计划优先使用仓库 `Migrate Dev Database` 工作流；本次实际使用用户指定 `.env` 和
+Supabase CLI 完成等价 plan/apply（未触发 GitHub workflow）：
 
-1. `mode=plan`，确认仅两版 pending 且顺序正确。
-2. `mode=apply`，确认 applied versions 为
-   `20260731100000`、`20260731110000`。
+1. `supabase db push --dry-run`，确认仅三版 pending 且顺序正确。
+2. `supabase db push --yes`，应用 `20260731100000`、`20260731110000`、
+   `20260731120000`。
 3. 再运行 `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"`。
 
 Expected: Local/Remote 全量对齐。
 
-- [ ] **Step 8: 生成并核对数据库类型**
+- [x] **Step 8: 生成并核对数据库类型**
 
 优先运行：
 
@@ -1655,7 +1656,7 @@ bun run typecheck
 
 Expected: PASS，类型差异只包含本阶段新增列、表和 RPC。
 
-- [ ] **Step 9: 运行真实数据库 smoke 与执行计划**
+- [x] **Step 9: 运行真实数据库 smoke、记录安全例外与执行计划**
 
 Run:
 
@@ -1671,7 +1672,19 @@ Expected:
 - smoke 后 fixture 残留为 0。
 - 三类关键查询使用设计索引。
 
-- [ ] **Step 10: 运行全量供应商回归**
+发布环境例外：完整 16 项 smoke 的 committed-concurrency 探针只能在显式标记的
+loopback disposable 数据库和显式 payable fixture 上运行。本次用户提供的是非
+loopback Dev 数据库，脚本按设计以
+`SUPPLIER_PAYMENT_SMOKE_PREREQUISITE_CONCURRENCY_ALLOW_COMMITTED_CONCURRENCY_REQUIRED`
+拒绝，未绕过安全门。真实 rollback-only EXPLAIN、fresh-connection 残留检查和
+全部静态/确定性并发契约均通过；完整 16 项需在可抛弃本地数据库具备时补跑。
+这不记为真实业务 smoke PASS：未验证风险是数据库真实并发锁竞争、16 项业务命令
+及清理在同一可抛弃实例上的联动。责任人为后端/数据库发布负责人；补测条件是本地
+Supabase/Docker 可用、数据库地址为 loopback、显式设置 disposable 标志并提供
+专用 payable fixture ID，完成标准是 16 项全 `true` 且 fresh connection 残留为 0。
+该项是进入生产环境前的发布门禁，不阻止本次 Dev migration 收口和代码合并。
+
+- [x] **Step 10: 运行全量供应商回归**
 
 Run:
 
@@ -1681,9 +1694,12 @@ bun run api:build
 bun run admin:check
 bun run admin:build
 cd apps/api
-bun test $(rg --files src -g '*supplier*.test.ts' | sort)
+bun test $(rg --files src -g '*supplier*.test.ts' | sort) \
+  src/controllers/supplier-payment-requests/routes.test.ts \
+  src/controllers/supplier-payables/routes.test.ts
 cd ../admin
-bun test components/supplier-payables \
+bun test components/supplier-products/supplier-command-attempt.test.ts \
+  components/supplier-payables \
   components/supplier-payment-requests \
   components/supplier-purchase-orders \
   components/finance/finance-supplier-cost-summary.test.ts
@@ -1694,7 +1710,7 @@ bunx playwright test --config=playwright.supplier-purchase-order.config.ts
 
 Expected: 0 failure。
 
-- [ ] **Step 11: 完成需求逐条审计**
+- [x] **Step 11: 完成需求逐条审计**
 
 逐条提供当前事实证据：
 
@@ -1710,9 +1726,10 @@ Expected: 0 failure。
 - 所有新增列表接口均分页，关键计划使用索引。
 - 旧采购申请、采购单、履约和费用链路回归通过。
 - migration Local/Remote 对齐。
-- Orange 与任务启动基线一致，Agent 零写入。
+- Orange 启动快照未持久化，无法严格证明相对启动基线一致；当前只读快照、Agent
+  零写命令和 gooes diff 中无 Orange 文件作为可审计边界。
 
-- [ ] **Step 12: 更新计划证据并提交**
+- [x] **Step 12: 更新计划证据并提交**
 
 把每个 Task 勾选为 `[x]`，在本文末尾记录：
 
@@ -1723,9 +1740,10 @@ Expected: 0 failure。
 - 测试、类型检查和构建计数。
 - Orange 只读基线核查。
 
+数据库类型已在独立提交 `4ab728fb` 中提交，本步骤只提交计划证据：
+
 ```bash
-git add apps/api/src/types/database.ts \
-  docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md
+git add docs/superpowers/plans/2026-07-31-supplier-payables-payment-close-loop.md
 git commit -m "docs(supplier): 完成应付付款阶段收口"
 ```
 
@@ -1736,5 +1754,98 @@ git diff --cached --check
 git diff --cached --name-only
 ```
 
-Expected: 只包含数据库类型和本计划，不包含
+Expected: 只包含本计划，不包含
 `packages/domain/gooes-domain-1.13.0.tgz` 或 Orange 文件。
+
+---
+
+## 2026-07-31 完成证据
+
+### 提交
+
+- Task 1–6：`74522aae`、`3f02e864`、`68a0f8d5`、`d27af919`、
+  `aee4a95f`、`fc6b6d3b`。
+- Task 7–10：`dde6247b`、`27015d86`、`38de2836`、`1a8dc2f1`。
+- Task 11：`2c491798`（确定性 E2E）、`4ab728fb`（数据库类型）、
+  `cf44ca50`（真实回滚 smoke fixture 与 EXPLAIN）、`747163a9`（路由回归计数）、
+  `59a16e77`（合入当前 main 并保留已发布 migration 语义）、`0549c652`
+  （付款 UUID 幂等键、凭证归属校验与搜索契约对齐）。
+
+### Migration 发布
+
+- 应用前 `supabase migration list` 仅三版 pending：
+  `20260731100000`、`20260731110000`、`20260731120000`。
+- migration 契约：36 tests / 810 assertions；`db push --dry-run` 仅列出上述三版。
+- 回滚 rehearsal 在内存中精确去除 `20260731100000`、`20260731110000` 已有的
+  最外层 `BEGIN`/`COMMIT`，将无外层事务的 `20260731120000` 原样纳入 Bun.SQL
+  `sql.begin`，在同一真实事务中完整执行后抛出 sentinel 触发自动回滚；回滚后
+  migration 状态仍 pending，目标对象计数为 0。
+- 未触发 GitHub `Migrate Dev Database` workflow；使用用户指定 `.env` 执行等价
+  CLI plan/apply。`supabase db push --yes` 正式应用三版成功；应用后目标对象计数
+  为 4，最终 Local/Remote 全量对齐。回滚策略为 forward-only 补偿 migration，
+  不手工修库。
+
+### 数据库类型
+
+- 当前 Supabase CLI 需要 Docker/pg-meta，环境无 Docker daemon 且无可用
+  project ref，因此未接受不完整或破坏性的全量生成结果。
+- 采用 Dev catalog 范围化 fallback：11 张相关表 Row 列、6 张新表 Insert
+  optionality、14 个 RPC Args/DEFAULT optionality 均为 0 差异；未删除既有 key。
+- 类型契约 6 tests / 32 assertions，API typecheck/build/file-size 全绿。
+  pg-meta 或 project access 恢复后仍应补一次官方全量 regenerate + diff。
+
+### 真实数据库 smoke 与执行计划
+
+- 完整 smoke 在非 loopback、非 disposable Dev 数据库按设计被 committed-
+  concurrency 安全门拒绝；未设置绕过变量，也没有伪装数据库地址。本项不记为
+  真实业务 smoke PASS，遗留风险是 live 数据库并发锁、16 项命令与清理联动尚未在
+  disposable 实例验证。
+- rollback-only 真实 EXPLAIN exit 0，fresh connection 残留为 0，命中：
+  `supplier_payable_events_tenant_status_query_idx`、
+  `supplier_payment_requests_tenant_status_updated_idx`、
+  `project_cost_events_tenant_project_category_occurred_idx`、
+  `project_cost_commitments_active_remaining_idx`、
+  `supplier_payable_events_tenant_project_due_idx`、
+  `finance_ledger_entries_tenant_type_occurred_idx`；
+  `transaction_rolled_back=true`。
+- smoke fixture 根因修复回归 26 tests / 94 assertions；没有放宽并发安全门。
+- 后端/数据库发布负责人须在生产发布前用 loopback disposable Supabase 和显式
+  payable fixture 补跑；只有 16 项全 `true` 且 fresh residual=0 才能关闭风险。
+
+### 全量回归
+
+- `api:typecheck`、`api:build`、`admin:check`、`admin:build` 全绿；Admin 文件检查
+  1067 个 TS/TSX 文件均不超过 500 行。
+- API 全部 supplier 测试及两组非 supplier 文件名的付款路由测试：
+  693 tests / 5565 assertions，0 failure。
+- Admin 指定组件及通用命令 helper：130 tests / 650 assertions，0 failure。
+- Playwright：付款闭环 1 passed；采购申请闭环 1 passed；采购单闭环 2 passed。
+
+### 需求审计
+
+- 合格收货、成本、应付与承诺消费由同一收货 RPC 事务生成；分批收货按冻结订单
+  金额累计，拒收行不生成成本或应付。
+- 申请占用使用锁、乐观版本和幂等快照；驳回、取消、关闭释放余额；部分付款、
+  多次付款和重放通过状态机及唯一幂等事实约束。
+- 发票门禁在付款 RPC 写入前校验，失败无部分写入；每笔付款只生成一条供应商现金
+  台账。项目成本只聚合费用与 supplier cost，不把 supplier cash 重复计成本。
+- Admin 付款命令使用 controller 要求的纯 UUID 幂等键；E2E mock 会拒绝非 UUID，
+  防止 scoped key 在 mock 中误通过。付款前以一次受限、租户隔离查询校验全部凭证
+  文件属于当前员工、`expense_request` 场景且仍有效，任一不匹配时不调用付款 RPC。
+- 付款申请列表的 UI 文案、mock 和后端查询统一为“申请号或供应商”，不再错误提示
+  可按申请原因搜索。
+- 新增列表和辅助查询均有 `page=1&pageSize=20`、最大 100 的边界或受限 batch；
+  关键读取已由真实 EXPLAIN 证明命中索引。
+- 旧采购申请、采购单、履约和费用聚合包含在 693 项 API、130 项 Admin 与三条
+  Playwright 回归中。
+- Orange 仓库只做 `git status`/`rev-parse` 只读核查，Agent 未执行修改、格式化、
+  暂存或提交命令。当前 HEAD 为 `96443db9f3b36402229fe24c91c2b63746019156`；
+  其既有 dirty 状态不纳入 gooes 提交。由于任务启动快照未持久化，无法独立证明
+  相对启动基线逐文件一致；这是证据留存缺口，不把当前 dirty 状态归因于本任务。
+
+### 既有数据库安全提示（不在本阶段自动修复）
+
+`public.customer_wechat_pay_smoke_notifications` 与
+`public.customer_wechat_pay_smoke_orders` 当前 RLS disabled。直接启用 RLS 而没有
+配套 policy 会阻断现有访问，因此本阶段没有擅自修改；应另开安全任务，先梳理访问
+角色和 policy，再通过独立 migration 启用并验证。

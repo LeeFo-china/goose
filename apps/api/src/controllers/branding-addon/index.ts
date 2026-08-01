@@ -7,17 +7,30 @@ import {
   BrandingAddonOrderListQuerySchema,
   BrandingAddonOrderParamsSchema,
   BrandingAddonProductPatchSchema,
+  BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualProductValidationSchema,
+  BrandingVirtualCreateOrderSchema,
+  BrandingVirtualRefundCreateSchema,
+  BrandingVirtualRefundListQuerySchema,
+  BrandingVirtualRefundParamsSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "@/schema/branding-addon";
 import {
   platformBrandingAddonProductService,
 } from "@/services/platform-branding-addon-product";
 import {
+  brandingVirtualProductService,
+} from "@/services/branding-virtual-products";
+import {
   platformBrandingAddonOrdersService,
 } from "@/services/platform-branding-addon-orders";
 import {
   tenantBrandingAddonOrderService,
 } from "@/services/tenant-branding-addon-orders";
+import {
+  tenantBrandingVirtualOrderService,
+} from "@/services/tenant-branding-virtual-orders";
+import { brandingVirtualRefundService } from "@/services/branding-virtual-refunds";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -69,6 +82,23 @@ class PlatformBrandingAddonController extends PlatformBaseController {
     );
   }
 
+  @Post("/platform/branding/entitlement-product/virtual-products/:environment/validate")
+  async validateVirtualProduct(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const { environment } = parse(
+      BrandingVirtualProductEnvironmentParamsSchema,
+      request.params,
+    );
+    const input = parse(BrandingVirtualProductValidationSchema, request.body);
+    return ResponseHandler.success(
+      await platformBrandingAddonProductService.validateVirtualProduct(
+        authContext,
+        { environment, version: input.version },
+      ),
+    );
+  }
+
   @Get("/platform/branding/entitlement-orders")
   async listOrders(request: FastifyRequest) {
     const authContext = await this.getRequiredPlatformAdminContext(request);
@@ -90,6 +120,40 @@ class PlatformBrandingAddonController extends PlatformBaseController {
       await platformBrandingAddonOrdersService.get(authContext, id),
     );
   }
+
+  @Post("/platform/branding/virtual-payment/refunds")
+  async createVirtualRefund(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const input = parse(BrandingVirtualRefundCreateSchema, request.body);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.create(authContext, input),
+    );
+  }
+
+  @Get("/platform/branding/virtual-payment/refunds")
+  async listVirtualRefunds(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const query = parse(BrandingVirtualRefundListQuerySchema, request.query);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.list(authContext, {
+        page: query.page,
+        pageSize: query.pageSize,
+        ...(query.status ? { status: query.status } : {}),
+        ...(query.tenant_id ? { tenantId: query.tenant_id } : {}),
+      }),
+    );
+  }
+
+  @Get("/platform/branding/virtual-payment/refunds/:id")
+  async getVirtualRefund(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const { id } = parse(BrandingVirtualRefundParamsSchema, request.params);
+    parse(BrandingAddonEmptySchema, request.query);
+    return ResponseHandler.success(
+      await brandingVirtualRefundService.get(authContext, id),
+    );
+  }
 }
 
 class TenantBrandingAddonController extends TenantBaseController {
@@ -102,7 +166,7 @@ class TenantBrandingAddonController extends TenantBaseController {
     const authContext = await this.getRequiredTenantContext(request);
     parse(BrandingAddonEmptySchema, request.query);
     return ResponseHandler.success(
-      await tenantBrandingAddonOrderService.getProduct(authContext),
+      await brandingVirtualProductService.getTenantProduct(authContext),
     );
   }
 
@@ -130,6 +194,37 @@ class TenantBrandingAddonController extends TenantBaseController {
     const payerOpenid = requireWechatPayerOpenid(request);
     return ResponseHandler.success(
       await tenantBrandingAddonOrderService.createPaymentRequest(
+        authContext,
+        id,
+        payerOpenid,
+      ),
+    );
+  }
+
+  @Post("/tenant/branding/virtual-payment/orders")
+  async createVirtualOrder(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    parse(BrandingAddonEmptySchema, request.query);
+    const input = parse(BrandingVirtualCreateOrderSchema, request.body);
+    const payerOpenid = requireWechatPayerOpenid(request);
+    return ResponseHandler.success(
+      await tenantBrandingVirtualOrderService.createOrder(
+        authContext,
+        input,
+        payerOpenid,
+      ),
+    );
+  }
+
+  @Post("/tenant/branding/virtual-payment/orders/:id/payment-request")
+  async createVirtualPaymentRequest(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const { id } = parse(BrandingAddonOrderParamsSchema, request.params);
+    parse(BrandingAddonEmptySchema, request.query);
+    parse(BrandingAddonEmptySchema, request.body);
+    const payerOpenid = requireWechatPayerOpenid(request);
+    return ResponseHandler.success(
+      await tenantBrandingVirtualOrderService.createPaymentRequest(
         authContext,
         id,
         payerOpenid,

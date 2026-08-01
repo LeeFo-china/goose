@@ -1,5 +1,6 @@
 export * from './ai';
 export * from './auth';
+export * from './branding-virtual-payment';
 export * from './customer';
 export * from './customer-service';
 export * from './department';
@@ -18,6 +19,7 @@ export * from './project';
 export * from './referral';
 export * from './site-content';
 export * from './supplier';
+export * from './supplier-payment';
 export * from './supplier-product';
 export * from './tenant';
 export * from './location';

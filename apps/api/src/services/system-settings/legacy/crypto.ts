@@ -14,11 +14,18 @@ import {
   TENANT_SMS_ALIYUN_MODE,
   TENANT_SMS_TENCENT_MODE,
   TENANT_SMS_PLATFORM_MODE,
+  WECHAT_VIRTUAL_PAYMENT_SECRET_SETTING_KEYS,
 } from './definitions';
+import {
+  MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
+} from '@/services/branding-virtual-payment-contracts';
 import { isTencentOcrEncryptionPublicKeyPem } from '@/services/ocr/tencent-encryption-key';
+import {
+  isValidWechatMiniProgramOriginalId,
+  isValidWechatVirtualPaymentMessageToken,
+} from '@/services/wechat-virtual-payment-message-config';
 
 const TENCENT_OCR_ENCRYPTION_PUBLIC_KEY = 'TENCENT_OCR_ENCRYPTION_PUBLIC_KEY_PEM';
-
 export function normalizeStoredValue(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -120,6 +127,35 @@ export function validateSettingValue(record: SystemSettingRecord, value: string 
   if (!value) return null;
 
   if (
+    record.key === 'WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN' &&
+    !isValidWechatVirtualPaymentMessageToken(value)
+  ) {
+    throw Errors.business(
+      400,
+      '微信虚拟支付消息令牌格式不正确',
+      'WECHAT_VIRTUAL_MESSAGE_TOKEN_INVALID',
+    );
+  }
+
+  if (
+    record.key === 'WECHAT_MINIPROGRAM_ORIGINAL_ID' &&
+    !isValidWechatMiniProgramOriginalId(value)
+  ) {
+    throw Errors.business(
+      400,
+      '微信小程序原始 ID 格式不正确',
+      'WECHAT_VIRTUAL_MESSAGE_ORIGINAL_ID_INVALID',
+    );
+  }
+
+  if (
+    WECHAT_VIRTUAL_PAYMENT_SECRET_SETTING_KEYS.has(record.key) &&
+    !isWechatVirtualPaymentSecretBundle(value)
+  ) {
+    throw Errors.badRequest('微信虚拟支付密钥包格式不正确');
+  }
+
+  if (
     record.key === TENCENT_OCR_ENCRYPTION_PUBLIC_KEY &&
     !isTencentOcrEncryptionPublicKeyPem(value)
   ) {
@@ -149,6 +185,31 @@ export function validateSettingValue(record: SystemSettingRecord, value: string 
   }
 
   return value;
+}
+
+function isWechatVirtualPaymentSecretBundle(value: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false;
+    }
+    const keys = Object.keys(parsed);
+    if (
+      keys.length !== 2 ||
+      !keys.includes('appKey') ||
+      !keys.includes('revision')
+    ) {
+      return false;
+    }
+    const bundle = parsed as { appKey?: unknown; revision?: unknown };
+    return typeof bundle.appKey === 'string' &&
+      Boolean(bundle.appKey.trim()) &&
+      bundle.appKey.length <= MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH &&
+      Number.isSafeInteger(bundle.revision) &&
+      Number(bundle.revision) > 0;
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeTenantSmsChannelMode(value: string | null | undefined) {

@@ -34,6 +34,9 @@ import {
   toTenantBrandingAddonProductView,
 } from "@/services/branding-addon-order-views";
 import {
+  brandingEntitlementOrderQueryService,
+} from "@/services/branding-entitlement-order-query";
+import {
   type BrandingAddonGatewayPort,
   type BrandingAddonPaymentConfigRepositoryPort,
   type BrandingAddonSecretBundleServicePort,
@@ -44,7 +47,6 @@ import { wechatPayGateway } from "@/services/wechat-pay-gateway";
 import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundles";
 
 const PURCHASE_PERMISSION = "brand.entitlement.purchase";
-const READ_PERMISSION = "brand.entitlement_order.read";
 const TENANT_ADMIN_ROLE = "system_admin";
 
 type ProductRepositoryPort = Pick<
@@ -59,9 +61,14 @@ type OrderRepositoryPort = Pick<
   | "markPrepayCreated"
   | "markFailedBeforePrepay"
   | "findInternalTenantOrderById"
-  | "findTenantOrderById"
-  | "listTenantOrders"
 >;
+type OrderQueryServicePort = {
+  listTenant(
+    authContext: AuthContext,
+    query: BrandingAddonOrderListQuery,
+  ): Promise<unknown>;
+  getTenant(authContext: AuthContext, orderId: string): Promise<unknown>;
+};
 type EntitlementRepositoryPort = Pick<
   typeof tenantEntitlementsRepository,
   "findByCode"
@@ -79,6 +86,7 @@ export type TenantBrandingAddonOrderServiceDependencies = {
   accessPolicy?: AccessPolicyPort;
   secretBundleService?: BrandingAddonSecretBundleServicePort;
   wechatPayGateway?: BrandingAddonGatewayPort;
+  orderQueryService?: OrderQueryServicePort;
   tradeNoFactory?: () => string;
   nowFactory?: () => Date;
 };
@@ -91,6 +99,7 @@ export class TenantBrandingAddonOrderService {
   private readonly payment: TenantBrandingAddonOrderPayment;
   private readonly tradeNoFactory: () => string;
   private readonly nowFactory: () => Date;
+  private readonly orderQueryService: OrderQueryServicePort;
 
   constructor(
     dependencies: TenantBrandingAddonOrderServiceDependencies = {},
@@ -105,6 +114,8 @@ export class TenantBrandingAddonOrderService {
     this.tradeNoFactory = dependencies.tradeNoFactory ??
       createBrandingAddonTradeNo;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+    this.orderQueryService = dependencies.orderQueryService ??
+      brandingEntitlementOrderQueryService;
     this.payment = new TenantBrandingAddonOrderPayment({
       orderRepository: this.orderRepository,
       paymentConfigRepository: dependencies.paymentConfigRepository ??
@@ -139,6 +150,7 @@ export class TenantBrandingAddonOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
+    const product = await this.requireEnabledLegacyProduct();
     const entitlement = await this.findEntitlement(actor.tenantId);
     assertEntitlementAllowsPurchase(entitlement);
 
@@ -170,7 +182,6 @@ export class TenantBrandingAddonOrderService {
       );
     }
 
-    const product = await this.requireEnabledProduct();
     const preflight = await this.payment.preflight();
     const tradeNo = this.tradeNoFactory();
     const creationNow = this.nowFactory();
@@ -240,6 +251,7 @@ export class TenantBrandingAddonOrderService {
     payerOpenid: string,
   ) {
     const actor = this.requirePurchaser(authContext);
+    await this.requireEnabledLegacyProduct();
     const entitlement = await this.findEntitlement(actor.tenantId);
     assertEntitlementAllowsPurchase(entitlement);
     const order = await this.orderRepository.findInternalTenantOrderById({
@@ -263,39 +275,11 @@ export class TenantBrandingAddonOrderService {
     authContext: AuthContext,
     query: BrandingAddonOrderListQuery,
   ) {
-    const tenantId = this.requireReader(authContext);
-    const [orders, entitlement] = await Promise.all([
-      this.orderRepository.listTenantOrders({
-        tenantId,
-        page: query.page,
-        pageSize: query.pageSize,
-        status: query.status,
-        keyword: query.keyword,
-      }),
-      this.findEntitlement(tenantId),
-    ]);
-    const responseNow = this.nowFactory();
-    return {
-      ...orders,
-      list: orders.list.map((order) =>
-        toTenantBrandingAddonOrderView(order, entitlement, responseNow)
-      ),
-      server_time: responseNow.toISOString(),
-    };
+    return this.orderQueryService.listTenant(authContext, query);
   }
 
   async getOrder(authContext: AuthContext, orderId: string) {
-    const tenantId = this.requireReader(authContext);
-    const [order, entitlement] = await Promise.all([
-      this.orderRepository.findTenantOrderById({ tenantId, orderId }),
-      this.findEntitlement(tenantId),
-    ]);
-    if (!order) throw orderNotFound();
-    const responseNow = this.nowFactory();
-    return {
-      order: toTenantBrandingAddonOrderView(order, entitlement, responseNow),
-      server_time: responseNow.toISOString(),
-    };
+    return this.orderQueryService.getTenant(authContext, orderId);
   }
 
   private requirePurchaser(authContext: AuthContext) {
@@ -312,17 +296,6 @@ export class TenantBrandingAddonOrderService {
       );
     }
     return { tenantId, employeeId: authContext.employeeId };
-  }
-
-  private requireReader(authContext: AuthContext) {
-    const tenantId = this.accessPolicy.assertTenantContext(authContext);
-    if (
-      !authContext.employeeId ||
-      !this.accessPolicy.hasPermission(authContext, READ_PERMISSION)
-    ) {
-      throw Errors.forbidden();
-    }
-    return tenantId;
   }
 
   private async requireEnabledProduct() {
@@ -346,6 +319,18 @@ export class TenantBrandingAddonOrderService {
       );
     }
     return product as BrandingAddonProductRecord & { amount_fen: number };
+  }
+
+  private async requireEnabledLegacyProduct() {
+    const product = await this.requireEnabledProduct();
+    if (product.purchase_mode !== "direct_legacy") {
+      throw Errors.business(
+        409,
+        "品牌权益购买渠道已迁移",
+        "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      );
+    }
+    return product;
   }
 
   private async findEntitlement(tenantId: string) {

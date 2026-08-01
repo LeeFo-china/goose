@@ -3,6 +3,7 @@ import {
   financeOperatingReportRepository,
   type FinanceOperatingReportLedgerRow,
   type FinanceOperatingReportReceivableRow,
+  type FinanceOperatingReportSupplierCostRow,
 } from "@/repositories/finance-operating-report";
 import {
   financeReconciliationRepository,
@@ -21,6 +22,10 @@ import {
 import {
   financeMonthlyOverviewService,
 } from "@/services/finance-monthly-overview";
+import {
+  applySupplierCostsToCategoryGroups,
+  applySupplierCostsToProjectGroups,
+} from "@/services/finance-specialized-supplier-costs";
 import {
   agingBucketKey,
   buildMonthlyOverviewCsv,
@@ -41,7 +46,7 @@ const DEFAULT_RANGE_DAYS = 30;
 type FinanceSpecializedReportServiceDependencies = {
   operatingReportRepository: Pick<
     typeof financeOperatingReportRepository,
-    "listLedgerRows" | "listReceivableRows"
+    "listLedgerRows" | "listReceivableRows" | "listSupplierCostRows"
   >;
   reconciliationRepository: Pick<
     typeof financeReconciliationRepository,
@@ -114,9 +119,16 @@ export class FinanceSpecializedReportService {
     this.assertCanReadReports(authContext);
 
     const range = resolveReportRange(query, this.dependencies.now?.());
-    const [ledgerRows, receivableRows, reconciliationCandidates] =
+    const [ledgerRows, supplierCostRows, receivableRows, reconciliationCandidates] =
       await Promise.all([
         this.dependencies.operatingReportRepository.listLedgerRows({
+          tenantId,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          projectStatus: query.project_status,
+          sourceLimit: SOURCE_LIMIT,
+        }),
+        this.dependencies.operatingReportRepository.listSupplierCostRows({
           tenantId,
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
@@ -156,10 +168,14 @@ export class FinanceSpecializedReportService {
       if (row.direction === "in") {
         group.income_amount += row.amount;
         group.received_amount += row.amount;
-      } else if (row.direction === "out") {
+      } else if (
+        row.direction === "out" &&
+        row.entry_type !== "supplier_payment"
+      ) {
         group.expense_amount += row.amount;
       }
     }
+    applySupplierCostsToProjectGroups(groups, supplierCostRows);
 
     for (const row of receivableRows) {
       if (row.status === "canceled") continue;
@@ -216,13 +232,20 @@ export class FinanceSpecializedReportService {
     this.assertCanReadReports(authContext);
 
     const range = resolveReportRange(query, this.dependencies.now?.());
-    const ledgerRows = await this.dependencies.operatingReportRepository
-      .listLedgerRows({
+    const [ledgerRows, supplierCostRows] = await Promise.all([
+      this.dependencies.operatingReportRepository.listLedgerRows({
         tenantId,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         sourceLimit: SOURCE_LIMIT,
-      });
+      }),
+      this.dependencies.operatingReportRepository.listSupplierCostRows({
+        tenantId,
+        dateFrom: range.dateFrom,
+        dateTo: range.dateTo,
+        sourceLimit: SOURCE_LIMIT,
+      }),
+    ]);
 
     const groups = new Map<string, FinanceCostCategorySummaryItem & {
       projectIds: Set<string>;
@@ -231,7 +254,9 @@ export class FinanceSpecializedReportService {
     let unallocatedExpenseAmount = 0;
 
     for (const row of ledgerRows) {
-      if (row.direction !== "out") continue;
+      if (row.direction !== "out" || row.entry_type === "supplier_payment") {
+        continue;
+      }
       const key = row.cost_category_id || "unallocated";
       const current = groups.get(key) || {
         cost_category_id: row.cost_category_id,
@@ -251,6 +276,10 @@ export class FinanceSpecializedReportService {
         unallocatedExpenseAmount += row.amount;
       }
     }
+    expenseAmount += applySupplierCostsToCategoryGroups(
+      groups,
+      supplierCostRows,
+    );
 
     const list = Array.from(groups.values()).map((item) => ({
       cost_category_id: item.cost_category_id,

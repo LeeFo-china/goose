@@ -7,6 +7,7 @@ import {
   ORDER_ID,
   order,
   OTHER_TENANT_ID,
+  product,
   TENANT_ID,
   createDependencies,
 } from "./tenant-branding-addon-orders.test-fixtures";
@@ -32,6 +33,52 @@ async function createService(
 }
 
 describe("TenantBrandingAddonOrderService payment requests", () => {
+  test.each(["maintenance", "wechat_virtual"] as const)(
+    "blocks legacy order creation while purchase mode is %s",
+    async (purchaseMode) => {
+      const dependencies = createDependencies({
+        product: { ...product, purchase_mode: purchaseMode },
+      });
+      const fixture = await createService(dependencies);
+
+      await expect(fixture.service.createOrder(
+        authContext,
+        {
+          product_code: "custom_support_branding_annual",
+          idempotency_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+        order.payer_openid,
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      });
+      expect(dependencies.orderRepository.findByIdempotencyKey)
+        .not.toHaveBeenCalled();
+      expect(dependencies.orderRepository.createOrder).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each(["maintenance", "wechat_virtual"] as const)(
+    "blocks legacy payment-request creation while purchase mode is %s",
+    async (purchaseMode) => {
+      const dependencies = createDependencies({
+        product: { ...product, purchase_mode: purchaseMode },
+      });
+      const fixture = await createService(dependencies);
+
+      await expect(fixture.service.createPaymentRequest(
+        authContext,
+        ORDER_ID,
+        order.payer_openid,
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+      });
+      expect(dependencies.orderRepository.findInternalTenantOrderById)
+        .not.toHaveBeenCalled();
+    },
+  );
+
   test("rejects a payment request bound to another authenticated OpenID", async () => {
     const fixture = await createService();
 
@@ -270,9 +317,8 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
       keyword: "BA2026",
     });
 
-    expect(fixture.dependencies.orderRepository.listTenantOrders)
-      .toHaveBeenCalledWith({
-        tenantId: TENANT_ID,
+    expect(fixture.dependencies.orderQueryService.listTenant)
+      .toHaveBeenCalledWith(authContext, {
         page: 2,
         pageSize: 20,
         status: "paid",
@@ -316,11 +362,11 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
       statusCode: 404,
       code: "BRANDING_ADDON_ORDER_NOT_FOUND",
     });
-    expect(dependencies.orderRepository.findTenantOrderById)
-      .toHaveBeenCalledWith({
-        tenantId: OTHER_TENANT_ID,
-        orderId: ORDER_ID,
-      });
+    expect(dependencies.orderQueryService.getTenant)
+      .toHaveBeenCalledWith(
+        { ...authContext, tenantId: OTHER_TENANT_ID },
+        ORDER_ID,
+      );
   });
 
   test("rejects order reads without the dedicated read permission", async () => {
@@ -335,7 +381,7 @@ describe("TenantBrandingAddonOrderService reads and views", () => {
     await expect(
       fixture.service.listOrders(withoutRead, { page: 1, pageSize: 20 }),
     ).rejects.toMatchObject({ statusCode: 403 });
-    expect(fixture.dependencies.orderRepository.listTenantOrders)
-      .not.toHaveBeenCalled();
+    expect(fixture.dependencies.orderQueryService.listTenant)
+      .toHaveBeenCalledWith(withoutRead, { page: 1, pageSize: 20 });
   });
 });

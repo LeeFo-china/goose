@@ -33,6 +33,9 @@ export type FinanceProjectOperatingSummary = {
   overdue_amount: number;
   overdue_count: number;
   expense_paid_amount: number;
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
   actual_profit_amount: number;
   projected_profit_amount: number;
   net_cash_flow_amount: number;
@@ -62,6 +65,9 @@ export type FinanceProjectOperatingSummaryTotals = {
   overdue_amount: number;
   overdue_count: number;
   expense_paid_amount: number;
+  supplier_cost_amount: number;
+  supplier_payable_open_amount: number;
+  supplier_cash_paid_amount: number;
   actual_profit_amount: number;
   projected_profit_amount: number;
   net_cash_flow_amount: number;
@@ -89,6 +95,8 @@ type FinanceProjectSummaryServiceDependencies = {
     listProjectsByIds: typeof financeProjectSummaryRepository.listProjectsByIds;
     listProjectsForAnalytics: typeof financeProjectSummaryRepository.listProjectsForAnalytics;
     listLedgerTotals: typeof financeProjectSummaryRepository.listLedgerTotals;
+    listSupplierTotals:
+      typeof financeProjectSummaryRepository.listSupplierTotals;
     listUnallocatedExpenseItems: typeof financeProjectSummaryRepository.listUnallocatedExpenseItems;
     listLedgerTrend: typeof financeProjectSummaryRepository.listLedgerTrend;
     listReceivableTotals: typeof financeProjectSummaryRepository.listReceivableTotals;
@@ -190,11 +198,16 @@ export class FinanceProjectSummaryService {
     const tenantToday = getTenantToday();
     const [
       ledgerTotals,
+      supplierTotals,
       unallocatedExpenseItems,
       receivableTotals,
       budgetTotals,
     ] = await Promise.all([
       this.dependencies.repository.listLedgerTotals({
+        tenantId: input.tenantId,
+        projectIds,
+      }),
+      this.dependencies.repository.listSupplierTotals({
         tenantId: input.tenantId,
         projectIds,
       }),
@@ -217,6 +230,7 @@ export class FinanceProjectSummaryService {
     return input.projects.map((project) => buildProjectOperatingSummary({
       project,
       ledgerTotals: ledgerTotals.get(project.id),
+      supplierTotals: supplierTotals.get(project.id),
       unallocatedExpenseItems: unallocatedExpenseItems.get(project.id),
       receivableTotals: receivableTotals.get(project.id),
       budgetTotals: budgetTotals.get(project.id),

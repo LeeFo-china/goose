@@ -6,6 +6,14 @@ import {
   mock,
   test,
 } from "bun:test";
+import {
+  captureWorkerEnv,
+  clearWorkerConfigEnv,
+  createBrandingVirtualPaymentService,
+  restoreWorkerEnv,
+  setSupabaseTestEnv,
+  type WorkerEnv,
+} from "./billing-reconcile-worker-test-fixtures";
 
 const SUBSCRIPTION_RESULT = {
   ensured: 1,
@@ -87,6 +95,7 @@ describe("getWorkerConfig", () => {
       batchSize: 100,
       rechargeExpirationBatchSize: 50,
       brandingAddonExpirationBatchSize: 50,
+      brandingVirtualPaymentBatchSize: 20,
       refundBatchSize: 20,
     });
   });
@@ -139,14 +148,19 @@ describe("tick", () => {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const logger = mock(() => {});
+    const markHealthy = mock(async () => {});
     const { tick } = await import("./billing-reconcile-worker");
 
     await tick({
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
+      healthEvidence: { markHealthy },
       logger,
     });
 
@@ -175,6 +189,17 @@ describe("tick", () => {
           branding_addon_expiration: {
             status: "fulfilled",
             result: RECHARGE_EXPIRATION_RESULT,
+          },
+          branding_virtual_payment: {
+            status: "fulfilled",
+            result: {
+              claimed: 0,
+              queried: 0,
+              confirmed: 0,
+              closed: 0,
+              failed: 0,
+              grant_recovered: 0,
+            },
           },
           refund: { status: "fulfilled", result: REFUND_RESULT },
         },
@@ -213,6 +238,8 @@ describe("tick", () => {
         raw_secret: "distinctive addon raw secret",
       })),
     };
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const logger = mock(() => {});
     const { tick } = await import("./billing-reconcile-worker");
 
@@ -220,6 +247,7 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       logger,
     });
@@ -247,6 +275,8 @@ describe("tick", () => {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const logger = mock(() => {});
     const { tick } = await import("./billing-reconcile-worker");
 
@@ -254,6 +284,7 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       logger,
     });
@@ -279,6 +310,8 @@ describe("tick", () => {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const logger = mock(() => {});
     const { tick } = await import("./billing-reconcile-worker");
 
@@ -286,6 +319,7 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       logger,
     });
@@ -294,7 +328,7 @@ describe("tick", () => {
       "error",
       "tick completed with errors",
       expect.objectContaining({
-        result: {
+        result: expect.objectContaining({
           subscription: { status: "fulfilled", result: SUBSCRIPTION_SUMMARY },
           recharge_expiration: {
             status: "fulfilled",
@@ -305,7 +339,7 @@ describe("tick", () => {
             result: RECHARGE_EXPIRATION_RESULT,
           },
           refund: { status: "rejected" },
-        },
+        }),
       }),
     );
     expect(JSON.stringify(logger.mock.calls)).not.toContain(
@@ -323,6 +357,8 @@ describe("tick", () => {
       }),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const refundReconciliationService = {
       runBatch: mock(async () => REFUND_RESULT),
     };
@@ -333,6 +369,7 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       logger,
     });
@@ -362,14 +399,18 @@ describe("tick", () => {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
+    const markHealthy = mock(async () => {});
     const logger = mock(() => {});
     const { tick } = await import("./billing-reconcile-worker");
-
     const firstTick = tick({
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
+      healthEvidence: { markHealthy },
       logger,
     });
     await Promise.resolve();
@@ -377,15 +418,16 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       refundReconciliationService,
+      healthEvidence: { markHealthy },
       logger,
     });
-
     expect(subscriptionService.runDueChecks).toHaveBeenCalledTimes(1);
     expect(rechargeExpirationService.runExpiredOrderChecks).toHaveBeenCalledTimes(0);
     expect(
       brandingAddonExpirationService.runExpiredOrderChecks,
     ).toHaveBeenCalledTimes(0);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(0);
+    expect(markHealthy).not.toHaveBeenCalled();
     expect(logger).toHaveBeenCalledWith("warn", "previous tick still running");
 
     releaseSubscription?.();
@@ -395,6 +437,7 @@ describe("tick", () => {
       brandingAddonExpirationService.runExpiredOrderChecks,
     ).toHaveBeenCalledTimes(1);
     expect(refundReconciliationService.runBatch).toHaveBeenCalledTimes(1);
+    expect(markHealthy).toHaveBeenCalledTimes(1);
   });
 
   test("refreshes health only after all children succeed and recovers later", async () => {
@@ -405,6 +448,8 @@ describe("tick", () => {
       runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
     };
     const brandingAddonExpirationService = createBrandingAddonExpirationService();
+    const brandingVirtualPaymentReconciliationService =
+      createBrandingVirtualPaymentService();
     const refundReconciliationService = {
       runBatch: mock(async () => REFUND_RESULT),
     };
@@ -415,6 +460,7 @@ describe("tick", () => {
       subscriptionService,
       rechargeExpirationService,
       brandingAddonExpirationService,
+      brandingVirtualPaymentReconciliationService,
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -439,61 +485,15 @@ describe("tick", () => {
   });
 });
 
-const WORKER_ENV_KEYS = [
-  "BILLING_RECONCILE_WORKER_ENABLED",
-  "BILLING_RECONCILE_BATCH_SIZE",
-  "BILLING_RECONCILE_INTERVAL_MS",
-  "BILLING_RECHARGE_EXPIRATION_BATCH_SIZE",
-  "BILLING_BRANDING_ADDON_EXPIRATION_BATCH_SIZE",
-  "BILLING_REFUND_RECONCILE_BATCH_SIZE",
-  "SUPABASE_URL",
-  "SUPABASE_PUBLISH",
-  "SUPABASE_SERVICE_ROLE_KEY",
-] as const;
-
-type WorkerEnvKey = (typeof WORKER_ENV_KEYS)[number];
-
-let previousWorkerEnv: Record<WorkerEnvKey, string | undefined>;
+let previousWorkerEnv: WorkerEnv;
 
 async function readWorkerConfig() {
   const { getWorkerConfig } = await import("./billing-reconcile-worker");
   return getWorkerConfig();
 }
 
-function captureWorkerEnv(): Record<WorkerEnvKey, string | undefined> {
-  return Object.fromEntries(
-    WORKER_ENV_KEYS.map((key) => [key, process.env[key]]),
-  ) as Record<WorkerEnvKey, string | undefined>;
-}
-
-function restoreWorkerEnv(env: Record<WorkerEnvKey, string | undefined>): void {
-  for (const key of WORKER_ENV_KEYS) {
-    const value = env[key];
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-}
-
-function clearWorkerConfigEnv(): void {
-  delete process.env.BILLING_RECONCILE_WORKER_ENABLED;
-  delete process.env.BILLING_RECONCILE_BATCH_SIZE;
-  delete process.env.BILLING_RECONCILE_INTERVAL_MS;
-  delete process.env.BILLING_RECHARGE_EXPIRATION_BATCH_SIZE;
-  delete process.env.BILLING_BRANDING_ADDON_EXPIRATION_BATCH_SIZE;
-  delete process.env.BILLING_REFUND_RECONCILE_BATCH_SIZE;
-}
-
 function createBrandingAddonExpirationService() {
   return {
     runExpiredOrderChecks: mock(async () => RECHARGE_EXPIRATION_RESULT),
   };
-}
-
-function setSupabaseTestEnv(): void {
-  process.env.SUPABASE_URL ??= "http://localhost:54321";
-  process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-  process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 }

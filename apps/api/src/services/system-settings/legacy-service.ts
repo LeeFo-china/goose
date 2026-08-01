@@ -22,6 +22,8 @@ import {
   getTenantOverrideString,
   getNumber,
   getBoolean,
+  getPlatformSecretStrings,
+  getPlatformSecretString,
 } from './legacy/settings';
 import type { SystemSettingRecord } from './legacy/shared';
 import {
@@ -31,7 +33,8 @@ import {
 
 type SystemSettingRepositoryPort = Pick<
   SystemSettingRepository,
-  'findByKey' | 'updateValue' | 'createValue'
+  'findByKey' | 'updateValue' | 'createValue' | 'findPlatformByKeys'
+  | 'findPlatformSecretByKey'
 >;
 
 export class SystemSettingsService {
@@ -69,6 +72,12 @@ export class SystemSettingsService {
   getTenantOverrideString = getTenantOverrideString;
   getNumber = getNumber;
   getBoolean = getBoolean;
+  getPlatformSecretStrings(keys: readonly [string, string]) {
+    return getPlatformSecretStrings(this.systemSettingRepository, keys);
+  }
+  getPlatformSecretString(key: string) {
+    return getPlatformSecretString(this.systemSettingRepository, key);
+  }
 }
 
 export const systemSettingsService = new SystemSettingsService();

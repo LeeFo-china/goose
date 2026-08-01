@@ -1,6 +1,12 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  summarizeProjectSupplierCosts,
+  type ProjectCostBudgetSupplierCostTotals,
+} from "@/repositories/project-cost-budget-supplier-cost";
 import type { SaveProjectCostBudgetsInput } from "@/schema/finance-costs";
 import { SupabaseDB } from "@/utils/supabase/index";
+
+export type { ProjectCostBudgetSupplierCostTotals };
 
 const PROJECT_COST_BUDGET_SELECT = `
   id,
@@ -234,6 +240,14 @@ class ProjectCostBudgetRepository {
     };
   }
 
+  async listSupplierCostTotals(input: {
+    tenantId: string;
+    projectId: string;
+  }): Promise<ProjectCostBudgetSupplierCostTotals> {
+    const rows = await listSupplierCostEventRows(input);
+    return summarizeProjectSupplierCosts(rows);
+  }
+
   async listActiveCategoriesByIds(input: {
     tenantId: string;
     categoryIds: string[];
@@ -290,6 +304,35 @@ class ProjectCostBudgetRepository {
       projectId: input.projectId,
     });
   }
+}
+
+async function listSupplierCostEventRows(input: {
+  tenantId: string;
+  projectId: string;
+}): Promise<unknown[]> {
+  const rows: unknown[] = [];
+  for (let from = 0; from <= 10_000; from += 1_000) {
+    const to = Math.min(from + 999, 10_000);
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("project_cost_events")
+      .select(
+        "id,cost_category_id,amount::text,created_at,cost_category:finance_cost_categories!project_cost_events_category_tenant_fkey(code,name)",
+      )
+      .eq("tenant_id", input.tenantId)
+      .eq("project_id", input.projectId)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (error) {
+      throw Errors.dbError("查询项目供应商实际成本失败", error);
+    }
+    if (!Array.isArray(data)) {
+      throw Errors.dbError("解析项目供应商实际成本失败", data);
+    }
+    rows.push(...data);
+    if (data.length < to - from + 1) break;
+  }
+  return rows;
 }
 
 function parseBoundedAggregate(input: {

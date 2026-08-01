@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
+import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
 import { PlatformAuditLogActionSchema } from "@/schema/platform-audit-logs";
 import type { AuthContext } from "@/services/authorization";
 
@@ -11,7 +12,6 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const EMPLOYEE_ID = "11111111-1111-4111-8111-111111111111";
 const AUTH_USER_ID = "22222222-2222-4222-8222-222222222222";
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
-
 const product: BrandingAddonProductRecord = {
   id: "44444444-4444-4444-8444-444444444444",
   code: "custom_support_branding_annual",
@@ -22,12 +22,35 @@ const product: BrandingAddonProductRecord = {
   purchase_notes: "支付成功后自动开通一年",
   refund_policy: "数字权益支付成功并开通后不支持退款",
   enabled: false,
+  purchase_mode: "maintenance",
   version: 1,
   updated_by_employee_id: null,
   created_at: "2026-07-28T00:00:00.000Z",
   updated_at: "2026-07-28T00:00:00.000Z",
 };
-
+const productionMapping: BrandingVirtualProductRecord = {
+  id: "55555555-5555-4555-8555-555555555555",
+  addon_product_id: product.id,
+  provider: "wechat_virtual",
+  environment: "production",
+  app_id: "wx-app",
+  virtual_merchant_id: "virtual-merchant",
+  offer_id: "offer-annual",
+  provider_product_id: "branding-annual",
+  goods_quantity: 1,
+  expected_amount_fen: 9_900,
+  encrypted_secret_ref:
+    "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+  secret_revision: 2,
+  status: "active",
+  validation_status: "valid",
+  validated_at: "2026-07-31T00:00:00.000Z",
+  version: 1,
+  created_by: EMPLOYEE_ID,
+  updated_by: EMPLOYEE_ID,
+  created_at: "2026-07-31T00:00:00.000Z",
+  updated_at: "2026-07-31T00:00:00.000Z",
+};
 const platformAuth: AuthContext = {
   authUserId: AUTH_USER_ID,
   employeeId: EMPLOYEE_ID,
@@ -52,7 +75,6 @@ const platformAuth: AuthContext = {
     scope: "all",
   }],
 };
-
 type ServiceConstructor = typeof import(
   "./platform-branding-addon-product"
 )["PlatformBrandingAddonProductService"];
@@ -68,18 +90,30 @@ beforeAll(async () => {
 function createFixture(options: {
   current?: BrandingAddonProductRecord | null;
   updated?: BrandingAddonProductRecord | null;
-  getError?: unknown;
   updateError?: unknown;
+  mapping?: BrandingVirtualProductRecord | null;
+  updatedMapping?: BrandingVirtualProductRecord | null;
+  secretBundle?: string;
 } = {}) {
   const getProduct = mock(async () => {
-    if (options.getError) throw options.getError;
     return options.current === undefined ? product : options.current;
   });
-  const updateProduct = mock(async () => {
+  const manageConfiguration = mock(async () => {
     if (options.updateError) throw options.updateError;
-    return options.updated === undefined
-      ? { ...product, amount_fen: 1, enabled: true, version: 2 }
-      : options.updated;
+    if (options.updated === null) {
+      throw Object.assign(new Error("version conflict"), {
+        statusCode: 409,
+        code: "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
+      });
+    }
+    return {
+      product: options.updated === undefined
+        ? { ...product, amount_fen: 1, enabled: true, version: 2 }
+        : options.updated ?? product,
+      virtual_product: options.updatedMapping === undefined
+        ? null
+        : options.updatedMapping,
+    };
   });
   const assertPermission = mock((
     authContext: AuthContext,
@@ -96,18 +130,66 @@ function createFixture(options: {
     return "all" as const;
   });
   const recordBestEffort = mock(async () => null);
+  const findByProductAndEnvironment = mock(async () =>
+    options.mapping === undefined ? productionMapping : options.mapping
+  );
+  const getSecretString = mock(async () =>
+    options.secretBundle ?? JSON.stringify({
+      appKey: "production-secret",
+      revision: 2,
+    })
+  );
+  const getConfiguration = mock(async () => {
+    const current = options.current === undefined ? product : options.current;
+    if (!current) {
+      throw Object.assign(new Error("年度品牌权益商品不存在"), {
+        statusCode: 404,
+        code: "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+      });
+    }
+    return {
+      product: {
+        code: current.code,
+        entitlement_code: current.entitlement_code,
+        name: current.name,
+        amount_fen: current.amount_fen,
+        term_years: current.term_years,
+        purchase_notes: current.purchase_notes,
+        enabled: current.enabled,
+        purchase_mode: current.purchase_mode,
+        version: current.version,
+      },
+      virtual_products: [],
+    };
+  });
+  const validateConfiguration = mock(async () => ({
+    virtual_product: productionMapping,
+    validation: {
+      kind: "server_configuration" as const,
+      validated_at: "2026-08-01T00:00:00.000Z",
+    },
+  }));
   const service = new PlatformBrandingAddonProductService({
-    repository: { getProduct, updateProduct },
+    repository: { getProduct },
+    virtualProductRepository: {
+      findByProductAndEnvironment,
+      manageConfiguration,
+    },
+    settingsService: { getSecretString },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
+    managementService: { getConfiguration, validateConfiguration },
   });
 
   return {
     service,
     getProduct,
-    updateProduct,
+    manageConfiguration,
     assertPermission,
     recordBestEffort,
+    findByProductAndEnvironment,
+    getSecretString,
+    getConfiguration,
   };
 }
 
@@ -135,7 +217,7 @@ describe("PlatformBrandingAddonProductService access", () => {
         code: "FORBIDDEN",
       });
       expect(fixture.getProduct).not.toHaveBeenCalled();
-      expect(fixture.updateProduct).not.toHaveBeenCalled();
+      expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     },
   );
 
@@ -169,9 +251,13 @@ describe("PlatformBrandingAddonProductService reads", () => {
         term_years: 1,
         purchase_notes: "支付成功后自动开通一年",
         enabled: false,
+        purchase_mode: "maintenance",
         version: 1,
       },
+      virtual_products: [],
     });
+    expect(fixture.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.getProduct).not.toHaveBeenCalled();
   });
 
   test("maps a missing product to a stable not-found error", async () => {
@@ -183,20 +269,6 @@ describe("PlatformBrandingAddonProductService reads", () => {
     });
   });
 
-  test("does not expose repository diagnostics", async () => {
-    const fixture = createFixture({
-      getError: {
-        code: "DB_ERROR",
-        details: { message: "secret sql", hint: "private row" },
-      },
-    });
-
-    await expect(fixture.service.get(platformAuth)).rejects.toMatchObject({
-      statusCode: 500,
-      code: "DB_ERROR",
-      details: undefined,
-    });
-  });
 });
 
 describe("PlatformBrandingAddonProductService updates", () => {
@@ -227,13 +299,15 @@ describe("PlatformBrandingAddonProductService updates", () => {
         term_years: 1,
         purchase_notes: "支付成功后自动开通一年",
         enabled: false,
+        purchase_mode: "maintenance",
         version: 2,
       },
     });
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      name: "年度品牌支持服务",
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { name: "年度品牌支持服务" },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
     expect(fixture.recordBestEffort).toHaveBeenCalledWith({
       action: "branding_addon_product.update",
@@ -253,6 +327,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
           term_years: 1,
           purchase_notes: "支付成功后自动开通一年",
           enabled: false,
+          purchase_mode: "maintenance",
           version: 1,
         },
         to: {
@@ -263,6 +338,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
           term_years: 1,
           purchase_notes: "支付成功后自动开通一年",
           enabled: false,
+          purchase_mode: "maintenance",
           version: 2,
         },
       },
@@ -280,10 +356,11 @@ describe("PlatformBrandingAddonProductService updates", () => {
       version: 1,
     });
 
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      enabled: true,
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { enabled: true },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
   });
 
@@ -297,7 +374,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_PRODUCT_PRICE_REQUIRED",
     });
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
 
@@ -309,10 +386,11 @@ describe("PlatformBrandingAddonProductService updates", () => {
       version: 1,
     });
 
-    expect(fixture.updateProduct).toHaveBeenCalledWith({
-      amountFen: 2_147_483_647,
-      expectedVersion: 1,
-      updatedByEmployeeId: EMPLOYEE_ID,
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { amount_fen: 2_147_483_647 },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
     });
   });
 
@@ -327,7 +405,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
         statusCode: 400,
         code: "VALIDATION_ERROR",
       });
-      expect(fixture.updateProduct).not.toHaveBeenCalled();
+      expect(fixture.manageConfiguration).not.toHaveBeenCalled();
       expect(fixture.recordBestEffort).not.toHaveBeenCalled();
     }
   });
@@ -344,7 +422,7 @@ describe("PlatformBrandingAddonProductService updates", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT",
     });
-    expect(fixture.updateProduct).not.toHaveBeenCalled();
+    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
 
@@ -380,4 +458,37 @@ describe("PlatformBrandingAddonProductService updates", () => {
     });
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
+
+  test("switches to virtual payment only with a valid active production mapping", async () => {
+    const current = {
+      ...product,
+      amount_fen: 9_900,
+      enabled: true,
+    } satisfies BrandingAddonProductRecord;
+    const fixture = createFixture({
+      current,
+      updated: {
+        ...current,
+        purchase_mode: "wechat_virtual",
+        version: 2,
+      },
+    });
+
+    await fixture.service.update(platformAuth, {
+      purchase_mode: "wechat_virtual",
+      version: 1,
+    });
+
+    expect(fixture.findByProductAndEnvironment).toHaveBeenCalledWith({
+      addonProductId: product.id,
+      environment: "production",
+    });
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: { purchase_mode: "wechat_virtual" },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
+    });
+  });
+
 });

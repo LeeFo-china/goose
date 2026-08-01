@@ -4,8 +4,88 @@ import {
   BrandingAddonCreateOrderSchema,
   BrandingAddonOrderListQuerySchema,
   BrandingAddonProductPatchSchema,
+  BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualCreateOrderSchema,
+  BrandingVirtualProductValidationSchema,
   PlatformBrandingAddonOrderListQuerySchema,
 } from "./branding-addon";
+
+describe("BrandingVirtualCreateOrderSchema", () => {
+  const valid = {
+    product_code: "custom_support_branding_annual",
+    idempotency_key: "00000000-0000-4000-8000-000000000001",
+  } as const;
+
+  test("defaults the diagnostic platform without accepting price or server context", () => {
+    expect(BrandingVirtualCreateOrderSchema.parse(valid)).toEqual({
+      ...valid,
+      requested_platform: "unknown",
+    });
+    expect(BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      requested_platform: "ios",
+    }).requested_platform).toBe("ios");
+
+    for (const forged of [
+      { amount_fen: 1 },
+      { environment: "sandbox" },
+      { offer_id: "client-offer" },
+      { provider_product_id: "client-product" },
+      { payer_openid: "client-openid" },
+      { tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+      { created_by: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+      { appKey: "secret" },
+    ]) {
+      expect(() => BrandingVirtualCreateOrderSchema.parse({
+        ...valid,
+        ...forged,
+      })).toThrow();
+    }
+  });
+
+  test("rejects unsupported platforms and non-v4 idempotency keys", () => {
+    expect(() => BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      requested_platform: "macos",
+    })).toThrow();
+    expect(() => BrandingVirtualCreateOrderSchema.parse({
+      ...valid,
+      idempotency_key: "00000000-0000-1000-8000-000000000001",
+    })).toThrow();
+  });
+});
+
+describe("BrandingVirtualProductValidationSchema", () => {
+  test("accepts only a supported environment and positive mapping version", () => {
+    expect(BrandingVirtualProductEnvironmentParamsSchema.parse({
+      environment: "production",
+    })).toEqual({ environment: "production" });
+    expect(BrandingVirtualProductValidationSchema.parse({ version: 1 }))
+      .toEqual({ version: 1 });
+    expect(() => BrandingVirtualProductEnvironmentParamsSchema.parse({
+      environment: "staging",
+    })).toThrow();
+    expect(() => BrandingVirtualProductValidationSchema.parse({
+      version: 0,
+    })).toThrow();
+  });
+
+  test("matches the PostgreSQL integer upper boundary", () => {
+    expect(BrandingVirtualProductValidationSchema.parse({
+      version: 2_147_483_647,
+    })).toEqual({ version: 2_147_483_647 });
+
+    const result = BrandingVirtualProductValidationSchema.safeParse({
+      version: 2_147_483_648,
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(expect.objectContaining({
+        message: "版本号超出支持范围",
+      }));
+    }
+  });
+});
 
 describe("BrandingAddonProductPatchSchema", () => {
   test("accepts a positive integer price in fen", () => {
@@ -24,7 +104,23 @@ describe("BrandingAddonProductPatchSchema", () => {
       { amount_fen: 1 },
       { purchase_notes: "支付成功后自动开通一年" },
       { enabled: true },
-    ]) {
+      { purchase_mode: "maintenance" },
+      {
+        virtual_product: {
+          environment: "production",
+          app_id: "wx-app",
+          virtual_merchant_id: "merchant",
+          offer_id: "offer",
+          provider_product_id: "product",
+          expected_amount_fen: 9_900,
+          encrypted_secret_ref:
+            "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+          secret_revision: 2,
+          status: "active",
+          version: 1,
+        },
+      },
+    ] as const) {
       expect(BrandingAddonProductPatchSchema.parse({
         ...patch,
         version: 1,
@@ -33,6 +129,25 @@ describe("BrandingAddonProductPatchSchema", () => {
         version: 1,
       });
     }
+  });
+
+  test("rejects cross-environment virtual payment secret references", () => {
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      virtual_product: {
+        environment: "production",
+        app_id: "wx-app",
+        virtual_merchant_id: "merchant",
+        offer_id: "offer",
+        provider_product_id: "product",
+        expected_amount_fen: 9_900,
+        encrypted_secret_ref:
+          "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+        secret_revision: 2,
+        status: "active",
+        version: 1,
+      },
+      version: 1,
+    })).toThrow();
   });
 
   test("rejects a patch containing only the version", () => {
@@ -100,6 +215,52 @@ describe("BrandingAddonProductPatchSchema", () => {
         amount_fen,
         version: 1,
       })).toThrow();
+    }
+  });
+
+  test("matches PostgreSQL integer boundaries for command versions", () => {
+    const virtualProduct = {
+      environment: "production" as const,
+      app_id: "wx-app",
+      virtual_merchant_id: "merchant",
+      offer_id: "offer",
+      provider_product_id: "product",
+      expected_amount_fen: 9_900,
+      encrypted_secret_ref:
+        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
+      secret_revision: 2_147_483_647,
+      status: "draft" as const,
+      version: 2_147_483_647,
+    };
+    expect(BrandingAddonProductPatchSchema.parse({
+      virtual_product: virtualProduct,
+      version: 2_147_483_647,
+    })).toMatchObject({
+      virtual_product: virtualProduct,
+      version: 2_147_483_647,
+    });
+
+    for (const input of [
+      { version: 2_147_483_648, name: "年度品牌技术支持" },
+      {
+        version: 1,
+        virtual_product: {
+          ...virtualProduct,
+          secret_revision: 2_147_483_648,
+        },
+      },
+      {
+        version: 1,
+        virtual_product: { ...virtualProduct, version: 2_147_483_648 },
+      },
+    ]) {
+      const result = BrandingAddonProductPatchSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(
+          (issue) => issue.message.includes("超出支持范围"),
+        )).toBe(true);
+      }
     }
   });
 
@@ -194,6 +355,54 @@ describe("BrandingAddonOrderListQuerySchema", () => {
     })).toThrow();
     expect(() => BrandingAddonOrderListQuerySchema.parse({
       keyword: "(),\"%_\\",
+    })).toThrow();
+  });
+
+  test("accepts independent unified order status filters", () => {
+    expect(BrandingAddonOrderListQuerySchema.parse({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    })).toMatchObject({
+      payment_channel: "wechat_virtual",
+      payment_status: "succeeded",
+      fulfillment_status: "granted",
+      refund_status: "none",
+    });
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      payment_channel: "wechat_pay",
+    })).toThrow();
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      payment_status: "paid",
+    })).toThrow();
+  });
+
+  test("allows equivalent legacy and unified payment statuses", () => {
+    expect(BrandingAddonOrderListQuerySchema.parse({
+      status: "paid",
+      payment_status: "succeeded",
+    })).toMatchObject({
+      status: "paid",
+      payment_status: "succeeded",
+    });
+    expect(PlatformBrandingAddonOrderListQuerySchema.parse({
+      status: "pending",
+      payment_status: "pending",
+    })).toMatchObject({
+      status: "pending",
+      payment_status: "pending",
+    });
+  });
+
+  test("rejects conflicting legacy and unified payment statuses", () => {
+    expect(() => BrandingAddonOrderListQuerySchema.parse({
+      status: "paid",
+      payment_status: "closed",
+    })).toThrow();
+    expect(() => PlatformBrandingAddonOrderListQuerySchema.parse({
+      status: "failed",
+      payment_status: "pending",
     })).toThrow();
   });
 });

@@ -62,17 +62,20 @@ async function loadHarness() {
     { default: controller },
     { authorizationService },
     { platformBrandingAddonProductService },
+    { brandingVirtualProductService },
     { tenantBrandingAddonOrderService },
   ] = await Promise.all([
     import("."),
     import("@/services/authorization"),
     import("@/services/platform-branding-addon-product"),
+    import("@/services/branding-virtual-products"),
     import("@/services/tenant-branding-addon-orders"),
   ]);
   return {
     controller,
     authorizationService,
     platformBrandingAddonProductService,
+    brandingVirtualProductService,
     tenantBrandingAddonOrderService,
   };
 }
@@ -115,11 +118,14 @@ describe("BrandingAddonController routes", () => {
     expect([...registeredHandlers(controller).keys()]).toEqual([
       "GET /platform/branding/entitlement-product",
       "PATCH /platform/branding/entitlement-product",
+      "POST /platform/branding/entitlement-product/virtual-products/:environment/validate",
       "GET /platform/branding/entitlement-orders",
       "GET /platform/branding/entitlement-orders/:id",
       "GET /tenant/branding/entitlement-product",
       "POST /tenant/branding/entitlement-orders",
       "POST /tenant/branding/entitlement-orders/:id/payment-request",
+      "POST /tenant/branding/virtual-payment/orders",
+      "POST /tenant/branding/virtual-payment/orders/:id/payment-request",
       "GET /tenant/branding/entitlement-orders",
       "GET /tenant/branding/entitlement-orders/:id",
     ]);
@@ -135,12 +141,21 @@ describe("BrandingAddonController routes", () => {
       auth: authorizationService.getRequiredAuthContext,
       get: platformBrandingAddonProductService.get,
       update: platformBrandingAddonProductService.update,
+      validate: platformBrandingAddonProductService.validateVirtualProduct,
     };
     const get = mock(async () => ({ product: { version: 1 } }));
     const update = mock(async () => ({ product: { version: 2 } }));
+    const validate = mock(async () => ({
+      virtual_product: { validation_status: "valid", version: 2 },
+    }));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingAddonProductService, "get", get);
     replaceMethod(platformBrandingAddonProductService, "update", update);
+    replaceMethod(
+      platformBrandingAddonProductService,
+      "validateVirtualProduct",
+      validate,
+    );
 
     try {
       const getResponse = await requiredHandler(
@@ -167,6 +182,20 @@ describe("BrandingAddonController routes", () => {
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {});
       expect(update).toHaveBeenCalledWith(platformAuth, patch);
+
+      await requiredHandler(
+        controller,
+        "POST /platform/branding/entitlement-product/virtual-products/:environment/validate",
+      )({
+        params: { environment: "production" },
+        body: { version: 1 },
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(validate).toHaveBeenCalledWith(platformAuth, {
+        environment: "production",
+        version: 1,
+      });
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingAddonProductService, "get", originals.get);
@@ -174,6 +203,11 @@ describe("BrandingAddonController routes", () => {
         platformBrandingAddonProductService,
         "update",
         originals.update,
+      );
+      replaceMethod(
+        platformBrandingAddonProductService,
+        "validateVirtualProduct",
+        originals.validate,
       );
     }
   });
@@ -254,6 +288,7 @@ describe("BrandingAddonController routes", () => {
     const {
       authorizationService,
       controller,
+      brandingVirtualProductService,
       tenantBrandingAddonOrderService,
     } = await loadHarness();
     const originals = {
@@ -336,11 +371,12 @@ describe("BrandingAddonController routes", () => {
     const {
       authorizationService,
       controller,
+      brandingVirtualProductService,
       tenantBrandingAddonOrderService,
     } = await loadHarness();
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
-      product: tenantBrandingAddonOrderService.getProduct,
+      product: brandingVirtualProductService.getTenantProduct,
       list: tenantBrandingAddonOrderService.listOrders,
       detail: tenantBrandingAddonOrderService.getOrder,
     };
@@ -348,7 +384,7 @@ describe("BrandingAddonController routes", () => {
     const listOrders = mock(async () => ({ list: [] }));
     const getOrder = mock(async () => ({ order: { id: ORDER_ID } }));
     authorizationService.getRequiredAuthContext = mock(async () => tenantAuth);
-    replaceMethod(tenantBrandingAddonOrderService, "getProduct", getProduct);
+    replaceMethod(brandingVirtualProductService, "getTenantProduct", getProduct);
     replaceMethod(tenantBrandingAddonOrderService, "listOrders", listOrders);
     replaceMethod(tenantBrandingAddonOrderService, "getOrder", getOrder);
 
@@ -395,8 +431,8 @@ describe("BrandingAddonController routes", () => {
     } finally {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(
-        tenantBrandingAddonOrderService,
-        "getProduct",
+        brandingVirtualProductService,
+        "getTenantProduct",
         originals.product,
       );
       replaceMethod(

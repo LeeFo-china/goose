@@ -46,9 +46,19 @@ import { cn } from "@/lib/utils";
 import {
   cancelPurchaseOrder,
   loadPurchaseOrder,
+  loadPurchaseOrderFinancialSummary,
   loadPurchaseOrderItems,
   submitPurchaseOrder,
 } from "./purchase-order-api";
+import {
+  PurchaseOrderFinancialSummary,
+} from "./purchase-order-financial-summary";
+import {
+  failedFinancialSummaryState,
+  loadedFinancialSummaryState,
+  loadingFinancialSummaryState,
+  unloadedFinancialSummaryState,
+} from "./purchase-order-financial-summary-state";
 import {
   PurchaseOrderFulfillmentPanel,
 } from "./purchase-order-fulfillment-panel";
@@ -72,12 +82,14 @@ import type {
 export function PurchaseOrderDetail({
   open,
   order,
+  canViewPurchaseOrders,
   canManage,
   onOpenChange,
   onChanged,
 }: {
   open: boolean;
   order: PurchaseOrderWithReferences | null;
+  canViewPurchaseOrders: boolean;
   canManage: boolean;
   onOpenChange: (open: boolean) => void;
   onChanged: () => void;
@@ -91,9 +103,31 @@ export function PurchaseOrderDetail({
   const [commandAttempt, setCommandAttempt] =
     useState<SupplierCommandAttempt | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [financialSummaryState, setFinancialSummaryState] = useState(
+    unloadedFinancialSummaryState,
+  );
   const [fulfillmentState, setFulfillmentState] =
     useState<FulfillmentLoadState>(unloadedFulfillmentState);
   const requestGuard = useRef(createLatestRequestGuard());
+  const financialSummaryRequestGuard = useRef(createLatestRequestGuard());
+
+  const reloadFinancialSummary = useCallback(async () => {
+    const isLatest = financialSummaryRequestGuard.current.start();
+    if (!order || !canViewPurchaseOrders) return;
+    setFinancialSummaryState(loadingFinancialSummaryState);
+    try {
+      const summary = await loadPurchaseOrderFinancialSummary(order.id);
+      if (isLatest()) {
+        setFinancialSummaryState(loadedFinancialSummaryState(summary));
+      }
+    } catch (caught) {
+      if (isLatest()) {
+        setFinancialSummaryState(failedFinancialSummaryState(
+          errorMessage(caught, "采购单财务摘要加载失败"),
+        ));
+      }
+    }
+  }, [canViewPurchaseOrders, order]);
 
   const reload = useCallback(async () => {
     const isLatest = requestGuard.current.start();
@@ -122,21 +156,36 @@ export function PurchaseOrderDetail({
 
   useEffect(() => {
     requestGuard.current.invalidate();
+    financialSummaryRequestGuard.current.invalidate();
     setCurrent(order);
     setItems([]);
+    setFinancialSummaryState(unloadedFinancialSummaryState);
     setHasLoadedDetail(false);
     setFulfillmentState(unloadedFulfillmentState);
     setCancelReason("");
     setCommandAttempt(null);
-    if (open) void reload();
-    return () => requestGuard.current.invalidate();
-  }, [open, order, reload]);
+    if (open) {
+      void reload();
+      if (canViewPurchaseOrders) void reloadFinancialSummary();
+    }
+    return () => {
+      requestGuard.current.invalidate();
+      financialSummaryRequestGuard.current.invalidate();
+    };
+  }, [
+    canViewPurchaseOrders,
+    open,
+    order,
+    reload,
+    reloadFinancialSummary,
+  ]);
 
   const handleFulfillmentChanged = useCallback(async () => {
     const version = await reload();
+    if (canViewPurchaseOrders) void reloadFinancialSummary();
     onChanged();
     return version;
-  }, [onChanged, reload]);
+  }, [canViewPurchaseOrders, onChanged, reload, reloadFinancialSummary]);
 
   async function runCommand(action: "submit" | "cancel") {
     if (!current || busy) return;
@@ -172,6 +221,7 @@ export function PurchaseOrderDetail({
         toast.success("采购单已取消");
       }
       await reload();
+      if (canViewPurchaseOrders) void reloadFinancialSummary();
       setCommandAttempt(null);
       onChanged();
     } catch (caught) {
@@ -284,6 +334,13 @@ export function PurchaseOrderDetail({
                 </TableBody>
               </Table>
             </div>
+            {canViewPurchaseOrders ? (
+              <PurchaseOrderFinancialSummary
+                summary={financialSummaryState.summary}
+                isLoading={financialSummaryState.isLoading}
+                error={financialSummaryState.error}
+              />
+            ) : null}
             <PurchaseOrderFulfillmentPanel
               order={current}
               purchaseOrderItems={items}

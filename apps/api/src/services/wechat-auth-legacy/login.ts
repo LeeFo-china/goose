@@ -35,6 +35,7 @@ import {
 import type { WechatLoginMembershipRow } from "@/repositories/wechat-customer-identities";
 import { wechatEmployeeIdentityService } from "@/services/wechat-employee-identities";
 import { wechatRebindRequestService } from "@/services/wechat-rebind-requests";
+import { wechatMiniSessionCredentialService } from "@/services/wechat-mini-session-credentials";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import {
   isEmployeeOperableStatus,
@@ -77,6 +78,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
   if (!wxData.openid) {
     throw Errors.badRequest("微信登录失败，未获取到 openid");
   }
+  const openid = wxData.openid;
 
   request.log.info({ requestId: request.id, openid: wxData.openid }, "[auth] parsed openid");
 
@@ -96,6 +98,18 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
 
   let userId: string;
   let isNewUser = false;
+  let isSessionCredentialPersisted = false;
+  const persistSessionCredential = async () => {
+    if (isSessionCredentialPersisted || !wxData.session_key) {
+      return;
+    }
+    await wechatMiniSessionCredentialService.rotateForLogin({
+      userId,
+      openid,
+      sessionKey: wxData.session_key,
+    });
+    isSessionCredentialPersisted = true;
+  };
   let loginMembershipState: Awaited<
     ReturnType<typeof wechatCustomerIdentityService.resolveWechatLoginMembershipState>
   >;
@@ -179,6 +193,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
     unionid: wxData.unionid ?? null,
   });
   if (partnerLogin) {
+    await persistSessionCredential();
     this.clearVisitorOnlyAuthUserCache(userId);
     request.log.info(
       { requestId: request.id, userId, totalMs: Date.now() - startedAt },
@@ -261,6 +276,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
     );
 
     if (employeeLogin) {
+      await persistSessionCredential();
       this.prewarmEmployeeAuthContext(request, userId, employeeLogin);
 
       request.log.info(
@@ -315,6 +331,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
   );
 
   if (employeeLogin) {
+    await persistSessionCredential();
     this.prewarmEmployeeAuthContext(request, userId, employeeLogin);
     request.log.info(
       { requestId: request.id, userId, totalMs: Date.now() - startedAt },
@@ -344,6 +361,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
     "[auth] resolved customer tenant options",
   );
   if (customerOptions.length === 1) {
+    await persistSessionCredential();
     request.log.info(
       { requestId: request.id, userId, totalMs: Date.now() - startedAt },
       "[auth] resolved customer login context",
@@ -361,6 +379,7 @@ export async function getOpenId(this: any, request: FastifyRequest, reply: Fasti
   }
 
   if (customerOptions.length > 1) {
+    await persistSessionCredential();
     const enrichedCustomerOptions = await this.listCustomerTenantOptionsByAuthUser(userId, {
       includeProjectSummary: true,
       memberships: visitorState.memberships ?? undefined,

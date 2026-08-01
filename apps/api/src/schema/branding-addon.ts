@@ -5,6 +5,14 @@ import {
   BRANDING_ADDON_PRODUCT_CODE,
   MAX_POSTGRES_INTEGER_FEN,
 } from "../services/branding-addon-contracts";
+import {
+  BRANDING_PURCHASE_MODES,
+  VIRTUAL_FULFILLMENT_STATUSES,
+  VIRTUAL_PAYMENT_ENVIRONMENTS,
+  VIRTUAL_PAYMENT_PLATFORMS,
+  VIRTUAL_PAYMENT_STATUSES,
+  VIRTUAL_REFUND_STATUSES,
+} from "../services/branding-virtual-payment-contracts";
 import { PaginationQuerySchema } from "./request";
 
 const PRODUCT_NAME_MAX_LENGTH = 100;
@@ -15,12 +23,48 @@ const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "amount_fen",
   "purchase_notes",
   "enabled",
+  "purchase_mode",
+  "virtual_product",
 ] as const;
+
+const VirtualPaymentSecretRefSchema = z.enum([
+  "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+  "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
+]);
 
 export const BrandingAddonAmountFenSchema = z.number()
   .int("金额必须是整数分")
   .positive("金额必须大于 0")
   .max(MAX_POSTGRES_INTEGER_FEN, "金额超出支持范围");
+
+export const BrandingVirtualProductPatchSchema = z.object({
+  environment: z.enum(VIRTUAL_PAYMENT_ENVIRONMENTS),
+  app_id: z.string().trim().min(1).max(64),
+  virtual_merchant_id: z.string().trim().min(1).max(64),
+  offer_id: z.string().trim().min(1).max(128),
+  provider_product_id: z.string().trim().min(1).max(128),
+  expected_amount_fen: BrandingAddonAmountFenSchema,
+  encrypted_secret_ref: VirtualPaymentSecretRefSchema,
+  secret_revision: z.number()
+    .int("密钥版本号必须是整数")
+    .positive("密钥版本号必须大于 0")
+    .max(2_147_483_647, "密钥版本号超出支持范围"),
+  status: z.enum(["draft", "active", "disabled"]),
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
+}).strict().refine(
+  (input) => input.encrypted_secret_ref === (
+    input.environment === "production"
+      ? "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE"
+      : "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"
+  ),
+  {
+    message: "虚拟支付密钥引用必须与环境一致",
+    path: ["encrypted_secret_ref"],
+  },
+);
 
 export const BrandingAddonProductPatchSchema = z.object({
   name: z.string()
@@ -35,7 +79,12 @@ export const BrandingAddonProductPatchSchema = z.object({
     .max(PURCHASE_NOTES_MAX_LENGTH, "购买说明不能超过 500 个字符")
     .optional(),
   enabled: z.boolean().optional(),
-  version: z.number().int("版本号必须是整数").positive("版本号必须大于 0"),
+  purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
+  virtual_product: BrandingVirtualProductPatchSchema.optional(),
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
 }).strict().refine(
   (input) => PRODUCT_PATCH_MUTABLE_FIELDS.some(
     (field) => input[field] !== undefined,
@@ -48,18 +97,63 @@ export const BrandingAddonCreateOrderSchema = z.object({
   idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
 }).strict();
 
+export const BrandingVirtualCreateOrderSchema = z.object({
+  product_code: z.literal(BRANDING_ADDON_PRODUCT_CODE),
+  idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
+  requested_platform: z.enum(VIRTUAL_PAYMENT_PLATFORMS).default("unknown"),
+}).strict();
+
 export const BrandingAddonEmptySchema = z.object({}).strict();
+
+export const BrandingVirtualProductEnvironmentParamsSchema = z.object({
+  environment: z.enum(VIRTUAL_PAYMENT_ENVIRONMENTS),
+}).strict();
+
+export const BrandingVirtualProductValidationSchema = z.object({
+  version: z.number()
+    .int("版本号必须是整数")
+    .positive("版本号必须大于 0")
+    .max(2_147_483_647, "版本号超出支持范围"),
+}).strict();
 
 export const BrandingAddonOrderParamsSchema = z.object({
   id: z.uuid("订单 ID 格式不正确"),
+}).strict();
+
+export const BrandingVirtualRefundCreateSchema = z.object({
+  order_id: z.uuid("订单 ID 格式不正确"),
+  idempotency_key: z.uuidv4("幂等键必须是合法的 UUID v4"),
+  reason: z.string().trim().min(1, "退款原因不能为空").max(500),
+  evidence_summary: z.string().trim().max(1_000).default(""),
+}).strict();
+
+export const BrandingVirtualRefundParamsSchema = z.object({
+  id: z.uuid("退款 ID 格式不正确"),
+}).strict();
+
+export const BrandingVirtualRefundListQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum([
+    "reviewing", "submitted", "external_required", "succeeded", "failed",
+    "rejected",
+  ]).optional(),
+  tenant_id: z.uuid("租户 ID 格式不正确").optional(),
 }).strict();
 
 export const BrandingAddonOrderStatusSchema = z.enum(
   BRANDING_ADDON_ORDER_STATUSES,
 );
 
-export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
+export const BrandingEntitlementPaymentChannelSchema = z.enum([
+  "legacy_direct",
+  "wechat_virtual",
+]);
+
+const BrandingAddonOrderListQueryBaseSchema = PaginationQuerySchema.extend({
   status: BrandingAddonOrderStatusSchema.optional(),
+  payment_channel: BrandingEntitlementPaymentChannelSchema.optional(),
+  payment_status: z.enum(VIRTUAL_PAYMENT_STATUSES).optional(),
+  fulfillment_status: z.enum(VIRTUAL_FULFILLMENT_STATUSES).optional(),
+  refund_status: z.enum(VIRTUAL_REFUND_STATUSES).optional(),
   keyword: z.string()
     .trim()
     .min(1, "关键词不能为空")
@@ -68,8 +162,19 @@ export const BrandingAddonOrderListQuerySchema = PaginationQuerySchema.extend({
     .optional(),
 }).strict();
 
+export const BrandingAddonOrderListQuerySchema =
+  BrandingAddonOrderListQueryBaseSchema.refine(
+    (input) => !input.status ||
+      !input.payment_status ||
+      mapLegacyPaymentStatus(input.status) === input.payment_status,
+    {
+      message: "旧版订单状态与支付状态冲突",
+      path: ["payment_status"],
+    },
+  );
+
 export const PlatformBrandingAddonOrderListQuerySchema =
-  BrandingAddonOrderListQuerySchema.extend({
+  BrandingAddonOrderListQuerySchema.safeExtend({
     tenant_id: z.uuid("租户 ID 格式不正确").optional(),
     created_from: z.iso.datetime("开始时间格式不正确").optional(),
     created_to: z.iso.datetime("结束时间格式不正确").optional(),
@@ -83,11 +188,27 @@ export const PlatformBrandingAddonOrderListQuerySchema =
     },
   );
 
+function mapLegacyPaymentStatus(
+  status: z.infer<typeof BrandingAddonOrderStatusSchema>,
+) {
+  return status === "paid" ? "succeeded" : status;
+}
+
 export type BrandingAddonProductPatchInput =
   z.infer<typeof BrandingAddonProductPatchSchema>;
+export type BrandingVirtualProductPatchInput =
+  z.infer<typeof BrandingVirtualProductPatchSchema>;
+export type BrandingVirtualProductValidationInput =
+  z.infer<typeof BrandingVirtualProductValidationSchema>;
 export type BrandingAddonCreateOrderInput =
   z.infer<typeof BrandingAddonCreateOrderSchema>;
+export type BrandingVirtualCreateOrderInput =
+  z.infer<typeof BrandingVirtualCreateOrderSchema>;
 export type BrandingAddonOrderListQuery =
   z.infer<typeof BrandingAddonOrderListQuerySchema>;
 export type PlatformBrandingAddonOrderListQuery =
   z.infer<typeof PlatformBrandingAddonOrderListQuerySchema>;
+export type BrandingVirtualRefundCreateInput =
+  z.infer<typeof BrandingVirtualRefundCreateSchema>;
+export type BrandingVirtualRefundListQuery =
+  z.infer<typeof BrandingVirtualRefundListQuerySchema>;

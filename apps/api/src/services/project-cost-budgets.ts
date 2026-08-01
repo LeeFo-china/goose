@@ -4,6 +4,7 @@ import {
   type ProjectCostBudgetCommitmentTotals,
   type ProjectCostBudgetExpenseTotals,
   type ProjectCostBudgetRecord,
+  type ProjectCostBudgetSupplierCostTotals,
 } from "@/repositories/project-cost-budgets";
 import type { SaveProjectCostBudgetsInput } from "@/schema/finance-costs";
 import { accessPolicyService } from "@/services/access-policy";
@@ -19,7 +20,9 @@ export type ProjectCostBudgetListItem = {
   category_name: string | null;
   budget_amount: number;
   expense_amount: number;
+  supplier_cost_amount: number;
   commitment_amount: number;
+  active_commitment_amount: number;
   available_amount: number;
   remaining_amount: number;
   usage_ratio: number | null;
@@ -33,6 +36,7 @@ export type ProjectCostBudgetSummary = {
   budget_configured: boolean;
   budget_amount: number;
   expense_amount: number;
+  actual_supplier_cost_amount: number;
   commitment_amount: number;
   available_amount: number;
   remaining_amount: number;
@@ -48,6 +52,8 @@ type ProjectCostBudgetServiceDependencies = {
     listExpenseTotals: typeof projectCostBudgetRepository.listExpenseTotals;
     listCommitmentTotals:
       typeof projectCostBudgetRepository.listCommitmentTotals;
+    listSupplierCostTotals:
+      typeof projectCostBudgetRepository.listSupplierCostTotals;
     listActiveCategoriesByIds:
       typeof projectCostBudgetRepository.listActiveCategoriesByIds;
     saveBudgets: typeof projectCostBudgetRepository.saveBudgets;
@@ -72,17 +78,26 @@ export class ProjectCostBudgetService {
     await this.assertProjectInTenant({ tenantId, projectId });
     await this.assertCanView(authContext, projectId);
 
-    const [budgets, expenseTotals, commitmentTotals] = await Promise.all([
-      this.dependencies.repository.listActiveBudgets({ tenantId, projectId }),
-      this.dependencies.repository.listExpenseTotals({ tenantId, projectId }),
-      this.dependencies.repository.listCommitmentTotals({ tenantId, projectId }),
-    ]);
+    const [budgets, expenseTotals, commitmentTotals, supplierCostTotals] =
+      await Promise.all([
+        this.dependencies.repository.listActiveBudgets({ tenantId, projectId }),
+        this.dependencies.repository.listExpenseTotals({ tenantId, projectId }),
+        this.dependencies.repository.listCommitmentTotals({
+          tenantId,
+          projectId,
+        }),
+        this.dependencies.repository.listSupplierCostTotals({
+          tenantId,
+          projectId,
+        }),
+      ]);
 
     return buildProjectCostBudgetResult({
       projectId,
       budgets,
       expenseTotals,
       commitmentTotals,
+      supplierCostTotals,
     });
   }
 
@@ -107,16 +122,25 @@ export class ProjectCostBudgetService {
       employeeId,
       items: input.items,
     });
-    const [expenseTotals, commitmentTotals] = await Promise.all([
-      this.dependencies.repository.listExpenseTotals({ tenantId, projectId }),
-      this.dependencies.repository.listCommitmentTotals({ tenantId, projectId }),
-    ]);
+    const [expenseTotals, commitmentTotals, supplierCostTotals] =
+      await Promise.all([
+        this.dependencies.repository.listExpenseTotals({ tenantId, projectId }),
+        this.dependencies.repository.listCommitmentTotals({
+          tenantId,
+          projectId,
+        }),
+        this.dependencies.repository.listSupplierCostTotals({
+          tenantId,
+          projectId,
+        }),
+      ]);
 
     return buildProjectCostBudgetResult({
       projectId,
       budgets,
       expenseTotals,
       commitmentTotals,
+      supplierCostTotals,
     });
   }
 
@@ -192,12 +216,16 @@ function buildProjectCostBudgetResult(input: {
   budgets: ProjectCostBudgetRecord[];
   expenseTotals: ProjectCostBudgetExpenseTotals;
   commitmentTotals: ProjectCostBudgetCommitmentTotals;
+  supplierCostTotals: ProjectCostBudgetSupplierCostTotals;
 }) {
   const list = [...input.budgets]
     .sort(compareBudgetRecords)
     .map((budget) => buildProjectCostBudgetListItem({
       budget,
       expenseAmount: input.expenseTotals.byCategory.get(
+        budget.cost_category_id,
+      ) ?? 0,
+      supplierCostAmount: input.supplierCostTotals.byCategory.get(
         budget.cost_category_id,
       ) ?? 0,
       commitmentAmount: input.commitmentTotals.byCategory.get(
@@ -207,15 +235,22 @@ function buildProjectCostBudgetResult(input: {
   const budgetCategoryIds = new Set(
     input.budgets.map((budget) => budget.cost_category_id),
   );
-  for (const [costCategoryId, commitmentAmount] of
-    input.commitmentTotals.byCategory) {
+  const uncoveredCategoryIds = new Set([
+    ...input.commitmentTotals.byCategory.keys(),
+    ...input.supplierCostTotals.byCategory.keys(),
+  ]);
+  for (const costCategoryId of uncoveredCategoryIds) {
     if (budgetCategoryIds.has(costCategoryId)) continue;
     list.push(buildUnbudgetedCommitmentListItem({
       projectId: input.projectId,
       costCategoryId,
-      category: input.commitmentTotals.categoryDetails.get(costCategoryId),
+      category: input.commitmentTotals.categoryDetails.get(costCategoryId) ??
+        input.supplierCostTotals.categoryDetails.get(costCategoryId),
       expenseAmount: input.expenseTotals.byCategory.get(costCategoryId) ?? 0,
-      commitmentAmount,
+      supplierCostAmount:
+        input.supplierCostTotals.byCategory.get(costCategoryId) ?? 0,
+      commitmentAmount:
+        input.commitmentTotals.byCategory.get(costCategoryId) ?? 0,
     }));
   }
 
@@ -224,17 +259,21 @@ function buildProjectCostBudgetResult(input: {
   );
   const budgetConfigured = input.budgets.length > 0;
   const expenseAmount = roundMoney(input.expenseTotals.totalExpenseAmount);
+  const supplierCostAmount = roundMoney(
+    input.supplierCostTotals.totalSupplierCostAmount,
+  );
+  const actualCostAmount = roundMoney(expenseAmount + supplierCostAmount);
   const commitmentAmount = roundMoney(
     input.commitmentTotals.totalCommitmentAmount,
   );
   const remainingAmount = budgetConfigured
-    ? roundMoney(budgetAmount - expenseAmount)
+    ? roundMoney(budgetAmount - actualCostAmount)
     : 0;
   const availableAmount = roundMoney(
-    budgetAmount - expenseAmount - commitmentAmount,
+    budgetAmount - actualCostAmount - commitmentAmount,
   );
   const usageRatio = budgetConfigured && budgetAmount > 0
-    ? roundRatio(expenseAmount / budgetAmount)
+    ? roundRatio(actualCostAmount / budgetAmount)
     : null;
 
   return {
@@ -243,6 +282,7 @@ function buildProjectCostBudgetResult(input: {
       budget_configured: budgetConfigured,
       budget_amount: budgetAmount,
       expense_amount: expenseAmount,
+      actual_supplier_cost_amount: supplierCostAmount,
       commitment_amount: commitmentAmount,
       available_amount: availableAmount,
       remaining_amount: remainingAmount,
@@ -253,7 +293,7 @@ function buildProjectCostBudgetResult(input: {
       risk_level: resolveProjectRiskLevel({
         budgetConfigured,
         budgetAmount,
-        expenseAmount,
+        expenseAmount: actualCostAmount,
         availableAmount,
       }),
     } satisfies ProjectCostBudgetSummary,
@@ -263,10 +303,13 @@ function buildProjectCostBudgetResult(input: {
 function buildProjectCostBudgetListItem(input: {
   budget: ProjectCostBudgetRecord;
   expenseAmount: number;
+  supplierCostAmount: number;
   commitmentAmount: number;
 }): ProjectCostBudgetListItem {
   const budgetAmount = roundMoney(input.budget.budget_amount);
   const expenseAmount = roundMoney(input.expenseAmount);
+  const supplierCostAmount = roundMoney(input.supplierCostAmount);
+  const actualCostAmount = roundMoney(expenseAmount + supplierCostAmount);
   const commitmentAmount = roundMoney(input.commitmentAmount);
   const warningThresholdPercent = normalizeNumber(
     input.budget.warning_threshold_percent,
@@ -281,20 +324,22 @@ function buildProjectCostBudgetListItem(input: {
     category_name: input.budget.cost_category?.name ?? null,
     budget_amount: budgetAmount,
     expense_amount: expenseAmount,
+    supplier_cost_amount: supplierCostAmount,
     commitment_amount: commitmentAmount,
+    active_commitment_amount: commitmentAmount,
     available_amount: roundMoney(
-      budgetAmount - expenseAmount - commitmentAmount,
+      budgetAmount - actualCostAmount - commitmentAmount,
     ),
-    remaining_amount: roundMoney(budgetAmount - expenseAmount),
+    remaining_amount: roundMoney(budgetAmount - actualCostAmount),
     usage_ratio: budgetAmount > 0
-      ? roundRatio(expenseAmount / budgetAmount)
+      ? roundRatio(actualCostAmount / budgetAmount)
       : null,
     warning_threshold_percent: warningThresholdPercent,
     risk_level: resolveCategoryRiskLevel({
       budgetAmount,
-      expenseAmount,
+      expenseAmount: actualCostAmount,
       availableAmount: roundMoney(
-        budgetAmount - expenseAmount - commitmentAmount,
+        budgetAmount - actualCostAmount - commitmentAmount,
       ),
       warningThresholdPercent,
     }),
@@ -308,12 +353,17 @@ function buildUnbudgetedCommitmentListItem(input: {
   costCategoryId: string;
   category?: { code: string | null; name: string | null };
   expenseAmount: number;
+  supplierCostAmount: number;
   commitmentAmount: number;
 }): ProjectCostBudgetListItem {
   const expenseAmount = roundMoney(input.expenseAmount);
+  const supplierCostAmount = roundMoney(input.supplierCostAmount);
+  const actualCostAmount = roundMoney(expenseAmount + supplierCostAmount);
   const commitmentAmount = roundMoney(input.commitmentAmount);
-  const remainingAmount = expenseAmount === 0 ? 0 : roundMoney(-expenseAmount);
-  const availableAmount = roundMoney(-expenseAmount - commitmentAmount);
+  const remainingAmount = actualCostAmount === 0
+    ? 0
+    : roundMoney(-actualCostAmount);
+  const availableAmount = roundMoney(-actualCostAmount - commitmentAmount);
   return {
     id: `commitment:${input.costCategoryId}`,
     project_id: input.projectId,
@@ -322,14 +372,16 @@ function buildUnbudgetedCommitmentListItem(input: {
     category_name: input.category?.name ?? null,
     budget_amount: 0,
     expense_amount: expenseAmount,
+    supplier_cost_amount: supplierCostAmount,
     commitment_amount: commitmentAmount,
+    active_commitment_amount: commitmentAmount,
     available_amount: availableAmount,
     remaining_amount: remainingAmount,
     usage_ratio: null,
     warning_threshold_percent: 100,
     risk_level: resolveCategoryRiskLevel({
       budgetAmount: 0,
-      expenseAmount,
+      expenseAmount: actualCostAmount,
       availableAmount,
       warningThresholdPercent: 100,
     }),

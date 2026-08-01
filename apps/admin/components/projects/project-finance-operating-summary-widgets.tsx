@@ -356,7 +356,7 @@ function moneyFlowAxisLabel(value: string) {
   const labels: Record<string, string> = {
     合同金额: "合同",
     已收金额: "已收",
-    已付支出: "已付",
+    项目成本: "成本",
     实际利润: "实利",
     预测利润: "预利",
   };

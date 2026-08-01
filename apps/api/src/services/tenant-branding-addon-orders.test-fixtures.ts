@@ -4,6 +4,7 @@ import type { BrandingAddonOrderRecord } from "@/repositories/branding-addon-ord
 import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import type { TenantEntitlementRecord } from "@/repositories/tenant-entitlements";
 import type { PlatformPaymentConfigRecord } from "@/repositories/platform-payment-configs";
+import { toTenantBrandingAddonOrderView } from "@/services/branding-addon-order-views";
 import type { AuthContext } from "@/services/authorization";
 
 export const TENANT_ID = "11111111-1111-4111-8111-111111111111";
@@ -51,6 +52,7 @@ export const product = {
   purchase_notes: "支付成功后自动开通或续期一年",
   refund_policy: "数字权益支付成功并开通后不支持退款",
   enabled: true,
+  purchase_mode: "direct_legacy",
   version: 2,
   updated_by_employee_id: null,
   created_at: "2026-07-28T00:00:00.000Z",
@@ -171,14 +173,64 @@ export function createDependencies(overrides: {
         currentOrder ?? order,
     ),
     findInternalTenantOrderById: mock(async () => currentOrder),
-    findTenantOrderById: mock(async () => currentOrder),
-    listTenantOrders: mock(async () => ({
-      list: currentOrder ? [currentOrder] : [],
-      pagination: { page: 1, pageSize: 20, total: currentOrder ? 1 : 0, totalPages: currentOrder ? 1 : 0 },
-    })),
   };
   const entitlementRepository = {
     findByCode: mock(async () => currentEntitlement),
+  };
+  const orderQueryService = {
+    listTenant: mock(async (context: AuthContext, query: {
+      page: number;
+      pageSize: number;
+    }) => {
+      if (!context.permissions.some(
+        ({ code }) => code === "brand.entitlement_order.read",
+      )) {
+        throw Object.assign(new Error("forbidden"), {
+          statusCode: 403,
+          code: "FORBIDDEN",
+        });
+      }
+      return {
+        list: currentOrder
+          ? [toTenantBrandingAddonOrderView(
+            currentOrder,
+            currentEntitlement,
+            new Date(NOW),
+          )]
+          : [],
+        pagination: {
+          page: query.page,
+          pageSize: query.pageSize,
+          total: currentOrder ? 1 : 0,
+          totalPages: currentOrder ? 1 : 0,
+        },
+        server_time: NOW.toISOString(),
+      };
+    }),
+    getTenant: mock(async (context: AuthContext) => {
+      if (!context.permissions.some(
+        ({ code }) => code === "brand.entitlement_order.read",
+      )) {
+        throw Object.assign(new Error("forbidden"), {
+          statusCode: 403,
+          code: "FORBIDDEN",
+        });
+      }
+      if (!currentOrder) {
+        throw Object.assign(new Error("not found"), {
+          statusCode: 404,
+          code: "BRANDING_ADDON_ORDER_NOT_FOUND",
+        });
+      }
+      return {
+        order: toTenantBrandingAddonOrderView(
+          currentOrder,
+          currentEntitlement,
+          new Date(NOW),
+        ),
+        server_time: NOW.toISOString(),
+      };
+    }),
   };
   const paymentConfigRepository = {
     findWechatPayConfig: mock(async () => paymentConfig),
@@ -232,6 +284,7 @@ export function createDependencies(overrides: {
     productRepository,
     orderRepository,
     entitlementRepository,
+    orderQueryService,
     paymentConfigRepository,
     accessPolicy,
     secretBundleService,

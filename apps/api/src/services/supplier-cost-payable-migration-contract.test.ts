@@ -5,9 +5,14 @@ const migrationUrl = new URL(
   "../../../../supabase/migrations/20260731100000_create_supplier_cost_payable_facts.sql",
   import.meta.url,
 );
-const migration = existsSync(migrationUrl)
-  ? readFileSync(migrationUrl, "utf8")
-  : "";
+const migration = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
+const previousGuardMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260729191000_fix_supplier_purchase_order_transitions.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function contracts(source: string, patterns: readonly RegExp[]) {
   for (const pattern of patterns) expect(source).toMatch(pattern);
@@ -22,17 +27,19 @@ function ordered(source: string, patterns: readonly RegExp[]) {
   }
 }
 
-function sqlFunction(schema: string, name: string) {
-  const start = migration.search(
+function sqlFunctionFrom(source: string, schema: string, name: string) {
+  const start = source.search(
     new RegExp(
       `CREATE (?:OR REPLACE )?FUNCTION ${schema}\\.${name}\\s*\\(`,
     ),
   );
   if (start < 0) return "";
-  const end = migration.indexOf("\n$$;", start);
-  return end < 0 ? migration.slice(start) : migration.slice(start, end + 4);
+  const end = source.indexOf("\n$$;", start);
+  return end < 0 ? source.slice(start) : source.slice(start, end + 4);
 }
 
+const sqlFunction = (schema: string, name: string) =>
+  sqlFunctionFrom(migration, schema, name);
 function sqlTable(name: string) {
   const start = migration.indexOf(`CREATE TABLE public.${name}`);
   if (start < 0) return "";
@@ -44,9 +51,7 @@ function aclStatement(prefix: string, suffix: string) {
   const start = migration.indexOf(prefix);
   if (start < 0) return "";
   const end = migration.indexOf(suffix, start);
-  return end < 0
-    ? migration.slice(start)
-    : migration.slice(start, end + suffix.length);
+  return end < 0 ? migration.slice(start) : migration.slice(start, end + suffix.length);
 }
 
 describe("supplier cost and payable migration contract", () => {
@@ -71,7 +76,9 @@ describe("supplier cost and payable migration contract", () => {
         /currency char\(3\) NOT NULL DEFAULT 'CNY'/,
         /amount numeric\(18, 2\) NOT NULL/,
         /accepted_quantity numeric\(18, 4\) NOT NULL/,
+        /created_by_employee_id uuid NOT NULL/,
         /FOREIGN KEY \(project_id, tenant_id\)[\s\S]*projects\(id, tenant_id\)/,
+        /FOREIGN KEY \(created_by_employee_id, tenant_id\)[\s\S]*employees\(id, tenant_id\)/,
         /FOREIGN KEY \(cost_category_id, tenant_id\)[\s\S]*finance_cost_categories\(id, tenant_id\)/,
         /FOREIGN KEY \(tenant_supplier_id, tenant_id, supplier_id\)[\s\S]*tenant_suppliers\(id, tenant_id, supplier_id\)/,
         /FOREIGN KEY \(supplier_purchase_order_id, tenant_id, supplier_id\)[\s\S]*supplier_purchase_orders\(id, tenant_id, supplier_id\)/,
@@ -81,6 +88,7 @@ describe("supplier cost and payable migration contract", () => {
         /FOREIGN KEY \(purchase_requisition_id, tenant_id\)[\s\S]*supplier_purchase_requisitions\(id, tenant_id\)/,
         /UNIQUE \(tenant_id, source_type, source_id\)/,
         /CHECK \(source_type = 'supplier_purchase_receipt_item'\)/,
+        /CHECK \(source_id = supplier_purchase_order_receipt_item_id\)/,
         /CHECK \(currency = 'CNY'\)/,
         /CHECK \(amount >= 0\)/,
         /CHECK \(accepted_quantity > 0\)/,
@@ -99,6 +107,7 @@ describe("supplier cost and payable migration contract", () => {
       /CHECK \(due_at >= occurred_at\)/,
     ]);
     contracts(migration, [
+      /ALTER TABLE public\.employees\s*ADD CONSTRAINT employees_id_tenant_key\s*UNIQUE \(id, tenant_id\)[\s\S]*CREATE TABLE public\.project_cost_events[\s\S]*?FOREIGN KEY \(created_by_employee_id, tenant_id\)[\s\S]*CREATE TABLE public\.supplier_payable_events[\s\S]*?FOREIGN KEY \(created_by_employee_id, tenant_id\)/,
       /ADD CONSTRAINT supplier_purchase_order_receipt_items_id_tenant_receipt_order_item_key[\s\S]*UNIQUE \(\s*id,\s*tenant_id,\s*receipt_id,\s*supplier_purchase_order_id,\s*supplier_purchase_order_item_id\s*\)/,
     ]);
   });
@@ -107,6 +116,8 @@ describe("supplier cost and payable migration contract", () => {
     contracts(migration, [
       /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN settlement_term_days_snapshot integer/,
       /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN invoice_required_before_payment_snapshot boolean/,
+      /ALTER TABLE public\.supplier_purchase_orders[\s\S]*ADD COLUMN commercial_snapshot_source text/,
+      /supplier_purchase_orders_commercial_snapshot_source_check[\s\S]*'contract_snapshot'[\s\S]*'relationship_default_snapshot'[\s\S]*'legacy_default_snapshot'/,
       /ALTER TABLE public\.supplier_purchase_order_items[\s\S]*ADD COLUMN cost_category_id uuid/,
       /supplier_purchase_order_items_cost_category_tenant_fkey[\s\S]*FOREIGN KEY \(cost_category_id, tenant_id\)[\s\S]*finance_cost_categories\(id, tenant_id\)/,
       /ALTER TABLE public\.project_cost_commitments[\s\S]*ADD COLUMN recognized_amount numeric\(18, 2\) NOT NULL DEFAULT 0/,
@@ -209,7 +220,9 @@ describe("supplier cost and payable migration contract", () => {
       /SUPPLIER_ACCOUNTING_LEGACY_GAP_PAGINATION_INVALID/,
       /unmapped_order_item/,
       /unfinancialized_receipt_item/,
+      /legacy_default_snapshot/,
       /supplier_purchase_order_items/,
+      /supplier_purchase_orders/,
       /supplier_purchase_order_receipt_items/,
       /accepted_quantity > 0/,
       /project_cost_events/,
@@ -225,6 +238,127 @@ describe("supplier cost and payable migration contract", () => {
     );
   });
 
+  test("backfills historical commercial terms only from relationship defaults", () => {
+    const commercialBackfill = migration.slice(
+      migration.indexOf("-- Backfill historical commercial defaults"),
+      migration.indexOf("-- End historical commercial defaults"),
+    );
+    contracts(commercialBackfill, [
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+      /FROM public\.tenant_suppliers AS relationship/,
+      /settlement_term_days_snapshot = relationship\.settlement_term_days/,
+      /invoice_required_before_payment_snapshot =\s*relationship\.invoice_required_before_payment/,
+      /commercial_snapshot_source = 'legacy_default_snapshot'/,
+    ]);
+    expect(commercialBackfill).not.toMatch(/supplier_contracts|CURRENT_DATE/);
+    ordered(migration, [
+      /-- Backfill historical commercial defaults/,
+      /commercial_snapshot_source = 'legacy_default_snapshot'/,
+      /-- Backfill financializable accepted receipt items/,
+      /cost_event\.occurred_at \+ make_interval\(\s*days => purchase_order\.settlement_term_days_snapshot\s*\)/,
+      /purchase_order\.invoice_required_before_payment_snapshot/,
+    ]);
+  });
+
+  test("uses a transaction-scoped guard suspension for historical backfill", () => {
+    ordered(migration, [
+      /ALTER TABLE public\.supplier_purchase_order_items\s*DISABLE TRIGGER supplier_purchase_order_items_require_draft/,
+      /ALTER TABLE public\.supplier_purchase_orders\s*DISABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation/,
+      /-- Backfill reliable historical line categories/,
+      /UPDATE public\.supplier_purchase_order_items AS purchase_item/,
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+      /ALTER TABLE public\.supplier_purchase_order_items\s*ENABLE TRIGGER supplier_purchase_order_items_require_draft/,
+      /ALTER TABLE public\.supplier_purchase_orders\s*ENABLE TRIGGER supplier_purchase_orders_prevent_submitted_mutation/,
+      /SUPPLIER_PURCHASE_ORDER_GUARD_RESTORE_FAILED/,
+    ]);
+    contracts(migration, [
+      /pg_catalog\.pg_trigger/,
+      /supplier_purchase_order_items_require_draft/,
+      /public\.prevent_supplier_purchase_order_item_mutation\(\)'\s*::regprocedure/,
+      /supplier_purchase_orders_prevent_submitted_mutation/,
+      /public\.prevent_submitted_supplier_purchase_order_mutation\(\)'\s*::regprocedure/,
+      /guard_trigger\.tgenabled = 'O'/,
+    ]);
+  });
+
+  test("populates every inserted order snapshot before enforcing not null", () => {
+    const snapshot = sqlFunction(
+      "public",
+      "populate_supplier_purchase_order_commercial_snapshot",
+    );
+    contracts(snapshot, [
+      /RETURNS trigger/,
+      /SECURITY DEFINER/,
+      /SET search_path = pg_catalog, public/,
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*FOR SHARE/,
+      /FROM public\.supplier_contracts AS contract/,
+      /contract\.lifecycle_status = 'active'/,
+      /contract\.valid_from <= NEW\.priced_at::date/,
+      /contract\.valid_until >= NEW\.priced_at::date/,
+      /ORDER BY contract\.valid_until DESC, contract\.id/,
+      /NEW\.settlement_term_days_snapshot := COALESCE\(/,
+      /NEW\.invoice_required_before_payment_snapshot := COALESCE\(/,
+      /NEW\.commercial_snapshot_source := CASE/,
+      /'contract_snapshot'/,
+      /'relationship_default_snapshot'/,
+      /RETURN NEW/,
+    ]);
+    ordered(snapshot, [
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR SHARE/,
+      /FROM public\.supplier_contracts AS contract/,
+    ]);
+    const contractRead = snapshot.slice(
+      snapshot.indexOf("FROM public.supplier_contracts AS contract"),
+      snapshot.indexOf("NEW.settlement_term_days_snapshot"),
+    );
+    expect(contractRead).not.toContain("FOR SHARE");
+    contracts(migration, [
+      /CREATE TRIGGER supplier_purchase_orders_commercial_snapshot\s*BEFORE INSERT ON public\.supplier_purchase_orders[\s\S]*populate_supplier_purchase_order_commercial_snapshot/,
+      /REVOKE ALL ON FUNCTION\s*public\.populate_supplier_purchase_order_commercial_snapshot\(\)\s*FROM PUBLIC, anon, authenticated, service_role/,
+    ]);
+    const triggerAt = migration.indexOf(
+      "CREATE TRIGGER supplier_purchase_orders_commercial_snapshot",
+    );
+    const notNullAt = migration.indexOf(
+      "ALTER COLUMN settlement_term_days_snapshot SET NOT NULL",
+    );
+    const convertAt = migration.indexOf(
+      "CREATE OR REPLACE FUNCTION public.convert_supplier_purchase_requisition",
+    );
+    expect(triggerAt).toBeGreaterThanOrEqual(0);
+    expect(triggerAt).toBeLessThan(notNullAt);
+    expect(notNullAt).toBeLessThan(convertAt);
+  });
+
+  test("freezes commercial snapshots after order submission", () => {
+    const guard = sqlFunction(
+      "public",
+      "prevent_submitted_supplier_purchase_order_mutation",
+    );
+    const previousGuard = sqlFunctionFrom(
+      previousGuardMigration,
+      "public",
+      "prevent_submitted_supplier_purchase_order_mutation",
+    );
+    contracts(guard, [
+      /IF OLD\.status = 'submitted'/,
+      /NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s*OLD\.settlement_term_days_snapshot/,
+      /NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s*OLD\.invoice_required_before_payment_snapshot/,
+      /NEW\.commercial_snapshot_source IS DISTINCT FROM\s*OLD\.commercial_snapshot_source/,
+      /IF NEW\.status NOT IN \('draft', 'submitted', 'cancelled'\)[\s\S]*NEW\.version <> OLD\.version \+ 1[\s\S]*NEW\.updated_by_employee_id IS NULL[\s\S]*NEW\.updated_at < OLD\.updated_at/,
+      /IF NEW\.status = 'cancelled' AND \([\s\S]*NEW\.cancelled_by_employee_id IS NULL[\s\S]*NEW\.updated_by_employee_id IS DISTINCT FROM\s*NEW\.cancelled_by_employee_id/,
+    ]);
+    const withoutSnapshotFreeze = guard.replace(
+      /\s+OR NEW\.settlement_term_days_snapshot IS DISTINCT FROM\s+OLD\.settlement_term_days_snapshot\s+OR NEW\.invoice_required_before_payment_snapshot IS DISTINCT FROM\s+OLD\.invoice_required_before_payment_snapshot\s+OR NEW\.commercial_snapshot_source IS DISTINCT FROM\s+OLD\.commercial_snapshot_source/,
+      "",
+    );
+    const normalizeSql = (source: string) =>
+      source.replace(/\s+/g, " ").trim();
+    expect(normalizeSql(withoutSnapshotFreeze)).toBe(
+      normalizeSql(previousGuard),
+    );
+  });
+
   test("converts requisitions with category and commercial snapshots", () => {
     const convert = sqlFunction(
       "public",
@@ -235,17 +369,16 @@ describe("supplier cost and payable migration contract", () => {
       /p_requisition_id uuid[\s\S]*p_tenant_id uuid[\s\S]*p_expected_version integer[\s\S]*p_purchase_order_id uuid[\s\S]*p_actor_user_id uuid[\s\S]*p_actor_employee_id uuid[\s\S]*p_idempotency_key text/,
       /SECURITY DEFINER/,
       /SET search_path = pg_catalog, public/,
-      /FROM public\.tenant_suppliers AS relationship[\s\S]*FOR SHARE/,
-      /FROM public\.supplier_contracts AS contract[\s\S]*lifecycle_status = 'active'[\s\S]*valid_from <= v_checked_at::date[\s\S]*valid_until >= v_checked_at::date[\s\S]*ORDER BY[\s\S]*FOR SHARE/,
-      /COALESCE\(\s*v_contract_settlement_term_days,\s*v_default_settlement_term_days\s*\)/,
-      /COALESCE\(\s*v_contract_invoice_required,\s*v_default_invoice_required\s*\)/,
       /UPDATE public\.supplier_purchase_order_items AS purchase_item[\s\S]*SET cost_category_id = requisition_item\.cost_category_id[\s\S]*purchase_item\.supplier_sku_id =\s*requisition_item\.supplier_sku_id/,
-      /UPDATE public\.supplier_purchase_orders AS purchase_order[\s\S]*settlement_term_days_snapshot = v_settlement_term_days[\s\S]*invoice_required_before_payment_snapshot = v_invoice_required/,
       /convert_supplier_purchase_requisition_commercial_v1\([\s\S]*v_result ->> 'status' <> 'converted'[\s\S]*v_result ->> 'idempotent'/,
     ]);
+    expect(convert).not.toMatch(
+      /UPDATE public\.supplier_purchase_orders AS purchase_order/,
+    );
     ordered(convert, [
-      /FROM public\.supplier_contracts AS contract[\s\S]*?FOR SHARE/,
-      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR SHARE/,
+      /convert_supplier_purchase_requisition_commercial_v1\(/,
+      /v_result ->> 'idempotent'/,
+      /UPDATE public\.supplier_purchase_order_items AS purchase_item/,
     ]);
   });
 
@@ -263,11 +396,12 @@ describe("supplier cost and payable migration contract", () => {
       /'status', 'state_conflict'[\s\S]*'SUPPLIER_PURCHASE_ORDER_COST_CATEGORY_REQUIRED'/,
       /create_supplier_purchase_order_receipt_fulfillment_v1\(/,
       /previous_recognized_amount/,
-      /cumulative_accepted_quantity =\s*financial_line\.ordered_quantity[\s\S]*financial_line\.line_total_amount -\s*financial_line\.previous_recognized_amount/,
-      /round\(\s*financial_line\.line_total_amount \*\s*financial_line\.accepted_quantity \/\s*financial_line\.ordered_quantity,\s*2\s*\)/,
+      /greatest\(\s*least\(\s*financial_line\.line_total_amount,\s*CASE[\s\S]*financial_line\.cumulative_accepted_quantity >=\s*financial_line\.ordered_quantity[\s\S]*financial_line\.line_total_amount[\s\S]*round\(\s*financial_line\.line_total_amount \*\s*financial_line\.cumulative_accepted_quantity \/\s*financial_line\.ordered_quantity,\s*2\s*\)[\s\S]*END\s*\) -\s*financial_line\.previous_recognized_amount,\s*0\s*\)/,
       /WHERE financial_line\.accepted_quantity > 0/,
       /INSERT INTO public\.project_cost_events/,
       /INSERT INTO public\.supplier_payable_events/,
+      /INSERT INTO public\.project_cost_events \([\s\S]*?occurred_at,\s*created_by_employee_id\s*\)[\s\S]*?allocated\.recognized_amount,\s*p_received_at,\s*p_actor_employee_id/,
+      /INSERT INTO public\.supplier_payable_events \([\s\S]*?invoice_required_before_payment,\s*created_by_employee_id\s*\)[\s\S]*?v_order\.invoice_required_before_payment_snapshot,\s*cost_event\.created_by_employee_id/,
       /p_received_at \+ make_interval\(\s*days => v_order\.settlement_term_days_snapshot\s*\)/,
       /invoice_required_before_payment_snapshot/,
       /FROM public\.project_cost_commitments AS commitment[\s\S]*ORDER BY commitment\.cost_category_id, commitment\.id[\s\S]*FOR UPDATE/,
@@ -285,6 +419,57 @@ describe("supplier cost and payable migration contract", () => {
     ]);
     expect(receipt).toMatch(
       /exception block is a subtransaction[\s\S]*v1 receipt[\s\S]*command event[\s\S]*roll back/i,
+    );
+    expect(receipt).not.toMatch(
+      /line_total_amount \*\s*financial_line\.accepted_quantity \/\s*financial_line\.ordered_quantity/,
+    );
+  });
+
+  test("allocates live and historical facts from monotonic cumulative targets", () => {
+    const backfill = migration.slice(
+      migration.indexOf("-- Backfill financializable accepted receipt items"),
+      migration.indexOf(
+        "INSERT INTO public.supplier_payable_events",
+        migration.indexOf("-- Backfill financializable accepted receipt items"),
+      ),
+    );
+    contracts(backfill, [
+      /receipt\.received_by_employee_id/,
+      /SUM\(receipt_item\.accepted_quantity\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW[\s\S]*AS cumulative_accepted_quantity/,
+      /targeted AS MATERIALIZED/,
+      /least\(\s*historical_line\.line_total_amount,\s*CASE[\s\S]*historical_line\.cumulative_accepted_quantity >=\s*historical_line\.ordered_quantity[\s\S]*historical_line\.line_total_amount[\s\S]*round\(\s*historical_line\.line_total_amount \*\s*historical_line\.cumulative_accepted_quantity \/\s*historical_line\.ordered_quantity,\s*2\s*\)[\s\S]*END\s*\)[\s\S]*AS cumulative_target_amount/,
+      /greatest\(\s*targeted\.cumulative_target_amount - COALESCE\(\s*lag\(targeted\.cumulative_target_amount\) OVER \([\s\S]*ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING[\s\S]*\),\s*0\s*\),\s*0\s*\)[\s\S]*AS recognized_amount/,
+      /INSERT INTO public\.project_cost_events \([\s\S]*?occurred_at,\s*created_by_employee_id\s*\)[\s\S]*?allocated\.received_at,\s*allocated\.received_by_employee_id/,
+    ]);
+    expect(migration).toMatch(
+      /-- Backfill financializable accepted receipt items[\s\S]*?INSERT INTO public\.supplier_payable_events \([\s\S]*?invoice_required_before_payment,\s*created_by_employee_id\s*\)[\s\S]*?purchase_order\.invoice_required_before_payment_snapshot,\s*cost_event\.created_by_employee_id/,
+    );
+    expect(backfill).not.toMatch(
+      /line_total_amount \*\s*historical_line\.accepted_quantity \/\s*historical_line\.ordered_quantity/,
+    );
+
+    const lineTotalCents = 4;
+    const orderedQuantity = 6;
+    const cumulativeTargets = Array.from({ length: orderedQuantity }, (_, i) =>
+      Math.min(
+        lineTotalCents,
+        Math.round((lineTotalCents * (i + 1)) / orderedQuantity),
+      ),
+    );
+    const allocations = cumulativeTargets.map(
+      (target, i) => target - (cumulativeTargets[i - 1] ?? 0),
+    );
+    const unsafeFinalAllocation =
+      lineTotalCents -
+      Array.from({ length: orderedQuantity - 1 }, () =>
+        Math.round(lineTotalCents / orderedQuantity),
+      ).reduce((sum, amount) => sum + amount, 0);
+
+    expect(unsafeFinalAllocation).toBe(-1);
+    expect(allocations).toEqual([1, 0, 1, 1, 0, 1]);
+    expect(allocations.every((amount) => amount >= 0)).toBe(true);
+    expect(allocations.reduce((sum, amount) => sum + amount, 0)).toBe(
+      lineTotalCents,
     );
   });
 

@@ -162,13 +162,13 @@ class UserIdentityRepository {
       query = query.eq("openid", input.openid);
     }
 
-    const { error } = await query.select("id");
+    const { data, error } = await query.select("id");
 
     if (error) {
       throw Errors.dbError("解绑用户登录凭证失败", error);
     }
+    return (data || []) as { id: string }[];
   }
-
   async createOauthIdentity(input: {
     userId: string;
     platform: OAuthPlatform;

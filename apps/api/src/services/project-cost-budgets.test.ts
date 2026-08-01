@@ -72,6 +72,11 @@ const listCommitmentTotals = mock(async () => ({
     ["category-2", { code: "main_material", name: "主材" }],
   ]),
 }));
+const listSupplierCostTotals = mock(async () => ({
+  sourceRowCount: 0,
+  totalSupplierCostAmount: 0,
+  byCategory: new Map<string, number>(),
+}));
 
 const listActiveCategoriesByIds = mock(async () => [
   { id: "category-1", code: "labor", name: "人工", status: "active" },
@@ -107,6 +112,7 @@ mock.module("@/repositories/project-cost-budgets", () => ({
     listActiveBudgets,
     listExpenseTotals,
     listCommitmentTotals,
+    listSupplierCostTotals,
     listActiveCategoriesByIds,
     saveBudgets,
   },
@@ -158,6 +164,7 @@ describe("projectCostBudgetService", () => {
     listActiveBudgets.mockClear();
     listExpenseTotals.mockClear();
     listCommitmentTotals.mockClear();
+    listSupplierCostTotals.mockClear();
     listActiveCategoriesByIds.mockClear();
     saveBudgets.mockClear();
     canAccessProject.mockClear();

@@ -1,6 +1,7 @@
 import type { SettingDefinition } from './shared';
 
-export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [  {
+export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [
+  {
     key: "WECHAT_SHARE_CAMPAIGN_PAGE",
     groupCode: "wechat",
     name: "微信助力页路径",
@@ -19,12 +20,29 @@ export const DEFINITIONS_WECHAT_NOTIFY: SettingDefinition[] = [  {
     isSecret: true,
   },
   {
+    key: "WECHAT_MINIPROGRAM_ORIGINAL_ID",
+    groupCode: "wechat",
+    name: "微信小程序原始 ID",
+    description: "微信消息推送 ToUserName 对应的小程序原始 ID（gh_ 开头、最长 128 字符），不得填写 AppID。",
+    valueType: "string",
+    envNames: ["WECHAT_MINIPROGRAM_ORIGINAL_ID"],
+  },
+  {
     key: "WECHAT_SECRET",
     groupCode: "wechat",
     name: "微信小程序密钥",
     description: "微信小程序密钥，加密存储。",
     valueType: "string",
     envNames: ["WECHAT_SECRET"],
+    isSecret: true,
+  },
+  {
+    key: "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN",
+    groupCode: "wechat",
+    name: "微信虚拟支付消息令牌",
+    description: "仅用于微信小程序虚拟支付消息推送的非空 SHA-1 验签令牌（最长 512 字符），加密存储；不得复用 AppSecret 或虚拟支付 AppKey。",
+    valueType: "string",
+    envNames: ["WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN"],
     isSecret: true,
   },
   {

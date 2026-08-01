@@ -1,12 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AuthContext } from "@/services/authorization";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const baseProject = { id: "project-1", status: "constructing", signed_amount: 100000, budget: 90000 };
-
 const listProjects = mock(async () => ({
   list: [{ ...baseProject, name: "阶段三经营项目" }],
   pagination: {
@@ -47,11 +45,13 @@ const listLedgerTotals = mock(async () => new Map([
     ]),
   }],
 ]));
+const listSupplierTotals = mock(async () => new Map());
 const listUnallocatedExpenseItems = mock(async () => new Map());
 const listLedgerTrend = mock(async () => [{
   date: "2026-06-01",
   income_amount: 50000,
   expense_amount: 12000,
+  supplier_cash_paid_amount: 0,
 }]);
 const listReceivableTotals = mock(async () => new Map([
   ["project-1", {
@@ -78,7 +78,6 @@ const listBudgetTotals = mock(async () => new Map([
   }],
 ]));
 const canAccessProject = mock(async () => true);
-
 const repository = {
   listProjects,
   findProject,
@@ -86,6 +85,7 @@ const repository = {
   listProjectsByIds,
   listProjectsForAnalytics,
   listLedgerTotals,
+  listSupplierTotals,
   listUnallocatedExpenseItems,
   listLedgerTrend,
   listReceivableTotals,
@@ -139,7 +139,6 @@ async function createService() {
     accessPolicyService,
   });
 }
-
 describe("financeProjectSummaryService", () => {
   beforeEach(() => {
     listProjects.mockClear();
@@ -148,6 +147,7 @@ describe("financeProjectSummaryService", () => {
     listProjectsByIds.mockClear();
     listProjectsForAnalytics.mockClear();
     listLedgerTotals.mockClear();
+    listSupplierTotals.mockClear();
     listLedgerTrend.mockClear();
     listReceivableTotals.mockClear();
     listBudgetTotals.mockClear();
@@ -218,6 +218,7 @@ describe("financeProjectSummaryService", () => {
         date: "2026-06-01",
         income_amount: 50000,
         expense_amount: 12000,
+        supplier_cash_paid_amount: 0,
         net_cash_flow_amount: 38000,
       },
     ]);
@@ -485,7 +486,6 @@ describe("financeProjectSummaryService", () => {
 
   test("rejects project summary list without finance permission", async () => {
     const financeProjectSummaryService = await createService();
-
     await expect(
       financeProjectSummaryService.listProjectSummaries(
         authContextWithPermissions([{ code: "project.read", scope: "all" }]),

@@ -97,6 +97,40 @@ describe("BrandingAddonExpirationRepository", () => {
     ]);
   });
 
+  test("claims at most 100 legacy pending orders", async () => {
+    result = { data: [{ id: "order-1" }], error: null };
+    const { BrandingAddonExpirationRepository } = await import(
+      "./branding-addon-expiration"
+    );
+    const repository = new BrandingAddonExpirationRepository(() => client);
+
+    await repository.claimLegacyPendingOrders({
+      batchSize: 500,
+      leaseSeconds: 1,
+    });
+
+    expect(calls).toContainEqual([
+      "rpc",
+      "branding_claim_legacy_pending_orders",
+      { p_limit: 100, p_lease_seconds: 10 },
+    ]);
+  });
+
+  test("reads the database cutover readiness assertion", async () => {
+    result = { data: true, error: null };
+    const { BrandingAddonExpirationRepository } = await import(
+      "./branding-addon-expiration"
+    );
+    const repository = new BrandingAddonExpirationRepository(() => client);
+
+    await expect(repository.assertVirtualCutoverReady()).resolves.toBe(true);
+    expect(calls).toContainEqual([
+      "rpc",
+      "branding_assert_virtual_cutover_ready",
+      {},
+    ]);
+  });
+
   test("closes and releases only the exact pending claim", async () => {
     const { BrandingAddonExpirationRepository } = await import(
       "./branding-addon-expiration"
@@ -108,11 +142,20 @@ describe("BrandingAddonExpirationRepository", () => {
       claimToken: "claim-1",
       closedAt: new Date("2026-07-28T08:10:00.000Z"),
       requireMissingPrepay: true,
+      failureCode: "PAYMENT_CHANNEL_MIGRATED",
+      failureMessage: "旧支付渠道已关闭",
     });
     expect(calls).toContainEqual(["eq", "id", "order-1"]);
     expect(calls).toContainEqual(["eq", "status", "pending"]);
     expect(calls).toContainEqual(["eq", "close_claim_token", "claim-1"]);
     expect(calls).toContainEqual(["is", "prepay_id", null]);
+    expect(calls).toContainEqual([
+      "update",
+      expect.objectContaining({
+        failure_code: "PAYMENT_CHANNEL_MIGRATED",
+        failure_message: "旧支付渠道已关闭",
+      }),
+    ]);
 
     calls.length = 0;
     await repository.releaseCloseClaim({

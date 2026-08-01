@@ -25,7 +25,7 @@ export function isPublicRoute(method: string, url: string) {
     return true;
   }
 
-  if (isEffectiveBrandingRoute(method, url)) return true;
+  if (isEffectiveBrandingRoute(method, url) || (url === "/wechat/virtual-payment/events" && (method === "GET" || method === "POST"))) return true;
 
   if (
     (method === "GET" || method === "HEAD")

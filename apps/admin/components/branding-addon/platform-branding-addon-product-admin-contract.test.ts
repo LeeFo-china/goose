@@ -17,13 +17,13 @@ describe("platform branding addon product admin contract", () => {
     expect(page).toContain("/platform/branding/entitlement-product");
     expect(page).toContain("getAdminToken");
     expect(page).toContain("parseBackendJson");
-    expect(page).toContain("PlatformBrandingAddonProductForm");
-    expect(page).toContain("key={result.product.version}");
+    expect(page).toContain("PlatformBrandingVirtualProductForm");
+    expect(page).toContain("initialVirtualProducts");
   });
 
   test("keeps the product card filling the fixed admin workspace", () => {
     const page = readSource("../../app/(console)/platform/branding-addon/page.tsx");
-    const form = readSource("./platform-branding-addon-product-form.tsx");
+    const form = readSource("./platform-branding-virtual-product-form.tsx");
     const loading = readSource("../../app/(console)/platform/branding-addon/loading.tsx");
 
     for (const source of [page, loading]) {
@@ -33,30 +33,27 @@ describe("platform branding addon product admin contract", () => {
     }
     expect(form).toContain('className="flex min-h-0 flex-1 flex-col"');
     expect(form).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
-    expect(form).toContain('CardContent className="min-h-0 flex-1 overflow-auto"');
+    expect(form).toContain('CardContent className="min-h-0 flex-1 overflow-auto p-5"');
     expect(loading).toContain('Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none"');
-    expect(loading).toContain('CardContent className="min-h-0 flex-1 overflow-hidden"');
+    expect(loading).toContain('CardContent className="flex min-h-0 flex-1 flex-col p-0"');
   });
 
   test("patches editable fields with optimistic version handling", () => {
-    const form = readSource(
-      "./platform-branding-addon-product-form.tsx",
-    );
+    const form = readSource("./platform-branding-virtual-product-form.tsx");
+    const fields = readSource("./platform-branding-addon-product-form.tsx");
 
     expect(form).toContain("requestBackendJson");
     expect(form).toContain('method: "PATCH"');
     expect(form).toContain("buildProductPatch");
     expect(form).toContain("BRANDING_ADDON_PRODUCT_VERSION_CONFLICT");
-    expect(form).toContain("router.refresh()");
-    expect(form).toContain("FieldGroup");
-    expect(form).toContain("Switch");
-    expect(form).toContain("历史订单保留创建时的商品快照");
+    expect(form).toContain("window.location.reload()");
+    expect(fields).toContain("FieldGroup");
+    expect(fields).toContain("Switch");
+    expect(form).toContain("历史订单继续使用创建时快照");
   });
 
   test("uses accessible fields and exposes the immutable product facts", () => {
-    const form = readSource(
-      "./platform-branding-addon-product-form.tsx",
-    );
+    const form = readSource("./platform-branding-addon-product-form.tsx");
 
     expect(form).toContain('htmlFor="branding-addon-product-name"');
     expect(form).toContain('htmlFor="branding-addon-product-amount"');
@@ -68,11 +65,10 @@ describe("platform branding addon product admin contract", () => {
   });
 
   test("associates validation feedback with fields and clears stale success", () => {
-    const form = readSource(
-      "./platform-branding-addon-product-form.tsx",
-    );
+    const form = readSource("./platform-branding-addon-product-form.tsx");
+    const shell = readSource("./platform-branding-virtual-product-form.tsx");
 
-    expect(form).toContain("ProductFormValidationError");
+    expect(shell).toContain("ProductFormValidationError");
     expect(form).toContain("FieldError");
     expect(form).toContain(
       "data-invalid={Boolean(fieldErrors.name)}",
@@ -84,7 +80,7 @@ describe("platform branding addon product admin contract", () => {
       "data-invalid={Boolean(fieldErrors.purchaseNotes)}",
     );
     expect(form).toContain("required={values.enabled}");
-    expect(form).toContain("function editValues");
-    expect(form).toContain("setSaved(false)");
+    expect(shell).toContain("function editProduct");
+    expect(shell).toContain('setSaved("")');
   });
 });

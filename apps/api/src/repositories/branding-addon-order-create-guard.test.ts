@@ -80,6 +80,7 @@ describe("BrandingAddonOrderRepository atomic create errors", () => {
   test.each([
     ["BRANDING_ENTITLEMENT_SUSPENDED", "品牌权益已暂停，不能购买或续费"],
     ["BRANDING_ENTITLEMENT_REVOKED", "品牌权益已撤销，不能购买或续费"],
+    ["BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED", "品牌权益购买渠道已迁移"],
   ] as const)("maps %s without database details", async (code, message) => {
     const repository = createRepository({
       code: "P0001",

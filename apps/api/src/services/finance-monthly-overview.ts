@@ -7,6 +7,7 @@ import {
   financeOperatingReportRepository,
   type FinanceOperatingReportLedgerRow,
   type FinanceOperatingReportReceivableRow,
+  type FinanceOperatingReportSupplierCostRow,
 } from "@/repositories/finance-operating-report";
 import {
   financeReconciliationRepository,
@@ -17,13 +18,17 @@ import type { AuthContext } from "@/services/authorization";
 import {
   buildFinanceReconciliationExceptions,
 } from "@/services/finance-reconciliation-exceptions";
+import {
+  aggregateSupplierCostCentsBy,
+  supplierCostCentsToNumber,
+} from "@/services/finance-report-supplier-costs";
 
 const SOURCE_LIMIT = 10_000;
 
 type FinanceMonthlyOverviewServiceDependencies = {
   operatingReportRepository: Pick<
     typeof financeOperatingReportRepository,
-    "listLedgerRows" | "listReceivableRows"
+    "listLedgerRows" | "listReceivableRows" | "listSupplierCostRows"
   >;
   reconciliationRepository: Pick<
     typeof financeReconciliationRepository,
@@ -99,9 +104,15 @@ export class FinanceMonthlyOverviewService {
     const range = resolveMonthRange(
       query.month ?? toMonthOnly(this.dependencies.now?.() ?? new Date()),
     );
-    const [ledgerRows, receivableRows, reconciliationCandidates, closingPeriod] =
+    const [ledgerRows, supplierCostRows, receivableRows, reconciliationCandidates, closingPeriod] =
       await Promise.all([
         this.dependencies.operatingReportRepository.listLedgerRows({
+          tenantId,
+          dateFrom: range.dateFrom,
+          dateTo: range.dateTo,
+          sourceLimit: SOURCE_LIMIT,
+        }),
+        this.dependencies.operatingReportRepository.listSupplierCostRows({
           tenantId,
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
@@ -127,6 +138,7 @@ export class FinanceMonthlyOverviewService {
 
     const summary = buildSummary({
       ledgerRows,
+      supplierCostRows,
       receivableRows,
       reconciliationExceptionCount: buildFinanceReconciliationExceptions(
         reconciliationCandidates,
@@ -144,6 +156,7 @@ export class FinanceMonthlyOverviewService {
         date_to: range.dateTo,
         source_limit: SOURCE_LIMIT,
         truncated: ledgerRows.length >= SOURCE_LIMIT ||
+          supplierCostRows.length >= SOURCE_LIMIT ||
           receivableRows.length >= SOURCE_LIMIT,
       },
     };
@@ -170,6 +183,7 @@ export class FinanceMonthlyOverviewService {
 
 function buildSummary(input: {
   ledgerRows: FinanceOperatingReportLedgerRow[];
+  supplierCostRows: FinanceOperatingReportSupplierCostRow[];
   receivableRows: FinanceOperatingReportReceivableRow[];
   reconciliationExceptionCount: number;
   tenantToday: string;
@@ -178,7 +192,10 @@ function buildSummary(input: {
     (summary, row) => {
       if (row.direction === "in") {
         summary.incomeAmount += row.amount;
-      } else if (row.direction === "out") {
+      } else if (
+        row.direction === "out" &&
+        row.entry_type !== "supplier_payment"
+      ) {
         summary.expenseAmount += row.amount;
         if (!row.cost_category_id) {
           summary.unallocatedExpenseAmount += row.amount;
@@ -191,6 +208,14 @@ function buildSummary(input: {
       expenseAmount: 0,
       unallocatedExpenseAmount: 0,
     },
+  );
+  const supplierCostCents = aggregateSupplierCostCentsBy(
+    input.supplierCostRows,
+    () => "total",
+  ).get("total") ?? BigInt(0);
+  ledger.expenseAmount += supplierCostCentsToNumber(
+    supplierCostCents,
+    input.supplierCostRows,
   );
   const receivable = input.receivableRows.reduce(
     (summary, row) => {

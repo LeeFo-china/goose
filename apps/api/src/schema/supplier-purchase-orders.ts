@@ -47,6 +47,8 @@ const fulfillmentDateTime = z.iso.datetime({
   offset: true,
   message: "履约时间格式无效",
 });
+const financialSummaryMoney = z.string()
+  .regex(/^(?:0|[1-9]\d{0,15})\.\d{2}$/, "金额格式无效");
 
 export const SupplierPurchaseOrderStatusSchema = z.enum(
   SUPPLIER_PURCHASE_ORDER_STATUS_VALUES,
@@ -74,6 +76,16 @@ export const SupplierPurchaseOrderOptionQuerySchema =
 
 export const SupplierPurchaseOrderParamSchema = z.object({
   id: uuid("无效的供应商采购单 ID"),
+}).strict();
+
+export const SupplierPurchaseOrderFinancialSummarySchema = z.object({
+  purchase_order_id: uuid("无效的供应商采购单 ID"),
+  accepted_amount: financialSummaryMoney,
+  payable_amount: financialSummaryMoney,
+  reserved_request_amount: financialSummaryMoney,
+  paid_amount: financialSummaryMoney,
+  open_amount: financialSummaryMoney,
+  available_to_request_amount: financialSummaryMoney,
 }).strict();
 
 export const SupplierPurchaseOrderItemListQuerySchema =
@@ -235,3 +247,5 @@ export type SupplierPurchaseOrderShipmentCreateInput =
   z.infer<typeof SupplierPurchaseOrderShipmentCreateSchema>;
 export type SupplierPurchaseOrderReceiptCreateInput =
   z.infer<typeof SupplierPurchaseOrderReceiptCreateSchema>;
+export type SupplierPurchaseOrderFinancialSummary =
+  z.infer<typeof SupplierPurchaseOrderFinancialSummarySchema>;

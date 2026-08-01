@@ -44,6 +44,13 @@ export function mapBrandingAddonOrderConflict(error: unknown) {
 }
 
 export function mapBrandingAddonOrderCreationError(error: unknown) {
+  if (containsToken(error, "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED")) {
+    return Errors.business(
+      409,
+      "品牌权益购买渠道已迁移",
+      "BRANDING_ADDON_PAYMENT_CHANNEL_MIGRATED",
+    );
+  }
   if (containsToken(error, "BRANDING_ENTITLEMENT_SUSPENDED")) {
     return Errors.business(
       409,

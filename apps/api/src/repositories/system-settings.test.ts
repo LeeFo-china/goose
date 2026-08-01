@@ -49,6 +49,10 @@ const pendingConfigError = {
   code: "23514",
   message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
 };
+const pendingVirtualOrderError = {
+  code: "P0001",
+  message: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+};
 
 function queueExistingSettings(count: number) {
   maybeSingleResults = Array.from({ length: count }, () => ({
@@ -115,6 +119,45 @@ describe("SystemSettingRepository payment config trigger errors", () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
+  test("maps the exact virtual payment rotation guard to the stable 409", async () => {
+    updateResult = { data: null, error: pendingVirtualOrderError };
+    const systemSettingRepository = await createRepository();
+
+    await expect(systemSettingRepository.updateValue(updateInput)).rejects
+      .toMatchObject({
+        statusCode: 409,
+        code: "BRANDING_VIRTUAL_PAYMENT_SECRET_ROTATION_PENDING_ORDERS",
+        message: "存在待签发、签发中或待核对的虚拟支付订单，请完成处理后再变更密钥",
+      });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [
+      "BRANDING_VIRTUAL_PAYMENT_SECRET_IDENTITY_IMMUTABLE",
+      "虚拟支付密钥的标识、归属和密钥属性不可修改",
+    ],
+    [
+      "BRANDING_VIRTUAL_PAYMENT_SECRET_SCOPE_INVALID",
+      "虚拟支付密钥必须是平台级加密配置",
+    ],
+    [
+      "WECHAT_VIRTUAL_MESSAGE_TOKEN_IDENTITY_IMMUTABLE",
+      "虚拟支付消息令牌的标识、归属和密钥属性不可修改",
+    ],
+    [
+      "WECHAT_VIRTUAL_MESSAGE_TOKEN_SCOPE_INVALID",
+      "虚拟支付消息令牌必须是平台级加密配置",
+    ],
+  ])("maps exact virtual secret guard error %s", async (code, message) => {
+    updateResult = { data: null, error: { code: "P0001", message: code } };
+    const systemSettingRepository = await createRepository();
+
+    await expect(systemSettingRepository.updateValue(updateInput)).rejects
+      .toMatchObject({ statusCode: 409, code, message });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   test.each([
     [{ code: "23514", message: "UNRELATED_CHECK_VIOLATION" }],
     [{ code: "42P01", message: "relation does not exist" }],
@@ -154,6 +197,8 @@ describe("platform system settings payment secret update", () => {
   test.each([
     "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
     "PLATFORM_WECHAT_PAY_SERVICE_PROVIDER_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+    "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
   ])("blocks generic writes to protected payment secret %s", async (key) => {
     const { SystemSettingsService } = await import(
       "@/services/system-settings/legacy-service"

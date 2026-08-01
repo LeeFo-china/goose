@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
+import { createBrandingVirtualPaymentService } from "./billing-reconcile-worker-test-fixtures";
+
 const SUBSCRIPTION_RESULT = {
   ensured: 1,
   reminded: 2,
@@ -62,6 +64,8 @@ describe("billing reconcile worker branding add-on child", () => {
           throw new Error("addon expiration secret must not be logged");
         }),
       },
+      brandingVirtualPaymentReconciliationService:
+        createBrandingVirtualPaymentService(),
       refundReconciliationService,
       logger,
     });
@@ -93,6 +97,8 @@ describe("billing reconcile worker branding add-on child", () => {
           failed: 1,
         })),
       },
+      brandingVirtualPaymentReconciliationService:
+        createBrandingVirtualPaymentService(),
       refundReconciliationService: {
         runBatch: mock(async () => REFUND_RESULT),
       },

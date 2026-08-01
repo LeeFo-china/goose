@@ -58,7 +58,31 @@ const listLedgerRows = mock(async () => [
     occurred_at: "2026-06-08T10:00:00.000Z",
     metadata: {},
   },
+  {
+    id: "supplier-payment-a",
+    project_id: "project-a",
+    project_name: "A 项目",
+    project_status: "constructing",
+    cost_category_id: null,
+    cost_category_name: null,
+    direction: "out",
+    entry_type: "supplier_payment",
+    amount: 5000,
+    occurred_at: "2026-06-09T10:00:00.000Z",
+    metadata: {},
+  },
 ]);
+
+const listSupplierCostRows = mock(async () => [{
+  id: "supplier-cost-a",
+  project_id: "project-a",
+  project_name: "A 项目",
+  project_status: "constructing",
+  cost_category_id: "category-labor",
+  cost_category_name: "人工",
+  amount: "5000.00",
+  occurred_at: "2026-06-09T09:00:00.000Z",
+}]);
 
 const listReceivableRows = mock(async () => [
   {
@@ -219,6 +243,7 @@ async function createService() {
   return new FinanceSpecializedReportService({
     operatingReportRepository: {
       listLedgerRows,
+      listSupplierCostRows,
       listReceivableRows,
     },
     reconciliationRepository: {
@@ -234,6 +259,7 @@ async function createService() {
 describe("FinanceSpecializedReportService", () => {
   beforeEach(() => {
     listLedgerRows.mockClear();
+    listSupplierCostRows.mockClear();
     listReceivableRows.mockClear();
     listCandidateRows.mockClear();
     getMonthlyOverview.mockClear();
@@ -268,9 +294,9 @@ describe("FinanceSpecializedReportService", () => {
         project_id: "project-a",
         project_name: "A 项目",
         income_amount: 50000,
-        expense_amount: 12000,
-        gross_profit_amount: 38000,
-        gross_profit_rate: 0.76,
+        expense_amount: 17000,
+        gross_profit_amount: 33000,
+        gross_profit_rate: 0.66,
         receivable_remaining_amount: 10000,
         overdue_receivable_amount: 10000,
         reconciliation_exception_count: 2,
@@ -283,6 +309,40 @@ describe("FinanceSpecializedReportService", () => {
       projectStatus: undefined,
       sourceLimit: 10000,
     });
+  });
+
+  test("includes unpaid supplier cost in project ranking", async () => {
+    listLedgerRows.mockImplementationOnce(async () => []);
+    listReceivableRows.mockImplementationOnce(async () => []);
+    listCandidateRows.mockImplementationOnce(async () => ({
+      receivables: [],
+      payments: [],
+      ledgers: [],
+      expenseSettlements: [],
+      expenseLedgers: [],
+    }));
+    const service = await createService();
+
+    const result = await service.getProjectRanking(
+      authContextWithPermissions([
+        { code: "finance.reports.read", scope: "all" },
+      ]),
+      {
+        month: "2026-06",
+        page: 1,
+        pageSize: 20,
+        sort_by: "expense_amount",
+        sort_order: "desc",
+      },
+    );
+
+    expect(result.list).toEqual([
+      expect.objectContaining({
+        project_id: "project-a",
+        expense_amount: 5000,
+        gross_profit_amount: -5000,
+      }),
+    ]);
   });
 
   test("returns paginated cost category summary", async () => {
@@ -302,15 +362,15 @@ describe("FinanceSpecializedReportService", () => {
     );
 
     expect(result.summary).toEqual({
-      expense_amount: 13500,
+      expense_amount: 18500,
       unallocated_expense_amount: 1500,
     });
     expect(result.list).toEqual([
       {
         cost_category_id: "category-labor",
         cost_category_name: "人工",
-        expense_amount: 12000,
-        expense_percent: 0.8889,
+        expense_amount: 17000,
+        expense_percent: 0.9189,
         ledger_entry_count: 1,
         project_count: 1,
       },
@@ -318,7 +378,7 @@ describe("FinanceSpecializedReportService", () => {
         cost_category_id: null,
         cost_category_name: "未归集",
         expense_amount: 1500,
-        expense_percent: 0.1111,
+        expense_percent: 0.0811,
         ledger_entry_count: 1,
         project_count: 1,
       },
