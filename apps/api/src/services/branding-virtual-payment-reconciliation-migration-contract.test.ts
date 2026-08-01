@@ -35,11 +35,24 @@ describe("branding virtual payment reconciliation migration", () => {
     expect(normalized).toContain("reconcile_query_transaction_id text");
     expect(normalized).toContain("reconcile_query_paid_amount_fen integer");
     expect(normalized).toContain("reconcile_query_paid_at timestamptz");
+    expect(normalized).toContain("reconcile_completion_kind text");
+    expect(normalized).toContain(
+      "reconcile_completion_kind in ('query', 'grant_recovery')",
+    );
     expect(normalized).toContain(
       "reconcile_last_provider_status in (2, 3, 4) and reconcile_query_provider_order_no is not null",
     );
     expect(normalized).toContain(
-      "reconcile_query_paid_at is null and (reconcile_last_provider_status is null or reconcile_last_provider_status not in (2, 3, 4))",
+      "reconcile_completion_kind = 'query' and reconcile_last_provider_status in (2, 3, 4)",
+    );
+    expect(normalized).toContain(
+      "reconcile_completion_kind = 'grant_recovery' and reconcile_last_provider_status is null",
+    );
+    expect(normalized).toMatch(
+      /tenant_virtual_addon_orders_reconcile_completion_state_check check \([\s\S]*?\) is true\), add constraint tenant_virtual_addon_orders_reconcile_query_audit_check/,
+    );
+    expect(normalized).toMatch(
+      /tenant_virtual_addon_orders_reconcile_query_audit_check check \([\s\S]*?\) is true\), add constraint tenant_virtual_addon_orders_delivery_status_check/,
     );
     expect(normalized).toContain(
       "provider_delivery_status in ('not_required', 'pending', 'succeeded', 'failed')",
@@ -74,7 +87,7 @@ describe("branding virtual payment reconciliation migration", () => {
       /fulfillment_status = 'grant_failed'[\s\S]*old\.fulfillment_status is distinct from new\.fulfillment_status[\s\S]*new\.reconcile_next_at := clock_timestamp\(\)/,
     );
     expect(scheduling).toMatch(
-      /payment_status = 'succeeded'[\s\S]*fulfillment_status = 'granted'[\s\S]*provider_delivery_status = 'not_required'[\s\S]*reconcile_claim_token is not null[\s\S]*new\.reconcile_next_at := coalesce/,
+      /payment_status = 'succeeded'[\s\S]*fulfillment_status = 'granted'[\s\S]*provider_delivery_status = 'not_required'[\s\S]*reconcile_completion_kind is not null[\s\S]*new\.reconcile_next_at := coalesce/,
     );
     expect(normalized).toContain(
       "set reconcile_next_at = payment_expires_at where payment_status = 'pending' and payment_request_issued_at is not null",
@@ -90,7 +103,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "orders.payment_status = 'pending' and orders.payment_expires_at <= v_now and orders.payment_request_issued_at is not null",
     );
     expect(claim).toContain(
-      "orders.payment_status = 'succeeded' and orders.fulfillment_status = 'granted' and orders.provider_delivery_status = 'not_required' and orders.reconcile_claim_token is not null",
+      "orders.payment_status = 'succeeded' and orders.fulfillment_status = 'granted' and orders.provider_delivery_status = 'not_required' and orders.reconcile_completion_kind is not null",
     );
     const returned = claim.slice(claim.lastIndexOf("returning"));
     for (const fact of [
@@ -101,6 +114,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "orders.paid_amount_fen",
       "orders.paid_at",
       "orders.reconcile_claim_token",
+      "orders.reconcile_completion_kind",
       "orders.reconcile_query_provider_order_no",
       "orders.reconcile_query_transaction_id",
       "orders.reconcile_query_paid_amount_fen",
@@ -144,6 +158,10 @@ describe("branding virtual payment reconciliation migration", () => {
     }
     expect(prepare).toContain(
       "reconcile_last_provider_status = p_official_status",
+    );
+    expect(prepare).toContain("reconcile_completion_kind = 'query'");
+    expect(prepare).toContain(
+      "v_order.reconcile_completion_kind is not null and v_order.reconcile_completion_kind <> 'query'",
     );
     expect(prepare).toContain(
       "reconcile_query_provider_order_no = p_provider_order_no",
@@ -239,11 +257,18 @@ describe("branding virtual payment reconciliation migration", () => {
       "v_order.reconcile_last_provider_status is not null",
     );
     expect(grantRecoveryBranch).toContain(
+      "v_order.reconcile_completion_kind is distinct from 'grant_recovery'",
+    );
+    expect(grantRecoveryBranch).toContain(
       "v_order.provider_delivery_status <> 'not_required'",
     );
     expect(grantRecoveryBranch).toContain("reconcile_next_at = null");
     expect(grantRecoveryBranch).toContain("reconcile_claim_token = null");
     expect(grantRecoveryBranch).not.toContain("provider_delivery_status =");
+    expect(finalize).toContain(
+      "v_order.reconcile_completion_kind is distinct from 'query'",
+    );
+    expect(finalize).toContain("reconcile_completion_kind = null");
   });
 
   test("keeps both confirmation crash windows reclaimable", () => {
@@ -262,23 +287,76 @@ describe("branding virtual payment reconciliation migration", () => {
     );
 
     expect(scheduling).toContain(
-      "new.provider_delivery_status = 'not_required' and new.reconcile_claim_token is not null",
+      "new.provider_delivery_status = 'not_required' and new.reconcile_completion_kind is not null",
     );
     expect(claim).toContain(
       "orders.reconcile_claim_token is null or orders.reconcile_claim_expires_at <= v_now",
     );
     expect(claim).toContain(
-      "orders.provider_delivery_status = 'not_required' and orders.reconcile_claim_token is not null",
+      "orders.provider_delivery_status = 'not_required' and orders.reconcile_completion_kind is not null",
     );
     expect(dueIndex).toContain(
+      "provider_delivery_status = 'not_required' and reconcile_completion_kind is not null",
+    );
+    expect(dueIndex).not.toContain(
       "provider_delivery_status = 'not_required' and reconcile_claim_token is not null",
+    );
+    expect(claim).toContain(
+      "reconcile_completion_kind = case when orders.payment_status = 'succeeded' and orders.fulfillment_status = 'grant_failed' then coalesce(orders.reconcile_completion_kind, 'grant_recovery') else orders.reconcile_completion_kind end",
     );
     expect(claim).toContain(
       "orders.payment_status = 'pending' and orders.payment_expires_at <= v_now",
     );
     expect(scheduling).toMatch(
-      /provider_delivery_status = 'not_required'[\s\S]*reconcile_claim_token is not null[\s\S]*else new\.reconcile_next_at := null/,
+      /provider_delivery_status = 'not_required'[\s\S]*reconcile_completion_kind is not null[\s\S]*else new\.reconcile_next_at := null/,
     );
+  });
+
+  test("reschedule preserves completion checkpoints across lease release", () => {
+    const reschedule = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_reschedule_virtual_payment_reconciliation",
+    ));
+
+    expect(reschedule).toContain(
+      "v_order.reconcile_completion_kind = 'query'",
+    );
+    expect(reschedule).toContain(
+      "p_official_status is not null and p_official_status is distinct from v_order.reconcile_last_provider_status",
+    );
+    expect(reschedule).toContain(
+      "v_order.reconcile_completion_kind = 'grant_recovery'",
+    );
+    expect(reschedule).toContain("p_official_status is not null");
+    expect(reschedule).toContain(
+      "reconcile_last_provider_status = case when orders.reconcile_completion_kind is null then p_official_status else orders.reconcile_last_provider_status end",
+    );
+    for (const audit of [
+      "reconcile_query_provider_order_no",
+      "reconcile_query_transaction_id",
+      "reconcile_query_paid_amount_fen",
+      "reconcile_query_paid_at",
+    ]) {
+      expect(reschedule).toContain(
+        `${audit} = case when orders.reconcile_completion_kind is null then null else orders.${audit} end`,
+      );
+    }
+    expect(reschedule).not.toContain("reconcile_completion_kind = null");
+    expect(reschedule).toContain("reconcile_claim_token = null");
+  });
+
+  test("close rejects durable query checkpoints instead of deleting them", () => {
+    const close = normalizeSql(extractFunction(
+      migrationSql,
+      "branding_close_unpaid_virtual_payment_reconciliation",
+    ));
+
+    expect(close).toContain("v_order.reconcile_completion_kind is not null");
+    expect(close).toContain(
+      "v_order.reconcile_query_provider_order_no is not null",
+    );
+    expect(close).not.toContain("reconcile_query_provider_order_no = null");
+    expect(close).not.toContain("reconcile_completion_kind = null");
   });
 
   test("reschedules full official audit but closes only 0, 1, and 6", () => {
@@ -295,7 +373,7 @@ describe("branding virtual payment reconciliation migration", () => {
       "p_official_status is not null and p_official_status not between 0 and 10",
     );
     expect(reschedule).toContain(
-      "reconcile_last_provider_status = p_official_status",
+      "reconcile_last_provider_status = case when orders.reconcile_completion_kind is null then p_official_status else orders.reconcile_last_provider_status end",
     );
     expect(reschedule).not.toContain("p_official_status not in (");
     expect(close).toContain("p_official_status not in (0, 1, 6)");

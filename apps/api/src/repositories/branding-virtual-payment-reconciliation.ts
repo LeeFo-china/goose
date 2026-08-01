@@ -40,6 +40,7 @@ const ReconciliationClaimSchema = z.object({
   reconcile_next_at: nullableDateTime,
   reconcile_last_checked_at: nullableDateTime,
   reconcile_last_provider_status: officialStatus,
+  reconcile_completion_kind: z.enum(["query", "grant_recovery"]).nullable(),
   reconcile_query_provider_order_no: nullableText(128),
   reconcile_query_transaction_id: nullableText(128),
   reconcile_query_paid_amount_fen: z.number().int().min(100).nullable(),
