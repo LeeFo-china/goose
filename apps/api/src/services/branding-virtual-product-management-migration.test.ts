@@ -109,6 +109,14 @@ describe("branding virtual product management migration", () => {
     expect(sql).toContain("message = 'branding_virtual_product_patch_invalid'");
   });
 
+  test("parenthesizes the CASE expression used by the secret environment guard", () => {
+    const sql = normalizedSql();
+
+    expect(sql).toContain(
+      "p_virtual_product_patch->>'encrypted_secret_ref' <> (case when v_environment = 'production' then 'wechat_virtual_payment_production_secret_bundle' else 'wechat_virtual_payment_sandbox_secret_bundle' end)",
+    );
+  });
+
   test("rejects null command metadata and compares locked versions null-safely", () => {
     const sql = normalizedSql();
     const manageRpc = sql.slice(
