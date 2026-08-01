@@ -17,7 +17,6 @@ import {
   isApplicationErrorLike,
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
-import { systemSettingsService } from "@/services/system-settings";
 
 const MANAGE_PERMISSION = "platform.branding_product.manage";
 
@@ -27,9 +26,8 @@ type ProductRepositoryPort = Pick<
 >;
 type VirtualProductRepositoryPort = Pick<
   typeof brandingVirtualProductRepository,
-  "findByProductAndEnvironment" | "manageConfiguration"
+  "manageConfiguration"
 >;
-type SettingsServicePort = Pick<typeof systemSettingsService, "getSecretString">;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
 type ManagementServicePort = Pick<
@@ -40,7 +38,6 @@ type ManagementServicePort = Pick<
 export type PlatformBrandingAddonProductServiceDependencies = {
   repository?: ProductRepositoryPort;
   virtualProductRepository?: VirtualProductRepositoryPort;
-  settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
   managementService?: ManagementServicePort;
@@ -49,7 +46,6 @@ export type PlatformBrandingAddonProductServiceDependencies = {
 export class PlatformBrandingAddonProductService {
   private readonly repository: ProductRepositoryPort;
   private readonly virtualProductRepository: VirtualProductRepositoryPort;
-  private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
   private readonly managementService: ManagementServicePort;
@@ -58,7 +54,6 @@ export class PlatformBrandingAddonProductService {
     this.repository = dependencies.repository ?? brandingAddonProductRepository;
     this.virtualProductRepository = dependencies.virtualProductRepository ??
       brandingVirtualProductRepository;
-    this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.audit = dependencies.audit ?? platformAuditLogService;
     this.managementService = dependencies.managementService ??

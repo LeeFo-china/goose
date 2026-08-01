@@ -71,14 +71,8 @@ describe("PlatformBrandingAddonProductService virtual compatibility", () => {
     const getProduct = mock(async () => {
       throw new Error("product write path must not run");
     });
-    const findByProductAndEnvironment = mock(async () => {
-      throw new Error("mapping read must not run");
-    });
     const manageConfiguration = mock(async () => {
       throw new Error("payment write must not run");
-    });
-    const getSecretString = mock(async () => {
-      throw new Error("secret read must not run");
     });
     const validateConfiguration = mock(async () => ({
       virtual_product: productionMapping,
@@ -89,11 +83,7 @@ describe("PlatformBrandingAddonProductService virtual compatibility", () => {
     }));
     const service = new PlatformBrandingAddonProductService({
       repository: { getProduct },
-      virtualProductRepository: {
-        findByProductAndEnvironment,
-        manageConfiguration,
-      },
-      settingsService: { getSecretString },
+      virtualProductRepository: { manageConfiguration },
       accessPolicy: { assertPermission: mock(() => "all" as const) },
       audit: { recordBestEffort: mock(async () => null) },
       managementService: {
@@ -115,8 +105,6 @@ describe("PlatformBrandingAddonProductService virtual compatibility", () => {
       });
     expect(validateConfiguration).toHaveBeenCalledWith(platformAuth, input);
     expect(getProduct).not.toHaveBeenCalled();
-    expect(findByProductAndEnvironment).not.toHaveBeenCalled();
     expect(manageConfiguration).not.toHaveBeenCalled();
-    expect(getSecretString).not.toHaveBeenCalled();
   });
 });
