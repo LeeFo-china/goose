@@ -62,7 +62,7 @@ export default function PlatformBrandingAddonLoading() {
               data-testid="platform-branding-loading-payment-summary"
               className="flex flex-col gap-4 border-t pt-5"
             >
-              <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="flex flex-col gap-2">
                   <Skeleton className="h-4 w-28" />
                   <Skeleton className="h-3 w-80 max-w-[55vw]" />

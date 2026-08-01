@@ -19,6 +19,14 @@ describe("platform branding addon product admin contract", () => {
     expect(page).toContain("parseBackendJson");
     expect(page).toContain("PlatformBrandingVirtualProductForm");
     expect(page).toContain("paymentSummaries");
+    expect(page).toContain("platform.payment.config.read");
+    expect(page).toContain("platform.payment.config.manage");
+    expect(page).toContain(
+      "/platform/payment/wechat-virtual/branding-entitlement",
+    );
+    expect(page).toContain("paymentReadiness");
+    expect(page).toContain("paymentSnapshot.product?.version");
+    expect(page).toContain("productResult.product.version");
     expect(page).not.toContain("initialVirtualProducts");
   });
 
@@ -42,9 +50,6 @@ describe("platform branding addon product admin contract", () => {
   test("patches only product fields with optimistic version handling", () => {
     const form = readSource("./platform-branding-virtual-product-form.tsx");
     const fields = readSource("./platform-branding-addon-product-form.tsx");
-    const retiredData = readSource(
-      "./platform-branding-virtual-product-form-data.ts",
-    );
 
     expect(form).toContain("requestBackendJson");
     expect(form).toContain('method: "PATCH"');
@@ -58,8 +63,22 @@ describe("platform branding addon product admin contract", () => {
     expect(form).not.toContain("Legacy");
     expect(form).not.toContain("buildModePatch");
     expect(form).not.toContain("buildMappingPatch");
-    expect(retiredData).not.toContain("Legacy");
-    expect(retiredData).not.toContain("encrypted_secret_ref");
+    expect(form).toContain("setCurrentReadiness(null)");
+    expect(form).toContain("router.refresh()");
+    expect(existsSync(new URL(
+      "./platform-branding-virtual-product-form-data.ts",
+      import.meta.url,
+    ))).toBe(false);
+    expect(existsSync(new URL(
+      "./platform-branding-virtual-product-form-data.test.ts",
+      import.meta.url,
+    ))).toBe(false);
+    expect(existsSync(new URL(
+      "./platform-branding-virtual-product-fields.tsx",
+      import.meta.url,
+    ))).toBe(false);
+    expect(readSource("./platform-branding-addon-product-form-data.ts"))
+      .not.toContain("buildModePatch");
     expect(fields).toContain("FieldGroup");
     expect(fields).toContain("Switch");
     expect(form).toContain("历史订单继续使用创建时快照");
@@ -76,7 +95,10 @@ describe("platform branding addon product admin contract", () => {
     expect(summary).toContain("映射状态");
     expect(summary).toContain("校验状态");
     expect(summary).toContain("密钥状态");
-    expect(summary).toContain("阻塞项");
+    expect(summary).toContain("阻塞情况");
+    expect(summary).toContain("readiness.blockers");
+    expect(summary).toContain("完整状态请到支付配置查看");
+    expect(summary).not.toContain("getBlockers");
     expect(summary).toContain(
       "/settings?group=payment&section=virtual&environment=production",
     );

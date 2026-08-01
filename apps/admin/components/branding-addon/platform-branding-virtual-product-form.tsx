@@ -1,6 +1,7 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { RefreshCw, Save } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -15,6 +16,7 @@ import { PlatformBrandingPaymentSummary } from "@/components/branding-addon/plat
 import type {
   PlatformBrandingAddonProduct,
   PlatformBrandingAddonProductFormValues,
+  PlatformBrandingPaymentReadiness,
   PlatformBrandingVirtualProductSummary,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
 import { Badge } from "@/components/ui/badge";
@@ -34,11 +36,15 @@ const VERSION_CONFLICT_CODE = "BRANDING_ADDON_PRODUCT_VERSION_CONFLICT";
 export function PlatformBrandingVirtualProductForm({
   initialProduct,
   paymentSummaries,
+  paymentReadiness,
 }: {
   initialProduct: PlatformBrandingAddonProduct;
   paymentSummaries: PlatformBrandingVirtualProductSummary[];
+  paymentReadiness: PlatformBrandingPaymentReadiness | null;
 }) {
+  const router = useRouter();
   const [product, setProduct] = useState(initialProduct);
+  const [currentReadiness, setCurrentReadiness] = useState(paymentReadiness);
   const [values, setValues] = useState(() =>
     createProductFormValues(initialProduct)
   );
@@ -50,6 +56,10 @@ export function PlatformBrandingVirtualProductForm({
   const [hasVersionConflict, setHasVersionConflict] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    setCurrentReadiness(paymentReadiness);
+  }, [paymentReadiness]);
+
   function clearFeedback() {
     setError("");
     setSaved("");
@@ -59,6 +69,7 @@ export function PlatformBrandingVirtualProductForm({
 
   function editProduct(patch: Partial<PlatformBrandingAddonProductFormValues>) {
     setValues((current) => ({ ...current, ...patch }));
+    setCurrentReadiness(null);
     clearFeedback();
   }
 
@@ -90,6 +101,7 @@ export function PlatformBrandingVirtualProductForm({
         setProduct(result.product);
         setValues(createProductFormValues(result.product));
         setSaved(`商品已保存，当前版本为 ${result.product.version}`);
+        router.refresh();
       } catch (submitError) {
         handleRequestError(submitError);
       }
@@ -161,6 +173,7 @@ export function PlatformBrandingVirtualProductForm({
             <PlatformBrandingPaymentSummary
               product={product}
               summaries={paymentSummaries}
+              readiness={currentReadiness}
             />
           </div>
         </CardContent>

@@ -3,6 +3,7 @@ import { Settings2 } from "lucide-react";
 
 import type {
   PlatformBrandingAddonProduct,
+  PlatformBrandingPaymentReadiness,
   PlatformBrandingVirtualProduct,
   PlatformBrandingVirtualProductSummary,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
@@ -22,10 +23,13 @@ const ENVIRONMENTS: ReadonlyArray<{
 export function PlatformBrandingPaymentSummary({
   product,
   summaries,
+  readiness,
 }: {
   product: PlatformBrandingAddonProduct;
   summaries: PlatformBrandingVirtualProductSummary[];
+  readiness: PlatformBrandingPaymentReadiness | null;
 }) {
+  const readinessPresentation = getPaymentReadinessPresentation(readiness);
   return (
     <section
       className="flex flex-col gap-4 border-t pt-5"
@@ -58,11 +62,32 @@ export function PlatformBrandingPaymentSummary({
         </span>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">生产就绪与阻塞情况</span>
+          <Badge variant={readinessPresentation.variant}>
+            {readinessPresentation.label}
+          </Badge>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {readinessPresentation.description}
+        </p>
+        {readinessPresentation.blockers.length ? (
+          <ul className="grid gap-1 text-xs text-muted-foreground">
+            {readinessPresentation.blockers.map((message) => (
+              <li key={message} className="flex gap-2">
+                <span aria-hidden="true">•</span>
+                <span>{message}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-2">
         {ENVIRONMENTS.map(({ value, label }) => {
           const summary = summaries.find((item) => item.environment === value) ??
             emptySummary(value);
-          const blockers = getBlockers(product, summary);
           return (
             <div
               key={value}
@@ -70,9 +95,7 @@ export function PlatformBrandingPaymentSummary({
             >
               <div className="flex items-center justify-between gap-3">
                 <h3 className="text-sm font-medium">{label}</h3>
-                <Badge variant={blockers.length ? "warning" : "success"}>
-                  {blockers.length ? `${blockers.length} 项阻塞` : "配置就绪"}
-                </Badge>
+                <Badge variant="outline">配置事实</Badge>
               </div>
               <dl className="grid gap-3 text-sm sm:grid-cols-3">
                 <SummaryFact
@@ -93,16 +116,6 @@ export function PlatformBrandingPaymentSummary({
                   variant={summary.secret.configured ? "success" : "danger"}
                 />
               </dl>
-              <div className="flex flex-col gap-1 border-t pt-3 text-xs">
-                <span className="font-medium text-foreground">阻塞项</span>
-                <span
-                  className={blockers.length
-                    ? "text-muted-foreground"
-                    : "text-success"}
-                >
-                  {blockers.length ? blockers.join("；") : "当前环境无阻塞项"}
-                </span>
-              </div>
             </div>
           );
         })}
@@ -126,33 +139,6 @@ function SummaryFact({
       <dd><Badge variant={variant}>{value}</Badge></dd>
     </div>
   );
-}
-
-function getBlockers(
-  product: PlatformBrandingAddonProduct,
-  summary: PlatformBrandingVirtualProductSummary,
-): string[] {
-  const mapping = summary.mapping;
-  if (!mapping) {
-    return [
-      "未配置商品映射",
-      ...(summary.secret.configured ? [] : ["支付密钥未配置"]),
-    ];
-  }
-
-  const blockers: string[] = [];
-  if (mapping.status !== "active") blockers.push("商品映射未启用");
-  if (mapping.validation_status !== "valid") blockers.push("商品映射未通过校验");
-  if (!summary.secret.configured) blockers.push("支付密钥未配置");
-  if (
-    summary.secret.configured &&
-    summary.secret.revision !== mapping.secret_revision
-  ) blockers.push("密钥版本与映射不一致");
-  if (
-    product.amount_fen === null ||
-    mapping.expected_amount_fen !== product.amount_fen
-  ) blockers.push("映射售价与商品售价不一致");
-  return blockers;
 }
 
 function emptySummary(
@@ -213,4 +199,36 @@ function modeDescription(mode: PlatformBrandingAddonProduct["purchase_mode"]) {
   if (mode === "wechat_virtual") return "数字权益订单使用微信虚拟支付";
   if (mode === "maintenance") return "新购买已暂停";
   return "现有普通支付能力保留，后续仅用于合规交易";
+}
+
+export function getPaymentReadinessPresentation(
+  readiness: PlatformBrandingPaymentReadiness | null,
+): {
+  variant: "success" | "warning";
+  label: string;
+  description: string;
+  blockers: string[];
+} {
+  if (!readiness) {
+    return {
+      variant: "warning",
+      label: "状态未确认",
+      description: "完整状态请到支付配置查看",
+      blockers: [],
+    };
+  }
+  if (readiness.ready) {
+    return {
+      variant: "success",
+      label: "服务端判定已就绪",
+      description: "生产环境与消息鉴权已满足启用条件",
+      blockers: [],
+    };
+  }
+  return {
+    variant: "warning",
+    label: `${readiness.blockers.length} 项阻塞`,
+    description: "生产环境尚未满足虚拟支付启用条件",
+    blockers: readiness.blockers.map(({ message }) => message),
+  };
 }

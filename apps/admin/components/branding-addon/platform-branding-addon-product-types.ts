@@ -56,6 +56,15 @@ export interface PlatformBrandingVirtualProductSummary {
   };
 }
 
+export interface PlatformBrandingPaymentReadiness {
+  ready: boolean;
+  blockers: Array<{
+    code: string;
+    message: string;
+    settings_href?: string;
+  }>;
+}
+
 export interface PlatformBrandingAddonProductResult {
   product: PlatformBrandingAddonProduct;
   virtual_products?: PlatformBrandingVirtualProductSummary[];

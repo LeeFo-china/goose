@@ -78,6 +78,9 @@ describe("platform branding virtual-payment admin contract", () => {
     expect(loading).not.toContain("platform-branding-loading-configuration");
     expect(loading).not.toContain("platform-branding-loading-filters");
     expect(loading).not.toContain("Array.from({ length: 8 })");
+    expect(loading).toContain(
+      "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
+    );
     expect(loading).toContain("min-h-0 flex-1");
   });
 });
