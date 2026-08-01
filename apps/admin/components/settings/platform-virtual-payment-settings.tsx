@@ -11,7 +11,12 @@ import {
   virtualPaymentModeLabels,
   type VirtualPaymentMappingDraft,
 } from "@/components/settings/platform-virtual-payment-settings-data";
-import { toSafeVirtualPaymentMutationMessage } from "@/components/settings/platform-virtual-payment-errors";
+import {
+  createVirtualPaymentUiError,
+  type SafeVirtualPaymentMutationFeedback,
+  toSafeVirtualPaymentMutationFeedback,
+  toSafeVirtualPaymentMutationMessage,
+} from "@/components/settings/platform-virtual-payment-errors";
 import { VirtualPaymentMappingCard } from "@/components/settings/platform-virtual-payment-mapping-card";
 import { VirtualPaymentModeCard } from "@/components/settings/platform-virtual-payment-mode-card";
 import { PlatformVirtualPaymentSecretForm } from "@/components/settings/platform-virtual-payment-secret-form";
@@ -38,12 +43,15 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requestBackendJson } from "@/lib/backend-client";
+import { cn } from "@/lib/utils";
 import type {
   BrandingPurchaseMode,
   BrandingVirtualPaymentEnvironment,
 } from "@gooes/domain";
 
 const SETTINGS_PATH = "/platform/payment/wechat-virtual/branding-entitlement";
+const MUTATION_REFRESH_ERROR =
+  "已提交，但最新状态刷新失败，请重新加载。";
 
 export function PlatformVirtualPaymentSettings({
   environment,
@@ -59,26 +67,37 @@ export function PlatformVirtualPaymentSettings({
   const [notice, setNotice] = useState("");
   const [modeError, setModeError] = useState("");
   const [modePending, setModePending] = useState(false);
+  const [validationFeedback, setValidationFeedback] = useState<
+    (SafeVirtualPaymentMutationFeedback & {
+      environment: BrandingVirtualPaymentEnvironment;
+    }) | null
+  >(null);
   const requestSequence = useRef(0);
 
-  const refreshSnapshot = useCallback(async () => {
-    const sequence = ++requestSequence.current;
-    setLoading(true);
-    setLoadError("");
-    try {
-      const result = await requestBackendJson<PlatformVirtualPaymentSettingsView>(
-        "/platform/payment/wechat-virtual/branding-entitlement",
-        { fallbackMessage: "微信虚拟支付配置加载失败" },
-      );
-      if (sequence === requestSequence.current) setSnapshot(result);
-    } catch {
-      if (sequence === requestSequence.current) {
-        setLoadError("微信虚拟支付配置加载失败，请稍后重试。");
+  const refreshSnapshot = useCallback(
+    async function refreshSnapshot(): Promise<boolean> {
+      const sequence = ++requestSequence.current;
+      setLoading(true);
+      setLoadError("");
+      try {
+        const result = await requestBackendJson<PlatformVirtualPaymentSettingsView>(
+          "/platform/payment/wechat-virtual/branding-entitlement",
+          { fallbackMessage: "微信虚拟支付配置加载失败" },
+        );
+        if (sequence !== requestSequence.current) return false;
+        setSnapshot(result);
+        return true;
+      } catch {
+        if (sequence === requestSequence.current) {
+          setLoadError("微信虚拟支付配置加载失败，请稍后重试。");
+        }
+        return false;
+      } finally {
+        if (sequence === requestSequence.current) setLoading(false);
       }
-    } finally {
-      if (sequence === requestSequence.current) setLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     void refreshSnapshot();
@@ -86,6 +105,11 @@ export function PlatformVirtualPaymentSettings({
       requestSequence.current += 1;
     };
   }, [refreshSnapshot]);
+
+  async function ensureSnapshotRefreshed() {
+    const refreshed = await refreshSnapshot();
+    if (!refreshed) throw createVirtualPaymentUiError(MUTATION_REFRESH_ERROR);
+  }
 
   async function patchSettings(
     payload: PlatformVirtualPaymentSettingsPatch,
@@ -97,7 +121,7 @@ export function PlatformVirtualPaymentSettings({
       body: JSON.stringify(payload),
       fallbackMessage: "微信虚拟支付配置保存失败",
     });
-    await refreshSnapshot();
+    await ensureSnapshotRefreshed();
     setNotice(successMessage);
   }
 
@@ -107,19 +131,23 @@ export function PlatformVirtualPaymentSettings({
     amountYuan: string,
   ) {
     if (!snapshot) return;
+    setValidationFeedback(null);
     const mappingResult = buildVirtualMappingPatch({ summary, draft, amountYuan });
-    if (!mappingResult.ok) throw new Error(mappingResult.message);
+    if (!mappingResult.ok) {
+      throw createVirtualPaymentUiError(mappingResult.message);
+    }
     const patchResult = buildVirtualPaymentSettingsPatch({
       currentMode: snapshot.product.purchase_mode,
       nextMode: snapshot.product.purchase_mode,
       version: snapshot.product.version,
       virtualProduct: mappingResult.patch,
     });
-    if (!patchResult.ok) throw new Error(patchResult.message);
+    if (!patchResult.ok) throw createVirtualPaymentUiError(patchResult.message);
     await patchSettings(patchResult.patch, "虚拟商品映射已保存。");
   }
 
   async function saveSecret(input: { appKey: string; revision: number }) {
+    setNotice("");
     await requestBackendJson(
       `${SETTINGS_PATH}/${environment}/secret-bundle`,
       {
@@ -128,11 +156,12 @@ export function PlatformVirtualPaymentSettings({
         fallbackMessage: "AppKey 保存失败",
       },
     );
-    await refreshSnapshot();
+    await ensureSnapshotRefreshed();
     setNotice(`${virtualPaymentEnvironmentLabels[environment]} AppKey 已更新。`);
   }
 
   async function saveMessageToken(messageToken: string) {
+    setNotice("");
     await requestBackendJson(
       "/platform/payment/wechat-virtual/message-token",
       {
@@ -141,21 +170,41 @@ export function PlatformVirtualPaymentSettings({
         fallbackMessage: "支付消息令牌保存失败",
       },
     );
-    await refreshSnapshot();
+    await ensureSnapshotRefreshed();
     setNotice("支付消息令牌已更新。");
   }
 
   async function validateMapping(summary: PlatformVirtualPaymentProductSummary) {
-    if (!summary.mapping) throw new Error("请先保存当前环境的虚拟商品映射");
-    await requestBackendJson(
-      `${SETTINGS_PATH}/${environment}/validate`,
-      {
-        method: "POST",
-        body: JSON.stringify({ version: summary.mapping.version }),
-        fallbackMessage: "虚拟商品映射校验失败",
-      },
-    );
-    await refreshSnapshot();
+    if (!summary.mapping) {
+      throw createVirtualPaymentUiError("请先保存当前环境的虚拟商品映射");
+    }
+    setNotice("");
+    setValidationFeedback(null);
+    try {
+      await requestBackendJson(
+        `${SETTINGS_PATH}/${environment}/validate`,
+        {
+          method: "POST",
+          body: JSON.stringify({ version: summary.mapping.version }),
+          fallbackMessage: "虚拟商品映射校验失败",
+        },
+      );
+    } catch (validationError) {
+      const feedback = toSafeVirtualPaymentMutationFeedback(
+        validationError,
+        "虚拟商品映射校验失败，请检查配置。",
+      );
+      const refreshed = await refreshSnapshot();
+      setValidationFeedback({
+        ...feedback,
+        environment,
+        message: refreshed
+          ? feedback.message
+          : `${feedback.message} 校验未通过，且最新状态刷新失败，请重新加载。`,
+      });
+      return;
+    }
+    await ensureSnapshotRefreshed();
     setNotice(`${virtualPaymentEnvironmentLabels[environment]}校验已完成。`);
   }
 
@@ -247,12 +296,18 @@ export function PlatformVirtualPaymentSettings({
                 readonly={!snapshot.can_manage}
                 onSave={saveMapping}
                 onValidate={validateMapping}
+                validationFeedback={
+                  validationFeedback?.environment === environment
+                    ? validationFeedback
+                    : null
+                }
               />
               <div className="grid gap-4 xl:grid-cols-2">
                 <PlatformVirtualPaymentSecretForm
                   key={`${environment}:${summary.secret.revision ?? 0}:${snapshot.message_auth.message_token.valid}`}
                   environment={environment}
                   summary={summary}
+                  secretSource={snapshot.virtual_secret_sources[environment]}
                   messageAuth={snapshot.message_auth}
                   readonly={!snapshot.can_manage}
                   onSaveSecret={saveSecret}
@@ -288,7 +343,11 @@ function VirtualPaymentSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-4" aria-label="虚拟支付配置加载中">
       {["mode", "mapping"].map((key) => (
-        <VirtualPaymentCardSkeleton key={key} />
+        <VirtualPaymentCardSkeleton
+          key={key}
+          detailCount={key === "mode" ? 3 : 2}
+          showHeaderMeta={key === "mapping"}
+        />
       ))}
       <div className="grid gap-4 xl:grid-cols-2">
         {["secret", "message-token"].map((key) => (
@@ -299,16 +358,29 @@ function VirtualPaymentSettingsSkeleton() {
   );
 }
 
-function VirtualPaymentCardSkeleton() {
+function VirtualPaymentCardSkeleton({
+  detailCount = 2,
+  showHeaderMeta = false,
+}: {
+  detailCount?: number;
+  showHeaderMeta?: boolean;
+}) {
   return (
     <Card className="shadow-none">
       <CardHeader>
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-4 w-72 max-w-full" />
+        {showHeaderMeta ? <Skeleton className="h-3 w-36" /> : null}
       </CardHeader>
-      <CardContent className="grid gap-4 md:grid-cols-2">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
+      <CardContent
+        className={cn(
+          "grid gap-4",
+          detailCount === 3 ? "sm:grid-cols-3" : "md:grid-cols-2",
+        )}
+      >
+        {Array.from({ length: detailCount }, (_, index) => (
+          <Skeleton key={index} className="h-16 w-full" />
+        ))}
       </CardContent>
       <CardFooter className="justify-end border-t pt-5">
         <Skeleton className="h-9 w-28" />

@@ -10,7 +10,11 @@ import {
   virtualPaymentEnvironmentLabels,
   type VirtualPaymentMappingDraft,
 } from "@/components/settings/platform-virtual-payment-settings-data";
-import { toSafeVirtualPaymentMutationMessage } from "@/components/settings/platform-virtual-payment-errors";
+import {
+  type SafeVirtualPaymentMutationFeedback,
+  toSafeVirtualPaymentMutationMessage,
+} from "@/components/settings/platform-virtual-payment-errors";
+import { formatDateTime } from "@/components/settings/platform-payment-settings-shared";
 import type {
   PlatformVirtualPaymentMappingStatus,
   PlatformVirtualPaymentProductSummary,
@@ -48,6 +52,7 @@ export function VirtualPaymentMappingCard({
   readonly,
   onSave,
   onValidate,
+  validationFeedback,
 }: {
   summary: PlatformVirtualPaymentProductSummary;
   productAmountFen: number | null;
@@ -58,6 +63,7 @@ export function VirtualPaymentMappingCard({
     amountYuan: string,
   ) => Promise<void>;
   onValidate: (summary: PlatformVirtualPaymentProductSummary) => Promise<void>;
+  validationFeedback: SafeVirtualPaymentMutationFeedback | null;
 }) {
   const [draft, setDraft] = useState(() => createVirtualMappingDraft(summary.mapping));
   const [amountYuan, setAmountYuan] = useState(() =>
@@ -115,6 +121,11 @@ export function VirtualPaymentMappingCard({
           <CardDescription>
             关联微信虚拟商品与平台年度权益，敏感字段变化后必须重新校验。
           </CardDescription>
+          <p className="text-xs text-muted-foreground">
+            最近校验：{mapping?.validated_at
+              ? formatDateTime(mapping.validated_at)
+              : "暂无"}
+          </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
           <Badge variant={mapping?.status === "active" ? "success" : "secondary"}>
@@ -128,7 +139,31 @@ export function VirtualPaymentMappingCard({
       <form onSubmit={submit}>
         <CardContent>
           <FieldGroup className="grid gap-4 md:grid-cols-2">
-            {error ? <StatusAlert>{error}</StatusAlert> : null}
+            {error ? (
+              <div className="md:col-span-2">
+                <StatusAlert>{error}</StatusAlert>
+              </div>
+            ) : null}
+            {validationFeedback ? (
+              <div className="md:col-span-2">
+                <StatusAlert title="校验未通过">
+                  <span>{validationFeedback.message}</span>
+                  {validationFeedback.code || validationFeedback.requestId ? (
+                    <span className="mt-1 block break-all text-xs">
+                      {validationFeedback.code
+                        ? `错误码：${validationFeedback.code}`
+                        : null}
+                      {validationFeedback.code && validationFeedback.requestId
+                        ? "；"
+                        : null}
+                      {validationFeedback.requestId
+                        ? `Request-ID：${validationFeedback.requestId}`
+                        : null}
+                    </span>
+                  ) : null}
+                </StatusAlert>
+              </div>
+            ) : null}
             <MappingTextField
               id={`${summary.environment}-app-id`}
               label="小程序 AppID"

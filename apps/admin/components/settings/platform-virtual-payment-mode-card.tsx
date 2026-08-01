@@ -57,6 +57,26 @@ export function VirtualPaymentModeCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         {modeError ? <StatusAlert>{modeError}</StatusAlert> : null}
+        <dl className="grid gap-3 rounded-md border bg-muted/20 p-3 sm:grid-cols-3">
+          <div className="flex min-w-0 flex-col gap-1">
+            <dt className="text-xs text-muted-foreground">关联权益商品</dt>
+            <dd className="truncate text-sm font-medium">
+              {snapshot.product.name}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="text-xs text-muted-foreground">统一售价</dt>
+            <dd className="text-sm font-medium tabular-nums">
+              {formatProductAmount(snapshot.product.amount_fen)}
+            </dd>
+          </div>
+          <div className="flex flex-col gap-1">
+            <dt className="text-xs text-muted-foreground">权益周期</dt>
+            <dd className="text-sm font-medium">
+              {snapshot.product.term_years} 年
+            </dd>
+          </div>
+        </dl>
         {snapshot.readiness.ready ? (
           <StatusAlert tone="success" title="生产配置已就绪">
             可以启用微信虚拟支付。
@@ -81,61 +101,74 @@ export function VirtualPaymentModeCard({
           </StatusAlert>
         )}
       </CardContent>
-      <CardFooter className="justify-end gap-2 border-t pt-5">
-        {mode === "direct_legacy" ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!snapshot.can_manage || modePending}
-            onClick={() => void onChangeMode("maintenance")}
-          >
-            {modePending ? <Spinner data-icon="inline-start" /> : null}
-            进入维护模式
-          </Button>
-        ) : null}
-        {mode === "wechat_virtual" ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!snapshot.can_manage || modePending}
-            onClick={() => void onChangeMode("maintenance")}
-          >
-            {modePending ? <Spinner data-icon="inline-start" /> : null}
-            暂停虚拟支付
-          </Button>
-        ) : null}
-        {mode === "maintenance" ? (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                type="button"
-                disabled={!snapshot.readiness.ready || !snapshot.can_manage || modePending}
-              >
-                {modePending
-                  ? <Spinner data-icon="inline-start" />
-                  : <ShieldCheck data-icon="inline-start" />}
-                启用生产虚拟支付
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>确认启用生产虚拟支付</AlertDialogTitle>
-                <AlertDialogDescription>
-                  启用后数字权益订单将使用微信虚拟支付，并且不会自动回退普通支付。请确认生产映射、AppKey 和消息配置均已核对。
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>取消</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => void onChangeMode("wechat_virtual")}
+      <CardFooter className="flex-wrap justify-between gap-2 border-t pt-5">
+        <Button asChild type="button" variant="outline">
+          <Link href="/platform/branding-addon">管理权益商品</Link>
+        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          {mode === "direct_legacy" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!snapshot.can_manage || modePending}
+              onClick={() => void onChangeMode("maintenance")}
+            >
+              {modePending ? <Spinner data-icon="inline-start" /> : null}
+              进入维护模式
+            </Button>
+          ) : null}
+          {mode === "wechat_virtual" ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!snapshot.can_manage || modePending}
+              onClick={() => void onChangeMode("maintenance")}
+            >
+              {modePending ? <Spinner data-icon="inline-start" /> : null}
+              暂停虚拟支付
+            </Button>
+          ) : null}
+          {mode === "maintenance" ? (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  type="button"
+                  disabled={!snapshot.readiness.ready || !snapshot.can_manage || modePending}
                 >
-                  确认启用
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        ) : null}
+                  {modePending
+                    ? <Spinner data-icon="inline-start" />
+                    : <ShieldCheck data-icon="inline-start" />}
+                  启用生产虚拟支付
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>确认启用生产虚拟支付</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    启用后数字权益订单将使用微信虚拟支付，并且不会自动回退普通支付。请确认生产映射、AppKey 和消息配置均已核对。
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => void onChangeMode("wechat_virtual")}
+                  >
+                    确认启用
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          ) : null}
+        </div>
       </CardFooter>
     </Card>
   );
+}
+
+function formatProductAmount(amountFen: number | null) {
+  if (amountFen === null) return "未设置";
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+  }).format(amountFen / 100);
 }

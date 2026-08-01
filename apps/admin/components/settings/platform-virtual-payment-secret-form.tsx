@@ -26,12 +26,15 @@ import { Spinner } from "@/components/ui/spinner";
 import type {
   PlatformVirtualPaymentMessageAuth,
   PlatformVirtualPaymentProductSummary,
+  PlatformVirtualPaymentSecretSourceStatus,
+  PlatformVirtualPaymentSettingSource,
 } from "@/components/settings/platform-virtual-payment-settings-types";
 import type { BrandingVirtualPaymentEnvironment } from "@gooes/domain";
 
 type PlatformVirtualPaymentSecretFormProps = {
   environment: BrandingVirtualPaymentEnvironment;
   summary: PlatformVirtualPaymentProductSummary;
+  secretSource: PlatformVirtualPaymentSecretSourceStatus;
   messageAuth: PlatformVirtualPaymentMessageAuth;
   readonly: boolean;
   onSaveSecret: (input: { appKey: string; revision: number }) => Promise<void>;
@@ -41,6 +44,7 @@ type PlatformVirtualPaymentSecretFormProps = {
 export function PlatformVirtualPaymentSecretForm({
   environment,
   summary,
+  secretSource,
   messageAuth,
   readonly,
   onSaveSecret,
@@ -51,6 +55,7 @@ export function PlatformVirtualPaymentSecretForm({
       <EnvironmentSecretCard
         environment={environment}
         summary={summary}
+        secretSource={secretSource}
         readonly={readonly}
         onSave={onSaveSecret}
       />
@@ -66,11 +71,12 @@ export function PlatformVirtualPaymentSecretForm({
 function EnvironmentSecretCard({
   environment,
   summary,
+  secretSource,
   readonly,
   onSave,
 }: Pick<
   PlatformVirtualPaymentSecretFormProps,
-  "environment" | "summary" | "readonly"
+  "environment" | "summary" | "secretSource" | "readonly"
 > & {
   onSave: PlatformVirtualPaymentSecretFormProps["onSaveSecret"];
 }) {
@@ -113,6 +119,13 @@ function EnvironmentSecretCard({
   }
 
   const environmentLabel = environment === "production" ? "生产" : "沙箱";
+  const secretReady = secretSource.configured && summary.secret.configured;
+  const hasReadySecret = secretReady && Boolean(summary.secret.revision);
+  const secretStatusLabel = hasReadySecret
+    ? `已配置 v${summary.secret.revision}`
+    : secretSource.configured
+    ? "配置无效，需更新"
+    : "未配置";
   return (
     <Card className="shadow-none">
       <CardHeader className="flex-row items-start justify-between gap-4">
@@ -122,10 +135,8 @@ function EnvironmentSecretCard({
             新密钥会加密保存，页面不会读取或回填明文。
           </CardDescription>
         </div>
-        <Badge variant={summary.secret.configured ? "success" : "warning"}>
-          {summary.secret.configured
-            ? `已配置 v${summary.secret.revision}`
-            : "未配置"}
+        <Badge variant={hasReadySecret ? "success" : "warning"}>
+          {secretStatusLabel}
         </Badge>
       </CardHeader>
       <form onSubmit={submit}>
@@ -147,7 +158,7 @@ function EnvironmentSecretCard({
                 required
               />
               <FieldDescription>
-                留空不会覆盖当前密钥。请从微信虚拟支付后台复制完整值。
+                当前来源：{sourceLabel(secretSource.source)}。留空不会覆盖当前密钥。
               </FieldDescription>
             </Field>
             <Field data-disabled={readonly || pending}>
@@ -276,7 +287,7 @@ function MessageTokenCard({
   );
 }
 
-function sourceLabel(source: PlatformVirtualPaymentMessageAuth["message_token"]["source"]) {
+function sourceLabel(source: PlatformVirtualPaymentSettingSource) {
   if (source === "database") return "数据库配置";
   if (source === "env") return "环境变量";
   if (source === "default") return "默认配置";
