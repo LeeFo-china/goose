@@ -21,8 +21,9 @@ export function resolvePaymentSecretWrite(
   if (!storedValue) return "write";
 
   const currentValue = decryptStoredPaymentSecret(storedValue);
+  const isActive = snapshot?.status === "active";
   if (!WECHAT_VIRTUAL_PAYMENT_SECRET_SETTING_KEYS.has(key)) {
-    return currentValue === requestedValue ? "noop" : "write";
+    return isActive && currentValue === requestedValue ? "noop" : "write";
   }
 
   const currentBundle = parseVirtualSecretBundle(currentValue);
@@ -32,7 +33,7 @@ export function resolvePaymentSecretWrite(
     currentBundle.appKey === requestedBundle.appKey &&
     currentBundle.revision === requestedBundle.revision
   ) {
-    return "noop";
+    return isActive ? "noop" : "write";
   }
   if (
     requestedBundle.revision < currentBundle.revision ||

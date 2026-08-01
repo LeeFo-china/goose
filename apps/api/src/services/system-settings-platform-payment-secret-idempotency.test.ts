@@ -83,6 +83,28 @@ function repository(input: {
   };
 }
 
+function persistedSetting(input: {
+  key: string;
+  valueType: "string" | "json";
+  valueText: string;
+}) {
+  return {
+    id: "setting-1",
+    tenant_id: null,
+    key: input.key,
+    group_code: "payment",
+    name: "支付密钥",
+    description: "支付密钥",
+    value_type: input.valueType,
+    value_text: input.valueText,
+    is_secret: true,
+    status: "active" as const,
+    updated_by_employee_id: "employee-1",
+    created_at: UPDATED_AT,
+    updated_at: UPDATED_AT,
+  };
+}
+
 describe("SystemSettingsService payment-secret idempotency", () => {
   test("writes once and makes a sequential retry a no-op", async () => {
     let snapshot: {
@@ -246,5 +268,43 @@ describe("SystemSettingsService payment-secret idempotency", () => {
       code: "WECHAT_VIRTUAL_PAYMENT_SECRET_REVISION_CONFLICT",
     });
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    {
+      key: KEY,
+      valueType: "string" as const,
+      value: "inactive-message-token",
+    },
+    {
+      key: VIRTUAL_KEY,
+      valueType: "json" as const,
+      value: JSON.stringify({ appKey: "inactive-app-key", revision: 4 }),
+    },
+  ])("reactivates the same inactive payment secret for $key", async ({
+    key,
+    valueType,
+    value,
+  }) => {
+    const upsert = mock(async (input: { valueText: string }) =>
+      persistedSetting({ key, valueType, valueText: input.valueText }));
+    const service = new SystemSettingsService(repository({
+      key,
+      status: "inactive",
+      storedPlaintext: value,
+      upsert,
+    }));
+
+    const result = await service.updatePlatformPaymentSecretSetting(
+      platformAuth,
+      key,
+      value,
+    );
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      expectedUpdatedAt: UPDATED_AT,
+      status: "active",
+    }));
+    expect(result).toMatchObject({ status: "active", value_text: "******" });
   });
 });
