@@ -135,6 +135,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
       { environment: "production", version: 3 },
     );
   });
+
 });
 
 describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {

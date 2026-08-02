@@ -71,8 +71,7 @@ const mapping = {
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
 } satisfies BrandingVirtualProductRecord;
-type ServiceConstructor = typeof import("./branding-virtual-product-management")
-  ["BrandingVirtualProductManagementService"];
+type ServiceConstructor = (typeof import("./branding-virtual-product-management"))["BrandingVirtualProductManagementService"];
 let BrandingVirtualProductManagementService: ServiceConstructor;
 
 beforeAll(async () => {

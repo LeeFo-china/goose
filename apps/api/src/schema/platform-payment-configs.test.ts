@@ -18,6 +18,7 @@ const validVirtualProduct = {
   virtual_merchant_id: "virtual-merchant-1",
   offer_id: "offer-1",
   provider_product_id: "provider-product-1",
+  item_url: "https://cdn.example.test/branding.png",
   expected_amount_fen: 9_900,
   secret_revision: 1,
   status: "active",
@@ -151,6 +152,36 @@ describe("PlatformWechatVirtualProductPatchSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  test("requires a stable HTTPS JPG or PNG item URL", () => {
+    expect(PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      item_url: "https://cdn.example.test/branding.jpg?version=2",
+    }).success).toBe(true);
+    for (const item_url of [
+      undefined,
+      "http://cdn.example.test/branding.png",
+      "https://cdn.example.test/branding.webp",
+      "https://cdn.example.test/branding.png#fragment",
+    ]) {
+      const input = { ...validVirtualProduct, item_url };
+      expect(PlatformWechatVirtualProductPatchSchema.safeParse(input).success)
+        .toBe(false);
+    }
+  });
+
+  test("uses the WeChat provider product ID format", () => {
+    for (const provider_product_id of [
+      "provider product",
+      "provider-product-id-21",
+      "provider.product",
+    ]) {
+      expect(PlatformWechatVirtualProductPatchSchema.safeParse({
+        ...validVirtualProduct,
+        provider_product_id,
+      }).success).toBe(false);
+    }
   });
 
   test("accepts the maximum amount and reports PostgreSQL integer overflow", () => {

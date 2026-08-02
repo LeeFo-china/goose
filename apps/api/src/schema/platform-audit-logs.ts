@@ -80,6 +80,8 @@ export const PlatformAuditLogActionSchema = z.enum([
   "supplier_contract_terminate",
   "branding_addon_product.update",
   "branding_virtual_product.validate",
+  "branding_virtual_product.upload",
+  "branding_virtual_product.publish",
   "branding_virtual_refund.create",
 ]);
 
