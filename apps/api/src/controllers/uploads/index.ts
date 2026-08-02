@@ -23,6 +23,8 @@ import { assertApplymentUploadSceneAccess } from "./applyment-upload-access";
 import { assertDirectUploadFileDeclaration } from "./direct-upload-file-policy";
 import { assertSupplierLicenseUploadSceneAccess } from "./supplier-license-upload-access";
 import { assertBrandLogoUploadSceneAccess } from "./brand-logo-upload-access";
+import { assertVirtualGoodsUploadSceneAccess } from
+  "./virtual-goods-upload-access";
 import {
   assertDirectObjectKeyBelongsToActor,
   isProjectRequiredUploadScene,
@@ -55,10 +57,17 @@ const DIRECT_UPLOAD_SCENES = [
   "tenant_onboarding_license",
   "supplier_business_license",
   "brand_logo",
+  "branding_virtual_goods",
 ] as const;
 const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
-const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>(["h5_marketing_page", "picture_library", "picture_comment", "brand_logo"]);
+const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
+  "h5_marketing_page",
+  "picture_library",
+  "picture_comment",
+  "brand_logo",
+  "branding_virtual_goods",
+]);
 const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
   "tenant_onboarding_license",
   "wechat_pay_applyment",
@@ -92,7 +101,8 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
       value.scene === "tenant_onboarding_license" ||
       value.scene === "wechat_pay_applyment" ||
       value.scene === "supplier_business_license" ||
-      value.scene === "brand_logo"
+      value.scene === "brand_logo" ||
+      value.scene === "branding_virtual_goods"
     ) &&
     !value.upload_intent
   ) {
@@ -101,6 +111,8 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
       path: ["upload_intent"],
       message: value.scene === "brand_logo"
         ? "缺少品牌 Logo 上传凭证"
+        : value.scene === "branding_virtual_goods"
+        ? "缺少虚拟商品图片上传凭证"
         : "缺少私有上传凭证",
     });
   }
@@ -175,7 +187,8 @@ class UploadController extends BaseController {
       mimetype: result.data.mimetype,
       sizeBytes: result.data.size_bytes,
     });
-    const actorContext = await assertBrandLogoUploadSceneAccess(user, scene)
+    const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
+      ?? await assertBrandLogoUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
@@ -231,7 +244,8 @@ class UploadController extends BaseController {
       mimetype: result.data.mimetype,
       sizeBytes: result.data.size_bytes,
     });
-    const actorContext = await assertBrandLogoUploadSceneAccess(user, scene)
+    const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
+      ?? await assertBrandLogoUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);

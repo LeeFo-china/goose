@@ -384,6 +384,7 @@ function VirtualPaymentSettingsSkeleton() {
           key={key}
           detailCount={key === "mode" ? 3 : 2}
           showHeaderMeta={key === "mapping"}
+          showImageUpload={key === "mapping"}
           showGoodsFlow={key === "mapping"}
         />
       ))}
@@ -399,10 +400,12 @@ function VirtualPaymentSettingsSkeleton() {
 function VirtualPaymentCardSkeleton({
   detailCount = 2,
   showHeaderMeta = false,
+  showImageUpload = false,
   showGoodsFlow = false,
 }: {
   detailCount?: number;
   showHeaderMeta?: boolean;
+  showImageUpload?: boolean;
   showGoodsFlow?: boolean;
 }) {
   return (
@@ -423,6 +426,15 @@ function VirtualPaymentCardSkeleton({
             <Skeleton key={index} className="h-16 w-full" />
           ))}
         </div>
+        {showImageUpload ? (
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-20 rounded-md" />
+            <div className="flex flex-1 flex-col gap-2">
+              <Skeleton className="h-8 w-28" />
+              <Skeleton className="h-3 w-64 max-w-full" />
+            </div>
+          </div>
+        ) : null}
         {showGoodsFlow ? (
           <div className="grid gap-3 md:grid-cols-3">
             {Array.from({ length: 3 }, (_, index) => (

@@ -158,8 +158,9 @@ describe("platform virtual payment settings", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
     const secretSource = readSource("./platform-virtual-payment-secret-form.tsx");
     const mappingSource = readSource("./platform-virtual-payment-mapping-card.tsx");
+    const imageSource = readSource("./platform-virtual-payment-image-field.tsx");
     const flowSource = readOptionalSource("./platform-virtual-payment-goods-flow.tsx");
-    const source = `${virtualSource}\n${secretSource}\n${mappingSource}\n${flowSource}`;
+    const source = `${virtualSource}\n${secretSource}\n${mappingSource}\n${imageSource}\n${flowSource}`;
 
     expect(source).toContain("FieldGroup");
     expect(source).toContain("FieldLabel");
@@ -175,7 +176,7 @@ describe("platform virtual payment settings", () => {
     expect(secretSource).not.toMatch(/\bvalue=\{[^}]*appKey/i);
     expect(source).not.toContain("space-y-");
     expect(mappingSource).toContain("itemUrl");
-    expect(mappingSource).toContain("商品图片 URL");
+    expect(imageSource).toContain("商品图片");
   });
 
   test("remounts the secret form from the latest server revision", () => {

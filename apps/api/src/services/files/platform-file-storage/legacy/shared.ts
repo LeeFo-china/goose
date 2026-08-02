@@ -40,7 +40,8 @@ export type PlatformUploadScene =
   | "picture_comment"
   | "tenant_onboarding_license"
   | "supplier_business_license"
-  | "brand_logo";
+  | "brand_logo"
+  | "branding_virtual_goods";
 
 export type UploadImageInput = {
   buffer: Buffer;

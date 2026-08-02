@@ -7,6 +7,7 @@ import { assertBrandLogoUploadDeclaration } from "@/services/branding-file-polic
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const LARGE_IMAGE_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
+const VIRTUAL_GOODS_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -31,6 +32,19 @@ export function assertDirectUploadFileDeclaration(input: {
       mimeType: input.mimetype,
       sizeBytes: input.sizeBytes,
     });
+    return;
+  }
+  if (input.scene === "branding_virtual_goods") {
+    if (!VIRTUAL_GOODS_IMAGE_MIME_TYPES.has(input.mimetype)) {
+      throw Errors.badRequest("虚拟商品图片仅支持 JPG、JPEG 或 PNG");
+    }
+    if (
+      !Number.isSafeInteger(input.sizeBytes) ||
+      input.sizeBytes <= 0 ||
+      input.sizeBytes > DEFAULT_MAX_UPLOAD_FILE_SIZE
+    ) {
+      throw Errors.badRequest("虚拟商品图片大小必须大于 0 且不能超过 2MB");
+    }
     return;
   }
   const scenePolicy = getWechatPayApplymentUploadPolicy(input.scene) ??

@@ -2,14 +2,12 @@ import { ErrorCodes, Errors, getFilenameFromObjectKey, getMimeTypeFromObjectKey,
 import type { CompleteDirectUploadInput, DirectUploadInput, RegisterExistingCosObjectInput } from "./shared";
 import { buildTenantOnboardingLicenseVisitorPrefix } from "./object-owner-prefixes";
 import {
-  createPrivateUploadIntent,
   normalizePrivateUploadMimeType,
   TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES,
   TENANT_ONBOARDING_LICENSE_MIME_TYPES,
   verifyPrivateUploadIntent,
 } from "./private-upload-intent";
 import {
-  createApplymentUploadIntent,
   verifyApplymentUploadIntent,
 } from "./applyment-upload-intent";
 import {
@@ -17,17 +15,22 @@ import {
   getWechatPayApplymentUploadPolicy,
 } from "./direct-upload-scene-policy";
 import {
-  createSupplierLicenseUploadIntent,
-} from "./supplier-license-upload-intent";
-import {
   assertPrivateSupplierLicenseIntent,
   assertSupplierLicenseUploadDeclaration,
 } from "./supplier-license-upload-guard";
 import {
   validateBrandLogoDirectUpload,
-  verifyBrandLogoCosObject,
 } from "../brand-logo-cos-verifier";
-import { assertValidBrandLogoUploadIntent, createDirectBrandLogoUploadIntent } from "./brand-logo-upload-intent";
+import { assertValidBrandLogoUploadIntent } from "./brand-logo-upload-intent";
+import {
+  validateVirtualGoodsDirectUpload,
+} from "../virtual-goods-cos-verifier";
+import { verifyPublicUploadMetadata } from
+  "../verified-public-upload-metadata";
+import {
+  assertValidVirtualGoodsUploadIntent,
+} from "./virtual-goods-upload-intent";
+import { createSceneUploadIntent } from "./direct-upload-intent-factory";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
@@ -69,6 +72,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     ? getSupplierBusinessLicenseUploadPolicy(input.scene)
     : null;
   const isBrandLogo = validateBrandLogoDirectUpload(input);
+  const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
@@ -83,7 +87,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
-  const signedHeaders = applymentPolicy || supplierLicensePolicy || isBrandLogo
+  const signedHeaders = applymentPolicy || supplierLicensePolicy ||
+      isBrandLogo || isVirtualGoodsImage
     ? {
       "Content-Length": input.sizeBytes,
       "Content-Type": input.mimetype,
@@ -107,40 +112,17 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     Protocol: "https:",
     ...(signedHeaders ? { Headers: signedHeaders } : {}),
   });
-  const uploadIntent = applymentPolicy
-    ? createApplymentUploadIntent({
-      secretKey: config.secretKey,
-      scene: input.scene,
-      tenantId: input.tenantId!,
-      objectKey,
-      mimeType: input.mimetype,
-      sizeBytes: input.sizeBytes,
-      expiresAtSeconds,
-    })
-    : supplierLicensePolicy
-    ? createSupplierLicenseUploadIntent({
-      secretKey: config.secretKey,
-      scene: input.scene,
-      employeeId: input.employeeId!,
-      objectKey,
-      mimeType: input.mimetype,
-      sizeBytes: input.sizeBytes,
-      expiresAtSeconds,
-    })
-    : isPrivateLicense && visitorId
-    ? createPrivateUploadIntent({
-      secretKey: config.secretKey,
-      objectKey,
-      visitorId,
-      mimeType: input.mimetype,
-      sizeBytes: input.sizeBytes,
-      expiresAtSeconds,
-    })
-    : isBrandLogo
-    ? createDirectBrandLogoUploadIntent(input, {
-      secretKey: config.secretKey, objectKey, expiresAtSeconds,
-    })
-    : undefined;
+  const uploadIntent = createSceneUploadIntent(input, {
+    secretKey: config.secretKey,
+    objectKey,
+    expiresAtSeconds,
+    visitorId,
+    isPrivateLicense,
+    isApplyment: Boolean(applymentPolicy),
+    isSupplierLicense: Boolean(supplierLicensePolicy),
+    isBrandLogo,
+    isVirtualGoodsImage,
+  });
 
   return {
     provider: "tencent_cos" as const,
@@ -152,7 +134,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     method: "PUT" as const,
     headers: {
       "content-type": input.mimetype,
-      ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy || isBrandLogo
+      ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy ||
+          isBrandLogo || isVirtualGoodsImage
         ? {
           "content-length": String(input.sizeBytes),
           "x-cos-forbid-overwrite": "true",
@@ -168,9 +151,11 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
 export async function completeDirectUpload(this: any, input: CompleteDirectUploadInput) {
   const isPrivateObject = input.visibility === "private";
   const isBrandLogo = input.scene === "brand_logo";
+  const isVirtualGoodsImage = input.scene === "branding_virtual_goods";
   return this.registerExistingCosObject({
     ...input,
-    verifyHead: isPrivateObject || isBrandLogo || this.shouldVerifyDirectUploadHead(),
+    verifyHead: isPrivateObject || isBrandLogo || isVirtualGoodsImage ||
+      this.shouldVerifyDirectUploadHead(),
     failIfMissing: true,
     metadata: {
       direct_upload: true,
@@ -191,6 +176,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   const isPrivateSupplierLicense =
     input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE && isPrivateObject;
   const isBrandLogo = validateBrandLogoDirectUpload(input);
+  const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
   const privateHeadPolicy = getPrivateHeadPolicy(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
@@ -215,6 +201,9 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     });
   }
   if (isBrandLogo) assertValidBrandLogoUploadIntent(input, config.secretKey);
+  if (isVirtualGoodsImage) {
+    assertValidVirtualGoodsUploadIntent(input, config.secretKey);
+  }
 
   let headObject: {
     headers?: Record<string, string | number | undefined>;
@@ -222,18 +211,18 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
   } | null = null;
   const verifyHeadObject = Boolean(privateHeadPolicy) ||
     Boolean(input.verifyHead);
-  const brandLogoMetadata = isBrandLogo
-    ? await verifyBrandLogoCosObject({
-      cos,
-      bucket: config.bucket,
-      region: config.region,
-      objectKey: input.objectKey,
-      declaredMimeType: input.mimetype ?? "",
-      declaredSize: input.sizeBytes ?? 0,
-      clientEtag: input.etag,
-    })
-    : null;
-  if (verifyHeadObject && !brandLogoMetadata) {
+  const verifiedPublicImageMetadata = await verifyPublicUploadMetadata({
+    isBrandLogo,
+    isVirtualGoodsImage,
+    cos,
+    bucket: config.bucket,
+    region: config.region,
+    objectKey: input.objectKey,
+    declaredMimeType: input.mimetype ?? "",
+    declaredSize: input.sizeBytes ?? 0,
+    clientEtag: input.etag,
+  });
+  if (verifyHeadObject && !verifiedPublicImageMetadata) {
     try {
       headObject = await cos.headObject({
         Bucket: config.bucket,
@@ -276,13 +265,15 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       policy: privateHeadPolicy,
     })
     : null;
-  const contentLength = brandLogoMetadata?.sizeBytes ?? privateMetadata?.contentLength
+  const contentLength = verifiedPublicImageMetadata?.sizeBytes ??
+    privateMetadata?.contentLength
     ?? Number(getHeader(headers, "content-length") ?? fallbackSize);
-  const contentType = brandLogoMetadata?.mimeType ?? privateMetadata?.contentType ?? String(
+  const contentType = verifiedPublicImageMetadata?.mimeType ??
+    privateMetadata?.contentType ?? String(
     getHeader(headers, "content-type") || input.mimetype ||
       getMimeTypeFromObjectKey(input.objectKey),
   );
-  const etag = brandLogoMetadata?.etag ??
+  const etag = verifiedPublicImageMetadata?.etag ??
     privateMetadata?.etag
     ?? normalizeEtag(input.etag) ?? normalizeEtag(headObject?.ETag);
   const fileObject = await platformFileObjectRepository.createOrFindByObjectKey({
@@ -302,8 +293,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     original_name: input.filename ?? getFilenameFromObjectKey(input.objectKey),
     mime_type: contentType,
     size_bytes: Number.isFinite(contentLength) ? contentLength : fallbackSize,
-    width: brandLogoMetadata?.width ?? null,
-    height: brandLogoMetadata?.height ?? null,
+    width: verifiedPublicImageMetadata?.width ?? null,
+    height: verifiedPublicImageMetadata?.height ?? null,
     checksum: etag,
     visibility: input.visibility ?? "public",
     public_url: publicUrl,
