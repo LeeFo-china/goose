@@ -26,6 +26,8 @@ import { WechatVirtualPaymentGateway } from
 import type {
   WechatVirtualPaymentGatewayPort,
 } from "@/services/wechat-virtual-payment-gateway-contracts";
+import { isValidVirtualGoodsUploadItem } from
+  "@/services/wechat-virtual-payment-goods-input";
 import {
   BrandingVirtualProductWechatValidator,
   classifyWechatGoodsFailure,
@@ -157,6 +159,9 @@ export class BrandingVirtualProductManagementService {
         environment: input.environment,
         providerProductId: mapping.provider_product_id,
         expectedAmountFen: mapping.expected_amount_fen,
+        expectedName: product.name,
+        expectedRemark: product.purchase_notes,
+        expectedItemUrl: mapping.item_url ?? "",
         appKey: bundle.appKey,
       });
     } catch (error) {
@@ -358,6 +363,18 @@ function localValidationError(
     return {
       code: "BRANDING_VIRTUAL_PRODUCT_AMOUNT_MISMATCH",
       message: "虚拟商品映射价格与业务商品不一致",
+    };
+  }
+  if (!isValidVirtualGoodsUploadItem({
+    id: mapping.provider_product_id,
+    name: product.name,
+    price: mapping.expected_amount_fen,
+    remark: product.purchase_notes,
+    itemUrl: mapping.item_url,
+  })) {
+    return {
+      code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_GOODS_INVALID",
+      message: "微信虚拟商品 ID、名称、备注或图片地址不符合上传要求",
     };
   }
   return null;

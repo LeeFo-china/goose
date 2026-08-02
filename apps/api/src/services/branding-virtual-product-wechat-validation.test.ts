@@ -11,18 +11,19 @@ import type {
 } from "@/services/wechat-virtual-payment-gateway-contracts";
 
 
+const successUploadItem = {
+  id: "branding-annual",
+  name: "年度品牌权益",
+  price: 9_900,
+  remark: "年度数字权益",
+  itemUrl: "https://cdn.example.test/branding.png",
+  uploadStatus: 2 as const,
+};
 const successUpload = {
   requestId: "upload-request-id",
   environment: "production" as const,
   status: 3 as const,
-  items: [{
-    id: "branding-annual",
-    name: "年度品牌权益",
-    price: 9_900,
-    remark: "年度数字权益",
-    itemUrl: "https://cdn.example.test/branding.png",
-    uploadStatus: 2 as const,
-  }],
+  items: [successUploadItem],
 } satisfies QueryVirtualGoodsUploadResult;
 const successPublish = {
   requestId: "publish-request-id",
@@ -53,6 +54,9 @@ const validationInput = {
   environment: "production" as const,
   providerProductId: "branding-annual",
   expectedAmountFen: 9_900,
+  expectedName: "年度品牌权益",
+  expectedRemark: "年度数字权益",
+  expectedItemUrl: "https://cdn.example.test/branding.png",
   appKey: "production-secret",
 };
 
@@ -86,6 +90,21 @@ describe("BrandingVirtualProductWechatValidator", () => {
         remark: "年度数字权益",
         itemUrl: "https://cdn.example.test/branding.png",
         uploadStatus: 2 as const,
+      }],
+    }],
+    ["name mismatch", {
+      ...successUpload,
+      items: [{ ...successUploadItem, name: "旧品牌权益" }],
+    }],
+    ["remark mismatch", {
+      ...successUpload,
+      items: [{ ...successUploadItem, remark: "旧权益说明" }],
+    }],
+    ["image mismatch", {
+      ...successUpload,
+      items: [{
+        ...successUploadItem,
+        itemUrl: "https://cdn.example.test/branding-old.png",
       }],
     }],
     ["failed latest task", { ...successUpload, status: 2 as const }],
@@ -132,11 +151,21 @@ describe("BrandingVirtualProductWechatValidator", () => {
   });
 
   test.each([
-    ["no-task", 0, "微信暂无最近批量上传任务可供校验"],
-    ["running", 1, "微信最近一次批量上传任务仍在处理中，请稍后重试"],
+    [
+      "no-task",
+      0,
+      "微信暂无最近批量上传任务可供校验",
+      "BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_TASK_MISSING",
+    ],
+    [
+      "running",
+      1,
+      "微信最近一次批量上传任务仍在处理中，请稍后重试",
+      "BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_TASK_PENDING",
+    ],
   ] as const)(
     "reports upload %s task as unconfirmed",
-    async (_label, status, message) => {
+    async (_label, status, message, code) => {
       const fixture = createValidator({
         upload: { ...successUpload, status, items: [] },
       });
@@ -144,7 +173,7 @@ describe("BrandingVirtualProductWechatValidator", () => {
       await expect(fixture.validator.validate(validationInput)).rejects
         .toMatchObject({
           statusCode: 409,
-          code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          code,
           message,
           details: { requestId: "upload-request-id" },
         });
@@ -152,11 +181,21 @@ describe("BrandingVirtualProductWechatValidator", () => {
   );
 
   test.each([
-    ["no-task", 0, "微信暂无最近批量发布任务可供校验"],
-    ["running", 1, "微信最近一次批量发布任务仍在处理中，请稍后重试"],
+    [
+      "no-task",
+      0,
+      "微信暂无最近批量发布任务可供校验",
+      "BRANDING_VIRTUAL_PRODUCT_WECHAT_PUBLISH_TASK_MISSING",
+    ],
+    [
+      "running",
+      1,
+      "微信最近一次批量发布任务仍在处理中，请稍后重试",
+      "BRANDING_VIRTUAL_PRODUCT_WECHAT_PUBLISH_TASK_PENDING",
+    ],
   ] as const)(
     "reports publish %s task as unconfirmed",
-    async (_label, status, message) => {
+    async (_label, status, message, code) => {
       const fixture = createValidator({
         publish: { ...successPublish, status, items: [] },
       });
@@ -164,7 +203,7 @@ describe("BrandingVirtualProductWechatValidator", () => {
       await expect(fixture.validator.validate(validationInput)).rejects
         .toMatchObject({
           statusCode: 409,
-          code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+          code,
           message,
           details: { requestId: "publish-request-id" },
         });

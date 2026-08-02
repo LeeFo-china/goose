@@ -36,6 +36,9 @@ export interface BrandingVirtualProductWechatValidatorPort {
     environment: BrandingVirtualPaymentEnvironment;
     providerProductId: string;
     expectedAmountFen: number;
+    expectedName: string;
+    expectedRemark: string;
+    expectedItemUrl: string;
     appKey: string;
   }): Promise<WechatGoodsValidationResult>;
 }
@@ -57,6 +60,9 @@ export class BrandingVirtualProductWechatValidator
     environment: BrandingVirtualPaymentEnvironment;
     providerProductId: string;
     expectedAmountFen: number;
+    expectedName: string;
+    expectedRemark: string;
+    expectedItemUrl: string;
     appKey: string;
   }): Promise<WechatGoodsValidationResult> {
     const accessToken = await this.accessTokenProvider.getAccessToken();
@@ -66,7 +72,13 @@ export class BrandingVirtualProductWechatValidator
       signingSecret: { environment: input.environment, appKey: input.appKey },
     };
     const upload = await this.gateway.queryUploadGoods(signedInput);
-    assertUploadTaskMatches(upload, input.providerProductId, input.expectedAmountFen);
+    assertUploadTaskMatches(upload, {
+      providerProductId: input.providerProductId,
+      expectedAmountFen: input.expectedAmountFen,
+      expectedName: input.expectedName,
+      expectedRemark: input.expectedRemark,
+      expectedItemUrl: input.expectedItemUrl,
+    });
     const publish = await this.gateway.queryPublishGoods(signedInput);
     assertPublishTaskMatches(publish, input.providerProductId);
     return {
@@ -98,7 +110,7 @@ export function classifyWechatGoodsFailure(
     ) {
       return { confirmedInvalid: true, error };
     }
-    if (error.code === "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING") {
+    if (isGoodsTaskUnconfirmedCode(error.code)) {
       return { confirmedInvalid: false, error };
     }
     return {
@@ -124,11 +136,16 @@ export function classifyWechatGoodsFailure(
 
 function assertUploadTaskMatches(
   result: QueryVirtualGoodsUploadResult,
-  providerProductId: string,
-  expectedAmountFen: number,
+  expected: {
+    providerProductId: string;
+    expectedAmountFen: number;
+    expectedName: string;
+    expectedRemark: string;
+    expectedItemUrl: string;
+  },
 ): void {
   if (result.status === 0 || result.status === 1) {
-    throwGoodsTaskPending(result.requestId, "上传", result.status);
+    throwGoodsTaskUnconfirmed(result.requestId, "upload", result.status);
   }
   // The official query returns only the latest batch task, not a complete
   // goods catalog. This application owns exactly one virtual goods mapping,
@@ -137,8 +154,11 @@ function assertUploadTaskMatches(
   const item = result.items[0];
   if (
     result.status !== 3 || result.items.length !== 1 ||
-    item?.id !== providerProductId || item.uploadStatus !== 2 ||
-    item.price !== expectedAmountFen
+    item?.id !== expected.providerProductId || item.uploadStatus !== 2 ||
+    item.price !== expected.expectedAmountFen ||
+    item.name !== expected.expectedName ||
+    item.remark !== expected.expectedRemark ||
+    item.itemUrl !== expected.expectedItemUrl
   ) {
     throw Errors.business(
       409,
@@ -154,7 +174,7 @@ function assertPublishTaskMatches(
   providerProductId: string,
 ): void {
   if (result.status === 0 || result.status === 1) {
-    throwGoodsTaskPending(result.requestId, "发布", result.status);
+    throwGoodsTaskUnconfirmed(result.requestId, "publish", result.status);
   }
   // See the upload assertion above: this is a latest-task check under the
   // fixed single-goods product boundary, not a full remote catalog lookup.
@@ -172,19 +192,32 @@ function assertPublishTaskMatches(
   }
 }
 
-function throwGoodsTaskPending(
+function throwGoodsTaskUnconfirmed(
   requestId: string | null,
-  phase: "上传" | "发布",
+  phase: "upload" | "publish",
   status: 0 | 1,
 ): never {
+  const phaseLabel = phase === "upload" ? "上传" : "发布";
+  const code = `BRANDING_VIRTUAL_PRODUCT_WECHAT_${phase.toUpperCase()}_TASK_${
+    status === 0 ? "MISSING" : "PENDING"
+  }`;
   throw Errors.business(
     409,
     status === 0
-      ? `微信暂无最近批量${phase}任务可供校验`
-      : `微信最近一次批量${phase}任务仍在处理中，请稍后重试`,
-    "BRANDING_VIRTUAL_PRODUCT_WECHAT_TASK_PENDING",
+      ? `微信暂无最近批量${phaseLabel}任务可供校验`
+      : `微信最近一次批量${phaseLabel}任务仍在处理中，请稍后重试`,
+    code,
     { requestId },
   );
+}
+
+function isGoodsTaskUnconfirmedCode(code: string): boolean {
+  return [
+    "BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_TASK_MISSING",
+    "BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_TASK_PENDING",
+    "BRANDING_VIRTUAL_PRODUCT_WECHAT_PUBLISH_TASK_MISSING",
+    "BRANDING_VIRTUAL_PRODUCT_WECHAT_PUBLISH_TASK_PENDING",
+  ].includes(code);
 }
 
 function safeWechatFailureDetails(value: unknown): {
