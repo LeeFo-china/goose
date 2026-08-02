@@ -118,11 +118,11 @@ describe("virtual goods direct object ownership", () => {
   });
 
   test.each([
-    ["wrong extension", "image/png", `${LOGO_UUID}.jpg`],
-    ["unsupported extension", "image/png", `${LOGO_UUID}.webp`],
-    ["unassigned segment", "image/png", `unassigned/${LOGO_UUID}.png`],
+    ["wrong extension", "image/png", `${LOGO_UUID}.jpg`, false],
+    ["unsupported extension", "image/png", `${LOGO_UUID}.webp`, false],
+    ["unassigned segment", "image/png", `unassigned/${LOGO_UUID}.png`, false],
     ["tenant prefix", "image/png", `${LOGO_UUID}.png`, true],
-  ])("rejects %s", (_name, mimetype, suffix, tenantPrefix = false) => {
+  ] as const)("rejects %s", (_name, mimetype, suffix, tenantPrefix) => {
     expect(() => assertDirectObjectKeyBelongsToActor({
       objectKey: tenantPrefix
         ? `tenants/tenant-1/branding-virtual-goods/2026/08/02/${suffix}`
