@@ -17,10 +17,14 @@ import {
   toSafeVirtualPaymentMutationFeedback,
   toSafeVirtualPaymentMutationMessage,
 } from "@/components/settings/platform-virtual-payment-errors";
+import { PlatformVirtualPaymentGoodsFlow } from
+  "@/components/settings/platform-virtual-payment-goods-flow";
 import { VirtualPaymentMappingCard } from "@/components/settings/platform-virtual-payment-mapping-card";
 import { VirtualPaymentModeCard } from "@/components/settings/platform-virtual-payment-mode-card";
 import { createLatestRefreshCoordinator } from "@/components/settings/platform-virtual-payment-refresh-coordinator";
 import { PlatformVirtualPaymentSecretForm } from "@/components/settings/platform-virtual-payment-secret-form";
+import { usePlatformVirtualPaymentGoodsLifecycle } from
+  "@/components/settings/use-platform-virtual-payment-goods-lifecycle";
 import type {
   PlatformVirtualPaymentProductSummary,
   PlatformVirtualPaymentSettingsPatch,
@@ -74,6 +78,14 @@ export function PlatformVirtualPaymentSettings({
     }) | null
   >(null);
   const refreshCoordinator = useRef(createLatestRefreshCoordinator());
+  const activeSummary = snapshot?.virtual_products.find((item) =>
+    item.environment === environment
+  );
+  const mappingVersion = activeSummary?.mapping?.version ?? null;
+  const goodsLifecycle = usePlatformVirtualPaymentGoodsLifecycle({
+    environment,
+    mappingVersion,
+  });
 
   const refreshSnapshot = useCallback(
     async function refreshSnapshot(): Promise<boolean> {
@@ -133,6 +145,7 @@ export function PlatformVirtualPaymentSettings({
   ) {
     if (!snapshot) return;
     setValidationFeedback(null);
+    goodsLifecycle.clearFeedback();
     const mappingResult = buildVirtualMappingPatch({ summary, draft, amountYuan });
     if (!mappingResult.ok) {
       throw createVirtualPaymentUiError(mappingResult.message);
@@ -181,6 +194,7 @@ export function PlatformVirtualPaymentSettings({
     }
     setNotice("");
     setValidationFeedback(null);
+    goodsLifecycle.clearFeedback();
     try {
       await requestBackendJson(
         `${SETTINGS_PATH}/${environment}/validate`,
@@ -206,6 +220,7 @@ export function PlatformVirtualPaymentSettings({
       return;
     }
     await ensureSnapshotRefreshed();
+    await goodsLifecycle.refresh();
     setNotice(`${virtualPaymentEnvironmentLabels[environment]}校验已完成。`);
   }
 
@@ -254,9 +269,7 @@ export function PlatformVirtualPaymentSettings({
     );
   }
 
-  const summary = snapshot.virtual_products.find((item) =>
-    item.environment === environment
-  );
+  const summary = activeSummary;
   return (
     <div className="flex min-h-0 flex-col gap-4">
       {loadError ? <StatusAlert>{loadError}</StatusAlert> : null}
@@ -296,11 +309,34 @@ export function PlatformVirtualPaymentSettings({
                 productAmountFen={snapshot.product.amount_fen}
                 readonly={!snapshot.can_manage}
                 onSave={saveMapping}
-                onValidate={validateMapping}
-                validationFeedback={
-                  validationFeedback?.environment === environment
-                    ? validationFeedback
-                    : null
+                goodsFlow={
+                  <PlatformVirtualPaymentGoodsFlow
+                    environment={environment}
+                    mapping={summary.mapping}
+                    snapshot={goodsLifecycle.snapshot}
+                    loading={goodsLifecycle.loading}
+                    pollExhausted={goodsLifecycle.pollExhausted}
+                    readonly={!snapshot.can_manage}
+                    feedback={
+                      validationFeedback?.environment === environment
+                        ? validationFeedback
+                        : goodsLifecycle.feedback
+                    }
+                    onRefresh={goodsLifecycle.refresh}
+                    onUpload={async () => {
+                      setNotice("");
+                      if (await goodsLifecycle.startUpload()) {
+                        setNotice("微信商品上传任务已提交。");
+                      }
+                    }}
+                    onPublish={async () => {
+                      setNotice("");
+                      if (await goodsLifecycle.startPublish()) {
+                        setNotice("微信商品发布任务已提交。");
+                      }
+                    }}
+                    onValidate={() => validateMapping(summary)}
+                  />
                 }
               />
               <div className="grid gap-4 xl:grid-cols-2">
@@ -348,6 +384,7 @@ function VirtualPaymentSettingsSkeleton() {
           key={key}
           detailCount={key === "mode" ? 3 : 2}
           showHeaderMeta={key === "mapping"}
+          showGoodsFlow={key === "mapping"}
         />
       ))}
       <div className="grid gap-4 xl:grid-cols-2">
@@ -362,9 +399,11 @@ function VirtualPaymentSettingsSkeleton() {
 function VirtualPaymentCardSkeleton({
   detailCount = 2,
   showHeaderMeta = false,
+  showGoodsFlow = false,
 }: {
   detailCount?: number;
   showHeaderMeta?: boolean;
+  showGoodsFlow?: boolean;
 }) {
   return (
     <Card className="shadow-none">
@@ -373,15 +412,24 @@ function VirtualPaymentCardSkeleton({
         <Skeleton className="h-4 w-72 max-w-full" />
         {showHeaderMeta ? <Skeleton className="h-3 w-36" /> : null}
       </CardHeader>
-      <CardContent
-        className={cn(
-          "grid gap-4",
-          detailCount === 3 ? "sm:grid-cols-3" : "md:grid-cols-2",
-        )}
-      >
-        {Array.from({ length: detailCount }, (_, index) => (
-          <Skeleton key={index} className="h-16 w-full" />
-        ))}
+      <CardContent className="flex flex-col gap-5">
+        <div
+          className={cn(
+            "grid gap-4",
+            detailCount === 3 ? "sm:grid-cols-3" : "md:grid-cols-2",
+          )}
+        >
+          {Array.from({ length: detailCount }, (_, index) => (
+            <Skeleton key={index} className="h-16 w-full" />
+          ))}
+        </div>
+        {showGoodsFlow ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            {Array.from({ length: 3 }, (_, index) => (
+              <Skeleton key={index} className="h-20 w-full" />
+            ))}
+          </div>
+        ) : null}
       </CardContent>
       <CardFooter className="justify-end border-t pt-5">
         <Skeleton className="h-9 w-28" />

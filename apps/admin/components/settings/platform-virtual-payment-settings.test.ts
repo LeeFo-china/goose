@@ -125,8 +125,15 @@ describe("platform virtual payment settings", () => {
     expect(panelSource).toContain("PlatformVirtualPaymentSettings");
   });
 
-  test("calls all five virtual payment configuration APIs", () => {
+  test("calls virtual payment configuration and goods lifecycle APIs", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
+    const flowSource = readOptionalSource(
+      "./platform-virtual-payment-goods-flow.tsx",
+    );
+    const lifecycleSource = readOptionalSource(
+      "./use-platform-virtual-payment-goods-lifecycle.ts",
+    );
+    const requestSources = `${virtualSource}\n${lifecycleSource}`;
 
     expect(virtualSource).toContain(
       '"/platform/payment/wechat-virtual/branding-entitlement"',
@@ -137,15 +144,22 @@ describe("platform virtual payment settings", () => {
       '"/platform/payment/wechat-virtual/message-token"',
     );
     expect(virtualSource).toContain("/validate");
-    expect(virtualSource).toContain('method: "POST"');
+    expect(requestSources).toContain("/goods-status");
+    expect(requestSources).toContain("/goods/upload");
+    expect(requestSources).toContain("/goods/publish");
+    expect(requestSources).toContain('method: "POST"');
     expect(virtualSource).toContain("refreshSnapshot");
+    expect(flowSource.match(/<AlertDialog>/g)?.length).toBe(2);
+    expect(flowSource).toContain("刷新微信状态");
+    expect(flowSource).toContain("Spinner");
   });
 
   test("uses safe shadcn composition and never refills secrets", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
     const secretSource = readSource("./platform-virtual-payment-secret-form.tsx");
     const mappingSource = readSource("./platform-virtual-payment-mapping-card.tsx");
-    const source = `${virtualSource}\n${secretSource}\n${mappingSource}`;
+    const flowSource = readOptionalSource("./platform-virtual-payment-goods-flow.tsx");
+    const source = `${virtualSource}\n${secretSource}\n${mappingSource}\n${flowSource}`;
 
     expect(source).toContain("FieldGroup");
     expect(source).toContain("FieldLabel");
@@ -160,6 +174,8 @@ describe("platform virtual payment settings", () => {
     expect(secretSource).not.toMatch(/\bvalue=\{[^}]*token/i);
     expect(secretSource).not.toMatch(/\bvalue=\{[^}]*appKey/i);
     expect(source).not.toContain("space-y-");
+    expect(mappingSource).toContain("itemUrl");
+    expect(mappingSource).toContain("商品图片 URL");
   });
 
   test("remounts the secret form from the latest server revision", () => {
@@ -170,7 +186,7 @@ describe("platform virtual payment settings", () => {
     );
   });
 
-  test("skeleton mirrors the mapping and two secret columns", () => {
+  test("skeleton mirrors the mapping, goods flow, and two secret columns", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
     const skeletonBody = virtualSource.match(
       /function VirtualPaymentSettingsSkeleton\(\) \{([\s\S]*?)\n\}\n\nfunction VirtualPaymentCardSkeleton/,
@@ -179,6 +195,8 @@ describe("platform virtual payment settings", () => {
     expect(skeletonBody).toContain('["mode", "mapping"]');
     expect(skeletonBody).toContain('["secret", "message-token"]');
     expect(skeletonBody).toContain('className="grid gap-4 xl:grid-cols-2"');
+    expect(skeletonBody).toContain('showGoodsFlow={key === "mapping"}');
+    expect(virtualSource).toContain('className="grid gap-3 md:grid-cols-3"');
   });
 
   test("exposes only allowlisted safe mutation errors", () => {
@@ -192,6 +210,10 @@ describe("platform virtual payment settings", () => {
     expect(errorSource).toContain("SAFE_VIRTUAL_PAYMENT_ERROR_MESSAGES");
     expect(errorSource).toContain("BRANDING_VIRTUAL_PAYMENT_NOT_READY");
     expect(errorSource).toContain("WECHAT_VIRTUAL_PAYMENT_SECRET_REVISION_CONFLICT");
+    expect(errorSource).toContain("BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_TASK_MISSING");
+    expect(errorSource).toContain("BRANDING_VIRTUAL_PRODUCT_WECHAT_PUBLISH_TASK_PENDING");
+    expect(errorSource).toContain("BRANDING_VIRTUAL_PRODUCT_WECHAT_GOODS_INVALID");
+    expect(errorSource).toContain("BRANDING_VIRTUAL_PRODUCT_WECHAT_UPLOAD_REQUIRED");
     expect(errorSource).toContain('caught.status === 403');
     expect(renderedSources).toContain("toSafeVirtualPaymentMutationMessage");
     expect(renderedSources).not.toContain("caught.message");
@@ -258,16 +280,22 @@ describe("platform virtual payment settings", () => {
   test("shows validation time and refreshes a failed validation before retry", () => {
     const virtualSource = readSource("./platform-virtual-payment-settings.tsx");
     const mappingSource = readSource("./platform-virtual-payment-mapping-card.tsx");
+    const flowSource = readSource("./platform-virtual-payment-goods-flow.tsx");
+    const validateBody = virtualSource.match(
+      /async function validateMapping[\s\S]*?\n  async function changeMode/,
+    )?.[0] ?? "";
 
     expect(mappingSource).toContain("mapping?.validated_at");
     expect(mappingSource).toContain("最近校验");
-    expect(mappingSource).toContain("validationFeedback.requestId");
-    expect(mappingSource).toContain("validationFeedback.code");
+    expect(flowSource).toContain("feedback.requestId");
+    expect(flowSource).toContain("feedback.code");
     expect(virtualSource).toContain("toSafeVirtualPaymentMutationFeedback");
     expect(virtualSource).toMatch(
       /catch \(validationError\) \{[\s\S]*await refreshSnapshot\(\)[\s\S]*setValidationFeedback/,
     );
     expect(virtualSource).toContain("校验未通过，且最新状态刷新失败");
+    expect(validateBody).not.toContain("goods/upload");
+    expect(validateBody).not.toContain("goods/publish");
   });
 
   test("confirms production activation and gates it with server readiness", () => {

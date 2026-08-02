@@ -41,6 +41,7 @@ export type PlatformVirtualPaymentMapping = {
   virtual_merchant_id: string;
   offer_id: string;
   provider_product_id: string;
+  item_url: string | null;
   expected_amount_fen: number;
   encrypted_secret_ref: PlatformVirtualPaymentSecretReference;
   secret_revision: number;
@@ -117,10 +118,47 @@ export type PlatformVirtualPaymentMappingPatch = {
   virtual_merchant_id: string;
   offer_id: string;
   provider_product_id: string;
+  item_url: string;
   expected_amount_fen: number;
   secret_revision: number;
   status: PlatformVirtualPaymentMappingStatus;
   version: number;
+};
+
+export type PlatformVirtualGoodsPhaseState =
+  | "not_started"
+  | "processing"
+  | "succeeded"
+  | "failed"
+  | "mismatch";
+
+export type PlatformVirtualGoodsPhaseSummary = {
+  state: PlatformVirtualGoodsPhaseState;
+  task_status: 0 | 1 | 2 | 3;
+  item_status: 0 | 1 | 2 | 3 | null;
+  request_id: string | null;
+};
+
+export type PlatformVirtualGoodsLifecycleSnapshot = {
+  environment: BrandingVirtualPaymentEnvironment;
+  mapping_version: number;
+  upload: PlatformVirtualGoodsPhaseSummary;
+  publish: PlatformVirtualGoodsPhaseSummary;
+  next_action:
+    | "upload"
+    | "wait_upload"
+    | "publish"
+    | "wait_publish"
+    | "validate";
+  poll_after_ms: 2_000 | null;
+};
+
+export type PlatformVirtualGoodsActionResult = {
+  outcome: "accepted" | "already_processing" | "already_succeeded";
+  phase: "upload" | "publish";
+  environment: BrandingVirtualPaymentEnvironment;
+  mapping_version: number;
+  request_id: string | null;
 };
 
 export type PlatformVirtualPaymentSettingsPatch = {

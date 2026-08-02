@@ -32,6 +32,7 @@ export type VirtualPaymentMappingDraft = {
   virtualMerchantId: string;
   offerId: string;
   providerProductId: string;
+  itemUrl: string;
   status: PlatformVirtualPaymentMappingStatus;
 };
 
@@ -49,6 +50,7 @@ export function createVirtualMappingDraft(
     virtualMerchantId: mapping?.virtual_merchant_id ?? "",
     offerId: mapping?.offer_id ?? "",
     providerProductId: mapping?.provider_product_id ?? "",
+    itemUrl: mapping?.item_url ?? "",
     status: mapping?.status ?? "draft",
   };
 }
@@ -64,6 +66,19 @@ export function buildVirtualMappingPatch(input: {
   const providerProductId = input.draft.providerProductId.trim();
   if (!appId || !virtualMerchantId || !offerId || !providerProductId) {
     return { ok: false, message: "请完整填写当前环境的虚拟商品映射" };
+  }
+  if (!/^[A-Za-z0-9_-]{1,20}$/.test(providerProductId)) {
+    return {
+      ok: false,
+      message: "渠道商品 ID 只能包含字母、数字、下划线或短横线，且不超过 20 个字符",
+    };
+  }
+  const itemUrl = normalizeVirtualGoodsImageUrl(input.draft.itemUrl);
+  if (!itemUrl) {
+    return {
+      ok: false,
+      message: "商品图片必须是稳定的 HTTPS JPG 或 PNG 地址",
+    };
   }
 
   const revision = input.summary.secret.revision;
@@ -83,6 +98,7 @@ export function buildVirtualMappingPatch(input: {
     current.virtual_merchant_id !== virtualMerchantId ||
     current.offer_id !== offerId ||
     current.provider_product_id !== providerProductId ||
+    current.item_url !== itemUrl ||
     current.expected_amount_fen !== amount.amountFen ||
     current.secret_revision !== revision;
   if (
@@ -101,6 +117,7 @@ export function buildVirtualMappingPatch(input: {
       virtual_merchant_id: virtualMerchantId,
       offer_id: offerId,
       provider_product_id: providerProductId,
+      item_url: itemUrl,
       expected_amount_fen: amount.amountFen,
       secret_revision: revision,
       status: input.draft.status === "active" && sensitiveChanged
@@ -109,6 +126,21 @@ export function buildVirtualMappingPatch(input: {
       version: current?.version ?? 1,
     },
   };
+}
+
+export function normalizeVirtualGoodsImageUrl(value: string): string | null {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 2_048) return null;
+  try {
+    const url = new URL(normalized);
+    return url.protocol === "https:" &&
+        /\.(?:png|jpe?g)$/i.test(url.pathname) &&
+        url.username === "" && url.password === "" && url.hash === ""
+      ? normalized
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 export function buildVirtualPaymentSettingsPatch(input: {
