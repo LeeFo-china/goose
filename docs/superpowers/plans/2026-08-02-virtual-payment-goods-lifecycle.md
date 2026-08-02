@@ -417,7 +417,7 @@ git commit -m "test(payments): 验证微信虚拟商品闭环"
 **Files:**
 - Inspect only: all files changed by Tasks 1-6.
 
-- [ ] **Step 1: 检查分支差异和提交边界**
+- [x] **Step 1: 检查分支差异和提交边界**
 
 Run:
 
@@ -430,19 +430,21 @@ git diff --check origin/main...HEAD
 
 Expected: 工作树干净；只包含规格、计划、migration、API/Admin 实现和验证证据。
 
-- [ ] **Step 2: 推送功能分支**
+- [x] **Step 2: 推送功能分支**
 
 Run: `git push -u origin feat/virtual-payment-goods-lifecycle`
 
 Expected: 推送成功。
 
-- [ ] **Step 3: 创建 PR 并等待 CI**
+- [x] **Step 3: 创建 PR 并等待 CI**
 
 PR 标题：`feat(payments): 补齐微信虚拟商品上传发布闭环`
 
 PR 说明必须列出：根因、三步人工确认、`item_url` migration、普通校验保持只读、没有执行真实微信写操作、验证命令、dev migration 状态和 RLS advisory 独立跟进项。
 
-- [ ] **Step 4: 交付 Squash merge 建议**
+PR #12 已创建。仓库未配置功能分支或 `pull_request` 检查；镜像构建和 dev 自动部署仅在合并到 `main` 后触发，因此部署后只读 smoke 保持为未完成项。
+
+- [x] **Step 4: 交付 Squash merge 建议**
 
 CI 全部通过后建议使用 Squash and merge；最终 squash commit 使用：
 
