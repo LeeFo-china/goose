@@ -19,6 +19,9 @@ import {
   platformBrandingAddonProductService,
 } from "@/services/platform-branding-addon-product";
 import {
+  platformBrandingVirtualPaymentSettingsService,
+} from "@/services/platform-branding-virtual-payment-settings";
+import {
   brandingVirtualProductService,
 } from "@/services/branding-virtual-products";
 import {
@@ -91,10 +94,12 @@ class PlatformBrandingAddonController extends PlatformBaseController {
       request.params,
     );
     const input = parse(BrandingVirtualProductValidationSchema, request.body);
+    // @deprecated Compatibility route. New clients use the payment-domain path.
     return ResponseHandler.success(
-      await platformBrandingAddonProductService.validateVirtualProduct(
+      await platformBrandingVirtualPaymentSettingsService.validate(
         authContext,
-        { environment, version: input.version },
+        environment,
+        { version: input.version },
       ),
     );
   }

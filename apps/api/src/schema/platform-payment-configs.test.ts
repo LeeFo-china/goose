@@ -1,8 +1,28 @@
 import { describe, expect, test } from "bun:test";
 import {
+  type PlatformWechatVirtualProductPatchInput,
+  PlatformWechatVirtualEnvironmentSchema,
+  PlatformWechatVirtualProductPatchSchema,
+  PlatformWechatVirtualProductValidationSchema,
   UpdatePlatformWechatPayConfigSchema,
   UpdatePlatformWechatPaySecretBundleSchema,
+  UpdatePlatformWechatVirtualMessageTokenSchema,
+  UpdatePlatformWechatVirtualSecretBundleSchema,
+  UpdatePlatformWechatVirtualSettingsSchema,
 } from "./platform-payment-configs";
+import { MAX_POSTGRES_INTEGER_FEN } from "../services/branding-addon-contracts";
+
+const validVirtualProduct = {
+  environment: "sandbox",
+  app_id: "wx-virtual-app",
+  virtual_merchant_id: "virtual-merchant-1",
+  offer_id: "offer-1",
+  provider_product_id: "provider-product-1",
+  expected_amount_fen: 9_900,
+  secret_revision: 1,
+  status: "active",
+  version: 1,
+} satisfies PlatformWechatVirtualProductPatchInput;
 
 describe("UpdatePlatformWechatPayConfigSchema", () => {
   test("keeps omitted profile and status fields undefined for partial updates", () => {
@@ -89,6 +109,238 @@ describe("UpdatePlatformWechatPaySecretBundleSchema", () => {
   test("rejects incomplete secret bundle payload", () => {
     const result = UpdatePlatformWechatPaySecretBundleSchema.safeParse({
       private_key_pem: "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----",
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("PlatformWechatVirtualProductPatchSchema", () => {
+  test("normalizes required text fields", () => {
+    const result = PlatformWechatVirtualProductPatchSchema.parse({
+      ...validVirtualProduct,
+      app_id: "  wx-virtual-app  ",
+      virtual_merchant_id: "  virtual-merchant-1  ",
+      offer_id: "  offer-1  ",
+      provider_product_id: "  provider-product-1  ",
+    });
+
+    expect(result).toEqual(validVirtualProduct);
+  });
+
+  test("accepts every supported environment", () => {
+    expect(PlatformWechatVirtualEnvironmentSchema.parse("sandbox"))
+      .toBe("sandbox");
+    expect(PlatformWechatVirtualEnvironmentSchema.parse("production"))
+      .toBe("production");
+  });
+
+  test("rejects an unsupported environment", () => {
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      environment: "staging",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects an unsafe integer as expected amount", () => {
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      expected_amount_fen: Number.MAX_SAFE_INTEGER + 1,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("accepts the maximum amount and reports PostgreSQL integer overflow", () => {
+    expect(PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      expected_amount_fen: MAX_POSTGRES_INTEGER_FEN,
+    }).success).toBe(true);
+
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      expected_amount_fen: MAX_POSTGRES_INTEGER_FEN + 1,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(expect.objectContaining({
+        message: "金额超出支持范围",
+        path: ["expected_amount_fen"],
+      }));
+    }
+  });
+
+  test.each([
+    {
+      label: "mapping secret revision",
+      parse: (value: number) => PlatformWechatVirtualProductPatchSchema
+        .safeParse({ ...validVirtualProduct, secret_revision: value }),
+      message: "密钥版本号超出支持范围",
+      path: ["secret_revision"],
+    },
+    {
+      label: "mapping version",
+      parse: (value: number) => PlatformWechatVirtualProductPatchSchema
+        .safeParse({ ...validVirtualProduct, version: value }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "top-level update version",
+      parse: (value: number) => UpdatePlatformWechatVirtualSettingsSchema
+        .safeParse({ version: value, purchase_mode: "maintenance" }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "validation version",
+      parse: (value: number) => PlatformWechatVirtualProductValidationSchema
+        .safeParse({ version: value }),
+      message: "版本号超出支持范围",
+      path: ["version"],
+    },
+    {
+      label: "secret-bundle revision",
+      parse: (value: number) => UpdatePlatformWechatVirtualSecretBundleSchema
+        .safeParse({ app_key: "app-secret", revision: value }),
+      message: "密钥版本号超出支持范围",
+      path: ["revision"],
+    },
+  ])(
+    "accepts the PostgreSQL integer maximum and rejects overflow for $label",
+    ({ parse, message, path }) => {
+      expect(parse(MAX_POSTGRES_INTEGER_FEN).success).toBe(true);
+
+      const result = parse(MAX_POSTGRES_INTEGER_FEN + 1);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues).toContainEqual(expect.objectContaining({
+          message,
+          path,
+        }));
+      }
+    },
+  );
+
+  test.each([
+    ["secret_revision", { secret_revision: 0 }],
+    ["version", { version: 0 }],
+  ])("rejects zero %s", (_label, patch) => {
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      ...patch,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects encrypted secret references", () => {
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      encrypted_secret_ref: "secret://platform/wechat-virtual",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test("rejects unknown keys", () => {
+    const result = PlatformWechatVirtualProductPatchSchema.safeParse({
+      ...validVirtualProduct,
+      unexpected: true,
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("UpdatePlatformWechatVirtualSettingsSchema", () => {
+  test.each(["direct_legacy", "maintenance", "wechat_virtual"])(
+    "accepts %s purchase mode",
+    (purchaseMode) => {
+      expect(UpdatePlatformWechatVirtualSettingsSchema.safeParse({
+        version: 1,
+        purchase_mode: purchaseMode,
+      }).success)
+        .toBe(true);
+    },
+  );
+
+  test("accepts and normalizes a virtual product update", () => {
+    const result = UpdatePlatformWechatVirtualSettingsSchema.parse({
+      version: 2,
+      virtual_product: {
+        ...validVirtualProduct,
+        app_id: "  wx-virtual-app  ",
+      },
+    });
+
+    expect(result).toEqual({
+      version: 2,
+      virtual_product: validVirtualProduct,
+    });
+  });
+
+  test("rejects an update without a purchase mode or virtual product", () => {
+    expect(UpdatePlatformWechatVirtualSettingsSchema.safeParse({ version: 1 })
+      .success).toBe(false);
+  });
+
+  test.each([
+    ["zero version", { version: 0, purchase_mode: "maintenance" }],
+    ["unknown key", { version: 1, purchase_mode: "maintenance", extra: true }],
+  ])("rejects %s", (_label, input) => {
+    expect(UpdatePlatformWechatVirtualSettingsSchema.safeParse(input).success)
+      .toBe(false);
+  });
+});
+
+describe("PlatformWechatVirtualProductValidationSchema", () => {
+  test("accepts a positive version", () => {
+    expect(PlatformWechatVirtualProductValidationSchema.parse({ version: 1 }))
+      .toEqual({ version: 1 });
+  });
+
+  test.each([
+    ["zero version", { version: 0 }],
+    ["unknown key", { version: 1, extra: true }],
+  ])("rejects %s", (_label, input) => {
+    expect(PlatformWechatVirtualProductValidationSchema.safeParse(input).success)
+      .toBe(false);
+  });
+});
+
+describe("UpdatePlatformWechatVirtualSecretBundleSchema", () => {
+  test("normalizes the app key", () => {
+    expect(UpdatePlatformWechatVirtualSecretBundleSchema.parse({
+      app_key: "  app-secret  ",
+      revision: 1,
+    })).toEqual({ app_key: "app-secret", revision: 1 });
+  });
+
+  test.each([
+    ["zero revision", { app_key: "app-secret", revision: 0 }],
+    ["unknown key", { app_key: "app-secret", revision: 1, extra: true }],
+  ])("rejects %s", (_label, input) => {
+    expect(UpdatePlatformWechatVirtualSecretBundleSchema.safeParse(input).success)
+      .toBe(false);
+  });
+});
+
+describe("UpdatePlatformWechatVirtualMessageTokenSchema", () => {
+  test("normalizes the message token", () => {
+    expect(UpdatePlatformWechatVirtualMessageTokenSchema.parse({
+      message_token: "  message-secret  ",
+    })).toEqual({ message_token: "message-secret" });
+  });
+
+  test("rejects unknown keys", () => {
+    const result = UpdatePlatformWechatVirtualMessageTokenSchema.safeParse({
+      message_token: "message-secret",
+      extra: true,
     });
 
     expect(result.success).toBe(false);

@@ -5,6 +5,7 @@ import {
   BrandingAddonOrderListQuerySchema,
   BrandingAddonProductPatchSchema,
   BrandingVirtualProductEnvironmentParamsSchema,
+  BrandingVirtualProductPatchSchema,
   BrandingVirtualCreateOrderSchema,
   BrandingVirtualProductValidationSchema,
   PlatformBrandingAddonOrderListQuerySchema,
@@ -104,22 +105,6 @@ describe("BrandingAddonProductPatchSchema", () => {
       { amount_fen: 1 },
       { purchase_notes: "支付成功后自动开通一年" },
       { enabled: true },
-      { purchase_mode: "maintenance" },
-      {
-        virtual_product: {
-          environment: "production",
-          app_id: "wx-app",
-          virtual_merchant_id: "merchant",
-          offer_id: "offer",
-          provider_product_id: "product",
-          expected_amount_fen: 9_900,
-          encrypted_secret_ref:
-            "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
-          secret_revision: 2,
-          status: "active",
-          version: 1,
-        },
-      },
     ] as const) {
       expect(BrandingAddonProductPatchSchema.parse({
         ...patch,
@@ -131,8 +116,17 @@ describe("BrandingAddonProductPatchSchema", () => {
     }
   });
 
-  test("rejects cross-environment virtual payment secret references", () => {
+  test("strictly rejects the purchase mode field", () => {
     expect(() => BrandingAddonProductPatchSchema.parse({
+      name: "年度品牌技术支持",
+      purchase_mode: "maintenance",
+      version: 1,
+    })).toThrow();
+  });
+
+  test("strictly rejects the virtual product field", () => {
+    expect(() => BrandingAddonProductPatchSchema.parse({
+      name: "年度品牌技术支持",
       virtual_product: {
         environment: "production",
         app_id: "wx-app",
@@ -141,7 +135,7 @@ describe("BrandingAddonProductPatchSchema", () => {
         provider_product_id: "product",
         expected_amount_fen: 9_900,
         encrypted_secret_ref:
-          "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+          "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
         secret_revision: 2,
         status: "active",
         version: 1,
@@ -218,49 +212,21 @@ describe("BrandingAddonProductPatchSchema", () => {
     }
   });
 
-  test("matches PostgreSQL integer boundaries for command versions", () => {
-    const virtualProduct = {
-      environment: "production" as const,
-      app_id: "wx-app",
-      virtual_merchant_id: "merchant",
-      offer_id: "offer",
-      provider_product_id: "product",
-      expected_amount_fen: 9_900,
-      encrypted_secret_ref:
-        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
-      secret_revision: 2_147_483_647,
-      status: "draft" as const,
-      version: 2_147_483_647,
-    };
+  test("matches the PostgreSQL integer boundary for command versions", () => {
     expect(BrandingAddonProductPatchSchema.parse({
-      virtual_product: virtualProduct,
+      name: "年度品牌技术支持",
       version: 2_147_483_647,
-    })).toMatchObject({
-      virtual_product: virtualProduct,
-      version: 2_147_483_647,
-    });
+    }).version).toBe(2_147_483_647);
 
-    for (const input of [
-      { version: 2_147_483_648, name: "年度品牌技术支持" },
-      {
-        version: 1,
-        virtual_product: {
-          ...virtualProduct,
-          secret_revision: 2_147_483_648,
-        },
-      },
-      {
-        version: 1,
-        virtual_product: { ...virtualProduct, version: 2_147_483_648 },
-      },
-    ]) {
-      const result = BrandingAddonProductPatchSchema.safeParse(input);
-      expect(result.success).toBe(false);
-      if (!result.success) {
-        expect(result.error.issues.some(
-          (issue) => issue.message.includes("超出支持范围"),
-        )).toBe(true);
-      }
+    const result = BrandingAddonProductPatchSchema.safeParse({
+      version: 2_147_483_648,
+      name: "年度品牌技术支持",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues).toContainEqual(expect.objectContaining({
+        message: "版本号超出支持范围",
+      }));
     }
   });
 
@@ -281,6 +247,55 @@ describe("BrandingAddonProductPatchSchema", () => {
       purchase_notes: "说".repeat(501),
       version: 1,
     })).toThrow();
+  });
+});
+
+describe("BrandingVirtualProductPatchSchema", () => {
+  test("rejects cross-environment virtual payment secret references", () => {
+    expect(() => BrandingVirtualProductPatchSchema.parse({
+      environment: "production",
+      app_id: "wx-app",
+      virtual_merchant_id: "merchant",
+      offer_id: "offer",
+      provider_product_id: "product",
+      expected_amount_fen: 9_900,
+      encrypted_secret_ref:
+        "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
+      secret_revision: 2,
+      status: "active",
+      version: 1,
+    })).toThrow();
+  });
+
+  test("matches PostgreSQL integer boundaries for mapping versions", () => {
+    const virtualProduct = {
+      environment: "production" as const,
+      app_id: "wx-app",
+      virtual_merchant_id: "merchant",
+      offer_id: "offer",
+      provider_product_id: "product",
+      expected_amount_fen: 9_900,
+      encrypted_secret_ref:
+        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
+      secret_revision: 2_147_483_647,
+      status: "draft" as const,
+      version: 2_147_483_647,
+    };
+    expect(BrandingVirtualProductPatchSchema.parse(virtualProduct))
+      .toEqual(virtualProduct);
+
+    for (const input of [
+      { ...virtualProduct, secret_revision: 2_147_483_648 },
+      { ...virtualProduct, version: 2_147_483_648 },
+    ]) {
+      const result = BrandingVirtualProductPatchSchema.safeParse(input);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(
+          (issue) => issue.message.includes("超出支持范围"),
+        )).toBe(true);
+      }
+    }
   });
 });
 

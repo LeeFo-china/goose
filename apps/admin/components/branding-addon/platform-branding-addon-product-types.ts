@@ -56,6 +56,15 @@ export interface PlatformBrandingVirtualProductSummary {
   };
 }
 
+export interface PlatformBrandingPaymentReadiness {
+  ready: boolean;
+  blockers: Array<{
+    code: string;
+    message: string;
+    settings_href?: string;
+  }>;
+}
+
 export interface PlatformBrandingAddonProductResult {
   product: PlatformBrandingAddonProduct;
   virtual_products?: PlatformBrandingVirtualProductSummary[];
@@ -74,23 +83,6 @@ export interface PlatformBrandingAddonProductPatch {
   amount_fen?: number;
   purchase_notes: string;
   enabled: boolean;
-  version: number;
-  purchase_mode?: BrandingPurchaseMode;
-  virtual_product?: PlatformBrandingVirtualProductPatch;
-}
-
-export interface PlatformBrandingVirtualProductPatch {
-  environment: BrandingVirtualPaymentEnvironment;
-  app_id: string;
-  virtual_merchant_id: string;
-  offer_id: string;
-  provider_product_id: string;
-  expected_amount_fen: number;
-  encrypted_secret_ref:
-    | "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE"
-    | "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE";
-  secret_revision: number;
-  status: PlatformBrandingVirtualProductStatus;
   version: number;
 }
 

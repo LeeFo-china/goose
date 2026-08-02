@@ -24,6 +24,7 @@ import {
   getBoolean,
   getPlatformSecretStrings,
   getPlatformSecretString,
+  getPlatformSettingStatus,
 } from './legacy/settings';
 import type { SystemSettingRecord } from './legacy/shared';
 import {
@@ -34,7 +35,7 @@ import {
 type SystemSettingRepositoryPort = Pick<
   SystemSettingRepository,
   'findByKey' | 'updateValue' | 'createValue' | 'findPlatformByKeys'
-  | 'findPlatformSecretByKey'
+  | 'findPlatformSecretByKey' | 'upsertPlatformPaymentSecret'
 >;
 
 export class SystemSettingsService {
@@ -77,6 +78,9 @@ export class SystemSettingsService {
   }
   getPlatformSecretString(key: string) {
     return getPlatformSecretString(this.systemSettingRepository, key);
+  }
+  getPlatformSettingStatus(key: string) {
+    return getPlatformSettingStatus(this.systemSettingRepository, key);
   }
 }
 

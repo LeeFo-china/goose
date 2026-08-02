@@ -9,6 +9,9 @@ import type {
   CredentialInvalidationPort,
   ProvideVirtualGoodsInput,
   ProvideVirtualGoodsResult,
+  QueryVirtualGoodsPublishResult,
+  QueryVirtualGoodsTaskInput,
+  QueryVirtualGoodsUploadResult,
   QueryVirtualOrderInput,
   QueryVirtualOrderResult,
   RefundVirtualOrderInput,
@@ -19,6 +22,8 @@ import type {
 } from "./wechat-virtual-payment-gateway-contracts";
 import {
   assertSuccessfulWechatResponse,
+  normalizeQueryGoodsPublish,
+  normalizeQueryGoodsUpload,
   normalizeQueryOrder,
   normalizeRefundSubmission,
   parseJsonRecord,
@@ -71,6 +76,26 @@ export class WechatVirtualPaymentGateway
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.baseUrl = (dependencies.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.credentialInvalidation = dependencies.credentialInvalidation;
+  }
+
+  async queryUploadGoods(
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<QueryVirtualGoodsUploadResult> {
+    const response = await this.queryGoodsTask(
+      "/xpay/query_upload_goods",
+      input,
+    );
+    return normalizeQueryGoodsUpload(response, input);
+  }
+
+  async queryPublishGoods(
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<QueryVirtualGoodsPublishResult> {
+    const response = await this.queryGoodsTask(
+      "/xpay/query_publish_goods",
+      input,
+    );
+    return normalizeQueryGoodsPublish(response, input);
   }
 
   async queryOrder(
@@ -167,6 +192,26 @@ export class WechatVirtualPaymentGateway
       });
     }
     return { accepted: true, requestId: response.requestId };
+  }
+
+  private async queryGoodsTask(
+    path: "/xpay/query_upload_goods" | "/xpay/query_publish_goods",
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<WechatVirtualPaymentJsonResponse> {
+    assertGoodsTaskInput(input);
+    const body = JSON.stringify({ env: virtualPaymentEnv(input.environment) });
+    const paySig = calculateVirtualPaymentPaySig(
+      path,
+      body,
+      input.signingSecret.appKey,
+    );
+    const response = await this.requestJson({
+      path,
+      query: { access_token: input.accessToken, pay_sig: paySig },
+      body,
+    });
+    assertSuccessfulWechatResponse(response);
+    return response;
   }
 
   private async invalidateRejectedCredential(
@@ -283,6 +328,12 @@ function assertSignedInput(input: QueryVirtualOrderInput): void {
   ) throwInvalidRequest();
   assertSigningSecret(input.environment, input.signingSecret);
   buildOrderReference(input);
+}
+
+function assertGoodsTaskInput(input: QueryVirtualGoodsTaskInput): void {
+  assertAccessToken(input.accessToken);
+  if (!input.signingSecret) throwInvalidRequest();
+  assertSigningSecret(input.environment, input.signingSecret);
 }
 
 function assertRefundInput(input: RefundVirtualOrderInput): void {

@@ -16,12 +16,29 @@ import {
 import { platformAuditLogService } from "@/services/platform-audit-logs";
 import { systemSettingsService } from "@/services/system-settings";
 import {
+  wechatMiniProgramAccessTokenProvider,
+  type WechatMiniProgramAccessTokenPort,
+} from "@/services/wechat-miniprogram-access-token";
+import { wechatMiniSessionCredentialService } from
+  "@/services/wechat-mini-session-credentials";
+import { WechatVirtualPaymentGateway } from
+  "@/services/wechat-virtual-payment-gateway";
+import type {
+  WechatVirtualPaymentGatewayPort,
+} from "@/services/wechat-virtual-payment-gateway-contracts";
+import {
+  BrandingVirtualProductWechatValidator,
+  classifyWechatGoodsFailure,
+  type BrandingVirtualProductWechatValidatorPort,
+  type WechatGoodsValidationResult,
+} from "@/services/branding-virtual-product-wechat-validation";
+import {
   BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN,
   VIRTUAL_PAYMENT_ENVIRONMENTS,
   type BrandingVirtualPaymentEnvironment,
 } from "@gooes/domain";
 
-const MANAGE_PERMISSION = "platform.branding_product.manage";
+const MANAGE_PERMISSION = "platform.payment.config.manage";
 const SECRET_KEYS = [
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.sandbox,
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
@@ -37,12 +54,19 @@ type SettingsServicePort = Pick<
 >;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
+type GatewayPort = Pick<
+  WechatVirtualPaymentGatewayPort,
+  "queryUploadGoods" | "queryPublishGoods"
+>;
 
 export type BrandingVirtualProductManagementDependencies = {
   virtualProductRepository?: VirtualProductRepositoryPort;
   settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
+  gateway?: GatewayPort;
+  accessTokenProvider?: WechatMiniProgramAccessTokenPort;
+  wechatValidator?: BrandingVirtualProductWechatValidatorPort;
   nowFactory?: () => Date;
 };
 
@@ -51,6 +75,7 @@ export class BrandingVirtualProductManagementService {
   private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
+  private readonly wechatValidator: BrandingVirtualProductWechatValidatorPort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: BrandingVirtualProductManagementDependencies = {}) {
@@ -59,6 +84,14 @@ export class BrandingVirtualProductManagementService {
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.audit = dependencies.audit ?? platformAuditLogService;
+    this.wechatValidator = dependencies.wechatValidator ??
+      new BrandingVirtualProductWechatValidator({
+        gateway: dependencies.gateway ?? new WechatVirtualPaymentGateway({
+          credentialInvalidation: wechatMiniSessionCredentialService,
+        }),
+        accessTokenProvider: dependencies.accessTokenProvider ??
+          wechatMiniProgramAccessTokenProvider,
+      });
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -103,52 +136,113 @@ export class BrandingVirtualProductManagementService {
 
     const key = WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS[input.environment];
     const bundle = parseWechatVirtualPaymentSecretBundle(secretValues[key] ?? "");
-    const validationError = localValidationError(product, mapping, key, bundle);
-    const validationStatus = validationError ? "invalid" : "valid";
-    const validatedAt = this.nowFactory().toISOString();
-    const saved = await this.persistValidation({
-      addonProductId: product.id,
-      environment: input.environment,
-      expectedProductVersion: product.version,
-      expectedMappingVersion: mapping.version,
-      validationStatus,
-      validatedAt,
-      updatedByEmployeeId: actor.employeeId,
-    });
-
-    await this.audit.recordBestEffort({
-      action: "branding_virtual_product.validate",
-      actorEmployeeId: actor.employeeId,
-      actorUserId: actor.authUserId,
-      resourceType: "branding_virtual_product",
-      resourceId: saved.id,
-      resourceLabel: `${product.name}-${input.environment}`,
-      status: validationError ? "failure" : "success",
-      summary: validationError
-        ? "品牌权益虚拟商品本地配置验证失败"
-        : "品牌权益虚拟商品本地配置验证通过",
-      metadata: {
+    const localError = localValidationError(product, mapping, key, bundle);
+    if (localError) {
+      await this.persistOutcome({
+        actor,
+        product,
+        mapping,
         environment: input.environment,
-        validation: "server_configuration",
-        error_code: validationError?.code ?? null,
-        secret: {
-          key,
-          revision: bundle?.revision ?? null,
-          configured: bundle !== null,
-        },
-      },
-    });
-
-    if (validationError) {
-      throw Errors.business(409, validationError.message, validationError.code);
+        validationStatus: "invalid",
+        errorCode: localError.code,
+        secret: { key, revision: bundle?.revision ?? null, configured: bundle !== null },
+      });
+      throw Errors.business(409, localError.message, localError.code);
     }
+    if (!bundle) throw Errors.dbError("读取平台支付密钥配置失败");
+
+    let remoteResult: WechatGoodsValidationResult;
+    try {
+      remoteResult = await this.wechatValidator.validate({
+        environment: input.environment,
+        providerProductId: mapping.provider_product_id,
+        expectedAmountFen: mapping.expected_amount_fen,
+        appKey: bundle.appKey,
+      });
+    } catch (error) {
+      const failure = classifyWechatGoodsFailure(error);
+      await this.persistOutcome({
+        actor,
+        product,
+        mapping,
+        environment: input.environment,
+        validationStatus: failure.confirmedInvalid ? "invalid" : "pending",
+        errorCode: failure.error.code,
+        secret: { key, revision: bundle.revision, configured: true },
+      });
+      throw failure.error;
+    }
+
+    const validatedAt = this.nowFactory().toISOString();
+    const saved = await this.persistOutcome({
+      actor,
+      product,
+      mapping,
+      environment: input.environment,
+      validationStatus: "valid",
+      errorCode: null,
+      secret: { key, revision: bundle.revision, configured: true },
+      validatedAt,
+    });
     return {
       virtual_product: serializeBrandingVirtualProduct(saved),
       validation: {
-        kind: "server_configuration" as const,
+        kind: "wechat_goods" as const,
         validated_at: validatedAt,
+        request_ids: {
+          upload: remoteResult.uploadRequestId,
+          publish: remoteResult.publishRequestId,
+        },
       },
     };
+  }
+
+  private async persistOutcome(input: {
+    actor: { employeeId: string; authUserId: string };
+    product: BrandingAddonProductRecord;
+    mapping: BrandingVirtualProductRecord;
+    environment: BrandingVirtualPaymentEnvironment;
+    validationStatus: "pending" | "valid" | "invalid";
+    validatedAt?: string;
+    errorCode: string | null;
+    secret: {
+      key: BrandingVirtualPaymentSecretSettingKey;
+      revision: number | null;
+      configured: boolean;
+    };
+  }) {
+    const saved = await this.persistValidation({
+      addonProductId: input.product.id,
+      environment: input.environment,
+      expectedProductVersion: input.product.version,
+      expectedMappingVersion: input.mapping.version,
+      validationStatus: input.validationStatus,
+      validatedAt: input.validationStatus === "pending"
+        ? null
+        : input.validatedAt ?? this.nowFactory().toISOString(),
+      updatedByEmployeeId: input.actor.employeeId,
+    });
+    await this.audit.recordBestEffort({
+      action: "branding_virtual_product.validate",
+      actorEmployeeId: input.actor.employeeId,
+      actorUserId: input.actor.authUserId,
+      resourceType: "branding_virtual_product",
+      resourceId: saved.id,
+      resourceLabel: `${input.product.name}-${input.environment}`,
+      status: input.validationStatus === "valid" ? "success" : "failure",
+      summary: input.validationStatus === "valid"
+        ? "品牌权益虚拟商品微信侧状态验证通过"
+        : input.validationStatus === "pending"
+        ? "品牌权益虚拟商品微信侧状态暂未确认"
+        : "品牌权益虚拟商品微信侧状态验证失败",
+      metadata: {
+        environment: input.environment,
+        validation: "wechat_goods",
+        error_code: input.errorCode,
+        secret: input.secret,
+      },
+    });
+    return saved;
   }
 
   private requirePlatformOperator(authContext: AuthContext) {

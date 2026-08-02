@@ -8,6 +8,7 @@ const KEYS = [
   "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
   "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
 ] as const;
+const UPDATED_AT = "2026-08-01T10:00:00.000Z";
 
 type RepositoryConstructor = typeof import(
   "./system-settings"
@@ -17,6 +18,10 @@ type ServiceConstructor = typeof import(
 )["SystemSettingsService"];
 let SystemSettingRepository: RepositoryConstructor;
 let SystemSettingsService: ServiceConstructor;
+
+const unusedAtomicWriter = mock(async () => {
+  throw new TypeError("not used");
+});
 
 beforeAll(async () => {
   ({ SystemSettingRepository } = await import("./system-settings"));
@@ -51,6 +56,7 @@ describe("bounded platform secret settings query", () => {
           value_text: JSON.stringify({ appKey: "production", revision: 3 }),
           is_secret: true,
           status: "active",
+          updated_at: UPDATED_AT,
         },
         error: null,
       })),
@@ -70,7 +76,7 @@ describe("bounded platform secret settings query", () => {
     expect(calls).toContainEqual(["limit", 1]);
     expect(calls).toContainEqual([
       "select",
-      "key,value_text,is_secret,status",
+      "key,value_text,is_secret,status,updated_at",
     ]);
   });
 
@@ -154,6 +160,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     const result = await service.getPlatformSecretStrings(KEYS);
@@ -169,6 +176,7 @@ describe("bounded platform secret settings query", () => {
       value_text: JSON.stringify({ appKey: "production", revision: 3 }),
       is_secret: false,
       status: "active" as const,
+      updated_at: UPDATED_AT,
     }));
     const service = new SystemSettingsService({
       findPlatformSecretByKey,
@@ -182,12 +190,94 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     expect(await service.getPlatformSecretString(KEYS[1])).toContain(
       '"revision":3',
     );
     expect(findPlatformSecretByKey).toHaveBeenCalledWith(KEYS[1]);
+  });
+
+  test("reports database metadata without decrypting or leaking the stored value", async () => {
+    const storedValue = "enc:v1:invalid-sensitive-ciphertext";
+    const findPlatformSecretByKey = mock(async () => ({
+      key: KEYS[0],
+      value_text: storedValue,
+      is_secret: true,
+      status: "active" as const,
+      updated_at: UPDATED_AT,
+    }));
+    const service = new SystemSettingsService({
+      findPlatformSecretByKey,
+      findPlatformByKeys: mock(async () => {
+        throw new TypeError("batch lookup must not run");
+      }),
+      findByKey: mock(async () => {
+        throw new TypeError("generic lookup must not run");
+      }),
+      updateValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+      createValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
+    });
+
+    const result = await service.getPlatformSettingStatus(KEYS[0]);
+
+    expect(result).toEqual({ configured: true, source: "database" });
+    expect(findPlatformSecretByKey).toHaveBeenCalledTimes(1);
+    expect(findPlatformSecretByKey).toHaveBeenCalledWith(KEYS[0]);
+    expect(JSON.stringify(result)).not.toContain(storedValue);
+  });
+
+  test("reports env and empty metadata after an exact inactive-or-missing lookup", async () => {
+    const envKey = KEYS[1];
+    const emptyKey = "WECHAT_MINIPROGRAM_ORIGINAL_ID";
+    const previousEnv = process.env[envKey];
+    const previousOriginalId = process.env[emptyKey];
+    process.env[envKey] = "environment-secret";
+    delete process.env[emptyKey];
+    const findPlatformSecretByKey = mock(async (key: string) => key === envKey
+      ? {
+        key,
+        value_text: "ignored-inactive-value",
+        is_secret: true,
+        status: "inactive" as const,
+        updated_at: UPDATED_AT,
+      }
+      : null);
+    const service = new SystemSettingsService({
+      findPlatformSecretByKey,
+      findPlatformByKeys: mock(async () => []),
+      findByKey: mock(async () => null),
+      updateValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+      createValue: mock(async () => {
+        throw new TypeError("not used");
+      }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
+    });
+
+    try {
+      await expect(service.getPlatformSettingStatus(envKey)).resolves.toEqual({
+        configured: true,
+        source: "env",
+      });
+      await expect(service.getPlatformSettingStatus(emptyKey)).resolves.toEqual({
+        configured: false,
+        source: "empty",
+      });
+      expect(findPlatformSecretByKey).toHaveBeenCalledTimes(2);
+    } finally {
+      if (previousEnv === undefined) delete process.env[envKey];
+      else process.env[envKey] = previousEnv;
+      if (previousOriginalId === undefined) delete process.env[emptyKey];
+      else process.env[emptyKey] = previousOriginalId;
+    }
   });
 
   test("preserves a sanitized decrypt failure instead of treating it as empty", async () => {
@@ -209,6 +299,7 @@ describe("bounded platform secret settings query", () => {
       createValue: mock(async () => {
         throw new TypeError("not used");
       }),
+      upsertPlatformPaymentSecret: unusedAtomicWriter,
     });
 
     try {

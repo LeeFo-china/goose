@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import { PLATFORM_PAYMENT_SECRET_SETTING_KEYS } from "./definitions";
 import { DEFINITIONS_WECHAT_NOTIFY } from "./definitions-wechat-notify";
 
 describe("wechat message setting definitions", () => {
@@ -7,11 +8,14 @@ describe("wechat message setting definitions", () => {
     expect(DEFINITIONS_WECHAT_NOTIFY.find((definition) =>
       definition.key === "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN"
     )).toMatchObject({
-      groupCode: "wechat",
+      groupCode: "payment",
       valueType: "string",
       isSecret: true,
       envNames: ["WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN"],
     });
+    expect(PLATFORM_PAYMENT_SECRET_SETTING_KEYS.has(
+      "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN",
+    )).toBe(true);
   });
 
   test("keeps the original ID separate from the AppID and non-secret", () => {

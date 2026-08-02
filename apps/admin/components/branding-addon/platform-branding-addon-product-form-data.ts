@@ -3,7 +3,6 @@ import type {
   PlatformBrandingAddonProductFormValues,
   PlatformBrandingAddonProductPatch,
 } from "./platform-branding-addon-product-types";
-import type { BrandingPurchaseMode } from "@gooes/domain";
 
 export const MAX_BRANDING_ADDON_AMOUNT_FEN = 2_147_483_647;
 
@@ -12,55 +11,6 @@ type PriceParseResult =
   | { ok: false; message: string };
 
 export type ProductFormField = "name" | "amountYuan" | "purchaseNotes";
-
-type ModePatchResult =
-  | {
-    ok: true;
-    patch: { purchase_mode: BrandingPurchaseMode; version: number };
-  }
-  | { ok: false; message: string };
-
-export function buildModePatch(input: {
-  current: BrandingPurchaseMode;
-  next: BrandingPurchaseMode;
-  version: number;
-}): ModePatchResult {
-  if (input.current === input.next) {
-    return {
-      ok: true,
-      patch: { purchase_mode: input.next, version: input.version },
-    };
-  }
-  if (
-    input.current === "direct_legacy" &&
-    input.next === "wechat_virtual"
-  ) {
-    return {
-      ok: false,
-      message: "请先切换到维护模式并收敛旧待支付订单",
-    };
-  }
-  if (
-    input.current === "wechat_virtual" &&
-    input.next === "direct_legacy"
-  ) {
-    return {
-      ok: false,
-      message: "虚拟支付启用后只能暂停，不能回退到普通支付",
-    };
-  }
-  const isAllowed =
-    (input.current === "direct_legacy" && input.next === "maintenance") ||
-    (input.current === "maintenance" && input.next === "wechat_virtual") ||
-    (input.current === "wechat_virtual" && input.next === "maintenance");
-  if (!isAllowed) {
-    return { ok: false, message: "不支持当前支付通道切换" };
-  }
-  return {
-    ok: true,
-    patch: { purchase_mode: input.next, version: input.version },
-  };
-}
 
 export function isOrderRefundable(order: {
   payment_channel: "legacy_direct" | "wechat_virtual";

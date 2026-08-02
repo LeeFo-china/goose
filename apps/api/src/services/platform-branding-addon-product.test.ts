@@ -91,9 +91,6 @@ function createFixture(options: {
   current?: BrandingAddonProductRecord | null;
   updated?: BrandingAddonProductRecord | null;
   updateError?: unknown;
-  mapping?: BrandingVirtualProductRecord | null;
-  updatedMapping?: BrandingVirtualProductRecord | null;
-  secretBundle?: string;
 } = {}) {
   const getProduct = mock(async () => {
     return options.current === undefined ? product : options.current;
@@ -110,9 +107,7 @@ function createFixture(options: {
       product: options.updated === undefined
         ? { ...product, amount_fen: 1, enabled: true, version: 2 }
         : options.updated ?? product,
-      virtual_product: options.updatedMapping === undefined
-        ? null
-        : options.updatedMapping,
+      virtual_product: null,
     };
   });
   const assertPermission = mock((
@@ -130,15 +125,6 @@ function createFixture(options: {
     return "all" as const;
   });
   const recordBestEffort = mock(async () => null);
-  const findByProductAndEnvironment = mock(async () =>
-    options.mapping === undefined ? productionMapping : options.mapping
-  );
-  const getSecretString = mock(async () =>
-    options.secretBundle ?? JSON.stringify({
-      appKey: "production-secret",
-      revision: 2,
-    })
-  );
   const getConfiguration = mock(async () => {
     const current = options.current === undefined ? product : options.current;
     if (!current) {
@@ -165,17 +151,14 @@ function createFixture(options: {
   const validateConfiguration = mock(async () => ({
     virtual_product: productionMapping,
     validation: {
-      kind: "server_configuration" as const,
+      kind: "wechat_goods" as const,
       validated_at: "2026-08-01T00:00:00.000Z",
+      request_ids: { upload: "upload-request-id", publish: "publish-request-id" },
     },
   }));
   const service = new PlatformBrandingAddonProductService({
     repository: { getProduct },
-    virtualProductRepository: {
-      findByProductAndEnvironment,
-      manageConfiguration,
-    },
-    settingsService: { getSecretString },
+    virtualProductRepository: { manageConfiguration },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
     managementService: { getConfiguration, validateConfiguration },
@@ -187,8 +170,6 @@ function createFixture(options: {
     manageConfiguration,
     assertPermission,
     recordBestEffort,
-    findByProductAndEnvironment,
-    getSecretString,
     getConfiguration,
   };
 }
@@ -345,17 +326,54 @@ describe("PlatformBrandingAddonProductService updates", () => {
     });
   });
 
+  test("writes only business product fields without reading payment configuration", async () => {
+    const current = {
+      ...product,
+      amount_fen: 9_900,
+      enabled: true,
+      purchase_mode: "maintenance",
+    } satisfies BrandingAddonProductRecord;
+    const fixture = createFixture({
+      current,
+      updated: {
+        ...current,
+        name: "年度品牌支持服务",
+        amount_fen: 10_000,
+        purchase_notes: "更新后的购买说明",
+        enabled: false,
+        version: 2,
+      },
+    });
+    await fixture.service.update(platformAuth, {
+      name: "年度品牌支持服务",
+      amount_fen: 10_000,
+      purchase_notes: "更新后的购买说明",
+      enabled: false,
+      version: 1,
+    });
+    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+      expectedProductVersion: 1,
+      productPatch: {
+        name: "年度品牌支持服务",
+        amount_fen: 10_000,
+        purchase_notes: "更新后的购买说明",
+        enabled: false,
+      },
+      virtualProductPatch: {},
+      actorEmployeeId: EMPLOYEE_ID,
+    });
+    expect(fixture.getConfiguration).not.toHaveBeenCalled();
+  });
+
   test("can enable after the final merged state has a positive integer price", async () => {
     const fixture = createFixture({
       current: { ...product, amount_fen: 1 },
       updated: { ...product, amount_fen: 1, enabled: true, version: 2 },
     });
-
     await fixture.service.update(platformAuth, {
       enabled: true,
       version: 1,
     });
-
     expect(fixture.manageConfiguration).toHaveBeenCalledWith({
       expectedProductVersion: 1,
       productPatch: { enabled: true },
@@ -458,37 +476,4 @@ describe("PlatformBrandingAddonProductService updates", () => {
     });
     expect(fixture.recordBestEffort).not.toHaveBeenCalled();
   });
-
-  test("switches to virtual payment only with a valid active production mapping", async () => {
-    const current = {
-      ...product,
-      amount_fen: 9_900,
-      enabled: true,
-    } satisfies BrandingAddonProductRecord;
-    const fixture = createFixture({
-      current,
-      updated: {
-        ...current,
-        purchase_mode: "wechat_virtual",
-        version: 2,
-      },
-    });
-
-    await fixture.service.update(platformAuth, {
-      purchase_mode: "wechat_virtual",
-      version: 1,
-    });
-
-    expect(fixture.findByProductAndEnvironment).toHaveBeenCalledWith({
-      addonProductId: product.id,
-      environment: "production",
-    });
-    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
-      expectedProductVersion: 1,
-      productPatch: { purchase_mode: "wechat_virtual" },
-      virtualProductPatch: {},
-      actorEmployeeId: EMPLOYEE_ID,
-    });
-  });
-
 });

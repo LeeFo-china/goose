@@ -27,6 +27,25 @@ export type PlatformSecretSettingRecord = Pick<
   "key" | "value_text" | "is_secret" | "status"
 >;
 
+export type PlatformSecretSettingSnapshot = PlatformSecretSettingRecord & Pick<
+  SystemSettingRecord,
+  "updated_at"
+>;
+
+type AdminClient = ReturnType<typeof SupabaseDB.getAdminClient>;
+
+export type PlatformPaymentSecretSettingInput = {
+  key: string;
+  groupCode: string;
+  name: string;
+  description: string | null;
+  valueType: SystemSettingValueType;
+  valueText: string;
+  status: SystemSettingStatus;
+  employeeId: string | null;
+  expectedUpdatedAt: string | null;
+};
+
 export class SystemSettingRepository {
   constructor(
     private readonly client: unknown = SupabaseDB.getAdminClient(),
@@ -42,6 +61,37 @@ export class SystemSettingRepository {
     return (this.client as unknown as {
       from: (table: string) => any;
     }).from("system_setting_change_logs");
+  }
+
+  async upsertPlatformPaymentSecret(
+    input: PlatformPaymentSecretSettingInput,
+  ): Promise<SystemSettingRecord> {
+    const client = this.client as Pick<AdminClient, "rpc">;
+    const { data, error } = await client.rpc(
+      "upsert_platform_payment_secret_setting",
+      {
+        p_setting_key: input.key,
+        p_group_code: input.groupCode,
+        p_name: input.name,
+        p_description: input.description,
+        p_value_type: input.valueType,
+        p_value_text: input.valueText,
+        p_status: input.status,
+        p_changed_by_employee_id: input.employeeId,
+        p_expected_updated_at: input.expectedUpdatedAt,
+      },
+    );
+    if (error) {
+      throwSystemSettingMutationError(
+        error,
+        "保存平台支付密钥配置失败",
+        true,
+      );
+    }
+    if (!isPlatformPaymentSecretRecord(data, input.key)) {
+      throw Errors.dbError("保存平台支付密钥配置失败");
+    }
+    return data;
   }
 
   async listAll(): Promise<SystemSettingRecord[]> {
@@ -98,9 +148,9 @@ export class SystemSettingRepository {
 
   async findPlatformSecretByKey(
     key: string,
-  ): Promise<PlatformSecretSettingRecord | null> {
+  ): Promise<PlatformSecretSettingSnapshot | null> {
     const { data, error } = await this.table()
-      .select("key,value_text,is_secret,status")
+      .select("key,value_text,is_secret,status,updated_at")
       .eq("key", key)
       .is("tenant_id", null)
       .limit(1)
@@ -108,7 +158,7 @@ export class SystemSettingRepository {
     if (error) {
       throw Errors.dbError("查询平台支付密钥配置失败");
     }
-    return (data as PlatformSecretSettingRecord | null) ?? null;
+    return (data as PlatformSecretSettingSnapshot | null) ?? null;
   }
 
   async updateValue(input: {
@@ -147,8 +197,8 @@ export class SystemSettingRepository {
       .insert({
         tenant_id: input.tenantId || null,
         setting_key: input.key,
-        old_value_text: existing.value_text,
-        new_value_text: input.valueText,
+        old_value_text: existing.is_secret ? null : existing.value_text,
+        new_value_text: existing.is_secret ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 
@@ -196,7 +246,7 @@ export class SystemSettingRepository {
         tenant_id: input.tenantId,
         setting_key: input.key,
         old_value_text: null,
-        new_value_text: input.valueText,
+        new_value_text: input.isSecret ? null : input.valueText,
         changed_by_employee_id: input.employeeId,
       });
 
@@ -209,6 +259,11 @@ export class SystemSettingRepository {
 }
 
 const SYSTEM_SETTING_MUTATION_ERRORS = [
+  {
+    postgresCode: "P0001",
+    code: "SYSTEM_SETTING_PAYMENT_SECRET_VERSION_CONFLICT",
+    message: "支付密钥配置已变化，请刷新后重试",
+  },
   {
     postgresCode: "23514",
     code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
@@ -241,14 +296,51 @@ const SYSTEM_SETTING_MUTATION_ERRORS = [
   },
 ] as const;
 
-function throwSystemSettingMutationError(error: unknown, fallback: string): never {
-  if (error instanceof AppError) throw error;
+const ENCRYPTED_SECRET_ENVELOPE_PATTERN =
+  /^enc:v1:[A-Za-z0-9_-]{16}:[A-Za-z0-9_-]{22}:([A-Za-z0-9_-]{4})*([A-Za-z0-9_-]{2,4})$/;
+
+function isPlatformPaymentSecretRecord(
+  value: unknown,
+  expectedKey: string,
+): value is SystemSettingRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.id === "string" && record.id.length > 0 &&
+    record.tenant_id === null &&
+    record.key === expectedKey &&
+    record.group_code === "payment" &&
+    typeof record.name === "string" && record.name.length > 0 &&
+    (record.description === null || typeof record.description === "string") &&
+    record.value_type === (expectedKey === "WECHAT_VIRTUAL_PAYMENT_MESSAGE_TOKEN"
+      ? "string"
+      : "json") &&
+    typeof record.value_text === "string" &&
+    ENCRYPTED_SECRET_ENVELOPE_PATTERN.test(record.value_text) &&
+    record.is_secret === true &&
+    record.status === "active" &&
+    (record.updated_by_employee_id === null ||
+      typeof record.updated_by_employee_id === "string") &&
+    typeof record.created_at === "string" && record.created_at.length > 0 &&
+    typeof record.updated_at === "string" && record.updated_at.length > 0;
+}
+
+function throwSystemSettingMutationError(
+  error: unknown,
+  fallback: string,
+  sanitizeUnknown = false,
+): never {
+  if (error instanceof AppError) {
+    if (sanitizeUnknown) throw Errors.dbError(fallback);
+    throw error;
+  }
   for (const mapped of SYSTEM_SETTING_MUTATION_ERRORS) {
     if (matchesPostgresError(error, mapped.postgresCode, mapped.code)) {
       throw Errors.business(409, mapped.message, mapped.code);
     }
   }
-  throw Errors.dbError(fallback, error);
+  throw sanitizeUnknown
+    ? Errors.dbError(fallback)
+    : Errors.dbError(fallback, error);
 }
 
 export const systemSettingRepository = new SystemSettingRepository();

@@ -1,19 +1,15 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-
 import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
 import { PlatformAuditLogActionSchema } from "@/schema/platform-audit-logs";
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 const EMPLOYEE_ID = "11111111-1111-4111-8111-111111111111";
 const AUTH_USER_ID = "22222222-2222-4222-8222-222222222222";
 const PRODUCT_ID = "33333333-3333-4333-8333-333333333333";
-
 const platformAuth = {
   authUserId: AUTH_USER_ID,
   employeeId: EMPLOYEE_ID,
@@ -33,9 +29,8 @@ const platformAuth = {
   avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
-  permissions: [{ code: "platform.branding_product.manage", scope: "all" }],
+  permissions: [{ code: "platform.payment.config.manage", scope: "all" }],
 } satisfies AuthContext;
-
 const product: BrandingAddonProductRecord = {
   id: PRODUCT_ID,
   code: "custom_support_branding_annual",
@@ -52,7 +47,6 @@ const product: BrandingAddonProductRecord = {
   created_at: "2026-07-28T00:00:00.000Z",
   updated_at: "2026-07-28T00:00:00.000Z",
 };
-
 const mapping = {
   id: "44444444-4444-4444-8444-444444444444",
   addon_product_id: PRODUCT_ID,
@@ -76,11 +70,9 @@ const mapping = {
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
 } satisfies BrandingVirtualProductRecord;
-
 type ServiceConstructor = typeof import(
   "./branding-virtual-product-management"
 )["BrandingVirtualProductManagementService"];
-
 let BrandingVirtualProductManagementService: ServiceConstructor;
 
 beforeAll(async () => {
@@ -88,7 +80,6 @@ beforeAll(async () => {
     "./branding-virtual-product-management"
   ));
 });
-
 function createFixture(options: {
   product?: BrandingAddonProductRecord | null;
   mappings?: BrandingVirtualProductRecord[];
@@ -97,6 +88,8 @@ function createFixture(options: {
   validationResult?: BrandingVirtualProductRecord;
   validationError?: unknown;
   secretError?: unknown;
+  accessTokenError?: unknown;
+  gatewayError?: unknown;
 } = {}) {
   const snapshotProduct = options.product === undefined ? product : options.product;
   const snapshotMappings = options.mappings ?? (
@@ -113,7 +106,7 @@ function createFixture(options: {
     return { product: snapshotProduct, mappings: snapshotMappings };
   });
   const setConfigurationValidation = mock(async (input: {
-    validationStatus: "valid" | "invalid";
+    validationStatus: "pending" | "valid" | "invalid";
   }) => {
     if (options.validationError) throw options.validationError;
     return options.validationResult ?? {
@@ -137,8 +130,43 @@ function createFixture(options: {
     if (options.secretError) throw options.secretError;
     return secretValues;
   });
-  const assertPermission = mock(() => "all" as const);
+  const assertPermission = mock((
+    authContext: AuthContext,
+    permission: string,
+  ) => {
+    if (!authContext.permissions.some(({ code }) => code === permission)) {
+      throw Errors.forbidden();
+    }
+    return "all" as const;
+  });
   const recordBestEffort = mock(async () => null);
+  const getAccessToken = mock(async () => {
+    if (options.accessTokenError) throw options.accessTokenError;
+    return "access-token-sensitive";
+  });
+  const queryUploadGoods = mock(async () => {
+    if (options.gatewayError) throw options.gatewayError;
+    return {
+      requestId: "upload-request-id",
+      environment: "production" as const,
+      status: 3 as const,
+      items: [{
+        id: "branding-annual",
+        name: "年度品牌权益",
+        price: 9_900,
+        uploadStatus: 2 as const,
+      }],
+    };
+  });
+  const queryPublishGoods = mock(async () => {
+    if (options.gatewayError) throw options.gatewayError;
+    return {
+      requestId: "publish-request-id",
+      environment: "production" as const,
+      status: 3 as const,
+      items: [{ id: "branding-annual", publishStatus: 2 as const }],
+    };
+  });
   const service = new BrandingVirtualProductManagementService({
     virtualProductRepository: {
       getManagementSnapshot,
@@ -147,6 +175,8 @@ function createFixture(options: {
     settingsService: { getPlatformSecretStrings },
     accessPolicy: { assertPermission },
     audit: { recordBestEffort },
+    accessTokenProvider: { getAccessToken },
+    gateway: { queryUploadGoods, queryPublishGoods },
     nowFactory: () => new Date("2026-08-01T01:02:03.000Z"),
   });
   return {
@@ -155,6 +185,9 @@ function createFixture(options: {
     setConfigurationValidation,
     getPlatformSecretStrings,
     recordBestEffort,
+    getAccessToken,
+    queryUploadGoods,
+    queryPublishGoods,
   };
 }
 
@@ -163,7 +196,6 @@ describe("BrandingVirtualProductManagementService summaries", () => {
     const fixture = createFixture();
 
     const result = await fixture.service.getConfiguration();
-
     expect(result.product).toMatchObject({
       code: "custom_support_branding_annual",
       version: 4,
@@ -214,7 +246,6 @@ describe("BrandingVirtualProductManagementService summaries", () => {
         { ciphertext: "must-not-leak" },
       ),
     });
-
     await expect(fixture.service.getConfiguration()).rejects.toMatchObject({
       statusCode: 500,
       code: "CONFIG_SECRET_DECRYPT_FAILED",
@@ -241,14 +272,28 @@ describe("BrandingVirtualProductManagementService summaries", () => {
   });
 });
 
-describe("BrandingVirtualProductManagementService local validation", () => {
+describe("BrandingVirtualProductManagementService WeChat goods validation", () => {
   test("registers the dedicated validation audit action", () => {
     expect(PlatformAuditLogActionSchema.safeParse(
       "branding_virtual_product.validate",
     ).success).toBe(true);
   });
 
-  test("validates a pending mapping and persists valid with both versions", async () => {
+  test("rejects the branding-product permission before reading configuration", async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.service.validateConfiguration(
+      {
+        ...platformAuth,
+        permissions: [{ code: "platform.branding_product.manage", scope: "all" }],
+      },
+      { environment: "production", version: 3 },
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(fixture.getManagementSnapshot).not.toHaveBeenCalled();
+    expect(fixture.setConfigurationValidation).not.toHaveBeenCalled();
+  });
+
+  test("persists valid only after the latest upload and publish tasks confirm the fixed product", async () => {
     const fixture = createFixture();
 
     const result = await fixture.service.validateConfiguration(
@@ -266,7 +311,26 @@ describe("BrandingVirtualProductManagementService local validation", () => {
       updatedByEmployeeId: EMPLOYEE_ID,
     });
     expect(result.virtual_product.validation_status).toBe("valid");
-    expect(result.validation.kind).toBe("server_configuration");
+    expect(result.validation.kind).toBe("wechat_goods");
+    expect(fixture.getAccessToken).toHaveBeenCalledTimes(1);
+    expect(fixture.queryUploadGoods).toHaveBeenCalledWith({
+      accessToken: "access-token-sensitive",
+      environment: "production",
+      signingSecret: {
+        environment: "production",
+        appKey: "production-secret",
+      },
+    });
+    expect(fixture.queryPublishGoods).toHaveBeenCalledWith({
+      accessToken: "access-token-sensitive",
+      environment: "production",
+      signingSecret: {
+        environment: "production",
+        appKey: "production-secret",
+      },
+    });
+    expect(JSON.stringify(fixture.recordBestEffort.mock.calls))
+      .not.toContain("production-secret");
   });
 
   test("persists invalid before returning a stable 409", async () => {
@@ -286,10 +350,65 @@ describe("BrandingVirtualProductManagementService local validation", () => {
     expect(fixture.setConfigurationValidation).toHaveBeenCalledWith(
       expect.objectContaining({ validationStatus: "invalid" }),
     );
+    expect(fixture.getAccessToken).not.toHaveBeenCalled();
+    expect(fixture.queryUploadGoods).not.toHaveBeenCalled();
+    expect(fixture.queryPublishGoods).not.toHaveBeenCalled();
     const auditJson = JSON.stringify(fixture.recordBestEffort.mock.calls);
     expect(auditJson).not.toContain("appKey");
     expect(auditJson).not.toContain("production-secret");
     expect(auditJson).toContain('"configured":false');
+  });
+
+  test("persists invalid when WeChat explicitly rejects the goods query", async () => {
+    const sensitive = "upstream-sensitive-errmsg";
+    const fixture = createFixture({
+      gatewayError: Errors.business(
+        502,
+        "微信虚拟支付接口拒绝请求",
+        "WECHAT_VIRTUAL_PAYMENT_UPSTREAM_REJECTED",
+        { httpStatus: 200, wechatErrcode: 268490003, requestId: "safe-id", sensitive },
+      ),
+    });
+
+    const error = await fixture.service.validateConfiguration(
+      platformAuth,
+      { environment: "production", version: 3 },
+    ).catch((caught) => caught);
+
+    expect(error).toMatchObject({
+      statusCode: 409,
+      code: "BRANDING_VIRTUAL_PRODUCT_WECHAT_QUERY_REJECTED",
+      details: { requestId: "safe-id", wechatErrcode: 268490003 },
+    });
+    expect(fixture.setConfigurationValidation).toHaveBeenCalledWith(
+      expect.objectContaining({ validationStatus: "invalid" }),
+    );
+    expect(JSON.stringify(error)).not.toContain(sensitive);
+    expect(JSON.stringify(error)).not.toContain("access-token-sensitive");
+    expect(JSON.stringify(error)).not.toContain("production-secret");
+  });
+
+  test("persists pending for an unconfirmed network failure", async () => {
+    const code = "WECHAT_VIRTUAL_PAYMENT_TRANSPORT_FAILED";
+    const fixture = createFixture({
+      gatewayError: Errors.business(
+        502,
+        "微信虚拟支付接口暂时无法确认",
+        code,
+        { httpStatus: 200, wechatErrcode: null, requestId: "safe-id" },
+      ),
+    });
+
+    await expect(fixture.service.validateConfiguration(
+      platformAuth,
+      { environment: "production", version: 3 },
+    )).rejects.toMatchObject({
+      code,
+      details: { requestId: "safe-id" },
+    });
+    expect(fixture.setConfigurationValidation).toHaveBeenCalledWith(
+      expect.objectContaining({ validationStatus: "pending" }),
+    );
   });
 
   test("rejects an oversized AppKey without exposing it in validation", async () => {

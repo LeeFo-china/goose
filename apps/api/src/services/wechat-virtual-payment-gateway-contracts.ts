@@ -25,6 +25,11 @@ type SignedVirtualPaymentInput = VirtualOrderReference & {
   signingSecret: WechatVirtualPaymentSigningSecret;
 };
 
+export type QueryVirtualGoodsTaskInput = Omit<
+  SignedVirtualPaymentInput,
+  keyof VirtualOrderReference | "openid"
+>;
+
 export type QueryVirtualOrderInput = SignedVirtualPaymentInput;
 
 export type RefundVirtualOrderInput = SignedVirtualPaymentInput & {
@@ -90,7 +95,38 @@ export type ProvideVirtualGoodsResult = {
   requestId: string | null;
 };
 
+export type VirtualGoodsTaskStatus = 0 | 1 | 2 | 3;
+export type VirtualGoodsItemStatus = 0 | 1 | 2 | 3;
+
+export type QueryVirtualGoodsUploadResult = {
+  requestId: string | null;
+  environment: BrandingVirtualPaymentEnvironment;
+  status: VirtualGoodsTaskStatus;
+  items: Array<{
+    id: string;
+    name: string;
+    price: number;
+    uploadStatus: VirtualGoodsItemStatus;
+  }>;
+};
+
+export type QueryVirtualGoodsPublishResult = {
+  requestId: string | null;
+  environment: BrandingVirtualPaymentEnvironment;
+  status: VirtualGoodsTaskStatus;
+  items: Array<{
+    id: string;
+    publishStatus: VirtualGoodsItemStatus;
+  }>;
+};
+
 export interface WechatVirtualPaymentGatewayPort {
+  queryUploadGoods(
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<QueryVirtualGoodsUploadResult>;
+  queryPublishGoods(
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<QueryVirtualGoodsPublishResult>;
   queryOrder(input: QueryVirtualOrderInput): Promise<QueryVirtualOrderResult>;
   refundOrder(input: RefundVirtualOrderInput): Promise<RefundVirtualOrderResult>;
   notifyProvideGoods(

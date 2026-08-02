@@ -6,6 +6,7 @@ import {
   type SettingDefinition,
   type EffectiveSetting,
   type SettingScope,
+  type SettingSource,
   CACHE_TTL_MS,
 } from './shared';
 import {
@@ -35,6 +36,7 @@ import type {
   PlatformSecretSettingRecord,
   SystemSettingRepository,
 } from '@/repositories/system-settings';
+import { resolvePaymentSecretWrite } from './payment-secret-write';
 
 export async function getPlatformSecretStrings(
   repository: Pick<SystemSettingRepository, "findPlatformByKeys">,
@@ -92,6 +94,30 @@ export async function getPlatformSecretString(
   return readEnvValue(definition?.envNames ?? [key]) ??
     definition?.defaultValue ??
     "";
+}
+
+export type PlatformSettingStatus = {
+  configured: boolean;
+  source: SettingSource;
+};
+
+export async function getPlatformSettingStatus(
+  repository: Pick<SystemSettingRepository, "findPlatformSecretByKey">,
+  key: string,
+): Promise<PlatformSettingStatus> {
+  const record = await repository.findPlatformSecretByKey(key);
+  if (record?.status === "active" && normalizeStoredValue(record.value_text)) {
+    return { configured: true, source: "database" };
+  }
+
+  const definition = definitionByKey.get(key);
+  if (readEnvValue(definition?.envNames ?? [key])) {
+    return { configured: true, source: "env" };
+  }
+  if (normalizeStoredValue(definition?.defaultValue)) {
+    return { configured: true, source: "default" };
+  }
+  return { configured: false, source: "empty" };
 }
 
 export async function listSettings(this: any, authContext?: AuthContext) {
@@ -196,7 +222,59 @@ export async function updatePlatformPaymentSecretSetting(
         'SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID',
       );
     }
-    return persistSetting.call(this, authContext, key, value);
+    const tenantId = authContext.isPlatformAdmin
+      ? null
+      : accessPolicyService.assertTenantId(authContext);
+    if (tenantId) {
+      throw Errors.business(
+        403,
+        "该配置为平台级配置，不支持租户覆盖",
+        "SYSTEM_SETTING_PLATFORM_ONLY",
+      );
+    }
+    const definition = definitionByKey.get(key);
+    if (!definition?.isSecret) {
+      throw Errors.business(
+        409,
+        '支付密钥专用接口不支持该配置项',
+        'SYSTEM_SETTING_PAYMENT_SECRET_KEY_INVALID',
+      );
+    }
+    const record = this.buildDefinitionRecord(definition);
+    const validatedValue = validateSettingValue(
+      record,
+      normalizeStoredValue(value),
+    );
+    if (!validatedValue) {
+      throw Errors.badRequest("支付密钥不能为空");
+    }
+    const snapshot = await this.systemSettingRepository
+      .findPlatformSecretByKey(key);
+    if (resolvePaymentSecretWrite(snapshot, key, validatedValue) === "noop") {
+      return this.toEffective({
+        ...record,
+        value_text: "******",
+        status: snapshot?.status ?? record.status,
+        updated_at: snapshot?.updated_at ?? record.updated_at,
+      });
+    }
+    const updated = await this.systemSettingRepository
+      .upsertPlatformPaymentSecret({
+        key: definition.key,
+        groupCode: definition.groupCode,
+        name: definition.name,
+        description: definition.description,
+        valueType: definition.valueType,
+        valueText: encryptSecretValue(validatedValue),
+        status: record.status,
+        employeeId: authContext.employeeId,
+        expectedUpdatedAt: snapshot?.updated_at ?? null,
+      });
+    this.clearCache();
+    return this.toEffective({
+      ...updated,
+      value_text: updated.value_text ? "******" : null,
+    });
   }
 
 async function persistSetting(

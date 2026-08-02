@@ -7,6 +7,7 @@ import { PlatformBrandingEntitlementOrders } from "@/components/branding-addon/p
 import type {
   PlatformBrandingAddonProductResult,
   PlatformBrandingEntitlementOrder,
+  PlatformBrandingPaymentReadiness,
   PlatformBrandingPageData,
   PlatformBrandingVirtualRefund,
 } from "@/components/branding-addon/platform-branding-addon-product-types";
@@ -21,6 +22,8 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 const MANAGE_PERMISSION = "platform.branding_product.manage";
 const ORDER_READ_PERMISSION = "platform.branding_order.read";
 const REFUND_MANAGE_PERMISSION = "platform.branding_virtual_refund.manage";
+const PAYMENT_CONFIG_READ_PERMISSION = "platform.payment.config.read";
+const PAYMENT_CONFIG_MANAGE_PERMISSION = "platform.payment.config.manage";
 
 const PAYMENT_CHANNELS = ["legacy_direct", "wechat_virtual"] as const;
 const PAYMENT_STATUSES = ["pending", "succeeded", "closed", "failed"] as const;
@@ -32,6 +35,10 @@ const REFUND_STATUSES = [
 const REFUND_LIST_STATUSES = REFUND_STATUSES.filter((status) => status !== "none");
 
 type BrandingView = "product" | "orders" | "refunds";
+type PlatformPaymentReadinessResult = {
+  product?: { version?: number };
+  readiness?: PlatformBrandingPaymentReadiness;
+};
 type SearchParams = Promise<{
   view?: string;
   page?: string;
@@ -84,6 +91,10 @@ export default async function PlatformBrandingAddonPage({
   const canManage = isPlatformAdmin && permissions.has(MANAGE_PERMISSION);
   const canReadOrders = isPlatformAdmin && permissions.has(ORDER_READ_PERMISSION);
   const canManageRefunds = isPlatformAdmin && permissions.has(REFUND_MANAGE_PERMISSION);
+  const canReadPaymentConfig = isPlatformAdmin && (
+    permissions.has(PAYMENT_CONFIG_READ_PERMISSION) ||
+    permissions.has(PAYMENT_CONFIG_MANAGE_PERMISSION)
+  );
   const allowedViews: BrandingView[] = [
     ...(canManage ? ["product" as const] : []),
     ...(canReadOrders ? ["orders" as const] : []),
@@ -106,15 +117,29 @@ export default async function PlatformBrandingAddonPage({
   const refundListStatus = readEnum(params.refund_status, REFUND_LIST_STATUSES);
 
   let productResult: PlatformBrandingAddonProductResult | null = null;
+  let paymentReadiness: PlatformBrandingPaymentReadiness | null = null;
   let orders = emptyPage<PlatformBrandingEntitlementOrder>(page, pageSize);
   let refunds = emptyPage<PlatformBrandingVirtualRefund>(page, pageSize);
   let error: string | null = allowedViews.length ? null : "当前账号没有品牌权益管理权限";
 
   try {
     if (view === "product" && canManage) {
-      productResult = await getBackendData<PlatformBrandingAddonProductResult>(
-        "/platform/branding/entitlement-product",
-      );
+      const paymentSnapshotRequest = canReadPaymentConfig
+        ? getBackendData<PlatformPaymentReadinessResult>(
+          "/platform/payment/wechat-virtual/branding-entitlement",
+        ).catch(() => null)
+        : Promise.resolve(null);
+      let paymentSnapshot: PlatformPaymentReadinessResult | null;
+      [productResult, paymentSnapshot] = await Promise.all([
+        getBackendData<PlatformBrandingAddonProductResult>(
+          "/platform/branding/entitlement-product",
+        ),
+        paymentSnapshotRequest,
+      ]);
+      paymentReadiness = paymentSnapshot &&
+          paymentSnapshot.product?.version === productResult.product.version
+        ? paymentSnapshot.readiness ?? null
+        : null;
     }
     if (view === "orders" && canReadOrders) {
       orders = await getBackendData<PlatformBrandingPageData<PlatformBrandingEntitlementOrder>>(
@@ -173,7 +198,8 @@ export default async function PlatformBrandingAddonPage({
               <PlatformBrandingVirtualProductForm
                 key={`${productResult.product.version}-${productResult.virtual_products?.map((item) => item.mapping?.version ?? 0).join("-")}`}
                 initialProduct={productResult.product}
-                initialVirtualProducts={productResult.virtual_products ?? []}
+                paymentSummaries={productResult.virtual_products ?? []}
+                paymentReadiness={paymentReadiness}
               />
             </TabsContent>
           ) : null}
