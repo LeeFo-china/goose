@@ -37,6 +37,7 @@ const productionMapping: BrandingVirtualProductRecord = {
   virtual_merchant_id: "virtual-merchant",
   offer_id: "offer-annual",
   provider_product_id: "branding-annual",
+  item_url: "https://cdn.example.test/branding.png",
   goods_quantity: 1,
   expected_amount_fen: 9_900,
   encrypted_secret_ref:

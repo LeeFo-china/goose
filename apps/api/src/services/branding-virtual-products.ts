@@ -259,6 +259,7 @@ export function serializeBrandingVirtualProduct(
     virtual_merchant_id: product.virtual_merchant_id,
     offer_id: product.offer_id,
     provider_product_id: product.provider_product_id,
+    item_url: product.item_url,
     expected_amount_fen: product.expected_amount_fen,
     encrypted_secret_ref: product.encrypted_secret_ref,
     secret_revision: product.secret_revision,
@@ -283,6 +284,7 @@ export function mergeBrandingVirtualProduct(
     virtual_merchant_id: input.virtual_merchant_id,
     offer_id: input.offer_id,
     provider_product_id: input.provider_product_id,
+    item_url: input.item_url ?? current?.item_url ?? null,
     goods_quantity: 1,
     expected_amount_fen: input.expected_amount_fen,
     encrypted_secret_ref: input.encrypted_secret_ref,
@@ -306,6 +308,7 @@ export function hasVirtualProductValidationInputChanged(
     current.virtual_merchant_id !== input.virtual_merchant_id ||
     current.offer_id !== input.offer_id ||
     current.provider_product_id !== input.provider_product_id ||
+    (input.item_url !== undefined && current.item_url !== input.item_url) ||
     current.expected_amount_fen !== input.expected_amount_fen ||
     current.encrypted_secret_ref !== input.encrypted_secret_ref ||
     current.secret_revision !== input.secret_revision;

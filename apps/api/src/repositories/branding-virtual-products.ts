@@ -40,6 +40,7 @@ export type BrandingVirtualProductRecord = {
   virtual_merchant_id: string;
   offer_id: string;
   provider_product_id: string;
+  item_url: string | null;
   goods_quantity: 1;
   expected_amount_fen: number;
   encrypted_secret_ref: BrandingVirtualPaymentSecretSettingKey;
@@ -96,6 +97,7 @@ const VIRTUAL_PRODUCT_COLUMNS = [
   "virtual_merchant_id",
   "offer_id",
   "provider_product_id",
+  "item_url",
   "goods_quantity",
   "expected_amount_fen",
   "encrypted_secret_ref",

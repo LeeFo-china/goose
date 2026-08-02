@@ -11,6 +11,7 @@ const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
 const AUTH_USER_ID = "33333333-3333-4333-8333-333333333333";
 const PRODUCT_ID = "44444444-4444-4444-8444-444444444444";
+const ITEM_URL = "https://cdn.example.test/branding.png";
 
 const tenantAuth = {
   authUserId: AUTH_USER_ID,
@@ -60,6 +61,7 @@ const baseMapping: BrandingVirtualProductRecord = {
   virtual_merchant_id: "virtual-merchant",
   offer_id: "offer-annual",
   provider_product_id: "branding-annual",
+  item_url: ITEM_URL,
   goods_quantity: 1 as const,
   expected_amount_fen: 9_900,
   encrypted_secret_ref:
@@ -84,12 +86,58 @@ type SecretBundleParser = typeof import(
 
 let BrandingVirtualProductService: ServiceConstructor;
 let parseWechatVirtualPaymentSecretBundle: SecretBundleParser;
+let serializeBrandingVirtualProduct: typeof import(
+  "./branding-virtual-products"
+)["serializeBrandingVirtualProduct"];
+let mergeBrandingVirtualProduct: typeof import(
+  "./branding-virtual-products"
+)["mergeBrandingVirtualProduct"];
+let hasVirtualProductValidationInputChanged: typeof import(
+  "./branding-virtual-products"
+)["hasVirtualProductValidationInputChanged"];
 
 beforeAll(async () => {
   const module = await import("./branding-virtual-products");
   BrandingVirtualProductService = module.BrandingVirtualProductService;
   parseWechatVirtualPaymentSecretBundle =
     module.parseWechatVirtualPaymentSecretBundle;
+  serializeBrandingVirtualProduct = module.serializeBrandingVirtualProduct;
+  mergeBrandingVirtualProduct = module.mergeBrandingVirtualProduct;
+  hasVirtualProductValidationInputChanged =
+    module.hasVirtualProductValidationInputChanged;
+});
+
+describe("branding virtual product image mapping", () => {
+  const patch = {
+    environment: "production" as const,
+    app_id: baseMapping.app_id,
+    virtual_merchant_id: baseMapping.virtual_merchant_id,
+    offer_id: baseMapping.offer_id,
+    provider_product_id: baseMapping.provider_product_id,
+    item_url: ITEM_URL,
+    expected_amount_fen: baseMapping.expected_amount_fen,
+    encrypted_secret_ref: baseMapping.encrypted_secret_ref,
+    secret_revision: baseMapping.secret_revision,
+    status: baseMapping.status,
+    version: baseMapping.version,
+  };
+
+  test("serializes and merges the server-owned WeChat item URL", () => {
+    expect(serializeBrandingVirtualProduct(baseMapping)).toMatchObject({
+      item_url: baseMapping.item_url,
+    });
+    expect(mergeBrandingVirtualProduct(PRODUCT_ID, baseMapping, patch))
+      .toMatchObject({ item_url: baseMapping.item_url });
+  });
+
+  test("invalidates remote evidence when the WeChat item URL changes", () => {
+    expect(hasVirtualProductValidationInputChanged(baseMapping, {
+      ...patch,
+      item_url: "https://cdn.example.test/branding-v2.png",
+    })).toBe(true);
+    expect(hasVirtualProductValidationInputChanged(baseMapping, patch))
+      .toBe(false);
+  });
 });
 
 function createService(options: {
