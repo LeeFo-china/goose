@@ -16,6 +16,9 @@ import type {
   QueryVirtualOrderResult,
   RefundVirtualOrderInput,
   RefundVirtualOrderResult,
+  StartVirtualGoodsPublishInput,
+  StartVirtualGoodsTaskResult,
+  StartVirtualGoodsUploadInput,
   VirtualOrderReference,
   WechatVirtualPaymentFetch,
   WechatVirtualPaymentGatewayPort,
@@ -36,6 +39,10 @@ import {
   normalizeWechatVirtualPaymentRequestId,
   readWechatVirtualPaymentResponseBody,
 } from "./wechat-virtual-payment-response-reader";
+import {
+  isValidVirtualGoodsId,
+  isValidVirtualGoodsUploadItem,
+} from "./wechat-virtual-payment-goods-input";
 import {
   assertSigningSecret,
   calculateVirtualPaymentPaySig,
@@ -76,6 +83,37 @@ export class WechatVirtualPaymentGateway
     this.fetchImpl = dependencies.fetchImpl ?? fetch;
     this.baseUrl = (dependencies.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.credentialInvalidation = dependencies.credentialInvalidation;
+  }
+
+  async startUploadGoods(
+    input: StartVirtualGoodsUploadInput,
+  ): Promise<StartVirtualGoodsTaskResult> {
+    assertUploadGoodsInput(input);
+    const body = JSON.stringify({
+      upload_item: [{
+        id: input.item.id,
+        name: input.item.name,
+        price: input.item.price,
+        remark: input.item.remark,
+        item_url: input.item.itemUrl,
+      }],
+      env: virtualPaymentEnv(input.environment),
+    });
+    return await this.startGoodsTask("/xpay/start_upload_goods", body, input);
+  }
+
+  async startPublishGoods(
+    input: StartVirtualGoodsPublishInput,
+  ): Promise<StartVirtualGoodsTaskResult> {
+    assertGoodsTaskInput(input);
+    if (!isValidVirtualGoodsId(input.providerProductId)) {
+      throwInvalidRequest();
+    }
+    const body = JSON.stringify({
+      publish_item: [{ id: input.providerProductId }],
+      env: virtualPaymentEnv(input.environment),
+    });
+    return await this.startGoodsTask("/xpay/start_publish_goods", body, input);
   }
 
   async queryUploadGoods(
@@ -214,6 +252,29 @@ export class WechatVirtualPaymentGateway
     return response;
   }
 
+  private async startGoodsTask(
+    path: "/xpay/start_upload_goods" | "/xpay/start_publish_goods",
+    body: string,
+    input: QueryVirtualGoodsTaskInput,
+  ): Promise<StartVirtualGoodsTaskResult> {
+    const paySig = calculateVirtualPaymentPaySig(
+      path,
+      body,
+      input.signingSecret.appKey,
+    );
+    const response = await this.requestJson({
+      path,
+      query: { access_token: input.accessToken, pay_sig: paySig },
+      body,
+    });
+    assertSuccessfulWechatResponse(response);
+    return {
+      accepted: true,
+      requestId: response.requestId,
+      environment: input.environment,
+    };
+  }
+
   private async invalidateRejectedCredential(
     input: RefundVirtualOrderInput,
   ): Promise<void> {
@@ -334,6 +395,11 @@ function assertGoodsTaskInput(input: QueryVirtualGoodsTaskInput): void {
   assertAccessToken(input.accessToken);
   if (!input.signingSecret) throwInvalidRequest();
   assertSigningSecret(input.environment, input.signingSecret);
+}
+
+function assertUploadGoodsInput(input: StartVirtualGoodsUploadInput): void {
+  assertGoodsTaskInput(input);
+  if (!isValidVirtualGoodsUploadItem(input.item)) throwInvalidRequest();
 }
 
 function assertRefundInput(input: RefundVirtualOrderInput): void {

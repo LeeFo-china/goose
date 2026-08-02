@@ -152,8 +152,18 @@ export function normalizeQueryGoodsUpload(
     status,
     items: items.map((value) => {
       const item = requireRecord(value, response.requestId, response.httpStatus);
-      requireBoundedString(item, "remark", MAX_VIRTUAL_GOODS_REMARK_LENGTH, response);
-      requireBoundedString(item, "item_url", MAX_VIRTUAL_GOODS_URL_LENGTH, response);
+      const remark = requireBoundedString(
+        item,
+        "remark",
+        MAX_VIRTUAL_GOODS_REMARK_LENGTH,
+        response,
+      );
+      const itemUrl = requireBoundedString(
+        item,
+        "item_url",
+        MAX_VIRTUAL_GOODS_URL_LENGTH,
+        response,
+      );
       requireBoundedString(item, "errmsg", MAX_VIRTUAL_GOODS_ERROR_LENGTH, response);
       return {
         id: requireGoodsId(item, response),
@@ -164,6 +174,8 @@ export function normalizeQueryGoodsUpload(
           response,
         ),
         price: requirePositiveInteger(item, "price", response),
+        remark,
+        itemUrl,
         uploadStatus: parseGoodsItemStatus(item.upload_status, response),
       };
     }),

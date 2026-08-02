@@ -30,6 +30,26 @@ export type QueryVirtualGoodsTaskInput = Omit<
   keyof VirtualOrderReference | "openid"
 >;
 
+export type StartVirtualGoodsUploadInput = QueryVirtualGoodsTaskInput & {
+  item: {
+    id: string;
+    name: string;
+    price: number;
+    remark: string;
+    itemUrl: string;
+  };
+};
+
+export type StartVirtualGoodsPublishInput = QueryVirtualGoodsTaskInput & {
+  providerProductId: string;
+};
+
+export type StartVirtualGoodsTaskResult = {
+  accepted: true;
+  requestId: string | null;
+  environment: BrandingVirtualPaymentEnvironment;
+};
+
 export type QueryVirtualOrderInput = SignedVirtualPaymentInput;
 
 export type RefundVirtualOrderInput = SignedVirtualPaymentInput & {
@@ -106,6 +126,8 @@ export type QueryVirtualGoodsUploadResult = {
     id: string;
     name: string;
     price: number;
+    remark: string;
+    itemUrl: string;
     uploadStatus: VirtualGoodsItemStatus;
   }>;
 };
@@ -121,6 +143,12 @@ export type QueryVirtualGoodsPublishResult = {
 };
 
 export interface WechatVirtualPaymentGatewayPort {
+  startUploadGoods(
+    input: StartVirtualGoodsUploadInput,
+  ): Promise<StartVirtualGoodsTaskResult>;
+  startPublishGoods(
+    input: StartVirtualGoodsPublishInput,
+  ): Promise<StartVirtualGoodsTaskResult>;
   queryUploadGoods(
     input: QueryVirtualGoodsTaskInput,
   ): Promise<QueryVirtualGoodsUploadResult>;

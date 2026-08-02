@@ -155,6 +155,7 @@ function createFixture(options: {
         id: "branding-annual",
         name: "年度品牌权益",
         price: 9_900,
+        remark: "年度数字权益", itemUrl: "https://cdn.example.test/branding.png",
         uploadStatus: 2 as const,
       }],
     };
