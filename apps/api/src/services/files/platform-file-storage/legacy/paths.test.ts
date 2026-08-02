@@ -84,3 +84,21 @@ describe("brand logo object paths", () => {
     expect(objectKey).not.toContain(".exe");
   });
 });
+
+describe("virtual goods image object paths", () => {
+  test("uses the dedicated public prefix without an unassigned segment", async () => {
+    const { buildCosObjectKey } = await import("./paths");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename: "goods.exe",
+      mimetype: "image/png",
+      scene: "branding_virtual_goods",
+      tenantId: null,
+      employeeId: "employee-1",
+    });
+
+    expect(objectKey).toStartWith("public/branding-virtual-goods/");
+    expect(objectKey).not.toContain("/unassigned/");
+    expect(objectKey).toEndWith(".png");
+    expect(objectKey).not.toContain(".exe");
+  });
+});

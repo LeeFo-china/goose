@@ -102,3 +102,37 @@ describe("brand logo direct object ownership", () => {
     }));
   });
 });
+
+describe("virtual goods direct object ownership", () => {
+  test.each([
+    ["image/jpeg", "jpg"],
+    ["image/png", "png"],
+  ])("accepts a generated public %s object", (mimetype, extension) => {
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey:
+        `public/branding-virtual-goods/2026/08/02/${LOGO_UUID}.${extension}`,
+      scene: "branding_virtual_goods",
+      actorContext: platformActor,
+      mimetype,
+    })).not.toThrow();
+  });
+
+  test.each([
+    ["wrong extension", "image/png", `${LOGO_UUID}.jpg`],
+    ["unsupported extension", "image/png", `${LOGO_UUID}.webp`],
+    ["unassigned segment", "image/png", `unassigned/${LOGO_UUID}.png`],
+    ["tenant prefix", "image/png", `${LOGO_UUID}.png`, true],
+  ])("rejects %s", (_name, mimetype, suffix, tenantPrefix = false) => {
+    expect(() => assertDirectObjectKeyBelongsToActor({
+      objectKey: tenantPrefix
+        ? `tenants/tenant-1/branding-virtual-goods/2026/08/02/${suffix}`
+        : `public/branding-virtual-goods/2026/08/02/${suffix}`,
+      scene: "branding_virtual_goods",
+      actorContext: platformActor,
+      mimetype,
+    })).toThrow(expect.objectContaining({
+      statusCode: 403,
+      code: "FORBIDDEN",
+    }));
+  });
+});

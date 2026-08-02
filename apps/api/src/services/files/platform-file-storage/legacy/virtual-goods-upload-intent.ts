@@ -2,7 +2,6 @@ import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
   createPublicEmployeeUploadIntent,
-  type PublicEmployeeUploadIntentClaims,
   type PublicEmployeeUploadIntentInput,
   verifyPublicEmployeeUploadIntent,
 } from "./public-employee-upload-intent";
@@ -12,20 +11,19 @@ import type {
 } from "./shared";
 
 const OPTIONS = {
-  expectedScene: "brand_logo",
-  keyDerivationLabel: "gooes:brand-logo-upload-intent:v1",
+  expectedScene: "branding_virtual_goods",
+  keyDerivationLabel: "gooes:virtual-goods-upload-intent:v1",
 } as const;
 
-type BrandLogoUploadIntentInput = PublicEmployeeUploadIntentInput;
-export type BrandLogoUploadIntentClaims = PublicEmployeeUploadIntentClaims;
+type VirtualGoodsUploadIntentInput = PublicEmployeeUploadIntentInput;
 
-export function createBrandLogoUploadIntent(
-  input: BrandLogoUploadIntentInput & { expiresAtSeconds: number },
+export function createVirtualGoodsUploadIntent(
+  input: VirtualGoodsUploadIntentInput & { expiresAtSeconds: number },
 ) {
   return createPublicEmployeeUploadIntent(input, OPTIONS);
 }
 
-export function createDirectBrandLogoUploadIntent(
+export function createDirectVirtualGoodsUploadIntent(
   input: DirectUploadInput,
   signing: {
     secretKey: string;
@@ -33,7 +31,7 @@ export function createDirectBrandLogoUploadIntent(
     expiresAtSeconds: number;
   },
 ) {
-  return createBrandLogoUploadIntent({
+  return createVirtualGoodsUploadIntent({
     secretKey: signing.secretKey,
     scene: input.scene,
     tenantId: input.tenantId ?? null,
@@ -45,8 +43,8 @@ export function createDirectBrandLogoUploadIntent(
   });
 }
 
-export function verifyBrandLogoUploadIntent(
-  input: BrandLogoUploadIntentInput & {
+export function verifyVirtualGoodsUploadIntent(
+  input: VirtualGoodsUploadIntentInput & {
     token: string;
     nowSeconds: number;
   },
@@ -54,11 +52,11 @@ export function verifyBrandLogoUploadIntent(
   return verifyPublicEmployeeUploadIntent(input, OPTIONS);
 }
 
-export function assertValidBrandLogoUploadIntent(
+export function assertValidVirtualGoodsUploadIntent(
   input: RegisterExistingCosObjectInput,
   secretKey: string,
 ) {
-  if (verifyBrandLogoUploadIntent({
+  if (verifyVirtualGoodsUploadIntent({
     token: input.uploadIntent?.trim() || "",
     secretKey,
     scene: input.scene,
@@ -71,7 +69,7 @@ export function assertValidBrandLogoUploadIntent(
   })) return;
   throw Errors.business(
     400,
-    "品牌 Logo 上传凭证无效或已过期",
+    "虚拟商品图片上传凭证无效或已过期",
     ErrorCodes.FILE_STORAGE_UPLOAD_FAILED,
   );
 }

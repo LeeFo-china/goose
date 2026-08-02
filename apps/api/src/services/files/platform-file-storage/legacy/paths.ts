@@ -48,6 +48,7 @@ export function buildLegacyObjectPath(this: any, input: {
     tenant_onboarding_license: "tenant-onboarding-license",
     supplier_business_license: "supplier-business-license",
     brand_logo: "brand-logo",
+    branding_virtual_goods: "branding-virtual-goods",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -64,7 +65,8 @@ export function buildCosObjectKey(this: any, input: Pick<
   const extension = getFileExtension({
     filename: input.scene === "tenant_onboarding_license" ||
       input.scene === "supplier_business_license" ||
-      input.scene === "brand_logo"
+      input.scene === "brand_logo" ||
+      input.scene === "branding_virtual_goods"
       ? undefined
       : input.filename,
     mimetype: input.mimetype,
@@ -81,7 +83,10 @@ export function buildCosObjectKey(this: any, input: Pick<
     ? `tenants/${input.tenantId}`
     : "public";
   const scene = input.scene.replace(/_/g, "-");
-  if (input.scene === "brand_logo") {
+  if (
+    input.scene === "brand_logo" ||
+    input.scene === "branding_virtual_goods"
+  ) {
     return `${tenantPrefix}/${scene}/${year}/${month}/${day}/${randomUUID()}${extension}`;
   }
   const projectSegment = input.projectId?.trim()

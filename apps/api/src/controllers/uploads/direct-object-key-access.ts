@@ -19,6 +19,12 @@ const BRAND_LOGO_EXTENSION_BY_MIMETYPE: Readonly<Record<string, string>> = {
 
 const BRAND_LOGO_OBJECT_SUFFIX_PATTERN =
   /^\d{4}\/\d{2}\/\d{2}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp)$/;
+const VIRTUAL_GOODS_EXTENSION_BY_MIMETYPE: Readonly<Record<string, string>> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+};
+const VIRTUAL_GOODS_OBJECT_SUFFIX_PATTERN =
+  /^\d{4}\/\d{2}\/\d{2}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png)$/;
 
 export type DirectUploadActorContext = {
   tenantId: string | null;
@@ -55,6 +61,16 @@ export function assertDirectObjectKeyBelongsToActor(input: {
       matchedExtension !== expectedExtension
     ) {
       throw ownershipError("品牌 Logo 上传对象路径无效");
+    }
+  }
+  if (input.scene === "branding_virtual_goods") {
+    const suffix = input.objectKey.slice(expectedPrefix.length);
+    const expectedExtension =
+      VIRTUAL_GOODS_EXTENSION_BY_MIMETYPE[input.mimetype ?? ""];
+    const matchedExtension =
+      VIRTUAL_GOODS_OBJECT_SUFFIX_PATTERN.exec(suffix)?.[1];
+    if (!expectedExtension || matchedExtension !== expectedExtension) {
+      throw ownershipError("虚拟商品图片上传对象路径无效");
     }
   }
 
