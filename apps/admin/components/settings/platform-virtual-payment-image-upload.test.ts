@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   VIRTUAL_GOODS_IMAGE_MAX_SIZE_BYTES,
+  validateVirtualGoodsImageForUpload,
   validateVirtualGoodsImageDimensions,
   validateVirtualGoodsImageFile,
 } from "./platform-virtual-payment-image-upload";
@@ -42,5 +43,24 @@ describe("platform virtual-payment image upload", () => {
       .toBe("图片尺寸必须为 200×200 像素。");
     expect(validateVirtualGoodsImageDimensions({ width: 200, height: 199 }))
       .toBe("图片尺寸必须为 200×200 像素。");
+  });
+
+  test("validates file declaration before decoding dimensions", async () => {
+    let decodeCalls = 0;
+    await expect(validateVirtualGoodsImageForUpload(
+      { type: "image/webp", size: 100 } as File,
+      async () => {
+        decodeCalls += 1;
+        return { width: 200, height: 200 };
+      },
+    )).resolves.toBe("仅支持 JPG、JPEG 或 PNG 图片。");
+    expect(decodeCalls).toBe(0);
+  });
+
+  test("returns the decoded dimensions error", async () => {
+    await expect(validateVirtualGoodsImageForUpload(
+      { type: "image/png", size: 100 } as File,
+      async () => ({ width: 199, height: 200 }),
+    )).resolves.toBe("图片尺寸必须为 200×200 像素。");
   });
 });

@@ -42,3 +42,29 @@ export function validateVirtualGoodsImageDimensions(
   }
   return null;
 }
+
+export async function validateVirtualGoodsImageForUpload(
+  file: File,
+  readDimensions: (file: File) => Promise<ImageDimensions> =
+    readVirtualGoodsImageDimensions,
+): Promise<string | null> {
+  const declarationError = validateVirtualGoodsImageFile(file);
+  if (declarationError) return declarationError;
+  return validateVirtualGoodsImageDimensions(await readDimensions(file));
+}
+
+export function readVirtualGoodsImageDimensions(file: File) {
+  return new Promise<ImageDimensions>((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const image = new window.Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve({ width: image.naturalWidth, height: image.naturalHeight });
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("图片无法读取，请重新选择。"));
+    };
+    image.src = objectUrl;
+  });
+}

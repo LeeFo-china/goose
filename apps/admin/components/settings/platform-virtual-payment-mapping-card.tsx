@@ -10,6 +10,8 @@ import {
   virtualPaymentEnvironmentLabels,
   type VirtualPaymentMappingDraft,
 } from "@/components/settings/platform-virtual-payment-settings-data";
+import { VirtualPaymentImageField } from
+  "@/components/settings/platform-virtual-payment-image-field";
 import { toSafeVirtualPaymentMutationMessage } from
   "@/components/settings/platform-virtual-payment-errors";
 import { formatDateTime } from "@/components/settings/platform-payment-settings-shared";
@@ -67,7 +69,9 @@ export function VirtualPaymentMappingCard({
     formatFenAsYuanInput(summary.mapping?.expected_amount_fen ?? productAmountFen)
   );
   const [pendingAction, setPendingAction] = useState<"save" | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
   const [error, setError] = useState("");
+  const formPending = Boolean(pendingAction || imageUploading);
 
   function updateDraft(patch: Partial<VirtualPaymentMappingDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -76,7 +80,7 @@ export function VirtualPaymentMappingCard({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (readonly || pendingAction) return;
+    if (readonly || formPending) return;
     setError("");
     setPendingAction("save");
     try {
@@ -129,51 +133,38 @@ export function VirtualPaymentMappingCard({
               id={`${summary.environment}-app-id`}
               label="小程序 AppID"
               value={draft.appId}
-              disabled={readonly || Boolean(pendingAction)}
+              disabled={readonly || formPending}
               onChange={(value) => updateDraft({ appId: value })}
             />
             <MappingTextField
               id={`${summary.environment}-virtual-merchant-id`}
               label="虚拟支付商户号"
               value={draft.virtualMerchantId}
-              disabled={readonly || Boolean(pendingAction)}
+              disabled={readonly || formPending}
               onChange={(value) => updateDraft({ virtualMerchantId: value })}
             />
             <MappingTextField
               id={`${summary.environment}-offer-id`}
               label="Offer ID"
               value={draft.offerId}
-              disabled={readonly || Boolean(pendingAction)}
+              disabled={readonly || formPending}
               onChange={(value) => updateDraft({ offerId: value })}
             />
             <MappingTextField
               id={`${summary.environment}-provider-product-id`}
               label="渠道商品 ID"
               value={draft.providerProductId}
-              disabled={readonly || Boolean(pendingAction)}
+              disabled={readonly || formPending}
               onChange={(value) => updateDraft({ providerProductId: value })}
             />
-            <Field
-              className="md:col-span-2"
-              data-disabled={readonly || Boolean(pendingAction)}
-            >
-              <FieldLabel htmlFor={`${summary.environment}-item-url`}>
-                商品图片 URL
-              </FieldLabel>
-              <Input
-                id={`${summary.environment}-item-url`}
-                type="url"
-                value={draft.itemUrl}
-                onChange={(event) => updateDraft({ itemUrl: event.target.value })}
-                disabled={readonly || Boolean(pendingAction)}
-                placeholder="https://cdn.example.com/branding.png"
-                required
-              />
-              <FieldDescription>
-                稳定公网 HTTPS 地址，仅支持 JPG、JPEG 或 PNG。
-              </FieldDescription>
-            </Field>
-            <Field data-disabled={readonly || Boolean(pendingAction)}>
+            <VirtualPaymentImageField
+              id={`${summary.environment}-item-url`}
+              value={draft.itemUrl}
+              disabled={readonly || Boolean(pendingAction)}
+              onChange={(itemUrl) => updateDraft({ itemUrl })}
+              onPendingChange={setImageUploading}
+            />
+            <Field data-disabled={readonly || formPending}>
               <FieldLabel htmlFor={`${summary.environment}-amount`}>
                 核验价格（元）
               </FieldLabel>
@@ -183,14 +174,14 @@ export function VirtualPaymentMappingCard({
                 inputMode="decimal"
                 value={amountYuan}
                 onChange={(event) => setAmountYuan(event.target.value)}
-                disabled={readonly || Boolean(pendingAction)}
+                disabled={readonly || formPending}
                 required
               />
               <FieldDescription>
                 必须与平台权益统一售价和微信渠道价格一致。
               </FieldDescription>
             </Field>
-            <Field data-disabled={readonly || Boolean(pendingAction)}>
+            <Field data-disabled={readonly || formPending}>
               <FieldLabel htmlFor={`${summary.environment}-mapping-status`}>
                 映射状态
               </FieldLabel>
@@ -201,7 +192,7 @@ export function VirtualPaymentMappingCard({
                     status: value as PlatformVirtualPaymentMappingStatus,
                   })
                 }
-                disabled={readonly || Boolean(pendingAction)}
+                disabled={readonly || formPending}
               >
                 <SelectTrigger id={`${summary.environment}-mapping-status`}>
                   <SelectValue />
@@ -223,7 +214,10 @@ export function VirtualPaymentMappingCard({
           {goodsFlow}
         </CardContent>
         <CardFooter className="flex-wrap justify-end gap-2 border-t pt-5">
-          <Button type="submit" disabled={readonly || Boolean(pendingAction)}>
+          <Button
+            type="submit"
+            disabled={readonly || Boolean(pendingAction || imageUploading)}
+          >
             {pendingAction === "save"
               ? <Spinner data-icon="inline-start" />
               : <Save data-icon="inline-start" />}
