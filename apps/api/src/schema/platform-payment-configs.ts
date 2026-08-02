@@ -92,6 +92,27 @@ const requiredTrimmedText = (max: number, label: string) => z.string()
   .min(1, `${label}不能为空`)
   .max(max, `${label}不能超过 ${max} 个字符`);
 
+const wechatVirtualGoodsId = z.string()
+  .trim()
+  .regex(
+    /^[A-Za-z0-9_-]{1,20}$/,
+    "支付渠道商品 ID 只能包含字母、数字、下划线或短横线，且不超过 20 个字符",
+  );
+
+const wechatVirtualGoodsImageUrl = z.string()
+  .trim()
+  .max(2_048, "微信商品图片地址不能超过 2048 个字符")
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" &&
+        /\.(?:png|jpe?g)$/i.test(url.pathname) &&
+        url.username === "" && url.password === "" && url.hash === "";
+    } catch {
+      return false;
+    }
+  }, "微信商品图片必须是 HTTPS JPG 或 PNG 地址");
+
 export const PlatformWechatVirtualEnvironmentSchema = z.enum(
   VIRTUAL_PAYMENT_ENVIRONMENTS,
 );
@@ -101,7 +122,8 @@ export const PlatformWechatVirtualProductPatchSchema = z.object({
   app_id: requiredTrimmedText(64, "AppID"),
   virtual_merchant_id: requiredTrimmedText(64, "虚拟支付商户号"),
   offer_id: requiredTrimmedText(128, "Offer ID"),
-  provider_product_id: requiredTrimmedText(128, "支付渠道商品 ID"),
+  provider_product_id: wechatVirtualGoodsId,
+  item_url: wechatVirtualGoodsImageUrl,
   expected_amount_fen: z.number()
     .int("金额必须是整数分")
     .positive("金额必须大于 0")

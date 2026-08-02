@@ -20,6 +20,7 @@ const summary: PlatformVirtualPaymentProductSummary = {
     virtual_merchant_id: "virtual-mch",
     offer_id: "offer",
     provider_product_id: "branding-annual",
+    item_url: "https://cdn.example.test/branding.png",
     expected_amount_fen: 9_900,
     encrypted_secret_ref:
       "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
@@ -85,6 +86,7 @@ describe("platform virtual-payment settings data", () => {
         virtual_merchant_id: "virtual-mch",
         offer_id: "new-offer",
         provider_product_id: "branding-annual",
+        item_url: "https://cdn.example.test/branding.png",
         expected_amount_fen: 9_900,
         secret_revision: 4,
         status: "draft",
@@ -94,6 +96,34 @@ describe("platform virtual-payment settings data", () => {
     if (result.ok) {
       expect(Object.hasOwn(result.patch, "encrypted_secret_ref")).toBe(false);
       expect(result.patch.secret_revision).toBe(4);
+    }
+  });
+
+  test("requires a stable HTTPS JPG or PNG item URL", () => {
+    const draft = createVirtualMappingDraft(summary.mapping);
+    expect(buildVirtualMappingPatch({
+      summary,
+      draft: { ...draft, itemUrl: " https://cdn.example.test/goods.jpg?v=2 " },
+      amountYuan: "99.00",
+    })).toMatchObject({
+      ok: true,
+      patch: { item_url: "https://cdn.example.test/goods.jpg?v=2" },
+    });
+
+    for (const itemUrl of [
+      "",
+      "http://cdn.example.test/goods.png",
+      "https://cdn.example.test/goods.webp",
+      "https://cdn.example.test/goods.png#fragment",
+    ]) {
+      expect(buildVirtualMappingPatch({
+        summary,
+        draft: { ...draft, itemUrl },
+        amountYuan: "99.00",
+      })).toEqual({
+        ok: false,
+        message: "商品图片必须是稳定的 HTTPS JPG 或 PNG 地址",
+      });
     }
   });
 

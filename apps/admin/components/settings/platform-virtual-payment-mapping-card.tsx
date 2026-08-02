@@ -1,7 +1,7 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
-import { CheckCircle2, Save } from "lucide-react";
+import { type FormEvent, type ReactNode, useState } from "react";
+import { Save } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import { formatFenAsYuanInput } from "@/components/branding-addon/platform-branding-addon-product-form-data";
@@ -10,10 +10,8 @@ import {
   virtualPaymentEnvironmentLabels,
   type VirtualPaymentMappingDraft,
 } from "@/components/settings/platform-virtual-payment-settings-data";
-import {
-  type SafeVirtualPaymentMutationFeedback,
-  toSafeVirtualPaymentMutationMessage,
-} from "@/components/settings/platform-virtual-payment-errors";
+import { toSafeVirtualPaymentMutationMessage } from
+  "@/components/settings/platform-virtual-payment-errors";
 import { formatDateTime } from "@/components/settings/platform-payment-settings-shared";
 import type {
   PlatformVirtualPaymentMappingStatus,
@@ -45,14 +43,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Separator } from "@/components/ui/separator";
 
 export function VirtualPaymentMappingCard({
   summary,
   productAmountFen,
   readonly,
   onSave,
-  onValidate,
-  validationFeedback,
+  goodsFlow,
 }: {
   summary: PlatformVirtualPaymentProductSummary;
   productAmountFen: number | null;
@@ -62,14 +60,13 @@ export function VirtualPaymentMappingCard({
     draft: VirtualPaymentMappingDraft,
     amountYuan: string,
   ) => Promise<void>;
-  onValidate: (summary: PlatformVirtualPaymentProductSummary) => Promise<void>;
-  validationFeedback: SafeVirtualPaymentMutationFeedback | null;
+  goodsFlow: ReactNode;
 }) {
   const [draft, setDraft] = useState(() => createVirtualMappingDraft(summary.mapping));
   const [amountYuan, setAmountYuan] = useState(() =>
     formatFenAsYuanInput(summary.mapping?.expected_amount_fen ?? productAmountFen)
   );
-  const [pendingAction, setPendingAction] = useState<"save" | "validate" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"save" | null>(null);
   const [error, setError] = useState("");
 
   function updateDraft(patch: Partial<VirtualPaymentMappingDraft>) {
@@ -88,22 +85,6 @@ export function VirtualPaymentMappingCard({
       setError(toSafeVirtualPaymentMutationMessage(
         caught,
         "虚拟商品映射保存失败，请刷新后重试。",
-      ));
-    } finally {
-      setPendingAction(null);
-    }
-  }
-
-  async function validate() {
-    if (readonly || pendingAction) return;
-    setError("");
-    setPendingAction("validate");
-    try {
-      await onValidate(summary);
-    } catch (caught) {
-      setError(toSafeVirtualPaymentMutationMessage(
-        caught,
-        "虚拟商品映射校验失败，请检查配置。",
       ));
     } finally {
       setPendingAction(null);
@@ -144,26 +125,6 @@ export function VirtualPaymentMappingCard({
                 <StatusAlert>{error}</StatusAlert>
               </div>
             ) : null}
-            {validationFeedback ? (
-              <div className="md:col-span-2">
-                <StatusAlert title="校验未通过">
-                  <span>{validationFeedback.message}</span>
-                  {validationFeedback.code || validationFeedback.requestId ? (
-                    <span className="mt-1 block break-all text-xs">
-                      {validationFeedback.code
-                        ? `错误码：${validationFeedback.code}`
-                        : null}
-                      {validationFeedback.code && validationFeedback.requestId
-                        ? "；"
-                        : null}
-                      {validationFeedback.requestId
-                        ? `Request-ID：${validationFeedback.requestId}`
-                        : null}
-                    </span>
-                  ) : null}
-                </StatusAlert>
-              </div>
-            ) : null}
             <MappingTextField
               id={`${summary.environment}-app-id`}
               label="小程序 AppID"
@@ -192,6 +153,26 @@ export function VirtualPaymentMappingCard({
               disabled={readonly || Boolean(pendingAction)}
               onChange={(value) => updateDraft({ providerProductId: value })}
             />
+            <Field
+              className="md:col-span-2"
+              data-disabled={readonly || Boolean(pendingAction)}
+            >
+              <FieldLabel htmlFor={`${summary.environment}-item-url`}>
+                商品图片 URL
+              </FieldLabel>
+              <Input
+                id={`${summary.environment}-item-url`}
+                type="url"
+                value={draft.itemUrl}
+                onChange={(event) => updateDraft({ itemUrl: event.target.value })}
+                disabled={readonly || Boolean(pendingAction)}
+                placeholder="https://cdn.example.com/branding.png"
+                required
+              />
+              <FieldDescription>
+                稳定公网 HTTPS 地址，仅支持 JPG、JPEG 或 PNG。
+              </FieldDescription>
+            </Field>
             <Field data-disabled={readonly || Boolean(pendingAction)}>
               <FieldLabel htmlFor={`${summary.environment}-amount`}>
                 核验价格（元）
@@ -238,19 +219,10 @@ export function VirtualPaymentMappingCard({
               </FieldDescription>
             </Field>
           </FieldGroup>
+          <Separator className="my-5" />
+          {goodsFlow}
         </CardContent>
         <CardFooter className="flex-wrap justify-end gap-2 border-t pt-5">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={readonly || Boolean(pendingAction) || !mapping}
-            onClick={() => void validate()}
-          >
-            {pendingAction === "validate"
-              ? <Spinner data-icon="inline-start" />
-              : <CheckCircle2 data-icon="inline-start" />}
-            {pendingAction === "validate" ? "校验中" : "校验映射"}
-          </Button>
           <Button type="submit" disabled={readonly || Boolean(pendingAction)}>
             {pendingAction === "save"
               ? <Spinner data-icon="inline-start" />

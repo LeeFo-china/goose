@@ -17,6 +17,8 @@ import { PaginationQuerySchema } from "./request";
 const PRODUCT_NAME_MAX_LENGTH = 100;
 const PURCHASE_NOTES_MAX_LENGTH = 500;
 const ORDER_KEYWORD_PATTERN = /^[\p{L}\p{N} .-]+$/u;
+const WECHAT_VIRTUAL_GOODS_IMAGE_URL_PATTERN =
+  /^https:\/\/[^\s]+\.(?:png|jpe?g)(?:\?[^\s]*)?$/i;
 const PRODUCT_PATCH_MUTABLE_FIELDS = [
   "name",
   "amount_fen",
@@ -40,6 +42,14 @@ export const BrandingVirtualProductPatchSchema = z.object({
   virtual_merchant_id: z.string().trim().min(1).max(64),
   offer_id: z.string().trim().min(1).max(128),
   provider_product_id: z.string().trim().min(1).max(128),
+  item_url: z.string()
+    .trim()
+    .max(2_048)
+    .regex(
+      WECHAT_VIRTUAL_GOODS_IMAGE_URL_PATTERN,
+      "微信商品图片必须是 HTTPS JPG 或 PNG 地址",
+    )
+    .optional(),
   expected_amount_fen: BrandingAddonAmountFenSchema,
   encrypted_secret_ref: VirtualPaymentSecretRefSchema,
   secret_revision: z.number()

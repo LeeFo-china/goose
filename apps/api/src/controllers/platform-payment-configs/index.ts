@@ -19,6 +19,8 @@ import {
 import {
   platformBrandingVirtualPaymentSettingsService,
 } from "@/services/platform-branding-virtual-payment-settings";
+import { brandingVirtualProductGoodsLifecycleService } from
+  "@/services/branding-virtual-product-goods-lifecycle";
 import { platformPaymentConfigService } from "@/services/platform-payment-configs";
 import { Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -202,6 +204,65 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const data = await platformBrandingVirtualPaymentSecretService
       .saveMessageToken(authContext, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get(
+    "/platform/payment/wechat-virtual/branding-entitlement/:environment/goods-status",
+  )
+  async getBrandingVirtualProductGoodsStatus(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    this.parseEmptyQuery(request);
+    const environment = this.parseVirtualEnvironment(request);
+    const data = await brandingVirtualProductGoodsLifecycleService.getStatus(
+      authContext,
+      environment,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post(
+    "/platform/payment/wechat-virtual/branding-entitlement/:environment/goods/upload",
+  )
+  async uploadBrandingVirtualProductGoods(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    this.parseEmptyQuery(request);
+    const environment = this.parseVirtualEnvironment(request);
+    const bodyResult = PlatformWechatVirtualProductValidationSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const data = await brandingVirtualProductGoodsLifecycleService.startUpload(
+      authContext,
+      { environment, version: bodyResult.data.version },
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post(
+    "/platform/payment/wechat-virtual/branding-entitlement/:environment/goods/publish",
+  )
+  async publishBrandingVirtualProductGoods(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    this.parseEmptyQuery(request);
+    const environment = this.parseVirtualEnvironment(request);
+    const bodyResult = PlatformWechatVirtualProductValidationSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const data = await brandingVirtualProductGoodsLifecycleService.startPublish(
+      authContext,
+      { environment, version: bodyResult.data.version },
+    );
     return ResponseHandler.success(data);
   }
 

@@ -56,6 +56,7 @@ const mapping = {
   virtual_merchant_id: "virtual-merchant",
   offer_id: "offer-annual",
   provider_product_id: "branding-annual",
+  item_url: "https://cdn.example.test/branding.png",
   goods_quantity: 1,
   expected_amount_fen: 9_900,
   encrypted_secret_ref:
@@ -70,9 +71,7 @@ const mapping = {
   created_at: "2026-07-31T00:00:00.000Z",
   updated_at: "2026-07-31T00:00:00.000Z",
 } satisfies BrandingVirtualProductRecord;
-type ServiceConstructor = typeof import(
-  "./branding-virtual-product-management"
-)["BrandingVirtualProductManagementService"];
+type ServiceConstructor = (typeof import("./branding-virtual-product-management"))["BrandingVirtualProductManagementService"];
 let BrandingVirtualProductManagementService: ServiceConstructor;
 
 beforeAll(async () => {
@@ -152,8 +151,10 @@ function createFixture(options: {
       status: 3 as const,
       items: [{
         id: "branding-annual",
-        name: "年度品牌权益",
+        name: product.name,
         price: 9_900,
+        remark: product.purchase_notes,
+        itemUrl: mapping.item_url,
         uploadStatus: 2 as const,
       }],
     };

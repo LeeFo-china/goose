@@ -297,6 +297,36 @@ describe("BrandingVirtualProductPatchSchema", () => {
       }
     }
   });
+
+  test("accepts only stable HTTPS JPG or PNG item URLs", () => {
+    const virtualProduct = {
+      environment: "production" as const,
+      app_id: "wx-app",
+      virtual_merchant_id: "merchant",
+      offer_id: "offer",
+      provider_product_id: "product",
+      item_url: "https://cdn.example.test/branding.png?version=2",
+      expected_amount_fen: 9_900,
+      encrypted_secret_ref:
+        "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE" as const,
+      secret_revision: 2,
+      status: "draft" as const,
+      version: 1,
+    };
+
+    expect(BrandingVirtualProductPatchSchema.parse(virtualProduct))
+      .toEqual(virtualProduct);
+    for (const item_url of [
+      "http://cdn.example.test/branding.png",
+      "https://cdn.example.test/branding.webp",
+      "data:image/png;base64,abc",
+    ]) {
+      expect(BrandingVirtualProductPatchSchema.safeParse({
+        ...virtualProduct,
+        item_url,
+      }).success).toBe(false);
+    }
+  });
 });
 
 describe("BrandingAddonCreateOrderSchema", () => {

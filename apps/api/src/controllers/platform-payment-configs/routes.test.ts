@@ -88,6 +88,9 @@ describe("PlatformPaymentConfigsController routes", () => {
       "PATCH /platform/payment/wechat-virtual/branding-entitlement",
       "PUT /platform/payment/wechat-virtual/branding-entitlement/:environment/secret-bundle",
       "PUT /platform/payment/wechat-virtual/message-token",
+      "GET /platform/payment/wechat-virtual/branding-entitlement/:environment/goods-status",
+      "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/upload",
+      "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/publish",
       "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/validate",
     ]);
   });
@@ -98,11 +101,13 @@ describe("PlatformPaymentConfigsController routes", () => {
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
       { platformBrandingVirtualPaymentSecretService },
+      { brandingVirtualProductGoodsLifecycleService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
       import("@/services/platform-branding-virtual-payment-secrets"),
+      import("@/services/branding-virtual-product-goods-lifecycle"),
     ]);
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
@@ -112,6 +117,9 @@ describe("PlatformPaymentConfigsController routes", () => {
       statuses: platformBrandingVirtualPaymentSecretService.getStatuses,
       bundle: platformBrandingVirtualPaymentSecretService.saveSecretBundle,
       token: platformBrandingVirtualPaymentSecretService.saveMessageToken,
+      goodsStatus: brandingVirtualProductGoodsLifecycleService.getStatus,
+      upload: brandingVirtualProductGoodsLifecycleService.startUpload,
+      publish: brandingVirtualProductGoodsLifecycleService.startPublish,
     };
     const get = mock(async () => ({
       product: { version: 3 },
@@ -133,6 +141,9 @@ describe("PlatformPaymentConfigsController routes", () => {
     const validate = mock(async () => ({
       virtual_product: { validation_status: "valid" },
     }));
+    const getGoodsStatus = mock(async () => ({ next_action: "upload" as const }));
+    const startUpload = mock(async () => ({ outcome: "accepted" as const }));
+    const startPublish = mock(async () => ({ outcome: "accepted" as const }));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "get", get);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
@@ -155,6 +166,21 @@ describe("PlatformPaymentConfigsController routes", () => {
       platformBrandingVirtualPaymentSecretService,
       "saveMessageToken",
       saveMessageToken,
+    );
+    replaceMethod(
+      brandingVirtualProductGoodsLifecycleService,
+      "getStatus",
+      getGoodsStatus,
+    );
+    replaceMethod(
+      brandingVirtualProductGoodsLifecycleService,
+      "startUpload",
+      startUpload,
+    );
+    replaceMethod(
+      brandingVirtualProductGoodsLifecycleService,
+      "startPublish",
+      startPublish,
     );
 
     try {
@@ -206,6 +232,44 @@ describe("PlatformPaymentConfigsController routes", () => {
 
       await requiredHandler(
         controller,
+        "GET /platform/payment/wechat-virtual/branding-entitlement/:environment/goods-status",
+      )({
+        params: { environment: "production" },
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(getGoodsStatus).toHaveBeenCalledWith(platformAuth, "production");
+
+      await requiredHandler(
+        controller,
+        "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/upload",
+      )({
+        params: { environment: "production" },
+        body: { version: 3 },
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(startUpload).toHaveBeenCalledWith(platformAuth, {
+        environment: "production",
+        version: 3,
+      });
+
+      await requiredHandler(
+        controller,
+        "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/publish",
+      )({
+        params: { environment: "production" },
+        body: { version: 3 },
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(startPublish).toHaveBeenCalledWith(platformAuth, {
+        environment: "production",
+        version: 3,
+      });
+
+      await requiredHandler(
+        controller,
         "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/validate",
       )({
         params: { environment: "production" },
@@ -226,6 +290,9 @@ describe("PlatformPaymentConfigsController routes", () => {
       replaceMethod(platformBrandingVirtualPaymentSecretService, "getStatuses", originals.statuses);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originals.bundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originals.token);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", originals.goodsStatus);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", originals.upload);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", originals.publish);
     }
   });
 
@@ -235,26 +302,37 @@ describe("PlatformPaymentConfigsController routes", () => {
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
       { platformBrandingVirtualPaymentSecretService },
+      { brandingVirtualProductGoodsLifecycleService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
       import("@/services/platform-branding-virtual-payment-secrets"),
+      import("@/services/branding-virtual-product-goods-lifecycle"),
     ]);
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalUpdate = platformBrandingVirtualPaymentSettingsService.update;
     const originalValidate = platformBrandingVirtualPaymentSettingsService.validate;
     const originalBundle = platformBrandingVirtualPaymentSecretService.saveSecretBundle;
     const originalToken = platformBrandingVirtualPaymentSecretService.saveMessageToken;
+    const originalGoodsStatus = brandingVirtualProductGoodsLifecycleService.getStatus;
+    const originalUpload = brandingVirtualProductGoodsLifecycleService.startUpload;
+    const originalPublish = brandingVirtualProductGoodsLifecycleService.startPublish;
     const update = mock(async () => ({}));
     const validate = mock(async () => ({}));
     const saveSecretBundle = mock(async () => ({}));
     const saveMessageToken = mock(async () => ({}));
+    const getGoodsStatus = mock(async () => ({}));
+    const startUpload = mock(async () => ({}));
+    const startPublish = mock(async () => ({}));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "validate", validate);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", saveSecretBundle);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", saveMessageToken);
+    replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", getGoodsStatus);
+    replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", startUpload);
+    replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", startPublish);
 
     const invalidRequests: Array<[string, Partial<FastifyRequest>]> = [
       [
@@ -272,6 +350,18 @@ describe("PlatformPaymentConfigsController routes", () => {
       [
         "PUT /platform/payment/wechat-virtual/message-token",
         { body: { message_token: "token", key: "forged" }, query: {} },
+      ],
+      [
+        "GET /platform/payment/wechat-virtual/branding-entitlement/:environment/goods-status",
+        { params: { environment: "sandbox" }, query: { forged: true } },
+      ],
+      [
+        "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/upload",
+        { params: { environment: "sandbox" }, body: { version: 1, forged: true }, query: {} },
+      ],
+      [
+        "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/goods/publish",
+        { params: { environment: "staging" }, body: { version: 1 }, query: {} },
       ],
       [
         "POST /platform/payment/wechat-virtual/branding-entitlement/:environment/validate",
@@ -292,12 +382,18 @@ describe("PlatformPaymentConfigsController routes", () => {
       expect(validate).not.toHaveBeenCalled();
       expect(saveSecretBundle).not.toHaveBeenCalled();
       expect(saveMessageToken).not.toHaveBeenCalled();
+      expect(getGoodsStatus).not.toHaveBeenCalled();
+      expect(startUpload).not.toHaveBeenCalled();
+      expect(startPublish).not.toHaveBeenCalled();
     } finally {
       authorizationService.getRequiredAuthContext = originalAuth;
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", originalUpdate);
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "validate", originalValidate);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originalBundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originalToken);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", originalGoodsStatus);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", originalUpload);
+      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", originalPublish);
     }
   });
 });
