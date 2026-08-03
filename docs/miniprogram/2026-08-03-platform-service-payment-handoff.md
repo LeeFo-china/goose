@@ -33,9 +33,10 @@
 | Smoke 脚本 | `bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run` |
 | Smoke token 环境变量 | `PLATFORM_SERVICE_SMOKE_TENANT_TOKEN`、`PLATFORM_SERVICE_SMOKE_PLATFORM_TOKEN` |
 
-说明：当前 `.env` 未提供本次 smoke 专用租户 token、平台 token 和 `API_BASE_URL`，
-因此不能产出真实 HTTP Request-ID。开发库商品数据已通过只读 SQL 验证；HTTP smoke
-需要补齐上述三个变量后执行。
+说明：本轮已使用当前 worktree API、本地 `http://127.0.0.1:3099`、开发库
+`api-dev.goodcms.cn:8000` 和临时内存 JWT 完成 dry-run smoke。脚本未创建订单、
+未发起支付，输出仅包含商品、readiness 和脱敏 Request-ID。`.env` 中仍未固化 smoke
+专用 token；后续 CI 或其他开发机执行时仍需显式注入上述两个 token。
 
 ## 3. 权限与开关
 
@@ -439,7 +440,8 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 
 发布前需要完成：
 
-- dry-run HTTP smoke exit 0；
+- dry-run HTTP smoke exit 0；本轮本地 API + dev DB 已验证通过，后续 dev 发布后需
+  再用正式 dev 域名 `https://api-dev.goodcms.cn` 补跑一次；
 - 真机使用测试租户创建 1 笔小额订单；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；
