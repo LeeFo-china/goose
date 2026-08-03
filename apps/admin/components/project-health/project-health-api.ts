@@ -10,7 +10,6 @@ import {
   buildProjectHealthBackendQuery,
   type ProjectHealthQueryState,
 } from "./project-health-query";
-import type { z } from "zod";
 
 type BackendPayload<T> = {
   success?: boolean;
@@ -29,6 +28,14 @@ export type ProjectHealthFetcher = (
 type ProjectHealthRequestOptions = {
   signal?: AbortSignal;
   fetcher?: ProjectHealthFetcher;
+};
+
+type ParseResult<T> =
+  | { success: true; data: T }
+  | { success: false };
+
+type SafeParseSchema<T> = {
+  safeParse(data: unknown): ParseResult<T>;
 };
 
 function getPayloadMessage(payload: unknown, fallback: string): string {
@@ -64,7 +71,7 @@ async function parseProjectHealthPayload<T>(
 
 function parseDomainData<T>(
   data: unknown,
-  schema: z.ZodType<T>,
+  schema: SafeParseSchema<T>,
   invalidDataMessage: string,
 ): T {
   const result = schema.safeParse(data);

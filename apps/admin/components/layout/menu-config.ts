@@ -118,6 +118,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
         permission: "platform.branding_product.manage",
       },
       {
+        href: "/platform/virtual-products",
+        label: "虚拟商品",
+        icon: PackageOpen,
+        permission: "platform.virtual_product.read",
+      },
+      {
         href: "/platform/catalog",
         label: "供应标准目录",
         icon: PackageSearch,
