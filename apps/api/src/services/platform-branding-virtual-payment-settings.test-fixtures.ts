@@ -1,5 +1,6 @@
 import { mock } from "bun:test";
 
+import { Errors } from "@/errors/error-factory";
 import type { BrandingAddonProductRecord } from "@/repositories/branding-addon-products";
 import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
 import type { UpdatePlatformWechatVirtualSettingsInput } from "@/schema/platform-payment-configs";
@@ -57,6 +58,7 @@ export const productionMapping = {
 
 export const managementConfiguration = {
   product: {
+    id: product.id,
     code: product.code,
     entitlement_code: product.entitlement_code,
     name: product.name,
@@ -196,15 +198,22 @@ export function buildFixture(
 ) {
   const current = options.current === undefined ? product : options.current;
   const mapping = options.mapping === undefined ? productionMapping : options.mapping;
-  const getProduct = mock(async () => {
+  const getSnapshot = mock(async () => {
     if (options.productError) throw options.productError;
-    return current;
-  });
-  const findByProductAndEnvironment = mock(async () => {
     if (options.mappingError) throw options.mappingError;
-    return mapping;
+    if (!current) {
+      throw Errors.business(
+        404,
+        "年度品牌权益商品不存在",
+        "BRANDING_ADDON_PRODUCT_NOT_FOUND",
+      );
+    }
+    return {
+      product: current,
+      mappings: mapping ? [mapping] : [],
+    };
   });
-  const manageConfiguration = mock(async (input: {
+  const updateConfiguration = mock(async (input: {
     productPatch: { purchase_mode?: BrandingAddonProductRecord["purchase_mode"] };
   }) => {
     if (options.saveError) throw options.saveError;
@@ -213,7 +222,10 @@ export function buildFixture(
       product: options.savedProduct ?? {
         ...baseProduct,
         ...input.productPatch,
-        version: baseProduct.version + 1,
+        version: input.productPatch.purchase_mode &&
+            input.productPatch.purchase_mode !== baseProduct.purchase_mode
+          ? baseProduct.version + 1
+          : baseProduct.version,
       },
       virtual_product: options.savedMapping === undefined
         ? mapping
@@ -231,48 +243,48 @@ export function buildFixture(
     appKey: "legacy-cached-app-key",
     revision: 2,
   }));
-  const getConfiguration = mock(async () =>
-    options.configuration ?? managementConfiguration
-  );
+  const getPlatformSecretStrings = mock(async () => ({
+    WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE:
+      options.secretBundle ?? JSON.stringify({
+        appKey: "sandbox-app-key",
+        revision: 1,
+      }),
+    WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE:
+      options.secretBundle ?? JSON.stringify({
+        appKey: "never-expose-this-app-key",
+        revision: 2,
+      }),
+  }));
   const getStatuses = mock(async () => {
     if (options.secretStatusError) throw options.secretStatusError;
     return options.statuses ?? secretStatuses;
   });
-  const validateConfiguration = mock(async () => ({
-    virtual_product: productionMapping,
-    validation: {
-      kind: "wechat_goods" as const,
-      validated_at: "2026-08-01T01:02:03.000Z",
-      request_ids: { upload: "upload-request-id", publish: "publish-request-id" },
-    },
-  }));
+  const validate = mock(async () => null as never);
   const hasPermission = mock((context: AuthContext, permission: string) =>
     context.permissions.some(({ code }) => code === permission)
   );
   const recordBestEffort = mock(async () => null);
-  const settingsService = { getPlatformSecretString, getSecretString };
+  const settingsService = {
+    getPlatformSecretString,
+    getPlatformSecretStrings,
+    getSecretString,
+  };
   const service = new Service({
-    productRepository: { getProduct },
-    virtualProductRepository: {
-      findByProductAndEnvironment,
-      manageConfiguration,
-    },
     settingsService,
     accessPolicy: { hasPermission },
     audit: { recordBestEffort },
-    managementService: { getConfiguration, validateConfiguration },
+    catalogCompatibility: { getSnapshot, validate, updateConfiguration },
     secretStatusReader: { getStatuses },
   });
   return {
     service,
-    getProduct,
-    findByProductAndEnvironment,
-    manageConfiguration,
+    getSnapshot,
+    updateConfiguration,
     getPlatformSecretString,
     getSecretString,
-    getConfiguration,
+    getPlatformSecretStrings,
     getStatuses,
-    validateConfiguration,
+    validate,
     recordBestEffort,
   };
 }

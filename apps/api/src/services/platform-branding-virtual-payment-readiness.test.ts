@@ -225,7 +225,7 @@ describe("platform branding virtual-payment enablement readiness", () => {
       code: "BRANDING_VIRTUAL_PAYMENT_NOT_READY",
       details: { blocker_codes: expect.arrayContaining([blockerCode]) },
     });
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test("does not require message authentication for maintenance drafts", async () => {
@@ -248,6 +248,6 @@ describe("platform branding virtual-payment enablement readiness", () => {
       purchase_mode: "maintenance",
     })).resolves.toBeDefined();
     expect(fixture.getStatuses).not.toHaveBeenCalled();
-    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.updateConfiguration).toHaveBeenCalledTimes(1);
   });
 });

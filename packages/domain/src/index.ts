@@ -1,6 +1,7 @@
 export * from './ai';
 export * from './auth';
 export * from './branding-virtual-payment';
+export { VIRTUAL_PAYMENT_ENVIRONMENTS } from './virtual-product';
 export * from './customer';
 export * from './customer-service';
 export * from './department';
@@ -22,6 +23,7 @@ export * from './supplier';
 export * from './supplier-payment';
 export * from './supplier-product';
 export * from './tenant';
+export * from './virtual-product';
 export * from './location';
 export * from './workflow';
 export * from './wechat-pay-applyment-readiness';

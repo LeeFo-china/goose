@@ -1,13 +1,12 @@
 import type { StartVirtualGoodsUploadInput } from
-  "@/services/wechat-virtual-payment-gateway-contracts";
-import { MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN } from
-  "@/services/wechat-virtual-payment-signatures";
+  './wechat-virtual-payment-gateway-contracts';
 
 const GOODS_ID_PATTERN = /^[A-Za-z0-9_-]{1,20}$/;
 const IMAGE_PATH_PATTERN = /\.(?:png|jpe?g)$/i;
 const MAX_NAME_LENGTH = 20;
 const MAX_REMARK_LENGTH = 1_024;
 const MAX_URL_LENGTH = 2_048;
+const MAX_WECHAT_VIRTUAL_PAYMENT_AMOUNT_FEN = 2_147_483_647;
 
 export function isValidVirtualGoodsId(value: unknown): value is string {
   return typeof value === "string" && GOODS_ID_PATTERN.test(value);

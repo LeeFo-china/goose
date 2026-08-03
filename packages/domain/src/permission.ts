@@ -122,10 +122,16 @@ export const PERMISSION_CODE_VALUES = [
   'platform.branding_product.manage',
   'platform.branding_order.read',
   'platform.tenant_entitlement.manage',
+  'platform.virtual_product.read',
+  'platform.virtual_product.manage',
+  'platform.virtual_product.publish',
+  'platform.virtual_order.read',
+  'platform.virtual_refund.manage',
   'brand.settings.read',
   'brand.settings.update',
   'brand.entitlement.purchase',
   'brand.entitlement_order.read',
+  'virtual_product.purchase',
   'platform.supplier.view',
   'platform.supplier.review',
   'platform.supplier.manage',
@@ -506,6 +512,26 @@ export const PermissionCodeConfig: Record<
     label: '管理租户增值权益',
     module: 'platform_entitlement',
   },
+  'platform.virtual_product.read': {
+    label: '查看虚拟商品',
+    module: 'platform_virtual_product',
+  },
+  'platform.virtual_product.manage': {
+    label: '管理虚拟商品',
+    module: 'platform_virtual_product',
+  },
+  'platform.virtual_product.publish': {
+    label: '发布虚拟商品',
+    module: 'platform_virtual_product',
+  },
+  'platform.virtual_order.read': {
+    label: '查看虚拟商品订单',
+    module: 'platform_virtual_order',
+  },
+  'platform.virtual_refund.manage': {
+    label: '管理虚拟商品退款',
+    module: 'platform_virtual_refund',
+  },
   'brand.settings.read': {
     label: '查看品牌技术支持设置',
     module: 'branding',
@@ -521,6 +547,10 @@ export const PermissionCodeConfig: Record<
   'brand.entitlement_order.read': {
     label: '查看品牌技术支持权益订单',
     module: 'branding',
+  },
+  'virtual_product.purchase': {
+    label: '购买虚拟商品',
+    module: 'virtual_product',
   },
   'platform.supplier.view': {
     label: '查看平台供应商',
