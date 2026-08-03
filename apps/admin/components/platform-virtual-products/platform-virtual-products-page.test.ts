@@ -91,6 +91,27 @@ describe("平台虚拟商品管理页", () => {
     expect(source).toContain("await loadDetail({ showLoading: false })");
   });
 
+  test("详情面板刷新和微信操作提供局部反馈且失败提示不会被刷新清空", () => {
+    const source = readSource("./platform-virtual-product-detail.tsx");
+
+    expect(source).toContain('| "refresh"');
+    expect(source).toContain("操作中");
+    expect(source).toContain("详情已刷新。");
+    expect(source).toContain("clearError?: boolean");
+    expect(source).toContain("await loadDetail({ showLoading: false, clearError: false })");
+    expect(source).toContain("setError(actionError)");
+    expect(source).toContain('pendingAction === "refresh"');
+  });
+
+  test("编辑保存等待详情刷新完成再关闭，避免后续微信操作使用旧版本", () => {
+    const source = readSource("./platform-virtual-product-form.tsx");
+
+    expect(source).toContain("useEffect");
+    expect(source).toContain("onSaved?: () => void | Promise<void>");
+    expect(source).toContain("await onSaved?.()");
+    expect(source).toContain("createInitialVirtualProductFormValues(product)");
+  });
+
   test("loading 骨架屏同步虚拟商品列表布局", () => {
     const source = readSource(
       "../../app/(console)/platform/virtual-products/loading.tsx",

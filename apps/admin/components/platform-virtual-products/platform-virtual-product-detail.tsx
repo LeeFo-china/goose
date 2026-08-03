@@ -46,6 +46,7 @@ import type {
 
 type PendingAction =
   | "load"
+  | "refresh"
   | "activate"
   | "suspend"
   | "archive"
@@ -53,6 +54,11 @@ type PendingAction =
   | `${VirtualPaymentEnvironment}:publish`
   | `${VirtualPaymentEnvironment}:validate`
   | null;
+
+type LoadDetailOptions = {
+  showLoading?: boolean;
+  clearError?: boolean;
+};
 
 export function PlatformVirtualProductDetail({
   product,
@@ -74,16 +80,22 @@ export function PlatformVirtualProductDetail({
 
   async function loadDetail({
     showLoading = detail === null,
-  }: { showLoading?: boolean } = {}) {
+    clearError = true,
+  }: LoadDetailOptions = {}) {
     if (showLoading) setPendingAction("load");
-    setError("");
+    if (clearError) setError("");
     try {
-      setDetail(await requestBackendJson<PlatformVirtualProductDetailData>(
+      const nextDetail = await requestBackendJson<PlatformVirtualProductDetailData>(
         `/platform/virtual-products/${product.id}`,
         { fallbackMessage: "虚拟商品详情加载失败" },
-      ));
+      );
+      setDetail(nextDetail);
+      return nextDetail;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "虚拟商品详情加载失败");
+      if (clearError) {
+        setError(caught instanceof Error ? caught.message : "虚拟商品详情加载失败");
+      }
+      return null;
     } finally {
       if (showLoading) setPendingAction(null);
     }
@@ -104,10 +116,12 @@ export function PlatformVirtualProductDetail({
         body: JSON.stringify({ version: detail.version }),
         fallbackMessage: "虚拟商品状态调整失败",
       });
+      await loadDetail({ showLoading: false, clearError: false });
       setNotice("虚拟商品状态已更新。");
-      await loadDetail({ showLoading: false });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "虚拟商品状态调整失败");
+      const actionError = caught instanceof Error ? caught.message : "虚拟商品状态调整失败";
+      await loadDetail({ showLoading: false, clearError: false });
+      setError(actionError);
     } finally {
       setPendingAction(null);
     }
@@ -136,18 +150,29 @@ export function PlatformVirtualProductDetail({
         `/platform/virtual-products/${product.id}/channel-mappings/${environment}`,
         { fallbackMessage: "微信状态刷新失败" },
       );
+      await loadDetail({ showLoading: false, clearError: false });
       setNotice("微信商品状态已刷新。");
-      await loadDetail({ showLoading: false });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "微信虚拟商品操作失败");
-      await loadDetail({ showLoading: false });
+      const actionError = caught instanceof Error ? caught.message : "微信虚拟商品操作失败";
+      await loadDetail({ showLoading: false, clearError: false });
+      setError(actionError);
     } finally {
       setPendingAction(null);
     }
   }
 
+  async function refreshDetail() {
+    setPendingAction("refresh");
+    setError("");
+    setNotice("");
+    const refreshed = await loadDetail({ showLoading: false });
+    if (refreshed) setNotice("详情已刷新。");
+    setPendingAction(null);
+  }
+
   const current = detail ?? product;
   const status = productStatusMeta[current.status];
+  const isBusy = pendingAction !== null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-5xl overflow-y-auto">
@@ -167,8 +192,8 @@ export function PlatformVirtualProductDetail({
             正在加载虚拟商品详情
           </div>
         ) : null}
-        {error ? <StatusAlert>{error}</StatusAlert> : null}
-        {notice ? <StatusAlert tone="success">{notice}</StatusAlert> : null}
+        {!detail && error ? <StatusAlert>{error}</StatusAlert> : null}
+        {!detail && notice ? <StatusAlert tone="success">{notice}</StatusAlert> : null}
 
         {detail ? (
           <div className="flex flex-col gap-5">
@@ -184,31 +209,43 @@ export function PlatformVirtualProductDetail({
 
             <div className="flex flex-wrap justify-between gap-2">
               <div className="flex flex-wrap gap-2">
-                {canManage ? <PlatformVirtualProductFormButton product={detail} onSaved={loadDetail} /> : null}
+                {canManage ? (
+                  <PlatformVirtualProductFormButton
+                    product={detail}
+                    onSaved={async () => {
+                      await loadDetail({ showLoading: false });
+                    }}
+                  />
+                ) : null}
                 {canManage && detail.status === "draft" ? (
-                  <Button type="button" size="sm" onClick={() => void runTransition("activate")}>
+                  <Button type="button" size="sm" onClick={() => void runTransition("activate")} disabled={isBusy}>
                     {pendingAction === "activate" ? <Spinner data-icon="inline-start" /> : <PlayCircle data-icon="inline-start" />}
                     启用商品
                   </Button>
                 ) : null}
                 {canManage && detail.status === "active" ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => void runTransition("suspend")}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void runTransition("suspend")} disabled={isBusy}>
                     {pendingAction === "suspend" ? <Spinner data-icon="inline-start" /> : <PauseCircle data-icon="inline-start" />}
                     暂停商品
                   </Button>
                 ) : null}
                 {canManage && detail.status !== "archived" ? (
-                  <Button type="button" size="sm" variant="outline" onClick={() => void runTransition("archive")}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => void runTransition("archive")} disabled={isBusy}>
                     {pendingAction === "archive" ? <Spinner data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
                     归档商品
                   </Button>
                 ) : null}
               </div>
-              <Button type="button" size="sm" variant="outline" onClick={() => void loadDetail()}>
-                <RefreshCw data-icon="inline-start" />
+              <Button type="button" size="sm" variant="outline" onClick={() => void refreshDetail()} disabled={isBusy}>
+                {pendingAction === "refresh" ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}
                 刷新详情
               </Button>
             </div>
+            <DetailOperationFeedback
+              pendingAction={pendingAction}
+              error={error}
+              notice={notice}
+            />
 
             <Separator />
             <section className="grid gap-4 lg:grid-cols-2">
@@ -229,6 +266,42 @@ export function PlatformVirtualProductDetail({
       </DialogContent>
     </Dialog>
   );
+}
+
+function DetailOperationFeedback({
+  pendingAction,
+  error,
+  notice,
+}: {
+  pendingAction: PendingAction;
+  error: string;
+  notice: string;
+}) {
+  if (pendingAction && pendingAction !== "load") {
+    return (
+      <div className="min-h-9 rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground" aria-live="polite">
+        <span className="inline-flex items-center gap-2">
+          <Spinner data-icon="inline-start" />
+          操作中：{getPendingActionLabel(pendingAction)}
+        </span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="min-h-9 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive" aria-live="assertive">
+        {error}
+      </div>
+    );
+  }
+  if (notice) {
+    return (
+      <div className="min-h-9 rounded-md border border-success/30 bg-success/5 px-3 py-2 text-sm text-success" aria-live="polite">
+        {notice}
+      </div>
+    );
+  }
+  return <div className="min-h-9" aria-live="polite" />;
 }
 
 function ChannelCard({
@@ -255,6 +328,7 @@ function ChannelCard({
   const upload = mapping ? goodsStateMeta[mapping.upload_state] : goodsStateMeta.not_started;
   const publish = mapping ? goodsStateMeta[mapping.publish_state] : goodsStateMeta.not_started;
   const synced = mapping?.synced_product_version === productVersion;
+  const isBusy = pendingAction !== null;
 
   return (
     <div className="flex min-w-0 flex-col gap-4 rounded-md border bg-card p-4">
@@ -282,7 +356,7 @@ function ChannelCard({
         <Button
           type="button"
           size="sm"
-          disabled={!canPublish || !mapping}
+          disabled={isBusy || !canPublish || !mapping}
           onClick={() => void onAction(environment, "upload")}
         >
           {pendingAction === `${environment}:upload`
@@ -294,7 +368,7 @@ function ChannelCard({
           type="button"
           size="sm"
           variant="outline"
-          disabled={!canPublish || !mapping}
+          disabled={isBusy || !canPublish || !mapping}
           onClick={() => void onAction(environment, "publish")}
         >
           {pendingAction === `${environment}:publish`
@@ -306,7 +380,7 @@ function ChannelCard({
           type="button"
           size="sm"
           variant="outline"
-          disabled={!canPublish || !mapping}
+          disabled={isBusy || !canPublish || !mapping}
           onClick={() => void onAction(environment, "validate")}
         >
           {pendingAction === `${environment}:validate`
@@ -317,6 +391,16 @@ function ChannelCard({
       </div>
     </div>
   );
+}
+
+function getPendingActionLabel(action: Exclude<PendingAction, null | "load">) {
+  if (action === "refresh") return "刷新详情";
+  if (action === "activate") return "启用商品";
+  if (action === "suspend") return "暂停商品";
+  if (action === "archive") return "归档商品";
+  if (action.endsWith(":upload")) return "上传商品到微信";
+  if (action.endsWith(":publish")) return "发布微信商品";
+  return "校验映射";
 }
 
 function Fact({ label, value }: { label: string; value: ReactNode }) {

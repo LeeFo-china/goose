@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { Pencil, Plus } from "lucide-react";
 import type { VirtualBenefitType } from "@gooes/domain";
 
@@ -56,7 +56,7 @@ export function PlatformVirtualProductFormButton({
   onSaved,
 }: {
   product?: PlatformVirtualProductDetailData | null;
-  onSaved?: () => void;
+  onSaved?: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(() =>
@@ -66,6 +66,13 @@ export function PlatformVirtualProductFormButton({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const isEditing = Boolean(product);
+
+  useEffect(() => {
+    if (!open) return;
+    setValues(createInitialVirtualProductFormValues(product));
+    setError("");
+    setNotice("");
+  }, [open, product]);
 
   function update(patch: Partial<PlatformVirtualProductFormValues>) {
     setValues((current) => ({ ...current, ...patch }));
@@ -95,7 +102,7 @@ export function PlatformVirtualProductFormButton({
         },
       );
       setNotice(product ? "虚拟商品已保存。" : "虚拟商品已创建，渠道商品 ID 已由系统生成。");
-      onSaved?.();
+      await onSaved?.();
       if (!product) setValues(DEFAULT_VIRTUAL_PRODUCT_FORM_VALUES);
       setOpen(false);
     } catch (caught) {
