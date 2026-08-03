@@ -40,6 +40,8 @@
 
 ### 2.1 套餐与价格
 
+以下金额是系统首次上线的初始化默认值，不是代码常量：
+
 | 套餐 | 原价算法 | 折扣 | 用户售价 | 后端金额 |
 | --- | ---: | ---: | ---: | ---: |
 | 1 年 | ¥9,800 × 1 | 无 | ¥9,800 | `980000` 分 |
@@ -48,6 +50,9 @@
 
 规则：
 
+- 平台超管可以在服务商品管理中修改原价和实际售价；“几折”由系统根据 `实际售价 / 原价` 实时计算，避免原价、售价和折扣三个输入互相矛盾。界面也可以允许输入折扣，但提交前必须换算为实际售价，由后端再次校验。
+- 金额只保存在数据库商品配置中，应用代码和 Domain 包不得定义固定套餐金额常量。
+- 商品价格变更只影响变更后创建的新订单；已有待支付订单和历史订单继续使用下单时的不可变价格/条款快照，支付回调必须按订单快照金额核验。
 - 金额全部由后端商品表读取并在订单中做不可变快照，小程序只传 `product_code`。
 - 不赠送积分，不增加可用额度，不写 `tenant_credit_accounts` 或 `tenant_credit_ledger`。
 - 当前不具备自动续费申请条件，因此只做一次性购买的 1/2/3 年服务，不使用“订阅自动续费”表述。
@@ -182,7 +187,8 @@ awaiting_acceptance
 
 | 表 | 作用 | 核心关系/约束 |
 | --- | --- | --- |
-| `platform_service_products` | 平台服务商品目录 | `code` 唯一；金额为分；1/2/3 年；支持草稿、启用、停用、归档 |
+| `platform_service_products` | 平台服务商品目录 | `code` 唯一；原价/实际售价为分；1/2/3 年；支持版本、草稿、启用、停用、归档 |
+| `platform_service_product_versions` | 商品价格和条款变更历史 | 每次发布价格/条款都写不可变版本，订单引用并快照发布版本 |
 | `tenant_service_orders` | 租户购买订单 | 绑定 tenant、product、付款人；保存商品/价格/条款快照；`order_no`、`out_trade_no` 唯一 |
 | `tenant_service_contracts` | 租户当前服务合同期 | 每个租户和服务族最多一个当前合同；不代表自动续费 |
 | `tenant_service_contract_periods` | 每张已验收订单贡献的服务期 | 绑定 order；保存本期开始/结束，历史不可覆盖 |
@@ -277,7 +283,7 @@ GET /billing/service-products?page=1&pageSize=20
 
 权限：`billing.service_order.create`，即使租户处于 billing locked 也允许访问续费入口。
 
-响应：
+以下响应仅为初始化默认商品的示例，实际金额和折扣以后端当前已发布商品为准：
 
 ```json
 {
@@ -289,7 +295,8 @@ GET /billing/service-products?page=1&pageSize=20
         "term_years": 1,
         "list_amount_fen": 980000,
         "amount_fen": 980000,
-        "price_rate_percent": 100,
+        "price_rate_basis_points": 10000,
+        "pricing_version": 1,
         "service_scope": [
           "客户专属系统环境部署",
           "服务器基础配置",
@@ -328,7 +335,7 @@ POST /billing/service-orders
 }
 ```
 
-响应：
+以下响应仅为初始化默认商品的示例，实际金额和折扣以后端当前已发布商品为准：
 
 ```json
 {
@@ -341,6 +348,7 @@ POST /billing/service-orders
       "product_title": "平台部署及年度技术服务（1年）",
       "term_years": 1,
       "amount_fen": 980000,
+      "pricing_version": 1,
       "payment_status": "pending",
       "service_status": "waiting_payment",
       "wechat_fulfillment_status": "waiting_acceptance",
@@ -597,6 +605,7 @@ POST /billing/service-orders/:id/refund-requests
 GET    /platform/billing/service-products?page=1&pageSize=20
 POST   /platform/billing/service-products
 PATCH  /platform/billing/service-products/:id
+POST   /platform/billing/service-products/:id/publish
 POST   /platform/billing/service-products/:id/archive
 
 GET    /platform/billing/service-orders?page=1&pageSize=20
@@ -610,7 +619,7 @@ POST   /platform/billing/service-orders/:id/wechat-fulfillment/retry
 POST   /platform/billing/service-orders/:id/refund-decisions
 ```
 
-商品已有订单后禁止物理删除，只能停用或归档。商品编辑不回写历史订单快照。
+商品已有订单后禁止物理删除，只能停用或归档。原价和实际售价由平台超管维护，折扣按两者实时计算；编辑先形成草稿版本，发布后才供新订单使用。商品编辑和发布都不回写待支付及历史订单快照。
 
 “提交客户验收”前必须由后端校验服务器配置、系统部署、首次培训三个必需里程碑完成，并至少存在一份交付附件；前端禁用按钮只是提示，不能替代后端校验。
 
@@ -782,12 +791,12 @@ src/packageEmployees/pages/platformServiceOrderDetail/index.tsx
 
 ### 阶段 1：后端领域与支付闭环
 
-- 新增 migration、领域常量、权限和三款初始化商品；
+- 新增 migration、状态领域常量、权限和三款可配置的初始化商品；金额不得进入应用常量；
 - 完成商品、订单、普通支付、回调确认、查询和退款申请；
 - 旧积分充值入口切只读/关闭新建；
 - API dev 发布后同步版本、路径、权限、开关和真实脱敏响应样例。
 
-验收：三种金额准确；重复点击只产生一张订单；回调只创建一次实施工单；没有积分流水。
+验收：初始化默认金额准确；平台修改售价后新订单使用新价格、旧订单金额不变；重复点击只产生一张订单；回调只创建一次实施工单；没有积分流水。
 
 ### 阶段 2：Admin 实施履约
 
@@ -857,7 +866,8 @@ src/packageEmployees/pages/platformServiceOrderDetail/index.tsx
 
 - [ ] migration 仅通过 `supabase/migrations/` 应用，Local/Remote 对齐；
 - [ ] 列表分页默认 20、最大 100，查询限定字段且无 N+1；
-- [ ] 三款金额分别为 980000、1568000、2058000 分；
+- [ ] 三款初始化默认金额分别为 980000、1568000、2058000 分，且应用代码不存在固定金额常量；
+- [ ] 平台修改原价/售价后折扣正确重算，新订单使用已发布版本，待支付和历史订单保持原快照；
 - [ ] 前端篡改金额、年限、租户和 file_id 均被拒绝；
 - [ ] 相同幂等键重试不重复下单、验收、退款或上报；
 - [ ] 支付回调重复投递只确认一次、只创建一张工单；
