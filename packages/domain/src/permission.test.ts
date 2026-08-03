@@ -315,6 +315,21 @@ describe("domain permissions", () => {
     });
   });
 
+  test("exposes platform service sales permissions in domain constants", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("billing.service_order.create");
+    expect(PERMISSION_CODE_VALUES).toContain("billing.service_order.read");
+    expect(PERMISSION_CODE_VALUES).toContain(
+      "billing.service_order.refund.request",
+    );
+    expect(PERMISSION_CODE_VALUES).toContain(
+      "platform.service_product.manage",
+    );
+    expect(PERMISSION_CODE_VALUES).toContain("platform.service_order.read");
+    expect(PERMISSION_CODE_VALUES).toContain(
+      "platform.service_work_order.manage",
+    );
+  });
+
   test("exposes city partner platform permissions in domain constants", () => {
     const expectedPermissions = {
       "platform.partner.read": {

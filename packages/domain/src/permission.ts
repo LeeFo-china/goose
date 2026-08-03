@@ -83,6 +83,9 @@ export const PERMISSION_CODE_VALUES = [
   'billing.recharge.create',
   'billing.recharge.read',
   'billing.recharge.refund.request',
+  'billing.service_order.create',
+  'billing.service_order.read',
+  'billing.service_order.refund.request',
   'wechat_pay.config.read',
   'wechat_pay.config.manage',
   'wechat_pay.order.read',
@@ -101,6 +104,9 @@ export const PERMISSION_CODE_VALUES = [
   'platform.billing.recharge_product.manage',
   'platform.billing.recharge_refund.read',
   'platform.billing.recharge_refund.review',
+  'platform.service_product.manage',
+  'platform.service_order.read',
+  'platform.service_work_order.manage',
   'platform.ocr.recognize',
   'platform.ocr.recognition.read',
   'platform.ocr.tenant_policy.manage',
@@ -371,6 +377,18 @@ export const PermissionCodeConfig: Record<
     label: '申请积分充值退款',
     module: 'billing',
   },
+  'billing.service_order.create': {
+    label: '发起技术服务订单',
+    module: 'billing',
+  },
+  'billing.service_order.read': {
+    label: '查看技术服务订单',
+    module: 'billing',
+  },
+  'billing.service_order.refund.request': {
+    label: '申请技术服务退款',
+    module: 'billing',
+  },
   'wechat_pay.config.read': {
     label: '查看微信支付配置',
     module: 'wechat_pay',
@@ -442,6 +460,18 @@ export const PermissionCodeConfig: Record<
   'platform.billing.recharge_refund.review': {
     label: '审核积分充值退款申请',
     module: 'platform_billing',
+  },
+  'platform.service_product.manage': {
+    label: '管理技术服务商品',
+    module: 'platform_service',
+  },
+  'platform.service_order.read': {
+    label: '查看技术服务订单',
+    module: 'platform_service',
+  },
+  'platform.service_work_order.manage': {
+    label: '管理技术服务工单',
+    module: 'platform_service',
   },
   'platform.ocr.recognize': {
     label: '使用平台证照识别',
