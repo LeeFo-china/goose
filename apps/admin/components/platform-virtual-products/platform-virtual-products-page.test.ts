@@ -83,6 +83,14 @@ describe("平台虚拟商品管理页", () => {
     expect(source).toContain("/channel-mappings/${environment}/validate");
   });
 
+  test("详情面板操作后的数据刷新不插入顶部加载行造成布局跳动", () => {
+    const source = readSource("./platform-virtual-product-detail.tsx");
+
+    expect(source).toContain("showLoading?: boolean");
+    expect(source).toContain("if (showLoading) setPendingAction(\"load\")");
+    expect(source).toContain("await loadDetail({ showLoading: false })");
+  });
+
   test("loading 骨架屏同步虚拟商品列表布局", () => {
     const source = readSource(
       "../../app/(console)/platform/virtual-products/loading.tsx",

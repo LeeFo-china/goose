@@ -72,8 +72,10 @@ export function PlatformVirtualProductDetail({
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
-  async function loadDetail() {
-    setPendingAction("load");
+  async function loadDetail({
+    showLoading = detail === null,
+  }: { showLoading?: boolean } = {}) {
+    if (showLoading) setPendingAction("load");
     setError("");
     try {
       setDetail(await requestBackendJson<PlatformVirtualProductDetailData>(
@@ -83,7 +85,7 @@ export function PlatformVirtualProductDetail({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "虚拟商品详情加载失败");
     } finally {
-      setPendingAction(null);
+      if (showLoading) setPendingAction(null);
     }
   }
 
@@ -103,7 +105,7 @@ export function PlatformVirtualProductDetail({
         fallbackMessage: "虚拟商品状态调整失败",
       });
       setNotice("虚拟商品状态已更新。");
-      await loadDetail();
+      await loadDetail({ showLoading: false });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "虚拟商品状态调整失败");
     } finally {
@@ -135,10 +137,10 @@ export function PlatformVirtualProductDetail({
         { fallbackMessage: "微信状态刷新失败" },
       );
       setNotice("微信商品状态已刷新。");
-      await loadDetail();
+      await loadDetail({ showLoading: false });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "微信虚拟商品操作失败");
-      await loadDetail();
+      await loadDetail({ showLoading: false });
     } finally {
       setPendingAction(null);
     }
