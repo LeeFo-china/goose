@@ -83,7 +83,7 @@ describe("PlatformPaymentConfigService secret bundle revision", () => {
       },
       settingsService: { updatePlatformPaymentSecretSetting },
       pendingRechargeOrders: {
-        hasPendingWechatOrdersForPaymentConfig: mock(async () => false),
+        hasPendingOrdersForPaymentConfig: mock(async () => false),
       },
       secretBundleRevisionFactory: () => REVISION,
     });

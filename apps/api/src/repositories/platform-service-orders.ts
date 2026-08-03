@@ -13,8 +13,10 @@ import {
   type ProductDraftCreateInput,
   type ProductDraftUpdateInput,
   type ProductPublishInput,
+  REFUND_REQUEST_SELECT,
   type ProductRecord,
   type ProductVersionRecord,
+  type RefundRequestRecord,
   type RefundRequestCreateInput,
   TENANT_ORDER_SELECT,
   TENANT_PRODUCT_SELECT,
@@ -381,10 +383,45 @@ export class PlatformServiceOrderRepository {
         reason: input.reason,
         created_by_employee_id: input.createdByEmployeeId,
       })
-      .select("id,tenant_id,service_order_id,idempotency_key,reason,status,created_by_employee_id,created_at,updated_at")
+      .select(REFUND_REQUEST_SELECT)
       .single();
     if (error) throw Errors.dbError("创建平台技术服务退款申请失败", error);
-    return data as Record<string, unknown>;
+    return data as RefundRequestRecord;
+  }
+
+  async findRefundRequestByIdempotencyKey(input: {
+    tenantId: string;
+    orderId: string;
+    idempotencyKey: string;
+  }) {
+    const { data, error } = await this.refundRequests()
+      .select(REFUND_REQUEST_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("service_order_id", input.orderId)
+      .eq("idempotency_key", input.idempotencyKey)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询平台技术服务退款申请失败", error);
+    return (data as RefundRequestRecord | null) ?? null;
+  }
+
+  async markOrderRefundReviewing(input: {
+    tenantId: string;
+    orderId: string;
+    expectedVersion: number;
+  }) {
+    const { data, error } = await this.orders()
+      .update({
+        payment_status: "refund_reviewing",
+        version: input.expectedVersion + 1,
+      })
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .eq("version", input.expectedVersion)
+      .eq("payment_status", "paid")
+      .select(TENANT_ORDER_SELECT)
+      .maybeSingle();
+    if (error) throw Errors.dbError("更新平台技术服务订单退款状态失败", error);
+    return (data as OrderRecord | null) ?? null;
   }
 
   private products() {

@@ -86,6 +86,18 @@ const order = {
   updated_at: "2026-08-03T12:00:00.000Z",
 } satisfies OrderRecord;
 
+const refundRequest = {
+  id: "refund-1",
+  tenant_id: tenantId,
+  service_order_id: orderId,
+  idempotency_key: "00000000-0000-4000-8000-000000000911",
+  reason: "暂不需要服务",
+  status: "reviewing",
+  created_by_employee_id: employeeId,
+  created_at: "2026-08-03T12:01:00.000Z",
+  updated_at: "2026-08-03T12:01:00.000Z",
+};
+
 const paymentConfig = {
   id: configId,
   provider: "wechat_pay",
@@ -167,7 +179,15 @@ function createRepository() {
     findOrderByTenantAndId: mock(
       async (_input: unknown): Promise<OrderRecord | null> => order,
     ),
-    createRefundRequest: mock(async (_input: unknown) => ({ id: "refund-1" })),
+    findRefundRequestByIdempotencyKey: mock(async (_input: unknown) =>
+      null as typeof refundRequest | null
+    ),
+    createRefundRequest: mock(async (_input: unknown) => refundRequest),
+    markOrderRefundReviewing: mock(async (_input: unknown) => ({
+      ...order,
+      payment_status: "refund_reviewing",
+      version: 2,
+    })),
   };
 }
 
@@ -452,4 +472,5 @@ describe("TenantPlatformServiceOrderService", () => {
       code: "SERVICE_ORDER_INVALID_STATE",
     });
   });
+
 });

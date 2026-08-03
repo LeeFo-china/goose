@@ -37,6 +37,9 @@ import {
   requirePublishedVersion,
 } from "@/services/tenant-platform-service-order-snapshots";
 import {
+  requestServiceOrderRefund,
+} from "@/services/tenant-platform-service-order-refunds";
+import {
   wechatPayGateway as defaultWechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
 } from "@/services/wechat-pay-gateway";
@@ -55,6 +58,8 @@ type RepositoryPort = Pick<
   | "markPrepayCreated"
   | "findOrderByTenantAndId"
   | "createRefundRequest"
+  | "findRefundRequestByIdempotencyKey"
+  | "markOrderRefundReviewing"
 >;
 
 type PaymentConfigRepositoryPort = Pick<
@@ -95,7 +100,6 @@ type TenantPlatformServiceOrderServiceDependencies = {
 
 const CREATE_PERMISSION = "billing.service_order.create";
 const READ_PERMISSION = "billing.service_order.read";
-const REFUND_PERMISSION = "billing.service_order.refund.request";
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -280,23 +284,13 @@ export class TenantPlatformServiceOrderService {
     orderId: string,
     input: ServiceRefundRequestInput,
   ) {
-    const tenantId = this.assertCanRefund(authContext);
-    const employeeId = this.requireEmployee(authContext);
-    const order = await this.requireTenantOrder(tenantId, orderId);
-    this.assertOrderVersion(order, input.expected_version);
-    if (order.payment_status !== "paid") {
-      throw Errors.business(
-        409,
-        "只有已支付服务订单可以申请售后",
-        "SERVICE_ORDER_INVALID_STATE",
-      );
-    }
-    return this.repository.createRefundRequest({
-      tenantId,
+    return requestServiceOrderRefund({
+      authContext,
       orderId,
-      idempotencyKey: input.idempotency_key,
-      reason: input.reason,
-      createdByEmployeeId: employeeId,
+      request: input,
+      repository: this.repository,
+      accessPolicyService: this.accessPolicyService,
+      nowFactory: this.nowFactory,
     });
   }
 
@@ -392,14 +386,6 @@ export class TenantPlatformServiceOrderService {
       !this.accessPolicyService.hasPermission(authContext, READ_PERMISSION) &&
       !this.accessPolicyService.hasPermission(authContext, CREATE_PERMISSION)
     ) {
-      throw Errors.forbidden();
-    }
-    return tenantId;
-  }
-
-  private assertCanRefund(authContext: AuthContext) {
-    const tenantId = this.accessPolicyService.assertTenantContext(authContext);
-    if (!this.accessPolicyService.hasPermission(authContext, REFUND_PERMISSION)) {
       throw Errors.forbidden();
     }
     return tenantId;

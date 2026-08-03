@@ -136,6 +136,30 @@ export type RefundRequestCreateInput = {
   createdByEmployeeId: string;
 };
 
+export type RefundRequestRecord = {
+  id: string;
+  tenant_id: string;
+  service_order_id: string;
+  idempotency_key: string;
+  reason: string;
+  status: string;
+  created_by_employee_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export const REFUND_REQUEST_SELECT = [
+  "id",
+  "tenant_id",
+  "service_order_id",
+  "idempotency_key",
+  "reason",
+  "status",
+  "created_by_employee_id",
+  "created_at",
+  "updated_at",
+].join(",");
+
 export const TENANT_PRODUCT_SELECT = [
   "id",
   "code",

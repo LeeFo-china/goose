@@ -88,7 +88,7 @@ async function createService() {
       updatePlatformPaymentSecretSetting: mock(async () => ({})),
     },
     pendingRechargeOrders: {
-      hasPendingWechatOrdersForPaymentConfig: mock(async () => false),
+      hasPendingOrdersForPaymentConfig: mock(async () => false),
     },
     profileValidationService: { validate },
   });

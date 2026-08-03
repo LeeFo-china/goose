@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { Errors } from "@/errors/error-factory";
-import { billingRechargeRepository } from "@/repositories/billing-recharge";
 import {
   platformPaymentConfigRepository,
   type PlatformPaymentProfileCode,
@@ -12,6 +11,7 @@ import type { AuthContext } from "@/services/authorization";
 import {
   assertCriticalPaymentConfigChangeAllowed,
   assertPaymentSecretChangeAllowed,
+  pendingPlatformPaymentOrders,
   type PendingRechargeOrderPort,
 } from "@/services/platform-payment-config-pending-orders";
 import { runPlatformPaymentConfigMutation } from "@/services/platform-payment-config-mutation";
@@ -114,7 +114,7 @@ export class PlatformPaymentConfigService {
     this.repository = dependencies.repository ?? platformPaymentConfigRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.pendingRechargeOrders = dependencies.pendingRechargeOrders ??
-      billingRechargeRepository;
+      pendingPlatformPaymentOrders;
     this.profileValidationService = dependencies.profileValidationService ??
       platformPaymentProfileValidationService;
     this.readinessService = dependencies.readinessService ??

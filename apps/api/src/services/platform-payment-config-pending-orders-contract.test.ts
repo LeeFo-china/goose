@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const platformServiceMigration = readFileSync(
+  join(
+    import.meta.dir,
+    "../../../../supabase/migrations/20260803113000_guard_platform_service_payment_config.sql",
+  ),
+  "utf8",
+);
 
 describe("pending recharge payment config guard migration", () => {
   test("guards critical payment config fields for matching pending wechat orders", () => {
@@ -62,5 +69,29 @@ describe("pending recharge payment config guard migration", () => {
       "tenant_credit_orders_pending_wechat_payment_config_idx",
     );
     expect(migration).toContain("ON public.tenant_credit_orders(payment_config_id)");
+  });
+});
+
+describe("pending platform payment order guard migration", () => {
+  test("extends config and secret guards to platform service orders", () => {
+    expect(platformServiceMigration).toContain(
+      "tenant_service_orders_pending_payment_config_idx",
+    );
+    expect(platformServiceMigration).toContain(
+      "FROM public.tenant_service_orders AS service_order",
+    );
+    expect(platformServiceMigration).toContain(
+      "service_order.payment_config_id = OLD.id",
+    );
+    expect(platformServiceMigration).toContain(
+      "service_order.payment_config_id = v_config_id",
+    );
+    expect(platformServiceMigration).toContain(
+      "service_order.payment_status = 'pending'",
+    );
+    expect(platformServiceMigration).toContain(
+      "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
+    );
+    expect(platformServiceMigration).toContain("ERRCODE = '23514'");
   });
 });
