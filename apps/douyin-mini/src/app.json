@@ -1,0 +1,52 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/cases/index",
+    "pages/sites/index",
+    "pages/lead/index",
+    "pages/company/index",
+    "pages/privacy/index",
+    "pages/case-detail/index",
+    "pages/site-detail/index",
+    "pages/lead-success/index",
+    "pages/service-unavailable/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "装修服务",
+    "navigationBarBackgroundColor": "#F5F5F3",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F5F3"
+  },
+  "tabBar": {
+    "color": "#625F5B",
+    "selectedColor": "#191817",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/tabbar/home.png",
+        "selectedIconPath": "assets/tabbar/home-active.png"
+      },
+      {
+        "pagePath": "pages/cases/index",
+        "text": "案例",
+        "iconPath": "assets/tabbar/cases.png",
+        "selectedIconPath": "assets/tabbar/cases-active.png"
+      },
+      {
+        "pagePath": "pages/sites/index",
+        "text": "工地",
+        "iconPath": "assets/tabbar/sites.png",
+        "selectedIconPath": "assets/tabbar/sites-active.png"
+      },
+      {
+        "pagePath": "pages/lead/index",
+        "text": "免费咨询",
+        "iconPath": "assets/tabbar/lead.png",
+        "selectedIconPath": "assets/tabbar/lead-active.png"
+      }
+    ]
+  }
+}

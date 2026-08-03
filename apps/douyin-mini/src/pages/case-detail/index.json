@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "案例详情",
+  "usingComponents": {
+    "image-gallery": "/components/image-gallery/index",
+    "lead-cta": "/components/lead-cta/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
+  }
+}

@@ -1,0 +1,21 @@
+.home-page { padding-bottom: 56rpx; }
+.home-block { margin-top: 28rpx; }
+.home-hero { margin-top: 24rpx; }
+.home-section { margin-top: 56rpx; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; margin-bottom: 24rpx; }
+.section-link, .text-action, .privacy-link { min-height: 88rpx; margin: 0; padding: 0 8rpx; background: transparent; font-size: 26rpx; line-height: 88rpx; }
+.card-list, .site-list { display: flex; flex-direction: column; gap: 24rpx; }
+.process-list { margin-top: 22rpx; border-top: 1rpx solid #dddad5; }
+.process-item { display: flex; gap: 24rpx; padding: 26rpx 0; border-bottom: 1rpx solid #dddad5; }
+.process-index { width: 60rpx; flex: none; font-size: 24rpx; font-weight: 650; }
+.process-title { color: #191817; font-size: 28rpx; font-weight: 650; }
+.process-description, .process-note, .company-copy, .section-empty { margin-top: 8rpx; color: #625f5b; font-size: 24rpx; line-height: 1.65; }
+.process-note { margin-top: 18rpx; font-size: 22rpx; }
+.trust-panel { padding: 32rpx; }
+.region-list { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 24rpx; }
+.region-tag { padding: 12rpx 18rpx; border-radius: 999rpx; background: #eceae6; color: #625f5b; font-size: 24rpx; }
+.section-empty { margin-top: 20rpx; }
+.company-name { margin-top: 28rpx; color: #191817; font-size: 28rpx; font-weight: 650; }
+.company-copy { margin-top: 12rpx; }
+.text-action { margin-top: 8rpx; }
+.privacy-link { width: 100%; margin-top: 24rpx; color: #706c67; font-size: 23rpx; text-align: center; }

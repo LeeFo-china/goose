@@ -1,0 +1,15 @@
+<page-skeleton tt:if="{{loading}}" />
+<error-state tt:elif="{{error}}" title="咨询服务暂时无法加载" description="请检查网络后重试。" bindretry="load" />
+<empty-state tt:elif="{{disabled}}" title="在线咨询暂未开放" description="装修公司当前未开放短信咨询服务。" />
+<view tt:else class="page-content lead-page">
+  <view class="page-header">
+    <view class="ui-page-title">免费装修咨询</view>
+    <view class="ui-page-description">留下联系方式后，由 {{companyName}} 的服务人员与你沟通；浏览公开内容无需提交信息。</view>
+  </view>
+  <view class="form-block">
+    <lead-form value="{{form}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" phone-ready="{{phoneReady}}" sms-sending="{{smsSending}}" sms-cooldown="{{smsCooldown}}" consented="{{consented}}" submitting="{{submitting}}" field-errors="{{fieldErrors}}" focused-field="{{focusedField}}" optional-details-expanded="{{optionalDetailsExpanded}}" bindfieldchange="onFieldChange" bindsendsms="onSendSms" bindconsentchange="onConsentChange" bindopenpolicy="onOpenPolicy" bindtoggleoptional="onToggleOptionalDetails" bindsubmit="onSubmit" />
+  </view>
+  <view tt:if="{{formError}}" class="form-error ui-error-surface" role="alert">{{formError}}</view>
+  <view class="security-note">验证码仅用于确认本次联系方式。平台不会在客户端读取抖音账号绑定手机号。</view>
+  <button tt:if="{{servicePhone}}" class="phone-action ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onPhoneCall">直接联系装修公司：{{servicePhone}}</button>
+</view>

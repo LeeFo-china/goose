@@ -1,0 +1,8 @@
+@import "../../styles/tokens.ttss";
+
+.error-state { box-sizing: border-box; display: flex; min-height: 360rpx; flex-direction: column; align-items: center; justify-content: center; padding: 48rpx 32rpx; color: #191817; text-align: center; }
+.error-mark { display: flex; width: 68rpx; height: 68rpx; align-items: center; justify-content: center; border-radius: 34rpx; background: #fdecea; color: #b42318; font-size: 36rpx; font-weight: 650; }
+.error-title { margin-top: 24rpx; font-size: 30rpx; font-weight: 650; line-height: 1.4; }
+.error-description { max-width: 540rpx; margin-top: 12rpx; color: #625f5b; font-size: 25rpx; line-height: 1.65; }
+.error-action { min-width: 190rpx; min-height: 88rpx; margin-top: 28rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 27rpx; line-height: 88rpx; }
+.error-action[disabled] { opacity: .6; }

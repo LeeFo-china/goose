@@ -1,0 +1,10 @@
+{
+  "navigationBarTitleText": "公司介绍",
+  "usingComponents": {
+    "tenant-brand": "/components/tenant-brand/index",
+    "image-gallery": "/components/image-gallery/index",
+    "lead-cta": "/components/lead-cta/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
+  }
+}

@@ -137,6 +137,14 @@ export const PERMISSION_CODE_VALUES = [
   'platform.supplier.manage',
   'platform.supplier.blacklist',
   'platform.catalog.manage',
+  'platform.douyin_miniapp.manage',
+  'douyin_miniapp.read',
+  'douyin_miniapp.manage',
+  'douyin_miniapp.audit.submit',
+  'douyin_lead.read',
+  'douyin_lead.assign',
+  'douyin_lead.follow_up',
+  'douyin_lead.convert',
   'service_provider.profile.read',
   'service_provider.profile.manage',
   'supplier.view',
@@ -181,6 +189,13 @@ export interface PermissionStatusConfigItem {
   type: 'default' | 'primary' | 'success' | 'warning' | 'danger';
 }
 
+export interface PermissionCodeConfigItem {
+  label: string;
+  module: string;
+  resource?: string;
+  action?: string;
+}
+
 export const RoleStatusConfig: Record<
   RoleStatus,
   PermissionStatusConfigItem
@@ -217,7 +232,7 @@ export const PermissionOverrideEffectConfig: Record<
 
 export const PermissionCodeConfig: Record<
   PermissionCode,
-  { label: string; module: string }
+  PermissionCodeConfigItem
 > = {
   'dashboard.read': { label: '查看工作台', module: 'dashboard' },
   'task_center.read': { label: '查看待办中心', module: 'task_center' },
@@ -571,6 +586,54 @@ export const PermissionCodeConfig: Record<
   'platform.catalog.manage': {
     label: '管理供应标准目录',
     module: 'platform_supplier_catalog',
+  },
+  'platform.douyin_miniapp.manage': {
+    label: '管理抖音小程序',
+    module: 'platform',
+    resource: 'douyin_miniapp',
+    action: 'manage',
+  },
+  'douyin_miniapp.read': {
+    label: '查看抖音小程序',
+    module: 'douyin_miniapp',
+    resource: 'douyin_miniapp',
+    action: 'read',
+  },
+  'douyin_miniapp.manage': {
+    label: '管理抖音小程序',
+    module: 'douyin_miniapp',
+    resource: 'douyin_miniapp',
+    action: 'manage',
+  },
+  'douyin_miniapp.audit.submit': {
+    label: '提交抖音审核',
+    module: 'douyin_miniapp',
+    resource: 'douyin_miniapp',
+    action: 'audit_submit',
+  },
+  'douyin_lead.read': {
+    label: '查看抖音线索',
+    module: 'douyin_miniapp',
+    resource: 'douyin_lead',
+    action: 'read',
+  },
+  'douyin_lead.assign': {
+    label: '分配抖音线索',
+    module: 'douyin_miniapp',
+    resource: 'douyin_lead',
+    action: 'assign',
+  },
+  'douyin_lead.follow_up': {
+    label: '跟进抖音线索',
+    module: 'douyin_miniapp',
+    resource: 'douyin_lead',
+    action: 'follow_up',
+  },
+  'douyin_lead.convert': {
+    label: '转化抖音线索',
+    module: 'douyin_miniapp',
+    resource: 'douyin_lead',
+    action: 'convert',
   },
   'service_provider.profile.read': {
     label: '查看服务商资料',

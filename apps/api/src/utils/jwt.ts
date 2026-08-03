@@ -4,11 +4,12 @@ import { ErrorCodes } from "@/errors/error-codes";
 
 export type JwtPayload = {
   sub?: string;
-  token_type?: "auth" | "visitor_session" | "h5_marketing" | "platform_partner";
+  token_type?: "auth" | "visitor_session" | "h5_marketing" | "platform_partner"
+    | "douyin_miniapp";
   openid?: string;
   unionid?: string | null;
   visitor_id?: string;
-  login_channel?: "wechat" | "admin_web";
+  login_channel?: "wechat" | "admin_web" | "douyin";
   roles?: string[];
   tenant_id?: string | null;
   tenant_slug?: string | null;
@@ -17,6 +18,9 @@ export type JwtPayload = {
   partner_id?: string | null;
   verified_phone?: string | null;
   share_link_id?: string | null;
+  douyin_installation_id?: string;
+  douyin_app_id?: string;
+  subject_hash?: string;
   iat?: number;
   exp?: number;
 };
@@ -29,12 +33,40 @@ export type H5MarketingTokenPayload = JwtPayload & {
   scene?: string | null;
 };
 
+export type DouyinMiniappTokenPayload = JwtPayload & {
+  token_type: "douyin_miniapp";
+  login_channel: "douyin";
+  tenant_id: string;
+  douyin_installation_id: string;
+  douyin_app_id: string;
+  subject_hash: string;
+};
+
+export type DouyinMiniappTokenInput = Pick<
+  DouyinMiniappTokenPayload,
+  "tenant_id" | "douyin_installation_id" | "douyin_app_id" | "subject_hash"
+>;
+
 type JwtHeader = {
   alg: "HS256";
   typ: "JWT";
 };
 
 const encoder = new TextEncoder();
+const DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS = 2 * 60 * 60;
+const DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
+const DOUYIN_MINIAPP_CLAIMS = new Set([
+  "sub",
+  "token_type",
+  "login_channel",
+  "roles",
+  "tenant_id",
+  "douyin_installation_id",
+  "douyin_app_id",
+  "subject_hash",
+  "iat",
+  "exp",
+]);
 
 function toBase64Url(value: string | Uint8Array) {
   const input = typeof value === "string"
@@ -156,6 +188,19 @@ export function signH5MarketingToken(
   );
 }
 
+export function signDouyinMiniappToken(payload: DouyinMiniappTokenInput) {
+  return signJwtPayload(
+    {
+      ...payload,
+      sub: payload.subject_hash,
+      token_type: "douyin_miniapp",
+      login_channel: "douyin",
+      roles: ["douyin_miniapp"],
+    },
+    `${getDouyinMiniappTokenExpiresInSeconds()}s`,
+  );
+}
+
 export function verifyTokenDetailed(token: string): {
   payload: JwtPayload | null;
   reason: "valid" | "expired" | "invalid";
@@ -204,6 +249,10 @@ export function verifyTokenDetailed(token: string): {
 
     if (payload.token_type === "visitor_session") {
       if (!payload.openid || !payload.visitor_id) {
+        return { payload: null, reason: "invalid" };
+      }
+    } else if (payload.token_type === "douyin_miniapp") {
+      if (!isValidDouyinMiniappPayload(payload, now)) {
         return { payload: null, reason: "invalid" };
       }
     } else if (!payload.sub) {
@@ -260,3 +309,46 @@ export function getH5MarketingTokenExpiresAt(now = Date.now()) {
   );
   return new Date(now + expiresIn * 1000).toISOString();
 }
+
+export function getDouyinMiniappTokenExpiresInSeconds() {
+  const configured = process.env.DOUYIN_MINIAPP_SESSION_EXPIRES_IN;
+  const parsed = configured
+    ? parseJwtExpiresIn(configured)
+    : DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS;
+
+  return Number.isSafeInteger(parsed)
+    && parsed > 0
+    && parsed <= DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS
+    ? parsed
+    : DOUYIN_MINIAPP_DEFAULT_EXPIRES_IN_SECONDS;
+}
+
+function isValidDouyinMiniappPayload(
+  payload: JwtPayload,
+  now: number,
+): payload is DouyinMiniappTokenPayload {
+  return Object.keys(payload).every((claim) => DOUYIN_MINIAPP_CLAIMS.has(claim))
+    && payload.login_channel === "douyin"
+    && Array.isArray(payload.roles)
+    && payload.roles.length === 1
+    && payload.roles[0] === "douyin_miniapp"
+    && typeof payload.tenant_id === "string"
+    && UUID_PATTERN.test(payload.tenant_id)
+    && typeof payload.douyin_installation_id === "string"
+    && UUID_PATTERN.test(payload.douyin_installation_id)
+    && typeof payload.douyin_app_id === "string"
+    && payload.douyin_app_id.trim() === payload.douyin_app_id
+    && payload.douyin_app_id.length > 0
+    && payload.douyin_app_id.length <= 128
+    && typeof payload.subject_hash === "string"
+    && /^[a-f0-9]{64}$/.test(payload.subject_hash)
+    && payload.sub === payload.subject_hash
+    && Number.isSafeInteger(payload.iat)
+    && Number.isSafeInteger(payload.exp)
+    && payload.iat! >= 0
+    && payload.iat! <= now + 60
+    && payload.exp! > payload.iat!
+    && payload.exp! - payload.iat! <= DOUYIN_MINIAPP_MAX_EXPIRES_IN_SECONDS;
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;

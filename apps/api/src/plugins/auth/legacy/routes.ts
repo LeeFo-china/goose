@@ -1,5 +1,8 @@
 import type { VerifiedJwtPayload } from "./types";
 import { isTenantOnboardingOcrRoute } from "./tenant-onboarding-routes";
+import { shouldBypassDouyinAuth } from "./douyin-routes";
+
+export { isDouyinMiniappRoute } from "./douyin-routes";
 
 const publicRoutes = new Set([
   "/",
@@ -8,7 +11,6 @@ const publicRoutes = new Set([
   "/admin/auth/send-code",
   "/admin/auth/login",
 ]);
-
 const partnerPortalRoutes = new Set([
   "/partner/auth/me",
   "/partner/dashboard/summary",
@@ -19,7 +21,6 @@ const partnerPortalRoutes = new Set([
   "/partner/dashboard/commission-ledger",
   "/partner/dashboard/settlements",
 ]);
-
 export function isPublicRoute(method: string, url: string) {
   if (publicRoutes.has(url)) {
     return true;
@@ -183,18 +184,19 @@ export function isPublicRoute(method: string, url: string) {
 }
 
 export function isPartnerAuthRoute(method: string, url: string) {
-  return (
-    method === "POST" &&
+  return method === "POST" &&
     (
       url === "/partner/auth/login" ||
       url === "/partner/auth/send-code" ||
       url === "/partner/auth/bind-phone"
-    )
-  );
+    );
 }
-
 export function shouldBypassAuth(method: string, url: string) {
-  return isPartnerAuthRoute(method, url) || isInternalSiteContentPreviewRoute(method, url);
+  return (
+    isPartnerAuthRoute(method, url)
+    || isInternalSiteContentPreviewRoute(method, url)
+    || shouldBypassDouyinAuth(method, url)
+  );
 }
 
 function isPublicSiteContentRoute(method: string, url: string) {
@@ -483,17 +485,14 @@ function isTenantOnboardingApplicantRoute(method: string, url: string) {
 }
 
 function isEffectiveBrandingRoute(method: string, url: string) {
-  return (method === "GET" || method === "HEAD") &&
-    url === "/branding/effective";
+  return (method === "GET" || method === "HEAD") && url === "/branding/effective";
 }
 
 export function isPureVisitorPayload(payload: VerifiedJwtPayload) {
   const roles = Array.isArray(payload.roles) ? payload.roles : [];
-  return (
-    roles.length === 1 &&
-    roles[0] === "visitor" &&
-    !payload.tenant_id &&
-    !payload.customer_id &&
-    !payload.employee_id
-  );
+  return roles.length === 1
+    && roles[0] === "visitor"
+    && !payload.tenant_id
+    && !payload.customer_id
+    && !payload.employee_id;
 }

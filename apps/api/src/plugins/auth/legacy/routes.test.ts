@@ -1,11 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isDouyinMiniappRoute,
   isPartnerAuthRoute,
   isPartnerPortalRoute,
   isPublicRoute,
   isVisitorSessionRoute,
   shouldBypassAuth,
 } from "./routes";
+
+describe("Douyin miniapp route isolation", () => {
+  test("bypasses only session exchange and classifies the protected namespace", () => {
+    expect(shouldBypassAuth("POST", "/douyin-mini/auth/session")).toBe(true);
+    expect(shouldBypassAuth("GET", "/douyin-mini/auth/session")).toBe(false);
+    expect(shouldBypassAuth("POST", "/douyin-mini/auth/session/extra")).toBe(false);
+    expect(isDouyinMiniappRoute("/douyin-mini/bootstrap")).toBe(true);
+    expect(isDouyinMiniappRoute("/douyin-mini/cases?page=1")).toBe(true);
+    expect(isDouyinMiniappRoute("/douyin-miniature/bootstrap")).toBe(false);
+  });
+});
 
 describe("isVisitorSessionRoute", () => {
   test("allows applicant routes only with visitor sessions", () => {
@@ -230,6 +242,46 @@ describe("auth public route allowlist", () => {
       ["GET", "/internal/site-content-extra/versions/version-id/preview"],
     ] as const) {
       expect(shouldBypassAuth(method, route)).toBe(false);
+    }
+  });
+
+  test("bypasses bearer auth only for exact Douyin callback POST routes", () => {
+    const callbackRoutes = [
+      "/douyin-thirdparty/events/authorization",
+      "/douyin-thirdparty/events/message",
+    ];
+
+    for (const route of callbackRoutes) {
+      expect(shouldBypassAuth("POST", route)).toBe(true);
+      expect(isPublicRoute("POST", route)).toBe(false);
+      expect(shouldBypassAuth("GET", route)).toBe(false);
+      expect(shouldBypassAuth("HEAD", route)).toBe(false);
+    }
+
+    expect(shouldBypassAuth("POST", "/douyin-thirdparty/events")).toBe(false);
+    expect(shouldBypassAuth(
+      "POST",
+      "/douyin-thirdparty/events/authorization/extra",
+    )).toBe(false);
+    expect(shouldBypassAuth("POST", "/douyin-thirdparty/events/unknown")).toBe(false);
+  });
+
+  test("bypasses bearer auth only for one app-scoped Douyin message callback segment", () => {
+    const route = "/douyin-thirdparty/events/message/tt-authorizer-1/callback";
+
+    expect(shouldBypassAuth("POST", route)).toBe(true);
+    expect(isPublicRoute("POST", route)).toBe(false);
+    expect(shouldBypassAuth("GET", route)).toBe(false);
+    expect(shouldBypassAuth("HEAD", route)).toBe(false);
+
+    for (const invalidRoute of [
+      "/douyin-thirdparty/events/message//callback",
+      "/douyin-thirdparty/events/message/tt-authorizer-1",
+      "/douyin-thirdparty/events/message/tt-authorizer-1/callback/extra",
+      "/douyin-thirdparty/events/message/one/two/callback",
+      `/douyin-thirdparty/events/message/${"a".repeat(129)}/callback`,
+    ]) {
+      expect(shouldBypassAuth("POST", invalidRoute)).toBe(false);
     }
   });
 

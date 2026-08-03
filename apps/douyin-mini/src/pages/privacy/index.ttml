@@ -1,0 +1,13 @@
+<page-skeleton tt:if="{{loading}}" />
+<error-state tt:elif="{{error}}" bindretry="load" />
+<view tt:else class="page-content policy-page">
+  <view class="policy-kicker">隐私政策与用户协议</view><view class="policy-title">清楚说明信息如何使用</view>
+  <view class="version-card"><view class="version-label">当前展示版本</view><view class="version-value">{{version}}</view></view>
+  <view class="policy-section"><view class="section-title">1. 服务提供方</view><view class="policy-copy">本小程序由平台提供技术能力，由 {{companyName}} 向你提供装修内容浏览和咨询服务。</view></view>
+  <view class="policy-section"><view class="section-title">2. 信息处理范围</view><view class="policy-copy">浏览公开内容时，小程序会使用必要的会话、安全和入口信息。只有当你主动提交免费咨询时，才会按表单提示处理联系方式、装修需求、验证码校验结果及必要的入口归因信息。</view></view>
+  <view class="policy-section"><view class="section-title">3. 使用目的</view><view class="policy-copy">相关信息仅用于完成身份校验、响应装修咨询、安排后续沟通、保障服务安全，以及统计不包含业主私密内容的服务效果。</view></view>
+  <view class="policy-section"><view class="section-title">4. 你的选择与权利</view><view class="policy-copy">你可以选择不提交咨询信息；不提交不会影响公开案例和工地内容浏览。如需查询、更正或删除已提交的信息，可通过下方公开电话联系服务提供方。</view></view>
+  <view class="policy-section"><view class="section-title">5. 用户使用约定</view><view class="policy-copy">请勿提交违法、有害或侵犯他人权益的内容。案例、报价和服务流程仅供沟通参考，具体权利义务以你与装修公司最终确认的合同或服务文件为准。</view></view>
+  <view class="policy-section"><view class="section-title">6. 联系方式</view><view class="policy-copy"><view>服务提供方：{{companyName}}</view><view tt:if="{{servicePhone}}">公开电话：{{servicePhone}}</view></view></view>
+  <view class="policy-note">本政策以当前展示版本为准；如规则更新，小程序将同步展示新的版本信息。</view>
+</view>

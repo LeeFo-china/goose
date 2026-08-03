@@ -1,0 +1,15 @@
+.company-page { padding-bottom: 56rpx; }
+.company-section { margin-top: 60rpx; }
+.company-intro { padding: 38rpx; border-radius: 24rpx; background: #fff; box-shadow: 0 4rpx 16rpx rgba(37,33,30,.07); }
+.section-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; }
+.section-title { margin-top: 8rpx; color: #25211e; font-size: 34rpx; font-weight: 600; line-height: 1.4; }
+.body-copy { margin-top: 22rpx; color: #5f5853; font-size: 26rpx; line-height: 1.8; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 14rpx; margin-top: 24rpx; }
+.tag { padding: 14rpx 20rpx; border: 1rpx solid #ddd6d0; border-radius: 10rpx; background: #fff; color: #514b47; font-size: 24rpx; }
+.qualification-list { margin: 24rpx 0; border-top: 1rpx solid #dfdad5; }
+.qualification-item { padding: 24rpx 0; border-bottom: 1rpx solid #dfdad5; color: #514b47; font-size: 26rpx; }
+.contact-card { margin-bottom: 34rpx; padding: 34rpx; border-radius: 24rpx; background: #2c2825; color: #fff; }
+.contact-card .section-kicker { color: #e8b49f; }
+.contact-row { display: flex; gap: 24rpx; padding-top: 26rpx; }
+.contact-label { width: 120rpx; flex: none; color: rgba(255,255,255,.65); font-size: 23rpx; }
+.contact-value { color: #fff; font-size: 25rpx; line-height: 1.55; }

@@ -1,0 +1,13 @@
+<view tt:if="{{loading}}" class="site site--loading"><view class="site-skeleton"></view></view>
+<view tt:elif="{{error}}" class="site site--state">
+  <view>工地加载失败</view><button class="state-action" bindtap="onRetry">重试</button>
+</view>
+<button tt:else class="site ui-card ui-pressable" hover-class="ui-pressable--pressed" hover-start-time="20" bindtap="onSelect" aria-label="查看工地 {{item.community || '公开在建工地'}}">
+  <image tt:if="{{(item.cover_image_url || fallbackImageUrl) && !imageFailed}}" class="site-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" lazy-load="true" binderror="onImageError" />
+  <view tt:else class="site-image site-image--empty">施工图片待更新</view>
+  <view class="site-body">
+    <view class="site-row"><view class="site-title">{{item.community || '公开在建工地'}}</view><view class="site-stage" style="border-color: {{primaryColor}}; color: {{primaryColor}}">{{item.status || '施工中'}}</view></view>
+    <view class="site-meta">{{item.city || ''}}{{item.district || ''}}<text tt:if="{{item.area}}"> · {{item.area}}㎡</text></view>
+    <view tt:if="{{item.updated_at}}" class="site-time">最近更新 {{item.updated_at}}</view>
+  </view>
+</button>

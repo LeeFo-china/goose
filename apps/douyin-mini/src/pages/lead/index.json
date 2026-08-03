@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "免费咨询",
+  "usingComponents": {
+    "lead-form": "/components/lead-form/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
+  }
+}

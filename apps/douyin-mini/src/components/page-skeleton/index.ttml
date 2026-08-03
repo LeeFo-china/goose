@@ -1,0 +1,5 @@
+<view class="skeleton" aria-label="正在加载">
+  <view class="skeleton-hero"></view>
+  <view class="skeleton-title"></view>
+  <view tt:for="{{rows}}" tt:key="*this" class="skeleton-row"></view>
+</view>

@@ -1,0 +1,8 @@
+.gallery { display: flex; flex-wrap: wrap; gap: 12rpx; }
+.gallery-item, .gallery-skeleton { box-sizing: border-box; width: calc((100% - 12rpx) / 2); height: 260rpx; overflow: hidden; padding: 0; border: 0; border-radius: 18rpx; background: #ece9e5; }
+.gallery-image { width: 100%; height: 100%; }
+.gallery--loading .gallery-skeleton { animation: gallery-pulse 1.4s ease-in-out infinite; }
+.gallery-state { display: flex; min-height: 220rpx; flex-direction: column; align-items: center; justify-content: center; border: 1rpx solid #e6e1dc; border-radius: 24rpx; color: #665f5a; font-size: 26rpx; text-align: center; }
+.gallery-action { min-width: 144rpx; min-height: 88rpx; margin-top: 18rpx; border-radius: 12rpx; background: #25211e; color: #fff; font-size: 26rpx; line-height: 88rpx; }
+@keyframes gallery-pulse { 50% { opacity: .55; } }
+@media (prefers-reduced-motion: reduce) { .gallery--loading .gallery-skeleton { animation: none; opacity: .65; } }

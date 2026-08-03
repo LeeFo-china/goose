@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "sms-code-input": "/components/sms-code-input/index",
+    "privacy-consent": "/components/privacy-consent/index"
+  }
+}
