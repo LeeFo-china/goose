@@ -2,6 +2,70 @@ import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 
 describe("domain permissions", () => {
+  test("exposes the Douyin miniapp platform permission", () => {
+    expect(PERMISSION_CODE_VALUES).toContain("platform.douyin_miniapp.manage");
+    expect(PermissionCodeConfig["platform.douyin_miniapp.manage"]).toEqual({
+      label: "管理抖音小程序",
+      module: "platform",
+      resource: "douyin_miniapp",
+      action: "manage",
+    });
+  });
+
+  test("exposes tenant Douyin workspace and lead permissions", () => {
+    const expectedPermissions = {
+      "douyin_miniapp.read": {
+        label: "查看抖音小程序",
+        module: "douyin_miniapp",
+        resource: "douyin_miniapp",
+        action: "read",
+      },
+      "douyin_miniapp.manage": {
+        label: "管理抖音小程序",
+        module: "douyin_miniapp",
+        resource: "douyin_miniapp",
+        action: "manage",
+      },
+      "douyin_miniapp.audit.submit": {
+        label: "提交抖音审核",
+        module: "douyin_miniapp",
+        resource: "douyin_miniapp",
+        action: "audit_submit",
+      },
+      "douyin_lead.read": {
+        label: "查看抖音线索",
+        module: "douyin_miniapp",
+        resource: "douyin_lead",
+        action: "read",
+      },
+      "douyin_lead.assign": {
+        label: "分配抖音线索",
+        module: "douyin_miniapp",
+        resource: "douyin_lead",
+        action: "assign",
+      },
+      "douyin_lead.follow_up": {
+        label: "跟进抖音线索",
+        module: "douyin_miniapp",
+        resource: "douyin_lead",
+        action: "follow_up",
+      },
+      "douyin_lead.convert": {
+        label: "转化抖音线索",
+        module: "douyin_miniapp",
+        resource: "douyin_lead",
+        action: "convert",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
+
   test("exposes tenant onboarding workflow permissions", () => {
     expect(PermissionCodeConfig["platform.tenant_onboarding.review"]).toEqual({
       label: "审核装企入驻",

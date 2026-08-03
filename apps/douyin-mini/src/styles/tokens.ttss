@@ -1,0 +1,85 @@
+.ui-page-title {
+  color: #191817;
+  font-size: 42rpx;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.ui-page-description {
+  margin-top: 12rpx;
+  color: #625f5b;
+  font-size: 24rpx;
+  line-height: 1.65;
+}
+
+.ui-section-title {
+  color: #191817;
+  font-size: 34rpx;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.ui-card {
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1rpx solid #dddad5;
+  border-radius: 16rpx;
+  background: #fff;
+  color: #191817;
+}
+
+.ui-pressable {
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.ui-pressable--pressed {
+  opacity: .88;
+  transform: scale(.99);
+}
+
+.ui-meta {
+  color: #706c67;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.ui-control {
+  box-sizing: border-box;
+  border: 1rpx solid #dddad5;
+  border-radius: 12rpx;
+  background: #fff;
+  color: #191817;
+}
+
+.ui-control--error {
+  border-color: #b42318;
+}
+
+.ui-field-error {
+  margin-top: 10rpx;
+  color: #b42318;
+  font-size: 22rpx;
+  line-height: 1.5;
+}
+
+.ui-hint-surface {
+  border-radius: 12rpx;
+  background: #eceae6;
+  color: #625f5b;
+}
+
+.ui-error-surface {
+  border-radius: 12rpx;
+  background: #fdecea;
+  color: #8e1b13;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-pressable {
+    transition: none;
+  }
+
+  .ui-pressable--pressed {
+    transform: none;
+  }
+}

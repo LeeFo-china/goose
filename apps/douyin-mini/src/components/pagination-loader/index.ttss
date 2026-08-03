@@ -1,0 +1,5 @@
+@import "../../styles/tokens.ttss";
+
+.pagination { display: flex; min-height: 112rpx; align-items: center; justify-content: center; padding: 12rpx 0; }
+.pagination-copy { color: #625f5b; font-size: 24rpx; line-height: 1.5; }
+.pagination-action { min-height: 88rpx; margin: 0; padding: 0 28rpx; border-radius: 12rpx; background: transparent; color: #191817; font-size: 26rpx; line-height: 88rpx; }

@@ -1,0 +1,10 @@
+<page-skeleton tt:if="{{loading}}" />
+<error-state tt:elif="{{error}}" bindretry="load" />
+<view tt:elif="{{company}}" class="page-content company-page">
+  <tenant-brand name="{{company.name}}" city="{{city}}" logo-url="{{company.logo_url}}" />
+  <view class="company-section company-intro"><view class="section-kicker">公司简介</view><view class="section-title">认真了解，再做选择</view><view class="body-copy">{{company.summary || '公司公开介绍正在完善。'}}</view></view>
+  <view class="company-section"><view class="section-kicker">服务范围</view><view class="section-title">本地服务区域</view><view tt:if="{{regionLabels.length}}" class="tag-list"><view tt:for="{{regionLabels}}" tt:key="*this" class="tag">{{item}}</view></view><view tt:else class="body-copy">服务区域正在完善，可提交需求后确认。</view></view>
+  <view class="company-section"><view class="section-kicker">资质信息</view><view class="section-title">公开资质与荣誉</view><view tt:if="{{company.qualifications.length}}" class="qualification-list"><view tt:for="{{company.qualifications}}" tt:key="title" class="qualification-item">{{item.title}}</view></view><view tt:else class="body-copy">暂未发布公开资质图片。</view><view tt:if="{{qualificationImages.length}}"><image-gallery items="{{qualificationImages}}" /></view></view>
+  <view class="company-section contact-card"><view class="section-kicker">公开联系信息</view><view class="contact-row"><view class="contact-label">服务电话</view><view class="contact-value">{{company.service_phone}}</view></view><view class="contact-row"><view class="contact-label">门店地址</view><view class="contact-value">{{company.public_address || '公开地址正在完善'}}</view></view></view>
+  <view><lead-cta primary-color="{{primaryColor}}" bindaction="onLead" /></view>
+</view>

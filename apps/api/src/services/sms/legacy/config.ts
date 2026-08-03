@@ -46,7 +46,7 @@ export function getTemplateConfigKey(input: {
     return `${prefix}_${tenantOnboardingSuffixes[purpose]}`;
   }
 
-  if (input.purpose === "bind_customer") {
+  if (input.purpose === "bind_customer" || input.purpose === "douyin_lead") {
     return `${prefix}_BIND_CUSTOMER`;
   }
 

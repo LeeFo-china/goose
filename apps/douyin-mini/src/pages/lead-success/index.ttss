@@ -1,0 +1,6 @@
+.success-page { box-sizing: border-box; min-height: 100vh; padding: 132rpx 48rpx 64rpx; background: #f7f6f4; text-align: center; }
+.success-mark { display: flex; width: 104rpx; height: 104rpx; margin: 0 auto; align-items: center; justify-content: center; border-radius: 52rpx; background: #dfeadf; color: #356044; font-size: 54rpx; font-weight: 600; }
+.success-title { margin-top: 38rpx; color: #25211e; font-size: 42rpx; font-weight: 600; }
+.success-copy { margin-top: 22rpx; color: #5f5853; font-size: 27rpx; line-height: 1.8; }
+.success-note { margin-top: 32rpx; padding: 24rpx; border-radius: 16rpx; background: #eeeae6; color: #716963; font-size: 23rpx; line-height: 1.7; }
+.home-button { min-height: 96rpx; margin-top: 52rpx; border-radius: 14rpx; background: #2c2825; color: #fff; font-size: 28rpx; line-height: 96rpx; }

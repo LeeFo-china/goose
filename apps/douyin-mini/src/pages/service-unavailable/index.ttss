@@ -1,0 +1,46 @@
+.page-shell {
+  box-sizing: border-box;
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 64rpx 32rpx;
+}
+
+.status-card {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 64rpx 40rpx;
+  border: 1rpx solid #e7dfd5;
+  border-radius: 24rpx;
+  background: #fffdf9;
+  text-align: center;
+}
+
+.status-mark {
+  display: flex;
+  width: 88rpx;
+  height: 88rpx;
+  margin: 0 auto 32rpx;
+  align-items: center;
+  justify-content: center;
+  border-radius: 44rpx;
+  background: #f3e2da;
+  color: #a94628;
+  font-size: 48rpx;
+  font-weight: 600;
+}
+
+.status-title {
+  color: #25211e;
+  font-size: 36rpx;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.status-description {
+  margin-top: 20rpx;
+  color: #756c65;
+  font-size: 28rpx;
+  line-height: 1.7;
+}

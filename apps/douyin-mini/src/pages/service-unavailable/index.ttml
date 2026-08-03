@@ -1,0 +1,7 @@
+<view class="page-shell">
+  <view class="status-card">
+    <view class="status-mark">!</view>
+    <view class="status-title">{{title}}</view>
+    <view class="status-description">{{description}}</view>
+  </view>
+</view>

@@ -1,0 +1,9 @@
+<view class="brand" aria-label="{{name}}">
+  <view tt:if="{{loading}}" class="brand-logo brand-logo--loading"></view>
+  <image tt:elif="{{logoUrl && !logoFailed}}" class="brand-logo" src="{{logoUrl}}" mode="aspectFill" binderror="onLogoError" />
+  <view tt:else class="brand-logo brand-logo--fallback" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}">装</view>
+  <view class="brand-copy">
+    <view class="brand-name">{{loading ? '正在加载' : name}}</view>
+    <view tt:if="{{city}}" class="brand-city">{{city}}服务</view>
+  </view>
+</view>

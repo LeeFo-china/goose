@@ -1,0 +1,6 @@
+@import "../../styles/tokens.ttss";
+
+.sms-row { display: flex; gap: 14rpx; }
+.sms-input { min-width: 0; height: 92rpx; flex: 1; padding: 0 22rpx; font-size: 27rpx; }
+.sms-button { box-sizing: border-box; width: 226rpx; height: 92rpx; margin: 0; padding: 0 10rpx; border: 1rpx solid #191817; border-radius: 12rpx; background: #fff; color: #191817; font-size: 24rpx; line-height: 90rpx; }
+.sms-button[disabled] { border-color: #dddad5; background: #eceae6; color: #706c67; opacity: 1; }

@@ -1,0 +1,11 @@
+{
+  "navigationBarTitleText": "装修案例",
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "case-card": "/components/case-card/index",
+    "pagination-loader": "/components/pagination-loader/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
+  }
+}

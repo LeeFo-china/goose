@@ -1,0 +1,13 @@
+{
+  "navigationBarTitleText": "装修服务",
+  "usingComponents": {
+    "tenant-brand": "/components/tenant-brand/index",
+    "hero-banner": "/components/hero-banner/index",
+    "trust-metrics": "/components/trust-metrics/index",
+    "case-card": "/components/case-card/index",
+    "site-card": "/components/site-card/index",
+    "empty-state": "/components/empty-state/index",
+    "error-state": "/components/error-state/index",
+    "page-skeleton": "/components/page-skeleton/index"
+  }
+}

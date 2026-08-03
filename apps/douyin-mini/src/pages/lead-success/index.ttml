@@ -1,0 +1,7 @@
+<view class="success-page">
+  <view class="success-mark">✓</view>
+  <view class="success-title">装修需求已收到</view>
+  <view class="success-copy">无论这是首次提交，还是同一需求的重复提交，我们都只会按有效记录安排处理。装修公司服务人员将尽快与你沟通。</view>
+  <view class="success-note">请留意电话或短信，具体方案、报价与工期以双方后续确认的信息为准。</view>
+  <button class="home-button" bindtap="onBackHome">返回首页继续浏览</button>
+</view>

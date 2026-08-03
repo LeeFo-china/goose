@@ -1,0 +1,16 @@
+<view tt:if="{{loading}}" class="case case--loading"><view class="case-skeleton"></view></view>
+<view tt:elif="{{error}}" class="case case--state">
+  <view>案例加载失败</view><button class="state-action" bindtap="onRetry">重试</button>
+</view>
+<button tt:else class="case ui-card ui-pressable" hover-class="ui-pressable--pressed" hover-start-time="20" bindtap="onSelect" aria-label="查看案例 {{item.title}}">
+  <image tt:if="{{(item.cover_image_url || fallbackImageUrl) && !imageFailed}}" class="case-image" src="{{item.cover_image_url || fallbackImageUrl}}" mode="aspectFill" lazy-load="true" binderror="onImageError" />
+  <view tt:else class="case-image case-image--empty">案例图片待更新</view>
+  <view class="case-body">
+    <view class="case-title">{{item.title || '装修案例'}}</view>
+    <view class="case-meta">{{item.layout || '户型待定'}}<text tt:if="{{item.area}}"> · {{item.area}}㎡</text></view>
+    <view class="case-footer">
+      <view class="case-location">{{item.community || item.district || item.city || '区域待定'}}</view>
+      <view tt:if="{{item.budget_band}}" class="case-budget" style="border-color: {{primaryColor}}; color: {{primaryColor}}">{{item.budget_band}}</view>
+    </view>
+  </view>
+</button>

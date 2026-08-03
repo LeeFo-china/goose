@@ -46,4 +46,18 @@ describe("admin nav active matching", () => {
 
     expect(activeLabels).toEqual(["服务商资料"]);
   });
+
+  test("matches the Douyin miniapp workspace inside its own section", () => {
+    const douyinItems = tenantNavGroups.find(
+      (group) => group.label === "抖音小程序",
+    )?.items ?? [];
+
+    expect(douyinItems).toHaveLength(1);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/workspace",
+        douyinItems[0]?.href ?? "",
+      ),
+    ).toBe(true);
+  });
 });

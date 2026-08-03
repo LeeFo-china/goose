@@ -1,0 +1,7 @@
+.skeleton { padding: 32rpx; }
+.skeleton-hero, .skeleton-title, .skeleton-row { border-radius: 18rpx; background: #eceae6; animation: skeleton-pulse 1.4s ease-in-out infinite; }
+.skeleton-hero { height: 320rpx; }
+.skeleton-title { width: 42%; height: 40rpx; margin-top: 44rpx; }
+.skeleton-row { height: 180rpx; margin-top: 24rpx; }
+@keyframes skeleton-pulse { 50% { opacity: .52; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-hero, .skeleton-title, .skeleton-row { animation: none; opacity: .65; } }

@@ -1,0 +1,14 @@
+<view tt:if="{{loading}}" class="hero hero--loading"><view class="hero-skeleton"></view></view>
+<view tt:elif="{{error}}" class="hero hero--error">
+  <view class="hero-title">首页内容暂时无法加载</view>
+  <button class="hero-retry ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetry">重新加载</button>
+</view>
+<view tt:else class="hero {{imageUrl && !imageFailed ? 'hero--with-image' : 'hero--without-image'}}">
+  <image tt:if="{{imageUrl && !imageFailed}}" class="hero-image" src="{{imageUrl}}" mode="aspectFill" binderror="onImageError" />
+  <view class="hero-overlay"></view>
+  <view class="hero-content">
+    <view class="hero-title">{{title}}</view>
+    <view class="hero-subtitle">{{subtitle}}</view>
+    <button class="hero-action ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{resolvedPrimaryColor}}; color: {{resolvedPrimaryTextColor}}" bindtap="onAction">{{actionLabel}}</button>
+  </view>
+</view>
