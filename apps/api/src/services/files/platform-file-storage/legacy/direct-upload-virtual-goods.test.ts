@@ -138,8 +138,12 @@ describe("virtual goods image direct upload initialization", () => {
       Headers: {
         "Content-Length": validPng.length,
         "Content-Type": "image/png",
+        "x-cos-acl": "public-read",
         "x-cos-forbid-overwrite": true,
       },
+    }));
+    expect(response.headers).toEqual(expect.objectContaining({
+      "x-cos-acl": "public-read",
     }));
     expect(response.upload_intent).toBeString();
   });

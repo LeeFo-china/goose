@@ -92,6 +92,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     ? {
       "Content-Length": input.sizeBytes,
       "Content-Type": input.mimetype,
+      ...(isVirtualGoodsImage ? { "x-cos-acl": "public-read" } : {}),
       "x-cos-forbid-overwrite": true,
     }
     : isPrivateLicense
@@ -138,6 +139,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
           isBrandLogo || isVirtualGoodsImage
         ? {
           "content-length": String(input.sizeBytes),
+          ...(isVirtualGoodsImage ? { "x-cos-acl": "public-read" } : {}),
           "x-cos-forbid-overwrite": "true",
         }
         : {}),
