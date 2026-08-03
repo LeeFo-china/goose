@@ -17,6 +17,10 @@ describe('PlatformVirtualProductsController routes', () => {
       "@Post('/platform/virtual-products/:id/activate')",
       "@Post('/platform/virtual-products/:id/suspend')",
       "@Post('/platform/virtual-products/:id/archive')",
+      "@Get('/platform/virtual-products/:id/channel-mappings/:environment')",
+      "@Post('/platform/virtual-products/:id/channel-mappings/:environment/goods/upload')",
+      "@Post('/platform/virtual-products/:id/channel-mappings/:environment/goods/publish')",
+      "@Post('/platform/virtual-products/:id/channel-mappings/:environment/validate')",
     ]) {
       expect(controller).toContain(route);
     }

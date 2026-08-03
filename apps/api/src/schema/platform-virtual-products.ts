@@ -100,6 +100,8 @@ export const PlatformVirtualProductChannelParamsSchema = z.object({
   environment: z.enum(VIRTUAL_PAYMENT_ENVIRONMENTS),
 }).strict();
 
+export const PlatformVirtualProductEmptySchema = z.object({}).strict();
+
 export const PlatformVirtualProductVersionCommandSchema = z.object({
   version: z.number().int().positive(),
 }).strict();

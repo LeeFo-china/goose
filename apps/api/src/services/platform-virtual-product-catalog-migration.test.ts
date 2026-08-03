@@ -50,4 +50,10 @@ describe('platform virtual product catalog migration', () => {
     expect(value).toContain('provider_product_id');
     expect(value).toContain('on conflict');
   });
+
+  test('does not define duplicate insert columns', () => {
+    const value = sql();
+
+    expect(value).not.toContain('code, name, module, module, resource');
+  });
 });
