@@ -6,6 +6,10 @@ import type {
   QueryVirtualGoodsUploadResult,
 } from './wechat-virtual-payment-gateway-contracts';
 
+process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
+process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
+
 mock.module('./access-policy', () => ({
   accessPolicyService: { assertPermission: mock(() => 'all') },
 }));
@@ -91,16 +95,18 @@ const productA = {
     last_error_code: null,
     last_error_summary: null,
     version: 2,
+    updated_at: '2026-08-03T00:00:00.000Z',
   },
   channel: {
     id: CHANNEL_ID,
-    provider: 'wechat_virtual',
-    environment: 'production',
+    provider: 'wechat_virtual' as const,
+    environment: 'production' as const,
     app_id: 'wx-app',
     offer_id: 'offer-id',
     encrypted_secret_ref: 'WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE',
     secret_revision: 2,
-    status: 'active',
+    status: 'active' as const,
+    version: 2,
   },
 };
 
@@ -211,6 +217,7 @@ function createFixture(options: {
     },
     begin,
     finish,
+    getSnapshot,
     assertPermission,
     queryUploadGoods,
     queryPublishGoods,
@@ -268,6 +275,28 @@ describe('PlatformVirtualProductChannelsService', () => {
     );
   });
 
+  test('returns the refreshed local snapshot after persisting remote evidence', async () => {
+    const fixture = createFixture({
+      running: operationForProductA,
+      upload: uploadTask(3, [{
+        id: productA.mapping.provider_product_id,
+        name: productA.name,
+        price: productA.amount_fen,
+        remark: productA.purchase_notes,
+        itemUrl: IMAGE_URL,
+        uploadStatus: 2,
+      }]),
+    });
+    const service = await fixture.serviceFactory();
+
+    await expect(service.refresh(
+      auth as AuthContext,
+      PRODUCT_A,
+      'production',
+    )).resolves.toEqual(productA);
+    expect(fixture.getSnapshot).toHaveBeenCalledTimes(3);
+  });
+
   test('production upload requires publish permission and uses database snapshot', async () => {
     const fixture = createFixture();
     const service = await fixture.serviceFactory();
@@ -316,5 +345,20 @@ describe('PlatformVirtualProductChannelsService', () => {
     expect(fixture.startPublishGoods).toHaveBeenCalledWith(
       expect.objectContaining({ providerProductId: 'vp_branding_y' }),
     );
+  });
+
+  test('validate does not report success without terminal synchronized evidence', async () => {
+    const fixture = createFixture();
+    const service = await fixture.serviceFactory();
+
+    await expect(service.validate(
+      auth as AuthContext,
+      PRODUCT_A,
+      'production',
+      { version: 5 },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'VIRTUAL_PRODUCT_WECHAT_GOODS_INVALID',
+    });
   });
 });

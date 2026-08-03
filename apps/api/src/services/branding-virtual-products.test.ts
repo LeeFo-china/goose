@@ -167,8 +167,10 @@ function createService(options: {
       revision: 1,
     }),
   };
-  const getProduct = mock(async () => product);
-  const findByProductAndEnvironment = mock(async () => mapping);
+  const getSnapshot = mock(async () => ({
+    product,
+    mappings: mapping ? [mapping] : [],
+  }));
   const findByCode = mock(async () => null);
   const getSecretString = mock(async (key: string) => {
     if (options.secretError) throw options.secretError;
@@ -177,8 +179,7 @@ function createService(options: {
   const assertTenantContext = mock(() => TENANT_ID);
   const hasPermission = mock(() => true);
   const service = new BrandingVirtualProductService({
-    productRepository: { getProduct },
-    virtualProductRepository: { findByProductAndEnvironment },
+    catalogCompatibility: { getSnapshot },
     entitlementRepository: { findByCode },
     settingsService: { getSecretString },
     accessPolicy: { assertTenantContext, hasPermission },
@@ -187,8 +188,7 @@ function createService(options: {
 
   return {
     service,
-    getProduct,
-    findByProductAndEnvironment,
+    getSnapshot,
     findByCode,
     getSecretString,
   };
@@ -211,6 +211,36 @@ describe("parseWechatVirtualPaymentSecretBundle", () => {
 });
 
 describe("BrandingVirtualProductService tenant capability", () => {
+  test("reads the preserved annual identity from the generic catalog", async () => {
+    const getSnapshot = mock(async () => ({
+      product: baseProduct,
+      mappings: [baseMapping],
+    }));
+    const service = new BrandingVirtualProductService({
+      catalogCompatibility: { getSnapshot },
+      entitlementRepository: { findByCode: mock(async () => null) },
+      settingsService: {
+        getSecretString: mock(async () => JSON.stringify({
+          appKey: "production-app-key",
+          revision: 2,
+        })),
+      },
+      accessPolicy: {
+        assertTenantContext: mock(() => TENANT_ID),
+        hasPermission: mock(() => true),
+      },
+    } as never);
+
+    const result = await service.getTenantProduct(tenantAuth);
+
+    expect(getSnapshot).toHaveBeenCalledTimes(1);
+    expect(result.product).toMatchObject({
+      id: PRODUCT_ID,
+      code: "custom_support_branding_annual",
+      amount_fen: 9_900,
+    });
+  });
+
   test.each([
     ["maintenance", "active", "valid", 9_900, false, "PURCHASE_MAINTENANCE"],
     ["wechat_virtual", "disabled", "valid", 9_900, false, "VIRTUAL_PRODUCT_DISABLED"],
@@ -331,7 +361,7 @@ describe("BrandingVirtualProductService tenant capability", () => {
       virtual_payment_available: false,
       unavailable_reason: "PURCHASE_MODE_DIRECT_LEGACY",
     });
-    expect(fixture.findByProductAndEnvironment).not.toHaveBeenCalled();
+    expect(fixture.getSnapshot).toHaveBeenCalledTimes(1);
   });
 });
 

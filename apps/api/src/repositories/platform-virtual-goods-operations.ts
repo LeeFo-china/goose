@@ -60,6 +60,7 @@ export interface PlatformVirtualGoodsMappingSnapshot {
   last_error_code: string | null;
   last_error_summary: string | null;
   version: number;
+  updated_at: string;
 }
 
 export interface PlatformVirtualPaymentChannelSnapshot {
@@ -71,6 +72,7 @@ export interface PlatformVirtualPaymentChannelSnapshot {
   encrypted_secret_ref: string;
   secret_revision: number;
   status: 'active' | 'disabled';
+  version: number;
 }
 
 export interface PlatformVirtualProductChannelSnapshot {
@@ -135,6 +137,7 @@ const SNAPSHOT_COLUMNS = `
     last_error_code,
     last_error_summary,
     version,
+    updated_at,
     channel:platform_virtual_payment_channels!inner(
       id,
       provider,
@@ -143,7 +146,8 @@ const SNAPSHOT_COLUMNS = `
       offer_id,
       encrypted_secret_ref,
       secret_revision,
-      status
+      status,
+      version
     )
   )
 `;

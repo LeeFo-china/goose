@@ -129,7 +129,7 @@ export class PlatformVirtualProductChannelsService {
         prepared.item,
       );
 
-    return await this.operations.finish({
+    await this.operations.finish({
       operationId: running.id,
       state: evidence.state,
       requestId: evidence.requestId,
@@ -140,6 +140,7 @@ export class PlatformVirtualProductChannelsService {
         ? running.product_version
         : null,
     });
+    return await this.requireSnapshot(productId, environment);
   }
 
   async startUpload(
@@ -164,7 +165,7 @@ export class PlatformVirtualProductChannelsService {
         ...prepared.signedInput,
         item: prepared.item,
       });
-      const result = await this.operations.finish({
+      await this.operations.finish({
         operationId: operation.id,
         state: 'processing',
         requestId: started.requestId,
@@ -178,7 +179,7 @@ export class PlatformVirtualProductChannelsService {
         syncedProductVersion: null,
       });
       await this.auditOperation(prepared, 'upload', started.requestId);
-      return result;
+      return await this.requireSnapshot(productId, environment);
     } catch (error) {
       await this.finishFailure(operation.id, error);
       throw mapWechatGoodsError(error);
@@ -214,7 +215,7 @@ export class PlatformVirtualProductChannelsService {
         ...prepared.signedInput,
         providerProductId: prepared.item.id,
       });
-      const result = await this.operations.finish({
+      await this.operations.finish({
         operationId: operation.id,
         state: 'processing',
         requestId: started.requestId,
@@ -228,7 +229,7 @@ export class PlatformVirtualProductChannelsService {
         syncedProductVersion: null,
       });
       await this.auditOperation(prepared, 'publish', started.requestId);
-      return result;
+      return await this.requireSnapshot(productId, environment);
     } catch (error) {
       await this.finishFailure(operation.id, error);
       throw mapWechatGoodsError(error);
@@ -244,13 +245,24 @@ export class PlatformVirtualProductChannelsService {
     this.assertPlatform(auth, PUBLISH);
     const snapshot = await this.requireSnapshot(productId, environment);
     if (snapshot.version !== input.version) throw versionConflict();
+    if (isSynchronized(snapshot)) return snapshot;
+    const refreshed = await this.refresh(auth, productId, environment);
+    if (isSynchronized(refreshed)) return refreshed;
     if (
-      snapshot.mapping.validation_status === 'valid' &&
-      snapshot.mapping.synced_product_version === snapshot.version
+      refreshed.mapping.upload_state === 'processing' ||
+      refreshed.mapping.publish_state === 'processing'
     ) {
-      return snapshot;
+      throw Errors.business(
+        409,
+        '微信虚拟商品仍在处理中，请稍后重新校验',
+        'VIRTUAL_PRODUCT_CHANNEL_TASK_PENDING',
+      );
     }
-    return await this.refresh(auth, productId, environment);
+    throw Errors.business(
+      409,
+      '微信虚拟商品尚未完成上传、发布和校验',
+      'VIRTUAL_PRODUCT_WECHAT_GOODS_INVALID',
+    );
   }
 
   private async prepare(
@@ -412,6 +424,13 @@ function mapWechatGoodsError(error: unknown): unknown {
     '微信虚拟商品操作失败',
     'VIRTUAL_PRODUCT_WECHAT_OPERATION_FAILED',
   );
+}
+
+function isSynchronized(snapshot: PlatformVirtualProductChannelSnapshot) {
+  return snapshot.mapping.upload_state === 'succeeded' &&
+    snapshot.mapping.publish_state === 'succeeded' &&
+    snapshot.mapping.validation_status === 'valid' &&
+    snapshot.mapping.synced_product_version === snapshot.version;
 }
 
 function requestIdFromError(error: unknown): string | null {

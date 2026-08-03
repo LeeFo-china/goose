@@ -19,8 +19,9 @@ import {
 import {
   platformBrandingVirtualPaymentSettingsService,
 } from "@/services/platform-branding-virtual-payment-settings";
-import { brandingVirtualProductGoodsLifecycleService } from
-  "@/services/branding-virtual-product-goods-lifecycle";
+import {
+  brandingVirtualProductCatalogCompatibilityService,
+} from "@/services/branding-virtual-product-compatibility";
 import { platformPaymentConfigService } from "@/services/platform-payment-configs";
 import { Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
@@ -217,7 +218,8 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     const authContext = await this.getRequiredPlatformAdminContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
-    const data = await brandingVirtualProductGoodsLifecycleService.getStatus(
+    const data = await brandingVirtualProductCatalogCompatibilityService
+      .refreshChannel(
       authContext,
       environment,
     );
@@ -238,10 +240,8 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
       request.body || {},
     );
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-    const data = await brandingVirtualProductGoodsLifecycleService.startUpload(
-      authContext,
-      { environment, version: bodyResult.data.version },
-    );
+    const data = await brandingVirtualProductCatalogCompatibilityService
+      .startUpload(authContext, environment, bodyResult.data);
     return ResponseHandler.success(data);
   }
 
@@ -259,10 +259,8 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
       request.body || {},
     );
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-    const data = await brandingVirtualProductGoodsLifecycleService.startPublish(
-      authContext,
-      { environment, version: bodyResult.data.version },
-    );
+    const data = await brandingVirtualProductCatalogCompatibilityService
+      .startPublish(authContext, environment, bodyResult.data);
     return ResponseHandler.success(data);
   }
 
@@ -280,7 +278,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
       request.body || {},
     );
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-    const data = await platformBrandingVirtualPaymentSettingsService.validate(
+    const data = await brandingVirtualProductCatalogCompatibilityService.validate(
       authContext,
       environment,
       bodyResult.data,

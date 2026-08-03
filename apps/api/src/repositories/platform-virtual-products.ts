@@ -6,6 +6,7 @@ import type {
   PlatformVirtualProductListQueryInput,
   UpdatePlatformVirtualProductInput,
 } from '../schema/platform-virtual-products';
+import type { BrandingPurchaseMode } from '@gooes/domain';
 
 export const LIST_COLUMNS =
   'id,code,name,product_type,amount_fen,currency,status,version,updated_at';
@@ -18,6 +19,9 @@ const DETAIL_COLUMNS = `
   amount_fen,
   currency,
   image_file_id,
+  image:platform_file_objects!platform_virtual_products_image_file_id_fkey(
+    public_url
+  ),
   purchase_notes,
   refund_template,
   status,
@@ -67,6 +71,8 @@ const DETAIL_COLUMNS = `
       message_auth_status,
       status,
       version,
+      encrypted_secret_ref,
+      secret_revision,
       created_at,
       updated_at
     )
@@ -97,7 +103,8 @@ type SupabaseRpcClient = {
     name:
       | 'platform_create_virtual_product'
       | 'platform_update_virtual_product'
-      | 'platform_transition_virtual_product',
+      | 'platform_transition_virtual_product'
+      | 'platform_manage_annual_virtual_payment_compatibility',
     args: Record<string, unknown>,
   ): Promise<{ data: unknown; error: unknown }>;
 };
@@ -111,6 +118,13 @@ export interface PlatformVirtualProductTransitionInput {
   id: string;
   expectedVersion: number;
   targetStatus: PlatformVirtualProductTransitionStatus;
+  actorEmployeeId: string;
+}
+
+export interface ManageAnnualVirtualPaymentCompatibilityInput {
+  expectedProductVersion: number;
+  purchaseMode?: BrandingPurchaseMode;
+  virtualProductPatch: Record<string, unknown>;
   actorEmployeeId: string;
 }
 
@@ -169,13 +183,33 @@ export class PlatformVirtualProductsRepository {
     return data ?? null;
   }
 
+  async findByCode(code: string): Promise<unknown | null> {
+    const { data, error } = await (this.client().from(
+      'platform_virtual_products',
+    ) as SupabaseDetailQuery)
+      .select(DETAIL_COLUMNS)
+      .eq('code', code)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError('查询虚拟商品失败', error);
+    }
+
+    return data ?? null;
+  }
+
   async isUsablePlatformFile(fileId: string): Promise<boolean> {
     const { data, error } = await (this.client().from(
       'platform_file_objects',
     ) as SupabaseDetailQuery)
       .select('id')
       .eq('id', fileId)
-      .eq('owner_type', 'platform')
+      .is('tenant_id', null)
+      .eq('owner_type', 'branding_virtual_goods')
+      .eq('scene', 'branding_virtual_goods')
+      .eq('visibility', 'public')
+      .eq('width', 200)
+      .eq('height', 200)
       .eq('status', 'active')
       .is('deleted_at', null)
       .maybeSingle();
@@ -250,6 +284,25 @@ export class PlatformVirtualProductsRepository {
 
     return data;
   }
+
+  async manageAnnualCompatibility(
+    input: ManageAnnualVirtualPaymentCompatibilityInput,
+  ): Promise<unknown> {
+    const { data, error } = await this.client().rpc(
+      'platform_manage_annual_virtual_payment_compatibility',
+      {
+        p_expected_product_version: input.expectedProductVersion,
+        p_purchase_mode: input.purchaseMode ?? null,
+        p_virtual_product_patch: input.virtualProductPatch,
+        p_actor_employee_id: input.actorEmployeeId,
+      },
+    );
+
+    if (error) {
+      throwCompatibilityCommandError(error);
+    }
+    return data;
+  }
 }
 
 function productPayload(input: CreatePlatformVirtualProductInput) {
@@ -259,6 +312,65 @@ function productPayload(input: CreatePlatformVirtualProductInput) {
 
 export function escapePostgrestSearch(value: string): string {
   return value.replace(/[%,()]/g, ' ').trim();
+}
+
+const COMPATIBILITY_COMMAND_ERRORS: Record<
+  string,
+  { statusCode: number; message: string }
+> = {
+  VIRTUAL_PRODUCT_NOT_FOUND: {
+    statusCode: 404,
+    message: '年度品牌权益商品不存在',
+  },
+  VIRTUAL_PRODUCT_MAPPING_NOT_FOUND: {
+    statusCode: 404,
+    message: '虚拟商品渠道映射不存在',
+  },
+  VIRTUAL_PRODUCT_COMPATIBILITY_PATCH_INVALID: {
+    statusCode: 400,
+    message: '年度品牌权益兼容配置参数无效',
+  },
+  VIRTUAL_PRODUCT_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: '虚拟商品版本已变化，请刷新后重试',
+  },
+  VIRTUAL_PRODUCT_CHANNEL_ID_IMMUTABLE: {
+    statusCode: 409,
+    message: '渠道商品 ID 已生成后不可手动变更',
+  },
+  VIRTUAL_PRODUCT_COMPATIBILITY_PRODUCT_FACT_IMMUTABLE: {
+    statusCode: 409,
+    message: '商品价格和图片请在虚拟商品管理中修改',
+  },
+  VIRTUAL_PRODUCT_NOT_READY: {
+    statusCode: 409,
+    message: '生产微信商品尚未完成同步校验',
+  },
+  VIRTUAL_PRODUCT_ALREADY_ARCHIVED: {
+    statusCode: 409,
+    message: '已归档的虚拟商品不能修改',
+  },
+  BRANDING_ADDON_PURCHASE_MODE_TRANSITION_INVALID: {
+    statusCode: 409,
+    message: '不支持当前商品购买模式切换',
+  },
+};
+
+function throwCompatibilityCommandError(error: unknown): never {
+  if (error && typeof error === 'object') {
+    const record = error as Record<string, unknown>;
+    if (record.code === 'P0001' && typeof record.message === 'string') {
+      const mapped = COMPATIBILITY_COMMAND_ERRORS[record.message];
+      if (mapped) {
+        throw Errors.business(
+          mapped.statusCode,
+          mapped.message,
+          record.message,
+        );
+      }
+    }
+  }
+  throw Errors.dbError('保存年度品牌权益兼容配置失败');
 }
 
 export const platformVirtualProductsRepository =

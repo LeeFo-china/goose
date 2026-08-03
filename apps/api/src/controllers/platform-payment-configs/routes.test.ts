@@ -101,25 +101,26 @@ describe("PlatformPaymentConfigsController routes", () => {
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
       { platformBrandingVirtualPaymentSecretService },
-      { brandingVirtualProductGoodsLifecycleService },
+      { brandingVirtualProductCatalogCompatibilityService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
       import("@/services/platform-branding-virtual-payment-secrets"),
-      import("@/services/branding-virtual-product-goods-lifecycle"),
+      import("@/services/branding-virtual-product-compatibility"),
     ]);
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
       get: platformBrandingVirtualPaymentSettingsService.get,
       update: platformBrandingVirtualPaymentSettingsService.update,
-      validate: platformBrandingVirtualPaymentSettingsService.validate,
       statuses: platformBrandingVirtualPaymentSecretService.getStatuses,
       bundle: platformBrandingVirtualPaymentSecretService.saveSecretBundle,
       token: platformBrandingVirtualPaymentSecretService.saveMessageToken,
-      goodsStatus: brandingVirtualProductGoodsLifecycleService.getStatus,
-      upload: brandingVirtualProductGoodsLifecycleService.startUpload,
-      publish: brandingVirtualProductGoodsLifecycleService.startPublish,
+      goodsStatus:
+        brandingVirtualProductCatalogCompatibilityService.refreshChannel,
+      upload: brandingVirtualProductCatalogCompatibilityService.startUpload,
+      publish: brandingVirtualProductCatalogCompatibilityService.startPublish,
+      validate: brandingVirtualProductCatalogCompatibilityService.validate,
     };
     const get = mock(async () => ({
       product: { version: 3 },
@@ -148,7 +149,7 @@ describe("PlatformPaymentConfigsController routes", () => {
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "get", get);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
     replaceMethod(
-      platformBrandingVirtualPaymentSettingsService,
+      brandingVirtualProductCatalogCompatibilityService,
       "validate",
       validate,
     );
@@ -168,17 +169,17 @@ describe("PlatformPaymentConfigsController routes", () => {
       saveMessageToken,
     );
     replaceMethod(
-      brandingVirtualProductGoodsLifecycleService,
-      "getStatus",
+      brandingVirtualProductCatalogCompatibilityService,
+      "refreshChannel",
       getGoodsStatus,
     );
     replaceMethod(
-      brandingVirtualProductGoodsLifecycleService,
+      brandingVirtualProductCatalogCompatibilityService,
       "startUpload",
       startUpload,
     );
     replaceMethod(
-      brandingVirtualProductGoodsLifecycleService,
+      brandingVirtualProductCatalogCompatibilityService,
       "startPublish",
       startPublish,
     );
@@ -249,10 +250,11 @@ describe("PlatformPaymentConfigsController routes", () => {
         query: {},
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {});
-      expect(startUpload).toHaveBeenCalledWith(platformAuth, {
-        environment: "production",
-        version: 3,
-      });
+      expect(startUpload).toHaveBeenCalledWith(
+        platformAuth,
+        "production",
+        { version: 3 },
+      );
 
       await requiredHandler(
         controller,
@@ -263,10 +265,11 @@ describe("PlatformPaymentConfigsController routes", () => {
         query: {},
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {});
-      expect(startPublish).toHaveBeenCalledWith(platformAuth, {
-        environment: "production",
-        version: 3,
-      });
+      expect(startPublish).toHaveBeenCalledWith(
+        platformAuth,
+        "production",
+        { version: 3 },
+      );
 
       await requiredHandler(
         controller,
@@ -286,13 +289,13 @@ describe("PlatformPaymentConfigsController routes", () => {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "get", originals.get);
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", originals.update);
-      replaceMethod(platformBrandingVirtualPaymentSettingsService, "validate", originals.validate);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "getStatuses", originals.statuses);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originals.bundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originals.token);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", originals.goodsStatus);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", originals.upload);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", originals.publish);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "refreshChannel", originals.goodsStatus);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", originals.upload);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", originals.publish);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", originals.validate);
     }
   });
 
@@ -302,22 +305,23 @@ describe("PlatformPaymentConfigsController routes", () => {
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
       { platformBrandingVirtualPaymentSecretService },
-      { brandingVirtualProductGoodsLifecycleService },
+      { brandingVirtualProductCatalogCompatibilityService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
       import("@/services/platform-branding-virtual-payment-secrets"),
-      import("@/services/branding-virtual-product-goods-lifecycle"),
+      import("@/services/branding-virtual-product-compatibility"),
     ]);
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalUpdate = platformBrandingVirtualPaymentSettingsService.update;
-    const originalValidate = platformBrandingVirtualPaymentSettingsService.validate;
+    const originalValidate = brandingVirtualProductCatalogCompatibilityService.validate;
     const originalBundle = platformBrandingVirtualPaymentSecretService.saveSecretBundle;
     const originalToken = platformBrandingVirtualPaymentSecretService.saveMessageToken;
-    const originalGoodsStatus = brandingVirtualProductGoodsLifecycleService.getStatus;
-    const originalUpload = brandingVirtualProductGoodsLifecycleService.startUpload;
-    const originalPublish = brandingVirtualProductGoodsLifecycleService.startPublish;
+    const originalGoodsStatus =
+      brandingVirtualProductCatalogCompatibilityService.refreshChannel;
+    const originalUpload = brandingVirtualProductCatalogCompatibilityService.startUpload;
+    const originalPublish = brandingVirtualProductCatalogCompatibilityService.startPublish;
     const update = mock(async () => ({}));
     const validate = mock(async () => ({}));
     const saveSecretBundle = mock(async () => ({}));
@@ -327,12 +331,12 @@ describe("PlatformPaymentConfigsController routes", () => {
     const startPublish = mock(async () => ({}));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
-    replaceMethod(platformBrandingVirtualPaymentSettingsService, "validate", validate);
+    replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", validate);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", saveSecretBundle);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", saveMessageToken);
-    replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", getGoodsStatus);
-    replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", startUpload);
-    replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", startPublish);
+    replaceMethod(brandingVirtualProductCatalogCompatibilityService, "refreshChannel", getGoodsStatus);
+    replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", startUpload);
+    replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", startPublish);
 
     const invalidRequests: Array<[string, Partial<FastifyRequest>]> = [
       [
@@ -388,12 +392,12 @@ describe("PlatformPaymentConfigsController routes", () => {
     } finally {
       authorizationService.getRequiredAuthContext = originalAuth;
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", originalUpdate);
-      replaceMethod(platformBrandingVirtualPaymentSettingsService, "validate", originalValidate);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", originalValidate);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originalBundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originalToken);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "getStatus", originalGoodsStatus);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startUpload", originalUpload);
-      replaceMethod(brandingVirtualProductGoodsLifecycleService, "startPublish", originalPublish);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "refreshChannel", originalGoodsStatus);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", originalUpload);
+      replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", originalPublish);
     }
   });
 });

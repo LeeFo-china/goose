@@ -1,10 +1,7 @@
 import { Errors } from "@/errors/error-factory";
+import type { BrandingAddonProductRecord } from
+  "@/repositories/branding-addon-products";
 import {
-  brandingAddonProductRepository,
-  type BrandingAddonProductRecord,
-} from "@/repositories/branding-addon-products";
-import {
-  brandingVirtualProductRepository,
   type BrandingVirtualPaymentSecretSettingKey,
   type BrandingVirtualProductRecord,
 } from "@/repositories/branding-virtual-products";
@@ -15,6 +12,9 @@ import {
 } from "@/repositories/tenant-entitlements";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  brandingVirtualProductCatalogCompatibilityService,
+} from "@/services/branding-virtual-product-compatibility";
 import { toTenantBrandingAddonProductView } from "@/services/branding-addon-order-views";
 import {
   MAX_WECHAT_VIRTUAL_PAYMENT_SECRET_LENGTH,
@@ -44,13 +44,9 @@ export type BrandingVirtualProductUnavailableReason =
   | "VIRTUAL_PRODUCT_AMOUNT_MISMATCH"
   | "VIRTUAL_PRODUCT_SECRET_INVALID";
 
-type ProductRepositoryPort = Pick<
-  typeof brandingAddonProductRepository,
-  "getProduct"
->;
-type VirtualProductRepositoryPort = Pick<
-  typeof brandingVirtualProductRepository,
-  "findByProductAndEnvironment"
+type CatalogCompatibilityPort = Pick<
+  typeof brandingVirtualProductCatalogCompatibilityService,
+  "getSnapshot"
 >;
 type EntitlementRepositoryPort = Pick<
   typeof tenantEntitlementsRepository,
@@ -66,8 +62,7 @@ type AccessPolicyPort = Pick<
 >;
 
 export type BrandingVirtualProductServiceDependencies = {
-  productRepository?: ProductRepositoryPort;
-  virtualProductRepository?: VirtualProductRepositoryPort;
+  catalogCompatibility?: CatalogCompatibilityPort;
   entitlementRepository?: EntitlementRepositoryPort;
   settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
@@ -75,18 +70,15 @@ export type BrandingVirtualProductServiceDependencies = {
 };
 
 export class BrandingVirtualProductService {
-  private readonly productRepository: ProductRepositoryPort;
-  private readonly virtualProductRepository: VirtualProductRepositoryPort;
+  private readonly catalogCompatibility: CatalogCompatibilityPort;
   private readonly entitlementRepository: EntitlementRepositoryPort;
   private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: BrandingVirtualProductServiceDependencies = {}) {
-    this.productRepository = dependencies.productRepository ??
-      brandingAddonProductRepository;
-    this.virtualProductRepository = dependencies.virtualProductRepository ??
-      brandingVirtualProductRepository;
+    this.catalogCompatibility = dependencies.catalogCompatibility ??
+      brandingVirtualProductCatalogCompatibilityService;
     this.entitlementRepository = dependencies.entitlementRepository ??
       tenantEntitlementsRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
@@ -96,10 +88,13 @@ export class BrandingVirtualProductService {
 
   async getTenantProduct(authContext: AuthContext) {
     const tenantId = this.requirePurchaser(authContext);
-    const product = await this.requireEnabledProduct();
+    const snapshot = await this.readCatalogSnapshot();
+    const product = this.requireEnabledProduct(snapshot.product);
     const [mapping, entitlement] = await Promise.all([
       product.purchase_mode === "wechat_virtual"
-        ? this.findProductionMapping(product.id)
+        ? Promise.resolve(snapshot.mappings.find(
+          (candidate) => candidate.environment === "production",
+        ) ?? null)
         : Promise.resolve(null),
       this.findEntitlement(tenantId),
     ]);
@@ -107,6 +102,7 @@ export class BrandingVirtualProductService {
 
     return {
       product: {
+        id: product.id,
         ...toTenantBrandingAddonProductView(product, entitlement),
         purchase_mode: product.purchase_mode,
         payment_channel: PAYMENT_CHANNEL,
@@ -135,13 +131,18 @@ export class BrandingVirtualProductService {
     return tenantId;
   }
 
-  private async requireEnabledProduct(): Promise<BrandingAddonProductRecord> {
-    let product: BrandingAddonProductRecord | null;
+  private async readCatalogSnapshot() {
     try {
-      product = await this.productRepository.getProduct();
-    } catch {
+      return await this.catalogCompatibility.getSnapshot();
+    } catch (error) {
+      if (isApplicationErrorLike(error)) throw error;
       throw Errors.dbError("查询年度品牌权益商品失败");
     }
+  }
+
+  private requireEnabledProduct(
+    product: BrandingAddonProductRecord,
+  ): BrandingAddonProductRecord {
     if (!product || !product.enabled || !Number.isSafeInteger(product.amount_fen)) {
       throw Errors.business(
         404,
@@ -150,17 +151,6 @@ export class BrandingVirtualProductService {
       );
     }
     return product;
-  }
-
-  private async findProductionMapping(addonProductId: string) {
-    try {
-      return await this.virtualProductRepository.findByProductAndEnvironment({
-        addonProductId,
-        environment: "production",
-      });
-    } catch {
-      throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    }
   }
 
   private async findEntitlement(tenantId: string) {

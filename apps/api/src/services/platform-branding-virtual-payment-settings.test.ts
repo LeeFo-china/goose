@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from "bun:test";
+import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import { Errors } from "@/errors/error-factory";
 import type { BrandingVirtualProductRecord } from "@/repositories/branding-virtual-products";
@@ -38,6 +38,39 @@ function createFixture(options: FixtureOptions = {}) {
 }
 
 describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
+  test("builds the legacy settings response from the generic catalog snapshot", async () => {
+    const getSnapshot = mock(async () => ({
+      product,
+      mappings: [productionMapping],
+    }));
+    const getStatuses = mock(async () => secretStatuses);
+    const getPlatformSecretStrings = mock(async () => ({
+      WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE: "",
+      WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE: JSON.stringify({
+        appKey: "secret",
+        revision: 2,
+      }),
+    }));
+    const hasPermission = mock(() => true);
+    const service = new PlatformBrandingVirtualPaymentSettingsService({
+      catalogCompatibility: { getSnapshot },
+      settingsService: {
+        getPlatformSecretString: mock(async () => ""),
+        getPlatformSecretStrings,
+      },
+      secretStatusReader: { getStatuses },
+      accessPolicy: { hasPermission },
+    } as never);
+
+    const result = await service.get(manageAuth);
+
+    expect(getSnapshot).toHaveBeenCalledTimes(1);
+    expect(getPlatformSecretStrings).toHaveBeenCalledTimes(1);
+    expect(result.product.id).toBe(product.id);
+    expect(result.virtual_products[0]?.mapping?.provider_product_id)
+      .toBe(productionMapping.provider_product_id);
+  });
+
   test("allows read and manage permissions to read with the correct capability", async () => {
     const readFixture = createFixture();
     const manageFixture = createFixture();
@@ -86,7 +119,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
     await expect(fixture.service.get(
       auth("platform.payment.config.read"),
     )).rejects.toBe(expected);
-    expect(fixture.getConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.getSnapshot).toHaveBeenCalledTimes(1);
     expect(fixture.getStatuses).toHaveBeenCalledTimes(1);
   });
 
@@ -102,7 +135,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
         statusCode: 403,
         code: "FORBIDDEN",
       });
-      expect(fixture.getConfiguration).not.toHaveBeenCalled();
+      expect(fixture.getSnapshot).not.toHaveBeenCalled();
       expect(fixture.getStatuses).not.toHaveBeenCalled();
     },
   );
@@ -122,23 +155,37 @@ describe("PlatformBrandingVirtualPaymentSettingsService permissions", () => {
       })).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
       await expect(fixture.service.validate(context, "production", { version: 3 }))
         .rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
-      expect(fixture.getProduct).not.toHaveBeenCalled();
-      expect(fixture.validateConfiguration).not.toHaveBeenCalled();
+      expect(fixture.getSnapshot).not.toHaveBeenCalled();
+      expect(fixture.validate).not.toHaveBeenCalled();
     },
   );
 
   test("delegates validation under the payment manage permission", async () => {
     const fixture = createFixture();
     await fixture.service.validate(manageAuth, "production", { version: 3 });
-    expect(fixture.validateConfiguration).toHaveBeenCalledWith(
+    expect(fixture.validate).toHaveBeenCalledWith(
       manageAuth,
-      { environment: "production", version: 3 },
+      "production",
+      { version: 3 },
     );
   });
 
 });
 
 describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
+  test("rejects edits to the preserved channel product ID", async () => {
+    const fixture = createFixture();
+
+    await expect(fixture.service.update(manageAuth, {
+      version: 4,
+      virtual_product: virtualPatch({ provider_product_id: "changed-id" }),
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "VIRTUAL_PRODUCT_CHANNEL_ID_IMMUTABLE",
+    });
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
+  });
+
   test("injects the environment secret key and writes only the payment fields once", async () => {
     const sandboxMapping = {
       ...productionMapping,
@@ -162,8 +209,8 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       }),
     });
 
-    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
-    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+    expect(fixture.updateConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.updateConfiguration).toHaveBeenCalledWith({
       expectedProductVersion: 4,
       productPatch: { purchase_mode: "maintenance" },
       virtualProductPatch: {
@@ -174,7 +221,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
     });
     expect(result).toMatchObject({
       can_manage: true,
-      product: { version: 5 },
+      product: { version: 4 },
       virtual_product: {
         environment: "sandbox",
         encrypted_secret_ref: "WECHAT_VIRTUAL_PAYMENT_SANDBOX_SECRET_BUNDLE",
@@ -195,7 +242,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       statusCode: 409,
       code: "BRANDING_ADDON_PURCHASE_MODE_TRANSITION_INVALID",
     });
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test("requires new mappings to use version one", async () => {
@@ -218,7 +265,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       statusCode: 409,
       code: "BRANDING_VIRTUAL_PRODUCT_REVALIDATION_REQUIRED",
     });
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test.each([
@@ -255,7 +302,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       code: "BRANDING_VIRTUAL_PAYMENT_NOT_READY",
       details: { blocker_codes: expect.arrayContaining([code]) },
     });
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test("requires matching configured secret revision before enabling wechat mode", async () => {
@@ -297,7 +344,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
     );
     expect(fixture.getSecretString).not.toHaveBeenCalled();
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test("wraps an unknown secret read outage and does not save a draft mapping", async () => {
@@ -315,7 +362,7 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       message: "读取平台支付密钥配置失败",
       details: undefined,
     });
-    expect(fixture.manageConfiguration).not.toHaveBeenCalled();
+    expect(fixture.updateConfiguration).not.toHaveBeenCalled();
   });
 
   test("switches maintenance to wechat virtual with an uncached ready secret", async () => {
@@ -331,8 +378,8 @@ describe("PlatformBrandingVirtualPaymentSettingsService updates", () => {
       "WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE",
     );
     expect(fixture.getSecretString).not.toHaveBeenCalled();
-    expect(fixture.manageConfiguration).toHaveBeenCalledTimes(1);
-    expect(fixture.manageConfiguration).toHaveBeenCalledWith({
+    expect(fixture.updateConfiguration).toHaveBeenCalledTimes(1);
+    expect(fixture.updateConfiguration).toHaveBeenCalledWith({
       expectedProductVersion: 4,
       productPatch: { purchase_mode: "wechat_virtual" },
       virtualProductPatch: {},

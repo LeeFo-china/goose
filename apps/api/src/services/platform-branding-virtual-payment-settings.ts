@@ -1,12 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import {
-  brandingAddonProductRepository,
-  type BrandingAddonProductRecord,
-} from "@/repositories/branding-addon-products";
-import {
-  brandingVirtualProductRepository,
-  type BrandingVirtualProductRecord,
-} from "@/repositories/branding-virtual-products";
+import type { BrandingAddonProductRecord } from
+  "@/repositories/branding-addon-products";
+import type { BrandingVirtualProductRecord } from
+  "@/repositories/branding-virtual-products";
 import type {
   PlatformWechatVirtualEnvironmentInput,
   PlatformWechatVirtualProductValidationInput,
@@ -15,8 +11,8 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
-  brandingVirtualProductManagementService,
-} from "@/services/branding-virtual-product-management";
+  brandingVirtualProductCatalogCompatibilityService,
+} from "@/services/branding-virtual-product-compatibility";
 import {
   brandingVirtualProductVersionConflict,
   hasVirtualProductValidationInputChanged,
@@ -27,6 +23,8 @@ import {
   WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS,
 } from "@/services/branding-virtual-products";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { serializeCatalogConfiguration } from
+  "@/services/platform-branding-virtual-payment-compatibility-view";
 import {
   assertBrandingVirtualPaymentModeTransition,
   assertPlatformBrandingVirtualPaymentReady,
@@ -41,23 +39,15 @@ import { BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN } from "@gooes/domain";
 const READ_PERMISSION = "platform.payment.config.read";
 const MANAGE_PERMISSION = "platform.payment.config.manage";
 
-type ProductRepositoryPort = Pick<
-  typeof brandingAddonProductRepository,
-  "getProduct"
->;
-type VirtualProductRepositoryPort = Pick<
-  typeof brandingVirtualProductRepository,
-  "findByProductAndEnvironment" | "manageConfiguration"
->;
 type SettingsServicePort = Pick<
   typeof systemSettingsService,
-  "getPlatformSecretString"
+  "getPlatformSecretString" | "getPlatformSecretStrings"
 >;
 type AccessPolicyPort = Pick<typeof accessPolicyService, "hasPermission">;
 type AuditPort = Pick<typeof platformAuditLogService, "recordBestEffort">;
-type ManagementServicePort = Pick<
-  typeof brandingVirtualProductManagementService,
-  "getConfiguration" | "validateConfiguration"
+type CatalogCompatibilityPort = Pick<
+  typeof brandingVirtualProductCatalogCompatibilityService,
+  "getSnapshot" | "updateConfiguration" | "validate"
 >;
 type SecretStatusReaderPort = Pick<
   typeof platformBrandingVirtualPaymentSecretService,
@@ -73,46 +63,46 @@ type EnrichedVirtualProductInput = VirtualProductInput & {
 };
 
 export type PlatformBrandingVirtualPaymentSettingsDependencies = {
-  productRepository?: ProductRepositoryPort;
-  virtualProductRepository?: VirtualProductRepositoryPort;
   settingsService?: SettingsServicePort;
   accessPolicy?: AccessPolicyPort;
   audit?: AuditPort;
-  managementService?: ManagementServicePort;
+  catalogCompatibility?: CatalogCompatibilityPort;
   secretStatusReader?: SecretStatusReaderPort;
 };
 
 export class PlatformBrandingVirtualPaymentSettingsService {
-  private readonly productRepository: ProductRepositoryPort;
-  private readonly virtualProductRepository: VirtualProductRepositoryPort;
   private readonly settingsService: SettingsServicePort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly audit: AuditPort;
-  private readonly managementService: ManagementServicePort;
+  private readonly catalogCompatibility: CatalogCompatibilityPort;
   private readonly secretStatusReader: SecretStatusReaderPort;
 
   constructor(
     dependencies: PlatformBrandingVirtualPaymentSettingsDependencies = {},
   ) {
-    this.productRepository = dependencies.productRepository ??
-      brandingAddonProductRepository;
-    this.virtualProductRepository = dependencies.virtualProductRepository ??
-      brandingVirtualProductRepository;
     this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.audit = dependencies.audit ?? platformAuditLogService;
-    this.managementService = dependencies.managementService ??
-      brandingVirtualProductManagementService;
+    this.catalogCompatibility = dependencies.catalogCompatibility ??
+      brandingVirtualProductCatalogCompatibilityService;
     this.secretStatusReader = dependencies.secretStatusReader ??
       platformBrandingVirtualPaymentSecretService;
   }
 
   async get(authContext: AuthContext) {
     this.requireReadable(authContext);
-    const [configuration, secretStatuses] = await Promise.all([
-      this.managementService.getConfiguration(),
+    const [snapshot, secretStatuses, secretValues] = await Promise.all([
+      this.catalogCompatibility.getSnapshot(),
       this.secretStatusReader.getStatuses(authContext),
+      this.settingsService.getPlatformSecretStrings([
+        WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.sandbox,
+        WECHAT_VIRTUAL_PAYMENT_SECRET_KEYS.production,
+      ]),
     ]);
+    const configuration = serializeCatalogConfiguration(
+      snapshot,
+      secretValues,
+    );
     return {
       ...configuration,
       ...secretStatuses,
@@ -129,7 +119,8 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     input: UpdatePlatformWechatVirtualSettingsInput,
   ) {
     const actor = this.requireManageable(authContext);
-    const current = await this.requireProduct();
+    const snapshot = await this.requireCatalogSnapshot();
+    const current = snapshot.product;
     if (current.version !== input.version) throw productVersionConflict();
 
     const finalPurchaseMode = input.purchase_mode ?? current.purchase_mode;
@@ -142,7 +133,9 @@ export class PlatformBrandingVirtualPaymentSettingsService {
       ? enrichVirtualProductInput(input.virtual_product)
       : null;
     const requestedMapping = enrichedInput
-      ? await this.findMapping(current.id, enrichedInput.environment)
+      ? snapshot.mappings.find(
+        (mapping) => mapping.environment === enrichedInput.environment,
+      ) ?? null
       : null;
     let secretConfigured: boolean | null = null;
     if (enrichedInput) {
@@ -156,7 +149,9 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     if (finalPurchaseMode === "wechat_virtual") {
       const production = enrichedInput?.environment === "production"
         ? mergeBrandingVirtualProduct(current.id, requestedMapping, enrichedInput)
-        : await this.findMapping(current.id, "production");
+        : snapshot.mappings.find(
+          (mapping) => mapping.environment === "production",
+        ) ?? null;
       const productionSecretConfigured = enrichedInput?.environment === "production" &&
           secretConfigured !== null
         ? secretConfigured
@@ -207,10 +202,11 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     input: PlatformWechatVirtualProductValidationInput,
   ) {
     this.requireManageable(authContext);
-    return await this.managementService.validateConfiguration(authContext, {
+    return await this.catalogCompatibility.validate(
+      authContext,
       environment,
-      version: input.version,
-    });
+      input,
+    );
   }
 
   private requireReadable(authContext: AuthContext) {
@@ -254,10 +250,10 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     return this.accessPolicy.hasPermission(authContext, MANAGE_PERMISSION);
   }
 
-  private async requireProduct() {
+  private async requireCatalogSnapshot() {
     try {
-      const current = await this.productRepository.getProduct();
-      if (current) return current;
+      const snapshot = await this.catalogCompatibility.getSnapshot();
+      if (snapshot?.product) return snapshot;
     } catch (error) {
       if (isApplicationErrorLike(error)) throw error;
       throw Errors.dbError("查询年度品牌权益商品失败");
@@ -269,21 +265,6 @@ export class PlatformBrandingVirtualPaymentSettingsService {
     );
   }
 
-  private async findMapping(
-    addonProductId: string,
-    environment: PlatformWechatVirtualEnvironmentInput,
-  ) {
-    try {
-      return await this.virtualProductRepository.findByProductAndEnvironment({
-        addonProductId,
-        environment,
-      });
-    } catch (error) {
-      if (isApplicationErrorLike(error)) throw error;
-      throw Errors.dbError("查询品牌权益虚拟商品映射失败");
-    }
-  }
-
   private async assertMappingCanBeSaved(
     current: BrandingVirtualProductRecord | null,
     input: EnrichedVirtualProductInput,
@@ -291,6 +272,13 @@ export class PlatformBrandingVirtualPaymentSettingsService {
   ) {
     if ((current?.version ?? 1) !== input.version) {
       throw brandingVirtualProductVersionConflict();
+    }
+    if (current && current.provider_product_id !== input.provider_product_id) {
+      throw Errors.business(
+        409,
+        "渠道商品 ID 已生成后不可手动变更",
+        "VIRTUAL_PRODUCT_CHANNEL_ID_IMMUTABLE",
+      );
     }
     if (input.environment === "production" &&
       input.expected_amount_fen < BRANDING_VIRTUAL_MINIMUM_AMOUNT_FEN) {
@@ -394,10 +382,10 @@ export class PlatformBrandingVirtualPaymentSettingsService {
   }
 
   private async saveConfiguration(
-    input: Parameters<VirtualProductRepositoryPort["manageConfiguration"]>[0],
+    input: Parameters<CatalogCompatibilityPort["updateConfiguration"]>[0],
   ) {
     try {
-      return await this.virtualProductRepository.manageConfiguration(input);
+      return await this.catalogCompatibility.updateConfiguration(input);
     } catch (error) {
       if (isApplicationErrorLike(error)) throw error;
       throw Errors.dbError("保存品牌权益虚拟支付配置失败");
@@ -460,6 +448,7 @@ function enrichVirtualProductInput(
 
 function serializeProduct(product: BrandingAddonProductRecord) {
   return {
+    id: product.id,
     code: product.code,
     entitlement_code: product.entitlement_code,
     name: product.name,
