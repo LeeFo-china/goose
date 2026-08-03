@@ -91,6 +91,15 @@ export class PlatformServiceOrderRepository {
     return pageResult<PlatformProductRecord>(data, count, pagination);
   }
 
+  async findPlatformProductById(productId: string) {
+    const { data, error } = await this.products()
+      .select(PLATFORM_PRODUCT_SELECT)
+      .eq("id", productId)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询平台技术服务商品失败", error);
+    return (data as PlatformProductRecord | null) ?? null;
+  }
+
   async createProductDraft(input: ProductDraftCreateInput) {
     const { data, error } = await this.products()
       .insert({

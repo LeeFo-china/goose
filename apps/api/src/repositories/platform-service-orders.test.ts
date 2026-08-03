@@ -117,7 +117,7 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).not.toContain("updated_by_employee_id");
   });
 
-  test("lists orders by tenant without selecting payer_openid or product_snapshot", async () => {
+  test("lists orders by tenant with payment fields required by service layer", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
@@ -138,12 +138,12 @@ describe("PlatformServiceOrderRepository", () => {
     expect(calls).toContainEqual(["ilike", "order_no", "%TSO%"]);
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).not.toBe("*");
-    expect(selectCall?.[1]).not.toContain("payer_openid");
-    expect(selectCall?.[1]).not.toContain("payment_config_id");
-    expect(selectCall?.[1]).not.toContain("product_snapshot");
+    expect(selectCall?.[1]).toContain("payer_openid");
+    expect(selectCall?.[1]).toContain("payment_config_id");
+    expect(selectCall?.[1]).toContain("product_snapshot");
   });
 
-  test("finds an order by tenant and id", async () => {
+  test("finds an order by tenant and id with payment continuation fields", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
@@ -157,9 +157,24 @@ describe("PlatformServiceOrderRepository", () => {
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-1"]);
     expect(calls).toContainEqual(["eq", "id", "order-1"]);
     const selectCall = calls.find(([method]) => method === "select");
-    expect(selectCall?.[1]).not.toContain("payer_openid");
-    expect(selectCall?.[1]).not.toContain("payment_config_id");
-    expect(selectCall?.[1]).not.toContain("product_snapshot");
+    expect(selectCall?.[1]).toContain("payer_openid");
+    expect(selectCall?.[1]).toContain("payment_config_id");
+    expect(selectCall?.[1]).toContain("product_snapshot");
+  });
+
+  test("finds a platform product draft by id for publishing", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+
+    await repository.findPlatformProductById("product-1");
+
+    expect(calls).toContainEqual(["from", "platform_service_products"]);
+    expect(calls).toContainEqual(["eq", "id", "product-1"]);
+    const selectCall = calls.find(([method]) => method === "select");
+    expect(selectCall?.[1]).toContain("terms_content");
+    expect(selectCall?.[1]).toContain("published_version");
   });
 
   test("loads tenant products from the published version instead of editable draft fields", async () => {

@@ -37,11 +37,17 @@ export type OrderRecord = {
   tenant_id?: string;
   order_no: string;
   out_trade_no?: string;
+  product_id?: string;
+  product_version_id?: string;
   product_code: string;
   term_years: number;
   amount_fen: number;
   payment_status: string;
   service_status: string;
+  payment_config_id?: string;
+  payment_config_guard_version?: number;
+  payer_openid?: string;
+  product_snapshot?: Record<string, unknown>;
   prepay_id: string | null;
   payment_expires_at: string;
   paid_at: string | null;
@@ -160,11 +166,17 @@ export const TENANT_ORDER_SELECT = [
   "id",
   "order_no",
   "out_trade_no",
+  "product_id",
+  "product_version_id",
   "product_code",
   "term_years",
   "amount_fen",
   "payment_status",
   "service_status",
+  "payment_config_id",
+  "payment_config_guard_version",
+  "payer_openid",
+  "product_snapshot",
   "prepay_id",
   "payment_expires_at",
   "paid_at",
