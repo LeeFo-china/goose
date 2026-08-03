@@ -4,10 +4,11 @@
 
 适用仓库：`gooes` 后端 / `orange` 小程序
 
-状态：后端一期代码已完成，开发库 migration 已应用到 `api-dev.goodcms.cn:8000` 并
-验证 Local/Remote 对齐。当前文档只覆盖商品、订单、普通微信支付、回调确认后自动
-建实施工单、退款申请基础能力；不包含 Admin 页面、履约采集、培训记录、交付附件、
-客户验收和微信发货信息管理上报。
+状态：后端一期代码实现已完成，开发库 migration 已应用到 `api-dev.goodcms.cn:8000`
+并验证 Local/Remote 对齐；发布完成门槛仍需补齐生成数据库类型、本地 migration
+reset 验证和正式 dev 域名 smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
+后自动建实施工单、退款申请基础能力；不包含 Admin 页面、履约采集、培训记录、
+交付附件、客户验收和微信发货信息管理上报。
 
 ## 1. 业务边界
 
@@ -35,8 +36,11 @@
 
 说明：本轮已使用当前 worktree API、本地 `http://127.0.0.1:3099`、开发库
 `api-dev.goodcms.cn:8000` 和临时内存 JWT 完成 dry-run smoke。脚本未创建订单、
-未发起支付，输出仅包含商品、readiness 和脱敏 Request-ID。`.env` 中仍未固化 smoke
-专用 token；后续 CI 或其他开发机执行时仍需显式注入上述两个 token。
+未发起支付，输出仅包含商品、readiness 和脱敏 Request-ID。正式 dev 域名
+`https://api-dev.goodcms.cn` 使用同类临时 token dry-run 时返回 `TOKEN_INVALID`
+（Request-ID：`req-282`），需要在 dev API 部署本分支后，使用该环境认可的 smoke
+token 重新补跑。`.env` 中仍未固化 smoke 专用 token；后续 CI 或其他开发机执行时仍需
+显式注入上述两个 token。
 
 ## 3. 权限与开关
 
@@ -440,8 +444,8 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 
 发布前需要完成：
 
-- dry-run HTTP smoke exit 0；本轮本地 API + dev DB 已验证通过，后续 dev 发布后需
-  再用正式 dev 域名 `https://api-dev.goodcms.cn` 补跑一次；
+- dry-run HTTP smoke exit 0；本轮本地 API + dev DB 已验证通过，正式 dev 域名
+  `https://api-dev.goodcms.cn` 尚需在部署本分支并准备有效 smoke token 后补跑；
 - 真机使用测试租户创建 1 笔小额订单；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；
