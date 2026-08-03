@@ -6,7 +6,6 @@ import {
 } from "@/repositories/branding-addon-orders";
 import {
   billingRechargeRepository,
-  type TenantCreditWechatNotificationRecord,
 } from "@/repositories/billing-recharge";
 import {
   customerWechatPaySmokeRepository,
@@ -23,18 +22,33 @@ import {
   brandingAddonPaymentConfirmation,
 } from "@/services/branding-addon-payment-confirmation";
 import {
+  platformServiceOrderRepository,
+} from "@/repositories/platform-service-orders";
+import {
+  platformServiceOrderPaymentConfirmation,
+  PlatformServiceOrderPaymentConfirmation,
+} from "@/services/platform-service-order-payment-confirmation";
+import {
   handleBrandingAddonCallback,
   type BrandingAddonCallbackRepositoryPort,
   type BrandingAddonPaymentConfirmationPort,
 } from "@/services/wechat-pay-callback-branding-addon";
 import {
   type CallbackHeaders,
-  type CreditRechargeCallbackContext,
   type ProjectPaymentCallbackContext,
   WechatPayCallbackContextMatcher,
   type WechatPayCallbackContextMatcherDependencies,
 } from "@/services/wechat-pay-callback-context-matcher";
 import { BillingRechargePaymentConfirmation } from "@/services/billing-recharge-payment-confirmation";
+import {
+  handleCreditRechargeCallback,
+  type RechargePaymentConfirmationPort,
+} from "@/services/wechat-pay-callback-credit-recharge";
+import {
+  handlePlatformServiceOrderCallback,
+  type PlatformServiceOrderCallbackRepositoryPort,
+  type PlatformServiceOrderPaymentConfirmationPort,
+} from "@/services/wechat-pay-callback-platform-service";
 import { handleCreditRechargeRefundCallback } from "@/services/wechat-pay-callback-refunds";
 import {
   handleCustomerWechatPaySmokeCallback,
@@ -66,8 +80,8 @@ type CreditRechargeRepositoryPort = Pick<
   | "confirmWechatRechargeRefund"
   | "applyWechatRechargeRefundCallbackState"
 >;
-type RechargePaymentConfirmationPort = Pick<
-  BillingRechargePaymentConfirmation,
+type PlatformServicePaymentConfirmationPort = Pick<
+  PlatformServiceOrderPaymentConfirmation,
   "confirm"
 >;
 type WechatPayCallbackServiceDependencies =
@@ -77,6 +91,9 @@ type WechatPayCallbackServiceDependencies =
   creditRechargeRepository?: CreditRechargeRepositoryPort;
   brandingAddonOrderRepository?: BrandingAddonCallbackRepositoryPort;
   brandingAddonPaymentConfirmation?: BrandingAddonPaymentConfirmationPort;
+  platformServiceOrderRepository?: PlatformServiceOrderCallbackRepositoryPort;
+  platformServiceOrderPaymentConfirmation?:
+    PlatformServicePaymentConfirmationPort;
   customerSmokeRepository?: CustomerWechatPaySmokeCallbackRepositoryPort;
   rechargePaymentConfirmation?: RechargePaymentConfirmationPort;
   paymentRepository?: PaymentRepositoryPort;
@@ -94,6 +111,10 @@ export class WechatPayCallbackService {
   private readonly brandingAddonOrderRepository:
     BrandingAddonCallbackRepositoryPort;
   private readonly brandingAddonPaymentConfirmation: BrandingAddonPaymentConfirmationPort;
+  private readonly platformServiceOrderRepository:
+    PlatformServiceOrderCallbackRepositoryPort;
+  private readonly platformServiceOrderPaymentConfirmation:
+    PlatformServiceOrderPaymentConfirmationPort;
   private readonly customerSmokeRepository:
     CustomerWechatPaySmokeCallbackRepositoryPort;
   private readonly rechargePaymentConfirmation: RechargePaymentConfirmationPort;
@@ -113,6 +134,12 @@ export class WechatPayCallbackService {
     this.brandingAddonPaymentConfirmation =
       dependencies.brandingAddonPaymentConfirmation ??
         brandingAddonPaymentConfirmation;
+    this.platformServiceOrderRepository =
+      dependencies.platformServiceOrderRepository ??
+        platformServiceOrderRepository;
+    this.platformServiceOrderPaymentConfirmation =
+      dependencies.platformServiceOrderPaymentConfirmation ??
+        platformServiceOrderPaymentConfirmation;
     this.customerSmokeRepository = dependencies.customerSmokeRepository ??
       customerWechatPaySmokeRepository;
     this.rechargePaymentConfirmation = dependencies.rechargePaymentConfirmation ??
@@ -145,7 +172,13 @@ export class WechatPayCallbackService {
       });
     }
     if (matched.kind === "credit_recharge") {
-      return this.handleCreditRechargeCallback({ matched, notifyId, payload });
+      return handleCreditRechargeCallback({
+        matched,
+        notifyId,
+        payload,
+        repository: this.creditRechargeRepository,
+        confirmation: this.rechargePaymentConfirmation,
+      });
     }
     if (matched.kind === "branding_addon") {
       return handleBrandingAddonCallback({
@@ -154,6 +187,15 @@ export class WechatPayCallbackService {
         payload,
         repository: this.brandingAddonOrderRepository,
         confirmation: this.brandingAddonPaymentConfirmation,
+      });
+    }
+    if (matched.kind === "platform_service_order") {
+      return handlePlatformServiceOrderCallback({
+        matched,
+        notifyId,
+        payload,
+        repository: this.platformServiceOrderRepository,
+        confirmation: this.platformServiceOrderPaymentConfirmation,
       });
     }
     if (matched.kind === "customer_wechat_pay_smoke") {
@@ -211,51 +253,6 @@ export class WechatPayCallbackService {
     }
   }
 
-  private async handleCreditRechargeCallback(input: {
-    matched: CreditRechargeCallbackContext;
-    notifyId: string;
-    payload: Record<string, unknown>;
-  }) {
-    const { matched, notifyId, payload } = input;
-    const existing =
-      await this.creditRechargeRepository.findWechatNotificationByNotifyId({
-        notifyId,
-      });
-    if (existing?.processed) {
-      return SUCCESS_RESPONSE;
-    }
-
-    const notification = existing ??
-      await this.creditRechargeRepository.createWechatNotification({
-        tenant_id: matched.order.tenant_id,
-        credit_order_id: matched.order.id,
-        notify_id: notifyId,
-        event_type: this.requireString(
-          payload,
-          "event_type",
-          "回调事件类型缺失",
-        ),
-        resource_type: this.optionalString(payload.resource_type),
-        raw_payload: payload as Record<string, unknown>,
-        signature_valid: true,
-        processed: false,
-      });
-
-    try {
-      await this.processCreditRechargeTransaction({ matched, notification });
-      await this.creditRechargeRepository.markWechatNotificationProcessed({
-        notificationId: notification.id,
-      });
-      return SUCCESS_RESPONSE;
-    } catch (error) {
-      await this.creditRechargeRepository.markWechatNotificationFailed({
-        notificationId: notification.id,
-        errorMessage: getErrorMessage(error),
-      });
-      throw error;
-    }
-  }
-
   private async processSuccessfulTransaction(input: {
     matched: ProjectPaymentCallbackContext;
     notification: WechatPayNotificationRecord;
@@ -301,19 +298,6 @@ export class WechatPayCallbackService {
       paidAt: this.optionalString(matched.resource.success_time) ??
         new Date().toISOString(),
       notificationId: notification.id,
-    });
-  }
-
-  private async processCreditRechargeTransaction(input: {
-    matched: CreditRechargeCallbackContext;
-    notification: TenantCreditWechatNotificationRecord;
-  }) {
-    const { matched, notification } = input;
-    await this.rechargePaymentConfirmation.confirm({
-      order: matched.order,
-      transaction: matched.transaction,
-      notificationId: notification.id,
-      source: "wechat_callback",
     });
   }
 

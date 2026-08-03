@@ -48,6 +48,7 @@ export type OrderRecord = {
   payment_config_guard_version?: number;
   payer_openid?: string;
   product_snapshot?: Record<string, unknown>;
+  transaction_id?: string | null;
   prepay_id: string | null;
   payment_expires_at: string;
   paid_at: string | null;
@@ -177,6 +178,7 @@ export const TENANT_ORDER_SELECT = [
   "payment_config_guard_version",
   "payer_openid",
   "product_snapshot",
+  "transaction_id",
   "prepay_id",
   "payment_expires_at",
   "paid_at",
