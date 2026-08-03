@@ -87,11 +87,12 @@ type SupabaseListQuery = {
 type SupabaseDetailQuery = {
   select(columns: string): SupabaseDetailQuery;
   eq(column: string, value: unknown): SupabaseDetailQuery;
+  is(column: string, value: null): SupabaseDetailQuery;
   maybeSingle(): Promise<{ data: unknown; error: unknown }>;
 };
 
 type SupabaseRpcClient = {
-  from(table: 'platform_virtual_products'): unknown;
+  from(table: 'platform_virtual_products' | 'platform_file_objects'): unknown;
   rpc(
     name:
       | 'platform_create_virtual_product'
@@ -166,6 +167,24 @@ export class PlatformVirtualProductsRepository {
     }
 
     return data ?? null;
+  }
+
+  async isUsablePlatformFile(fileId: string): Promise<boolean> {
+    const { data, error } = await (this.client().from(
+      'platform_file_objects',
+    ) as SupabaseDetailQuery)
+      .select('id')
+      .eq('id', fileId)
+      .eq('owner_type', 'platform')
+      .eq('status', 'active')
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError('查询虚拟商品图片失败', error);
+    }
+
+    return Boolean(data);
   }
 
   async create(input: {
