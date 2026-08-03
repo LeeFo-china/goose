@@ -47,10 +47,11 @@ describe("development change plan", () => {
     [
       "domain runtime",
       ["packages/domain/src/index.ts"],
-      ["api", "admin", "web", "social-video-worker"],
+      ["api", "admin", "h5", "web", "social-video-worker"],
       [
         "api",
         "admin",
+        "h5",
         "web",
         "social-video-worker",
         "cos-reconcile-worker",
@@ -122,19 +123,22 @@ describe("development change plan", () => {
     expect(plan.classifications).toEqual(["non-runtime"]);
   });
 
-  test("fails closed for H5 and dev Nginx while expanding unknown runtime paths", () => {
-    expect(() => resolveDevChangePlan(["apps/h5/src/main.js"], metadata)).toThrow(
-      "unsupported automatic service: h5",
-    );
+  test("supports H5, fails closed for unrelated dev Nginx, and expands unknown runtime paths", () => {
+    const h5Plan = resolveDevChangePlan(["apps/h5/src/main.js"], metadata);
+    expect(h5Plan.build_services).toEqual(["h5"]);
+    expect(h5Plan.deploy_services).toEqual(["h5"]);
+    expect(h5Plan.classifications).toEqual(["h5"]);
+
     expect(() => resolveDevChangePlan(["deploy/nginx/gooes-web-dev.conf"], metadata)).toThrow(
       "unsupported automatic service: dev-nginx",
     );
 
     const plan = resolveDevChangePlan(["config/runtime.toml"], metadata);
-    expect(plan.build_services).toEqual(["api", "admin", "web", "social-video-worker"]);
+    expect(plan.build_services).toEqual(["api", "admin", "h5", "web", "social-video-worker"]);
     expect(plan.deploy_services).toEqual([
       "api",
       "admin",
+      "h5",
       "web",
       "social-video-worker",
       "cos-reconcile-worker",
@@ -146,10 +150,11 @@ describe("development change plan", () => {
   test("treats deployment secrets preparation as shared runtime", () => {
     const plan = resolveDevChangePlan(["scripts/prepare-site-content-deployment-secrets.sh"], metadata);
 
-    expect(plan.build_services).toEqual(["api", "admin", "web", "social-video-worker"]);
+    expect(plan.build_services).toEqual(["api", "admin", "h5", "web", "social-video-worker"]);
     expect(plan.deploy_services).toEqual([
       "api",
       "admin",
+      "h5",
       "web",
       "social-video-worker",
       "cos-reconcile-worker",

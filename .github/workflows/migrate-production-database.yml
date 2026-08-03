@@ -162,7 +162,7 @@ jobs:
                   next_character = substr(text, position + 1, 1)
 
                   if (state == "single_quote") {
-                    if (character == "\\") {
+                    if (character == "\\" && escape_single_quote) {
                       lexical_error = "backslash_in_single_quote"
                       exit 2
                     } else if (character == single_quote) {
@@ -252,6 +252,9 @@ jobs:
                       current_statement_index = executable_statement_count
                     }
                     at_statement_start = 0
+                    escape_single_quote = position > 1 \
+                      && substr(text, position - 1, 1) ~ /[eE]/ \
+                      && (position == 2 || substr(text, position - 2, 1) !~ /[[:alnum:]_$]/)
                     state = "single_quote"
                     position++
                     continue

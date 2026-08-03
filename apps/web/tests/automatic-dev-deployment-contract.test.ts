@@ -108,10 +108,10 @@ describe("automatic development image build contract", () => {
     expect(resolveStep).toContain('changed_files: []');
     expect(resolveStep).toContain('classifications: ["fallback-all"]');
     expect(resolveStep).toContain(
-      'build_services: ["api", "admin", "web", "social-video-worker"]',
+      'build_services: ["api", "admin", "h5", "web", "social-video-worker"]',
     );
     expect(resolveStep).toContain(
-      'deploy_services: ["api", "admin", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"]',
+      'deploy_services: ["api", "admin", "h5", "web", "social-video-worker", "cos-reconcile-worker", "billing-reconcile-worker"]',
     );
     expect(resolveStep).toContain('no_op: false');
     expect(resolveStep).not.toMatch(/resolve-dev-change-plan\.mjs[^\n]*(?:\|\||catch)/);

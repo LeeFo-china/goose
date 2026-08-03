@@ -93,7 +93,7 @@ describe("phase one SEO and standalone deployment", () => {
     const deploy = read(repositoryRoot, ".github/workflows/deploy-docker-services.yml");
     const gate = read(repositoryRoot, ".github/workflows/verify-web-deployment-gate.yml");
     const workflows = `${dev}\n${build}\n${deploy}`;
-    expect(dev).toContain("options: [api, admin, web");
+    expect(dev).toContain("options: [api, admin, h5, web");
     expect(dev).toContain("goose-web:${SOURCE_SHA}");
     expect(dev).toContain("https://www-dev.goodcms.cn/partners");
     expect(build).toContain("service: web");

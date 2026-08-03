@@ -1,7 +1,6 @@
 export * from './ai';
 export * from './auth';
 export * from './branding-virtual-payment';
-export { VIRTUAL_PAYMENT_ENVIRONMENTS } from './virtual-product';
 export * from './customer';
 export * from './customer-service';
 export * from './department';

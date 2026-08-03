@@ -90,7 +90,7 @@ describe("web deployment hard gates", () => {
     expect(service).toContain("required: true");
     expect(service).toContain("type: choice");
     expect(service).toContain(
-      "options: [api, admin, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]",
+      "options: [api, admin, h5, web, social-video-worker, cos-reconcile-worker, billing-reconcile-worker]",
     );
     for (const input of ["commit_sha", "build_run_id"]) {
       const section = inputSection(dispatch, input);
