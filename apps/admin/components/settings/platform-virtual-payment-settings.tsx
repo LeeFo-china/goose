@@ -1,30 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
 import {
-  buildVirtualMappingPatch,
+  buildVirtualChannelPatch,
   buildVirtualPaymentSettingsPatch,
   virtualPaymentEnvironmentLabels,
   virtualPaymentModeLabels,
-  type VirtualPaymentMappingDraft,
+  type VirtualPaymentChannelDraft,
 } from "@/components/settings/platform-virtual-payment-settings-data";
 import {
   createVirtualPaymentUiError,
-  type SafeVirtualPaymentMutationFeedback,
-  toSafeVirtualPaymentMutationFeedback,
   toSafeVirtualPaymentMutationMessage,
 } from "@/components/settings/platform-virtual-payment-errors";
-import { PlatformVirtualPaymentGoodsFlow } from
-  "@/components/settings/platform-virtual-payment-goods-flow";
-import { VirtualPaymentMappingCard } from "@/components/settings/platform-virtual-payment-mapping-card";
+import { PlatformVirtualPaymentChannelCard } from
+  "@/components/settings/platform-virtual-payment-channel-card";
 import { VirtualPaymentModeCard } from "@/components/settings/platform-virtual-payment-mode-card";
 import { createLatestRefreshCoordinator } from "@/components/settings/platform-virtual-payment-refresh-coordinator";
 import { PlatformVirtualPaymentSecretForm } from "@/components/settings/platform-virtual-payment-secret-form";
-import { usePlatformVirtualPaymentGoodsLifecycle } from
-  "@/components/settings/use-platform-virtual-payment-goods-lifecycle";
 import type {
   PlatformVirtualPaymentProductSummary,
   PlatformVirtualPaymentSettingsPatch,
@@ -72,20 +68,10 @@ export function PlatformVirtualPaymentSettings({
   const [notice, setNotice] = useState("");
   const [modeError, setModeError] = useState("");
   const [modePending, setModePending] = useState(false);
-  const [validationFeedback, setValidationFeedback] = useState<
-    (SafeVirtualPaymentMutationFeedback & {
-      environment: BrandingVirtualPaymentEnvironment;
-    }) | null
-  >(null);
   const refreshCoordinator = useRef(createLatestRefreshCoordinator());
   const activeSummary = snapshot?.virtual_products.find((item) =>
     item.environment === environment
   );
-  const mappingVersion = activeSummary?.mapping?.version ?? null;
-  const goodsLifecycle = usePlatformVirtualPaymentGoodsLifecycle({
-    environment,
-    mappingVersion,
-  });
 
   const refreshSnapshot = useCallback(
     async function refreshSnapshot(): Promise<boolean> {
@@ -138,26 +124,24 @@ export function PlatformVirtualPaymentSettings({
     setNotice(successMessage);
   }
 
-  async function saveMapping(
+  async function saveChannel(
     summary: PlatformVirtualPaymentProductSummary,
-    draft: VirtualPaymentMappingDraft,
-    amountYuan: string,
+    draft: VirtualPaymentChannelDraft,
   ) {
     if (!snapshot) return;
-    setValidationFeedback(null);
-    goodsLifecycle.clearFeedback();
-    const mappingResult = buildVirtualMappingPatch({ summary, draft, amountYuan });
-    if (!mappingResult.ok) {
-      throw createVirtualPaymentUiError(mappingResult.message);
-    }
-    const patchResult = buildVirtualPaymentSettingsPatch({
-      currentMode: snapshot.product.purchase_mode,
-      nextMode: snapshot.product.purchase_mode,
-      version: snapshot.product.version,
-      virtualProduct: mappingResult.patch,
-    });
+    const patchResult = buildVirtualChannelPatch({ summary, draft });
     if (!patchResult.ok) throw createVirtualPaymentUiError(patchResult.message);
-    await patchSettings(patchResult.patch, "虚拟商品映射已保存。");
+    setNotice("");
+    await requestBackendJson(
+      `/platform/payment/wechat-virtual/channels/${environment}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(patchResult.patch),
+        fallbackMessage: "虚拟支付渠道配置保存失败",
+      },
+    );
+    await ensureSnapshotRefreshed();
+    setNotice(`${virtualPaymentEnvironmentLabels[environment]}渠道配置已保存。`);
   }
 
   async function saveSecret(input: { appKey: string; revision: number }) {
@@ -186,42 +170,6 @@ export function PlatformVirtualPaymentSettings({
     );
     await ensureSnapshotRefreshed();
     setNotice("支付消息令牌已更新。");
-  }
-
-  async function validateMapping(summary: PlatformVirtualPaymentProductSummary) {
-    if (!summary.mapping) {
-      throw createVirtualPaymentUiError("请先保存当前环境的虚拟商品映射");
-    }
-    setNotice("");
-    setValidationFeedback(null);
-    goodsLifecycle.clearFeedback();
-    try {
-      await requestBackendJson(
-        `${SETTINGS_PATH}/${environment}/validate`,
-        {
-          method: "POST",
-          body: JSON.stringify({ version: summary.mapping.version }),
-          fallbackMessage: "虚拟商品映射校验失败",
-        },
-      );
-    } catch (validationError) {
-      const feedback = toSafeVirtualPaymentMutationFeedback(
-        validationError,
-        "虚拟商品映射校验失败，请检查配置。",
-      );
-      const refreshed = await refreshSnapshot();
-      setValidationFeedback({
-        ...feedback,
-        environment,
-        message: refreshed
-          ? feedback.message
-          : `${feedback.message} 校验未通过，且最新状态刷新失败，请重新加载。`,
-      });
-      return;
-    }
-    await ensureSnapshotRefreshed();
-    await goodsLifecycle.refresh();
-    setNotice(`${virtualPaymentEnvironmentLabels[environment]}校验已完成。`);
   }
 
   async function changeMode(nextMode: BrandingPurchaseMode) {
@@ -303,41 +251,24 @@ export function PlatformVirtualPaymentSettings({
         {summary ? (
           <TabsContent value={environment} className="m-0">
             <div className="flex flex-col gap-4">
-              <VirtualPaymentMappingCard
+              <div className="rounded-md border bg-muted/25 px-3 py-2 text-sm text-muted-foreground">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span>
+                    商品事实、价格、渠道标识和微信上传发布流程已统一迁移到虚拟商品管理。
+                  </span>
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link href="/platform/virtual-products">
+                      <ExternalLink data-icon="inline-start" />
+                      去管理虚拟商品
+                    </Link>
+                  </Button>
+                </div>
+              </div>
+              <PlatformVirtualPaymentChannelCard
                 key={`${environment}:${summary.mapping?.version ?? 0}`}
                 summary={summary}
-                productAmountFen={snapshot.product.amount_fen}
                 readonly={!snapshot.can_manage}
-                onSave={saveMapping}
-                goodsFlow={
-                  <PlatformVirtualPaymentGoodsFlow
-                    environment={environment}
-                    mapping={summary.mapping}
-                    snapshot={goodsLifecycle.snapshot}
-                    loading={goodsLifecycle.loading}
-                    pollExhausted={goodsLifecycle.pollExhausted}
-                    readonly={!snapshot.can_manage}
-                    feedback={
-                      validationFeedback?.environment === environment
-                        ? validationFeedback
-                        : goodsLifecycle.feedback
-                    }
-                    onRefresh={goodsLifecycle.refresh}
-                    onUpload={async () => {
-                      setNotice("");
-                      if (await goodsLifecycle.startUpload()) {
-                        setNotice("微信商品上传任务已提交。");
-                      }
-                    }}
-                    onPublish={async () => {
-                      setNotice("");
-                      if (await goodsLifecycle.startPublish()) {
-                        setNotice("微信商品发布任务已提交。");
-                      }
-                    }}
-                    onValidate={() => validateMapping(summary)}
-                  />
-                }
+                onSave={saveChannel}
               />
               <div className="grid gap-4 xl:grid-cols-2">
                 <PlatformVirtualPaymentSecretForm
@@ -359,7 +290,7 @@ export function PlatformVirtualPaymentSettings({
               <EmptyHeader>
                 <EmptyTitle>当前环境尚无配置</EmptyTitle>
                 <EmptyDescription>
-                  刷新统一快照后再继续配置虚拟商品映射。
+                  刷新统一快照后再继续配置虚拟支付渠道。
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
@@ -379,13 +310,11 @@ export function PlatformVirtualPaymentSettings({
 function VirtualPaymentSettingsSkeleton() {
   return (
     <div className="flex flex-col gap-4" aria-label="虚拟支付配置加载中">
-      {["mode", "mapping"].map((key) => (
+      {["mode", "channel"].map((key) => (
         <VirtualPaymentCardSkeleton
           key={key}
           detailCount={key === "mode" ? 3 : 2}
-          showHeaderMeta={key === "mapping"}
-          showImageUpload={key === "mapping"}
-          showGoodsFlow={key === "mapping"}
+          showHeaderMeta={key === "channel"}
         />
       ))}
       <div className="grid gap-4 xl:grid-cols-2">
@@ -400,13 +329,9 @@ function VirtualPaymentSettingsSkeleton() {
 function VirtualPaymentCardSkeleton({
   detailCount = 2,
   showHeaderMeta = false,
-  showImageUpload = false,
-  showGoodsFlow = false,
 }: {
   detailCount?: number;
   showHeaderMeta?: boolean;
-  showImageUpload?: boolean;
-  showGoodsFlow?: boolean;
 }) {
   return (
     <Card className="shadow-none">
@@ -426,22 +351,6 @@ function VirtualPaymentCardSkeleton({
             <Skeleton key={index} className="h-16 w-full" />
           ))}
         </div>
-        {showImageUpload ? (
-          <div className="flex items-center gap-3">
-            <Skeleton className="size-20 rounded-md" />
-            <div className="flex flex-1 flex-col gap-2">
-              <Skeleton className="h-8 w-28" />
-              <Skeleton className="h-3 w-64 max-w-full" />
-            </div>
-          </div>
-        ) : null}
-        {showGoodsFlow ? (
-          <div className="grid gap-3 md:grid-cols-3">
-            {Array.from({ length: 3 }, (_, index) => (
-              <Skeleton key={index} className="h-20 w-full" />
-            ))}
-          </div>
-        ) : null}
       </CardContent>
       <CardFooter className="justify-end border-t pt-5">
         <Skeleton className="h-9 w-28" />

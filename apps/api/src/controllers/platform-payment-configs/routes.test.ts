@@ -86,6 +86,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       "POST /platform/payment/wechat-pay/profiles/:profileCode/validate",
       "GET /platform/payment/wechat-virtual/branding-entitlement",
       "PATCH /platform/payment/wechat-virtual/branding-entitlement",
+      "PUT /platform/payment/wechat-virtual/channels/:environment",
       "PUT /platform/payment/wechat-virtual/branding-entitlement/:environment/secret-bundle",
       "PUT /platform/payment/wechat-virtual/message-token",
       "GET /platform/payment/wechat-virtual/branding-entitlement/:environment/goods-status",
@@ -100,12 +101,14 @@ describe("PlatformPaymentConfigsController routes", () => {
       { default: controller },
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
+      { platformBrandingVirtualPaymentChannelService },
       { platformBrandingVirtualPaymentSecretService },
       { brandingVirtualProductCatalogCompatibilityService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
+      import("@/services/platform-branding-virtual-payment-channels"),
       import("@/services/platform-branding-virtual-payment-secrets"),
       import("@/services/branding-virtual-product-compatibility"),
     ]);
@@ -113,6 +116,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       auth: authorizationService.getRequiredAuthContext,
       get: platformBrandingVirtualPaymentSettingsService.get,
       update: platformBrandingVirtualPaymentSettingsService.update,
+      updateChannel: platformBrandingVirtualPaymentChannelService.updateChannel,
       statuses: platformBrandingVirtualPaymentSecretService.getStatuses,
       bundle: platformBrandingVirtualPaymentSecretService.saveSecretBundle,
       token: platformBrandingVirtualPaymentSecretService.saveMessageToken,
@@ -133,6 +137,14 @@ describe("PlatformPaymentConfigsController routes", () => {
       message_auth: { message_token: { configured: true } },
     }));
     const update = mock(async () => ({ product: { version: 4 } }));
+    const updateChannel = mock(async () => ({
+      environment: "sandbox",
+      app_id: "wx-virtual-app",
+      virtual_merchant_id: "virtual-merchant-1",
+      offer_id: "offer-1",
+      status: "active",
+      version: 2,
+    }));
     const saveSecretBundle = mock(async () => ({
       environment: "sandbox" as const,
       configured: true,
@@ -148,6 +160,11 @@ describe("PlatformPaymentConfigsController routes", () => {
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "get", get);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
+    replaceMethod(
+      platformBrandingVirtualPaymentChannelService,
+      "updateChannel",
+      updateChannel,
+    );
     replaceMethod(
       brandingVirtualProductCatalogCompatibilityService,
       "validate",
@@ -207,6 +224,25 @@ describe("PlatformPaymentConfigsController routes", () => {
         "PATCH /platform/payment/wechat-virtual/branding-entitlement",
       )({ body: patch, query: {}, user: { sub: AUTH_USER_ID } } as FastifyRequest, {});
       expect(update).toHaveBeenCalledWith(platformAuth, patch);
+
+      const channel = {
+        app_id: "wx-virtual-app",
+        virtual_merchant_id: "virtual-merchant-1",
+        offer_id: "offer-1",
+        secret_revision: 2,
+        status: "active",
+        version: 1,
+      } as const;
+      await requiredHandler(
+        controller,
+        "PUT /platform/payment/wechat-virtual/channels/:environment",
+      )({
+        params: { environment: "sandbox" },
+        body: channel,
+        query: {},
+        user: { sub: AUTH_USER_ID },
+      } as FastifyRequest, {});
+      expect(updateChannel).toHaveBeenCalledWith(platformAuth, "sandbox", channel);
 
       const secret = { app_key: "sandbox-key", revision: 2 };
       await requiredHandler(
@@ -289,6 +325,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "get", originals.get);
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", originals.update);
+      replaceMethod(platformBrandingVirtualPaymentChannelService, "updateChannel", originals.updateChannel);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "getStatuses", originals.statuses);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originals.bundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originals.token);
@@ -304,17 +341,21 @@ describe("PlatformPaymentConfigsController routes", () => {
       { default: controller },
       { authorizationService },
       { platformBrandingVirtualPaymentSettingsService },
+      { platformBrandingVirtualPaymentChannelService },
       { platformBrandingVirtualPaymentSecretService },
       { brandingVirtualProductCatalogCompatibilityService },
     ] = await Promise.all([
       import("."),
       import("@/services/authorization"),
       import("@/services/platform-branding-virtual-payment-settings"),
+      import("@/services/platform-branding-virtual-payment-channels"),
       import("@/services/platform-branding-virtual-payment-secrets"),
       import("@/services/branding-virtual-product-compatibility"),
     ]);
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalUpdate = platformBrandingVirtualPaymentSettingsService.update;
+    const originalUpdateChannel =
+      platformBrandingVirtualPaymentChannelService.updateChannel;
     const originalValidate = brandingVirtualProductCatalogCompatibilityService.validate;
     const originalBundle = platformBrandingVirtualPaymentSecretService.saveSecretBundle;
     const originalToken = platformBrandingVirtualPaymentSecretService.saveMessageToken;
@@ -323,6 +364,7 @@ describe("PlatformPaymentConfigsController routes", () => {
     const originalUpload = brandingVirtualProductCatalogCompatibilityService.startUpload;
     const originalPublish = brandingVirtualProductCatalogCompatibilityService.startPublish;
     const update = mock(async () => ({}));
+    const updateChannel = mock(async () => ({}));
     const validate = mock(async () => ({}));
     const saveSecretBundle = mock(async () => ({}));
     const saveMessageToken = mock(async () => ({}));
@@ -331,6 +373,7 @@ describe("PlatformPaymentConfigsController routes", () => {
     const startPublish = mock(async () => ({}));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", update);
+    replaceMethod(platformBrandingVirtualPaymentChannelService, "updateChannel", updateChannel);
     replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", validate);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", saveSecretBundle);
     replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", saveMessageToken);
@@ -342,6 +385,22 @@ describe("PlatformPaymentConfigsController routes", () => {
       [
         "PATCH /platform/payment/wechat-virtual/branding-entitlement",
         { body: { version: 3, purchase_mode: "maintenance", forged: true }, query: {} },
+      ],
+      [
+        "PUT /platform/payment/wechat-virtual/channels/:environment",
+        {
+          params: { environment: "sandbox" },
+          body: {
+            app_id: "wx-virtual-app",
+            virtual_merchant_id: "virtual-merchant-1",
+            offer_id: "offer-1",
+            secret_revision: 2,
+            status: "active",
+            version: 1,
+            provider_product_id: "forged",
+          },
+          query: {},
+        },
       ],
       [
         "PUT /platform/payment/wechat-virtual/branding-entitlement/:environment/secret-bundle",
@@ -383,6 +442,7 @@ describe("PlatformPaymentConfigsController routes", () => {
         });
       }
       expect(update).not.toHaveBeenCalled();
+      expect(updateChannel).not.toHaveBeenCalled();
       expect(validate).not.toHaveBeenCalled();
       expect(saveSecretBundle).not.toHaveBeenCalled();
       expect(saveMessageToken).not.toHaveBeenCalled();
@@ -392,6 +452,7 @@ describe("PlatformPaymentConfigsController routes", () => {
     } finally {
       authorizationService.getRequiredAuthContext = originalAuth;
       replaceMethod(platformBrandingVirtualPaymentSettingsService, "update", originalUpdate);
+      replaceMethod(platformBrandingVirtualPaymentChannelService, "updateChannel", originalUpdateChannel);
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", originalValidate);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveSecretBundle", originalBundle);
       replaceMethod(platformBrandingVirtualPaymentSecretService, "saveMessageToken", originalToken);

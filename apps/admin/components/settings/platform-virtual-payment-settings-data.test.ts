@@ -6,10 +6,9 @@ import type {
   PlatformVirtualPaymentSettingsView,
 } from "./platform-virtual-payment-settings-types";
 import {
-  buildVirtualMappingPatch,
+  buildVirtualChannelPatch,
   buildVirtualPaymentSettingsPatch,
-  createVirtualMappingDraft,
-  parseVirtualPaymentAmountInput,
+  createVirtualChannelDraft,
 } from "./platform-virtual-payment-settings-data";
 
 const summary: PlatformVirtualPaymentProductSummary = {
@@ -55,121 +54,51 @@ type HasNoPlaintextLeafKeys = [Extract<
 const hasNoPlaintextLeafKeys: Assert<HasNoPlaintextLeafKeys> = true;
 
 describe("platform virtual-payment settings data", () => {
-  test("reuses exact yuan-to-fen parsing and rejects unsupported prices", () => {
-    expect(parseVirtualPaymentAmountInput("99.00")).toEqual({
-      ok: true,
-      amountFen: 9_900,
-    });
-    expect(parseVirtualPaymentAmountInput("99.001")).toEqual({
-      ok: false,
-      message: "年度价格最多保留两位小数",
-    });
-    expect(parseVirtualPaymentAmountInput("21474836.48")).toEqual({
-      ok: false,
-      message: "年度价格超出支持范围",
-    });
-  });
-
-  test("builds a mapping request without accepting a client secret reference", () => {
-    const draft = createVirtualMappingDraft(summary.mapping);
-    const result = buildVirtualMappingPatch({
+  test("builds a channel request without product-owned fields", () => {
+    const draft = createVirtualChannelDraft(summary.mapping);
+    const result = buildVirtualChannelPatch({
       summary,
       draft: { ...draft, offerId: "new-offer", status: "active" },
-      amountYuan: "99.00",
     });
 
     expect(result).toEqual({
       ok: true,
       patch: {
-        environment: "production",
         app_id: "wx-app",
         virtual_merchant_id: "virtual-mch",
         offer_id: "new-offer",
-        provider_product_id: "branding-annual",
-        item_url: "https://cdn.example.test/branding.png",
-        expected_amount_fen: 9_900,
         secret_revision: 4,
-        status: "draft",
+        status: "active",
         version: 2,
       },
     });
     if (result.ok) {
       expect(Object.hasOwn(result.patch, "encrypted_secret_ref")).toBe(false);
-      expect(result.patch.secret_revision).toBe(4);
+      expect(Object.hasOwn(result.patch, "provider_product_id")).toBe(false);
+      expect(Object.hasOwn(result.patch, "item_url")).toBe(false);
+      expect(Object.hasOwn(result.patch, "expected_amount_fen")).toBe(false);
     }
   });
 
-  test("requires a stable HTTPS JPG or PNG item URL", () => {
-    const draft = createVirtualMappingDraft(summary.mapping);
-    expect(buildVirtualMappingPatch({
-      summary,
-      draft: { ...draft, itemUrl: " https://cdn.example.test/goods.jpg?v=2 " },
-      amountYuan: "99.00",
-    })).toMatchObject({
-      ok: true,
-      patch: { item_url: "https://cdn.example.test/goods.jpg?v=2" },
+  test("keeps draft mappings disabled at payment-channel level", () => {
+    const draft = createVirtualChannelDraft({
+      ...summary.mapping!,
+      status: "draft",
     });
 
-    for (const itemUrl of [
-      "",
-      "http://cdn.example.test/goods.png",
-      "https://cdn.example.test/goods.webp",
-      "https://cdn.example.test/goods.png#fragment",
-    ]) {
-      expect(buildVirtualMappingPatch({
-        summary,
-        draft: { ...draft, itemUrl },
-        amountYuan: "99.00",
-      })).toEqual({
-        ok: false,
-        message: "商品图片必须是稳定的 HTTPS JPG 或 PNG 地址",
-      });
-    }
-  });
-
-  test("requires revalidation before activating an unvalidated mapping", () => {
-    const result = buildVirtualMappingPatch({
-      summary: {
-        ...summary,
-        secret: { ...summary.secret, revision: 3 },
-        mapping: {
-          ...summary.mapping!,
-          status: "draft",
-          validation_status: "pending",
-        },
-      },
-      draft: {
-        ...createVirtualMappingDraft(summary.mapping),
-        status: "active",
-      },
-      amountYuan: "99.00",
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      message: "请先校验当前环境的虚拟商品映射",
-    });
+    expect(draft.status).toBe("disabled");
   });
 
   test("keeps product CAS version and enforces forward-only mode transitions", () => {
-    const mappingResult = buildVirtualMappingPatch({
-      summary,
-      draft: createVirtualMappingDraft(summary.mapping),
-      amountYuan: "99.00",
-    });
-    if (!mappingResult.ok) throw new Error(mappingResult.message);
-
     expect(buildVirtualPaymentSettingsPatch({
       currentMode: "maintenance",
       nextMode: "wechat_virtual",
       version: 7,
-      virtualProduct: mappingResult.patch,
     })).toEqual({
       ok: true,
       patch: {
         version: 7,
         purchase_mode: "wechat_virtual",
-        virtual_product: mappingResult.patch,
       },
     });
     expect(buildVirtualPaymentSettingsPatch({

@@ -26,6 +26,10 @@ export type PlatformVirtualPaymentMappingStatus =
   | "active"
   | "disabled";
 
+export type PlatformVirtualPaymentChannelStatus =
+  | "active"
+  | "disabled";
+
 export type PlatformVirtualPaymentValidationStatus =
   | "pending"
   | "valid"
@@ -122,6 +126,15 @@ export type PlatformVirtualPaymentMappingPatch = {
   expected_amount_fen: number;
   secret_revision: number;
   status: PlatformVirtualPaymentMappingStatus;
+  version: number;
+};
+
+export type PlatformVirtualPaymentChannelPatch = {
+  app_id: string;
+  virtual_merchant_id: string;
+  offer_id: string;
+  secret_revision: number;
+  status: PlatformVirtualPaymentChannelStatus;
   version: number;
 };
 

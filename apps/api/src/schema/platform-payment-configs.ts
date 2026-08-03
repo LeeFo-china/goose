@@ -133,6 +133,15 @@ export const PlatformWechatVirtualProductPatchSchema = z.object({
   version: positiveInteger("版本号"),
 }).strict();
 
+export const UpdatePlatformWechatVirtualChannelSchema = z.object({
+  app_id: requiredTrimmedText(64, "AppID"),
+  virtual_merchant_id: requiredTrimmedText(64, "虚拟支付商户号"),
+  offer_id: requiredTrimmedText(128, "Offer ID"),
+  secret_revision: positiveInteger("密钥版本号"),
+  status: z.enum(["active", "disabled"]),
+  version: positiveInteger("版本号"),
+}).strict();
+
 export const UpdatePlatformWechatVirtualSettingsSchema = z.object({
   version: positiveInteger("版本号"),
   purchase_mode: z.enum(BRANDING_PURCHASE_MODES).optional(),
@@ -160,6 +169,8 @@ export type PlatformWechatVirtualEnvironmentInput =
   z.infer<typeof PlatformWechatVirtualEnvironmentSchema>;
 export type PlatformWechatVirtualProductPatchInput =
   z.infer<typeof PlatformWechatVirtualProductPatchSchema>;
+export type UpdatePlatformWechatVirtualChannelInput =
+  z.infer<typeof UpdatePlatformWechatVirtualChannelSchema>;
 export type UpdatePlatformWechatVirtualSettingsInput =
   z.infer<typeof UpdatePlatformWechatVirtualSettingsSchema>;
 export type PlatformWechatVirtualProductValidationInput =

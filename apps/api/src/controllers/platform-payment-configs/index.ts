@@ -5,6 +5,7 @@ import {
   BrandingVirtualProductEnvironmentParamsSchema,
 } from "@/schema/branding-addon";
 import {
+  UpdatePlatformWechatVirtualChannelSchema,
   PlatformWechatVirtualProductValidationSchema,
   PlatformPaymentProfileCodeSchema,
   UpdatePlatformWechatVirtualMessageTokenSchema,
@@ -16,6 +17,9 @@ import {
 import {
   platformBrandingVirtualPaymentSecretService,
 } from "@/services/platform-branding-virtual-payment-secrets";
+import {
+  platformBrandingVirtualPaymentChannelService,
+} from "@/services/platform-branding-virtual-payment-channels";
 import {
   platformBrandingVirtualPaymentSettingsService,
 } from "@/services/platform-branding-virtual-payment-settings";
@@ -170,6 +174,23 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
       authContext,
       bodyResult.data,
     );
+    return ResponseHandler.success(data);
+  }
+
+  @Put("/platform/payment/wechat-virtual/channels/:environment")
+  async updateWechatVirtualPaymentChannel(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    this.parseEmptyQuery(request);
+    const environment = this.parseVirtualEnvironment(request);
+    const bodyResult = UpdatePlatformWechatVirtualChannelSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const data = await platformBrandingVirtualPaymentChannelService
+      .updateChannel(authContext, environment, bodyResult.data);
     return ResponseHandler.success(data);
   }
 

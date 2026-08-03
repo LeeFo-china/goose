@@ -15,6 +15,7 @@ import {
 
 const PAYMENT_SETTINGS_HREF =
   "/settings?group=payment&section=virtual&environment=production";
+const VIRTUAL_PRODUCT_HREF = "/platform/virtual-products";
 
 export const PLATFORM_BRANDING_VIRTUAL_PAYMENT_READINESS_CODES = [
   "PRODUCT_DISABLED",
@@ -79,13 +80,13 @@ export function evaluatePlatformBrandingVirtualPaymentReadiness(
   );
   const mapping = production?.mapping ?? null;
   if (!mapping) {
-    add("PRODUCTION_MAPPING_REQUIRED", "请先配置生产环境虚拟商品映射", PAYMENT_SETTINGS_HREF);
+    add("PRODUCTION_MAPPING_REQUIRED", "请先配置生产环境虚拟商品映射", VIRTUAL_PRODUCT_HREF);
   } else {
     if (mapping.status !== "active") {
-      add("PRODUCTION_MAPPING_DISABLED", "请先启用生产环境虚拟商品映射", PAYMENT_SETTINGS_HREF);
+      add("PRODUCTION_MAPPING_DISABLED", "请先启用生产环境虚拟商品映射", VIRTUAL_PRODUCT_HREF);
     }
     if (mapping.validation_status !== "valid") {
-      add("PRODUCTION_MAPPING_INVALID", "请先通过生产环境虚拟商品映射校验", PAYMENT_SETTINGS_HREF);
+      add("PRODUCTION_MAPPING_INVALID", "请先通过生产环境虚拟商品映射校验", VIRTUAL_PRODUCT_HREF);
     }
     if (
       configuration.product.amount_fen === null ||
@@ -95,7 +96,7 @@ export function evaluatePlatformBrandingVirtualPaymentReadiness(
       add(
         "PRODUCTION_MAPPING_AMOUNT_MISMATCH",
         "生产环境映射价格必须与年度品牌权益价格一致",
-        PAYMENT_SETTINGS_HREF,
+        VIRTUAL_PRODUCT_HREF,
       );
     }
     if (

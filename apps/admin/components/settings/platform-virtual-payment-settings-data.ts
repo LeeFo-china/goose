@@ -1,11 +1,8 @@
-import {
-  parseYuanInputToFen,
-} from "@/components/branding-addon/platform-branding-addon-product-form-data";
 import type {
   PlatformVirtualPaymentMapping,
-  PlatformVirtualPaymentMappingPatch,
-  PlatformVirtualPaymentMappingStatus,
+  PlatformVirtualPaymentChannelStatus,
   PlatformVirtualPaymentProductSummary,
+  PlatformVirtualPaymentChannelPatch,
   PlatformVirtualPaymentSettingsPatch,
 } from "@/components/settings/platform-virtual-payment-settings-types";
 import type {
@@ -27,127 +24,67 @@ export const virtualPaymentEnvironmentLabels: Record<
   production: "生产环境",
 };
 
-export type VirtualPaymentMappingDraft = {
+export type VirtualPaymentChannelDraft = {
   appId: string;
   virtualMerchantId: string;
   offerId: string;
-  providerProductId: string;
-  itemUrl: string;
-  status: PlatformVirtualPaymentMappingStatus;
+  status: PlatformVirtualPaymentChannelStatus;
 };
 
 type BuildResult<T> =
   | { ok: true; patch: T }
   | { ok: false; message: string };
 
-export const parseVirtualPaymentAmountInput = parseYuanInputToFen;
-
-export function createVirtualMappingDraft(
+export function createVirtualChannelDraft(
   mapping: PlatformVirtualPaymentMapping | null,
-): VirtualPaymentMappingDraft {
+): VirtualPaymentChannelDraft {
   return {
     appId: mapping?.app_id ?? "",
     virtualMerchantId: mapping?.virtual_merchant_id ?? "",
     offerId: mapping?.offer_id ?? "",
-    providerProductId: mapping?.provider_product_id ?? "",
-    itemUrl: mapping?.item_url ?? "",
-    status: mapping?.status ?? "draft",
+    status: mapping?.status === "active" ? "active" : "disabled",
   };
 }
 
-export function buildVirtualMappingPatch(input: {
+export function buildVirtualChannelPatch(input: {
   summary: PlatformVirtualPaymentProductSummary;
-  draft: VirtualPaymentMappingDraft;
-  amountYuan: string;
-}): BuildResult<PlatformVirtualPaymentMappingPatch> {
+  draft: VirtualPaymentChannelDraft;
+}): BuildResult<PlatformVirtualPaymentChannelPatch> {
   const appId = input.draft.appId.trim();
   const virtualMerchantId = input.draft.virtualMerchantId.trim();
   const offerId = input.draft.offerId.trim();
-  const providerProductId = input.draft.providerProductId.trim();
-  if (!appId || !virtualMerchantId || !offerId || !providerProductId) {
-    return { ok: false, message: "请完整填写当前环境的虚拟商品映射" };
+  if (!appId || !virtualMerchantId || !offerId) {
+    return { ok: false, message: "请完整填写当前环境的虚拟支付渠道配置" };
   }
-  if (!/^[A-Za-z0-9_-]{1,20}$/.test(providerProductId)) {
-    return {
-      ok: false,
-      message: "渠道商品 ID 只能包含字母、数字、下划线或短横线，且不超过 20 个字符",
-    };
-  }
-  const itemUrl = normalizeVirtualGoodsImageUrl(input.draft.itemUrl);
-  if (!itemUrl) {
-    return {
-      ok: false,
-      message: "商品图片必须是稳定的 HTTPS JPG 或 PNG 地址",
-    };
-  }
-
-  const revision = input.summary.secret.revision;
-  if (!input.summary.secret.configured || !revision) {
-    return { ok: false, message: "请先配置当前环境的虚拟支付密钥" };
-  }
-
-  const amount = parseVirtualPaymentAmountInput(input.amountYuan);
-  if (!amount.ok) return amount;
-  if (input.summary.environment === "production" && amount.amountFen < 100) {
-    return { ok: false, message: "生产虚拟商品价格不得低于 1.00 元" };
-  }
-
   const current = input.summary.mapping;
-  const sensitiveChanged = !current ||
-    current.app_id !== appId ||
-    current.virtual_merchant_id !== virtualMerchantId ||
-    current.offer_id !== offerId ||
-    current.provider_product_id !== providerProductId ||
-    current.item_url !== itemUrl ||
-    current.expected_amount_fen !== amount.amountFen ||
-    current.secret_revision !== revision;
-  if (
-    input.draft.status === "active" &&
-    !sensitiveChanged &&
-    current?.validation_status !== "valid"
-  ) {
-    return { ok: false, message: "请先校验当前环境的虚拟商品映射" };
+  const secretRevision = input.summary.secret.revision ?? current?.secret_revision;
+  if (!current || !current.version) {
+    return { ok: false, message: "当前环境渠道配置尚未初始化" };
+  }
+  if (!secretRevision) {
+    return { ok: false, message: "请先配置当前环境的虚拟支付 AppKey" };
+  }
+  if (input.draft.status === "active" && !input.summary.secret.configured) {
+    return { ok: false, message: "请先配置当前环境的虚拟支付 AppKey" };
   }
 
   return {
     ok: true,
     patch: {
-      environment: input.summary.environment,
       app_id: appId,
       virtual_merchant_id: virtualMerchantId,
       offer_id: offerId,
-      provider_product_id: providerProductId,
-      item_url: itemUrl,
-      expected_amount_fen: amount.amountFen,
-      secret_revision: revision,
-      status: input.draft.status === "active" && sensitiveChanged
-        ? "draft"
-        : input.draft.status,
-      version: current?.version ?? 1,
+      secret_revision: secretRevision,
+      status: input.draft.status === "active" ? "active" : "disabled",
+      version: current.version,
     },
   };
-}
-
-export function normalizeVirtualGoodsImageUrl(value: string): string | null {
-  const normalized = value.trim();
-  if (!normalized || normalized.length > 2_048) return null;
-  try {
-    const url = new URL(normalized);
-    return url.protocol === "https:" &&
-        /\.(?:png|jpe?g)$/i.test(url.pathname) &&
-        url.username === "" && url.password === "" && url.hash === ""
-      ? normalized
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 export function buildVirtualPaymentSettingsPatch(input: {
   currentMode: BrandingPurchaseMode;
   nextMode: BrandingPurchaseMode;
   version: number;
-  virtualProduct?: PlatformVirtualPaymentMappingPatch;
 }): BuildResult<PlatformVirtualPaymentSettingsPatch> {
   const transitionError = getModeTransitionError(
     input.currentMode,
@@ -156,7 +93,7 @@ export function buildVirtualPaymentSettingsPatch(input: {
   if (transitionError) return { ok: false, message: transitionError };
 
   const modeChanged = input.currentMode !== input.nextMode;
-  if (!modeChanged && !input.virtualProduct) {
+  if (!modeChanged) {
     return { ok: false, message: "没有需要保存的虚拟支付配置" };
   }
   return {
@@ -164,9 +101,6 @@ export function buildVirtualPaymentSettingsPatch(input: {
     patch: {
       version: input.version,
       ...(modeChanged ? { purchase_mode: input.nextMode } : {}),
-      ...(input.virtualProduct
-        ? { virtual_product: input.virtualProduct }
-        : {}),
     },
   };
 }

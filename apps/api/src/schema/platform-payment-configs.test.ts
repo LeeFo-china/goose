@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   type PlatformWechatVirtualProductPatchInput,
   PlatformWechatVirtualEnvironmentSchema,
+  UpdatePlatformWechatVirtualChannelSchema,
   PlatformWechatVirtualProductPatchSchema,
   PlatformWechatVirtualProductValidationSchema,
   UpdatePlatformWechatPayConfigSchema,
@@ -285,6 +286,42 @@ describe("PlatformWechatVirtualProductPatchSchema", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+});
+
+describe("UpdatePlatformWechatVirtualChannelSchema", () => {
+  test("accepts only environment-level channel fields", () => {
+    expect(UpdatePlatformWechatVirtualChannelSchema.parse({
+      app_id: "  wx-virtual-app  ",
+      virtual_merchant_id: "  virtual-merchant-1  ",
+      offer_id: "  offer-1  ",
+      secret_revision: 2,
+      status: "active",
+      version: 1,
+    })).toEqual({
+      app_id: "wx-virtual-app",
+      virtual_merchant_id: "virtual-merchant-1",
+      offer_id: "offer-1",
+      secret_revision: 2,
+      status: "active",
+      version: 1,
+    });
+  });
+
+  test.each([
+    ["provider product id", { provider_product_id: "vp_1" }],
+    ["item url", { item_url: "https://cdn.example.test/goods.png" }],
+    ["expected amount", { expected_amount_fen: 9900 }],
+  ])("rejects product-owned field: %s", (_label, forbiddenPatch) => {
+    expect(UpdatePlatformWechatVirtualChannelSchema.safeParse({
+      app_id: "wx-virtual-app",
+      virtual_merchant_id: "virtual-merchant-1",
+      offer_id: "offer-1",
+      secret_revision: 2,
+      status: "active",
+      version: 1,
+      ...forbiddenPatch,
+    }).success).toBe(false);
   });
 });
 
