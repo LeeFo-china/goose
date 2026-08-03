@@ -5,6 +5,12 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const readMigration = () => Bun.file(migrationPath).text();
+const seedPointerFixMigrationPath = new URL(
+  "../../../../supabase/migrations/20260803114000_fix_platform_service_seed_publish_pointers.sql",
+  import.meta.url,
+);
+const readSeedPointerFixMigration = () =>
+  Bun.file(seedPointerFixMigrationPath).text();
 
 describe("platform service sales migration", () => {
   test("creates isolated service sales tables", async () => {
@@ -33,5 +39,14 @@ describe("platform service sales migration", () => {
     expect(sql).toContain("platform_service_create_pending_order");
     expect(sql).toContain("platform_service_confirm_payment");
     expect(sql).toContain("FOR UPDATE");
+  });
+
+  test("repairs default product published-version pointers through migration", async () => {
+    const sql = await readSeedPointerFixMigration();
+    expect(sql).toContain("platform_service_1y");
+    expect(sql).toContain("platform_service_2y");
+    expect(sql).toContain("platform_service_3y");
+    expect(sql).toMatch(/UPDATE\s+public\.platform_service_products/i);
+    expect(sql).toContain("PLATFORM_SERVICE_SEED_PUBLISHED_VERSION_MISSING");
   });
 });

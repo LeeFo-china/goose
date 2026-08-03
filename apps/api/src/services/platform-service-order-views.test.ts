@@ -38,6 +38,7 @@ describe("platform service order views", () => {
         ...pending,
         payment_status: "pending",
         service_status: "waiting_payment",
+        prepay_id: "wx-prepay",
         payment_expires_at: "2026-08-03T11:59:00.000Z",
       },
       now,
@@ -80,6 +81,7 @@ describe("platform service order views", () => {
     const json = JSON.stringify(view);
     expect(json).not.toContain("openid-secret");
     expect(json).not.toContain("config-secret");
+    expect(json).not.toContain("wx-prepay");
     expect(json).not.toContain("product_snapshot");
     expect(view.available_actions.request_refund.enabled).toBe(true);
   });

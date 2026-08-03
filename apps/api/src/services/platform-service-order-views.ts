@@ -81,7 +81,6 @@ export function serializeTenantServiceOrder(
     payment_status: paymentStatus,
     service_status: serviceStatus,
     display_stage: getDisplayStage(paymentStatus, serviceStatus),
-    prepay_id: record.prepay_id,
     payment_expires_at: record.payment_expires_at,
     paid_at: record.paid_at,
     closed_at: record.closed_at,
