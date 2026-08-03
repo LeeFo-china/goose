@@ -119,6 +119,19 @@ describe("domain permissions", () => {
     }
   });
 
+  test("exposes generic virtual product permissions", () => {
+    for (const code of [
+      "platform.virtual_product.read",
+      "platform.virtual_product.manage",
+      "platform.virtual_product.publish",
+      "platform.virtual_order.read",
+      "platform.virtual_refund.manage",
+      "virtual_product.purchase",
+    ]) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+    }
+  });
+
   test("exposes receivable permissions in domain permission constants", () => {
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.view");
     expect(PERMISSION_CODE_VALUES).toContain("finance.receivable.manage");
