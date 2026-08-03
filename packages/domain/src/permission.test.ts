@@ -127,7 +127,7 @@ describe("domain permissions", () => {
       "platform.virtual_order.read",
       "platform.virtual_refund.manage",
       "virtual_product.purchase",
-    ]) {
+    ] as const) {
       expect(PERMISSION_CODE_VALUES).toContain(code);
     }
   });
