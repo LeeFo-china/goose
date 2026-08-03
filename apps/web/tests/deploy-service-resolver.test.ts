@@ -43,7 +43,7 @@ describe("production deploy service resolver", () => {
       "build",
       "api, admin,,api,cos-reconcile-worker",
     ]);
-    expect(all.stdout?.toString().trim()).toBe("api admin web social-video-worker");
+    expect(all.stdout?.toString().trim()).toBe("api admin h5 web social-video-worker");
     expect(selected.stdout?.toString().trim()).toBe("api admin");
   });
 

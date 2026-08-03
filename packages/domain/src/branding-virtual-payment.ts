@@ -1,12 +1,11 @@
+import { VIRTUAL_PAYMENT_ENVIRONMENTS } from './virtual-product';
+
+export { VIRTUAL_PAYMENT_ENVIRONMENTS };
+
 export const BRANDING_PURCHASE_MODES = [
   'direct_legacy',
   'maintenance',
   'wechat_virtual',
-] as const;
-
-export const VIRTUAL_PAYMENT_ENVIRONMENTS = [
-  'sandbox',
-  'production',
 ] as const;
 
 export const VIRTUAL_PAYMENT_PLATFORMS = [
