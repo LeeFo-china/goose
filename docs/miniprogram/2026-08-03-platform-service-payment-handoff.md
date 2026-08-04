@@ -31,7 +31,7 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 | 项目 | 值 |
 | --- | --- |
 | Dev API base URL | `https://api-dev.goodcms.cn` |
-| Dev API release | GitHub Actions `Release Dev` run `30862755105`，commit `9217f5340858eabae3fb2fc7fc51a0ceaaf7a6a6` |
+| Dev API release | GitHub Actions `Release Dev` run `30869050621`，commit `f48e2a109e5a1b3c49a66485d1dfc24d13771344` |
 | Dev Supabase API host | `api-dev.goodcms.cn:8000` |
 | 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000`、`20260804110000` |
 | 数据库类型 | `apps/api/src/types/database.ts` 已从同版本本地 schema 生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment`、`platform_service_publish_product_version`、`platform_service_request_refund_review` RPC |
@@ -49,6 +49,8 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 到 `20260804110000`；随后对开发库执行 `supabase db push --db-url` 应用
 `20260804110000_harden_platform_service_sales_atomicity.sql`，`supabase migration list
 --db-url` 显示 Local/Remote 均为 `20260804110000`。
+对应 API 代码已发布到 dev，GitHub Actions `Release Dev` run `30869050621` 执行成功，
+发布 commit 为 `f48e2a109e5a1b3c49a66485d1dfc24d13771344`。
 本地 `.env` 自签 token 不被 dev 容器认可，曾返回 `TOKEN_INVALID`，后续 smoke 应使用
 dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke 专用 token；后续 CI
 或其他开发机执行时仍需显式注入上述两个 token。
