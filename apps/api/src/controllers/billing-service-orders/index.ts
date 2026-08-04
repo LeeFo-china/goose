@@ -1,6 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  ServiceFulfillmentAttachmentPreviewParamSchema,
   ServiceAcceptanceDecisionSchema,
   ServiceOrderActionSchema,
   ServiceOrderCreateSchema,
@@ -196,6 +197,21 @@ class BillingServiceOrdersController extends BaseController {
       authContext,
       paramsResult.data.id,
       bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url")
+  async getFulfillmentAttachmentPreviewUrl(request: FastifyRequest) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = ServiceFulfillmentAttachmentPreviewParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await (await service()).getFulfillmentAttachmentPreviewUrl(
+      authContext,
+      paramsResult.data,
     );
     return ResponseHandler.success(data);
   }

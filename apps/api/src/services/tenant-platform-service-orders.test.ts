@@ -185,6 +185,9 @@ function createRepository() {
     findAcceptanceViewByTenantAndOrderId: mock(
       async (_input: unknown) => null,
     ),
+    findTenantFulfillmentAttachmentPreview: mock(
+      async (_input: unknown) => null,
+    ),
     decideAcceptance: mock(async () => ({
       workOrder: null,
       order: null,

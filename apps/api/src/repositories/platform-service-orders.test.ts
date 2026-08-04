@@ -317,6 +317,31 @@ describe("PlatformServiceOrderRepository", () => {
     );
   });
 
+  test("loads tenant fulfillment attachment preview with scoped order and file", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+
+    await repository.findTenantFulfillmentAttachmentPreview({
+      tenantId: "tenant-1",
+      orderId: "order-1",
+      attachmentId: "attachment-1",
+    });
+
+    expect(calls).toContainEqual([
+      "from",
+      "tenant_service_fulfillment_attachments",
+    ]);
+    expect(calls).toContainEqual(["eq", "tenant_id", "tenant-1"]);
+    expect(calls).toContainEqual(["eq", "service_order_id", "order-1"]);
+    expect(calls).toContainEqual(["eq", "id", "attachment-1"]);
+    const selectCall = calls.find(([method]) => method === "select");
+    expect(selectCall?.[1]).toContain(
+      "file:platform_file_objects!tenant_service_fulfillment_attachments_file_id_fkey",
+    );
+  });
+
   test("decides tenant acceptance through atomic RPC", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"

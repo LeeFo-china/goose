@@ -85,6 +85,7 @@ function createDependencies() {
       findOrderByTenantAndId: mock(async () => order),
       findOrderForPaymentByTenantAndId: mock(async () => order),
       findAcceptanceViewByTenantAndOrderId: mock(async () => null),
+      findTenantFulfillmentAttachmentPreview: mock(async () => null),
       decideAcceptance: mock(async () => ({
         workOrder: null,
         order: null,

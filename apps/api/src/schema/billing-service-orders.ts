@@ -41,6 +41,11 @@ export const ServiceOrderParamSchema = z.object({
   id: z.uuid("无效的平台服务订单 ID"),
 });
 
+export const ServiceFulfillmentAttachmentPreviewParamSchema = z.object({
+  id: z.uuid("无效的平台服务订单 ID"),
+  attachmentId: z.uuid("无效的平台服务履约附件 ID"),
+});
+
 export type ServiceProductListQuery =
   z.infer<typeof ServiceProductListQuerySchema>;
 export type ServiceOrderListQuery =
@@ -53,3 +58,5 @@ export type ServiceRefundRequestInput =
   z.infer<typeof ServiceRefundRequestSchema>;
 export type ServiceAcceptanceDecisionInput =
   z.infer<typeof ServiceAcceptanceDecisionSchema>;
+export type ServiceFulfillmentAttachmentPreviewParam =
+  z.infer<typeof ServiceFulfillmentAttachmentPreviewParamSchema>;
