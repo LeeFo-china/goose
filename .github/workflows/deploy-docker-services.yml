@@ -472,6 +472,7 @@ jobs:
           GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
           GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
           OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
+          WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
         run: |
           set -euo pipefail
           if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
@@ -504,6 +505,7 @@ jobs:
           GOOES_PREVIEW_SESSION_SECRET: ${{ secrets.GOOES_PREVIEW_SESSION_SECRET }}
           GOOES_WEB_REVALIDATE_SHARED_SECRET: ${{ secrets.GOOES_WEB_REVALIDATE_SHARED_SECRET }}
           OCR_RESULT_ENCRYPTION_KEY: ${{ secrets.OCR_RESULT_ENCRYPTION_KEY }}
+          WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1: ${{ secrets.WECHAT_MINI_SESSION_ENCRYPTION_KEY_V1 }}
         run: |
           set -euo pipefail
           if [ "${WEB_DIRECT_DEPLOY:-false}" = true ]; then
