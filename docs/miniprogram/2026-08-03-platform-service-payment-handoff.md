@@ -51,6 +51,9 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 --db-url` 显示 Local/Remote 均为 `20260804110000`。
 对应 API 代码已发布到 dev，GitHub Actions `Release Dev` run `30869050621` 执行成功，
 发布 commit 为 `f48e2a109e5a1b3c49a66485d1dfc24d13771344`。
+同日使用开发库只读筛选出的合法租户员工/平台员工登录态重新执行 dev dry-run smoke，
+结果 `ok=true`、readiness 全部为 `true`，商品金额来自 dev 数据库已发布版本；该 smoke
+未创建订单、未触发微信支付，输出未包含手机号、token、OpenID 或支付签名。
 本地 `.env` 自签 token 不被 dev 容器认可，曾返回 `TOKEN_INVALID`，后续 smoke 应使用
 dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke 专用 token；后续 CI
 或其他开发机执行时仍需显式注入上述两个 token。
