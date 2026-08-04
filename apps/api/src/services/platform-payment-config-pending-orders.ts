@@ -1,14 +1,18 @@
 import { Errors } from "@/errors/error-factory";
-import type { billingRechargeRepository } from "@/repositories/billing-recharge";
+import { billingRechargeRepository } from "@/repositories/billing-recharge";
+import {
+  brandingAddonPaymentConfigRepository,
+} from "@/repositories/branding-addon-payment-config";
 import type {
   PlatformPaymentConfigRecord,
   PlatformPaymentConfigUpsertInput,
 } from "@/repositories/platform-payment-configs";
+import { platformServiceOrderRepository } from "@/repositories/platform-service-orders";
 
-export type PendingRechargeOrderPort = Pick<
-  typeof billingRechargeRepository,
-  "hasPendingWechatOrdersForPaymentConfig"
->;
+export type PendingPlatformPaymentOrdersPort = {
+  hasPendingOrdersForPaymentConfig(paymentConfigId: string): Promise<boolean>;
+};
+export type PendingRechargeOrderPort = PendingPlatformPaymentOrdersPort;
 
 const CRITICAL_CONFIG_FIELDS = [
   "merchant_mode",
@@ -20,11 +24,28 @@ const CRITICAL_CONFIG_FIELDS = [
   "encrypted_config_ref",
 ] as const;
 
-const PENDING_RECHARGE_CONFIG_ERROR = {
+const PENDING_CONFIG_ERROR = {
   statusCode: 409,
-  message: "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
-  code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+  message: "存在使用当前微信支付配置的待支付订单，请等待订单支付或关闭后再修改",
+  code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
 } as const;
+
+export const pendingPlatformPaymentOrders: PendingPlatformPaymentOrdersPort = {
+  async hasPendingOrdersForPaymentConfig(paymentConfigId: string) {
+    const [hasRecharge, hasBrandingAddon, hasServiceOrder] = await Promise.all([
+      billingRechargeRepository.hasPendingWechatOrdersForPaymentConfig(
+        paymentConfigId,
+      ),
+      brandingAddonPaymentConfigRepository.hasPendingOrdersForPaymentConfig(
+        paymentConfigId,
+      ),
+      platformServiceOrderRepository.hasPendingOrdersForPaymentConfig(
+        paymentConfigId,
+      ),
+    ]);
+    return hasRecharge || hasBrandingAddon || hasServiceOrder;
+  },
+};
 
 function normalizeComparable(value: string | null) {
   return value?.trim() || null;
@@ -33,7 +54,7 @@ function normalizeComparable(value: string | null) {
 export async function assertCriticalPaymentConfigChangeAllowed(input: {
   current: PlatformPaymentConfigRecord | null;
   next: PlatformPaymentConfigUpsertInput;
-  pendingRechargeOrders: PendingRechargeOrderPort;
+  pendingRechargeOrders: PendingPlatformPaymentOrdersPort;
 }) {
   if (!input.current) return;
 
@@ -44,29 +65,29 @@ export async function assertCriticalPaymentConfigChangeAllowed(input: {
   if (!hasCriticalChange) return;
 
   const hasPendingOrders = await input.pendingRechargeOrders
-    .hasPendingWechatOrdersForPaymentConfig(input.current.id);
+    .hasPendingOrdersForPaymentConfig(input.current.id);
   if (!hasPendingOrders) return;
 
-  throw Errors.business(
-    PENDING_RECHARGE_CONFIG_ERROR.statusCode,
-    PENDING_RECHARGE_CONFIG_ERROR.message,
-    PENDING_RECHARGE_CONFIG_ERROR.code,
-  );
+  throwPendingOrdersError();
 }
 
 export async function assertPaymentSecretChangeAllowed(input: {
   current: PlatformPaymentConfigRecord | null;
-  pendingRechargeOrders: PendingRechargeOrderPort;
+  pendingRechargeOrders: PendingPlatformPaymentOrdersPort;
 }) {
   if (!input.current) return;
 
   const hasPendingOrders = await input.pendingRechargeOrders
-    .hasPendingWechatOrdersForPaymentConfig(input.current.id);
+    .hasPendingOrdersForPaymentConfig(input.current.id);
   if (!hasPendingOrders) return;
 
+  throwPendingOrdersError();
+}
+
+function throwPendingOrdersError(): never {
   throw Errors.business(
-    PENDING_RECHARGE_CONFIG_ERROR.statusCode,
-    PENDING_RECHARGE_CONFIG_ERROR.message,
-    PENDING_RECHARGE_CONFIG_ERROR.code,
+    PENDING_CONFIG_ERROR.statusCode,
+    PENDING_CONFIG_ERROR.message,
+    PENDING_CONFIG_ERROR.code,
   );
 }

@@ -79,7 +79,9 @@ const updatePlatformPaymentSecretSetting = mock(async () => ({
 const secretBundleRevisionFactory = mock(
   () => "11111111-1111-4111-8111-111111111111",
 );
-const hasPendingWechatOrdersForPaymentConfig = mock(async () => false);
+const hasPendingOrdersForPaymentConfig = mock(async () => false);
+const hasPendingWechatOrdersForPaymentConfig =
+  hasPendingOrdersForPaymentConfig;
 
 const platformRole = {
   id: "role-platform",
@@ -141,7 +143,7 @@ async function createService() {
     },
     secretBundleRevisionFactory,
     pendingRechargeOrders: {
-      hasPendingWechatOrdersForPaymentConfig,
+      hasPendingOrdersForPaymentConfig,
     },
   });
 }
@@ -280,7 +282,7 @@ describe("PlatformPaymentConfigService", () => {
       { merchant_id: "1900000002" },
     )).rejects.toMatchObject({
       statusCode: 409,
-      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
     });
 
     expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(
@@ -445,7 +447,7 @@ describe("PlatformPaymentConfigService", () => {
       },
     )).rejects.toMatchObject({
       statusCode: 409,
-      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
     });
 
     expect(hasPendingWechatOrdersForPaymentConfig).toHaveBeenCalledWith(

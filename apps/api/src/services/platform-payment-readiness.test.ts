@@ -23,7 +23,7 @@ const directConfig = {
   secret_bundle_revision: "bundle-revision-direct",
   serial_no: "DIRECT-SERIAL-NUMBER",
   notify_url: "https://api.example.com/pay/wechat/callback",
-  enabled_channels: ["tenant_recharge"],
+  enabled_channels: ["tenant_recharge", "platform_service"],
   status: "active",
   validation_status: "valid",
   last_validated_at: "2026-07-20T12:00:00.000Z",
@@ -260,5 +260,20 @@ describe("PlatformPaymentReadinessService", () => {
       code: "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
       message: "支付配置缺少必需的启用渠道",
     });
+  });
+
+  test("requires tenant recharge and platform service channels for direct merchant", async () => {
+    const { result } = await getReadiness({
+      platform_direct_recharge: {
+        ...directConfig,
+        enabled_channels: ["tenant_recharge"],
+      },
+    });
+
+    expect(result.profiles[0]?.blockers).toContainEqual({
+      code: "PLATFORM_PAYMENT_REQUIRED_CHANNELS_MISSING",
+      message: "支付配置缺少必需的启用渠道",
+    });
+    expect(result.profiles[0]?.checks.required_channels_enabled).toBe(false);
   });
 });

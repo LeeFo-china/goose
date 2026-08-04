@@ -65,7 +65,9 @@ const upsertWechatPayConfig = mock(async (input: PlatformPaymentConfigUpsertInpu
 const updatePlatformPaymentSecretSetting = mock(async () => ({
   key: "setting-key",
 }));
-const hasPendingWechatOrdersForPaymentConfig = mock(async () => false);
+const hasPendingOrdersForPaymentConfig = mock(async () => false);
+const hasPendingWechatOrdersForPaymentConfig =
+  hasPendingOrdersForPaymentConfig;
 
 const authContext = {
   authUserId: "auth-platform",
@@ -102,7 +104,9 @@ async function createService() {
     settingsService: { updatePlatformPaymentSecretSetting },
     secretBundleRevisionFactory: () =>
       "11111111-1111-4111-8111-111111111111",
-    pendingRechargeOrders: { hasPendingWechatOrdersForPaymentConfig },
+    pendingRechargeOrders: {
+      hasPendingOrdersForPaymentConfig,
+    },
   });
 }
 
@@ -145,7 +149,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
         input,
       )).rejects.toMatchObject({
         statusCode: 409,
-        code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+        code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
       });
 
       const configId = profileCode === "platform_direct_recharge"
@@ -254,7 +258,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
     upsertWechatPayConfig.mockImplementationOnce(async () => {
       throw {
         code: "23514",
-        message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+        message: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
       };
     });
     const service = await createService();
@@ -265,7 +269,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
       { merchant_id: "1900000002" },
     )).rejects.toMatchObject({
       statusCode: 409,
-      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
     });
   });
 
@@ -273,7 +277,7 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
     updatePlatformPaymentSecretSetting.mockImplementationOnce(async () => {
       throw Errors.dbError("更新系统配置失败", {
         code: "23514",
-        message: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+        message: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
       });
     });
     const service = await createService();
@@ -287,15 +291,15 @@ describe("PlatformPaymentConfigService pending recharge guards", () => {
       },
     )).rejects.toMatchObject({
       statusCode: 409,
-      code: "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      code: "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
     });
   });
 
   test("keeps an already mapped system-setting conflict unchanged", async () => {
     const conflict = Errors.business(
       409,
-      "存在使用当前微信支付配置的待支付充值订单，请等待订单支付或关闭后再修改",
-      "PLATFORM_PAYMENT_CONFIG_PENDING_RECHARGE_ORDERS",
+      "存在使用当前微信支付配置的待支付订单，请等待订单支付或关闭后再修改",
+      "PLATFORM_PAYMENT_CONFIG_PENDING_ORDERS",
     );
     updatePlatformPaymentSecretSetting.mockImplementationOnce(async () => {
       throw conflict;

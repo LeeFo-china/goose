@@ -92,3 +92,37 @@ describe('branding error codes', () => {
     ]);
   });
 });
+
+describe('platform service sales error codes', () => {
+  test('exports the stable service order and product error contract', () => {
+    expect([
+      ErrorCodes.SERVICE_PRODUCT_NOT_FOUND,
+      ErrorCodes.SERVICE_TERMS_VERSION_STALE,
+      ErrorCodes.SERVICE_ORDER_NOT_FOUND,
+      ErrorCodes.SERVICE_ORDER_INVALID_STATE,
+      ErrorCodes.SERVICE_ORDER_VERSION_CONFLICT,
+      ErrorCodes.SERVICE_ORDER_IDEMPOTENCY_CONFLICT,
+      ErrorCodes.SERVICE_ORDER_FORBIDDEN,
+      ErrorCodes.PAYER_OPENID_REQUIRED,
+      ErrorCodes.SERVICE_PAYMENT_CONFIG_INVALID,
+      ErrorCodes.SERVICE_PAYMENT_PREPAY_FAILED,
+      ErrorCodes.SERVICE_REFUND_ALREADY_PENDING,
+      ErrorCodes.SERVICE_PRODUCT_VERSION_CONFLICT,
+      ErrorCodes.SERVICE_PRODUCT_PUBLISH_REQUIRED,
+    ]).toEqual([
+      'SERVICE_PRODUCT_NOT_FOUND',
+      'SERVICE_TERMS_VERSION_STALE',
+      'SERVICE_ORDER_NOT_FOUND',
+      'SERVICE_ORDER_INVALID_STATE',
+      'SERVICE_ORDER_VERSION_CONFLICT',
+      'SERVICE_ORDER_IDEMPOTENCY_CONFLICT',
+      'SERVICE_ORDER_FORBIDDEN',
+      'PAYER_OPENID_REQUIRED',
+      'SERVICE_PAYMENT_CONFIG_INVALID',
+      'SERVICE_PAYMENT_PREPAY_FAILED',
+      'SERVICE_REFUND_ALREADY_PENDING',
+      'SERVICE_PRODUCT_VERSION_CONFLICT',
+      'SERVICE_PRODUCT_PUBLISH_REQUIRED',
+    ]);
+  });
+});

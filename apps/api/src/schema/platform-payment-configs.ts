@@ -16,7 +16,7 @@ const nullableText = (max: number, message: string) =>
   }, z.string().max(max, message).nullable().optional());
 
 export const PlatformWechatPayEnabledChannelSchema = z.enum(
-  ["tenant_recharge", "project_payment", "applyment"],
+  ["tenant_recharge", "project_payment", "applyment", "platform_service"],
   { message: "无效的平台支付启用渠道" },
 );
 

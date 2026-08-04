@@ -7,11 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
   public: {
     Tables: {
       _backup_departments_20260527: {
@@ -5629,6 +5624,7 @@ export type Database = {
           entitlement_code: string
           id: string
           name: string
+          purchase_mode: string
           purchase_notes: string
           refund_policy: string
           term_years: number
@@ -5644,6 +5640,7 @@ export type Database = {
           entitlement_code: string
           id?: string
           name: string
+          purchase_mode?: string
           purchase_notes: string
           refund_policy: string
           term_years?: number
@@ -5659,6 +5656,7 @@ export type Database = {
           entitlement_code?: string
           id?: string
           name?: string
+          purchase_mode?: string
           purchase_notes?: string
           refund_policy?: string
           term_years?: number
@@ -6479,6 +6477,7 @@ export type Database = {
           name: string
           phone: string
           region_codes: string[]
+          region_version: number
           remark: string | null
           settlement_account: Json
           settlement_account_status: string
@@ -6497,6 +6496,7 @@ export type Database = {
           name: string
           phone: string
           region_codes?: string[]
+          region_version?: number
           remark?: string | null
           settlement_account?: Json
           settlement_account_status?: string
@@ -6515,6 +6515,7 @@ export type Database = {
           name?: string
           phone?: string
           region_codes?: string[]
+          region_version?: number
           remark?: string | null
           settlement_account?: Json
           settlement_account_status?: string
@@ -6763,6 +6764,595 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_service_product_versions: {
+        Row: {
+          amount_fen: number
+          id: string
+          list_amount_fen: number
+          product_id: string
+          published_at: string
+          published_by_employee_id: string | null
+          service_scope: Json
+          term_years: number
+          terms_content: string
+          terms_version: number
+          title: string
+          version: number
+        }
+        Insert: {
+          amount_fen: number
+          id?: string
+          list_amount_fen: number
+          product_id: string
+          published_at?: string
+          published_by_employee_id?: string | null
+          service_scope: Json
+          term_years: number
+          terms_content: string
+          terms_version: number
+          title: string
+          version: number
+        }
+        Update: {
+          amount_fen?: number
+          id?: string
+          list_amount_fen?: number
+          product_id?: string
+          published_at?: string
+          published_by_employee_id?: string | null
+          service_scope?: Json
+          term_years?: number
+          terms_content?: string
+          terms_version?: number
+          title?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_service_product_versions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "platform_service_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_service_product_versions_published_by_employee_id_fkey"
+            columns: ["published_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_service_products: {
+        Row: {
+          amount_fen: number
+          code: string
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          list_amount_fen: number
+          published_version_id: string | null
+          service_scope: Json
+          sort_order: number
+          status: string
+          term_years: number
+          terms_content: string
+          terms_version: number
+          title: string
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          amount_fen: number
+          code: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          list_amount_fen: number
+          published_version_id?: string | null
+          service_scope?: Json
+          sort_order?: number
+          status?: string
+          term_years: number
+          terms_content: string
+          terms_version?: number
+          title: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          amount_fen?: number
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          list_amount_fen?: number
+          published_version_id?: string | null
+          service_scope?: Json
+          sort_order?: number
+          status?: string
+          term_years?: number
+          terms_content?: string
+          terms_version?: number
+          title?: string
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_service_products_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_service_products_published_version_fkey"
+            columns: ["published_version_id"]
+            isOneToOne: false
+            referencedRelation: "platform_service_product_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_service_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_goods_operations: {
+        Row: {
+          channel_id: string
+          failure_code: string | null
+          failure_summary: string | null
+          finished_at: string | null
+          id: string
+          last_queried_at: string | null
+          mapping_id: string
+          normalized_result: Json
+          phase: string
+          product_id: string
+          product_version: number
+          request_id: string | null
+          request_snapshot_hash: string
+          started_at: string
+          state: string
+        }
+        Insert: {
+          channel_id: string
+          failure_code?: string | null
+          failure_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          last_queried_at?: string | null
+          mapping_id: string
+          normalized_result?: Json
+          phase: string
+          product_id: string
+          product_version: number
+          request_id?: string | null
+          request_snapshot_hash: string
+          started_at?: string
+          state: string
+        }
+        Update: {
+          channel_id?: string
+          failure_code?: string | null
+          failure_summary?: string | null
+          finished_at?: string | null
+          id?: string
+          last_queried_at?: string | null
+          mapping_id?: string
+          normalized_result?: Json
+          phase?: string
+          product_id?: string
+          product_version?: number
+          request_id?: string | null
+          request_snapshot_hash?: string
+          started_at?: string
+          state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_goods_operations_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_payment_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_goods_operations_mapping_id_fkey"
+            columns: ["mapping_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_product_mappings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_goods_operations_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_payment_channels: {
+        Row: {
+          app_id: string
+          created_at: string
+          created_by_employee_id: string
+          encrypted_secret_ref: string
+          environment: string
+          id: string
+          message_auth_status: string
+          offer_id: string
+          provider: string
+          secret_revision: number
+          status: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+          virtual_merchant_id: string
+        }
+        Insert: {
+          app_id: string
+          created_at?: string
+          created_by_employee_id: string
+          encrypted_secret_ref: string
+          environment: string
+          id?: string
+          message_auth_status?: string
+          offer_id: string
+          provider: string
+          secret_revision: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+          virtual_merchant_id: string
+        }
+        Update: {
+          app_id?: string
+          created_at?: string
+          created_by_employee_id?: string
+          encrypted_secret_ref?: string
+          environment?: string
+          id?: string
+          message_auth_status?: string
+          offer_id?: string
+          provider?: string
+          secret_revision?: number
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+          virtual_merchant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_payment_channels_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_payment_channels_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_payment_products: {
+        Row: {
+          addon_product_id: string
+          app_id: string
+          created_at: string
+          created_by: string | null
+          encrypted_secret_ref: string
+          environment: string
+          expected_amount_fen: number
+          goods_quantity: number
+          id: string
+          item_url: string | null
+          offer_id: string
+          provider: string
+          provider_product_id: string
+          secret_revision: number
+          status: string
+          updated_at: string
+          updated_by: string | null
+          validated_at: string | null
+          validation_status: string
+          version: number
+          virtual_merchant_id: string
+        }
+        Insert: {
+          addon_product_id: string
+          app_id: string
+          created_at?: string
+          created_by?: string | null
+          encrypted_secret_ref: string
+          environment: string
+          expected_amount_fen: number
+          goods_quantity?: number
+          id?: string
+          item_url?: string | null
+          offer_id: string
+          provider?: string
+          provider_product_id: string
+          secret_revision: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          validated_at?: string | null
+          validation_status?: string
+          version?: number
+          virtual_merchant_id: string
+        }
+        Update: {
+          addon_product_id?: string
+          app_id?: string
+          created_at?: string
+          created_by?: string | null
+          encrypted_secret_ref?: string
+          environment?: string
+          expected_amount_fen?: number
+          goods_quantity?: number
+          id?: string
+          item_url?: string | null
+          offer_id?: string
+          provider?: string
+          provider_product_id?: string
+          secret_revision?: number
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          validated_at?: string | null
+          validation_status?: string
+          version?: number
+          virtual_merchant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_payment_products_addon_product_id_fkey"
+            columns: ["addon_product_id"]
+            isOneToOne: false
+            referencedRelation: "platform_addon_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_payment_products_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_payment_products_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_product_grant_rules: {
+        Row: {
+          benefit_type: string
+          created_at: string
+          duration_unit: string | null
+          duration_value: number | null
+          entitlement_code: string
+          expiry_mode: string
+          expiry_unit: string | null
+          expiry_value: number | null
+          grant_amount: number | null
+          product_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          benefit_type: string
+          created_at?: string
+          duration_unit?: string | null
+          duration_value?: number | null
+          entitlement_code: string
+          expiry_mode: string
+          expiry_unit?: string | null
+          expiry_value?: number | null
+          grant_amount?: number | null
+          product_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          benefit_type?: string
+          created_at?: string
+          duration_unit?: string | null
+          duration_value?: number | null
+          entitlement_code?: string
+          expiry_mode?: string
+          expiry_unit?: string | null
+          expiry_value?: number | null
+          grant_amount?: number | null
+          product_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_product_grant_rules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: true
+            referencedRelation: "platform_virtual_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_product_mappings: {
+        Row: {
+          channel_id: string
+          created_at: string
+          id: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          last_operation_id: string | null
+          last_request_id: string | null
+          product_id: string
+          provider_product_id: string
+          publish_state: string
+          remote_snapshot: Json
+          synced_product_version: number | null
+          updated_at: string
+          upload_state: string
+          validation_status: string
+          version: number
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          id?: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          last_operation_id?: string | null
+          last_request_id?: string | null
+          product_id: string
+          provider_product_id: string
+          publish_state?: string
+          remote_snapshot?: Json
+          synced_product_version?: number | null
+          updated_at?: string
+          upload_state?: string
+          validation_status?: string
+          version?: number
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          id?: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          last_operation_id?: string | null
+          last_request_id?: string | null
+          product_id?: string
+          provider_product_id?: string
+          publish_state?: string
+          remote_snapshot?: Json
+          synced_product_version?: number | null
+          updated_at?: string
+          upload_state?: string
+          validation_status?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_product_mappings_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_payment_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_product_mappings_last_operation_fkey"
+            columns: ["last_operation_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_goods_operations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_product_mappings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "platform_virtual_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      platform_virtual_products: {
+        Row: {
+          amount_fen: number
+          code: string
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          id: string
+          image_file_id: string | null
+          name: string
+          product_type: string
+          purchase_notes: string
+          refund_template: string
+          status: string
+          updated_at: string
+          updated_by_employee_id: string
+          version: number
+        }
+        Insert: {
+          amount_fen: number
+          code: string
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          id?: string
+          image_file_id?: string | null
+          name: string
+          product_type: string
+          purchase_notes?: string
+          refund_template: string
+          status?: string
+          updated_at?: string
+          updated_by_employee_id: string
+          version?: number
+        }
+        Update: {
+          amount_fen?: number
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          id?: string
+          image_file_id?: string | null
+          name?: string
+          product_type?: string
+          purchase_notes?: string
+          refund_template?: string
+          status?: string
+          updated_at?: string
+          updated_by_employee_id?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_virtual_products_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_products_image_file_id_fkey"
+            columns: ["image_file_id"]
+            isOneToOne: false
+            referencedRelation: "platform_file_objects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_virtual_products_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -7512,6 +8102,97 @@ export type Database = {
           },
         ]
       }
+      project_cost_budgets: {
+        Row: {
+          budget_amount: number
+          cost_category_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          project_id: string
+          remark: string | null
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          warning_threshold_percent: number
+        }
+        Insert: {
+          budget_amount?: number
+          cost_category_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id: string
+          remark?: string | null
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          warning_threshold_percent?: number
+        }
+        Update: {
+          budget_amount?: number
+          cost_category_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id?: string
+          remark?: string | null
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          warning_threshold_percent?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_cost_budgets_cost_category_id_fkey"
+            columns: ["cost_category_id"]
+            isOneToOne: false
+            referencedRelation: "finance_cost_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_cost_budgets_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_cost_commitments: {
         Row: {
           amount: number
@@ -7719,19 +8400,11 @@ export type Database = {
             ]
             isOneToOne: false
             referencedRelation: "supplier_purchase_order_items"
-            referencedColumns: [
-              "id",
-              "tenant_id",
-              "supplier_purchase_order_id",
-            ]
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
           },
           {
             foreignKeyName: "project_cost_events_order_tenant_supplier_fkey"
-            columns: [
-              "supplier_purchase_order_id",
-              "tenant_id",
-              "supplier_id",
-            ]
+            columns: ["supplier_purchase_order_id", "tenant_id", "supplier_id"]
             isOneToOne: false
             referencedRelation: "supplier_purchase_orders"
             referencedColumns: ["id", "tenant_id", "supplier_id"]
@@ -7771,11 +8444,7 @@ export type Database = {
             ]
             isOneToOne: false
             referencedRelation: "supplier_purchase_order_receipts"
-            referencedColumns: [
-              "id",
-              "tenant_id",
-              "supplier_purchase_order_id",
-            ]
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
           },
           {
             foreignKeyName: "project_cost_events_relationship_tenant_supplier_fkey"
@@ -7817,97 +8486,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      project_cost_budgets: {
-        Row: {
-          budget_amount: number
-          cost_category_id: string
-          created_at: string
-          created_by: string | null
-          id: string
-          metadata: Json
-          project_id: string
-          remark: string | null
-          status: string
-          tenant_id: string
-          updated_at: string
-          updated_by: string | null
-          warning_threshold_percent: number
-        }
-        Insert: {
-          budget_amount?: number
-          cost_category_id: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metadata?: Json
-          project_id: string
-          remark?: string | null
-          status?: string
-          tenant_id: string
-          updated_at?: string
-          updated_by?: string | null
-          warning_threshold_percent?: number
-        }
-        Update: {
-          budget_amount?: number
-          cost_category_id?: string
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          metadata?: Json
-          project_id?: string
-          remark?: string | null
-          status?: string
-          tenant_id?: string
-          updated_at?: string
-          updated_by?: string | null
-          warning_threshold_percent?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "project_cost_budgets_cost_category_id_fkey"
-            columns: ["cost_category_id"]
-            isOneToOne: false
-            referencedRelation: "finance_cost_categories"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_cost_budgets_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "employees"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_cost_budgets_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "platform_ocr_tenant_policy_overview"
-            referencedColumns: ["tenant_id"]
-          },
-          {
-            foreignKeyName: "project_cost_budgets_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "project_cost_budgets_updated_by_fkey"
-            columns: ["updated_by"]
-            isOneToOne: false
-            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -10134,19 +10712,11 @@ export type Database = {
             ]
             isOneToOne: false
             referencedRelation: "supplier_purchase_order_items"
-            referencedColumns: [
-              "id",
-              "tenant_id",
-              "supplier_purchase_order_id",
-            ]
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
           },
           {
             foreignKeyName: "supplier_payable_events_order_tenant_supplier_fkey"
-            columns: [
-              "supplier_purchase_order_id",
-              "tenant_id",
-              "supplier_id",
-            ]
+            columns: ["supplier_purchase_order_id", "tenant_id", "supplier_id"]
             isOneToOne: false
             referencedRelation: "supplier_purchase_orders"
             referencedColumns: ["id", "tenant_id", "supplier_id"]
@@ -10186,11 +10756,7 @@ export type Database = {
             ]
             isOneToOne: false
             referencedRelation: "supplier_purchase_order_receipts"
-            referencedColumns: [
-              "id",
-              "tenant_id",
-              "supplier_purchase_order_id",
-            ]
+            referencedColumns: ["id", "tenant_id", "supplier_purchase_order_id"]
           },
           {
             foreignKeyName: "supplier_payable_events_relationship_tenant_supplier_fkey"
@@ -10277,11 +10843,7 @@ export type Database = {
           },
           {
             foreignKeyName: "supplier_payment_allocations_payment_tenant_fkey"
-            columns: [
-              "supplier_payment_id",
-              "tenant_id",
-              "payment_request_id",
-            ]
+            columns: ["supplier_payment_id", "tenant_id", "payment_request_id"]
             isOneToOne: false
             referencedRelation: "supplier_payments"
             referencedColumns: ["id", "tenant_id", "payment_request_id"]
@@ -11937,7 +12499,7 @@ export type Database = {
           {
             foreignKeyName: "supplier_purchase_orders_requisition_tenant_fkey"
             columns: ["purchase_requisition_id", "tenant_id", "id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "supplier_purchase_requisitions"
             referencedColumns: ["id", "tenant_id", "purchase_order_id"]
           },
@@ -12288,7 +12850,7 @@ export type Database = {
           {
             foreignKeyName: "supplier_purchase_requisitions_order_tenant_fkey"
             columns: ["purchase_order_id", "tenant_id", "id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "supplier_purchase_orders"
             referencedColumns: ["id", "tenant_id", "purchase_requisition_id"]
           },
@@ -14083,6 +14645,7 @@ export type Database = {
           new_value: Json
           old_value: Json
           reason: string | null
+          reverses_event_id: string | null
           source_id: string | null
           source_type: string
           tenant_id: string
@@ -14098,6 +14661,7 @@ export type Database = {
           new_value: Json
           old_value: Json
           reason?: string | null
+          reverses_event_id?: string | null
           source_id?: string | null
           source_type: string
           tenant_id: string
@@ -14113,6 +14677,7 @@ export type Database = {
           new_value?: Json
           old_value?: Json
           reason?: string | null
+          reverses_event_id?: string | null
           source_id?: string | null
           source_type?: string
           tenant_id?: string
@@ -14131,6 +14696,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "tenant_entitlements"
             referencedColumns: ["id", "tenant_id", "entitlement_code"]
+          },
+          {
+            foreignKeyName: "tenant_entitlement_events_reverses_event_id_fkey"
+            columns: ["reverses_event_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_entitlement_events"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -15174,6 +15746,145 @@ export type Database = {
           },
         ]
       }
+      tenant_service_orders: {
+        Row: {
+          amount_fen: number
+          closed_at: string | null
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          idempotency_key: string | null
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_config_guard_version: number
+          payment_config_id: string
+          payment_expires_at: string
+          payment_status: string
+          prepay_id: string | null
+          pricing_version: number
+          product_code: string
+          product_id: string
+          product_snapshot: Json
+          product_version_id: string
+          service_status: string
+          tenant_id: string
+          term_years: number
+          terms_accepted_at: string
+          terms_version: number
+          transaction_id: string | null
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          amount_fen: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          idempotency_key?: string | null
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid: string
+          payment_config_guard_version: number
+          payment_config_id: string
+          payment_expires_at: string
+          payment_status?: string
+          prepay_id?: string | null
+          pricing_version: number
+          product_code: string
+          product_id: string
+          product_snapshot: Json
+          product_version_id: string
+          service_status?: string
+          tenant_id: string
+          term_years: number
+          terms_accepted_at: string
+          terms_version: number
+          transaction_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          amount_fen?: number
+          closed_at?: string | null
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          idempotency_key?: string | null
+          order_no?: string
+          out_trade_no?: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid?: string
+          payment_config_guard_version?: number
+          payment_config_id?: string
+          payment_expires_at?: string
+          payment_status?: string
+          prepay_id?: string | null
+          pricing_version?: number
+          product_code?: string
+          product_id?: string
+          product_snapshot?: Json
+          product_version_id?: string
+          service_status?: string
+          tenant_id?: string
+          term_years?: number
+          terms_accepted_at?: string
+          terms_version?: number
+          transaction_id?: string | null
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_orders_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_orders_payment_config_id_fkey"
+            columns: ["payment_config_id"]
+            isOneToOne: false
+            referencedRelation: "platform_payment_configs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_orders_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "platform_service_products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_orders_product_version_id_fkey"
+            columns: ["product_version_id"]
+            isOneToOne: false
+            referencedRelation: "platform_service_product_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_service_provider_profiles: {
         Row: {
           address: string | null
@@ -15266,6 +15977,226 @@ export type Database = {
             foreignKeyName: "tenant_service_provider_profiles_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_service_refund_requests: {
+        Row: {
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          idempotency_key: string
+          reason: string
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          service_order_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by_employee_id: string
+          id?: string
+          idempotency_key: string
+          reason: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_order_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by_employee_id?: string
+          id?: string
+          idempotency_key?: string
+          reason?: string
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          service_order_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_refund_requests_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_refund_requests_order_identity_fkey"
+            columns: ["service_order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_refund_requests_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_refund_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_refund_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_service_wechat_notifications: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          notify_id: string
+          order_id: string | null
+          out_trade_no: string | null
+          payload: Json
+          processed: boolean
+          processed_at: string | null
+          tenant_id: string | null
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          notify_id: string
+          order_id?: string | null
+          out_trade_no?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          tenant_id?: string | null
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          notify_id?: string
+          order_id?: string | null
+          out_trade_no?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          tenant_id?: string | null
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_wechat_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_wechat_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_wechat_notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_service_work_orders: {
+        Row: {
+          assignee_employee_id: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          id: string
+          order_no: string
+          service_order_id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          assignee_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          order_no: string
+          service_order_id: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          assignee_employee_id?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          id?: string
+          order_no?: string
+          service_order_id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_work_orders_assignee_employee_id_fkey"
+            columns: ["assignee_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_work_orders_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_work_orders_order_identity_fkey"
+            columns: ["service_order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_work_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_work_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
@@ -15792,6 +16723,404 @@ export type Database = {
           },
           {
             foreignKeyName: "tenant_usage_daily_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_virtual_addon_orders: {
+        Row: {
+          amount_fen: number
+          config_version: number
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          environment: string
+          failure_code: string | null
+          failure_message: string | null
+          fulfillment_status: string
+          id: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision: number
+          payment_request_claim_expires_at: string | null
+          payment_request_claim_token: string | null
+          payment_request_claimed_at: string | null
+          payment_request_issued_at: string | null
+          payment_status: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string | null
+          provider_delivery_last_error: string | null
+          provider_delivery_last_error_code: string | null
+          provider_delivery_provided_at: string | null
+          provider_delivery_request_id: string | null
+          provider_delivery_status: string
+          provider_order_no: string | null
+          provider_order_type: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_completion_kind: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_last_error_code: string | null
+          reconcile_last_provider_status: number | null
+          reconcile_next_at: string | null
+          reconcile_query_paid_amount_fen: number | null
+          reconcile_query_paid_at: string | null
+          reconcile_query_provider_order_no: string | null
+          reconcile_query_transaction_id: string | null
+          refund_policy: string
+          refund_status: string
+          requested_platform: string
+          secret_revision: number
+          settlement_channel: string | null
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_fen: number
+          config_version: number
+          created_at?: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id?: string | null
+          environment: string
+          failure_code?: string | null
+          failure_message?: string | null
+          fulfillment_status?: string
+          id?: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision?: number
+          payment_request_claim_expires_at?: string | null
+          payment_request_claim_token?: string | null
+          payment_request_claimed_at?: string | null
+          payment_request_issued_at?: string | null
+          payment_status?: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count?: number
+          provider_delivery_attempt_key?: string | null
+          provider_delivery_last_error?: string | null
+          provider_delivery_last_error_code?: string | null
+          provider_delivery_provided_at?: string | null
+          provider_delivery_request_id?: string | null
+          provider_delivery_status?: string
+          provider_order_no?: string | null
+          provider_order_type?: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_completion_kind?: string | null
+          reconcile_last_checked_at?: string | null
+          reconcile_last_error?: string | null
+          reconcile_last_error_code?: string | null
+          reconcile_last_provider_status?: number | null
+          reconcile_next_at?: string | null
+          reconcile_query_paid_amount_fen?: number | null
+          reconcile_query_paid_at?: string | null
+          reconcile_query_provider_order_no?: string | null
+          reconcile_query_transaction_id?: string | null
+          refund_policy: string
+          refund_status?: string
+          requested_platform?: string
+          secret_revision: number
+          settlement_channel?: string | null
+          tenant_id: string
+          term_years?: number
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_fen?: number
+          config_version?: number
+          created_at?: string
+          created_by?: string
+          entitlement_code?: string
+          entitlement_event_id?: string | null
+          environment?: string
+          failure_code?: string | null
+          failure_message?: string | null
+          fulfillment_status?: string
+          id?: string
+          idempotency_key?: string
+          offer_id?: string
+          order_no?: string
+          out_trade_no?: string
+          paid_amount_fen?: number | null
+          paid_at?: string | null
+          payer_openid?: string
+          payment_expires_at?: string
+          payment_request_attempt_revision?: number
+          payment_request_claim_expires_at?: string | null
+          payment_request_claim_token?: string | null
+          payment_request_claimed_at?: string | null
+          payment_request_issued_at?: string | null
+          payment_status?: string
+          product_code?: string
+          product_id?: string
+          product_name?: string
+          provider_delivery_attempt_count?: number
+          provider_delivery_attempt_key?: string | null
+          provider_delivery_last_error?: string | null
+          provider_delivery_last_error_code?: string | null
+          provider_delivery_provided_at?: string | null
+          provider_delivery_request_id?: string | null
+          provider_delivery_status?: string
+          provider_order_no?: string | null
+          provider_order_type?: number | null
+          provider_product_id?: string
+          purchase_notes?: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_completion_kind?: string | null
+          reconcile_last_checked_at?: string | null
+          reconcile_last_error?: string | null
+          reconcile_last_error_code?: string | null
+          reconcile_last_provider_status?: number | null
+          reconcile_next_at?: string | null
+          reconcile_query_paid_amount_fen?: number | null
+          reconcile_query_paid_at?: string | null
+          reconcile_query_provider_order_no?: string | null
+          reconcile_query_transaction_id?: string | null
+          refund_policy?: string
+          refund_status?: string
+          requested_platform?: string
+          secret_revision?: number
+          settlement_channel?: string | null
+          tenant_id?: string
+          term_years?: number
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_virtual_addon_orders_created_employee_tenant_fkey"
+            columns: ["created_by", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_orders_entitlement_event_identity_fkey"
+            columns: ["entitlement_event_id", "tenant_id", "entitlement_code"]
+            isOneToOne: false
+            referencedRelation: "tenant_entitlement_events"
+            referencedColumns: ["id", "tenant_id", "entitlement_code"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_orders_product_identity_fkey"
+            columns: ["product_id", "product_code"]
+            isOneToOne: false
+            referencedRelation: "platform_addon_products"
+            referencedColumns: ["id", "code"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_orders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_virtual_addon_refunds: {
+        Row: {
+          amount_fen: number
+          apple_receipt_hash: string | null
+          compensation_entitlement_event_id: string | null
+          compensation_last_error: string | null
+          compensation_status: string
+          created_at: string
+          evidence_summary: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id: string | null
+          provider_refund_no: string | null
+          provider_refund_started_at: string | null
+          provider_refund_succeeded_at: string | null
+          provider_refund_transaction_id: string | null
+          provider_request_id: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_next_at: string | null
+          refund_no: string
+          rejected_at: string | null
+          request_source: string
+          requested_by: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          succeeded_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          amount_fen: number
+          apple_receipt_hash?: string | null
+          compensation_entitlement_event_id?: string | null
+          compensation_last_error?: string | null
+          compensation_status?: string
+          created_at?: string
+          evidence_summary?: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id?: string | null
+          provider_refund_no?: string | null
+          provider_refund_started_at?: string | null
+          provider_refund_succeeded_at?: string | null
+          provider_refund_transaction_id?: string | null
+          provider_request_id?: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_next_at?: string | null
+          refund_no: string
+          rejected_at?: string | null
+          request_source: string
+          requested_by?: string | null
+          reviewed_by?: string | null
+          status: string
+          submitted_at?: string | null
+          succeeded_at?: string | null
+          tenant_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          amount_fen?: number
+          apple_receipt_hash?: string | null
+          compensation_entitlement_event_id?: string | null
+          compensation_last_error?: string | null
+          compensation_status?: string
+          created_at?: string
+          evidence_summary?: string
+          failed_at?: string | null
+          id?: string
+          idempotency_key?: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          order_id?: string
+          platform_mode?: string
+          provider_refund_id?: string | null
+          provider_refund_no?: string | null
+          provider_refund_started_at?: string | null
+          provider_refund_succeeded_at?: string | null
+          provider_refund_transaction_id?: string | null
+          provider_request_id?: string | null
+          purchase_entitlement_event_id?: string
+          reason?: string
+          reconcile_attempt_count?: number
+          reconcile_claim_expires_at?: string | null
+          reconcile_claim_token?: string | null
+          reconcile_next_at?: string | null
+          refund_no?: string
+          rejected_at?: string | null
+          request_source?: string
+          requested_by?: string | null
+          reviewed_by?: string | null
+          status?: string
+          submitted_at?: string | null
+          succeeded_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_compensation_entitlement_even_fkey"
+            columns: ["compensation_entitlement_event_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_entitlement_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: true
+            referencedRelation: "tenant_virtual_addon_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_purchase_entitlement_event_id_fkey"
+            columns: ["purchase_entitlement_event_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_entitlement_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_virtual_addon_refunds_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -16554,6 +17883,59 @@ export type Database = {
           },
         ]
       }
+      wechat_mini_session_credentials: {
+        Row: {
+          created_at: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id: string
+          invalidated_at: string | null
+          last_used_at: string | null
+          oauth_identity_id: string
+          obtained_at: string
+          openid_hash: string
+          session_revision: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id?: string
+          invalidated_at?: string | null
+          last_used_at?: string | null
+          oauth_identity_id: string
+          obtained_at?: string
+          openid_hash: string
+          session_revision?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_session_key?: string
+          encryption_key_version?: number
+          id?: string
+          invalidated_at?: string | null
+          last_used_at?: string | null
+          oauth_identity_id?: string
+          obtained_at?: string
+          openid_hash?: string
+          session_revision?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_mini_session_credentials_oauth_identity_id_fkey"
+            columns: ["oauth_identity_id"]
+            isOneToOne: false
+            referencedRelation: "user_oauth_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       wechat_pay_settlement_rules: {
         Row: {
           created_at: string
@@ -16915,6 +18297,197 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_virtual_payment_notifications: {
+        Row: {
+          actual_price_fen: number | null
+          attach: string | null
+          authentication_method: string
+          authentication_status: string
+          created_at: string
+          environment: string
+          event_key: string
+          event_type: string
+          id: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          msg_type: string
+          normalized_payload: Json
+          openid_hash: string | null
+          order_id: string | null
+          orig_price_fen: number | null
+          out_trade_no: string | null
+          paid_at: string | null
+          payload_sha256: string
+          processed_at: string | null
+          provider_created_at: number
+          provider_order_no: string | null
+          provider_product_id: string | null
+          quantity: number | null
+          received_at: string
+          recipient_original_id: string
+          request_id: string | null
+          result_summary: Json
+          retry_count: number
+          sender_id_hash: string
+          status: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          actual_price_fen?: number | null
+          attach?: string | null
+          authentication_method: string
+          authentication_status: string
+          created_at?: string
+          environment: string
+          event_key: string
+          event_type: string
+          id?: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          msg_type: string
+          normalized_payload?: Json
+          openid_hash?: string | null
+          order_id?: string | null
+          orig_price_fen?: number | null
+          out_trade_no?: string | null
+          paid_at?: string | null
+          payload_sha256: string
+          processed_at?: string | null
+          provider_created_at: number
+          provider_order_no?: string | null
+          provider_product_id?: string | null
+          quantity?: number | null
+          received_at?: string
+          recipient_original_id: string
+          request_id?: string | null
+          result_summary?: Json
+          retry_count?: number
+          sender_id_hash: string
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          actual_price_fen?: number | null
+          attach?: string | null
+          authentication_method?: string
+          authentication_status?: string
+          created_at?: string
+          environment?: string
+          event_key?: string
+          event_type?: string
+          id?: string
+          last_error_code?: string | null
+          last_error_summary?: string | null
+          msg_type?: string
+          normalized_payload?: Json
+          openid_hash?: string | null
+          order_id?: string | null
+          orig_price_fen?: number | null
+          out_trade_no?: string | null
+          paid_at?: string | null
+          payload_sha256?: string
+          processed_at?: string | null
+          provider_created_at?: number
+          provider_order_no?: string | null
+          provider_product_id?: string | null
+          quantity?: number | null
+          received_at?: string
+          recipient_original_id?: string
+          request_id?: string | null
+          result_summary?: Json
+          retry_count?: number
+          sender_id_hash?: string
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_virtual_payment_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_virtual_addon_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wechat_virtual_refund_event_inbox: {
+        Row: {
+          decision_code: number | null
+          event_key: string
+          event_type: string
+          id: string
+          order_id: string | null
+          out_trade_no: string
+          payload_sha256: string
+          processed_at: string
+          provider_created_at: number
+          provider_reference_hash: string
+          provider_result_code: number | null
+          received_at: string
+          recipient_original_id: string
+          refund_id: string | null
+          request_id: string | null
+          result_summary: Json
+          sender_id_hash: string
+        }
+        Insert: {
+          decision_code?: number | null
+          event_key: string
+          event_type: string
+          id?: string
+          order_id?: string | null
+          out_trade_no: string
+          payload_sha256: string
+          processed_at?: string
+          provider_created_at: number
+          provider_reference_hash: string
+          provider_result_code?: number | null
+          received_at?: string
+          recipient_original_id: string
+          refund_id?: string | null
+          request_id?: string | null
+          result_summary?: Json
+          sender_id_hash: string
+        }
+        Update: {
+          decision_code?: number | null
+          event_key?: string
+          event_type?: string
+          id?: string
+          order_id?: string | null
+          out_trade_no?: string
+          payload_sha256?: string
+          processed_at?: string
+          provider_created_at?: number
+          provider_reference_hash?: string
+          provider_result_code?: number | null
+          received_at?: string
+          recipient_original_id?: string
+          refund_id?: string | null
+          request_id?: string | null
+          result_summary?: Json
+          sender_id_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wechat_virtual_refund_event_inbox_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_virtual_addon_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "wechat_virtual_refund_event_inbox_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_virtual_addon_refunds"
             referencedColumns: ["id"]
           },
         ]
@@ -17905,165 +19478,6 @@ export type Database = {
         }
         Returns: string
       }
-      cancel_supplier_payment_request: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_payment_request_id: string
-          p_reason: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      close_supplier_payment_request: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_payment_request_id: string
-          p_reason: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      confirm_supplier_payment: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_allocations: Json
-          p_evidence_images: Json
-          p_expected_version: number
-          p_idempotency_key: string
-          p_paid_at: string
-          p_payment_id: string
-          p_payment_method: string
-          p_payment_reference: string
-          p_payment_request_id: string
-          p_remark: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      get_supplier_payables_by_ids: {
-        Args: {
-          p_payable_event_ids: string[]
-          p_tenant_id: string
-          p_visible_project_ids: string[]
-        }
-        Returns: Json
-      }
-      get_supplier_payment_request_detail: {
-        Args: { p_payment_request_id: string; p_tenant_id: string }
-        Returns: Json
-      }
-      get_supplier_purchase_order_financial_summary: {
-        Args: { p_supplier_purchase_order_id: string; p_tenant_id: string }
-        Returns: Json
-      }
-      list_supplier_accounting_legacy_gaps: {
-        Args: { p_page: number; p_page_size: number; p_tenant_id: string }
-        Returns: {
-          gap_type: string
-          reason: string
-          supplier_purchase_order_id: string
-          supplier_purchase_order_item_id: string
-          supplier_purchase_order_receipt_item_id: string
-          total_count: number
-        }[]
-      }
-      list_supplier_payable_filter_options: {
-        Args: {
-          p_keyword?: string
-          p_page?: number
-          p_page_size?: number
-          p_tenant_id: string
-          p_type?: string
-          p_visible_project_ids?: string[]
-        }
-        Returns: Json
-      }
-      list_supplier_payables: {
-        Args: {
-          p_due_from?: string
-          p_due_to?: string
-          p_page?: number
-          p_page_size?: number
-          p_project_id?: string
-          p_purchase_order_id?: string
-          p_status?: string
-          p_tenant_id: string
-          p_tenant_supplier_id?: string
-          p_visible_project_ids?: string[]
-        }
-        Returns: Json
-      }
-      list_supplier_payment_request_payments: {
-        Args: {
-          p_page?: number
-          p_page_size?: number
-          p_payment_request_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      list_supplier_payment_requests: {
-        Args: {
-          p_created_from?: string
-          p_created_to?: string
-          p_keyword?: string
-          p_page?: number
-          p_page_size?: number
-          p_project_id?: string
-          p_status?: string
-          p_tenant_id: string
-          p_tenant_supplier_id?: string
-          p_visible_project_ids?: string[]
-        }
-        Returns: Json
-      }
-      review_supplier_payment_request: {
-        Args: {
-          p_action: string
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_payment_request_id: string
-          p_remark: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
-      save_supplier_payment_request_draft: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_allocations: Json
-          p_expected_version: number
-          p_idempotency_key: string
-          p_payment_request_id: string
-          p_project_id: string
-          p_reason: string
-          p_remark: string
-          p_tenant_id: string
-          p_tenant_supplier_id: string
-        }
-        Returns: Json
-      }
-      submit_supplier_payment_request: {
-        Args: {
-          p_actor_employee_id: string
-          p_actor_user_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_payment_request_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
       apply_tenant_entitlement_action: {
         Args: {
           p_action: string
@@ -18139,6 +19553,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      assert_branding_virtual_payment_order_current: {
+        Args: {
+          p_mapping: Database["public"]["Tables"]["platform_virtual_payment_products"]["Row"]
+          p_order: Database["public"]["Tables"]["tenant_virtual_addon_orders"]["Row"]
+          p_product: Database["public"]["Tables"]["platform_addon_products"]["Row"]
+        }
+        Returns: undefined
       }
       assert_supplier_proxy_scope: {
         Args: {
@@ -18574,6 +19996,15 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      branding_assert_virtual_cutover_ready: { Args: never; Returns: boolean }
+      branding_begin_virtual_payment_delivery_retry: {
+        Args: {
+          p_attempt_key: string
+          p_claim_token: string
+          p_order_id: string
+        }
+        Returns: boolean
+      }
       branding_claim_expired_addon_orders: {
         Args: {
           p_excluded_ids?: string[]
@@ -18627,6 +20058,258 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      branding_claim_legacy_pending_orders: {
+        Args: { p_lease_seconds: number; p_limit: number }
+        Returns: {
+          amount_fen: number
+          channel: string
+          close_attempt_count: number
+          close_claim_expires_at: string | null
+          close_claim_token: string | null
+          close_last_error: string | null
+          close_reason: string | null
+          closed_at: string | null
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          expected_guard_version: number
+          failure_code: string | null
+          failure_message: string | null
+          id: string
+          idempotency_key: string
+          metadata: Json
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_appid: string
+          payment_config_id: string
+          payment_expires_at: string
+          payment_mchid: string
+          prepay_id: string | null
+          product_code: string
+          product_id: string
+          product_name: string
+          purchase_notes: string
+          refund_policy: string
+          status: string
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_addon_orders"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      branding_claim_virtual_addon_payment_request: {
+        Args: {
+          p_created_by: string
+          p_order_id: string
+          p_payer_openid: string
+          p_tenant_id: string
+        }
+        Returns: {
+          amount_fen: number
+          config_version: number
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          environment: string
+          failure_code: string | null
+          failure_message: string | null
+          fulfillment_status: string
+          id: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision: number
+          payment_request_claim_expires_at: string | null
+          payment_request_claim_token: string | null
+          payment_request_claimed_at: string | null
+          payment_request_issued_at: string | null
+          payment_status: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string | null
+          provider_delivery_last_error: string | null
+          provider_delivery_last_error_code: string | null
+          provider_delivery_provided_at: string | null
+          provider_delivery_request_id: string | null
+          provider_delivery_status: string
+          provider_order_no: string | null
+          provider_order_type: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_completion_kind: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_last_error_code: string | null
+          reconcile_last_provider_status: number | null
+          reconcile_next_at: string | null
+          reconcile_query_paid_amount_fen: number | null
+          reconcile_query_paid_at: string | null
+          reconcile_query_provider_order_no: string | null
+          reconcile_query_transaction_id: string | null
+          refund_policy: string
+          refund_status: string
+          requested_platform: string
+          secret_revision: number
+          settlement_channel: string | null
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_claim_virtual_addon_refund_submission: {
+        Args: { p_lease_seconds?: number; p_refund_id: string }
+        Returns: {
+          amount_fen: number
+          apple_receipt_hash: string | null
+          compensation_entitlement_event_id: string | null
+          compensation_last_error: string | null
+          compensation_status: string
+          created_at: string
+          evidence_summary: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id: string | null
+          provider_refund_no: string | null
+          provider_refund_started_at: string | null
+          provider_refund_succeeded_at: string | null
+          provider_refund_transaction_id: string | null
+          provider_request_id: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_next_at: string | null
+          refund_no: string
+          rejected_at: string | null
+          request_source: string
+          requested_by: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          succeeded_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_refunds"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      branding_claim_virtual_payment_reconciliation_batch: {
+        Args: { p_lease_seconds: number; p_limit: number }
+        Returns: {
+          amount_fen: number
+          entitlement_event_id: string
+          environment: string
+          fulfillment_status: string
+          id: string
+          offer_id: string
+          out_trade_no: string
+          paid_amount_fen: number
+          paid_at: string
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_issued_at: string
+          payment_status: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string
+          provider_delivery_last_error: string
+          provider_delivery_last_error_code: string
+          provider_delivery_provided_at: string
+          provider_delivery_request_id: string
+          provider_delivery_status: string
+          provider_order_no: string
+          provider_product_id: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string
+          reconcile_claim_token: string
+          reconcile_completion_kind: string
+          reconcile_last_checked_at: string
+          reconcile_last_error: string
+          reconcile_last_error_code: string
+          reconcile_last_provider_status: number
+          reconcile_next_at: string
+          reconcile_query_paid_amount_fen: number
+          reconcile_query_paid_at: string
+          reconcile_query_provider_order_no: string
+          reconcile_query_transaction_id: string
+          secret_revision: number
+          tenant_id: string
+          transaction_id: string
+        }[]
+      }
+      branding_claim_virtual_refund_reconciliation_batch: {
+        Args: { p_lease_seconds?: number; p_limit?: number }
+        Returns: {
+          amount_fen: number
+          attempt_count: number
+          claim_expires_at: string
+          claim_token: string
+          compensation_status: string
+          environment: string
+          order_id: string
+          out_trade_no: string
+          payer_openid: string
+          platform_mode: string
+          provider_order_no: string
+          refund_id: string
+          refund_status: string
+          secret_revision: number
+        }[]
+      }
+      branding_close_unpaid_virtual_payment_reconciliation: {
+        Args: {
+          p_claim_token: string
+          p_official_status: number
+          p_order_id: string
+        }
+        Returns: boolean
+      }
+      branding_compensate_virtual_addon_refund: {
+        Args: { p_refund_id: string }
+        Returns: {
+          compensation_entitlement_event_id: string
+          compensation_status: string
+          refund_id: string
+        }[]
+      }
       branding_confirm_addon_purchase: {
         Args: {
           p_appid: string
@@ -18637,6 +20320,33 @@ export type Database = {
           p_out_trade_no: string
           p_paid_amount_fen: number
           p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      branding_confirm_virtual_addon_purchase: {
+        Args: {
+          p_actual_price_fen: number
+          p_allow_late_closed_recovery: boolean
+          p_attach: string
+          p_currency: string
+          p_environment: string
+          p_event_type: string
+          p_msg_type: string
+          p_notification_id: string
+          p_openid: string
+          p_order_id: string
+          p_orig_price_fen: number
+          p_out_trade_no: string
+          p_paid_at: string
+          p_provider_created_at: number
+          p_provider_order_no: string
+          p_provider_product_id: string
+          p_quantity: number
+          p_recipient_original_id: string
+          p_sender_id_hash: string
+          p_source: string
+          p_successful_state: boolean
           p_transaction_id: string
         }
         Returns: Json
@@ -18711,9 +20421,628 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      branding_create_virtual_addon_order: {
+        Args: {
+          p_created_by: string
+          p_idempotency_key: string
+          p_payer_openid: string
+          p_requested_platform: string
+          p_tenant_id: string
+          p_virtual_product_id: string
+        }
+        Returns: {
+          amount_fen: number
+          config_version: number
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          environment: string
+          failure_code: string | null
+          failure_message: string | null
+          fulfillment_status: string
+          id: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision: number
+          payment_request_claim_expires_at: string | null
+          payment_request_claim_token: string | null
+          payment_request_claimed_at: string | null
+          payment_request_issued_at: string | null
+          payment_status: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string | null
+          provider_delivery_last_error: string | null
+          provider_delivery_last_error_code: string | null
+          provider_delivery_provided_at: string | null
+          provider_delivery_request_id: string | null
+          provider_delivery_status: string
+          provider_order_no: string | null
+          provider_order_type: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_completion_kind: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_last_error_code: string | null
+          reconcile_last_provider_status: number | null
+          reconcile_next_at: string | null
+          reconcile_query_paid_amount_fen: number | null
+          reconcile_query_paid_at: string | null
+          reconcile_query_provider_order_no: string | null
+          reconcile_query_transaction_id: string | null
+          refund_policy: string
+          refund_status: string
+          requested_platform: string
+          secret_revision: number
+          settlement_channel: string | null
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_create_virtual_addon_refund: {
+        Args: {
+          p_evidence_summary: string
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_requested_by: string
+        }
+        Returns: {
+          amount_fen: number
+          apple_receipt_hash: string | null
+          compensation_entitlement_event_id: string | null
+          compensation_last_error: string | null
+          compensation_status: string
+          created_at: string
+          evidence_summary: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id: string | null
+          provider_refund_no: string | null
+          provider_refund_started_at: string | null
+          provider_refund_succeeded_at: string | null
+          provider_refund_transaction_id: string | null
+          provider_request_id: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_next_at: string | null
+          refund_no: string
+          rejected_at: string | null
+          request_source: string
+          requested_by: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          succeeded_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_refunds"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      branding_finalize_virtual_addon_payment_request: {
+        Args: {
+          p_claim_token: string
+          p_created_by: string
+          p_order_id: string
+          p_payer_openid: string
+          p_tenant_id: string
+        }
+        Returns: {
+          amount_fen: number
+          config_version: number
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          environment: string
+          failure_code: string | null
+          failure_message: string | null
+          fulfillment_status: string
+          id: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision: number
+          payment_request_claim_expires_at: string | null
+          payment_request_claim_token: string | null
+          payment_request_claimed_at: string | null
+          payment_request_issued_at: string | null
+          payment_status: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string | null
+          provider_delivery_last_error: string | null
+          provider_delivery_last_error_code: string | null
+          provider_delivery_provided_at: string | null
+          provider_delivery_request_id: string | null
+          provider_delivery_status: string
+          provider_order_no: string | null
+          provider_order_type: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_completion_kind: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_last_error_code: string | null
+          reconcile_last_provider_status: number | null
+          reconcile_next_at: string | null
+          reconcile_query_paid_amount_fen: number | null
+          reconcile_query_paid_at: string | null
+          reconcile_query_provider_order_no: string | null
+          reconcile_query_transaction_id: string | null
+          refund_policy: string
+          refund_status: string
+          requested_platform: string
+          secret_revision: number
+          settlement_channel: string | null
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_finalize_virtual_payment_reconciliation: {
+        Args: {
+          p_claim_token: string
+          p_delivery_attempt_key: string
+          p_official_status: number
+          p_order_id: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_provider_order_no: string
+          p_transaction_id: string
+        }
+        Returns: boolean
+      }
+      branding_finalize_virtual_refund_reconciliation: {
+        Args: {
+          p_claim_token: string
+          p_left_fee_fen: number
+          p_official_status: number
+          p_refund_fee_fen: number
+          p_refund_id: string
+        }
+        Returns: {
+          amount_fen: number
+          apple_receipt_hash: string | null
+          compensation_entitlement_event_id: string | null
+          compensation_last_error: string | null
+          compensation_status: string
+          created_at: string
+          evidence_summary: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id: string | null
+          provider_refund_no: string | null
+          provider_refund_started_at: string | null
+          provider_refund_succeeded_at: string | null
+          provider_refund_transaction_id: string | null
+          provider_request_id: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_next_at: string | null
+          refund_no: string
+          rejected_at: string | null
+          request_source: string
+          requested_by: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          succeeded_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_refunds"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_get_entitlement_order_detail: {
+        Args: { p_order_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       branding_get_platform_addon_order_audit: {
         Args: { p_order_id: string }
         Returns: Json
+      }
+      branding_get_virtual_addon_refund_detail: {
+        Args: { p_refund_id: string }
+        Returns: Json
+      }
+      branding_get_virtual_product_management_snapshot: {
+        Args: never
+        Returns: Json
+      }
+      branding_get_virtual_refund_order_context: {
+        Args: { p_order_id: string }
+        Returns: Json
+      }
+      branding_list_entitlement_orders: {
+        Args: {
+          p_created_from?: string
+          p_created_to?: string
+          p_fulfillment_status?: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_payment_channel?: string
+          p_payment_status?: string
+          p_refund_status?: string
+          p_tenant_id?: string
+        }
+        Returns: {
+          amount_fen: number
+          closed_at: string
+          count_only: boolean
+          created_at: string
+          entitlement_expires_at: string
+          entitlement_source: string
+          entitlement_source_id: string
+          entitlement_starts_at: string
+          entitlement_status: string
+          failure_code: string
+          fulfillment_status: string
+          id: string
+          order_no: string
+          paid_at: string
+          payment_channel: string
+          payment_expires_at: string
+          payment_platform: string
+          payment_status: string
+          product_code: string
+          product_name: string
+          refund_status: string
+          tenant_id: string
+          tenant_name: string
+          tenant_slug: string
+          term_years: number
+          total_count: number
+          updated_at: string
+        }[]
+      }
+      branding_list_virtual_addon_refunds: {
+        Args: {
+          p_page?: number
+          p_page_size?: number
+          p_status?: string
+          p_tenant_id?: string
+        }
+        Returns: Json[]
+      }
+      branding_manage_virtual_product_configuration: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_product_version: number
+          p_product_patch: Json
+          p_virtual_product_patch: Json
+        }
+        Returns: Json
+      }
+      branding_manage_virtual_product_configuration_without_item_url: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_product_version: number
+          p_product_patch: Json
+          p_virtual_product_patch: Json
+        }
+        Returns: Json
+      }
+      branding_mark_virtual_addon_refund_submitted: {
+        Args: {
+          p_claim_token: string
+          p_provider_refund_id: string
+          p_provider_request_id: string
+          p_refund_id: string
+        }
+        Returns: {
+          amount_fen: number
+          apple_receipt_hash: string | null
+          compensation_entitlement_event_id: string | null
+          compensation_last_error: string | null
+          compensation_status: string
+          created_at: string
+          evidence_summary: string
+          failed_at: string | null
+          id: string
+          idempotency_key: string
+          last_error_code: string | null
+          last_error_summary: string | null
+          order_id: string
+          platform_mode: string
+          provider_refund_id: string | null
+          provider_refund_no: string | null
+          provider_refund_started_at: string | null
+          provider_refund_succeeded_at: string | null
+          provider_refund_transaction_id: string | null
+          provider_request_id: string | null
+          purchase_entitlement_event_id: string
+          reason: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_next_at: string | null
+          refund_no: string
+          rejected_at: string | null
+          request_source: string
+          requested_by: string | null
+          reviewed_by: string | null
+          status: string
+          submitted_at: string | null
+          succeeded_at: string | null
+          tenant_id: string
+          updated_at: string
+          version: number
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_refunds"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      branding_mark_virtual_payment_delivery: {
+        Args: {
+          p_attempt_key: string
+          p_claim_token: string
+          p_delivery_status: string
+          p_error_code: string
+          p_error_summary: string
+          p_order_id: string
+          p_provider_request_id: string
+        }
+        Returns: boolean
+      }
+      branding_mark_virtual_refund_reconciliation_conflict: {
+        Args: {
+          p_claim_token: string
+          p_error_code: string
+          p_refund_id: string
+        }
+        Returns: boolean
+      }
+      branding_prepare_successful_query_reconciliation: {
+        Args: {
+          p_actual_price_fen: number
+          p_attach: string
+          p_claim_token: string
+          p_currency: string
+          p_environment: string
+          p_official_status: number
+          p_openid: string
+          p_order_id: string
+          p_orig_price_fen: number
+          p_out_trade_no: string
+          p_paid_at: string
+          p_provider_order_no: string
+          p_provider_order_type: number
+          p_provider_product_id: string
+          p_quantity: number
+          p_transaction_id: string
+        }
+        Returns: boolean
+      }
+      branding_process_virtual_ios_refund_inquiry: {
+        Args: {
+          p_bundle_id: string
+          p_channel_bill_hash: string
+          p_order_time: string
+          p_out_trade_no: string
+          p_provide_status: number
+          p_provider_created_at: number
+          p_provider_product_id: string
+          p_quantity: number
+          p_recipient_original_id: string
+          p_refund_request_reason: string
+          p_refund_time: string
+          p_request_id?: string
+          p_sender_id_hash: string
+        }
+        Returns: {
+          evidence: string
+          notification_id: string
+          result_code: number
+          result_info: string
+        }[]
+      }
+      branding_process_virtual_refund_notification: {
+        Args: {
+          p_local_refund_no: string
+          p_openid_hash: string
+          p_out_trade_no: string
+          p_provider_created_at: number
+          p_provider_order_id: string
+          p_provider_refund_id: string
+          p_provider_refund_transaction_id: string
+          p_provider_result_code: number
+          p_provider_result_message: string
+          p_recipient_original_id: string
+          p_refund_fee_fen: number
+          p_refund_started_at: string
+          p_refund_succeeded_at: string
+          p_request_id?: string
+          p_retry_times: number
+          p_sender_id_hash: string
+          p_successful: boolean
+        }
+        Returns: {
+          compensation_status: string
+          notification_id: string
+          refund_id: string
+          refund_status: string
+        }[]
+      }
+      branding_record_apple_virtual_order_type_from_refund_fact: {
+        Args: {
+          p_environment: string
+          p_left_fee_fen: number
+          p_official_status: number
+          p_order_fee_fen: number
+          p_order_id: string
+          p_out_trade_no: string
+          p_paid_fee_fen: number
+          p_provider_order_no: string
+          p_provider_order_type: number
+          p_refund_fee_fen: number
+        }
+        Returns: boolean
+      }
+      branding_record_virtual_order_type_fact: {
+        Args: {
+          p_environment: string
+          p_left_fee_fen: number
+          p_official_status: number
+          p_order_fee_fen: number
+          p_order_id: string
+          p_out_trade_no: string
+          p_paid_fee_fen: number
+          p_provider_order_no: string
+          p_provider_order_type: number
+        }
+        Returns: boolean
+      }
+      branding_release_virtual_addon_payment_request_claim: {
+        Args: {
+          p_claim_token: string
+          p_created_by: string
+          p_order_id: string
+          p_payer_openid: string
+          p_tenant_id: string
+        }
+        Returns: {
+          amount_fen: number
+          config_version: number
+          created_at: string
+          created_by: string
+          entitlement_code: string
+          entitlement_event_id: string | null
+          environment: string
+          failure_code: string | null
+          failure_message: string | null
+          fulfillment_status: string
+          id: string
+          idempotency_key: string
+          offer_id: string
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_expires_at: string
+          payment_request_attempt_revision: number
+          payment_request_claim_expires_at: string | null
+          payment_request_claim_token: string | null
+          payment_request_claimed_at: string | null
+          payment_request_issued_at: string | null
+          payment_status: string
+          product_code: string
+          product_id: string
+          product_name: string
+          provider_delivery_attempt_count: number
+          provider_delivery_attempt_key: string | null
+          provider_delivery_last_error: string | null
+          provider_delivery_last_error_code: string | null
+          provider_delivery_provided_at: string | null
+          provider_delivery_request_id: string | null
+          provider_delivery_status: string
+          provider_order_no: string | null
+          provider_order_type: number | null
+          provider_product_id: string
+          purchase_notes: string
+          reconcile_attempt_count: number
+          reconcile_claim_expires_at: string | null
+          reconcile_claim_token: string | null
+          reconcile_completion_kind: string | null
+          reconcile_last_checked_at: string | null
+          reconcile_last_error: string | null
+          reconcile_last_error_code: string | null
+          reconcile_last_provider_status: number | null
+          reconcile_next_at: string | null
+          reconcile_query_paid_amount_fen: number | null
+          reconcile_query_paid_at: string | null
+          reconcile_query_provider_order_no: string | null
+          reconcile_query_transaction_id: string | null
+          refund_policy: string
+          refund_status: string
+          requested_platform: string
+          secret_revision: number
+          settlement_channel: string | null
+          tenant_id: string
+          term_years: number
+          transaction_id: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_virtual_addon_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      branding_release_virtual_addon_refund_submission_claim: {
+        Args: { p_claim_token: string; p_refund_id: string }
+        Returns: boolean
       }
       branding_renew_addon_close_claim: {
         Args: {
@@ -18768,7 +21097,100 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      branding_renew_virtual_addon_refund_submission_claim: {
+        Args: {
+          p_claim_token: string
+          p_lease_seconds?: number
+          p_refund_id: string
+        }
+        Returns: boolean
+      }
+      branding_reschedule_virtual_payment_reconciliation: {
+        Args: {
+          p_claim_token: string
+          p_error_code: string
+          p_error_summary: string
+          p_next_at: string
+          p_official_status: number
+          p_order_id: string
+        }
+        Returns: boolean
+      }
+      branding_reschedule_virtual_refund_reconciliation: {
+        Args: {
+          p_claim_token: string
+          p_error_code: string
+          p_error_summary: string
+          p_next_at: string
+          p_refund_id: string
+        }
+        Returns: boolean
+      }
+      branding_set_virtual_product_configuration_validation: {
+        Args: {
+          p_addon_product_id: string
+          p_environment: string
+          p_expected_mapping_version: number
+          p_expected_product_version: number
+          p_updated_by: string
+          p_validated_at: string
+          p_validation_status: string
+        }
+        Returns: {
+          addon_product_id: string
+          app_id: string
+          created_at: string
+          created_by: string | null
+          encrypted_secret_ref: string
+          environment: string
+          expected_amount_fen: number
+          goods_quantity: number
+          id: string
+          item_url: string | null
+          offer_id: string
+          provider: string
+          provider_product_id: string
+          secret_revision: number
+          status: string
+          updated_at: string
+          updated_by: string | null
+          validated_at: string | null
+          validation_status: string
+          version: number
+          virtual_merchant_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_virtual_payment_products"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      cancel_supplier_payment_request: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_payment_request_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       cancel_supplier_purchase_order: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      cancel_supplier_purchase_order_fulfillment_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -19107,6 +21529,18 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      close_supplier_payment_request: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_payment_request_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       complete_douyin_authorization_event: {
         Args: {
           p_access_token_ciphertext: string
@@ -19238,6 +21672,24 @@ export type Database = {
         }
         Returns: Json
       }
+      confirm_supplier_payment: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allocations: Json
+          p_evidence_images: Json
+          p_expected_version: number
+          p_idempotency_key: string
+          p_paid_at: string
+          p_payment_id: string
+          p_payment_method: string
+          p_payment_reference: string
+          p_payment_request_id: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       confirm_supplier_purchase_order_fulfillment: {
         Args: {
           p_actor_employee_id: string
@@ -19252,6 +21704,18 @@ export type Database = {
         Returns: Json
       }
       convert_supplier_purchase_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_purchase_order_id: string
+          p_requisition_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      convert_supplier_purchase_requisition_commercial_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -19529,7 +21993,38 @@ export type Database = {
         }
         Returns: Json
       }
+      create_supplier_purchase_order_from_requisition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_delivery_date: string
+          p_items: Json
+          p_order_id: string
+          p_project_id: string
+          p_purchase_requisition_id: string
+          p_remark: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       create_supplier_purchase_order_receipt: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_fulfillment_version: number
+          p_idempotency_key: string
+          p_items: Json
+          p_order_id: string
+          p_receipt_id: string
+          p_receipt_no: string
+          p_received_at: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_purchase_order_receipt_fulfillment_v1: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -19997,6 +22492,22 @@ export type Database = {
           remaining_amount: number
         }[]
       }
+      get_supplier_payables_by_ids: {
+        Args: {
+          p_payable_event_ids: string[]
+          p_tenant_id: string
+          p_visible_project_ids: string[]
+        }
+        Returns: Json
+      }
+      get_supplier_payment_request_detail: {
+        Args: { p_payment_request_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      get_supplier_purchase_order_financial_summary: {
+        Args: { p_supplier_purchase_order_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       get_tenant_supplier_order_eligibility: {
         Args: {
           p_checked_at: string
@@ -20036,6 +22547,33 @@ export type Database = {
           nav_position: string
         }[]
       }
+      get_wechat_mini_session_credential: {
+        Args: {
+          p_oauth_identity_id: string
+          p_openid: string
+          p_user_id: string
+        }
+        Returns: {
+          created_at: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id: string
+          invalidated_at: string | null
+          last_used_at: string | null
+          oauth_identity_id: string
+          obtained_at: string
+          openid_hash: string
+          session_revision: number
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "wechat_mini_session_credentials"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       get_workflow_version_running_instance_counts: {
         Args: {
           p_definition_id: string
@@ -20064,6 +22602,34 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      invalidate_wechat_mini_session_credential: {
+        Args: {
+          p_credential_id: string
+          p_openid: string
+          p_session_revision: number
+          p_user_id: string
+        }
+        Returns: {
+          created_at: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id: string
+          invalidated_at: string | null
+          last_used_at: string | null
+          oauth_identity_id: string
+          obtained_at: string
+          openid_hash: string
+          session_revision: number
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "wechat_mini_session_credentials"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       list_accessible_project_workflow_tasks: {
         Args: {
@@ -20264,6 +22830,67 @@ export type Database = {
         Args: { p_project_id: string; p_tenant_id: string }
         Returns: Json
       }
+      list_supplier_accounting_legacy_gaps: {
+        Args: { p_page: number; p_page_size: number; p_tenant_id: string }
+        Returns: {
+          gap_type: string
+          reason: string
+          supplier_purchase_order_id: string
+          supplier_purchase_order_item_id: string
+          supplier_purchase_order_receipt_item_id: string
+          total_count: number
+        }[]
+      }
+      list_supplier_payable_filter_options: {
+        Args: {
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_tenant_id: string
+          p_type?: string
+          p_visible_project_ids?: string[]
+        }
+        Returns: Json
+      }
+      list_supplier_payables: {
+        Args: {
+          p_due_from?: string
+          p_due_to?: string
+          p_page?: number
+          p_page_size?: number
+          p_project_id?: string
+          p_purchase_order_id?: string
+          p_status?: string
+          p_tenant_id: string
+          p_tenant_supplier_id?: string
+          p_visible_project_ids?: string[]
+        }
+        Returns: Json
+      }
+      list_supplier_payment_request_payments: {
+        Args: {
+          p_page?: number
+          p_page_size?: number
+          p_payment_request_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_supplier_payment_requests: {
+        Args: {
+          p_created_from?: string
+          p_created_to?: string
+          p_keyword?: string
+          p_page?: number
+          p_page_size?: number
+          p_project_id?: string
+          p_status?: string
+          p_tenant_id: string
+          p_tenant_supplier_id?: string
+          p_visible_project_ids?: string[]
+        }
+        Returns: Json
+      }
       list_supplier_purchase_order_supplier_options: {
         Args: {
           p_checked_at: string
@@ -20356,6 +22983,10 @@ export type Database = {
           tenant_status: string
           user_id: string
         }[]
+      }
+      lock_project_cost_budget_scope: {
+        Args: { p_project_id: string; p_tenant_id: string }
+        Returns: undefined
       }
       lock_tenant_onboarding_employee_phones: {
         Args: { p_phones: string[] }
@@ -20491,6 +23122,202 @@ export type Database = {
           liked: boolean
         }[]
       }
+      platform_begin_virtual_goods_operation: {
+        Args: {
+          p_mapping_id: string
+          p_phase: string
+          p_product_version: number
+          p_request_snapshot_hash: string
+        }
+        Returns: {
+          channel_id: string
+          failure_code: string | null
+          failure_summary: string | null
+          finished_at: string | null
+          id: string
+          last_queried_at: string | null
+          mapping_id: string
+          normalized_result: Json
+          phase: string
+          product_id: string
+          product_version: number
+          request_id: string | null
+          request_snapshot_hash: string
+          started_at: string
+          state: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_virtual_goods_operations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      platform_create_virtual_product: {
+        Args: {
+          p_actor_employee_id: string
+          p_grant_rule: Json
+          p_product: Json
+        }
+        Returns: Json
+      }
+      platform_finish_virtual_goods_operation: {
+        Args: {
+          p_failure_code: string
+          p_failure_summary: string
+          p_normalized_result: Json
+          p_operation_id: string
+          p_request_id: string
+          p_state: string
+          p_synced_product_version: number
+        }
+        Returns: Json
+      }
+      platform_manage_annual_virtual_payment_compatibility: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_product_version: number
+          p_purchase_mode: string
+          p_virtual_product_patch: Json
+        }
+        Returns: Json
+      }
+      platform_service_confirm_payment: {
+        Args: {
+          p_metadata?: Json
+          p_notification_id: string
+          p_order_id: string
+          p_paid_amount_fen: number
+          p_paid_at: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      platform_service_create_pending_order: {
+        Args: {
+          p_amount_fen: number
+          p_created_by_employee_id: string
+          p_idempotency_key: string
+          p_order_no: string
+          p_out_trade_no: string
+          p_payer_openid: string
+          p_payment_config_guard_version: number
+          p_payment_config_id: string
+          p_payment_expires_at: string
+          p_pricing_version: number
+          p_product_code: string
+          p_product_id: string
+          p_product_snapshot: Json
+          p_product_version_id: string
+          p_required_channel?: string
+          p_tenant_id: string
+          p_term_years: number
+          p_terms_accepted_at: string
+          p_terms_version: number
+        }
+        Returns: {
+          amount_fen: number
+          closed_at: string | null
+          created_at: string
+          created_by_employee_id: string
+          id: string
+          idempotency_key: string | null
+          order_no: string
+          out_trade_no: string
+          paid_amount_fen: number | null
+          paid_at: string | null
+          payer_openid: string
+          payment_config_guard_version: number
+          payment_config_id: string
+          payment_expires_at: string
+          payment_status: string
+          prepay_id: string | null
+          pricing_version: number
+          product_code: string
+          product_id: string
+          product_snapshot: Json
+          product_version_id: string
+          service_status: string
+          tenant_id: string
+          term_years: number
+          terms_accepted_at: string
+          terms_version: number
+          transaction_id: string | null
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_service_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      platform_service_publish_product_version: {
+        Args: {
+          p_amount_fen: number
+          p_expected_version: number
+          p_list_amount_fen: number
+          p_product_id: string
+          p_published_by_employee_id: string
+          p_service_scope: Json
+          p_term_years: number
+          p_terms_content: string
+          p_terms_version: number
+          p_title: string
+        }
+        Returns: {
+          amount_fen: number
+          id: string
+          list_amount_fen: number
+          product_id: string
+          published_at: string
+          published_by_employee_id: string | null
+          service_scope: Json
+          term_years: number
+          terms_content: string
+          terms_version: number
+          title: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_service_product_versions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      platform_service_request_refund_review: {
+        Args: {
+          p_created_by_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      platform_transition_virtual_product: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_product_id: string
+          p_target_status: string
+        }
+        Returns: Json
+      }
+      platform_update_virtual_product: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_grant_rule_patch: Json
+          p_product_id: string
+          p_product_patch: Json
+        }
+        Returns: Json
+      }
+      platform_virtual_provider_product_id: { Args: never; Returns: string }
       prune_douyin_authorization_event_deliveries: {
         Args: { p_before: string; p_limit?: number }
         Returns: number
@@ -20626,6 +23453,21 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: undefined
       }
+      record_supplier_payment_command_result: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_command: string
+          p_idempotency_key: string
+          p_request: Json
+          p_resource_id: string
+          p_resource_type: string
+          p_result: Json
+          p_result_version: number
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       release_phone_identity_selection: {
         Args: { p_candidate_id: string; p_now: string; p_session_id: string }
         Returns: {
@@ -20639,6 +23481,10 @@ export type Database = {
           p_nodes: Json
           p_tenant_id: string
         }
+        Returns: Json
+      }
+      replay_supplier_payment_command_result: {
+        Args: { p_result: Json }
         Returns: Json
       }
       require_valid_brand_logo_file: {
@@ -20793,6 +23639,19 @@ export type Database = {
         }
         Returns: Json
       }
+      review_supplier_payment_request: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_payment_request_id: string
+          p_remark: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       review_supplier_purchase_requisition: {
         Args: {
           p_action: string
@@ -20819,6 +23678,29 @@ export type Database = {
         }
         Returns: Json
       }
+      revoke_wechat_mini_session_credentials: {
+        Args: { p_oauth_identity_id: string }
+        Returns: {
+          created_at: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id: string
+          invalidated_at: string | null
+          last_used_at: string | null
+          oauth_identity_id: string
+          obtained_at: string
+          openid_hash: string
+          session_revision: number
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "wechat_mini_session_credentials"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       rollback_site_content: {
         Args: { p_actor_id: string; p_entry_id: string; p_version_id: string }
         Returns: {
@@ -20836,6 +23718,36 @@ export type Database = {
           to: "site_content_entries"
           isOneToOne: true
           isSetofReturn: false
+        }
+      }
+      rotate_wechat_mini_session_credential: {
+        Args: {
+          p_encrypted_session_key: string
+          p_encryption_key_version: number
+          p_oauth_identity_id: string
+          p_openid: string
+          p_openid_hash: string
+          p_user_id: string
+        }
+        Returns: {
+          created_at: string
+          encrypted_session_key: string
+          encryption_key_version: number
+          id: string
+          invalidated_at: string | null
+          last_used_at: string | null
+          oauth_identity_id: string
+          obtained_at: string
+          openid_hash: string
+          session_revision: number
+          status: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "wechat_mini_session_credentials"
+          isOneToOne: false
+          isSetofReturn: true
         }
       }
       save_brand_profile_draft: {
@@ -20876,6 +23788,22 @@ export type Database = {
           p_items: Json
           p_project_id: string
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      save_supplier_payment_request_draft: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allocations: Json
+          p_expected_version: number
+          p_idempotency_key: string
+          p_payment_request_id: string
+          p_project_id: string
+          p_reason: string
+          p_remark: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
         }
         Returns: Json
       }
@@ -21001,6 +23929,17 @@ export type Database = {
           updated_existing: boolean
         }[]
       }
+      submit_supplier_payment_request: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_payment_request_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       submit_supplier_purchase_order: {
         Args: {
           p_actor_employee_id: string
@@ -21081,9 +24020,27 @@ export type Database = {
           application_id: string
         }[]
       }
+      supplier_payment_request_to_jsonb: {
+        Args: {
+          p_request: Database["public"]["Tables"]["supplier_payment_requests"]["Row"]
+        }
+        Returns: Json
+      }
+      supplier_payment_to_jsonb: {
+        Args: {
+          p_payment: Database["public"]["Tables"]["supplier_payments"]["Row"]
+        }
+        Returns: Json
+      }
       supplier_purchase_order_snapshot: {
         Args: {
           p_order: Database["public"]["Tables"]["supplier_purchase_orders"]["Row"]
+        }
+        Returns: Json
+      }
+      supplier_purchase_requisition_to_jsonb: {
+        Args: {
+          p_requisition: Database["public"]["Tables"]["supplier_purchase_requisitions"]["Row"]
         }
         Returns: Json
       }
@@ -21124,6 +24081,15 @@ export type Database = {
           user_id: string
         }[]
       }
+      touch_wechat_mini_session_credential: {
+        Args: {
+          p_credential_id: string
+          p_openid: string
+          p_session_revision: number
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       unbind_platform_partner_member_binding: {
         Args: {
           p_auth_user_id: string
@@ -21151,6 +24117,40 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: string
+      }
+      upsert_platform_payment_secret_setting: {
+        Args: {
+          p_changed_by_employee_id: string
+          p_description: string
+          p_expected_updated_at: string
+          p_group_code: string
+          p_name: string
+          p_setting_key: string
+          p_status: string
+          p_value_text: string
+          p_value_type: string
+        }
+        Returns: {
+          created_at: string
+          description: string | null
+          group_code: string
+          id: string
+          is_secret: boolean
+          key: string
+          name: string
+          status: string
+          tenant_id: string | null
+          updated_at: string
+          updated_by_employee_id: string | null
+          value_text: string | null
+          value_type: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "system_settings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       upsert_supplier_price_list_item: {
         Args: {
@@ -21216,6 +24216,48 @@ export type Database = {
           oauth_matched: boolean
           user_profile: Json
         }[]
+      }
+      wechat_accept_virtual_payment_notification: {
+        Args: {
+          p_actual_price_fen: number
+          p_attach: string
+          p_environment: string
+          p_event_type: string
+          p_msg_type: string
+          p_openid_hash: string
+          p_orig_price_fen: number
+          p_out_trade_no: string
+          p_paid_at: string
+          p_provider_created_at: number
+          p_provider_order_no: string
+          p_provider_product_id: string
+          p_quantity: number
+          p_recipient_original_id: string
+          p_request_id: string
+          p_sender_id_hash: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      wechat_mark_virtual_payment_notification_failed: {
+        Args: {
+          p_error_code: string
+          p_error_summary: string
+          p_notification_id: string
+          p_order_id: string
+        }
+        Returns: Json
+      }
+      wechat_mark_virtual_payment_notification_processed: {
+        Args: {
+          p_entitlement_event_id: string
+          p_entitlement_status: string
+          p_fulfilled: boolean
+          p_notification_id: string
+          p_order_id: string
+          p_payment_recorded: boolean
+        }
+        Returns: Json
       }
       wechat_pay_create_pending_service_provider_order: {
         Args: {
@@ -21302,12 +24344,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -21329,12 +24371,13 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -21353,12 +24396,13 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -21377,12 +24421,13 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -21395,11 +24440,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

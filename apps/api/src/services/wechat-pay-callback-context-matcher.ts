@@ -35,12 +35,17 @@ import { wechatPaySecretBundleService } from "@/services/wechat-pay-secret-bundl
 import {
   type BrandingAddonCallbackContext,
   type CreditRechargeCallbackContext,
+  type PlatformServiceOrderCallbackContext,
   WechatPayPlatformPaymentCallbackMatcher,
 } from "@/services/wechat-pay-callback-platform-payment";
 export type {
   BrandingAddonCallbackContext,
   CreditRechargeCallbackContext,
+  PlatformServiceOrderCallbackContext,
 } from "@/services/wechat-pay-callback-platform-payment";
+import {
+  platformServiceOrderRepository,
+} from "@/repositories/platform-service-orders";
 
 export type CallbackHeaders = Record<string, string | string[] | undefined>;
 
@@ -66,6 +71,10 @@ type BrandingAddonRepositoryPort = Pick<
   typeof brandingAddonOrderRepository,
   "findByOutTradeNo"
 >;
+type PlatformServiceOrderRepositoryPort = Pick<
+  typeof platformServiceOrderRepository,
+  "findOrderByOutTradeNo"
+>;
 
 export type WechatPayCallbackCrypto = {
   verifySignature: typeof verifyWechatPayCallbackSignature;
@@ -81,6 +90,7 @@ export type WechatPayCallbackContextMatcherDependencies = {
   customerSmokeRepository?: CustomerSmokeRepositoryPort;
   creditRechargeRepository?: CreditRechargeRepositoryPort;
   brandingAddonMatchRepository?: BrandingAddonRepositoryPort;
+  platformServiceOrderMatchRepository?: PlatformServiceOrderRepositoryPort;
 };
 
 export type ProjectPaymentCallbackContext = {
@@ -113,6 +123,7 @@ export type MatchedCallbackContext =
   | CustomerWechatPaySmokeCallbackContext
   | BrandingAddonCallbackContext
   | CreditRechargeCallbackContext
+  | PlatformServiceOrderCallbackContext
   | CreditRechargeRefundCallbackContext;
 
 export class WechatPayCallbackContextMatcher {
@@ -148,6 +159,8 @@ export class WechatPayCallbackContextMatcher {
         dependencies.brandingAddonMatchRepository ??
           brandingAddonOrderRepository,
         this.creditRechargeRepository,
+        dependencies.platformServiceOrderMatchRepository ??
+          platformServiceOrderRepository,
       );
   }
 
