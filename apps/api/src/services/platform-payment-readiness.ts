@@ -62,9 +62,9 @@ export const PLATFORM_WECHAT_PAY_PROFILE_DEFINITION_BY_CODE = {
   platform_direct_recharge: {
     profile_code: "platform_direct_recharge",
     label: "平台直连商户",
-    description: "用于平台自有积分充值等平台收款场景。",
+    description: "用于平台技术服务等平台自有收款场景。",
     merchant_mode: "direct_merchant",
-    enabled_channels: ["tenant_recharge"],
+    enabled_channels: ["tenant_recharge", "platform_service"],
     secret_setting_key: "PLATFORM_WECHAT_PAY_SECRET_BUNDLE",
   },
   tenant_service_provider: {

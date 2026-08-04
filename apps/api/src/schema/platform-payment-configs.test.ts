@@ -65,6 +65,17 @@ describe("UpdatePlatformWechatPayConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  test("accepts platform service as a direct merchant payment channel", () => {
+    const result = UpdatePlatformWechatPayConfigSchema.safeParse({
+      merchant_mode: "direct_merchant",
+      merchant_id: "1900000001",
+      enabled_channels: ["tenant_recharge", "platform_service"],
+      status: "active",
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   test("accepts service provider merchant fields for tenant payment profile", () => {
     const result = UpdatePlatformWechatPayConfigSchema.safeParse({
       merchant_mode: "service_provider_sub_merchant",

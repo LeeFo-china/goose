@@ -43,9 +43,9 @@ export const profileDefinitions: ProfileDefinition[] = [
   {
     profile_code: "platform_direct_recharge",
     label: "平台直连商户",
-    description: "用于平台积分充值等平台自有收款。",
+    description: "用于平台技术服务等平台自有收款。",
     merchant_mode: "direct_merchant",
-    enabled_channels: ["tenant_recharge"],
+    enabled_channels: ["tenant_recharge", "platform_service"],
   },
   {
     profile_code: "tenant_service_provider",
@@ -284,6 +284,7 @@ export function merchantModeLabel(mode: PlatformPaymentMerchantMode) {
 
 export function paymentChannelLabel(channel: string) {
   if (channel === "tenant_recharge") return "租户充值";
+  if (channel === "platform_service") return "平台技术服务";
   if (channel === "project_payment") return "项目收款";
   if (channel === "applyment") return "商户进件";
   return channel;
