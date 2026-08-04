@@ -17,6 +17,21 @@ const atomicHardeningMigrationPath = new URL(
 );
 const readAtomicHardeningMigration = () =>
   Bun.file(atomicHardeningMigrationPath).text();
+const devSmokeProductMigrationPath = new URL(
+  "../../../../supabase/migrations/20260804120000_seed_dev_platform_service_smoke_product.sql",
+  import.meta.url,
+);
+const devSmokeProductMigrationFile = Bun.file(devSmokeProductMigrationPath);
+const readDevSmokeProductMigration = () => devSmokeProductMigrationFile.text();
+const devSmokeProductPointerMigrationPath = new URL(
+  "../../../../supabase/migrations/20260804121000_fix_dev_platform_service_smoke_product_pointer.sql",
+  import.meta.url,
+);
+const devSmokeProductPointerMigrationFile = Bun.file(
+  devSmokeProductPointerMigrationPath,
+);
+const readDevSmokeProductPointerMigration = () =>
+  devSmokeProductPointerMigrationFile.text();
 
 describe("platform service sales migration", () => {
   test("creates isolated service sales tables", async () => {
@@ -70,5 +85,25 @@ describe("platform service sales migration", () => {
     expect(sql).toContain("platform_service_prevent_ordered_product_code_change");
     expect(sql).toContain("SERVICE_PRODUCT_CODE_LOCKED");
     expect(sql).toMatch(/CREATE\s+TRIGGER\s+tr_platform_service_products_code_lock/i);
+  });
+
+  test("seeds the small payment smoke product only for development", async () => {
+    expect(await devSmokeProductMigrationFile.exists()).toBe(true);
+    const sql = await readDevSmokeProductMigration();
+    expect(sql).toContain("platform_service_smoke_1fen");
+    expect(sql).toContain("WECHAT_MINIPROGRAM_ENV_VERSION");
+    expect(sql).toContain("develop");
+    expect(sql).toContain("amount_fen <= 100");
+    expect(sql).toContain("dev-only payment smoke product");
+    expect(sql).not.toMatch(/INSERT\s+INTO\s+public\.tenant_service_orders/i);
+  });
+
+  test("repairs the dev smoke product published-version pointer separately", async () => {
+    expect(await devSmokeProductPointerMigrationFile.exists()).toBe(true);
+    const sql = await readDevSmokeProductPointerMigration();
+    expect(sql).toContain("platform_service_smoke_1fen");
+    expect(sql).toContain("WECHAT_MINIPROGRAM_ENV_VERSION");
+    expect(sql).toMatch(/UPDATE\s+public\.platform_service_products\s+AS\s+product/i);
+    expect(sql).toContain("published_version_id = version.id");
   });
 });

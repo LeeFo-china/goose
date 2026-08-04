@@ -33,8 +33,9 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 | Dev API base URL | `https://api-dev.goodcms.cn` |
 | Dev API release | GitHub Actions `Release Dev` run `30869050621`，commit `f48e2a109e5a1b3c49a66485d1dfc24d13771344` |
 | Dev Supabase API host | `api-dev.goodcms.cn:8000` |
-| 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000`、`20260804110000` |
+| 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000`、`20260804110000`、`20260804120000`、`20260804121000` |
 | 数据库类型 | `apps/api/src/types/database.ts` 已从同版本本地 schema 生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment`、`platform_service_publish_product_version`、`platform_service_request_refund_review` RPC |
+| Domain 制品 | `@gooes/domain@1.14.0` 本机制品：`/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.14.0.tgz` |
 | Smoke 脚本 | `bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run` |
 | Smoke token 环境变量 | `PLATFORM_SERVICE_SMOKE_TENANT_TOKEN`、`PLATFORM_SERVICE_SMOKE_PLATFORM_TOKEN` |
 
@@ -46,9 +47,10 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 2026-08-04 又使用同一 dev 域名和 dev 登录 token 重新补跑 dry-run smoke，结果仍为
 `ok=true`、readiness 全部为 `true`、Request-ID：`req-4a`。
 2026-08-04 继续补充本地 Colima 隔离验证：`supabase db reset` exit 0，Local migration
-到 `20260804110000`；随后对开发库执行 `supabase db push --db-url` 应用
-`20260804110000_harden_platform_service_sales_atomicity.sql`，`supabase migration list
---db-url` 显示 Local/Remote 均为 `20260804110000`。
+到 `20260804121000`；随后对开发库执行 `supabase db push --db-url` 应用
+`20260804110000_harden_platform_service_sales_atomicity.sql`、`20260804120000_seed_dev_platform_service_smoke_product.sql`
+和 `20260804121000_fix_dev_platform_service_smoke_product_pointer.sql`，`supabase migration list
+--db-url` 显示 Local/Remote 均为 `20260804121000`。
 对应 API 代码已发布到 dev，GitHub Actions `Release Dev` run `30869050621` 执行成功，
 发布 commit 为 `f48e2a109e5a1b3c49a66485d1dfc24d13771344`。
 同日使用开发库只读筛选出的合法租户员工/平台员工登录态重新执行 dev dry-run smoke，
@@ -57,6 +59,12 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 本地 `.env` 自签 token 不被 dev 容器认可，曾返回 `TOKEN_INVALID`，后续 smoke 应使用
 dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke 专用 token；后续 CI
 或其他开发机执行时仍需显式注入上述两个 token。
+2026-08-04 应 Orange 真实小额支付 smoke 需要，对开发库应用
+`20260804120000_seed_dev_platform_service_smoke_product.sql` 和
+`20260804121000_fix_dev_platform_service_smoke_product_pointer.sql`。`supabase migration
+list --db-url` 显示 Local/Remote 均到 `20260804121000`。该商品只在
+`system_settings.WECHAT_MINIPROGRAM_ENV_VERSION=develop` 时插入并发布；dev 接口验证
+`GET /billing/service-products` 已可读取 `platform_service_smoke_1fen`，金额为 1 分。
 
 ## 3. 权限与开关
 
@@ -139,6 +147,33 @@ dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke
 
 这些是初始化默认值，不是代码常量。上线后平台可在服务商品管理中调整原价和实际
 售价并发布新版本；新订单使用新版本，历史订单继续使用下单快照。
+
+### 4.1 Dev 专用真实支付 smoke 商品
+
+为满足小程序真机真实支付验收，开发库额外发布一款小额测试商品：
+
+```json
+{
+  "code": "platform_service_smoke_1fen",
+  "status": "enabled",
+  "title": "平台技术服务支付 Smoke（开发专用）",
+  "term_years": 1,
+  "list_amount_fen": 1,
+  "amount_fen": 1,
+  "price_rate_basis_points": 10000,
+  "pricing_version": 1,
+  "terms_version": 1,
+  "service_scope": [
+    "开发环境真实微信支付链路验证",
+    "支付成功后验证回调确认",
+    "支付成功后验证实施工单幂等创建"
+  ]
+}
+```
+
+该商品用于 dev 真机支付 smoke，不代表正式报价。Orange 不需要写死商品 code；它会随
+`GET /billing/service-products` 返回。生产库执行同一 migration 时，只有当
+`WECHAT_MINIPROGRAM_ENV_VERSION=develop` 才会插入该商品。
 
 ## 5. 租户侧接口
 
@@ -560,6 +595,7 @@ Gooes 在本机或 CI 注入合法 dev 登录态执行 smoke，输出只允许�
 商品 code/金额、订单 ID/no 和状态。当前 dev 只读审计仍显示尚无真实平台服务订单、
 回调通知和工单；真实支付 smoke 完成后，需要再补充：
 
+- 当前可用于真机小额支付的 dev 商品为 `platform_service_smoke_1fen`，金额 1 分；
 - 1 笔小额测试订单的脱敏订单 ID/no；
 - `wx.requestPayment` 后订单从 `pending` 变为 `paid` 的时间；
 - 对应 `tenant_service_wechat_notifications` processed 数量；
@@ -584,8 +620,9 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 
 - dry-run HTTP smoke exit 0；本轮本地 API + dev DB、正式 dev 域名
   `https://api-dev.goodcms.cn` 均已验证通过；
+- dev 小额 smoke 商品 `platform_service_smoke_1fen` 已发布，金额 1 分；
 - 本地 Colima 隔离库 `supabase db reset` 已验证通过，最新 Local migration 为
-  `20260804110000`；
+  `20260804121000`；
 - 真机使用测试租户创建 1 笔小额订单；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；
