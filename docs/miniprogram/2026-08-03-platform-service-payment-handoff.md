@@ -41,6 +41,8 @@
 未发起支付，输出仅包含商品、readiness 和脱敏 Request-ID。随后已发布 dev API，并
 使用 dev 登录接口获取的租户管理员与平台超管 token 对 `https://api-dev.goodcms.cn`
 补跑 dry-run smoke，结果 `ok=true`、readiness 全部为 `true`、Request-ID：`req-e`。
+2026-08-04 又使用同一 dev 域名和 dev 登录 token 重新补跑 dry-run smoke，结果仍为
+`ok=true`、readiness 全部为 `true`、Request-ID：`req-4a`。
 本地 `.env` 自签 token 不被 dev 容器认可，曾返回 `TOKEN_INVALID`，后续 smoke 应使用
 dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke 专用 token；后续 CI
 或其他开发机执行时仍需显式注入上述两个 token。
@@ -449,6 +451,9 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 
 - dry-run HTTP smoke exit 0；本轮本地 API + dev DB、正式 dev 域名
   `https://api-dev.goodcms.cn` 均已验证通过；
+- 本地 `supabase db reset` 仍需在具备 Docker Desktop/Docker daemon 的本地或隔离 CI
+  runner 上补跑；当前机器执行时被
+  `Cannot connect to the Docker daemon at unix:///var/run/docker.sock` 阻断；
 - 真机使用测试租户创建 1 笔小额订单；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；
