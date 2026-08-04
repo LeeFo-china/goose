@@ -175,6 +175,15 @@ function createDependencies() {
         )
       ),
     },
+    orderShippingReporter: {
+      reportAcceptedOrder: mock(async () => ({
+        status: "succeeded" as const,
+        idempotent: false,
+        report: null,
+        error_code: null,
+        skipped_reason: null,
+      })),
+    },
     nowFactory: () => now,
     signedUrlResolver: mock(async () => "https://cos.example.com/signed.pdf"),
   };
@@ -281,6 +290,17 @@ describe("Tenant platform service order acceptance", () => {
     });
     expect(result.work_order).toMatchObject({ status: "accepted", version: 6 });
     expect(result.acceptance_preparation).toMatchObject({ status: "accepted" });
+    expect(dependencies.orderShippingReporter.reportAcceptedOrder)
+      .toHaveBeenCalledWith({
+        order: expect.objectContaining({
+          id: orderId,
+          service_status: "accepted",
+        }),
+        source: "tenant_acceptance",
+      });
+    expect(result.wechat_shipping_report).toMatchObject({
+      status: "succeeded",
+    });
   });
 
   test("rejects customer acceptance and sends the work order back to rectifying", async () => {
@@ -309,6 +329,8 @@ describe("Tenant platform service order acceptance", () => {
     );
     expect(result.work_order).toMatchObject({ status: "rectifying", version: 6 });
     expect(result.acceptance_preparation).toMatchObject({ status: "rejected" });
+    expect(dependencies.orderShippingReporter.reportAcceptedOrder)
+      .not.toHaveBeenCalled();
   });
 
   test("maps stale customer acceptance decisions to a stable conflict code", async () => {
