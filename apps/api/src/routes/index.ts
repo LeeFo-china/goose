@@ -76,6 +76,9 @@ import BillingServiceOrdersController from "@/controllers/billing-service-orders
 import PlatformBillingRechargeController from "@/controllers/platform-billing-recharge";
 import PlatformBillingRechargeRefundController from "@/controllers/platform-billing-recharge-refunds";
 import PlatformServiceProductsController from "@/controllers/platform-service-products";
+import PlatformServiceOrdersController from "@/controllers/platform-service-orders";
+import PlatformServiceWorkOrdersController from "@/controllers/platform-service-work-orders";
+import PlatformServiceRefundRequestsController from "@/controllers/platform-service-refund-requests";
 import FinanceController from "@/controllers/finance";
 import UserAuthEventsController from "@/controllers/user-auth-events";
 import IdentityDiagnosticsController from "@/controllers/identity-diagnostics";
@@ -189,6 +192,9 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformBillingRechargeController.registerExtraRoutes(app);
   PlatformBillingRechargeRefundController.registerExtraRoutes(app);
   PlatformServiceProductsController.registerExtraRoutes(app);
+  PlatformServiceOrdersController.registerExtraRoutes(app);
+  PlatformServiceWorkOrdersController.registerExtraRoutes(app);
+  PlatformServiceRefundRequestsController.registerExtraRoutes(app);
   UserAuthEventsController.registerExtraRoutes(app);
   IdentityDiagnosticsController.registerExtraRoutes(app);
   PictureLibraryController.registerExtraRoutes(app);
