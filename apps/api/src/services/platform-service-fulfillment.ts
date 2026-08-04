@@ -3,10 +3,13 @@ import {
   platformServiceFulfillmentRepository,
   type PlatformServiceFulfillmentRepository,
 } from "@/repositories/platform-service-fulfillment";
+import {
+  platformServiceOrderShippingReportRepository,
+  type PlatformServiceOrderShippingReportRepository,
+} from "@/repositories/platform-service-order-shipping-reports";
 import type {
   AtomicActionResult,
   OrderRecord,
-  WorkOrderRecord,
 } from "@/repositories/platform-service-order-records";
 import type {
   PlatformServiceAcceptancePreparationInput,
@@ -19,7 +22,16 @@ import type {
   PlatformServiceWorkOrderTransitionInput,
 } from "@/schema/platform-service-fulfillment";
 import type { AuthContext } from "@/services/authorization";
-import { serializeTenantServiceOrder } from "@/services/platform-service-order-views";
+import {
+  platformServiceOrderShippingService,
+  type OrderShippingReportResult,
+} from "@/services/platform-service-order-shipping";
+import {
+  latestShippingReportByOrderId,
+  serializePlatformOrder,
+  serializePlatformWorkOrder,
+  serializeWechatShippingReport,
+} from "@/services/platform-service-fulfillment-views";
 
 type RepositoryPort = Pick<
   PlatformServiceFulfillmentRepository,
@@ -37,7 +49,21 @@ type RepositoryPort = Pick<
 
 type PlatformServiceFulfillmentServiceDependencies = {
   repository?: RepositoryPort;
+  shippingReportRepository?: ShippingReportRepositoryPort;
+  orderShippingReporter?: OrderShippingReporterPort;
   nowFactory?: () => Date;
+};
+
+type ShippingReportRepositoryPort = Pick<
+  PlatformServiceOrderShippingReportRepository,
+  "listByServiceOrderIds" | "findByServiceOrderId" | "findReportableOrderById"
+>;
+
+type OrderShippingReporterPort = {
+  reportAcceptedOrder(input: {
+    order: OrderRecord;
+    source: "platform_acceptance";
+  }): Promise<OrderShippingReportResult>;
 };
 
 const ORDER_READ_PERMISSION = "platform.service_order.read";
@@ -49,6 +75,8 @@ const MAX_PAGE_SIZE = 100;
 
 export class PlatformServiceFulfillmentService {
   private readonly repository: RepositoryPort;
+  private readonly shippingReportRepository: ShippingReportRepositoryPort;
+  private readonly orderShippingReporter: OrderShippingReporterPort;
   private readonly nowFactory: () => Date;
 
   constructor(
@@ -56,6 +84,10 @@ export class PlatformServiceFulfillmentService {
   ) {
     this.repository = dependencies.repository ??
       platformServiceFulfillmentRepository;
+    this.shippingReportRepository = dependencies.shippingReportRepository ??
+      platformServiceOrderShippingReportRepository;
+    this.orderShippingReporter = dependencies.orderShippingReporter ??
+      platformServiceOrderShippingService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -73,9 +105,16 @@ export class PlatformServiceFulfillmentService {
       tenantKeyword: query.tenantKeyword,
     });
     const now = this.nowFactory();
+    const shippingReports = await this.shippingReportRepository
+      .listByServiceOrderIds(result.list.map((order) => order.id));
+    const shippingReportByOrderId = latestShippingReportByOrderId(
+      shippingReports,
+    );
     return {
       ...result,
-      list: result.list.map((order) => serializePlatformOrder(order, now)),
+      list: result.list.map((order) =>
+        serializePlatformOrder(order, now, shippingReportByOrderId.get(order.id))
+      ),
       server_time: now.toISOString(),
     };
   }
@@ -90,7 +129,43 @@ export class PlatformServiceFulfillmentService {
         "SERVICE_ORDER_NOT_FOUND",
       );
     }
-    return { order: serializePlatformOrder(order, this.nowFactory()) };
+    const shippingReport = await this.shippingReportRepository
+      .findByServiceOrderId(orderId);
+    return {
+      order: serializePlatformOrder(order, this.nowFactory(), shippingReport),
+    };
+  }
+
+  async retryOrderShippingReport(authContext: AuthContext, orderId: string) {
+    this.assertCanManageWorkOrders(authContext);
+    const order = await this.shippingReportRepository
+      .findReportableOrderById(orderId);
+    if (!order) {
+      throw Errors.business(
+        404,
+        "平台技术服务订单不存在",
+        "SERVICE_ORDER_NOT_FOUND",
+      );
+    }
+
+    const result = await this.orderShippingReporter.reportAcceptedOrder({
+      order,
+      source: "platform_acceptance",
+    });
+    if (result.status === "skipped") {
+      throw Errors.business(
+        409,
+        "平台技术服务订单尚不满足微信履约上报条件",
+        "SERVICE_ORDER_SHIPPING_REPORT_NOT_READY",
+        { reason: result.skipped_reason },
+      );
+    }
+    const now = this.nowFactory();
+    return {
+      order: serializePlatformOrder(order, now, result.report),
+      wechat_shipping_report: serializeWechatShippingReport(result.report),
+      server_time: now.toISOString(),
+    };
   }
 
   async listWorkOrders(
@@ -293,67 +368,6 @@ export class PlatformServiceFulfillmentService {
     }
     return workOrder;
   }
-}
-
-function serializePlatformOrder(order: OrderRecord, now: Date) {
-  return {
-    ...serializeTenantServiceOrder(order, now),
-    tenant_id: order.tenant_id ?? null,
-  };
-}
-
-function serializePlatformWorkOrder(workOrder: WorkOrderRecord) {
-  return {
-    id: workOrder.id,
-    tenant_id: workOrder.tenant_id,
-    service_order_id: workOrder.service_order_id,
-    order_no: workOrder.order_no,
-    status: workOrder.status,
-    assignee_employee_id: workOrder.assignee_employee_id,
-    created_by_employee_id: workOrder.created_by_employee_id,
-    assigned_at: workOrder.assigned_at ?? null,
-    version: workOrder.version ?? 1,
-    available_actions: getWorkOrderActions(workOrder.status),
-    order: normalizeMaybeSingleRelation(workOrder.order),
-    created_at: workOrder.created_at,
-    updated_at: workOrder.updated_at,
-  };
-}
-
-function normalizeMaybeSingleRelation<T>(value: T | T[] | null | undefined) {
-  return Array.isArray(value) ? value[0] ?? null : value ?? null;
-}
-
-function getWorkOrderActions(status: string) {
-  const canCancel = [
-    "waiting_assignment",
-    "configuring",
-    "deploying",
-    "training",
-    "awaiting_acceptance",
-    "rectifying",
-  ].includes(status);
-  return {
-    assign: {
-      enabled: !["active", "canceled"].includes(status),
-      label: "分配负责人",
-      disabled_reason: ["active", "canceled"].includes(status)
-        ? "终态工单不能重新分配"
-        : null,
-    },
-    transition: {
-      enabled: status !== "active" && status !== "canceled",
-      label: "推进状态",
-      disabled_reason: status === "active" || status === "canceled"
-        ? "终态工单不能继续流转"
-        : null,
-    },
-    cancel: {
-      enabled: canCancel,
-      label: "取消工单",
-      disabled_reason: canCancel ? null : "当前状态不能取消",
-    },
-  };
 }
 
 function throwBusinessConflict(errorCode: string | undefined, message: string): never {

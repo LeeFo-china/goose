@@ -283,7 +283,10 @@ export default async function PlatformServiceOrdersPage({
           unit={activeTab === "orders" ? "笔订单" : activeTab === "workOrders" ? "张工单" : "条退款"}
         >
           {activeTab === "orders" ? (
-            <PlatformServiceOrderTable orders={orders.list} />
+            <PlatformServiceOrderTable
+              orders={orders.list}
+              canRetryShipping={canManageWorkOrder}
+            />
           ) : activeTab === "workOrders" ? (
             <PlatformServiceWorkOrderTable
               workOrders={workOrders.list}

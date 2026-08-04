@@ -7,6 +7,7 @@ import { PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS } from "@gooes/domain";
 import type {
   PlatformServiceOrderListItem,
   PlatformServiceRefundRequestListItem,
+  PlatformServiceWechatShippingStatus,
   PlatformServiceWorkOrderListItem,
   ServiceTenantSummary,
 } from "./platform-service-order-types";
@@ -127,6 +128,16 @@ export const refundStatusMeta: Record<
   approved: { label: "已通过", variant: "success" },
   rejected: { label: "已驳回", variant: "danger" },
   cancelled: { label: "已取消", variant: "secondary" },
+};
+
+export const wechatShippingStatusMeta: Record<
+  PlatformServiceWechatShippingStatus,
+  { label: string; variant: "secondary" | "success" | "warning" | "danger" }
+> = {
+  not_started: { label: "未上报", variant: "secondary" },
+  pending: { label: "上报中", variant: "warning" },
+  succeeded: { label: "已上报", variant: "success" },
+  failed: { label: "上报失败", variant: "danger" },
 };
 
 export function normalizePlatformServiceTab(value: string | undefined): PlatformServiceTab {
@@ -277,6 +288,13 @@ export function getServiceStatusMeta(status: string) {
 
 export function getRefundStatusMeta(status: string) {
   return refundStatusMeta[status] ?? {
+    label: status,
+    variant: "secondary" as const,
+  };
+}
+
+export function getWechatShippingStatusMeta(status: string) {
+  return wechatShippingStatusMeta[status as PlatformServiceWechatShippingStatus] ?? {
     label: status,
     variant: "secondary" as const,
   };

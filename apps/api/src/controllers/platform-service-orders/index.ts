@@ -4,7 +4,7 @@ import {
   PlatformServiceEntityParamSchema,
   PlatformServiceOrderListQuerySchema,
 } from "@/schema/platform-service-fulfillment";
-import { Get } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
 
@@ -43,6 +43,21 @@ class PlatformServiceOrdersController extends PlatformBaseController {
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
     const data = await (await service()).getOrder(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/billing/service-orders/:id/shipping-report/retry")
+  async retryOrderShippingReport(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformServiceEntityParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await (await service()).retryOrderShippingReport(
       authContext,
       paramsResult.data.id,
     );

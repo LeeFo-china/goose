@@ -10,6 +10,7 @@ describe("PlatformServiceOrdersController routes", () => {
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
+      post: (path: string) => routes.push({ method: "POST", path }),
     };
 
     controller.registerExtraRoutes(fastify as never);
@@ -17,6 +18,10 @@ describe("PlatformServiceOrdersController routes", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/platform/billing/service-orders" },
       { method: "GET", path: "/platform/billing/service-orders/:id" },
+      {
+        method: "POST",
+        path: "/platform/billing/service-orders/:id/shipping-report/retry",
+      },
     ]);
   });
 });
