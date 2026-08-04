@@ -14,8 +14,9 @@ import {
   type PlatformServiceOrderRepository,
 } from "@/repositories/platform-service-orders";
 import type {
-  ServiceOrderActionInput,
   ServiceAcceptanceDecisionInput,
+  ServiceFulfillmentAttachmentPreviewParam,
+  ServiceOrderActionInput,
   ServiceOrderCreateInput,
   ServiceOrderListQuery,
   ServiceProductListQuery,
@@ -28,9 +29,7 @@ import {
   serializeTenantServiceOrder,
   serializeTenantServiceProduct,
 } from "@/services/platform-service-order-views";
-import {
-  requireActiveServicePaymentConfig,
-} from "@/services/tenant-platform-service-order-payment-config";
+import { requireActiveServicePaymentConfig } from "@/services/tenant-platform-service-order-payment-config";
 import {
   buildProductSnapshot,
   getOrderDescription,
@@ -41,6 +40,7 @@ import {
 } from "@/services/tenant-platform-service-order-refunds";
 import {
   decideTenantServiceOrderAcceptance,
+  getTenantServiceFulfillmentAttachmentPreviewUrl,
   getTenantServiceOrderAcceptance,
 } from "@/services/tenant-platform-service-order-acceptance";
 import {
@@ -66,6 +66,7 @@ type RepositoryPort = Pick<
   | "findOrderByTenantAndId"
   | "findOrderForPaymentByTenantAndId"
   | "findAcceptanceViewByTenantAndOrderId"
+  | "findTenantFulfillmentAttachmentPreview"
   | "decideAcceptance"
   | "requestRefundReview"
 >;
@@ -335,6 +336,18 @@ export class TenantPlatformServiceOrderService {
       orderId,
       input,
       "rejected",
+    );
+  }
+
+  async getFulfillmentAttachmentPreviewUrl(
+    authContext: AuthContext,
+    params: ServiceFulfillmentAttachmentPreviewParam,
+  ) {
+    return getTenantServiceFulfillmentAttachmentPreviewUrl(
+      this.acceptanceDependencies(),
+      authContext,
+      params.id,
+      params.attachmentId,
     );
   }
 

@@ -5,6 +5,9 @@ import type {
   OrderRecord,
   WorkOrderRecord,
 } from "@/repositories/platform-service-order-records";
+import type {
+  FulfillmentAttachmentPreviewRecord,
+} from "@/repositories/platform-service-fulfillment-attachment-preview-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -14,6 +17,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const tenantId = "00000000-0000-4000-8000-000000000011";
 const employeeId = "00000000-0000-4000-8000-000000000012";
 const orderId = "00000000-0000-4000-8000-000000000301";
+const attachmentId = "00000000-0000-4000-8000-000000000801";
 const now = new Date("2026-08-03T12:00:00.000Z");
 
 const tenantAuth = {
@@ -116,10 +120,34 @@ const acceptanceView = {
   }],
 };
 
+const attachmentPreview = {
+  id: attachmentId,
+  tenant_id: tenantId,
+  service_order_id: orderId,
+  work_order_id: workOrder.id,
+  fulfillment_record_id: "00000000-0000-4000-8000-000000000701",
+  file_id: "00000000-0000-4000-8000-000000000901",
+  file_name: "交付说明.pdf",
+  mime_type: "application/pdf",
+  size_bytes: 1024,
+  file: {
+    id: "00000000-0000-4000-8000-000000000901",
+    tenant_id: tenantId,
+    scene: "tenant_service_fulfillment_attachment",
+    provider: "tencent_cos",
+    object_key:
+      "tenants/00000000-0000-4000-8000-000000000011/tenant-service-fulfillment-attachment/file.pdf",
+    visibility: "private",
+    status: "active",
+    deleted_at: null,
+  },
+} satisfies FulfillmentAttachmentPreviewRecord;
+
 function createDependencies() {
   return {
     repository: {
       findAcceptanceViewByTenantAndOrderId: mock(async () => acceptanceView),
+      findTenantFulfillmentAttachmentPreview: mock(async () => attachmentPreview),
       decideAcceptance: mock(async (input: {
         decision: "accepted" | "rejected";
       }): Promise<AtomicActionResult> => ({
@@ -148,6 +176,7 @@ function createDependencies() {
       ),
     },
     nowFactory: () => now,
+    signedUrlResolver: mock(async () => "https://cos.example.com/signed.pdf"),
   };
 }
 
@@ -191,6 +220,39 @@ describe("Tenant platform service order acceptance", () => {
     });
     expect(result.available_actions.accept).toMatchObject({ enabled: true });
     expect(result.available_actions.reject).toMatchObject({ enabled: true });
+  });
+
+  test("returns a short TTL preview URL for scoped fulfillment attachments", async () => {
+    const { getTenantServiceFulfillmentAttachmentPreviewUrl } = await import(
+      "./tenant-platform-service-order-acceptance"
+    );
+
+    const result = await getTenantServiceFulfillmentAttachmentPreviewUrl(
+      dependencies,
+      tenantAuth,
+      orderId,
+      attachmentId,
+    );
+
+    expect(
+      dependencies.repository.findTenantFulfillmentAttachmentPreview,
+    ).toHaveBeenCalledWith({ tenantId, orderId, attachmentId });
+    expect(dependencies.signedUrlResolver).toHaveBeenCalledWith(
+      attachmentPreview.file.object_key,
+      { ttlSeconds: 600 },
+    );
+    expect(result).toMatchObject({
+      preview_url: "https://cos.example.com/signed.pdf",
+      ttl_seconds: 600,
+      expires_at: "2026-08-03T12:10:00.000Z",
+      file: {
+        id: attachmentPreview.file_id,
+        attachment_id: attachmentId,
+        file_name: "交付说明.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 1024,
+      },
+    });
   });
 
   test("confirms customer acceptance through the atomic repository decision", async () => {

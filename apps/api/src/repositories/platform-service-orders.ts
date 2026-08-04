@@ -25,6 +25,10 @@ import {
   type TenantServiceAcceptanceViewRecord,
   TENANT_PUBLIC_ORDER_SELECT,
 } from "./platform-service-order-records";
+import {
+  type FulfillmentAttachmentPreviewRecord,
+  TENANT_FULFILLMENT_ATTACHMENT_PREVIEW_SELECT,
+} from "./platform-service-fulfillment-attachment-preview-records";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
 
@@ -49,6 +53,7 @@ type ServiceClient = {
       | "platform_service_product_versions"
       | "tenant_service_orders"
       | "tenant_service_work_orders"
+      | "tenant_service_fulfillment_attachments"
       | "tenant_service_wechat_notifications"
       | "tenant_service_refund_requests",
   ): ServiceQuery;
@@ -251,6 +256,21 @@ export class PlatformServiceOrderRepository {
       .maybeSingle();
     if (error) throw Errors.dbError("查询平台技术服务验收资料失败", error);
     return (data as TenantServiceAcceptanceViewRecord | null) ?? null;
+  }
+
+  async findTenantFulfillmentAttachmentPreview(input: {
+    tenantId: string;
+    orderId: string;
+    attachmentId: string;
+  }) {
+    const { data, error } = await this.fulfillmentAttachments()
+      .select(TENANT_FULFILLMENT_ATTACHMENT_PREVIEW_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("service_order_id", input.orderId)
+      .eq("id", input.attachmentId)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询平台技术服务履约附件失败", error);
+    return (data as FulfillmentAttachmentPreviewRecord | null) ?? null;
   }
 
   async findOrderForPaymentByTenantAndId(input: {
@@ -470,6 +490,9 @@ export class PlatformServiceOrderRepository {
     return this.clientProvider().from("tenant_service_wechat_notifications");
   }
 
+  private fulfillmentAttachments() {
+    return this.clientProvider().from("tenant_service_fulfillment_attachments");
+  }
 }
 
 export const platformServiceOrderRepository =

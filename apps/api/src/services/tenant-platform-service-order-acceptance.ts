@@ -6,8 +6,13 @@ import type {
   TenantServiceAcceptanceViewRecord,
   WorkOrderRecord,
 } from "@/repositories/platform-service-order-records";
+import type {
+  FulfillmentAttachmentPreviewFileRecord,
+  FulfillmentAttachmentPreviewRecord,
+} from "@/repositories/platform-service-fulfillment-attachment-preview-records";
 import type { ServiceAcceptanceDecisionInput } from "@/schema/billing-service-orders";
 import type { AuthContext } from "@/services/authorization";
+import { resolveSignedStoredFileUrl } from "@/services/files/file-url-resolver";
 import { serializeTenantServiceOrder } from "@/services/platform-service-order-views";
 
 type AcceptanceRepositoryPort = {
@@ -15,6 +20,11 @@ type AcceptanceRepositoryPort = {
     tenantId: string;
     orderId: string;
   }) => Promise<TenantServiceAcceptanceViewRecord | null>;
+  findTenantFulfillmentAttachmentPreview: (input: {
+    tenantId: string;
+    orderId: string;
+    attachmentId: string;
+  }) => Promise<FulfillmentAttachmentPreviewRecord | null>;
   decideAcceptance: (input: {
     tenantId: string;
     serviceOrderId: string;
@@ -34,10 +44,16 @@ type AcceptanceDependencies = {
   repository: AcceptanceRepositoryPort;
   accessPolicyService: AccessPolicyPort;
   nowFactory: () => Date;
+  signedUrlResolver?: (
+    objectKey: string,
+    options: { ttlSeconds: number },
+  ) => Promise<string>;
 };
 
 const CREATE_PERMISSION = "billing.service_order.create";
 const READ_PERMISSION = "billing.service_order.read";
+const FULFILLMENT_ATTACHMENT_SCENE = "tenant_service_fulfillment_attachment";
+const PREVIEW_TTL_SECONDS = 600;
 
 export async function getTenantServiceOrderAcceptance(
   dependencies: AcceptanceDependencies,
@@ -94,6 +110,54 @@ export async function decideTenantServiceOrderAcceptance(
   };
 }
 
+export async function getTenantServiceFulfillmentAttachmentPreviewUrl(
+  dependencies: AcceptanceDependencies,
+  authContext: AuthContext,
+  orderId: string,
+  attachmentId: string,
+) {
+  const tenantId = assertCanRead(dependencies.accessPolicyService, authContext);
+  const attachment = await dependencies.repository
+    .findTenantFulfillmentAttachmentPreview({
+      tenantId,
+      orderId,
+      attachmentId,
+    });
+  const file = normalizeMaybeSingleRelation(attachment?.file);
+  if (
+    !attachment ||
+    !file ||
+    !isPreviewableFulfillmentAttachment(tenantId, attachment, file)
+  ) {
+    throw Errors.business(
+      404,
+      "平台服务履约附件不存在",
+      "SERVICE_FULFILLMENT_ATTACHMENT_NOT_FOUND",
+    );
+  }
+
+  const resolver = dependencies.signedUrlResolver ?? resolveSignedStoredFileUrl;
+  const previewUrl = await resolver(file.object_key, {
+    ttlSeconds: PREVIEW_TTL_SECONDS,
+  });
+  const responseNow = dependencies.nowFactory();
+  return {
+    preview_url: previewUrl,
+    ttl_seconds: PREVIEW_TTL_SECONDS,
+    expires_at: new Date(
+      responseNow.getTime() + PREVIEW_TTL_SECONDS * 1000,
+    ).toISOString(),
+    file: {
+      id: attachment.file_id,
+      attachment_id: attachment.id,
+      file_name: attachment.file_name ?? null,
+      mime_type: attachment.mime_type ?? null,
+      size_bytes: attachment.size_bytes ?? null,
+    },
+    server_time: responseNow.toISOString(),
+  };
+}
+
 function assertCanRead(
   accessPolicyService: AccessPolicyPort,
   authContext: AuthContext,
@@ -122,6 +186,24 @@ function assertCanCreate(
 function requireEmployee(authContext: AuthContext) {
   if (!authContext.employeeId) throw Errors.forbidden();
   return authContext.employeeId;
+}
+
+function isPreviewableFulfillmentAttachment(
+  tenantId: string,
+  attachment: FulfillmentAttachmentPreviewRecord,
+  file: FulfillmentAttachmentPreviewFileRecord,
+) {
+  return Boolean(
+    attachment.tenant_id === tenantId &&
+      file.tenant_id === tenantId &&
+      file.id === attachment.file_id &&
+      file.scene === FULFILLMENT_ATTACHMENT_SCENE &&
+      file.provider === "tencent_cos" &&
+      file.visibility === "private" &&
+      file.status === "active" &&
+      file.deleted_at === null &&
+      file.object_key.trim()
+  );
 }
 
 function serializeAcceptanceView(

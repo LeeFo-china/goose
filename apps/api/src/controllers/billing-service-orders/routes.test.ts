@@ -34,6 +34,11 @@ describe("BillingServiceOrdersController routes", () => {
         method: "POST",
         path: "/billing/service-orders/:id/acceptance/reject",
       },
+      {
+        method: "GET",
+        path:
+          "/billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url",
+      },
     ]);
   });
 });
