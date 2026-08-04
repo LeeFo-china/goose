@@ -23253,6 +23253,51 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      platform_service_publish_product_version: {
+        Args: {
+          p_amount_fen: number
+          p_expected_version: number
+          p_list_amount_fen: number
+          p_product_id: string
+          p_published_by_employee_id: string
+          p_service_scope: Json
+          p_term_years: number
+          p_terms_content: string
+          p_terms_version: number
+          p_title: string
+        }
+        Returns: {
+          amount_fen: number
+          id: string
+          list_amount_fen: number
+          product_id: string
+          published_at: string
+          published_by_employee_id: string | null
+          service_scope: Json
+          term_years: number
+          terms_content: string
+          terms_version: number
+          title: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_service_product_versions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      platform_service_request_refund_review: {
+        Args: {
+          p_created_by_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       platform_transition_virtual_product: {
         Args: {
           p_actor_employee_id: string

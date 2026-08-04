@@ -179,14 +179,17 @@ function createRepository() {
     findOrderByTenantAndId: mock(
       async (_input: unknown): Promise<OrderRecord | null> => order,
     ),
-    findRefundRequestByIdempotencyKey: mock(async (_input: unknown) =>
-      null as typeof refundRequest | null
+    findOrderForPaymentByTenantAndId: mock(
+      async (_input: unknown): Promise<OrderRecord | null> => order,
     ),
-    createRefundRequest: mock(async (_input: unknown) => refundRequest),
-    markOrderRefundReviewing: mock(async (_input: unknown) => ({
-      ...order,
-      payment_status: "refund_reviewing",
-      version: 2,
+    requestRefundReview: mock(async (_input: unknown) => ({
+      idempotent: false,
+      refundRequest,
+      order: {
+        ...order,
+        payment_status: "refund_reviewing",
+        version: 2,
+      },
     })),
   };
 }
@@ -289,7 +292,7 @@ describe("TenantPlatformServiceOrderService", () => {
   });
 
   test("keeps an existing pending order amount after a later price publication", async () => {
-    dependencies.repository.findOrderByTenantAndId.mockImplementationOnce(
+    dependencies.repository.findOrderForPaymentByTenantAndId.mockImplementationOnce(
       async () => ({ ...order, prepay_id: null }),
     );
     const { TenantPlatformServiceOrderService } = await import(
@@ -452,7 +455,7 @@ describe("TenantPlatformServiceOrderService", () => {
     );
     const service = new TenantPlatformServiceOrderService(dependencies);
 
-    dependencies.repository.findOrderByTenantAndId.mockImplementationOnce(
+    dependencies.repository.findOrderForPaymentByTenantAndId.mockImplementationOnce(
       async () => ({ ...order, payment_expires_at: "2026-08-03T11:59:00.000Z" }),
     );
     await expect(service.createPaymentRequest(tenantAuth, orderId, {
@@ -462,7 +465,7 @@ describe("TenantPlatformServiceOrderService", () => {
       code: "SERVICE_ORDER_INVALID_STATE",
     });
 
-    dependencies.repository.findOrderByTenantAndId.mockImplementationOnce(
+    dependencies.repository.findOrderForPaymentByTenantAndId.mockImplementationOnce(
       async () => ({ ...order, payment_status: "paid" }),
     );
     await expect(service.createPaymentRequest(tenantAuth, orderId, {

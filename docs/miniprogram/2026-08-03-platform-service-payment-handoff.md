@@ -5,10 +5,12 @@
 适用仓库：`gooes` 后端 / `orange` 小程序
 
 状态：后端一期代码实现已完成并发布到 dev API，开发库 migration 已应用到
-`api-dev.goodcms.cn:8000` 并验证 Local/Remote 对齐；数据库类型已从开发库重新生成。
-发布完成门槛仍需补齐本地 migration reset 验证和真实小额支付/回调 smoke。当前文档
-只覆盖商品、订单、普通微信支付、回调确认后自动建实施工单、退款申请基础能力；
-不包含 Admin 页面、履约采集、培训记录、交付附件、客户验收和微信发货信息管理上报。
+`api-dev.goodcms.cn:8000` 并验证 Local/Remote 对齐；本地 Colima 隔离库已完成
+`supabase db reset` 从空库验证。数据库类型已在同版本本地 schema 生成；远端 dev
+typegen 受容器内 DNS/CA 限制未直接生成。发布完成门槛仍需补齐真实小额支付/回调
+smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认后自动建实施工单、退款
+申请基础能力；不包含 Admin 页面、履约采集、培训记录、交付附件、客户验收和微信
+发货信息管理上报。
 
 ## 1. 业务边界
 
@@ -31,8 +33,8 @@
 | Dev API base URL | `https://api-dev.goodcms.cn` |
 | Dev API release | GitHub Actions `Release Dev` run `30862755105`，commit `9217f5340858eabae3fb2fc7fc51a0ceaaf7a6a6` |
 | Dev Supabase API host | `api-dev.goodcms.cn:8000` |
-| 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000` |
-| 数据库类型 | `apps/api/src/types/database.ts` 已从开发库生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment` RPC |
+| 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000`、`20260804110000` |
+| 数据库类型 | `apps/api/src/types/database.ts` 已从同版本本地 schema 生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment`、`platform_service_publish_product_version`、`platform_service_request_refund_review` RPC |
 | Smoke 脚本 | `bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run` |
 | Smoke token 环境变量 | `PLATFORM_SERVICE_SMOKE_TENANT_TOKEN`、`PLATFORM_SERVICE_SMOKE_PLATFORM_TOKEN` |
 
@@ -43,6 +45,10 @@
 补跑 dry-run smoke，结果 `ok=true`、readiness 全部为 `true`、Request-ID：`req-e`。
 2026-08-04 又使用同一 dev 域名和 dev 登录 token 重新补跑 dry-run smoke，结果仍为
 `ok=true`、readiness 全部为 `true`、Request-ID：`req-4a`。
+2026-08-04 继续补充本地 Colima 隔离验证：`supabase db reset` exit 0，Local migration
+到 `20260804110000`；随后对开发库执行 `supabase db push --db-url` 应用
+`20260804110000_harden_platform_service_sales_atomicity.sql`，`supabase migration list
+--db-url` 显示 Local/Remote 均为 `20260804110000`。
 本地 `.env` 自签 token 不被 dev 容器认可，曾返回 `TOKEN_INVALID`，后续 smoke 应使用
 dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke 专用 token；后续 CI
 或其他开发机执行时仍需显式注入上述两个 token。
@@ -451,9 +457,8 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 
 - dry-run HTTP smoke exit 0；本轮本地 API + dev DB、正式 dev 域名
   `https://api-dev.goodcms.cn` 均已验证通过；
-- 本地 `supabase db reset` 仍需在具备 Docker Desktop/Docker daemon 的本地或隔离 CI
-  runner 上补跑；当前机器执行时被
-  `Cannot connect to the Docker daemon at unix:///var/run/docker.sock` 阻断；
+- 本地 Colima 隔离库 `supabase db reset` 已验证通过，最新 Local migration 为
+  `20260804110000`；
 - 真机使用测试租户创建 1 笔小额订单；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；

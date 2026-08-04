@@ -21,6 +21,7 @@ type RepositoryPort = Pick<
   | "findPlatformProductById"
   | "publishProductVersion"
   | "archiveProduct"
+  | "hasOrdersForProduct"
 >;
 
 type PlatformServiceProductServiceDependencies = {
@@ -78,6 +79,25 @@ export class PlatformServiceProductService {
     input: PlatformServiceProductUpdateInput,
   ) {
     const employeeId = this.assertCanManage(authContext);
+    const currentProduct = input.code !== undefined || input.terms_content !== undefined
+      ? await this.requireProduct(productId)
+      : null;
+    if (
+      input.code !== undefined &&
+      currentProduct &&
+      input.code !== currentProduct.code &&
+      await this.repository.hasOrdersForProduct(productId)
+    ) {
+      throw Errors.business(
+        409,
+        "平台服务商品已有订单，不能修改商品编码",
+        "SERVICE_PRODUCT_CODE_LOCKED",
+      );
+    }
+    const termsVersion = input.terms_content !== undefined && currentProduct &&
+        input.terms_content !== currentProduct.terms_content
+      ? currentProduct.terms_version + 1
+      : undefined;
     const product = await this.repository.updateProductDraft({
       productId,
       expectedVersion: input.expected_version,
@@ -89,6 +109,7 @@ export class PlatformServiceProductService {
       amountFen: input.amount_fen,
       serviceScope: input.service_scope,
       termsContent: input.terms_content,
+      termsVersion,
     });
     if (!product) {
       throw Errors.business(
@@ -121,6 +142,13 @@ export class PlatformServiceProductService {
       termsContent: product.terms_content,
       employeeId,
     });
+    if (!publishedVersion) {
+      throw Errors.business(
+        409,
+        "平台服务商品已被更新，请刷新后重试",
+        "SERVICE_PRODUCT_VERSION_CONFLICT",
+      );
+    }
 
     return {
       product_id: productId,

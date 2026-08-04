@@ -1,5 +1,8 @@
 import { Errors } from "@/errors/error-factory";
-import type { OrderRecord } from "@/repositories/platform-service-order-records";
+import type {
+  OrderRecord,
+  RefundReviewResult,
+} from "@/repositories/platform-service-order-records";
 import type { ServiceRefundRequestInput } from "@/schema/billing-service-orders";
 import type { AuthContext } from "@/services/authorization";
 import { serializeTenantServiceOrder } from "@/services/platform-service-order-views";
@@ -9,23 +12,14 @@ export type ServiceOrderRefundRepositoryPort = {
     tenantId: string;
     orderId: string;
   }): Promise<OrderRecord | null>;
-  findRefundRequestByIdempotencyKey(input: {
-    tenantId: string;
-    orderId: string;
-    idempotencyKey: string;
-  }): Promise<unknown | null>;
-  createRefundRequest(input: {
-    tenantId: string;
-    orderId: string;
-    idempotencyKey: string;
-    reason: string;
-    createdByEmployeeId: string;
-  }): Promise<unknown>;
-  markOrderRefundReviewing(input: {
+  requestRefundReview(input: {
     tenantId: string;
     orderId: string;
     expectedVersion: number;
-  }): Promise<OrderRecord | null>;
+    idempotencyKey: string;
+    reason: string;
+    createdByEmployeeId: string;
+  }): Promise<RefundReviewResult>;
 };
 
 export type ServiceOrderRefundAccessPolicyPort = {
@@ -51,18 +45,6 @@ export async function requestServiceOrderRefund(input: {
     input.orderId,
   );
   assertOrderVersion(order, input.request.expected_version);
-  const existing = await input.repository.findRefundRequestByIdempotencyKey({
-    tenantId,
-    orderId: input.orderId,
-    idempotencyKey: input.request.idempotency_key,
-  });
-  if (existing) {
-    return {
-      idempotent: true,
-      refund_request: existing,
-      order: serializeTenantServiceOrder(order, input.nowFactory()),
-    };
-  }
   if (order.payment_status !== "paid") {
     throw Errors.business(
       409,
@@ -70,29 +52,25 @@ export async function requestServiceOrderRefund(input: {
       "SERVICE_ORDER_INVALID_STATE",
     );
   }
-  const refundRequest = await input.repository.createRefundRequest({
+  const result = await input.repository.requestRefundReview({
     tenantId,
     orderId: input.orderId,
+    expectedVersion: input.request.expected_version,
     idempotencyKey: input.request.idempotency_key,
     reason: input.request.reason,
     createdByEmployeeId: employeeId,
   });
-  const updatedOrder = await input.repository.markOrderRefundReviewing({
-    tenantId,
-    orderId: input.orderId,
-    expectedVersion: input.request.expected_version,
-  });
-  if (!updatedOrder) {
+  if (!result.refundRequest || !result.order) {
     throw Errors.business(
       409,
       "平台服务订单已更新，请刷新后重试",
-      "SERVICE_ORDER_VERSION_CONFLICT",
+      result.errorCode ?? "SERVICE_ORDER_VERSION_CONFLICT",
     );
   }
   return {
-    idempotent: false,
-    refund_request: refundRequest,
-    order: serializeTenantServiceOrder(updatedOrder, input.nowFactory()),
+    idempotent: result.idempotent,
+    refund_request: result.refundRequest,
+    order: serializeTenantServiceOrder(result.order, input.nowFactory()),
   };
 }
 

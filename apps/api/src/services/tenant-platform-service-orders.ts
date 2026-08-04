@@ -57,9 +57,8 @@ type RepositoryPort = Pick<
   | "createPendingOrder"
   | "markPrepayCreated"
   | "findOrderByTenantAndId"
-  | "createRefundRequest"
-  | "findRefundRequestByIdempotencyKey"
-  | "markOrderRefundReviewing"
+  | "findOrderForPaymentByTenantAndId"
+  | "requestRefundReview"
 >;
 
 type PaymentConfigRepositoryPort = Pick<
@@ -264,7 +263,7 @@ export class TenantPlatformServiceOrderService {
     _payerOpenid: string,
   ) {
     const tenantId = this.assertCanCreate(authContext);
-    const order = await this.requireTenantOrder(tenantId, orderId);
+    const order = await this.requireTenantPaymentOrder(tenantId, orderId);
     this.assertOrderVersion(order, input.expected_version);
     const paymentRequest = await this.createPaymentRequestForOrder(
       order,
@@ -410,6 +409,21 @@ export class TenantPlatformServiceOrderService {
 
   private async requireTenantOrder(tenantId: string, orderId: string) {
     const order = await this.repository.findOrderByTenantAndId({
+      tenantId,
+      orderId,
+    });
+    if (!order) {
+      throw Errors.business(
+        404,
+        "平台服务订单不存在",
+        "SERVICE_ORDER_NOT_FOUND",
+      );
+    }
+    return order;
+  }
+
+  private async requireTenantPaymentOrder(tenantId: string, orderId: string) {
+    const order = await this.repository.findOrderForPaymentByTenantAndId({
       tenantId,
       orderId,
     });

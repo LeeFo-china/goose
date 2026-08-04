@@ -11,6 +11,12 @@ const seedPointerFixMigrationPath = new URL(
 );
 const readSeedPointerFixMigration = () =>
   Bun.file(seedPointerFixMigrationPath).text();
+const atomicHardeningMigrationPath = new URL(
+  "../../../../supabase/migrations/20260804110000_harden_platform_service_sales_atomicity.sql",
+  import.meta.url,
+);
+const readAtomicHardeningMigration = () =>
+  Bun.file(atomicHardeningMigrationPath).text();
 
 describe("platform service sales migration", () => {
   test("creates isolated service sales tables", async () => {
@@ -48,5 +54,21 @@ describe("platform service sales migration", () => {
     expect(sql).toContain("platform_service_3y");
     expect(sql).toMatch(/UPDATE\s+public\.platform_service_products/i);
     expect(sql).toContain("PLATFORM_SERVICE_SEED_PUBLISHED_VERSION_MISSING");
+  });
+
+  test("hardens publish and refund transitions with atomic RPCs", async () => {
+    const sql = await readAtomicHardeningMigration();
+    expect(sql).toContain("platform_service_publish_product_version");
+    expect(sql).toContain("platform_service_request_refund_review");
+    expect(sql).toContain("FOR UPDATE");
+    expect(sql).toContain("SERVICE_PRODUCT_VERSION_CONFLICT");
+    expect(sql).toContain("SERVICE_ORDER_VERSION_CONFLICT");
+  });
+
+  test("prevents product code changes after service orders exist", async () => {
+    const sql = await readAtomicHardeningMigration();
+    expect(sql).toContain("platform_service_prevent_ordered_product_code_change");
+    expect(sql).toContain("SERVICE_PRODUCT_CODE_LOCKED");
+    expect(sql).toMatch(/CREATE\s+TRIGGER\s+tr_platform_service_products_code_lock/i);
   });
 });

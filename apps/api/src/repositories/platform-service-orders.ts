@@ -13,13 +13,13 @@ import {
   type ProductDraftCreateInput,
   type ProductDraftUpdateInput,
   type ProductPublishInput,
-  REFUND_REQUEST_SELECT,
   type ProductRecord,
   type ProductVersionRecord,
-  type RefundRequestRecord,
-  type RefundRequestCreateInput,
-  TENANT_ORDER_SELECT,
+  type RefundReviewInput,
+  type RefundReviewResult,
+  TENANT_INTERNAL_ORDER_SELECT,
   TENANT_PRODUCT_SELECT,
+  TENANT_PUBLIC_ORDER_SELECT,
 } from "./platform-service-order-records";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
@@ -49,7 +49,11 @@ type ServiceClient = {
       | "tenant_service_refund_requests",
   ): ServiceQuery;
   rpc(
-    name: "platform_service_create_pending_order" | "platform_service_confirm_payment",
+    name:
+      | "platform_service_create_pending_order"
+      | "platform_service_confirm_payment"
+      | "platform_service_publish_product_version"
+      | "platform_service_request_refund_review",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -134,6 +138,7 @@ export class PlatformServiceOrderRepository {
     if (input.amountFen !== undefined) patch.amount_fen = input.amountFen;
     if (input.serviceScope !== undefined) patch.service_scope = input.serviceScope;
     if (input.termsContent !== undefined) patch.terms_content = input.termsContent;
+    if (input.termsVersion !== undefined) patch.terms_version = input.termsVersion;
 
     const { data, error } = await this.products()
       .update(patch)
@@ -146,40 +151,32 @@ export class PlatformServiceOrderRepository {
   }
 
   async publishProductVersion(input: ProductPublishInput) {
-    const nextVersion = input.expectedVersion + 1;
-    const { data: version, error: versionError } = await this.versions()
-      .insert({
-        product_id: input.productId,
-        version: nextVersion,
-        title: input.title,
-        term_years: input.termYears,
-        list_amount_fen: input.listAmountFen,
-        amount_fen: input.amountFen,
-        service_scope: input.serviceScope,
-        terms_version: input.termsVersion,
-        terms_content: input.termsContent,
-        published_by_employee_id: input.employeeId,
-      })
-      .select("id,product_id,version,title,term_years,list_amount_fen,amount_fen,service_scope,terms_version,terms_content")
-      .single();
-    if (versionError) {
-      throw Errors.dbError("发布平台技术服务商品版本失败", versionError);
-    }
-    const versionRecord = version as ProductVersionRecord;
-    const { error: productError } = await this.products()
-      .update({
-        published_version_id: versionRecord.id,
-        version: nextVersion,
-        updated_by_employee_id: input.employeeId,
-      })
-      .eq("id", input.productId)
-      .eq("version", input.expectedVersion)
-      .select(PLATFORM_PRODUCT_SELECT)
-      .maybeSingle();
-    if (productError) {
-      throw Errors.dbError("更新平台技术服务商品发布指针失败", productError);
-    }
-    return versionRecord;
+    const { data, error } = await this.clientProvider().rpc(
+      "platform_service_publish_product_version",
+      {
+        p_product_id: input.productId,
+        p_expected_version: input.expectedVersion,
+        p_title: input.title,
+        p_term_years: input.termYears,
+        p_list_amount_fen: input.listAmountFen,
+        p_amount_fen: input.amountFen,
+        p_service_scope: input.serviceScope,
+        p_terms_version: input.termsVersion,
+        p_terms_content: input.termsContent,
+        p_published_by_employee_id: input.employeeId,
+      },
+    );
+    if (error) throw Errors.dbError("发布平台技术服务商品版本失败", error);
+    return (data as ProductVersionRecord | null) ?? null;
+  }
+
+  async hasOrdersForProduct(productId: string) {
+    const { data, error } = await this.orders()
+      .select("id")
+      .eq("product_id", productId)
+      .limit(1);
+    if (error) throw Errors.dbError("检查平台技术服务商品订单失败", error);
+    return Array.isArray(data) && data.length > 0;
   }
 
   async archiveProduct(input: {
@@ -210,7 +207,7 @@ export class PlatformServiceOrderRepository {
   }) {
     const pagination = normalizePagination(input.page, input.pageSize);
     let request = this.orders()
-      .select(TENANT_ORDER_SELECT, { count: "exact" })
+      .select(TENANT_PUBLIC_ORDER_SELECT, { count: "exact" })
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
       .range(pagination.from, pagination.to);
@@ -230,11 +227,24 @@ export class PlatformServiceOrderRepository {
 
   async findOrderByTenantAndId(input: { tenantId: string; orderId: string }) {
     const { data, error } = await this.orders()
-      .select(TENANT_ORDER_SELECT)
+      .select(TENANT_PUBLIC_ORDER_SELECT)
       .eq("tenant_id", input.tenantId)
       .eq("id", input.orderId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询平台技术服务订单失败", error);
+    return (data as OrderRecord | null) ?? null;
+  }
+
+  async findOrderForPaymentByTenantAndId(input: {
+    tenantId: string;
+    orderId: string;
+  }) {
+    const { data, error } = await this.orders()
+      .select(TENANT_INTERNAL_ORDER_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询平台技术服务支付订单失败", error);
     return (data as OrderRecord | null) ?? null;
   }
 
@@ -243,7 +253,7 @@ export class PlatformServiceOrderRepository {
     idempotencyKey: string;
   }) {
     const { data, error } = await this.orders()
-      .select(TENANT_ORDER_SELECT)
+      .select(TENANT_INTERNAL_ORDER_SELECT)
       .eq("tenant_id", input.tenantId)
       .eq("idempotency_key", input.idempotencyKey)
       .maybeSingle();
@@ -253,13 +263,7 @@ export class PlatformServiceOrderRepository {
 
   async findOrderByOutTradeNo(outTradeNo: string) {
     const { data, error } = await this.orders()
-      .select([
-        TENANT_ORDER_SELECT,
-        "tenant_id",
-        "payment_config_id",
-        "payment_config_guard_version",
-        "payer_openid",
-      ].join(","))
+      .select(TENANT_INTERNAL_ORDER_SELECT)
       .eq("out_trade_no", outTradeNo)
       .maybeSingle();
     if (error) throw Errors.dbError("查询平台技术服务支付订单失败", error);
@@ -299,7 +303,7 @@ export class PlatformServiceOrderRepository {
       .update({ prepay_id: input.prepayId })
       .eq("id", input.orderId)
       .eq("payment_status", "pending")
-      .select(TENANT_ORDER_SELECT)
+      .select(TENANT_INTERNAL_ORDER_SELECT)
       .maybeSingle();
     if (error) throw Errors.dbError("保存平台技术服务预支付单失败", error);
     return (data as OrderRecord | null) ?? null;
@@ -374,62 +378,38 @@ export class PlatformServiceOrderRepository {
     return data as Record<string, unknown>;
   }
 
-  async createRefundRequest(input: RefundRequestCreateInput) {
-    const { data, error } = await this.refundRequests()
-      .insert({
-        tenant_id: input.tenantId,
-        service_order_id: input.orderId,
-        idempotency_key: input.idempotencyKey,
-        reason: input.reason,
-        created_by_employee_id: input.createdByEmployeeId,
-      })
-      .select(REFUND_REQUEST_SELECT)
-      .single();
+  async requestRefundReview(input: RefundReviewInput): Promise<RefundReviewResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "platform_service_request_refund_review",
+      {
+        p_tenant_id: input.tenantId,
+        p_order_id: input.orderId,
+        p_expected_version: input.expectedVersion,
+        p_idempotency_key: input.idempotencyKey,
+        p_reason: input.reason,
+        p_created_by_employee_id: input.createdByEmployeeId,
+      },
+    );
     if (error) throw Errors.dbError("创建平台技术服务退款申请失败", error);
-    return data as RefundRequestRecord;
-  }
-
-  async findRefundRequestByIdempotencyKey(input: {
-    tenantId: string;
-    orderId: string;
-    idempotencyKey: string;
-  }) {
-    const { data, error } = await this.refundRequests()
-      .select(REFUND_REQUEST_SELECT)
-      .eq("tenant_id", input.tenantId)
-      .eq("service_order_id", input.orderId)
-      .eq("idempotency_key", input.idempotencyKey)
-      .maybeSingle();
-    if (error) throw Errors.dbError("查询平台技术服务退款申请失败", error);
-    return (data as RefundRequestRecord | null) ?? null;
-  }
-
-  async markOrderRefundReviewing(input: {
-    tenantId: string;
-    orderId: string;
-    expectedVersion: number;
-  }) {
-    const { data, error } = await this.orders()
-      .update({
-        payment_status: "refund_reviewing",
-        version: input.expectedVersion + 1,
-      })
-      .eq("tenant_id", input.tenantId)
-      .eq("id", input.orderId)
-      .eq("version", input.expectedVersion)
-      .eq("payment_status", "paid")
-      .select(TENANT_ORDER_SELECT)
-      .maybeSingle();
-    if (error) throw Errors.dbError("更新平台技术服务订单退款状态失败", error);
-    return (data as OrderRecord | null) ?? null;
+    const result = data as {
+      idempotent?: unknown;
+      refund_request?: unknown;
+      order?: unknown;
+      error_code?: unknown;
+    } | null;
+    return {
+      idempotent: result?.idempotent === true,
+      refundRequest: (result?.refund_request as RefundReviewResult["refundRequest"]) ??
+        null,
+      order: (result?.order as OrderRecord | null) ?? null,
+      errorCode: typeof result?.error_code === "string"
+        ? result.error_code
+        : undefined,
+    };
   }
 
   private products() {
     return this.clientProvider().from("platform_service_products");
-  }
-
-  private versions() {
-    return this.clientProvider().from("platform_service_product_versions");
   }
 
   private orders() {
@@ -440,9 +420,6 @@ export class PlatformServiceOrderRepository {
     return this.clientProvider().from("tenant_service_wechat_notifications");
   }
 
-  private refundRequests() {
-    return this.clientProvider().from("tenant_service_refund_requests");
-  }
 }
 
 export const platformServiceOrderRepository =

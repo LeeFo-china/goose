@@ -95,6 +95,7 @@ export type ProductDraftUpdateInput = Partial<ProductDraftCreateInput> & {
   productId: string;
   expectedVersion: number;
   employeeId: string;
+  termsVersion?: number;
 };
 
 export type ProductPublishInput = {
@@ -134,6 +135,17 @@ export type RefundRequestCreateInput = {
   idempotencyKey: string;
   reason: string;
   createdByEmployeeId: string;
+};
+
+export type RefundReviewInput = RefundRequestCreateInput & {
+  expectedVersion: number;
+};
+
+export type RefundReviewResult = {
+  idempotent: boolean;
+  refundRequest: RefundRequestRecord | null;
+  order: OrderRecord | null;
+  errorCode?: string;
 };
 
 export type RefundRequestRecord = {
@@ -187,8 +199,26 @@ export const PLATFORM_PRODUCT_SELECT = [
   "published_version:platform_service_product_versions!platform_service_products_published_version_fkey(id,version,title,term_years,list_amount_fen,amount_fen,service_scope,terms_version,terms_content)",
 ].join(",");
 
-export const TENANT_ORDER_SELECT = [
+export const TENANT_PUBLIC_ORDER_SELECT = [
   "id",
+  "order_no",
+  "product_code",
+  "term_years",
+  "amount_fen",
+  "payment_status",
+  "service_status",
+  "payment_expires_at",
+  "paid_at",
+  "closed_at",
+  "terms_version",
+  "version",
+  "created_at",
+  "updated_at",
+].join(",");
+
+export const TENANT_INTERNAL_ORDER_SELECT = [
+  "id",
+  "tenant_id",
   "order_no",
   "out_trade_no",
   "product_id",

@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { OrderRecord } from "@/repositories/platform-service-order-records";
+import type {
+  OrderRecord,
+  RefundReviewResult,
+} from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -80,14 +83,15 @@ function createDependencies() {
       createPendingOrder: mock(async () => order),
       markPrepayCreated: mock(async () => order),
       findOrderByTenantAndId: mock(async () => order),
-      findRefundRequestByIdempotencyKey: mock(async () =>
-        null as typeof refundRequest | null
-      ),
-      createRefundRequest: mock(async () => refundRequest),
-      markOrderRefundReviewing: mock(async () => ({
-        ...order,
-        payment_status: "refund_reviewing",
-        version: 2,
+      findOrderForPaymentByTenantAndId: mock(async () => order),
+      requestRefundReview: mock(async (): Promise<RefundReviewResult> => ({
+        idempotent: false,
+        refundRequest,
+        order: {
+          ...order,
+          payment_status: "refund_reviewing",
+          version: 2,
+        },
       })),
     },
     paymentConfigRepository: {
@@ -119,9 +123,25 @@ describe("TenantPlatformServiceOrderService refund requests", () => {
   });
 
   test("creates one refund request for the same idempotency key", async () => {
-    dependencies.repository.findRefundRequestByIdempotencyKey
-      .mockImplementationOnce(async () => null)
-      .mockImplementationOnce(async () => refundRequest);
+    dependencies.repository.requestRefundReview
+      .mockImplementationOnce(async () => ({
+        idempotent: false,
+        refundRequest,
+        order: {
+          ...order,
+          payment_status: "refund_reviewing",
+          version: 2,
+        },
+      }))
+      .mockImplementationOnce(async () => ({
+        idempotent: true,
+        refundRequest,
+        order: {
+          ...order,
+          payment_status: "refund_reviewing",
+          version: 2,
+        },
+      }));
     const { TenantPlatformServiceOrderService } = await import(
       "./tenant-platform-service-orders"
     );
@@ -137,7 +157,7 @@ describe("TenantPlatformServiceOrderService refund requests", () => {
 
     expect(first.idempotent).toBe(false);
     expect(second.idempotent).toBe(true);
-    expect(dependencies.repository.createRefundRequest).toHaveBeenCalledTimes(1);
+    expect(dependencies.repository.requestRefundReview).toHaveBeenCalledTimes(2);
   });
 
   test("moves a paid service order to refund_reviewing", async () => {
@@ -152,12 +172,36 @@ describe("TenantPlatformServiceOrderService refund requests", () => {
       reason: "暂不需要服务",
     });
 
-    expect(dependencies.repository.markOrderRefundReviewing).toHaveBeenCalledWith({
+    expect(dependencies.repository.requestRefundReview).toHaveBeenCalledWith({
       tenantId,
       orderId,
       expectedVersion: 1,
+      idempotencyKey: "00000000-0000-4000-8000-000000000912",
+      reason: "暂不需要服务",
+      createdByEmployeeId: employeeId,
     });
     expect(result.order.payment_status).toBe("refund_reviewing");
+  });
+
+  test("does not create a standalone refund row when atomic transition conflicts", async () => {
+    dependencies.repository.requestRefundReview.mockImplementationOnce(async () => ({
+      idempotent: false,
+      refundRequest: null,
+      order: null,
+      errorCode: "SERVICE_ORDER_VERSION_CONFLICT",
+    }));
+    const { TenantPlatformServiceOrderService } = await import(
+      "./tenant-platform-service-orders"
+    );
+    const service = new TenantPlatformServiceOrderService(dependencies);
+
+    await expect(service.requestRefund(tenantAuth, orderId, {
+      expected_version: 1,
+      idempotency_key: "00000000-0000-4000-8000-000000000914",
+      reason: "暂不需要服务",
+    })).rejects.toMatchObject({
+      code: "SERVICE_ORDER_VERSION_CONFLICT",
+    });
   });
 
   test("rejects refund requests for pending, closed or refunded orders", async () => {

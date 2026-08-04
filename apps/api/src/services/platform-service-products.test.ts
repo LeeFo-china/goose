@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
-import type { PlatformProductRecord } from "@/repositories/platform-service-order-records";
+import type {
+  PlatformProductRecord,
+  ProductVersionRecord,
+} from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -95,8 +98,11 @@ function createRepository() {
         },
       })
     ),
+    hasOrdersForProduct: mock(async (_productId: string) => false),
     findPlatformProductById: mock(async (_productId: string) => makeProduct()),
-    publishProductVersion: mock(async (_input: unknown) => ({
+    publishProductVersion: mock(async (
+      _input: unknown,
+    ): Promise<ProductVersionRecord | null> => ({
       id: "00000000-0000-4000-8000-000000000202",
       version: 2,
       title: "平台部署及年度技术服务（1年）",
@@ -173,6 +179,39 @@ describe("PlatformServiceProductService", () => {
     expect(updated.published?.amount_fen).toBe(980000);
   });
 
+  test("rejects product code changes after orders exist", async () => {
+    repository.hasOrdersForProduct.mockImplementationOnce(async () => true);
+    const { PlatformServiceProductService } = await import(
+      "./platform-service-products"
+    );
+    const service = new PlatformServiceProductService({ repository });
+
+    await expect(service.updateProduct(platformAuth, productId, {
+      code: "platform_service_renamed",
+      expected_version: 1,
+    })).rejects.toMatchObject({
+      code: "SERVICE_PRODUCT_CODE_LOCKED",
+    });
+    expect(repository.updateProductDraft).not.toHaveBeenCalled();
+  });
+
+  test("increments terms version when terms content changes", async () => {
+    const { PlatformServiceProductService } = await import(
+      "./platform-service-products"
+    );
+    const service = new PlatformServiceProductService({ repository });
+
+    await service.updateProduct(platformAuth, productId, {
+      terms_content: "新的服务条款",
+      expected_version: 1,
+    });
+
+    expect(repository.updateProductDraft.mock.calls[0]?.[0]).toMatchObject({
+      termsContent: "新的服务条款",
+      termsVersion: 2,
+    });
+  });
+
   test("publishes an immutable product version with optimistic locking", async () => {
     const { PlatformServiceProductService } = await import(
       "./platform-service-products"
@@ -192,6 +231,21 @@ describe("PlatformServiceProductService", () => {
       employeeId,
     });
     expect(result.published_version.version).toBe(2);
+  });
+
+  test("maps a stale atomic publish result to version conflict", async () => {
+    repository.publishProductVersion.mockImplementationOnce(async () => null);
+    const { PlatformServiceProductService } = await import(
+      "./platform-service-products"
+    );
+    const service = new PlatformServiceProductService({ repository });
+
+    await expect(service.publishProduct(platformAuth, productId, {
+      expected_version: 1,
+      idempotency_key: "00000000-0000-4000-8000-000000000903",
+    })).rejects.toMatchObject({
+      code: "SERVICE_PRODUCT_VERSION_CONFLICT",
+    });
   });
 
   test("rejects stale product version updates", async () => {

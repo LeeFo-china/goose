@@ -117,7 +117,7 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).not.toContain("updated_by_employee_id");
   });
 
-  test("lists orders by tenant with payment fields required by service layer", async () => {
+  test("lists orders by tenant without internal payment binding fields", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
@@ -138,12 +138,15 @@ describe("PlatformServiceOrderRepository", () => {
     expect(calls).toContainEqual(["ilike", "order_no", "%TSO%"]);
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).not.toBe("*");
-    expect(selectCall?.[1]).toContain("payer_openid");
-    expect(selectCall?.[1]).toContain("payment_config_id");
-    expect(selectCall?.[1]).toContain("product_snapshot");
+    expect(selectCall?.[1]).not.toContain("payer_openid");
+    expect(selectCall?.[1]).not.toContain("payment_config_id");
+    expect(selectCall?.[1]).not.toContain("payment_config_guard_version");
+    expect(selectCall?.[1]).not.toContain("product_snapshot");
+    expect(selectCall?.[1]).not.toContain("prepay_id");
+    expect(selectCall?.[1]).not.toContain("transaction_id");
   });
 
-  test("finds an order by tenant and id with payment continuation fields", async () => {
+  test("finds tenant order detail without internal payment binding fields", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
@@ -157,9 +160,26 @@ describe("PlatformServiceOrderRepository", () => {
     expect(calls).toContainEqual(["eq", "tenant_id", "tenant-1"]);
     expect(calls).toContainEqual(["eq", "id", "order-1"]);
     const selectCall = calls.find(([method]) => method === "select");
+    expect(selectCall?.[1]).not.toContain("payer_openid");
+    expect(selectCall?.[1]).not.toContain("payment_config_id");
+    expect(selectCall?.[1]).not.toContain("product_snapshot");
+  });
+
+  test("loads internal payment fields only for payment continuation", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+
+    await repository.findOrderForPaymentByTenantAndId({
+      tenantId: "tenant-1",
+      orderId: "order-1",
+    });
+
+    const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).toContain("payer_openid");
     expect(selectCall?.[1]).toContain("payment_config_id");
-    expect(selectCall?.[1]).toContain("product_snapshot");
+    expect(selectCall?.[1]).toContain("prepay_id");
   });
 
   test("finds a platform product draft by id for publishing", async () => {
@@ -195,12 +215,12 @@ describe("PlatformServiceOrderRepository", () => {
     expect(calls).toContainEqual(["eq", "status", "enabled"]);
   });
 
-  test("publishes a new immutable product version with optimistic locking", async () => {
+  test("publishes a product version through atomic RPC", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"
     );
     const repository = new PlatformServiceOrderRepository(() => client);
-    singleResult = {
+    rpcResult = {
       data: {
         id: "version-2",
         product_id: "product-1",
@@ -222,15 +242,52 @@ describe("PlatformServiceOrderRepository", () => {
       employeeId: "employee-1",
     });
 
-    expect(calls).toContainEqual(["from", "platform_service_product_versions"]);
-    expect(calls).toContainEqual(["insert", expect.objectContaining({
-      product_id: "product-1",
-      version: 2,
-      amount_fen: 80,
-    })]);
-    expect(calls).toContainEqual(["from", "platform_service_products"]);
-    expect(calls).toContainEqual(["eq", "id", "product-1"]);
-    expect(calls).toContainEqual(["eq", "version", 1]);
+    expect(client.rpc).toHaveBeenCalledWith(
+      "platform_service_publish_product_version",
+      expect.objectContaining({
+        p_product_id: "product-1",
+        p_expected_version: 1,
+        p_published_by_employee_id: "employee-1",
+      }),
+    );
+    expect(calls).not.toContainEqual([
+      "from",
+      "platform_service_product_versions",
+    ]);
+  });
+
+  test("requests refund review through atomic RPC", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+    rpcResult = {
+      data: {
+        ok: true,
+        idempotent: false,
+        refund_request: { id: "refund-1" },
+        order: { id: "order-1", payment_status: "refund_reviewing" },
+      },
+      error: null,
+    };
+
+    await repository.requestRefundReview({
+      tenantId: "tenant-1",
+      orderId: "order-1",
+      expectedVersion: 1,
+      idempotencyKey: "00000000-0000-4000-8000-000000000001",
+      reason: "暂不需要服务",
+      createdByEmployeeId: "employee-1",
+    });
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "platform_service_request_refund_review",
+      expect.objectContaining({
+        p_tenant_id: "tenant-1",
+        p_order_id: "order-1",
+        p_expected_version: 1,
+      }),
+    );
   });
 
   test("creates a pending order through platform_service_create_pending_order", async () => {
