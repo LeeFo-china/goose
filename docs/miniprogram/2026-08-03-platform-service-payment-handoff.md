@@ -7,8 +7,9 @@
 状态：后端一期代码实现已完成并发布到 dev API，开发库 migration 已应用到
 `api-dev.goodcms.cn:8000` 并验证 Local/Remote 对齐；本地 Colima 隔离库已完成
 `supabase db reset` 从空库验证。数据库类型已在同版本本地 schema 生成；远端 dev
-typegen 受容器内 DNS/CA 限制未直接生成。发布完成门槛仍需补齐真实小额支付/回调
-smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认后自动建实施工单、退款
+typegen 受容器内 DNS/CA 限制未直接生成。Orange 已完成 dev 1 分真实小额支付
+smoke；Gooes 已完成回调 processed、实施工单唯一创建和重复回调/重复刷新幂等复核。
+当前文档只覆盖商品、订单、普通微信支付、回调确认后自动建实施工单、退款
 申请基础能力；不包含 Admin 页面、履约采集、培训记录、交付附件、客户验收和微信
 发货信息管理上报。
 
@@ -31,7 +32,7 @@ smoke。当前文档只覆盖商品、订单、普通微信支付、回调确认
 | 项目 | 值 |
 | --- | --- |
 | Dev API base URL | `https://api-dev.goodcms.cn` |
-| Dev API release | GitHub Actions `Release Dev` run `30869050621`，commit `f48e2a109e5a1b3c49a66485d1dfc24d13771344` |
+| Dev API release | GitHub Actions `Release Dev` run `30882712418`，commit `970b9e55713c42aea95840086cbf23a39860722e`，conclusion `success` |
 | Dev Supabase API host | `api-dev.goodcms.cn:8000` |
 | 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000`、`20260804110000`、`20260804120000`、`20260804121000` |
 | 数据库类型 | `apps/api/src/types/database.ts` 已从同版本本地 schema 生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment`、`platform_service_publish_product_version`、`platform_service_request_refund_review` RPC |
@@ -65,6 +66,12 @@ dev 登录接口或该环境认可的 smoke token。`.env` 中仍未固化 smoke
 list --db-url` 显示 Local/Remote 均到 `20260804121000`。该商品只在
 `system_settings.WECHAT_MINIPROGRAM_ENV_VERSION=develop` 时插入并发布；dev 接口验证
 `GET /billing/service-products` 已可读取 `platform_service_smoke_1fen`，金额为 1 分。
+Orange 随后完成 dev 真机 1 分真实支付：订单 ID
+`88839d4e-5184-45a2-86b3-1b365240e6c8`，订单号
+`TSO2026080405421720866A623FF`，支付后订单为 `paid`，服务为
+`waiting_assignment`。Gooes 后端复核确认：对应微信支付通知记录 1 条且
+`processed=true`，对应实施工单 1 张；重复执行同一支付确认 RPC 和重复刷新订单详情后，
+实施工单数量仍为 1。
 
 ## 3. 权限与开关
 
@@ -592,15 +599,16 @@ Orange 当前不要把现有 `image_upload.ts` 扩展到平台技术服务，也
 
 测试员工手机号、OpenID、token、微信交易号和支付签名不写入仓库文档。联调时可以由
 Gooes 在本机或 CI 注入合法 dev 登录态执行 smoke，输出只允许包含脱敏 Request-ID、
-商品 code/金额、订单 ID/no 和状态。当前 dev 只读审计仍显示尚无真实平台服务订单、
-回调通知和工单；真实支付 smoke 完成后，需要再补充：
+商品 code/金额、订单 ID/no 和状态。
 
 - 当前可用于真机小额支付的 dev 商品为 `platform_service_smoke_1fen`，金额 1 分；
-- 1 笔小额测试订单的脱敏订单 ID/no；
-- `wx.requestPayment` 后订单从 `pending` 变为 `paid` 的时间；
-- 对应 `tenant_service_wechat_notifications` processed 数量；
-- 对应 `tenant_service_work_orders` 数量必须为 1；
-- 重复回调或重复刷新不重复建工单的审计结果。
+- 已完成 1 笔小额测试订单：ID `88839d4e-5184-45a2-86b3-1b365240e6c8`，
+  订单号 `TSO2026080405421720866A623FF`；
+- `wx.requestPayment` 完成后，后端订单状态为 `paid`，服务状态为
+  `waiting_assignment`；
+- 对应 `tenant_service_wechat_notifications` 记录数为 1，`processed=true`；
+- 对应 `tenant_service_work_orders` 记录数为 1；
+- 重复回调确认和重复刷新订单详情后，实施工单数量仍为 1。
 
 ## 12. Smoke 与验收清单
 
@@ -619,11 +627,13 @@ bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run
 发布前需要完成：
 
 - dry-run HTTP smoke exit 0；本轮本地 API + dev DB、正式 dev 域名
-  `https://api-dev.goodcms.cn` 均已验证通过；
+  `https://api-dev.goodcms.cn` 均已验证通过；2026-08-04 最新 Request-ID：
+  `req-d`；
 - dev 小额 smoke 商品 `platform_service_smoke_1fen` 已发布，金额 1 分；
 - 本地 Colima 隔离库 `supabase db reset` 已验证通过，最新 Local migration 为
   `20260804121000`；
-- 真机使用测试租户创建 1 笔小额订单；
+- 真机使用测试租户创建 1 笔小额订单，订单号
+  `TSO2026080405421720866A623FF`；
 - 确认 `wx.requestPayment` 成功后，后端订单变为 `paid`；
 - 确认支付成功后恰好创建 1 张 `tenant_service_work_orders`；
 - 重复刷新或重复回调不会重复建工单；
