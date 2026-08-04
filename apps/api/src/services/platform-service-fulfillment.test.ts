@@ -98,6 +98,27 @@ const refundRequestRecord = {
   updated_at: "2026-08-04T10:02:00.000Z",
 };
 
+const shippingReportRecord = {
+  id: "shipping-report-1",
+  tenant_id: "tenant-1",
+  service_order_id: "order-1",
+  source: "tenant_acceptance",
+  status: "failed",
+  attempt_count: 2,
+  last_attempt_key: "00000000-0000-4000-8000-000000000901",
+  request_payload: {
+    logistics_type: 3,
+    shipping_list: [{ item_desc: "客户专属系统环境已部署" }],
+  },
+  wechat_errcode: 10060004,
+  wechat_errmsg: "WECHAT_ORDER_SHIPPING_UPLOAD_REJECTED",
+  provider_request_id: null,
+  last_attempt_at: "2026-08-04T10:30:00.000Z",
+  succeeded_at: null,
+  created_at: "2026-08-04T10:20:00.000Z",
+  updated_at: "2026-08-04T10:30:00.000Z",
+};
+
 const repository = {
   listPlatformServiceOrders: mock(async () => ({
     list: [orderRecord],
@@ -129,18 +150,56 @@ const repository = {
   })),
 };
 
+const shippingReportRepository = {
+  listByServiceOrderIds: mock(async () => [shippingReportRecord]),
+  findByServiceOrderId: mock(async () => shippingReportRecord),
+  findReportableOrderById: mock(async () => ({
+    ...orderRecord,
+    tenant_id: "tenant-1",
+    payment_status: "paid",
+    service_status: "accepted",
+    payer_openid: "openid-1",
+    transaction_id: "4200000000202608040000000001",
+    out_trade_no: "TSO202608040001",
+    product_snapshot: { title: "平台年度技术服务" },
+  })),
+};
+
+const orderShippingReporter = {
+  reportAcceptedOrder: mock(async () => ({
+    status: "succeeded" as const,
+    idempotent: false,
+    report: {
+      ...shippingReportRecord,
+      status: "succeeded" as const,
+      wechat_errcode: 0,
+      wechat_errmsg: "ok",
+      succeeded_at: "2026-08-04T10:35:00.000Z",
+    },
+    error_code: null,
+    skipped_reason: null,
+  })),
+};
+
 describe("PlatformServiceFulfillmentService", () => {
   beforeEach(() => {
     for (const fn of Object.values(repository)) {
       if ("mockClear" in fn) fn.mockClear();
     }
+    for (const fn of Object.values(shippingReportRepository)) {
+      if ("mockClear" in fn) fn.mockClear();
+    }
+    orderShippingReporter.reportAcceptedOrder.mockClear();
   });
 
   test("lists platform service orders with read permission", async () => {
     const { PlatformServiceFulfillmentService } = await import(
       "./platform-service-fulfillment"
     );
-    const service = new PlatformServiceFulfillmentService({ repository });
+    const service = new PlatformServiceFulfillmentService({
+      repository,
+      shippingReportRepository,
+    } as never);
 
     const result = await service.listOrders(
       platformAuth([{ code: "platform.service_order.read", scope: "all" }]),
@@ -153,6 +212,76 @@ describe("PlatformServiceFulfillmentService", () => {
     expect(result.list[0]).toMatchObject({
       id: "order-1",
       available_actions: expect.any(Object),
+      wechat_shipping_report: {
+        id: "shipping-report-1",
+        status: "failed",
+        attempt_count: 2,
+        wechat_errcode: 10060004,
+      },
+    });
+    expect(shippingReportRepository.listByServiceOrderIds)
+      .toHaveBeenCalledWith(["order-1"]);
+  });
+
+  test("retries WeChat shipping report for accepted paid service orders", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const service = new PlatformServiceFulfillmentService({
+      repository,
+      shippingReportRepository,
+      orderShippingReporter,
+    } as never);
+
+    const result = await service.retryOrderShippingReport(
+      platformAuth([{ code: "platform.service_work_order.manage", scope: "all" }]),
+      "order-1",
+    );
+
+    expect(shippingReportRepository.findReportableOrderById)
+      .toHaveBeenCalledWith("order-1");
+    expect(orderShippingReporter.reportAcceptedOrder).toHaveBeenCalledWith({
+      order: expect.objectContaining({
+        id: "order-1",
+        payer_openid: "openid-1",
+        transaction_id: "4200000000202608040000000001",
+      }),
+      source: "platform_acceptance",
+    });
+    expect(result.order.wechat_shipping_report).toMatchObject({
+      status: "succeeded",
+      wechat_errcode: 0,
+    });
+  });
+
+  test("returns a stable retry-not-ready error when order cannot be reported", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const skippedReporter = {
+      reportAcceptedOrder: mock(async () => ({
+        status: "skipped" as const,
+        idempotent: false,
+        report: null,
+        error_code: null,
+        skipped_reason: "ORDER_NOT_ACCEPTED",
+      })),
+    };
+    const service = new PlatformServiceFulfillmentService({
+      repository,
+      shippingReportRepository,
+      orderShippingReporter: skippedReporter,
+    } as never);
+
+    await expect(
+      service.retryOrderShippingReport(
+        platformAuth([{ code: "platform.service_work_order.manage", scope: "all" }]),
+        "order-1",
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SERVICE_ORDER_SHIPPING_REPORT_NOT_READY",
+      details: { reason: "ORDER_NOT_ACCEPTED" },
     });
   });
 

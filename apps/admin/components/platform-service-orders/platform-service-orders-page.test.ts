@@ -55,6 +55,7 @@ describe("平台技术服务履约页", () => {
   test("三类表格展示关键履约事实和操作入口", () => {
     const source = [
       readSource("./platform-service-order-table.tsx"),
+      readSource("./platform-service-order-shipping-action.tsx"),
       readSource("./platform-service-work-order-table.tsx"),
       readSource("./platform-service-refund-request-table.tsx"),
       readSource("./platform-service-work-order-actions.tsx"),
@@ -67,6 +68,7 @@ describe("平台技术服务履约页", () => {
       "套餐",
       "支付状态",
       "服务状态",
+      "微信履约",
       "金额",
       "负责人",
       "工单状态",
@@ -74,10 +76,14 @@ describe("平台技术服务履约页", () => {
       "审核退款",
       "记录履约",
       "推进状态",
+      "重新上报微信履约",
     ]) {
       expect(source).toContain(label);
     }
     expect(source).toContain("PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME");
+    expect(source).toContain("PlatformServiceOrderShippingAction");
+    expect(source).toContain("/platform/billing/service-orders/");
+    expect(source).toContain("/shipping-report/retry");
   });
 
   test("工单操作使用后端动作开关并按状态机过滤推进目标", () => {

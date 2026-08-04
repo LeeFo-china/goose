@@ -21,6 +21,31 @@ export type ServiceTenantSummary = {
   contact_phone?: string | null;
 };
 
+export type PlatformServiceOrderAction = {
+  enabled: boolean;
+  label: string;
+  disabled_reason: string | null;
+};
+
+export type PlatformServiceWechatShippingStatus =
+  | "not_started"
+  | "pending"
+  | "succeeded"
+  | "failed";
+
+export type PlatformServiceWechatShippingReport = {
+  id: string | null;
+  status: PlatformServiceWechatShippingStatus | string;
+  attempt_count: number;
+  wechat_errcode: number | null;
+  wechat_errmsg: string | null;
+  provider_request_id: string | null;
+  last_attempt_at: string | null;
+  succeeded_at: string | null;
+  updated_at: string | null;
+  source?: string | null;
+};
+
 export type PlatformServiceOrderListItem = {
   id: string;
   tenant_id?: string;
@@ -36,6 +61,8 @@ export type PlatformServiceOrderListItem = {
   created_at: string;
   updated_at: string;
   tenant?: ServiceTenantSummary | ServiceTenantSummary[] | null;
+  wechat_shipping_report?: PlatformServiceWechatShippingReport | null;
+  available_actions?: Record<string, PlatformServiceOrderAction>;
 };
 
 export type PlatformServiceWorkOrderListItem = {
@@ -50,14 +77,7 @@ export type PlatformServiceWorkOrderListItem = {
   version?: number;
   created_at: string;
   updated_at: string;
-  available_actions?: Record<
-    string,
-    {
-      enabled: boolean;
-      label: string;
-      disabled_reason: string | null;
-    }
-  >;
+  available_actions?: Record<string, PlatformServiceOrderAction>;
   order?: {
     id: string;
     order_no: string;

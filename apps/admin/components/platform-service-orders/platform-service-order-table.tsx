@@ -12,13 +12,17 @@ import {
   getPaymentStatusMeta,
   getServiceStatusMeta,
   getTenantName,
+  getWechatShippingStatusMeta,
 } from "./platform-service-order-rules";
+import { PlatformServiceOrderShippingAction } from "./platform-service-order-shipping-action";
 import type { PlatformServiceOrderListItem } from "./platform-service-order-types";
 
 export function PlatformServiceOrderTable({
   orders,
+  canRetryShipping,
 }: {
   orders: PlatformServiceOrderListItem[];
+  canRetryShipping: boolean;
 }) {
   const columns: ColumnDef<PlatformServiceOrderListItem>[] = [
     {
@@ -87,6 +91,41 @@ export function PlatformServiceOrderTable({
       ),
       meta: { cellClassName: "whitespace-nowrap" },
     },
+    {
+      id: "wechat_shipping_report",
+      header: "微信履约",
+      cell: ({ row }) => {
+        const report = row.original.wechat_shipping_report;
+        const meta = getWechatShippingStatusMeta(report?.status || "not_started");
+        return (
+          <div className="space-y-1">
+            <Badge variant={meta.variant}>{meta.label}</Badge>
+            <div className="text-xs text-muted-foreground">
+              {formatDateTime(report?.last_attempt_at)}
+            </div>
+            {report?.wechat_errcode ? (
+              <div className="text-xs tabular-nums text-destructive">
+                {report.wechat_errcode}
+              </div>
+            ) : null}
+          </div>
+        );
+      },
+      meta: { cellClassName: "whitespace-nowrap" },
+    },
+    {
+      id: "actions",
+      header: "",
+      cell: ({ row }) => (
+        <div className="flex justify-end">
+          <PlatformServiceOrderShippingAction
+            order={row.original}
+            canRetry={canRetryShipping}
+          />
+        </div>
+      ),
+      meta: { cellClassName: "min-w-[176px]" },
+    },
   ];
 
   return (
@@ -94,10 +133,9 @@ export function PlatformServiceOrderTable({
       columns={columns}
       data={orders}
       emptyText="当前筛选条件下没有平台技术服务订单"
-      minWidth="min-w-[1080px]"
+      minWidth="min-w-[1320px]"
       tableClassName="border-t-0"
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }
-
