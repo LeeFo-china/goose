@@ -65,6 +65,21 @@ const workOrderRecord = {
   version: 1,
   created_at: "2026-08-04T10:01:00.000Z",
   updated_at: "2026-08-04T10:01:00.000Z",
+  order: {
+    id: "order-1",
+    order_no: "TSO202608040001",
+    product_code: "platform_service_1y",
+    term_years: 1,
+    amount_fen: 980000,
+    payment_status: "paid",
+    service_status: "waiting_assignment",
+    paid_at: "2026-08-04T10:01:00.000Z",
+    tenant: {
+      id: "tenant-1",
+      name: "示例装企",
+      status: "active",
+    },
+  },
 };
 
 const refundRequestRecord = {
@@ -182,6 +197,34 @@ describe("PlatformServiceFulfillmentService", () => {
     expect(repository.transitionServiceWorkOrder).toHaveBeenCalledWith(
       expect.objectContaining({ toStatus: "deploying", expectedVersion: 2 }),
     );
+  });
+
+  test("lists work orders with related order and tenant summary", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const service = new PlatformServiceFulfillmentService({ repository });
+
+    const result = await service.listWorkOrders(
+      platformAuth([{
+        code: "platform.service_work_order.manage",
+        scope: "all",
+      }]),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.list[0]).toMatchObject({
+      id: "work-1",
+      order: {
+        id: "order-1",
+        product_code: "platform_service_1y",
+        amount_fen: 980000,
+        tenant: {
+          id: "tenant-1",
+          name: "示例装企",
+        },
+      },
+    });
   });
 
   test("maps work-order version conflicts to stable business errors", async () => {

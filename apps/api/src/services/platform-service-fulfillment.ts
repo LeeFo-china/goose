@@ -314,9 +314,14 @@ function serializePlatformWorkOrder(workOrder: WorkOrderRecord) {
     assigned_at: workOrder.assigned_at ?? null,
     version: workOrder.version ?? 1,
     available_actions: getWorkOrderActions(workOrder.status),
+    order: normalizeMaybeSingleRelation(workOrder.order),
     created_at: workOrder.created_at,
     updated_at: workOrder.updated_at,
   };
+}
+
+function normalizeMaybeSingleRelation<T>(value: T | T[] | null | undefined) {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
 }
 
 function getWorkOrderActions(status: string) {

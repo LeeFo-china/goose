@@ -176,6 +176,25 @@ export type WorkOrderRecord = {
   version?: number;
   created_at: string;
   updated_at: string;
+  order?: {
+    id: string;
+    order_no: string;
+    product_code: string;
+    term_years: number;
+    amount_fen: number;
+    payment_status: string;
+    service_status: string;
+    paid_at: string | null;
+    tenant?: {
+      id: string;
+      name: string | null;
+      status?: string | null;
+    } | Array<{
+      id: string;
+      name: string | null;
+      status?: string | null;
+    }> | null;
+  } | null;
 };
 
 export type WorkOrderActionInput = {

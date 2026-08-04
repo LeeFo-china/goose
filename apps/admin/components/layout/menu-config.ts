@@ -90,6 +90,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
       },
       { href: "/platform/usage", label: "用量统计", icon: BarChart3 },
       { href: "/platform/billing", label: "计费中心", icon: CircleDollarSign },
+      {
+        href: "/platform/service-orders",
+        label: "技术服务",
+        icon: BriefcaseBusiness,
+        permission: "platform.service_order.read",
+      },
       { href: "/platform/wechat-pay/applyments", label: "支付进件", icon: FileCheck2 },
       { href: "/platform/ai-models", label: "AI 模型路由", icon: Bot },
       { href: "/platform/audit-logs", label: "平台审计", icon: ScrollText },
