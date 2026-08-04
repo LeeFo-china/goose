@@ -243,12 +243,12 @@ Authorization: Bearer <tenant-employee-token>
 - `service_status = awaiting_acceptance`；
 - 工单 `status = awaiting_acceptance`；
 - 验收准备 `status = submitted`；
-- 各含 1 条履约记录和 2 个附件元数据（图片 + PDF）。
+- 各含 1 条履约记录和 2 个真实 dev-smoke 附件（图片 + PDF）。
 
 ## 7. 给 Orange 的回复模板
 
-> Gooes 已准备两张隔离的 `awaiting_acceptance` dev 订单，分别用于确认验收和要求整改，订单均含履约记录及图片/PDF 附件元数据。客户验收主链路可先用现有 dev API 联调。
+> Gooes 已准备两张隔离的 `awaiting_acceptance` dev 订单，分别用于确认验收和要求整改，订单均含履约记录及图片/PDF 附件。客户验收主链路可直接使用 dev API 联调。
 >
-> 附件预览后端采用平台技术服务专用短 TTL URL 契约：`GET /billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url`，不复用微信支付进件材料预览接口。该接口待本分支合并并发布 dev API 后可联调；签名 URL TTL 为 600 秒，小程序不要持久化。
+> 附件预览后端采用平台技术服务专用短 TTL URL 契约：`GET /billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url`，不复用微信支付进件材料预览接口。该接口已发布到 dev API；签名 URL TTL 为 600 秒，小程序不要持久化。
 >
-> `@gooes/domain@1.14.0` 已包含平台服务履约状态和履约记录枚举；后端会同步提供可安装制品供 Orange 更新。
+> `@gooes/domain@1.14.0` 已包含平台服务履约状态和履约记录枚举；本机可安装制品：`/Users/leefo/Public/work/gooes/packages/domain/gooes-domain-1.14.0.tgz`。
