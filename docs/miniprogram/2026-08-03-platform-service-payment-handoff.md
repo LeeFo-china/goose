@@ -5,10 +5,10 @@
 适用仓库：`gooes` 后端 / `orange` 小程序
 
 状态：后端一期代码实现已完成并发布到 dev API，开发库 migration 已应用到
-`api-dev.goodcms.cn:8000` 并验证 Local/Remote 对齐；发布完成门槛仍需补齐生成数据库
-类型、本地 migration reset 验证和真实小额支付/回调 smoke。当前文档只覆盖商品、
-订单、普通微信支付、回调确认后自动建实施工单、退款申请基础能力；不包含 Admin
-页面、履约采集、培训记录、交付附件、客户验收和微信发货信息管理上报。
+`api-dev.goodcms.cn:8000` 并验证 Local/Remote 对齐；数据库类型已从开发库重新生成。
+发布完成门槛仍需补齐本地 migration reset 验证和真实小额支付/回调 smoke。当前文档
+只覆盖商品、订单、普通微信支付、回调确认后自动建实施工单、退款申请基础能力；
+不包含 Admin 页面、履约采集、培训记录、交付附件、客户验收和微信发货信息管理上报。
 
 ## 1. 业务边界
 
@@ -32,6 +32,7 @@
 | Dev API release | GitHub Actions `Release Dev` run `30862755105`，commit `9217f5340858eabae3fb2fc7fc51a0ceaaf7a6a6` |
 | Dev Supabase API host | `api-dev.goodcms.cn:8000` |
 | 已应用 migration | `20260803110000`、`20260803113000`、`20260803114000` |
+| 数据库类型 | `apps/api/src/types/database.ts` 已从开发库生成，包含平台服务商品、订单、工单、通知、退款表及 `platform_service_create_pending_order`、`platform_service_confirm_payment` RPC |
 | Smoke 脚本 | `bun --cwd apps/api src/scripts/platform-service-payment-smoke.ts --dry-run` |
 | Smoke token 环境变量 | `PLATFORM_SERVICE_SMOKE_TENANT_TOKEN`、`PLATFORM_SERVICE_SMOKE_PLATFORM_TOKEN` |
 
