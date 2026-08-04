@@ -2,6 +2,7 @@ import type {
   PlatformServicePaymentStatus,
   PlatformServiceStatus,
 } from "@gooes/domain";
+import { PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS } from "@gooes/domain";
 
 import type {
   PlatformServiceOrderListItem,
@@ -67,6 +68,17 @@ export const workOrderTransitionOptions: ReadonlyArray<{
   value: Exclude<PlatformServiceStatus, "waiting_payment">;
   label: string;
 }>;
+
+export function getWorkOrderNextStatusOptions(status: string) {
+  const nextStatuses = new Set<string>(
+    PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS
+      .filter((transition) => transition.from === status)
+      .map((transition) => transition.to),
+  );
+  return workOrderTransitionOptions.filter((option) =>
+    nextStatuses.has(option.value)
+  );
+}
 
 export const fulfillmentRecordTypeOptions = [
   { value: "environment_setup", label: "实施工单" },
@@ -246,7 +258,7 @@ export function getListCurrentCount(input: {
   pageSize: number;
   total: number;
 }) {
-  return Math.min(input.list.length || input.pageSize, input.total);
+  return input.list.length;
 }
 
 export function getPaymentStatusMeta(status: string) {

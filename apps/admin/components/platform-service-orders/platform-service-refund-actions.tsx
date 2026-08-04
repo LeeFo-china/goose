@@ -56,6 +56,10 @@ function ReviewRefundButton({
     setError("");
     const formData = new FormData(event.currentTarget);
     const reviewRemark = String(formData.get("review_remark") || "").trim();
+    if (!isApproved && !reviewRemark) {
+      setError("请填写驳回原因");
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -108,6 +112,7 @@ function ReviewRefundButton({
                 id={`review-remark-${request.id}`}
                 name="review_remark"
                 maxLength={1000}
+                required={!isApproved}
                 placeholder={isApproved ? "填写退款审核依据" : "填写驳回原因"}
               />
             </Field>
@@ -127,4 +132,3 @@ function ReviewRefundButton({
     </Dialog>
   );
 }
-

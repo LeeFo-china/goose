@@ -79,4 +79,23 @@ describe("平台技术服务履约页", () => {
     }
     expect(source).toContain("PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME");
   });
+
+  test("工单操作使用后端动作开关并按状态机过滤推进目标", () => {
+    const actions = readSource("./platform-service-work-order-actions.tsx");
+    const rules = readSource("./platform-service-order-rules.ts");
+
+    expect(actions).toContain("workOrder.available_actions?.assign");
+    expect(actions).toContain("workOrder.available_actions?.transition");
+    expect(actions).toContain("disabled_reason");
+    expect(actions).toContain("getWorkOrderNextStatusOptions(workOrder.status)");
+    expect(rules).toContain("PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS");
+    expect(rules).toContain("transition.from === status");
+  });
+
+  test("当前数量按真实列表长度展示，避免空页误报 pageSize", () => {
+    const rules = readSource("./platform-service-order-rules.ts");
+
+    expect(rules).toContain("return input.list.length;");
+    expect(rules).not.toContain("input.list.length || input.pageSize");
+  });
 });

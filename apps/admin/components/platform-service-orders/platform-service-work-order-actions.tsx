@@ -30,8 +30,8 @@ import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 import {
   fulfillmentRecordTypeOptions,
+  getWorkOrderNextStatusOptions,
   getServiceStatusMeta,
-  workOrderTransitionOptions,
 } from "./platform-service-order-rules";
 import type { PlatformServiceWorkOrderListItem } from "./platform-service-order-types";
 
@@ -62,6 +62,9 @@ function AssignWorkOrderButton({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const assignAction = workOrder.available_actions?.assign;
+  const canAssign = assignAction?.enabled ?? true;
+  const disabledReason = assignAction?.disabled_reason ?? undefined;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,9 +96,17 @@ function AssignWorkOrderButton({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={canAssign ? open : false} onOpenChange={(nextOpen) => {
+      if (canAssign) setOpen(nextOpen);
+    }}>
       <DialogTrigger asChild>
-        <Button type="button" size="sm" variant="outline">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!canAssign}
+          title={disabledReason}
+        >
           <UserPlus data-icon="inline-start" />
           分配
         </Button>
@@ -147,6 +158,12 @@ function TransitionWorkOrderButton({
   const [pending, startTransition] = useTransition();
   const [toStatus, setToStatus] = useState("");
   const [error, setError] = useState("");
+  const transitionAction = workOrder.available_actions?.transition;
+  const nextStatusOptions = getWorkOrderNextStatusOptions(workOrder.status);
+  const canTransition = (transitionAction?.enabled ?? true) &&
+    nextStatusOptions.length > 0;
+  const disabledReason = transitionAction?.disabled_reason ??
+    (nextStatusOptions.length === 0 ? "当前状态没有可推进的下一步" : undefined);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,9 +199,17 @@ function TransitionWorkOrderButton({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={canTransition ? open : false} onOpenChange={(nextOpen) => {
+      if (canTransition) setOpen(nextOpen);
+    }}>
       <DialogTrigger asChild>
-        <Button type="button" size="sm" variant="outline">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!canTransition}
+          title={disabledReason}
+        >
           <Send data-icon="inline-start" />
           推进状态
         </Button>
@@ -206,7 +231,7 @@ function TransitionWorkOrderButton({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {workOrderTransitionOptions.map((option) => (
+                    {nextStatusOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
                       </SelectItem>
@@ -352,4 +377,3 @@ function RecordFulfillmentButton({
     </Dialog>
   );
 }
-
