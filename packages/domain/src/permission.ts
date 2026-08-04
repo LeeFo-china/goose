@@ -107,6 +107,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.service_product.manage',
   'platform.service_order.read',
   'platform.service_work_order.manage',
+  'platform.service_refund.review',
   'platform.ocr.recognize',
   'platform.ocr.recognition.read',
   'platform.ocr.tenant_policy.manage',
@@ -471,6 +472,10 @@ export const PermissionCodeConfig: Record<
   },
   'platform.service_work_order.manage': {
     label: '管理技术服务工单',
+    module: 'platform_service',
+  },
+  'platform.service_refund.review': {
+    label: '审核技术服务退款',
     module: 'platform_service',
   },
   'platform.ocr.recognize': {

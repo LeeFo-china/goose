@@ -328,6 +328,13 @@ describe("domain permissions", () => {
     expect(PERMISSION_CODE_VALUES).toContain(
       "platform.service_work_order.manage",
     );
+    expect(PERMISSION_CODE_VALUES).toContain(
+      "platform.service_refund.review",
+    );
+    expect(PermissionCodeConfig["platform.service_refund.review"]).toEqual({
+      label: "审核技术服务退款",
+      module: "platform_service",
+    });
   });
 
   test("exposes city partner platform permissions in domain constants", () => {
