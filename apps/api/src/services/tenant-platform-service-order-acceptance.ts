@@ -13,6 +13,10 @@ import type {
 import type { ServiceAcceptanceDecisionInput } from "@/schema/billing-service-orders";
 import type { AuthContext } from "@/services/authorization";
 import { resolveSignedStoredFileUrl } from "@/services/files/file-url-resolver";
+import {
+  platformServiceOrderShippingService,
+  type OrderShippingReportResult,
+} from "@/services/platform-service-order-shipping";
 import { serializeTenantServiceOrder } from "@/services/platform-service-order-views";
 
 type AcceptanceRepositoryPort = {
@@ -44,6 +48,12 @@ type AcceptanceDependencies = {
   repository: AcceptanceRepositoryPort;
   accessPolicyService: AccessPolicyPort;
   nowFactory: () => Date;
+  orderShippingReporter?: {
+    reportAcceptedOrder: (input: {
+      order: OrderRecord;
+      source: "tenant_acceptance";
+    }) => Promise<OrderShippingReportResult>;
+  };
   signedUrlResolver?: (
     objectKey: string,
     options: { ttlSeconds: number },
@@ -99,6 +109,9 @@ export async function decideTenantServiceOrderAcceptance(
       result.errorCode ?? "SERVICE_ACCEPTANCE_INVALID_STATE",
     );
   }
+  const orderShippingReport = decision === "accepted"
+    ? await reportAcceptedOrderShipping(dependencies, result.order)
+    : null;
   const responseNow = dependencies.nowFactory();
   return {
     order: serializeTenantServiceOrder(result.order, responseNow),
@@ -106,6 +119,7 @@ export async function decideTenantServiceOrderAcceptance(
     acceptance_preparation: serializeAcceptancePreparation(
       result.acceptancePreparation,
     ),
+    wechat_shipping_report: orderShippingReport,
     server_time: responseNow.toISOString(),
   };
 }
@@ -186,6 +200,36 @@ function assertCanCreate(
 function requireEmployee(authContext: AuthContext) {
   if (!authContext.employeeId) throw Errors.forbidden();
   return authContext.employeeId;
+}
+
+async function reportAcceptedOrderShipping(
+  dependencies: AcceptanceDependencies,
+  order: OrderRecord,
+) {
+  const reporter = dependencies.orderShippingReporter ??
+    platformServiceOrderShippingService;
+  try {
+    return await reporter.reportAcceptedOrder({
+      order,
+      source: "tenant_acceptance",
+    });
+  } catch (error) {
+    return {
+      status: "failed",
+      idempotent: false,
+      report: null,
+      error_code: stableErrorCode(error),
+      skipped_reason: null,
+    } satisfies OrderShippingReportResult;
+  }
+}
+
+function stableErrorCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = error.code;
+    if (typeof code === "string" && code.trim()) return code.slice(0, 100);
+  }
+  return "WECHAT_ORDER_SHIPPING_REPORT_FAILED";
 }
 
 function isPreviewableFulfillmentAttachment(
