@@ -182,6 +182,15 @@ function createRepository() {
     findOrderForPaymentByTenantAndId: mock(
       async (_input: unknown): Promise<OrderRecord | null> => order,
     ),
+    findAcceptanceViewByTenantAndOrderId: mock(
+      async (_input: unknown) => null,
+    ),
+    decideAcceptance: mock(async () => ({
+      workOrder: null,
+      order: null,
+      acceptancePreparation: null,
+      errorCode: "SERVICE_ACCEPTANCE_INVALID_STATE",
+    })),
     requestRefundReview: mock(async (_input: unknown) => ({
       idempotent: false,
       refundRequest,

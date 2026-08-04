@@ -84,6 +84,13 @@ function createDependencies() {
       markPrepayCreated: mock(async () => order),
       findOrderByTenantAndId: mock(async () => order),
       findOrderForPaymentByTenantAndId: mock(async () => order),
+      findAcceptanceViewByTenantAndOrderId: mock(async () => null),
+      decideAcceptance: mock(async () => ({
+        workOrder: null,
+        order: null,
+        acceptancePreparation: null,
+        errorCode: "SERVICE_ACCEPTANCE_INVALID_STATE",
+      })),
       requestRefundReview: mock(async (): Promise<RefundReviewResult> => ({
         idempotent: false,
         refundRequest,

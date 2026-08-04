@@ -2,6 +2,8 @@ import { Errors } from "../errors/error-factory";
 import { SupabaseDB } from "../utils/supabase";
 import {
   buildIlikePattern,
+  type AcceptanceDecisionInput,
+  type AtomicActionResult,
   type ConfirmPaymentInput,
   type CreatePendingOrderInput,
   type NotificationCreateInput,
@@ -17,8 +19,10 @@ import {
   type ProductVersionRecord,
   type RefundReviewInput,
   type RefundReviewResult,
+  TENANT_ACCEPTANCE_ORDER_SELECT,
   TENANT_INTERNAL_ORDER_SELECT,
   TENANT_PRODUCT_SELECT,
+  type TenantServiceAcceptanceViewRecord,
   TENANT_PUBLIC_ORDER_SELECT,
 } from "./platform-service-order-records";
 
@@ -53,7 +57,8 @@ type ServiceClient = {
       | "platform_service_create_pending_order"
       | "platform_service_confirm_payment"
       | "platform_service_publish_product_version"
-      | "platform_service_request_refund_review",
+      | "platform_service_request_refund_review"
+      | "tenant_service_decide_acceptance",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -235,6 +240,19 @@ export class PlatformServiceOrderRepository {
     return (data as OrderRecord | null) ?? null;
   }
 
+  async findAcceptanceViewByTenantAndOrderId(input: {
+    tenantId: string;
+    orderId: string;
+  }) {
+    const { data, error } = await this.orders()
+      .select(TENANT_ACCEPTANCE_ORDER_SELECT)
+      .eq("tenant_id", input.tenantId)
+      .eq("id", input.orderId)
+      .maybeSingle();
+    if (error) throw Errors.dbError("查询平台技术服务验收资料失败", error);
+    return (data as TenantServiceAcceptanceViewRecord | null) ?? null;
+  }
+
   async findOrderForPaymentByTenantAndId(input: {
     tenantId: string;
     orderId: string;
@@ -402,6 +420,38 @@ export class PlatformServiceOrderRepository {
       refundRequest: (result?.refund_request as RefundReviewResult["refundRequest"]) ??
         null,
       order: (result?.order as OrderRecord | null) ?? null,
+      errorCode: typeof result?.error_code === "string"
+        ? result.error_code
+        : undefined,
+    };
+  }
+
+  async decideAcceptance(input: AcceptanceDecisionInput): Promise<AtomicActionResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "tenant_service_decide_acceptance",
+      {
+        p_tenant_id: input.tenantId,
+        p_service_order_id: input.serviceOrderId,
+        p_decision: input.decision,
+        p_expected_work_order_version: input.expectedWorkOrderVersion,
+        p_operator_employee_id: input.operatorEmployeeId,
+        p_remark: input.remark ?? null,
+        p_metadata: {},
+      },
+    );
+    if (error) throw Errors.dbError("提交平台技术服务验收决定失败", error);
+    const result = data as {
+      work_order?: unknown;
+      order?: unknown;
+      acceptance_preparation?: unknown;
+      error_code?: unknown;
+    } | null;
+    return {
+      workOrder: (result?.work_order as AtomicActionResult["workOrder"]) ?? null,
+      order: (result?.order as OrderRecord | null) ?? null,
+      acceptancePreparation:
+        (result?.acceptance_preparation as AtomicActionResult["acceptancePreparation"]) ??
+          null,
       errorCode: typeof result?.error_code === "string"
         ? result.error_code
         : undefined,

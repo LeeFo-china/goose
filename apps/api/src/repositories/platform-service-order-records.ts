@@ -164,6 +164,44 @@ export type RefundRequestRecord = {
   updated_at: string;
 };
 
+export type FulfillmentAttachmentRecord = {
+  id: string;
+  file_id: string;
+  file_name?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  created_at: string;
+};
+
+export type FulfillmentRecordRecord = {
+  id: string;
+  tenant_id: string;
+  service_order_id: string;
+  work_order_id: string;
+  record_type: string;
+  title: string;
+  content: string;
+  occurred_at: string;
+  created_by_employee_id: string;
+  created_at: string;
+  updated_at: string;
+  attachments?: FulfillmentAttachmentRecord[] | null;
+};
+
+export type AcceptancePreparationRecord = {
+  id: string;
+  tenant_id: string;
+  service_order_id: string;
+  work_order_id: string;
+  status: string;
+  summary: string;
+  prepared_by_employee_id: string;
+  prepared_at: string;
+  submitted_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type WorkOrderRecord = {
   id: string;
   tenant_id: string;
@@ -195,6 +233,15 @@ export type WorkOrderRecord = {
       status?: string | null;
     }> | null;
   } | null;
+};
+
+export type TenantServiceAcceptanceViewRecord = OrderRecord & {
+  work_orders?: WorkOrderRecord[] | WorkOrderRecord | null;
+  acceptance_preparations?:
+    | AcceptancePreparationRecord[]
+    | AcceptancePreparationRecord
+    | null;
+  fulfillment_records?: FulfillmentRecordRecord[] | null;
 };
 
 export type WorkOrderActionInput = {
@@ -246,8 +293,18 @@ export type ServiceRefundReviewInput = {
 export type AtomicActionResult = {
   workOrder?: WorkOrderRecord | null;
   refundRequest?: RefundRequestRecord | null;
+  acceptancePreparation?: AcceptancePreparationRecord | null;
   order: OrderRecord | null;
   errorCode?: string;
+};
+
+export type AcceptanceDecisionInput = {
+  tenantId: string;
+  serviceOrderId: string;
+  decision: "accepted" | "rejected";
+  expectedWorkOrderVersion: number;
+  operatorEmployeeId: string;
+  remark?: string;
 };
 
 export const REFUND_REQUEST_SELECT = [
@@ -357,6 +414,13 @@ export const TENANT_PUBLIC_ORDER_SELECT = [
   "version",
   "created_at",
   "updated_at",
+].join(",");
+
+export const TENANT_ACCEPTANCE_ORDER_SELECT = [
+  TENANT_PUBLIC_ORDER_SELECT,
+  "work_orders:tenant_service_work_orders(id,tenant_id,service_order_id,order_no,status,assignee_employee_id,created_by_employee_id,assigned_at,version,created_at,updated_at)",
+  "acceptance_preparations:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,created_at,updated_at)",
+  "fulfillment_records:tenant_service_fulfillment_records(id,tenant_id,service_order_id,work_order_id,record_type,title,content,occurred_at,created_by_employee_id,created_at,updated_at,attachments:tenant_service_fulfillment_attachments(id,file_id,file_name,mime_type,size_bytes,created_at))",
 ].join(",");
 
 export const TENANT_INTERNAL_ORDER_SELECT = [

@@ -1,0 +1,228 @@
+import { Errors } from "@/errors/error-factory";
+import type {
+  AcceptancePreparationRecord,
+  AtomicActionResult,
+  OrderRecord,
+  TenantServiceAcceptanceViewRecord,
+  WorkOrderRecord,
+} from "@/repositories/platform-service-order-records";
+import type { ServiceAcceptanceDecisionInput } from "@/schema/billing-service-orders";
+import type { AuthContext } from "@/services/authorization";
+import { serializeTenantServiceOrder } from "@/services/platform-service-order-views";
+
+type AcceptanceRepositoryPort = {
+  findAcceptanceViewByTenantAndOrderId: (input: {
+    tenantId: string;
+    orderId: string;
+  }) => Promise<TenantServiceAcceptanceViewRecord | null>;
+  decideAcceptance: (input: {
+    tenantId: string;
+    serviceOrderId: string;
+    decision: "accepted" | "rejected";
+    expectedWorkOrderVersion: number;
+    operatorEmployeeId: string;
+    remark?: string;
+  }) => Promise<AtomicActionResult>;
+};
+
+type AccessPolicyPort = {
+  assertTenantContext: (authContext: AuthContext) => string;
+  hasPermission: (authContext: AuthContext, permissionCode: string) => boolean;
+};
+
+type AcceptanceDependencies = {
+  repository: AcceptanceRepositoryPort;
+  accessPolicyService: AccessPolicyPort;
+  nowFactory: () => Date;
+};
+
+const CREATE_PERMISSION = "billing.service_order.create";
+const READ_PERMISSION = "billing.service_order.read";
+
+export async function getTenantServiceOrderAcceptance(
+  dependencies: AcceptanceDependencies,
+  authContext: AuthContext,
+  orderId: string,
+) {
+  const tenantId = assertCanRead(dependencies.accessPolicyService, authContext);
+  const view = await dependencies.repository.findAcceptanceViewByTenantAndOrderId({
+    tenantId,
+    orderId,
+  });
+  if (!view) {
+    throw Errors.business(
+      404,
+      "平台服务订单不存在",
+      "SERVICE_ORDER_NOT_FOUND",
+    );
+  }
+  return serializeAcceptanceView(view, dependencies.nowFactory());
+}
+
+export async function decideTenantServiceOrderAcceptance(
+  dependencies: AcceptanceDependencies,
+  authContext: AuthContext,
+  orderId: string,
+  input: ServiceAcceptanceDecisionInput,
+  decision: "accepted" | "rejected",
+) {
+  const tenantId = assertCanCreate(dependencies.accessPolicyService, authContext);
+  const employeeId = requireEmployee(authContext);
+  const result = await dependencies.repository.decideAcceptance({
+    tenantId,
+    serviceOrderId: orderId,
+    decision,
+    expectedWorkOrderVersion: input.expected_work_order_version,
+    operatorEmployeeId: employeeId,
+    remark: input.remark,
+  });
+  if (!result.workOrder || !result.order || !result.acceptancePreparation) {
+    throw Errors.business(
+      409,
+      "平台服务验收状态已更新，请刷新后重试",
+      result.errorCode ?? "SERVICE_ACCEPTANCE_INVALID_STATE",
+    );
+  }
+  const responseNow = dependencies.nowFactory();
+  return {
+    order: serializeTenantServiceOrder(result.order, responseNow),
+    work_order: serializeWorkOrder(result.workOrder),
+    acceptance_preparation: serializeAcceptancePreparation(
+      result.acceptancePreparation,
+    ),
+    server_time: responseNow.toISOString(),
+  };
+}
+
+function assertCanRead(
+  accessPolicyService: AccessPolicyPort,
+  authContext: AuthContext,
+) {
+  const tenantId = accessPolicyService.assertTenantContext(authContext);
+  if (
+    !accessPolicyService.hasPermission(authContext, READ_PERMISSION) &&
+    !accessPolicyService.hasPermission(authContext, CREATE_PERMISSION)
+  ) {
+    throw Errors.forbidden();
+  }
+  return tenantId;
+}
+
+function assertCanCreate(
+  accessPolicyService: AccessPolicyPort,
+  authContext: AuthContext,
+) {
+  const tenantId = accessPolicyService.assertTenantContext(authContext);
+  if (!accessPolicyService.hasPermission(authContext, CREATE_PERMISSION)) {
+    throw Errors.forbidden();
+  }
+  return tenantId;
+}
+
+function requireEmployee(authContext: AuthContext) {
+  if (!authContext.employeeId) throw Errors.forbidden();
+  return authContext.employeeId;
+}
+
+function serializeAcceptanceView(
+  record: TenantServiceAcceptanceViewRecord,
+  now: Date,
+) {
+  const workOrder = normalizeMaybeSingleRelation(record.work_orders);
+  const acceptancePreparation = normalizeMaybeSingleRelation(
+    record.acceptance_preparations,
+  );
+  return {
+    order: serializeTenantServiceOrder(record, now),
+    work_order: workOrder ? serializeWorkOrder(workOrder) : null,
+    acceptance_preparation: acceptancePreparation
+      ? serializeAcceptancePreparation(acceptancePreparation)
+      : null,
+    fulfillment_records: normalizeList(record.fulfillment_records).map((
+      fulfillmentRecord,
+    ) => ({
+      id: fulfillmentRecord.id,
+      record_type: fulfillmentRecord.record_type,
+      title: fulfillmentRecord.title,
+      content: fulfillmentRecord.content,
+      occurred_at: fulfillmentRecord.occurred_at,
+      created_at: fulfillmentRecord.created_at,
+      attachments: normalizeList(fulfillmentRecord.attachments).map((
+        attachment,
+      ) => ({
+        id: attachment.id,
+        file_id: attachment.file_id,
+        file_name: attachment.file_name ?? null,
+        mime_type: attachment.mime_type ?? null,
+        size_bytes: attachment.size_bytes ?? null,
+        created_at: attachment.created_at,
+      })),
+    })),
+    available_actions: getAcceptanceActions(
+      record,
+      workOrder,
+      acceptancePreparation,
+    ),
+    server_time: now.toISOString(),
+  };
+}
+
+function serializeWorkOrder(workOrder: WorkOrderRecord) {
+  return {
+    id: workOrder.id,
+    tenant_id: workOrder.tenant_id,
+    service_order_id: workOrder.service_order_id,
+    order_no: workOrder.order_no,
+    status: workOrder.status,
+    assignee_employee_id: workOrder.assignee_employee_id,
+    version: workOrder.version ?? 1,
+    created_at: workOrder.created_at,
+    updated_at: workOrder.updated_at,
+  };
+}
+
+function serializeAcceptancePreparation(
+  acceptancePreparation: AcceptancePreparationRecord,
+) {
+  return {
+    id: acceptancePreparation.id,
+    status: acceptancePreparation.status,
+    summary: acceptancePreparation.summary,
+    prepared_at: acceptancePreparation.prepared_at,
+    submitted_at: acceptancePreparation.submitted_at,
+    created_at: acceptancePreparation.created_at,
+    updated_at: acceptancePreparation.updated_at,
+  };
+}
+
+function getAcceptanceActions(
+  order: OrderRecord,
+  workOrder: WorkOrderRecord | null,
+  acceptancePreparation: AcceptancePreparationRecord | null,
+) {
+  const enabled = order.payment_status === "paid" &&
+    workOrder?.status === "awaiting_acceptance" &&
+    acceptancePreparation?.status === "submitted";
+  const disabledReason = enabled ? null : "当前服务暂不可验收";
+  return {
+    accept: {
+      enabled,
+      label: "确认验收",
+      disabled_reason: disabledReason,
+    },
+    reject: {
+      enabled,
+      label: "要求整改",
+      disabled_reason: disabledReason,
+    },
+  };
+}
+
+function normalizeMaybeSingleRelation<T>(value: T | T[] | null | undefined) {
+  return Array.isArray(value) ? value[0] ?? null : value ?? null;
+}
+
+function normalizeList<T>(value: T | T[] | null | undefined): T[] {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}

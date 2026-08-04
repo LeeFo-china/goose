@@ -25,6 +25,15 @@ describe("BillingServiceOrdersController routes", () => {
         path: "/billing/service-orders/:id/payment-request",
       },
       { method: "POST", path: "/billing/service-orders/:id/refund-requests" },
+      { method: "GET", path: "/billing/service-orders/:id/acceptance" },
+      {
+        method: "POST",
+        path: "/billing/service-orders/:id/acceptance/confirm",
+      },
+      {
+        method: "POST",
+        path: "/billing/service-orders/:id/acceptance/reject",
+      },
     ]);
   });
 });

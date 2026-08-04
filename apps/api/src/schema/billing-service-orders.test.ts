@@ -6,6 +6,7 @@ import {
   ServiceOrderCreateSchema,
   ServiceOrderListQuerySchema,
   ServiceProductListQuerySchema,
+  ServiceAcceptanceDecisionSchema,
   ServiceRefundRequestSchema,
 } from "./billing-service-orders";
 
@@ -62,5 +63,27 @@ describe("billing service order schemas", () => {
       idempotency_key: randomUUID(),
       reason: "未开始实施",
     }).success).toBe(true);
+  });
+
+  test("parses customer acceptance decisions without idempotency or amount", () => {
+    expect(ServiceAcceptanceDecisionSchema.parse({
+      expected_work_order_version: 5,
+      remark: "确认验收通过",
+    })).toEqual({
+      expected_work_order_version: 5,
+      remark: "确认验收通过",
+    });
+    expect(ServiceAcceptanceDecisionSchema.safeParse({
+      expected_work_order_version: 0,
+      remark: "确认验收通过",
+    }).success).toBe(false);
+    expect(ServiceAcceptanceDecisionSchema.safeParse({
+      expected_work_order_version: 5,
+      remark: "x".repeat(501),
+    }).success).toBe(false);
+    expect(ServiceAcceptanceDecisionSchema.safeParse({
+      expected_work_order_version: 5,
+      amount_fen: 1,
+    }).success).toBe(false);
   });
 });
