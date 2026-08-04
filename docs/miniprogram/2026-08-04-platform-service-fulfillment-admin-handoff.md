@@ -11,9 +11,9 @@
 - 开发数据库已应用并验证 `20260804160000_create_platform_service_fulfillment_admin.sql`，
   `supabase migration list --db-url` 显示 Local/Remote 对齐到 `20260804160000`。
 - 本次 merge 后的 GitHub Actions `Build Docker Images` run `30886827110` 已成功；
-  对应 `Auto Deploy Dev` run `30887245991` 已失败，失败发生在 `Deploy API / Deploy dev`
-  阶段；前置迁移历史验证已通过。因此 Orange 不应在收到 dev 发布修复确认前开始依赖
-  二期平台接口。
+  中间一次 `Auto Deploy Dev` run `30887245991` 失败后，后续 main 提交 `889207f`
+  已完成 `Auto Deploy Dev` run `30887458556` 并成功。因此 Orange 可以基于 dev 环境
+  开始二期平台技术服务履约状态的只读核对；客户侧验收接口仍需以后端三期契约为准。
 - 本文档只写入 gooes 仓库，不修改 `/Users/leefo/Public/work/orange`。
 
 ## 1. 本期后端和 Admin 已完成能力
