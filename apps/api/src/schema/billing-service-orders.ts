@@ -32,6 +32,11 @@ export const ServiceRefundRequestSchema = ServiceOrderActionSchema.extend({
     .max(500, "售后原因不能超过 500 个字符"),
 }).strict();
 
+export const ServiceAcceptanceDecisionSchema = z.object({
+  expected_work_order_version: z.number().int().positive("工单版本必须大于 0"),
+  remark: z.string().trim().max(500, "备注不能超过 500 个字符").optional(),
+}).strict();
+
 export const ServiceOrderParamSchema = z.object({
   id: z.uuid("无效的平台服务订单 ID"),
 });
@@ -46,3 +51,5 @@ export type ServiceOrderActionInput =
   z.infer<typeof ServiceOrderActionSchema>;
 export type ServiceRefundRequestInput =
   z.infer<typeof ServiceRefundRequestSchema>;
+export type ServiceAcceptanceDecisionInput =
+  z.infer<typeof ServiceAcceptanceDecisionSchema>;

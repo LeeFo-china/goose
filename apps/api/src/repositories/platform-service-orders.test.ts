@@ -290,6 +290,69 @@ describe("PlatformServiceOrderRepository", () => {
     );
   });
 
+  test("loads tenant acceptance view with scoped order and fulfillment records", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+
+    await repository.findAcceptanceViewByTenantAndOrderId({
+      tenantId: "tenant-1",
+      orderId: "order-1",
+    });
+
+    expect(calls).toContainEqual(["from", "tenant_service_orders"]);
+    expect(calls).toContainEqual(["eq", "tenant_id", "tenant-1"]);
+    expect(calls).toContainEqual(["eq", "id", "order-1"]);
+    const selectCall = calls.find(([method]) => method === "select");
+    expect(selectCall?.[1]).toContain("work_orders:tenant_service_work_orders");
+    expect(selectCall?.[1]).toContain(
+      "acceptance_preparations:tenant_service_acceptance_preparations",
+    );
+    expect(selectCall?.[1]).toContain(
+      "fulfillment_records:tenant_service_fulfillment_records",
+    );
+    expect(selectCall?.[1]).toContain(
+      "attachments:tenant_service_fulfillment_attachments",
+    );
+  });
+
+  test("decides tenant acceptance through atomic RPC", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+    rpcResult = {
+      data: {
+        work_order: { id: "work-order-1", status: "accepted" },
+        order: { id: "order-1", service_status: "accepted" },
+        acceptance_preparation: { id: "acceptance-1", status: "accepted" },
+      },
+      error: null,
+    };
+
+    await repository.decideAcceptance({
+      tenantId: "tenant-1",
+      serviceOrderId: "order-1",
+      decision: "accepted",
+      expectedWorkOrderVersion: 5,
+      operatorEmployeeId: "employee-1",
+      remark: "确认验收通过",
+    });
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "tenant_service_decide_acceptance",
+      expect.objectContaining({
+        p_tenant_id: "tenant-1",
+        p_service_order_id: "order-1",
+        p_decision: "accepted",
+        p_expected_work_order_version: 5,
+        p_operator_employee_id: "employee-1",
+        p_remark: "确认验收通过",
+      }),
+    );
+  });
+
   test("creates a pending order through platform_service_create_pending_order", async () => {
     const { PlatformServiceOrderRepository } = await import(
       "./platform-service-orders"

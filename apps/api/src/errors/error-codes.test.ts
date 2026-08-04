@@ -109,6 +109,9 @@ describe('platform service sales error codes', () => {
       ErrorCodes.SERVICE_REFUND_ALREADY_PENDING,
       ErrorCodes.SERVICE_PRODUCT_VERSION_CONFLICT,
       ErrorCodes.SERVICE_PRODUCT_PUBLISH_REQUIRED,
+      ErrorCodes.SERVICE_WORK_ORDER_NOT_FOUND,
+      ErrorCodes.SERVICE_WORK_ORDER_VERSION_CONFLICT,
+      ErrorCodes.SERVICE_ACCEPTANCE_INVALID_STATE,
     ]).toEqual([
       'SERVICE_PRODUCT_NOT_FOUND',
       'SERVICE_TERMS_VERSION_STALE',
@@ -123,6 +126,9 @@ describe('platform service sales error codes', () => {
       'SERVICE_REFUND_ALREADY_PENDING',
       'SERVICE_PRODUCT_VERSION_CONFLICT',
       'SERVICE_PRODUCT_PUBLISH_REQUIRED',
+      'SERVICE_WORK_ORDER_NOT_FOUND',
+      'SERVICE_WORK_ORDER_VERSION_CONFLICT',
+      'SERVICE_ACCEPTANCE_INVALID_STATE',
     ]);
   });
 });

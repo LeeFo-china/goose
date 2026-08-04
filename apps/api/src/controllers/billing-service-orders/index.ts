@@ -1,6 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  ServiceAcceptanceDecisionSchema,
   ServiceOrderActionSchema,
   ServiceOrderCreateSchema,
   ServiceOrderListQuerySchema,
@@ -135,6 +136,63 @@ class BillingServiceOrdersController extends BaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await (await service()).requestRefund(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/billing/service-orders/:id/acceptance")
+  async getAcceptance(request: FastifyRequest) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = ServiceOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const data = await (await service()).getAcceptance(
+      authContext,
+      paramsResult.data.id,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/billing/service-orders/:id/acceptance/confirm")
+  async confirmAcceptance(request: FastifyRequest) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = ServiceOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ServiceAcceptanceDecisionSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await (await service()).confirmAcceptance(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/billing/service-orders/:id/acceptance/reject")
+  async rejectAcceptance(request: FastifyRequest) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = ServiceOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ServiceAcceptanceDecisionSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await (await service()).rejectAcceptance(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

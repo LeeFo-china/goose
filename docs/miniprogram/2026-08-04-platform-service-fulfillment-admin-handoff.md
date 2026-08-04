@@ -14,6 +14,10 @@
   中间一次 `Auto Deploy Dev` run `30887245991` 失败后，后续 main 提交 `889207f`
   已完成 `Auto Deploy Dev` run `30887458556` 并成功。因此 Orange 可以基于 dev 环境
   开始二期平台技术服务履约状态的只读核对；客户侧验收接口仍需以后端三期契约为准。
+- 三期客户侧验收接口的正式对接文档已新增：
+  `docs/miniprogram/2026-08-04-platform-service-customer-acceptance-handoff.md`。
+  开发库已应用 `20260804170000_create_platform_service_customer_acceptance.sql`
+  并验证 Local/Remote 对齐；该能力待三期分支 merge 并发布 dev API 后再进入 Orange 真机联调。
 - 本文档只写入 gooes 仓库，不修改 `/Users/leefo/Public/work/orange`。
 
 ## 1. 本期后端和 Admin 已完成能力
@@ -501,6 +505,7 @@ Orange 回传问题时请提供：
 > 和退款审核能力；Orange 当前支付链路暂不需要调整，也不要调用 `/platform/billing/*`
 > 平台接口。
 >
-> 本次 merge 后 dev API/Admin 发布仍需等待 Actions 完成并补跑 smoke。客户侧“读取验收
-> 资料、确认验收、要求整改、附件预览”接口尚未作为三期契约发布，Orange 可先按
-> handoff 文档预评估页面和状态展示，正式开发请以后续客户侧接口发布和真实响应样例为准。
+> 三期客户侧“读取验收资料、确认验收、要求整改”接口已形成后端契约，详见
+> `docs/miniprogram/2026-08-04-platform-service-customer-acceptance-handoff.md`。
+> 开发库已应用 `20260804170000_create_platform_service_customer_acceptance.sql`
+> 并验证 Local/Remote 对齐；待三期分支 merge 并发布 dev API 后，Orange 可按该文档开始员工端真机联调。

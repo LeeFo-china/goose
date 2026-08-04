@@ -6,6 +6,13 @@ const migrationPath = new URL(
 );
 const migrationFile = Bun.file(migrationPath);
 const readMigration = () => migrationFile.text();
+const customerAcceptanceMigrationPath = new URL(
+  "../../../../supabase/migrations/20260804170000_create_platform_service_customer_acceptance.sql",
+  import.meta.url,
+);
+const customerAcceptanceMigrationFile = Bun.file(customerAcceptanceMigrationPath);
+const readCustomerAcceptanceMigration = () =>
+  customerAcceptanceMigrationFile.text();
 
 describe("platform service fulfillment admin migration", () => {
   test("creates fulfillment tables with tenant-scoped ownership", async () => {
@@ -89,5 +96,27 @@ describe("platform service fulfillment admin migration", () => {
     expect(sql).not.toMatch(/UPDATE\s+public\.platform_virtual_products/i);
     expect(sql).not.toMatch(/CREATE\s+TABLE\s+public\.project_accept/i);
     expect(sql).not.toMatch(/ALTER\s+TABLE\s+public\.project_accept/i);
+  });
+
+  test("adds an atomic tenant customer acceptance decision RPC", async () => {
+    expect(await customerAcceptanceMigrationFile.exists()).toBe(true);
+    const sql = await readCustomerAcceptanceMigration();
+
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.tenant_service_decide_acceptance",
+    );
+    expect(sql).toContain("p_decision text");
+    expect(sql).toContain("p_expected_work_order_version integer");
+    expect(sql).toContain("FOR UPDATE");
+    expect(sql).toContain("SERVICE_WORK_ORDER_VERSION_CONFLICT");
+    expect(sql).toContain("SERVICE_ACCEPTANCE_INVALID_STATE");
+    expect(sql).toContain("customer_accept");
+    expect(sql).toContain("customer_reject");
+    expect(sql).toContain(
+      "UPDATE public.tenant_service_acceptance_preparations",
+    );
+    expect(sql).not.toContain("DROP TABLE public.tenant_service_orders");
+    expect(sql).not.toMatch(/UPDATE\s+public\.tenant_credit_/i);
+    expect(sql).not.toMatch(/UPDATE\s+public\.platform_virtual_products/i);
   });
 });

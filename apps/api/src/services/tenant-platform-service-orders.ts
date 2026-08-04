@@ -15,6 +15,7 @@ import {
 } from "@/repositories/platform-service-orders";
 import type {
   ServiceOrderActionInput,
+  ServiceAcceptanceDecisionInput,
   ServiceOrderCreateInput,
   ServiceOrderListQuery,
   ServiceProductListQuery,
@@ -29,7 +30,6 @@ import {
 } from "@/services/platform-service-order-views";
 import {
   requireActiveServicePaymentConfig,
-  requireOrderPaymentConfig,
 } from "@/services/tenant-platform-service-order-payment-config";
 import {
   buildProductSnapshot,
@@ -39,6 +39,13 @@ import {
 import {
   requestServiceOrderRefund,
 } from "@/services/tenant-platform-service-order-refunds";
+import {
+  decideTenantServiceOrderAcceptance,
+  getTenantServiceOrderAcceptance,
+} from "@/services/tenant-platform-service-order-acceptance";
+import {
+  createServiceOrderPaymentRequest,
+} from "@/services/tenant-platform-service-order-payment";
 import {
   wechatPayGateway as defaultWechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
@@ -58,6 +65,8 @@ type RepositoryPort = Pick<
   | "markPrepayCreated"
   | "findOrderByTenantAndId"
   | "findOrderForPaymentByTenantAndId"
+  | "findAcceptanceViewByTenantAndOrderId"
+  | "decideAcceptance"
   | "requestRefundReview"
 >;
 
@@ -293,6 +302,42 @@ export class TenantPlatformServiceOrderService {
     });
   }
 
+  async getAcceptance(authContext: AuthContext, orderId: string) {
+    return getTenantServiceOrderAcceptance(
+      this.acceptanceDependencies(),
+      authContext,
+      orderId,
+    );
+  }
+
+  async confirmAcceptance(
+    authContext: AuthContext,
+    orderId: string,
+    input: ServiceAcceptanceDecisionInput,
+  ) {
+    return decideTenantServiceOrderAcceptance(
+      this.acceptanceDependencies(),
+      authContext,
+      orderId,
+      input,
+      "accepted",
+    );
+  }
+
+  async rejectAcceptance(
+    authContext: AuthContext,
+    orderId: string,
+    input: ServiceAcceptanceDecisionInput,
+  ) {
+    return decideTenantServiceOrderAcceptance(
+      this.acceptanceDependencies(),
+      authContext,
+      orderId,
+      input,
+      "rejected",
+    );
+  }
+
   private async buildExistingOrderResponse(order: OrderRecord) {
     const paymentRequest = order.payment_status === "pending"
       ? await this.createPaymentRequestForOrder(
@@ -319,56 +364,19 @@ export class TenantPlatformServiceOrderService {
     description: string,
     wrapPrepayError: boolean,
   ) {
-    this.assertPaymentReusable(order);
-    const config = requireOrderPaymentConfig(
-      await this.paymentConfigRepository.findWechatPayConfigById(
-        requireText(order.payment_config_id, "SERVICE_PAYMENT_CONFIG_INVALID"),
-      ),
+    return createServiceOrderPaymentRequest(
+      {
+        repository: this.repository,
+        paymentConfigRepository: this.paymentConfigRepository,
+        secretBundleService: this.secretBundleService,
+        wechatPayGateway: this.wechatPayGateway,
+        secretBundleMatcher: requireMatchingPlatformPaymentSecretBundle,
+        nowFactory: this.nowFactory,
+      },
       order,
+      description,
+      wrapPrepayError,
     );
-    const secretBundle = requireMatchingPlatformPaymentSecretBundle(
-      config,
-      await this.secretBundleService.load(config.encrypted_config_ref),
-    );
-
-    const existingPrepayId = order.prepay_id?.trim();
-    if (existingPrepayId) {
-      return this.wechatPayGateway.createMiniProgramPaymentRequest({
-        config,
-        prepayId: existingPrepayId,
-        secretBundle,
-      });
-    }
-
-    try {
-      const prepay = await this.wechatPayGateway.createJsapiPrepay({
-        config,
-        order: {
-          out_trade_no: order.out_trade_no ?? order.order_no,
-          amount: order.amount_fen / 100,
-          payer_openid: requireText(
-            order.payer_openid,
-            "PAYER_OPENID_REQUIRED",
-          ),
-          payment_expires_at: order.payment_expires_at,
-        },
-        description,
-        secretBundle,
-      });
-      const markedOrder = await this.repository.markPrepayCreated({
-        orderId: order.id,
-        prepayId: prepay.prepayId,
-      });
-      return markedOrder ? prepay.paymentRequest : null;
-    } catch (error) {
-      if (!wrapPrepayError) throw error;
-      throw Errors.business(
-        502,
-        "微信支付预下单失败，请稍后继续支付",
-        "SERVICE_PAYMENT_PREPAY_FAILED",
-        { order_id: order.id },
-      );
-    }
   }
 
   private assertCanCreate(authContext: AuthContext) {
@@ -447,30 +455,13 @@ export class TenantPlatformServiceOrderService {
     }
   }
 
-  private assertPaymentReusable(order: OrderRecord) {
-    if (order.payment_status !== "pending") {
-      throw Errors.business(
-        409,
-        "平台服务订单不是待支付状态",
-        "SERVICE_ORDER_INVALID_STATE",
-      );
-    }
-    if (new Date(order.payment_expires_at).getTime() <= this.nowFactory().getTime()) {
-      throw Errors.business(
-        409,
-        "平台服务订单支付时间已结束",
-        "SERVICE_ORDER_INVALID_STATE",
-      );
-    }
+  private acceptanceDependencies() {
+    return {
+      repository: this.repository,
+      accessPolicyService: this.accessPolicyService,
+      nowFactory: this.nowFactory,
+    };
   }
-}
-
-function requireText(value: string | null | undefined, code: string) {
-  const text = value?.trim();
-  if (!text) {
-    throw Errors.business(409, "平台服务支付参数缺失", code);
-  }
-  return text;
 }
 
 function normalizePositiveInteger(value: number | undefined, fallback: number) {
