@@ -164,13 +164,13 @@ export class PlatformServiceFulfillmentService {
   async createFulfillmentRecord(
     authContext: AuthContext,
     workOrderId: string,
-    context: { tenantId: string; serviceOrderId: string },
     input: PlatformServiceFulfillmentRecordInput,
   ) {
     const employeeId = this.assertCanManageWorkOrders(authContext);
+    const workOrder = await this.requireWorkOrder(workOrderId);
     return this.repository.createFulfillmentRecord({
-      tenantId: context.tenantId,
-      serviceOrderId: context.serviceOrderId,
+      tenantId: workOrder.tenant_id,
+      serviceOrderId: workOrder.service_order_id,
       workOrderId,
       recordType: input.record_type,
       title: input.title,
@@ -184,13 +184,13 @@ export class PlatformServiceFulfillmentService {
   async upsertAcceptancePreparation(
     authContext: AuthContext,
     workOrderId: string,
-    context: { tenantId: string; serviceOrderId: string },
     input: PlatformServiceAcceptancePreparationInput,
   ) {
     const employeeId = this.assertCanManageWorkOrders(authContext);
+    const workOrder = await this.requireWorkOrder(workOrderId);
     return this.repository.upsertAcceptancePreparation({
-      tenantId: context.tenantId,
-      serviceOrderId: context.serviceOrderId,
+      tenantId: workOrder.tenant_id,
+      serviceOrderId: workOrder.service_order_id,
       workOrderId,
       status: input.status,
       summary: input.summary,
@@ -278,6 +278,20 @@ export class PlatformServiceFulfillmentService {
 
   private assertPlatformAdmin(authContext: AuthContext) {
     if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+  }
+
+  private async requireWorkOrder(workOrderId: string) {
+    const workOrder = await this.repository.findPlatformServiceWorkOrderById(
+      workOrderId,
+    );
+    if (!workOrder) {
+      throw Errors.business(
+        404,
+        "平台技术服务工单不存在",
+        "SERVICE_WORK_ORDER_NOT_FOUND",
+      );
+    }
+    return workOrder;
   }
 }
 

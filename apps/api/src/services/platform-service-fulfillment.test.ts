@@ -233,4 +233,34 @@ describe("PlatformServiceFulfillmentService", () => {
       }),
     );
   });
+
+  test("derives fulfillment context from the target work order", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const service = new PlatformServiceFulfillmentService({ repository });
+
+    await service.createFulfillmentRecord(
+      platformAuth([{ code: "platform.service_work_order.manage", scope: "all" }]),
+      "work-1",
+      {
+        record_type: "server_configuration",
+        title: "服务器配置",
+        content: "已完成配置",
+        occurred_at: "2026-08-04T10:00:00+08:00",
+        file_ids: [],
+      },
+    );
+
+    expect(repository.findPlatformServiceWorkOrderById).toHaveBeenCalledWith(
+      "work-1",
+    );
+    expect(repository.createFulfillmentRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        serviceOrderId: "order-1",
+        workOrderId: "work-1",
+      }),
+    );
+  });
 });
