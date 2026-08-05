@@ -18,6 +18,10 @@ const autoDeployDevWorkflow = readFileSync(
   new URL("../.github/workflows/auto-deploy-dev.yml", import.meta.url),
   "utf8",
 );
+const verifyDevMigrationHistoryWorkflow = readFileSync(
+  new URL("../.github/workflows/verify-dev-migration-history.yml", import.meta.url),
+  "utf8",
+);
 const deployDevWorkflow = readFileSync(
   new URL("../.github/workflows/deploy-dev.yml", import.meta.url),
   "utf8",
@@ -2273,6 +2277,30 @@ describe("reusable build workflow", () => {
 });
 
 describe("development orchestrator", () => {
+  test("uses a direct database URL for Supabase CLI migration history checks", () => {
+    const migrationHistoryStep = sliceWorkflowStep(
+      verifyDevMigrationHistoryWorkflow,
+      "Verify development database migration history",
+    );
+
+    expect(migrationHistoryStep).toContain('test -n "${SUPABASE_DB_DIRECT_URL:-}"');
+    expect(migrationHistoryStep).toContain(
+      'export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"',
+    );
+    expect(migrationHistoryStep).toContain(
+      'MIGRATION_HISTORY_DB_URL="${SUPABASE_DB_DIRECT_URL}"',
+    );
+    expect(migrationHistoryStep).toContain(
+      "node scripts/validate-dev-database-target.mjs --direct-migration-history",
+    );
+    expect(migrationHistoryStep).toContain(
+      'pnpm dlx supabase@2.99.0 migration list --db-url "${MIGRATION_HISTORY_DB_URL}" > migration-history.txt',
+    );
+    expect(migrationHistoryStep).not.toContain(
+      'pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_URL}"',
+    );
+  });
+
   test("provides a development-only manual release entrypoint", () => {
     expect(releaseDevWorkflow).toContain("name: Release Dev");
     expect(releaseDevWorkflow).toContain("workflow_dispatch:");

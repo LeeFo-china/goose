@@ -84,6 +84,9 @@ jobs:
           . "${DEV_DB_ENV_FILE}"
           set +a
           test -n "${SUPABASE_DB_URL:-}"
+          test -n "${SUPABASE_DB_DIRECT_URL:-}"
+          export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"
+          MIGRATION_HISTORY_DB_URL="${SUPABASE_DB_DIRECT_URL}"
 
           ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref)"
           test -n "${ACTUAL_PROJECT_REF}"
@@ -92,10 +95,14 @@ jobs:
             "${SUPABASE_DB_URL}" "${ACTUAL_PROJECT_REF}" \
             "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
             "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}"
+          node scripts/validate-dev-database-target.mjs --direct-migration-history \
+            "${MIGRATION_HISTORY_DB_URL}" "${ACTUAL_PROJECT_REF}" \
+            "${DEV_DB_HOST}" "${DEV_PROJECT_REF}" \
+            "${BLOCKED_DB_HOSTS}" "${BLOCKED_PROJECT_REFS}"
 
           corepack enable
           corepack prepare pnpm@10.33.0 --activate
-          pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_URL}" > migration-history.txt
+          pnpm dlx supabase@2.99.0 migration list --db-url "${MIGRATION_HISTORY_DB_URL}" > migration-history.txt
           node scripts/verify-migration-history.mjs \
             migration-history.txt supabase/migrations "${MIGRATION_VERSION}" \
             > strict-evidence.json

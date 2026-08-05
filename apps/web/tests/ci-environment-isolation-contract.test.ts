@@ -102,7 +102,17 @@ describe("CI environment isolation", () => {
     expect(workflow).toContain("scripts/validate-dev-database-target.mjs");
     expect(workflow).toContain("scripts/verify-migration-history.mjs");
     expect(workflow).toContain("scripts/verify-dev-migration-evidence.mjs");
+    expect(workflow).toContain('test -n "${SUPABASE_DB_DIRECT_URL:-}"');
     expect(workflow).toContain(
+      'export SUPABASE_PROJECT_REF="${SUPABASE_PROJECT_REF:-${DEV_PROJECT_REF}}"',
+    );
+    expect(workflow).toContain(
+      'MIGRATION_HISTORY_DB_URL="${SUPABASE_DB_DIRECT_URL}"',
+    );
+    expect(workflow).toContain(
+      'pnpm dlx supabase@2.99.0 migration list --db-url "${MIGRATION_HISTORY_DB_URL}"',
+    );
+    expect(workflow).not.toContain(
       'pnpm dlx supabase@2.99.0 migration list --db-url "${SUPABASE_DB_URL}"',
     );
 
@@ -124,6 +134,12 @@ describe("CI environment isolation", () => {
 
     expect(workflow).toContain(
       'ACTUAL_PROJECT_REF="$(node scripts/validate-dev-database-target.mjs --resolve-project-ref)"',
+    );
+    expect(workflow).toContain(
+      '"${MIGRATION_HISTORY_DB_URL}" "${ACTUAL_PROJECT_REF}"',
+    );
+    expect(workflow).toContain(
+      "node scripts/validate-dev-database-target.mjs --direct-migration-history",
     );
     expect(workflow).not.toContain("node --input-type=module");
     expect(workflow).not.toContain("<<'NODE'");
