@@ -62,6 +62,7 @@ import PlatformPaymentConfigsController from "@/controllers/platform-payment-con
 import PlatformVirtualProductsController from "@/controllers/platform-virtual-products";
 import PlatformWechatPayApplymentsController from "@/controllers/platform-wechat-pay-applyments";
 import PlatformAuditLogsController from "@/controllers/platform-audit-logs";
+import PlatformOperatorsController from "@/controllers/platform-operators";
 import AdministrativeAreasController from "@/controllers/administrative-areas";
 import TenantShareLinksController from "@/controllers/tenant-share-links";
 import TenantDeviceController from "@/controllers/tenant-devices";
@@ -177,6 +178,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformVirtualProductsController.registerExtraRoutes(app);
   PlatformWechatPayApplymentsController.registerExtraRoutes(app);
   PlatformAuditLogsController.registerExtraRoutes(app);
+  PlatformOperatorsController.registerExtraRoutes(app);
   AdministrativeAreasController.registerExtraRoutes(app);
   TenantShareLinksController.registerExtraRoutes(app);
   TenantDeviceController.registerExtraRoutes(app);
