@@ -229,7 +229,10 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/scripts/:scriptKey/run")
   async runScript(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ops.execute",
+    );
 
     const paramsResult = OpsScriptKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);

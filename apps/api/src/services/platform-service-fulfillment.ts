@@ -399,14 +399,14 @@ export class PlatformServiceFulfillmentService {
   }
 
   private assertCanReadOrders(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!hasPermission(authContext, ORDER_READ_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private assertCanManageWorkOrders(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!authContext.employeeId) throw Errors.forbidden();
     if (!hasPermission(authContext, WORK_ORDER_MANAGE_PERMISSION)) {
       throw Errors.forbidden();
@@ -415,7 +415,7 @@ export class PlatformServiceFulfillmentService {
   }
 
   private assertCanReviewRefunds(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!authContext.employeeId) throw Errors.forbidden();
     if (!hasPermission(authContext, REFUND_REVIEW_PERMISSION)) {
       throw Errors.forbidden();
@@ -423,8 +423,13 @@ export class PlatformServiceFulfillmentService {
     return authContext.employeeId;
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+  private assertPlatformStaff(authContext: AuthContext) {
+    if (
+      authContext.tenantId !== null
+      || (!authContext.isPlatformStaff && !authContext.isPlatformAdmin)
+    ) {
+      throw Errors.forbidden();
+    }
   }
 
   private async requireWorkOrder(workOrderId: string) {

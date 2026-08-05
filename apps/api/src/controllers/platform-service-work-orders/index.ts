@@ -26,7 +26,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Get("/platform/billing/service-work-orders")
   async listWorkOrders(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const queryResult = PlatformServiceWorkOrderListQuerySchema.safeParse(
       request.query || {},
     );
@@ -41,7 +44,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Get("/platform/billing/service-work-orders/:id")
   async getWorkOrder(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -56,7 +62,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-work-orders/:id/assign")
   async assignWorkOrder(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -77,7 +86,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-work-orders/:id/status-transitions")
   async transitionWorkOrder(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -98,7 +110,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-work-orders/:id/fulfillment-records")
   async createFulfillmentRecord(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -119,7 +134,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-work-orders/:id/acceptance-preparation")
   async upsertAcceptancePreparation(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -140,7 +158,10 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-work-orders/:id/overdue-acceptance/confirm")
   async confirmOverdueAcceptance(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );

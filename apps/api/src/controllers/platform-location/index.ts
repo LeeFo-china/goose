@@ -13,7 +13,10 @@ class PlatformLocationController extends PlatformBaseController {
 
   @Get("/platform/location/address-suggestions")
   async suggestAddresses(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
 
     const queryResult = PlatformAddressSuggestionQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -24,7 +27,10 @@ class PlatformLocationController extends PlatformBaseController {
 
   @Get("/platform/location/map-config")
   async getMapConfig(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
 
     const data = await tencentLbsService.getWebMapConfig();
     return ResponseHandler.success(data);

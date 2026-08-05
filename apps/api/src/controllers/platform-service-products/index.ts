@@ -24,7 +24,10 @@ class PlatformServiceProductsController extends PlatformBaseController {
 
   @Get("/platform/billing/service-products")
   async listProducts(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_product.manage",
+    );
     const queryResult = PlatformServiceProductListQuerySchema.safeParse(
       request.query || {},
     );
@@ -39,7 +42,10 @@ class PlatformServiceProductsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-products")
   async createProduct(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_product.manage",
+    );
     const bodyResult = PlatformServiceProductDraftSchema.safeParse(
       request.body || {},
     );
@@ -54,7 +60,10 @@ class PlatformServiceProductsController extends PlatformBaseController {
 
   @Patch("/platform/billing/service-products/:id")
   async updateProduct(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_product.manage",
+    );
     const paramsResult = PlatformServiceProductParamSchema.safeParse(
       request.params || {},
     );
@@ -75,7 +84,10 @@ class PlatformServiceProductsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-products/:id/publish")
   async publishProduct(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_product.manage",
+    );
     const paramsResult = PlatformServiceProductParamSchema.safeParse(
       request.params || {},
     );
@@ -96,7 +108,10 @@ class PlatformServiceProductsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-products/:id/archive")
   async archiveProduct(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_product.manage",
+    );
     const paramsResult = PlatformServiceProductParamSchema.safeParse(
       request.params || {},
     );

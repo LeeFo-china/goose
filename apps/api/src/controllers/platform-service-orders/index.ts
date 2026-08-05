@@ -21,7 +21,10 @@ class PlatformServiceOrdersController extends PlatformBaseController {
 
   @Get("/platform/billing/service-orders")
   async listOrders(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_order.read",
+    );
     const queryResult = PlatformServiceOrderListQuerySchema.safeParse(
       request.query || {},
     );
@@ -36,7 +39,10 @@ class PlatformServiceOrdersController extends PlatformBaseController {
 
   @Get("/platform/billing/service-orders/:id")
   async getOrder(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_order.read",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );
@@ -51,7 +57,10 @@ class PlatformServiceOrdersController extends PlatformBaseController {
 
   @Post("/platform/billing/service-orders/:id/shipping-report/retry")
   async retryOrderShippingReport(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_work_order.manage",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );

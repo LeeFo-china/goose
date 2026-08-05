@@ -24,7 +24,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Get("/platform/picture-library/categories")
   async listCategories(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.read");
     const queryResult = PictureCategoryListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await pictureLibraryService.listCategories(queryResult.data, authContext);
@@ -33,7 +33,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/categories")
   async createCategory(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const bodyResult = CreatePictureCategorySchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const data = await pictureLibraryService.createCategory(bodyResult.data, authContext);
@@ -42,7 +42,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Patch("/platform/picture-library/categories/:id")
   async updateCategory(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdatePictureCategorySchema.safeParse(request.body || {});
@@ -57,7 +57,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Delete("/platform/picture-library/categories/:id")
   async disableCategory(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.disableCategory(paramsResult.data.id, authContext);
@@ -66,7 +66,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Get("/platform/picture-library/assets")
   async listAssets(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.read");
     const queryResult = PictureAssetListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await pictureLibraryService.listAssets(queryResult.data, authContext);
@@ -75,7 +75,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/assets")
   async createAsset(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const bodyResult = CreatePictureAssetSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const data = await pictureLibraryService.createAsset(bodyResult.data, authContext);
@@ -84,7 +84,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Patch("/platform/picture-library/assets/:id")
   async updateAsset(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdatePictureAssetSchema.safeParse(request.body || {});
@@ -109,7 +109,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Delete("/platform/picture-library/assets/:id")
   async deleteAsset(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.deleteAsset(paramsResult.data.id, authContext);
@@ -118,7 +118,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Get("/platform/picture-library/comments")
   async listComments(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.read");
     const queryResult = PictureCommentListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await pictureLibraryService.listComments(queryResult.data, authContext);
@@ -127,7 +127,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Get("/platform/picture-library/health")
   async getHealthReport(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.read");
     const queryResult = PictureLibraryHealthQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await pictureLibraryHealthService.buildReport({
@@ -139,7 +139,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/health/assets/:id/repair-comment-count")
   async repairAssetCommentCount(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryHealthService.repairAssetCommentCount(
@@ -151,7 +151,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/health/categories/:id/set-cover-from-first-published")
   async setCategoryCoverFromFirstPublishedAsset(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryHealthService.setCategoryCoverFromFirstPublishedAsset(
@@ -163,7 +163,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/comments/:id/hide")
   async hideComment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.hideComment(paramsResult.data.id, authContext);
@@ -172,7 +172,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Post("/platform/picture-library/comments/:id/show")
   async showComment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.showComment(paramsResult.data.id, authContext);
@@ -181,7 +181,7 @@ class PictureLibraryController extends PlatformBaseController {
 
   @Delete("/platform/picture-library/comments/:id")
   async deleteComment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.deleteComment(paramsResult.data.id, authContext);
@@ -192,7 +192,7 @@ class PictureLibraryController extends PlatformBaseController {
     request: FastifyRequest,
     status: "published" | "hidden",
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(request, "platform.picture.manage");
     const paramsResult = PictureLibraryIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const data = await pictureLibraryService.updateAssetStatus(

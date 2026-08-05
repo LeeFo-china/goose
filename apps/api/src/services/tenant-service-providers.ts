@@ -195,7 +195,13 @@ export class TenantServiceProvidersService {
   }
 
   private requirePlatformPublisher(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin || !authContext.employeeId) throw Errors.forbidden();
+    if (
+      authContext.tenantId !== null ||
+      (!authContext.isPlatformStaff && !authContext.isPlatformAdmin) ||
+      !authContext.employeeId
+    ) {
+      throw Errors.forbidden();
+    }
     this.accessPolicy.assertPermission(authContext, PLATFORM_PERMISSION);
     return authContext.employeeId;
   }

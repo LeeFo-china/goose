@@ -77,7 +77,7 @@ export class PlatformAuthorizationService {
   }
 
   assertPermission(
-    authContext: PlatformStaffAuthContext,
+    authContext: Pick<AuthContext, "permissions">,
     code: PermissionCode,
   ): void {
     const hasPermission = authContext.permissions.some(

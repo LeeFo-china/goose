@@ -85,6 +85,14 @@ export const PlatformAuditLogActionSchema = z.enum([
   "platform_virtual_product.upload",
   "platform_virtual_product.publish",
   "branding_virtual_refund.create",
+  "platform_operator_create",
+  "platform_operator_update",
+  "platform_operator_roles_replace",
+  "platform_operator_sessions_revoke",
+  "platform_role_create",
+  "platform_role_update",
+  "platform_role_permissions_replace",
+  "platform_role_archive",
 ]);
 
 export const PlatformAuditLogStatusSchema = z.enum(["success", "failure"]);
