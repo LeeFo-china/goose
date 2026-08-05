@@ -51,7 +51,7 @@ export async function getPage(this: any, authContext: AuthContext, id: string) {
 }
 
 export async function getPlatformPage(this: any, authContext: AuthContext, id: string) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.read");
   const page = await this.getExistingPage(id, null, true);
   const [draftVersion, publishedVersion] = await Promise.all([
     marketingPageRepository.findDraftVersion(id, null, true),
@@ -103,7 +103,7 @@ export async function createPage(this: any, authContext: AuthContext, input: Cre
 }
 
 export async function createPlatformPage(this: any, authContext: AuthContext, input: CreateMarketingPageInput) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   await this.assertSlugAvailable(input.slug);
   const sortOrder = input.sort_order ?? await this.getNextActiveSortOrder(null, true);
 
@@ -163,7 +163,7 @@ export async function updatePlatformPage(this: any,
   id: string,
   input: UpdateMarketingPageInput,
 ) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   const existing = await this.getExistingPage(id, null, true);
 
   if (input.slug && input.slug !== existing.slug) {
@@ -189,7 +189,7 @@ export async function archivePage(this: any, authContext: AuthContext, id: strin
 }
 
 export async function archivePlatformPage(this: any, authContext: AuthContext, id: string) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   await this.getExistingPage(id, null, true);
   return resolveMarketingPageCover(
     await marketingPageRepository.archivePage(id, authContext.employeeId, null, true),
@@ -205,7 +205,7 @@ export async function offlinePage(this: any, authContext: AuthContext, id: strin
 }
 
 export async function offlinePlatformPage(this: any, authContext: AuthContext, id: string) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   await this.getExistingPage(id, null, true);
   return resolveMarketingPageCover(
     await marketingPageRepository.setPageOffline(id, authContext.employeeId, null, true),

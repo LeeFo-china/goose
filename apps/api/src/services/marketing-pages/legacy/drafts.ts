@@ -50,7 +50,7 @@ export async function getDraft(this: any, authContext: AuthContext, id: string) 
 }
 
 export async function getPlatformDraft(this: any, authContext: AuthContext, id: string) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.read");
   const page = await this.getExistingPage(id, null, true);
   const draftVersion = await this.getOrCreateDraftVersion(
     page.id,
@@ -105,7 +105,7 @@ export async function savePlatformDraft(this: any,
   id: string,
   config: MarketingPageConfigInput,
 ) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   const page = await this.getExistingPage(id, null, true);
   const draftVersion = await this.getOrCreateDraftVersion(
     page.id,
@@ -180,7 +180,7 @@ export async function publishPage(this: any, authContext: AuthContext, id: strin
 }
 
 export async function publishPlatformPage(this: any, authContext: AuthContext, id: string) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.publish");
   const page = await this.getExistingPage(id, null, true);
   const draftVersion = await marketingPageRepository.findDraftVersion(page.id, null, true);
   if (!draftVersion) {
@@ -278,7 +278,7 @@ export async function duplicatePlatformPage(this: any,
   id: string,
   input: DuplicateMarketingPageInput,
 ) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   const sourcePage = await this.getExistingPage(id, null, true);
   const sourceDraft = await marketingPageRepository.findDraftVersion(id, null, true);
   const sourcePublished = sourcePage.published_version_id
