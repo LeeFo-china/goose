@@ -101,6 +101,15 @@ const controllerBoundaries: ControllerBoundary[] = [
     forbidLegacyGuard: true,
   },
   {
+    file: "controllers/ocr/index.ts",
+    permissions: [
+      "platform.ocr.recognize",
+      "platform.ocr.recognition.read",
+      "platform.ocr.tenant_policy.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
     file: "controllers/platform-payment-configs/index.ts",
     permissions: [
       "platform.payment.config.read",
@@ -316,6 +325,29 @@ describe("platform permission boundaries", () => {
     expect(uploadAccess).not.toContain("!authContext.isPlatformAdmin");
     expect(previews).not.toContain("getRequiredPlatformAdminContext(request)");
     expect(catalog).not.toContain("!authContext.isPlatformAdmin");
+  });
+
+  test("platform OCR services check concrete OCR permissions", () => {
+    const platformOcr = readFileSync(
+      new URL("../services/ocr/platform-service.ts", import.meta.url),
+      "utf8",
+    );
+    const tenantPolicy = readFileSync(
+      new URL("../services/ocr/tenant-policy.ts", import.meta.url),
+      "utf8",
+    );
+    const ocr = readFileSync(
+      new URL("../services/ocr/service.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(platformOcr).toContain("platform.ocr.recognize");
+    expect(tenantPolicy).toContain("platform.ocr.recognition.read");
+    expect(tenantPolicy).toContain("platform.ocr.tenant_policy.manage");
+    expect(ocr).toContain("platform.ocr.recognition.read");
+    expect(platformOcr).not.toContain("!authContext.isPlatformAdmin");
+    expect(tenantPolicy).not.toContain("!authContext.isPlatformAdmin");
+    expect(ocr).not.toContain("!authContext.isPlatformAdmin");
   });
 
   test("platform payment and virtual product services check concrete permissions", () => {

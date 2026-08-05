@@ -238,7 +238,9 @@ export class PlatformOcrService {
   }
 
   private requirePlatformPermissions(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin || !authContext.employeeId) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity || !authContext.employeeId) {
       throw Errors.forbidden();
     }
     if (
