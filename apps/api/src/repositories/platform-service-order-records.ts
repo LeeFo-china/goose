@@ -244,6 +244,7 @@ export type WorkOrderRecord = {
       status?: string | null;
     }> | null;
   } | null;
+  acceptance_preparation?: AcceptancePreparationRecord | AcceptancePreparationRecord[] | null;
 };
 
 export type TenantServiceAcceptanceViewRecord = OrderRecord & {
@@ -376,6 +377,7 @@ export const PLATFORM_SERVICE_WORK_ORDER_SELECT = [
   "created_at",
   "updated_at",
   "order:tenant_service_orders(id,order_no,product_code,term_years,amount_fen,payment_status,service_status,paid_at,tenant:tenants(id,name,status))",
+  "acceptance_preparation:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,created_at,updated_at)",
 ].join(",");
 
 export const PLATFORM_SERVICE_REFUND_REQUEST_SELECT = [

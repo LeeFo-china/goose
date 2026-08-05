@@ -78,6 +78,13 @@ export type PlatformServiceWorkOrderListItem = {
   created_at: string;
   updated_at: string;
   available_actions?: Record<string, PlatformServiceOrderAction>;
+  acceptance_preparation?: {
+    id: string;
+    status: string;
+    summary: string;
+    submitted_at: string | null;
+    updated_at: string;
+  } | null;
   order?: {
     id: string;
     order_no: string;

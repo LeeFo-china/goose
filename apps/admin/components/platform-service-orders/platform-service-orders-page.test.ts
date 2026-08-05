@@ -59,6 +59,7 @@ describe("平台技术服务履约页", () => {
       readSource("./platform-service-work-order-table.tsx"),
       readSource("./platform-service-refund-request-table.tsx"),
       readSource("./platform-service-work-order-actions.tsx"),
+      readSource("./platform-service-acceptance-preparation-action.tsx"),
       readSource("./platform-service-refund-actions.tsx"),
     ].join("\n");
 
@@ -75,6 +76,7 @@ describe("平台技术服务履约页", () => {
       "退款状态",
       "审核退款",
       "记录履约",
+      "提交验收",
       "推进状态",
       "重新上报微信履约",
     ]) {
@@ -87,13 +89,18 @@ describe("平台技术服务履约页", () => {
   });
 
   test("工单操作使用后端动作开关并按状态机过滤推进目标", () => {
-    const actions = readSource("./platform-service-work-order-actions.tsx");
+    const actions = [
+      readSource("./platform-service-work-order-actions.tsx"),
+      readSource("./platform-service-acceptance-preparation-action.tsx"),
+    ].join("\n");
     const rules = readSource("./platform-service-order-rules.ts");
 
     expect(actions).toContain("workOrder.available_actions?.assign");
     expect(actions).toContain("workOrder.available_actions?.transition");
     expect(actions).toContain("disabled_reason");
     expect(actions).toContain("getWorkOrderNextStatusOptions(workOrder.status)");
+    expect(actions).toContain("/acceptance-preparation");
+    expect(actions).toContain("workOrder.status === \"awaiting_acceptance\"");
     expect(rules).toContain("PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS");
     expect(rules).toContain("transition.from === status");
   });
