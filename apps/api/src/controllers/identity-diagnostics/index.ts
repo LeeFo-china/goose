@@ -13,7 +13,10 @@ class IdentityDiagnosticsController extends PlatformBaseController {
 
   @Get("/platform/identity-diagnostics")
   async inspect(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.identity_diagnostic.read",
+    );
 
     const queryResult = IdentityDiagnosticsQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) {

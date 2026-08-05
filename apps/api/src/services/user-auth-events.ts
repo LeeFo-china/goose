@@ -5,7 +5,11 @@ import type {
   UserAuthEventSummaryQuery,
 } from "@/schema/user-auth-events";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
+import type { PermissionCode } from "@gooes/domain";
 
+const PLATFORM_IDENTITY_DIAGNOSTIC_READ_PERMISSION =
+  "platform.identity_diagnostic.read" satisfies PermissionCode;
 const STAGE3_BLOCKING_EVENT_TYPES = [
   "identity_oauth_mismatch",
   "identity_membership_mismatch",
@@ -17,12 +21,12 @@ const STAGE3_BLOCKING_EVENT_TYPES = [
 
 class UserAuthEventService {
   async list(query: UserAuthEventListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertIdentityDiagnosticReadPermission(authContext);
     return userIdentityRepository.listAuthEvents(query);
   }
 
   async summarize(query: UserAuthEventSummaryQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertIdentityDiagnosticReadPermission(authContext);
     const summary = await userIdentityRepository.summarizeAuthEvents(query);
     const blockingEventTypes = new Set(STAGE3_BLOCKING_EVENT_TYPES);
     const blockingCount = summary.by_event_type
@@ -37,10 +41,16 @@ class UserAuthEventService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertIdentityDiagnosticReadPermission(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(
+      authContext,
+      PLATFORM_IDENTITY_DIAGNOSTIC_READ_PERMISSION,
+    );
   }
 }
 

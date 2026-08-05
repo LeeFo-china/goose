@@ -23,6 +23,16 @@ const controllerBoundaries: ControllerBoundary[] = [
     forbidLegacyGuard: true,
   },
   {
+    file: "controllers/user-auth-events/index.ts",
+    permissions: ["platform.identity_diagnostic.read"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/identity-diagnostics/index.ts",
+    permissions: ["platform.identity_diagnostic.read"],
+    forbidLegacyGuard: true,
+  },
+  {
     file: "controllers/platform-location/index.ts",
     permissions: ["platform.location.manage"],
     forbidLegacyGuard: true,
@@ -210,6 +220,22 @@ describe("platform permission boundaries", () => {
     expect(source).toContain("platform.audit.read");
     expect(source).toContain("platformAuthorizationService.assertPermission");
     expect(source).not.toContain("authContext.isPlatformAdmin");
+  });
+
+  test("platform identity diagnostic services check concrete diagnostic permission", () => {
+    const events = readFileSync(
+      new URL("../services/user-auth-events.ts", import.meta.url),
+      "utf8",
+    );
+    const diagnostics = readFileSync(
+      new URL("../services/identity-diagnostics.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(events).toContain("platform.identity_diagnostic.read");
+    expect(diagnostics).toContain("platform.identity_diagnostic.read");
+    expect(events).not.toContain("assertPlatformAdmin");
+    expect(diagnostics).not.toContain("assertPlatformAdmin");
   });
 
   test("platform location services check concrete location permission", () => {
