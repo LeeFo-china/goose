@@ -7,6 +7,8 @@ import { createSupplierLicenseUploadIntent } from
   "./supplier-license-upload-intent";
 import { createDirectVirtualGoodsUploadIntent } from
   "./virtual-goods-upload-intent";
+import { createDirectPlatformServiceFulfillmentUploadIntent } from
+  "./platform-service-fulfillment-upload-intent";
 
 export function createSceneUploadIntent(
   input: DirectUploadInput,
@@ -20,6 +22,7 @@ export function createSceneUploadIntent(
     isSupplierLicense: boolean;
     isBrandLogo: boolean;
     isVirtualGoodsImage: boolean;
+    isPlatformServiceFulfillmentAttachment: boolean;
   },
 ) {
   const common = {
@@ -53,6 +56,9 @@ export function createSceneUploadIntent(
   }
   if (context.isVirtualGoodsImage) {
     return createDirectVirtualGoodsUploadIntent(input, context);
+  }
+  if (context.isPlatformServiceFulfillmentAttachment) {
+    return createDirectPlatformServiceFulfillmentUploadIntent(input, context);
   }
   return undefined;
 }

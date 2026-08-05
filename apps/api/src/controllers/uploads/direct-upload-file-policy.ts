@@ -7,7 +7,14 @@ import { assertBrandLogoUploadDeclaration } from "@/services/branding-file-polic
 
 const DEFAULT_MAX_UPLOAD_FILE_SIZE = 2 * 1024 * 1024;
 const LARGE_IMAGE_MAX_UPLOAD_FILE_SIZE = 5 * 1024 * 1024;
+const FULFILLMENT_ATTACHMENT_MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024;
 const VIRTUAL_GOODS_IMAGE_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
+const FULFILLMENT_ATTACHMENT_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -44,6 +51,19 @@ export function assertDirectUploadFileDeclaration(input: {
       input.sizeBytes > DEFAULT_MAX_UPLOAD_FILE_SIZE
     ) {
       throw Errors.badRequest("虚拟商品图片大小必须大于 0 且不能超过 2MB");
+    }
+    return;
+  }
+  if (input.scene === "tenant_service_fulfillment_attachment") {
+    if (!FULFILLMENT_ATTACHMENT_MIME_TYPES.has(input.mimetype)) {
+      throw Errors.badRequest("履约附件仅支持 JPG、PNG、WebP 或 PDF");
+    }
+    if (
+      !Number.isSafeInteger(input.sizeBytes) ||
+      input.sizeBytes <= 0 ||
+      input.sizeBytes > FULFILLMENT_ATTACHMENT_MAX_UPLOAD_FILE_SIZE
+    ) {
+      throw Errors.badRequest("履约附件大小必须大于 0 且不能超过 10MB");
     }
     return;
   }

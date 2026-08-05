@@ -156,6 +156,82 @@ describe("COS direct upload proxy", () => {
     expect(JSON.stringify(payload)).not.toContain("private-license");
     expect(JSON.stringify(payload)).not.toContain("certificate");
   });
+
+  test("allows a large platform service PDF attachment within the backend policy", async () => {
+    const proxyObject =
+      "private/tenant-service-fulfillment-attachments/platform-employees/hash/deployment.pdf";
+    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/uploads/cos/direct-init")) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body.scene).toBe("tenant_service_fulfillment_attachment");
+        expect(body.mimetype).toBe("application/pdf");
+        expect(body.size_bytes).toBe(6 * 1024 * 1024);
+        return jsonResponse({
+          success: true,
+          data: {
+            object_key: proxyObject,
+            storage_path: proxyObject,
+            upload_url: "https://cos.example.com/deployment.pdf",
+            method: "PUT",
+            headers: {
+              "content-type": "application/pdf",
+              "content-length": String(6 * 1024 * 1024),
+            },
+            upload_intent: "proxy-private-intent",
+          },
+        });
+      }
+      if (url === "https://cos.example.com/deployment.pdf") {
+        return new Response(null, {
+          status: 200,
+          headers: { etag: '"proxy-etag"' },
+        });
+      }
+      if (url.endsWith("/uploads/cos/direct-complete")) {
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        expect(body.object_key).toBe(proxyObject);
+        expect(body.upload_intent).toBe("proxy-private-intent");
+        return jsonResponse({
+          success: true,
+          data: { file_id: "file-service-pdf", status: "active" },
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch;
+
+    const formData = new FormData();
+    formData.set(
+      "file",
+      new File(
+        [new Uint8Array(6 * 1024 * 1024)],
+        "deployment.pdf",
+        { type: "application/pdf" },
+      ),
+    );
+    formData.set("payload", JSON.stringify({
+      scene: "tenant_service_fulfillment_attachment",
+      filename: "deployment.pdf",
+      mimetype: "application/pdf",
+      size_bytes: 6 * 1024 * 1024,
+    }));
+    const { POST } = await import("./route");
+    const response = await POST(new Request(
+      "https://admin.example.com/api/uploads/cos/direct-proxy",
+      { method: "POST", body: formData },
+    ));
+    const payload = await response.json() as {
+      data: Record<string, unknown>;
+    };
+
+    expect(response.status).toBe(200);
+    expect(payload.data.completed).toMatchObject({
+      file_id: "file-service-pdf",
+      status: "active",
+      object_key: proxyObject,
+      storage_path: proxyObject,
+    });
+  });
 });
 
 function jsonResponse(data: unknown, status = 200) {

@@ -338,6 +338,30 @@ export function allowPlatformVirtualGoodsUpload() {
   }));
 }
 
+export function allowPlatformServiceWorkOrderUpload() {
+  getRequiredAuthContext.mockImplementation(async (): Promise<AuthContext> => ({
+    authUserId: platformAuthUserId,
+    employeeId: platformEmployeeId,
+    tenantId: null,
+    tenantName: null,
+    tenantSlug: null,
+    tenantStatus: null,
+    isPlatformAdmin: true,
+    employeeName: "平台实施管理员",
+    employeeStatus: "active",
+    departmentId: null,
+    tenantDepartmentId: null,
+    departmentCode: "OPS",
+    departmentName: "运营部",
+    postId: null,
+    postName: null,
+    avatar: null,
+    roleCodes: ["platform_admin"],
+    roles: [],
+    permissions: [{ code: "platform.service_work_order.manage", scope: "all" }],
+  }));
+}
+
 export const applymentUploadBody = {
   scene: "wechat_pay_applyment",
   filename: "license.jpg",
