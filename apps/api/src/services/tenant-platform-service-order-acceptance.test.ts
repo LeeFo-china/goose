@@ -3,6 +3,7 @@ import type {
   AcceptancePreparationRecord,
   AtomicActionResult,
   OrderRecord,
+  TenantServiceAcceptanceViewRecord,
   WorkOrderRecord,
 } from "@/repositories/platform-service-order-records";
 import type {
@@ -93,7 +94,7 @@ const acceptancePreparation = {
   updated_at: "2026-08-03T12:40:00.000Z",
 } satisfies AcceptancePreparationRecord;
 
-const acceptanceView = {
+const acceptanceView: TenantServiceAcceptanceViewRecord = {
   ...order,
   work_orders: [workOrder],
   acceptance_preparations: [acceptancePreparation],
@@ -235,6 +236,51 @@ describe("Tenant platform service order acceptance", () => {
     });
     expect(result.available_actions.accept).toMatchObject({ enabled: true });
     expect(result.available_actions.reject).toMatchObject({ enabled: true });
+  });
+
+  test("falls back to file object metadata for stale fulfillment attachment snapshots", async () => {
+    const [baseFulfillmentRecord] = acceptanceView.fulfillment_records ?? [];
+    const [baseAttachment] = baseFulfillmentRecord?.attachments ?? [];
+    if (!baseFulfillmentRecord || !baseAttachment) {
+      throw new Error("test fixture missing fulfillment attachment");
+    }
+    dependencies.repository.findAcceptanceViewByTenantAndOrderId
+      .mockImplementationOnce(async () => ({
+        ...acceptanceView,
+        fulfillment_records: [{
+          ...baseFulfillmentRecord,
+          attachments: [{
+            ...baseAttachment,
+            file_name: null,
+            mime_type: null,
+            size_bytes: null,
+            file: {
+              id: "00000000-0000-4000-8000-000000000901",
+              original_name: "旧附件交付说明.pdf",
+              mime_type: "application/pdf",
+              size_bytes: 4096,
+            },
+          }],
+        }],
+      }));
+    const { getTenantServiceOrderAcceptance } = await import(
+      "./tenant-platform-service-order-acceptance"
+    );
+
+    const result = await getTenantServiceOrderAcceptance(
+      dependencies,
+      tenantAuth,
+      orderId,
+    );
+
+    const [serializedFulfillmentRecord] = result.fulfillment_records;
+    const [serializedAttachment] = serializedFulfillmentRecord?.attachments ?? [];
+    expect(serializedAttachment).toMatchObject({
+      file_id: "00000000-0000-4000-8000-000000000901",
+      file_name: "旧附件交付说明.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 4096,
+    });
   });
 
   test("returns a short TTL preview URL for scoped fulfillment attachments", async () => {

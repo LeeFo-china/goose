@@ -315,6 +315,11 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).toContain(
       "attachments:tenant_service_fulfillment_attachments",
     );
+    expect(selectCall?.[1]).toContain(
+      "file:platform_file_objects!tenant_service_fulfillment_attachments_file_id_fkey",
+    );
+    expect(selectCall?.[1]).toContain("original_name");
+    expect(selectCall?.[1]).toContain("size_bytes");
   });
 
   test("loads tenant fulfillment attachment preview with scoped order and file", async () => {
