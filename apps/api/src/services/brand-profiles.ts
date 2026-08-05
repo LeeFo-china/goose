@@ -221,8 +221,11 @@ export class BrandProfilesService {
   }
 
   private requirePlatformEmployee(authContext: AuthContext): string {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
     if (
-      !authContext.isPlatformAdmin ||
+      !isPlatformIdentity ||
       authContext.tenantId !== null ||
       !authContext.employeeId ||
       !this.accessPolicyService.hasPermission(

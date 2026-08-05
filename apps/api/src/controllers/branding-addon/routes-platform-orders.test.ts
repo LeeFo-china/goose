@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 
 import type { FastifyRequest } from "fastify";
 import type { AuthContext } from "@/services/authorization";
+import { mockPlatformPermission } from "./routes-platform-auth-test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -43,15 +44,18 @@ async function loadHarness() {
   const [
     { default: controller },
     { authorizationService },
+    { platformAuthorizationService },
     { platformBrandingAddonOrdersService },
   ] = await Promise.all([
     import("."),
     import("@/services/authorization"),
+    import("@/services/platform-authorization"),
     import("@/services/platform-branding-addon-orders"),
   ]);
   return {
     controller,
     authorizationService,
+    platformAuthorizationService,
     platformBrandingAddonOrdersService,
   };
 }
@@ -87,6 +91,7 @@ describe("BrandingAddonController platform order routes", () => {
     const {
       authorizationService,
       controller,
+      platformAuthorizationService,
       platformBrandingAddonOrdersService,
     } = await loadHarness();
     const originals = {
@@ -94,6 +99,10 @@ describe("BrandingAddonController platform order routes", () => {
       list: platformBrandingAddonOrdersService.list,
       detail: platformBrandingAddonOrdersService.get,
     };
+    const restorePlatformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const list = mock(async () => ({
       list: [],
       pagination: { page: 2, pageSize: 100, total: 0, totalPages: 0 },
@@ -136,6 +145,7 @@ describe("BrandingAddonController platform order routes", () => {
       } as FastifyRequest, {});
       expect(detail).toHaveBeenCalledWith(platformAuth, ORDER_ID);
     } finally {
+      restorePlatformPermission();
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingAddonOrdersService, "list", originals.list);
       replaceMethod(
@@ -150,10 +160,15 @@ describe("BrandingAddonController platform order routes", () => {
     const {
       authorizationService,
       controller,
+      platformAuthorizationService,
       platformBrandingAddonOrdersService,
     } = await loadHarness();
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalList = platformBrandingAddonOrdersService.list;
+    const restorePlatformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const list = mock(async () => ({ list: [] }));
     authorizationService.getRequiredAuthContext = mock(async () => platformAuth);
     replaceMethod(platformBrandingAddonOrdersService, "list", list);
@@ -170,6 +185,7 @@ describe("BrandingAddonController platform order routes", () => {
       });
       expect(list).not.toHaveBeenCalled();
     } finally {
+      restorePlatformPermission();
       authorizationService.getRequiredAuthContext = originalAuth;
       replaceMethod(platformBrandingAddonOrdersService, "list", originalList);
     }

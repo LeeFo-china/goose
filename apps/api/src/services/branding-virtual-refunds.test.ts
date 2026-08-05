@@ -386,7 +386,7 @@ function platformAdmin(): AuthContext {
     roleCodes: ["platform_admin"],
     roles: [],
     permissions: [{
-      code: "platform.branding_virtual_refund.manage",
+      code: "platform.virtual_refund.manage",
       scope: "all",
     }],
   };

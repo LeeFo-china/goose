@@ -21,7 +21,7 @@ import { wechatMiniSessionCredentialService } from "@/services/wechat-mini-sessi
 import { WechatVirtualPaymentGateway } from "@/services/wechat-virtual-payment-gateway";
 import type { WechatVirtualPaymentGatewayPort } from "@/services/wechat-virtual-payment-gateway-contracts";
 
-const MANAGE_PERMISSION = "platform.branding_virtual_refund.manage";
+const MANAGE_PERMISSION = "platform.virtual_refund.manage";
 
 type RepositoryPort = Pick<
   typeof brandingVirtualRefundRepository,
@@ -217,8 +217,11 @@ export class BrandingVirtualRefundService {
   }
 
   private requireOperator(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
     if (
-      !authContext.isPlatformAdmin || authContext.tenantId !== null ||
+      !isPlatformIdentity || authContext.tenantId !== null ||
       !authContext.employeeId || !authContext.authUserId
     ) throw Errors.forbidden();
     this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);

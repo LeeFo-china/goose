@@ -140,6 +140,21 @@ const controllerBoundaries: ControllerBoundary[] = [
     ],
     forbidLegacyGuard: true,
   },
+  {
+    file: "controllers/branding/index.ts",
+    permissions: ["platform.branding.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/branding-addon/index.ts",
+    permissions: [
+      "platform.branding_product.manage",
+      "platform.payment.config.manage",
+      "platform.branding_order.read",
+      "platform.virtual_refund.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -286,5 +301,53 @@ describe("platform permission boundaries", () => {
     expect(refunds).toContain("platform.billing.recharge_refund.review");
     expect(refunds).not.toContain("if (!authContext.isPlatformAdmin)");
     expect(execution).not.toContain("if (!authContext.isPlatformAdmin)");
+  });
+
+  test("platform branding services check concrete permissions", () => {
+    const profiles = readFileSync(
+      new URL("../services/brand-profiles.ts", import.meta.url),
+      "utf8",
+    );
+    const product = readFileSync(
+      new URL("../services/platform-branding-addon-product.ts", import.meta.url),
+      "utf8",
+    );
+    const orders = readFileSync(
+      new URL("../services/branding-entitlement-order-query.ts", import.meta.url),
+      "utf8",
+    );
+    const refunds = readFileSync(
+      new URL("../services/branding-virtual-refunds.ts", import.meta.url),
+      "utf8",
+    );
+    const channels = readFileSync(
+      new URL("../services/platform-branding-virtual-payment-channels.ts", import.meta.url),
+      "utf8",
+    );
+    const virtualProducts = readFileSync(
+      new URL("../services/branding-virtual-product-management.ts", import.meta.url),
+      "utf8",
+    );
+    const goodsLifecycle = readFileSync(
+      new URL("../services/branding-virtual-product-goods-lifecycle.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(profiles).toContain("platform.branding.manage");
+    expect(product).toContain("platform.branding_product.manage");
+    expect(orders).toContain("platform.branding_order.read");
+    expect(refunds).toContain("platform.virtual_refund.manage");
+    expect(refunds).not.toContain("platform.branding_virtual_refund.manage");
+    for (const source of [
+      profiles,
+      product,
+      orders,
+      refunds,
+      channels,
+      virtualProducts,
+      goodsLifecycle,
+    ]) {
+      expect(source).not.toContain("!authContext.isPlatformAdmin");
+    }
   });
 });

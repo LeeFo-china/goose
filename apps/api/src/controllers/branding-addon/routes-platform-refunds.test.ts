@@ -27,7 +27,7 @@ const AUTH = {
   roleCodes: ["platform_admin"],
   roles: [],
   permissions: [{
-    code: "platform.branding_virtual_refund.manage",
+    code: "platform.virtual_refund.manage",
     scope: "all" as const,
   }],
 } satisfies AuthContext;
@@ -38,10 +38,15 @@ describe("BrandingAddonController platform refund routes", () => {
   test("注册创建、分页列表和详情接口并委托退款服务", async () => {
     const { default: controller } = await import(".");
     const { authorizationService } = await import("@/services/authorization");
+    const { platformAuthorizationService } = await import(
+      "@/services/platform-authorization"
+    );
     const { brandingVirtualRefundService } = await import(
       "@/services/branding-virtual-refunds"
     );
     const originalAuth = authorizationService.getRequiredAuthContext;
+    const originalSession = platformAuthorizationService.assertPlatformSession;
+    const originalPermission = platformAuthorizationService.assertPermission;
     const originals = {
       create: brandingVirtualRefundService.create,
       list: brandingVirtualRefundService.list,
@@ -51,6 +56,16 @@ describe("BrandingAddonController platform refund routes", () => {
     const list = mock(async () => ({ list: [] }));
     const get = mock(async () => ({ id: REFUND_ID }));
     authorizationService.getRequiredAuthContext = mock(async () => AUTH);
+    Reflect.set(
+      platformAuthorizationService,
+      "assertPlatformSession",
+      mock(async () => AUTH),
+    );
+    Reflect.set(
+      platformAuthorizationService,
+      "assertPermission",
+      mock(() => "all"),
+    );
     Reflect.set(brandingVirtualRefundService, "create", create);
     Reflect.set(brandingVirtualRefundService, "list", list);
     Reflect.set(brandingVirtualRefundService, "get", get);
@@ -85,6 +100,16 @@ describe("BrandingAddonController platform refund routes", () => {
       expect(get).toHaveBeenCalledWith(AUTH, REFUND_ID);
     } finally {
       authorizationService.getRequiredAuthContext = originalAuth;
+      Reflect.set(
+        platformAuthorizationService,
+        "assertPlatformSession",
+        originalSession,
+      );
+      Reflect.set(
+        platformAuthorizationService,
+        "assertPermission",
+        originalPermission,
+      );
       for (const [key, value] of Object.entries(originals)) {
         Reflect.set(brandingVirtualRefundService, key, value);
       }

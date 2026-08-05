@@ -57,7 +57,10 @@ class PlatformBrandingController extends PlatformBaseController {
 
   @Get("/platform/branding")
   async getPlatform(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     parse(BrandingEmptyQuerySchema, request.query);
     const result = await brandProfilesService.getPlatform(authContext);
     const effective = await effectiveBrandingService.resolvePlatform();
@@ -66,7 +69,10 @@ class PlatformBrandingController extends PlatformBaseController {
 
   @Patch("/platform/branding")
   async savePlatformDraft(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(BrandingDraftSchema, request.body);
     const result = await brandProfilesService.savePlatformDraft(
@@ -79,7 +85,10 @@ class PlatformBrandingController extends PlatformBaseController {
 
   @Post("/platform/branding/publish")
   async publishPlatform(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(BrandingPublishSchema, request.body);
     const result = await brandProfilesService.publishPlatform(
@@ -92,7 +101,10 @@ class PlatformBrandingController extends PlatformBaseController {
 
   @Get("/platform/tenants/:id/entitlements")
   async listEntitlements(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     const { id } = parse(BrandingTenantParamsSchema, request.params);
     const query = parse(
       BrandingEntitlementListQuerySchema,
@@ -107,7 +119,10 @@ class PlatformBrandingController extends PlatformBaseController {
     "/platform/tenants/:id/entitlements/custom_support_branding/grant",
   )
   async grantEntitlement(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     const { id } = parse(BrandingTenantParamsSchema, request.params);
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(EntitlementGrantSchema, request.body);
@@ -120,7 +135,10 @@ class PlatformBrandingController extends PlatformBaseController {
     "/platform/tenants/:id/entitlements/custom_support_branding/suspend",
   )
   async suspendEntitlement(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     const { id } = parse(BrandingTenantParamsSchema, request.params);
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(EntitlementSuspendSchema, request.body);
@@ -133,7 +151,10 @@ class PlatformBrandingController extends PlatformBaseController {
     "/platform/tenants/:id/entitlements/custom_support_branding/resume",
   )
   async resumeEntitlement(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     const { id } = parse(BrandingTenantParamsSchema, request.params);
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(EntitlementResumeSchema, request.body);
@@ -146,7 +167,10 @@ class PlatformBrandingController extends PlatformBaseController {
     "/platform/tenants/:id/entitlements/custom_support_branding/revoke",
   )
   async revokeEntitlement(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.branding.manage",
+    );
     const { id } = parse(BrandingTenantParamsSchema, request.params);
     parse(BrandingEmptyQuerySchema, request.query);
     const input = parse(EntitlementRevokeSchema, request.body);
