@@ -287,6 +287,10 @@ describe("platform permission boundaries", () => {
       new URL("../services/platform-branding-virtual-payment-secrets.ts", import.meta.url),
       "utf8",
     );
+    const virtualGoodsUpload = readFileSync(
+      new URL("../controllers/uploads/virtual-goods-upload-access.ts", import.meta.url),
+      "utf8",
+    );
     const applyments = readFileSync(
       new URL("../services/wechat-pay-applyments-platform.ts", import.meta.url),
       "utf8",
@@ -299,6 +303,8 @@ describe("platform permission boundaries", () => {
     expect(virtualChannels).toContain("platform.virtual_product.publish");
     expect(virtualSettings).not.toContain("!authContext.isPlatformAdmin");
     expect(virtualSecrets).not.toContain("!authContext.isPlatformAdmin");
+    expect(virtualGoodsUpload).toContain("platform.payment.config.manage");
+    expect(virtualGoodsUpload).not.toContain("!authContext.isPlatformAdmin");
     expect(applyments).toContain("PLATFORM_SUBMIT_PERMISSION");
     expect(applyments).not.toContain("!authContext.isPlatformAdmin");
   });
@@ -308,6 +314,10 @@ describe("platform permission boundaries", () => {
     const site = readFileSync(new URL("../services/site-content.ts", import.meta.url), "utf8");
     const douyin = readFileSync(
       new URL("../services/platform-douyin-miniapps.ts", import.meta.url),
+      "utf8",
+    );
+    const fulfillmentUpload = readFileSync(
+      new URL("../controllers/uploads/platform-service-fulfillment-upload-access.ts", import.meta.url),
       "utf8",
     );
     const revenue = readFileSync(
@@ -322,6 +332,8 @@ describe("platform permission boundaries", () => {
     expect(site).toContain("platform.site_content.publish");
     expect(douyin).toContain("platform.douyin_miniapp.manage");
     expect(douyin).not.toContain("!authContext.isPlatformAdmin");
+    expect(fulfillmentUpload).toContain("platform.service_work_order.manage");
+    expect(fulfillmentUpload).not.toContain("!authContext.isPlatformAdmin");
     expect(revenue).toContain("platform.partner.revenue.read");
     expect(revenue).toContain("platform.partner.revenue.manage");
     expect(revenue).toContain("platform.partner.commission.read");

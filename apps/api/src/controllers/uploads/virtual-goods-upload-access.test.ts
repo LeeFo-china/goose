@@ -84,6 +84,31 @@ describe("assertVirtualGoodsUploadSceneAccess", () => {
     );
   });
 
+  test("allows a platform operator without super admin flag", async () => {
+    const operatorContext = {
+      ...platformContext,
+      isPlatformAdmin: false,
+      isPlatformStaff: true,
+    };
+    const deps = dependencies(operatorContext);
+
+    expect(await assertVirtualGoodsUploadSceneAccess(
+      { sub: "auth-platform" },
+      "branding_virtual_goods",
+      deps.value,
+    )).toEqual({
+      tenantId: null,
+      employeeId: "employee-platform",
+      customerId: null,
+      visitorId: null,
+      isPlatformAdmin: false,
+    });
+    expect(deps.assertPermission).toHaveBeenCalledWith(
+      operatorContext,
+      "platform.payment.config.manage",
+    );
+  });
+
   test.each([
     ["tenant context", { tenantId: "tenant-1" }],
     ["non-platform context", { isPlatformAdmin: false }],

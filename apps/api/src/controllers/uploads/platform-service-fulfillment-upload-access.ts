@@ -27,8 +27,11 @@ export async function assertPlatformServiceFulfillmentUploadSceneAccess(
 
   const authContext = await dependencies.authorizationService
     .getRequiredAuthContext(user.sub);
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true ||
+    authContext.isPlatformAdmin === true;
   if (
-    !authContext.isPlatformAdmin ||
+    !isPlatformIdentity ||
     authContext.tenantId ||
     !authContext.employeeId
   ) {
@@ -43,6 +46,6 @@ export async function assertPlatformServiceFulfillmentUploadSceneAccess(
     employeeId: authContext.employeeId,
     customerId: null,
     visitorId: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: authContext.isPlatformAdmin,
   };
 }
