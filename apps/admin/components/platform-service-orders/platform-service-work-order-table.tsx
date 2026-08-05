@@ -87,13 +87,12 @@ export function PlatformServiceWorkOrderTable({
         if (!acceptance) {
           return <span className="text-muted-foreground">未提交</span>;
         }
+        const meta = getAcceptancePreparationStatusMeta(acceptance);
         return (
           <div className="space-y-1">
-            <Badge variant={acceptance.acceptance_overdue ? "danger" : "warning"}>
-              {acceptance.acceptance_overdue ? "已逾期" : "确认中"}
-            </Badge>
+            <Badge variant={meta.variant}>{meta.label}</Badge>
             <div className="text-xs text-muted-foreground">
-              截止 {formatDateTime(acceptance.acceptance_due_at)}
+              {meta.timePrefix} {formatDateTime(acceptance.acceptance_due_at)}
             </div>
           </div>
         );
@@ -136,4 +135,51 @@ export function PlatformServiceWorkOrderTable({
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
+}
+
+function getAcceptancePreparationStatusMeta(
+  acceptance: NonNullable<PlatformServiceWorkOrderListItem["acceptance_preparation"]>,
+): {
+  label: string;
+  variant: "secondary" | "success" | "warning" | "danger";
+  timePrefix: string;
+} {
+  switch (acceptance.status) {
+    case "accepted":
+      return {
+        label: "已验收",
+        variant: "success",
+        timePrefix: "截止",
+      };
+    case "rejected":
+      return {
+        label: "已退回整改",
+        variant: "danger",
+        timePrefix: "截止",
+      };
+    case "cancelled":
+      return {
+        label: "已取消",
+        variant: "secondary",
+        timePrefix: "截止",
+      };
+    case "submitted":
+      return acceptance.acceptance_overdue
+        ? {
+          label: "已逾期",
+          variant: "danger",
+          timePrefix: "截止",
+        }
+        : {
+          label: "确认中",
+          variant: "warning",
+          timePrefix: "截止",
+        };
+    default:
+      return {
+        label: "草稿",
+        variant: "secondary",
+        timePrefix: "截止",
+      };
+  }
 }

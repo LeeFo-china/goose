@@ -110,6 +110,18 @@ describe("平台技术服务履约页", () => {
     expect(rules).toContain("transition.from === status");
   });
 
+  test("客户验收列优先按验收状态展示，已验收不能显示确认中", () => {
+    const table = readSource("./platform-service-work-order-table.tsx");
+
+    expect(table).toContain("getAcceptancePreparationStatusMeta");
+    expect(table).toContain('case "accepted"');
+    expect(table).toContain('label: "已验收"');
+    expect(table).toContain('case "rejected"');
+    expect(table).toContain('label: "已退回整改"');
+    expect(table).toContain('acceptance.status');
+    expect(table).toContain("acceptance.acceptance_overdue");
+  });
+
   test("当前数量按真实列表长度展示，避免空页误报 pageSize", () => {
     const rules = readSource("./platform-service-order-rules.ts");
 
