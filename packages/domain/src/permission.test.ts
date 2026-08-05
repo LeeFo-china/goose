@@ -25,6 +25,7 @@ describe("domain permissions", () => {
       "platform.marketing_page.publish": "发布平台 H5 活动",
       "platform.usage.read": "查看平台用量",
       "platform.billing.read": "查看平台计费",
+      "platform.billing.manage": "管理平台计费",
       "platform.ai_config.read": "查看平台 AI 路由",
       "platform.ai_config.manage": "管理平台 AI 路由",
       "platform.identity_diagnostic.read": "查看平台身份诊断",

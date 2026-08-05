@@ -3,6 +3,7 @@ import {
   ErrorCodes,
   billingRepository,
   accessPolicyService,
+  assertPlatformBillingPermission,
   platformAuditLogService,
   LOW_BALANCE_THRESHOLD,
   BILLING_EVENT_SOURCE,
@@ -38,6 +39,9 @@ import {
   type ShadowBillingContext,
 } from './shared';
 import { billingSubscriptionService } from '@/services/billing-subscriptions';
+
+const PLATFORM_BILLING_READ_PERMISSION = 'platform.billing.read';
+const PLATFORM_BILLING_MANAGE_PERMISSION = 'platform.billing.manage';
 
 export async function getTenantAccount(this: any, authContext: AuthContext) {
     const tenantId = accessPolicyService.assertTenantContext(authContext);
@@ -164,7 +168,7 @@ export async function getTenantSubscriptionInvoice(
   }
 
 export async function getPlatformSummary(this: any, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const [tenantCount, accounts] = await Promise.all([
       billingRepository.countTenants(),
       billingRepository.listAllAccounts(),
@@ -188,7 +192,7 @@ export async function getPlatformSummary(this: any, authContext: AuthContext) {
   }
 
 export async function listPlatformTenants(this: any, query: BillingTenantListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const tenants = await billingRepository.listTenantCandidates(query);
     const accounts = await billingRepository.listAccountsByTenantIds(
       tenants.list.map((tenant) => tenant.id),
@@ -224,7 +228,7 @@ export async function manualRecharge(this: any,
     input: BillingManualRechargeInput,
     authContext: AuthContext,
   ) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_MANAGE_PERMISSION);
     const result = await billingRepository.manualRecharge(
       tenantId,
       input,
@@ -252,7 +256,7 @@ export async function manualRecharge(this: any,
   }
 
 export async function listPlatformLedger(this: any, query: BillingLedgerQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const filterTenantIds = query.tenant_keyword
       ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
       : undefined;
@@ -270,7 +274,7 @@ export async function listPlatformLedger(this: any, query: BillingLedgerQuery, a
   }
 
 export async function listPlatformBillingEvents(this: any, query: BillingEventQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const filterTenantIds = query.tenant_keyword
       ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
       : undefined;

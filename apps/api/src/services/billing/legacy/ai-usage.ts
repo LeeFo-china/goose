@@ -3,6 +3,7 @@ import {
   ErrorCodes,
   billingRepository,
   accessPolicyService,
+  assertPlatformBillingPermission,
   platformAuditLogService,
   LOW_BALANCE_THRESHOLD,
   BILLING_EVENT_SOURCE,
@@ -37,8 +38,10 @@ import {
   type ShadowBillingContext,
 } from './shared';
 
+const PLATFORM_BILLING_READ_PERMISSION = 'platform.billing.read';
+
 export async function getPlatformAiUsageStats(this: any, query: BillingAiUsageStatsQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const filterTenantIds = query.tenant_keyword
       ? await billingRepository.listTenantIdsByKeyword(query.tenant_keyword)
       : undefined;
@@ -167,7 +170,7 @@ export async function getPlatformAiUsageStats(this: any, query: BillingAiUsageSt
   }
 
 export async function getPlatformAiUsageFilterOptions(this: any, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     const [rows, routes] = await Promise.all([
       billingRepository.listAiUsageFilterOptionRows({ limit: 10000 }),
       billingRepository.listAiRoutingFilterOptionRows(),

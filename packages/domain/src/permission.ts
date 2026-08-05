@@ -112,6 +112,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.marketing_page.publish',
   'platform.usage.read',
   'platform.billing.read',
+  'platform.billing.manage',
   'platform.ai_config.read',
   'platform.ai_config.manage',
   'platform.identity_diagnostic.read',
@@ -561,6 +562,12 @@ export const PermissionCodeConfig: Record<
     module: 'platform_billing',
     resource: 'billing',
     action: 'read',
+  },
+  'platform.billing.manage': {
+    label: '管理平台计费',
+    module: 'platform_billing',
+    resource: 'billing',
+    action: 'manage',
   },
   'platform.ai_config.read': {
     label: '查看平台 AI 路由',

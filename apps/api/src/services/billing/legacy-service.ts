@@ -52,7 +52,6 @@ import {
   updatePricingRule,
   assertPricingRuleTenant,
   recordPricingAudit,
-  assertPlatformAdmin,
 } from './legacy/pricing';
 
 class BillingService {
@@ -99,7 +98,6 @@ class BillingService {
   updatePricingRule = updatePricingRule;
   private assertPricingRuleTenant = assertPricingRuleTenant;
   private recordPricingAudit = recordPricingAudit;
-  private assertPlatformAdmin = assertPlatformAdmin;
 }
 
 export const billingService = new BillingService();

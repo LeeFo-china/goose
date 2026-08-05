@@ -3,6 +3,7 @@ import {
   ErrorCodes,
   billingRepository,
   accessPolicyService,
+  assertPlatformBillingPermission,
   platformAuditLogService,
   LOW_BALANCE_THRESHOLD,
   BILLING_EVENT_SOURCE,
@@ -37,6 +38,8 @@ import {
   type ShadowBillingContext,
 } from './shared';
 
+const PLATFORM_BILLING_MANAGE_PERMISSION = 'platform.billing.manage';
+
 export function emptyShadowSourceResult(this: any) {
     return {
       scanned: 0,
@@ -48,7 +51,7 @@ export function emptyShadowSourceResult(this: any) {
   }
 
 export async function runShadowBilling(this: any, input: BillingShadowRunInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_MANAGE_PERMISSION);
     const enabledSources = new Set(input.sources?.length ? input.sources : ["ai", "sms", "social_video"]);
     const rules = await billingRepository.listPricingRules({
       page: 1,
