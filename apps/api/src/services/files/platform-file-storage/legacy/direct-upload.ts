@@ -15,6 +15,10 @@ import {
   getWechatPayApplymentUploadPolicy,
 } from "./direct-upload-scene-policy";
 import {
+  getPrivateHeadPolicy,
+  type PrivateHeadPolicy,
+} from "./direct-upload-private-head-policy";
+import {
   assertPrivateSupplierLicenseIntent,
   assertSupplierLicenseUploadDeclaration,
 } from "./supplier-license-upload-guard";
@@ -31,18 +35,16 @@ import {
   assertValidVirtualGoodsUploadIntent,
 } from "./virtual-goods-upload-intent";
 import { createSceneUploadIntent } from "./direct-upload-intent-factory";
+import {
+  assertPlatformServiceFulfillmentAttachmentCompletion,
+  assertPlatformServiceFulfillmentAttachmentDirectUpload,
+  getPlatformServiceFulfillmentAttachmentPrivatePolicy,
+  isPrivatePlatformServiceFulfillmentAttachmentUpload,
+} from "./platform-service-fulfillment-upload-guard";
 
 const PRIVATE_LICENSE_SCENE = "tenant_onboarding_license";
 const PRIVATE_APPLYMENT_SCENE = "wechat_pay_applyment";
 const PRIVATE_SUPPLIER_LICENSE_SCENE = "supplier_business_license";
-
-type PrivateHeadPolicy = {
-  maxSizeBytes: number;
-  mimeTypes: ReadonlySet<string>;
-  sizeError: string;
-  typeError: string;
-  checksumError: string;
-};
 
 export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const provider = await this.getStorageProvider();
@@ -71,8 +73,12 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   const supplierLicensePolicy = input.visibility === "private"
     ? getSupplierBusinessLicenseUploadPolicy(input.scene)
     : null;
+  const platformServiceFulfillmentAttachmentPolicy =
+    getPlatformServiceFulfillmentAttachmentPrivatePolicy(input);
   const isBrandLogo = validateBrandLogoDirectUpload(input);
   const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
+  const isPrivatePlatformServiceFulfillmentAttachment =
+    isPrivatePlatformServiceFulfillmentAttachmentUpload(input);
   if (input.scene === PRIVATE_LICENSE_SCENE && (!isPrivateLicense || !visitorId)) {
     throw Errors.forbidden();
   }
@@ -84,11 +90,12 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
   if (supplierLicensePolicy) {
     assertSupplierLicenseUploadDeclaration(input, supplierLicensePolicy);
   }
+  assertPlatformServiceFulfillmentAttachmentDirectUpload(input);
   const expiresAtSeconds = Math.floor(Date.now() / 1000) + config.signedUrlTtl;
   // COS only enforces this overwrite guard when bucket versioning is disabled.
   // Task 13 must verify the target bucket setting before release.
   const signedHeaders = applymentPolicy || supplierLicensePolicy ||
-      isBrandLogo || isVirtualGoodsImage
+      platformServiceFulfillmentAttachmentPolicy || isBrandLogo || isVirtualGoodsImage
     ? {
       "Content-Length": input.sizeBytes,
       "Content-Type": input.mimetype,
@@ -123,6 +130,8 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     isSupplierLicense: Boolean(supplierLicensePolicy),
     isBrandLogo,
     isVirtualGoodsImage,
+    isPlatformServiceFulfillmentAttachment:
+      Boolean(platformServiceFulfillmentAttachmentPolicy),
   });
 
   return {
@@ -136,7 +145,7 @@ export async function createDirectUpload(this: any, input: DirectUploadInput) {
     headers: {
       "content-type": input.mimetype,
       ...(isPrivateLicense || applymentPolicy || supplierLicensePolicy ||
-          isBrandLogo || isVirtualGoodsImage
+          platformServiceFulfillmentAttachmentPolicy || isBrandLogo || isVirtualGoodsImage
         ? {
           "content-length": String(input.sizeBytes),
           ...(isVirtualGoodsImage ? { "x-cos-acl": "public-read" } : {}),
@@ -177,6 +186,8 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
     && isPrivateObject;
   const isPrivateSupplierLicense =
     input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE && isPrivateObject;
+  const isPrivatePlatformServiceFulfillmentAttachment =
+    isPrivatePlatformServiceFulfillmentAttachmentUpload(input);
   const isBrandLogo = validateBrandLogoDirectUpload(input);
   const isVirtualGoodsImage = validateVirtualGoodsDirectUpload(input);
   const privateHeadPolicy = getPrivateHeadPolicy(input);
@@ -202,6 +213,7 @@ export async function registerExistingCosObject(this: any, input: RegisterExisti
       secretKey: config.secretKey,
     });
   }
+  assertPlatformServiceFulfillmentAttachmentCompletion(input, config.secretKey);
   if (isBrandLogo) assertValidBrandLogoUploadIntent(input, config.secretKey);
   if (isVirtualGoodsImage) {
     assertValidVirtualGoodsUploadIntent(input, config.secretKey);
@@ -354,42 +366,6 @@ function assertPrivateLicenseIntent(input: {
     nowSeconds: Math.floor(Date.now() / 1000),
   });
   if (!verified) throw privateUploadError("私有上传凭证无效或已过期");
-}
-
-function getPrivateHeadPolicy(
-  input: RegisterExistingCosObjectInput,
-): PrivateHeadPolicy | null {
-  if (input.visibility !== "private") return null;
-  if (input.scene === PRIVATE_LICENSE_SCENE) {
-    return {
-      maxSizeBytes: TENANT_ONBOARDING_LICENSE_MAX_SIZE_BYTES,
-      mimeTypes: TENANT_ONBOARDING_LICENSE_MIME_TYPES,
-      sizeError: "营业执照文件大小校验失败",
-      typeError: "营业执照文件类型校验失败",
-      checksumError: "营业执照文件校验值不一致",
-    };
-  }
-  if (input.scene === PRIVATE_APPLYMENT_SCENE) {
-    const policy = getWechatPayApplymentUploadPolicy(input.scene)!;
-    return {
-      maxSizeBytes: policy.maxSizeBytes,
-      mimeTypes: policy.mimeTypes,
-      sizeError: policy.sizeError,
-      typeError: policy.typeError,
-      checksumError: policy.checksumError,
-    };
-  }
-  if (input.scene === PRIVATE_SUPPLIER_LICENSE_SCENE) {
-    const policy = getSupplierBusinessLicenseUploadPolicy(input.scene)!;
-    return {
-      maxSizeBytes: policy.maxSizeBytes,
-      mimeTypes: policy.mimeTypes,
-      sizeError: policy.sizeError,
-      typeError: policy.typeError,
-      checksumError: policy.checksumError,
-    };
-  }
-  return null;
 }
 
 function assertApplymentUploadDeclaration(

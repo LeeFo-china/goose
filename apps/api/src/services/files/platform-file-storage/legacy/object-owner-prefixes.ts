@@ -15,6 +15,19 @@ export function buildSupplierBusinessLicenseEmployeePrefix(
   return `private/supplier-business-license/employees/${employeeHash}/`;
 }
 
+export function buildPlatformServiceFulfillmentAttachmentEmployeePrefix(
+  employeeId: string | null | undefined,
+): string {
+  const normalizedEmployeeId = employeeId?.trim();
+  if (!normalizedEmployeeId) {
+    throw Errors.forbidden();
+  }
+  const employeeHash = createHash("sha256")
+    .update(normalizedEmployeeId)
+    .digest("hex");
+  return `private/tenant-service-fulfillment-attachments/platform-employees/${employeeHash}/`;
+}
+
 export function buildTenantOnboardingLicenseVisitorPrefix(
   visitorId: string | null | undefined,
 ): string {

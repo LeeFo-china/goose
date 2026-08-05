@@ -25,54 +25,24 @@ import { assertSupplierLicenseUploadSceneAccess } from "./supplier-license-uploa
 import { assertBrandLogoUploadSceneAccess } from "./brand-logo-upload-access";
 import { assertVirtualGoodsUploadSceneAccess } from
   "./virtual-goods-upload-access";
+import { assertPlatformServiceFulfillmentUploadSceneAccess } from
+  "./platform-service-fulfillment-upload-access";
 import {
   assertDirectObjectKeyBelongsToActor,
   isProjectRequiredUploadScene,
   type DirectUploadActorContext,
 } from "./direct-object-key-access";
+import {
+  DIRECT_UPLOAD_MIME_TYPES,
+  DIRECT_UPLOAD_SCENES,
+  PRIVATE_DIRECT_UPLOAD_SCENES,
+  PUBLIC_DIRECT_UPLOAD_SCENES,
+  SENSITIVE_DIRECT_UPLOAD_LOG_SCENES,
+  type UploadScene,
+} from "./direct-upload-scenes";
 
-const IMAGE_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/heic",
-  "image/heif",
-] as const;
-const DIRECT_UPLOAD_SCENES = [
-  "project_log",
-  "project_log_comment",
-  "customer_follow_up_comment",
-  "customer_service",
-  "expense_request",
-  "referral_payment",
-  "employee_avatar",
-  "customer_avatar",
-  "customer_douyin_screenshot",
-  "h5_marketing_page",
-  "project_acceptance",
-  "project_payment",
-  "wechat_pay_applyment",
-  "picture_library",
-  "picture_comment",
-  "tenant_onboarding_license",
-  "supplier_business_license",
-  "brand_logo",
-  "branding_virtual_goods",
-] as const;
 const FINANCE_PAYMENT_CONFIRM_PERMISSION = "finance.payment.confirm";
 const UPLOAD_IMAGES_TIMING_PREFIX = "[UPLOAD_IMAGES_TIMING]";
-const PUBLIC_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
-  "h5_marketing_page",
-  "picture_library",
-  "picture_comment",
-  "brand_logo",
-  "branding_virtual_goods",
-]);
-const PRIVATE_DIRECT_UPLOAD_SCENES = new Set<UploadScene>([
-  "tenant_onboarding_license",
-  "wechat_pay_applyment",
-  "supplier_business_license",
-]);
 
 const DirectUploadInitSchema = z.object({
   scene: z.enum(DIRECT_UPLOAD_SCENES, {
@@ -80,8 +50,8 @@ const DirectUploadInitSchema = z.object({
   }),
   project_id: z.string().uuid("无效的项目ID").optional(),
   filename: z.string().trim().max(200, "文件名过长").optional(),
-  mimetype: z.enum(IMAGE_MIME_TYPES, {
-    message: "仅支持 jpg、png、webp、heic、heif 图片",
+  mimetype: z.enum(DIRECT_UPLOAD_MIME_TYPES, {
+    message: "仅支持 jpg、png、webp、heic、heif 图片或 PDF",
   }),
   size_bytes: z.number().int().positive("图片大小无效"),
 });
@@ -102,7 +72,8 @@ const DirectUploadCompleteSchema = DirectUploadInitSchema.extend({
       value.scene === "wechat_pay_applyment" ||
       value.scene === "supplier_business_license" ||
       value.scene === "brand_logo" ||
-      value.scene === "branding_virtual_goods"
+      value.scene === "branding_virtual_goods" ||
+      value.scene === "tenant_service_fulfillment_attachment"
     ) &&
     !value.upload_intent
   ) {
@@ -127,7 +98,6 @@ const UploadPublicUrlQuerySchema = z.object({
     .refine((value) => !value.startsWith("/"), "图片路径不合法")
     .refine((value) => !value.includes("\\"), "图片路径不合法"),
 });
-type UploadScene = (typeof DIRECT_UPLOAD_SCENES)[number];
 type UploadActorContext = DirectUploadActorContext;
 
 function logUploadImagesTiming(
@@ -189,6 +159,7 @@ class UploadController extends BaseController {
     });
     const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
       ?? await assertBrandLogoUploadSceneAccess(user, scene)
+      ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
@@ -216,8 +187,7 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      ...(scene === "wechat_pay_applyment" ||
-        scene === "supplier_business_license"
+      ...(SENSITIVE_DIRECT_UPLOAD_LOG_SCENES.has(scene)
         ? {}
         : { object_key: directUpload.object_key }),
     });
@@ -246,6 +216,7 @@ class UploadController extends BaseController {
     });
     const actorContext = await assertVirtualGoodsUploadSceneAccess(user, scene)
       ?? await assertBrandLogoUploadSceneAccess(user, scene)
+      ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
       ?? await this.resolveUploadActorContext(user);
@@ -284,8 +255,7 @@ class UploadController extends BaseController {
       scene,
       tenant_id: actorContext.tenantId,
       size_bytes: result.data.size_bytes,
-      ...(scene === "wechat_pay_applyment" ||
-        scene === "supplier_business_license"
+      ...(SENSITIVE_DIRECT_UPLOAD_LOG_SCENES.has(scene)
         ? {}
         : { object_key: result.data.object_key }),
       provider: "provider" in uploaded ? uploaded.provider : undefined,
@@ -305,6 +275,12 @@ class UploadController extends BaseController {
       throw Errors.forbidden();
     }
     if (scene === "supplier_business_license" && actorContext.isPlatformAdmin) {
+      return;
+    }
+    if (
+      scene === "tenant_service_fulfillment_attachment" &&
+      actorContext.isPlatformAdmin
+    ) {
       return;
     }
 

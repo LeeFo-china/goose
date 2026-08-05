@@ -104,4 +104,17 @@ describe("平台技术服务履约页", () => {
     expect(rules).toContain("return input.list.length;");
     expect(rules).not.toContain("input.list.length || input.pageSize");
   });
+
+  test("记录履约附件使用直传上传而不是手工粘贴 file_id", () => {
+    const source = [
+      readSource("./platform-service-work-order-actions.tsx"),
+      readSource("./platform-service-fulfillment-attachment-upload-field.tsx"),
+    ].join("\n");
+
+    expect(source).toContain("tenant_service_fulfillment_attachment");
+    expect(source).toContain("uploadDirectToCos");
+    expect(source).toContain("履约附件");
+    expect(source).not.toContain("附件 file_id");
+    expect(source).not.toContain('name="file_ids"');
+  });
 });

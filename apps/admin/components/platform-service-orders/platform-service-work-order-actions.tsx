@@ -33,6 +33,10 @@ import {
   getWorkOrderNextStatusOptions,
   getServiceStatusMeta,
 } from "./platform-service-order-rules";
+import {
+  PlatformServiceFulfillmentAttachmentUploadField,
+  type UploadedFulfillmentAttachment,
+} from "./platform-service-fulfillment-attachment-upload-field";
 import type { PlatformServiceWorkOrderListItem } from "./platform-service-order-types";
 
 export function PlatformServiceWorkOrderActions({
@@ -270,7 +274,22 @@ function RecordFulfillmentButton({
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [recordType, setRecordType] = useState("environment_setup");
+  const [uploading, setUploading] = useState(false);
+  const [uploadedAttachments, setUploadedAttachments] = useState<
+    UploadedFulfillmentAttachment[]
+  >([]);
   const [error, setError] = useState("");
+
+  function resetRecordFormState() {
+    setError("");
+    setUploadedAttachments([]);
+  }
+
+  function handleDialogOpenChange(nextOpen: boolean) {
+    if (!nextOpen && (pending || uploading)) return;
+    setOpen(nextOpen);
+    if (!nextOpen) resetRecordFormState();
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -278,10 +297,7 @@ function RecordFulfillmentButton({
     const formData = new FormData(event.currentTarget);
     const title = String(formData.get("title") || "").trim();
     const content = String(formData.get("content") || "").trim();
-    const fileIds = String(formData.get("file_ids") || "")
-      .split(/[\n,，\s]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    const fileIds = uploadedAttachments.map((attachment) => attachment.fileId);
 
     startTransition(async () => {
       try {
@@ -300,6 +316,7 @@ function RecordFulfillmentButton({
           },
         );
         setOpen(false);
+        setUploadedAttachments([]);
         refreshAfterDialogClose(router);
       } catch (submitError) {
         setError(submitError instanceof Error ? submitError.message : "记录履约失败");
@@ -308,7 +325,7 @@ function RecordFulfillmentButton({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" size="sm" variant="outline">
           <ClipboardCheck data-icon="inline-start" />
@@ -353,21 +370,25 @@ function RecordFulfillmentButton({
                 placeholder="例如：客户专属系统环境已部署，服务器配置及首次操作培训已完成。"
               />
             </Field>
-            <Field>
-              <FieldLabel htmlFor={`record-files-${workOrder.id}`}>附件 file_id</FieldLabel>
-              <Textarea
-                id={`record-files-${workOrder.id}`}
-                name="file_ids"
-                placeholder="可粘贴多个 file_id，用逗号或换行分隔"
-              />
-            </Field>
+            <PlatformServiceFulfillmentAttachmentUploadField
+              inputId={`record-files-${workOrder.id}`}
+              disabled={pending}
+              attachments={uploadedAttachments}
+              onAttachmentsChange={setUploadedAttachments}
+              onUploadingChange={setUploading}
+            />
           </FieldGroup>
           <FieldError>{error}</FieldError>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleDialogOpenChange(false)}
+              disabled={pending || uploading}
+            >
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button type="submit" disabled={pending || uploading}>
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               保存记录
             </Button>

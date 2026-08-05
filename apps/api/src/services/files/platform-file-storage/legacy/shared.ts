@@ -41,7 +41,8 @@ export type PlatformUploadScene =
   | "tenant_onboarding_license"
   | "supplier_business_license"
   | "brand_logo"
-  | "branding_virtual_goods";
+  | "branding_virtual_goods"
+  | "tenant_service_fulfillment_attachment";
 
 export type UploadImageInput = {
   buffer: Buffer;
@@ -161,6 +162,7 @@ export function getFileExtension(input: Pick<UploadImageInput, "filename" | "mim
     "image/webp": ".webp",
     "image/heic": ".heic",
     "image/heif": ".heif",
+    "application/pdf": ".pdf",
   };
 
   return mimeToExtension[input.mimetype] || ".jpg";

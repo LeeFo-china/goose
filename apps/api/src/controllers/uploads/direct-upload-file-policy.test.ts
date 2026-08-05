@@ -74,3 +74,40 @@ describe("branding_virtual_goods direct upload declaration", () => {
     }));
   });
 });
+
+describe("tenant_service_fulfillment_attachment direct upload declaration", () => {
+  test.each(["image/jpeg", "image/png", "image/webp", "application/pdf"])(
+    "accepts canonical %s up to 10 MiB",
+    (mimetype) => {
+      expect(() => assertDirectUploadFileDeclaration({
+        scene: "tenant_service_fulfillment_attachment",
+        mimetype,
+        sizeBytes: 10 * 1024 * 1024,
+      })).not.toThrow();
+    },
+  );
+
+  test.each([
+    ["HEIC", "image/heic", 100],
+    ["plain text", "text/plain", 100],
+    ["uppercase", "APPLICATION/PDF", 100],
+    ["MIME parameters", "application/pdf; charset=binary", 100],
+    ["zero size", "application/pdf", 0],
+    ["negative size", "application/pdf", -1],
+    ["fractional size", "application/pdf", 1.5],
+    ["oversize", "application/pdf", 10 * 1024 * 1024 + 1],
+  ])("rejects invalid %s as a bad request", (
+    _name,
+    mimetype,
+    sizeBytes,
+  ) => {
+    expect(() => assertDirectUploadFileDeclaration({
+      scene: "tenant_service_fulfillment_attachment",
+      mimetype,
+      sizeBytes,
+    })).toThrow(expect.objectContaining({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+    }));
+  });
+});

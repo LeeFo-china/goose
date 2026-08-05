@@ -1,6 +1,7 @@
 import { ErrorCodes } from "@/errors/error-codes";
 import { Errors } from "@/errors/error-factory";
 import {
+  buildPlatformServiceFulfillmentAttachmentEmployeePrefix,
   buildSupplierBusinessLicenseEmployeePrefix,
   buildTenantOnboardingLicenseVisitorPrefix,
 } from "@/services/files/platform-file-storage/legacy/object-owner-prefixes";
@@ -94,6 +95,11 @@ function buildExpectedPrefix(
   }
   if (scene === "supplier_business_license") {
     return buildSupplierBusinessLicenseEmployeePrefix(actorContext.employeeId);
+  }
+  if (scene === "tenant_service_fulfillment_attachment") {
+    return buildPlatformServiceFulfillmentAttachmentEmployeePrefix(
+      actorContext.employeeId,
+    );
   }
   const actorPrefix = actorContext.tenantId
     ? `tenants/${actorContext.tenantId}`

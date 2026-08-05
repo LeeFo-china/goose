@@ -102,3 +102,48 @@ describe("virtual goods image object paths", () => {
     expect(objectKey).not.toContain(".exe");
   });
 });
+
+describe("platform service fulfillment attachment object paths", () => {
+  test.each([
+    ["deployment.pdf", "application/pdf", ".pdf"],
+    ["delivery.jpg", "image/jpeg", ".jpg"],
+    ["training.png", "image/png", ".png"],
+    ["snapshot.webp", "image/webp", ".webp"],
+  ])("uses the dedicated private employee prefix for %s", async (
+    filename,
+    mimetype,
+    expectedExtension,
+  ) => {
+    const { buildCosObjectKey } = await import("./paths");
+    const employeeId = "platform-employee-1";
+    const employeeHash = createHash("sha256").update(employeeId).digest("hex");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename,
+      mimetype,
+      scene: "tenant_service_fulfillment_attachment",
+      tenantId: null,
+      employeeId,
+    });
+
+    expect(objectKey).toStartWith(
+      `private/tenant-service-fulfillment-attachments/platform-employees/${employeeHash}/`,
+    );
+    expect(objectKey).not.toContain(employeeId);
+    expect(objectKey).not.toContain("/unassigned/");
+    expect(objectKey).toEndWith(expectedExtension);
+  });
+
+  test("derives the extension from MIME instead of an untrusted filename", async () => {
+    const { buildCosObjectKey } = await import("./paths");
+    const objectKey = buildCosObjectKey.call({}, {
+      filename: "deployment.exe",
+      mimetype: "application/pdf",
+      scene: "tenant_service_fulfillment_attachment",
+      tenantId: null,
+      employeeId: "platform-employee-1",
+    });
+
+    expect(objectKey).toEndWith(".pdf");
+    expect(objectKey).not.toContain(".exe");
+  });
+});

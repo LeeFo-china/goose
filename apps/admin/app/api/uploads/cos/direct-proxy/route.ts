@@ -4,7 +4,7 @@ import { buildBackendUrl, type BackendResponse } from "@/lib/backend";
 
 export const runtime = "nodejs";
 
-const MAX_PROXY_UPLOAD_SIZE = 5 * 1024 * 1024;
+const MAX_PROXY_UPLOAD_SIZE = 10 * 1024 * 1024;
 
 type DirectUploadInitResult = {
   object_key: string;

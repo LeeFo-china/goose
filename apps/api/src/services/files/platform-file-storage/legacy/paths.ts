@@ -7,11 +7,13 @@ import type {
   UploadImageInput,
 } from "./shared";
 import {
+  buildPlatformServiceFulfillmentAttachmentEmployeePrefix,
   buildSupplierBusinessLicenseEmployeePrefix,
   buildTenantOnboardingLicenseVisitorPrefix,
 } from "./object-owner-prefixes";
 
 export {
+  buildPlatformServiceFulfillmentAttachmentEmployeePrefix,
   buildSupplierBusinessLicenseEmployeePrefix,
   buildTenantOnboardingLicenseVisitorPrefix,
 } from "./object-owner-prefixes";
@@ -49,6 +51,7 @@ export function buildLegacyObjectPath(this: any, input: {
     supplier_business_license: "supplier-business-license",
     brand_logo: "brand-logo",
     branding_virtual_goods: "branding-virtual-goods",
+    tenant_service_fulfillment_attachment: "tenant-service-fulfillment-attachment",
   };
 
   return `${prefixByScene[input.scene]}/${year}/${month}/${day}/${randomUUID()}${input.extension}`;
@@ -65,6 +68,7 @@ export function buildCosObjectKey(this: any, input: Pick<
   const extension = getFileExtension({
     filename: input.scene === "tenant_onboarding_license" ||
       input.scene === "supplier_business_license" ||
+      input.scene === "tenant_service_fulfillment_attachment" ||
       input.scene === "brand_logo" ||
       input.scene === "branding_virtual_goods"
       ? undefined
@@ -77,6 +81,10 @@ export function buildCosObjectKey(this: any, input: Pick<
   }
   if (input.scene === "supplier_business_license") {
     return `${buildSupplierBusinessLicenseEmployeePrefix(input.employeeId)}`
+      + `${year}/${month}/${day}/${randomUUID()}${extension}`;
+  }
+  if (input.scene === "tenant_service_fulfillment_attachment") {
+    return `${buildPlatformServiceFulfillmentAttachmentEmployeePrefix(input.employeeId)}`
       + `${year}/${month}/${day}/${randomUUID()}${extension}`;
   }
   const tenantPrefix = input.tenantId
