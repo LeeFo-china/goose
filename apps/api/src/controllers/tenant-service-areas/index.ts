@@ -21,7 +21,10 @@ class TenantServiceAreasController extends PlatformBaseController {
 
   @Get("/platform/tenant-service-areas")
   async listServiceAreas(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
     const queryResult = TenantServiceAreaListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -31,7 +34,10 @@ class TenantServiceAreasController extends PlatformBaseController {
 
   @Post("/platform/tenant-service-areas")
   async createServiceArea(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
     const bodyResult = CreateTenantServiceAreaSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
@@ -41,7 +47,10 @@ class TenantServiceAreasController extends PlatformBaseController {
 
   @Patch("/platform/tenant-service-areas/:id")
   async updateServiceArea(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
     const paramsResult = TenantServiceAreaIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdateTenantServiceAreaSchema.safeParse(request.body || {});

@@ -28,6 +28,16 @@ const controllerBoundaries: ControllerBoundary[] = [
     forbidLegacyGuard: true,
   },
   {
+    file: "controllers/administrative-areas/index.ts",
+    permissions: ["platform.location.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/tenant-service-areas/index.ts",
+    permissions: ["platform.location.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
     file: "controllers/picture-library/index.ts",
     permissions: ["platform.picture.read", "platform.picture.manage"],
     forbidLegacyGuard: true,
@@ -200,6 +210,22 @@ describe("platform permission boundaries", () => {
     expect(source).toContain("platform.audit.read");
     expect(source).toContain("platformAuthorizationService.assertPermission");
     expect(source).not.toContain("authContext.isPlatformAdmin");
+  });
+
+  test("platform location services check concrete location permission", () => {
+    const administrativeAreas = readFileSync(
+      new URL("../services/administrative-areas.ts", import.meta.url),
+      "utf8",
+    );
+    const locationMatching = readFileSync(
+      new URL("../services/location-matching.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(administrativeAreas).toContain("platform.location.manage");
+    expect(locationMatching).toContain("platform.location.manage");
+    expect(administrativeAreas).not.toContain("assertPlatformAdmin");
+    expect(locationMatching).not.toContain("assertPlatformAdmin");
   });
 
   test("platform partners service checks concrete partner permissions", () => {

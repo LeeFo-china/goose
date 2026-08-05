@@ -8,7 +8,9 @@ import type {
 } from "@/schema/tenant-service-areas";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { SupabaseDB } from "@/utils/supabase";
+import type { PermissionCode } from "@gooes/domain";
 
 type TenantLite = {
   id: string;
@@ -53,6 +55,7 @@ type TenantLocationCandidate = {
 };
 
 const EARTH_RADIUS_KM = 6371;
+const PLATFORM_LOCATION_MANAGE_PERMISSION = "platform.location.manage" satisfies PermissionCode;
 const MATCH_REASON_RANK: Record<LocationMatchReason, number> = {
   identity: 100,
   adcode: 90,
@@ -64,12 +67,12 @@ const MATCH_REASON_RANK: Record<LocationMatchReason, number> = {
 
 class LocationMatchingService {
   async listServiceAreas(query: TenantServiceAreaListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertLocationManagePermission(authContext);
     return tenantServiceAreaRepository.list(query);
   }
 
   async createServiceArea(input: CreateTenantServiceAreaInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertLocationManagePermission(authContext);
     const record = await tenantServiceAreaRepository.create(input);
     await platformAuditLogService.recordBestEffort({
       action: "tenant_service_area_create",
@@ -86,7 +89,7 @@ class LocationMatchingService {
   }
 
   async updateServiceArea(id: string, input: UpdateTenantServiceAreaInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertLocationManagePermission(authContext);
     const existing = await tenantServiceAreaRepository.findById(id);
     if (!existing) throw Errors.notFound("服务区域不存在");
 
@@ -353,10 +356,21 @@ class LocationMatchingService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertLocationManagePermission(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (
+      authContext.tenantId !== null ||
+      !isPlatformIdentity ||
+      !authContext.employeeId ||
+      !authContext.authUserId
+    ) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(
+      authContext,
+      PLATFORM_LOCATION_MANAGE_PERMISSION,
+    );
   }
 }
 
