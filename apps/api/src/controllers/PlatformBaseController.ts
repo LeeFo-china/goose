@@ -1,10 +1,11 @@
 import { BaseController } from "@/controllers/BaseController";
-import { Errors } from "@/errors/error-factory";
+import { platformAuthorizationService, type PlatformStaffAuthContext } from "@/services/platform-authorization";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import type { PermissionCode } from "@gooes/domain";
 import type { FastifyRequest } from "fastify";
 import type { ZodTypeAny } from "zod";
 
-type PlatformAuthContext = AuthContext & { isPlatformAdmin: true };
+type PlatformAuthContext = PlatformStaffAuthContext & { isPlatformAdmin: true; isPlatformSuperAdmin: true };
 
 export abstract class PlatformBaseController<
   TCreate extends ZodTypeAny = ZodTypeAny,
@@ -22,16 +23,45 @@ export abstract class PlatformBaseController<
   protected assertPlatformAdmin(
     authContext: AuthContext,
   ): asserts authContext is PlatformAuthContext {
-    if (!authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
-    }
+    platformAuthorizationService.assertSuperAdmin(authContext as PlatformStaffAuthContext);
+  }
+
+  protected async getRequiredPlatformStaffContext(
+    request: FastifyRequest,
+  ): Promise<PlatformStaffAuthContext> {
+    const authContext = await this.getRequiredAuthContext(request);
+    const platformContext = await platformAuthorizationService.assertPlatformSession(
+      authContext,
+      request.user?.admin_auth_version,
+    );
+    request.authContext = platformContext;
+    return platformContext;
+  }
+
+  protected async getRequiredPlatformPermissionContext(
+    request: FastifyRequest,
+    permissionCode: PermissionCode,
+  ): Promise<PlatformStaffAuthContext> {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    platformAuthorizationService.assertPermission(authContext, permissionCode);
+    return authContext;
+  }
+
+  protected async getRequiredPlatformSuperAdminContext(
+    request: FastifyRequest,
+  ): Promise<PlatformAuthContext> {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    platformAuthorizationService.assertSuperAdmin(authContext);
+    return {
+      ...authContext,
+      isPlatformAdmin: true,
+      isPlatformSuperAdmin: true,
+    };
   }
 
   protected async getRequiredPlatformAdminContext(
     request: FastifyRequest,
   ): Promise<PlatformAuthContext> {
-    const authContext = await this.getRequiredAuthContext(request);
-    this.assertPlatformAdmin(authContext);
-    return authContext;
+    return this.getRequiredPlatformSuperAdminContext(request);
   }
 }
