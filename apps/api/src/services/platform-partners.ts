@@ -71,6 +71,7 @@ type PlatformPartnersServiceDependencies = {
 };
 
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
+const PARTNER_READ_PERMISSION = "platform.partner.read";
 const BINDING_MANAGE_PERMISSION = "platform.partner.binding.manage";
 const INVITE_BINDING_CHANGE_REASON = "装企小程序扫码入驻自动绑定";
 
@@ -93,7 +94,7 @@ export class PlatformPartnersService {
   }
 
   async listPartners(authContext: AuthContext, query: PlatformPartnerListQuery) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     return this.repository.listPartners({
       page: query.page,
       pageSize: query.pageSize,
@@ -104,12 +105,12 @@ export class PlatformPartnersService {
   }
 
   async getPartner(authContext: AuthContext, partnerId: string) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     return this.requirePartner(partnerId);
   }
 
   async listLevels(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     return this.repository.listLevels();
   }
 
@@ -182,7 +183,7 @@ export class PlatformPartnersService {
     partnerId: string,
     query: PlatformPartnerMemberListQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     await this.requirePartner(partnerId);
     return this.repository.listPartnerMembers({
       partnerId,
@@ -273,13 +274,13 @@ export class PlatformPartnersService {
   }
 
   async listInviteCodes(authContext: AuthContext, partnerId: string) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     await this.requirePartner(partnerId);
     return this.repository.listInviteCodes(partnerId);
   }
 
   async getInviteCodeQrcode(authContext: AuthContext, code: string) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanReadPartners(authContext);
     const inviteCode = await this.requireAvailableInviteCode(code);
     return generatePartnerInviteCodeQrcode({
       scene: buildPartnerInviteCodeScene(inviteCode.code),
@@ -379,7 +380,7 @@ export class PlatformPartnersService {
     authContext: AuthContext,
     query: TenantPartnerBindingListQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanManageBindings(authContext);
     return this.repository.listTenantBindings({
       page: query.page,
       pageSize: query.pageSize,
@@ -433,30 +434,38 @@ export class PlatformPartnersService {
     return partner;
   }
 
+  private assertCanReadPartners(authContext: AuthContext) {
+    this.assertPlatformStaff(authContext);
+    if (!this.hasPermission(authContext, PARTNER_READ_PERMISSION)) {
+      throw Errors.forbidden();
+    }
+  }
+
   private assertCanManagePartners(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!this.hasPermission(authContext, PARTNER_MANAGE_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private assertCanManageBindings(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!this.hasPermission(authContext, BINDING_MANAGE_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformStaff(authContext: AuthContext) {
+    if (
+      authContext.tenantId !== null ||
+      (!authContext.isPlatformStaff && !authContext.isPlatformAdmin)
+    ) {
       throw Errors.forbidden();
     }
   }
 
   private hasPermission(authContext: AuthContext, permissionCode: string) {
-    return authContext.permissions.some((permission) =>
-      permission.code === permissionCode
-    );
+    return authContext.permissions.some((permission) => permission.code === permissionCode);
   }
 
   private requireEmployeeId(authContext: AuthContext) {

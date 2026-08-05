@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import type { FastifyRequest } from "fastify";
 import type { AuthContext } from "@/services/authorization";
+import { mockPlatformPermission } from "./routes-platform-auth-test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -61,6 +62,7 @@ async function loadHarness() {
   const [
     { default: controller },
     { authorizationService },
+    { platformAuthorizationService },
     { platformBrandingAddonProductService },
     { platformBrandingVirtualPaymentSettingsService },
     { brandingVirtualProductService },
@@ -68,6 +70,7 @@ async function loadHarness() {
   ] = await Promise.all([
     import("."),
     import("@/services/authorization"),
+    import("@/services/platform-authorization"),
     import("@/services/platform-branding-addon-product"),
     import("@/services/platform-branding-virtual-payment-settings"),
     import("@/services/branding-virtual-products"),
@@ -76,6 +79,7 @@ async function loadHarness() {
   return {
     controller,
     authorizationService,
+    platformAuthorizationService,
     platformBrandingAddonProductService,
     platformBrandingVirtualPaymentSettingsService,
     brandingVirtualProductService,
@@ -141,6 +145,7 @@ describe("BrandingAddonController routes", () => {
     const {
       authorizationService,
       controller,
+      platformAuthorizationService,
       platformBrandingAddonProductService,
       platformBrandingVirtualPaymentSettingsService,
     } = await loadHarness();
@@ -150,6 +155,10 @@ describe("BrandingAddonController routes", () => {
       update: platformBrandingAddonProductService.update,
       validate: platformBrandingVirtualPaymentSettingsService.validate,
     };
+    const restorePlatformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const get = mock(async () => ({ product: { version: 1 } }));
     const update = mock(async () => ({ product: { version: 2 } }));
     const validate = mock(async () => ({
@@ -205,6 +214,7 @@ describe("BrandingAddonController routes", () => {
         { version: 1 },
       );
     } finally {
+      restorePlatformPermission();
       authorizationService.getRequiredAuthContext = originals.auth;
       replaceMethod(platformBrandingAddonProductService, "get", originals.get);
       replaceMethod(

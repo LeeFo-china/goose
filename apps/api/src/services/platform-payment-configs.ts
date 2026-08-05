@@ -410,7 +410,7 @@ export class PlatformPaymentConfigService {
   }
 
   private assertReadable(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!this.canManage(authContext) && !this.hasPermission(
       authContext,
       "platform.payment.config.read",
@@ -420,14 +420,16 @@ export class PlatformPaymentConfigService {
   }
 
   private assertManageable(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!this.canManage(authContext)) {
       throw Errors.forbidden();
     }
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformStaff(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
   }

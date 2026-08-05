@@ -235,7 +235,9 @@ export class PlatformBillingRechargeRefundExecutionService {
   }
 
   private assertCanExecute(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) throw Errors.forbidden();
     if (!authContext.employeeId) throw Errors.forbidden();
     if (!hasPermission(authContext, REVIEW_PERMISSION)) throw Errors.forbidden();
   }

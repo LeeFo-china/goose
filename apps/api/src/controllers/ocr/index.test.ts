@@ -83,6 +83,11 @@ const platformAuth = {
   ...tenantAuth,
   tenantId: null,
   isPlatformAdmin: true,
+  permissions: [
+    { code: "platform.ocr.recognize", scope: "all" },
+    { code: "platform.ocr.recognition.read", scope: "all" },
+    { code: "platform.ocr.tenant_policy.manage", scope: "all" },
+  ],
 } as AuthContext;
 
 async function getController(authContext: AuthContext = tenantAuth) {

@@ -22,7 +22,10 @@ class PlatformServiceRefundRequestsController extends PlatformBaseController {
 
   @Get("/platform/billing/service-refund-requests")
   async listRefundRequests(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_refund.review",
+    );
     const queryResult = PlatformServiceRefundRequestListQuerySchema.safeParse(
       request.query || {},
     );
@@ -37,7 +40,10 @@ class PlatformServiceRefundRequestsController extends PlatformBaseController {
 
   @Post("/platform/billing/service-refund-requests/:id/review")
   async reviewRefundRequest(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_refund.review",
+    );
     const paramsResult = PlatformServiceEntityParamSchema.safeParse(
       request.params || {},
     );

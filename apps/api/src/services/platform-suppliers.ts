@@ -332,7 +332,13 @@ export class PlatformSuppliersService {
     return setting;
   }
   private require(auth: AuthContext, permission: keyof typeof PERMISSION) {
-    if (!auth.isPlatformAdmin || !auth.employeeId || !auth.authUserId) {
+    const isPlatformIdentity = auth.isPlatformStaff || auth.isPlatformAdmin;
+    if (
+      auth.tenantId !== null ||
+      !isPlatformIdentity ||
+      !auth.employeeId ||
+      !auth.authUserId
+    ) {
       throw Errors.forbidden();
     }
     this.accessPolicy.assertPermission(auth, PERMISSION[permission]);

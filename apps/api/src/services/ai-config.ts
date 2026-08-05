@@ -9,17 +9,15 @@ import type {
   UpdateAiProviderPayload,
   UpdateAiSceneRoutePayload,
 } from "@/schema/ai-config";
+import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
-class AiConfigService {
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
-    }
-  }
+const READ_PERMISSION = "platform.ai_config.read";
+const MANAGE_PERMISSION = "platform.ai_config.manage";
 
+class AiConfigService {
   async getConfig(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
 
     const [providers, models, routes] = await Promise.all([
       aiConfigRepository.listProviders(),
@@ -35,42 +33,42 @@ class AiConfigService {
   }
 
   async createProvider(authContext: AuthContext, input: AiProviderPayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.createProvider(input);
     await this.audit(authContext, "ai_provider", record.id, record.name, "创建 AI 供应商");
     return record;
   }
 
   async updateProvider(authContext: AuthContext, id: string, input: UpdateAiProviderPayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.updateProvider(id, input);
     await this.audit(authContext, "ai_provider", record.id, record.name, "更新 AI 供应商");
     return record;
   }
 
   async createModel(authContext: AuthContext, input: AiModelPayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.createModel(input);
     await this.audit(authContext, "ai_model", record.id, record.name, "创建 AI 模型");
     return record;
   }
 
   async updateModel(authContext: AuthContext, id: string, input: UpdateAiModelPayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.updateModel(id, input);
     await this.audit(authContext, "ai_model", record.id, record.name, "更新 AI 模型");
     return record;
   }
 
   async createSceneRoute(authContext: AuthContext, input: AiSceneRoutePayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.createSceneRoute(input);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "创建 AI 场景路由");
     return record;
   }
 
   async updateSceneRoute(authContext: AuthContext, id: string, input: UpdateAiSceneRoutePayload) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const record = await aiConfigRepository.updateSceneRoute(id, input);
     await this.audit(authContext, "ai_scene_route", record.id, record.name, "更新 AI 场景路由");
     return record;
@@ -92,6 +90,15 @@ class AiConfigService {
       resourceLabel,
       summary,
     }).catch(() => null);
+  }
+
+  private assertPlatformPermission(authContext: AuthContext, permission: string) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    accessPolicyService.assertPermission(authContext, permission);
   }
 }
 

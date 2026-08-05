@@ -13,7 +13,10 @@ class PlatformAuditLogsController extends PlatformBaseController {
 
   @Get("/platform/audit-logs")
   async listAuditLogs(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.audit.read",
+    );
 
     const queryResult = PlatformAuditLogListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);

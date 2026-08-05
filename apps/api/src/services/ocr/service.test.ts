@@ -338,7 +338,12 @@ describe("OcrService", () => {
 
   test("platform config test discards fields and does not persist a record", async () => {
     const { service, dependencies } = await createHarness();
-    const platformContext = { ...authContext, tenantId: null, isPlatformAdmin: true };
+    const platformContext = {
+      ...authContext,
+      tenantId: null,
+      isPlatformAdmin: true,
+      permissions: [{ code: "platform.ocr.recognize", scope: "all" as const }],
+    };
 
     const result = await service.testPlatformConfig(platformContext, {
       imageBase64: "c3ludGhldGlj",

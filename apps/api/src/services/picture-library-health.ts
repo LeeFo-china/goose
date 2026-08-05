@@ -3,21 +3,21 @@ import type { PlatformAuditLogAction } from "@/schema/platform-audit-logs";
 import { Errors } from "@/errors/error-factory";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
+import type { PermissionCode } from "@gooes/domain";
 
 class PictureLibraryHealthService {
   async buildReport(input: {
     authContext?: AuthContext;
     issueLimit?: number;
   } = {}) {
-    if (input.authContext && !input.authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
-    }
+    if (input.authContext) this.assertPermission(input.authContext, "platform.picture.read");
     return pictureLibraryHealthRepository.buildReport(input.issueLimit);
   }
 
   async repairAssetCommentCount(assetId: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const result = await pictureLibraryHealthRepository.repairAssetCommentCount(assetId);
     visitorPictureLibraryService.refreshPublicCacheSoon();
     await this.recordAudit(
@@ -37,7 +37,7 @@ class PictureLibraryHealthService {
     categoryId: string,
     authContext: AuthContext,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const result = await pictureLibraryHealthRepository.setCategoryCoverFromFirstPublishedAsset(
       categoryId,
     );
@@ -56,10 +56,13 @@ class PictureLibraryHealthService {
     return result;
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPermission(authContext: AuthContext, code: PermissionCode) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(authContext, code);
   }
 
   private async recordAudit(

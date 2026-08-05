@@ -44,7 +44,7 @@ export class PlatformServiceProductService {
     authContext: AuthContext,
     query: Partial<PlatformServiceProductListQuery> = {},
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanManage(authContext);
     const products = await this.repository.listPlatformProducts({
       page: normalizePositiveInteger(query.page, DEFAULT_PAGE),
       pageSize: normalizePageSize(query.pageSize),
@@ -203,7 +203,7 @@ export class PlatformServiceProductService {
   }
 
   private assertCanManage(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformStaff(authContext);
     if (!authContext.employeeId) {
       throw Errors.forbidden();
     }
@@ -213,8 +213,11 @@ export class PlatformServiceProductService {
     return authContext.employeeId;
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformStaff(authContext: AuthContext) {
+    if (
+      authContext.tenantId !== null
+      || (!authContext.isPlatformStaff && !authContext.isPlatformAdmin)
+    ) {
       throw Errors.forbidden();
     }
   }

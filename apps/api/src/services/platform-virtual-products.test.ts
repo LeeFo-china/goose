@@ -11,7 +11,10 @@ mock.module('./access-policy', () => ({
 }));
 
 const auth = {
+  authUserId: crypto.randomUUID(),
   isPlatformAdmin: true,
+  isPlatformStaff: true,
+  tenantId: null,
   employeeId: crypto.randomUUID(),
   permissions: [{ code: 'platform.virtual_product.manage', scope: 'all' }],
 };

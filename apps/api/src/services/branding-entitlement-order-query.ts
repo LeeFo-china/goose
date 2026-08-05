@@ -127,8 +127,11 @@ export class BrandingEntitlementOrderQueryService {
   }
 
   private requirePlatformReader(authContext: AuthContext): void {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
     if (
-      !authContext.isPlatformAdmin ||
+      !isPlatformIdentity ||
       authContext.tenantId !== null ||
       !authContext.employeeId ||
       authContext.employeeStatus !== "active" ||

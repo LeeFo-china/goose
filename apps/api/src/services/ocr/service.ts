@@ -39,6 +39,7 @@ import {
   buildOcrDedupeKey,
   validateOcrFile,
 } from "./request-guards";
+import { assertPlatformOcrPermission } from "./platform-permissions";
 import { allowsOcrDocument, loadOcrRuntimePolicy } from "./runtime-policy";
 import {
   buildResultSummary,
@@ -331,10 +332,7 @@ export class OcrService {
   }
 
   async listPlatformRecognitions(authContext: AuthContext, input: OcrPlatformListInput) {
-    if (!authContext.isPlatformAdmin || !this.accessPolicy.hasPermission(
-      authContext,
-      "platform.ocr.recognition.read",
-    )) throw Errors.forbidden();
+    assertPlatformOcrPermission(authContext, this.accessPolicy, "platform.ocr.recognition.read");
     return this.repository.listPlatform(input);
   }
 
@@ -342,7 +340,7 @@ export class OcrService {
     authContext: AuthContext,
     input: { imageBase64: string },
   ) {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+    assertPlatformOcrPermission(authContext, this.accessPolicy, "platform.ocr.recognize");
     const startedAt = this.clockMsFactory();
     const response = await this.gateway.recognize({
       providerAction: "BizLicenseOCR",

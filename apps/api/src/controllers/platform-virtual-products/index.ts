@@ -29,7 +29,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Get('/platform/virtual-products')
   async listProducts(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductReadContext(request);
     const query = parse(PlatformVirtualProductListQuerySchema, request.query);
     return ResponseHandler.success(
       await platformVirtualProductsService.list(auth, query),
@@ -38,7 +38,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products')
   async createProduct(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductManageContext(request);
     const input = parse(CreatePlatformVirtualProductSchema, request.body);
     return ResponseHandler.success(
       await platformVirtualProductsService.create(auth, input),
@@ -47,7 +47,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Get('/platform/virtual-products/:id')
   async getDetail(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductReadContext(request);
     const { id } = parse(PlatformVirtualProductParamsSchema, request.params);
     return ResponseHandler.success(
       await platformVirtualProductsService.getDetail(auth, id),
@@ -56,7 +56,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Patch('/platform/virtual-products/:id')
   async updateProduct(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductManageContext(request);
     const { id } = parse(PlatformVirtualProductParamsSchema, request.params);
     const input = parse(UpdatePlatformVirtualProductSchema, request.body);
     return ResponseHandler.success(
@@ -66,7 +66,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/activate')
   async activate(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductManageContext(request);
     const { id } = parse(PlatformVirtualProductParamsSchema, request.params);
     const input = parse(PlatformVirtualProductVersionCommandSchema, request.body);
     return ResponseHandler.success(
@@ -76,7 +76,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/suspend')
   async suspend(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductManageContext(request);
     const { id } = parse(PlatformVirtualProductParamsSchema, request.params);
     const input = parse(PlatformVirtualProductVersionCommandSchema, request.body);
     return ResponseHandler.success(
@@ -86,7 +86,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/archive')
   async archive(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductManageContext(request);
     const { id } = parse(PlatformVirtualProductParamsSchema, request.params);
     const input = parse(PlatformVirtualProductVersionCommandSchema, request.body);
     return ResponseHandler.success(
@@ -96,7 +96,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Get('/platform/virtual-products/:id/channel-mappings/:environment')
   async getChannelMapping(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductReadContext(request);
     const { id, environment } = parse(
       PlatformVirtualProductChannelParamsSchema,
       request.params,
@@ -109,7 +109,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/channel-mappings/:environment/goods/upload')
   async uploadGoods(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductPublishContext(request);
     const { id, environment } = parse(
       PlatformVirtualProductChannelParamsSchema,
       request.params,
@@ -128,7 +128,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/channel-mappings/:environment/goods/publish')
   async publishGoods(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductPublishContext(request);
     const { id, environment } = parse(
       PlatformVirtualProductChannelParamsSchema,
       request.params,
@@ -147,7 +147,7 @@ class PlatformVirtualProductsController extends PlatformBaseController {
 
   @Post('/platform/virtual-products/:id/channel-mappings/:environment/validate')
   async validateMapping(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getVirtualProductPublishContext(request);
     const { id, environment } = parse(
       PlatformVirtualProductChannelParamsSchema,
       request.params,
@@ -162,6 +162,18 @@ class PlatformVirtualProductsController extends PlatformBaseController {
         input,
       ),
     );
+  }
+
+  private getVirtualProductReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, 'platform.virtual_product.read');
+  }
+
+  private getVirtualProductManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, 'platform.virtual_product.manage');
+  }
+
+  private getVirtualProductPublishContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, 'platform.virtual_product.publish');
   }
 }
 

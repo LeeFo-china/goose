@@ -13,7 +13,10 @@ class AdministrativeAreasController extends PlatformBaseController {
 
   @Get("/platform/administrative-areas")
   async listAdministrativeAreas(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.location.manage",
+    );
     const queryResult = AdministrativeAreaListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 

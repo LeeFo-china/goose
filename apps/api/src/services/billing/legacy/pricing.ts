@@ -3,6 +3,7 @@ import {
   ErrorCodes,
   billingRepository,
   accessPolicyService,
+  assertPlatformBillingPermission,
   platformAuditLogService,
   LOW_BALANCE_THRESHOLD,
   BILLING_EVENT_SOURCE,
@@ -37,13 +38,16 @@ import {
   type ShadowBillingContext,
 } from './shared';
 
+const PLATFORM_BILLING_READ_PERMISSION = 'platform.billing.read';
+const PLATFORM_BILLING_MANAGE_PERMISSION = 'platform.billing.manage';
+
 export async function listPricingRules(this: any, query: BillingPricingRuleQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_READ_PERMISSION);
     return billingRepository.listPricingRules(query);
   }
 
 export async function createPricingRule(this: any, input: BillingPricingRuleCreateInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_MANAGE_PERMISSION);
     this.assertPricingRuleTenant(input);
     const result = await billingRepository.createPricingRule(input);
 
@@ -52,7 +56,7 @@ export async function createPricingRule(this: any, input: BillingPricingRuleCrea
   }
 
 export async function updatePricingRule(this: any, id: string, input: BillingPricingRuleUpdateInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    assertPlatformBillingPermission(authContext, PLATFORM_BILLING_MANAGE_PERMISSION);
     this.assertPricingRuleTenant(input);
     const result = await billingRepository.updatePricingRule(id, input);
 
@@ -90,10 +94,4 @@ export async function recordPricingAudit(this: any,
         enabled: rule.enabled,
       },
     });
-  }
-
-export function assertPlatformAdmin(this: any, authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
-    }
   }

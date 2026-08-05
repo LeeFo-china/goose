@@ -11,11 +11,15 @@ import type {
 import type { AuthContext } from "@/services/authorization";
 import { notificationService } from "@/services/notifications";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { projectSer } from "@/services/projects";
 import { systemSettingsService } from "@/services/system-settings";
+import type { PermissionCode } from "@gooes/domain";
 
 const VISITOR_PROJECT_CONSULTATION_ENABLED_KEY =
   "VISITOR_PROJECT_CONSULTATION_ENABLED";
+const PLATFORM_LEAD_READ_PERMISSION = "platform.lead.read" satisfies PermissionCode;
+const PLATFORM_LEAD_ASSIGN_PERMISSION = "platform.lead.assign" satisfies PermissionCode;
 
 type VisitorLeadContext = {
   authUserId: string | null | undefined;
@@ -52,12 +56,12 @@ class PlatformLeadService {
   }
 
   async list(query: PlatformLeadListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_LEAD_READ_PERMISSION);
     return platformLeadRepository.list(query);
   }
 
   async getDetail(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_LEAD_READ_PERMISSION);
 
     const detail = await platformLeadRepository.getDetail(id);
     if (!detail) {
@@ -68,7 +72,7 @@ class PlatformLeadService {
   }
 
   async assign(id: string, input: PlatformLeadAssignInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PLATFORM_LEAD_ASSIGN_PERMISSION);
 
     if (!authContext.employeeId) {
       throw Errors.forbidden();
@@ -120,10 +124,13 @@ class PlatformLeadService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformPermission(authContext: AuthContext, permission: PermissionCode) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(authContext, permission);
   }
 
   private async assertVisitorProjectConsultationEnabled(

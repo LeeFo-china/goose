@@ -12,17 +12,19 @@ import type {
 } from "@/schema/picture-library";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
 import type { PlatformAuditLogAction } from "@/schema/platform-audit-logs";
+import type { PermissionCode } from "@gooes/domain";
 
 class PictureLibraryService {
   async listCategories(query: PictureCategoryListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.read");
     return pictureLibraryRepository.listCategories(query);
   }
 
   async createCategory(input: CreatePictureCategoryInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     await this.assertCategorySlugAvailable(input.slug);
     await this.assertOptionalAsset(input.cover_asset_id);
     const category = await pictureLibraryRepository.createCategory(input);
@@ -34,7 +36,7 @@ class PictureLibraryService {
   }
 
   async updateCategory(id: string, input: UpdatePictureCategoryInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const existing = await this.getRequiredCategory(id);
     if (input.slug && input.slug !== existing.slug) {
       await this.assertCategorySlugAvailable(input.slug);
@@ -50,7 +52,7 @@ class PictureLibraryService {
   }
 
   async disableCategory(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const category = await pictureLibraryRepository.updateCategory(id, { status: "inactive" });
     if (!category) throw Errors.notFound("图片分类不存在");
     await this.recordAudit(authContext, "picture_category_disable", category.id, category.name, {
@@ -61,12 +63,12 @@ class PictureLibraryService {
   }
 
   async listAssets(query: PictureAssetListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.read");
     return pictureLibraryRepository.listAssets(query);
   }
 
   async createAsset(input: CreatePictureAssetInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     await this.assertCategories(input.category_ids);
     const file = await pictureLibraryRepository.findFileObject(input.file_object_id);
     if (!file || file.deleted_at || file.status !== "active") {
@@ -88,7 +90,7 @@ class PictureLibraryService {
   }
 
   async updateAsset(id: string, input: UpdatePictureAssetInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     await this.getRequiredAsset(id);
     if (input.category_ids) await this.assertCategories(input.category_ids);
     const asset = await pictureLibraryRepository.updateAsset(id, input);
@@ -105,7 +107,7 @@ class PictureLibraryService {
     status: "published" | "hidden" | "draft",
     authContext: AuthContext,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const asset = await pictureLibraryRepository.updateAssetStatus(id, status);
     if (!asset) throw Errors.notFound("图片不存在");
     await this.recordAudit(authContext, `picture_asset_${status}`, asset.id, asset.title, {
@@ -116,7 +118,7 @@ class PictureLibraryService {
   }
 
   async deleteAsset(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const asset = await pictureLibraryRepository.softDeleteAsset(id);
     if (!asset) throw Errors.notFound("图片不存在");
     await this.recordAudit(authContext, "picture_asset_delete", asset.id, asset.title, {
@@ -127,12 +129,12 @@ class PictureLibraryService {
   }
 
   async listComments(query: PictureCommentListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.read");
     return pictureLibraryCommentsRepository.listComments(query);
   }
 
   async hideComment(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const comment = await pictureLibraryCommentsRepository.updateCommentStatus(id, "hidden");
     if (!comment) throw Errors.notFound("图片评论不存在");
     await this.recordAudit(authContext, "picture_comment_hide", comment.id, comment.content, {
@@ -144,7 +146,7 @@ class PictureLibraryService {
   }
 
   async showComment(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const comment = await pictureLibraryCommentsRepository.updateCommentStatus(id, "visible");
     if (!comment) throw Errors.notFound("图片评论不存在");
     await this.recordAudit(authContext, "picture_comment_show", comment.id, comment.content, {
@@ -156,7 +158,7 @@ class PictureLibraryService {
   }
 
   async deleteComment(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.picture.manage");
     const comment = await pictureLibraryCommentsRepository.softDeleteComment(id);
     if (!comment) throw Errors.notFound("图片评论不存在");
     await this.recordAudit(authContext, "picture_comment_delete", comment.id, comment.content, {
@@ -168,10 +170,11 @@ class PictureLibraryService {
     return comment;
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPermission(authContext: AuthContext, code: PermissionCode) {
+    if (authContext.tenantId !== null || (!authContext.isPlatformStaff && !authContext.isPlatformAdmin)) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(authContext, code);
   }
 
   private async assertCategorySlugAvailable(slug: string) {

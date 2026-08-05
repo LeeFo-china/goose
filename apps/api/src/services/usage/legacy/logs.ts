@@ -2,7 +2,7 @@ import { normalizeDateRange } from "./date-range";
 import {
   accessPolicyService,
   aiCallLogRepository,
-  assertPlatformAdmin,
+  assertPlatformUsagePermission,
   smsSendLogRepository,
   socialVideoTranscriptionRepository,
   type AuthContext,
@@ -10,6 +10,8 @@ import {
   type UsageSmsLogsQuery,
   type UsageSocialVideoLogsQuery,
 } from "./shared";
+
+const PLATFORM_USAGE_READ_PERMISSION = "platform.usage.read";
 
 export async function listTenantAiLogs(query: UsageAiLogsQuery, authContext: AuthContext) {
   const tenantId = accessPolicyService.assertTenantContext(authContext);
@@ -61,7 +63,7 @@ export async function listTenantSocialVideoLogs(
 }
 
 export async function listPlatformAiLogs(query: UsageAiLogsQuery, authContext: AuthContext) {
-  assertPlatformAdmin(authContext);
+  assertPlatformUsagePermission(authContext, PLATFORM_USAGE_READ_PERMISSION);
   const range = normalizeDateRange(query);
   return aiCallLogRepository.list({
     tenantId: query.tenant_id,
@@ -77,7 +79,7 @@ export async function listPlatformAiLogs(query: UsageAiLogsQuery, authContext: A
 }
 
 export async function listPlatformSmsLogs(query: UsageSmsLogsQuery, authContext: AuthContext) {
-  assertPlatformAdmin(authContext);
+  assertPlatformUsagePermission(authContext, PLATFORM_USAGE_READ_PERMISSION);
   const range = normalizeDateRange(query);
   return smsSendLogRepository.list({
     tenantId: query.tenant_id,
@@ -95,7 +97,7 @@ export async function listPlatformSocialVideoLogs(
   query: UsageSocialVideoLogsQuery,
   authContext: AuthContext,
 ) {
-  assertPlatformAdmin(authContext);
+  assertPlatformUsagePermission(authContext, PLATFORM_USAGE_READ_PERMISSION);
   const range = normalizeDateRange(query);
   return socialVideoTranscriptionRepository.listUsageLogs({
     tenantId: query.tenant_id,

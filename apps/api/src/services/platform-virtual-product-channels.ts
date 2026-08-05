@@ -352,9 +352,10 @@ export class PlatformVirtualProductChannelsService {
   }
 
   private assertPlatform(auth: AuthContext, permission: string): Actor {
+    const isPlatformIdentity = auth.isPlatformStaff || auth.isPlatformAdmin;
     if (
-      !auth.isPlatformAdmin ||
       auth.tenantId !== null ||
+      !isPlatformIdentity ||
       !auth.employeeId ||
       !auth.authUserId
     ) {

@@ -12,9 +12,11 @@ import {
   PlatformOcrTenantPolicyParamsSchema,
   UpdatePlatformOcrTenantPolicySchema,
 } from "@/schema/ocr";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { ocrService, ocrTenantPolicyService, platformOcrService } from "@/services/ocr";
 import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import type { PermissionCode } from "@gooes/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 class OcrController extends TenantBaseController {
@@ -58,7 +60,10 @@ class OcrController extends TenantBaseController {
 
   @Get("/platform/ocr/recognitions")
   async listPlatformRecognitions(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognition.read",
+    );
     const parsed = PlatformOcrRecognitionListQuerySchema.safeParse(request.query ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 
@@ -76,7 +81,10 @@ class OcrController extends TenantBaseController {
 
   @Get("/platform/ocr/capabilities")
   async listPlatformCapabilities(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognize",
+    );
     const parsed = OcrCapabilitiesQuerySchema.safeParse(request.query ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 
@@ -88,7 +96,10 @@ class OcrController extends TenantBaseController {
 
   @Post("/platform/ocr/recognitions")
   async createPlatformRecognition(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognize",
+    );
     const parsed = CreatePlatformOcrRecognitionSchema.safeParse(request.body ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 
@@ -99,7 +110,10 @@ class OcrController extends TenantBaseController {
 
   @Get("/platform/ocr/recognitions/:id/result")
   async getPlatformRecognitionResult(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognize",
+    );
     const parsed = OcrRecognitionParamsSchema.safeParse(request.params);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 
@@ -110,7 +124,10 @@ class OcrController extends TenantBaseController {
 
   @Get("/platform/ocr/tenant-policies")
   async listPlatformTenantPolicies(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognition.read",
+    );
     const parsed = PlatformOcrTenantPolicyListQuerySchema.safeParse(
       request.query ?? {},
     );
@@ -124,7 +141,10 @@ class OcrController extends TenantBaseController {
 
   @Put("/platform/ocr/tenant-policies/:tenantId")
   async updatePlatformTenantPolicy(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.tenant_policy.manage",
+    );
     const params = PlatformOcrTenantPolicyParamsSchema.safeParse(request.params);
     if (!params.success) throw Errors.fromZod(params.error);
     const body = UpdatePlatformOcrTenantPolicySchema.safeParse(request.body ?? {});
@@ -139,7 +159,10 @@ class OcrController extends TenantBaseController {
 
   @Post("/platform/ocr/config-test")
   async testPlatformConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.ocr.recognize",
+    );
     if (!request.isMultipart()) {
       throw Errors.badRequest("请上传测试图片");
     }
@@ -157,9 +180,17 @@ class OcrController extends TenantBaseController {
     ));
   }
 
-  private async getRequiredPlatformContext(request: FastifyRequest) {
+  private async getRequiredPlatformPermissionContext(
+    request: FastifyRequest,
+    permissionCode: PermissionCode,
+  ) {
     const authContext = await this.getRequiredAuthContext(request);
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    platformAuthorizationService.assertPermission(authContext, permissionCode);
     return authContext;
   }
 

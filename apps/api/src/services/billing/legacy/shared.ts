@@ -31,6 +31,7 @@ import type { PlatformAuditLogAction } from "@/schema/platform-audit-logs";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import type { PermissionCode } from "@gooes/domain";
 
 export const LOW_BALANCE_THRESHOLD = Number(process.env.BILLING_LOW_BALANCE_CREDITS || 5000);
 
@@ -109,6 +110,17 @@ export function percentileDisc(values: number[], percentile: number) {
   return sorted[Math.min(index, sorted.length - 1)] ?? 0;
 }
 
+export function assertPlatformBillingPermission(
+  authContext: AuthContext,
+  permissionCode: PermissionCode,
+) {
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+  if (authContext.tenantId !== null || !isPlatformIdentity) {
+    throw Errors.forbidden();
+  }
+  accessPolicyService.assertPermission(authContext, permissionCode);
+}
 
 export { Errors, ErrorCodes, billingRepository, accessPolicyService, platformAuditLogService };
 export type {

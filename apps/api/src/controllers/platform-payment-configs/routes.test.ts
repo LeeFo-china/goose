@@ -200,6 +200,10 @@ describe("PlatformPaymentConfigsController routes", () => {
       "startPublish",
       startPublish,
     );
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
+      configurable: true,
+      value: mock(async () => platformAuth),
+    });
 
     try {
       const getResponse = await requiredHandler(
@@ -333,6 +337,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", originals.upload);
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", originals.publish);
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "validate", originals.validate);
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 
@@ -380,6 +385,10 @@ describe("PlatformPaymentConfigsController routes", () => {
     replaceMethod(brandingVirtualProductCatalogCompatibilityService, "refreshChannel", getGoodsStatus);
     replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", startUpload);
     replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", startPublish);
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
+      configurable: true,
+      value: mock(async () => platformAuth),
+    });
 
     const invalidRequests: Array<[string, Partial<FastifyRequest>]> = [
       [
@@ -459,6 +468,7 @@ describe("PlatformPaymentConfigsController routes", () => {
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "refreshChannel", originalGoodsStatus);
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startUpload", originalUpload);
       replaceMethod(brandingVirtualProductCatalogCompatibilityService, "startPublish", originalPublish);
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 });

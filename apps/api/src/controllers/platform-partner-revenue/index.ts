@@ -22,7 +22,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
 
   @Get("/platform/partner-revenue/events")
   async listRevenueEvents(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRevenueReadContext(request);
     const queryResult = PlatformRevenueEventListQuerySchema.safeParse(
       request.query || {},
     );
@@ -40,7 +40,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRevenueManageContext(request);
     const bodyResult = LeadServiceFeeRevenueCreateSchema.safeParse(
       request.body || {},
     );
@@ -59,7 +59,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRevenueManageContext(request);
     const bodyResult = RechargeRevenueSyncSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
@@ -72,7 +72,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
 
   @Get("/platform/partner-commissions")
   async listCommissionLedgers(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getCommissionReadContext(request);
     const queryResult = PartnerCommissionLedgerListQuerySchema.safeParse(
       request.query || {},
     );
@@ -87,7 +87,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
 
   @Get("/platform/partner-settlements")
   async listSettlementBatches(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getCommissionReadContext(request);
     const queryResult = PartnerSettlementBatchListQuerySchema.safeParse(
       request.query || {},
     );
@@ -105,7 +105,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSettlementManageContext(request);
     const bodyResult = PartnerSettlementBatchCreateSchema.safeParse(
       request.body || {},
     );
@@ -121,7 +121,7 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
 
   @Post("/platform/partner-settlements/:id/mark-paid")
   async markSettlementPaid(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSettlementManageContext(request);
     const paramsResult = PartnerSettlementBatchParamSchema.safeParse(
       request.params || {},
     );
@@ -139,6 +139,22 @@ class PlatformPartnerRevenueController extends PlatformBaseController {
       },
     );
     return ResponseHandler.success(data);
+  }
+
+  private getRevenueReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.partner.revenue.read");
+  }
+
+  private getRevenueManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.partner.revenue.manage");
+  }
+
+  private getCommissionReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.partner.commission.read");
+  }
+
+  private getSettlementManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.partner.settlement.manage");
   }
 }
 

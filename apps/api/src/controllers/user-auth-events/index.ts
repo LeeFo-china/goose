@@ -16,7 +16,10 @@ class UserAuthEventsController extends PlatformBaseController {
 
   @Get("/platform/user-auth-events")
   async listEvents(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.identity_diagnostic.read",
+    );
 
     const queryResult = UserAuthEventListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) {
@@ -29,7 +32,10 @@ class UserAuthEventsController extends PlatformBaseController {
 
   @Get("/platform/user-auth-events/summary")
   async summary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.identity_diagnostic.read",
+    );
 
     const queryResult = UserAuthEventSummaryQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) {

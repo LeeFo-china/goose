@@ -106,7 +106,10 @@ const authContext = {
   avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
-  permissions: [{ code: "platform.billing.recharge_product.manage", scope: "all" }],
+  permissions: [
+    { code: "platform.billing.read", scope: "all" },
+    { code: "platform.billing.recharge_product.manage", scope: "all" },
+  ],
 } satisfies AuthContext;
 
 const repository = {

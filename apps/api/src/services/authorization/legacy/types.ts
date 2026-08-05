@@ -19,6 +19,9 @@ export type AuthContext = {
   tenantSlug: string | null;
   tenantStatus: string | null;
   isPlatformAdmin: boolean;
+  isPlatformStaff?: boolean;
+  isPlatformSuperAdmin?: boolean;
+  adminAuthVersion?: number;
   employeeName: string | null;
   employeeStatus: string | null;
   departmentId: string | null;

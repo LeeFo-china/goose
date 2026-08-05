@@ -114,8 +114,11 @@ export class PlatformBrandingAddonProductService {
   }
 
   private requirePlatformOperator(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
     if (
-      !authContext.isPlatformAdmin || authContext.tenantId !== null ||
+      !isPlatformIdentity || authContext.tenantId !== null ||
       !authContext.employeeId || !authContext.authUserId
     ) throw Errors.forbidden();
     this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);

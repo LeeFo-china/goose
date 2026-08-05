@@ -52,7 +52,7 @@ function createController() {
     releaseServiceProvider as never,
   );
   const authContext = { isPlatformAdmin: true, permissions: [] };
-  (controller as unknown as Record<string, unknown>).getRequiredPlatformAdminContext =
+  (controller as unknown as Record<string, unknown>).getRequiredPlatformPermissionContext =
     mock(async () => authContext);
   return { controller, service, releaseService, releaseServiceProvider, authContext };
 }

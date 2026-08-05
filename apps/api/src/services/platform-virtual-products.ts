@@ -185,7 +185,8 @@ export class PlatformVirtualProductsService {
   }
 
   private assertPlatform(auth: AuthContext, permission: string) {
-    if (!auth.isPlatformAdmin) {
+    const isPlatformIdentity = auth.isPlatformStaff || auth.isPlatformAdmin;
+    if (auth.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
     this.accessPolicy.assertPermission(auth, permission);

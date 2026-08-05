@@ -10,6 +10,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const platformAuth = {
   authUserId: "auth-user-1",
   employeeId: "employee-1",
+  tenantId: null,
   isPlatformAdmin: true,
   permissions: [
     { code: "platform.ocr.recognition.read", scope: "all" },

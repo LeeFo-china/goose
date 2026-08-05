@@ -17,8 +17,10 @@ import {
   fillMarketingPageSettingsWithAi,
 } from "@/services/marketing-page-ai";
 import { marketingPageService } from "@/services/marketing-pages";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { Delete, Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import type { PermissionCode } from "@gooes/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   createAiPageContext,
@@ -28,7 +30,7 @@ import {
 class PlatformMarketingPagesController extends MarketingPagesBaseController {
   @Get("/platform/marketing-pages")
   async listPlatformPages(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const queryResult = MarketingPageListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -39,7 +41,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages")
   async createPlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const bodyResult = CreateMarketingPageSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -53,7 +55,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/ai-fill-create")
   async fillPlatformCreateWithAi(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const bodyResult = MarketingPageCreateAiFillSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -77,7 +79,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Get("/platform/marketing-pages/:id")
   async getPlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -88,7 +90,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Patch("/platform/marketing-pages/:id")
   async updatePlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -106,7 +108,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Delete("/platform/marketing-pages/:id")
   async archivePlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -120,7 +122,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Get("/platform/marketing-pages/:id/draft")
   async getPlatformDraft(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -131,7 +133,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Put("/platform/marketing-pages/:id/draft")
   async savePlatformDraft(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -149,7 +151,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/publish")
   async publishPlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentPublishContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -163,7 +165,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/ai-fill-block")
   async fillPlatformBlockWithAi(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -193,7 +195,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/ai-fill-settings")
   async fillPlatformSettingsWithAi(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentReadContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -223,7 +225,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/offline")
   async offlinePlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -237,7 +239,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/duplicate")
   async duplicatePlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -255,7 +257,7 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
 
   @Post("/platform/marketing-pages/:id/reorder")
   async reorderPlatformPage(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await this.getPlatformContentManageContext(request);
 
     const paramsResult = MarketingPageIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -269,6 +271,32 @@ class PlatformMarketingPagesController extends MarketingPagesBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(data);
+  }
+
+  private getPlatformContentReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformContentContext(request, "platform.site_content.read");
+  }
+
+  private getPlatformContentManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformContentContext(request, "platform.site_content.manage");
+  }
+
+  private getPlatformContentPublishContext(request: FastifyRequest) {
+    return this.getRequiredPlatformContentContext(request, "platform.site_content.publish");
+  }
+
+  private async getRequiredPlatformContentContext(
+    request: FastifyRequest,
+    permissionCode: PermissionCode,
+  ) {
+    const authContext = await this.getRequiredAuthContext(request);
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    platformAuthorizationService.assertPermission(authContext, permissionCode);
+    return authContext;
   }
 }
 

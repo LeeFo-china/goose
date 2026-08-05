@@ -432,12 +432,9 @@ export class TenantOnboardingReviewService {
   }
 
   private assertReviewPermission(authContext: AuthContext) {
-    if (
-      !authContext.isPlatformAdmin ||
-      !authContext.permissions.some((permission) =>
-        permission.code === REVIEW_PERMISSION
-      )
-    ) {
+    const isPlatformStaff = authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    const canReview = authContext.permissions.some((permission) => permission.code === REVIEW_PERMISSION);
+    if (authContext.tenantId !== null || !isPlatformStaff || !canReview) {
       throw reviewForbiddenError();
     }
   }

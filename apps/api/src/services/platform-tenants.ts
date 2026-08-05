@@ -7,15 +7,17 @@ import type {
 } from "@/schema/platform-tenants";
 import { authorizationService, type AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { platformAuthorizationService } from "@/services/platform-authorization";
+import type { PermissionCode } from "@gooes/domain";
 
 class PlatformTenantService {
   async list(query: PlatformTenantListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.read");
     return platformTenantRepository.list(query);
   }
 
   async create(input: CreatePlatformTenantInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.manage");
 
     const existing = await platformTenantRepository.findBySlug(input.slug);
     if (existing) {
@@ -79,7 +81,7 @@ class PlatformTenantService {
   }
 
   async getDetail(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.read");
     const record = await this.getRequiredTenant(id);
     const [usage, templateApplication, adminEmployees, roles] = await Promise.all([
       platformTenantRepository.getUsageStats([id]),
@@ -134,7 +136,7 @@ class PlatformTenantService {
   }
 
   async update(id: string, input: UpdatePlatformTenantInput, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.manage");
     await this.getRequiredTenant(id);
 
     const record = await platformTenantRepository.update(id, input);
@@ -164,7 +166,7 @@ class PlatformTenantService {
   }
 
   async suspend(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.status.manage");
     const tenant = await this.getRequiredTenant(id);
     if (tenant.status === "archived") {
       throw Errors.business(409, "已归档租户不能停用", "TENANT_ARCHIVED");
@@ -199,7 +201,7 @@ class PlatformTenantService {
   }
 
   async activate(id: string, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPermission(authContext, "platform.tenant.status.manage");
     const tenant = await this.getRequiredTenant(id);
     if (tenant.status === "archived") {
       throw Errors.business(409, "已归档租户不能启用", "TENANT_ARCHIVED");
@@ -233,10 +235,11 @@ class PlatformTenantService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPermission(authContext: AuthContext, code: PermissionCode) {
+    if (authContext.tenantId !== null || (!authContext.isPlatformStaff && !authContext.isPlatformAdmin)) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(authContext, code);
   }
 
   private async getRequiredTenant(id: string) {

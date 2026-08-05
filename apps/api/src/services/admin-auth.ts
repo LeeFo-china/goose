@@ -6,10 +6,11 @@ import {
   type AdminAuthEmployeeRecord,
 } from "@/repositories/admin-auth";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { sendSmsCode } from "@/services/sms";
 import { userIdentityService } from "@/services/user-identities";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
-import { getJwtExpiresAt, signToken } from "@/utils/jwt";
+import { getAdminJwtExpiresAt, signAdminToken } from "@/utils/jwt";
 import { isEmployeeOperableStatus } from "@gooes/domain";
 import { resolveStoredFileUrl } from "@/services/files/file-url-resolver";
 import {
@@ -94,6 +95,13 @@ function serializeTenantFromAuthContext(authContext: AuthContext) {
     name: authContext.tenantName,
     slug: authContext.tenantSlug,
     status: authContext.tenantStatus,
+  };
+}
+
+function serializePlatformSessionFlags(authContext: AuthContext) {
+  return {
+    is_platform_staff: Boolean(authContext.isPlatformStaff),
+    is_platform_super_admin: Boolean(authContext.isPlatformSuperAdmin),
   };
 }
 
@@ -297,11 +305,20 @@ class AdminAuthService {
     );
     authorizationService.assertTenantAvailable(authContext);
 
-    const token = signToken({
+    const isPlatformSession = Boolean(authContext.isPlatformStaff);
+    const adminAuthVersion = authContext.adminAuthVersion
+      ?? employee.admin_auth_version
+      ?? 1;
+    const token = signAdminToken({
       sub: authUserId,
       login_channel: "admin_web",
       roles: ["employee"],
-    });
+      admin_auth_version: adminAuthVersion,
+    }, { platform: isPlatformSession });
+    await adminAuthRepository.updateLastLogin(
+      employee.id,
+      new Date().toISOString(),
+    );
 
     return {
       token,
@@ -311,19 +328,27 @@ class AdminAuthService {
       tenant: serializeTenantFromAuthContext(authContext),
       roles: authContext.roleCodes,
       permissions: authContext.permissions,
-      expires_at: getJwtExpiresAt(),
+      ...serializePlatformSessionFlags(authContext),
+      expires_at: getAdminJwtExpiresAt({ platform: isPlatformSession }),
     };
   }
 
-  async me(authUserId?: string | null) {
+  async me(authUserId?: string | null, adminAuthVersion?: number) {
     if (!authUserId) {
       throw Errors.unauthorized("缺少登录凭证");
     }
 
-    const authContext = await authorizationService.getAuthContextByAuthUserId(
+    let authContext = await authorizationService.getAuthContextByAuthUserId(
       authUserId,
     );
     authorizationService.assertTenantAvailable(authContext);
+
+    if (authContext.isPlatformStaff) {
+      authContext = await platformAuthorizationService.assertPlatformSession(
+        authContext,
+        adminAuthVersion,
+      );
+    }
 
     if (
       !authContext.employeeId ||
@@ -343,6 +368,7 @@ class AdminAuthService {
       tenant: serializeTenantFromAuthContext(authContext),
       roles: authContext.roleCodes,
       permissions: authContext.permissions,
+      ...serializePlatformSessionFlags(authContext),
     };
   }
 }

@@ -33,7 +33,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/tenant-onboarding/applications")
   async listApplications(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const query = this.parse(TenantOnboardingApplicationListQuerySchema, request.query);
     return ResponseHandler.success(
       await tenantOnboardingReviewService.list(authContext, query),
@@ -42,7 +42,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/tenant-onboarding/applications/:id")
   async getApplication(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     return ResponseHandler.success(
       await tenantOnboardingReviewService.get(authContext, params.id),
@@ -51,7 +51,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/tenant-onboarding/applications/:id/reviews")
   async listReviews(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const query = this.parse(TenantOnboardingReviewListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -61,7 +61,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/tenant-onboarding/applications/:id/notifications")
   async listNotifications(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const query = this.parse(TenantOnboardingNotificationListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -75,7 +75,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/license-access")
   async accessLicense(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     return ResponseHandler.success(
       await tenantOnboardingReviewService.accessLicense(authContext, params.id),
@@ -84,7 +84,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/notifications/:deliveryId/retry")
   async retryNotification(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingNotificationIdParamSchema, request.params);
     this.parse(RetryTenantOnboardingNotificationSchema, request.body);
     return ResponseHandler.success(
@@ -98,7 +98,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/start-review")
   async startReview(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const body = this.parse(StartReviewTenantOnboardingApplicationSchema, request.body);
     return ResponseHandler.success(
@@ -108,7 +108,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/request-partner-assist")
   async requestPartnerAssist(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const body = this.parse(RequestTenantOnboardingPartnerAssistSchema, request.body);
     return ResponseHandler.success(
@@ -122,7 +122,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/request-supplement")
   async requestSupplement(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const body = this.parse(RequestSupplementTenantOnboardingApplicationSchema, request.body);
     return ResponseHandler.success(
@@ -136,7 +136,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/approve")
   async approve(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const body = this.parse(ApproveTenantOnboardingApplicationSchema, request.body);
     return ResponseHandler.success(
@@ -146,7 +146,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/tenant-onboarding/applications/:id/reject")
   async reject(request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOnboardingReviewContext(request);
     const params = this.parse(TenantOnboardingApplicationIdParamSchema, request.params);
     const body = this.parse(RejectTenantOnboardingApplicationSchema, request.body);
     return ResponseHandler.success(
@@ -156,7 +156,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/service-provider-publications")
   async listServiceProviderPublications(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const query = this.parse(TenantServiceProviderPublicationListQuerySchema, request.query);
     return ResponseHandler.success(
       await tenantServiceProvidersService.listPlatformQueue(context, query),
@@ -165,7 +165,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/service-provider-publications/:tenantId")
   async getServiceProviderPublication(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const params = this.parse(TenantServiceProviderPublicationParamSchema, request.params);
     return ResponseHandler.success(
       await tenantServiceProvidersService.getPlatformDetail(context, params.tenantId),
@@ -174,7 +174,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Get("/platform/service-provider-publications/:tenantId/areas")
   async listServiceProviderPublicationAreas(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const params = this.parse(TenantServiceProviderPublicationParamSchema, request.params);
     const query = this.parse(TenantServiceProviderAreaListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -188,7 +188,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/service-provider-publications/:tenantId/publish")
   async publishServiceProvider(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const params = this.parse(TenantServiceProviderPublicationParamSchema, request.params);
     const body = this.parse(PublishTenantServiceProviderProfileSchema, request.body);
     return ResponseHandler.success(
@@ -198,7 +198,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/service-provider-publications/:tenantId/return-draft")
   async returnServiceProviderToDraft(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const params = this.parse(TenantServiceProviderPublicationParamSchema, request.params);
     const body = this.parse(ReturnTenantServiceProviderProfileToDraftSchema, request.body);
     return ResponseHandler.success(
@@ -208,7 +208,7 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
 
   @Post("/platform/service-provider-publications/:tenantId/suspend")
   async suspendServiceProvider(request: FastifyRequest) {
-    const context = await this.getRequiredPlatformAdminContext(request);
+    const context = await this.getServiceProviderPublishContext(request);
     const params = this.parse(TenantServiceProviderPublicationParamSchema, request.params);
     const body = this.parse(SuspendTenantServiceProviderProfileSchema, request.body);
     return ResponseHandler.success(
@@ -223,6 +223,20 @@ class PlatformTenantOnboardingController extends PlatformBaseController {
     const result = schema.safeParse(input || {});
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data;
+  }
+
+  private getOnboardingReviewContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.tenant_onboarding.review",
+    );
+  }
+
+  private getServiceProviderPublishContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.service_provider.publish",
+    );
   }
 }
 

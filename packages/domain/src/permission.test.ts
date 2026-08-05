@@ -1,7 +1,51 @@
 import { describe, expect, test } from "bun:test";
 import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
+import type { PermissionCode } from "./permission";
 
 describe("domain permissions", () => {
+  test("exposes platform operator foundation permissions", () => {
+    const platformFoundationPermissions = {
+      "platform.dashboard.read": "查看平台概览",
+      "platform.operator.read": "查看平台运营人员",
+      "platform.operator.manage": "管理平台运营人员",
+      "platform.role.read": "查看平台角色",
+      "platform.role.manage": "管理平台角色",
+      "platform.audit.read": "查看平台审计日志",
+      "platform.tenant.read": "查看平台租户",
+      "platform.tenant.manage": "管理平台租户",
+      "platform.tenant.status.manage": "管理平台租户状态",
+      "platform.device.read": "查看平台设备资产",
+      "platform.device.manage": "管理平台设备资产",
+      "platform.lead.read": "查看平台线索",
+      "platform.lead.assign": "分配平台线索",
+      "platform.picture.read": "查看平台图片资料",
+      "platform.picture.manage": "管理平台图片资料",
+      "platform.marketing_page.read": "查看平台 H5 活动",
+      "platform.marketing_page.manage": "管理平台 H5 活动",
+      "platform.marketing_page.publish": "发布平台 H5 活动",
+      "platform.usage.read": "查看平台用量",
+      "platform.billing.read": "查看平台计费",
+      "platform.billing.manage": "管理平台计费",
+      "platform.ai_config.read": "查看平台 AI 路由",
+      "platform.ai_config.manage": "管理平台 AI 路由",
+      "platform.identity_diagnostic.read": "查看平台身份诊断",
+      "platform.system_setting.read": "查看平台系统配置",
+      "platform.system_setting.manage": "管理平台系统配置",
+      "platform.social_video.manage": "管理平台自媒体脚本",
+      "platform.location.manage": "管理平台运营区域",
+      "platform.ops.execute": "执行平台运维脚本",
+    } as const;
+
+    for (const code of Object.keys(platformFoundationPermissions) as Array<
+      keyof typeof platformFoundationPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code as PermissionCode]?.label).toBe(
+        platformFoundationPermissions[code],
+      );
+    }
+  });
+
   test("exposes the Douyin miniapp platform permission", () => {
     expect(PERMISSION_CODE_VALUES).toContain("platform.douyin_miniapp.manage");
     expect(PermissionCodeConfig["platform.douyin_miniapp.manage"]).toEqual({

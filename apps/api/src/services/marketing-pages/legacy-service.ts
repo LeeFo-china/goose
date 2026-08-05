@@ -1,5 +1,5 @@
 import {
-  assertPlatformAdmin,
+  assertPlatformSiteContentPermission,
   listPages,
   listPlatformPages,
   getNextActiveSortOrder,
@@ -51,7 +51,7 @@ import {
 } from "./legacy/leads-events";
 
 class MarketingPageService {
-  private assertPlatformAdmin = assertPlatformAdmin;
+  private assertPlatformSiteContentPermission = assertPlatformSiteContentPermission;
   listPages = listPages;
   listPlatformPages = listPlatformPages;
   private getNextActiveSortOrder = getNextActiveSortOrder;

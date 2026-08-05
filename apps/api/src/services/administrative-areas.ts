@@ -5,7 +5,9 @@ import {
 } from "@/repositories/administrative-areas";
 import type { AdministrativeAreaListQuery } from "@/schema/administrative-areas";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { Errors } from "@/errors/error-factory";
+import type { PermissionCode } from "@gooes/domain";
 
 export type AdministrativeAreaNode = AdministrativeAreaRecord & {
   children?: AdministrativeAreaNode[];
@@ -22,6 +24,7 @@ type PublicAdministrativeAreaNode = {
 
 const PUBLIC_CACHE_SECONDS = 24 * 60 * 60;
 const PUBLIC_SNAPSHOT_CACHE_TTL_MS = 30 * 60 * 1000;
+const PLATFORM_LOCATION_MANAGE_PERMISSION = "platform.location.manage" satisfies PermissionCode;
 
 type PublicAdministrativeAreaSnapshot = {
   rows: PublicAdministrativeAreaRecord[];
@@ -34,7 +37,7 @@ class AdministrativeAreaService {
   private publicSnapshotInFlight: Promise<PublicAdministrativeAreaSnapshot> | null = null;
 
   async list(query: AdministrativeAreaListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertLocationManagePermission(authContext);
     const list = await administrativeAreaRepository.list(query);
     return {
       list: query.tree ? this.toTree(list) : list,
@@ -175,10 +178,16 @@ class AdministrativeAreaService {
     return latestSyncedAt?.slice(0, 10) || new Date().toISOString().slice(0, 10);
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertLocationManagePermission(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(
+      authContext,
+      PLATFORM_LOCATION_MANAGE_PERMISSION,
+    );
   }
 }
 

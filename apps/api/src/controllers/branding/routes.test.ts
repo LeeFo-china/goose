@@ -1,13 +1,24 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { FastifyRequest } from "fastify";
-import type { AuthContext } from "@/services/authorization";
 import type {
   SerializedBrandProfile,
   SerializedEntitlement,
 } from "@/services/branding-contracts";
 import {
+  AUTH_USER_ID,
+  LOGO_FILE_ID,
+  TENANT_ID,
+  platformAuth,
+  platformEffective,
+  platformProfile,
+  serializedEntitlement,
+  tenantAuth,
+  tenantEffective,
+} from "./routes.fixtures.test";
+import {
   loadController,
   loadHarness,
+  mockPlatformPermission,
   registeredHandlers,
   requiredHandler,
 } from "./routes.test-helpers";
@@ -15,92 +26,6 @@ import {
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
-const EMPLOYEE_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
-const AUTH_USER_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const LOGO_FILE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
-
-const platformAuth = {
-  authUserId: AUTH_USER_ID,
-  tenantId: null,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: null,
-  employeeId: EMPLOYEE_ID,
-  employeeName: "平台管理员",
-  employeeStatus: "active",
-  isPlatformAdmin: true,
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
-  roleCodes: ["platform_admin"],
-  roles: [],
-  permissions: [{ code: "platform.branding.manage", scope: "all" }],
-} satisfies AuthContext;
-
-const tenantAuth = {
-  ...platformAuth,
-  tenantId: TENANT_ID,
-  tenantName: "测试租户",
-  tenantSlug: "test-tenant",
-  tenantStatus: "active",
-  isPlatformAdmin: false,
-  roleCodes: ["system_admin"],
-  permissions: [
-    { code: "brand.settings.read", scope: "all" },
-    { code: "brand.settings.update", scope: "all" },
-  ],
-} satisfies AuthContext;
-
-const platformProfile = {
-  display_name: "平台品牌",
-  logo_file_id: LOGO_FILE_ID,
-  logo_url: "https://cdn.example.com/platform.png",
-  status: "published",
-  version: 2,
-  published_version: 2,
-  has_unpublished_changes: false,
-  published_at: "2026-07-27T10:00:00.000Z",
-  updated_at: "2026-07-27T10:00:00.000Z",
-} satisfies SerializedBrandProfile;
-
-const serializedEntitlement = {
-  id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
-  tenant_id: TENANT_ID,
-  code: "custom_support_branding",
-  status: "active",
-  starts_at: "2026-07-27T10:00:00.000Z",
-  expires_at: "2027-07-27T10:00:00.000Z",
-  source_type: "manual_grant",
-  source_id: null,
-  suspended_at: null,
-  suspend_reason: null,
-  version: 1,
-  updated_at: "2026-07-27T10:00:00.000Z",
-} satisfies SerializedEntitlement;
-
-const platformEffective = {
-  source: "platform" as const,
-  tenant_id: null,
-  display_name: "平台品牌",
-  logo_url: "https://cdn.example.com/platform.png",
-  support_text: "平台品牌",
-  version: 2,
-  updated_at: "2026-07-27T10:00:00.000Z",
-};
-
-const tenantEffective = {
-  ...platformEffective,
-  source: "tenant" as const,
-  tenant_id: TENANT_ID,
-  display_name: "租户品牌",
-  support_text: "租户品牌",
-};
 
 describe("BrandingController routes", () => {
   test("registers exactly the twelve Batch A routes", async () => {
@@ -165,10 +90,15 @@ describe("BrandingController routes", () => {
       brandProfilesService,
       controller,
       effectiveBrandingService,
+      platformAuthorizationService,
     } = await loadHarness();
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalGet = brandProfilesService.getPlatform;
     const originalResolve = effectiveBrandingService.resolvePlatform;
+    const platformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const getRequiredAuthContext = mock(async () => platformAuth);
     const getPlatform = mock(async () => ({ profile: platformProfile }));
     const resolvePlatform = mock(async () => platformEffective);
@@ -186,9 +116,14 @@ describe("BrandingController routes", () => {
         effective: platformEffective,
       });
       expect(getRequiredAuthContext).toHaveBeenCalledWith(AUTH_USER_ID);
+      expect(platformPermission.assertPermission).toHaveBeenCalledWith(
+        platformAuth,
+        "platform.branding.manage",
+      );
       expect(getPlatform).toHaveBeenCalledWith(platformAuth);
       expect(resolvePlatform).toHaveBeenCalledTimes(1);
     } finally {
+      platformPermission.restore();
       authorizationService.getRequiredAuthContext = originalAuth;
       brandProfilesService.getPlatform = originalGet;
       effectiveBrandingService.resolvePlatform = originalResolve;
@@ -201,6 +136,7 @@ describe("BrandingController routes", () => {
       brandProfilesService,
       controller,
       effectiveBrandingService,
+      platformAuthorizationService,
     } = await loadHarness();
     const originals = {
       auth: authorizationService.getRequiredAuthContext,
@@ -208,6 +144,10 @@ describe("BrandingController routes", () => {
       publish: brandProfilesService.publishPlatform,
       resolve: effectiveBrandingService.resolvePlatform,
     };
+    const platformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const savedProfile = {
       ...platformProfile,
       version: 1,
@@ -246,6 +186,7 @@ describe("BrandingController routes", () => {
         user: { sub: AUTH_USER_ID },
       } as FastifyRequest, {})).rejects.toBe(publishFailure);
     } finally {
+      platformPermission.restore();
       authorizationService.getRequiredAuthContext = originals.auth;
       brandProfilesService.savePlatformDraft = originals.save;
       brandProfilesService.publishPlatform = originals.publish;
@@ -359,6 +300,7 @@ describe("BrandingController routes", () => {
     const {
       authorizationService,
       controller,
+      platformAuthorizationService,
       tenantEntitlementsService,
     } = await loadHarness();
     const originals = {
@@ -369,6 +311,10 @@ describe("BrandingController routes", () => {
       resume: tenantEntitlementsService.resume,
       revoke: tenantEntitlementsService.revoke,
     };
+    const platformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const result = { entitlement: serializedEntitlement };
     const listPlatform = mock(async () => ({
       list: [],
@@ -429,6 +375,7 @@ describe("BrandingController routes", () => {
         );
       }
     } finally {
+      platformPermission.restore();
       authorizationService.getRequiredAuthContext = originals.auth;
       Object.assign(tenantEntitlementsService, {
         listPlatform: originals.list,
@@ -441,11 +388,20 @@ describe("BrandingController routes", () => {
   });
 
   test("rejects invalid entitlement params, pagination, and action payloads", async () => {
-    const { authorizationService, controller, tenantEntitlementsService } =
+    const {
+      authorizationService,
+      controller,
+      platformAuthorizationService,
+      tenantEntitlementsService,
+    } =
       await loadHarness();
     const originalAuth = authorizationService.getRequiredAuthContext;
     const originalList = tenantEntitlementsService.listPlatform;
     const originalRevoke = tenantEntitlementsService.revoke;
+    const platformPermission = mockPlatformPermission(
+      platformAuthorizationService,
+      platformAuth,
+    );
     const listPlatform = mock(async () => ({
       list: [] as SerializedEntitlement[],
       pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
@@ -479,6 +435,7 @@ describe("BrandingController routes", () => {
       expect(listPlatform).not.toHaveBeenCalled();
       expect(revoke).not.toHaveBeenCalled();
     } finally {
+      platformPermission.restore();
       authorizationService.getRequiredAuthContext = originalAuth;
       tenantEntitlementsService.listPlatform = originalList;
       tenantEntitlementsService.revoke = originalRevoke;

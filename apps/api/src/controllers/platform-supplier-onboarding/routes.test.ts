@@ -16,12 +16,13 @@ const auth = {
   employeeId: "22222222-2222-4222-8222-222222222222",
   isPlatformAdmin: true,
 };
+const requirePlatformPermission = mock(async () => auth);
 
 async function controller() {
   const { default: value } = await import(".");
-  Object.defineProperty(value, "getRequiredPlatformAdminContext", {
+  Object.defineProperty(value, "getRequiredPlatformPermissionContext", {
     configurable: true,
-    value: mock(async () => auth),
+    value: requirePlatformPermission,
   });
   return value;
 }
@@ -48,6 +49,7 @@ describe("PlatformSupplierOnboardingController", () => {
   beforeEach(() => {
     create.mockClear();
     checkIdentity.mockClear();
+    requirePlatformPermission.mockClear();
   });
 
   test("registers supplier onboarding routes", async () => {
@@ -80,6 +82,10 @@ describe("PlatformSupplierOnboardingController", () => {
       }),
       "supplier-onboarding-1",
     );
+    expect(requirePlatformPermission).toHaveBeenCalledWith(
+      expect.anything(),
+      "platform.supplier.manage",
+    );
   });
 
   test("rejects create without idempotency key", async () => {
@@ -100,6 +106,10 @@ describe("PlatformSupplierOnboardingController", () => {
     expect(checkIdentity).toHaveBeenCalledWith(
       auth,
       "91411525MA9G000000",
+    );
+    expect(requirePlatformPermission).toHaveBeenCalledWith(
+      expect.anything(),
+      "platform.supplier.manage",
     );
   });
 });

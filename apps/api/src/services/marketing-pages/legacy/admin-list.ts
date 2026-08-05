@@ -32,11 +32,20 @@ import {
   type UpdateMarketingLeadInput,
   type UpdateMarketingPageInput,
 } from "./shared";
+import { platformAuthorizationService } from "@/services/platform-authorization";
+import type { PermissionCode } from "@gooes/domain";
 
-export function assertPlatformAdmin(this: any, authContext: AuthContext) {
-  if (!authContext.isPlatformAdmin) {
+export function assertPlatformSiteContentPermission(
+  this: any,
+  authContext: AuthContext,
+  permissionCode: PermissionCode,
+) {
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+  if (authContext.tenantId !== null || !isPlatformIdentity) {
     throw Errors.forbidden();
   }
+  platformAuthorizationService.assertPermission(authContext, permissionCode);
 }
 
 export async function listPages(this: any, authContext: AuthContext, query: MarketingPageListQuery) {
@@ -49,7 +58,7 @@ export async function listPages(this: any, authContext: AuthContext, query: Mark
 }
 
 export async function listPlatformPages(this: any, authContext: AuthContext, query: MarketingPageListQuery) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.read");
   const result = await marketingPageRepository.listPages(query, null, true);
   return {
     ...result,
@@ -210,7 +219,7 @@ export async function reorderPlatformPage(this: any,
   id: string,
   input: ReorderMarketingPageInput,
 ) {
-  this.assertPlatformAdmin(authContext);
+  this.assertPlatformSiteContentPermission(authContext, "platform.site_content.manage");
   await this.getExistingPage(id, null, true);
 
   return this.reorderActivePages({

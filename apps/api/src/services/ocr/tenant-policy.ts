@@ -110,8 +110,13 @@ export class OcrTenantPolicyService {
   }
 
   private assertPermission(authContext: AuthContext, permission: string) {
-    if (!authContext.isPlatformAdmin ||
-      !this.accessPolicy.hasPermission(authContext, permission)) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (
+      authContext.tenantId !== null ||
+      !isPlatformIdentity ||
+      !this.accessPolicy.hasPermission(authContext, permission)
+    ) {
       throw Errors.forbidden();
     }
   }

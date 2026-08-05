@@ -339,35 +339,37 @@ export class PlatformPartnerRevenueService {
   }
 
   private assertCanReadRevenue(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformIdentity(authContext);
     if (!this.hasPermission(authContext, REVENUE_READ_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private assertCanManageRevenue(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformIdentity(authContext);
     if (!this.hasPermission(authContext, REVENUE_MANAGE_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private assertCanReadCommissions(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformIdentity(authContext);
     if (!this.hasPermission(authContext, COMMISSION_READ_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
   private assertCanManageSettlements(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformIdentity(authContext);
     if (!this.hasPermission(authContext, SETTLEMENT_MANAGE_PERMISSION)) {
       throw Errors.forbidden();
     }
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformIdentity(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
   }

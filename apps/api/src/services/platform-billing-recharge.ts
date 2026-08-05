@@ -41,6 +41,7 @@ type PlatformBillingRechargeServiceDependencies =
   };
 
 const PRODUCT_MANAGE_PERMISSION = "platform.billing.recharge_product.manage";
+const BILLING_READ_PERMISSION = "platform.billing.read";
 const RECOMMENDED_PRODUCT_TEMPLATE = "recommended_v1";
 const RECOMMENDED_RECHARGE_PRODUCTS = [
   {
@@ -107,7 +108,7 @@ export class PlatformBillingRechargeService {
     authContext: AuthContext,
     query: PlatformRechargeProductQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, BILLING_READ_PERMISSION);
     return this.repository.listProducts({
       page: query.page,
       pageSize: query.pageSize,
@@ -174,7 +175,7 @@ export class PlatformBillingRechargeService {
     authContext: AuthContext,
     query: PlatformRechargeOrderQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, BILLING_READ_PERMISSION);
     return this.repository.listOrders({
       page: query.page,
       pageSize: query.pageSize,
@@ -184,7 +185,7 @@ export class PlatformBillingRechargeService {
   }
 
   async getOrderDetail(authContext: AuthContext, orderId: string) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, BILLING_READ_PERMISSION);
     const order = await this.repository.findOrderById(orderId);
     if (!order) {
       throw Errors.business(
@@ -211,7 +212,7 @@ export class PlatformBillingRechargeService {
     orderId: string,
     input: PlatformRechargeOrderCompensateInput = {},
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertCanManageProducts(authContext);
     return this.compensationService.compensateWechatOrder(
       authContext,
       orderId,
@@ -220,14 +221,16 @@ export class PlatformBillingRechargeService {
   }
 
   private assertCanManageProducts(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
-    if (!this.hasPermission(authContext, PRODUCT_MANAGE_PERMISSION)) {
-      throw Errors.forbidden();
-    }
+    this.assertPlatformPermission(authContext, PRODUCT_MANAGE_PERMISSION);
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformPermission(authContext: AuthContext, permissionCode: string) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    if (!this.hasPermission(authContext, permissionCode)) {
       throw Errors.forbidden();
     }
   }

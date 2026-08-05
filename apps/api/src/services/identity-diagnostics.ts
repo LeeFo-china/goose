@@ -8,8 +8,12 @@ import {
 } from "@/repositories/identity-diagnostics";
 import type { IdentityDiagnosticsQuery } from "@/schema/identity-diagnostics";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
+import type { PermissionCode } from "@gooes/domain";
 
 type DiagnosticSeverity = "ok" | "warning" | "danger";
+const PLATFORM_IDENTITY_DIAGNOSTIC_READ_PERMISSION =
+  "platform.identity_diagnostic.read" satisfies PermissionCode;
 
 type DiagnosticIssue = {
   severity: DiagnosticSeverity;
@@ -22,7 +26,7 @@ type DiagnosticIssue = {
 
 class IdentityDiagnosticsService {
   async inspect(query: IdentityDiagnosticsQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertIdentityDiagnosticReadPermission(authContext);
 
     const data = await identityDiagnosticsRepository.lookup(query.keyword);
     const issues = this.buildIssues(data);
@@ -58,10 +62,16 @@ class IdentityDiagnosticsService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertIdentityDiagnosticReadPermission(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(
+      authContext,
+      PLATFORM_IDENTITY_DIAGNOSTIC_READ_PERMISSION,
+    );
   }
 
   private buildIssues(data: Awaited<ReturnType<typeof identityDiagnosticsRepository.lookup>>) {

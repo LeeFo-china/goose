@@ -5,36 +5,57 @@ import {
   UpdateSystemSettingSchema,
 } from "@/schema/system-settings";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { systemSettingsService } from "@/services/system-settings";
 import { tencentLbsService } from "@/services/tencent-lbs";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
+import type { PermissionCode } from "@gooes/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
+
+type SystemSettingsPermission = Extract<
+  PermissionCode,
+  "system.settings.read" | "system.settings.update" | "system.settings.test"
+>;
 
 class SystemSettingsController extends TenantBaseController {
   constructor() {
     super("system_settings");
   }
 
-  private async getRequiredPlatformSettingsContext(request: FastifyRequest) {
+  private async getRequiredPlatformSettingsContext(
+    request: FastifyRequest,
+    permissionCode: SystemSettingsPermission,
+  ) {
     const authContext = await this.getRequiredAuthContext(request);
-    if (!authContext.isPlatformAdmin) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(authContext, permissionCode);
     return authContext;
   }
 
   private assertSettingsPermission(
     authContext: AuthContext,
-    permissionCode: "system.settings.read" | "system.settings.update",
+    permissionCode: SystemSettingsPermission,
   ) {
-    if (authContext.isPlatformAdmin) return;
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId === null && isPlatformIdentity) {
+      platformAuthorizationService.assertPermission(authContext, permissionCode);
+      return;
+    }
     this.assertPermission(authContext, permissionCode);
   }
 
   @Get("/platform/system-settings")
   async listPlatformSettings(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformSettingsContext(request);
+    const authContext = await this.getRequiredPlatformSettingsContext(
+      request,
+      "system.settings.read",
+    );
 
     const data = await systemSettingsService.listSettings(authContext);
     return ResponseHandler.success(data);
@@ -42,7 +63,10 @@ class SystemSettingsController extends TenantBaseController {
 
   @Patch("/platform/system-settings/:key")
   async updatePlatformSetting(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformSettingsContext(request);
+    const authContext = await this.getRequiredPlatformSettingsContext(
+      request,
+      "system.settings.update",
+    );
 
     const paramsResult = SystemSettingKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -60,7 +84,10 @@ class SystemSettingsController extends TenantBaseController {
 
   @Post("/platform/system-settings/tencent-lbs/test")
   async testPlatformTencentLbs(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformSettingsContext(request);
+    await this.getRequiredPlatformSettingsContext(
+      request,
+      "system.settings.test",
+    );
 
     const data = await tencentLbsService.testWebserviceConfig();
     return ResponseHandler.success(data);
@@ -124,7 +151,8 @@ class SystemSettingsController extends TenantBaseController {
 
   @Post("/admin/system-settings/tencent-lbs/test")
   async testTencentLbs(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformSettingsContext(request);
+    const authContext = await this.getRequiredAuthContext(request);
+    this.assertSettingsPermission(authContext, "system.settings.test");
 
     const data = await tencentLbsService.testWebserviceConfig();
     return ResponseHandler.success(data);

@@ -5,10 +5,14 @@ import {
 } from "@/repositories/platform-audit-logs";
 import type { PlatformAuditLogListQuery } from "@/schema/platform-audit-logs";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 
 class PlatformAuditLogService {
   async list(query: PlatformAuditLogListQuery, authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    platformAuthorizationService.assertPermission(
+      authContext,
+      "platform.audit.read",
+    );
     return platformAuditLogRepository.list(query);
   }
 
@@ -21,12 +25,6 @@ class PlatformAuditLogService {
       return await this.record(input);
     } catch {
       return null;
-    }
-  }
-
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
-      throw Errors.forbidden();
     }
   }
 }

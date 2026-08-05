@@ -11,9 +11,11 @@ export type {
   UsageSmsLogsQuery,
   UsageSocialVideoLogsQuery,
 } from "@/schema/usage";
-export { accessPolicyService } from "@/services/access-policy";
+import { accessPolicyService } from "@/services/access-policy";
+export { accessPolicyService };
 export type { AuthContext } from "@/services/authorization";
 import type { AuthContext } from "@/services/authorization";
+import type { PermissionCode } from "@gooes/domain";
 
 export type DateRange = {
   dateFrom: string;
@@ -34,8 +36,14 @@ export const ACTIVE_PROJECT_STATUSES = new Set([
   "acceptance",
 ]);
 
-export function assertPlatformAdmin(authContext: AuthContext) {
-  if (!authContext.isPlatformAdmin) {
+export function assertPlatformUsagePermission(
+  authContext: AuthContext,
+  permissionCode: PermissionCode,
+) {
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+  if (authContext.tenantId !== null || !isPlatformIdentity) {
     throw Errors.forbidden();
   }
+  accessPolicyService.assertPermission(authContext, permissionCode);
 }

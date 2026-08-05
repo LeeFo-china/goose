@@ -59,7 +59,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers")
   async listSuppliers(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const query = this.parse(PlatformSupplierListQuerySchema, request.query);
     return ResponseHandler.success(
       await platformSuppliersService.listSuppliers(auth, query),
@@ -68,7 +68,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers")
   async createSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const input = this.parse(PlatformSupplierCreateSchema, request.body);
     return ResponseHandler.success(await platformSuppliersService.createSupplier(
@@ -79,7 +79,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/supplier-qualification-types")
   async listQualificationTypes(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const query = this.parse(
       SupplierQualificationTypeListQuerySchema,
       request.query,
@@ -91,7 +91,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/supplier-qualification-types")
   async createQualificationType(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const input = this.parse(SupplierQualificationTypeCreateSchema, request.body);
     return ResponseHandler.success(
@@ -101,7 +101,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/supplier-qualification-types/:id")
   async updateQualificationType(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierQualificationTypeUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -114,7 +114,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id")
   async getSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     return ResponseHandler.success(
       await platformSuppliersService.getSupplier(auth, id),
@@ -123,7 +123,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/suppliers/:id")
   async updateSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(PlatformSupplierUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -133,7 +133,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/submit")
   async submitSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierCommandSchema, request.body);
@@ -146,7 +146,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/approve")
   async approveSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierReviewContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierCommandSchema, request.body);
@@ -159,7 +159,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/reject")
   async rejectSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierReviewContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(
@@ -175,7 +175,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/suspend")
   async suspendSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(
@@ -191,7 +191,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/resume")
   async resumeSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierCommandSchema, request.body);
@@ -204,7 +204,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/blacklist")
   async blacklistSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierBlacklistContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierBlacklistCommandSchema, request.body);
@@ -217,7 +217,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id/qualifications")
   async listQualifications(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const query = this.parse(SupplierChildListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -230,7 +230,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/qualifications")
   async createQualification(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierQualificationCreateSchema, request.body);
@@ -244,7 +244,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/suppliers/:id/qualifications/:qualificationId")
   async updateQualification(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const params = this.parse(SupplierQualificationParamSchema, request.params);
     const input = this.parse(SupplierQualificationUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -258,7 +258,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/qualifications/:qualificationId/verify")
   async verifyQualification(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierReviewContext(request);
     const key = requireIdempotencyKey(request);
     const params = this.parse(SupplierQualificationParamSchema, request.params);
     const input = this.parse(SupplierCommandSchema, request.body);
@@ -276,7 +276,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/qualifications/:qualificationId/reject")
   async rejectQualification(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierReviewContext(request);
     const key = requireIdempotencyKey(request);
     const params = this.parse(SupplierQualificationParamSchema, request.params);
     const input = this.parse(
@@ -297,7 +297,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id/service-regions")
   async listServiceRegions(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const query = this.parse(SupplierChildListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -310,7 +310,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/service-regions")
   async createServiceRegion(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierServiceRegionCreateSchema, request.body);
@@ -324,7 +324,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/suppliers/:id/service-regions/:regionId")
   async updateServiceRegion(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const params = this.parse(SupplierServiceRegionParamSchema, request.params);
     const input = this.parse(SupplierServiceRegionUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -338,7 +338,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id/addresses")
   async listAddresses(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const query = this.parse(SupplierChildListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -351,7 +351,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/addresses")
   async createAddress(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierAddressCreateSchema, request.body);
@@ -365,7 +365,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/suppliers/:id/addresses/:addressId")
   async updateAddress(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const params = this.parse(SupplierAddressParamSchema, request.params);
     const input = this.parse(SupplierAddressUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -379,7 +379,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id/contacts")
   async listContacts(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const query = this.parse(SupplierChildListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -392,7 +392,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Post("/platform/suppliers/:id/contacts")
   async createContact(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const input = this.parse(SupplierContactCreateSchema, request.body);
@@ -406,7 +406,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/suppliers/:id/contacts/:contactId")
   async updateContact(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const params = this.parse(SupplierContactParamSchema, request.params);
     const input = this.parse(SupplierContactUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -420,7 +420,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/suppliers/:id/events")
   async listEvents(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { id } = this.parse(PlatformSupplierIdParamSchema, request.params);
     const query = this.parse(SupplierEventListQuerySchema, request.query);
     return ResponseHandler.success(
@@ -433,7 +433,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Get("/platform/tenant-supplier-settings/:tenantId")
   async getTenantSupplierSettings(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierViewContext(request);
     const { tenantId } = this.parse(
       PlatformTenantSupplierSettingsParamSchema,
       request.params,
@@ -445,7 +445,7 @@ class PlatformSuppliersController extends PlatformBaseController {
 
   @Patch("/platform/tenant-supplier-settings/:tenantId")
   async setTenantSupplierSettings(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getSupplierManageContext(request);
     const key = requireIdempotencyKey(request);
     const { tenantId } = this.parse(
       PlatformTenantSupplierSettingsParamSchema,
@@ -471,6 +471,22 @@ class PlatformSuppliersController extends PlatformBaseController {
     const result = schema.safeParse(input || {});
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data;
+  }
+
+  private getSupplierViewContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.supplier.view");
+  }
+
+  private getSupplierManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.supplier.manage");
+  }
+
+  private getSupplierReviewContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.supplier.review");
+  }
+
+  private getSupplierBlacklistContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.supplier.blacklist");
   }
 }
 

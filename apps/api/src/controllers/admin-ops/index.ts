@@ -33,14 +33,14 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/scripts")
   async listScripts(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     return ResponseHandler.success(opsScriptService.listScripts());
   }
 
   @Get("/admin/ops/script-runs")
   async listScriptRuns(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const queryResult = OpsScriptRunListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -51,7 +51,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/system-metrics")
   async getSystemMetrics(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const data = await opsScriptService.getSystemMetrics();
     return ResponseHandler.success(data);
@@ -59,7 +59,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/service-health")
   async getServiceHealth(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const data = await dockerServiceHealthService.getSnapshot();
     return ResponseHandler.success(data);
@@ -67,7 +67,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/location-metrics")
   async getLocationMetrics(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const data = await locationGovernanceService.getMetrics(authContext);
     return ResponseHandler.success(data);
@@ -75,14 +75,14 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/options")
   async getReleaseOptions(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     return ResponseHandler.success(releaseDeploymentService.getOptions());
   }
 
   @Get("/admin/ops/releases/runtime-versions")
   async getReleaseRuntimeVersions(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const data = await releaseDeploymentService.getRuntimeVersions();
     return ResponseHandler.success(data);
@@ -90,7 +90,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/runs")
   async listReleaseRuns(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const queryResult = ReleaseRunListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -101,7 +101,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/runs/:runId/failure-summary")
   async getReleaseRunFailureSummary(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const paramsResult = ReleaseRunFailureSummaryParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -112,7 +112,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/successful-refs")
   async listSuccessfulReleaseRefs(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const queryResult = ReleaseSuccessfulRefListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -123,7 +123,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/refs")
   async listReleaseRefs(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const queryResult = ReleaseRefListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -134,7 +134,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/tags")
   async createReleaseTag(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const bodyResult = ReleaseCreateTagSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -145,7 +145,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/rollback-tag")
   async createReleaseRollbackTag(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const bodyResult = ReleaseCreateRollbackTagSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -156,7 +156,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/dispatch")
   async dispatchRelease(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const bodyResult = ReleaseDispatchSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -167,7 +167,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/production-candidates/:runId")
   async getProductionReleaseCandidate(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -178,7 +178,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/production-candidates/:runId/deploy")
   async deployProductionReleaseCandidate(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -196,7 +196,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/production-migrations/dispatch")
   async dispatchProductionMigration(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const bodyResult = ReleaseProductionMigrationDispatchSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -207,7 +207,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Post("/admin/ops/releases/production-migrations/precheck")
   async dispatchProductionMigrationPrecheck(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const bodyResult = ReleaseProductionMigrationPrecheckDispatchSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -218,7 +218,7 @@ class AdminOpsController extends PlatformBaseController {
 
   @Get("/admin/ops/releases/production-migrations/precheck/:runId")
   async getProductionMigrationPrecheck(request: FastifyRequest, reply: FastifyReply) {
-    await this.getRequiredPlatformAdminContext(request);
+    await this.getOpsContext(request);
 
     const paramsResult = ReleaseProductionCandidateParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -227,9 +227,13 @@ class AdminOpsController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
+  private getOpsContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.ops.execute");
+  }
+
   @Post("/admin/ops/scripts/:scriptKey/run")
   async runScript(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getOpsContext(request);
 
     const paramsResult = OpsScriptKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);

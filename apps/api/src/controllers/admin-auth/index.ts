@@ -73,7 +73,10 @@ class AdminAuthController extends BaseController {
 
   @Get("/admin/auth/me")
   async me(request: FastifyRequest, reply: FastifyReply) {
-    const result = await adminAuthService.me(request.user?.sub);
+    const result = await adminAuthService.me(
+      request.user?.sub,
+      request.user?.admin_auth_version,
+    );
 
     return ResponseHandler.success(result);
   }

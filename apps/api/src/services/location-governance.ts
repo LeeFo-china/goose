@@ -3,7 +3,12 @@ import {
   userLocationContextRepository,
 } from "@/repositories/user-location-contexts";
 import type { AuthContext } from "@/services/authorization";
+import { platformAuthorizationService } from "@/services/platform-authorization";
 import { Errors } from "@/errors/error-factory";
+import type { PermissionCode } from "@gooes/domain";
+
+const PLATFORM_OPS_EXECUTE_PERMISSION =
+  "platform.ops.execute" satisfies PermissionCode;
 
 type LocationContextMetricsWindow = {
   window: "24h" | "7d";
@@ -26,7 +31,7 @@ type LocationContextMetricsWindow = {
 
 class LocationGovernanceService {
   async getMetrics(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertOpsPermission(authContext);
     const now = new Date();
     const since7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
     const since24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
@@ -54,10 +59,16 @@ class LocationGovernanceService {
     };
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertOpsPermission(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
       throw Errors.forbidden();
     }
+    platformAuthorizationService.assertPermission(
+      authContext,
+      PLATFORM_OPS_EXECUTE_PERMISSION,
+    );
   }
 
   private buildMetricsWindow(

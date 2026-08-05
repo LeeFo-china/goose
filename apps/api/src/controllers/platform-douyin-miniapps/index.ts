@@ -55,7 +55,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Get("/platform/douyin-miniapps")
   async listInstallations(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const queryResult = PlatformDouyinMiniappListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await this.service.list(authContext, queryResult.data);
@@ -64,7 +64,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Get("/platform/douyin-miniapps/:id")
   async getInstallation(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     const data = await this.service.get(authContext, installationId);
     return ResponseHandler.success(data);
@@ -72,7 +72,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Post("/platform/douyin-miniapps/:id/bind")
   async bindInstallation(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     const bodyResult = BindPlatformDouyinMiniappSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -82,7 +82,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Post("/platform/douyin-miniapps/template-development")
   async createTemplateDevelopment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const bodyResult = CreateTemplateDevelopmentInstallationSchema.safeParse(
       request.body || {},
     );
@@ -93,7 +93,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Patch("/platform/douyin-miniapps/:id/config")
   async updateConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     const bodyResult = UpdatePlatformDouyinMiniappConfigSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -121,7 +121,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Get("/platform/douyin-miniapps/:id/releases")
   async listReleases(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     const queryResult = PlatformDouyinMiniappReleaseListQuerySchema.safeParse(
       request.query || {},
@@ -134,7 +134,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Post("/platform/douyin-miniapps/:id/releases/upload")
   async uploadRelease(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     this.parseEmptyRequestPart(request.query);
     const bodyResult = UploadPlatformDouyinMiniappReleaseSchema.safeParse(request.body || {});
@@ -152,7 +152,7 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
 
   @Post("/platform/douyin-miniapps/:id/releases/:releaseId/submit-audit")
   async submitReleaseAudit(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const { id, releaseId } = this.parseReleaseIds(request);
     this.parseEmptyRequestPart(request.query);
     const bodyResult = SubmitPlatformDouyinMiniappReleaseAuditSchema.safeParse(
@@ -184,11 +184,11 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
   private async runIdAction(
     request: FastifyRequest,
     action: (
-      authContext: AuthContext & { isPlatformAdmin: true },
+      authContext: AuthContext,
       installationId: string,
     ) => Promise<unknown>,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const installationId = this.parseInstallationId(request);
     return ResponseHandler.success(await action(authContext, installationId));
   }
@@ -197,12 +197,12 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     request: FastifyRequest,
     action: (
       service: ReleaseControllerService,
-      authContext: AuthContext & { isPlatformAdmin: true },
+      authContext: AuthContext,
       installationId: string,
       releaseId: string,
     ) => Promise<unknown>,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getDouyinMiniappManageContext(request);
     const { id, releaseId } = this.parseReleaseIds(request);
     this.parseEmptyRequestPart(request.query);
     this.parseEmptyRequestPart(request.body);
@@ -229,6 +229,10 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
       input === undefined ? {} : input,
     );
     if (!result.success) throw Errors.fromZod(result.error);
+  }
+
+  private getDouyinMiniappManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.douyin_miniapp.manage");
   }
 }
 

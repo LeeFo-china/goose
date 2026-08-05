@@ -38,7 +38,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
 
   @Get("/platform/payment/wechat-pay/config")
   async getWechatPayConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     const data = await platformPaymentConfigService.getWechatPayConfig(
       authContext,
     );
@@ -47,7 +47,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
 
   @Put("/platform/payment/wechat-pay/config")
   async updateWechatPayConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     const bodyResult = UpdatePlatformWechatPayConfigSchema.safeParse(
       request.body || {},
     );
@@ -62,7 +62,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
 
   @Get("/platform/payment/wechat-pay/profiles")
   async listWechatPayProfiles(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     const data = await platformPaymentConfigService.listWechatPayProfiles(
       authContext,
     );
@@ -71,7 +71,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
 
   @Get("/platform/payment/wechat-pay/readiness")
   async getWechatPayReadiness(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     const data = await platformPaymentConfigService.getWechatPayReadiness(
       authContext,
     );
@@ -83,7 +83,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     const profileCode = this.parseProfileCode(request);
     const data = await platformPaymentConfigService.getWechatPayProfileConfig(
       authContext,
@@ -97,7 +97,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     const profileCode = this.parseProfileCode(request);
     const bodyResult = UpdatePlatformWechatPayConfigSchema.safeParse(
       request.body || {},
@@ -117,7 +117,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     const profileCode = this.parseProfileCode(request);
     const bodyResult = UpdatePlatformWechatPaySecretBundleSchema.safeParse(
       request.body || {},
@@ -137,7 +137,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     const profileCode = this.parseProfileCode(request);
     const data = await platformPaymentConfigService.validateWechatPayProfile(
       authContext,
@@ -151,7 +151,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     this.parseEmptyQuery(request);
     const data = await platformBrandingVirtualPaymentSettingsService.get(
       authContext,
@@ -164,7 +164,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const bodyResult = UpdatePlatformWechatVirtualSettingsSchema.safeParse(
       request.body || {},
@@ -182,7 +182,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const bodyResult = UpdatePlatformWechatVirtualChannelSchema.safeParse(
@@ -201,7 +201,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const bodyResult = UpdatePlatformWechatVirtualSecretBundleSchema.safeParse(
@@ -218,7 +218,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const bodyResult = UpdatePlatformWechatVirtualMessageTokenSchema.safeParse(
       request.body || {},
@@ -236,7 +236,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigReadContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const data = await brandingVirtualProductCatalogCompatibilityService
@@ -254,7 +254,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const bodyResult = PlatformWechatVirtualProductValidationSchema.safeParse(
@@ -273,7 +273,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const bodyResult = PlatformWechatVirtualProductValidationSchema.safeParse(
@@ -292,7 +292,7 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPaymentConfigManageContext(request);
     this.parseEmptyQuery(request);
     const environment = this.parseVirtualEnvironment(request);
     const bodyResult = PlatformWechatVirtualProductValidationSchema.safeParse(
@@ -327,6 +327,14 @@ class PlatformPaymentConfigsController extends PlatformBaseController {
     );
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data.environment;
+  }
+
+  private getPaymentConfigReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.payment.config.read");
+  }
+
+  private getPaymentConfigManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.payment.config.manage");
   }
 }
 

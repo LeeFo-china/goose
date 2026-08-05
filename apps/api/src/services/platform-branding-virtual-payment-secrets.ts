@@ -189,7 +189,9 @@ export class PlatformBrandingVirtualPaymentSecretService {
   }
 
   private requirePlatformContext(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin || authContext.tenantId !== null) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (!isPlatformIdentity || authContext.tenantId !== null) {
       throw Errors.forbidden();
     }
   }
@@ -198,9 +200,8 @@ export class PlatformBrandingVirtualPaymentSecretService {
     authUserId: string;
     employeeId: string;
     tenantId: null;
-    isPlatformAdmin: true;
   } {
-    return authContext.isPlatformAdmin &&
+    return (authContext.isPlatformStaff || authContext.isPlatformAdmin) &&
       authContext.tenantId === null &&
       Boolean(authContext.employeeId) &&
       Boolean(authContext.authUserId) &&

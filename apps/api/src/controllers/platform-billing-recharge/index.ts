@@ -21,7 +21,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Get("/platform/billing/recharge-products")
   async listProducts(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getBillingReadContext(request);
     const queryResult = PlatformRechargeProductQuerySchema.safeParse(
       request.query || {},
     );
@@ -36,7 +36,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Post("/platform/billing/recharge-products")
   async createProduct(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRechargeProductManageContext(request);
     const bodyResult = PlatformRechargeProductCreateSchema.safeParse(
       request.body || {},
     );
@@ -54,7 +54,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRechargeProductManageContext(request);
     const data = await platformBillingRechargeService.applyRecommendedProducts(
       authContext,
     );
@@ -63,7 +63,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Patch("/platform/billing/recharge-products/:id")
   async updateProduct(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRechargeProductManageContext(request);
     const paramsResult = PlatformRechargeProductParamSchema.safeParse(
       request.params || {},
     );
@@ -83,7 +83,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Get("/platform/billing/recharge-orders")
   async listOrders(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getBillingReadContext(request);
     const queryResult = PlatformRechargeOrderQuerySchema.safeParse(
       request.query || {},
     );
@@ -98,7 +98,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Get("/platform/billing/recharge-orders/:id")
   async getOrderDetail(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getBillingReadContext(request);
     const paramsResult = PlatformRechargeOrderParamSchema.safeParse(
       request.params || {},
     );
@@ -113,7 +113,7 @@ class PlatformBillingRechargeController extends PlatformBaseController {
 
   @Post("/platform/billing/recharge-orders/:id/compensate")
   async compensateOrder(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRechargeProductManageContext(request);
     const paramsResult = PlatformRechargeOrderParamSchema.safeParse(
       request.params || {},
     );
@@ -129,6 +129,14 @@ class PlatformBillingRechargeController extends PlatformBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(data);
+  }
+
+  private getBillingReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.billing.read");
+  }
+
+  private getRechargeProductManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.billing.recharge_product.manage");
   }
 }
 
