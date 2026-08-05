@@ -95,6 +95,14 @@ export const PlatformServiceAcceptancePreparationSchema = z.object({
   file_ids: FileIdsSchema,
 }).strict();
 
+export const PlatformServiceOverdueAcceptanceConfirmSchema = z.object({
+  expected_version: ExpectedVersionSchema,
+  remark: z.string().trim()
+    .min(1, "确认原因不能为空")
+    .max(1000, "确认原因不能超过 1000 个字符"),
+  metadata: MetadataSchema,
+}).strict();
+
 export const PlatformServiceRefundReviewSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
   expected_version: ExpectedVersionSchema,
@@ -120,5 +128,7 @@ export type PlatformServiceFulfillmentRecordInput =
   z.infer<typeof PlatformServiceFulfillmentRecordSchema>;
 export type PlatformServiceAcceptancePreparationInput =
   z.infer<typeof PlatformServiceAcceptancePreparationSchema>;
+export type PlatformServiceOverdueAcceptanceConfirmInput =
+  z.infer<typeof PlatformServiceOverdueAcceptanceConfirmSchema>;
 export type PlatformServiceRefundReviewInput =
   z.infer<typeof PlatformServiceRefundReviewSchema>;

@@ -80,6 +80,27 @@ export function PlatformServiceWorkOrderTable({
       meta: { cellClassName: "whitespace-nowrap" },
     },
     {
+      id: "acceptance_preparation",
+      header: "客户验收",
+      cell: ({ row }) => {
+        const acceptance = row.original.acceptance_preparation;
+        if (!acceptance) {
+          return <span className="text-muted-foreground">未提交</span>;
+        }
+        return (
+          <div className="space-y-1">
+            <Badge variant={acceptance.acceptance_overdue ? "danger" : "warning"}>
+              {acceptance.acceptance_overdue ? "已逾期" : "确认中"}
+            </Badge>
+            <div className="text-xs text-muted-foreground">
+              截止 {formatDateTime(acceptance.acceptance_due_at)}
+            </div>
+          </div>
+        );
+      },
+      meta: { cellClassName: "whitespace-nowrap" },
+    },
+    {
       accessorKey: "updated_at",
       header: "更新时间",
       cell: ({ row }) => (
@@ -110,10 +131,9 @@ export function PlatformServiceWorkOrderTable({
       columns={columns}
       data={workOrders}
       emptyText="当前筛选条件下没有实施工单"
-      minWidth="min-w-[1280px]"
+      minWidth="min-w-[1400px]"
       tableClassName="border-t-0"
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}
     />
   );
 }
-

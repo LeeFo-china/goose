@@ -90,6 +90,7 @@ const acceptancePreparation = {
   prepared_by_employee_id: employeeId,
   prepared_at: "2026-08-03T12:30:00.000Z",
   submitted_at: "2026-08-03T12:40:00.000Z",
+  acceptance_due_at: "2026-08-06T12:40:00.000Z",
   created_at: "2026-08-03T12:30:00.000Z",
   updated_at: "2026-08-03T12:40:00.000Z",
 } satisfies AcceptancePreparationRecord;
@@ -229,10 +230,41 @@ describe("Tenant platform service order acceptance", () => {
     expect(result.acceptance_preparation).toMatchObject({
       status: "submitted",
       summary: "客户专属系统已完成部署、服务器配置和首次培训。",
+      acceptance_due_at: "2026-08-06T12:40:00.000Z",
+      acceptance_overdue: false,
+      acceptance_remaining_seconds: 261600,
     });
     expect(result.fulfillment_records[0]).toMatchObject({
       record_type: "server_configuration",
       attachments: [{ file_id: "00000000-0000-4000-8000-000000000901" }],
+    });
+    expect(result.available_actions.accept).toMatchObject({ enabled: true });
+    expect(result.available_actions.reject).toMatchObject({ enabled: true });
+  });
+
+  test("marks acceptance preparation as overdue without hiding tenant decision actions", async () => {
+    dependencies.repository.findAcceptanceViewByTenantAndOrderId
+      .mockImplementationOnce(async () => ({
+        ...acceptanceView,
+        acceptance_preparations: [{
+          ...acceptancePreparation,
+          acceptance_due_at: "2026-08-02T12:40:00.000Z",
+        }],
+      }));
+    const { getTenantServiceOrderAcceptance } = await import(
+      "./tenant-platform-service-order-acceptance"
+    );
+
+    const result = await getTenantServiceOrderAcceptance(
+      dependencies,
+      tenantAuth,
+      orderId,
+    );
+
+    expect(result.acceptance_preparation).toMatchObject({
+      acceptance_due_at: "2026-08-02T12:40:00.000Z",
+      acceptance_overdue: true,
+      acceptance_remaining_seconds: 0,
     });
     expect(result.available_actions.accept).toMatchObject({ enabled: true });
     expect(result.available_actions.reject).toMatchObject({ enabled: true });

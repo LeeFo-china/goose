@@ -4,6 +4,7 @@ import {
   PlatformServiceAcceptancePreparationSchema,
   PlatformServiceEntityParamSchema,
   PlatformServiceFulfillmentRecordSchema,
+  PlatformServiceOverdueAcceptanceConfirmSchema,
   PlatformServiceWorkOrderAssignSchema,
   PlatformServiceWorkOrderListQuerySchema,
   PlatformServiceWorkOrderTransitionSchema,
@@ -130,6 +131,27 @@ class PlatformServiceWorkOrdersController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await (await service()).upsertAcceptancePreparation(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/billing/service-work-orders/:id/overdue-acceptance/confirm")
+  async confirmOverdueAcceptance(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const paramsResult = PlatformServiceEntityParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = PlatformServiceOverdueAcceptanceConfirmSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await (await service()).confirmOverdueAcceptance(
       authContext,
       paramsResult.data.id,
       bodyResult.data,

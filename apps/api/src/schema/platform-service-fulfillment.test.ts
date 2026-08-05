@@ -5,6 +5,7 @@ import {
   PlatformServiceAcceptancePreparationSchema,
   PlatformServiceFulfillmentRecordSchema,
   PlatformServiceOrderListQuerySchema,
+  PlatformServiceOverdueAcceptanceConfirmSchema,
   PlatformServiceRefundReviewSchema,
   PlatformServiceWorkOrderAssignSchema,
   PlatformServiceWorkOrderListQuerySchema,
@@ -109,6 +110,21 @@ describe("platform service fulfillment schemas", () => {
     expect(PlatformServiceAcceptancePreparationSchema.safeParse({
       status: "accepted",
       summary: "客户已确认",
+    }).success).toBe(false);
+  });
+
+  test("validates platform overdue acceptance confirmation", () => {
+    expect(PlatformServiceOverdueAcceptanceConfirmSchema.safeParse({
+      expected_version: 3,
+      remark: "客户超过 3 天未确认，平台依据履约材料确认验收。",
+    }).success).toBe(true);
+    expect(PlatformServiceOverdueAcceptanceConfirmSchema.safeParse({
+      expected_version: 0,
+      remark: "版本错误",
+    }).success).toBe(false);
+    expect(PlatformServiceOverdueAcceptanceConfirmSchema.safeParse({
+      expected_version: 3,
+      remark: "",
     }).success).toBe(false);
   });
 

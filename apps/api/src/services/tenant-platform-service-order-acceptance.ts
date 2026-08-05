@@ -118,6 +118,7 @@ export async function decideTenantServiceOrderAcceptance(
     work_order: serializeWorkOrder(result.workOrder),
     acceptance_preparation: serializeAcceptancePreparation(
       result.acceptancePreparation,
+      responseNow,
     ),
     wechat_shipping_report: orderShippingReport,
     server_time: responseNow.toISOString(),
@@ -262,7 +263,7 @@ function serializeAcceptanceView(
     order: serializeTenantServiceOrder(record, now),
     work_order: workOrder ? serializeWorkOrder(workOrder) : null,
     acceptance_preparation: acceptancePreparation
-      ? serializeAcceptancePreparation(acceptancePreparation)
+      ? serializeAcceptancePreparation(acceptancePreparation, now)
       : null,
     fulfillment_records: normalizeList(record.fulfillment_records).map((
       fulfillmentRecord,
@@ -312,13 +313,19 @@ function serializeWorkOrder(workOrder: WorkOrderRecord) {
 
 function serializeAcceptancePreparation(
   acceptancePreparation: AcceptancePreparationRecord,
+  now: Date,
 ) {
+  const dueAt = acceptancePreparation.acceptance_due_at;
+  const remainingSeconds = getRemainingSeconds(dueAt, now);
   return {
     id: acceptancePreparation.id,
     status: acceptancePreparation.status,
     summary: acceptancePreparation.summary,
     prepared_at: acceptancePreparation.prepared_at,
     submitted_at: acceptancePreparation.submitted_at,
+    acceptance_due_at: dueAt,
+    acceptance_overdue: dueAt ? remainingSeconds === 0 : false,
+    acceptance_remaining_seconds: remainingSeconds,
     created_at: acceptancePreparation.created_at,
     updated_at: acceptancePreparation.updated_at,
   };
@@ -354,4 +361,11 @@ function normalizeMaybeSingleRelation<T>(value: T | T[] | null | undefined) {
 function normalizeList<T>(value: T | T[] | null | undefined): T[] {
   if (!value) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function getRemainingSeconds(dueAt: string | null, now: Date) {
+  if (!dueAt) return null;
+  const dueTime = new Date(dueAt).getTime();
+  if (!Number.isFinite(dueTime)) return null;
+  return Math.max(0, Math.floor((dueTime - now.getTime()) / 1000));
 }

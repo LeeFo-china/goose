@@ -37,4 +37,13 @@ export const DEFINITIONS_PAYMENT: SettingDefinition[] = [
     envNames: ["WECHAT_VIRTUAL_PAYMENT_PRODUCTION_SECRET_BUNDLE"],
     isSecret: true,
   },
+  {
+    key: "PLATFORM_SERVICE_ACCEPTANCE_WINDOW_DAYS",
+    groupCode: "payment",
+    name: "平台技术服务验收确认期",
+    description: "平台提交技术服务验收后，租户客户可确认验收或要求整改的天数；逾期后平台可按履约材料手动确认验收。",
+    valueType: "number",
+    envNames: ["PLATFORM_SERVICE_ACCEPTANCE_WINDOW_DAYS"],
+    defaultValue: "3",
+  },
 ];

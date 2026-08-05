@@ -38,6 +38,7 @@ import {
   type UploadedFulfillmentAttachment,
 } from "./platform-service-fulfillment-attachment-upload-field";
 import { PlatformServiceAcceptancePreparationAction } from "./platform-service-acceptance-preparation-action";
+import { PlatformServiceOverdueAcceptanceAction } from "./platform-service-overdue-acceptance-action";
 import type { PlatformServiceWorkOrderListItem } from "./platform-service-order-types";
 
 export function PlatformServiceWorkOrderActions({
@@ -54,6 +55,7 @@ export function PlatformServiceWorkOrderActions({
       <AssignWorkOrderButton workOrder={workOrder} />
       <RecordFulfillmentButton workOrder={workOrder} />
       <PlatformServiceAcceptancePreparationAction workOrder={workOrder} />
+      <PlatformServiceOverdueAcceptanceAction workOrder={workOrder} />
       <TransitionWorkOrderButton workOrder={workOrder} />
     </div>
   );

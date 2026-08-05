@@ -17,6 +17,7 @@ import {
   type RefundReviewResult,
   type ServiceRefundReviewInput,
   type TransitionWorkOrderInput,
+  type WorkOrderActionInput,
   type WorkOrderRecord,
 } from "./platform-service-order-records";
 
@@ -50,6 +51,7 @@ type ServiceClient = {
     name:
       | "platform_service_assign_work_order"
       | "platform_service_transition_work_order"
+      | "platform_service_confirm_overdue_acceptance"
       | "platform_service_review_refund_request",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
@@ -231,8 +233,9 @@ export class PlatformServiceFulfillmentRepository {
         prepared_by_employee_id: input.preparedByEmployeeId,
         prepared_at: new Date().toISOString(),
         submitted_at: submittedAt,
+        acceptance_due_at: input.acceptanceDueAt ?? null,
       })
-      .select("id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,created_at,updated_at")
+      .select("id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,acceptance_due_at,created_at,updated_at")
       .single();
     if (error) throw Errors.dbError("保存平台技术服务验收准备失败", error);
     if (input.fileIds.length > 0) {
@@ -246,6 +249,23 @@ export class PlatformServiceFulfillmentRepository {
       });
     }
     return data as Record<string, unknown>;
+  }
+
+  async confirmOverdueAcceptance(
+    input: WorkOrderActionInput,
+  ): Promise<AtomicActionResult> {
+    const { data, error } = await this.clientProvider().rpc(
+      "platform_service_confirm_overdue_acceptance",
+      {
+        p_work_order_id: input.workOrderId,
+        p_expected_version: input.expectedVersion,
+        p_operator_employee_id: input.operatorEmployeeId,
+        p_remark: input.remark ?? null,
+        p_metadata: input.metadata ?? {},
+      },
+    );
+    if (error) throw Errors.dbError("平台确认逾期验收失败", error);
+    return this.mapAtomicActionResult(data);
   }
 
   async listPlatformServiceRefundRequests(input: {
@@ -388,12 +408,16 @@ export class PlatformServiceFulfillmentRepository {
     const result = data as {
       work_order?: unknown;
       refund_request?: unknown;
+      acceptance_preparation?: unknown;
       order?: unknown;
       error_code?: unknown;
     } | null;
     return {
       workOrder: (result?.work_order as WorkOrderRecord | null | undefined) ?? null,
       refundRequest: (result?.refund_request as AtomicActionResult["refundRequest"]) ??
+        null,
+      acceptancePreparation:
+        (result?.acceptance_preparation as AtomicActionResult["acceptancePreparation"]) ??
         null,
       order: (result?.order as OrderRecord | null) ?? null,
       errorCode: typeof result?.error_code === "string"

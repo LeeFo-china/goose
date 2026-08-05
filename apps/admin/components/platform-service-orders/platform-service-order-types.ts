@@ -83,6 +83,9 @@ export type PlatformServiceWorkOrderListItem = {
     status: string;
     summary: string;
     submitted_at: string | null;
+    acceptance_due_at?: string | null;
+    acceptance_overdue?: boolean;
+    acceptance_remaining_seconds?: number | null;
     updated_at: string;
   } | null;
   order?: {
