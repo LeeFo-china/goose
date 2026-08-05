@@ -113,6 +113,10 @@ describe("PlatformPartnersService invite code generation", () => {
     const payloads: PlatformPartnerInviteCodeCreateRecordInput[] = [];
     const service = new PlatformPartnersService({
       repository: createRepository((payload) => payloads.push(payload)),
+      regionPolicy: {
+        assertAssignableDistricts: async (codes) => [...codes],
+        assertPartnerInviteRegion: async () => "411500",
+      },
     });
 
     await service.createInviteCode(platformAuthContext, activePartner.id, {

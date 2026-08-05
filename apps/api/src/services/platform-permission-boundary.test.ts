@@ -41,6 +41,15 @@ const controllerBoundaries: ControllerBoundary[] = [
     file: "controllers/admin-ops/index.ts",
     permissions: ["platform.ops.execute"],
   },
+  {
+    file: "controllers/platform-partners/index.ts",
+    permissions: [
+      "platform.partner.read",
+      "platform.partner.manage",
+      "platform.partner.binding.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -71,5 +80,17 @@ describe("platform permission boundaries", () => {
     expect(source).toContain("platform.audit.read");
     expect(source).toContain("platformAuthorizationService.assertPermission");
     expect(source).not.toContain("authContext.isPlatformAdmin");
+  });
+
+  test("platform partners service checks concrete partner permissions", () => {
+    const source = readFileSync(
+      new URL("../services/platform-partners.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("platform.partner.read");
+    expect(source).toContain("platform.partner.manage");
+    expect(source).toContain("platform.partner.binding.manage");
+    expect(source).not.toContain("assertPlatformAdmin");
   });
 });

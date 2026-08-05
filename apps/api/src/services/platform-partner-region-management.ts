@@ -92,7 +92,9 @@ export class PlatformPartnerRegionManagementService {
   }
 
   private requireManager(authContext: AuthContext) {
-    const canManage = authContext.isPlatformAdmin &&
+    const isPlatformStaff = authContext.tenantId === null &&
+      (authContext.isPlatformStaff || authContext.isPlatformAdmin);
+    const canManage = isPlatformStaff &&
       authContext.permissions.some(
         (permission) => permission.code === "platform.partner.manage",
       );

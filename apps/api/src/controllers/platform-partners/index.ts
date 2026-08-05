@@ -94,7 +94,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partners")
   async listPartners(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const queryResult = PlatformPartnerListQuerySchema.safeParse(
       request.query || {},
     );
@@ -109,7 +109,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/platform/partners")
   async createPartner(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const bodyResult = PlatformPartnerCreateSchema.safeParse(
       request.body || {},
     );
@@ -124,14 +124,14 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partners/levels")
   async listLevels(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const data = await platformPartnersService.listLevels(authContext);
     return ResponseHandler.success(data);
   }
 
   @Get("/platform/partners/:id")
   async getPartner(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -146,7 +146,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Patch("/platform/partners/:id")
   async updatePartner(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -166,7 +166,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Patch("/platform/partners/:id/regions")
   async updatePartnerRegions(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -186,7 +186,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Patch("/platform/partners/:id/status")
   async updatePartnerStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -206,7 +206,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partners/:id/members")
   async listPartnerMembers(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -226,7 +226,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/platform/partners/:id/members")
   async createPartnerMember(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -246,7 +246,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Patch("/platform/partner-members/:memberId/status")
   async updatePartnerMemberStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerMemberIdParamSchema.safeParse(
       request.params || {},
     );
@@ -266,7 +266,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/platform/partners/:id/invite-codes")
   async createInviteCode(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerManageContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -286,7 +286,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partners/:id/invite-codes")
   async listInviteCodes(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const paramsResult = PlatformPartnerIdParamSchema.safeParse(
       request.params || {},
     );
@@ -301,7 +301,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partner-invite-codes/:code/qrcode")
   async getInviteCodeQrcode(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerReadContext(request);
     const paramsResult = PlatformPartnerInviteCodeParamSchema.safeParse(
       request.params || {},
     );
@@ -319,7 +319,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Get("/platform/partner-bindings")
   async listTenantBindings(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerBindingContext(request);
     const queryResult = TenantPartnerBindingListQuerySchema.safeParse(
       request.query || {},
     );
@@ -334,7 +334,7 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/platform/partner-bindings")
   async createTenantBinding(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getPartnerBindingContext(request);
     const bodyResult = TenantPartnerBindingCreateSchema.safeParse(
       request.body || {},
     );
@@ -345,6 +345,27 @@ class PlatformPartnersController extends PlatformBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(data);
+  }
+
+  private getPartnerReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.read",
+    );
+  }
+
+  private getPartnerManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.manage",
+    );
+  }
+
+  private getPartnerBindingContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.binding.manage",
+    );
   }
 }
 
