@@ -8,6 +8,7 @@ export type AdminAuthEmployeeRecord = {
   user_id: string | null;
   tenant_id: string | null;
   status: string | null;
+  admin_auth_version?: number | null;
   tenant_department_id: string | null;
   post_id: string | null;
   name: string | null;
@@ -55,6 +56,7 @@ class AdminAuthRepository {
         user_id,
         tenant_id,
         status,
+        admin_auth_version,
         tenant_department_id,
         post_id,
         name,
@@ -264,6 +266,27 @@ class AdminAuthRepository {
 
     if (error) {
       throw Errors.dbError("绑定员工后台账号失败", error);
+    }
+  }
+
+  async updateLastLogin(employeeId: string, loggedInAt: string) {
+    const { data, error } = await this.adminClient
+      .from("employees")
+      .update({ last_login_time: loggedInAt })
+      .eq("id", employeeId)
+      .select("id")
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("更新员工最后登录时间失败", error);
+    }
+
+    if (!data) {
+      throw Errors.business(
+        404,
+        "员工身份不存在",
+        ErrorCodes.ADMIN_AUTH_EMPLOYEE_NOT_FOUND,
+      );
     }
   }
 }

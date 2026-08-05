@@ -63,6 +63,7 @@ const findValidVerificationCode = mock(async () => null);
 const createAdminAuthUser = mock(async () => "auth-user-1");
 const bindEmployeeAuthUser = mock(async () => undefined);
 const markVerificationCodeVerified = mock(async () => undefined);
+const updateLastLogin = mock(async () => undefined);
 const getAuthContextByEmployeeId = mock(async () => activeAuthContext);
 const getAuthContextByAuthUserId = mock(async () => activeAuthContext);
 const assertTenantAvailable = mock(() => undefined);
@@ -76,6 +77,7 @@ mock.module("@/repositories/admin-auth", () => ({
     createAdminAuthUser,
     bindEmployeeAuthUser,
     markVerificationCodeVerified,
+    updateLastLogin,
   },
 }));
 
@@ -103,8 +105,20 @@ mock.module("@/utils/auth/test-login", () => ({
 }));
 
 mock.module("@/utils/jwt", () => ({
+  getAdminJwtExpiresAt: () => "2026-07-08T00:00:00.000Z",
   getJwtExpiresAt: () => "2026-07-08T00:00:00.000Z",
-  signToken: () => "signed-token",
+  signAdminToken: () => "signed-token",
+  verifyTokenDetailed: () => ({
+    reason: "valid",
+    payload: {
+      sub: "auth-platform",
+      login_channel: "admin_web",
+      roles: ["employee"],
+      admin_auth_version: 5,
+      iat: 1,
+      exp: 1 + 12 * 60 * 60,
+    },
+  }),
 }));
 
 mock.module("@/services/files/file-url-resolver", () => ({
@@ -126,6 +140,7 @@ describe("admin auth login timing", () => {
     createAdminAuthUser.mockClear();
     bindEmployeeAuthUser.mockClear();
     markVerificationCodeVerified.mockClear();
+    updateLastLogin.mockClear();
     getAuthContextByEmployeeId.mockClear();
     getAuthContextByEmployeeId.mockImplementation(async () => {
       await waitForTimerResolution();

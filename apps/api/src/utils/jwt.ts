@@ -315,6 +315,18 @@ export function getJwtExpiresAt(now = Date.now()) {
   return new Date(now + expiresIn * 1000).toISOString();
 }
 
+export function getAdminJwtExpiresAt(
+  options: { platform: boolean },
+  now = Date.now(),
+) {
+  const expiresIn = parseJwtExpiresIn(
+    options.platform
+      ? process.env.PLATFORM_ADMIN_JWT_EXPIRES_IN || "12h"
+      : process.env.JWT_EXPIRES_IN || "7d",
+  );
+  return new Date(now + expiresIn * 1000).toISOString();
+}
+
 export function getH5MarketingTokenExpiresAt(now = Date.now()) {
   const expiresIn = parseJwtExpiresIn(
     process.env.H5_MARKETING_TOKEN_EXPIRES_IN || "30m",
