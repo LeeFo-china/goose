@@ -25,7 +25,7 @@ class PlatformUploadPreviewController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformStaffContext(request);
     const parsed = SupplierLicensePreviewParamsSchema.safeParse(request.params);
     if (!parsed.success) throw Errors.fromZod(parsed.error);
 

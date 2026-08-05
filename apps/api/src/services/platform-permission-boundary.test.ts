@@ -71,6 +71,11 @@ const controllerBoundaries: ControllerBoundary[] = [
     forbidLegacyGuard: true,
   },
   {
+    file: "controllers/platform-supplier-onboarding/index.ts",
+    permissions: ["platform.supplier.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
     file: "controllers/platform-supplier-catalog/index.ts",
     permissions: ["platform.catalog.manage"],
     forbidLegacyGuard: true,
@@ -228,8 +233,20 @@ describe("platform permission boundaries", () => {
       new URL("../services/platform-suppliers.ts", import.meta.url),
       "utf8",
     );
+    const onboarding = readFileSync(
+      new URL("../services/supplier-onboarding.ts", import.meta.url),
+      "utf8",
+    );
     const catalog = readFileSync(
       new URL("../services/supplier-catalog.ts", import.meta.url),
+      "utf8",
+    );
+    const uploadAccess = readFileSync(
+      new URL("../controllers/uploads/supplier-license-upload-access.ts", import.meta.url),
+      "utf8",
+    );
+    const previews = readFileSync(
+      new URL("../controllers/platform-upload-previews/index.ts", import.meta.url),
       "utf8",
     );
 
@@ -237,8 +254,15 @@ describe("platform permission boundaries", () => {
     expect(suppliers).toContain("platform.supplier.manage");
     expect(suppliers).toContain("platform.supplier.review");
     expect(suppliers).toContain("platform.supplier.blacklist");
+    expect(onboarding).toContain("platform.supplier.manage");
     expect(catalog).toContain("platform.catalog.manage");
+    expect(uploadAccess).toContain("platform.supplier.manage");
+    expect(previews).toContain("platform.supplier.view");
+    expect(previews).toContain("platform.supplier.manage");
     expect(suppliers).not.toContain("!auth.isPlatformAdmin");
+    expect(onboarding).not.toContain("!auth.isPlatformAdmin");
+    expect(uploadAccess).not.toContain("!authContext.isPlatformAdmin");
+    expect(previews).not.toContain("getRequiredPlatformAdminContext(request)");
     expect(catalog).not.toContain("!authContext.isPlatformAdmin");
   });
 

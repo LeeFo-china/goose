@@ -11,7 +11,14 @@ export async function assertSupplierLicenseUploadSceneAccess(
   if (!user.sub) throw Errors.unauthorized();
 
   const authContext = await authorizationService.getRequiredAuthContext(user.sub);
-  if (!authContext.isPlatformAdmin || !authContext.employeeId) {
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true ||
+    authContext.isPlatformAdmin === true;
+  if (
+    !isPlatformIdentity ||
+    authContext.tenantId !== null ||
+    !authContext.employeeId
+  ) {
     throw Errors.forbidden();
   }
   accessPolicyService.assertPermission(authContext, "platform.supplier.manage");
@@ -21,6 +28,6 @@ export async function assertSupplierLicenseUploadSceneAccess(
     employeeId: authContext.employeeId,
     customerId: null,
     visitorId: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: authContext.isPlatformAdmin,
   };
 }

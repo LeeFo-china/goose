@@ -32,7 +32,10 @@ class PlatformSupplierOnboardingController extends PlatformBaseController {
 
   @Post("/platform/suppliers/onboarding")
   async onboardSupplier(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.supplier.manage",
+    );
     const idempotencyKey = requireIdempotencyKey(request);
     const parsed = SupplierOnboardingCreateSchema.safeParse(request.body ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
@@ -43,7 +46,10 @@ class PlatformSupplierOnboardingController extends PlatformBaseController {
 
   @Get("/platform/suppliers/identity-check")
   async checkIdentity(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.supplier.manage",
+    );
     const parsed = SupplierIdentityCheckQuerySchema.safeParse(request.query ?? {});
     if (!parsed.success) throw Errors.fromZod(parsed.error);
     return ResponseHandler.success(

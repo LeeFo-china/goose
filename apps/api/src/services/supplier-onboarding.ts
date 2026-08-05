@@ -70,7 +70,15 @@ export class SupplierOnboardingService {
   }
 
   private requireManage(auth: AuthContext) {
-    if (!auth.isPlatformAdmin || !auth.employeeId || !auth.authUserId) {
+    const isPlatformIdentity =
+      auth.isPlatformStaff === true ||
+      auth.isPlatformAdmin === true;
+    if (
+      !isPlatformIdentity ||
+      auth.tenantId !== null ||
+      !auth.employeeId ||
+      !auth.authUserId
+    ) {
       throw Errors.forbidden();
     }
     this.accessPolicy.assertPermission(auth, "platform.supplier.manage");
