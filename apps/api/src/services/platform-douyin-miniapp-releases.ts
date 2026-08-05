@@ -151,7 +151,11 @@ export class PlatformDouyinMiniappReleasesService {
   }
 
   private assertCanManage(authContext: AuthContext): void {
-    if (!authContext.isPlatformAdmin || !authContext.employeeId) throw Errors.forbidden();
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity || !authContext.employeeId) {
+      throw Errors.forbidden();
+    }
     if (this.dependencies.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION) !== "all") {
       throw Errors.forbidden();
     }

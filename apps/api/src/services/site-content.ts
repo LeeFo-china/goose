@@ -131,11 +131,11 @@ export class SiteContentService {
     return this.toPublicDetail(record, assets);
   }
   async listAdmin(authContext: AuthContext, query: SiteContentListQuery) {
-    this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
     return this.repository.listAdmin(query);
   }
   async getAdminDetail(authContext: AuthContext, entryId: string) {
-    this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
     return this.getAdminDetailWithoutPermission(entryId);
   }
 
@@ -146,7 +146,7 @@ export class SiteContentService {
   }
 
   async createEntry(authContext: AuthContext, input: CreateSiteContentEntryInput) {
-    this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.assertAssetsAvailable(input.version);
     const created = await this.repository.createEntryWithVersion({
@@ -159,7 +159,7 @@ export class SiteContentService {
   }
 
   async updateEntry(authContext: AuthContext, entryId: string, input: UpdateSiteContentEntryInput) {
-    this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const current = await this.requireEntry(entryId);
     if (input.slug && current.status === "published" && input.slug !== current.slug) {
       throw Errors.business(
@@ -174,13 +174,13 @@ export class SiteContentService {
   }
 
   async listVersions(authContext: AuthContext, entryId: string, query: { page: number; pageSize: number }) {
-    this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
     await this.requireEntry(entryId);
     return this.repository.listVersions(entryId, query);
   }
 
   async createVersion(authContext: AuthContext, entryId: string, input: CreateSiteContentVersionInput) {
-    this.accessPolicy.assertPermission(authContext, MANAGE_PERMISSION);
+    this.assertPlatformPermission(authContext, MANAGE_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     const entry = await this.requireEntry(entryId);
     this.assertMetadataMatchesType(entry.content_type, input.metadata);
@@ -191,7 +191,7 @@ export class SiteContentService {
   }
 
   async publish(authContext: AuthContext, entryId: string, versionId: string): Promise<PublishSiteContentResult> {
-    this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
+    this.assertPlatformPermission(authContext, PUBLISH_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.requireEntry(entryId);
     await this.requireOwnedVersion(entryId, versionId);
@@ -200,7 +200,7 @@ export class SiteContentService {
   }
 
   async rollback(authContext: AuthContext, entryId: string, versionId: string): Promise<PublishSiteContentResult> {
-    this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
+    this.assertPlatformPermission(authContext, PUBLISH_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.requireEntry(entryId);
     await this.requireOwnedVersion(entryId, versionId);
@@ -209,7 +209,7 @@ export class SiteContentService {
   }
 
   async archive(authContext: AuthContext, entryId: string) {
-    this.accessPolicy.assertPermission(authContext, PUBLISH_PERMISSION);
+    this.assertPlatformPermission(authContext, PUBLISH_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.requireEntry(entryId);
     const entry = await this.repository.archive(entryId, actorId);
@@ -225,7 +225,7 @@ export class SiteContentService {
   }
 
   async createPreviewToken(authContext: AuthContext, entryId: string, versionId: string) {
-    this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
+    this.assertPlatformPermission(authContext, READ_PERMISSION);
     const actorId = this.requireEmployeeId(authContext);
     await this.requireOwnedVersion(entryId, versionId);
     const token = this.tokenGenerator();
@@ -260,6 +260,14 @@ export class SiteContentService {
     const entry = await this.requireEntry(version.entry_id);
     const assets = await this.loadAssetMap(this.collectVersionFileIds(version));
     return this.toPreviewDetail(entry, version, assets);
+  }
+
+  private assertPlatformPermission(authContext: AuthContext, permission: string) {
+    const isPlatformIdentity = authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    this.accessPolicy.assertPermission(authContext, permission);
   }
 
   private async finishPublication(
@@ -459,9 +467,7 @@ export class SiteContentService {
   }
 
   private requireEmployeeId(authContext: AuthContext) {
-    if (!authContext.employeeId) {
-      throw Errors.business(403, "当前平台账号未绑定员工", "PLATFORM_EMPLOYEE_REQUIRED");
-    }
+    if (!authContext.employeeId) throw Errors.business(403, "当前平台账号未绑定员工", "PLATFORM_EMPLOYEE_REQUIRED");
     return authContext.employeeId;
   }
 
@@ -481,16 +487,13 @@ export class SiteContentService {
   ) {
     await this.audit.recordBestEffort({
       action: "platform_config_update",
-      actorEmployeeId: authContext.employeeId,
-      actorUserId: authContext.authUserId,
+      actorEmployeeId: authContext.employeeId, actorUserId: authContext.authUserId,
       resourceType: "site_content",
       resourceId: entry.id,
       resourceLabel: entry.slug,
-      status,
-      summary,
+      status, summary,
       metadata: { operation, ...metadata },
     });
   }
 }
-
 export const siteContentService = new SiteContentService();

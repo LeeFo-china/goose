@@ -21,14 +21,14 @@ class AiConfigController extends PlatformBaseController {
 
   @Get("/platform/ai-config")
   async getConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigReadContext(request);
     const data = await aiConfigService.getConfig(authContext);
     return ResponseHandler.success(data);
   }
 
   @Post("/platform/ai-config/providers")
   async createProvider(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const bodyResult = AiProviderPayloadSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
@@ -38,7 +38,7 @@ class AiConfigController extends PlatformBaseController {
 
   @Patch("/platform/ai-config/providers/:id")
   async updateProvider(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdateAiProviderPayloadSchema.safeParse(request.body || {});
@@ -54,7 +54,7 @@ class AiConfigController extends PlatformBaseController {
 
   @Post("/platform/ai-config/models")
   async createModel(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const bodyResult = AiModelPayloadSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
@@ -64,7 +64,7 @@ class AiConfigController extends PlatformBaseController {
 
   @Patch("/platform/ai-config/models/:id")
   async updateModel(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdateAiModelPayloadSchema.safeParse(request.body || {});
@@ -80,7 +80,7 @@ class AiConfigController extends PlatformBaseController {
 
   @Post("/platform/ai-config/routes")
   async createSceneRoute(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const bodyResult = AiSceneRoutePayloadSchema.safeParse(request.body || {});
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
@@ -90,7 +90,7 @@ class AiConfigController extends PlatformBaseController {
 
   @Patch("/platform/ai-config/routes/:id")
   async updateSceneRoute(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getAiConfigManageContext(request);
     const paramsResult = AiConfigIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = UpdateAiSceneRoutePayloadSchema.safeParse(request.body || {});
@@ -102,6 +102,14 @@ class AiConfigController extends PlatformBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(data);
+  }
+
+  private getAiConfigReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.ai_config.read");
+  }
+
+  private getAiConfigManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.ai_config.manage");
   }
 }
 

@@ -57,7 +57,7 @@ class SiteContentController extends PlatformBaseController {
 
   @Get("/platform/site-content")
   async listAdmin(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentReadContext(request);
     const query = SiteContentListQuerySchema.safeParse(request.query ?? {});
     if (!query.success) throw Errors.fromZod(query.error);
     return ResponseHandler.success(await siteContentService.listAdmin(authContext, query.data));
@@ -65,7 +65,7 @@ class SiteContentController extends PlatformBaseController {
 
   @Post("/platform/site-content")
   async createEntry(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentManageContext(request);
     const body = CreateSiteContentEntrySchema.safeParse(request.body ?? {});
     if (!body.success) throw Errors.fromZod(body.error);
     return ResponseHandler.success(await siteContentService.createEntry(authContext, body.data));
@@ -73,14 +73,14 @@ class SiteContentController extends PlatformBaseController {
 
   @Get("/platform/site-content/:id")
   async getAdminDetail(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentReadContext(request);
     const params = this.parseId(request.params);
     return ResponseHandler.success(await siteContentService.getAdminDetail(authContext, params.id));
   }
 
   @Patch("/platform/site-content/:id")
   async updateEntry(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentManageContext(request);
     const params = this.parseId(request.params);
     const body = UpdateSiteContentEntrySchema.safeParse(request.body ?? {});
     if (!body.success) throw Errors.fromZod(body.error);
@@ -89,7 +89,7 @@ class SiteContentController extends PlatformBaseController {
 
   @Get("/platform/site-content/:id/versions")
   async listVersions(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentReadContext(request);
     const params = this.parseId(request.params);
     const query = SiteContentPaginationQuerySchema.safeParse(request.query ?? {});
     if (!query.success) throw Errors.fromZod(query.error);
@@ -98,7 +98,7 @@ class SiteContentController extends PlatformBaseController {
 
   @Post("/platform/site-content/:id/versions")
   async createVersion(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentManageContext(request);
     const params = this.parseId(request.params);
     const body = CreateSiteContentVersionSchema.safeParse(request.body ?? {});
     if (!body.success) throw Errors.fromZod(body.error);
@@ -117,14 +117,14 @@ class SiteContentController extends PlatformBaseController {
 
   @Post("/platform/site-content/:id/archive")
   async archive(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentPublishContext(request);
     const params = this.parseId(request.params);
     return ResponseHandler.success(await siteContentService.archive(authContext, params.id));
   }
 
   @Post("/platform/site-content/:id/preview-token")
   async createPreviewToken(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentReadContext(request);
     const params = this.parseId(request.params);
     const body = CreateSitePreviewTokenSchema.safeParse(request.body ?? {});
     if (!body.success) throw Errors.fromZod(body.error);
@@ -167,7 +167,7 @@ class SiteContentController extends PlatformBaseController {
   }
 
   private async runVersionAction(action: "publish" | "rollback", request: FastifyRequest) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getSiteContentPublishContext(request);
     const params = this.parseId(request.params);
     const body = SiteContentVersionActionSchema.safeParse(request.body ?? {});
     if (!body.success) throw Errors.fromZod(body.error);
@@ -175,6 +175,18 @@ class SiteContentController extends PlatformBaseController {
       ? await siteContentService.publish(authContext, params.id, body.data.versionId)
       : await siteContentService.rollback(authContext, params.id, body.data.versionId);
     return ResponseHandler.success(result);
+  }
+
+  private getSiteContentReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.site_content.read");
+  }
+
+  private getSiteContentManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.site_content.manage");
+  }
+
+  private getSiteContentPublishContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.site_content.publish");
   }
 
   private assertPreviewSignature(request: FastifyRequest, payload: unknown) {

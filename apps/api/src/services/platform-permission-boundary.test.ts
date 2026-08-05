@@ -95,6 +95,35 @@ const controllerBoundaries: ControllerBoundary[] = [
     ],
     forbidLegacyGuard: true,
   },
+  {
+    file: "controllers/ai-config/index.ts",
+    permissions: ["platform.ai_config.read", "platform.ai_config.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/site-content/index.ts",
+    permissions: [
+      "platform.site_content.read",
+      "platform.site_content.manage",
+      "platform.site_content.publish",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-douyin-miniapps/index.ts",
+    permissions: ["platform.douyin_miniapp.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-partner-revenue/index.ts",
+    permissions: [
+      "platform.partner.revenue.read",
+      "platform.partner.revenue.manage",
+      "platform.partner.commission.read",
+      "platform.partner.settlement.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -193,5 +222,31 @@ describe("platform permission boundaries", () => {
     expect(virtualSecrets).not.toContain("!authContext.isPlatformAdmin");
     expect(applyments).toContain("PLATFORM_SUBMIT_PERMISSION");
     expect(applyments).not.toContain("!authContext.isPlatformAdmin");
+  });
+
+  test("platform operating services check concrete permissions", () => {
+    const ai = readFileSync(new URL("../services/ai-config.ts", import.meta.url), "utf8");
+    const site = readFileSync(new URL("../services/site-content.ts", import.meta.url), "utf8");
+    const douyin = readFileSync(
+      new URL("../services/platform-douyin-miniapps.ts", import.meta.url),
+      "utf8",
+    );
+    const revenue = readFileSync(
+      new URL("../services/platform-partner-revenue.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(ai).toContain("platform.ai_config.read");
+    expect(ai).toContain("platform.ai_config.manage");
+    expect(site).toContain("platform.site_content.read");
+    expect(site).toContain("platform.site_content.manage");
+    expect(site).toContain("platform.site_content.publish");
+    expect(douyin).toContain("platform.douyin_miniapp.manage");
+    expect(douyin).not.toContain("!authContext.isPlatformAdmin");
+    expect(revenue).toContain("platform.partner.revenue.read");
+    expect(revenue).toContain("platform.partner.revenue.manage");
+    expect(revenue).toContain("platform.partner.commission.read");
+    expect(revenue).toContain("platform.partner.settlement.manage");
+    expect(revenue).not.toContain("if (!authContext.isPlatformAdmin)");
   });
 });
