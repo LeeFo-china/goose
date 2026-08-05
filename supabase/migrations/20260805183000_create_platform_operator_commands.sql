@@ -605,7 +605,8 @@ CREATE OR REPLACE FUNCTION public.create_platform_role(
   p_actor_user_id uuid,
   p_idempotency_key uuid,
   p_name text,
-  p_description text DEFAULT NULL
+  p_description text DEFAULT NULL,
+  p_permission_ids uuid[] DEFAULT ARRAY[]::uuid[]
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -616,6 +617,8 @@ DECLARE
   v_existing jsonb;
   v_role_id uuid := gen_random_uuid();
   v_code text := 'platform_custom_' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 12);
+  v_permission_ids uuid[];
+  v_invalid_count integer;
   v_record jsonb;
   v_result jsonb;
 BEGIN
@@ -644,13 +647,38 @@ BEGIN
     1
   );
 
+  SELECT array_agg(DISTINCT permission_id)
+  INTO v_permission_ids
+  FROM unnest(coalesce(p_permission_ids, ARRAY[]::uuid[])) AS permission_id;
+  v_permission_ids := coalesce(v_permission_ids, ARRAY[]::uuid[]);
+
+  SELECT count(*)
+  INTO v_invalid_count
+  FROM unnest(v_permission_ids) AS requested(permission_id)
+  LEFT JOIN public.permissions AS permissions
+    ON permissions.id = requested.permission_id
+  WHERE permissions.id IS NULL
+    OR permissions.status <> 'active'
+    OR NOT (permissions.code LIKE 'platform.%');
+
+  IF v_invalid_count > 0 THEN
+    RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'PLATFORM_ROLE_PERMISSION_INVALID';
+  END IF;
+
+  INSERT INTO public.role_permissions (role_id, permission_id, access_scope)
+  SELECT v_role_id, permission_id, 'all'
+  FROM unnest(v_permission_ids) AS permission_id
+  ON CONFLICT (role_id, permission_id) DO UPDATE SET
+    access_scope = 'all';
+
   SELECT jsonb_build_object(
     'id', role.id,
     'code', role.code,
     'name', role.name,
     'description', role.description,
     'status', role.status,
-    'version', role.version
+    'version', role.version,
+    'permission_ids', to_jsonb(v_permission_ids)
   )
   INTO v_record
   FROM public.roles AS role
@@ -972,7 +1000,7 @@ REVOKE ALL ON FUNCTION public.update_platform_operator(uuid, uuid, uuid, integer
 REVOKE ALL ON FUNCTION public.replace_platform_operator_roles(uuid, uuid, uuid, integer, uuid, uuid[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.transition_platform_operator_status(uuid, uuid, uuid, integer, uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.revoke_platform_operator_sessions(uuid, uuid, uuid, integer, uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.create_platform_role(uuid, uuid, uuid, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.create_platform_role(uuid, uuid, uuid, text, text, uuid[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.update_platform_role(uuid, uuid, uuid, integer, uuid, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.replace_platform_role_permissions(uuid, uuid, uuid, integer, uuid, uuid[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.archive_platform_role(uuid, uuid, uuid, integer, uuid) FROM PUBLIC;
@@ -987,7 +1015,7 @@ GRANT EXECUTE ON FUNCTION public.update_platform_operator(uuid, uuid, uuid, inte
 GRANT EXECUTE ON FUNCTION public.replace_platform_operator_roles(uuid, uuid, uuid, integer, uuid, uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.transition_platform_operator_status(uuid, uuid, uuid, integer, uuid, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.revoke_platform_operator_sessions(uuid, uuid, uuid, integer, uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.create_platform_role(uuid, uuid, uuid, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.create_platform_role(uuid, uuid, uuid, text, text, uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.update_platform_role(uuid, uuid, uuid, integer, uuid, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.replace_platform_role_permissions(uuid, uuid, uuid, integer, uuid, uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.archive_platform_role(uuid, uuid, uuid, integer, uuid) TO service_role;
