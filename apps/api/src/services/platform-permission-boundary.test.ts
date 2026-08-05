@@ -65,6 +65,36 @@ const controllerBoundaries: ControllerBoundary[] = [
     permissions: ["platform.catalog.manage"],
     forbidLegacyGuard: true,
   },
+  {
+    file: "controllers/platform-payment-configs/index.ts",
+    permissions: [
+      "platform.payment.config.read",
+      "platform.payment.config.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-virtual-products/index.ts",
+    permissions: [
+      "platform.virtual_product.read",
+      "platform.virtual_product.manage",
+      "platform.virtual_product.publish",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-wechat-pay-applyments/index.ts",
+    permissions: [
+      "platform.wechat_pay.applyment.read",
+      "platform.wechat_pay.applyment.review",
+      "platform.wechat_pay.applyment.manage",
+      "platform.wechat_pay.applyment.submit",
+      "platform.wechat_pay.applyment.sync",
+      "platform.wechat_pay.applyment.repair",
+      "platform.wechat_pay.config.activate",
+    ],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -126,5 +156,42 @@ describe("platform permission boundaries", () => {
     expect(catalog).toContain("platform.catalog.manage");
     expect(suppliers).not.toContain("!auth.isPlatformAdmin");
     expect(catalog).not.toContain("!authContext.isPlatformAdmin");
+  });
+
+  test("platform payment and virtual product services check concrete permissions", () => {
+    const paymentConfigs = readFileSync(
+      new URL("../services/platform-payment-configs.ts", import.meta.url),
+      "utf8",
+    );
+    const virtualProducts = readFileSync(
+      new URL("../services/platform-virtual-products.ts", import.meta.url),
+      "utf8",
+    );
+    const virtualChannels = readFileSync(
+      new URL("../services/platform-virtual-product-channels.ts", import.meta.url),
+      "utf8",
+    );
+    const virtualSettings = readFileSync(
+      new URL("../services/platform-branding-virtual-payment-settings.ts", import.meta.url),
+      "utf8",
+    );
+    const virtualSecrets = readFileSync(
+      new URL("../services/platform-branding-virtual-payment-secrets.ts", import.meta.url),
+      "utf8",
+    );
+    const applyments = readFileSync(
+      new URL("../services/wechat-pay-applyments-platform.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(paymentConfigs).toContain("platform.payment.config.read");
+    expect(paymentConfigs).toContain("platform.payment.config.manage");
+    expect(virtualProducts).toContain("platform.virtual_product.read");
+    expect(virtualProducts).toContain("platform.virtual_product.manage");
+    expect(virtualChannels).toContain("platform.virtual_product.publish");
+    expect(virtualSettings).not.toContain("!authContext.isPlatformAdmin");
+    expect(virtualSecrets).not.toContain("!authContext.isPlatformAdmin");
+    expect(applyments).toContain("PLATFORM_SUBMIT_PERMISSION");
+    expect(applyments).not.toContain("!authContext.isPlatformAdmin");
   });
 });

@@ -360,12 +360,11 @@ export class WechatPayApplymentPlatformActions {
     return applyment;
   }
 
-  private assertPlatformPermission(
-    authContext: AuthContext,
-    permissionCode: string,
-  ) {
+  private assertPlatformPermission(authContext: AuthContext, permissionCode: string) {
+    const isPlatformIdentity = authContext.isPlatformStaff || authContext.isPlatformAdmin;
     if (
-      !authContext.isPlatformAdmin ||
+      authContext.tenantId !== null ||
+      !isPlatformIdentity ||
       !this.accessPolicyService.hasPermission(
         authContext,
         permissionCode,

@@ -23,7 +23,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Get("/platform/finance/wechat-pay/applyments")
   async listApplyments(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentReadContext(request);
     const queryResult = PlatformWechatPayApplymentListQuerySchema.safeParse(
       request.query || {},
     );
@@ -38,7 +38,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Get("/platform/finance/wechat-pay/applyments/:id")
   async getApplyment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentReadContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -53,7 +53,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Post("/platform/finance/wechat-pay/applyments/:id/approve")
   async approveApplyment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentReviewContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -73,7 +73,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Post("/platform/finance/wechat-pay/applyments/:id/reject")
   async rejectApplyment(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentReviewContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -93,7 +93,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Post("/platform/finance/wechat-pay/applyments/:id/mark-applying")
   async markApplymentApplying(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentManageContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -116,7 +116,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentSubmitContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -138,7 +138,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentSyncContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -160,7 +160,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentRepairContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -180,7 +180,7 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
 
   @Post("/platform/finance/wechat-pay/applyments/:id/activate-config")
   async activateApplymentConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getApplymentActivateContext(request);
     const paramsResult = WechatPayApplymentIdParamSchema.safeParse(
       request.params,
     );
@@ -196,6 +196,34 @@ class PlatformWechatPayApplymentsController extends PlatformBaseController {
       bodyResult.data,
     );
     return ResponseHandler.success(data);
+  }
+
+  private getApplymentReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.read");
+  }
+
+  private getApplymentReviewContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.review");
+  }
+
+  private getApplymentManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.manage");
+  }
+
+  private getApplymentSubmitContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.submit");
+  }
+
+  private getApplymentSyncContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.sync");
+  }
+
+  private getApplymentRepairContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.applyment.repair");
+  }
+
+  private getApplymentActivateContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.wechat_pay.config.activate");
   }
 }
 
