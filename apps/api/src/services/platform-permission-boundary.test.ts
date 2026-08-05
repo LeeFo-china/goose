@@ -51,6 +51,16 @@ const controllerBoundaries: ControllerBoundary[] = [
     forbidLegacyGuard: true,
   },
   {
+    file: "controllers/platform-partner-applications/index.ts",
+    permissions: ["platform.partner.read", "platform.partner.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-partner-member-rebind-requests/index.ts",
+    permissions: ["platform.partner.read", "platform.partner.manage"],
+    forbidLegacyGuard: true,
+  },
+  {
     file: "controllers/platform-suppliers/index.ts",
     permissions: [
       "platform.supplier.view",
@@ -192,11 +202,25 @@ describe("platform permission boundaries", () => {
       new URL("../services/platform-partners.ts", import.meta.url),
       "utf8",
     );
+    const applications = readFileSync(
+      new URL("../services/platform-partner-applications.ts", import.meta.url),
+      "utf8",
+    );
+    const rebind = readFileSync(
+      new URL("../services/platform-partner-member-rebind.ts", import.meta.url),
+      "utf8",
+    );
 
     expect(source).toContain("platform.partner.read");
     expect(source).toContain("platform.partner.manage");
     expect(source).toContain("platform.partner.binding.manage");
     expect(source).not.toContain("assertPlatformAdmin");
+    expect(applications).toContain("platform.partner.read");
+    expect(applications).toContain("platform.partner.manage");
+    expect(applications).not.toContain("assertPlatformAdmin");
+    expect(rebind).toContain("platform.partner.read");
+    expect(rebind).toContain("platform.partner.manage");
+    expect(rebind).not.toContain("assertPlatformAdmin");
   });
 
   test("platform supplier services check concrete supplier and catalog permissions", () => {

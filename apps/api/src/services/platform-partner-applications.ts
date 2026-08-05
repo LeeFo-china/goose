@@ -51,6 +51,7 @@ type PlatformPartnerApplicationsServiceDependencies = {
   audit?: Pick<typeof platformAuditLogService, "recordBestEffort">;
 };
 
+const PARTNER_READ_PERMISSION = "platform.partner.read";
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const DEFAULT_SOURCE_CHANNEL = "official_website";
 const MINI_PROGRAM_SOURCE_CHANNEL = "mini_program";
@@ -139,7 +140,7 @@ export class PlatformPartnerApplicationsService {
     authContext: AuthContext,
     query: PlatformPartnerApplicationListQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PARTNER_READ_PERMISSION);
     return this.applicationRepository.listApplications({
       page: query.page,
       pageSize: query.pageSize,
@@ -150,7 +151,7 @@ export class PlatformPartnerApplicationsService {
   }
 
   async getApplication(authContext: AuthContext, applicationId: string) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PARTNER_READ_PERMISSION);
     return this.requireApplication(applicationId);
   }
 
@@ -327,14 +328,21 @@ export class PlatformPartnerApplicationsService {
   }
 
   private assertCanManagePartners(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
-    if (!this.hasPermission(authContext, PARTNER_MANAGE_PERMISSION)) {
-      throw Errors.forbidden();
-    }
+    this.assertPlatformPermission(authContext, PARTNER_MANAGE_PERMISSION);
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformPermission(
+    authContext: AuthContext,
+    permissionCode: string,
+  ) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
+    if (
+      !isPlatformIdentity ||
+      authContext.tenantId !== null ||
+      !this.hasPermission(authContext, permissionCode)
+    ) {
       throw Errors.forbidden();
     }
   }

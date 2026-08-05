@@ -112,7 +112,10 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
 
   @Get("/platform/partner-applications")
   async listApplications(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.read",
+    );
     const queryResult = PlatformPartnerApplicationListQuerySchema.safeParse(
       request.query || {},
     );
@@ -127,7 +130,10 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
 
   @Get("/platform/partner-applications/:id")
   async getApplication(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.read",
+    );
     const paramsResult = PlatformPartnerApplicationIdParamSchema.safeParse(
       request.params || {},
     );
@@ -145,7 +151,10 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
     request: FastifyRequest,
     reply: FastifyReply,
   ) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.manage",
+    );
     const paramsResult = PlatformPartnerApplicationIdParamSchema.safeParse(
       request.params || {},
     );
@@ -166,7 +175,10 @@ class PlatformPartnerApplicationsController extends PlatformBaseController {
 
   @Post("/platform/partner-applications/:id/approve")
   async approveApplication(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.manage",
+    );
     const paramsResult = PlatformPartnerApplicationIdParamSchema.safeParse(
       request.params || {},
     );

@@ -32,7 +32,7 @@ const platformAuthContext = {
   avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
-  permissions: [{ code: "platform.partner.manage", scope: "all" }],
+  permissions: [{ code: "platform.partner.read", scope: "all" }, { code: "platform.partner.manage", scope: "all" }],
 } satisfies AuthContext;
 const tenantAuthContext = {
   ...platformAuthContext,
@@ -370,7 +370,7 @@ describe("PlatformPartnerApplicationsService", () => {
     expect(applicationRepository.createApplication).not.toHaveBeenCalled();
   });
 
-  test("lists applications only for platform admins", async () => {
+  test("lists applications only for platform readers", async () => {
     const service = await createService();
 
     await expect(

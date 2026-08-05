@@ -17,7 +17,10 @@ class PlatformPartnerMemberRebindRequestsController extends PlatformBaseControll
 
   @Get("/platform/partner-member-rebind-requests")
   async listRequests(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.read",
+    );
     const queryResult = PlatformPartnerMemberRebindListQuerySchema.safeParse(
       request.query || {},
     );
@@ -32,7 +35,10 @@ class PlatformPartnerMemberRebindRequestsController extends PlatformBaseControll
 
   @Post("/platform/partner-member-rebind-requests/:id/approve")
   async approveRequest(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.manage",
+    );
     const paramsResult = PlatformPartnerMemberRebindIdParamSchema.safeParse(
       request.params || {},
     );
@@ -52,7 +58,10 @@ class PlatformPartnerMemberRebindRequestsController extends PlatformBaseControll
 
   @Post("/platform/partner-member-rebind-requests/:id/reject")
   async rejectRequest(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.partner.manage",
+    );
     const paramsResult = PlatformPartnerMemberRebindIdParamSchema.safeParse(
       request.params || {},
     );

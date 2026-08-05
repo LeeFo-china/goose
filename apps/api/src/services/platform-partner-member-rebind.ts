@@ -24,6 +24,7 @@ import { smsVerificationCodeService } from "@/services/sms-verification-codes";
 import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 import type { JwtPayload } from "@/utils/jwt";
 
+const PARTNER_READ_PERMISSION = "platform.partner.read";
 const PARTNER_MANAGE_PERMISSION = "platform.partner.manage";
 const REBIND_SMS_SCENE = "rebind_platform_partner";
 
@@ -177,7 +178,7 @@ export class PlatformPartnerMemberRebindService {
     authContext: AuthContext,
     query: PlatformPartnerMemberRebindListQuery,
   ) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformPermission(authContext, PARTNER_READ_PERMISSION);
     return this.repository.listRequests(query);
   }
 
@@ -364,16 +365,21 @@ export class PlatformPartnerMemberRebindService {
   }
 
   private assertCanManagePartners(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
-    if (!authContext.permissions.some((item) =>
-      item.code === PARTNER_MANAGE_PERMISSION
-    )) {
-      throw Errors.forbidden();
-    }
+    this.assertPlatformPermission(authContext, PARTNER_MANAGE_PERMISSION);
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) {
+  private assertPlatformPermission(
+    authContext: AuthContext,
+    permissionCode: string,
+  ) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true ||
+      authContext.isPlatformAdmin === true;
+    if (
+      !isPlatformIdentity ||
+      authContext.tenantId !== null ||
+      !authContext.permissions.some((item) => item.code === permissionCode)
+    ) {
       throw Errors.forbidden();
     }
   }
