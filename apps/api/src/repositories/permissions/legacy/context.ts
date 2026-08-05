@@ -21,7 +21,7 @@ export async function listEmployeeRolesWithPermissions(this: any, employeeId: st
   const { data, error } = await this.adminClient
     .from("employee_roles")
     .select(`
-      role:roles (
+      role:roles!inner (
         id,
         code,
         name,
@@ -33,12 +33,14 @@ export async function listEmployeeRolesWithPermissions(this: any, employeeId: st
         role_permissions (
           access_scope,
           permission:permissions (
-            code
+            code,
+            status
           )
         )
       )
     `)
-    .eq("employee_id", employeeId);
+    .eq("employee_id", employeeId)
+    .eq("role.status", "active");
 
   if (error) {
     throw Errors.dbError("查询员工角色权限失败", error);
@@ -56,7 +58,7 @@ export async function listEmployeeRolesWithPermissions(this: any, employeeId: st
     roles.push(role);
 
     for (const item of permissions || []) {
-      if (!item.permission?.code) continue;
+      if (!item.permission?.code || item.permission.status !== "active") continue;
       rolePermissions.push({
         code: item.permission.code,
         scope: item.access_scope,

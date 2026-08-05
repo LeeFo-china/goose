@@ -46,6 +46,7 @@ export type EmployeePermissionContextRecord = {
     user_id: string | null;
     tenant_id: string | null;
     status: string | null;
+    admin_auth_version?: number | null;
     tenant_department_id: string | null;
     post_id: string | null;
     name: string | null;
@@ -104,7 +105,7 @@ export type EmployeePermissionContextRecord = {
 export type RoleWithPermissionsRecord = RoleRecord & {
   role_permissions?: Array<{
     access_scope: string;
-    permission: { code: string } | null;
+    permission: { code: string; status?: string | null } | null;
   }> | null;
 };
 

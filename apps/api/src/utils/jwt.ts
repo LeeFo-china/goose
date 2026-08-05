@@ -14,6 +14,7 @@ export type JwtPayload = {
   tenant_id?: string | null;
   tenant_slug?: string | null;
   employee_id?: string | null;
+  admin_auth_version?: number;
   customer_id?: string | null;
   partner_id?: string | null;
   verified_phone?: string | null;
@@ -156,6 +157,17 @@ function signJwtPayload(
 
 export function signToken(payload: Omit<JwtPayload, "iat" | "exp">) {
   return signJwtPayload(payload, process.env.JWT_EXPIRES_IN || "7d");
+}
+
+export function signAdminToken(
+  payload: Omit<JwtPayload, "iat" | "exp">,
+  options: { platform: boolean },
+) {
+  const expiresIn = options.platform
+    ? process.env.PLATFORM_ADMIN_JWT_EXPIRES_IN || "12h"
+    : process.env.JWT_EXPIRES_IN || "7d";
+
+  return signJwtPayload(payload, expiresIn);
 }
 
 export function signVisitorSessionToken(payload: Omit<

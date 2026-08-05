@@ -75,12 +75,22 @@ function buildTenantContext(
   roleCodes: string[],
 ) {
   const tenantId = employee?.tenant_id ?? null;
+  const isGlobalEmployee = Boolean(employee) && !tenantId;
+  const isPlatformSuperAdmin = isGlobalEmployee
+    && roleCodes.includes("platform_admin");
+  const isPlatformStaff = isPlatformSuperAdmin || (
+    isGlobalEmployee && roleCodes.includes("platform_staff")
+  );
+
   return {
     tenantId,
     tenantName: getRelationValue(employee?.tenant, "name") as string | null,
     tenantSlug: getRelationValue(employee?.tenant, "slug") as string | null,
     tenantStatus: getRelationValue(employee?.tenant, "status") as string | null,
-    isPlatformAdmin: roleCodes.includes("platform_admin") && !tenantId,
+    isPlatformAdmin: isPlatformSuperAdmin,
+    isPlatformStaff,
+    isPlatformSuperAdmin,
+    adminAuthVersion: employee?.admin_auth_version ?? 1,
   };
 }
 
@@ -88,14 +98,15 @@ export function buildAuthContext(input: Awaited<
   ReturnType<typeof permissionRepository.getEmployeePermissionContextByAuthUserId>
 >, authUserId: string): AuthContext {
   const employee = input.employee;
-  const roles = input.roles.map((item) => ({
+  const activeRoles = input.roles.filter((item) => item.status === "active");
+  const roles = activeRoles.map((item) => ({
     id: item.id,
     code: item.code,
     name: item.name ?? null,
     description: item.description ?? null,
     status: item.status ?? null,
   }));
-  const roleCodes = input.roles.map((item) => item.code);
+  const roleCodes = activeRoles.map((item) => item.code);
 
   if (!employee) {
     const tenantContext = buildTenantContext(null, roleCodes);
@@ -145,7 +156,7 @@ export function buildAuthContext(input: Awaited<
     };
   }
 
-  if (roleCodes.includes("system_admin")) {
+  if (tenantContext.tenantId !== null && roleCodes.includes("system_admin")) {
     return {
       authUserId,
       employeeId: employee.id,
