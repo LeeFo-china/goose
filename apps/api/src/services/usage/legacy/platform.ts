@@ -2,7 +2,7 @@ import { buildDateBuckets, getCreatedDate, normalizeDateRange } from "./date-ran
 import { summarizeAi, summarizeSms, summarizeSocialVideo } from "./summaries";
 import {
   aiCallLogRepository,
-  assertPlatformAdmin,
+  assertPlatformUsagePermission,
   smsSendLogRepository,
   socialVideoTranscriptionRepository,
   usageRepository,
@@ -11,11 +11,13 @@ import {
   type UsageDateRangeQuery,
 } from "./shared";
 
+const PLATFORM_USAGE_READ_PERMISSION = "platform.usage.read";
+
 export async function listPlatformTenantUsage(
   query: PlatformTenantUsageQuery,
   authContext: AuthContext,
 ) {
-  assertPlatformAdmin(authContext);
+  assertPlatformUsagePermission(authContext, PLATFORM_USAGE_READ_PERMISSION);
   const range = normalizeDateRange(query);
   const tenants = await usageRepository.listTenants({
     page: query.page,
@@ -64,7 +66,7 @@ export async function listPlatformTenantUsage(
 }
 
 export async function getPlatformOverview(query: UsageDateRangeQuery, authContext: AuthContext) {
-  assertPlatformAdmin(authContext);
+  assertPlatformUsagePermission(authContext, PLATFORM_USAGE_READ_PERMISSION);
   const range = normalizeDateRange(query);
   const dates = buildDateBuckets(range);
   const dateSet = new Set(dates);
