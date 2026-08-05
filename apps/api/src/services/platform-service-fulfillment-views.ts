@@ -88,6 +88,9 @@ export function serializePlatformWorkOrder(workOrder: WorkOrderRecord) {
     version: workOrder.version ?? 1,
     available_actions: getWorkOrderActions(workOrder.status),
     order: normalizeMaybeSingleRelation(workOrder.order),
+    acceptance_preparation: normalizeMaybeSingleRelation(
+      workOrder.acceptance_preparation,
+    ),
     created_at: workOrder.created_at,
     updated_at: workOrder.updated_at,
   };
