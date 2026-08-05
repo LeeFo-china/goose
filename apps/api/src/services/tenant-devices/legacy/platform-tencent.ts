@@ -1,8 +1,9 @@
 import {
-  assertPlatformAdmin,
+  assertPlatformDevicePermission,
   getDeviceLabel,
   getRequiredPlatformDevice,
   getRequiredPlatformTencentDevice,
+  PLATFORM_DEVICE_MANAGE_PERMISSION,
 } from "./access";
 import { syncAssets } from "./sync";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./shared";
 
 export async function deletePlatformTencentDevice(deviceId: string, authContext: AuthContext) {
-  assertPlatformAdmin(authContext);
+  assertPlatformDevicePermission(authContext, PLATFORM_DEVICE_MANAGE_PERMISSION);
 
   const [device, channels, assets, bindings] = await Promise.all([
     tencentIotVideoService.findDeviceSummary(deviceId),
@@ -104,7 +105,11 @@ export async function getPlatformTencentDeviceAccessInfo(id: string, authContext
 }
 
 export async function getPlatformTencentDevicePassword(id: string, authContext: AuthContext) {
-  const device = await getRequiredPlatformTencentDevice(id, authContext);
+  const device = await getRequiredPlatformTencentDevice(
+    id,
+    authContext,
+    PLATFORM_DEVICE_MANAGE_PERMISSION,
+  );
   const result = await tencentIotVideoService.getDevicePassword(device.vendor_device_serial);
 
   await platformAuditLogService.recordBestEffort({
@@ -135,7 +140,11 @@ export async function getPlatformTencentDevicePassword(id: string, authContext: 
 }
 
 export async function resetPlatformTencentDevicePassword(id: string, authContext: AuthContext) {
-  const device = await getRequiredPlatformTencentDevice(id, authContext);
+  const device = await getRequiredPlatformTencentDevice(
+    id,
+    authContext,
+    PLATFORM_DEVICE_MANAGE_PERMISSION,
+  );
   const password = generateSipPassword();
   const result = await tencentIotVideoService.updateDevicePassword({
     deviceId: device.vendor_device_serial,
@@ -181,7 +190,11 @@ export async function resetPlatformTencentDevicePassword(id: string, authContext
 }
 
 export async function syncPlatformTenantDevice(id: string, authContext: AuthContext) {
-  const device = await getRequiredPlatformDevice(id, authContext);
+  const device = await getRequiredPlatformDevice(
+    id,
+    authContext,
+    PLATFORM_DEVICE_MANAGE_PERMISSION,
+  );
   const result = await syncAssets({
     tenantId: device.tenant_id,
     assets: [device],

@@ -1,4 +1,8 @@
-import { assertPlatformAdmin, assertTenantDeviceAccess } from "./access";
+import {
+  assertPlatformDevicePermission,
+  assertTenantDeviceAccess,
+  PLATFORM_DEVICE_READ_PERMISSION,
+} from "./access";
 import {
   getTencentDeviceTypeLabel,
   tenantDeviceRepository,
@@ -25,7 +29,7 @@ export async function listPlatformTenantDevices(
   query: PlatformTenantDeviceListQueryInput,
   authContext: AuthContext,
 ) {
-  assertPlatformAdmin(authContext);
+  assertPlatformDevicePermission(authContext, PLATFORM_DEVICE_READ_PERMISSION);
   return tenantDeviceRepository.listPlatform(query);
 }
 
@@ -33,7 +37,7 @@ export async function listPlatformTencentDevices(
   query: PlatformTencentDeviceListQueryInput,
   authContext: AuthContext,
 ) {
-  assertPlatformAdmin(authContext);
+  assertPlatformDevicePermission(authContext, PLATFORM_DEVICE_READ_PERMISSION);
 
   const [devices, channels, assets] = await Promise.all([
     tencentIotVideoService.listDeviceSummaries(query.keyword),
