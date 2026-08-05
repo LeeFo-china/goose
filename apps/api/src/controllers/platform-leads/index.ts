@@ -1,4 +1,4 @@
-import { BaseController } from "@/controllers/BaseController";
+import { PlatformBaseController } from "@/controllers/PlatformBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
   PlatformLeadAssignSchema,
@@ -6,13 +6,12 @@ import {
   PlatformLeadListQuerySchema,
   PlatformLeadSubmitSchema,
 } from "@/schema/platform-leads";
-import { authorizationService } from "@/services/authorization";
 import { platformLeadService } from "@/services/platform-leads";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-class PlatformLeadsController extends BaseController {
+class PlatformLeadsController extends PlatformBaseController {
   constructor() {
     super("platform_leads");
   }
@@ -32,7 +31,10 @@ class PlatformLeadsController extends BaseController {
 
   @Get("/platform/leads")
   async listLeads(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.lead.read",
+    );
 
     const queryResult = PlatformLeadListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -43,7 +45,10 @@ class PlatformLeadsController extends BaseController {
 
   @Get("/platform/leads/:id")
   async getLead(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.lead.read",
+    );
 
     const paramsResult = PlatformLeadIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -54,7 +59,10 @@ class PlatformLeadsController extends BaseController {
 
   @Post("/platform/leads/:id/assign")
   async assignLead(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.lead.assign",
+    );
 
     const paramsResult = PlatformLeadIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
