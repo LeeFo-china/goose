@@ -4,6 +4,9 @@ export type FulfillmentAttachmentPreviewFileRecord = {
   scene: string;
   provider: string;
   object_key: string;
+  original_name: string | null;
+  mime_type: string;
+  size_bytes: number;
   visibility: string;
   status: string;
   deleted_at: string | null;
@@ -34,5 +37,5 @@ export const TENANT_FULFILLMENT_ATTACHMENT_PREVIEW_SELECT = [
   "file_name",
   "mime_type",
   "size_bytes",
-  "file:platform_file_objects!tenant_service_fulfillment_attachments_file_id_fkey(id,tenant_id,scene,provider,object_key,visibility,status,deleted_at)",
+  "file:platform_file_objects!tenant_service_fulfillment_attachments_file_id_fkey(id,tenant_id,scene,provider,object_key,original_name,mime_type,size_bytes,visibility,status,deleted_at)",
 ].join(",");

@@ -42,6 +42,10 @@ const query = {
     calls.push(["eq", column, value]);
     return query;
   },
+  in(column: string, values: readonly unknown[]) {
+    calls.push(["in", column, values]);
+    return query;
+  },
   ilike(column: string, value: string) {
     calls.push(["ilike", column, value]);
     return query;
@@ -199,6 +203,38 @@ describe("PlatformServiceFulfillmentRepository", () => {
       data: { id: "record-1", work_order_id: "work-1" },
       error: null,
     };
+    listResult = {
+      data: [
+        {
+          id: "file-1",
+          tenant_id: null,
+          scene: "tenant_service_fulfillment_attachment",
+          provider: "tencent_cos",
+          visibility: "private",
+          status: "active",
+          deleted_at: null,
+          created_by_employee_id: "admin-1",
+          original_name: "部署说明.pdf",
+          mime_type: "application/pdf",
+          size_bytes: 2048,
+        },
+        {
+          id: "file-2",
+          tenant_id: null,
+          scene: "tenant_service_fulfillment_attachment",
+          provider: "tencent_cos",
+          visibility: "private",
+          status: "active",
+          deleted_at: null,
+          created_by_employee_id: "admin-1",
+          original_name: "培训照片.png",
+          mime_type: "image/png",
+          size_bytes: 4096,
+        },
+      ],
+      error: null,
+      count: 2,
+    };
 
     await repository.createFulfillmentRecord({
       tenantId: "tenant-1",
@@ -213,12 +249,24 @@ describe("PlatformServiceFulfillmentRepository", () => {
     });
 
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_records"]);
+    expect(calls).toContainEqual(["from", "platform_file_objects"]);
+    expect(calls).toContainEqual(["in", "id", ["file-1", "file-2"]]);
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_attachments"]);
     const insertCalls = calls.filter(([method]) => method === "insert");
     expect(insertCalls).toHaveLength(2);
     expect(insertCalls[1]?.[1]).toEqual([
-      expect.objectContaining({ file_id: "file-1" }),
-      expect.objectContaining({ file_id: "file-2" }),
+      expect.objectContaining({
+        file_id: "file-1",
+        file_name: "部署说明.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 2048,
+      }),
+      expect.objectContaining({
+        file_id: "file-2",
+        file_name: "培训照片.png",
+        mime_type: "image/png",
+        size_bytes: 4096,
+      }),
     ]);
   });
 

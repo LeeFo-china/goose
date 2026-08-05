@@ -112,6 +112,7 @@ describe('platform service sales error codes', () => {
       ErrorCodes.SERVICE_WORK_ORDER_NOT_FOUND,
       ErrorCodes.SERVICE_WORK_ORDER_VERSION_CONFLICT,
       ErrorCodes.SERVICE_ACCEPTANCE_INVALID_STATE,
+      ErrorCodes.SERVICE_FULFILLMENT_ATTACHMENT_INVALID,
     ]).toEqual([
       'SERVICE_PRODUCT_NOT_FOUND',
       'SERVICE_TERMS_VERSION_STALE',
@@ -129,6 +130,7 @@ describe('platform service sales error codes', () => {
       'SERVICE_WORK_ORDER_NOT_FOUND',
       'SERVICE_WORK_ORDER_VERSION_CONFLICT',
       'SERVICE_ACCEPTANCE_INVALID_STATE',
+      'SERVICE_FULFILLMENT_ATTACHMENT_INVALID',
     ]);
   });
 });

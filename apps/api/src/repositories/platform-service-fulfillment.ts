@@ -1,3 +1,4 @@
+import { ErrorCodes } from "../errors/error-codes";
 import { Errors } from "../errors/error-factory";
 import { SupabaseDB } from "../utils/supabase";
 import {
@@ -25,6 +26,7 @@ type ServiceQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): ServiceQuery;
   insert(record: Record<string, unknown> | Array<Record<string, unknown>>): ServiceQuery;
   eq(column: string, value: unknown): ServiceQuery;
+  in(column: string, values: readonly unknown[]): ServiceQuery;
   ilike(column: string, pattern: string): ServiceQuery;
   or(filter: string): ServiceQuery;
   order(column: string, options: { ascending: boolean }): ServiceQuery;
@@ -41,7 +43,8 @@ type ServiceClient = {
       | "tenant_service_refund_requests"
       | "tenant_service_fulfillment_records"
       | "tenant_service_fulfillment_attachments"
-      | "tenant_service_acceptance_preparations",
+      | "tenant_service_acceptance_preparations"
+      | "platform_file_objects",
   ): ServiceQuery;
   rpc(
     name:
@@ -51,6 +54,22 @@ type ServiceClient = {
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
+
+type FulfillmentAttachmentFileObjectRecord = {
+  id: string;
+  tenant_id: string | null;
+  scene: string;
+  provider: string;
+  visibility: string;
+  status: string;
+  deleted_at: string | null;
+  created_by_employee_id: string | null;
+  original_name: string | null;
+  mime_type: string;
+  size_bytes: number;
+};
+
+const FULFILLMENT_ATTACHMENT_SCENE = "tenant_service_fulfillment_attachment";
 
 export class PlatformServiceFulfillmentRepository {
   constructor(
@@ -292,6 +311,10 @@ export class PlatformServiceFulfillmentRepository {
     return this.clientProvider().from("tenant_service_acceptance_preparations");
   }
 
+  private fileObjects() {
+    return this.clientProvider().from("platform_file_objects");
+  }
+
   private async createAttachments(input: {
     tenantId: string;
     serviceOrderId: string;
@@ -300,6 +323,7 @@ export class PlatformServiceFulfillmentRepository {
     fileIds: string[];
     createdByEmployeeId: string;
   }) {
+    const fileObjects = await this.findBindableFulfillmentAttachmentFiles(input);
     const { error } = await this.fulfillmentAttachments()
       .insert(input.fileIds.map((fileId) => ({
         tenant_id: input.tenantId,
@@ -307,10 +331,57 @@ export class PlatformServiceFulfillmentRepository {
         work_order_id: input.workOrderId,
         fulfillment_record_id: input.fulfillmentRecordId,
         file_id: fileId,
+        file_name: fileObjects.get(fileId)?.original_name ?? null,
+        mime_type: fileObjects.get(fileId)?.mime_type ?? null,
+        size_bytes: fileObjects.get(fileId)?.size_bytes ?? null,
         created_by_employee_id: input.createdByEmployeeId,
       })))
       .select("id");
     if (error) throw Errors.dbError("绑定平台技术服务附件失败", error);
+  }
+
+  private async findBindableFulfillmentAttachmentFiles(input: {
+    tenantId: string;
+    fileIds: string[];
+    createdByEmployeeId: string;
+  }) {
+    const uniqueFileIds = Array.from(new Set(input.fileIds));
+    const { data, error } = await this.fileObjects()
+      .select("id,tenant_id,scene,provider,visibility,status,deleted_at,created_by_employee_id,original_name,mime_type,size_bytes")
+      .in("id", uniqueFileIds);
+    if (error) throw Errors.dbError("查询平台技术服务附件文件失败", error);
+
+    const files = new Map(
+      ((data as FulfillmentAttachmentFileObjectRecord[] | null) ?? [])
+        .map((file) => [file.id, file]),
+    );
+    for (const fileId of uniqueFileIds) {
+      const file = files.get(fileId);
+      if (!file || !this.isBindableFulfillmentAttachmentFile(file, input)) {
+        throw Errors.business(
+          400,
+          "平台技术服务履约附件不可绑定",
+          ErrorCodes.SERVICE_FULFILLMENT_ATTACHMENT_INVALID,
+          { file_id: fileId },
+        );
+      }
+    }
+    return files;
+  }
+
+  private isBindableFulfillmentAttachmentFile(
+    file: FulfillmentAttachmentFileObjectRecord,
+    input: { tenantId: string; createdByEmployeeId: string },
+  ) {
+    return Boolean(
+      (file.tenant_id === input.tenantId || file.tenant_id === null) &&
+        file.scene === FULFILLMENT_ATTACHMENT_SCENE &&
+        file.provider === "tencent_cos" &&
+        file.visibility === "private" &&
+        file.status === "active" &&
+        file.deleted_at === null &&
+        file.created_by_employee_id === input.createdByEmployeeId,
+    );
   }
 
   private mapAtomicActionResult(data: unknown): AtomicActionResult {

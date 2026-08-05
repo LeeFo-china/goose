@@ -137,6 +137,9 @@ const attachmentPreview = {
     provider: "tencent_cos",
     object_key:
       "tenants/00000000-0000-4000-8000-000000000011/tenant-service-fulfillment-attachment/file.pdf",
+    original_name: "交付说明.pdf",
+    mime_type: "application/pdf",
+    size_bytes: 1024,
     visibility: "private",
     status: "active",
     deleted_at: null,
@@ -147,7 +150,10 @@ function createDependencies() {
   return {
     repository: {
       findAcceptanceViewByTenantAndOrderId: mock(async () => acceptanceView),
-      findTenantFulfillmentAttachmentPreview: mock(async () => attachmentPreview),
+      findTenantFulfillmentAttachmentPreview: mock(
+        async (): Promise<FulfillmentAttachmentPreviewRecord> =>
+          attachmentPreview,
+      ),
       decideAcceptance: mock(async (input: {
         decision: "accepted" | "rejected";
       }): Promise<AtomicActionResult> => ({
@@ -261,6 +267,47 @@ describe("Tenant platform service order acceptance", () => {
         mime_type: "application/pdf",
         size_bytes: 1024,
       },
+    });
+  });
+
+  test("allows tenant preview for platform-owned fulfillment attachments", async () => {
+    const platformOwnedPreview: FulfillmentAttachmentPreviewRecord = {
+      ...attachmentPreview,
+      file_name: null,
+      mime_type: null,
+      size_bytes: null,
+      file: {
+        ...attachmentPreview.file,
+        tenant_id: null,
+        original_name: "部署验收说明.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 2048,
+        object_key:
+          "private/tenant-service-fulfillment-attachments/platform-employees/hash/file.pdf",
+      },
+    };
+    dependencies.repository.findTenantFulfillmentAttachmentPreview
+      .mockImplementationOnce(async () => platformOwnedPreview);
+    const { getTenantServiceFulfillmentAttachmentPreviewUrl } = await import(
+      "./tenant-platform-service-order-acceptance"
+    );
+
+    const result = await getTenantServiceFulfillmentAttachmentPreviewUrl(
+      dependencies,
+      tenantAuth,
+      orderId,
+      attachmentId,
+    );
+
+    expect(dependencies.signedUrlResolver).toHaveBeenCalledWith(
+      "private/tenant-service-fulfillment-attachments/platform-employees/hash/file.pdf",
+      { ttlSeconds: 600 },
+    );
+    expect(result.file).toMatchObject({
+      attachment_id: attachmentId,
+      file_name: "部署验收说明.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 2048,
     });
   });
 
