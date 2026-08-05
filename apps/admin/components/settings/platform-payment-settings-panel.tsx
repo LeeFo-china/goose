@@ -19,6 +19,7 @@ import {
 } from "@/components/settings/platform-payment-readiness-request-coordinator";
 import { SecretBundleForm } from "@/components/settings/platform-payment-secret-form";
 import { PlatformVirtualPaymentSettings } from "@/components/settings/platform-virtual-payment-settings";
+import { SettingEditor } from "@/components/settings/settings-actions";
 import {
   definitionFor,
   emptyProfile,
@@ -43,6 +44,7 @@ import type {
   PlatformWechatPayProfileView,
   PlatformWechatPayReadinessResult,
 } from "@/components/settings/platform-payment-settings-types";
+import type { SystemSetting } from "@/components/settings/settings-types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
@@ -51,11 +53,14 @@ import { requestBackendJson } from "@/lib/backend-client";
 import type { BrandingVirtualPaymentEnvironment } from "@gooes/domain";
 
 type PaymentSection = "ordinary" | "virtual";
+const ACCEPTANCE_WINDOW_SETTING_KEY = "PLATFORM_SERVICE_ACCEPTANCE_WINDOW_DAYS";
 
 export function PlatformPaymentSettingsPanel({
   paymentProfiles,
+  paymentSettings = [],
 }: {
   paymentProfiles: PlatformWechatPayProfileListResult;
+  paymentSettings?: SystemSetting[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -66,6 +71,9 @@ export function PlatformPaymentSettingsPanel({
     searchParams.get("environment") === "production"
       ? "production"
       : "sandbox";
+  const acceptanceWindowSetting = paymentSettings.find((setting) =>
+    setting.key === ACCEPTANCE_WINDOW_SETTING_KEY
+  ) ?? null;
 
   function updateSection(section: PaymentSection) {
     const params = new URLSearchParams(searchParams.toString());
@@ -86,6 +94,17 @@ export function PlatformPaymentSettingsPanel({
 
   return (
     <div className="flex min-h-0 flex-col gap-4 p-4">
+      {acceptanceWindowSetting ? (
+        <section className="rounded-md border bg-background">
+          <div className="border-b px-4 py-3">
+            <div className="text-sm font-medium">平台技术服务业务规则</div>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              配置客户确认验收的时间窗口。逾期后，平台可依据履约记录和交付附件手动确认。
+            </p>
+          </div>
+          <SettingEditor setting={acceptanceWindowSetting} />
+        </section>
+      ) : null}
       <Tabs
         value={section}
         onValueChange={(value) => updateSection(value as PaymentSection)}

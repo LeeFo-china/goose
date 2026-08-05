@@ -167,7 +167,10 @@ export function SettingsTabs({
                 className="m-0 h-full min-h-0 overflow-auto data-[state=inactive]:hidden"
               >
                 {isPlatformMode && activeGroup.code === "payment" ? (
-                  <PlatformPaymentSettingsPanel paymentProfiles={paymentProfiles} />
+                  <PlatformPaymentSettingsPanel
+                    paymentProfiles={paymentProfiles}
+                    paymentSettings={activeGroup.settings}
+                  />
                 ) : (
                   <div>
                     {activeGroup.code === "social_video" ? (

@@ -130,6 +130,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
         permission: "platform.virtual_product.read",
       },
       {
+        href: "/platform/service-products",
+        label: "技术服务套餐",
+        icon: BriefcaseBusiness,
+        permission: "platform.service_product.manage",
+      },
+      {
         href: "/platform/catalog",
         label: "供应标准目录",
         icon: PackageSearch,

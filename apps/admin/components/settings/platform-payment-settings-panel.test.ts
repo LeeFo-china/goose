@@ -29,6 +29,16 @@ describe("platform payment settings panel", () => {
     expect(tabsSource).toContain("PlatformPaymentSettingsPanel");
     expect(tabsSource).toContain('activeGroup.code === "payment"');
     expect(tabsSource).toContain("paymentProfiles");
+    expect(tabsSource).toContain("paymentSettings={activeGroup.settings}");
+  });
+
+  test("platform payment panel exposes platform service acceptance window rule", () => {
+    const panelSource = readSource("./platform-payment-settings-panel.tsx");
+
+    expect(panelSource).toContain("paymentSettings");
+    expect(panelSource).toContain("PLATFORM_SERVICE_ACCEPTANCE_WINDOW_DAYS");
+    expect(panelSource).toContain("平台技术服务业务规则");
+    expect(panelSource).toContain("<SettingEditor setting={acceptanceWindowSetting} />");
   });
 
   test("settings card constrains tab panels so payment tabs scroll instead of clipping", () => {
