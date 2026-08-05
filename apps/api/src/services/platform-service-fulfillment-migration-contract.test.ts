@@ -13,6 +13,13 @@ const customerAcceptanceMigrationPath = new URL(
 const customerAcceptanceMigrationFile = Bun.file(customerAcceptanceMigrationPath);
 const readCustomerAcceptanceMigration = () =>
   customerAcceptanceMigrationFile.text();
+const acceptanceDeadlineMigrationPath = new URL(
+  "../../../../supabase/migrations/20260805152000_add_platform_service_acceptance_deadline.sql",
+  import.meta.url,
+);
+const acceptanceDeadlineMigrationFile = Bun.file(acceptanceDeadlineMigrationPath);
+const readAcceptanceDeadlineMigration = () =>
+  acceptanceDeadlineMigrationFile.text();
 
 describe("platform service fulfillment admin migration", () => {
   test("creates fulfillment tables with tenant-scoped ownership", async () => {
@@ -112,6 +119,29 @@ describe("platform service fulfillment admin migration", () => {
     expect(sql).toContain("SERVICE_ACCEPTANCE_INVALID_STATE");
     expect(sql).toContain("customer_accept");
     expect(sql).toContain("customer_reject");
+    expect(sql).toContain(
+      "UPDATE public.tenant_service_acceptance_preparations",
+    );
+    expect(sql).not.toContain("DROP TABLE public.tenant_service_orders");
+    expect(sql).not.toMatch(/UPDATE\s+public\.tenant_credit_/i);
+    expect(sql).not.toMatch(/UPDATE\s+public\.platform_virtual_products/i);
+  });
+
+  test("adds acceptance due time and platform overdue confirmation RPC", async () => {
+    expect(await acceptanceDeadlineMigrationFile.exists()).toBe(true);
+    const sql = await readAcceptanceDeadlineMigration();
+
+    expect(sql).toContain("acceptance_due_at");
+    expect(sql).toContain("tenant_service_acceptance_preparations_due_idx");
+    expect(sql).toContain(
+      "CREATE OR REPLACE FUNCTION public.platform_service_confirm_overdue_acceptance",
+    );
+    expect(sql).toContain("p_expected_version integer");
+    expect(sql).toContain("FOR UPDATE");
+    expect(sql).toContain("SERVICE_ACCEPTANCE_NOT_OVERDUE");
+    expect(sql).toContain("platform_accept_overdue");
+    expect(sql).toContain("UPDATE public.tenant_service_work_orders");
+    expect(sql).toContain("UPDATE public.tenant_service_orders");
     expect(sql).toContain(
       "UPDATE public.tenant_service_acceptance_preparations",
     );

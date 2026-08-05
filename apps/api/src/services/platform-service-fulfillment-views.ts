@@ -2,6 +2,7 @@ import type {
   OrderShippingReportRecord,
 } from "@/repositories/platform-service-order-shipping-reports";
 import type {
+  AcceptancePreparationRecord,
   OrderRecord,
   WorkOrderRecord,
 } from "@/repositories/platform-service-order-records";
@@ -75,7 +76,13 @@ export function latestShippingReportByOrderId(
   return reportByOrderId;
 }
 
-export function serializePlatformWorkOrder(workOrder: WorkOrderRecord) {
+export function serializePlatformWorkOrder(
+  workOrder: WorkOrderRecord,
+  now = new Date(),
+) {
+  const acceptancePreparation = normalizeMaybeSingleRelation(
+    workOrder.acceptance_preparation,
+  );
   return {
     id: workOrder.id,
     tenant_id: workOrder.tenant_id,
@@ -86,11 +93,15 @@ export function serializePlatformWorkOrder(workOrder: WorkOrderRecord) {
     created_by_employee_id: workOrder.created_by_employee_id,
     assigned_at: workOrder.assigned_at ?? null,
     version: workOrder.version ?? 1,
-    available_actions: getWorkOrderActions(workOrder.status),
-    order: normalizeMaybeSingleRelation(workOrder.order),
-    acceptance_preparation: normalizeMaybeSingleRelation(
-      workOrder.acceptance_preparation,
+    available_actions: getWorkOrderActions(
+      workOrder.status,
+      acceptancePreparation,
+      now,
     ),
+    order: normalizeMaybeSingleRelation(workOrder.order),
+    acceptance_preparation: acceptancePreparation
+      ? serializePlatformAcceptancePreparation(acceptancePreparation, now)
+      : null,
     created_at: workOrder.created_at,
     updated_at: workOrder.updated_at,
   };
@@ -139,7 +150,24 @@ function getWechatShippingRetryAction(
   };
 }
 
-function getWorkOrderActions(status: string) {
+export function serializePlatformAcceptancePreparation(
+  acceptancePreparation: AcceptancePreparationRecord,
+  now: Date,
+) {
+  const dueAt = acceptancePreparation.acceptance_due_at;
+  const remainingSeconds = getRemainingSeconds(dueAt, now);
+  return {
+    ...acceptancePreparation,
+    acceptance_overdue: dueAt ? remainingSeconds === 0 : false,
+    acceptance_remaining_seconds: remainingSeconds,
+  };
+}
+
+function getWorkOrderActions(
+  status: string,
+  acceptancePreparation: WorkOrderRecord["acceptance_preparation"],
+  now: Date,
+) {
   const canCancel = [
     "waiting_assignment",
     "configuring",
@@ -148,6 +176,14 @@ function getWorkOrderActions(status: string) {
     "awaiting_acceptance",
     "rectifying",
   ].includes(status);
+  const normalizedAcceptancePreparation = normalizeMaybeSingleRelation(
+    acceptancePreparation,
+  );
+  const isOverdueAcceptance = Boolean(
+    status === "awaiting_acceptance" &&
+      normalizedAcceptancePreparation?.status === "submitted" &&
+      isPastDue(normalizedAcceptancePreparation.acceptance_due_at, now),
+  );
   return {
     assign: {
       enabled: !["active", "canceled"].includes(status),
@@ -168,5 +204,25 @@ function getWorkOrderActions(status: string) {
       label: "取消工单",
       disabled_reason: canCancel ? null : "当前状态不能取消",
     },
+    confirm_overdue_acceptance: {
+      enabled: isOverdueAcceptance,
+      label: "平台确认验收",
+      disabled_reason: isOverdueAcceptance
+        ? null
+        : "客户验收未逾期，不能由平台确认验收",
+    },
   };
+}
+
+function isPastDue(dueAt: string | null | undefined, now: Date) {
+  if (!dueAt) return false;
+  const dueTime = new Date(dueAt).getTime();
+  return Number.isFinite(dueTime) && dueTime <= now.getTime();
+}
+
+function getRemainingSeconds(dueAt: string | null, now: Date) {
+  if (!dueAt) return null;
+  const dueTime = new Date(dueAt).getTime();
+  if (!Number.isFinite(dueTime)) return null;
+  return Math.max(0, Math.floor((dueTime - now.getTime()) / 1000));
 }

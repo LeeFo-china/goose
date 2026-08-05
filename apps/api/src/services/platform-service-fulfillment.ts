@@ -15,6 +15,7 @@ import type {
   PlatformServiceAcceptancePreparationInput,
   PlatformServiceFulfillmentRecordInput,
   PlatformServiceOrderListQuery,
+  PlatformServiceOverdueAcceptanceConfirmInput,
   PlatformServiceRefundRequestListQuery,
   PlatformServiceRefundReviewInput,
   PlatformServiceWorkOrderAssignInput,
@@ -29,9 +30,11 @@ import {
 import {
   latestShippingReportByOrderId,
   serializePlatformOrder,
+  serializePlatformAcceptancePreparation,
   serializePlatformWorkOrder,
   serializeWechatShippingReport,
 } from "@/services/platform-service-fulfillment-views";
+import { systemSettingsService } from "@/services/system-settings/legacy-service";
 
 type RepositoryPort = Pick<
   PlatformServiceFulfillmentRepository,
@@ -43,14 +46,24 @@ type RepositoryPort = Pick<
   | "transitionServiceWorkOrder"
   | "createFulfillmentRecord"
   | "upsertAcceptancePreparation"
+  | "confirmOverdueAcceptance"
   | "listPlatformServiceRefundRequests"
   | "reviewServiceRefundRequest"
 >;
+
+type SettingsServicePort = {
+  getNumber(
+    key: string,
+    fallbackValue: number,
+    options?: { min?: number; max?: number; tenantId?: string | null },
+  ): Promise<number>;
+};
 
 type PlatformServiceFulfillmentServiceDependencies = {
   repository?: RepositoryPort;
   shippingReportRepository?: ShippingReportRepositoryPort;
   orderShippingReporter?: OrderShippingReporterPort;
+  settingsService?: SettingsServicePort;
   nowFactory?: () => Date;
 };
 
@@ -69,6 +82,8 @@ type OrderShippingReporterPort = {
 const ORDER_READ_PERMISSION = "platform.service_order.read";
 const WORK_ORDER_MANAGE_PERMISSION = "platform.service_work_order.manage";
 const REFUND_REVIEW_PERMISSION = "platform.service_refund.review";
+const ACCEPTANCE_WINDOW_DAYS_SETTING_KEY = "PLATFORM_SERVICE_ACCEPTANCE_WINDOW_DAYS";
+const DEFAULT_ACCEPTANCE_WINDOW_DAYS = 3;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
@@ -77,6 +92,7 @@ export class PlatformServiceFulfillmentService {
   private readonly repository: RepositoryPort;
   private readonly shippingReportRepository: ShippingReportRepositoryPort;
   private readonly orderShippingReporter: OrderShippingReporterPort;
+  private readonly settingsService: SettingsServicePort;
   private readonly nowFactory: () => Date;
 
   constructor(
@@ -88,6 +104,7 @@ export class PlatformServiceFulfillmentService {
       platformServiceOrderShippingReportRepository;
     this.orderShippingReporter = dependencies.orderShippingReporter ??
       platformServiceOrderShippingService;
+    this.settingsService = dependencies.settingsService ?? systemSettingsService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
   }
 
@@ -181,9 +198,13 @@ export class PlatformServiceFulfillmentService {
       keyword: query.keyword,
       tenantKeyword: query.tenantKeyword,
     });
+    const now = this.nowFactory();
     return {
       ...result,
-      list: result.list.map(serializePlatformWorkOrder),
+      list: result.list.map((workOrder) =>
+        serializePlatformWorkOrder(workOrder, now)
+      ),
+      server_time: now.toISOString(),
     };
   }
 
@@ -199,7 +220,7 @@ export class PlatformServiceFulfillmentService {
         "SERVICE_WORK_ORDER_NOT_FOUND",
       );
     }
-    return { work_order: serializePlatformWorkOrder(workOrder) };
+    return { work_order: serializePlatformWorkOrder(workOrder, this.nowFactory()) };
   }
 
   async assignWorkOrder(
@@ -263,6 +284,17 @@ export class PlatformServiceFulfillmentService {
   ) {
     const employeeId = this.assertCanManageWorkOrders(authContext);
     const workOrder = await this.requireWorkOrder(workOrderId);
+    const submittedAt = input.status === "submitted" ? this.nowFactory() : null;
+    const acceptanceDueAt = submittedAt
+      ? addDays(
+        submittedAt,
+        await this.settingsService.getNumber(
+          ACCEPTANCE_WINDOW_DAYS_SETTING_KEY,
+          DEFAULT_ACCEPTANCE_WINDOW_DAYS,
+          { min: 1, max: 30 },
+        ),
+      )
+      : null;
     return this.repository.upsertAcceptancePreparation({
       tenantId: workOrder.tenant_id,
       serviceOrderId: workOrder.service_order_id,
@@ -271,7 +303,47 @@ export class PlatformServiceFulfillmentService {
       summary: input.summary,
       fileIds: input.file_ids,
       preparedByEmployeeId: employeeId,
+      acceptanceDueAt: acceptanceDueAt?.toISOString() ?? null,
     });
+  }
+
+  async confirmOverdueAcceptance(
+    authContext: AuthContext,
+    workOrderId: string,
+    input: PlatformServiceOverdueAcceptanceConfirmInput,
+  ) {
+    const employeeId = this.assertCanManageWorkOrders(authContext);
+    const result = await this.repository.confirmOverdueAcceptance({
+      workOrderId,
+      expectedVersion: input.expected_version,
+      operatorEmployeeId: employeeId,
+      remark: input.remark,
+      metadata: input.metadata,
+    });
+    if (!result.workOrder || !result.order || !result.acceptancePreparation) {
+      throwBusinessConflict(
+        result.errorCode,
+        result.errorCode === "SERVICE_ACCEPTANCE_NOT_OVERDUE"
+          ? "客户验收仍在确认期内，暂不能由平台确认验收"
+          : "平台技术服务验收状态已更新，请刷新后重试",
+      );
+    }
+    const orderShippingReport = await this.orderShippingReporter
+      .reportAcceptedOrder({
+        order: result.order,
+        source: "platform_acceptance",
+      });
+    const now = this.nowFactory();
+    return {
+      work_order: serializePlatformWorkOrder(result.workOrder, now),
+      order: serializePlatformOrder(result.order, now, orderShippingReport.report),
+      acceptance_preparation: serializePlatformAcceptancePreparation(
+        result.acceptancePreparation,
+        now,
+      ),
+      wechat_shipping_report: orderShippingReport,
+      server_time: now.toISOString(),
+    };
   }
 
   async listRefundRequests(
@@ -376,6 +448,10 @@ function throwBusinessConflict(errorCode: string | undefined, message: string): 
     message,
     errorCode ?? "SERVICE_WORK_ORDER_VERSION_CONFLICT",
   );
+}
+
+function addDays(date: Date, days: number) {
+  return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
 function hasPermission(authContext: AuthContext, permissionCode: string) {

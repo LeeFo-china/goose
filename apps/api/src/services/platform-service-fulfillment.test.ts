@@ -140,6 +140,11 @@ const repository = {
   })),
   createFulfillmentRecord: mock(async () => ({ id: "record-1" })),
   upsertAcceptancePreparation: mock(async () => ({ id: "acceptance-1" })),
+  confirmOverdueAcceptance: mock(async () => ({
+    workOrder: null,
+    order: null,
+    acceptancePreparation: null,
+  })),
   listPlatformServiceRefundRequests: mock(async () => ({
     list: [refundRequestRecord],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
@@ -435,4 +440,5 @@ describe("PlatformServiceFulfillmentService", () => {
       }),
     );
   });
+
 });

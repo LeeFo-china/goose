@@ -31,6 +31,10 @@ describe("PlatformServiceWorkOrdersController routes", () => {
         method: "POST",
         path: "/platform/billing/service-work-orders/:id/acceptance-preparation",
       },
+      {
+        method: "POST",
+        path: "/platform/billing/service-work-orders/:id/overdue-acceptance/confirm",
+      },
     ]);
   });
 });

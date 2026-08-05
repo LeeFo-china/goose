@@ -60,6 +60,7 @@ describe("平台技术服务履约页", () => {
       readSource("./platform-service-refund-request-table.tsx"),
       readSource("./platform-service-work-order-actions.tsx"),
       readSource("./platform-service-acceptance-preparation-action.tsx"),
+      readSource("./platform-service-overdue-acceptance-action.tsx"),
       readSource("./platform-service-refund-actions.tsx"),
     ].join("\n");
 
@@ -77,6 +78,7 @@ describe("平台技术服务履约页", () => {
       "审核退款",
       "记录履约",
       "提交验收",
+      "平台确认验收",
       "推进状态",
       "重新上报微信履约",
     ]) {
@@ -92,14 +94,17 @@ describe("平台技术服务履约页", () => {
     const actions = [
       readSource("./platform-service-work-order-actions.tsx"),
       readSource("./platform-service-acceptance-preparation-action.tsx"),
+      readSource("./platform-service-overdue-acceptance-action.tsx"),
     ].join("\n");
     const rules = readSource("./platform-service-order-rules.ts");
 
     expect(actions).toContain("workOrder.available_actions?.assign");
     expect(actions).toContain("workOrder.available_actions?.transition");
+    expect(actions).toContain("workOrder.available_actions?.confirm_overdue_acceptance");
     expect(actions).toContain("disabled_reason");
     expect(actions).toContain("getWorkOrderNextStatusOptions(workOrder.status)");
     expect(actions).toContain("/acceptance-preparation");
+    expect(actions).toContain("/overdue-acceptance/confirm");
     expect(actions).toContain("workOrder.status === \"awaiting_acceptance\"");
     expect(rules).toContain("PLATFORM_SERVICE_WORK_ORDER_ALLOWED_TRANSITIONS");
     expect(rules).toContain("transition.from === status");

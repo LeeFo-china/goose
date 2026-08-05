@@ -209,6 +209,7 @@ export type AcceptancePreparationRecord = {
   prepared_by_employee_id: string;
   prepared_at: string;
   submitted_at: string | null;
+  acceptance_due_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -292,6 +293,7 @@ export type AcceptancePreparationInput = {
   summary: string;
   fileIds: string[];
   preparedByEmployeeId: string;
+  acceptanceDueAt?: string | null;
 };
 
 export type ServiceRefundReviewInput = {
@@ -377,7 +379,7 @@ export const PLATFORM_SERVICE_WORK_ORDER_SELECT = [
   "created_at",
   "updated_at",
   "order:tenant_service_orders(id,order_no,product_code,term_years,amount_fen,payment_status,service_status,paid_at,tenant:tenants(id,name,status))",
-  "acceptance_preparation:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,created_at,updated_at)",
+  "acceptance_preparation:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,acceptance_due_at,created_at,updated_at)",
 ].join(",");
 
 export const PLATFORM_SERVICE_REFUND_REQUEST_SELECT = [
@@ -432,7 +434,7 @@ export const TENANT_PUBLIC_ORDER_SELECT = [
 export const TENANT_ACCEPTANCE_ORDER_SELECT = [
   TENANT_PUBLIC_ORDER_SELECT,
   "work_orders:tenant_service_work_orders(id,tenant_id,service_order_id,order_no,status,assignee_employee_id,created_by_employee_id,assigned_at,version,created_at,updated_at)",
-  "acceptance_preparations:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,created_at,updated_at)",
+  "acceptance_preparations:tenant_service_acceptance_preparations(id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,acceptance_due_at,created_at,updated_at)",
   "fulfillment_records:tenant_service_fulfillment_records(id,tenant_id,service_order_id,work_order_id,record_type,title,content,occurred_at,created_by_employee_id,created_at,updated_at,attachments:tenant_service_fulfillment_attachments(id,file_id,file_name,mime_type,size_bytes,created_at,file:platform_file_objects!tenant_service_fulfillment_attachments_file_id_fkey(id,original_name,mime_type,size_bytes)))",
 ].join(",");
 
