@@ -124,6 +124,22 @@ const controllerBoundaries: ControllerBoundary[] = [
     ],
     forbidLegacyGuard: true,
   },
+  {
+    file: "controllers/platform-billing-recharge/index.ts",
+    permissions: [
+      "platform.billing.read",
+      "platform.billing.recharge_product.manage",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-billing-recharge-refunds/index.ts",
+    permissions: [
+      "platform.billing.recharge_refund.read",
+      "platform.billing.recharge_refund.review",
+    ],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -248,5 +264,27 @@ describe("platform permission boundaries", () => {
     expect(revenue).toContain("platform.partner.commission.read");
     expect(revenue).toContain("platform.partner.settlement.manage");
     expect(revenue).not.toContain("if (!authContext.isPlatformAdmin)");
+  });
+
+  test("platform billing services check concrete permissions", () => {
+    const recharge = readFileSync(
+      new URL("../services/platform-billing-recharge.ts", import.meta.url),
+      "utf8",
+    );
+    const refunds = readFileSync(
+      new URL("../services/platform-billing-recharge-refunds.ts", import.meta.url),
+      "utf8",
+    );
+    const execution = readFileSync(
+      new URL("../services/platform-billing-recharge-refund-execution.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(recharge).toContain("platform.billing.read");
+    expect(recharge).toContain("platform.billing.recharge_product.manage");
+    expect(refunds).toContain("platform.billing.recharge_refund.read");
+    expect(refunds).toContain("platform.billing.recharge_refund.review");
+    expect(refunds).not.toContain("if (!authContext.isPlatformAdmin)");
+    expect(execution).not.toContain("if (!authContext.isPlatformAdmin)");
   });
 });

@@ -150,19 +150,23 @@ export class PlatformBillingRechargeRefundService {
   }
 
   private assertCanRead(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformContext(authContext);
     if (!hasPermission(authContext, READ_PERMISSION)) throw Errors.forbidden();
   }
 
   private assertCanReview(authContext: AuthContext) {
-    this.assertPlatformAdmin(authContext);
+    this.assertPlatformContext(authContext);
     if (!authContext.employeeId) throw Errors.forbidden();
     if (!hasPermission(authContext, REVIEW_PERMISSION)) throw Errors.forbidden();
     return authContext.employeeId;
   }
 
-  private assertPlatformAdmin(authContext: AuthContext) {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+  private assertPlatformContext(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
   }
 
   private auditReview(

@@ -17,7 +17,7 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
 
   @Get("/platform/billing/recharge-refund-requests")
   async listRequests(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRefundReadContext(request);
     const queryResult = PlatformRechargeRefundRequestQuerySchema.safeParse(
       request.query || {},
     );
@@ -33,7 +33,7 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
 
   @Get("/platform/billing/recharge-refund-requests/:id")
   async get(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRefundReadContext(request);
     const paramsResult = PlatformRechargeRefundRequestParamSchema.safeParse(
       request.params || {},
     );
@@ -49,7 +49,7 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
 
   @Post("/platform/billing/recharge-refund-requests/:id/approve")
   async approve(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRefundReviewContext(request);
     const paramsResult = PlatformRechargeRefundRequestParamSchema.safeParse(
       request.params || {},
     );
@@ -70,7 +70,7 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
 
   @Post("/platform/billing/recharge-refund-requests/:id/reject")
   async reject(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRefundReviewContext(request);
     const paramsResult = PlatformRechargeRefundRequestParamSchema.safeParse(
       request.params || {},
     );
@@ -91,7 +91,7 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
 
   @Post("/platform/billing/recharge-refund-requests/:id/execute")
   async execute(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredPlatformAdminContext(request);
+    const authContext = await this.getRefundReviewContext(request);
     const paramsResult = PlatformRechargeRefundRequestParamSchema.safeParse(
       request.params || {},
     );
@@ -103,6 +103,14 @@ class PlatformBillingRechargeRefundController extends PlatformBaseController {
         paramsResult.data.id,
       ),
     );
+  }
+
+  private getRefundReadContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.billing.recharge_refund.read");
+  }
+
+  private getRefundReviewContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(request, "platform.billing.recharge_refund.review");
   }
 }
 
