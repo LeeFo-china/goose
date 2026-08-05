@@ -199,7 +199,12 @@ export class SupplierCatalogService {
   }
 
   private requirePlatform(authContext: AuthContext): void {
-    if (!authContext.isPlatformAdmin) throw Errors.forbidden();
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (
+      authContext.tenantId !== null ||
+      !isPlatformIdentity
+    ) throw Errors.forbidden();
     this.accessPolicy.assertPermission(authContext, PLATFORM_PERMISSION);
   }
 

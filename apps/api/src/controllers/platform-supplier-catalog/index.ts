@@ -43,7 +43,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Get("/platform/catalog/categories")
   async listCategories(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const query = this.parse(CatalogCategoryListQuerySchema, request.query);
     return ResponseHandler.success(
       await supplierCatalogService.listPlatformCategories(auth, query),
@@ -52,7 +52,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Post("/platform/catalog/categories")
   async createCategory(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const key = requireIdempotencyKey(request);
     const input = this.parse(CatalogCategoryCreateSchema, request.body);
     return ResponseHandler.success(
@@ -62,7 +62,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Patch("/platform/catalog/categories/:id")
   async updateCategory(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const { id } = this.parse(CatalogCategoryParamSchema, request.params);
     const input = this.parse(CatalogCategoryUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -72,7 +72,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Get("/platform/catalog/brands")
   async listBrands(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const query = this.parse(CatalogBrandListQuerySchema, request.query);
     return ResponseHandler.success(
       await supplierCatalogService.listPlatformBrands(auth, query),
@@ -81,7 +81,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Post("/platform/catalog/brands")
   async createBrand(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const key = requireIdempotencyKey(request);
     const input = this.parse(CatalogBrandCreateSchema, request.body);
     return ResponseHandler.success(
@@ -91,7 +91,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Patch("/platform/catalog/brands/:id")
   async updateBrand(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const { id } = this.parse(CatalogBrandParamSchema, request.params);
     const input = this.parse(CatalogBrandUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -101,7 +101,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Get("/platform/catalog/units")
   async listUnits(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const query = this.parse(CatalogUnitListQuerySchema, request.query);
     return ResponseHandler.success(
       await supplierCatalogService.listPlatformUnits(auth, query),
@@ -110,7 +110,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Post("/platform/catalog/units")
   async createUnit(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const key = requireIdempotencyKey(request);
     const input = this.parse(CatalogUnitCreateSchema, request.body);
     return ResponseHandler.success(
@@ -120,7 +120,7 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
 
   @Patch("/platform/catalog/units/:id")
   async updateUnit(request: FastifyRequest) {
-    const auth = await this.getRequiredPlatformAdminContext(request);
+    const auth = await this.getCatalogManageContext(request);
     const { id } = this.parse(CatalogUnitParamSchema, request.params);
     const input = this.parse(CatalogUnitUpdateSchema, request.body);
     return ResponseHandler.success(
@@ -135,6 +135,13 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
     const result = schema.safeParse(input || {});
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data;
+  }
+
+  private getCatalogManageContext(request: FastifyRequest) {
+    return this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.catalog.manage",
+    );
   }
 }
 

@@ -50,6 +50,21 @@ const controllerBoundaries: ControllerBoundary[] = [
     ],
     forbidLegacyGuard: true,
   },
+  {
+    file: "controllers/platform-suppliers/index.ts",
+    permissions: [
+      "platform.supplier.view",
+      "platform.supplier.manage",
+      "platform.supplier.review",
+      "platform.supplier.blacklist",
+    ],
+    forbidLegacyGuard: true,
+  },
+  {
+    file: "controllers/platform-supplier-catalog/index.ts",
+    permissions: ["platform.catalog.manage"],
+    forbidLegacyGuard: true,
+  },
 ];
 
 describe("platform permission boundaries", () => {
@@ -92,5 +107,24 @@ describe("platform permission boundaries", () => {
     expect(source).toContain("platform.partner.manage");
     expect(source).toContain("platform.partner.binding.manage");
     expect(source).not.toContain("assertPlatformAdmin");
+  });
+
+  test("platform supplier services check concrete supplier and catalog permissions", () => {
+    const suppliers = readFileSync(
+      new URL("../services/platform-suppliers.ts", import.meta.url),
+      "utf8",
+    );
+    const catalog = readFileSync(
+      new URL("../services/supplier-catalog.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(suppliers).toContain("platform.supplier.view");
+    expect(suppliers).toContain("platform.supplier.manage");
+    expect(suppliers).toContain("platform.supplier.review");
+    expect(suppliers).toContain("platform.supplier.blacklist");
+    expect(catalog).toContain("platform.catalog.manage");
+    expect(suppliers).not.toContain("!auth.isPlatformAdmin");
+    expect(catalog).not.toContain("!authContext.isPlatformAdmin");
   });
 });

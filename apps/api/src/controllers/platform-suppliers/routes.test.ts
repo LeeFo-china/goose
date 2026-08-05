@@ -77,7 +77,7 @@ describe("PlatformSuppliersController routes", () => {
 
   test("rejects every create and command route without an idempotency key", async () => {
     const { default: controller } = await import(".");
-    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
       value: async () => ({ isPlatformAdmin: true }),
     });
@@ -113,7 +113,7 @@ describe("PlatformSuppliersController routes", () => {
         });
       }
     } finally {
-      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 
@@ -126,7 +126,7 @@ describe("PlatformSuppliersController routes", () => {
     const tenantId = crypto.randomUUID();
     const setTenantSupplierSettings = mock(async () => ({}));
     const original = platformSuppliersService.setTenantSupplierSettings;
-    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
       value: async () => auth,
     });
@@ -153,7 +153,7 @@ describe("PlatformSuppliersController routes", () => {
       });
     } finally {
       platformSuppliersService.setTenantSupplierSettings = original;
-      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 
@@ -163,7 +163,7 @@ describe("PlatformSuppliersController routes", () => {
       "@/services/platform-suppliers"
     );
     const auth = { isPlatformAdmin: true, authUserId: crypto.randomUUID() };
-    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
       value: mock(async () => auth),
     });
@@ -352,7 +352,7 @@ describe("PlatformSuppliersController routes", () => {
       expect(supplierIds[0]).not.toBe(supplierIds[1]);
     } finally {
       Object.assign(platformSuppliersService, originals);
-      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 });

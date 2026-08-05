@@ -32,7 +32,7 @@ describe("PlatformSupplierCatalogController routes", () => {
 
   test("rejects every create route without an idempotency key", async () => {
     const { default: controller } = await import(".");
-    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
       value: async () => ({ isPlatformAdmin: true }),
     });
@@ -56,7 +56,7 @@ describe("PlatformSupplierCatalogController routes", () => {
         });
       }
     } finally {
-      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 
@@ -66,7 +66,7 @@ describe("PlatformSupplierCatalogController routes", () => {
       "@/services/supplier-catalog"
     );
     const auth = { isPlatformAdmin: true, authUserId: crypto.randomUUID() };
-    Object.defineProperty(controller, "getRequiredPlatformAdminContext", {
+    Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
       value: mock(async () => auth),
     });
@@ -153,7 +153,7 @@ describe("PlatformSupplierCatalogController routes", () => {
       expect(createUnit).toHaveBeenCalledTimes(1);
     } finally {
       Object.assign(supplierCatalogService, originals);
-      Reflect.deleteProperty(controller, "getRequiredPlatformAdminContext");
+      Reflect.deleteProperty(controller, "getRequiredPlatformPermissionContext");
     }
   });
 });
