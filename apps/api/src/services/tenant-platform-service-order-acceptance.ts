@@ -164,9 +164,9 @@ export async function getTenantServiceFulfillmentAttachmentPreviewUrl(
     file: {
       id: attachment.file_id,
       attachment_id: attachment.id,
-      file_name: attachment.file_name ?? null,
-      mime_type: attachment.mime_type ?? null,
-      size_bytes: attachment.size_bytes ?? null,
+      file_name: attachment.file_name ?? file.original_name ?? null,
+      mime_type: attachment.mime_type ?? file.mime_type ?? null,
+      size_bytes: attachment.size_bytes ?? file.size_bytes ?? null,
     },
     server_time: responseNow.toISOString(),
   };
@@ -239,7 +239,7 @@ function isPreviewableFulfillmentAttachment(
 ) {
   return Boolean(
     attachment.tenant_id === tenantId &&
-      file.tenant_id === tenantId &&
+      (file.tenant_id === tenantId || file.tenant_id === null) &&
       file.id === attachment.file_id &&
       file.scene === FULFILLMENT_ATTACHMENT_SCENE &&
       file.provider === "tencent_cos" &&
