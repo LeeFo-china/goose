@@ -120,8 +120,20 @@ const PERMISSION_SELECT = [
   "status",
 ].join(",");
 
-const PLATFORM_ROLE_CODE_FILTER =
-  "code.eq.platform_admin,code.eq.platform_staff,code.ilike.platform_custom_%";
+const BUILT_IN_PLATFORM_ROLE_CODES = [
+  "platform_admin",
+  "platform_staff",
+  "platform_operations",
+  "platform_supplier_operations",
+  "platform_service_delivery",
+  "platform_finance_review",
+  "platform_technical_operations",
+] as const;
+
+const PLATFORM_ROLE_CODE_FILTER = [
+  ...BUILT_IN_PLATFORM_ROLE_CODES.map((code) => `code.eq.${code}`),
+  "code.ilike.platform_custom_%",
+].join(",");
 
 export class PlatformRolesRepository {
   private from(table: PlatformRoleTable) {
@@ -404,8 +416,7 @@ function countBy<T extends Record<string, unknown>>(
 }
 
 function isPlatformRoleCode(code: string | null | undefined): boolean {
-  return code === "platform_admin"
-    || code === "platform_staff"
+  return BUILT_IN_PLATFORM_ROLE_CODES.some((roleCode) => roleCode === code)
     || code?.startsWith("platform_custom_") === true;
 }
 

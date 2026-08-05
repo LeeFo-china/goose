@@ -34,7 +34,8 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.get_platform_command_idempotent_result(
   p_actor_user_id uuid,
-  p_idempotency_key uuid
+  p_idempotency_key uuid,
+  p_action text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -44,13 +45,13 @@ AS $$
 DECLARE
   v_result jsonb;
 BEGIN
-  IF p_actor_user_id IS NULL OR p_idempotency_key IS NULL THEN
+  IF p_actor_user_id IS NULL OR p_idempotency_key IS NULL OR p_action IS NULL THEN
     RETURN NULL;
   END IF;
 
   PERFORM pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
-      'platform-operator-command:' || p_actor_user_id::text || ':' || p_idempotency_key::text,
+      'platform-operator-command:' || p_actor_user_id::text || ':' || p_action || ':' || p_idempotency_key::text,
       0
     )
   );
@@ -59,6 +60,7 @@ BEGIN
   INTO v_result
   FROM public.platform_audit_logs AS audit_log
   WHERE audit_log.actor_user_id = p_actor_user_id
+    AND audit_log.action = p_action
     AND audit_log.idempotency_key = p_idempotency_key
   ORDER BY audit_log.created_at ASC
   LIMIT 1;
@@ -112,7 +114,7 @@ BEGIN
     p_summary,
     jsonb_build_object('result', p_result)
   )
-  ON CONFLICT (actor_user_id, idempotency_key)
+  ON CONFLICT (actor_user_id, action, idempotency_key)
   WHERE actor_user_id IS NOT NULL AND idempotency_key IS NOT NULL
   DO NOTHING;
 END;
@@ -248,7 +250,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_operator_create');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -335,7 +337,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_operator_update');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -422,7 +424,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_operator_roles_replace');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -548,7 +550,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_operator_sessions_revoke');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -623,7 +625,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_role_create');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -721,7 +723,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_role_update');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -803,7 +805,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_role_permissions_replace');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -920,7 +922,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   PERFORM public.assert_platform_operator_actor(p_actor_employee_id);
-  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key);
+  v_existing := public.get_platform_command_idempotent_result(p_actor_user_id, p_idempotency_key, 'platform_role_archive');
   IF v_existing IS NOT NULL THEN
     RETURN v_existing;
   END IF;
@@ -991,7 +993,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.assert_platform_operator_actor(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.get_platform_command_idempotent_result(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.get_platform_command_idempotent_result(uuid, uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.write_platform_command_audit(text, uuid, uuid, uuid, text, uuid, text, text, jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.normalize_platform_operator_role_ids(uuid[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.ensure_platform_super_admin_survives(uuid) FROM PUBLIC;
@@ -1006,7 +1008,7 @@ REVOKE ALL ON FUNCTION public.replace_platform_role_permissions(uuid, uuid, uuid
 REVOKE ALL ON FUNCTION public.archive_platform_role(uuid, uuid, uuid, integer, uuid) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.assert_platform_operator_actor(uuid) TO service_role;
-GRANT EXECUTE ON FUNCTION public.get_platform_command_idempotent_result(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_platform_command_idempotent_result(uuid, uuid, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.write_platform_command_audit(text, uuid, uuid, uuid, text, uuid, text, text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.normalize_platform_operator_role_ids(uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.ensure_platform_super_admin_survives(uuid) TO service_role;

@@ -114,12 +114,15 @@ export class PlatformOperatorsRepository {
     const to = offset + query.pageSize - 1;
 
     let request = this.from("employees")
-      .select(EMPLOYEE_SELECT, { count: "exact" })
+      .select(`${EMPLOYEE_SELECT}, employee_roles!inner(role_id)`, { count: "exact" })
       .is("tenant_id", null)
       .order("created_at", { ascending: false })
       .range(offset, to);
 
     if (query.status) request = request.eq("status", query.status);
+    if (query.roleId) {
+      request = request.eq("employee_roles.role_id", query.roleId);
+    }
     if (query.keyword) {
       const keyword = query.keyword.replace(/[,()]/g, " ").trim();
       if (keyword) {
@@ -140,20 +143,7 @@ export class PlatformOperatorsRepository {
       .map((row) => ({
         ...row,
         roles: rolesByEmployeeId.get(row.id) ?? [],
-      }))
-      .filter((row) => {
-        const hasPlatformRole = row.roles.some(
-          (role) =>
-            role.status === "active"
-            && (role.code === "platform_staff"
-              || role.code === "platform_admin"
-              || role.code?.startsWith("platform_")),
-        );
-        const matchesRole = query.roleId
-          ? row.roles.some((role) => role.id === query.roleId)
-          : true;
-        return hasPlatformRole && matchesRole;
-      });
+      }));
 
     return {
       list,

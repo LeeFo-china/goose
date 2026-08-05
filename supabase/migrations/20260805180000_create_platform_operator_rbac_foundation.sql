@@ -17,7 +17,7 @@ ALTER TABLE public.platform_audit_logs
   ADD COLUMN IF NOT EXISTS idempotency_key uuid;
 
 CREATE UNIQUE INDEX IF NOT EXISTS platform_audit_logs_actor_idempotency_unique
-ON public.platform_audit_logs(actor_user_id, idempotency_key)
+ON public.platform_audit_logs(actor_user_id, action, idempotency_key)
 WHERE actor_user_id IS NOT NULL AND idempotency_key IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS employees_platform_status_created_idx
