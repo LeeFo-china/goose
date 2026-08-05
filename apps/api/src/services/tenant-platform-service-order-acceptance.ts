@@ -275,14 +275,17 @@ function serializeAcceptanceView(
       created_at: fulfillmentRecord.created_at,
       attachments: normalizeList(fulfillmentRecord.attachments).map((
         attachment,
-      ) => ({
-        id: attachment.id,
-        file_id: attachment.file_id,
-        file_name: attachment.file_name ?? null,
-        mime_type: attachment.mime_type ?? null,
-        size_bytes: attachment.size_bytes ?? null,
-        created_at: attachment.created_at,
-      })),
+      ) => {
+        const file = normalizeMaybeSingleRelation(attachment.file);
+        return {
+          id: attachment.id,
+          file_id: attachment.file_id,
+          file_name: attachment.file_name ?? file?.original_name ?? null,
+          mime_type: attachment.mime_type ?? file?.mime_type ?? null,
+          size_bytes: attachment.size_bytes ?? file?.size_bytes ?? null,
+          created_at: attachment.created_at,
+        };
+      }),
     })),
     available_actions: getAcceptanceActions(
       record,
