@@ -23,6 +23,12 @@ function validate(args: readonly string[] = validArgs) {
   return spawnSync("node", [script, ...args], { encoding: "utf8" });
 }
 
+function validateDirectMigrationHistoryTarget(args: readonly string[]) {
+  return spawnSync("node", [script, "--direct-migration-history", ...args], {
+    encoding: "utf8",
+  });
+}
+
 type ResolverEnvironment = Partial<
   Record<
     "SUPABASE_PROJECT_REF" | "SUPABASE_DB_DIRECT_URL" | "SUPABASE_DB_URL",
@@ -134,6 +140,57 @@ describe("development database target validator", () => {
     expect(result.stderr).not.toContain(validUrl);
     expect(result.stderr).not.toContain("dev_user");
     expect(result.stderr).not.toContain("dev_password");
+  });
+
+  test.each([
+    [
+      "custom dev direct proxy",
+      [
+        devProxyUrl(5432),
+        devProjectRef,
+        "api-dev.goodcms.cn",
+        devProjectRef,
+        "api.goodcms.cn 1.13.20.39",
+        productionProjectRef,
+      ],
+    ],
+    [
+      "canonical Supabase direct host",
+      [
+        directUrl(devProjectRef),
+        devProjectRef,
+        "api-dev.goodcms.cn",
+        devProjectRef,
+        "api.goodcms.cn 1.13.20.39",
+        productionProjectRef,
+      ],
+    ],
+  ])("accepts %s for migration history reads", (_case, args) => {
+    const result = validateDirectMigrationHistoryTarget(args);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  });
+
+  test.each([
+    ["the pooled dev proxy", devProxyUrl(6543)],
+    ["the normal app database URL", validUrl.replace(":5432/", ":6543/")],
+    ["a canonical direct URL on the pooler port", directUrl(devProjectRef).replace(":5432/", ":6543/")],
+  ])("rejects %s for migration history reads", (_case, url) => {
+    const result = validateDirectMigrationHistoryTarget([
+      url,
+      devProjectRef,
+      "api-dev.goodcms.cn",
+      devProjectRef,
+      "api.goodcms.cn 1.13.20.39",
+      productionProjectRef,
+    ]);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("development database target rejected\n");
+    expect(result.stderr).not.toContain(url);
   });
 
   test.each([

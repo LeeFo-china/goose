@@ -209,6 +209,52 @@ export function validateDatabaseTarget(args) {
   return true;
 }
 
+export function validateDirectMigrationHistoryTarget(args) {
+  if (args.length < 4 || args.length > 6) return false;
+
+  const [
+    rawDatabaseUrl,
+    actualProjectRef,
+    expectedHost,
+    expectedProjectRef,
+    blockedHostsValue = "",
+    blockedRefsValue = "",
+  ] = args;
+
+  if (!isCanonicalHostname(expectedHost)) return false;
+  if (
+    !isValidProjectRef(actualProjectRef) ||
+    !isValidProjectRef(expectedProjectRef) ||
+    actualProjectRef !== expectedProjectRef
+  ) {
+    return false;
+  }
+
+  const databaseUrl = parsePostgresUrl(rawDatabaseUrl);
+  if (!databaseUrl) return false;
+  if (databaseUrl.port !== "5432") return false;
+
+  const canonicalDirectHost = `db.${expectedProjectRef}.supabase.co`;
+  if (
+    databaseUrl.hostname !== expectedHost &&
+    databaseUrl.hostname !== canonicalDirectHost
+  ) {
+    return false;
+  }
+
+  const blockedHosts = splitList(blockedHostsValue);
+  if (blockedHosts.includes(databaseUrl.hostname)) return false;
+
+  const blockedRefs = splitList(blockedRefsValue);
+  if (
+    blockedRefs.includes(actualProjectRef) ||
+    blockedRefs.some((blockedRef) => rawDatabaseUrl.includes(blockedRef))
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function reject() {
   console.error("development database target rejected");
   process.exit(1);
@@ -221,6 +267,11 @@ function runCli() {
     const projectRef = resolveProjectRef();
     if (!projectRef) reject();
     process.stdout.write(projectRef);
+    return;
+  }
+
+  if (args[0] === "--direct-migration-history") {
+    if (!validateDirectMigrationHistoryTarget(args.slice(1))) reject();
     return;
   }
 
