@@ -76,21 +76,21 @@ BEGIN
       status
     )
     VALUES (
-      NULL,
-      'Dev 超级管理员',
+      v_tenant_id,
+      'Dev 租户管理员',
       '19900000001',
-      NULL,
-      NULL,
+      v_tenant_department_id,
+      v_post_id,
       'active'
     )
     RETURNING id INTO v_employee_id;
   ELSE
     UPDATE public.employees
     SET
-      tenant_id = NULL,
-      name = 'Dev 超级管理员',
-      tenant_department_id = NULL,
-      post_id = NULL,
+      tenant_id = v_tenant_id,
+      name = 'Dev 租户管理员',
+      tenant_department_id = v_tenant_department_id,
+      post_id = v_post_id,
       status = 'active'
     WHERE id = v_employee_id;
   END IF;
@@ -100,9 +100,9 @@ BEGIN
   ON CONFLICT (employee_id, role_id) DO NOTHING;
 
   IF v_platform_admin_role_id IS NOT NULL THEN
-    INSERT INTO public.employee_roles (employee_id, role_id)
-    VALUES (v_employee_id, v_platform_admin_role_id)
-    ON CONFLICT (employee_id, role_id) DO NOTHING;
+    DELETE FROM public.employee_roles
+    WHERE employee_id = v_employee_id
+      AND role_id = v_platform_admin_role_id;
   END IF;
 
   INSERT INTO public.employees (
