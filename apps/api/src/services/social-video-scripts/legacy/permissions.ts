@@ -1,3 +1,5 @@
+import { platformAuthorizationService } from "@/services/platform-authorization";
+
 import { accessPolicyService, Errors } from "./shared";
 import type { AuthContext } from "./shared";
 
@@ -10,6 +12,18 @@ export function assertCanManage(this: any, authContext: AuthContext) {
   if (!this.canManage(authContext)) {
     throw Errors.forbidden();
   }
+}
+
+export function assertCanReadPlatformScripts(authContext: AuthContext) {
+  const isPlatformIdentity =
+    authContext.tenantId === null &&
+    (authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true);
+
+  if (!isPlatformIdentity) {
+    throw Errors.forbidden();
+  }
+
+  platformAuthorizationService.assertPermission(authContext, "platform.usage.read");
 }
 
 export function assertCanUseTranscription(this: any, 

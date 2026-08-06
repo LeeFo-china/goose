@@ -2,6 +2,10 @@ import { socialVideoScriptRepository, socialVideoTranscriptionRepository, Errors
 import type { AuthContext, ListSocialVideoScriptsQuery } from "./shared";
 import { serializeScript } from "./normalization";
 
+type PlatformScriptsAccess = {
+  assertCanReadPlatformScripts: (authContext: AuthContext) => void;
+};
+
 export async function listScripts(this: any, 
   transcriptionId: string,
   query: ListSocialVideoScriptsQuery,
@@ -45,6 +49,29 @@ export async function listAdminScripts(this: any,
 
   const result = await socialVideoScriptRepository.listAll({
     tenantId,
+    page: query.page,
+    pageSize: query.pageSize,
+    targetPlatform: query.target_platform,
+    style: query.style,
+    status: query.status,
+  });
+
+  return {
+    items: result.items.map((item) => serializeScript(item)),
+    total: result.total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
+}
+
+export async function listPlatformScripts(this: PlatformScriptsAccess,
+  query: ListSocialVideoScriptsQuery,
+  authContext: AuthContext,
+) {
+  this.assertCanReadPlatformScripts(authContext);
+
+  const result = await socialVideoScriptRepository.listAll({
+    tenantId: null,
     page: query.page,
     pageSize: query.pageSize,
     targetPlatform: query.target_platform,

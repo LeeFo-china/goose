@@ -6,8 +6,9 @@ import { SocialVideoScriptsTable } from "@/components/social-video/social-video-
 import type { SocialVideoScriptsData } from "@/components/social-video/social-video-types";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { getAdminToken } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { isPlatformOnlySession } from "@/lib/session-mode";
 
 type SocialVideoPageSearchParams = {
   page?: string;
@@ -63,6 +64,7 @@ async function getSocialVideoData(params: SocialVideoPageSearchParams) {
   const style = includesValue(STYLES, params.style);
   const status = includesValue(STATUSES, params.status);
   const token = await getAdminToken();
+  const session = await getAdminSession();
 
   if (!token) {
     return {
@@ -81,9 +83,12 @@ async function getSocialVideoData(params: SocialVideoPageSearchParams) {
   if (status) query.set("status", status);
 
   try {
+    const scriptsEndpoint = isPlatformOnlySession(session)
+      ? "/platform/social-video/scripts"
+      : "/admin/social-video/scripts";
     const data = await fetchBackendData<SocialVideoScriptsData>(
       token,
-      `/admin/social-video/scripts?${query}`,
+      `${scriptsEndpoint}?${query}`,
     );
     return {
       data: data || { items: [], total: 0, page, pageSize: PAGE_SIZE },

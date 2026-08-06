@@ -111,6 +111,20 @@ class SocialVideoController extends BaseController {
     return ResponseHandler.success(data);
   }
 
+  @Get("/platform/social-video/scripts")
+  async listPlatformScripts(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+
+    const queryResult = ListSocialVideoScriptsQuerySchema.safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await socialVideoScriptService.listPlatformScripts(
+      queryResult.data,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
   @Get("/admin/social-video/usage-summary")
   async getUsageSummary(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
