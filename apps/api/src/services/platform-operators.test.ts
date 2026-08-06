@@ -114,6 +114,37 @@ describe("PlatformOperatorsService", () => {
     expect(result.list[0]).not.toHaveProperty("full_phone");
   });
 
+  test("allows platform super admin to list operators when permission list is stale", async () => {
+    const { PlatformOperatorsService } = await import(
+      "@/services/platform-operators"
+    );
+    const repository = {
+      list: async () => ({
+        list: [operatorRecord()],
+        pagination: {
+          page: 1,
+          pageSize: 20,
+          total: 1,
+          totalPages: 1,
+        },
+      }),
+      findById: async () => null,
+      createCommand: async () => null,
+      updateCommand: async () => null,
+      replaceRolesCommand: async () => null,
+      transitionStatusCommand: async () => null,
+      revokeSessionsCommand: async () => null,
+    };
+    const service = new PlatformOperatorsService({ repository });
+
+    const result = await service.list(
+      authContext({ isPlatformSuperAdmin: true }),
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(result.list).toHaveLength(1);
+  });
+
   test("returns full phone only to managers on detail", async () => {
     const { PlatformOperatorsService } = await import(
       "@/services/platform-operators"
@@ -182,6 +213,38 @@ describe("PlatformOperatorsService", () => {
       code: ErrorCodes.PLATFORM_SUPER_ADMIN_REQUIRED,
       statusCode: 403,
     });
+  });
+
+  test("allows platform super admin to create when permission list is stale", async () => {
+    const { PlatformOperatorsService } = await import(
+      "@/services/platform-operators"
+    );
+    const repository = {
+      list: async () => ({
+        list: [],
+        pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      }),
+      findById: async () => null,
+      createCommand: async () => operatorRecord(),
+      updateCommand: async () => null,
+      replaceRolesCommand: async () => null,
+      transitionStatusCommand: async () => null,
+      revokeSessionsCommand: async () => null,
+    };
+    const service = new PlatformOperatorsService({ repository });
+
+    await expect(
+      service.create(
+        authContext({ isPlatformSuperAdmin: true }),
+        {
+          name: "新人员",
+          phone: "13900139000",
+          role_ids: [ROLE_ID],
+          status: "pending",
+          idempotency_key: IDEMPOTENCY_KEY,
+        },
+      ),
+    ).resolves.toEqual(operatorRecord());
   });
 
   test("maps RPC phone conflict into stable business error", async () => {

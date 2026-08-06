@@ -34,6 +34,16 @@ function createSession(permissions: AdminPermission[]): AdminSession {
   };
 }
 
+function createPlatformSuperAdminSession(): AdminSession {
+  return {
+    ...createSession([]),
+    tenant: null,
+    roles: ["platform_admin"],
+    is_platform_staff: true,
+    is_platform_super_admin: true,
+  };
+}
+
 describe("admin nav visibility", () => {
   test("consolidates tenant operations into one platform nav item", () => {
     const platformItems = platformNavGroups.flatMap((group) => group.items);
@@ -131,6 +141,17 @@ describe("admin nav visibility", () => {
         item,
       ),
     ).toBe(false);
+  });
+
+  test("keeps platform super admin from being locked out by stale platform permission lists", () => {
+    const item: AdminMenuItem = {
+      href: "/platform/operators",
+      label: "平台人员",
+      icon: Users,
+      permission: "platform.operator.read",
+    };
+
+    expect(hasMenuItemAccess(createPlatformSuperAdminSession(), item)).toBe(true);
   });
 
   test("removes hidden items and empty groups from visible groups", () => {

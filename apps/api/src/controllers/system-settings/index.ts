@@ -13,9 +13,13 @@ import { ResponseHandler } from "@/utils/response";
 import type { PermissionCode } from "@gooes/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
-type SystemSettingsPermission = Extract<
+type TenantSystemSettingsPermission = Extract<
   PermissionCode,
   "system.settings.read" | "system.settings.update" | "system.settings.test"
+>;
+type PlatformSystemSettingsPermission = Extract<
+  PermissionCode,
+  "platform.system_setting.read" | "platform.system_setting.manage"
 >;
 
 class SystemSettingsController extends TenantBaseController {
@@ -25,7 +29,7 @@ class SystemSettingsController extends TenantBaseController {
 
   private async getRequiredPlatformSettingsContext(
     request: FastifyRequest,
-    permissionCode: SystemSettingsPermission,
+    permissionCode: PlatformSystemSettingsPermission,
   ) {
     const authContext = await this.getRequiredAuthContext(request);
     const isPlatformIdentity =
@@ -39,12 +43,16 @@ class SystemSettingsController extends TenantBaseController {
 
   private assertSettingsPermission(
     authContext: AuthContext,
-    permissionCode: SystemSettingsPermission,
+    permissionCode: TenantSystemSettingsPermission,
+    platformPermissionCode: PlatformSystemSettingsPermission,
   ) {
     const isPlatformIdentity =
       authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true;
     if (authContext.tenantId === null && isPlatformIdentity) {
-      platformAuthorizationService.assertPermission(authContext, permissionCode);
+      platformAuthorizationService.assertPermission(
+        authContext,
+        platformPermissionCode,
+      );
       return;
     }
     this.assertPermission(authContext, permissionCode);
@@ -54,7 +62,7 @@ class SystemSettingsController extends TenantBaseController {
   async listPlatformSettings(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformSettingsContext(
       request,
-      "system.settings.read",
+      "platform.system_setting.read",
     );
 
     const data = await systemSettingsService.listSettings(authContext);
@@ -65,7 +73,7 @@ class SystemSettingsController extends TenantBaseController {
   async updatePlatformSetting(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredPlatformSettingsContext(
       request,
-      "system.settings.update",
+      "platform.system_setting.manage",
     );
 
     const paramsResult = SystemSettingKeyParamsSchema.safeParse(request.params);
@@ -86,7 +94,7 @@ class SystemSettingsController extends TenantBaseController {
   async testPlatformTencentLbs(request: FastifyRequest, reply: FastifyReply) {
     await this.getRequiredPlatformSettingsContext(
       request,
-      "system.settings.test",
+      "platform.system_setting.manage",
     );
 
     const data = await tencentLbsService.testWebserviceConfig();
@@ -124,7 +132,11 @@ class SystemSettingsController extends TenantBaseController {
   @Get("/admin/system-settings")
   async listSettings(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
-    this.assertSettingsPermission(authContext, "system.settings.read");
+    this.assertSettingsPermission(
+      authContext,
+      "system.settings.read",
+      "platform.system_setting.read",
+    );
 
     const data = await systemSettingsService.listSettings(authContext);
     return ResponseHandler.success(data);
@@ -133,7 +145,11 @@ class SystemSettingsController extends TenantBaseController {
   @Patch("/admin/system-settings/:key")
   async updateSetting(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
-    this.assertSettingsPermission(authContext, "system.settings.update");
+    this.assertSettingsPermission(
+      authContext,
+      "system.settings.update",
+      "platform.system_setting.manage",
+    );
 
     const paramsResult = SystemSettingKeyParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -152,7 +168,11 @@ class SystemSettingsController extends TenantBaseController {
   @Post("/admin/system-settings/tencent-lbs/test")
   async testTencentLbs(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getRequiredAuthContext(request);
-    this.assertSettingsPermission(authContext, "system.settings.test");
+    this.assertSettingsPermission(
+      authContext,
+      "system.settings.test",
+      "platform.system_setting.manage",
+    );
 
     const data = await tencentLbsService.testWebserviceConfig();
     return ResponseHandler.success(data);

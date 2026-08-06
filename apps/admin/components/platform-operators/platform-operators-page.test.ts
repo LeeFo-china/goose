@@ -24,6 +24,7 @@ describe("平台运营人员管理页", () => {
     const page = readSource("../../app/(console)/platform/operators/page.tsx");
 
     expect(page).toContain("isPlatformOnlySession");
+    expect(page).toContain("isPlatformSuperAdmin");
     expect(page).toContain("platform.operator.read");
     expect(page).toContain("platform.operator.manage");
     expect(page).toContain("buildBackendUrl(`/platform/operators?");
