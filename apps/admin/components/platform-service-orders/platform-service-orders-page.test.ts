@@ -121,6 +121,15 @@ describe("平台技术服务履约页", () => {
     expect(actions).not.toContain('name="assignee_employee_id"');
   });
 
+  test("分配负责人列表加载不会被自身 loading 状态取消", () => {
+    const actions = readSource("./platform-service-work-order-actions.tsx");
+
+    expect(actions).toContain("}, [open, operatorsLoaded]);");
+    expect(actions).toContain("hasSelectedAssigneeOption");
+    expect(actions).toContain("当前负责人（历史记录）");
+    expect(actions).not.toContain("[loadingOperators, open, operatorLoadError, operatorsLoaded]");
+  });
+
   test("客户验收列优先按验收状态展示，已验收不能显示确认中", () => {
     const table = readSource("./platform-service-work-order-table.tsx");
 

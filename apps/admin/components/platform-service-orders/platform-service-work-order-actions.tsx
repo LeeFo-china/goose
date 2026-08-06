@@ -79,9 +79,7 @@ function AssignWorkOrderButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState(
-    workOrder.assignee_employee_id || "",
-  );
+  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState(workOrder.assignee_employee_id || "");
   const [operators, setOperators] = useState<PlatformOperator[]>([]);
   const [operatorsLoaded, setOperatorsLoaded] = useState(false);
   const [loadingOperators, setLoadingOperators] = useState(false);
@@ -90,25 +88,28 @@ function AssignWorkOrderButton({
   const assignAction = workOrder.available_actions?.assign;
   const canAssign = assignAction?.enabled ?? true;
   const disabledReason = assignAction?.disabled_reason ?? undefined;
+  const hasSelectedAssigneeOption = Boolean(assigneeEmployeeId) && operators.some((operator) => operator.id === assigneeEmployeeId);
+  const shouldShowHistoricalAssigneeOption = Boolean(assigneeEmployeeId) && operatorsLoaded && !hasSelectedAssigneeOption;
   const hasAssignableOperators = operators.length > 0;
   const operatorHint = loadingOperators
     ? "正在加载可分配的平台人员。"
     : operatorsLoaded
-      ? hasAssignableOperators
+      ? shouldShowHistoricalAssigneeOption
+        ? "当前负责人来自历史记录，可选择新的可用平台人员重新分配。"
+        : hasAssignableOperators
         ? "仅显示可用的平台人员。"
         : "暂无可分配的平台人员，请先在平台人员中新增或启用人员。"
       : "打开弹窗后自动加载可分配的平台人员。";
 
   useEffect(() => {
-    if (!open || operatorsLoaded || loadingOperators || operatorLoadError) return;
+    if (!open || operatorsLoaded) return;
 
     let cancelled = false;
     setLoadingOperators(true);
     setOperatorLoadError("");
-    requestBackendJson<PlatformOperatorPageData<PlatformOperator>>(
-      "/platform/operators?page=1&pageSize=100&status=active",
-      { fallbackMessage: "负责人列表加载失败" },
-    )
+    requestBackendJson<PlatformOperatorPageData<PlatformOperator>>("/platform/operators?page=1&pageSize=100&status=active", {
+      fallbackMessage: "负责人列表加载失败",
+    })
       .then((data) => {
         if (cancelled) return;
         setOperators(data.list);
@@ -127,7 +128,7 @@ function AssignWorkOrderButton({
     return () => {
       cancelled = true;
     };
-  }, [loadingOperators, open, operatorLoadError, operatorsLoaded]);
+  }, [open, operatorsLoaded]);
 
   function handleOpenChange(nextOpen: boolean) {
     if (!canAssign) return;
@@ -201,12 +202,11 @@ function AssignWorkOrderButton({
                 disabled={pending || loadingOperators || Boolean(operatorLoadError)}
               >
                 <SelectTrigger id={`assignee-${workOrder.id}`}>
-                  <SelectValue
-                    placeholder={loadingOperators ? "加载负责人列表..." : "请选择负责人"}
-                  />
+                  <SelectValue placeholder={loadingOperators ? "加载负责人列表..." : "请选择负责人"} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    {shouldShowHistoricalAssigneeOption ? <SelectItem value={assigneeEmployeeId}>当前负责人（历史记录）</SelectItem> : null}
                     {operators.map((operator) => (
                       <SelectItem key={operator.id} value={operator.id}>
                         {formatPlatformOperatorOption(operator)}
