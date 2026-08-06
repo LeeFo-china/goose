@@ -295,6 +295,7 @@ export function isVisitorSessionRoute(method: string, url: string) {
     return true;
   }
 
+  if ((method === "GET" || method === "HEAD") && url.startsWith("/share-campaigns/") || method === "POST" && (url === "/share-campaigns/open" || url === "/share-campaigns/assist")) return true;
   if (
     (method === "GET" || method === "HEAD") &&
     url === "/visitor/local-service-providers"

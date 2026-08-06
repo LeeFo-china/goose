@@ -83,4 +83,52 @@ describe("authPlugin WeChat virtual-payment reachability", () => {
       visitorId: "visitor-auth-hook-smoke",
     });
   });
+
+  test("lets visitor session tokens reach share campaign open, detail, and assist handlers", async () => {
+    const { default: authPlugin } = await import("./legacy-plugin");
+    const { signVisitorSessionToken } = await import("@/utils/jwt");
+    const app = Fastify({ logger: false, exposeHeadRoutes: false });
+    apps.push(app);
+    await app.register(async (scope) => {
+      authPlugin(scope);
+      scope.post("/share-campaigns/open", async (request) => ({
+        reached: true,
+        openid: request.user?.openid,
+        visitorId: request.user?.visitor_id,
+      }));
+      scope.get("/share-campaigns/:shareToken", async (request) => ({
+        reached: true,
+        openid: request.user?.openid,
+        visitorId: request.user?.visitor_id,
+      }));
+      scope.post("/share-campaigns/assist", async (request) => ({
+        reached: true,
+        openid: request.user?.openid,
+        visitorId: request.user?.visitor_id,
+      }));
+    });
+
+    const authorization = `Bearer ${signVisitorSessionToken({
+      openid: "openid-share-assist-smoke",
+      visitor_id: "visitor-share-assist-smoke",
+    })}`;
+
+    for (const [method, url] of [
+      ["POST", "/share-campaigns/open"],
+      ["GET", "/share-campaigns/share-token"],
+      ["POST", "/share-campaigns/assist"],
+    ] as const) {
+      const response = await app.inject({
+        method,
+        url,
+        headers: { authorization },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(JSON.parse(response.body) as unknown).toEqual({
+        reached: true,
+        openid: "openid-share-assist-smoke",
+        visitorId: "visitor-share-assist-smoke",
+      });
+    }
+  });
 });

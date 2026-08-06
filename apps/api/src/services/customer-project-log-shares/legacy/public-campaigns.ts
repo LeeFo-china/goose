@@ -207,10 +207,29 @@ export async function openShareCampaign(this: any,
   };
 }
 
+async function resolveHelperOpenid(helper: {
+  authUserId?: string | null;
+  openid?: string | null;
+}) {
+  if (helper.openid) {
+    return helper.openid;
+  }
+
+  if (!helper.authUserId) {
+    return null;
+  }
+
+  const identity = await userIdentityService.findActiveOauthIdentityByUserId({
+    userId: helper.authUserId,
+    platform: "wechat_mini",
+  });
+  return identity?.openid ?? null;
+}
+
 export async function assistShareCampaign(this: any, 
   input: AssistCustomerProjectLogShareCampaignInput,
   helper: {
-    authUserId: string;
+    authUserId?: string | null;
     openid?: string | null;
     ip?: string | null;
   },
@@ -218,6 +237,17 @@ export async function assistShareCampaign(this: any,
   const campaign = await this.ensureCampaignPhase2Metadata(
     await this.getCampaignByToken(input.share_token),
   );
+  const helperOpenid = await resolveHelperOpenid(helper);
+
+  if (!helper.authUserId && !helper.openid) {
+    throw this.buildAssistBlockedError({
+      statusCode: 401,
+      code: ErrorCodes.NOT_AUTHENTICATED,
+      message: "请先建立微信会话后再助力",
+      campaign,
+      reason: "not_authenticated",
+    });
+  }
 
   if (campaign.status !== "active") {
     if (campaign.status === "achieved") {
@@ -250,7 +280,10 @@ export async function assistShareCampaign(this: any,
   }
 
   const owner = await this.getCustomerById(campaign.customer_id);
-  if (owner.user_id && owner.user_id === helper.authUserId) {
+  if (await this.isCampaignOwnerViewer(owner, {
+    authUserId: helper.authUserId ?? null,
+    openid: helperOpenid,
+  })) {
     throw this.buildAssistBlockedError({
       statusCode: 403,
       code: ErrorCodes.OWNER_SELF_NOT_ALLOWED,
@@ -262,8 +295,8 @@ export async function assistShareCampaign(this: any,
 
   const existingAssist = await customerProjectLogShareCampaignRepository.findAssist({
     campaign_id: campaign.id,
-    helper_auth_user_id: helper.authUserId,
-    helper_openid: helper.openid ?? null,
+    helper_auth_user_id: helper.authUserId ?? null,
+    helper_openid: helperOpenid,
   });
   if (existingAssist) {
     throw this.buildAssistBlockedError({
@@ -275,16 +308,18 @@ export async function assistShareCampaign(this: any,
     });
   }
 
-  const helperProfile = await this.getUserProfileByAuthUserId(helper.authUserId);
-  const helperName = helperProfile?.nickname || "好友";
+  const helperProfile = helper.authUserId
+    ? await this.getUserProfileByAuthUserId(helper.authUserId)
+    : null;
+  const helperName = helperProfile?.nickname || "微信好友";
   const helperAvatar = this.getImagePublicUrl(helperProfile?.avatar_path) || null;
   const now = new Date().toISOString();
 
   await customerProjectLogShareCampaignRepository.createAssist({
     campaign_id: campaign.id,
     share_token: campaign.share_token,
-    helper_auth_user_id: helper.authUserId,
-    helper_openid: helper.openid ?? null,
+    helper_auth_user_id: helper.authUserId ?? null,
+    helper_openid: helperOpenid,
     helper_device_id: null,
     helper_ip: helper.ip ?? null,
     source: input.source,

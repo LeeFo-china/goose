@@ -1,5 +1,15 @@
+import { ErrorCodes } from "@/errors/error-codes";
 import { Errors, SupabaseDB } from "./shared";
 import type { CustomerProjectLogShareAssistRow } from "./shared";
+
+function isUniqueViolation(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    (error as { code?: unknown }).code === "23505",
+  );
+}
 
 export async function createOpen(this: any, input: {
   campaign_id: string;
@@ -36,22 +46,38 @@ export async function findAssist(this: any, input: {
   helper_auth_user_id: string | null;
   helper_openid: string | null;
 }) {
-  let query = SupabaseDB.getAdminClient()
+  if (input.helper_auth_user_id) {
+    const { data, error } = await SupabaseDB.getAdminClient()
+      .from("customer_log_share_assists")
+      .select("*")
+      .eq("campaign_id", input.campaign_id)
+      .eq("is_valid", true)
+      .eq("helper_auth_user_id", input.helper_auth_user_id)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw Errors.dbError("查询助力记录失败", error);
+    }
+
+    if (data) {
+      return data as CustomerProjectLogShareAssistRow;
+    }
+  }
+
+  if (!input.helper_openid) {
+    return null;
+  }
+
+  const { data, error } = await SupabaseDB.getAdminClient()
     .from("customer_log_share_assists")
     .select("*")
     .eq("campaign_id", input.campaign_id)
     .eq("is_valid", true)
-    .limit(1);
+    .eq("helper_openid", input.helper_openid)
+    .limit(1)
+    .maybeSingle();
 
-  if (input.helper_auth_user_id) {
-    query = query.eq("helper_auth_user_id", input.helper_auth_user_id);
-  } else if (input.helper_openid) {
-    query = query.is("helper_auth_user_id", null).eq("helper_openid", input.helper_openid);
-  } else {
-    return null;
-  }
-
-  const { data, error } = await query.maybeSingle();
   if (error) {
     throw Errors.dbError("查询助力记录失败", error);
   }
@@ -93,6 +119,10 @@ export async function createAssist(this: any, input: {
     .single();
 
   if (error || !data) {
+    if (isUniqueViolation(error)) {
+      throw Errors.business(409, "你已经助力过了", ErrorCodes.ALREADY_ASSISTED);
+    }
+
     throw Errors.dbError("创建助力记录失败", error);
   }
 

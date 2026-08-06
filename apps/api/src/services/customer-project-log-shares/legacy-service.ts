@@ -51,6 +51,7 @@ import {
   getEffectiveShareCampaignConfig,
 } from './legacy/config-access';
 import {
+  isCampaignOwnerViewer,
   buildViewerAssistInfo,
   buildAssistBlockedError,
   getOwnedProjectLogContext,
@@ -238,6 +239,7 @@ class CustomerProjectLogShareService {
   private buildAppointmentRewardSummary = buildAppointmentRewardSummary;
   private getEffectiveProjectConfig = getEffectiveProjectConfig;
   private getEffectiveShareCampaignConfig = getEffectiveShareCampaignConfig;
+  private isCampaignOwnerViewer = isCampaignOwnerViewer;
   private buildViewerAssistInfo = buildViewerAssistInfo;
   private buildAssistBlockedError = buildAssistBlockedError;
   private getOwnedProjectLogContext = getOwnedProjectLogContext;

@@ -124,13 +124,20 @@ import {
   type ViewerAssistInfo,
 } from './shared';
 
+export async function isCampaignOwnerViewer(this: any, owner: CampaignOwnerRow, viewer?: { authUserId?: string | null; openid?: string | null }) {
+  if (!owner.user_id) return false;
+  if (viewer?.authUserId && owner.user_id === viewer.authUserId) return true;
+  if (!viewer?.openid) return false;
+  const identity = await userIdentityService.findActiveOauthIdentity({ platform: "wechat_mini", openid: viewer.openid });
+  return identity?.user_id === owner.user_id;
+}
 export async function buildViewerAssistInfo(this: any, 
   campaign: CustomerProjectLogShareCampaignRow,
   owner: CampaignOwnerRow,
   viewer?: { authUserId?: string | null; openid?: string | null },
 ): Promise<ViewerAssistInfo> {
-  const isAuthenticated = Boolean(viewer?.authUserId);
-  if (!isAuthenticated || !viewer?.authUserId) {
+  const isAuthenticated = Boolean(viewer?.authUserId || viewer?.openid);
+  if (!isAuthenticated) {
     return {
       is_authenticated: false,
       can_assist: false,
@@ -139,8 +146,9 @@ export async function buildViewerAssistInfo(this: any,
       is_owner: false,
     };
   }
+  const viewerContext = viewer ?? {};
 
-  const isOwner = Boolean(owner.user_id && owner.user_id === viewer.authUserId);
+  const isOwner = await this.isCampaignOwnerViewer(owner, viewerContext);
   if (isOwner) {
     return {
       is_authenticated: true,
@@ -183,8 +191,8 @@ export async function buildViewerAssistInfo(this: any,
 
   const existingAssist = await customerProjectLogShareCampaignRepository.findAssist({
     campaign_id: campaign.id,
-    helper_auth_user_id: viewer.authUserId,
-    helper_openid: viewer.openid ?? null,
+    helper_auth_user_id: viewerContext.authUserId ?? null,
+    helper_openid: viewerContext.openid ?? null,
   });
 
   if (existingAssist) {

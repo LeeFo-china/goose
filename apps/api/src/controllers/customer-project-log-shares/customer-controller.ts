@@ -208,14 +208,13 @@ class CustomerShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/share-campaigns/assist")
   async assistShareCampaign(request: FastifyRequest, reply: FastifyReply) {
-    const authUserId = this.getRequiredAuthUserId(request);
     const bodyResult = AssistCustomerProjectLogShareCampaignSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
 
     const data = await customerProjectLogShareService.assistShareCampaign(
       bodyResult.data,
       {
-        authUserId,
+        authUserId: this.getOptionalAuthUserId(request),
         openid: request.user?.openid ?? null,
         ip: request.ip,
       },

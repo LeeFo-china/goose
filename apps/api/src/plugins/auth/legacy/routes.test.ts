@@ -102,6 +102,18 @@ describe("isVisitorSessionRoute", () => {
     expect(isVisitorSessionRoute("POST", "/platform/leads/00000000-0000-4000-8000-000000000001/assign"))
       .toBe(false);
   });
+
+  test("allows visitor sessions to open, view, and assist share campaigns", () => {
+    expect(isVisitorSessionRoute("POST", "/share-campaigns/open")).toBe(true);
+    expect(isVisitorSessionRoute("GET", "/share-campaigns/share-token")).toBe(true);
+    expect(isVisitorSessionRoute("HEAD", "/share-campaigns/share-token")).toBe(true);
+    expect(isVisitorSessionRoute("POST", "/share-campaigns/assist")).toBe(true);
+
+    expect(isPublicRoute("POST", "/share-campaigns/open")).toBe(true);
+    expect(isPublicRoute("GET", "/share-campaigns/share-token")).toBe(true);
+    expect(isPublicRoute("POST", "/share-campaigns/assist")).toBe(false);
+    expect(shouldBypassAuth("POST", "/share-campaigns/assist")).toBe(false);
+  });
 });
 
 describe("auth public route allowlist", () => {
