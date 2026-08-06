@@ -33,7 +33,30 @@ export async function findByShareToken(this: any, shareToken: string) {
     throw Errors.dbError("查询分享活动失败", error);
   }
 
-  return (data || null) as CustomerProjectLogShareCampaignRow | null;
+  if (data) {
+    return data as CustomerProjectLogShareCampaignRow;
+  }
+
+  const scene = shareToken.startsWith("st_") ? shareToken.slice(3) : "";
+  if (scene.length !== 32 || !/^[A-Za-z0-9_-]+$/.test(scene)) {
+    return null;
+  }
+
+  // Older posters may contain the 32-character WeChat scene truncated from a
+  // longer immutable share token. Resolve it only when the prefix is unique.
+  const { data: candidates, error: prefixError } = await SupabaseDB.getAdminClient()
+    .from("customer_log_share_campaigns")
+    .select("*")
+    .like("share_token", `${shareToken}%`)
+    .limit(2);
+
+  if (prefixError) {
+    throw Errors.dbError("查询历史分享活动失败", prefixError);
+  }
+
+  return candidates?.length === 1
+    ? candidates[0] as CustomerProjectLogShareCampaignRow
+    : null;
 }
 
 export async function findById(this: any, id: string) {
