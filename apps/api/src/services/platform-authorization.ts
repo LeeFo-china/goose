@@ -77,9 +77,13 @@ export class PlatformAuthorizationService {
   }
 
   assertPermission(
-    authContext: Pick<AuthContext, "permissions">,
+    authContext: Pick<AuthContext, "permissions" | "isPlatformSuperAdmin">,
     code: PermissionCode,
   ): void {
+    if (authContext.isPlatformSuperAdmin && code.startsWith("platform.")) {
+      return;
+    }
+
     const hasPermission = authContext.permissions.some(
       (permission) => permission.code === code,
     );

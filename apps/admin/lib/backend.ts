@@ -39,6 +39,8 @@ export type AdminSession = {
   tenant: AdminTenant | null;
   roles: string[];
   permissions: AdminPermission[];
+  is_platform_staff?: boolean;
+  is_platform_super_admin?: boolean;
   token?: string;
   expires_at?: string;
 };

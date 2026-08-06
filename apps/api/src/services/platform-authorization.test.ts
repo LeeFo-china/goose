@@ -144,6 +144,23 @@ describe("PlatformAuthorizationService", () => {
       }),
     ).not.toThrow();
   });
+
+  test("allows platform super admin to use platform permissions as a built-in fallback", async () => {
+    const { PlatformAuthorizationService } = await import("./platform-authorization");
+    const service = new PlatformAuthorizationService({
+      repository: {
+        getSecuritySnapshot: mock(async () => activeSnapshot),
+      },
+    });
+
+    expect(() =>
+      service.assertPermission({
+        ...baseAuthContext,
+        isPlatformSuperAdmin: true,
+        permissions: [],
+      }, "platform.operator.read"),
+    ).not.toThrow();
+  });
 });
 
 function expectBusinessErrorCode(action: () => void, code: string) {

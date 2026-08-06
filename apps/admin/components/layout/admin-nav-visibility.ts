@@ -23,11 +23,26 @@ export function hasMenuItemAccess(
   if (requirements.length === 0) return true;
 
   return requirements.every((requirement) =>
+    isPlatformSuperAdminAccess(session, requirement.code) ||
     session.permissions.some((permission) => {
       if (permission.code !== requirement.code) return false;
       if (!requirement.scope) return true;
       return permission.scope === requirement.scope;
     }),
+  );
+}
+
+function isPlatformSuperAdminAccess(
+  session: AdminSession,
+  permissionCode: string,
+): boolean {
+  return Boolean(
+    permissionCode.startsWith("platform.") &&
+      session.tenant === null &&
+      (
+        session.is_platform_super_admin === true ||
+        session.roles.includes("platform_admin")
+      ),
   );
 }
 

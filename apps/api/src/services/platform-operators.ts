@@ -15,7 +15,11 @@ import type {
   UpdatePlatformOperatorInput,
 } from "@/schema/platform-operators";
 import type { AuthContext } from "@/services/authorization";
-import type { PlatformStaffAuthContext } from "@/services/platform-authorization";
+import {
+  platformAuthorizationService,
+  type PlatformStaffAuthContext,
+} from "@/services/platform-authorization";
+import type { PermissionCode } from "@gooes/domain";
 
 type PlatformOperatorsRepositoryPort = Pick<
   typeof platformOperatorsRepository,
@@ -38,8 +42,8 @@ type PlatformOperatorView = Omit<PlatformOperatorRecord, "phone"> & {
   full_phone?: string;
 };
 
-const OPERATOR_READ_PERMISSION = "platform.operator.read";
-const OPERATOR_MANAGE_PERMISSION = "platform.operator.manage";
+const OPERATOR_READ_PERMISSION = "platform.operator.read" satisfies PermissionCode;
+const OPERATOR_MANAGE_PERMISSION = "platform.operator.manage" satisfies PermissionCode;
 
 const RPC_ERROR_MAP: Record<string, AppError> = {
   PLATFORM_OPERATOR_NOT_FOUND: Errors.business(
@@ -200,18 +204,15 @@ export class PlatformOperatorsService {
     };
   }
 
-  private assertPermission(authContext: AuthContext, code: string): void {
-    if (!this.hasPermission(authContext, code)) {
-      throw Errors.business(
-        403,
-        "缺少平台操作权限",
-        ErrorCodes.PLATFORM_PERMISSION_REQUIRED,
-        { permission: code },
-      );
-    }
+  private assertPermission(authContext: AuthContext, code: PermissionCode): void {
+    platformAuthorizationService.assertPermission(authContext, code);
   }
 
-  private hasPermission(authContext: AuthContext, code: string): boolean {
+  private hasPermission(authContext: AuthContext, code: PermissionCode): boolean {
+    if (authContext.isPlatformSuperAdmin && code.startsWith("platform.")) {
+      return true;
+    }
+
     return authContext.permissions.some((permission) => permission.code === code);
   }
 

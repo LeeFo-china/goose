@@ -96,8 +96,15 @@ export default async function PlatformOperatorsPage({
 
   const permissions = new Set(session.permissions.map((item) => item.code));
   const isPlatformAdmin = isPlatformOnlySession(session);
-  const canRead = isPlatformAdmin && permissions.has(READ_PERMISSION);
-  const canManage = isPlatformAdmin && permissions.has(MANAGE_PERMISSION);
+  const isPlatformSuperAdmin = isPlatformAdmin &&
+    (
+      session.is_platform_super_admin === true ||
+      session.roles.includes("platform_admin")
+    );
+  const canRead = isPlatformAdmin &&
+    (isPlatformSuperAdmin || permissions.has(READ_PERMISSION));
+  const canManage = isPlatformAdmin &&
+    (isPlatformSuperAdmin || permissions.has(MANAGE_PERMISSION));
   const params = await searchParams;
   const page = normalizePlatformOperatorPage(params.page);
   const pageSize = normalizePlatformListPageSize(params.pageSize);
