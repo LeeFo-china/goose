@@ -6,6 +6,7 @@ DECLARE
   v_tenant_id uuid;
   v_tenant_department_id uuid;
   v_post_id uuid;
+  v_platform_admin_employee_id uuid;
   v_employee_id uuid;
   v_tenant_admin_employee_id uuid;
   v_identity_tenant_b_id uuid;
@@ -59,6 +60,50 @@ BEGIN
     RAISE EXCEPTION 'Dev seed requires tenant role code=system_admin';
   END IF;
 
+  IF v_platform_admin_role_id IS NULL THEN
+    RAISE EXCEPTION 'Dev seed requires global role code=platform_admin';
+  END IF;
+
+  SELECT id
+  INTO v_platform_admin_employee_id
+  FROM public.employees
+  WHERE phone = '19900000003'
+  ORDER BY created_at ASC
+  LIMIT 1;
+
+  IF v_platform_admin_employee_id IS NULL THEN
+    INSERT INTO public.employees (
+      tenant_id,
+      name,
+      phone,
+      tenant_department_id,
+      post_id,
+      status
+    )
+    VALUES (
+      NULL,
+      'Dev 平台超管',
+      '19900000003',
+      NULL,
+      NULL,
+      'active'
+    )
+    RETURNING id INTO v_platform_admin_employee_id;
+  ELSE
+    UPDATE public.employees
+    SET
+      tenant_id = NULL,
+      name = 'Dev 平台超管',
+      tenant_department_id = NULL,
+      post_id = NULL,
+      status = 'active'
+    WHERE id = v_platform_admin_employee_id;
+  END IF;
+
+  INSERT INTO public.employee_roles (employee_id, role_id)
+  VALUES (v_platform_admin_employee_id, v_platform_admin_role_id)
+  ON CONFLICT (employee_id, role_id) DO NOTHING;
+
   SELECT id
   INTO v_employee_id
   FROM public.employees
@@ -99,11 +144,9 @@ BEGIN
   VALUES (v_employee_id, v_system_admin_role_id)
   ON CONFLICT (employee_id, role_id) DO NOTHING;
 
-  IF v_platform_admin_role_id IS NOT NULL THEN
-    DELETE FROM public.employee_roles
-    WHERE employee_id = v_employee_id
-      AND role_id = v_platform_admin_role_id;
-  END IF;
+  DELETE FROM public.employee_roles
+  WHERE employee_id = v_employee_id
+    AND role_id = v_platform_admin_role_id;
 
   INSERT INTO public.employees (
     tenant_id,
@@ -134,11 +177,9 @@ BEGIN
   VALUES (v_tenant_admin_employee_id, v_system_admin_role_id)
   ON CONFLICT (employee_id, role_id) DO NOTHING;
 
-  IF v_platform_admin_role_id IS NOT NULL THEN
-    DELETE FROM public.employee_roles
-    WHERE employee_id = v_tenant_admin_employee_id
-      AND role_id = v_platform_admin_role_id;
-  END IF;
+  DELETE FROM public.employee_roles
+  WHERE employee_id = v_tenant_admin_employee_id
+    AND role_id = v_platform_admin_role_id;
 
   INSERT INTO public.customers (
     tenant_id,

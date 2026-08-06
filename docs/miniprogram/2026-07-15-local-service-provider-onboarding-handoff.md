@@ -269,7 +269,7 @@ Idempotency-Key: <uuid-v4>
 
 ### 场景 C：平台审核通过并自动归因城市合伙人
 
-- 平台审核员：`Dev 超级管理员`
+- 平台审核员：`Dev 平台超管`
 - 审核申请 ID：`04659e6f-694f-4b9e-bfdc-5d1244491e70`
 - `GET /platform/tenant-onboarding/applications`：返回该 `submitted` 申请
 - `POST /platform/tenant-onboarding/applications/:id/start-review`：HTTP `200`
