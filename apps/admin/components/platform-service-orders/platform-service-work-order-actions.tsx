@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState, useTransition } from "react";
+import { type FormEvent, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ClipboardCheck, Loader2, Send, UserPlus } from "lucide-react";
 
@@ -14,7 +14,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -28,6 +34,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
+import type {
+  PageData as PlatformOperatorPageData,
+  PlatformOperator,
+} from "../platform-operators/platform-operator-types";
 import {
   fulfillmentRecordTypeOptions,
   getWorkOrderNextStatusOptions,
@@ -69,17 +79,76 @@ function AssignWorkOrderButton({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState(
+    workOrder.assignee_employee_id || "",
+  );
+  const [operators, setOperators] = useState<PlatformOperator[]>([]);
+  const [operatorsLoaded, setOperatorsLoaded] = useState(false);
+  const [loadingOperators, setLoadingOperators] = useState(false);
+  const [operatorLoadError, setOperatorLoadError] = useState("");
   const [error, setError] = useState("");
   const assignAction = workOrder.available_actions?.assign;
   const canAssign = assignAction?.enabled ?? true;
   const disabledReason = assignAction?.disabled_reason ?? undefined;
+  const hasAssignableOperators = operators.length > 0;
+  const operatorHint = loadingOperators
+    ? "正在加载可分配的平台人员。"
+    : operatorsLoaded
+      ? hasAssignableOperators
+        ? "仅显示可用的平台人员。"
+        : "暂无可分配的平台人员，请先在平台人员中新增或启用人员。"
+      : "打开弹窗后自动加载可分配的平台人员。";
+
+  useEffect(() => {
+    if (!open || operatorsLoaded || loadingOperators || operatorLoadError) return;
+
+    let cancelled = false;
+    setLoadingOperators(true);
+    setOperatorLoadError("");
+    requestBackendJson<PlatformOperatorPageData<PlatformOperator>>(
+      "/platform/operators?page=1&pageSize=100&status=active",
+      { fallbackMessage: "负责人列表加载失败" },
+    )
+      .then((data) => {
+        if (cancelled) return;
+        setOperators(data.list);
+        setOperatorsLoaded(true);
+      })
+      .catch((caught) => {
+        if (cancelled) return;
+        setOperatorLoadError(
+          caught instanceof Error ? caught.message : "负责人列表加载失败",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingOperators(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadingOperators, open, operatorLoadError, operatorsLoaded]);
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!canAssign) return;
+    setOpen(nextOpen);
+    if (nextOpen) {
+      setAssigneeEmployeeId(workOrder.assignee_employee_id || "");
+      setError("");
+      setOperatorLoadError("");
+    }
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     const formData = new FormData(event.currentTarget);
-    const assigneeEmployeeId = String(formData.get("assignee_employee_id") || "").trim();
     const remark = String(formData.get("remark") || "").trim();
+    const selectedAssigneeEmployeeId = assigneeEmployeeId.trim();
+    if (!selectedAssigneeEmployeeId) {
+      setError("请选择负责人");
+      return;
+    }
 
     startTransition(async () => {
       try {
@@ -88,7 +157,7 @@ function AssignWorkOrderButton({
           {
             method: "POST",
             body: JSON.stringify({
-              assignee_employee_id: assigneeEmployeeId,
+              assignee_employee_id: selectedAssigneeEmployeeId,
               expected_version: workOrder.version ?? 1,
               remark: remark || undefined,
             }),
@@ -104,9 +173,7 @@ function AssignWorkOrderButton({
   }
 
   return (
-    <Dialog open={canAssign ? open : false} onOpenChange={(nextOpen) => {
-      if (canAssign) setOpen(nextOpen);
-    }}>
+    <Dialog open={canAssign ? open : false} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -127,13 +194,29 @@ function AssignWorkOrderButton({
         <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor={`assignee-${workOrder.id}`}>负责人员工 ID</FieldLabel>
-              <Input
-                id={`assignee-${workOrder.id}`}
-                name="assignee_employee_id"
-                defaultValue={workOrder.assignee_employee_id || ""}
-                required
-              />
+              <FieldLabel htmlFor={`assignee-${workOrder.id}`}>负责人</FieldLabel>
+              <Select
+                value={assigneeEmployeeId}
+                onValueChange={setAssigneeEmployeeId}
+                disabled={pending || loadingOperators || Boolean(operatorLoadError)}
+              >
+                <SelectTrigger id={`assignee-${workOrder.id}`}>
+                  <SelectValue
+                    placeholder={loadingOperators ? "加载负责人列表..." : "请选择负责人"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    {operators.map((operator) => (
+                      <SelectItem key={operator.id} value={operator.id}>
+                        {formatPlatformOperatorOption(operator)}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <FieldDescription>{operatorHint}</FieldDescription>
+              <FieldError>{operatorLoadError}</FieldError>
             </Field>
             <Field>
               <FieldLabel htmlFor={`assign-remark-${workOrder.id}`}>备注</FieldLabel>
@@ -145,7 +228,10 @@ function AssignWorkOrderButton({
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
               取消
             </Button>
-            <Button type="submit" disabled={pending}>
+            <Button
+              type="submit"
+              disabled={pending || loadingOperators || Boolean(operatorLoadError) || !hasAssignableOperators}
+            >
               {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
               保存分配
             </Button>
@@ -154,6 +240,12 @@ function AssignWorkOrderButton({
       </DialogContent>
     </Dialog>
   );
+}
+
+function formatPlatformOperatorOption(operator: PlatformOperator): string {
+  const name = operator.name?.trim() || "未命名平台人员";
+  const phone = operator.phone_masked || operator.phone || "";
+  return phone ? `${name}（${phone}）` : name;
 }
 
 function TransitionWorkOrderButton({

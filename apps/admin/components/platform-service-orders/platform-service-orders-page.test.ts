@@ -110,6 +110,17 @@ describe("平台技术服务履约页", () => {
     expect(rules).toContain("transition.from === status");
   });
 
+  test("分配实施工单使用平台人员下拉选择而不是手填员工 ID", () => {
+    const actions = readSource("./platform-service-work-order-actions.tsx");
+
+    expect(actions).toContain("/platform/operators?page=1&pageSize=100&status=active");
+    expect(actions).toContain("<Select");
+    expect(actions).toContain("请选择负责人");
+    expect(actions).toContain("assigneeEmployeeId");
+    expect(actions).not.toContain("负责人员工 ID");
+    expect(actions).not.toContain('name="assignee_employee_id"');
+  });
+
   test("客户验收列优先按验收状态展示，已验收不能显示确认中", () => {
     const table = readSource("./platform-service-work-order-table.tsx");
 
