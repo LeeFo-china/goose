@@ -25,7 +25,7 @@ const PHONE_COLUMN_CLASS_NAME = "w-[128px] whitespace-nowrap";
 const STATUS_COLUMN_CLASS_NAME = "w-[88px] whitespace-nowrap";
 const ROLES_COLUMN_CLASS_NAME = "min-w-[220px]";
 const LOGIN_COLUMN_CLASS_NAME = "hidden w-[156px] whitespace-nowrap xl:table-cell";
-const UPDATED_COLUMN_CLASS_NAME = "hidden w-[156px] whitespace-nowrap 2xl:table-cell";
+const CREATED_COLUMN_CLASS_NAME = "hidden w-[156px] whitespace-nowrap 2xl:table-cell";
 const ACTION_COLUMN_CLASS_NAME = "w-[230px] whitespace-nowrap text-right";
 
 function getStatusMeta(status: string | null | undefined) {
@@ -143,16 +143,16 @@ export function PlatformOperatorsTable({
       },
     },
     {
-      accessorKey: "updated_at",
-      header: "更新时间",
+      accessorKey: "created_at",
+      header: "创建时间",
       cell: ({ row }) => (
         <span className="tabular-nums text-muted-foreground">
-          {formatPlatformOperatorDate(row.original.updated_at)}
+          {formatPlatformOperatorDate(row.original.created_at)}
         </span>
       ),
       meta: {
-        headerClassName: UPDATED_COLUMN_CLASS_NAME,
-        cellClassName: UPDATED_COLUMN_CLASS_NAME,
+        headerClassName: CREATED_COLUMN_CLASS_NAME,
+        cellClassName: CREATED_COLUMN_CLASS_NAME,
       },
     },
     {

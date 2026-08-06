@@ -97,6 +97,14 @@ describe("平台运营人员管理页", () => {
     expect(actions).toContain("buildPlatformOperatorRolesPayload");
   });
 
+  test("列表表格使用员工已有创建时间字段", () => {
+    const table = readSource("./platform-operator-table.tsx");
+
+    expect(table).toContain('accessorKey: "created_at"');
+    expect(table).toContain('header: "创建时间"');
+    expect(table).not.toContain('accessorKey: "updated_at"');
+  });
+
   test("加载骨架屏复用真实列表壳高度与表格结构", () => {
     const page = readSource("../../app/(console)/platform/operators/page.tsx");
     const loading = readSource("../../app/(console)/platform/operators/loading.tsx");

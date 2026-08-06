@@ -57,7 +57,6 @@ export type PlatformOperatorRecord = {
   status: PlatformOperatorStatus | string | null;
   last_login_time: string | null;
   created_at: string | null;
-  updated_at: string | null;
   version: number | null;
   admin_auth_version: number | null;
   roles: PlatformOperatorRoleRecord[];
@@ -87,7 +86,6 @@ const EMPLOYEE_SELECT = [
   "status",
   "last_login_time",
   "created_at",
-  "updated_at",
   "version",
   "admin_auth_version",
 ].join(",");
