@@ -246,6 +246,7 @@ export function buildCampaignSummary(this: any,
   campaign: CustomerProjectLogShareCampaignRow,
 ): ShareCampaignSummary {
   return {
+    campaign_id: campaign.id,
     id: campaign.id,
     share_token: campaign.share_token,
     status: campaign.status,

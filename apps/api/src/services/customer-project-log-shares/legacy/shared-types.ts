@@ -166,6 +166,7 @@ export let cachedWechatAccessToken: {
 } | null = null;
 
 export type ShareCampaignSummary = {
+  campaign_id: string;
   id: string;
   share_token: string;
   status: CustomerProjectLogShareCampaignRow["status"];
