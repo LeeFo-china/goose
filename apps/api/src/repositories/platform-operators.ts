@@ -14,6 +14,7 @@ type UntypedTable = {
   eq: (...args: unknown[]) => UntypedTable;
   is: (...args: unknown[]) => UntypedTable;
   in: (...args: unknown[]) => UntypedTable;
+  like: (...args: unknown[]) => UntypedTable;
   or: (...args: unknown[]) => UntypedTable;
   order: (...args: unknown[]) => UntypedTable;
   range: (...args: unknown[]) => UntypedTable;
@@ -48,6 +49,7 @@ export type PlatformOperatorRoleRecord = {
   name: string | null;
   description?: string | null;
   status: string | null;
+  tenant_id?: string | null;
 };
 
 export type PlatformOperatorRecord = {
@@ -92,8 +94,10 @@ const EMPLOYEE_SELECT = [
 
 const ROLE_SELECT = [
   "employee_id",
-  "role:roles(id, code, name, description, status)",
+  "role:roles(id, code, name, description, status, tenant_id)",
 ].join(", ");
+
+const PLATFORM_OPERATOR_ROLE_CODE_PATTERN = "platform_%";
 
 export class PlatformOperatorsRepository {
   private from(table: PlatformOperatorTable) {
@@ -112,8 +116,14 @@ export class PlatformOperatorsRepository {
     const to = offset + query.pageSize - 1;
 
     let request = this.from("employees")
-      .select(`${EMPLOYEE_SELECT}, employee_roles!inner(role_id)`, { count: "exact" })
+      .select(
+        `${EMPLOYEE_SELECT}, employee_roles!inner(role_id, role:roles!employee_roles_role_id_fkey!inner(id))`,
+        { count: "exact" },
+      )
       .is("tenant_id", null)
+      .is("employee_roles.role.tenant_id", null)
+      .eq("employee_roles.role.status", "active")
+      .like("employee_roles.role.code", PLATFORM_OPERATOR_ROLE_CODE_PATTERN)
       .order("created_at", { ascending: false })
       .range(offset, to);
 
@@ -167,13 +177,7 @@ export class PlatformOperatorsRepository {
     const row = data as EmployeeRow;
     const rolesByEmployeeId = await this.listRolesByEmployeeIds([row.id]);
     const roles = rolesByEmployeeId.get(row.id) ?? [];
-    const hasPlatformRole = roles.some(
-      (role) =>
-        role.status === "active"
-        && (role.code === "platform_staff"
-          || role.code === "platform_admin"
-          || role.code?.startsWith("platform_")),
-    );
+    const hasPlatformRole = roles.some(isActiveGlobalPlatformRole);
     if (!hasPlatformRole) return null;
 
     return {
@@ -275,7 +279,7 @@ export class PlatformOperatorsRepository {
     const rolesByEmployeeId = new Map<string, PlatformOperatorRoleRecord[]>();
     for (const item of (data || []) as EmployeeRoleRow[]) {
       const role = normalizeRoleRelation(item.role);
-      if (!role) continue;
+      if (!role || !isActiveGlobalPlatformRole(role)) continue;
       const roles = rolesByEmployeeId.get(item.employee_id) ?? [];
       roles.push(role);
       rolesByEmployeeId.set(item.employee_id, roles);
@@ -300,6 +304,12 @@ function normalizeRoleRelation(
 ) {
   if (Array.isArray(role)) return role[0] ?? null;
   return role ?? null;
+}
+
+function isActiveGlobalPlatformRole(role: PlatformOperatorRoleRecord): boolean {
+  return role.status === "active"
+    && role.tenant_id === null
+    && role.code.startsWith("platform_");
 }
 
 export const platformOperatorsRepository = new PlatformOperatorsRepository();

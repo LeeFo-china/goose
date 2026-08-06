@@ -14,6 +14,18 @@ describe("platform operators pagination boundary", () => {
     expect(source).not.toContain("row.roles.some((role) => role.id === query.roleId)");
   });
 
+  test("limits platform operator listing to active global platform roles before pagination", () => {
+    const source = readFileSync(
+      new URL("./platform-operators.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("role:roles!employee_roles_role_id_fkey!inner");
+    expect(source).toContain(".is(\"employee_roles.role.tenant_id\", null)");
+    expect(source).toContain(".eq(\"employee_roles.role.status\", \"active\")");
+    expect(source).toContain(".like(\"employee_roles.role.code\", PLATFORM_OPERATOR_ROLE_CODE_PATTERN)");
+  });
+
   test("does not select non-existent employee updated_at column", () => {
     const source = readFileSync(
       new URL("./platform-operators.ts", import.meta.url),
