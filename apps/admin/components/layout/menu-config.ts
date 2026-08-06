@@ -141,6 +141,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
         icon: PackageSearch,
         permission: "platform.catalog.manage",
       },
+      {
+        href: "/platform/operators",
+        label: "平台人员",
+        icon: Shield,
+        permission: "platform.operator.read",
+      },
       { href: "/settings", label: "系统配置", icon: SlidersHorizontal, activeMatch: "exact" },
       { href: "/social-video", label: "自媒体脚本", icon: Clapperboard },
     ],
