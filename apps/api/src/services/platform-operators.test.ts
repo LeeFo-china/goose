@@ -58,7 +58,6 @@ function operatorRecord() {
     status: "active",
     last_login_time: null,
     created_at: "2026-08-05T08:00:00.000Z",
-    updated_at: "2026-08-05T08:00:00.000Z",
     version: 3,
     admin_auth_version: 2,
     roles: [
