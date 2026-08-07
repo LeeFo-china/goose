@@ -160,6 +160,8 @@ export async function getShareCard(this: any,
 
   return {
     project_name: context.project_name,
+    tenant_name: context.tenant_name,
+    company_name: context.tenant_name,
     stage_code: context.stage_code,
     stage_label: context.stage_label,
     log_title: context.node_name || context.stage_label || "施工日志更新",

@@ -258,6 +258,7 @@ export async function getOwnedProjectLogContext(this: any,
       status,
       address,
       style_tags,
+      tenant:tenants!projects_tenant_id_fkey(name),
       property:properties!projects_property_id_fkey(
         community,
         building_info
@@ -266,15 +267,12 @@ export async function getOwnedProjectLogContext(this: any,
     .eq("id", projectId)
     .eq("customer_id", customer.id)
     .maybeSingle();
-
   if (projectError) {
     throw Errors.dbError("查询客户项目失败", projectError);
   }
-
   if (!projectData) {
     throw Errors.forbidden();
   }
-
   const [assignees, logResult] = await Promise.all([
     projectMemberService.listPrimaryAssigneesByProjectId(projectId),
     SupabaseDB.getAdminClient()
@@ -301,12 +299,14 @@ export async function getOwnedProjectLogContext(this: any,
     community: null,
     building_info: null,
   });
+  const tenant = normalizeRelation(project.tenant, { name: null });
   const designer = assignees.find((item) => item.role_code === "designer");
   const status = isProjectStatus(project.status) ? project.status : null;
   const stageCode = isProjectLogStageCode(log.stage_code) ? log.stage_code : null;
 
   return {
     tenant_id: project.tenant_id,
+    tenant_name: typeof tenant.name === "string" ? tenant.name : null,
     customer_id: customer.id,
     customer_name: customer.name,
     project_id: project.id,
