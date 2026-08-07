@@ -1,18 +1,22 @@
 import { NextResponse } from "next/server";
+import {
+  clearAdminTokenCookie,
+  clearAdminTokenCookieOnUnauthorized,
+} from "@/lib/admin-auth-cookie";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl } from "@/lib/backend";
 
 export async function GET() {
   const token = await getAdminToken();
   if (!token) {
-    return NextResponse.json(
+    return clearAdminTokenCookie(NextResponse.json(
       {
         success: false,
         message: "缺少登录凭证",
         code: "TOKEN_MISSING",
       },
       { status: 401 },
-    );
+    ));
   }
 
   let response: Response;
@@ -35,5 +39,7 @@ export async function GET() {
   }
   const payload = await response.json().catch(() => ({}));
 
-  return NextResponse.json(payload, { status: response.status });
+  return clearAdminTokenCookieOnUnauthorized(
+    NextResponse.json(payload, { status: response.status }),
+  );
 }

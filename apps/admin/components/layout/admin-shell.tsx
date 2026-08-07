@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
 import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
+import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
 import {
   AdminPreferencesMenu,
@@ -78,6 +79,7 @@ export function AdminShell({
       tenantId={session.tenant?.id ?? null}
       userId={session.user_id}
     >
+      <AdminSessionGuard />
       <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
         "fixed inset-y-0 left-0 hidden flex-col border-r border-black/10 bg-white transition-[width] duration-200 lg:flex",

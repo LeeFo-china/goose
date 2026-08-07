@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  clearAdminTokenCookie,
+  clearAdminTokenCookieOnUnauthorized,
+} from "@/lib/admin-auth-cookie";
 import { getAdminToken } from "@/lib/auth";
 import { buildBackendUrl } from "@/lib/backend";
 
@@ -81,14 +85,14 @@ async function fetchBackendWithRetry(input: {
 async function proxyBackend(request: Request, context: RouteContext) {
   const token = await getAdminToken();
   if (!token) {
-    return NextResponse.json(
+    return clearAdminTokenCookie(NextResponse.json(
       {
         success: false,
         message: "缺少登录凭证",
         code: "TOKEN_MISSING",
       },
       { status: 401 },
-    );
+    ));
   }
 
   const params = await context.params;
@@ -138,10 +142,10 @@ async function proxyBackend(request: Request, context: RouteContext) {
     responseHeaders.set("content-type", contentType);
   }
 
-  return new NextResponse(payload, {
+  return clearAdminTokenCookieOnUnauthorized(new NextResponse(payload, {
     status: response.status,
     headers: responseHeaders,
-  });
+  }));
 }
 
 export async function GET(request: Request, context: RouteContext) {
