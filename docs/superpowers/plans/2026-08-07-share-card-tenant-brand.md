@@ -18,7 +18,7 @@
 - Modify: `apps/api/src/services/customer-project-log-shares/legacy/owned-context.ts:245-329`
 - Modify: `apps/api/src/services/customer-project-log-shares/legacy/public-actions.ts:148-185`
 
-- [ ] **Step 1: Write the failing contract and behavior tests**
+- [x] **Step 1: Write the failing contract and behavior tests**
 
 Create `apps/api/src/services/customer-project-log-shares/share-card-tenant-brand.test.ts`:
 
@@ -101,7 +101,7 @@ describe("客户项目日志分享卡租户品牌", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -113,7 +113,7 @@ bun test src/services/customer-project-log-shares/share-card-tenant-brand.test.t
 Expected: FAIL because the project query does not select the tenant relation and
 `getShareCard()` does not return `tenant_name` or `company_name`.
 
-- [ ] **Step 3: Extend the project and context types**
+- [x] **Step 3: Extend the project and context types**
 
 In `legacy/shared-types.ts`, extend `CustomerProjectRow` with the Supabase relation shape:
 
@@ -132,7 +132,7 @@ Add the normalized field to `CustomerProjectLogShareContext` immediately after
   tenant_name: string | null;
 ```
 
-- [ ] **Step 4: Select and normalize the project-owned tenant name**
+- [x] **Step 4: Select and normalize the project-owned tenant name**
 
 In the existing `projects` select inside `getOwnedProjectLogContext()`, add only the
 required tenant field before the property relation:
@@ -160,7 +160,7 @@ Add the field to the returned context:
 This keeps the project ownership check and log query unchanged and avoids a second
 Supabase request.
 
-- [ ] **Step 5: Map the normalized name to both response fields**
+- [x] **Step 5: Map the normalized name to both response fields**
 
 In `getShareCard()` add the two fields directly after `project_name`:
 
@@ -172,7 +172,7 @@ In `getShareCard()` add the two fields directly after `project_name`:
 Do not read a tenant name from authentication state and do not conditionally omit the
 fields when the value is `null`.
 
-- [ ] **Step 6: Run the focused test and verify GREEN**
+- [x] **Step 6: Run the focused test and verify GREEN**
 
 Run:
 
@@ -183,7 +183,7 @@ bun test src/services/customer-project-log-shares/share-card-tenant-brand.test.t
 
 Expected: 3 tests pass and 0 fail.
 
-- [ ] **Step 7: Run adjacent share-card regression tests**
+- [x] **Step 7: Run adjacent share-card regression tests**
 
 Run:
 
@@ -199,7 +199,7 @@ bun test \
 Expected: all tests pass; existing reward, campaign summary, and QR-code behavior stays
 unchanged.
 
-- [ ] **Step 8: Commit the contract change**
+- [x] **Step 8: Commit the contract change**
 
 ```bash
 git add \
@@ -215,7 +215,7 @@ git commit -m "feat(share): 返回分享卡项目租户品牌"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-07-share-card-tenant-brand.md`
 
-- [ ] **Step 1: Run API static verification**
+- [x] **Step 1: Run API static verification**
 
 Run from the repository root:
 
@@ -229,7 +229,7 @@ git diff --check
 Expected: TypeScript, the Bun API build, the API file-size gate, and whitespace checks
 all exit with status 0.
 
-- [ ] **Step 2: Review contract, performance, and repository boundaries**
+- [x] **Step 2: Review contract, performance, and repository boundaries**
 
 Confirm all of the following from the final diff:
 
@@ -242,7 +242,7 @@ Confirm all of the following from the final diff:
 - There is no migration, new dependency, cache, or Orange repository modification.
 ```
 
-- [ ] **Step 3: Mark the implementation plan complete**
+- [x] **Step 3: Mark the implementation plan complete**
 
 Replace every unchecked plan checkbox with `[x]`, then run:
 
@@ -252,7 +252,7 @@ git add docs/superpowers/plans/2026-08-07-share-card-tenant-brand.md
 git commit -m "docs(share): 记录分享卡租户品牌验证"
 ```
 
-- [ ] **Step 4: Prepare the dev handoff message**
+- [x] **Step 4: Prepare the dev handoff message**
 
 After the code is merged and dev is deployed, send Orange this exact contract summary.
 Append the output of `git rev-parse --short HEAD` as the dev commit only after deployment
