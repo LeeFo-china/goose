@@ -32,6 +32,12 @@ const devSmokeProductPointerMigrationFile = Bun.file(
 );
 const readDevSmokeProductPointerMigration = () =>
   devSmokeProductPointerMigrationFile.text();
+const formalTermsMigrationPath = new URL(
+  "../../../../supabase/migrations/20260807160000_prepare_platform_service_product_formal_terms.sql",
+  import.meta.url,
+);
+const formalTermsMigrationFile = Bun.file(formalTermsMigrationPath);
+const readFormalTermsMigration = () => formalTermsMigrationFile.text();
 
 describe("platform service sales migration", () => {
   test("creates isolated service sales tables", async () => {
@@ -105,5 +111,35 @@ describe("platform service sales migration", () => {
     expect(sql).toContain("WECHAT_MINIPROGRAM_ENV_VERSION");
     expect(sql).toMatch(/UPDATE\s+public\.platform_service_products\s+AS\s+product/i);
     expect(sql).toContain("published_version_id = version.id");
+  });
+
+  test("prepares formal terms as unpublished drafts for the three service packages", async () => {
+    expect(await formalTermsMigrationFile.exists()).toBe(true);
+    const sql = await readFormalTermsMigration();
+
+    for (const code of [
+      "platform_service_1y",
+      "platform_service_2y",
+      "platform_service_3y",
+    ]) {
+      expect(sql).toContain(code);
+    }
+    for (const section of [
+      "交付成果",
+      "客户配合",
+      "响应时间",
+      "不包含事项",
+      "验收与整改",
+      "退款与争议",
+      "服务期限",
+    ]) {
+      expect(sql).toContain(section);
+    }
+    expect(sql).toMatch(/terms_version\s*=\s*product\.terms_version\s*\+\s*1/i);
+    expect(sql).toMatch(/version\s*=\s*product\.version\s*\+\s*1/i);
+    expect(sql).toContain("IS DISTINCT FROM");
+    expect(sql).not.toContain("platform_service_smoke_1fen");
+    expect(sql).not.toMatch(/published_version_id\s*=/i);
+    expect(sql).not.toMatch(/INSERT\s+INTO\s+public\.platform_service_product_versions/i);
   });
 });

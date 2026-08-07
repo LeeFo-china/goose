@@ -67,7 +67,7 @@ Expected: PASS，0 failures。
 ### Task 3: 三档正式条款草稿 migration
 
 **Files:**
-- Create: `supabase/migrations/20260807143000_prepare_platform_service_product_formal_terms.sql`
+- Create: `supabase/migrations/20260807160000_prepare_platform_service_product_formal_terms.sql`
 
 - [ ] **Step 1: 写 migration 内容检查**
 
@@ -92,7 +92,7 @@ Expected: PASS，0 failures。
 ### Task 4: 开发数据库与静态门禁验证
 
 **Files:**
-- Verify only: `supabase/migrations/20260807143000_prepare_platform_service_product_formal_terms.sql`
+- Verify only: `supabase/migrations/20260807160000_prepare_platform_service_product_formal_terms.sql`
 
 - [ ] **Step 1: 对开发数据库执行 migration dry-run**
 
@@ -116,7 +116,7 @@ Expected: Local/Remote 对齐；三档正式商品草稿条款已更新且发布
 
 Run: `pnpm --dir apps/admin check`
 
-Run: `cd apps/admin && bun test components/platform-service-products/platform-service-products-page.test.ts components/platform-service-products/platform-service-product-action-rules.test.ts components/platform-service-products/platform-service-product-form-data.test.ts`
+Run: `cd apps/admin && bun test components/platform-service-products/platform-service-products-page.test.ts components/platform-service-products/platform-service-product-action-rules.test.ts`
 
 Run: `cd apps/api && bun test src/schema/platform-service-products.test.ts src/controllers/platform-service-products/routes.test.ts src/services/platform-service-products.test.ts src/services/tenant-platform-service-orders.test.ts`
 

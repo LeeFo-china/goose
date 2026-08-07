@@ -1,10 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Archive, RefreshCw, Send } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +31,10 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 import { PlatformServiceProductFormButton } from "./platform-service-product-form";
 import {
+  getNextPublishedVersion,
+  getPlatformServiceProductChangedFields,
+} from "./platform-service-product-action-rules";
+import {
   formatDateTime,
   formatDiscount,
   formatFen,
@@ -31,6 +46,7 @@ import type {
 } from "./platform-service-product-types";
 
 type PendingAction = "publish" | "archive" | "refresh" | null;
+type ConfirmAction = "publish" | "archive" | null;
 
 export function PlatformServiceProductDetail({
   product,
@@ -45,10 +61,23 @@ export function PlatformServiceProductDetail({
 }) {
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const status = getProductStatusMeta(product.status);
   const isBusy = pendingAction !== null;
+  const changedFields = getPlatformServiceProductChangedFields(product);
+  const nextPublishedVersion = getNextPublishedVersion(product);
+
+  function changeConfirmation(
+    action: Exclude<ConfirmAction, null>,
+    nextOpen: boolean,
+  ) {
+    if (isBusy) return;
+    setConfirmAction(nextOpen ? action : null);
+    setError("");
+    if (nextOpen) setNotice("");
+  }
 
   async function refreshPage() {
     setPendingAction("refresh");
@@ -76,12 +105,21 @@ export function PlatformServiceProductDetail({
         fallbackMessage: action === "publish" ? "发布套餐失败" : "归档套餐失败",
       });
       router.refresh();
+      setConfirmAction(null);
       setNotice(action === "publish" ? "发布套餐已提交，请刷新查看最新版本。" : "套餐已归档。");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "套餐操作失败");
     } finally {
       setPendingAction(null);
     }
+  }
+
+  async function confirmProductAction(
+    event: MouseEvent<HTMLButtonElement>,
+    action: "publish" | "archive",
+  ) {
+    event.preventDefault();
+    await runAction(action);
   }
 
   return (
@@ -127,27 +165,120 @@ export function PlatformServiceProductDetail({
               />
             ) : null}
             {canManage && product.status !== "archived" ? (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => void runAction("publish")}
-                disabled={isBusy}
+              <AlertDialog
+                open={confirmAction === "publish"}
+                onOpenChange={(nextOpen) => changeConfirmation("publish", nextOpen)}
               >
-                {pendingAction === "publish" ? <Spinner data-icon="inline-start" /> : <Send data-icon="inline-start" />}
-                发布套餐
-              </Button>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" size="sm" disabled={isBusy}>
+                    <Send data-icon="inline-start" />
+                    发布套餐
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>确认发布套餐</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      发布后，小程序将读取 v{nextPublishedVersion} 作为新的购买版本。
+                      价格和条款变化只影响新订单，已有订单继续使用下单时的快照。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="grid gap-3 rounded-md border bg-muted/25 p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{product.draft.title}</span>
+                      <Badge variant="outline">
+                        草稿 v{product.version} → 发布 v{nextPublishedVersion}
+                      </Badge>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Fact label="标价" value={formatFen(product.draft.list_amount_fen)} />
+                      <Fact label="实付价" value={formatFen(product.draft.amount_fen)} />
+                      <Fact label="条款版本" value={`v${product.draft.terms_version}`} />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">本次变更</div>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {changedFields.length > 0 ? (
+                          changedFields.map((field) => (
+                            <Badge key={field} variant="secondary">
+                              {field}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-muted-foreground">
+                            草稿与当前发布版本没有配置差异
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {error ? <StatusAlert>{error}</StatusAlert> : null}
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isBusy}>取消</AlertDialogCancel>
+                    <AlertDialogAction asChild>
+                      <Button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={(event) => void confirmProductAction(event, "publish")}
+                      >
+                        {pendingAction === "publish" ? (
+                          <Spinner data-icon="inline-start" />
+                        ) : (
+                          <Send data-icon="inline-start" />
+                        )}
+                        确认发布套餐
+                      </Button>
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             ) : null}
             {canManage && product.status !== "archived" ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void runAction("archive")}
-                disabled={isBusy}
+              <AlertDialog
+                open={confirmAction === "archive"}
+                onOpenChange={(nextOpen) => changeConfirmation("archive", nextOpen)}
               >
-                {pendingAction === "archive" ? <Spinner data-icon="inline-start" /> : <Archive data-icon="inline-start" />}
-                归档套餐
-              </Button>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" size="sm" variant="outline" disabled={isBusy}>
+                    <Archive data-icon="inline-start" />
+                    归档套餐
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>确认归档套餐</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      归档后，小程序将不再展示和销售该套餐。
+                      历史订单与已经生成的发布版本仍会保留，当前后台没有恢复归档套餐的操作入口。
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <div className="rounded-md border bg-destructive/5 p-4 text-sm">
+                    <div className="font-medium">{product.draft.title}</div>
+                    <div className="mt-1 text-muted-foreground">
+                      套餐编码 {product.code}，当前实付价 {formatFen(product.draft.amount_fen)}
+                    </div>
+                  </div>
+                  {error ? <StatusAlert>{error}</StatusAlert> : null}
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isBusy}>取消</AlertDialogCancel>
+                    <AlertDialogAction asChild>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={isBusy}
+                        onClick={(event) => void confirmProductAction(event, "archive")}
+                      >
+                        {pendingAction === "archive" ? (
+                          <Spinner data-icon="inline-start" />
+                        ) : (
+                          <Archive data-icon="inline-start" />
+                        )}
+                        确认归档套餐
+                      </Button>
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             ) : null}
           </div>
           <Button
