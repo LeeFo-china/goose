@@ -77,4 +77,17 @@ describe("平台技术服务套餐配置页", () => {
     expect(source).toContain("idempotency_key");
     expect(source).toContain("crypto.randomUUID()");
   });
+
+  test("发布和归档操作必须经过影响确认", () => {
+    const detail = readSource("./platform-service-product-detail.tsx");
+
+    expect(detail).toContain("AlertDialog");
+    expect(detail).toContain("确认发布套餐");
+    expect(detail).toContain("确认归档套餐");
+    expect(detail).toContain("只影响新订单");
+    expect(detail).toContain("小程序将不再展示和销售该套餐");
+    expect(detail).toContain('variant="destructive"');
+    expect(detail).toContain("getPlatformServiceProductChangedFields");
+    expect(detail).toContain("getNextPublishedVersion");
+  });
 });
