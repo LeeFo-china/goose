@@ -1,6 +1,6 @@
 # Admin Session Expiry Handling Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Make Admin authentication failures clear the stale login cookie and immediately return the user to login instead of rendering a false permission-denied state.
 
@@ -19,7 +19,7 @@
 - Modify: `apps/admin/app/api/auth/me/route.ts`
 - Create: `apps/admin/app/api/auth/me/route.test.ts`
 
-- [ ] **Step 1: Write failing route tests**
+- [x] **Step 1: Write failing route tests**
 
 Configure the mocked backend response and assert these exact outcomes:
 
@@ -43,7 +43,7 @@ expect(forbidden.headers.get("set-cookie")).toBeNull();
 
 Add equivalent `/api/auth/me` tests for 401 cookie deletion and 403 preservation.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 ```bash
 cd apps/admin
@@ -52,7 +52,7 @@ bun test 'app/api/backend/[...path]/route.test.ts' app/api/auth/me/route.test.ts
 
 Expected: FAIL because authentication 401 responses do not delete the Cookie.
 
-- [ ] **Step 3: Implement the response helper**
+- [x] **Step 3: Implement the response helper**
 
 Create:
 
@@ -75,11 +75,11 @@ export function clearAdminTokenCookieOnUnauthorized<T extends NextResponse>(
 Apply it to locally generated `TOKEN_MISSING`, proxied backend responses, and
 `/api/auth/me`. Preserve status and JSON; never redirect an API `fetch()`.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run the command from Step 2. Expected: all route tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/admin/lib/admin-auth-cookie.ts \
@@ -98,7 +98,7 @@ git commit -m "fix(auth): 清理后台失效登录凭证"
 - Modify: `apps/admin/lib/backend-client.ts`
 - Create: `apps/admin/lib/backend-client.test.ts`
 
-- [ ] **Step 1: Write failing utility tests**
+- [x] **Step 1: Write failing utility tests**
 
 ```typescript
 expect(isAdminAuthenticationFailure({ status: 401, code: "TOKEN_EXPIRED" }))
@@ -116,7 +116,7 @@ expect(location.replace).toHaveBeenCalledTimes(1);
 Add a `requestBackendJson()` test proving a 401 still throws a structured error
 with status, code, and Request-ID after invoking the redirect handler.
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 ```bash
 cd apps/admin
@@ -125,7 +125,7 @@ bun test lib/admin-session-expiry.test.ts lib/backend-client.test.ts
 
 Expected: FAIL because the classifier/redirector and request integration do not exist.
 
-- [ ] **Step 3: Implement the browser-safe utility**
+- [x] **Step 3: Implement the browser-safe utility**
 
 Provide these contracts:
 
@@ -162,11 +162,11 @@ Expose a lazy `handleBrowserAdminSessionExpiry()` that returns `false` during
 server rendering. Call it in `requestBackendJson()` before throwing the existing
 structured error.
 
-- [ ] **Step 4: Run tests and verify GREEN**
+- [x] **Step 4: Run tests and verify GREEN**
 
 Run the command from Step 2. Expected: all utility tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/admin/lib/admin-session-expiry.ts \
@@ -183,7 +183,7 @@ git commit -m "fix(auth): 统一处理后台会话失效"
 - Create: `apps/admin/components/layout/admin-session-guard.test.ts`
 - Modify: `apps/admin/components/layout/admin-shell.tsx`
 
-- [ ] **Step 1: Write failing session-check tests**
+- [x] **Step 1: Write failing session-check tests**
 
 ```typescript
 expect(await checkAdminSession({
@@ -203,7 +203,7 @@ expect(await checkAdminSession({
 Add a source contract assertion that `AdminShell` mounts
 `<AdminSessionGuard />` exactly once.
 
-- [ ] **Step 2: Run test and verify RED**
+- [x] **Step 2: Run test and verify RED**
 
 ```bash
 cd apps/admin
@@ -212,7 +212,7 @@ bun test components/layout/admin-session-guard.test.ts
 
 Expected: FAIL because the guard does not exist.
 
-- [ ] **Step 3: Implement the no-UI guard**
+- [x] **Step 3: Implement the no-UI guard**
 
 `checkAdminSession()` requests `/api/auth/me` with `cache: "no-store"` and
 returns `"active"`, `"expired"`, or `"unavailable"`. The component must use:
@@ -226,11 +226,11 @@ and visible `document.visibilitychange`, prevents concurrent checks with a ref,
 redirects only for `expired`, and removes all timers/listeners on unmount.
 Mount it once inside `AdminSessionScopeProvider`.
 
-- [ ] **Step 4: Run test and verify GREEN**
+- [x] **Step 4: Run test and verify GREEN**
 
 Run the command from Step 2. Expected: all guard tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/admin/components/layout/admin-session-guard.tsx \
@@ -247,7 +247,7 @@ git commit -m "fix(auth): 增加后台会话状态检查"
 - Modify: `apps/admin/components/login-form.tsx`
 - Modify: `apps/admin/app/login/page.tsx`
 
-- [ ] **Step 1: Write a failing notice test**
+- [x] **Step 1: Write a failing notice test**
 
 ```typescript
 expect(getAdminLoginNotice("session_expired"))
@@ -256,7 +256,7 @@ expect(getAdminLoginNotice("unknown")).toBeNull();
 expect(getAdminLoginNotice(undefined)).toBeNull();
 ```
 
-- [ ] **Step 2: Run test and verify RED**
+- [x] **Step 2: Run test and verify RED**
 
 ```bash
 cd apps/admin
@@ -265,7 +265,7 @@ bun test components/login-form-navigation.test.ts
 
 Expected: FAIL because `getAdminLoginNotice()` does not exist.
 
-- [ ] **Step 3: Implement the fixed notice**
+- [x] **Step 3: Implement the fixed notice**
 
 Add the pure resolver, pass `sessionNotice?: string | null` to `LoginForm`, and
 render:
@@ -279,11 +279,11 @@ render:
 The login page awaits `searchParams` and passes only the fixed resolved string;
 it never renders arbitrary query-string content.
 
-- [ ] **Step 4: Run test and verify GREEN**
+- [x] **Step 4: Run test and verify GREEN**
 
 Run the command from Step 2. Expected: all login tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/admin/components/login-form-navigation.ts \
@@ -297,7 +297,7 @@ git commit -m "fix(auth): 提示后台登录会话过期"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-07-admin-session-expiry-handling.md`
 
-- [ ] **Step 1: Run focused tests**
+- [x] **Step 1: Run focused tests**
 
 ```bash
 cd apps/admin
@@ -312,7 +312,7 @@ bun test \
 
 Expected: all focused tests pass without warnings.
 
-- [ ] **Step 2: Run static verification and build**
+- [x] **Step 2: Run static verification and build**
 
 ```bash
 cd ../..
@@ -324,13 +324,13 @@ git diff --check
 Expected: file-size, Next type generation, TypeScript, production build, and
 whitespace validation all exit successfully.
 
-- [ ] **Step 3: Review security behavior**
+- [x] **Step 3: Review security behavior**
 
 Confirm that no token enters browser JavaScript, only 401 clears/redirects,
 403 and 5xx preserve the session, the target is a fixed local URL, all event
 listeners are cleaned up, and there is no database or API contract change.
 
-- [ ] **Step 4: Record completion**
+- [x] **Step 4: Record completion**
 
 Mark all plan checkboxes complete and commit:
 

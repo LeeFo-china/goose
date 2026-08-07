@@ -2,7 +2,7 @@ import { clearAdminSessionScopedStorage } from "@/components/layout/admin-sessio
 
 const SESSION_EXPIRED_LOGIN_PATH = "/login?reason=session_expired";
 
-type AdminAuthenticationFailure = {
+export type AdminAuthenticationFailure = {
   status: number;
   code?: string;
 };
