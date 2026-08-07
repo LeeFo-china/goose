@@ -21,7 +21,7 @@ function getPayloadMessage(payload: unknown, fallback: string) {
   return fallback;
 }
 
-export function LoginForm() {
+export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) {
   const router = useRouter();
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
@@ -102,6 +102,9 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <form className="flex flex-col gap-4" onSubmit={login}>
+          {sessionNotice ? (
+            <StatusAlert tone="warning">{sessionNotice}</StatusAlert>
+          ) : null}
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="phone">手机号</FieldLabel>

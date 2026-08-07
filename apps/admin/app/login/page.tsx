@@ -1,12 +1,19 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/login-form";
+import { getAdminLoginNotice } from "@/components/login-form-navigation";
 import { getAdminSession } from "@/lib/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ reason?: string | string[] }>;
+}) {
   const session = await getAdminSession();
   if (session) {
     redirect("/dashboard");
   }
+  const params = await searchParams;
+  const reason = typeof params.reason === "string" ? params.reason : undefined;
 
   return (
     <main className="console-grid min-h-screen">
@@ -44,7 +51,7 @@ export default async function LoginPage() {
               让装修更省心 更透明
             </p>
           </div>
-          <LoginForm />
+          <LoginForm sessionNotice={getAdminLoginNotice(reason)} />
         </section>
       </div>
     </main>
