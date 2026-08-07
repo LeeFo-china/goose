@@ -69,6 +69,7 @@ const order = {
   order_no: "TSO202608030001",
   out_trade_no: "TSO202608030001",
   product_code: "platform_service_1y",
+  product_snapshot: { pricing_version: 3 },
   term_years: 1,
   amount_fen: 980000,
   payment_status: "pending",
@@ -269,6 +270,7 @@ describe("TenantPlatformServiceOrderService", () => {
       code: "platform_service_1y",
       amount_fen: 980000,
       pricing_version: 1,
+      terms_content: "服务条款",
     });
   });
 
@@ -312,7 +314,7 @@ describe("TenantPlatformServiceOrderService", () => {
     );
     const service = new TenantPlatformServiceOrderService(dependencies);
 
-    await service.createPaymentRequest(tenantAuth, orderId, {
+    const result = await service.createPaymentRequest(tenantAuth, orderId, {
       expected_version: 1,
       idempotency_key: "00000000-0000-4000-8000-000000000902",
     }, "openid-user");
@@ -323,6 +325,7 @@ describe("TenantPlatformServiceOrderService", () => {
       .toMatchObject({
         order: { amount: 9800 },
       });
+    expect(result.order.pricing_version).toBe(3);
   });
 
   test("rejects a stale terms version", async () => {
@@ -441,6 +444,7 @@ describe("TenantPlatformServiceOrderService", () => {
     }, "openid-user");
 
     const payload = JSON.stringify(result);
+    expect(result.order.pricing_version).toBe(3);
     expect(payload).not.toContain("credit");
     expect(payload).not.toContain("virtual");
     expect(payload).not.toContain("积分");
@@ -453,12 +457,13 @@ describe("TenantPlatformServiceOrderService", () => {
     const service = new TenantPlatformServiceOrderService(dependencies);
 
     await service.listOrders(tenantAuth, { page: 2, pageSize: 10 });
-    await service.getOrder(tenantAuth, orderId);
+    const result = await service.getOrder(tenantAuth, orderId);
 
     expect(dependencies.repository.listOrders.mock.calls[0]?.[0])
       .toMatchObject({ tenantId, page: 2, pageSize: 10 });
     expect(dependencies.repository.findOrderByTenantAndId.mock.calls[0]?.[0])
       .toEqual({ tenantId, orderId });
+    expect(result.order.pricing_version).toBe(3);
   });
 
   test("rejects continue payment after expiration or state change", async () => {

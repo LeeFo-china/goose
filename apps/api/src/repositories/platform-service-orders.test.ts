@@ -162,7 +162,7 @@ describe("PlatformServiceOrderRepository", () => {
     const selectCall = calls.find(([method]) => method === "select");
     expect(selectCall?.[1]).not.toContain("payer_openid");
     expect(selectCall?.[1]).not.toContain("payment_config_id");
-    expect(selectCall?.[1]).not.toContain("product_snapshot");
+    expect(selectCall?.[1]).toContain("product_snapshot");
   });
 
   test("loads internal payment fields only for payment continuation", async () => {
@@ -180,6 +180,7 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).toContain("payer_openid");
     expect(selectCall?.[1]).toContain("payment_config_id");
     expect(selectCall?.[1]).toContain("prepay_id");
+    expect(selectCall?.[1]).toContain("product_snapshot");
   });
 
   test("finds a platform product draft by id for publishing", async () => {

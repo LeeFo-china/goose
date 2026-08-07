@@ -11,6 +11,7 @@ describe("platform service order views", () => {
         id: "order-1",
         order_no: "TSO202608030001",
         product_code: "platform_service_1y",
+        product_snapshot: { pricing_version: 3 },
         term_years: 1,
         amount_fen: 980000,
         payment_status: "pending",
@@ -58,6 +59,7 @@ describe("platform service order views", () => {
         id: "order-1",
         order_no: "TSO202608030001",
         product_code: "platform_service_1y",
+        product_snapshot: { pricing_version: 3, secret: true },
         term_years: 1,
         amount_fen: 980000,
         payment_status: "paid",
@@ -73,7 +75,6 @@ describe("platform service order views", () => {
         payer_openid: "openid-secret",
         payment_config_id: "config-secret",
         payment_config_guard_version: 1,
-        product_snapshot: { secret: true },
       },
       new Date("2026-08-03T12:02:00.000Z"),
     );
@@ -84,6 +85,7 @@ describe("platform service order views", () => {
     expect(json).not.toContain("wx-prepay");
     expect(json).not.toContain("product_snapshot");
     expect(view.available_actions.request_refund.enabled).toBe(true);
+    expect(view.pricing_version).toBe(3);
   });
 
   test("calculates tenant product price rate from published version", async () => {
@@ -114,6 +116,7 @@ describe("platform service order views", () => {
       title: "平台部署及年度技术服务（2年）",
       pricing_version: 1,
       price_rate_basis_points: 8000,
+      terms_content: "服务条款",
     });
   });
 

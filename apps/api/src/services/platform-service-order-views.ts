@@ -31,6 +31,7 @@ export function serializeTenantServiceProduct(record: ProductRecord) {
     pricing_version: publishedVersion.version,
     service_scope: publishedVersion.service_scope,
     terms_version: publishedVersion.terms_version,
+    terms_content: publishedVersion.terms_content,
   };
 }
 
@@ -84,6 +85,7 @@ export function serializeTenantServiceOrder(
     payment_expires_at: record.payment_expires_at,
     paid_at: record.paid_at,
     closed_at: record.closed_at,
+    pricing_version: getSnapshotPricingVersion(record),
     terms_version: record.terms_version,
     version: record.version,
     available_actions: {
@@ -93,6 +95,14 @@ export function serializeTenantServiceOrder(
     created_at: record.created_at,
     updated_at: record.updated_at,
   };
+}
+
+function getSnapshotPricingVersion(record: TenantServiceOrderInput) {
+  const pricingVersion = record.product_snapshot?.pricing_version;
+  return typeof pricingVersion === "number" &&
+      Number.isSafeInteger(pricingVersion) && pricingVersion > 0
+    ? pricingVersion
+    : undefined;
 }
 
 function serializeVersionLike(version: {

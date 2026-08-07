@@ -237,7 +237,7 @@ export class PlatformServiceOrderRepository {
 
   async findOrderByTenantAndId(input: { tenantId: string; orderId: string }) {
     const { data, error } = await this.orders()
-      .select(TENANT_PUBLIC_ORDER_SELECT)
+      .select(`${TENANT_PUBLIC_ORDER_SELECT},product_snapshot`)
       .eq("tenant_id", input.tenantId)
       .eq("id", input.orderId)
       .maybeSingle();
