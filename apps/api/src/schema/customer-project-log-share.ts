@@ -44,7 +44,7 @@ export const CustomerProjectLogShareChannelSchema = z.enum(
 );
 
 export const CustomerProjectLogShareSourceSchema = z.enum(
-  ["qrcode", "poster"],
+  ["qrcode", "poster", "wechat_friend"],
   {
     message: "无效的分享来源",
   },
