@@ -80,6 +80,8 @@ class CustomerShareCampaignController extends CustomerProjectLogSharesBaseContro
       display_mode: "disabled",
       config_status: null,
       focus_campaign: null,
+      pending_reward_campaign: null,
+      active_campaign: null,
       recommended_log: null,
     };
   }

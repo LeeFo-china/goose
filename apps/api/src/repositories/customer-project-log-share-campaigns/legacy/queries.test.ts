@@ -14,6 +14,11 @@ const exactResults: Array<{ data: unknown; error: unknown }> = [];
 const prefixResults: Array<{ data: unknown[]; error: unknown }> = [];
 const exactTokens: string[] = [];
 const prefixPatterns: string[] = [];
+const equals: Array<[string, unknown]> = [];
+const inFilters: Array<[string, unknown[]]> = [];
+const orFilters: string[] = [];
+const orderColumns: string[] = [];
+const limits: number[] = [];
 
 const client = {
   from: mock(() => {
@@ -21,6 +26,19 @@ const client = {
       select: mock(() => query),
       eq: mock((_column: string, value: string) => {
         exactTokens.push(value);
+        equals.push([_column, value]);
+        return query;
+      }),
+      in: mock((column: string, values: unknown[]) => {
+        inFilters.push([column, values]);
+        return query;
+      }),
+      or: mock((filter: string) => {
+        orFilters.push(filter);
+        return query;
+      }),
+      order: mock((column: string) => {
+        orderColumns.push(column);
         return query;
       }),
       maybeSingle: mock(async () => exactResults.shift() ?? {
@@ -31,9 +49,13 @@ const client = {
         prefixPatterns.push(pattern);
         return query;
       }),
-      limit: mock(async () => prefixResults.shift() ?? {
-        data: [],
-        error: null,
+      limit: mock((limit: number) => {
+        limits.push(limit);
+        if (limit === 1) return query;
+        return Promise.resolve(prefixResults.shift() ?? {
+          data: [],
+          error: null,
+        });
       }),
     };
     return query;
@@ -50,6 +72,11 @@ describe("share campaign token lookup", () => {
     prefixResults.length = 0;
     exactTokens.length = 0;
     prefixPatterns.length = 0;
+    equals.length = 0;
+    inFilters.length = 0;
+    orFilters.length = 0;
+    orderColumns.length = 0;
+    limits.length = 0;
   });
 
   test("resolves a historical poster scene to its unique full token", async () => {
@@ -97,5 +124,46 @@ describe("share campaign token lookup", () => {
     );
 
     expect(campaign).toBeNull();
+  });
+
+  test("queries bounded reward candidates independently from the summary window", async () => {
+    prefixResults.push({ data: [historicalCampaign], error: null });
+    const { listRewardCandidatesByProject } = await import("./queries");
+
+    const campaigns = await listRewardCandidatesByProject.call({}, {
+      customer_id: "customer-id",
+      project_id: "project-id",
+      now: "2026-08-07T10:00:00.000Z",
+    });
+
+    expect(campaigns).toHaveLength(1);
+    expect(inFilters).toContainEqual([
+      "reward_claim_status",
+      ["unclaimed", "pending"],
+    ]);
+    expect(equals).toContainEqual(["status", "achieved"]);
+    expect(orFilters[0]).toContain("reward_claim_voucher_expires_at.gt.2026-08-07T10:00:00.000Z");
+    expect(orderColumns).toEqual(["achieved_at", "created_at"]);
+    expect(limits).toContain(20);
+  });
+
+  test("queries the latest active instance for the effective marketing campaign", async () => {
+    exactResults.push({ data: historicalCampaign, error: null });
+    const { findLatestActiveByMarketingCampaign } = await import("./queries");
+
+    const campaign = await findLatestActiveByMarketingCampaign.call({}, {
+      customer_id: "customer-id",
+      project_id: "project-id",
+      campaign_id: "marketing-campaign-id",
+    });
+
+    expect(campaign).toMatchObject(historicalCampaign);
+    expect(equals).toEqual(expect.arrayContaining([
+      ["customer_id", "customer-id"],
+      ["project_id", "project-id"],
+      ["campaign_id", "marketing-campaign-id"],
+      ["status", "active"],
+    ]));
+    expect(limits).toContain(1);
   });
 });

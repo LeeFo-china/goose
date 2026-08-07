@@ -72,6 +72,7 @@ import {
   resolveStoredFileUrl,
   resolveStoredFileUrlList,
 } from "@/services/files/file-url-resolver";
+import { selectCustomerProjectCampaignSummaryEntries } from "../campaign-summary-selection";
 
 import {
   buildCampaignRewardTitle,
@@ -163,24 +164,70 @@ export async function loadCustomerProjectCampaignSummary(this: any,
     this.getOwnedProject(authUserId, projectId, scope),
     this.getEffectiveShareCampaignConfig(projectId, scope?.tenantId),
   ]);
-  const [campaignRows, recentImageLog] = await Promise.all([
+  const effectiveMarketingCampaignId = typeof configResult.effective?.campaign_id === "string"
+    ? configResult.effective.campaign_id
+    : undefined;
+  const [campaignRows, rewardCandidateRows, currentActiveCampaign, recentImageLog] = await Promise.all([
     customerProjectLogShareCampaignRepository.listByProject({
       customer_id: customer.id,
       project_id: projectId,
       limit: 20,
     }),
+    customerProjectLogShareCampaignRepository.listRewardCandidatesByProject({
+      customer_id: customer.id,
+      project_id: projectId,
+      now: new Date().toISOString(),
+      limit: 20,
+    }),
+    effectiveMarketingCampaignId
+      ? customerProjectLogShareCampaignRepository.findLatestActiveByMarketingCampaign({
+        customer_id: customer.id,
+        project_id: projectId,
+        campaign_id: effectiveMarketingCampaignId,
+      })
+      : Promise.resolve(null),
     this.getRecentImageProjectLog(projectId, scope?.tenantId),
   ]);
-  const campaigns = campaignRows.map((item: any) => this.ensureCampaignPhase2Metadata(item));
-  const resolvedCampaigns = await Promise.all(campaigns);
-
-  const claimRewardCampaign = resolvedCampaigns.find((item) =>
-    this.isCampaignRewardClaimable(item)
-  ) || null;
-  const activeCampaign = resolvedCampaigns.find((item) => item.status === "active") || null;
-  const claimedCampaign = resolvedCampaigns.find((item) => item.status === "reward_claimed") || null;
-
-  const focusCampaign = claimRewardCampaign || activeCampaign || claimedCampaign;
+  const mergedCampaignRows = [...campaignRows];
+  const seenCampaignIds = new Set(campaignRows.map((campaign) => campaign.id));
+  for (const campaign of [
+    ...rewardCandidateRows,
+    ...(currentActiveCampaign ? [currentActiveCampaign] : []),
+  ]) {
+    if (!seenCampaignIds.has(campaign.id)) {
+      seenCampaignIds.add(campaign.id);
+      mergedCampaignRows.push(campaign);
+    }
+  }
+  const resolvedCampaigns = await Promise.all(
+    mergedCampaignRows.map((campaign) => this.ensureCampaignPhase2Metadata(campaign)),
+  );
+  const resolvedCampaignById = new Map(
+    resolvedCampaigns.map((campaign) => [campaign.id, campaign]),
+  );
+  const buildSelectionCandidate = (campaign: CustomerProjectLogShareCampaignRow) => ({
+    campaign,
+    isLegacyRewardClaimable: this.isCampaignRewardClaimable(campaign),
+    voucherStatus: this.getRewardClaimVoucherStatus(campaign),
+  });
+  const {
+    pendingRewardCampaign,
+    activeCampaign,
+    focusCampaign,
+  } = selectCustomerProjectCampaignSummaryEntries({
+    candidates: resolvedCampaigns.map(buildSelectionCandidate),
+    legacyCandidates: campaignRows
+      .map((campaign) => resolvedCampaignById.get(campaign.id))
+      .filter((campaign): campaign is CustomerProjectLogShareCampaignRow => Boolean(campaign))
+      .map(buildSelectionCandidate),
+    effectiveMarketingCampaignId,
+  });
+  const buildSummaryEntry = (campaign: CustomerProjectLogShareCampaignRow | null) => campaign
+    ? {
+      ...this.buildCampaignSummary(campaign),
+      reward_title: getCampaignRewardTitle(campaign),
+    }
+    : null;
   const recentLog = focusCampaign
     ? await this.getProjectLogById(focusCampaign.log_id)
     : recentImageLog;
@@ -195,6 +242,8 @@ export async function loadCustomerProjectCampaignSummary(this: any,
       config_status: configResult.rawCampaign?.status || configResult.rawLegacyConfig?.config_status || null,
       recommended_log: null,
       focus_campaign: null,
+      pending_reward_campaign: null,
+      active_campaign: null,
     };
   }
 
@@ -231,12 +280,9 @@ export async function loadCustomerProjectCampaignSummary(this: any,
       : Boolean(configResult.rawLegacyConfig?.enabled),
     config_status: configResult.rawCampaign?.status || configResult.rawLegacyConfig?.config_status || null,
     recommended_log: recommendedLog,
-    focus_campaign: focusCampaign
-      ? {
-        ...this.buildCampaignSummary(focusCampaign),
-        reward_title: getCampaignRewardTitle(focusCampaign),
-      }
-      : null,
+    focus_campaign: buildSummaryEntry(focusCampaign),
+    pending_reward_campaign: buildSummaryEntry(pendingRewardCampaign),
+    active_campaign: buildSummaryEntry(activeCampaign),
   };
 }
 

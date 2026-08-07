@@ -246,8 +246,12 @@ export function buildCampaignSummary(this: any,
   campaign: CustomerProjectLogShareCampaignRow,
 ): ShareCampaignSummary {
   return {
+    instance_id: campaign.id,
     campaign_id: campaign.id,
     id: campaign.id,
+    marketing_campaign_id: campaign.campaign_id,
+    project_id: campaign.project_id,
+    log_id: campaign.log_id,
     share_token: campaign.share_token,
     status: campaign.status,
     target_assist_count: campaign.target_assist_count,

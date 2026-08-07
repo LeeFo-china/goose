@@ -107,6 +107,55 @@ export async function listByProject(this: any, input: {
   return (data || []) as CustomerProjectLogShareCampaignRow[];
 }
 
+export async function listRewardCandidatesByProject(this: any, input: {
+  customer_id: string;
+  project_id: string;
+  now: string;
+  limit?: number;
+}) {
+  const limit = Math.min(Math.max(input.limit ?? 20, 1), 20);
+  const { data, error } = await SupabaseDB.getAdminClient()
+    .from("customer_log_share_campaigns")
+    .select("*")
+    .eq("customer_id", input.customer_id)
+    .eq("project_id", input.project_id)
+    .eq("status", "achieved")
+    .in("reward_claim_status", ["unclaimed", "pending"])
+    .or(`reward_claim_voucher_expires_at.is.null,reward_claim_voucher_expires_at.gt.${input.now}`)
+    .order("achieved_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw Errors.dbError("查询待领取分享奖励失败", error);
+  }
+
+  return (data || []) as CustomerProjectLogShareCampaignRow[];
+}
+
+export async function findLatestActiveByMarketingCampaign(this: any, input: {
+  customer_id: string;
+  project_id: string;
+  campaign_id: string;
+}) {
+  const { data, error } = await SupabaseDB.getAdminClient()
+    .from("customer_log_share_campaigns")
+    .select("*")
+    .eq("customer_id", input.customer_id)
+    .eq("project_id", input.project_id)
+    .eq("campaign_id", input.campaign_id)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw Errors.dbError("查询当前助力活动失败", error);
+  }
+
+  return (data || null) as CustomerProjectLogShareCampaignRow | null;
+}
+
 export async function findActiveByProject(this: any, projectId: string) {
   const { data, error } = await SupabaseDB.getAdminClient()
     .from("customer_log_share_campaigns")

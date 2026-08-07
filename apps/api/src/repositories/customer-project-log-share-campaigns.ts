@@ -30,6 +30,14 @@ class CustomerProjectLogShareCampaignRepository {
     return legacyCustomerProjectLogShareCampaignRepository.listByProject(...args);
   }
 
+  listRewardCandidatesByProject(...args: Parameters<LegacyCustomerProjectLogShareCampaignRepository["listRewardCandidatesByProject"]>) {
+    return legacyCustomerProjectLogShareCampaignRepository.listRewardCandidatesByProject(...args);
+  }
+
+  findLatestActiveByMarketingCampaign(...args: Parameters<LegacyCustomerProjectLogShareCampaignRepository["findLatestActiveByMarketingCampaign"]>) {
+    return legacyCustomerProjectLogShareCampaignRepository.findLatestActiveByMarketingCampaign(...args);
+  }
+
   create(...args: Parameters<LegacyCustomerProjectLogShareCampaignRepository["create"]>) {
     return legacyCustomerProjectLogShareCampaignRepository.create(...args);
   }

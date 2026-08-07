@@ -4,6 +4,8 @@ import {
   findById,
   findByVoucherToken,
   listByProject,
+  listRewardCandidatesByProject,
+  findLatestActiveByMarketingCampaign,
   findActiveByProject,
 } from "./legacy/queries";
 import {
@@ -31,6 +33,8 @@ class CustomerProjectLogShareCampaignRepository {
   findById = findById;
   findByVoucherToken = findByVoucherToken;
   listByProject = listByProject;
+  listRewardCandidatesByProject = listRewardCandidatesByProject;
+  findLatestActiveByMarketingCampaign = findLatestActiveByMarketingCampaign;
   create = create;
   updateMetrics = updateMetrics;
   updateRewardMetadata = updateRewardMetadata;
