@@ -1,3 +1,5 @@
+import { handleBrowserAdminSessionExpiry } from "@/lib/admin-session-expiry";
+
 export type BackendClientPayload<T> = {
   success?: boolean;
   data?: T;
@@ -48,6 +50,10 @@ export async function requestBackendJson<T = unknown>(
   const payload = await response.json().catch(() => ({})) as BackendClientPayload<T>;
 
   if (!response.ok || payload.success === false) {
+    handleBrowserAdminSessionExpiry({
+      status: response.status,
+      code: payload.code,
+    });
     throw Object.assign(
       new Error(getPayloadMessage(payload, fallbackMessage || `请求失败(${response.status})`)),
       {
