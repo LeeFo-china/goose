@@ -15,7 +15,7 @@
 **Files:**
 - Create: `apps/api/src/schema/customer-project-log-share-source.test.ts`
 
-- [ ] **Step 1: Write the failing request and migration contract tests**
+- [x] **Step 1: Write the failing request and migration contract tests**
 
 Create `apps/api/src/schema/customer-project-log-share-source.test.ts`:
 
@@ -87,7 +87,7 @@ describe("好友助力微信好友转发来源", () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -99,7 +99,7 @@ bun test src/schema/customer-project-log-share-source.test.ts
 Expected: the first test fails because `wechat_friend` is rejected, and the migration
 test fails because the migration does not exist. The compatibility/default test passes.
 
-- [ ] **Step 3: Commit the failing contract test**
+- [x] **Step 3: Commit the failing contract test**
 
 ```bash
 git add apps/api/src/schema/customer-project-log-share-source.test.ts
@@ -112,7 +112,7 @@ git commit -m "test(share): 覆盖微信好友分享来源"
 - Modify: `apps/api/src/schema/customer-project-log-share.ts:46-51`
 - Create: `supabase/migrations/20260807143000_add_wechat_friend_share_source.sql`
 
-- [ ] **Step 1: Extend the shared Zod enum**
+- [x] **Step 1: Extend the shared Zod enum**
 
 Replace the source values in `CustomerProjectLogShareSourceSchema` with:
 
@@ -123,7 +123,7 @@ Replace the source values in `CustomerProjectLogShareSourceSchema` with:
 Do not change the `.default("qrcode")` declarations on the open and assist request
 schemas.
 
-- [ ] **Step 2: Add the forward database migration**
+- [x] **Step 2: Add the forward database migration**
 
 Create `supabase/migrations/20260807143000_add_wechat_friend_share_source.sql`:
 
@@ -147,7 +147,7 @@ CHECK (source IN ('qrcode', 'poster', 'wechat_friend'));
 COMMIT;
 ```
 
-- [ ] **Step 3: Run the focused test and verify GREEN**
+- [x] **Step 3: Run the focused test and verify GREEN**
 
 Run:
 
@@ -158,7 +158,7 @@ bun test src/schema/customer-project-log-share-source.test.ts
 
 Expected: 3 tests pass and 0 fail.
 
-- [ ] **Step 4: Confirm existing pass-through code remains unchanged**
+- [x] **Step 4: Confirm existing pass-through code remains unchanged**
 
 Run:
 
@@ -171,7 +171,7 @@ rg -n -C 3 "source: input.source" \
 Expected: one open and one assist pass-through in both the service and repository. No
 business-logic files are modified.
 
-- [ ] **Step 5: Commit the implementation**
+- [x] **Step 5: Commit the implementation**
 
 ```bash
 git add \
@@ -185,7 +185,7 @@ git commit -m "feat(share): 支持微信好友分享来源"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-08-07-share-campaign-wechat-friend-source.md`
 
-- [ ] **Step 1: Inspect pending migrations before applying**
+- [x] **Step 1: Inspect pending migrations before applying**
 
 Run with the intended environment configuration:
 
@@ -196,13 +196,13 @@ supabase migration list
 Expected: `20260807143000` is present locally and not yet present remotely. If any other
 unexpected migration is pending, stop before applying and report it.
 
-- [ ] **Step 2: Validate the migration in an isolated local Supabase stack**
+- [x] **Step 2: Validate the migration in an isolated local Supabase stack**
 
 Run:
 
 ```bash
 colima status
-supabase start
+supabase start --exclude edge-runtime,vector
 supabase db reset
 docker exec supabase_db_gooes psql -U postgres -d postgres -Atc \
   "SELECT conname || ':' || pg_get_constraintdef(oid)
@@ -217,7 +217,7 @@ docker exec supabase_db_gooes psql -U postgres -d postgres -Atc \
 Expected: the migration applies without rewriting data; both constraints allow all three
 values.
 
-- [ ] **Step 3: Run focused and adjacent tests**
+- [x] **Step 3: Run focused and adjacent tests**
 
 Run:
 
@@ -231,7 +231,7 @@ bun test \
 
 Expected: all selected tests pass with 0 failures.
 
-- [ ] **Step 4: Run API static and build gates**
+- [x] **Step 4: Run API static and build gates**
 
 Run from the repository root:
 
@@ -244,7 +244,7 @@ git diff --check
 
 Expected: every command exits 0.
 
-- [ ] **Step 5: Verify migration alignment after the approved dev application**
+- [x] **Step 5: Verify migration alignment after the approved dev application**
 
 After applying the migration to the development database through Supabase CLI, run:
 
@@ -254,7 +254,7 @@ supabase migration list
 
 Expected: Local and Remote both contain `20260807143000`. Do not apply manual DDL or DML.
 
-- [ ] **Step 6: Record verification evidence and commit the completed plan**
+- [x] **Step 6: Record verification evidence and commit the completed plan**
 
 Mark completed checkboxes and append the exact test, build, and migration verification
 results to this document, then commit:
@@ -263,3 +263,21 @@ results to this document, then commit:
 git add docs/superpowers/plans/2026-08-07-share-campaign-wechat-friend-source.md
 git commit -m "docs(share): 记录微信好友来源验收"
 ```
+
+## Verification Evidence
+
+- TDD RED: `customer-project-log-share-source.test.ts` returned 1 pass and 2
+  expected failures before implementation: `wechat_friend` was rejected and the
+  migration file was absent.
+- TDD GREEN and adjacent regressions: 8 tests passed, 0 failed, 33 assertions.
+- Existing data flow: both open and assist paths still pass `input.source` unchanged
+  through service and repository; no business-logic files changed.
+- Local migration replay: `supabase db reset` applied every migration from an empty
+  local database and finished with `20260807143000_add_wechat_friend_share_source.sql`.
+- Local constraint query: both `customer_log_share_opens_source_check` and
+  `customer_log_share_assists_source_check` contain `qrcode`, `poster`, and
+  `wechat_friend`.
+- API gates after installing the frozen-lockfile dependencies in the isolated worktree:
+  TypeScript check passed, Bun build bundled 932 modules, and API file-size check passed.
+- Development database: `supabase db push` applied only `20260807143000`; the final
+  migration list reports `20260807143000 | 20260807143000` for Local and Remote.
