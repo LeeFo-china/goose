@@ -103,6 +103,11 @@ export type CustomerProjectRow = {
   } | {
     name: string | null;
   }[] | null;
+  tenant?: {
+    name: string | null;
+  } | {
+    name: string | null;
+  }[] | null;
 };
 
 export type CustomerProjectLogRow = {
@@ -130,6 +135,7 @@ export type CustomerProjectScope = {
 
 export type CustomerProjectLogShareContext = {
   tenant_id: string | null;
+  tenant_name: string | null;
   customer_id: string;
   customer_name: string | null;
   project_id: string;
