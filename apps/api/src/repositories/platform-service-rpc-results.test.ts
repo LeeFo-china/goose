@@ -82,6 +82,33 @@ describe("platform service RPC business fact boundary", () => {
       }),
       access_mode: "paid_onboarding",
     }));
+    expectDbError(() => rpcParsers.parsePaymentConfirmationResult({
+      ...base,
+      order: rpcOrder({ service_status: "configuring" }),
+      work_order: rpcWorkOrder({ status: "deploying" }),
+      access_mode: "paid_onboarding",
+    }));
+    expectDbError(() => rpcParsers.parsePaymentConfirmationResult({
+      ...base,
+      order: rpcOrder({
+        payment_status: "refunded",
+        service_status: "configuring",
+      }),
+      work_order: rpcWorkOrder({ status: "configuring" }),
+      access_mode: "paid_onboarding",
+    }));
+    expect(rpcParsers.parsePaymentConfirmationResult({
+      ...base,
+      order: rpcOrder({
+        payment_status: "refunded",
+        service_status: "canceled",
+        service_access_terminated_at: "2026-08-10T10:30:00.000Z",
+        service_access_termination_reason: "full_refund_confirmed",
+        service_access_terminated_by_employee_id: RPC_IDS.employee,
+      }),
+      work_order: rpcWorkOrder({ status: "canceled" }),
+      access_mode: null,
+    })).toMatchObject({ idempotent: true, access_mode: null });
   });
 
   test("discriminates accepted, rejected, and resolved-error acceptance facts", () => {
@@ -126,6 +153,43 @@ describe("platform service RPC business fact boundary", () => {
       ...acceptedRpcEnvelope(),
       error_code: "SERVICE_ACCEPTANCE_INVALID_STATE",
     }));
+    expectDbError(() => rpcParsers.parseAcceptanceResult({
+      ...acceptedRpcEnvelope(),
+      order: rpcOrder({
+        payment_status: "refund_reviewing",
+        service_status: "accepted",
+      }),
+    }));
+    expectDbError(() => rpcParsers.parseAcceptanceResult({
+      ...acceptedRpcEnvelope(),
+      contract_period: rpcPeriod({
+        status: "adjusted",
+        adjustment_reason: "shifted_by_refund",
+        refund_request_id: RPC_IDS.refund,
+      }),
+    }));
+    expectDbError(() => rpcParsers.parseAcceptanceResult({
+      ...acceptedRpcEnvelope(),
+      idempotent: true,
+      order: rpcOrder({
+        payment_status: "pending",
+        service_status: "accepted",
+      }),
+    }));
+
+    for (const paymentStatus of ["paid", "refund_reviewing", "refunding"] as const) {
+      expect(rpcParsers.parseAcceptanceResult({
+        ...acceptedRpcEnvelope(),
+        idempotent: true,
+        order: rpcOrder({ payment_status: paymentStatus, service_status: "active" }),
+        work_order: rpcWorkOrder({ status: "active" }),
+        contract_period: rpcPeriod({
+          status: "adjusted",
+          adjustment_reason: "shifted_by_refund",
+          refund_request_id: RPC_IDS.refund,
+        }),
+      })).toMatchObject({ idempotent: true });
+    }
   });
 
   test("uses a dedicated overdue matrix that cannot return rejection", () => {
@@ -235,6 +299,33 @@ describe("platform service RPC business fact boundary", () => {
         ...valid.refund_request,
         provider_refund_amount_fen: 99,
       },
+    }));
+
+    expect(rpcParsers.parseRefundClosureResult({
+      ...valid,
+      idempotent: true,
+      order: rpcOrder({
+        payment_status: "refunded",
+        service_status: "canceled",
+        service_access_terminated_at: "2026-08-11T10:30:00.000Z",
+        service_access_termination_reason: "full_refund_confirmed",
+        service_access_terminated_by_employee_id: RPC_IDS.employee,
+      }),
+    })).toMatchObject({ idempotent: true, accessTerminated: false });
+    for (const paymentStatus of [
+      "paid",
+      "refund_reviewing",
+      "refunding",
+    ] as const) {
+      expect(rpcParsers.parseRefundClosureResult({
+        ...valid,
+        idempotent: true,
+        order: rpcOrder({ payment_status: paymentStatus }),
+      })).toMatchObject({ idempotent: true, accessTerminated: false });
+    }
+    expectDbError(() => rpcParsers.parseRefundClosureResult({
+      ...valid,
+      order: rpcOrder({ payment_status: "refunding" }),
     }));
   });
 });

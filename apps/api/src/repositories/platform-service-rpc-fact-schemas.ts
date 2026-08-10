@@ -72,7 +72,17 @@ export const orderRpcSchema = z.object({
   cancel_claim_expires_at: nullableDateTime,
   close_reason: nonBlank.nullable(),
   closed_by_employee_id: nullableUuid,
-}).passthrough();
+}).passthrough().superRefine((value, context) => {
+  const terminationFacts = [
+    value.service_access_terminated_at,
+    value.service_access_termination_reason,
+    value.service_access_terminated_by_employee_id,
+  ];
+  if (
+    !terminationFacts.every((fact) => fact === null) &&
+    !terminationFacts.every((fact) => fact !== null)
+  ) context.addIssue({ code: "custom", message: "termination facts invalid" });
+});
 
 export const workOrderRpcSchema = z.object({
   id: uuid,
@@ -228,6 +238,9 @@ export const trustedRefundOrderSchema = z.object({
   payment_config_id: uuid,
   payment_config_guard_version: positiveInteger,
   transaction_id: nonBlank,
+  service_access_terminated_at: nullableDateTime,
+  service_access_termination_reason: nonBlank.nullable(),
+  service_access_terminated_by_employee_id: nullableUuid,
 }).passthrough();
 
 function addIssue(context: z.RefinementCtx, message: string) {
@@ -240,6 +253,20 @@ function factsAreBound(value: {
 }) {
   return value.order.tenant_id === value.work_order.tenant_id &&
     value.order.id === value.work_order.service_order_id;
+}
+
+function hasFullRefundTermination(order: {
+  payment_status: z.infer<typeof paymentStatusSchema>;
+  service_status: z.infer<typeof serviceStatusSchema>;
+  service_access_terminated_at: string | null;
+  service_access_termination_reason: string | null;
+  service_access_terminated_by_employee_id: string | null;
+}) {
+  return order.payment_status === "refunded" &&
+    order.service_status === "canceled" &&
+    order.service_access_terminated_at !== null &&
+    order.service_access_termination_reason === "full_refund_confirmed" &&
+    order.service_access_terminated_by_employee_id !== null;
 }
 
 export const paymentConfirmationSchema = z.object({
@@ -274,7 +301,15 @@ export const paymentConfirmationSchema = z.object({
     "partially_refunded",
     "refunded",
   ].includes(value.order.payment_status)) addIssue(context, "payment replay state invalid");
+  if (value.order.service_status !== value.work_order.status) {
+    addIssue(context, "payment workflow state mismatch");
+  }
+  if (
+    value.order.payment_status === "refunded" &&
+    !hasFullRefundTermination(value.order)
+  ) addIssue(context, "refunded payment facts invalid");
   const hasPaidOnboardingAccess = value.order.service_access_terminated_at === null &&
+    value.order.payment_status !== "refunded" &&
     !["accepted", "active"].includes(value.order.service_status);
   if (
     value.access_mode !== (hasPaidOnboardingAccess ? "paid_onboarding" : null)
@@ -327,10 +362,20 @@ function acceptanceResultSchema(
     const isAccepted = ["accepted", "active"].includes(value.order.service_status);
     const isRejected = value.order.service_status === "rectifying";
     if (isAccepted) {
+      const isFirstAcceptance = !value.idempotent;
       if (
         value.work_order.status !== value.order.service_status ||
         value.acceptance_preparation.status !== "accepted" ||
-        value.order.payment_status === "refunded" ||
+        (isFirstAcceptance && (
+          value.order.payment_status !== "paid" ||
+          value.order.service_status !== "accepted" ||
+          value.contract_period?.status !== "active"
+        )) ||
+        (!isFirstAcceptance && ![
+          "paid",
+          "refund_reviewing",
+          "refunding",
+        ].includes(value.order.payment_status)) ||
         value.order.service_access_terminated_at !== null ||
         !value.contract || !value.contract_period ||
         value.contract.tenant_id !== value.order.tenant_id ||
@@ -343,6 +388,8 @@ function acceptanceResultSchema(
     }
     if (
       !allowRejected || !isRejected || value.work_order.status !== "rectifying" ||
+      value.order.payment_status !== "paid" ||
+      value.order.service_access_terminated_at !== null ||
       value.acceptance_preparation.status !== "rejected" ||
       value.contract !== null || value.contract_period !== null || value.idempotent
     ) addIssue(context, "rejected facts invalid");
@@ -412,13 +459,22 @@ export const refundClosureSchema = z.object({
   idempotent: z.boolean(),
   error_code: z.null(),
 }).passthrough().superRefine((value, context) => {
+  const isUnterminatedReviewState = [
+    "paid",
+    "refund_reviewing",
+    "refunding",
+  ].includes(value.order.payment_status) &&
+    value.order.service_access_terminated_at === null;
+  const hasAllowedOrderState = value.idempotent
+    ? isUnterminatedReviewState || hasFullRefundTermination(value.order)
+    : value.order.payment_status === "paid" &&
+      value.order.service_access_terminated_at === null;
   if (
     value.refund_request.status !== "cancelled" ||
     value.refund_request.provider_refund_status !== "CLOSED" ||
     value.refund_request.tenant_id !== value.order.tenant_id ||
     value.refund_request.service_order_id !== value.order.id ||
-    value.order.payment_status !== "paid" ||
-    value.order.service_access_terminated_at !== null ||
+    !hasAllowedOrderState ||
     value.refund_request.provider_refund_amount_fen !== value.order.amount_fen ||
     value.order.paid_amount_fen !== value.order.amount_fen
   ) addIssue(context, "refund closure facts invalid");

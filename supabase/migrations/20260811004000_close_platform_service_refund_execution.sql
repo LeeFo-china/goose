@@ -86,6 +86,20 @@ CREATE UNIQUE INDEX tenant_service_refund_requests_provider_wechat_refund_unique
   ON public.tenant_service_refund_requests (provider_wechat_refund_id)
   WHERE provider_wechat_refund_id IS NOT NULL;
 
+-- The expression indexes serialize the same provider identifier across the
+-- mutually exclusive SUCCESS and CLOSED terminal fact columns. A pre-check is
+-- still useful for a stable early error, while the unique constraint closes
+-- the concurrent different-request race at the database boundary.
+CREATE UNIQUE INDEX tenant_service_refund_requests_terminal_out_refund_unique_idx
+  ON public.tenant_service_refund_requests
+  ((COALESCE(out_refund_no, provider_out_refund_no)))
+  WHERE COALESCE(out_refund_no, provider_out_refund_no) IS NOT NULL;
+
+CREATE UNIQUE INDEX tenant_service_refund_requests_terminal_wechat_refund_unique_idx
+  ON public.tenant_service_refund_requests
+  ((COALESCE(wechat_refund_id, provider_wechat_refund_id)))
+  WHERE COALESCE(wechat_refund_id, provider_wechat_refund_id) IS NOT NULL;
+
 ALTER TABLE public.tenant_service_work_order_events
   DROP CONSTRAINT tenant_service_work_order_events_action_check;
 
@@ -243,8 +257,6 @@ BEGIN
     IF v_refund.provider_out_refund_no IS DISTINCT FROM p_out_refund_no
       OR v_refund.provider_wechat_refund_id IS DISTINCT FROM p_wechat_refund_id
       OR v_refund.provider_refund_amount_fen IS DISTINCT FROM p_refund_amount_fen
-      OR v_order.payment_status <> 'paid'
-      OR v_order.service_access_terminated_at IS NOT NULL
     THEN
       RAISE EXCEPTION 'SERVICE_REFUND_CLOSURE_IDEMPOTENCY_CONFLICT';
     END IF;

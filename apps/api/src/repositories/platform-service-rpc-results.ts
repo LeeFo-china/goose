@@ -52,6 +52,9 @@ export type RefundExecutionOrderRecord = {
   payment_config_id: string;
   payment_config_guard_version: number;
   transaction_id: string;
+  service_access_terminated_at: string | null;
+  service_access_termination_reason: string | null;
+  service_access_terminated_by_employee_id: string | null;
 } & Record<string, unknown>;
 export type RefundExecutionRequestRecord = RefundRequestRecord & {
   provider_refund_status?: "CLOSED" | null;
@@ -73,8 +76,13 @@ export type RefundConfirmationResult = {
 };
 
 export type RefundClosureResult = {
-  refundRequest: RefundRequestRecord;
-  order: OrderRecord;
+  refundRequest: Omit<RefundExecutionRequestRecord, "order">;
+  order: OrderRecord & Pick<
+    RefundExecutionOrderRecord,
+    | "service_access_terminated_at"
+    | "service_access_termination_reason"
+    | "service_access_terminated_by_employee_id"
+  >;
   providerStatus: "CLOSED";
   refunded: false;
   accessTerminated: false;

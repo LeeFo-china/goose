@@ -195,18 +195,31 @@ export class PlatformServiceRefundExecutionService {
 
   private assertExecutableState(request: RefundExecutionRequestRecord) {
     if (!EXECUTABLE_STATUSES.has(request.status)) throw invalidStateError();
+    if (request.status === "cancelled") {
+      const isProviderClosed = request.provider_refund_status === "CLOSED";
+      const isUnterminatedReviewState = [
+        "paid",
+        "refund_reviewing",
+        "refunding",
+      ].includes(request.order.payment_status) &&
+        request.order.service_access_terminated_at === null;
+      const isLaterFullRefund = request.order.payment_status === "refunded" &&
+        request.order.service_status === "canceled" &&
+        request.order.service_access_terminated_at !== null &&
+        request.order.service_access_termination_reason ===
+          "full_refund_confirmed" &&
+        request.order.service_access_terminated_by_employee_id !== null;
+      if (!isProviderClosed || (!isUnterminatedReviewState && !isLaterFullRefund)) {
+        throw invalidStateError();
+      }
+      return;
+    }
     const expectedPaymentStatuses = request.status === "refunded"
       ? ["refunded"]
-      : request.status === "cancelled"
-      ? ["paid"]
       : ["refund_reviewing", "refunding"];
     if (!expectedPaymentStatuses.includes(request.order.payment_status)) {
       throw invalidStateError();
     }
-    if (
-      request.status === "cancelled" &&
-      request.provider_refund_status !== "CLOSED"
-    ) throw invalidStateError();
   }
 
   private buildBinding(request: RefundExecutionRequestRecord) {

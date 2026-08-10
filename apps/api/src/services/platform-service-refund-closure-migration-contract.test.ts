@@ -4,13 +4,20 @@ const migrationUrl = new URL(
   "../../../../supabase/migrations/20260811004000_close_platform_service_refund_execution.sql",
   import.meta.url,
 );
+const accessMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260810190000_create_platform_service_contract_access.sql",
+  import.meta.url,
+);
 
 function normalizeSql(sql: string) {
   return sql.toLowerCase().replaceAll(/\s+/g, " ").trim();
 }
 
-function functionBody(sql: string) {
-  const start = sql.indexOf("CREATE OR REPLACE FUNCTION public.platform_service_close_refund_execution");
+function functionBody(
+  sql: string,
+  signature = "CREATE OR REPLACE FUNCTION public.platform_service_close_refund_execution",
+) {
+  const start = sql.indexOf(signature);
   const bodyStart = sql.indexOf("AS $$", start);
   const bodyEnd = sql.indexOf("\n$$;", bodyStart);
   expect(start).toBeGreaterThan(-1);
@@ -39,6 +46,30 @@ describe("platform service provider-closed refund recovery migration", () => {
     expect(sql).toContain("status = 'cancelled'");
     expect(sql).toContain("tenant_service_refund_requests_provider_out_refund_unique_idx");
     expect(sql).toContain("tenant_service_refund_requests_provider_wechat_refund_unique_idx");
+  });
+
+  test("serializes provider identifiers across SUCCESS and CLOSED terminal columns", async () => {
+    const sql = normalizeSql(await Bun.file(migrationUrl).text());
+    expect(sql).toContain(
+      "unique index tenant_service_refund_requests_terminal_out_refund_unique_idx on public.tenant_service_refund_requests ((coalesce(out_refund_no, provider_out_refund_no))) where coalesce(out_refund_no, provider_out_refund_no) is not null",
+    );
+    expect(sql).toContain(
+      "unique index tenant_service_refund_requests_terminal_wechat_refund_unique_idx on public.tenant_service_refund_requests ((coalesce(wechat_refund_id, provider_wechat_refund_id))) where coalesce(wechat_refund_id, provider_wechat_refund_id) is not null",
+    );
+    expect(sql).toContain("unique constraint closes");
+    expect(sql).toContain("concurrent different-request race at the database boundary");
+
+    const closeBody = functionBody(await Bun.file(migrationUrl).text());
+    expect(closeBody).toContain(
+      "when unique_violation then raise exception 'service_refund_provider_id_conflict'",
+    );
+    const confirmBody = functionBody(
+      await Bun.file(accessMigrationUrl).text(),
+      "CREATE OR REPLACE FUNCTION public.platform_service_confirm_refund",
+    );
+    expect(confirmBody).toContain(
+      "when unique_violation then raise exception 'service_refund_execution_id_conflict'",
+    );
   });
 
   test("uses a service-role-only exact RPC and canonical lock order", async () => {
@@ -112,6 +143,24 @@ describe("platform service provider-closed refund recovery migration", () => {
     expect(body).toContain("'refunded', false");
     expect(body).toContain("'access_terminated', false");
     expect(body).toContain("'retryable', false");
+  });
+
+  test("replays its own CLOSED fact without depending on a later order terminal state", async () => {
+    const body = functionBody(await Bun.file(migrationUrl).text());
+    const replayStart = body.indexOf(
+      "if v_refund.status = 'cancelled' and v_refund.provider_refund_status = 'closed'",
+    );
+    const replayReturn = body.indexOf("return jsonb_build_object", replayStart);
+    const replayEnd = body.indexOf("end if;", replayReturn);
+    const replay = body.slice(replayStart, replayEnd);
+    expect(replayStart).toBeGreaterThan(-1);
+    expect(replay).toContain(
+      "v_refund.provider_refund_amount_fen is distinct from p_refund_amount_fen",
+    );
+    expect(replay).not.toContain("v_order.payment_status");
+    expect(replay).not.toContain("v_order.service_access_terminated_at");
+    expect(replay).not.toContain("update public.");
+    expect(replay).toContain("'idempotent', true");
   });
 
   test("bounds deployment locks before DDL and documents forward remediation", async () => {
