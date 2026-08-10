@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import type { AtomicActionResult } from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -79,6 +80,39 @@ const baseAcceptancePreparation = {
   updated_at: "2026-08-04T10:01:00.000Z",
 };
 
+const contractPeriodId = "70000000-0000-4000-8000-000000000001";
+const contract = {
+  id: "60000000-0000-4000-8000-000000000001",
+  tenant_id: baseOrder.tenant_id,
+  service_family: "platform_technical_service",
+  status: "active",
+  service_start_at: "2026-08-04T10:05:00.000Z",
+  service_end_at: "2027-08-04T10:05:00.000Z",
+  last_period_id: contractPeriodId,
+  version: 1,
+  created_at: "2026-08-04T10:05:00.000Z",
+  updated_at: "2026-08-04T10:05:00.000Z",
+};
+const contractPeriod = {
+  id: contractPeriodId,
+  contract_id: contract.id,
+  tenant_id: baseOrder.tenant_id,
+  service_order_id: baseOrder.id,
+  accepted_at: "2026-08-04T10:05:00.000Z",
+  starts_at: "2026-08-04T10:05:00.000Z",
+  ends_at: "2027-08-04T10:05:00.000Z",
+  original_starts_at: "2026-08-04T10:05:00.000Z",
+  original_ends_at: "2027-08-04T10:05:00.000Z",
+  term_years: baseOrder.term_years,
+  status: "active",
+  adjustment_reason: null,
+  refund_request_id: null,
+  metadata: {},
+  version: 1,
+  created_at: "2026-08-04T10:05:00.000Z",
+  updated_at: "2026-08-04T10:05:00.000Z",
+};
+
 function createRepository() {
   return {
     listPlatformServiceOrders: mock(async () => ({ list: [], pagination: {} })),
@@ -88,11 +122,17 @@ function createRepository() {
     assignServiceWorkOrder: mock(async () => ({ order: null, workOrder: null })),
     transitionServiceWorkOrder: mock(async () => ({ order: null, workOrder: null })),
     createFulfillmentRecord: mock(async () => ({ id: "record-1" })),
-    upsertAcceptancePreparation: mock(async () => ({ id: "acceptance-1" })),
+    upsertAcceptancePreparation: mock(async (): Promise<AtomicActionResult> => ({
+      acceptancePreparation: baseAcceptancePreparation,
+      order: null,
+    })),
     confirmOverdueAcceptance: mock(async () => ({
       workOrder: { ...baseWorkOrder, status: "accepted", version: 2 },
       order: baseOrder,
       acceptancePreparation: baseAcceptancePreparation,
+      contract,
+      contractPeriod,
+      idempotent: false,
     })),
     listPlatformServiceRefundRequests: mock(async () => ({ list: [], pagination: {} })),
     reviewServiceRefundRequest: mock(async () => ({ order: null, refundRequest: null })),
@@ -105,6 +145,7 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
       "./platform-service-fulfillment"
     );
     const repository = createRepository();
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
     const settingsService = { getNumber: mock(async () => 3) };
     const service = new PlatformServiceFulfillmentService({
       repository,
@@ -115,7 +156,7 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     await service.upsertAcceptancePreparation(authContext, "work-1", {
       status: "submitted",
       summary: "客户专属系统环境已部署，服务器配置及首次操作培训已完成。",
-      file_ids: [],
+      file_ids: [canonicalFileId.toUpperCase()],
     });
 
     expect(settingsService.getNumber).toHaveBeenCalledWith(
@@ -126,8 +167,34 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     expect(repository.upsertAcceptancePreparation).toHaveBeenCalledWith(
       expect.objectContaining({
         acceptanceDueAt: "2026-08-07T10:00:00.000Z",
+        fileIds: [canonicalFileId],
       }),
     );
+  });
+
+  test("surfaces a stable conflict when atomic acceptance preparation is rejected", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const repository = createRepository();
+    repository.upsertAcceptancePreparation.mockImplementationOnce(async () => ({
+      acceptancePreparation: null,
+      order: null,
+      errorCode: "SERVICE_ACCEPTANCE_INVALID_STATE",
+    }));
+    const service = new PlatformServiceFulfillmentService({
+      repository,
+      settingsService: { getNumber: mock(async () => 3) },
+    } as never);
+
+    await expect(service.upsertAcceptancePreparation(authContext, "work-1", {
+      status: "draft",
+      summary: "验收准备",
+      file_ids: [],
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SERVICE_ACCEPTANCE_INVALID_STATE",
+    });
   });
 
   test("lets platform confirm overdue acceptance and reports WeChat fulfillment", async () => {
@@ -170,6 +237,21 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     expect(result.acceptance_preparation).toMatchObject({
       status: "accepted",
       acceptance_due_at: "2026-08-04T10:00:00.000Z",
+    });
+    expect(result).toMatchObject({
+      contract: {
+        id: contract.id,
+        tenant_id: baseOrder.tenant_id,
+        last_period_id: contractPeriod.id,
+      },
+      contract_period: {
+        id: contractPeriod.id,
+        contract_id: contract.id,
+        tenant_id: baseOrder.tenant_id,
+        service_order_id: baseOrder.id,
+        status: "active",
+      },
+      idempotent: false,
     });
   });
 });

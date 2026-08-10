@@ -206,6 +206,8 @@ export const buildRequest = (
   body: Record<string, unknown>,
 ): FastifyRequest => ({
   body,
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: { sub: authUserId, tenant_id: tenantId, employee_id: employeeId },
   id: "req-test",
 }) as FastifyRequest;
@@ -214,6 +216,8 @@ export const buildPlatformRequest = (
   body: Record<string, unknown>,
 ): FastifyRequest => ({
   body,
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: { sub: platformAuthUserId },
   id: "req-platform-test",
 }) as FastifyRequest;
@@ -226,7 +230,8 @@ export function allowPlatformSupplierUpload() {
     tenantName: null,
     tenantSlug: null,
     tenantStatus: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
     employeeName: "平台运营",
     employeeStatus: "active",
     departmentId: null,
@@ -250,7 +255,8 @@ export function denyPlatformSupplierPermission() {
     tenantName: null,
     tenantSlug: null,
     tenantStatus: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
     employeeName: "平台运营",
     employeeStatus: "active",
     departmentId: null,
@@ -298,7 +304,8 @@ export function allowPlatformBrandLogoUpload() {
     tenantName: null,
     tenantSlug: null,
     tenantStatus: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
     employeeName: "平台品牌管理员",
     employeeStatus: "active",
     departmentId: null,
@@ -322,7 +329,8 @@ export function allowPlatformVirtualGoodsUpload() {
     tenantName: null,
     tenantSlug: null,
     tenantStatus: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
     employeeName: "平台支付管理员",
     employeeStatus: "active",
     departmentId: null,
@@ -346,7 +354,8 @@ export function allowPlatformServiceWorkOrderUpload() {
     tenantName: null,
     tenantSlug: null,
     tenantStatus: null,
-    isPlatformAdmin: true,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
     employeeName: "平台实施管理员",
     employeeStatus: "active",
     departmentId: null,
@@ -359,6 +368,31 @@ export function allowPlatformServiceWorkOrderUpload() {
     roleCodes: ["platform_admin"],
     roles: [],
     permissions: [{ code: "platform.service_work_order.manage", scope: "all" }],
+  }));
+}
+
+export function denyPlatformUploadPermission() {
+  getRequiredAuthContext.mockImplementation(async (): Promise<AuthContext> => ({
+    authUserId: platformAuthUserId,
+    employeeId: platformEmployeeId,
+    tenantId: null,
+    tenantName: null,
+    tenantSlug: null,
+    tenantStatus: null,
+    isPlatformAdmin: false,
+    isPlatformStaff: true,
+    employeeName: "平台运营",
+    employeeStatus: "active",
+    departmentId: null,
+    tenantDepartmentId: null,
+    departmentCode: "OPS",
+    departmentName: "运营部",
+    postId: null,
+    postName: null,
+    avatar: null,
+    roleCodes: ["platform_operator"],
+    roles: [],
+    permissions: [],
   }));
 }
 
@@ -384,6 +418,8 @@ export const buildVisitorRequest = (
 ): FastifyRequest => ({
   body,
   query: {},
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: {
     token_type: "visitor_session",
     visitor_id: currentVisitorId,

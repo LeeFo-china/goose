@@ -35,14 +35,14 @@ describe("billing subscription invoice controller contract", () => {
       "utf8",
     );
 
-    expect(controllerSource).toContain("@Get(\"/billing/subscription\")");
+    expect(controllerSource).toContain("@Get(\"/billing/subscription\",");
     expect(controllerSource).toContain(
-      "@Get(\"/billing/subscription-invoices\")",
+      "@Get(\"/billing/subscription-invoices\",",
     );
     expect(controllerSource).toContain(
-      "@Get(\"/billing/subscription-invoices/:id\")",
+      "@Get(\"/billing/subscription-invoices/:id\",",
     );
-    expect(controllerSource).toContain("allowedWhenBillingLocked: true");
+    expect(controllerSource).toContain('tenantServiceAccess: "recovery"');
     expect(controllerSource).toContain("BillingSubscriptionInvoiceQuerySchema");
     expect(controllerSource).toContain("BillingSubscriptionInvoiceParamSchema");
   });

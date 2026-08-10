@@ -7,6 +7,7 @@ import { Errors } from "@/errors/error-factory";
 import { Get } from "@/utils/decorators/route";
 import { authorizationService } from "@/services/authorization";
 import { homeDashboardService } from "@/services/home-dashboard";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 
 const HomeStatsQuerySchema = z.object({
     debug_timing: z.preprocess((value) => {
@@ -35,6 +36,7 @@ export class RpcController extends BaseController {
         const authContextStartedAt = Date.now();
         const authContext = await authorizationService.getRequiredAuthContext(
             request.user?.sub,
+            getTenantServiceAuthOptions(request),
         );
         const authContextMs = Date.now() - authContextStartedAt;
         request.authContext = authContext;

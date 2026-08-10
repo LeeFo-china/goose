@@ -20,18 +20,33 @@ import {
   type WorkOrderActionInput,
   type WorkOrderRecord,
 } from "./platform-service-order-records";
+import {
+  buildCloseServiceRefundRpcParams,
+  buildConfirmServiceRefundRpcParams,
+  type CloseServiceRefundInput,
+  type ConfirmServiceRefundInput,
+  parseOverdueAcceptanceResult,
+  parseRefundClosureResult,
+  parseRefundConfirmationResult,
+  parseRefundExecutionRequest,
+} from "./platform-service-rpc-results";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
 
 type ServiceQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): ServiceQuery;
   insert(record: Record<string, unknown> | Array<Record<string, unknown>>): ServiceQuery;
+  upsert(
+    record: Record<string, unknown> | Array<Record<string, unknown>>,
+    options: { onConflict: string; ignoreDuplicates: boolean },
+  ): ServiceQuery;
   eq(column: string, value: unknown): ServiceQuery;
   in(column: string, values: readonly unknown[]): ServiceQuery;
   ilike(column: string, pattern: string): ServiceQuery;
   or(filter: string): ServiceQuery;
   order(column: string, options: { ascending: boolean }): ServiceQuery;
   range(from: number, to: number): ServiceQuery;
+  limit(value: number): ServiceQuery;
   maybeSingle(): Promise<QueryResult>;
   single(): Promise<QueryResult>;
 };
@@ -44,15 +59,17 @@ type ServiceClient = {
       | "tenant_service_refund_requests"
       | "tenant_service_fulfillment_records"
       | "tenant_service_fulfillment_attachments"
-      | "tenant_service_acceptance_preparations"
       | "platform_file_objects",
   ): ServiceQuery;
   rpc(
     name:
       | "platform_service_assign_work_order"
       | "platform_service_transition_work_order"
+      | "platform_service_upsert_acceptance_preparation"
       | "platform_service_confirm_overdue_acceptance"
-      | "platform_service_review_refund_request",
+      | "platform_service_review_refund_request"
+      | "platform_service_confirm_refund"
+      | "platform_service_close_refund_execution",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -72,6 +89,7 @@ type FulfillmentAttachmentFileObjectRecord = {
 };
 
 const FULFILLMENT_ATTACHMENT_SCENE = "tenant_service_fulfillment_attachment";
+const REFUND_EXECUTION_SELECT = "id,tenant_id,service_order_id,idempotency_key,reason,status,version,created_by_employee_id,reviewed_by_employee_id,reviewed_at,review_remark,out_refund_no,wechat_refund_id,refund_amount_fen,refunded_at,refunded_by_employee_id,provider_refund_status,provider_out_refund_no,provider_wechat_refund_id,provider_refund_amount_fen,provider_checked_at,provider_checked_by_employee_id,created_at,updated_at,order:tenant_service_orders(id,tenant_id,order_no,out_trade_no,amount_fen,paid_amount_fen,payment_status,service_status,payment_config_id,payment_config_guard_version,transaction_id,service_access_terminated_at,service_access_termination_reason,service_access_terminated_by_employee_id)";
 
 export class PlatformServiceFulfillmentRepository {
   constructor(
@@ -220,25 +238,19 @@ export class PlatformServiceFulfillmentRepository {
   }
 
   async upsertAcceptancePreparation(input: AcceptancePreparationInput) {
-    const submittedAt = input.status === "submitted"
-      ? new Date().toISOString()
-      : null;
-    const { data, error } = await this.acceptancePreparations()
-      .insert({
-        tenant_id: input.tenantId,
-        service_order_id: input.serviceOrderId,
-        work_order_id: input.workOrderId,
-        status: input.status,
-        summary: input.summary,
-        prepared_by_employee_id: input.preparedByEmployeeId,
-        prepared_at: new Date().toISOString(),
-        submitted_at: submittedAt,
-        acceptance_due_at: input.acceptanceDueAt ?? null,
-      })
-      .select("id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,acceptance_due_at,created_at,updated_at")
-      .single();
+    const { data, error } = await this.clientProvider().rpc(
+      "platform_service_upsert_acceptance_preparation",
+      {
+        p_work_order_id: input.workOrderId,
+        p_status: input.status,
+        p_summary: input.summary,
+        p_prepared_by_employee_id: input.preparedByEmployeeId,
+        p_acceptance_due_at: input.acceptanceDueAt ?? null,
+      },
+    );
     if (error) throw Errors.dbError("保存平台技术服务验收准备失败", error);
-    if (input.fileIds.length > 0) {
+    const result = this.mapAtomicActionResult(data);
+    if (result.acceptancePreparation && input.fileIds.length > 0) {
       await this.createAttachments({
         tenantId: input.tenantId,
         serviceOrderId: input.serviceOrderId,
@@ -248,13 +260,13 @@ export class PlatformServiceFulfillmentRepository {
         createdByEmployeeId: input.preparedByEmployeeId,
       });
     }
-    return data as Record<string, unknown>;
+    return result;
   }
 
   async confirmOverdueAcceptance(
     input: WorkOrderActionInput,
   ): Promise<AtomicActionResult> {
-    const { data, error } = await this.clientProvider().rpc(
+    const data = await this.rpcData(
       "platform_service_confirm_overdue_acceptance",
       {
         p_work_order_id: input.workOrderId,
@@ -263,9 +275,9 @@ export class PlatformServiceFulfillmentRepository {
         p_remark: input.remark ?? null,
         p_metadata: input.metadata ?? {},
       },
+      "平台确认逾期验收失败",
     );
-    if (error) throw Errors.dbError("平台确认逾期验收失败", error);
-    return this.mapAtomicActionResult(data);
+    return parseOverdueAcceptanceResult(data);
   }
 
   async listPlatformServiceRefundRequests(input: {
@@ -307,6 +319,49 @@ export class PlatformServiceFulfillmentRepository {
     return this.mapAtomicActionResult(data);
   }
 
+  async findPlatformServiceRefundRequestById(refundRequestId: string) {
+    let result: QueryResult;
+    try {
+      result = await this.refundRequests().select(REFUND_EXECUTION_SELECT)
+        .eq("id", refundRequestId).limit(1).maybeSingle();
+    } catch {
+      throw Errors.dbError("查询平台技术服务退款执行事实失败");
+    }
+    const { data, error } = result;
+    if (error) throw Errors.dbError("查询平台技术服务退款执行事实失败");
+    return data === null ? null : parseRefundExecutionRequest(data);
+  }
+
+  async confirmServiceRefund(input: ConfirmServiceRefundInput) {
+    const data = await this.rpcData(
+      "platform_service_confirm_refund",
+      buildConfirmServiceRefundRpcParams(input),
+      "确认平台技术服务退款失败",
+    );
+    return parseRefundConfirmationResult(data);
+  }
+
+  async closeServiceRefund(input: CloseServiceRefundInput) {
+    const data = await this.rpcData(
+      "platform_service_close_refund_execution",
+      buildCloseServiceRefundRpcParams(input),
+      "关闭平台技术服务退款执行失败",
+    );
+    return parseRefundClosureResult(data);
+  }
+
+  private async rpcData(
+    name: Parameters<ServiceClient["rpc"]>[0], params: Record<string, unknown>, message: string,
+  ) {
+    try {
+      const { data, error } = await this.clientProvider().rpc(name, params);
+      if (error) throw Errors.dbError(message);
+      return data;
+    } catch {
+      throw Errors.dbError(message);
+    }
+  }
+
   private orders() {
     return this.clientProvider().from("tenant_service_orders");
   }
@@ -327,10 +382,6 @@ export class PlatformServiceFulfillmentRepository {
     return this.clientProvider().from("tenant_service_fulfillment_attachments");
   }
 
-  private acceptancePreparations() {
-    return this.clientProvider().from("tenant_service_acceptance_preparations");
-  }
-
   private fileObjects() {
     return this.clientProvider().from("platform_file_objects");
   }
@@ -343,20 +394,29 @@ export class PlatformServiceFulfillmentRepository {
     fileIds: string[];
     createdByEmployeeId: string;
   }) {
-    const fileObjects = await this.findBindableFulfillmentAttachmentFiles(input);
-    const { error } = await this.fulfillmentAttachments()
-      .insert(input.fileIds.map((fileId) => ({
-        tenant_id: input.tenantId,
-        service_order_id: input.serviceOrderId,
-        work_order_id: input.workOrderId,
-        fulfillment_record_id: input.fulfillmentRecordId,
-        file_id: fileId,
-        file_name: fileObjects.get(fileId)?.original_name ?? null,
-        mime_type: fileObjects.get(fileId)?.mime_type ?? null,
-        size_bytes: fileObjects.get(fileId)?.size_bytes ?? null,
-        created_by_employee_id: input.createdByEmployeeId,
-      })))
-      .select("id");
+    const uniqueFileIds = deduplicateUuidIds(input.fileIds);
+    const fileObjects = await this.findBindableFulfillmentAttachmentFiles({
+      ...input,
+      fileIds: uniqueFileIds,
+    });
+    const attachments = uniqueFileIds.map((fileId) => ({
+      tenant_id: input.tenantId,
+      service_order_id: input.serviceOrderId,
+      work_order_id: input.workOrderId,
+      fulfillment_record_id: input.fulfillmentRecordId,
+      file_id: fileId,
+      file_name: fileObjects.get(fileId)?.original_name ?? null,
+      mime_type: fileObjects.get(fileId)?.mime_type ?? null,
+      size_bytes: fileObjects.get(fileId)?.size_bytes ?? null,
+      created_by_employee_id: input.createdByEmployeeId,
+    }));
+    const attachmentWrite = input.fulfillmentRecordId === null
+      ? this.fulfillmentAttachments().upsert(attachments, {
+        onConflict: "work_order_id,fulfillment_record_id,file_id",
+        ignoreDuplicates: true,
+      })
+      : this.fulfillmentAttachments().insert(attachments);
+    const { error } = await attachmentWrite.select("id");
     if (error) throw Errors.dbError("绑定平台技术服务附件失败", error);
   }
 
@@ -365,17 +425,16 @@ export class PlatformServiceFulfillmentRepository {
     fileIds: string[];
     createdByEmployeeId: string;
   }) {
-    const uniqueFileIds = Array.from(new Set(input.fileIds));
     const { data, error } = await this.fileObjects()
       .select("id,tenant_id,scene,provider,visibility,status,deleted_at,created_by_employee_id,original_name,mime_type,size_bytes")
-      .in("id", uniqueFileIds);
+      .in("id", input.fileIds);
     if (error) throw Errors.dbError("查询平台技术服务附件文件失败", error);
 
     const files = new Map(
       ((data as FulfillmentAttachmentFileObjectRecord[] | null) ?? [])
         .map((file) => [file.id, file]),
     );
-    for (const fileId of uniqueFileIds) {
+    for (const fileId of input.fileIds) {
       const file = files.get(fileId);
       if (!file || !this.isBindableFulfillmentAttachmentFile(file, input)) {
         throw Errors.business(
@@ -425,6 +484,15 @@ export class PlatformServiceFulfillmentRepository {
         : undefined,
     };
   }
+}
+
+function deduplicateUuidIds(ids: string[]) {
+  const seen = new Set<string>();
+  return ids.map((id) => id.toLowerCase()).filter((id) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 export const platformServiceFulfillmentRepository =

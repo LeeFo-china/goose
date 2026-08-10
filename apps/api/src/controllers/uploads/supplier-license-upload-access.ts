@@ -29,5 +29,6 @@ export async function assertSupplierLicenseUploadSceneAccess(
     customerId: null,
     visitorId: null,
     isPlatformAdmin: authContext.isPlatformAdmin,
+    isPlatformIdentity,
   };
 }

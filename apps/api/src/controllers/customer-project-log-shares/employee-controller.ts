@@ -1,6 +1,5 @@
 import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
-import { authorizationService } from "@/services/authorization";
 import {
   AssistCustomerProjectLogShareCampaignSchema,
   ClaimCustomerProjectLogShareCampaignSchema,
@@ -56,7 +55,7 @@ import { CustomerProjectLogSharesBaseController } from "./shared";
 class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseController {
   @Get("/employee/projects/:projectId/share-campaign-config")
   async getEmployeeProjectShareCampaignConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -78,7 +77,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Put("/employee/projects/:projectId/share-campaign-config")
   async putEmployeeProjectShareCampaignConfig(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = PutProjectShareCampaignConfigSchema.safeParse(request.body);
@@ -102,7 +101,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/projects/:projectId/share-campaign-config/status")
   async postEmployeeProjectShareCampaignConfigStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = EmployeeProjectShareCampaignConfigParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = PostProjectShareCampaignConfigStatusSchema.safeParse(request.body);
@@ -191,7 +190,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/share-campaigns")
   async listEmployeeShareCampaigns(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const queryResult = EmployeeShareCampaignListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -209,7 +208,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/marketing-center/campaigns")
   async listMarketingCenterCampaigns(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const queryResult = MarketingCampaignListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -227,7 +226,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/marketing-center/templates")
   async listMarketingCenterTemplates(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const queryResult = MarketingCampaignTemplateListQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -244,7 +243,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/marketing-center/templates")
   async createMarketingCenterTemplate(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const bodyResult = CreateMarketingCampaignTemplateSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -259,7 +258,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/marketing-center/templates/:templateId")
   async getMarketingCenterTemplateDetail(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -273,7 +272,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Put("/employee/marketing-center/templates/:templateId")
   async updateMarketingCenterTemplate(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -291,7 +290,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/marketing-center/templates/:templateId/status")
   async updateMarketingCenterTemplateStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const paramsResult = MarketingCampaignTemplateIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -309,7 +308,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/marketing-center/campaigns")
   async createMarketingCenterCampaign(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const bodyResult = CreateMarketingCampaignSchema.safeParse(request.body);
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
@@ -324,7 +323,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/share-campaigns/stats/summary")
   async getEmployeeShareCampaignStatsSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const queryResult = EmployeeShareCampaignStatsSummaryQuerySchema.safeParse(request.query);
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
@@ -344,7 +343,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/share-campaigns/:campaignId")
   async getEmployeeShareCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
 
@@ -367,7 +366,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/marketing-center/campaigns/:campaignId")
   async getMarketingCenterCampaignDetail(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.read");
     const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -382,7 +381,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Put("/employee/marketing-center/campaigns/:campaignId")
   async updateMarketingCenterCampaign(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -400,7 +399,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/share-campaigns/:campaignId/status")
   async postEmployeeShareCampaignStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const bodyResult = PostEmployeeShareCampaignStatusSchema.safeParse(request.body);
@@ -426,7 +425,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Post("/employee/marketing-center/campaigns/:campaignId/status")
   async postMarketingCenterCampaignStatus(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     accessPolicyService.assertPermission(authContext, "project.update");
     const paramsResult = MarketingCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
@@ -444,7 +443,7 @@ class EmployeeShareCampaignController extends CustomerProjectLogSharesBaseContro
 
   @Get("/employee/share-campaigns/:campaignId/helpers")
   async listEmployeeShareCampaignHelpers(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await this.getRequiredTenantAuthContext(request);
     const paramsResult = ShareCampaignManagementCampaignIdParamsSchema.safeParse(request.params);
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
     const queryResult = CustomerProjectLogShareHelpersQuerySchema.safeParse(request.query);

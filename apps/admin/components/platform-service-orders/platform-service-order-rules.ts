@@ -58,9 +58,45 @@ export const serviceStatusOptions: ReadonlyArray<{
 export const refundStatusOptions = [
   { value: "reviewing", label: "待审核" },
   { value: "approved", label: "已通过" },
+  { value: "refunding", label: "退款中" },
+  { value: "refunded", label: "已退款" },
   { value: "rejected", label: "已驳回" },
   { value: "cancelled", label: "已取消" },
 ] as const;
+
+export type PlatformServiceRefundExecutionFeedback = {
+  kind: "success" | "warning" | "error";
+  message: string;
+};
+
+export function getPlatformServiceRefundExecutionFeedback(
+  result: unknown,
+): PlatformServiceRefundExecutionFeedback {
+  if (!result || typeof result !== "object") {
+    return inconsistentRefundExecutionFeedback();
+  }
+  const facts = result as Record<string, unknown>;
+  if (
+    facts.provider_status === "SUCCESS" && facts.refunded === true &&
+    facts.access_terminated === true && facts.retryable === false
+  ) {
+    return { kind: "success", message: "微信退款成功，服务访问已终止" };
+  }
+  if (
+    facts.provider_status === "CLOSED" && facts.refunded === false &&
+    facts.access_terminated === false && facts.retryable === false
+  ) {
+    return {
+      kind: "warning",
+      message: "微信退款已关闭，访问未终止，请重新发起退款申请",
+    };
+  }
+  return inconsistentRefundExecutionFeedback();
+}
+
+function inconsistentRefundExecutionFeedback(): PlatformServiceRefundExecutionFeedback {
+  return { kind: "error", message: "退款执行结果不一致，请刷新后核查" };
+}
 
 export const workOrderTransitionOptions: ReadonlyArray<{
   value: Exclude<PlatformServiceStatus, "waiting_payment">;
@@ -126,6 +162,8 @@ export const refundStatusMeta: Record<
 > = {
   reviewing: { label: "待审核", variant: "warning" },
   approved: { label: "已通过", variant: "success" },
+  refunding: { label: "退款中", variant: "warning" },
+  refunded: { label: "已退款", variant: "secondary" },
   rejected: { label: "已驳回", variant: "danger" },
   cancelled: { label: "已取消", variant: "secondary" },
 };

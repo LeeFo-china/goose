@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
+import type { AtomicActionResult } from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -102,7 +103,7 @@ const shippingReportRecord = {
   id: "shipping-report-1",
   tenant_id: "tenant-1",
   service_order_id: "order-1",
-  source: "tenant_acceptance",
+  source: "tenant_acceptance" as const,
   status: "failed",
   attempt_count: 2,
   last_attempt_key: "00000000-0000-4000-8000-000000000901",
@@ -139,7 +140,10 @@ const repository = {
     order: { ...orderRecord, service_status: "deploying", version: 3 },
   })),
   createFulfillmentRecord: mock(async () => ({ id: "record-1" })),
-  upsertAcceptancePreparation: mock(async () => ({ id: "acceptance-1" })),
+  upsertAcceptancePreparation: mock(async (): Promise<AtomicActionResult> => ({
+    acceptancePreparation: null,
+    order: null,
+  })),
   confirmOverdueAcceptance: mock(async () => ({
     workOrder: null,
     order: null,
@@ -416,6 +420,7 @@ describe("PlatformServiceFulfillmentService", () => {
       "./platform-service-fulfillment"
     );
     const service = new PlatformServiceFulfillmentService({ repository });
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
 
     await service.createFulfillmentRecord(
       platformAuth([{ code: "platform.service_work_order.manage", scope: "all" }]),
@@ -425,7 +430,7 @@ describe("PlatformServiceFulfillmentService", () => {
         title: "服务器配置",
         content: "已完成配置",
         occurred_at: "2026-08-04T10:00:00+08:00",
-        file_ids: [],
+        file_ids: [canonicalFileId.toUpperCase(), canonicalFileId],
       },
     );
 
@@ -437,6 +442,7 @@ describe("PlatformServiceFulfillmentService", () => {
         tenantId: "tenant-1",
         serviceOrderId: "order-1",
         workOrderId: "work-1",
+        fileIds: [canonicalFileId],
       }),
     );
   });

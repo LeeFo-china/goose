@@ -133,7 +133,7 @@ export class EffectiveBrandingService {
     try {
       const context = await this.authorizationService.getRequiredAuthContext(
         authUserId,
-        { allowedWhenBillingLocked: true },
+        { tenantServiceAccess: "read" },
       );
       if (
         context.authUserId !== authUserId ||

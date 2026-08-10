@@ -39,11 +39,12 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
 
-export async function getPlayParams(this: any, input: {
+export async function getPlayParams(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   cameraId: string;
@@ -54,6 +55,7 @@ export async function getPlayParams(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.read",
     allowCustomer: true,
+    tenantServiceAccess: input.tenantServiceAccess,
   });
   const camera = await projectCameraRepository.findByProjectCamera(
     input.projectId,

@@ -11,6 +11,7 @@ export async function assertApplymentUploadSceneAccess(
   if (!user.sub) throw Errors.unauthorized();
   const authContext = await authorizationService.getRequiredAuthContext(
     user.sub,
+    { tenantServiceAccess: "write" },
   );
   uploadService.assertDirectUploadAccess({ authContext, scene });
   if (
@@ -26,5 +27,7 @@ export async function assertApplymentUploadSceneAccess(
     customerId: null,
     visitorId: null,
     isPlatformAdmin: authContext.isPlatformAdmin,
+    isPlatformIdentity:
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true,
   };
 }

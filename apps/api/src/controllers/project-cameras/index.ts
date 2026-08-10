@@ -18,6 +18,7 @@ import {
   UpdateProjectCameraSchema,
 } from "@/schema/project-cameras";
 import { projectCameraService } from "@/services/project-cameras";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 
 class ProjectCameraController extends TenantBaseController {
   constructor() {
@@ -38,6 +39,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.listCameraBindProjectOptions({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       query: queryResult.data,
     });
 
@@ -51,6 +53,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.listCameraProjectGroups({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       query: queryResult.data,
     });
 
@@ -64,6 +67,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.listProjectCameras({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       meta: this.getRequestMeta(request),
     });
@@ -83,6 +87,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.listEzvizDeviceChannels({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       onlyUnbound: queryResult.data.only_unbound,
     });
@@ -102,6 +107,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.listTencentDeviceChannels({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       onlyUnbound: queryResult.data.only_unbound,
       keyword: queryResult.data.keyword,
@@ -120,6 +126,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.createTencentDevice({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       payload: bodyResult.data,
     });
@@ -134,6 +141,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.getTencentDevicePassword({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       deviceId: paramsResult.data.device_id,
     });
@@ -153,6 +161,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.resetTencentDevicePassword({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       deviceId: paramsResult.data.device_id,
       payload: bodyResult.data,
@@ -171,6 +180,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.createProjectCamera({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       payload: bodyResult.data,
     });
@@ -188,6 +198,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.updateProjectCamera({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       cameraId: paramsResult.data.camera_id,
       payload: bodyResult.data,
@@ -203,6 +214,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.deleteProjectCamera({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       cameraId: paramsResult.data.camera_id,
     });
@@ -222,6 +234,7 @@ class ProjectCameraController extends TenantBaseController {
 
     const result = await projectCameraService.getPlayParams({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       projectId: paramsResult.data.project_id,
       cameraId: paramsResult.data.camera_id,
       meta: this.getRequestMeta(request),

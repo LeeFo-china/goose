@@ -9,6 +9,7 @@ import {
 } from "@/schema/usage";
 import { authorizationService } from "@/services/authorization";
 import { usageService } from "@/services/usage";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -20,7 +21,10 @@ class UsageController extends BaseController {
 
   @Get("/usage/summary")
   async getTenantSummary(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
     const queryResult = UsageDateRangeQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -30,7 +34,10 @@ class UsageController extends BaseController {
 
   @Get("/usage/overview")
   async getTenantOverview(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
     const queryResult = UsageDateRangeQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -40,7 +47,10 @@ class UsageController extends BaseController {
 
   @Get("/usage/ai-logs")
   async listTenantAiLogs(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
     const queryResult = UsageAiLogsQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -50,7 +60,10 @@ class UsageController extends BaseController {
 
   @Get("/usage/sms-logs")
   async listTenantSmsLogs(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
     const queryResult = UsageSmsLogsQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 
@@ -60,7 +73,10 @@ class UsageController extends BaseController {
 
   @Get("/usage/social-video-logs")
   async listTenantSocialVideoLogs(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await authorizationService.getRequiredAuthContext(request.user?.sub);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
     const queryResult = UsageSocialVideoLogsQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
 

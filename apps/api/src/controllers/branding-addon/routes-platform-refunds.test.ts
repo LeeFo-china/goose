@@ -121,9 +121,14 @@ type Handler = (request: FastifyRequest, reply: unknown) => Promise<unknown>;
 
 function captureRoutes(controller: { registerExtraRoutes(app: unknown): void }) {
   const routes = new Map<string, Handler>();
-  const register = (method: string) => (path: string, handler: Handler) => {
-    routes.set(`${method} ${path}`, handler);
-  };
+  const register = (method: string) =>
+    (path: string, optionsOrHandler: unknown, handler?: Handler) => {
+      const routeHandler = handler ?? optionsOrHandler;
+      if (typeof routeHandler !== "function") {
+        throw new TypeError(`invalid route handler: ${method} ${path}`);
+      }
+      routes.set(`${method} ${path}`, routeHandler as Handler);
+    };
   controller.registerExtraRoutes({
     get: register("GET"),
     post: register("POST"),

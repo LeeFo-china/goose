@@ -7,6 +7,7 @@ import {
   buildRequest,
   completeDirectUpload,
   createDirectUpload,
+  denyPlatformUploadPermission,
   employeeId,
   platformEmployeeId,
   resetUploadControllerMocks,
@@ -78,6 +79,17 @@ describe("UploadController brand logo direct upload", () => {
       statusCode: 403,
       code: "BRANDING_ENTITLEMENT_SUSPENDED",
     });
+    expect(createDirectUpload).not.toHaveBeenCalled();
+  });
+
+  test("rejects platform staff without branding permission", async () => {
+    denyPlatformUploadPermission();
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildPlatformRequest(uploadBody),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
     expect(createDirectUpload).not.toHaveBeenCalled();
   });
 

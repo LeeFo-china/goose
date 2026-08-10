@@ -7,6 +7,7 @@ import {
   buildRequest,
   completeDirectUpload,
   createDirectUpload,
+  denyPlatformUploadPermission,
   platformEmployeeId,
   resetUploadControllerMocks,
 } from "./index.test-harness";
@@ -43,6 +44,17 @@ describe("UploadController platform service fulfillment attachment direct upload
 
     await expect(controller.initDirectCosUpload(
       buildRequest(uploadBody),
+      {} as never,
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(createDirectUpload).not.toHaveBeenCalled();
+  });
+
+  test("rejects platform staff without work-order permission", async () => {
+    denyPlatformUploadPermission();
+    const { default: controller } = await import("./index");
+
+    await expect(controller.initDirectCosUpload(
+      buildPlatformRequest(uploadBody),
       {} as never,
     )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
     expect(createDirectUpload).not.toHaveBeenCalled();

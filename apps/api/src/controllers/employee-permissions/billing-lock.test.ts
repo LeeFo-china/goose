@@ -45,6 +45,10 @@ beforeEach(() => {
 function buildRequest(): FastifyRequest {
   return {
     user: { sub: authUserId },
+    method: "GET",
+    routeOptions: {
+      config: { tenantServiceAccess: "session" },
+    },
   } as FastifyRequest;
 }
 
@@ -56,7 +60,7 @@ describe("EmployeePermissionsController billing lock access", () => {
     const response = await controller.getMyPermissions(request, {} as never);
 
     expect(getRequiredAuthContext).toHaveBeenCalledWith(authUserId, {
-      allowedWhenBillingLocked: true,
+      tenantServiceAccess: "session",
     });
     expect(request.authContext).toEqual(authContext);
     expect(response.data).toEqual(authContext);

@@ -48,6 +48,7 @@ export type OrderRecord = {
   product_code: string;
   term_years: number;
   amount_fen: number;
+  paid_amount_fen?: number | null;
   payment_status: string;
   service_status: string;
   payment_config_id?: string;
@@ -55,6 +56,8 @@ export type OrderRecord = {
   payer_openid?: string;
   product_snapshot?: Record<string, unknown>;
   transaction_id?: string | null;
+  service_access_terminated_at?: string | null;
+  service_access_termination_reason?: string | null;
   prepay_id: string | null;
   payment_expires_at: string;
   paid_at: string | null;
@@ -166,6 +169,11 @@ export type RefundRequestRecord = {
   reviewed_by_employee_id?: string | null;
   reviewed_at?: string | null;
   review_remark?: string | null;
+  out_refund_no?: string | null;
+  wechat_refund_id?: string | null;
+  refund_amount_fen?: number | null;
+  refunded_at?: string | null;
+  refunded_by_employee_id?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -315,6 +323,9 @@ export type AtomicActionResult = {
   refundRequest?: RefundRequestRecord | null;
   acceptancePreparation?: AcceptancePreparationRecord | null;
   order: OrderRecord | null;
+  contract?: ServiceContractRecord | null;
+  contractPeriod?: ServiceContractPeriodRecord | null;
+  idempotent?: boolean;
   errorCode?: string;
 };
 
@@ -339,6 +350,11 @@ export const REFUND_REQUEST_SELECT = [
   "reviewed_by_employee_id",
   "reviewed_at",
   "review_remark",
+  "out_refund_no",
+  "wechat_refund_id",
+  "refund_amount_fen",
+  "refunded_at",
+  "refunded_by_employee_id",
   "created_at",
   "updated_at",
 ].join(",");
@@ -473,3 +489,7 @@ export const TENANT_INTERNAL_ORDER_SELECT = [
   "created_at",
   "updated_at",
 ].join(",");
+import type {
+  ServiceContractPeriodRecord,
+  ServiceContractRecord,
+} from "./platform-service-rpc-results";

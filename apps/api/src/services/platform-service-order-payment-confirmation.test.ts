@@ -45,6 +45,7 @@ describe("PlatformServiceOrderPaymentConfirmation", () => {
     const confirmPayment = mock(async (_input: unknown) => ({
       order: { id: order.id, payment_status: "paid" },
       work_order: { id: "work-order-1" },
+      access_mode: "paid_onboarding" as const,
       idempotent: false,
     }));
     const { PlatformServiceOrderPaymentConfirmation } = await import(
@@ -74,6 +75,7 @@ describe("PlatformServiceOrderPaymentConfirmation", () => {
     });
     expect(result).toMatchObject({
       work_order: { id: "work-order-1" },
+      access_mode: "paid_onboarding",
       idempotent: false,
     });
   });

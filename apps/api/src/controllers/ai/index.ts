@@ -15,6 +15,7 @@ import {
   serializeDecorationQaStreamEvent,
   streamDecorationQa,
 } from "@/services/decoration-qa";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 
 class AiController extends BaseController {
   constructor() {
@@ -67,6 +68,7 @@ class AiController extends BaseController {
 
     const suggestions = await getDecorationQaSuggestions({
       query: result.data,
+      ...getTenantServiceAuthOptions(request),
       authUserId: request.user?.sub,
       tenantId: request.user?.tenant_id,
       customerId: request.user?.customer_id,

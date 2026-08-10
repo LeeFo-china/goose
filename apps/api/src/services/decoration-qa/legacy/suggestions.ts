@@ -1,3 +1,5 @@
+import type { TenantServiceRouteAccess } from '@gooes/domain';
+
 import {
   Errors,
   authorizationService,
@@ -71,13 +73,6 @@ export async function buildSuggestionScenePrompt(input: {
   }
 
   if (input.scene === "employee") {
-    const authContext = await authorizationService.getRequiredAuthContext(
-      input.authUserId,
-    );
-    if (!authContext.employeeId) {
-      throw Errors.forbidden();
-    }
-
     return "用户是装修公司员工。问题可以偏向客户沟通、施工解释、材料工艺说明。";
   }
 
@@ -213,6 +208,7 @@ export async function trySaveSuggestionCache(input: {
 
 export async function getDecorationQaSuggestions(input: {
   query: DecorationQaSuggestionQueryInput;
+  tenantServiceAccess: TenantServiceRouteAccess;
   authUserId?: string;
   tenantId?: string | null;
   customerId?: string | null;
@@ -222,6 +218,18 @@ export async function getDecorationQaSuggestions(input: {
   const now = new Date();
   const nowMs = now.getTime();
   const scene = input.query.scene;
+  if (scene === "employee") {
+    if (!input.authUserId) {
+      throw Errors.unauthorized("缺少登录凭证");
+    }
+    const authContext = await authorizationService.getRequiredAuthContext(
+      input.authUserId,
+      { tenantServiceAccess: input.tenantServiceAccess },
+    );
+    if (!authContext.employeeId) {
+      throw Errors.forbidden();
+    }
+  }
   const projectId = scene === "customer"
     ? input.query.project_id ?? null
     : null;

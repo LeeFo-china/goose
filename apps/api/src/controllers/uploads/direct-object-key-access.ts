@@ -33,6 +33,7 @@ export type DirectUploadActorContext = {
   customerId: string | null;
   visitorId: string | null;
   isPlatformAdmin: boolean;
+  isPlatformIdentity: boolean;
 };
 
 export function isProjectRequiredUploadScene(scene: string): boolean {

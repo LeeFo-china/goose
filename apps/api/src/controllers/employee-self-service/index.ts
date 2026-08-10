@@ -15,23 +15,21 @@ const EmployeePersonalizationQuerySchema = z.object({
 class EmployeeSelfServiceController extends TenantBaseController {
   private readonly bootstrapHandler = new EmployeeBootstrapHandler({
     getRequiredTenantContext: (request) =>
-      this.getRequiredTenantContext(request, {
-        allowedWhenBillingLocked: true,
-      }),
+      this.getRequiredTenantContext(request),
   });
 
   constructor() {
     super("employee_self_service");
   }
 
-  @Get("/employee/bootstrap")
+  @Get("/employee/bootstrap", { tenantServiceAccess: "read" })
   async getEmployeeBootstrap(request: FastifyRequest, reply: FastifyReply) {
     return ResponseHandler.success(
       await this.bootstrapHandler.getEmployeeBootstrap(request),
     );
   }
 
-  @Get("/employee/personalization")
+  @Get("/employee/personalization", { tenantServiceAccess: "read" })
   async getEmployeePersonalization(request: FastifyRequest, reply: FastifyReply) {
     const queryResult = EmployeePersonalizationQuerySchema.safeParse(request.query);
     if (!queryResult.success) {

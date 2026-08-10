@@ -1,5 +1,6 @@
 import "fastify";
 import "@fastify/multipart";
+import type { TenantServiceRouteAccess } from "@gooes/domain";
 import type { JwtPayload } from "@/utils/jwt";
 import type { AuthContext } from "@/services/authorization";
 
@@ -18,6 +19,10 @@ type MultipartUploadPart =
   };
 
 declare module "fastify" {
+  interface FastifyContextConfig {
+    tenantServiceAccess?: TenantServiceRouteAccess;
+  }
+
   interface FastifyRequest {
     user?: JwtPayload;
     authContext?: AuthContext;
