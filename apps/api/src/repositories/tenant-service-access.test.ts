@@ -26,6 +26,7 @@ const rowsByTable: Record<TableName, unknown[]> = {
   tenant_billing_subscriptions: [{ status: "locked" }],
 };
 const errorsByTable: Partial<Record<TableName, unknown>> = {};
+const rejectionsByTable: Partial<Record<TableName, unknown>> = {};
 const fromCalls: TableName[] = [];
 const queryCalls: QueryCall[] = [];
 
@@ -73,6 +74,13 @@ class TableQuery {
       TResult1 | PromiseLike<TResult1>) | null,
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): Promise<TResult1 | TResult2> {
+    if (this.table in rejectionsByTable) {
+      return Promise.reject(rejectionsByTable[this.table]).then(
+        onfulfilled,
+        onrejected,
+      );
+    }
+
     return Promise.resolve({
       data: rowsByTable[this.table],
       error: errorsByTable[this.table] ?? null,
@@ -104,6 +112,9 @@ describe("TenantServiceAccessRepository", () => {
     rowsByTable.tenant_billing_subscriptions = [{ status: "locked" }];
     for (const table of Object.keys(errorsByTable) as TableName[]) {
       delete errorsByTable[table];
+    }
+    for (const table of Object.keys(rejectionsByTable) as TableName[]) {
+      delete rejectionsByTable[table];
     }
     fromCalls.length = 0;
     queryCalls.length = 0;
@@ -184,34 +195,83 @@ describe("TenantServiceAccessRepository", () => {
       "payment_status",
       ["paid", "refund_reviewing", "refunding", "partially_refunded"],
     ]]);
-    expect(callsFor("tenant_service_orders", "not")).toEqual([[
-      "service_status",
-      "in",
-      "(accepted,active)",
-    ]]);
+    expect(callsFor("tenant_service_orders", "not")).toEqual([
+      ["service_status", "in", "(accepted,active)"],
+      ["paid_at", "is", null],
+    ]);
     expect(callsFor("tenant_service_orders", "is")).toEqual([[
       "service_access_terminated_at",
       null,
     ]]);
     expect(callsFor("tenant_service_orders", "order")).toEqual([
-      ["paid_at", { ascending: false }],
+      ["paid_at", { ascending: false, nullsFirst: false }],
       ["id", { ascending: false }],
     ]);
   });
 
-  test("wraps every access fact query error with Errors.dbError", async () => {
-    errorsByTable.tenant_service_orders = { message: "query failed" };
+  test.each([
+    { id: "order-1", paid_at: null },
+    { id: "order-1", paid_at: "not-a-date:SENSITIVE_ROW" },
+    { id: "   ", paid_at: NOW },
+  ])("fails closed for malformed paid-onboarding fact %#", async (row) => {
+    rowsByTable.tenant_service_orders = [row];
     const { TenantServiceAccessRepository } =
       await import("./tenant-service-access");
 
-    await expect(new TenantServiceAccessRepository().getAccessFacts({
+    const caught = await new TenantServiceAccessRepository().getAccessFacts({
       tenantId: TENANT_ID,
       now: new Date(NOW),
-    })).rejects.toMatchObject({
+    }).catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({
       statusCode: 500,
       code: "DB_ERROR",
       message: "查询租户服务访问事实失败",
     });
+    expect((caught as { details?: unknown }).details).toBeUndefined();
+    expect(JSON.stringify(caught)).not.toContain("SENSITIVE_ROW");
+  });
+
+  test("does not expose resolved query errors through AppError details", async () => {
+    errorsByTable.tenant_service_orders = {
+      message: "query failed:SENSITIVE_RESOLVED_ERROR",
+    };
+    const { TenantServiceAccessRepository } =
+      await import("./tenant-service-access");
+
+    const caught = await new TenantServiceAccessRepository().getAccessFacts({
+      tenantId: TENANT_ID,
+      now: new Date(NOW),
+    }).catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询租户服务访问事实失败",
+    });
+    expect((caught as { details?: unknown }).details).toBeUndefined();
+    expect(JSON.stringify(caught)).not.toContain("SENSITIVE_RESOLVED_ERROR");
+  });
+
+  test("does not expose rejected query errors through AppError details", async () => {
+    rejectionsByTable.tenant_service_orders = {
+      message: "query rejected:SENSITIVE_REJECTED_ERROR",
+    };
+    const { TenantServiceAccessRepository } =
+      await import("./tenant-service-access");
+
+    const caught = await new TenantServiceAccessRepository().getAccessFacts({
+      tenantId: TENANT_ID,
+      now: new Date(NOW),
+    }).catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询租户服务访问事实失败",
+    });
+    expect((caught as { details?: unknown }).details).toBeUndefined();
+    expect(JSON.stringify(caught)).not.toContain("SENSITIVE_REJECTED_ERROR");
   });
 });
 

@@ -49,7 +49,7 @@ type UntypedTableQuery = {
   gt: (column: string, value: unknown) => UntypedTableQuery;
   order: (
     column: string,
-    options: { ascending: boolean },
+    options: { ascending: boolean; nullsFirst?: boolean },
   ) => UntypedTableQuery;
   limit: (value: number) => UntypedTableQuery;
   then: Promise<QueryResult>["then"];
@@ -93,8 +93,9 @@ export class TenantServiceAccessRepository
           .eq("tenant_id", input.tenantId)
           .in("payment_status", PAID_ONBOARDING_PAYMENT_STATUSES)
           .not("service_status", "in", "(accepted,active)")
+          .not("paid_at", "is", null)
           .is("service_access_terminated_at", null)
-          .order("paid_at", { ascending: false })
+          .order("paid_at", { ascending: false, nullsFirst: false })
           .order("id", { ascending: false })
           .limit(1),
         this.from("tenant_billing_subscriptions")
@@ -102,13 +103,12 @@ export class TenantServiceAccessRepository
           .eq("tenant_id", input.tenantId)
           .limit(1),
       ]);
-    } catch (error) {
-      throw Errors.dbError("查询租户服务访问事实失败", error);
+    } catch {
+      throw Errors.dbError("查询租户服务访问事实失败");
     }
 
-    const queryError = results.find((result) => result.error)?.error;
-    if (queryError) {
-      throw Errors.dbError("查询租户服务访问事实失败", queryError);
+    if (results.some((result) => result.error)) {
+      throw Errors.dbError("查询租户服务访问事实失败");
     }
 
     const [tenantResult, contractResult, orderResult, subscriptionResult] =
@@ -117,9 +117,7 @@ export class TenantServiceAccessRepository
     const contract = firstRow<TenantServiceContractAccessFact>(
       contractResult.data,
     );
-    const paidOnboardingOrder = firstRow<TenantServicePaidOnboardingFact>(
-      orderResult.data,
-    );
+    const paidOnboardingOrder = parsePaidOnboardingFact(orderResult.data);
     const subscription = firstRow<{ status: TenantBillingSubscriptionStatus }>(
       subscriptionResult.data,
     );
@@ -146,4 +144,31 @@ function firstRow<T>(data: unknown): T | null {
   }
 
   return data[0] as T;
+}
+
+function parsePaidOnboardingFact(
+  data: unknown,
+): TenantServicePaidOnboardingFact | null {
+  if (!Array.isArray(data) || data.length === 0) {
+    return null;
+  }
+
+  const row = data[0];
+  if (!row || typeof row !== "object" || Array.isArray(row)) {
+    throw Errors.dbError("查询租户服务访问事实失败");
+  }
+
+  const id = (row as Record<string, unknown>).id;
+  const paidAt = (row as Record<string, unknown>).paid_at;
+  if (
+    typeof id !== "string"
+    || id.trim() === ""
+    || typeof paidAt !== "string"
+    || paidAt.trim() === ""
+    || !Number.isFinite(Date.parse(paidAt))
+  ) {
+    throw Errors.dbError("查询租户服务访问事实失败");
+  }
+
+  return { id, paid_at: paidAt };
 }

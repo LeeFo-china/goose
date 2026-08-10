@@ -8,6 +8,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const NOW = new Date("2026-08-10T08:00:00.000Z");
+const DECISION_STARTS_AT = "2026-08-10T08:00:00.000Z";
+const DECISION_ENDS_AT = "2026-09-10T08:00:00.000Z";
 const ROUTE_ACCESSES = [
   "session",
   "recovery",
@@ -177,16 +179,28 @@ describe("resolveTenantServiceRouteDecision", () => {
 
       for (const routeAccess of ROUTE_ACCESSES) {
         const allowed = allowedRouteSet.has(routeAccess);
+        const expectedReason = allowed
+          ? null
+          : mode === "grace"
+          ? "当前服务处于只读宽限期"
+          : mode === "hard_blocked"
+          ? "租户状态不可用"
+          : "租户服务访问已到期";
+
         expect(resolveTenantServiceRouteDecision({
           mode,
           routeAccess,
           requiredCapability: "core.projects",
-          startsAt: null,
-          endsAt: null,
-        })).toMatchObject({
+          startsAt: DECISION_STARTS_AT,
+          endsAt: DECISION_ENDS_AT,
+        })).toEqual({
+          mode,
           accessLevel,
           allowed,
           errorCode: allowed ? null : deniedErrorCode,
+          reason: expectedReason,
+          startsAt: DECISION_STARTS_AT,
+          endsAt: DECISION_ENDS_AT,
         });
       }
     },
