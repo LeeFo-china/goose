@@ -18,8 +18,6 @@
 -- directions.
 -- PLATFORM_SERVICE_ACCESS_PREFLIGHT_LEGACY_REFUND_UNSUPPORTED: legacy partial
 -- or completed refunds require an explicit fact-preserving migration design.
--- PLATFORM_SERVICE_ACCESS_PREFLIGHT_ATTACHMENT_HISTORY_INVALID: duplicate
--- attachment scope/file facts must be resolved in a predecessor migration.
 -- A failure is repaired only by revising this not-yet-released migration or by
 -- introducing a versioned predecessor migration with an earlier timestamp
 -- before rollout. Manual dev/prod DML repair is prohibited.
@@ -226,28 +224,8 @@ BEGIN
       'PLATFORM_SERVICE_ACCESS_PREFLIGHT_LEGACY_REFUND_UNSUPPORTED';
   END IF;
 
-  SELECT count(*)
-  INTO v_invalid_count
-  FROM (
-    SELECT work_order_id, fulfillment_record_id, file_id
-    FROM public.tenant_service_fulfillment_attachments
-    GROUP BY work_order_id, fulfillment_record_id, file_id
-    HAVING count(*) > 1
-  ) AS duplicate_attachment;
-
-  IF v_invalid_count > 0 THEN
-    RAISE EXCEPTION
-      'PLATFORM_SERVICE_ACCESS_PREFLIGHT_ATTACHMENT_HISTORY_INVALID';
-  END IF;
 END;
 $$;
-
-CREATE UNIQUE INDEX tenant_service_fulfillment_attachments_scope_file_key
-  ON public.tenant_service_fulfillment_attachments (
-    work_order_id,
-    fulfillment_record_id,
-    file_id
-  ) NULLS NOT DISTINCT;
 
 ALTER TABLE public.tenant_service_orders
   ADD COLUMN source_trial_id uuid NULL,
@@ -1467,6 +1445,9 @@ BEGIN
     ) OR (
       v_refund.status = 'approved'
       AND v_order.payment_status IN ('refund_reviewing', 'refunding')
+    ) OR (
+      v_refund.status = 'refunding'
+      AND v_order.payment_status = 'refunding'
     ) OR (
       v_refund.status = 'refunded'
       AND v_order.payment_status = 'refunded'

@@ -429,7 +429,7 @@ describe("PlatformServiceFulfillmentService", () => {
         title: "服务器配置",
         content: "已完成配置",
         occurred_at: "2026-08-04T10:00:00+08:00",
-        file_ids: [],
+        file_ids: ["file-1", "FILE-1"],
       },
     );
 
@@ -441,6 +441,7 @@ describe("PlatformServiceFulfillmentService", () => {
         tenantId: "tenant-1",
         serviceOrderId: "order-1",
         workOrderId: "work-1",
+        fileIds: ["file-1"],
       }),
     );
   });

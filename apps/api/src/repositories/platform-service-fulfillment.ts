@@ -337,8 +337,12 @@ export class PlatformServiceFulfillmentRepository {
     fileIds: string[];
     createdByEmployeeId: string;
   }) {
-    const fileObjects = await this.findBindableFulfillmentAttachmentFiles(input);
-    const attachments = input.fileIds.map((fileId) => ({
+    const uniqueFileIds = deduplicateUuidIds(input.fileIds);
+    const fileObjects = await this.findBindableFulfillmentAttachmentFiles({
+      ...input,
+      fileIds: uniqueFileIds,
+    });
+    const attachments = uniqueFileIds.map((fileId) => ({
       tenant_id: input.tenantId,
       service_order_id: input.serviceOrderId,
       work_order_id: input.workOrderId,
@@ -364,17 +368,16 @@ export class PlatformServiceFulfillmentRepository {
     fileIds: string[];
     createdByEmployeeId: string;
   }) {
-    const uniqueFileIds = Array.from(new Set(input.fileIds));
     const { data, error } = await this.fileObjects()
       .select("id,tenant_id,scene,provider,visibility,status,deleted_at,created_by_employee_id,original_name,mime_type,size_bytes")
-      .in("id", uniqueFileIds);
+      .in("id", input.fileIds);
     if (error) throw Errors.dbError("查询平台技术服务附件文件失败", error);
 
     const files = new Map(
       ((data as FulfillmentAttachmentFileObjectRecord[] | null) ?? [])
         .map((file) => [file.id, file]),
     );
-    for (const fileId of uniqueFileIds) {
+    for (const fileId of input.fileIds) {
       const file = files.get(fileId);
       if (!file || !this.isBindableFulfillmentAttachmentFile(file, input)) {
         throw Errors.business(
@@ -424,6 +427,16 @@ export class PlatformServiceFulfillmentRepository {
         : undefined,
     };
   }
+}
+
+function deduplicateUuidIds(ids: string[]) {
+  const seen = new Set<string>();
+  return ids.filter((id) => {
+    const key = id.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export const platformServiceFulfillmentRepository =

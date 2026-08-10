@@ -31,6 +31,13 @@ const MetadataSchema = z.record(z.string(), z.unknown()).optional().default({});
 
 const FileIdsSchema = z.array(z.uuid("附件 ID 格式不正确"))
   .max(10, "一次最多绑定 10 个附件")
+  .refine(
+    (fileIds) => new Set(fileIds.map((fileId) => fileId.toLowerCase())).size ===
+      fileIds.length,
+    {
+      message: "附件 ID 不能重复",
+    },
+  )
   .optional()
   .default([]);
 

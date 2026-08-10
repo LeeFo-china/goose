@@ -3,10 +3,15 @@ import {
   extractFunctionBody,
   extractFunctionDefinition,
   extractFunctionSignature,
-  extractPreflight,
+  migrationPath,
   normalizeSql,
   readMigration,
 } from "./platform-service-access-migration-test-helpers";
+
+const attachmentPredecessorPath = new URL(
+  "../../../../supabase/migrations/20260810185000_harden_platform_service_attachment_identity.sql",
+  import.meta.url,
+);
 
 const acceptancePreparationRpc =
   "public.platform_service_upsert_acceptance_preparation( uuid, text, text, uuid, timestamptz )";
@@ -92,17 +97,50 @@ describe("platform service access migration atomicity follow-up", () => {
   });
 
   test("makes acceptance attachment retries fact-preserving", async () => {
-    const sql = await readMigration();
-    const normalized = normalizeSql(sql);
-    const preflight = normalizeSql(extractPreflight(sql));
-    expect(preflight).toContain(
+    const predecessorFile = Bun.file(attachmentPredecessorPath);
+    expect(await predecessorFile.exists()).toBe(true);
+    expect(
+      attachmentPredecessorPath.pathname.localeCompare(migrationPath.pathname),
+    ).toBeLessThan(0);
+    const predecessor = normalizeSql(
+      await predecessorFile.text(),
+    );
+    const mainMigration = normalizeSql(await readMigration());
+    const referencedLock = predecessor.indexOf(
+      "lock table public.tenants, public.employees in row share mode;",
+    );
+    const attachmentLock = predecessor.indexOf(
+      "lock table public.tenant_service_fulfillment_attachments in share mode;",
+    );
+    const preflight = predecessor.indexOf("-- historical invariant preflight");
+    const uniqueIndex = predecessor.indexOf(
+      "create unique index tenant_service_fulfillment_attachments_scope_file_key",
+    );
+    expect(predecessor).toContain("set local lock_timeout = '5s';");
+    expect(predecessor).toContain("set local statement_timeout = '2min';");
+    expect(referencedLock).toBeGreaterThan(-1);
+    expect(attachmentLock).toBeGreaterThan(referencedLock);
+    expect(preflight).toBeGreaterThan(attachmentLock);
+    expect(uniqueIndex).toBeGreaterThan(preflight);
+    expect(predecessor).not.toContain("public.tenant_service_orders");
+    expect(predecessor).not.toContain("public.tenant_service_work_orders");
+    expect(predecessor).toContain(
       "platform_service_access_preflight_attachment_history_invalid",
     );
-    expect(preflight).toContain(
+    expect(predecessor).toContain(
       "group by work_order_id, fulfillment_record_id, file_id having count(*) > 1",
     );
-    expect(normalized).toContain(
+    expect(predecessor).toContain(
       "create unique index tenant_service_fulfillment_attachments_scope_file_key on public.tenant_service_fulfillment_attachments ( work_order_id, fulfillment_record_id, file_id ) nulls not distinct;",
+    );
+    expect(mainMigration).not.toContain(
+      "platform_service_access_preflight_attachment_history_invalid",
+    );
+    expect(mainMigration).not.toContain(
+      "tenant_service_fulfillment_attachments_scope_file_key",
+    );
+    expect(mainMigration).not.toContain(
+      "lock table public.tenant_service_fulfillment_attachments",
     );
   });
 
@@ -151,6 +189,7 @@ describe("platform service access migration atomicity follow-up", () => {
     for (const stablePair of [
       "v_refund.status = 'reviewing' and v_order.payment_status = 'refund_reviewing'",
       "v_refund.status = 'approved' and v_order.payment_status in ('refund_reviewing', 'refunding')",
+      "v_refund.status = 'refunding' and v_order.payment_status = 'refunding'",
       "v_refund.status = 'refunded' and v_order.payment_status = 'refunded'",
       "v_refund.status in ('rejected', 'cancelled') and v_order.payment_status = 'paid'",
     ]) {

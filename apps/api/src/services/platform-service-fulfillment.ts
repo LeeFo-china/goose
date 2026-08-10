@@ -272,7 +272,7 @@ export class PlatformServiceFulfillmentService {
       title: input.title,
       content: input.content,
       occurredAt: input.occurred_at,
-      fileIds: input.file_ids,
+      fileIds: uniqueFileIds(input.file_ids),
       createdByEmployeeId: employeeId,
     });
   }
@@ -301,7 +301,7 @@ export class PlatformServiceFulfillmentService {
       workOrderId,
       status: input.status,
       summary: input.summary,
-      fileIds: input.file_ids,
+      fileIds: uniqueFileIds(input.file_ids),
       preparedByEmployeeId: employeeId,
       acceptanceDueAt: acceptanceDueAt?.toISOString() ?? null,
     });
@@ -464,6 +464,16 @@ function throwBusinessConflict(errorCode: string | undefined, message: string): 
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function uniqueFileIds(fileIds: string[]) {
+  const seen = new Set<string>();
+  return fileIds.filter((fileId) => {
+    const key = fileId.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function hasPermission(authContext: AuthContext, permissionCode: string) {

@@ -251,7 +251,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
       title: "服务器配置",
       content: "已完成配置",
       occurredAt: "2026-08-04T10:00:00.000Z",
-      fileIds: ["file-1", "file-2"],
+      fileIds: ["file-1", "FILE-1", "file-2"],
       createdByEmployeeId: "admin-1",
     });
 
@@ -319,7 +319,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
       workOrderId: "work-1",
       status: "submitted",
       summary: "部署和培训已完成",
-      fileIds: ["file-1"],
+      fileIds: ["file-1", "FILE-1"],
       preparedByEmployeeId: "admin-1",
       acceptanceDueAt: "2026-08-13T10:00:00.000Z",
     });
