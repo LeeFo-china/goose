@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
+import type { AtomicActionResult } from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -139,7 +140,10 @@ const repository = {
     order: { ...orderRecord, service_status: "deploying", version: 3 },
   })),
   createFulfillmentRecord: mock(async () => ({ id: "record-1" })),
-  upsertAcceptancePreparation: mock(async () => ({ id: "acceptance-1" })),
+  upsertAcceptancePreparation: mock(async (): Promise<AtomicActionResult> => ({
+    acceptancePreparation: null,
+    order: null,
+  })),
   confirmOverdueAcceptance: mock(async () => ({
     workOrder: null,
     order: null,

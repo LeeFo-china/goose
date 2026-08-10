@@ -18,6 +18,8 @@
 -- directions.
 -- PLATFORM_SERVICE_ACCESS_PREFLIGHT_LEGACY_REFUND_UNSUPPORTED: legacy partial
 -- or completed refunds require an explicit fact-preserving migration design.
+-- PLATFORM_SERVICE_ACCESS_PREFLIGHT_ATTACHMENT_HISTORY_INVALID: duplicate
+-- attachment scope/file facts must be resolved in a predecessor migration.
 -- A failure is repaired only by revising this not-yet-released migration or by
 -- introducing a versioned predecessor migration with an earlier timestamp
 -- before rollout. Manual dev/prod DML repair is prohibited.
@@ -29,9 +31,18 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '5min';
 
+-- Lock referenced tables first, in this fixed tenants -> employees order.
+-- SHARE ROW EXCLUSIVE is the mode later foreign-key validation needs on the
+-- referenced tables; taking it now prevents later foreign-key lock upgrades
+-- while service-table writers are blocked. Task 7 must measure the window.
+LOCK TABLE
+  public.tenants,
+  public.employees
+IN SHARE ROW EXCLUSIVE MODE;
+
 -- Take the strongest lock needed by later DDL up front in one deterministic
--- order. This blocks legacy readers/writers before preflight and avoids later
--- unbounded lock upgrades inside the migration transaction.
+-- service-table order. Together with the referenced-table locks above, this
+-- blocks legacy readers/writers before preflight without deferred lock upgrades.
 LOCK TABLE
   public.tenant_service_orders,
   public.tenant_service_work_orders,
@@ -214,8 +225,29 @@ BEGIN
     RAISE EXCEPTION
       'PLATFORM_SERVICE_ACCESS_PREFLIGHT_LEGACY_REFUND_UNSUPPORTED';
   END IF;
+
+  SELECT count(*)
+  INTO v_invalid_count
+  FROM (
+    SELECT work_order_id, fulfillment_record_id, file_id
+    FROM public.tenant_service_fulfillment_attachments
+    GROUP BY work_order_id, fulfillment_record_id, file_id
+    HAVING count(*) > 1
+  ) AS duplicate_attachment;
+
+  IF v_invalid_count > 0 THEN
+    RAISE EXCEPTION
+      'PLATFORM_SERVICE_ACCESS_PREFLIGHT_ATTACHMENT_HISTORY_INVALID';
+  END IF;
 END;
 $$;
+
+CREATE UNIQUE INDEX tenant_service_fulfillment_attachments_scope_file_key
+  ON public.tenant_service_fulfillment_attachments (
+    work_order_id,
+    fulfillment_record_id,
+    file_id
+  ) NULLS NOT DISTINCT;
 
 ALTER TABLE public.tenant_service_orders
   ADD COLUMN source_trial_id uuid NULL,
@@ -935,7 +967,12 @@ BEGIN
     RETURN jsonb_build_object(
       'order', to_jsonb(v_order),
       'work_order', to_jsonb(v_work_order),
-      'access_mode', 'paid_onboarding',
+      'access_mode', CASE
+        WHEN v_order.service_access_terminated_at IS NULL
+          AND v_order.service_status NOT IN ('accepted', 'active')
+        THEN 'paid_onboarding'
+        ELSE NULL
+      END,
       'idempotent', true
     );
   END IF;
@@ -1050,7 +1087,11 @@ BEGIN
     );
   END IF;
 
-  IF p_expected_version IS NULL OR p_operator_employee_id IS NULL THEN
+  IF p_expected_version IS NULL
+    OR p_operator_employee_id IS NULL
+    OR jsonb_typeof(coalesce(p_metadata, '{}'::jsonb)) <> 'object'
+    OR pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192
+  THEN
     RETURN jsonb_build_object(
       'work_order', NULL,
       'order', NULL,
@@ -1420,21 +1461,32 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    IF v_order.payment_status = 'paid'
-      AND v_order.version = p_expected_version
+    IF (
+      v_refund.status = 'reviewing'
+      AND v_order.payment_status = 'refund_reviewing'
+    ) OR (
+      v_refund.status = 'approved'
+      AND v_order.payment_status IN ('refund_reviewing', 'refunding')
+    ) OR (
+      v_refund.status = 'refunded'
+      AND v_order.payment_status = 'refunded'
+    ) OR (
+      v_refund.status IN ('rejected', 'cancelled')
+      AND v_order.payment_status = 'paid'
+    )
     THEN
-      UPDATE public.tenant_service_orders
-      SET
-        payment_status = 'refund_reviewing',
-        version = version + 1
-      WHERE id = v_order.id
-      RETURNING * INTO v_order;
+      RETURN jsonb_build_object(
+        'idempotent', true,
+        'refund_request', to_jsonb(v_refund),
+        'order', to_jsonb(v_order)
+      );
     END IF;
 
     RETURN jsonb_build_object(
-      'idempotent', true,
-      'refund_request', to_jsonb(v_refund),
-      'order', to_jsonb(v_order)
+      'idempotent', false,
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_ORDER_IDEMPOTENCY_CONFLICT'
     );
   END IF;
 
@@ -1662,6 +1714,237 @@ GRANT EXECUTE ON FUNCTION public.platform_service_review_refund_request(
   uuid, text, integer, uuid, text
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.platform_service_upsert_acceptance_preparation(
+  p_work_order_id uuid,
+  p_status text,
+  p_summary text,
+  p_prepared_by_employee_id uuid,
+  p_acceptance_due_at timestamptz DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_order_id uuid;
+  v_order public.tenant_service_orders%ROWTYPE;
+  v_work_order public.tenant_service_work_orders%ROWTYPE;
+  v_acceptance public.tenant_service_acceptance_preparations%ROWTYPE;
+  v_acceptance_exists boolean;
+  v_command_at timestamptz;
+  v_action text;
+BEGIN
+  IF p_work_order_id IS NULL THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT service_order_id
+  INTO v_order_id
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF p_status IS NULL
+    OR p_status NOT IN ('draft', 'submitted')
+    OR p_summary IS NULL
+    OR btrim(p_summary) = ''
+    OR char_length(p_summary) > 5000
+    OR p_prepared_by_employee_id IS NULL
+    OR (p_status = 'submitted' AND p_acceptance_due_at IS NULL)
+  THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'acceptance_preparation', NULL,
+      'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
+    );
+  END IF;
+
+  PERFORM public.platform_service_lock_order(v_order_id);
+
+  SELECT *
+  INTO v_order
+  FROM public.tenant_service_orders
+  WHERE id = v_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_acceptance
+  FROM public.tenant_service_acceptance_preparations
+  WHERE work_order_id = v_work_order.id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  v_acceptance_exists := FOUND;
+
+  IF NOT (
+      v_order.payment_status = 'paid'
+      AND v_order.service_status = 'awaiting_acceptance'
+      AND v_work_order.status = 'awaiting_acceptance'
+      AND v_order.service_access_terminated_at IS NULL
+    )
+    OR (
+      v_acceptance_exists
+      AND v_acceptance.status IN ('accepted', 'rejected', 'cancelled')
+    )
+  THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'acceptance_preparation', NULL,
+      'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
+    );
+  END IF;
+
+  -- API retries after a later attachment failure can carry a recomputed due
+  -- time. The already-recorded preparation fact wins for the same stable
+  -- status/summary/operator command, so retries do not move DB timestamps or
+  -- append duplicate immutable events.
+  IF v_acceptance_exists
+    AND v_acceptance.status = p_status
+    AND v_acceptance.summary = p_summary
+    AND v_acceptance.prepared_by_employee_id = p_prepared_by_employee_id
+  THEN
+    RETURN jsonb_build_object(
+      'work_order', to_jsonb(v_work_order),
+      'order', to_jsonb(v_order),
+      'acceptance_preparation', to_jsonb(v_acceptance),
+      'idempotent', true,
+      'error_code', NULL
+    );
+  END IF;
+
+  v_command_at := clock_timestamp();
+  v_action := CASE
+    WHEN p_status = 'submitted' THEN 'acceptance_submit'
+    ELSE 'acceptance_prepare'
+  END;
+
+  IF v_acceptance_exists THEN
+    UPDATE public.tenant_service_acceptance_preparations
+    SET
+      status = p_status,
+      summary = p_summary,
+      prepared_by_employee_id = p_prepared_by_employee_id,
+      prepared_at = v_command_at,
+      submitted_at = CASE
+        WHEN p_status = 'submitted' THEN v_command_at
+        ELSE NULL
+      END,
+      acceptance_due_at = CASE
+        WHEN p_status = 'submitted' THEN p_acceptance_due_at
+        ELSE NULL
+      END,
+      updated_at = v_command_at
+    WHERE id = v_acceptance.id
+      AND tenant_id = v_order.tenant_id
+    RETURNING * INTO v_acceptance;
+  ELSE
+    INSERT INTO public.tenant_service_acceptance_preparations (
+      tenant_id,
+      service_order_id,
+      work_order_id,
+      status,
+      summary,
+      prepared_by_employee_id,
+      prepared_at,
+      submitted_at,
+      acceptance_due_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      v_order.tenant_id,
+      v_order.id,
+      v_work_order.id,
+      p_status,
+      p_summary,
+      p_prepared_by_employee_id,
+      v_command_at,
+      CASE WHEN p_status = 'submitted' THEN v_command_at ELSE NULL END,
+      CASE
+        WHEN p_status = 'submitted' THEN p_acceptance_due_at
+        ELSE NULL
+      END,
+      v_command_at,
+      v_command_at
+    )
+    RETURNING * INTO v_acceptance;
+  END IF;
+
+  INSERT INTO public.tenant_service_work_order_events (
+    tenant_id,
+    service_order_id,
+    work_order_id,
+    action,
+    from_status,
+    to_status,
+    remark,
+    operator_employee_id,
+    metadata,
+    created_at
+  )
+  VALUES (
+    v_order.tenant_id,
+    v_order.id,
+    v_work_order.id,
+    v_action,
+    'awaiting_acceptance',
+    'awaiting_acceptance',
+    NULL,
+    p_prepared_by_employee_id,
+    jsonb_build_object(
+      'acceptance_preparation_id', v_acceptance.id,
+      'preparation_status', v_acceptance.status,
+      'acceptance_due_at', v_acceptance.acceptance_due_at
+    ),
+    v_command_at
+  );
+
+  RETURN jsonb_build_object(
+    'work_order', to_jsonb(v_work_order),
+    'order', to_jsonb(v_order),
+    'acceptance_preparation', to_jsonb(v_acceptance),
+    'idempotent', false,
+    'error_code', NULL
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_upsert_acceptance_preparation(
+  uuid, text, text, uuid, timestamptz
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_upsert_acceptance_preparation(
+  uuid, text, text, uuid, timestamptz
+) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_upsert_acceptance_preparation(
+  uuid, text, text, uuid, timestamptz
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_upsert_acceptance_preparation(
+  uuid, text, text, uuid, timestamptz
+) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.tenant_service_decide_acceptance(
   p_tenant_id uuid,
   p_service_order_id uuid,
@@ -1771,6 +2054,25 @@ BEGIN
     FOR UPDATE;
 
     IF FOUND THEN
+      IF v_period.status NOT IN ('active', 'adjusted')
+        OR v_order.payment_status = 'refunded'
+        OR v_order.service_access_terminated_at IS NOT NULL
+        OR v_acceptance.status <> 'accepted'
+        OR v_order.service_status NOT IN ('accepted', 'active')
+        OR v_work_order.status NOT IN ('accepted', 'active')
+        OR v_order.service_status IS DISTINCT FROM v_work_order.status
+      THEN
+        RETURN jsonb_build_object(
+          'work_order', NULL,
+          'order', NULL,
+          'acceptance_preparation', NULL,
+          'contract', NULL,
+          'contract_period', NULL,
+          'idempotent', false,
+          'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
+        );
+      END IF;
+
       SELECT *
       INTO v_contract
       FROM public.tenant_service_contracts
@@ -2051,6 +2353,25 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
+    IF v_period.status NOT IN ('active', 'adjusted')
+      OR v_order.payment_status = 'refunded'
+      OR v_order.service_access_terminated_at IS NOT NULL
+      OR v_acceptance.status <> 'accepted'
+      OR v_order.service_status NOT IN ('accepted', 'active')
+      OR v_work_order.status NOT IN ('accepted', 'active')
+      OR v_order.service_status IS DISTINCT FROM v_work_order.status
+    THEN
+      RETURN jsonb_build_object(
+        'work_order', NULL,
+        'order', NULL,
+        'acceptance_preparation', NULL,
+        'contract', NULL,
+        'contract_period', NULL,
+        'idempotent', false,
+        'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
+      );
+    END IF;
+
     SELECT *
     INTO v_contract
     FROM public.tenant_service_contracts

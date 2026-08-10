@@ -295,7 +295,7 @@ export class PlatformServiceFulfillmentService {
         ),
       )
       : null;
-    return this.repository.upsertAcceptancePreparation({
+    const result = await this.repository.upsertAcceptancePreparation({
       tenantId: workOrder.tenant_id,
       serviceOrderId: workOrder.service_order_id,
       workOrderId,
@@ -305,6 +305,13 @@ export class PlatformServiceFulfillmentService {
       preparedByEmployeeId: employeeId,
       acceptanceDueAt: acceptanceDueAt?.toISOString() ?? null,
     });
+    if (!result.acceptancePreparation) {
+      throwBusinessConflict(
+        result.errorCode,
+        "平台技术服务验收准备状态已更新，请刷新后重试",
+      );
+    }
+    return result.acceptancePreparation;
   }
 
   async confirmOverdueAcceptance(

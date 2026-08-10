@@ -26,6 +26,10 @@ type QueryResult = { data: unknown; error: unknown; count?: number | null };
 type ServiceQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): ServiceQuery;
   insert(record: Record<string, unknown> | Array<Record<string, unknown>>): ServiceQuery;
+  upsert(
+    record: Record<string, unknown> | Array<Record<string, unknown>>,
+    options: { onConflict: string; ignoreDuplicates: boolean },
+  ): ServiceQuery;
   eq(column: string, value: unknown): ServiceQuery;
   in(column: string, values: readonly unknown[]): ServiceQuery;
   ilike(column: string, pattern: string): ServiceQuery;
@@ -44,13 +48,13 @@ type ServiceClient = {
       | "tenant_service_refund_requests"
       | "tenant_service_fulfillment_records"
       | "tenant_service_fulfillment_attachments"
-      | "tenant_service_acceptance_preparations"
       | "platform_file_objects",
   ): ServiceQuery;
   rpc(
     name:
       | "platform_service_assign_work_order"
       | "platform_service_transition_work_order"
+      | "platform_service_upsert_acceptance_preparation"
       | "platform_service_confirm_overdue_acceptance"
       | "platform_service_review_refund_request",
     params: Record<string, unknown>,
@@ -220,25 +224,19 @@ export class PlatformServiceFulfillmentRepository {
   }
 
   async upsertAcceptancePreparation(input: AcceptancePreparationInput) {
-    const submittedAt = input.status === "submitted"
-      ? new Date().toISOString()
-      : null;
-    const { data, error } = await this.acceptancePreparations()
-      .insert({
-        tenant_id: input.tenantId,
-        service_order_id: input.serviceOrderId,
-        work_order_id: input.workOrderId,
-        status: input.status,
-        summary: input.summary,
-        prepared_by_employee_id: input.preparedByEmployeeId,
-        prepared_at: new Date().toISOString(),
-        submitted_at: submittedAt,
-        acceptance_due_at: input.acceptanceDueAt ?? null,
-      })
-      .select("id,tenant_id,service_order_id,work_order_id,status,summary,prepared_by_employee_id,prepared_at,submitted_at,acceptance_due_at,created_at,updated_at")
-      .single();
+    const { data, error } = await this.clientProvider().rpc(
+      "platform_service_upsert_acceptance_preparation",
+      {
+        p_work_order_id: input.workOrderId,
+        p_status: input.status,
+        p_summary: input.summary,
+        p_prepared_by_employee_id: input.preparedByEmployeeId,
+        p_acceptance_due_at: input.acceptanceDueAt ?? null,
+      },
+    );
     if (error) throw Errors.dbError("保存平台技术服务验收准备失败", error);
-    if (input.fileIds.length > 0) {
+    const result = this.mapAtomicActionResult(data);
+    if (result.acceptancePreparation && input.fileIds.length > 0) {
       await this.createAttachments({
         tenantId: input.tenantId,
         serviceOrderId: input.serviceOrderId,
@@ -248,7 +246,7 @@ export class PlatformServiceFulfillmentRepository {
         createdByEmployeeId: input.preparedByEmployeeId,
       });
     }
-    return data as Record<string, unknown>;
+    return result;
   }
 
   async confirmOverdueAcceptance(
@@ -327,10 +325,6 @@ export class PlatformServiceFulfillmentRepository {
     return this.clientProvider().from("tenant_service_fulfillment_attachments");
   }
 
-  private acceptancePreparations() {
-    return this.clientProvider().from("tenant_service_acceptance_preparations");
-  }
-
   private fileObjects() {
     return this.clientProvider().from("platform_file_objects");
   }
@@ -344,19 +338,24 @@ export class PlatformServiceFulfillmentRepository {
     createdByEmployeeId: string;
   }) {
     const fileObjects = await this.findBindableFulfillmentAttachmentFiles(input);
-    const { error } = await this.fulfillmentAttachments()
-      .insert(input.fileIds.map((fileId) => ({
-        tenant_id: input.tenantId,
-        service_order_id: input.serviceOrderId,
-        work_order_id: input.workOrderId,
-        fulfillment_record_id: input.fulfillmentRecordId,
-        file_id: fileId,
-        file_name: fileObjects.get(fileId)?.original_name ?? null,
-        mime_type: fileObjects.get(fileId)?.mime_type ?? null,
-        size_bytes: fileObjects.get(fileId)?.size_bytes ?? null,
-        created_by_employee_id: input.createdByEmployeeId,
-      })))
-      .select("id");
+    const attachments = input.fileIds.map((fileId) => ({
+      tenant_id: input.tenantId,
+      service_order_id: input.serviceOrderId,
+      work_order_id: input.workOrderId,
+      fulfillment_record_id: input.fulfillmentRecordId,
+      file_id: fileId,
+      file_name: fileObjects.get(fileId)?.original_name ?? null,
+      mime_type: fileObjects.get(fileId)?.mime_type ?? null,
+      size_bytes: fileObjects.get(fileId)?.size_bytes ?? null,
+      created_by_employee_id: input.createdByEmployeeId,
+    }));
+    const attachmentWrite = input.fulfillmentRecordId === null
+      ? this.fulfillmentAttachments().upsert(attachments, {
+        onConflict: "work_order_id,fulfillment_record_id,file_id",
+        ignoreDuplicates: true,
+      })
+      : this.fulfillmentAttachments().insert(attachments);
+    const { error } = await attachmentWrite.select("id");
     if (error) throw Errors.dbError("绑定平台技术服务附件失败", error);
   }
 

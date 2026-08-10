@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import type { AtomicActionResult } from "@/repositories/platform-service-order-records";
 import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
@@ -88,7 +89,10 @@ function createRepository() {
     assignServiceWorkOrder: mock(async () => ({ order: null, workOrder: null })),
     transitionServiceWorkOrder: mock(async () => ({ order: null, workOrder: null })),
     createFulfillmentRecord: mock(async () => ({ id: "record-1" })),
-    upsertAcceptancePreparation: mock(async () => ({ id: "acceptance-1" })),
+    upsertAcceptancePreparation: mock(async (): Promise<AtomicActionResult> => ({
+      acceptancePreparation: baseAcceptancePreparation,
+      order: null,
+    })),
     confirmOverdueAcceptance: mock(async () => ({
       workOrder: { ...baseWorkOrder, status: "accepted", version: 2 },
       order: baseOrder,
@@ -128,6 +132,31 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
         acceptanceDueAt: "2026-08-07T10:00:00.000Z",
       }),
     );
+  });
+
+  test("surfaces a stable conflict when atomic acceptance preparation is rejected", async () => {
+    const { PlatformServiceFulfillmentService } = await import(
+      "./platform-service-fulfillment"
+    );
+    const repository = createRepository();
+    repository.upsertAcceptancePreparation.mockImplementationOnce(async () => ({
+      acceptancePreparation: null,
+      order: null,
+      errorCode: "SERVICE_ACCEPTANCE_INVALID_STATE",
+    }));
+    const service = new PlatformServiceFulfillmentService({
+      repository,
+      settingsService: { getNumber: mock(async () => 3) },
+    } as never);
+
+    await expect(service.upsertAcceptancePreparation(authContext, "work-1", {
+      status: "draft",
+      summary: "验收准备",
+      file_ids: [],
+    })).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SERVICE_ACCEPTANCE_INVALID_STATE",
+    });
   });
 
   test("lets platform confirm overdue acceptance and reports WeChat fulfillment", async () => {
