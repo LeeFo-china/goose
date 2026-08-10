@@ -7,8 +7,32 @@
 -- another forward migration to restore the prior exact RPC definitions and
 -- revoke newly unused privileges. Destructive rollback would erase accepted
 -- service history and is intentionally not provided.
+--
+-- Preflight remediation contract before rollout:
+-- PLATFORM_SERVICE_ACCESS_PREFLIGHT_PAID_HISTORY_INVALID: paid lifecycle rows
+-- must have complete payment facts and exactly one work order.
+-- PLATFORM_SERVICE_ACCESS_PREFLIGHT_ACCEPTANCE_HISTORY_INVALID: accepted
+-- order/work-order/preparation/event facts must describe one valid decision.
+-- PLATFORM_SERVICE_ACCESS_PREFLIGHT_REFUND_HISTORY_INVALID: refund workflow
+-- rows and orders must have one matching active review request in both
+-- directions.
+-- PLATFORM_SERVICE_ACCESS_PREFLIGHT_LEGACY_REFUND_UNSUPPORTED: legacy partial
+-- or completed refunds require an explicit fact-preserving migration design.
+-- A failure is repaired only by revising this not-yet-released migration or by
+-- introducing a versioned predecessor migration with an earlier timestamp
+-- before rollout. Manual dev/prod DML repair is prohibited.
 
 BEGIN;
+
+-- Block every legacy writer before inspecting or backfilling its facts. NOWAIT
+-- keeps deployment failure bounded; retry only after the old transaction ends.
+LOCK TABLE
+  public.tenant_service_orders,
+  public.tenant_service_work_orders,
+  public.tenant_service_acceptance_preparations,
+  public.tenant_service_work_order_events,
+  public.tenant_service_refund_requests
+IN SHARE ROW EXCLUSIVE MODE NOWAIT;
 
 -- Historical invariant preflight runs before any DDL and fails closed. The
 -- stable exception messages are deployment/remediation contract codes.
@@ -65,7 +89,9 @@ BEGIN
       )
       AND work_order.id IS NOT NULL
       AND work_order.status IN ('accepted', 'active')
+      AND service_order.service_status = work_order.status
       AND acceptance.id IS NOT NULL
+      AND acceptance.work_order_id = work_order.id
       AND acceptance.status = 'accepted'
       AND (
         SELECT count(*)
@@ -77,12 +103,50 @@ BEGIN
             'customer_accept',
             'platform_accept_overdue'
           )
+          AND acceptance_event.from_status = 'awaiting_acceptance'
+          AND acceptance_event.to_status = 'accepted'
       ) = 1
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.tenant_service_work_order_events AS invalid_acceptance_event
+        WHERE invalid_acceptance_event.service_order_id = service_order.id
+          AND invalid_acceptance_event.tenant_id = service_order.tenant_id
+          AND invalid_acceptance_event.work_order_id = work_order.id
+          AND invalid_acceptance_event.action IN (
+            'customer_accept',
+            'platform_accept_overdue'
+          )
+          AND (
+            invalid_acceptance_event.from_status IS DISTINCT FROM
+              'awaiting_acceptance'
+            OR invalid_acceptance_event.to_status IS DISTINCT FROM 'accepted'
+          )
+      )
     );
 
   IF v_invalid_count > 0 THEN
     RAISE EXCEPTION
       'PLATFORM_SERVICE_ACCESS_PREFLIGHT_ACCEPTANCE_HISTORY_INVALID';
+  END IF;
+
+  SELECT count(*)
+  INTO v_invalid_count
+  FROM public.tenant_service_orders AS refund_state_order
+  WHERE refund_state_order.payment_status IN (
+      'refund_reviewing',
+      'refunding'
+    )
+    AND (
+      SELECT count(*)
+      FROM public.tenant_service_refund_requests AS active_refund
+      WHERE active_refund.service_order_id = refund_state_order.id
+        AND active_refund.tenant_id = refund_state_order.tenant_id
+        AND active_refund.status IN ('reviewing', 'approved')
+    ) <> 1;
+
+  IF v_invalid_count > 0 THEN
+    RAISE EXCEPTION
+      'PLATFORM_SERVICE_ACCESS_PREFLIGHT_REFUND_HISTORY_INVALID';
   END IF;
 
   SELECT count(*)
@@ -160,19 +224,24 @@ ALTER TABLE public.tenant_service_orders
   ADD CONSTRAINT tenant_service_orders_access_termination_fields_check
     CHECK (
       (
-        payment_status <> 'refunded'
-        AND service_access_terminated_at IS NULL
-        AND service_access_termination_reason IS NULL
-        AND service_access_terminated_by_employee_id IS NULL
+        (
+          service_access_terminated_at IS NULL
+          AND service_access_termination_reason IS NULL
+          AND service_access_terminated_by_employee_id IS NULL
+        )
+        OR
+        (
+          service_access_terminated_at IS NOT NULL
+          AND service_access_termination_reason IS NOT NULL
+          AND service_access_terminated_by_employee_id IS NOT NULL
+          AND paid_at IS NOT NULL
+          AND service_access_terminated_at >= paid_at
+        )
       )
-      OR
+      AND
       (
-        payment_status = 'refunded'
-        AND service_access_terminated_at IS NOT NULL
-        AND service_access_termination_reason IS NOT NULL
-        AND service_access_terminated_by_employee_id IS NOT NULL
-        AND paid_at IS NOT NULL
-        AND service_access_terminated_at >= paid_at
+        payment_status <> 'refunded'
+        OR service_access_terminated_at IS NOT NULL
       )
     );
 
@@ -679,14 +748,15 @@ BEGIN
           'customer_accept',
           'platform_accept_overdue'
         )
-      ORDER BY work_order_event.created_at ASC, work_order_event.id ASC
-      LIMIT 1
+        AND work_order_event.from_status = 'awaiting_acceptance'
+        AND work_order_event.to_status = 'accepted'
     ) AS acceptance_event ON true
     WHERE service_order.service_status IN ('accepted', 'active')
     ORDER BY
       service_order.tenant_id ASC,
       acceptance_event.created_at ASC,
-      service_order.id ASC
+      service_order.created_at ASC,
+      service_order.order_no ASC
   LOOP
     PERFORM public.tenant_service_ensure_contract_period(
       v_history.tenant_id,
@@ -886,6 +956,140 @@ REVOKE ALL ON FUNCTION public.platform_service_confirm_payment(
 ) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_confirm_payment(
   uuid, text, bigint, timestamptz, uuid, jsonb
+) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.platform_service_transition_work_order(
+  p_work_order_id uuid,
+  p_to_status text,
+  p_expected_version integer,
+  p_operator_employee_id uuid,
+  p_remark text DEFAULT NULL,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_work_order public.tenant_service_work_orders%ROWTYPE;
+  v_order public.tenant_service_orders%ROWTYPE;
+  v_from_status text;
+BEGIN
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF v_work_order.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_VERSION_CONFLICT'
+    );
+  END IF;
+
+  v_from_status := v_work_order.status;
+
+  IF p_to_status = 'accepted' THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_ACCEPTANCE_DEDICATED_RPC_REQUIRED'
+    );
+  END IF;
+
+  IF NOT (
+    (v_from_status = 'waiting_assignment' AND p_to_status = 'configuring')
+    OR (v_from_status = 'configuring' AND p_to_status = 'deploying')
+    OR (v_from_status = 'deploying' AND p_to_status = 'training')
+    OR (v_from_status = 'training' AND p_to_status = 'awaiting_acceptance')
+    OR (
+      v_from_status = 'awaiting_acceptance'
+      AND p_to_status = 'rectifying'
+    )
+    OR (v_from_status = 'rectifying' AND p_to_status = 'awaiting_acceptance')
+    OR (v_from_status = 'accepted' AND p_to_status = 'active')
+    OR (
+      v_from_status IN (
+        'waiting_assignment',
+        'configuring',
+        'deploying',
+        'training',
+        'awaiting_acceptance',
+        'rectifying'
+      )
+      AND p_to_status = 'canceled'
+    )
+  ) THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  UPDATE public.tenant_service_work_orders
+  SET
+    status = p_to_status,
+    version = version + 1
+  WHERE id = v_work_order.id
+  RETURNING * INTO v_work_order;
+
+  UPDATE public.tenant_service_orders
+  SET
+    service_status = p_to_status,
+    version = version + 1
+  WHERE id = v_work_order.service_order_id
+  RETURNING * INTO v_order;
+
+  INSERT INTO public.tenant_service_work_order_events (
+    tenant_id,
+    service_order_id,
+    work_order_id,
+    action,
+    from_status,
+    to_status,
+    remark,
+    operator_employee_id,
+    metadata
+  )
+  VALUES (
+    v_work_order.tenant_id,
+    v_work_order.service_order_id,
+    v_work_order.id,
+    'transition',
+    v_from_status,
+    p_to_status,
+    p_remark,
+    p_operator_employee_id,
+    coalesce(p_metadata, '{}'::jsonb)
+  );
+
+  RETURN jsonb_build_object(
+    'work_order', to_jsonb(v_work_order),
+    'order', to_jsonb(v_order),
+    'error_code', NULL
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_transition_work_order(
+  uuid, text, integer, uuid, text, jsonb
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_transition_work_order(
+  uuid, text, integer, uuid, text, jsonb
+) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_transition_work_order(
+  uuid, text, integer, uuid, text, jsonb
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_transition_work_order(
+  uuid, text, integer, uuid, text, jsonb
 ) TO service_role;
 
 CREATE OR REPLACE FUNCTION public.tenant_service_decide_acceptance(
@@ -1530,8 +1734,14 @@ BEGIN
     RETURN jsonb_build_object(
       'refund_request', to_jsonb(v_refund),
       'order', to_jsonb(v_order),
-      'contract', to_jsonb(v_contract),
-      'contract_period', to_jsonb(v_period),
+      'contract', CASE
+        WHEN v_has_period THEN to_jsonb(v_contract)
+        ELSE NULL
+      END,
+      'contract_period', CASE
+        WHEN v_has_period THEN to_jsonb(v_period)
+        ELSE NULL
+      END,
       'idempotent', true,
       'error_code', NULL
     );
@@ -1652,14 +1862,56 @@ BEGIN
     v_contract_end_at := NULL;
     v_last_period_id := NULL;
 
+    -- Preserve every earlier period exactly as recorded. The preceding
+    -- non-void period supplies the starting anchor for later reflow.
+    SELECT prior_period.ends_at
+    INTO v_contract_end_at
+    FROM public.tenant_service_contract_periods AS prior_period
+    JOIN public.tenant_service_orders AS prior_order
+      ON prior_order.id = prior_period.service_order_id
+     AND prior_order.tenant_id = prior_period.tenant_id
+    WHERE prior_period.contract_id = v_contract.id
+      AND prior_period.tenant_id = v_refund.tenant_id
+      AND prior_period.status <> 'voided'
+      AND (
+        prior_period.accepted_at,
+        prior_order.created_at,
+        prior_order.order_no
+      ) < (
+        v_period.accepted_at,
+        v_order.created_at,
+        v_order.order_no
+      )
+    ORDER BY
+      prior_period.accepted_at DESC,
+      prior_order.created_at DESC,
+      prior_order.order_no DESC
+    LIMIT 1
+    FOR UPDATE OF prior_period;
+
     FOR v_reflow_period IN
-      SELECT *
-      FROM public.tenant_service_contract_periods
-      WHERE contract_id = v_contract.id
-        AND tenant_id = v_refund.tenant_id
-        AND status <> 'voided'
-      ORDER BY accepted_at ASC, id ASC
-      FOR UPDATE
+      SELECT reflow_period.*
+      FROM public.tenant_service_contract_periods AS reflow_period
+      JOIN public.tenant_service_orders AS reflow_order
+        ON reflow_order.id = reflow_period.service_order_id
+       AND reflow_order.tenant_id = reflow_period.tenant_id
+      WHERE reflow_period.contract_id = v_contract.id
+        AND reflow_period.tenant_id = v_refund.tenant_id
+        AND reflow_period.status <> 'voided'
+        AND (
+          reflow_period.accepted_at,
+          reflow_order.created_at,
+          reflow_order.order_no
+        ) > (
+          v_period.accepted_at,
+          v_order.created_at,
+          v_order.order_no
+        )
+      ORDER BY
+        reflow_period.accepted_at ASC,
+        reflow_order.created_at ASC,
+        reflow_order.order_no ASC
+      FOR UPDATE OF reflow_period
     LOOP
       v_reflow_starts_at := CASE
         WHEN v_contract_end_at IS NULL THEN v_reflow_period.accepted_at
@@ -1706,14 +1958,26 @@ BEGIN
           END
         );
 
-      IF v_contract_start_at IS NULL THEN
-        v_contract_start_at := v_reflow_starts_at;
-      END IF;
       v_contract_end_at := v_reflow_ends_at;
-      v_last_period_id := v_reflow_period.id;
     END LOOP;
 
-    IF v_last_period_id IS NULL THEN
+    SELECT remaining_period.starts_at
+    INTO v_contract_start_at
+    FROM public.tenant_service_contract_periods AS remaining_period
+    JOIN public.tenant_service_orders AS remaining_order
+      ON remaining_order.id = remaining_period.service_order_id
+     AND remaining_order.tenant_id = remaining_period.tenant_id
+    WHERE remaining_period.contract_id = v_contract.id
+      AND remaining_period.tenant_id = v_refund.tenant_id
+      AND remaining_period.status <> 'voided'
+    ORDER BY
+      remaining_period.accepted_at ASC,
+      remaining_order.created_at ASC,
+      remaining_order.order_no ASC
+    LIMIT 1
+    FOR UPDATE OF remaining_period;
+
+    IF NOT FOUND THEN
       UPDATE public.tenant_service_contracts
       SET
         status = 'canceled',
@@ -1723,6 +1987,26 @@ BEGIN
         AND tenant_id = v_refund.tenant_id
       RETURNING * INTO v_contract;
     ELSE
+      SELECT
+        remaining_period.ends_at,
+        remaining_period.id
+      INTO
+        v_contract_end_at,
+        v_last_period_id
+      FROM public.tenant_service_contract_periods AS remaining_period
+      JOIN public.tenant_service_orders AS remaining_order
+        ON remaining_order.id = remaining_period.service_order_id
+       AND remaining_order.tenant_id = remaining_period.tenant_id
+      WHERE remaining_period.contract_id = v_contract.id
+        AND remaining_period.tenant_id = v_refund.tenant_id
+        AND remaining_period.status <> 'voided'
+      ORDER BY
+        remaining_period.accepted_at DESC,
+        remaining_order.created_at DESC,
+        remaining_order.order_no DESC
+      LIMIT 1
+      FOR UPDATE OF remaining_period;
+
       UPDATE public.tenant_service_contracts
       SET
         status = CASE
@@ -1769,8 +2053,14 @@ BEGIN
   RETURN jsonb_build_object(
     'refund_request', to_jsonb(v_refund),
     'order', to_jsonb(v_order),
-    'contract', to_jsonb(v_contract),
-    'contract_period', to_jsonb(v_period),
+    'contract', CASE
+      WHEN v_has_period THEN to_jsonb(v_contract)
+      ELSE NULL
+    END,
+    'contract_period', CASE
+      WHEN v_has_period THEN to_jsonb(v_period)
+      ELSE NULL
+    END,
     'idempotent', false,
     'error_code', NULL
   );
