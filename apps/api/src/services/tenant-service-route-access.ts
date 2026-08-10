@@ -51,6 +51,12 @@ export function getTenantServiceRouteAccess(
   return resolveTenantServiceRouteAccess(request).access;
 }
 
+export function getTenantServiceAuthOptions(
+  request: TenantServiceRouteAccessRequest,
+): { tenantServiceAccess: TenantServiceRouteAccess } {
+  return { tenantServiceAccess: getTenantServiceRouteAccess(request) };
+}
+
 function isTenantServiceRouteAccess(
   value: unknown,
 ): value is TenantServiceRouteAccess {

@@ -36,7 +36,7 @@ export async function assertBrandLogoUploadSceneAccess(
   if (!user.sub) throw Errors.forbidden();
 
   const authContext = await dependencies.authorizationService
-    .getRequiredAuthContext(user.sub);
+    .getRequiredAuthContext(user.sub, { tenantServiceAccess: "write" });
   if (!authContext.employeeId) throw Errors.forbidden();
 
   if (authContext.isPlatformAdmin) {

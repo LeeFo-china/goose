@@ -4,6 +4,7 @@ import { BaseController } from "@/controllers/BaseController";
 import { Post } from "@/utils/decorators/route";
 import { authorizationService } from "@/services/authorization";
 import { projectCreatePageDataService } from "@/services/project-create-page-data";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 
 export class GetProjectCreatePageDataController extends BaseController {
     constructor() {
@@ -13,6 +14,7 @@ export class GetProjectCreatePageDataController extends BaseController {
     private async getRequiredAuthContext(request: FastifyRequest) {
         const authContext = await authorizationService.getRequiredAuthContext(
             request.user?.sub,
+            getTenantServiceAuthOptions(request),
         );
         request.authContext = authContext;
         return authContext;

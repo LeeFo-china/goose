@@ -184,9 +184,11 @@ export class AuthorizationService {
   }
 
   assertTenantAvailable(authContext: AuthContext) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin;
     if (
       authContext.employeeId &&
-      !authContext.isPlatformAdmin &&
+      !isPlatformIdentity &&
       !authContext.tenantId
     ) {
       throw Errors.business(403, "员工未绑定装修公司", "EMPLOYEE_TENANT_MISSING");
@@ -197,9 +199,11 @@ export class AuthorizationService {
     authContext: AuthContext,
     options: GetRequiredAuthContextOptions,
   ) {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin;
     if (
       !authContext.employeeId ||
-      authContext.isPlatformAdmin ||
+      isPlatformIdentity ||
       !authContext.tenantId
     ) {
       return;
@@ -216,7 +220,7 @@ export class AuthorizationService {
     }
 
     throw Errors.business(
-      403,
+      decision.errorCode === "TENANT_SERVICE_ACCESS_EXPIRED" ? 402 : 403,
       decision.reason ?? "租户服务访问不可用",
       decision.errorCode ?? "TENANT_SERVICE_ACCESS_DENIED",
       {

@@ -9,7 +9,7 @@ import {
 } from "@/schema/billing-recharge";
 import { authorizationService } from "@/services/authorization";
 import { billingRechargeService } from "@/services/billing-recharge";
-import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -20,9 +20,10 @@ class BillingRechargeController extends BaseController {
   }
 
   private async getBillingAllowedAuthContext(request: FastifyRequest) {
-    return authorizationService.getRequiredAuthContext(request.user?.sub, {
-      tenantServiceAccess: getTenantServiceRouteAccess(request),
-    });
+    return authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
   }
 
   @Get("/billing/recharge-products", { tenantServiceAccess: "recovery" })

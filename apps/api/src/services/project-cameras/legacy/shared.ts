@@ -27,6 +27,7 @@ import type {
   UpdateProjectCameraTencentDevicePasswordInput,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
+import type { TenantServiceRouteAccess } from "@gooes/domain";
 
 export type CameraActor = {
   userId: string;
@@ -38,6 +39,10 @@ export type CameraActor = {
 export type RequestLogMeta = {
   ip?: string | null;
   userAgent?: string | null;
+};
+
+export type TenantServiceAccessInput = {
+  tenantServiceAccess: TenantServiceRouteAccess;
 };
 
 export function normalizeCapabilities(value: unknown) {

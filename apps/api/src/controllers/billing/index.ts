@@ -18,7 +18,7 @@ import {
 } from "@/schema/billing";
 import { authorizationService } from "@/services/authorization";
 import { billingService } from "@/services/billing";
-import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -30,7 +30,7 @@ class BillingController extends BaseController {
 
   private async getBillingAllowedAuthContext(request: FastifyRequest) {
     return authorizationService.getRequiredAuthContext(request.user?.sub, {
-      tenantServiceAccess: getTenantServiceRouteAccess(request),
+      ...getTenantServiceAuthOptions(request),
     });
   }
 

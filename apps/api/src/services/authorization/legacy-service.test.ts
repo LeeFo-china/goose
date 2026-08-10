@@ -42,6 +42,14 @@ const platformAuthContext = {
   roleCodes: ["platform_admin"],
 } satisfies AuthContext;
 
+const platformStaffAuthContext = {
+  ...platformAuthContext,
+  isPlatformAdmin: false,
+  isPlatformStaff: true,
+  isPlatformSuperAdmin: false,
+  roleCodes: ["platform_staff"],
+} satisfies AuthContext;
+
 const tenantlessEmployeeAuthContext = {
   ...tenantAuthContext,
   tenantId: null,
@@ -150,6 +158,29 @@ describe("AuthorizationService tenant service access guard", () => {
     });
   });
 
+  test.each(["read", "write"] as const)(
+    "rejects service blocked %s access with payment-required status",
+    async (routeAccess) => {
+      const blockedDecision = decision({
+        mode: "service_blocked",
+        accessLevel: "none",
+        allowed: false,
+        errorCode: "TENANT_SERVICE_ACCESS_EXPIRED",
+        reason: "租户服务访问已到期",
+      });
+      resolveForRoute.mockImplementationOnce(async () => blockedDecision);
+      const service = await createAuthorizationService();
+
+      await expect(service.getRequiredAuthContext("user-1", {
+        tenantServiceAccess: routeAccess,
+      })).rejects.toMatchObject({
+        statusCode: 402,
+        code: blockedDecision.errorCode,
+        message: blockedDecision.reason,
+      });
+    },
+  );
+
   test("does not resolve tenant service access for platform admins", async () => {
     const service = await createAuthorizationService(platformAuthContext);
 
@@ -158,6 +189,18 @@ describe("AuthorizationService tenant service access guard", () => {
     });
 
     expect(authContext.isPlatformAdmin).toBe(true);
+    expect(resolveForRoute).not.toHaveBeenCalled();
+  });
+
+  test("does not resolve tenant service access for non-admin platform staff", async () => {
+    const service = await createAuthorizationService(platformStaffAuthContext);
+
+    const authContext = await service.getRequiredAuthContext("platform-staff", {
+      tenantServiceAccess: "write",
+    });
+
+    expect(authContext.isPlatformStaff).toBe(true);
+    expect(authContext.isPlatformAdmin).toBe(false);
     expect(resolveForRoute).not.toHaveBeenCalled();
   });
 

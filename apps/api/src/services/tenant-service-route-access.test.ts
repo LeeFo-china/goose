@@ -5,6 +5,7 @@ import { TENANT_SERVICE_ROUTE_ACCESS_VALUES } from "@gooes/domain";
 describe("tenant service route access reader", () => {
   test("accepts every explicit domain route access value", async () => {
     const {
+      getTenantServiceAuthOptions,
       getTenantServiceRouteAccess,
       resolveTenantServiceRouteAccess,
     } = await import("./tenant-service-route-access");
@@ -16,6 +17,9 @@ describe("tenant service route access reader", () => {
         isMissing: false,
       });
       expect(getTenantServiceRouteAccess(request)).toBe(tenantServiceAccess);
+      expect(getTenantServiceAuthOptions(request)).toEqual({
+        tenantServiceAccess,
+      });
     }
   });
 

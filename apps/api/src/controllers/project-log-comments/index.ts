@@ -8,6 +8,7 @@ import {
   type ProjectLogCommentsQueryType,
 } from "@/schema/project-log-comments";
 import { projectLogCommentsService } from "@/services/project-log-comments";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
@@ -24,6 +25,7 @@ class ProjectLogCommentsController extends BaseController {
     const payload: CreateProjectLogCommentInput = result.data;
     const item = await projectLogCommentsService.createComment({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       tokenRoles: this.getTokenRoles(request),
       payload,
     });
@@ -39,6 +41,7 @@ class ProjectLogCommentsController extends BaseController {
     const { log_id }: ProjectLogCommentsQueryType = result.data;
     const comments = await projectLogCommentsService.listComments({
       authUserId: request.user?.sub,
+      ...getTenantServiceAuthOptions(request),
       tokenRoles: this.getTokenRoles(request),
       logId: log_id,
     });

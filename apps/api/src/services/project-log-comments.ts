@@ -8,7 +8,10 @@ import type { CreateProjectLogCommentInput } from "@/schema/project-log-comments
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
-import type { ProjectLogCommentAuthorType } from "@gooes/domain";
+import type {
+  ProjectLogCommentAuthorType,
+  TenantServiceRouteAccess,
+} from "@gooes/domain";
 
 type CommentAuthor = {
   id: string;
@@ -44,6 +47,7 @@ function normalizeImages(value: unknown): string[] {
 class ProjectLogCommentsService {
   async createComment(input: {
     authUserId: string | undefined;
+    tenantServiceAccess: TenantServiceRouteAccess;
     tokenRoles: string[];
     payload: CreateProjectLogCommentInput;
   }) {
@@ -51,6 +55,7 @@ class ProjectLogCommentsService {
     const log = await this.assertProjectLogReadable({
       logId: input.payload.log_id,
       author,
+      tenantServiceAccess: input.tenantServiceAccess,
     });
 
     if (input.payload.parent_id) {
@@ -105,6 +110,7 @@ class ProjectLogCommentsService {
 
   async listComments(input: {
     authUserId: string | undefined;
+    tenantServiceAccess: TenantServiceRouteAccess;
     tokenRoles: string[];
     logId: string;
   }) {
@@ -112,6 +118,7 @@ class ProjectLogCommentsService {
     const log = await this.assertProjectLogReadable({
       logId: input.logId,
       author: viewer,
+      tenantServiceAccess: input.tenantServiceAccess,
     });
 
     const rows = await projectLogCommentsRepository.listByLog({
@@ -206,6 +213,7 @@ class ProjectLogCommentsService {
   private async assertProjectLogReadable(input: {
     logId: string;
     author: ResolvedCommentAuthor;
+    tenantServiceAccess: TenantServiceRouteAccess;
   }): Promise<ProjectLogAccessInfo> {
     const log = await this.getProjectLogAccessInfo(input.logId);
     if (input.author.author_type === "customer") {
@@ -227,6 +235,7 @@ class ProjectLogCommentsService {
 
     const authContext = await authorizationService.getRequiredAuthContext(
       input.author.auth_user_id,
+      { tenantServiceAccess: input.tenantServiceAccess },
     );
     const tenantId = accessPolicyService.assertTenantContext(authContext);
     if (tenantId !== log.tenant_id) {

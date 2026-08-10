@@ -12,7 +12,7 @@ import {
   ServiceRefundRequestSchema,
 } from "@/schema/billing-service-orders";
 import { authorizationService } from "@/services/authorization";
-import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
@@ -48,9 +48,10 @@ class BillingServiceOrdersController extends BaseController {
   }
 
   private async getBillingAllowedAuthContext(request: FastifyRequest) {
-    return authorizationService.getRequiredAuthContext(request.user?.sub, {
-      tenantServiceAccess: getTenantServiceRouteAccess(request),
-    });
+    return authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
   }
 
   @Get("/billing/service-products", { tenantServiceAccess: "recovery" })

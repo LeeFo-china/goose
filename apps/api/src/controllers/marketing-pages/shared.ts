@@ -1,5 +1,6 @@
 import { BaseController } from "@/controllers/BaseController";
 import { authorizationService } from "@/services/authorization";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type { FastifyRequest } from "fastify";
 
 export function getRequestMetadata(request: FastifyRequest) {
@@ -33,6 +34,9 @@ export abstract class MarketingPagesBaseController extends BaseController {
   }
 
   protected async getRequiredAuthContext(request: FastifyRequest) {
-    return authorizationService.getRequiredAuthContext(request.user?.sub);
+    return authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
   }
 }

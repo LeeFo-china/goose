@@ -4,7 +4,7 @@ import {
   authorizationService,
   type AuthContext,
 } from "@/services/authorization";
-import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type { FastifyRequest } from "fastify";
 import type { ZodTypeAny } from "zod";
 
@@ -20,7 +20,7 @@ export abstract class TenantBaseController<
   ) {
     const authContext = await authorizationService.getRequiredAuthContext(
       request.user?.sub,
-      { tenantServiceAccess: getTenantServiceRouteAccess(request) },
+      getTenantServiceAuthOptions(request),
     );
     request.authContext = authContext;
     return authContext;

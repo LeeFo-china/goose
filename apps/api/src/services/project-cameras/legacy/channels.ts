@@ -39,11 +39,12 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
 
-export async function listEzvizDeviceChannels(this: any, input: {
+export async function listEzvizDeviceChannels(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   onlyUnbound: boolean;
@@ -53,6 +54,7 @@ export async function listEzvizDeviceChannels(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
   });
 
   const [channels, bindings, tenantDeviceAssets] = await Promise.all([
@@ -110,7 +112,7 @@ export async function listEzvizDeviceChannels(this: any, input: {
   };
 }
 
-export async function listTencentDeviceChannels(this: any, input: {
+export async function listTencentDeviceChannels(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   onlyUnbound: boolean;
@@ -121,6 +123,7 @@ export async function listTencentDeviceChannels(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
   });
 
   const [deviceSummaries, channels, bindings, tenantDeviceAssets] = await Promise.all([

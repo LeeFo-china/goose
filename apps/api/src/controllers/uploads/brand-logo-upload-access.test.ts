@@ -82,7 +82,9 @@ describe("assertBrandLogoUploadSceneAccess", () => {
       deps.value,
     );
 
-    expect(deps.getRequiredAuthContext).toHaveBeenCalledWith("auth-tenant");
+    expect(deps.getRequiredAuthContext).toHaveBeenCalledWith("auth-tenant", {
+      tenantServiceAccess: "write",
+    });
     expect(deps.assertCanCustomize).toHaveBeenCalledWith(
       tenantContext,
       expect.any(Date),

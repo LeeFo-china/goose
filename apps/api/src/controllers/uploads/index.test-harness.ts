@@ -206,6 +206,8 @@ export const buildRequest = (
   body: Record<string, unknown>,
 ): FastifyRequest => ({
   body,
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: { sub: authUserId, tenant_id: tenantId, employee_id: employeeId },
   id: "req-test",
 }) as FastifyRequest;
@@ -214,6 +216,8 @@ export const buildPlatformRequest = (
   body: Record<string, unknown>,
 ): FastifyRequest => ({
   body,
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: { sub: platformAuthUserId },
   id: "req-platform-test",
 }) as FastifyRequest;
@@ -384,6 +388,8 @@ export const buildVisitorRequest = (
 ): FastifyRequest => ({
   body,
   query: {},
+  method: "POST",
+  routeOptions: { config: { tenantServiceAccess: "write" } },
   user: {
     token_type: "visitor_session",
     visitor_id: currentVisitorId,
