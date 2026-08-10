@@ -60,6 +60,95 @@ describe("route decorators", () => {
       await app.close();
     }
   });
+
+  test("executes inherited handlers with instance binding and sibling isolation", async () => {
+    class ParentController {
+      protected owner = "parent";
+
+      @Get("/decorator/inherited")
+      inherited() {
+        return { owner: this.owner, route: "inherited" };
+      }
+    }
+
+    class ChildController extends ParentController {
+      protected override owner = "child";
+
+      @Post("/decorator/child")
+      child() {
+        return { owner: this.owner, route: "child" };
+      }
+    }
+
+    class SiblingController extends ParentController {
+      protected override owner = "sibling";
+
+      @Get("/decorator/sibling")
+      sibling() {
+        return { owner: this.owner, route: "sibling" };
+      }
+    }
+
+    const childApp = Fastify();
+    const siblingApp = Fastify();
+
+    try {
+      registerRoutes(childApp, new ChildController());
+      registerRoutes(siblingApp, new SiblingController());
+
+      const inheritedFromChild = await childApp.inject({
+        method: "GET",
+        url: "/decorator/inherited",
+      });
+      const child = await childApp.inject({
+        method: "POST",
+        url: "/decorator/child",
+      });
+      const missingSibling = await childApp.inject({
+        method: "GET",
+        url: "/decorator/sibling",
+      });
+      const inheritedFromSibling = await siblingApp.inject({
+        method: "GET",
+        url: "/decorator/inherited",
+      });
+      const sibling = await siblingApp.inject({
+        method: "GET",
+        url: "/decorator/sibling",
+      });
+      const missingChild = await siblingApp.inject({
+        method: "POST",
+        url: "/decorator/child",
+      });
+
+      expect(inheritedFromChild.statusCode).toBe(200);
+      expect(inheritedFromChild.body).toBe(JSON.stringify({
+        owner: "child",
+        route: "inherited",
+      }));
+      expect(child.statusCode).toBe(200);
+      expect(child.body).toBe(JSON.stringify({
+        owner: "child",
+        route: "child",
+      }));
+      expect(missingSibling.statusCode).toBe(404);
+
+      expect(inheritedFromSibling.statusCode).toBe(200);
+      expect(inheritedFromSibling.body).toBe(JSON.stringify({
+        owner: "sibling",
+        route: "inherited",
+      }));
+      expect(sibling.statusCode).toBe(200);
+      expect(sibling.body).toBe(JSON.stringify({
+        owner: "sibling",
+        route: "sibling",
+      }));
+      expect(missingChild.statusCode).toBe(404);
+    } finally {
+      await childApp.close();
+      await siblingApp.close();
+    }
+  });
 });
 
 function findAccess(

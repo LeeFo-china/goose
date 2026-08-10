@@ -45,8 +45,13 @@ export async function loadHarness() {
 export function registeredHandlers(controller: BrandingControllerLike) {
   const routes = new Map<string, RouteHandler>();
   const register = (method: string) =>
-    (path: string, handler: RouteHandler) =>
-      routes.set(`${method} ${path}`, handler);
+    (path: string, optionsOrHandler: unknown, handler?: RouteHandler) => {
+      const routeHandler = handler ?? optionsOrHandler;
+      if (typeof routeHandler !== "function") {
+        throw new TypeError(`invalid route handler: ${method} ${path}`);
+      }
+      routes.set(`${method} ${path}`, routeHandler as RouteHandler);
+    };
   controller.registerExtraRoutes({
     get: register("GET"),
     patch: register("PATCH"),
