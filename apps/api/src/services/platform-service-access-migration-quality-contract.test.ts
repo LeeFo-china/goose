@@ -294,17 +294,17 @@ describe("platform service access migration quality hardening", () => {
       body.indexOf("update public.tenant_service_refund_requests"),
     );
 
-    expect(body).toContain("from public.employees as employee");
-    expect(body).toContain(
-      "join public.employee_roles as employee_role on employee_role.employee_id = employee.id",
+    const operatorLock = body.indexOf(
+      "perform public.platform_service_lock_refund_operator(p_operator_employee_id);",
     );
-    expect(body).toContain(
-      "join public.roles as role on role.id = employee_role.role_id",
+    const advisoryLock = body.indexOf(
+      "perform public.platform_service_lock_order(v_order_id);",
     );
-    expect(body).toContain("employee.tenant_id is null");
-    expect(body).toContain("employee.status = 'active'");
-    expect(body).toContain("role.tenant_id is null");
-    expect(body).toContain("role.status = 'active'");
+    expect(operatorLock).toBeGreaterThan(-1);
+    expect(advisoryLock).toBeGreaterThan(operatorLock);
+    expect(body.slice(operatorLock + 1)).not.toContain(
+      "from public.employees as employee",
+    );
     expect(body).not.toContain("employee.tenant_id = v_refund.tenant_id");
     expect(body).not.toContain("assert_platform_operator_actor");
 

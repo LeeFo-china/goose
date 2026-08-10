@@ -284,6 +284,22 @@ describe("platform service contract access migration", () => {
     expect(helperBody).toContain("GREATEST");
     expect(helperBody).toContain("make_interval(years => v_order.term_years)");
     expect(helperBody).toContain("ON CONFLICT (service_order_id) DO NOTHING");
+
+    const terminationGuard =
+      "v_order.service_access_terminated_at is not null or v_order.service_access_termination_reason is not null or v_order.service_access_terminated_by_employee_id is not null";
+    for (const body of [acceptanceBody, overdueBody, helperBody]) {
+      const normalizedBody = normalizeSql(body);
+      expect(normalizedBody).toContain(terminationGuard);
+    }
+    expect(normalizeSql(acceptanceBody).indexOf(terminationGuard)).toBeLessThan(
+      normalizeSql(acceptanceBody).indexOf("update public.tenant_service_work_orders"),
+    );
+    expect(normalizeSql(overdueBody).indexOf(terminationGuard)).toBeLessThan(
+      normalizeSql(overdueBody).indexOf("update public.tenant_service_work_orders"),
+    );
+    expect(normalizeSql(helperBody).indexOf(terminationGuard)).toBeLessThan(
+      normalizeSql(helperBody).indexOf("insert into public.tenant_service_contracts"),
+    );
   });
 
   test("requires dedicated RPCs for acceptance without changing other transitions", async () => {

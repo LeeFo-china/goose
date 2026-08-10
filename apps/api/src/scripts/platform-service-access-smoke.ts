@@ -15,6 +15,12 @@ import {
   verifyPaidOnboarding,
   verifyRenewalExtension,
 } from "./platform-service-access-smoke-fixture";
+import {
+  verifyProviderClosedConstraint,
+  verifyRefundActorFactsStayFrozen,
+  verifyRefundOperatorLockOrder,
+  verifyTerminatedAcceptanceGuard,
+} from "./platform-service-access-smoke-boundaries";
 
 type SmokeScenario = (typeof PLATFORM_SERVICE_ACCESS_SMOKE_SCENARIOS)[number];
 type SmokeChecks = Record<SmokeScenario, boolean>;
@@ -35,6 +41,9 @@ export const PLATFORM_SERVICE_ACCESS_SMOKE_SCENARIOS = [
   "full_refund_termination",
   "hard_block",
   "service_block",
+  "provider_closed_constraint",
+  "terminated_acceptance_guard",
+  "refund_operator_lock_order",
   "closed_terminal",
   "provider_identity_conflict",
   "fixture_cleanup",
@@ -257,8 +266,69 @@ export async function runPlatformServiceAccessSmoke(
       === "hard_blocked";
     await db`update public.tenants set status = 'active' where id = ${fixture.tenantId}::uuid`;
 
-    const closedOrder = await createPaidSmokeOrder(db, fixture, 3);
-    const conflictOrder = await createPaidSmokeOrder(db, fixture, 4);
+    const constraintOrder = await createPaidSmokeOrder(db, fixture, 3);
+    const constraintRequestId = await createApprovedSmokeRefund(
+      db,
+      fixture,
+      constraintOrder,
+    );
+    checks.provider_closed_constraint = await verifyProviderClosedConstraint(
+      db,
+      fixture,
+      constraintRequestId,
+    );
+    checks.terminated_acceptance_guard = await verifyTerminatedAcceptanceGuard(
+      db,
+      fixture,
+    );
+
+    const lockCloseOrder = await createPaidSmokeOrder(db, fixture, 4);
+    const lockCloseRequestId = await createApprovedSmokeRefund(
+      db,
+      fixture,
+      lockCloseOrder,
+    );
+    const lockConfirmOrder = await createPaidSmokeOrder(db, fixture, 5);
+    const lockConfirmRequestId = await createApprovedSmokeRefund(
+      db,
+      fixture,
+      lockConfirmOrder,
+    );
+    const freezeCloseOrder = await createPaidSmokeOrder(db, fixture, 6);
+    const freezeCloseRequestId = await createApprovedSmokeRefund(
+      db,
+      fixture,
+      freezeCloseOrder,
+    );
+    const freezeConfirmOrder = await createPaidSmokeOrder(db, fixture, 7);
+    const freezeConfirmRequestId = await createApprovedSmokeRefund(
+      db,
+      fixture,
+      freezeConfirmOrder,
+    );
+    checks.refund_operator_lock_order = await verifyRefundOperatorLockOrder(
+      databaseUrl,
+      fixture,
+      [
+        { kind: "close", order: lockCloseOrder, requestId: lockCloseRequestId },
+        {
+          kind: "confirm",
+          order: lockConfirmOrder,
+          requestId: lockConfirmRequestId,
+        },
+      ],
+    ) && await verifyRefundActorFactsStayFrozen(databaseUrl, fixture, {
+      kind: "close",
+      order: freezeCloseOrder,
+      requestId: freezeCloseRequestId,
+    }) && await verifyRefundActorFactsStayFrozen(databaseUrl, fixture, {
+      kind: "confirm",
+      order: freezeConfirmOrder,
+      requestId: freezeConfirmRequestId,
+    });
+
+    const closedOrder = await createPaidSmokeOrder(db, fixture, 8);
+    const conflictOrder = await createPaidSmokeOrder(db, fixture, 9);
     const closedRequestId = await createApprovedSmokeRefund(db, fixture, closedOrder);
     const closedResult = await closeSmokeRefund(
       db, fixture, closedOrder, closedRequestId, "closed-provider",

@@ -43,6 +43,9 @@ describe("platform service provider-closed refund recovery migration", () => {
     expect(sql).toContain("provider_refund_status is null or provider_refund_status = 'closed'");
     expect(sql).toContain("foreign key (provider_checked_by_employee_id) references public.employees(id)");
     expect(sql).toContain("tenant_service_refund_requests_provider_closed_fields_check");
+    expect(sql).toContain(
+      "check ((( ( provider_refund_status is null and provider_out_refund_no is null and provider_wechat_refund_id is null and provider_refund_amount_fen is null and provider_checked_at is null and provider_checked_by_employee_id is null ) or ( status = 'cancelled' and provider_refund_status = 'closed' and provider_out_refund_no is not null and provider_wechat_refund_id is not null and provider_refund_amount_fen is not null and provider_checked_at is not null and provider_checked_by_employee_id is not null ) )) is true)",
+    );
     expect(sql).toContain("status = 'cancelled'");
     expect(sql).toContain("tenant_service_refund_requests_provider_out_refund_unique_idx");
     expect(sql).toContain("tenant_service_refund_requests_provider_wechat_refund_unique_idx");
@@ -83,6 +86,9 @@ describe("platform service provider-closed refund recovery migration", () => {
     expect(sql).toContain(`grant execute on function ${signature} to service_role;`);
 
     const body = functionBody(sqlText);
+    const operatorLock = body.indexOf(
+      "perform public.platform_service_lock_refund_operator(p_operator_employee_id);",
+    );
     const advisory = body.indexOf("perform public.platform_service_lock_order(v_order_id);");
     const orderLock = body.indexOf("from public.tenant_service_orders", advisory);
     const workLock = body.indexOf("from public.tenant_service_work_orders", orderLock);
@@ -91,7 +97,8 @@ describe("platform service provider-closed refund recovery migration", () => {
       workLock,
     );
     const refundLock = body.indexOf("from public.tenant_service_refund_requests", acceptanceLock);
-    expect(advisory).toBeGreaterThan(-1);
+    expect(operatorLock).toBeGreaterThan(-1);
+    expect(advisory).toBeGreaterThan(operatorLock);
     expect(orderLock).toBeGreaterThan(advisory);
     expect(workLock).toBeGreaterThan(orderLock);
     expect(acceptanceLock).toBeGreaterThan(workLock);
@@ -114,10 +121,38 @@ describe("platform service provider-closed refund recovery migration", () => {
     expect(body).toContain("v_order.out_trade_no is distinct from p_out_trade_no");
     expect(body).toContain("v_order.payment_config_id is distinct from p_payment_config_id");
     expect(body).toContain("v_order.payment_config_guard_version is distinct from p_payment_config_guard_version");
-    expect(body).toContain("employee.tenant_id is null");
-    expect(body).toContain("employee.status = 'active'");
-    expect(body).toContain("role.tenant_id is null");
-    expect(body).toContain("role.status = 'active'");
+    const accessSql = await Bun.file(accessMigrationUrl).text();
+    const actorBody = functionBody(
+      accessSql,
+      "CREATE OR REPLACE FUNCTION public.platform_service_lock_refund_operator",
+    );
+    const employeeLock = actorBody.indexOf("from public.employees as employee");
+    const employeeRoleLock = actorBody.indexOf(
+      "from public.employee_roles as employee_role",
+      employeeLock,
+    );
+    const roleLock = actorBody.indexOf("from public.roles as role", employeeRoleLock);
+    expect(employeeLock).toBeGreaterThan(-1);
+    expect(employeeRoleLock).toBeGreaterThan(employeeLock);
+    expect(roleLock).toBeGreaterThan(employeeRoleLock);
+    expect(actorBody.slice(employeeLock, employeeRoleLock)).toContain("for share");
+    expect(actorBody.slice(employeeRoleLock, roleLock)).toContain("for share");
+    expect(actorBody.slice(roleLock)).toContain("for share");
+    expect(actorBody).toContain("employee.tenant_id is null");
+    expect(actorBody).toContain("employee.status = 'active'");
+    expect(actorBody).toContain("role.tenant_id is null");
+    expect(actorBody).toContain("role.status = 'active'");
+    const normalizedAccessSql = normalizeSql(accessSql);
+    const actorReference =
+      "public.platform_service_lock_refund_operator(uuid)";
+    for (const role of ["public", "anon", "authenticated", "service_role"]) {
+      expect(normalizedAccessSql).toContain(
+        `revoke all on function ${actorReference} from ${role};`,
+      );
+    }
+    expect(normalizedAccessSql).not.toContain(
+      `grant execute on function ${actorReference}`,
+    );
     expect(body).toContain("v_refund.status not in ('approved', 'refunding')");
     expect(body).toContain("v_order.payment_status not in ('refund_reviewing', 'refunding')");
     expect(body).toContain("v_order.service_access_terminated_at is not null");
@@ -168,11 +203,22 @@ describe("platform service provider-closed refund recovery migration", () => {
     const timeout = sql.indexOf("set local lock_timeout = '5s'");
     const employeeLock = sql.indexOf("lock table public.employees");
     const serviceLock = sql.indexOf("lock table public.tenant_service_work_order_events");
+    const preflight = sql.indexOf("service_refund_provider_closed_history_invalid");
+    const factsPreflight = sql.indexOf("execute $preflight$");
+    const stagedSchemaRejection = sql.indexOf(
+      "if v_provider_column_count <> 0 then",
+    );
     const ddl = sql.indexOf("alter table public.tenant_service_refund_requests");
     expect(timeout).toBeGreaterThan(sql.indexOf("begin;"));
     expect(employeeLock).toBeGreaterThan(timeout);
     expect(serviceLock).toBeGreaterThan(employeeLock);
-    expect(ddl).toBeGreaterThan(serviceLock);
+    expect(preflight).toBeGreaterThan(serviceLock);
+    expect(factsPreflight).toBeGreaterThan(preflight);
+    expect(stagedSchemaRejection).toBeGreaterThan(factsPreflight);
+    expect(ddl).toBeGreaterThan(stagedSchemaRejection);
+    expect(ddl).toBeGreaterThan(preflight);
+    expect(sql).toContain("information_schema.columns");
+    expect(sql).toContain("partial provider closed schema or fact group");
     expect(sql).toContain("task 7 must measure");
     expect(sql).toContain("forward-only");
     expect(sql).toContain("do not repair dev or production with manual dml");

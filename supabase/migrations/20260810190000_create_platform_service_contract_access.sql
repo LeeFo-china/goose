@@ -580,6 +580,63 @@ REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid)
 REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid)
   FROM service_role;
 
+-- Refund execution takes the global actor locks before any service fact lock.
+-- The fixed employee -> employee_roles -> roles sequence also serializes role
+-- revocation with the later refund-row mutation.
+CREATE OR REPLACE FUNCTION public.platform_service_lock_refund_operator(
+  p_operator_employee_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_role_ids uuid[];
+BEGIN
+  PERFORM employee.id
+  FROM public.employees AS employee
+  WHERE employee.id = p_operator_employee_id
+    AND employee.tenant_id IS NULL
+    AND employee.status = 'active'
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
+  END IF;
+
+  SELECT array_agg(locked_employee_role.role_id ORDER BY locked_employee_role.role_id)
+  INTO v_role_ids
+  FROM (
+    SELECT employee_role.role_id
+    FROM public.employee_roles AS employee_role
+    WHERE employee_role.employee_id = p_operator_employee_id
+    ORDER BY employee_role.role_id
+    FOR SHARE
+  ) AS locked_employee_role;
+
+  PERFORM role.id
+  FROM public.roles AS role
+  WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
+    AND role.tenant_id IS NULL
+    AND role.status = 'active'
+  ORDER BY role.id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
+  END IF;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_lock_refund_operator(uuid)
+  FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_lock_refund_operator(uuid)
+  FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_lock_refund_operator(uuid)
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_lock_refund_operator(uuid)
+  FROM service_role;
+
 -- Internal-only helper shared by both official acceptance entry points. It is
 -- SECURITY INVOKER and has no direct API grant, so only controlled definer RPCs
 -- (and the migration owner during historical backfill) can mutate periods.
@@ -626,7 +683,11 @@ BEGIN
     'paid',
     'refund_reviewing',
     'refunding'
-  ) THEN
+  )
+    OR v_order.service_access_terminated_at IS NOT NULL
+    OR v_order.service_access_termination_reason IS NOT NULL
+    OR v_order.service_access_terminated_by_employee_id IS NOT NULL
+  THEN
     RAISE EXCEPTION 'SERVICE_CONTRACT_ORDER_INVALID_STATE';
   END IF;
 
@@ -2090,6 +2151,9 @@ BEGIN
   END IF;
 
   IF v_order.payment_status <> 'paid'
+    OR v_order.service_access_terminated_at IS NOT NULL
+    OR v_order.service_access_termination_reason IS NOT NULL
+    OR v_order.service_access_terminated_by_employee_id IS NOT NULL
     OR v_work_order.status <> 'awaiting_acceptance'
     OR v_acceptance.status <> 'submitted'
   THEN
@@ -2388,6 +2452,9 @@ BEGIN
   END IF;
 
   IF v_order.payment_status <> 'paid'
+    OR v_order.service_access_terminated_at IS NOT NULL
+    OR v_order.service_access_termination_reason IS NOT NULL
+    OR v_order.service_access_terminated_by_employee_id IS NOT NULL
     OR v_work_order.status <> 'awaiting_acceptance'
     OR v_acceptance.status <> 'submitted'
   THEN
@@ -2584,6 +2651,8 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
   END IF;
 
+  PERFORM public.platform_service_lock_refund_operator(p_operator_employee_id);
+
   PERFORM public.platform_service_lock_order(v_order_id);
 
   PERFORM pg_advisory_xact_lock(
@@ -2665,22 +2734,6 @@ BEGIN
       p_payment_config_guard_version
   THEN
     RAISE EXCEPTION 'SERVICE_REFUND_PAYMENT_BINDING_INVALID';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.employees AS employee
-    JOIN public.employee_roles AS employee_role
-      ON employee_role.employee_id = employee.id
-    JOIN public.roles AS role
-      ON role.id = employee_role.role_id
-    WHERE employee.id = p_operator_employee_id
-      AND employee.tenant_id IS NULL
-      AND employee.status = 'active'
-      AND role.tenant_id IS NULL
-      AND role.status = 'active'
-  ) THEN
-    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
   END IF;
 
   IF v_refund.status = 'refunded' THEN

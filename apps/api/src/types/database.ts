@@ -24128,6 +24128,10 @@ export type Database = {
         Args: { p_service_order_id: string }
         Returns: undefined
       }
+      platform_service_lock_refund_operator: {
+        Args: { p_operator_employee_id: string }
+        Returns: undefined
+      }
       platform_service_publish_product_version: {
         Args: {
           p_amount_fen: number

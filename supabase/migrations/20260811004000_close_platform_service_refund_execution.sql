@@ -17,6 +17,71 @@ LOCK TABLE
   public.tenant_service_refund_requests
 IN ACCESS EXCLUSIVE MODE;
 
+-- SERVICE_REFUND_PROVIDER_CLOSED_HISTORY_INVALID means an earlier local
+-- rehearsal left a partial provider CLOSED schema or fact group. Because this
+-- migration is not released, repair it only by revising this migration or by
+-- introducing a versioned predecessor with an earlier timestamp before
+-- rollout. Do not repair dev or production with manual DML.
+DO $$
+DECLARE
+  v_provider_column_count integer;
+  v_invalid_refund_request_id uuid;
+BEGIN
+  SELECT count(*)::integer
+  INTO v_provider_column_count
+  FROM information_schema.columns
+  WHERE table_schema = 'public'
+    AND table_name = 'tenant_service_refund_requests'
+    AND column_name IN (
+      'provider_refund_status',
+      'provider_out_refund_no',
+      'provider_wechat_refund_id',
+      'provider_refund_amount_fen',
+      'provider_checked_at',
+      'provider_checked_by_employee_id'
+    );
+
+  IF v_provider_column_count = 6 THEN
+    EXECUTE $preflight$
+      SELECT id
+      FROM public.tenant_service_refund_requests
+      WHERE NOT ((
+        (
+          provider_refund_status IS NULL
+          AND provider_out_refund_no IS NULL
+          AND provider_wechat_refund_id IS NULL
+          AND provider_refund_amount_fen IS NULL
+          AND provider_checked_at IS NULL
+          AND provider_checked_by_employee_id IS NULL
+        )
+        OR (
+          status = 'cancelled'
+          AND provider_refund_status = 'CLOSED'
+          AND provider_out_refund_no IS NOT NULL
+          AND provider_wechat_refund_id IS NOT NULL
+          AND provider_refund_amount_fen IS NOT NULL
+          AND provider_checked_at IS NOT NULL
+          AND provider_checked_by_employee_id IS NOT NULL
+        )
+      ) IS TRUE)
+      LIMIT 1
+    $preflight$
+    INTO v_invalid_refund_request_id;
+
+    IF v_invalid_refund_request_id IS NOT NULL THEN
+      RAISE EXCEPTION 'SERVICE_REFUND_PROVIDER_CLOSED_HISTORY_INVALID';
+    END IF;
+  END IF;
+
+  -- This migration is transactional and not resumable from a staged schema.
+  -- Even a complete valid six-column group must stop with the stable code
+  -- before the unconditional first-release DDL below can raise duplicate_column.
+  IF v_provider_column_count <> 0 THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_PROVIDER_CLOSED_HISTORY_INVALID';
+  END IF;
+END;
+$$;
+
 ALTER TABLE public.tenant_service_refund_requests
   ADD COLUMN provider_refund_status text NULL,
   ADD COLUMN provider_out_refund_no text NULL,
@@ -57,7 +122,7 @@ ALTER TABLE public.tenant_service_refund_requests
     REFERENCES public.employees(id)
     ON DELETE RESTRICT,
   ADD CONSTRAINT tenant_service_refund_requests_provider_closed_fields_check
-    CHECK (
+    CHECK (((
       (
         provider_refund_status IS NULL
         AND provider_out_refund_no IS NULL
@@ -76,7 +141,7 @@ ALTER TABLE public.tenant_service_refund_requests
         AND provider_checked_at IS NOT NULL
         AND provider_checked_by_employee_id IS NOT NULL
       )
-    );
+    )) IS TRUE);
 
 CREATE UNIQUE INDEX tenant_service_refund_requests_provider_out_refund_unique_idx
   ON public.tenant_service_refund_requests (provider_out_refund_no)
@@ -182,6 +247,8 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
   END IF;
 
+  PERFORM public.platform_service_lock_refund_operator(p_operator_employee_id);
+
   PERFORM public.platform_service_lock_order(v_order_id);
 
   SELECT *
@@ -233,22 +300,6 @@ BEGIN
       p_payment_config_guard_version
   THEN
     RAISE EXCEPTION 'SERVICE_REFUND_PAYMENT_BINDING_INVALID';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.employees AS employee
-    JOIN public.employee_roles AS employee_role
-      ON employee_role.employee_id = employee.id
-    JOIN public.roles AS role
-      ON role.id = employee_role.role_id
-    WHERE employee.id = p_operator_employee_id
-      AND employee.tenant_id IS NULL
-      AND employee.status = 'active'
-      AND role.tenant_id IS NULL
-      AND role.status = 'active'
-  ) THEN
-    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
   END IF;
 
   IF v_refund.status = 'cancelled'
