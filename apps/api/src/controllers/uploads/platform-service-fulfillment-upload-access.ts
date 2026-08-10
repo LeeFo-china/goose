@@ -47,5 +47,6 @@ export async function assertPlatformServiceFulfillmentUploadSceneAccess(
     customerId: null,
     visitorId: null,
     isPlatformAdmin: authContext.isPlatformAdmin,
+    isPlatformIdentity,
   };
 }

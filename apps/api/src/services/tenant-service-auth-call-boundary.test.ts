@@ -7,7 +7,6 @@ import ts from "typescript";
 const SRC_ROOT = fileURLToPath(new URL("../", import.meta.url));
 
 const AUDITED_NO_OPTION_CALLS = [
-  ["controllers/PlatformBaseController.ts", "getRequiredAuthContext", "platform staff boundary"],
   ["controllers/billing/index.ts", "getPlatformSummary", "platform billing"],
   ["controllers/billing/index.ts", "listPlatformTenants", "platform billing"],
   ["controllers/billing/index.ts", "manualRecharge", "platform billing"],
@@ -52,6 +51,37 @@ describe("tenant service authorization call boundary", () => {
       .sort(compareCall);
 
     expect(actual).toEqual(expected);
+  });
+
+  test("does not let PlatformBase subclasses call its raw auth-context helper", () => {
+    const actual = productionTypeScriptFiles(SRC_ROOT)
+      .flatMap(findPlatformBaseSubclassRawCalls)
+      .sort(compareCall);
+
+    expect(actual).toEqual([]);
+  });
+
+  test("keeps the PlatformBase raw auth-context helper private", () => {
+    const path = resolve(SRC_ROOT, "controllers/PlatformBaseController.ts");
+    const source = ts.createSourceFile(
+      path,
+      readFileSync(path, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
+    const rawHelper = source.statements
+      .filter(ts.isClassDeclaration)
+      .flatMap((node) => [...node.members])
+      .find((member) =>
+        ts.isMethodDeclaration(member) &&
+        member.name.getText() === "getRequiredAuthContext"
+      );
+
+    expect(rawHelper && ts.canHaveModifiers(rawHelper)
+      ? ts.getModifiers(rawHelper)?.some(
+        (modifier) => modifier.kind === ts.SyntaxKind.PrivateKeyword,
+      )
+      : false).toBe(true);
   });
 
   test("guards employee decoration suggestions before cache fast paths", () => {
@@ -108,6 +138,49 @@ function findNoOptionCalls(path: string): AuthCall[] {
         path: relative(SRC_ROOT, path),
         owner: findOwner(node),
       });
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(source);
+  return calls.filter((call) => !(
+    call.path === "controllers/PlatformBaseController.ts" &&
+    call.owner === "getRequiredAuthContext"
+  ));
+}
+
+function findPlatformBaseSubclassRawCalls(path: string): AuthCall[] {
+  if (path.endsWith("/controllers/PlatformBaseController.ts")) return [];
+
+  const source = ts.createSourceFile(
+    path,
+    readFileSync(path, "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const calls: AuthCall[] = [];
+
+  function visit(node: ts.Node) {
+    if (
+      ts.isClassDeclaration(node) &&
+      node.heritageClauses?.some((clause) =>
+        clause.token === ts.SyntaxKind.ExtendsKeyword &&
+        clause.types.some((type) => type.expression.getText() === "PlatformBaseController")
+      )
+    ) {
+      for (const member of node.members) {
+        member.forEachChild(function inspect(descendant) {
+          if (
+            ts.isCallExpression(descendant) &&
+            ts.isPropertyAccessExpression(descendant.expression) &&
+            descendant.expression.expression.kind === ts.SyntaxKind.ThisKeyword &&
+            descendant.expression.name.text === "getRequiredAuthContext"
+          ) {
+            calls.push({ path: relative(SRC_ROOT, path), owner: findOwner(descendant) });
+          }
+          descendant.forEachChild(inspect);
+        });
+      }
     }
     ts.forEachChild(node, visit);
   }

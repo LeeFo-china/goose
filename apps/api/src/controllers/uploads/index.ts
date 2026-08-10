@@ -289,13 +289,8 @@ class UploadController extends BaseController {
     if (scene === "tenant_onboarding_license" && !actorContext.visitorId) {
       throw Errors.forbidden();
     }
-    if (scene === "supplier_business_license" && actorContext.isPlatformAdmin) {
-      return;
-    }
-    if (
-      scene === "tenant_service_fulfillment_attachment" &&
-      actorContext.isPlatformAdmin
-    ) {
+    if (scene === "supplier_business_license" && actorContext.isPlatformIdentity) return;
+    if (scene === "tenant_service_fulfillment_attachment" && actorContext.isPlatformIdentity) {
       return;
     }
 
@@ -375,7 +370,7 @@ class UploadController extends BaseController {
       throw Errors.business(403, "私有文件不能通过公开地址访问", ErrorCodes.FORBIDDEN);
     }
 
-    if (actorContext.isPlatformAdmin) {
+    if (actorContext.isPlatformIdentity) {
       return;
     }
 
@@ -407,6 +402,7 @@ class UploadController extends BaseController {
         customerId: null,
         visitorId,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
@@ -428,6 +424,7 @@ class UploadController extends BaseController {
         customerId: null,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
         authContext,
       };
     }
@@ -439,6 +436,7 @@ class UploadController extends BaseController {
         customerId: tokenCustomerId,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
@@ -457,6 +455,7 @@ class UploadController extends BaseController {
         customerId: null,
         visitorId: null,
         isPlatformAdmin: authContext.isPlatformAdmin,
+        isPlatformIdentity: authContext.isPlatformStaff === true || authContext.isPlatformAdmin,
         authContext,
       };
     }
@@ -469,6 +468,7 @@ class UploadController extends BaseController {
         customerId: membership.identity_id,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
@@ -479,6 +479,7 @@ class UploadController extends BaseController {
       customerId: customer?.id ?? null,
       visitorId: null,
       isPlatformAdmin: false,
+      isPlatformIdentity: false,
     };
   }
 

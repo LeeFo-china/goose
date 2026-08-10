@@ -12,7 +12,7 @@ export abstract class PlatformBaseController<
   TUpdate extends ZodTypeAny = ZodTypeAny,
   T = unknown,
 > extends BaseController<TCreate, TUpdate, T> {
-  protected async getRequiredAuthContext(request: FastifyRequest) {
+  private async getRequiredAuthContext(request: FastifyRequest) {
     const authContext = await authorizationService.getRequiredAuthContext(
       request.user?.sub,
     );

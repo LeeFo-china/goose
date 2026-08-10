@@ -27,5 +27,7 @@ export async function assertApplymentUploadSceneAccess(
     customerId: null,
     visitorId: null,
     isPlatformAdmin: authContext.isPlatformAdmin,
+    isPlatformIdentity:
+      authContext.isPlatformStaff === true || authContext.isPlatformAdmin === true,
   };
 }

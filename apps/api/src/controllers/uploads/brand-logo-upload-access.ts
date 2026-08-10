@@ -39,7 +39,10 @@ export async function assertBrandLogoUploadSceneAccess(
     .getRequiredAuthContext(user.sub, { tenantServiceAccess: "write" });
   if (!authContext.employeeId) throw Errors.forbidden();
 
-  if (authContext.isPlatformAdmin) {
+  const isPlatformIdentity =
+    authContext.isPlatformStaff === true ||
+    authContext.isPlatformAdmin === true;
+  if (isPlatformIdentity) {
     if (authContext.tenantId) throw Errors.forbidden();
     dependencies.accessPolicyService.assertPermission(
       authContext,
@@ -50,7 +53,8 @@ export async function assertBrandLogoUploadSceneAccess(
       employeeId: authContext.employeeId,
       customerId: null,
       visitorId: null,
-      isPlatformAdmin: true,
+      isPlatformAdmin: authContext.isPlatformAdmin,
+      isPlatformIdentity: true,
     };
   }
 
@@ -63,5 +67,6 @@ export async function assertBrandLogoUploadSceneAccess(
     customerId: null,
     visitorId: null,
     isPlatformAdmin: false,
+    isPlatformIdentity: false,
   };
 }

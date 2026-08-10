@@ -8,12 +8,14 @@ const tenantActor = {
   customerId: null,
   visitorId: null,
   isPlatformAdmin: false,
+  isPlatformIdentity: false,
 };
 const platformActor = {
   ...tenantActor,
   tenantId: null,
   employeeId: "platform-employee-1",
   isPlatformAdmin: true,
+  isPlatformIdentity: true,
 };
 const LOGO_UUID = "11111111-1111-4111-8111-111111111111";
 

@@ -95,6 +95,7 @@ describe("assertBrandLogoUploadSceneAccess", () => {
       customerId: null,
       visitorId: null,
       isPlatformAdmin: false,
+      isPlatformIdentity: false,
     });
   });
 
@@ -107,7 +108,8 @@ describe("assertBrandLogoUploadSceneAccess", () => {
       tenantName: null,
       tenantSlug: null,
       tenantStatus: null,
-      isPlatformAdmin: true,
+      isPlatformAdmin: false,
+      isPlatformStaff: true,
       permissions: [{ code: "platform.branding.manage", scope: "all" }],
     };
     const deps = dependencies(platformContext);
@@ -126,7 +128,8 @@ describe("assertBrandLogoUploadSceneAccess", () => {
     expect(actor).toMatchObject({
       tenantId: null,
       employeeId: "employee-platform",
-      isPlatformAdmin: true,
+      isPlatformAdmin: false,
+      isPlatformIdentity: true,
     });
   });
 
