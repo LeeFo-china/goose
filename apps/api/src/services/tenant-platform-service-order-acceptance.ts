@@ -116,6 +116,13 @@ export async function decideTenantServiceOrderAcceptance(
       result.errorCode ?? "SERVICE_ACCEPTANCE_INVALID_STATE",
     );
   }
+  if (decision === "accepted" && (!result.contract || !result.contractPeriod)) {
+    throw Errors.business(
+      409,
+      "平台服务验收状态已更新，请刷新后重试",
+      result.errorCode ?? "SERVICE_ACCEPTANCE_INVALID_STATE",
+    );
+  }
   const orderShippingReport = decision === "accepted"
     ? await reportAcceptedOrderShipping(dependencies, result.order)
     : null;
@@ -129,6 +136,9 @@ export async function decideTenantServiceOrderAcceptance(
       result.acceptancePreparation,
       responseNow,
     ),
+    contract: decision === "accepted" ? result.contract : null,
+    contract_period: decision === "accepted" ? result.contractPeriod : null,
+    idempotent: result.idempotent === true,
     wechat_shipping_report: orderShippingReport,
     server_time: responseNow.toISOString(),
   };

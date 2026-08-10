@@ -69,6 +69,10 @@ const query = {
     calls.push(["range", from, to]);
     return query;
   },
+  limit(value: number) {
+    calls.push(["limit", value]);
+    return query;
+  },
   maybeSingle: mock(async () => maybeResult),
   single: mock(async () => singleResult),
   then<TResult1 = QueryResult, TResult2 = never>(
@@ -410,4 +414,5 @@ describe("PlatformServiceFulfillmentRepository", () => {
       }),
     );
   });
+
 });

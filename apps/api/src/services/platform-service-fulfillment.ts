@@ -7,10 +7,7 @@ import {
   platformServiceOrderShippingReportRepository,
   type PlatformServiceOrderShippingReportRepository,
 } from "@/repositories/platform-service-order-shipping-reports";
-import type {
-  AtomicActionResult,
-  OrderRecord,
-} from "@/repositories/platform-service-order-records";
+import type { AtomicActionResult, OrderRecord } from "@/repositories/platform-service-order-records";
 import type {
   PlatformServiceAcceptancePreparationInput,
   PlatformServiceFulfillmentRecordInput,
@@ -327,7 +324,10 @@ export class PlatformServiceFulfillmentService {
       remark: input.remark,
       metadata: input.metadata,
     });
-    if (!result.workOrder || !result.order || !result.acceptancePreparation) {
+    if (
+      !result.workOrder || !result.order || !result.acceptancePreparation ||
+      !result.contract || !result.contractPeriod
+    ) {
       throwBusinessConflict(
         result.errorCode,
         result.errorCode === "SERVICE_ACCEPTANCE_NOT_OVERDUE"
@@ -348,6 +348,9 @@ export class PlatformServiceFulfillmentService {
         result.acceptancePreparation,
         now,
       ),
+      contract: result.contract,
+      contract_period: result.contractPeriod,
+      idempotent: result.idempotent === true,
       wechat_shipping_report: orderShippingReport,
       server_time: now.toISOString(),
     };

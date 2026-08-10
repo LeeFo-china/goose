@@ -20,6 +20,12 @@ import {
   type WorkOrderActionInput,
   type WorkOrderRecord,
 } from "./platform-service-order-records";
+import {
+  type ConfirmServiceRefundInput,
+  parseAcceptanceResult,
+  parseRefundConfirmationResult,
+  parseRefundExecutionRequest,
+} from "./platform-service-rpc-results";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
 
@@ -36,6 +42,7 @@ type ServiceQuery = PromiseLike<QueryResult> & {
   or(filter: string): ServiceQuery;
   order(column: string, options: { ascending: boolean }): ServiceQuery;
   range(from: number, to: number): ServiceQuery;
+  limit(value: number): ServiceQuery;
   maybeSingle(): Promise<QueryResult>;
   single(): Promise<QueryResult>;
 };
@@ -56,7 +63,8 @@ type ServiceClient = {
       | "platform_service_transition_work_order"
       | "platform_service_upsert_acceptance_preparation"
       | "platform_service_confirm_overdue_acceptance"
-      | "platform_service_review_refund_request",
+      | "platform_service_review_refund_request"
+      | "platform_service_confirm_refund",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -76,6 +84,7 @@ type FulfillmentAttachmentFileObjectRecord = {
 };
 
 const FULFILLMENT_ATTACHMENT_SCENE = "tenant_service_fulfillment_attachment";
+const REFUND_EXECUTION_SELECT = "id,tenant_id,service_order_id,idempotency_key,reason,status,version,created_by_employee_id,reviewed_by_employee_id,reviewed_at,review_remark,out_refund_no,wechat_refund_id,refund_amount_fen,refunded_at,refunded_by_employee_id,created_at,updated_at,order:tenant_service_orders(id,tenant_id,order_no,out_trade_no,amount_fen,paid_amount_fen,payment_status,service_status,payment_config_id,payment_config_guard_version,transaction_id)";
 
 export class PlatformServiceFulfillmentRepository {
   constructor(
@@ -252,7 +261,7 @@ export class PlatformServiceFulfillmentRepository {
   async confirmOverdueAcceptance(
     input: WorkOrderActionInput,
   ): Promise<AtomicActionResult> {
-    const { data, error } = await this.clientProvider().rpc(
+    const data = await this.rpcData(
       "platform_service_confirm_overdue_acceptance",
       {
         p_work_order_id: input.workOrderId,
@@ -261,9 +270,9 @@ export class PlatformServiceFulfillmentRepository {
         p_remark: input.remark ?? null,
         p_metadata: input.metadata ?? {},
       },
+      "平台确认逾期验收失败",
     );
-    if (error) throw Errors.dbError("平台确认逾期验收失败", error);
-    return this.mapAtomicActionResult(data);
+    return parseAcceptanceResult(data);
   }
 
   async listPlatformServiceRefundRequests(input: {
@@ -303,6 +312,53 @@ export class PlatformServiceFulfillmentRepository {
     );
     if (error) throw Errors.dbError("审核平台技术服务退款申请失败", error);
     return this.mapAtomicActionResult(data);
+  }
+
+  async findPlatformServiceRefundRequestById(refundRequestId: string) {
+    let result: QueryResult;
+    try {
+      result = await this.refundRequests().select(REFUND_EXECUTION_SELECT)
+        .eq("id", refundRequestId).limit(1).maybeSingle();
+    } catch {
+      throw Errors.dbError("查询平台技术服务退款执行事实失败");
+    }
+    const { data, error } = result;
+    if (error) throw Errors.dbError("查询平台技术服务退款执行事实失败");
+    return data === null ? null : parseRefundExecutionRequest(data);
+  }
+
+  async confirmServiceRefund(input: ConfirmServiceRefundInput) {
+    const data = await this.rpcData(
+      "platform_service_confirm_refund",
+      {
+        p_refund_request_id: input.refundRequestId,
+        p_service_order_id: input.serviceOrderId,
+        p_transaction_id: input.transactionId,
+        p_out_trade_no: input.outTradeNo,
+        p_payment_config_id: input.paymentConfigId,
+        p_payment_config_guard_version: input.paymentConfigGuardVersion,
+        p_out_refund_no: input.outRefundNo,
+        p_wechat_refund_id: input.wechatRefundId,
+        p_refund_amount_fen: input.refundAmountFen,
+        p_refunded_at: input.refundedAt,
+        p_operator_employee_id: input.operatorEmployeeId,
+        p_metadata: input.metadata,
+      },
+      "确认平台技术服务退款失败",
+    );
+    return parseRefundConfirmationResult(data);
+  }
+
+  private async rpcData(
+    name: Parameters<ServiceClient["rpc"]>[0], params: Record<string, unknown>, message: string,
+  ) {
+    try {
+      const { data, error } = await this.clientProvider().rpc(name, params);
+      if (error) throw Errors.dbError(message);
+      return data;
+    } catch {
+      throw Errors.dbError(message);
+    }
   }
 
   private orders() {

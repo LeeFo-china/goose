@@ -62,7 +62,14 @@ export const PlatformServiceRefundRequestListQuerySchema =
   PaginationQuerySchema.extend({
     keyword: z.string().trim().max(120, "关键词不能超过 120 个字符").optional(),
     tenantKeyword: z.string().trim().max(120, "租户关键词不能超过 120 个字符").optional(),
-    status: z.enum(["reviewing", "approved", "rejected", "cancelled"]).optional(),
+    status: z.enum([
+      "reviewing",
+      "approved",
+      "refunding",
+      "refunded",
+      "rejected",
+      "cancelled",
+    ]).optional(),
   }).strict();
 
 export const PlatformServiceWorkOrderAssignSchema = z.object({

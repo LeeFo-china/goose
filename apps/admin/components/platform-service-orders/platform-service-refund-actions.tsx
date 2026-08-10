@@ -2,7 +2,8 @@
 
 import { type FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, RotateCcw, XCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,13 +29,78 @@ export function PlatformServiceRefundActions({
   request: PlatformServiceRefundRequestListItem;
   canReview: boolean;
 }) {
-  if (!canReview || request.status !== "reviewing") return null;
+  return (
+    <div className="flex min-h-8 justify-end gap-2">
+      {canReview && request.status === "reviewing" ? (
+        <>
+          <ReviewRefundButton request={request} decision="rejected" />
+          <ReviewRefundButton request={request} decision="approved" />
+        </>
+      ) : null}
+      {canReview && request.status === "approved" && !request.refunded_at ? (
+        <ExecuteRefundButton request={request} />
+      ) : null}
+    </div>
+  );
+}
+
+function ExecuteRefundButton({
+  request,
+}: {
+  request: PlatformServiceRefundRequestListItem;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function handleExecute() {
+    startTransition(async () => {
+      try {
+        await requestBackendJson(
+          `/api/backend/platform/billing/service-refund-requests/${request.id}/execute`,
+          {
+            method: "POST",
+            fallbackMessage: "执行微信退款失败",
+          },
+        );
+        toast.success("微信退款成功，服务访问已终止");
+        setOpen(false);
+        refreshAfterDialogClose(router);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "执行微信退款失败");
+      }
+    });
+  }
 
   return (
-    <div className="flex justify-end gap-2">
-      <ReviewRefundButton request={request} decision="rejected" />
-      <ReviewRefundButton request={request} decision="approved" />
-    </div>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button type="button" size="sm" variant="destructive">
+          <RotateCcw data-icon="inline-start" />
+          执行微信退款
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>执行微信全额退款</DialogTitle>
+          <DialogDescription>
+            审核通过不等于退款成功。仅微信返回退款成功后，系统才会终止服务访问。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="rounded-md bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          订单：{request.order?.order_no || request.service_order_id}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+            取消
+          </Button>
+          <Button type="button" variant="destructive" onClick={handleExecute} disabled={pending}>
+            {pending ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+            确认执行退款
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

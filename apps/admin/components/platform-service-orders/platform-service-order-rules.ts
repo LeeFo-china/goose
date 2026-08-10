@@ -58,6 +58,8 @@ export const serviceStatusOptions: ReadonlyArray<{
 export const refundStatusOptions = [
   { value: "reviewing", label: "待审核" },
   { value: "approved", label: "已通过" },
+  { value: "refunding", label: "退款中" },
+  { value: "refunded", label: "已退款" },
   { value: "rejected", label: "已驳回" },
   { value: "cancelled", label: "已取消" },
 ] as const;
@@ -126,6 +128,8 @@ export const refundStatusMeta: Record<
 > = {
   reviewing: { label: "待审核", variant: "warning" },
   approved: { label: "已通过", variant: "success" },
+  refunding: { label: "退款中", variant: "warning" },
+  refunded: { label: "已退款", variant: "secondary" },
   rejected: { label: "已驳回", variant: "danger" },
   cancelled: { label: "已取消", variant: "secondary" },
 };

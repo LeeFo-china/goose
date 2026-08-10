@@ -103,7 +103,7 @@ const shippingReportRecord = {
   id: "shipping-report-1",
   tenant_id: "tenant-1",
   service_order_id: "order-1",
-  source: "tenant_acceptance",
+  source: "tenant_acceptance" as const,
   status: "failed",
   attempt_count: 2,
   last_attempt_key: "00000000-0000-4000-8000-000000000901",

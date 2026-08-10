@@ -16,7 +16,7 @@ export function requireActiveServicePaymentConfig(
 
 export function requireOrderPaymentConfig(
   config: PlatformPaymentConfigRecord | null,
-  order: OrderRecord,
+  order: Pick<OrderRecord, "payment_config_id" | "payment_config_guard_version">,
 ) {
   if (
     !config ||
