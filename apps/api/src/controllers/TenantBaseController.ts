@@ -3,8 +3,8 @@ import { accessPolicyService } from "@/services/access-policy";
 import {
   authorizationService,
   type AuthContext,
-  type GetRequiredAuthContextOptions,
 } from "@/services/authorization";
+import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
 import type { FastifyRequest } from "fastify";
 import type { ZodTypeAny } from "zod";
 
@@ -17,11 +17,10 @@ export abstract class TenantBaseController<
 > extends BaseController<TCreate, TUpdate, T> {
   protected async getRequiredAuthContext(
     request: FastifyRequest,
-    options: GetRequiredAuthContextOptions = {},
   ) {
     const authContext = await authorizationService.getRequiredAuthContext(
       request.user?.sub,
-      options,
+      { tenantServiceAccess: getTenantServiceRouteAccess(request) },
     );
     request.authContext = authContext;
     return authContext;
@@ -35,9 +34,8 @@ export abstract class TenantBaseController<
 
   protected async getRequiredTenantContext(
     request: FastifyRequest,
-    options: GetRequiredAuthContextOptions = {},
   ): Promise<TenantAuthContext> {
-    const authContext = await this.getRequiredAuthContext(request, options);
+    const authContext = await this.getRequiredAuthContext(request);
     this.assertTenantContext(authContext);
     return authContext;
   }

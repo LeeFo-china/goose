@@ -18,6 +18,7 @@ import {
 } from "@/schema/billing";
 import { authorizationService } from "@/services/authorization";
 import { billingService } from "@/services/billing";
+import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -29,18 +30,18 @@ class BillingController extends BaseController {
 
   private async getBillingAllowedAuthContext(request: FastifyRequest) {
     return authorizationService.getRequiredAuthContext(request.user?.sub, {
-      allowedWhenBillingLocked: true,
+      tenantServiceAccess: getTenantServiceRouteAccess(request),
     });
   }
 
-  @Get("/billing/account")
+  @Get("/billing/account", { tenantServiceAccess: "recovery" })
   async getTenantAccount(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantAccount(authContext);
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/summary")
+  @Get("/billing/summary", { tenantServiceAccess: "recovery" })
   async getTenantSummary(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingDateRangeQuerySchema.safeParse(request.query || {});
@@ -50,7 +51,7 @@ class BillingController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/ledger")
+  @Get("/billing/ledger", { tenantServiceAccess: "recovery" })
   async listTenantLedger(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingLedgerQuerySchema.safeParse(request.query || {});
@@ -60,21 +61,23 @@ class BillingController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/feature-estimates")
+  @Get("/billing/feature-estimates", { tenantServiceAccess: "recovery" })
   async getTenantFeatureEstimates(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantFeatureEstimates(authContext);
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/subscription")
+  @Get("/billing/subscription", { tenantServiceAccess: "recovery" })
   async getTenantSubscription(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const data = await billingService.getTenantSubscription(authContext);
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/subscription-invoices")
+  @Get("/billing/subscription-invoices", {
+    tenantServiceAccess: "recovery",
+  })
   async listTenantSubscriptionInvoices(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = BillingSubscriptionInvoiceQuerySchema.safeParse(request.query || {});
@@ -87,7 +90,9 @@ class BillingController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/subscription-invoices/:id")
+  @Get("/billing/subscription-invoices/:id", {
+    tenantServiceAccess: "recovery",
+  })
   async getTenantSubscriptionInvoice(request: FastifyRequest, reply: FastifyReply) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = BillingSubscriptionInvoiceParamSchema.safeParse(

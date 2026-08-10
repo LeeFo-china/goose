@@ -50,7 +50,12 @@ export function registeredHandlers(controller: BrandingControllerLike) {
       if (typeof routeHandler !== "function") {
         throw new TypeError(`invalid route handler: ${method} ${path}`);
       }
-      routes.set(`${method} ${path}`, routeHandler as RouteHandler);
+      const routeOptions = handler ? optionsOrHandler : {};
+      routes.set(`${method} ${path}`, (request, reply) =>
+        (routeHandler as RouteHandler)(
+          Object.assign(request, { method, routeOptions }),
+          reply,
+        ));
     };
   controller.registerExtraRoutes({
     get: register("GET"),

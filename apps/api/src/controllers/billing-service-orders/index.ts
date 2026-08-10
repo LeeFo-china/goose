@@ -12,6 +12,7 @@ import {
   ServiceRefundRequestSchema,
 } from "@/schema/billing-service-orders";
 import { authorizationService } from "@/services/authorization";
+import { getTenantServiceRouteAccess } from "@/services/tenant-service-route-access";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
@@ -48,11 +49,11 @@ class BillingServiceOrdersController extends BaseController {
 
   private async getBillingAllowedAuthContext(request: FastifyRequest) {
     return authorizationService.getRequiredAuthContext(request.user?.sub, {
-      allowedWhenBillingLocked: true,
+      tenantServiceAccess: getTenantServiceRouteAccess(request),
     });
   }
 
-  @Get("/billing/service-products")
+  @Get("/billing/service-products", { tenantServiceAccess: "recovery" })
   async listProducts(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = ServiceProductListQuerySchema.safeParse(
@@ -67,7 +68,7 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/service-orders")
+  @Get("/billing/service-orders", { tenantServiceAccess: "recovery" })
   async listOrders(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const queryResult = ServiceOrderListQuerySchema.safeParse(
@@ -82,7 +83,7 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders")
+  @Post("/billing/service-orders", { tenantServiceAccess: "recovery" })
   async createOrder(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const openid = requirePayerOpenid(request);
@@ -97,7 +98,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/service-orders/:id")
+  @Get("/billing/service-orders/:id", {
+    tenantServiceAccess: "recovery",
+  })
   async getOrder(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -112,7 +115,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders/:id/payment-request")
+  @Post("/billing/service-orders/:id/payment-request", {
+    tenantServiceAccess: "recovery",
+  })
   async createPaymentRequest(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const openid = requirePayerOpenid(request);
@@ -133,7 +138,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders/:id/cancel")
+  @Post("/billing/service-orders/:id/cancel", {
+    tenantServiceAccess: "recovery",
+  })
   async cancelOrder(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -152,7 +159,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders/:id/refund-requests")
+  @Post("/billing/service-orders/:id/refund-requests", {
+    tenantServiceAccess: "write",
+  })
   async requestRefund(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -171,7 +180,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/service-orders/:id/acceptance")
+  @Get("/billing/service-orders/:id/acceptance", {
+    tenantServiceAccess: "read",
+  })
   async getAcceptance(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -186,7 +197,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders/:id/acceptance/confirm")
+  @Post("/billing/service-orders/:id/acceptance/confirm", {
+    tenantServiceAccess: "write",
+  })
   async confirmAcceptance(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -207,7 +220,9 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/billing/service-orders/:id/acceptance/reject")
+  @Post("/billing/service-orders/:id/acceptance/reject", {
+    tenantServiceAccess: "write",
+  })
   async rejectAcceptance(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceOrderParamSchema.safeParse(
@@ -228,7 +243,10 @@ class BillingServiceOrdersController extends BaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get("/billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url")
+  @Get(
+    "/billing/service-orders/:id/fulfillment-attachments/:attachmentId/preview-url",
+    { tenantServiceAccess: "read" },
+  )
   async getFulfillmentAttachmentPreviewUrl(request: FastifyRequest) {
     const authContext = await this.getBillingAllowedAuthContext(request);
     const paramsResult = ServiceFulfillmentAttachmentPreviewParamSchema.safeParse(

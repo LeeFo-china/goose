@@ -1,7 +1,9 @@
+import type { TenantServiceRouteAccess } from "@gooes/domain";
+
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { permissionRepository } from "@/repositories/permissions";
-import { billingSubscriptionService } from "@/services/billing-subscriptions";
+import { tenantServiceAccessService } from "@/services/tenant-service-access";
 import {
   buildAuthContext,
   type EmployeePermissionContextRecord,
@@ -9,26 +11,26 @@ import {
 import { AuthContextCache } from "./legacy/context-cache";
 import type { AuthContext } from "./legacy/types";
 
-type BillingSubscriptionServicePort = Pick<
-  typeof billingSubscriptionService,
-  "getTenantLockState"
+type TenantServiceAccessServicePort = Pick<
+  typeof tenantServiceAccessService,
+  "resolveForRoute"
 >;
 
 export type GetRequiredAuthContextOptions = {
-  allowedWhenBillingLocked?: boolean;
+  tenantServiceAccess?: TenantServiceRouteAccess;
 };
 
 export type AuthorizationServiceDependencies = {
-  billingSubscriptionService?: BillingSubscriptionServicePort;
+  tenantServiceAccessService?: TenantServiceAccessServicePort;
 };
 
 export class AuthorizationService {
   private cache = new AuthContextCache();
-  private readonly billingSubscriptionService: BillingSubscriptionServicePort;
+  private readonly tenantServiceAccessService: TenantServiceAccessServicePort;
 
   constructor(dependencies: AuthorizationServiceDependencies = {}) {
-    this.billingSubscriptionService =
-      dependencies.billingSubscriptionService ?? billingSubscriptionService;
+    this.tenantServiceAccessService =
+      dependencies.tenantServiceAccessService ?? tenantServiceAccessService;
   }
 
   async getAuthContextByAuthUserId(authUserId: string): Promise<AuthContext> {
@@ -189,21 +191,9 @@ export class AuthorizationService {
     ) {
       throw Errors.business(403, "员工未绑定装修公司", "EMPLOYEE_TENANT_MISSING");
     }
-
-    if (
-      authContext.employeeId &&
-      !authContext.isPlatformAdmin &&
-      authContext.tenantStatus &&
-      authContext.tenantStatus !== "active"
-    ) {
-      throw Errors.business(403, "租户状态不可用", ErrorCodes.TENANT_NOT_AVAILABLE, {
-        tenant_id: authContext.tenantId,
-        tenant_status: authContext.tenantStatus,
-      });
-    }
   }
 
-  private async assertBillingAvailable(
+  private async assertTenantServiceAccess(
     authContext: AuthContext,
     options: GetRequiredAuthContextOptions,
   ) {
@@ -215,22 +205,26 @@ export class AuthorizationService {
       return;
     }
 
-    const lockState = await this.billingSubscriptionService.getTenantLockState(
-      authContext.tenantId,
-    );
-    if (!lockState.locked || options.allowedWhenBillingLocked) {
+    const decision = await this.tenantServiceAccessService.resolveForRoute({
+      tenantId: authContext.tenantId,
+      routeAccess: options.tenantServiceAccess ?? "write",
+      requiredCapability: null,
+      now: new Date(),
+    });
+    if (decision.allowed) {
       return;
     }
 
     throw Errors.business(
-      402,
-      "租户积分不足，系统已锁定",
-      ErrorCodes.TENANT_BILLING_LOCKED,
+      403,
+      decision.reason ?? "租户服务访问不可用",
+      decision.errorCode ?? "TENANT_SERVICE_ACCESS_DENIED",
       {
         tenant_id: authContext.tenantId,
-        lock_reason: lockState.reason,
-        locked_at: lockState.locked_at,
-        last_invoice_id: lockState.last_invoice_id,
+        access_mode: decision.mode,
+        access_level: decision.accessLevel,
+        starts_at: decision.startsAt,
+        ends_at: decision.endsAt,
       },
     );
   }
@@ -246,7 +240,7 @@ export class AuthorizationService {
     const authContext = await this.getAuthContextByAuthUserId(authUserId);
 
     this.assertTenantAvailable(authContext);
-    await this.assertBillingAvailable(authContext, options);
+    await this.assertTenantServiceAccess(authContext, options);
     return authContext;
   }
 }
