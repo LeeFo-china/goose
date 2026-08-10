@@ -468,10 +468,9 @@ function addDays(date: Date, days: number) {
 
 function uniqueFileIds(fileIds: string[]) {
   const seen = new Set<string>();
-  return fileIds.filter((fileId) => {
-    const key = fileId.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
+  return fileIds.map((fileId) => fileId.toLowerCase()).filter((fileId) => {
+    if (seen.has(fileId)) return false;
+    seen.add(fileId);
     return true;
   });
 }

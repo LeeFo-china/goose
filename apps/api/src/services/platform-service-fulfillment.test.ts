@@ -420,6 +420,7 @@ describe("PlatformServiceFulfillmentService", () => {
       "./platform-service-fulfillment"
     );
     const service = new PlatformServiceFulfillmentService({ repository });
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
 
     await service.createFulfillmentRecord(
       platformAuth([{ code: "platform.service_work_order.manage", scope: "all" }]),
@@ -429,7 +430,7 @@ describe("PlatformServiceFulfillmentService", () => {
         title: "服务器配置",
         content: "已完成配置",
         occurred_at: "2026-08-04T10:00:00+08:00",
-        file_ids: ["file-1", "FILE-1"],
+        file_ids: [canonicalFileId.toUpperCase(), canonicalFileId],
       },
     );
 
@@ -441,7 +442,7 @@ describe("PlatformServiceFulfillmentService", () => {
         tenantId: "tenant-1",
         serviceOrderId: "order-1",
         workOrderId: "work-1",
-        fileIds: ["file-1"],
+        fileIds: [canonicalFileId],
       }),
     );
   });

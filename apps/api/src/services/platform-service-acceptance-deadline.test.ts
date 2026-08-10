@@ -109,6 +109,7 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
       "./platform-service-fulfillment"
     );
     const repository = createRepository();
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
     const settingsService = { getNumber: mock(async () => 3) };
     const service = new PlatformServiceFulfillmentService({
       repository,
@@ -119,7 +120,7 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     await service.upsertAcceptancePreparation(authContext, "work-1", {
       status: "submitted",
       summary: "客户专属系统环境已部署，服务器配置及首次操作培训已完成。",
-      file_ids: ["file-1", "FILE-1"],
+      file_ids: [canonicalFileId.toUpperCase()],
     });
 
     expect(settingsService.getNumber).toHaveBeenCalledWith(
@@ -130,7 +131,7 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     expect(repository.upsertAcceptancePreparation).toHaveBeenCalledWith(
       expect.objectContaining({
         acceptanceDueAt: "2026-08-07T10:00:00.000Z",
-        fileIds: ["file-1"],
+        fileIds: [canonicalFileId],
       }),
     );
   });

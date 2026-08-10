@@ -431,10 +431,9 @@ export class PlatformServiceFulfillmentRepository {
 
 function deduplicateUuidIds(ids: string[]) {
   const seen = new Set<string>();
-  return ids.filter((id) => {
-    const key = id.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
+  return ids.map((id) => id.toLowerCase()).filter((id) => {
+    if (seen.has(id)) return false;
+    seen.add(id);
     return true;
   });
 }

@@ -206,6 +206,8 @@ describe("PlatformServiceFulfillmentRepository", () => {
       "./platform-service-fulfillment"
     );
     const repository = new PlatformServiceFulfillmentRepository(() => client);
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+    const uppercaseFileId = canonicalFileId.toUpperCase();
     singleResult = {
       data: { id: "record-1", work_order_id: "work-1" },
       error: null,
@@ -213,7 +215,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
     listResult = {
       data: [
         {
-          id: "file-1",
+          id: canonicalFileId,
           tenant_id: null,
           scene: "tenant_service_fulfillment_attachment",
           provider: "tencent_cos",
@@ -226,7 +228,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
           size_bytes: 2048,
         },
         {
-          id: "file-2",
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           tenant_id: null,
           scene: "tenant_service_fulfillment_attachment",
           provider: "tencent_cos",
@@ -251,25 +253,33 @@ describe("PlatformServiceFulfillmentRepository", () => {
       title: "服务器配置",
       content: "已完成配置",
       occurredAt: "2026-08-04T10:00:00.000Z",
-      fileIds: ["file-1", "FILE-1", "file-2"],
+      fileIds: [
+        uppercaseFileId,
+        canonicalFileId,
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      ],
       createdByEmployeeId: "admin-1",
     });
 
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_records"]);
     expect(calls).toContainEqual(["from", "platform_file_objects"]);
-    expect(calls).toContainEqual(["in", "id", ["file-1", "file-2"]]);
+    expect(calls).toContainEqual([
+      "in",
+      "id",
+      [canonicalFileId, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+    ]);
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_attachments"]);
     const insertCalls = calls.filter(([method]) => method === "insert");
     expect(insertCalls).toHaveLength(2);
     expect(insertCalls[1]?.[1]).toEqual([
       expect.objectContaining({
-        file_id: "file-1",
+        file_id: canonicalFileId,
         file_name: "部署说明.pdf",
         mime_type: "application/pdf",
         size_bytes: 2048,
       }),
       expect.objectContaining({
-        file_id: "file-2",
+        file_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         file_name: "培训照片.png",
         mime_type: "image/png",
         size_bytes: 4096,
@@ -282,6 +292,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
       "./platform-service-fulfillment"
     );
     const repository = new PlatformServiceFulfillmentRepository(() => client);
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
     rpcResult = {
       data: {
         acceptance_preparation: {
@@ -297,7 +308,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
     };
     listResult = {
       data: [{
-        id: "file-1",
+        id: canonicalFileId,
         tenant_id: null,
         scene: "tenant_service_fulfillment_attachment",
         provider: "tencent_cos",
@@ -319,7 +330,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
       workOrderId: "work-1",
       status: "submitted",
       summary: "部署和培训已完成",
-      fileIds: ["file-1", "FILE-1"],
+      fileIds: [canonicalFileId.toUpperCase()],
       preparedByEmployeeId: "admin-1",
       acceptanceDueAt: "2026-08-13T10:00:00.000Z",
     });
@@ -345,7 +356,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
     expect(attachmentPosition).toBeGreaterThan(rpcPosition);
     expect(calls.slice(attachmentPosition)).toContainEqual([
       "upsert",
-      [expect.objectContaining({ file_id: "file-1" })],
+      [expect.objectContaining({ file_id: canonicalFileId })],
       {
         onConflict: "work_order_id,fulfillment_record_id,file_id",
         ignoreDuplicates: true,
