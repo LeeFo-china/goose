@@ -27,6 +27,11 @@ export const ServiceOrderActionSchema = z.object({
   expected_version: z.number().int().positive("订单版本必须大于 0"),
 }).strict();
 
+export const ServiceOrderCancelSchema = ServiceOrderActionSchema.extend({
+  reason: z.enum(["user_changed_product", "user_cancelled"])
+    .default("user_cancelled"),
+}).strict();
+
 export const ServiceRefundRequestSchema = ServiceOrderActionSchema.extend({
   reason: z.string().trim().min(1, "售后原因不能为空")
     .max(500, "售后原因不能超过 500 个字符"),
@@ -54,6 +59,8 @@ export type ServiceOrderCreateInput =
   z.infer<typeof ServiceOrderCreateSchema>;
 export type ServiceOrderActionInput =
   z.infer<typeof ServiceOrderActionSchema>;
+export type ServiceOrderCancelInput =
+  z.infer<typeof ServiceOrderCancelSchema>;
 export type ServiceRefundRequestInput =
   z.infer<typeof ServiceRefundRequestSchema>;
 export type ServiceAcceptanceDecisionInput =

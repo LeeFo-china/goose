@@ -1,3 +1,9 @@
+export {
+  buildIlikePattern,
+  normalizePagination,
+  pageResult,
+} from "./platform-service-order-pagination";
+
 export type ProductVersionRecord = {
   id: string;
   version: number;
@@ -425,6 +431,7 @@ export const TENANT_PUBLIC_ORDER_SELECT = [
   "payment_expires_at",
   "paid_at",
   "closed_at",
+  "cancel_claim_expires_at",
   "terms_version",
   "version",
   "created_at",
@@ -459,41 +466,10 @@ export const TENANT_INTERNAL_ORDER_SELECT = [
   "payment_expires_at",
   "paid_at",
   "closed_at",
+  "cancel_idempotency_key",
+  "cancel_claim_expires_at",
   "terms_version",
   "version",
   "created_at",
   "updated_at",
 ].join(",");
-
-export function normalizePagination(page: number, pageSize: number) {
-  const normalizedPage = Math.max(1, Math.floor(page || 1));
-  const normalizedPageSize = Math.min(100, Math.max(1, Math.floor(pageSize || 20)));
-  const from = (normalizedPage - 1) * normalizedPageSize;
-  return {
-    page: normalizedPage,
-    pageSize: normalizedPageSize,
-    from,
-    to: from + normalizedPageSize - 1,
-  };
-}
-
-export function pageResult<T>(
-  data: unknown,
-  count: number | null | undefined,
-  pagination: ReturnType<typeof normalizePagination>,
-) {
-  const total = count ?? 0;
-  return {
-    list: (Array.isArray(data) ? data : []) as T[],
-    pagination: {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      total,
-      totalPages: total ? Math.ceil(total / pagination.pageSize) : 0,
-    },
-  };
-}
-
-export function buildIlikePattern(value: string) {
-  return `%${value.trim()}%`;
-}

@@ -4,6 +4,7 @@ import {
   ServiceFulfillmentAttachmentPreviewParamSchema,
   ServiceAcceptanceDecisionSchema,
   ServiceOrderActionSchema,
+  ServiceOrderCancelSchema,
   ServiceOrderCreateSchema,
   ServiceOrderListQuerySchema,
   ServiceOrderParamSchema,
@@ -16,9 +17,16 @@ import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
 
 const SERVICE_MODULE = "../../services/tenant-platform-service-orders";
+const CANCELLATION_SERVICE_MODULE =
+  "../../services/tenant-platform-service-order-cancellation";
 
 async function service() {
   return (await import(SERVICE_MODULE)).tenantPlatformServiceOrderService;
+}
+
+async function cancellationService() {
+  return (await import(CANCELLATION_SERVICE_MODULE))
+    .tenantPlatformServiceOrderCancellationService;
 }
 
 function requirePayerOpenid(request: FastifyRequest) {
@@ -121,6 +129,25 @@ class BillingServiceOrdersController extends BaseController {
       paramsResult.data.id,
       bodyResult.data,
       openid,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/billing/service-orders/:id/cancel")
+  async cancelOrder(request: FastifyRequest) {
+    const authContext = await this.getBillingAllowedAuthContext(request);
+    const paramsResult = ServiceOrderParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+
+    const bodyResult = ServiceOrderCancelSchema.safeParse(request.body || {});
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await (await cancellationService()).cancel(
+      authContext,
+      paramsResult.data.id,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

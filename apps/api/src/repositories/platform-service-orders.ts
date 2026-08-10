@@ -37,6 +37,7 @@ type ServiceQuery = PromiseLike<QueryResult> & {
   insert(record: Record<string, unknown>): ServiceQuery;
   update(patch: Record<string, unknown>): ServiceQuery;
   eq(column: string, value: unknown): ServiceQuery;
+  is(column: string, value: null): ServiceQuery;
   ilike(column: string, pattern: string): ServiceQuery;
   or(filter: string): ServiceQuery;
   order(column: string, options: { ascending: boolean }): ServiceQuery;
@@ -341,6 +342,7 @@ export class PlatformServiceOrderRepository {
       .update({ prepay_id: input.prepayId })
       .eq("id", input.orderId)
       .eq("payment_status", "pending")
+      .is("cancel_idempotency_key", null)
       .select(TENANT_INTERNAL_ORDER_SELECT)
       .maybeSingle();
     if (error) throw Errors.dbError("保存平台技术服务预支付单失败", error);
@@ -477,11 +479,9 @@ export class PlatformServiceOrderRepository {
         : undefined,
     };
   }
-
   private products() {
     return this.clientProvider().from("platform_service_products");
   }
-
   private orders() {
     return this.clientProvider().from("tenant_service_orders");
   }

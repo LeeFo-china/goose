@@ -70,9 +70,12 @@ export function serializePlatformServiceProduct(record: PlatformProductRecord) {
 export function serializeTenantServiceOrder(
   record: TenantServiceOrderInput,
   now: Date = new Date(),
+  options: { canCancelPayment?: boolean } = {},
 ) {
   const paymentStatus = String(record.payment_status);
   const serviceStatus = String(record.service_status);
+  const cancellationClaimed = hasCancellationClaim(record);
+  const cancellationActive = hasActiveCancellationClaim(record, now);
   return {
     id: record.id,
     order_no: record.order_no,
@@ -89,11 +92,57 @@ export function serializeTenantServiceOrder(
     terms_version: record.terms_version,
     version: record.version,
     available_actions: {
-      continue_payment: getContinuePaymentAction(record, now),
+      continue_payment: getContinuePaymentAction(
+        record,
+        now,
+        cancellationClaimed,
+      ),
+      cancel_payment: getCancelPaymentAction(
+        paymentStatus,
+        options.canCancelPayment === true,
+        cancellationActive,
+      ),
       request_refund: getRequestRefundAction(paymentStatus),
     },
     created_at: record.created_at,
     updated_at: record.updated_at,
+  };
+}
+
+function getCancelPaymentAction(
+  paymentStatus: string,
+  canCancelPayment: boolean,
+  cancellationActive: boolean,
+): ActionView {
+  if (paymentStatus === "pending") {
+    if (cancellationActive) {
+      return {
+        enabled: false,
+        label: "取消订单",
+        disabled_reason: "订单正在取消，请稍后刷新",
+      };
+    }
+    if (!canCancelPayment) {
+      return {
+        enabled: false,
+        label: "取消订单",
+        disabled_reason: "无取消订单权限",
+      };
+    }
+    return {
+      enabled: true,
+      label: "取消订单",
+      disabled_reason: null,
+    };
+  }
+  return {
+    enabled: false,
+    label: "取消订单",
+    disabled_reason: paymentStatus === "paid"
+      ? "订单已支付，不能取消"
+      : paymentStatus === "closed"
+      ? "订单已关闭"
+      : "订单状态不允许取消",
   };
 }
 
@@ -164,12 +213,20 @@ function hasUnpublishedChanges(
 function getContinuePaymentAction(
   record: TenantServiceOrderInput,
   now: Date,
+  cancellationClaimed: boolean,
 ): ActionView {
   if (record.payment_status !== "pending") {
     return {
       enabled: false,
       label: "继续支付",
       disabled_reason: "订单不是待支付状态",
+    };
+  }
+  if (cancellationClaimed) {
+    return {
+      enabled: false,
+      label: "继续支付",
+      disabled_reason: "订单正在取消，请稍后刷新",
     };
   }
   if (new Date(record.payment_expires_at).getTime() <= now.getTime()) {
@@ -184,6 +241,22 @@ function getContinuePaymentAction(
     label: "继续支付",
     disabled_reason: null,
   };
+}
+
+function hasCancellationClaim(record: TenantServiceOrderInput) {
+  return typeof record.cancel_claim_expires_at === "string" &&
+    Boolean(record.cancel_claim_expires_at.trim());
+}
+
+function hasActiveCancellationClaim(
+  record: TenantServiceOrderInput,
+  now: Date,
+) {
+  if (!hasCancellationClaim(record)) return false;
+  const expiresAt = typeof record.cancel_claim_expires_at === "string"
+    ? Date.parse(record.cancel_claim_expires_at)
+    : Number.NaN;
+  return Number.isFinite(expiresAt) && expiresAt > now.getTime();
 }
 
 function getRequestRefundAction(paymentStatus: string): ActionView {

@@ -38,6 +38,11 @@ const formalTermsMigrationPath = new URL(
 );
 const formalTermsMigrationFile = Bun.file(formalTermsMigrationPath);
 const readFormalTermsMigration = () => formalTermsMigrationFile.text();
+const cancellationMigrationPath = new URL(
+  "../../../../supabase/migrations/20260810100000_cancel_pending_platform_service_orders.sql",
+  import.meta.url,
+);
+const readCancellationMigration = () => Bun.file(cancellationMigrationPath).text();
 
 describe("platform service sales migration", () => {
   test("creates isolated service sales tables", async () => {
@@ -141,5 +146,29 @@ describe("platform service sales migration", () => {
     expect(sql).not.toContain("platform_service_smoke_1fen");
     expect(sql).not.toMatch(/published_version_id\s*=/i);
     expect(sql).not.toMatch(/INSERT\s+INTO\s+public\.platform_service_product_versions/i);
+  });
+
+  test("reserves and finalizes pending cancellation with payment race guards", async () => {
+    const sql = await readCancellationMigration();
+    expect(sql).toContain("platform_service_claim_pending_order_cancel");
+    expect(sql).toContain("platform_service_cancel_pending_order");
+    expect(sql).toContain("FOR UPDATE");
+    expect(sql).toContain("tenant_id = p_tenant_id");
+    expect(sql).toContain("cancel_idempotency_key");
+    expect(sql).toContain("pg_advisory_xact_lock");
+    expect(sql).toContain("SERVICE_ORDER_VERSION_CONFLICT");
+    expect(sql).toContain("SERVICE_ORDER_IDEMPOTENCY_CONFLICT");
+    expect(sql).toContain("SERVICE_ORDER_CANCEL_IN_PROGRESS");
+    expect(sql).toContain("SERVICE_ORDER_CANCEL_PREPAY_CHANGED");
+    expect(sql).toContain("p_require_missing_prepay");
+    expect(sql).toContain("prepay_id IS NULL");
+    expect(sql).toContain("platform_service_clear_cancel_claim_on_payment");
+    expect(sql).toContain("cancel_claim_expires_at");
+    expect(sql).toContain("SERVICE_ORDER_CANCEL_CLAIM_LEASE_MINUTES");
+    expect(sql).toContain("historical closed_at invariant");
+    expect(sql).toMatch(/payment_status\s*=\s*'closed'/i);
+    expect(sql).toMatch(/version\s*=\s*version\s*\+\s*1/i);
+    expect(sql).toContain("TO service_role");
+    expect(sql).toContain("FROM authenticated");
   });
 });

@@ -15749,7 +15749,11 @@ export type Database = {
       tenant_service_orders: {
         Row: {
           amount_fen: number
+          cancel_claim_expires_at: string | null
+          cancel_idempotency_key: string | null
           closed_at: string | null
+          close_reason: string | null
+          closed_by_employee_id: string | null
           created_at: string
           created_by_employee_id: string
           id: string
@@ -15780,7 +15784,11 @@ export type Database = {
         }
         Insert: {
           amount_fen: number
+          cancel_claim_expires_at?: string | null
+          cancel_idempotency_key?: string | null
           closed_at?: string | null
+          close_reason?: string | null
+          closed_by_employee_id?: string | null
           created_at?: string
           created_by_employee_id: string
           id?: string
@@ -15811,7 +15819,11 @@ export type Database = {
         }
         Update: {
           amount_fen?: number
+          cancel_claim_expires_at?: string | null
+          cancel_idempotency_key?: string | null
           closed_at?: string | null
+          close_reason?: string | null
+          closed_by_employee_id?: string | null
           created_at?: string
           created_by_employee_id?: string
           id?: string
@@ -15841,6 +15853,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "tenant_service_orders_closed_by_employee_tenant_fkey"
+            columns: ["closed_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "tenant_service_orders_created_by_employee_id_fkey"
             columns: ["created_by_employee_id"]
@@ -23193,6 +23212,27 @@ export type Database = {
         }
         Returns: Json
       }
+      platform_service_cancel_pending_order: {
+        Args: {
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_require_missing_prepay?: boolean
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      platform_service_claim_pending_order_cancel: {
+        Args: {
+          p_closed_by_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_order_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       platform_service_create_pending_order: {
         Args: {
           p_amount_fen: number
@@ -23217,7 +23257,11 @@ export type Database = {
         }
         Returns: {
           amount_fen: number
+          cancel_claim_expires_at: string | null
+          cancel_idempotency_key: string | null
           closed_at: string | null
+          close_reason: string | null
+          closed_by_employee_id: string | null
           created_at: string
           created_by_employee_id: string
           id: string

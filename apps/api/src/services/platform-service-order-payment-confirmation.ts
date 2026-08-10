@@ -9,7 +9,7 @@ export type PlatformServiceOrderPaymentConfirmationInput = {
   order: OrderRecord;
   transaction: WechatPayValidatedSuccessTransaction;
   notificationId: string | null;
-  source: "wechat_callback";
+  source: "wechat_callback" | "cancellation_reconcile";
 };
 
 type RepositoryPort = Pick<PlatformServiceOrderRepository, "confirmPayment">;

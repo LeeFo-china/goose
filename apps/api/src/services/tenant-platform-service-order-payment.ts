@@ -55,7 +55,7 @@ type ServiceOrderPaymentDependencies = {
 
 export async function createServiceOrderPaymentRequest(
   dependencies: ServiceOrderPaymentDependencies,
-  order: OrderRecord,
+  order: OrderRecord & { cancel_idempotency_key?: string | null },
   description: string,
   wrapPrepayError: boolean,
 ) {
@@ -80,8 +80,10 @@ export async function createServiceOrderPaymentRequest(
     });
   }
 
+  let prepay: WechatPayCreateJsapiPrepayResult;
+  let markedOrder: OrderRecord | null;
   try {
-    const prepay = await dependencies.wechatPayGateway.createJsapiPrepay({
+    prepay = await dependencies.wechatPayGateway.createJsapiPrepay({
       config,
       order: {
         out_trade_no: order.out_trade_no ?? order.order_no,
@@ -92,11 +94,10 @@ export async function createServiceOrderPaymentRequest(
       description,
       secretBundle,
     });
-    const markedOrder = await dependencies.repository.markPrepayCreated({
+    markedOrder = await dependencies.repository.markPrepayCreated({
       orderId: order.id,
       prepayId: prepay.prepayId,
     });
-    return markedOrder ? prepay.paymentRequest : null;
   } catch (error) {
     if (!wrapPrepayError) throw error;
     throw Errors.business(
@@ -106,9 +107,20 @@ export async function createServiceOrderPaymentRequest(
       { order_id: order.id },
     );
   }
+  if (!markedOrder) {
+    throw Errors.business(
+      409,
+      "平台服务订单状态已变化，请刷新后重试",
+      "SERVICE_ORDER_PAYMENT_STATE_CHANGED",
+    );
+  }
+  return prepay.paymentRequest;
 }
 
-function assertPaymentReusable(order: OrderRecord, nowFactory: () => Date) {
+function assertPaymentReusable(
+  order: OrderRecord & { cancel_idempotency_key?: string | null },
+  nowFactory: () => Date,
+) {
   if (order.payment_status !== "pending") {
     throw Errors.business(
       409,
@@ -121,6 +133,13 @@ function assertPaymentReusable(order: OrderRecord, nowFactory: () => Date) {
       409,
       "平台服务订单支付时间已结束",
       "SERVICE_ORDER_INVALID_STATE",
+    );
+  }
+  if (order.cancel_idempotency_key) {
+    throw Errors.business(
+      409,
+      "平台服务订单正在取消，请稍后刷新",
+      "SERVICE_ORDER_CANCEL_IN_PROGRESS",
     );
   }
 }

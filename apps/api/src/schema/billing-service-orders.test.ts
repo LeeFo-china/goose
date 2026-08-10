@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { randomUUID } from "crypto";
 
 import {
+  ServiceOrderCancelSchema,
   ServiceOrderActionSchema,
   ServiceOrderCreateSchema,
   ServiceOrderListQuerySchema,
@@ -63,6 +64,26 @@ describe("billing service order schemas", () => {
       idempotency_key: randomUUID(),
       reason: "未开始实施",
     }).success).toBe(true);
+  });
+
+  test("parses a strict idempotent pending order cancellation", () => {
+    expect(ServiceOrderCancelSchema.parse({
+      expected_version: 3,
+      idempotency_key: randomUUID(),
+      reason: "user_changed_product",
+    })).toMatchObject({
+      expected_version: 3,
+      reason: "user_changed_product",
+    });
+    expect(ServiceOrderCancelSchema.parse({
+      expected_version: 3,
+      idempotency_key: randomUUID(),
+    }).reason).toBe("user_cancelled");
+    expect(ServiceOrderCancelSchema.safeParse({
+      expected_version: 3,
+      idempotency_key: randomUUID(),
+      reason: "arbitrary text",
+    }).success).toBe(false);
   });
 
   test("parses customer acceptance decisions without idempotency or amount", () => {
