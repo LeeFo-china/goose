@@ -22,20 +22,40 @@ export const createResourceRoutes = (
 ): FastifyPluginAsync => {
   return async (fastify) => {
     if (routes.list) {
-      fastify.get(`/${resourceName}`, controller.list);
+      fastify.get(
+        `/${resourceName}`,
+        { config: { tenantServiceAccess: "read" } },
+        controller.list,
+      );
     }
 
     if (routes.getById) {
-      fastify.get(`/${resourceName}/:id`, controller.getById);
+      fastify.get(
+        `/${resourceName}/:id`,
+        { config: { tenantServiceAccess: "read" } },
+        controller.getById,
+      );
     }
 
     if (routes.create) {
-      fastify.post(`/${resourceName}`, controller.create);
+      fastify.post(
+        `/${resourceName}`,
+        { config: { tenantServiceAccess: "write" } },
+        controller.create,
+      );
     }
 
     if (routes.update) {
-      fastify.patch(`/${resourceName}/:id`, controller.update);
-      fastify.put(`/${resourceName}/:id`, controller.update);
+      fastify.patch(
+        `/${resourceName}/:id`,
+        { config: { tenantServiceAccess: "write" } },
+        controller.update,
+      );
+      fastify.put(
+        `/${resourceName}/:id`,
+        { config: { tenantServiceAccess: "write" } },
+        controller.update,
+      );
     }
 
     await controller.registerExtraRoutes(fastify, resourceName);
