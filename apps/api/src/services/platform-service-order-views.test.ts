@@ -26,11 +26,17 @@ describe("platform service order views", () => {
         updated_at: "2026-08-03T11:59:00.000Z",
       },
       now,
+      { canCancelPayment: true },
     );
 
     expect(pending.available_actions.continue_payment).toEqual({
       enabled: true,
       label: "继续支付",
+      disabled_reason: null,
+    });
+    expect(pending.available_actions.cancel_payment).toEqual({
+      enabled: true,
+      label: "取消订单",
       disabled_reason: null,
     });
 
@@ -43,11 +49,95 @@ describe("platform service order views", () => {
         payment_expires_at: "2026-08-03T11:59:00.000Z",
       },
       now,
+      { canCancelPayment: true },
     );
     expect(expired.available_actions.continue_payment.enabled).toBe(false);
     expect(expired.available_actions.continue_payment.disabled_reason).toBe(
       "订单已超过支付有效期",
     );
+    expect(expired.available_actions.cancel_payment.enabled).toBe(true);
+  });
+
+  test("disables cancellation for read-only tenant employees", async () => {
+    const { serializeTenantServiceOrder } = await import(
+      "./platform-service-order-views"
+    );
+    const view = serializeTenantServiceOrder({
+      id: "order-1",
+      order_no: "TSO202608030001",
+      product_code: "platform_service_1y",
+      term_years: 1,
+      amount_fen: 980000,
+      payment_status: "pending",
+      service_status: "waiting_payment",
+      prepay_id: "wx-prepay",
+      payment_expires_at: "2026-08-03T12:05:00.000Z",
+      paid_at: null,
+      closed_at: null,
+      terms_version: 1,
+      version: 1,
+      created_at: "2026-08-03T11:59:00.000Z",
+      updated_at: "2026-08-03T11:59:00.000Z",
+    }, new Date("2026-08-03T12:00:00.000Z"));
+
+    expect(view.available_actions.cancel_payment).toEqual({
+      enabled: false,
+      label: "取消订单",
+      disabled_reason: "无取消订单权限",
+    });
+  });
+
+  test("does not advertise payment actions while a cancellation lease is active", async () => {
+    const { serializeTenantServiceOrder } = await import(
+      "./platform-service-order-views"
+    );
+    const view = serializeTenantServiceOrder(
+      {
+        id: "order-2",
+        order_no: "TSO202608100002",
+        product_code: "platform_service_1y",
+        term_years: 1,
+        amount_fen: 980000,
+        payment_status: "pending",
+        service_status: "waiting_payment",
+        prepay_id: "wx-prepay",
+        payment_expires_at: "2026-08-10T12:30:00.000Z",
+        paid_at: null,
+        closed_at: null,
+        terms_version: 1,
+        version: 1,
+        created_at: "2026-08-10T11:59:00.000Z",
+        updated_at: "2026-08-10T11:59:00.000Z",
+        cancel_idempotency_key: "00000000-0000-4000-8000-000000000001",
+        cancel_claim_expires_at: "2026-08-10T12:15:00.000Z",
+      },
+      new Date("2026-08-10T12:00:00.000Z"),
+      { canCancelPayment: true },
+    );
+
+    expect(view.available_actions.continue_payment).toMatchObject({
+      enabled: false,
+      disabled_reason: "订单正在取消，请稍后刷新",
+    });
+    expect(view.available_actions.cancel_payment).toMatchObject({
+      enabled: false,
+      disabled_reason: "订单正在取消，请稍后刷新",
+    });
+
+    const expiredLease = serializeTenantServiceOrder(
+      {
+        ...view,
+        payment_status: "pending",
+        service_status: "waiting_payment",
+        prepay_id: "wx-prepay",
+        cancel_idempotency_key: "00000000-0000-4000-8000-000000000001",
+        cancel_claim_expires_at: "2026-08-10T11:59:00.000Z",
+      },
+      new Date("2026-08-10T12:00:00.000Z"),
+      { canCancelPayment: true },
+    );
+    expect(expiredLease.available_actions.continue_payment.enabled).toBe(false);
+    expect(expiredLease.available_actions.cancel_payment.enabled).toBe(true);
   });
 
   test("never serializes payer_openid, payment config or raw product snapshot", async () => {
@@ -85,6 +175,11 @@ describe("platform service order views", () => {
     expect(json).not.toContain("wx-prepay");
     expect(json).not.toContain("product_snapshot");
     expect(view.available_actions.request_refund.enabled).toBe(true);
+    expect(view.available_actions.cancel_payment).toEqual({
+      enabled: false,
+      label: "取消订单",
+      disabled_reason: "订单已支付，不能取消",
+    });
     expect(view.pricing_version).toBe(3);
   });
 

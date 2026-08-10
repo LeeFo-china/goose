@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-
 import { Errors } from "@/errors/error-factory";
 import {
   platformPaymentConfigRepository,
@@ -46,6 +44,12 @@ import {
 import {
   createServiceOrderPaymentRequest,
 } from "@/services/tenant-platform-service-order-payment";
+import {
+  createServiceTradeNo,
+  normalizeServiceOrderPage,
+  normalizeServiceOrderPageSize,
+  SERVICE_PAYMENT_WINDOW_MS,
+} from "@/services/tenant-platform-service-order-utils";
 import {
   wechatPayGateway as defaultWechatPayGateway,
   type WechatPayCreateJsapiPrepayResult,
@@ -109,10 +113,7 @@ type TenantPlatformServiceOrderServiceDependencies = {
 
 const CREATE_PERMISSION = "billing.service_order.create";
 const READ_PERMISSION = "billing.service_order.read";
-const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 20;
-const MAX_PAGE_SIZE = 100;
-export const SERVICE_PAYMENT_WINDOW_MS = 5 * 60 * 1000;
+export { SERVICE_PAYMENT_WINDOW_MS };
 
 export class TenantPlatformServiceOrderService {
   private readonly repository: RepositoryPort;
@@ -149,8 +150,8 @@ export class TenantPlatformServiceOrderService {
   ) {
     this.assertCanCreate(authContext);
     const products = await this.repository.listEnabledProducts({
-      page: normalizePositiveInteger(query.page, DEFAULT_PAGE),
-      pageSize: normalizePageSize(query.pageSize),
+      page: normalizeServiceOrderPage(query.page),
+      pageSize: normalizeServiceOrderPageSize(query.pageSize),
     });
     return {
       ...products,
@@ -165,17 +166,18 @@ export class TenantPlatformServiceOrderService {
     const tenantId = this.assertCanRead(authContext);
     const orders = await this.repository.listOrders({
       tenantId,
-      page: normalizePositiveInteger(query.page, DEFAULT_PAGE),
-      pageSize: normalizePageSize(query.pageSize),
+      page: normalizeServiceOrderPage(query.page),
+      pageSize: normalizeServiceOrderPageSize(query.pageSize),
       paymentStatus: query.paymentStatus,
       serviceStatus: query.serviceStatus,
       keyword: query.keyword,
     });
     const responseNow = this.nowFactory();
+    const canCancelPayment = this.canCreate(authContext);
     return {
       ...orders,
       list: orders.list.map((order) =>
-        serializeTenantServiceOrder(order, responseNow)
+        serializeTenantServiceOrder(order, responseNow, { canCancelPayment })
       ),
       server_time: responseNow.toISOString(),
     };
@@ -249,7 +251,9 @@ export class TenantPlatformServiceOrderService {
     const responseNow = this.nowFactory();
     return {
       idempotent: false,
-      order: serializeTenantServiceOrder(order, responseNow),
+      order: serializeTenantServiceOrder(order, responseNow, {
+        canCancelPayment: true,
+      }),
       product: serializeTenantServiceProduct(product),
       payment_request: paymentRequest,
       server_time: responseNow.toISOString(),
@@ -261,7 +265,9 @@ export class TenantPlatformServiceOrderService {
     const order = await this.requireTenantOrder(tenantId, orderId);
     const responseNow = this.nowFactory();
     return {
-      order: serializeTenantServiceOrder(order, responseNow),
+      order: serializeTenantServiceOrder(order, responseNow, {
+        canCancelPayment: this.canCreate(authContext),
+      }),
       server_time: responseNow.toISOString(),
     };
   }
@@ -282,7 +288,9 @@ export class TenantPlatformServiceOrderService {
     );
     const responseNow = this.nowFactory();
     return {
-      order: serializeTenantServiceOrder(order, responseNow),
+      order: serializeTenantServiceOrder(order, responseNow, {
+        canCancelPayment: true,
+      }),
       payment_request: paymentRequest,
       server_time: responseNow.toISOString(),
     };
@@ -360,7 +368,9 @@ export class TenantPlatformServiceOrderService {
       )
       : null;
     const responseNow = this.nowFactory();
-    const orderView = serializeTenantServiceOrder(order, responseNow);
+    const orderView = serializeTenantServiceOrder(order, responseNow, {
+      canCancelPayment: true,
+    });
     return {
       idempotent: true,
       order: orderView,
@@ -398,6 +408,10 @@ export class TenantPlatformServiceOrderService {
       throw Errors.forbidden();
     }
     return tenantId;
+  }
+
+  private canCreate(authContext: AuthContext) {
+    return this.accessPolicyService.hasPermission(authContext, CREATE_PERMISSION);
   }
 
   private assertCanRead(authContext: AuthContext) {
@@ -475,23 +489,6 @@ export class TenantPlatformServiceOrderService {
       nowFactory: this.nowFactory,
     };
   }
-}
-
-function normalizePositiveInteger(value: number | undefined, fallback: number) {
-  return Number.isInteger(value) && Number(value) > 0 ? Number(value) : fallback;
-}
-
-function normalizePageSize(value: number | undefined) {
-  return Math.min(
-    normalizePositiveInteger(value, DEFAULT_PAGE_SIZE),
-    MAX_PAGE_SIZE,
-  );
-}
-
-function createServiceTradeNo() {
-  return `TSO${new Date().toISOString().replace(/\D/g, "").slice(0, 17)}${
-    randomUUID().replaceAll("-", "").slice(0, 8).toUpperCase()
-  }`;
 }
 
 export const tenantPlatformServiceOrderService =

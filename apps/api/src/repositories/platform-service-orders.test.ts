@@ -42,6 +42,10 @@ const query = {
     calls.push(["eq", column, value]);
     return query;
   },
+  is(column: string, value: null) {
+    calls.push(["is", column, value]);
+    return query;
+  },
   ilike(column: string, value: string) {
     calls.push(["ilike", column, value]);
     return query;
@@ -144,6 +148,8 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).not.toContain("product_snapshot");
     expect(selectCall?.[1]).not.toContain("prepay_id");
     expect(selectCall?.[1]).not.toContain("transaction_id");
+    expect(selectCall?.[1]).not.toContain("cancel_idempotency_key");
+    expect(selectCall?.[1]).toContain("cancel_claim_expires_at");
   });
 
   test("finds tenant order detail without internal payment binding fields", async () => {
@@ -181,6 +187,21 @@ describe("PlatformServiceOrderRepository", () => {
     expect(selectCall?.[1]).toContain("payment_config_id");
     expect(selectCall?.[1]).toContain("prepay_id");
     expect(selectCall?.[1]).toContain("product_snapshot");
+    expect(selectCall?.[1]).toContain("cancel_idempotency_key");
+  });
+
+  test("does not save a prepay after cancellation is claimed", async () => {
+    const { PlatformServiceOrderRepository } = await import(
+      "./platform-service-orders"
+    );
+    const repository = new PlatformServiceOrderRepository(() => client);
+
+    await repository.markPrepayCreated({
+      orderId: "order-1",
+      prepayId: "prepay-1",
+    });
+
+    expect(calls).toContainEqual(["is", "cancel_idempotency_key", null]);
   });
 
   test("finds a platform product draft by id for publishing", async () => {

@@ -25,6 +25,7 @@ apps/*/.next-dev
 apps/*/.next-e2e
 apps/admin/next-env.d.ts
 supabase/.temp
+supabase/.branches/
 *.tgz
 
 # local migration backup artifacts

@@ -82,7 +82,14 @@ export async function getTenantServiceOrderAcceptance(
       "SERVICE_ORDER_NOT_FOUND",
     );
   }
-  return serializeAcceptanceView(view, dependencies.nowFactory());
+  return serializeAcceptanceView(
+    view,
+    dependencies.nowFactory(),
+    dependencies.accessPolicyService.hasPermission(
+      authContext,
+      CREATE_PERMISSION,
+    ),
+  );
 }
 
 export async function decideTenantServiceOrderAcceptance(
@@ -114,7 +121,9 @@ export async function decideTenantServiceOrderAcceptance(
     : null;
   const responseNow = dependencies.nowFactory();
   return {
-    order: serializeTenantServiceOrder(result.order, responseNow),
+    order: serializeTenantServiceOrder(result.order, responseNow, {
+      canCancelPayment: true,
+    }),
     work_order: serializeWorkOrder(result.workOrder),
     acceptance_preparation: serializeAcceptancePreparation(
       result.acceptancePreparation,
@@ -254,13 +263,14 @@ function isPreviewableFulfillmentAttachment(
 function serializeAcceptanceView(
   record: TenantServiceAcceptanceViewRecord,
   now: Date,
+  canCancelPayment: boolean,
 ) {
   const workOrder = normalizeMaybeSingleRelation(record.work_orders);
   const acceptancePreparation = normalizeMaybeSingleRelation(
     record.acceptance_preparations,
   );
   return {
-    order: serializeTenantServiceOrder(record, now),
+    order: serializeTenantServiceOrder(record, now, { canCancelPayment }),
     work_order: workOrder ? serializeWorkOrder(workOrder) : null,
     acceptance_preparation: acceptancePreparation
       ? serializeAcceptancePreparation(acceptancePreparation, now)

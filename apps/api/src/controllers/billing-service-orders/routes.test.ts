@@ -24,6 +24,7 @@ describe("BillingServiceOrdersController routes", () => {
         method: "POST",
         path: "/billing/service-orders/:id/payment-request",
       },
+      { method: "POST", path: "/billing/service-orders/:id/cancel" },
       { method: "POST", path: "/billing/service-orders/:id/refund-requests" },
       { method: "GET", path: "/billing/service-orders/:id/acceptance" },
       {
