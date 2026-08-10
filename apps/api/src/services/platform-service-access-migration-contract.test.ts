@@ -1,51 +1,19 @@
 import { describe, expect, test } from "bun:test";
+import {
+  extractConstraint,
+  extractFunctionBody,
+  extractFunctionDefinition,
+  extractFunctionSignature,
+  extractPreflight,
+  migrationFile,
+  normalizeSql,
+  readMigration,
+} from "./platform-service-access-migration-test-helpers";
 
-const migrationPath = new URL(
-  "../../../../supabase/migrations/20260810190000_create_platform_service_contract_access.sql",
-  import.meta.url,
-);
-const migrationFile = Bun.file(migrationPath);
 const legacyTransitionMigrationFile = Bun.file(new URL(
   "../../../../supabase/migrations/20260804160000_create_platform_service_fulfillment_admin.sql",
   import.meta.url,
 ));
-const readMigration = async () =>
-  (await migrationFile.exists()) ? migrationFile.text() : "";
-
-const normalizeSql = (sql: string) =>
-  sql.replace(/\s+/g, " ").trim().toLowerCase();
-const extractFunctionDefinition = (sql: string, functionName: string) =>
-  sql.match(new RegExp(
-    `CREATE OR REPLACE FUNCTION public\\.${functionName}\\([\\s\\S]*?\\n\\$\\$;`,
-  ))?.[0] ?? "";
-
-const extractFunctionBody = (sql: string, functionName: string) => {
-  const definition = extractFunctionDefinition(sql, functionName);
-  const bodyStart = definition.indexOf("\nAS $$\n");
-  const bodyEnd = definition.lastIndexOf("\n$$;");
-  if (bodyStart < 0 || bodyEnd < 0) return "";
-  return definition.slice(bodyStart + "\nAS $$\n".length, bodyEnd);
-};
-
-const extractFunctionSignature = (sql: string, functionName: string) => {
-  const definition = extractFunctionDefinition(sql, functionName);
-  const signatureEnd = definition.indexOf("\nRETURNS ");
-  return signatureEnd < 0 ? "" : definition.slice(0, signatureEnd);
-};
-
-const extractPreflight = (sql: string) => {
-  const start = sql.indexOf("-- Historical invariant preflight");
-  const end = sql.indexOf("\n$$;", start);
-  return start < 0 || end < 0 ? "" : sql.slice(start, end + 4);
-};
-
-const extractConstraint = (sql: string, constraintName: string) => {
-  const start = sql.indexOf(`ADD CONSTRAINT ${constraintName}`);
-  if (start < 0) return "";
-  const end = sql.indexOf(";", start);
-  return end < 0 ? "" : sql.slice(start, end + 1);
-};
-
 const expectServiceRoleRpcAcl = (
   sql: string,
   functionName: string,
@@ -134,7 +102,7 @@ describe("platform service contract access migration", () => {
     ]) {
       expect(lockBlock).toContain(`public.${table}`);
     }
-    expect(lockBlock).toContain("in share row exclusive mode nowait;");
+    expect(lockBlock).toContain("in access exclusive mode;");
     expect(normalized.slice(beginPosition, ddlPosition)).not.toMatch(
       /\b(?:create|alter|drop)\s+(?:table|index|trigger|policy)\b/,
     );
@@ -327,7 +295,18 @@ describe("platform service contract access migration", () => {
     const canonicalizeBody = (body: string) => normalizeSql(body)
       .replace(/\(\s+/g, "(")
       .replace(/\s+\)/g, ")");
-    const reconstructedLegacyBody = canonicalizeBody(transitionBody)
+    const currentSuffix = canonicalizeBody(transitionBody).slice(
+      canonicalizeBody(transitionBody).indexOf(
+        "if v_work_order.version <> p_expected_version then",
+      ),
+    );
+    const legacyBody = canonicalizeBody(
+      extractFunctionBody(legacySql, functionName),
+    );
+    const legacySuffix = legacyBody.slice(legacyBody.indexOf(
+      "if v_work_order.version <> p_expected_version then",
+    ));
+    const reconstructedLegacySuffix = currentSuffix
       .replace(
         "if p_to_status = 'accepted' then return jsonb_build_object('work_order', null, 'order', null, 'error_code', 'service_acceptance_dedicated_rpc_required'); end if; ",
         "",
@@ -343,9 +322,7 @@ describe("platform service contract access migration", () => {
     expect(transitionBody).toContain(
       "if p_to_status = 'accepted' then return jsonb_build_object( 'work_order', null, 'order', null, 'error_code', 'service_acceptance_dedicated_rpc_required' ); end if;",
     );
-    expect(reconstructedLegacyBody).toBe(
-      canonicalizeBody(extractFunctionBody(legacySql, functionName)),
-    );
+    expect(reconstructedLegacySuffix).toBe(legacySuffix);
   });
 
   test("finalizes only bound full refunds and recomputes later periods", async () => {
@@ -359,7 +336,7 @@ describe("platform service contract access migration", () => {
       "CREATE OR REPLACE FUNCTION public.platform_service_confirm_refund",
     );
     expect(refundSignature).toContain(
-      "create or replace function public.platform_service_confirm_refund( p_refund_request_id uuid, p_out_refund_no text, p_wechat_refund_id text, p_refund_amount_fen bigint, p_refunded_at timestamptz, p_operator_employee_id uuid, p_metadata jsonb default '{}'::jsonb )",
+      "create or replace function public.platform_service_confirm_refund( p_refund_request_id uuid, p_service_order_id uuid, p_transaction_id text, p_out_trade_no text, p_payment_config_id uuid, p_payment_config_guard_version integer, p_out_refund_no text, p_wechat_refund_id text, p_refund_amount_fen bigint, p_refunded_at timestamptz, p_operator_employee_id uuid, p_metadata jsonb default '{}'::jsonb )",
     );
     expect(refundBody).toContain("SERVICE_REFUND_PARTIAL_NOT_SUPPORTED");
     expect(refundBody).toContain("SERVICE_REFUND_AMOUNT_MISMATCH");
@@ -441,7 +418,9 @@ describe("platform service contract access migration", () => {
     expect(sql).toContain("ADD COLUMN refunded_at timestamptz NULL");
     expect(sql).toContain("tenant_service_refund_requests_out_refund_unique_idx");
     expect(sql).toContain("tenant_service_refund_requests_wechat_refund_unique_idx");
-    expect(refundBody).toContain("pg_column_size(p_metadata) > 8192");
+    expect(refundBody).toContain(
+      "pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192",
+    );
     expect(refundBody).not.toContain("'metadata', p_metadata");
   });
 
@@ -466,8 +445,11 @@ describe("platform service contract access migration", () => {
       ["platform_service_confirm_payment", "uuid, text, bigint, timestamptz, uuid, jsonb"],
       ["tenant_service_decide_acceptance", "uuid, uuid, text, integer, uuid, text, jsonb"],
       ["platform_service_confirm_overdue_acceptance", "uuid, integer, uuid, text, jsonb"],
+      ["platform_service_assign_work_order", "uuid, uuid, integer, uuid, text, jsonb"],
       ["platform_service_transition_work_order", "uuid, text, integer, uuid, text, jsonb"],
-      ["platform_service_confirm_refund", "uuid, text, text, bigint, timestamptz, uuid, jsonb"],
+      ["platform_service_request_refund_review", "uuid, uuid, integer, uuid, text, uuid"],
+      ["platform_service_review_refund_request", "uuid, text, integer, uuid, text"],
+      ["platform_service_confirm_refund", "uuid, uuid, text, text, uuid, integer, text, text, bigint, timestamptz, uuid, jsonb"],
     ] as const) {
       expectServiceRoleRpcAcl(sql, functionName, argumentTypes);
     }

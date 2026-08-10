@@ -24,15 +24,21 @@
 
 BEGIN;
 
--- Block every legacy writer before inspecting or backfilling its facts. NOWAIT
--- keeps deployment failure bounded; retry only after the old transaction ends.
+-- Keep deployment waits release-safe. Task 7 must measure these bounds against
+-- a production-shaped empty-DB replay and concurrent writer smoke before rollout.
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
+-- Take the strongest lock needed by later DDL up front in one deterministic
+-- order. This blocks legacy readers/writers before preflight and avoids later
+-- unbounded lock upgrades inside the migration transaction.
 LOCK TABLE
   public.tenant_service_orders,
   public.tenant_service_work_orders,
   public.tenant_service_acceptance_preparations,
   public.tenant_service_work_order_events,
   public.tenant_service_refund_requests
-IN SHARE ROW EXCLUSIVE MODE NOWAIT;
+IN ACCESS EXCLUSIVE MODE;
 
 -- Historical invariant preflight runs before any DDL and fails closed. The
 -- stable exception messages are deployment/remediation contract codes.
@@ -93,6 +99,7 @@ BEGIN
       AND acceptance.id IS NOT NULL
       AND acceptance.work_order_id = work_order.id
       AND acceptance.status = 'accepted'
+      AND acceptance.submitted_at IS NOT NULL
       AND (
         SELECT count(*)
         FROM public.tenant_service_work_order_events AS acceptance_event
@@ -105,6 +112,10 @@ BEGIN
           )
           AND acceptance_event.from_status = 'awaiting_acceptance'
           AND acceptance_event.to_status = 'accepted'
+          AND acceptance_event.created_at >= GREATEST(
+            service_order.paid_at,
+            acceptance.submitted_at
+          )
       ) = 1
       AND NOT EXISTS (
         SELECT 1
@@ -120,6 +131,10 @@ BEGIN
             invalid_acceptance_event.from_status IS DISTINCT FROM
               'awaiting_acceptance'
             OR invalid_acceptance_event.to_status IS DISTINCT FROM 'accepted'
+            OR invalid_acceptance_event.created_at < GREATEST(
+              service_order.paid_at,
+              acceptance.submitted_at
+            )
           )
       )
     );
@@ -217,9 +232,9 @@ ALTER TABLE public.tenant_service_orders
         AND char_length(service_access_termination_reason) <= 500
       )
     ),
-  ADD CONSTRAINT tenant_service_orders_access_terminator_tenant_fkey
-    FOREIGN KEY (service_access_terminated_by_employee_id, tenant_id)
-    REFERENCES public.employees(id, tenant_id)
+  ADD CONSTRAINT tenant_service_orders_access_terminator_employee_fkey
+    FOREIGN KEY (service_access_terminated_by_employee_id)
+    REFERENCES public.employees(id)
     ON DELETE RESTRICT,
   ADD CONSTRAINT tenant_service_orders_access_termination_fields_check
     CHECK (
@@ -253,6 +268,7 @@ CREATE INDEX tenant_service_orders_paid_onboarding_access_idx
     'refunding',
     'partially_refunded'
   )
+    AND service_status NOT IN ('accepted', 'active')
     AND service_access_terminated_at IS NULL;
 
 ALTER TABLE public.tenant_service_refund_requests
@@ -292,9 +308,9 @@ ALTER TABLE public.tenant_service_refund_requests
     ),
   ADD CONSTRAINT tenant_service_refund_requests_refund_amount_check
     CHECK (refund_amount_fen IS NULL OR refund_amount_fen > 0),
-  ADD CONSTRAINT tenant_service_refund_requests_refunded_by_tenant_fkey
-    FOREIGN KEY (refunded_by_employee_id, tenant_id)
-    REFERENCES public.employees(id, tenant_id)
+  ADD CONSTRAINT tenant_service_refund_requests_refunded_by_employee_fkey
+    FOREIGN KEY (refunded_by_employee_id)
+    REFERENCES public.employees(id)
     ON DELETE RESTRICT,
   ADD CONSTRAINT tenant_service_refund_requests_execution_fields_check
     CHECK (
@@ -526,8 +542,33 @@ ALTER TABLE public.tenant_service_work_order_events
     'customer_reject',
     'platform_accept_overdue',
     'refund_review',
-    'refund_confirm'
+    'refund_confirm',
+    'contract_period_void',
+    'contract_period_adjust'
   ));
+
+-- Private canonical per-order mutex used by every overlapping service command.
+CREATE OR REPLACE FUNCTION public.platform_service_lock_order(
+  p_service_order_id uuid
+)
+RETURNS void
+LANGUAGE sql
+SET search_path = public, pg_temp
+AS $$
+  SELECT pg_advisory_xact_lock(
+    hashtextextended(
+      'platform_service_order:' || p_service_order_id::text,
+      2026081019
+    )
+  );
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid)
+  FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_lock_order(uuid)
+  FROM service_role;
 
 -- Internal-only helper shared by both official acceptance entry points. It is
 -- SECURITY INVOKER and has no direct API grant, so only controlled definer RPCs
@@ -738,6 +779,12 @@ BEGIN
     JOIN public.tenant_service_work_orders AS work_order
       ON work_order.service_order_id = service_order.id
      AND work_order.tenant_id = service_order.tenant_id
+    JOIN public.tenant_service_acceptance_preparations AS acceptance
+      ON acceptance.service_order_id = service_order.id
+     AND acceptance.work_order_id = work_order.id
+     AND acceptance.tenant_id = service_order.tenant_id
+     AND acceptance.status = 'accepted'
+     AND acceptance.submitted_at IS NOT NULL
     JOIN LATERAL (
       SELECT work_order_event.created_at
       FROM public.tenant_service_work_order_events AS work_order_event
@@ -750,6 +797,10 @@ BEGIN
         )
         AND work_order_event.from_status = 'awaiting_acceptance'
         AND work_order_event.to_status = 'accepted'
+        AND work_order_event.created_at >= GREATEST(
+          service_order.paid_at,
+          acceptance.submitted_at
+        )
     ) AS acceptance_event ON true
     WHERE service_order.service_status IN ('accepted', 'active')
     ORDER BY
@@ -958,6 +1009,174 @@ GRANT EXECUTE ON FUNCTION public.platform_service_confirm_payment(
   uuid, text, bigint, timestamptz, uuid, jsonb
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.platform_service_assign_work_order(
+  p_work_order_id uuid,
+  p_assignee_employee_id uuid,
+  p_expected_version integer,
+  p_operator_employee_id uuid,
+  p_remark text DEFAULT NULL,
+  p_metadata jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_order_id uuid;
+  v_work_order public.tenant_service_work_orders%ROWTYPE;
+  v_order public.tenant_service_orders%ROWTYPE;
+  v_from_status text;
+  v_to_status text;
+BEGIN
+  IF p_work_order_id IS NULL THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT service_order_id
+  INTO v_order_id
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF p_assignee_employee_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_ASSIGNEE_INVALID'
+    );
+  END IF;
+
+  IF p_expected_version IS NULL OR p_operator_employee_id IS NULL THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  PERFORM public.platform_service_lock_order(v_order_id);
+
+  SELECT *
+  INTO v_order
+  FROM public.tenant_service_orders
+  WHERE id = v_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF v_work_order.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_VERSION_CONFLICT'
+    );
+  END IF;
+
+  IF v_work_order.status IN ('active', 'canceled') THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    WHERE employee.id = p_assignee_employee_id
+      AND employee.status = 'active'
+  ) THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_ASSIGNEE_INVALID'
+    );
+  END IF;
+
+  v_from_status := v_work_order.status;
+  v_to_status := CASE
+    WHEN v_work_order.status = 'waiting_assignment' THEN 'configuring'
+    ELSE v_work_order.status
+  END;
+
+  UPDATE public.tenant_service_work_orders
+  SET
+    assignee_employee_id = p_assignee_employee_id,
+    assigned_at = now(),
+    status = v_to_status,
+    version = version + 1
+  WHERE id = v_work_order.id
+  RETURNING * INTO v_work_order;
+
+  UPDATE public.tenant_service_orders
+  SET
+    service_status = v_to_status,
+    version = version + 1
+  WHERE id = v_work_order.service_order_id
+  RETURNING * INTO v_order;
+
+  INSERT INTO public.tenant_service_work_order_events (
+    tenant_id,
+    service_order_id,
+    work_order_id,
+    action,
+    from_status,
+    to_status,
+    remark,
+    operator_employee_id,
+    metadata
+  )
+  VALUES (
+    v_work_order.tenant_id,
+    v_work_order.service_order_id,
+    v_work_order.id,
+    'assign',
+    v_from_status,
+    v_to_status,
+    p_remark,
+    p_operator_employee_id,
+    coalesce(p_metadata, '{}'::jsonb)
+  );
+
+  RETURN jsonb_build_object(
+    'work_order', to_jsonb(v_work_order),
+    'order', to_jsonb(v_order),
+    'error_code', NULL
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_assign_work_order(
+  uuid, uuid, integer, uuid, text, jsonb
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_assign_work_order(
+  uuid, uuid, integer, uuid, text, jsonb
+) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_assign_work_order(
+  uuid, uuid, integer, uuid, text, jsonb
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_assign_work_order(
+  uuid, uuid, integer, uuid, text, jsonb
+) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.platform_service_transition_work_order(
   p_work_order_id uuid,
   p_to_status text,
@@ -972,14 +1191,55 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_order_id uuid;
   v_work_order public.tenant_service_work_orders%ROWTYPE;
   v_order public.tenant_service_orders%ROWTYPE;
   v_from_status text;
 BEGIN
+  IF p_work_order_id IS NULL THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF p_to_status IS NULL
+    OR p_expected_version IS NULL
+    OR p_operator_employee_id IS NULL
+    OR jsonb_typeof(coalesce(p_metadata, '{}'::jsonb)) <> 'object'
+    OR pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192
+  THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  SELECT service_order_id
+  INTO v_order_id
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  PERFORM public.platform_service_lock_order(v_order_id);
+
+  SELECT *
+  INTO v_order
+  FROM public.tenant_service_orders
+  WHERE id = v_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
   SELECT *
   INTO v_work_order
   FROM public.tenant_service_work_orders
   WHERE id = p_work_order_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
@@ -1092,6 +1352,316 @@ GRANT EXECUTE ON FUNCTION public.platform_service_transition_work_order(
   uuid, text, integer, uuid, text, jsonb
 ) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.platform_service_request_refund_review(
+  p_tenant_id uuid,
+  p_order_id uuid,
+  p_expected_version integer,
+  p_idempotency_key uuid,
+  p_reason text,
+  p_created_by_employee_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_order_id uuid;
+  v_order public.tenant_service_orders%ROWTYPE;
+  v_work_order public.tenant_service_work_orders%ROWTYPE;
+  v_refund public.tenant_service_refund_requests%ROWTYPE;
+BEGIN
+  IF p_tenant_id IS NULL
+    OR p_order_id IS NULL
+    OR p_expected_version IS NULL
+    OR p_idempotency_key IS NULL
+    OR p_reason IS NULL
+    OR p_created_by_employee_id IS NULL
+  THEN
+    RETURN jsonb_build_object(
+      'idempotent', false,
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  v_order_id := p_order_id;
+  PERFORM public.platform_service_lock_order(v_order_id);
+
+  SELECT *
+  INTO v_order
+  FROM public.tenant_service_orders
+  WHERE id = v_order_id
+    AND tenant_id = p_tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_refund
+  FROM public.tenant_service_refund_requests
+  WHERE tenant_id = v_order.tenant_id
+    AND service_order_id = v_order.id
+    AND idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_order.payment_status = 'paid'
+      AND v_order.version = p_expected_version
+    THEN
+      UPDATE public.tenant_service_orders
+      SET
+        payment_status = 'refund_reviewing',
+        version = version + 1
+      WHERE id = v_order.id
+      RETURNING * INTO v_order;
+    END IF;
+
+    RETURN jsonb_build_object(
+      'idempotent', true,
+      'refund_request', to_jsonb(v_refund),
+      'order', to_jsonb(v_order)
+    );
+  END IF;
+
+  IF v_order.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'idempotent', false,
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_ORDER_VERSION_CONFLICT'
+    );
+  END IF;
+
+  IF v_order.payment_status <> 'paid' THEN
+    RETURN jsonb_build_object(
+      'idempotent', false,
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_ORDER_INVALID_STATE'
+    );
+  END IF;
+
+  INSERT INTO public.tenant_service_refund_requests (
+    tenant_id,
+    service_order_id,
+    idempotency_key,
+    reason,
+    created_by_employee_id
+  )
+  VALUES (
+    v_order.tenant_id,
+    v_order.id,
+    p_idempotency_key,
+    p_reason,
+    p_created_by_employee_id
+  )
+  RETURNING * INTO v_refund;
+
+  UPDATE public.tenant_service_orders
+  SET
+    payment_status = 'refund_reviewing',
+    version = version + 1
+  WHERE id = v_order.id
+  RETURNING * INTO v_order;
+
+  RETURN jsonb_build_object(
+    'idempotent', false,
+    'refund_request', to_jsonb(v_refund),
+    'order', to_jsonb(v_order)
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_request_refund_review(
+  uuid, uuid, integer, uuid, text, uuid
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_request_refund_review(
+  uuid, uuid, integer, uuid, text, uuid
+) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_request_refund_review(
+  uuid, uuid, integer, uuid, text, uuid
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_request_refund_review(
+  uuid, uuid, integer, uuid, text, uuid
+) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.platform_service_review_refund_request(
+  p_refund_request_id uuid,
+  p_decision text,
+  p_expected_version integer,
+  p_operator_employee_id uuid,
+  p_review_remark text DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_order_id uuid;
+  v_refund public.tenant_service_refund_requests%ROWTYPE;
+  v_order public.tenant_service_orders%ROWTYPE;
+  v_work_order public.tenant_service_work_orders%ROWTYPE;
+BEGIN
+  IF p_refund_request_id IS NULL THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
+  END IF;
+
+  IF p_decision IS NULL
+    OR p_expected_version IS NULL
+    OR p_operator_employee_id IS NULL
+  THEN
+    RETURN jsonb_build_object(
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_REFUND_REVIEW_INVALID_STATE'
+    );
+  END IF;
+
+  SELECT service_order_id
+  INTO v_order_id
+  FROM public.tenant_service_refund_requests
+  WHERE id = p_refund_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
+  END IF;
+
+  PERFORM public.platform_service_lock_order(v_order_id);
+
+  SELECT *
+  INTO v_order
+  FROM public.tenant_service_orders
+  WHERE id = v_order_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  SELECT *
+  INTO v_refund
+  FROM public.tenant_service_refund_requests
+  WHERE id = p_refund_request_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
+  END IF;
+
+  IF v_refund.version <> p_expected_version THEN
+    RETURN jsonb_build_object(
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_WORK_ORDER_VERSION_CONFLICT'
+    );
+  END IF;
+
+  IF v_refund.status <> 'reviewing'
+    OR p_decision NOT IN ('approved', 'rejected')
+    OR v_order.payment_status <> 'refund_reviewing'
+  THEN
+    RETURN jsonb_build_object(
+      'refund_request', NULL,
+      'order', NULL,
+      'error_code', 'SERVICE_REFUND_REVIEW_INVALID_STATE'
+    );
+  END IF;
+
+  UPDATE public.tenant_service_refund_requests
+  SET
+    status = p_decision,
+    reviewed_by_employee_id = p_operator_employee_id,
+    reviewed_at = now(),
+    review_remark = p_review_remark,
+    version = version + 1
+  WHERE id = v_refund.id
+  RETURNING * INTO v_refund;
+
+  IF p_decision = 'rejected' THEN
+    UPDATE public.tenant_service_orders
+    SET
+      payment_status = 'paid',
+      version = version + 1
+    WHERE id = v_order.id
+    RETURNING * INTO v_order;
+  END IF;
+
+  INSERT INTO public.tenant_service_work_order_events (
+    tenant_id,
+    service_order_id,
+    work_order_id,
+    action,
+    from_status,
+    to_status,
+    remark,
+    operator_employee_id,
+    metadata
+  )
+  VALUES (
+    v_work_order.tenant_id,
+    v_work_order.service_order_id,
+    v_work_order.id,
+    'refund_review',
+    v_work_order.status,
+    v_work_order.status,
+    p_review_remark,
+    p_operator_employee_id,
+    jsonb_build_object(
+      'decision', p_decision,
+      'refund_request_id', v_refund.id
+    )
+  );
+
+  RETURN jsonb_build_object(
+    'refund_request', to_jsonb(v_refund),
+    'order', to_jsonb(v_order),
+    'error_code', NULL
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.platform_service_review_refund_request(
+  uuid, text, integer, uuid, text
+) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_review_refund_request(
+  uuid, text, integer, uuid, text
+) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_review_refund_request(
+  uuid, text, integer, uuid, text
+) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_review_refund_request(
+  uuid, text, integer, uuid, text
+) TO service_role;
+
 CREATE OR REPLACE FUNCTION public.tenant_service_decide_acceptance(
   p_tenant_id uuid,
   p_service_order_id uuid,
@@ -1107,6 +1677,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_order_id uuid;
   v_order public.tenant_service_orders%ROWTYPE;
   v_work_order public.tenant_service_work_orders%ROWTYPE;
   v_acceptance public.tenant_service_acceptance_preparations%ROWTYPE;
@@ -1117,7 +1688,15 @@ DECLARE
   v_action text;
   v_decided_at timestamptz;
 BEGIN
-  IF p_decision NOT IN ('accepted', 'rejected') THEN
+  IF p_tenant_id IS NULL
+    OR p_service_order_id IS NULL
+    OR p_decision IS NULL
+    OR p_decision NOT IN ('accepted', 'rejected')
+    OR p_expected_work_order_version IS NULL
+    OR p_operator_employee_id IS NULL
+    OR jsonb_typeof(coalesce(p_metadata, '{}'::jsonb)) <> 'object'
+    OR pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192
+  THEN
     RETURN jsonb_build_object(
       'work_order', NULL,
       'order', NULL,
@@ -1128,6 +1707,9 @@ BEGIN
       'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
     );
   END IF;
+
+  v_order_id := p_service_order_id;
+  PERFORM public.platform_service_lock_order(v_order_id);
 
   IF p_decision = 'accepted' THEN
     PERFORM pg_advisory_xact_lock(
@@ -1363,6 +1945,8 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_order_id uuid;
+  v_tenant_id uuid;
   v_work_order public.tenant_service_work_orders%ROWTYPE;
   v_order public.tenant_service_orders%ROWTYPE;
   v_acceptance public.tenant_service_acceptance_preparations%ROWTYPE;
@@ -1370,8 +1954,28 @@ DECLARE
   v_period public.tenant_service_contract_periods%ROWTYPE;
   v_decided_at timestamptz;
 BEGIN
-  SELECT *
-  INTO v_work_order
+  IF p_work_order_id IS NULL THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  IF p_expected_version IS NULL
+    OR p_operator_employee_id IS NULL
+    OR jsonb_typeof(coalesce(p_metadata, '{}'::jsonb)) <> 'object'
+    OR pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192
+  THEN
+    RETURN jsonb_build_object(
+      'work_order', NULL,
+      'order', NULL,
+      'acceptance_preparation', NULL,
+      'contract', NULL,
+      'contract_period', NULL,
+      'idempotent', false,
+      'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
+    );
+  END IF;
+
+  SELECT service_order_id, tenant_id
+  INTO v_order_id, v_tenant_id
   FROM public.tenant_service_work_orders
   WHERE id = p_work_order_id;
 
@@ -1379,28 +1983,20 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
   END IF;
 
+  PERFORM public.platform_service_lock_order(v_order_id);
+
   PERFORM pg_advisory_xact_lock(
     hashtextextended(
-      v_work_order.tenant_id::text || ':platform_technical_service',
+      v_tenant_id::text || ':platform_technical_service',
       2026081019
     )
   );
 
   SELECT *
-  INTO v_work_order
-  FROM public.tenant_service_work_orders
-  WHERE id = p_work_order_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
-  END IF;
-
-  SELECT *
   INTO v_order
   FROM public.tenant_service_orders
-  WHERE id = v_work_order.service_order_id
-    AND tenant_id = v_work_order.tenant_id
+  WHERE id = v_order_id
+    AND tenant_id = v_tenant_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
@@ -1413,6 +2009,18 @@ BEGIN
       'idempotent', false,
       'error_code', 'SERVICE_ACCEPTANCE_INVALID_STATE'
     );
+  END IF;
+
+  SELECT *
+  INTO v_work_order
+  FROM public.tenant_service_work_orders
+  WHERE id = p_work_order_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
   END IF;
 
   SELECT *
@@ -1601,6 +2209,11 @@ GRANT EXECUTE ON FUNCTION public.platform_service_confirm_overdue_acceptance(
 
 CREATE OR REPLACE FUNCTION public.platform_service_confirm_refund(
   p_refund_request_id uuid,
+  p_service_order_id uuid,
+  p_transaction_id text,
+  p_out_trade_no text,
+  p_payment_config_id uuid,
+  p_payment_config_guard_version integer,
   p_out_refund_no text,
   p_wechat_refund_id text,
   p_refund_amount_fen bigint,
@@ -1614,13 +2227,15 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_order_id uuid;
   v_tenant_id uuid;
   v_refund public.tenant_service_refund_requests%ROWTYPE;
   v_order public.tenant_service_orders%ROWTYPE;
   v_work_order public.tenant_service_work_orders%ROWTYPE;
   v_contract public.tenant_service_contracts%ROWTYPE;
   v_period public.tenant_service_contract_periods%ROWTYPE;
-  v_reflow_period public.tenant_service_contract_periods%ROWTYPE;
+  v_reflow_period record;
+  v_reflow_updated_period public.tenant_service_contract_periods%ROWTYPE;
   v_has_period boolean := false;
   v_work_order_from_status text;
   v_contract_start_at timestamptz;
@@ -1629,8 +2244,20 @@ DECLARE
   v_reflow_ends_at timestamptz;
   v_reflow_status text;
   v_last_period_id uuid;
+  v_period_before_status text;
+  v_period_before_starts_at timestamptz;
+  v_period_before_ends_at timestamptz;
 BEGIN
-  IF p_out_refund_no IS NULL
+  IF p_refund_request_id IS NULL
+    OR p_service_order_id IS NULL
+    OR p_transaction_id IS NULL
+    OR btrim(p_transaction_id) = ''
+    OR p_out_trade_no IS NULL
+    OR btrim(p_out_trade_no) = ''
+    OR p_payment_config_id IS NULL
+    OR p_payment_config_guard_version IS NULL
+    OR p_payment_config_guard_version <= 0
+    OR p_out_refund_no IS NULL
     OR btrim(p_out_refund_no) = ''
     OR char_length(p_out_refund_no) > 64
     OR p_wechat_refund_id IS NULL
@@ -1639,20 +2266,23 @@ BEGIN
     OR p_refund_amount_fen IS NULL
     OR p_refund_amount_fen <= 0
     OR p_refunded_at IS NULL
+    OR p_operator_employee_id IS NULL
     OR jsonb_typeof(coalesce(p_metadata, '{}'::jsonb)) <> 'object'
-    OR pg_column_size(p_metadata) > 8192
+    OR pg_column_size(coalesce(p_metadata, '{}'::jsonb)) > 8192
   THEN
     RAISE EXCEPTION 'SERVICE_REFUND_CONFIRMATION_INVALID';
   END IF;
 
-  SELECT tenant_id
-  INTO v_tenant_id
+  SELECT service_order_id, tenant_id
+  INTO v_order_id, v_tenant_id
   FROM public.tenant_service_refund_requests
   WHERE id = p_refund_request_id;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
   END IF;
+
+  PERFORM public.platform_service_lock_order(v_order_id);
 
   PERFORM pg_advisory_xact_lock(
     hashtextextended(
@@ -1662,21 +2292,10 @@ BEGIN
   );
 
   SELECT *
-  INTO v_refund
-  FROM public.tenant_service_refund_requests
-  WHERE id = p_refund_request_id
-    AND tenant_id = v_tenant_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
-  END IF;
-
-  SELECT *
   INTO v_order
   FROM public.tenant_service_orders
-  WHERE id = v_refund.service_order_id
-    AND tenant_id = v_refund.tenant_id
+  WHERE id = v_order_id
+    AND tenant_id = v_tenant_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
@@ -1692,6 +2311,25 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SERVICE_WORK_ORDER_NOT_FOUND';
+  END IF;
+
+  PERFORM acceptance.id
+  FROM public.tenant_service_acceptance_preparations AS acceptance
+  WHERE acceptance.service_order_id = v_order.id
+    AND acceptance.work_order_id = v_work_order.id
+    AND acceptance.tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  SELECT *
+  INTO v_refund
+  FROM public.tenant_service_refund_requests
+  WHERE id = p_refund_request_id
+    AND service_order_id = v_order.id
+    AND tenant_id = v_order.tenant_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_REQUEST_NOT_FOUND';
   END IF;
 
   SELECT *
@@ -1715,6 +2353,32 @@ BEGIN
     END IF;
   ELSIF v_order.service_status IN ('accepted', 'active') THEN
     RAISE EXCEPTION 'SERVICE_REFUND_CONTRACT_BINDING_INVALID';
+  END IF;
+
+  IF v_order.id IS DISTINCT FROM p_service_order_id
+    OR v_order.transaction_id IS DISTINCT FROM p_transaction_id
+    OR v_order.out_trade_no IS DISTINCT FROM p_out_trade_no
+    OR v_order.payment_config_id IS DISTINCT FROM p_payment_config_id
+    OR v_order.payment_config_guard_version IS DISTINCT FROM
+      p_payment_config_guard_version
+  THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_PAYMENT_BINDING_INVALID';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.employees AS employee
+    JOIN public.employee_roles AS employee_role
+      ON employee_role.employee_id = employee.id
+    JOIN public.roles AS role
+      ON role.id = employee_role.role_id
+    WHERE employee.id = p_operator_employee_id
+      AND employee.tenant_id IS NULL
+      AND employee.status = 'active'
+      AND role.tenant_id IS NULL
+      AND role.status = 'active'
+  ) THEN
+    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
   END IF;
 
   IF v_refund.status = 'refunded' THEN
@@ -1772,16 +2436,6 @@ BEGIN
     OR (v_has_period AND p_refunded_at < v_period.accepted_at)
   THEN
     RAISE EXCEPTION 'SERVICE_REFUND_TIME_INVALID';
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.employees AS employee
-    WHERE employee.id = p_operator_employee_id
-      AND employee.tenant_id = v_refund.tenant_id
-      AND employee.status = 'active'
-  ) THEN
-    RAISE EXCEPTION 'SERVICE_REFUND_OPERATOR_INVALID';
   END IF;
 
   -- Caller metadata is bounded and type-checked above but intentionally is not
@@ -1847,6 +2501,10 @@ BEGIN
     AND status <> 'accepted';
 
   IF v_has_period THEN
+    v_period_before_status := v_period.status;
+    v_period_before_starts_at := v_period.starts_at;
+    v_period_before_ends_at := v_period.ends_at;
+
     UPDATE public.tenant_service_contract_periods
     SET
       status = 'voided',
@@ -1857,6 +2515,43 @@ BEGIN
       AND contract_id = v_contract.id
       AND tenant_id = v_refund.tenant_id
     RETURNING * INTO v_period;
+
+    INSERT INTO public.tenant_service_work_order_events (
+      tenant_id,
+      service_order_id,
+      work_order_id,
+      action,
+      from_status,
+      to_status,
+      remark,
+      operator_employee_id,
+      metadata
+    )
+    VALUES (
+      v_refund.tenant_id,
+      v_period.service_order_id,
+      v_work_order.id,
+      'contract_period_void',
+      NULL,
+      NULL,
+      '合同期因全额退款作废',
+      p_operator_employee_id,
+      jsonb_build_object(
+        'period_id', v_period.id,
+        'refund_request_id', v_refund.id,
+        'reason', 'full_order_refund',
+        'before', jsonb_build_object(
+          'status', v_period_before_status,
+          'starts_at', v_period_before_starts_at,
+          'ends_at', v_period_before_ends_at
+        ),
+        'after', jsonb_build_object(
+          'status', v_period.status,
+          'starts_at', v_period.starts_at,
+          'ends_at', v_period.ends_at
+        )
+      )
+    );
 
     v_contract_start_at := NULL;
     v_contract_end_at := NULL;
@@ -1890,11 +2585,16 @@ BEGIN
     FOR UPDATE OF prior_period;
 
     FOR v_reflow_period IN
-      SELECT reflow_period.*
+      SELECT
+        reflow_period.*,
+        reflow_work_order.id AS audit_work_order_id
       FROM public.tenant_service_contract_periods AS reflow_period
       JOIN public.tenant_service_orders AS reflow_order
         ON reflow_order.id = reflow_period.service_order_id
        AND reflow_order.tenant_id = reflow_period.tenant_id
+      JOIN public.tenant_service_work_orders AS reflow_work_order
+        ON reflow_work_order.service_order_id = reflow_period.service_order_id
+       AND reflow_work_order.tenant_id = reflow_period.tenant_id
       WHERE reflow_period.contract_id = v_contract.id
         AND reflow_period.tenant_id = v_refund.tenant_id
         AND reflow_period.status <> 'voided'
@@ -1956,7 +2656,47 @@ BEGIN
             WHEN v_reflow_status = 'adjusted' THEN v_refund.id
             ELSE NULL
           END
+        )
+      RETURNING * INTO v_reflow_updated_period;
+
+      IF FOUND THEN
+        INSERT INTO public.tenant_service_work_order_events (
+          tenant_id,
+          service_order_id,
+          work_order_id,
+          action,
+          from_status,
+          to_status,
+          remark,
+          operator_employee_id,
+          metadata
+        )
+        VALUES (
+          v_refund.tenant_id,
+          v_reflow_period.service_order_id,
+          v_reflow_period.audit_work_order_id,
+          'contract_period_adjust',
+          NULL,
+          NULL,
+          '退款后合同期顺延重排',
+          p_operator_employee_id,
+          jsonb_build_object(
+            'period_id', v_reflow_updated_period.id,
+            'refund_request_id', v_refund.id,
+            'reason', 'full_refund_period_reflow',
+            'before', jsonb_build_object(
+              'status', v_reflow_period.status,
+              'starts_at', v_reflow_period.starts_at,
+              'ends_at', v_reflow_period.ends_at
+            ),
+            'after', jsonb_build_object(
+              'status', v_reflow_updated_period.status,
+              'starts_at', v_reflow_updated_period.starts_at,
+              'ends_at', v_reflow_updated_period.ends_at
+            )
+          )
         );
+      END IF;
 
       v_contract_end_at := v_reflow_ends_at;
     END LOOP;
@@ -2071,16 +2811,20 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.platform_service_confirm_refund(
-  uuid, text, text, bigint, timestamptz, uuid, jsonb
+  uuid, uuid, text, text, uuid, integer,
+  text, text, bigint, timestamptz, uuid, jsonb
 ) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_service_confirm_refund(
-  uuid, text, text, bigint, timestamptz, uuid, jsonb
+  uuid, uuid, text, text, uuid, integer,
+  text, text, bigint, timestamptz, uuid, jsonb
 ) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_confirm_refund(
-  uuid, text, text, bigint, timestamptz, uuid, jsonb
+  uuid, uuid, text, text, uuid, integer,
+  text, text, bigint, timestamptz, uuid, jsonb
 ) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_confirm_refund(
-  uuid, text, text, bigint, timestamptz, uuid, jsonb
+  uuid, uuid, text, text, uuid, integer,
+  text, text, bigint, timestamptz, uuid, jsonb
 ) TO service_role;
 
 COMMENT ON TABLE public.tenant_service_contracts
@@ -2092,7 +2836,8 @@ COMMENT ON COLUMN public.tenant_service_orders.source_trial_id
 COMMENT ON COLUMN public.tenant_service_orders.service_access_terminated_at
   IS '受控访问终止事实；service_status=canceled 本身不得用于移除服务访问。';
 COMMENT ON FUNCTION public.platform_service_confirm_refund(
-  uuid, text, text, bigint, timestamptz, uuid, jsonb
-) IS '在微信全额退款成功后原子固化退款、访问终止、合同期重排和不可变工单事件；不支持部分退款。';
+  uuid, uuid, text, text, uuid, integer,
+  text, text, bigint, timestamptz, uuid, jsonb
+) IS '校验订单支付绑定与全局平台操作员后，原子固化微信全额退款、访问终止、合同期重排及不可变工单事件；不支持部分退款。';
 
 COMMIT;
