@@ -80,6 +80,39 @@ const baseAcceptancePreparation = {
   updated_at: "2026-08-04T10:01:00.000Z",
 };
 
+const contractPeriodId = "70000000-0000-4000-8000-000000000001";
+const contract = {
+  id: "60000000-0000-4000-8000-000000000001",
+  tenant_id: baseOrder.tenant_id,
+  service_family: "platform_technical_service",
+  status: "active",
+  service_start_at: "2026-08-04T10:05:00.000Z",
+  service_end_at: "2027-08-04T10:05:00.000Z",
+  last_period_id: contractPeriodId,
+  version: 1,
+  created_at: "2026-08-04T10:05:00.000Z",
+  updated_at: "2026-08-04T10:05:00.000Z",
+};
+const contractPeriod = {
+  id: contractPeriodId,
+  contract_id: contract.id,
+  tenant_id: baseOrder.tenant_id,
+  service_order_id: baseOrder.id,
+  accepted_at: "2026-08-04T10:05:00.000Z",
+  starts_at: "2026-08-04T10:05:00.000Z",
+  ends_at: "2027-08-04T10:05:00.000Z",
+  original_starts_at: "2026-08-04T10:05:00.000Z",
+  original_ends_at: "2027-08-04T10:05:00.000Z",
+  term_years: baseOrder.term_years,
+  status: "active",
+  adjustment_reason: null,
+  refund_request_id: null,
+  metadata: {},
+  version: 1,
+  created_at: "2026-08-04T10:05:00.000Z",
+  updated_at: "2026-08-04T10:05:00.000Z",
+};
+
 function createRepository() {
   return {
     listPlatformServiceOrders: mock(async () => ({ list: [], pagination: {} })),
@@ -97,6 +130,9 @@ function createRepository() {
       workOrder: { ...baseWorkOrder, status: "accepted", version: 2 },
       order: baseOrder,
       acceptancePreparation: baseAcceptancePreparation,
+      contract,
+      contractPeriod,
+      idempotent: false,
     })),
     listPlatformServiceRefundRequests: mock(async () => ({ list: [], pagination: {} })),
     reviewServiceRefundRequest: mock(async () => ({ order: null, refundRequest: null })),
@@ -201,6 +237,21 @@ describe("PlatformServiceFulfillmentService acceptance deadline", () => {
     expect(result.acceptance_preparation).toMatchObject({
       status: "accepted",
       acceptance_due_at: "2026-08-04T10:00:00.000Z",
+    });
+    expect(result).toMatchObject({
+      contract: {
+        id: contract.id,
+        tenant_id: baseOrder.tenant_id,
+        last_period_id: contractPeriod.id,
+      },
+      contract_period: {
+        id: contractPeriod.id,
+        contract_id: contract.id,
+        tenant_id: baseOrder.tenant_id,
+        service_order_id: baseOrder.id,
+        status: "active",
+      },
+      idempotent: false,
     });
   });
 });
