@@ -21,6 +21,7 @@ import { requestBackendJson } from "@/lib/backend-client";
 import { refreshAfterDialogClose } from "@/lib/deferred-refresh";
 
 import type { PlatformServiceRefundRequestListItem } from "./platform-service-order-types";
+import { getPlatformServiceRefundExecutionFeedback } from "./platform-service-order-rules";
 
 export function PlatformServiceRefundActions({
   request,
@@ -56,14 +57,22 @@ function ExecuteRefundButton({
   function handleExecute() {
     startTransition(async () => {
       try {
-        await requestBackendJson(
+        const result = await requestBackendJson(
           `/api/backend/platform/billing/service-refund-requests/${request.id}/execute`,
           {
             method: "POST",
             fallbackMessage: "执行微信退款失败",
           },
         );
-        toast.success("微信退款成功，服务访问已终止");
+        const feedback = getPlatformServiceRefundExecutionFeedback(result);
+        if (feedback.kind === "warning") {
+          toast.warning(feedback.message);
+        } else if (feedback.kind === "success") {
+          toast.success(feedback.message);
+        } else {
+          toast.error(feedback.message);
+          return;
+        }
         setOpen(false);
         refreshAfterDialogClose(router);
       } catch (error) {

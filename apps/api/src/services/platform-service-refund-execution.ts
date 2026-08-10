@@ -3,10 +3,7 @@ import {
   platformServiceFulfillmentRepository,
   type PlatformServiceFulfillmentRepository,
 } from "../repositories/platform-service-fulfillment";
-import type {
-  ConfirmServiceRefundInput,
-  RefundExecutionRequestRecord,
-} from "../repositories/platform-service-rpc-results";
+import type { RefundExecutionRequestRecord } from "../repositories/platform-service-rpc-results";
 import {
   platformPaymentConfigRepository,
   type PlatformPaymentConfigRecord,
@@ -40,7 +37,9 @@ import { requireOrderPaymentConfig } from "./tenant-platform-service-order-payme
 
 type RepositoryPort = Pick<
   PlatformServiceFulfillmentRepository,
-  "findPlatformServiceRefundRequestById" | "confirmServiceRefund"
+  | "findPlatformServiceRefundRequestById"
+  | "confirmServiceRefund"
+  | "closeServiceRefund"
 >;
 type PaymentConfigRepositoryPort = Pick<
   typeof platformPaymentConfigRepository,
@@ -61,7 +60,12 @@ export type PlatformServiceRefundExecutionDependencies = {
 };
 
 const REFUND_PERMISSION = "platform.service_refund.review";
-const EXECUTABLE_STATUSES = new Set(["approved", "refunding", "refunded"]);
+const EXECUTABLE_STATUSES = new Set([
+  "approved",
+  "refunding",
+  "refunded",
+  "cancelled",
+]);
 
 export class PlatformServiceRefundExecutionService {
   private readonly repository: RepositoryPort;
@@ -101,6 +105,29 @@ export class PlatformServiceRefundExecutionService {
         metadata: { confirmation_source: "platform_service_refund_execution" },
       }));
     }
+    if (request.status === "cancelled") {
+      return this.serializeClosureResult(
+        await this.repository.closeServiceRefund({
+          ...binding,
+          outRefundNo: requireText(
+            request.provider_out_refund_no,
+            "SERVICE_REFUND_EXECUTION_FACT_INVALID",
+          ),
+          wechatRefundId: requireText(
+            request.provider_wechat_refund_id,
+            "SERVICE_REFUND_EXECUTION_FACT_INVALID",
+          ),
+          refundAmountFen: requirePositiveInteger(
+            request.provider_refund_amount_fen,
+            "SERVICE_REFUND_EXECUTION_FACT_INVALID",
+          ),
+          operatorEmployeeId,
+          metadata: {
+            confirmation_source: "platform_service_refund_execution",
+          },
+        }),
+      );
+    }
 
     const config = requireOrderPaymentConfig(
       await this.paymentConfigRepository.findWechatPayConfigById(
@@ -122,6 +149,21 @@ export class PlatformServiceRefundExecutionService {
       secretBundle,
       outRefundNo,
     });
+    if (refund.status === "CLOSED") {
+      return this.serializeClosureResult(
+        await this.repository.closeServiceRefund({
+          ...binding,
+          outRefundNo: refund.outRefundNo,
+          wechatRefundId: refund.wechatRefundId,
+          refundAmountFen: refund.refundAmountFen,
+          operatorEmployeeId,
+          metadata: {
+            confirmation_source: "platform_service_refund_execution",
+            wechat_request_id: refund.requestId,
+          },
+        }),
+      );
+    }
     if (refund.status !== "SUCCESS" || !refund.successTime) {
       throw uncertainStatusError(outRefundNo, refund.status);
     }
@@ -155,10 +197,16 @@ export class PlatformServiceRefundExecutionService {
     if (!EXECUTABLE_STATUSES.has(request.status)) throw invalidStateError();
     const expectedPaymentStatuses = request.status === "refunded"
       ? ["refunded"]
+      : request.status === "cancelled"
+      ? ["paid"]
       : ["refund_reviewing", "refunding"];
     if (!expectedPaymentStatuses.includes(request.order.payment_status)) {
       throw invalidStateError();
     }
+    if (
+      request.status === "cancelled" &&
+      request.provider_refund_status !== "CLOSED"
+    ) throw invalidStateError();
   }
 
   private buildBinding(request: RefundExecutionRequestRecord) {
@@ -235,7 +283,7 @@ export class PlatformServiceRefundExecutionService {
     }
     const refund = this.parseRefund(payload, input.request, input.outRefundNo);
     if (refund.status === "PROCESSING") return this.queryRefund(input);
-    if (refund.status !== "SUCCESS") throw terminalStatusError(refund.status);
+    if (refund.status === "ABNORMAL") throw terminalStatusError(refund.status);
     return refund;
   }
 
@@ -263,7 +311,7 @@ export class PlatformServiceRefundExecutionService {
     if (refund.status === "PROCESSING") {
       throw uncertainStatusError(input.outRefundNo, refund.status);
     }
-    if (refund.status !== "SUCCESS") throw terminalStatusError(refund.status);
+    if (refund.status === "ABNORMAL") throw terminalStatusError(refund.status);
     return refund;
   }
 
@@ -291,6 +339,28 @@ export class PlatformServiceRefundExecutionService {
       contract_period: result.contractPeriod,
       idempotent: result.idempotent,
       error_code: result.errorCode,
+      outcome: "refunded" as const,
+      provider_status: "SUCCESS" as const,
+      refunded: true as const,
+      access_terminated: true as const,
+      retryable: false as const,
+      server_time: this.nowFactory().toISOString(),
+    };
+  }
+
+  private serializeClosureResult(
+    result: Awaited<ReturnType<RepositoryPort["closeServiceRefund"]>>,
+  ) {
+    return {
+      refund_request: result.refundRequest,
+      order: result.order,
+      outcome: "provider_closed" as const,
+      provider_status: result.providerStatus,
+      refunded: result.refunded,
+      access_terminated: result.accessTerminated,
+      retryable: result.retryable,
+      idempotent: result.idempotent,
+      error_code: undefined,
       server_time: this.nowFactory().toISOString(),
     };
   }
@@ -321,10 +391,10 @@ function invalidStateError() {
   return Errors.business(409, "平台技术服务退款申请状态已变化", "SERVICE_REFUND_INVALID_STATE");
 }
 
-function terminalStatusError(status: "CLOSED" | "ABNORMAL") {
+function terminalStatusError(status: "ABNORMAL") {
   return Errors.business(
     409,
-    status === "CLOSED" ? "微信退款已关闭，请核查后重新处理" : "微信退款状态异常，请人工核查",
+    "微信退款状态异常，请人工核查",
     `SERVICE_REFUND_WECHAT_${status}`,
     { status },
   );

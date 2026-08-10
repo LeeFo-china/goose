@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { acceptedRpcEnvelope } from "./platform-service-rpc-result-fixtures.test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -375,29 +376,7 @@ describe("PlatformServiceOrderRepository", () => {
     );
     const repository = new PlatformServiceOrderRepository(() => client);
     rpcResult = {
-      data: {
-        work_order: { id: "work-order-1", status: "accepted" },
-        order: { id: "order-1", service_status: "accepted" },
-        acceptance_preparation: { id: "acceptance-1", status: "accepted" },
-        contract: {
-          id: "contract-1",
-          tenant_id: "tenant-1",
-          status: "active",
-          service_start_at: "2026-08-10T10:00:00.000Z",
-          service_end_at: "2027-08-10T10:00:00.000Z",
-        },
-        contract_period: {
-          id: "period-1",
-          contract_id: "contract-1",
-          tenant_id: "tenant-1",
-          service_order_id: "order-1",
-          status: "active",
-          starts_at: "2026-08-10T10:00:00.000Z",
-          ends_at: "2027-08-10T10:00:00.000Z",
-        },
-        idempotent: false,
-        error_code: null,
-      },
+      data: acceptedRpcEnvelope(),
       error: null,
     };
 

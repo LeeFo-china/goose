@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  acceptedRpcEnvelope,
+  RPC_IDS,
+  rpcOrder,
+  rpcRefundRequest,
+} from "./platform-service-rpc-result-fixtures.test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -36,56 +42,29 @@ const confirmInput = {
 };
 
 function acceptedEnvelope() {
-  return {
-    order: { id: "order-1", service_status: "accepted" },
-    work_order: { id: "work-1", status: "accepted" },
-    acceptance_preparation: { id: "acceptance-1", status: "accepted" },
-    contract: {
-      id: "contract-1", tenant_id: "tenant-1", status: "active",
-      service_start_at: "2026-08-10T10:00:00.000Z",
-      service_end_at: "2027-08-10T10:00:00.000Z",
-    },
-    contract_period: {
-      id: "period-1", contract_id: "contract-1", tenant_id: "tenant-1",
-      service_order_id: "order-1", status: "active",
-      starts_at: "2026-08-10T10:00:00.000Z",
-      ends_at: "2027-08-10T10:00:00.000Z",
-    },
-    idempotent: true,
-    error_code: null,
-  };
+  return acceptedRpcEnvelope({ idempotent: true });
 }
 
 function refundRequestEnvelope() {
   return {
-    id: "refund-1",
-    tenant_id: "tenant-1",
-    service_order_id: "order-1",
-    idempotency_key: "key-1",
-    reason: "不再需要服务",
-    status: "approved",
-    version: 2,
-    created_by_employee_id: "employee-1",
-    reviewed_by_employee_id: "admin-1",
-    reviewed_at: "2026-08-10T10:00:00.000Z",
-    review_remark: "同意",
-    out_refund_no: null,
-    wechat_refund_id: null,
-    refund_amount_fen: null,
-    refunded_at: null,
-    refunded_by_employee_id: null,
-    created_at: "2026-08-10T09:00:00.000Z",
-    updated_at: "2026-08-10T10:00:00.000Z",
+    ...rpcRefundRequest({
+      status: "approved",
+      out_refund_no: null,
+      wechat_refund_id: null,
+      refund_amount_fen: null,
+      refunded_at: null,
+      refunded_by_employee_id: null,
+    }),
     order: {
-      id: "order-1",
-      tenant_id: "tenant-1",
+      id: RPC_IDS.order,
+      tenant_id: RPC_IDS.tenant,
       order_no: "TSO1",
       out_trade_no: "TSO1",
       amount_fen: 100,
       paid_amount_fen: 100,
       payment_status: "refund_reviewing",
       service_status: "awaiting_acceptance",
-      payment_config_id: "config-1",
+      payment_config_id: RPC_IDS.paymentConfig,
       payment_config_guard_version: 7,
       transaction_id: "transaction-1",
     },
@@ -116,8 +95,8 @@ describe("PlatformServiceFulfillmentRepository access finalization", () => {
       remark: "客户逾期未确认",
     });
     expect(result).toMatchObject({
-      contract: { id: "contract-1" },
-      contractPeriod: { id: "period-1" },
+      contract: { id: RPC_IDS.contract },
+      contractPeriod: { id: RPC_IDS.period },
       idempotent: true,
     });
   });
@@ -154,8 +133,14 @@ describe("PlatformServiceFulfillmentRepository access finalization", () => {
     const repository = new PlatformServiceFulfillmentRepository(() => client as never);
     rpcResult = {
       data: {
-        refund_request: { id: "refund-1", status: "refunded" },
-        order: { id: "order-1", payment_status: "refunded" },
+        refund_request: rpcRefundRequest(),
+        order: rpcOrder({
+          payment_status: "refunded",
+          service_status: "canceled",
+          service_access_terminated_at: "2026-08-10T10:30:00.000Z",
+          service_access_termination_reason: "full_refund_confirmed",
+          service_access_terminated_by_employee_id: RPC_IDS.employee,
+        }),
         contract: null,
         contract_period: null,
         idempotent: false,
@@ -164,7 +149,7 @@ describe("PlatformServiceFulfillmentRepository access finalization", () => {
       error: null,
     };
     expect(await repository.confirmServiceRefund(confirmInput)).toMatchObject({
-      refundRequest: { id: "refund-1", status: "refunded" },
+      refundRequest: { id: RPC_IDS.refund, status: "refunded" },
       order: { payment_status: "refunded" },
       idempotent: false,
     });
@@ -182,6 +167,83 @@ describe("PlatformServiceFulfillmentRepository access finalization", () => {
       p_operator_employee_id: "admin-1",
       p_metadata: { confirmation_source: "platform_service_refund_execution" },
     });
+  });
+
+  test("closes a provider-CLOSED execution through the exact bound RPC", async () => {
+    const { PlatformServiceFulfillmentRepository } = await import(
+      "./platform-service-fulfillment"
+    );
+    const repository = new PlatformServiceFulfillmentRepository(() => client as never);
+    rpcResult = {
+      data: {
+        refund_request: rpcRefundRequest({
+          status: "cancelled",
+          out_refund_no: null,
+          wechat_refund_id: null,
+          refund_amount_fen: null,
+          refunded_at: null,
+          refunded_by_employee_id: null,
+          provider_refund_status: "CLOSED",
+          provider_out_refund_no: "TSRF1",
+          provider_wechat_refund_id: "wechat-refund-1",
+          provider_refund_amount_fen: 100,
+          provider_checked_at: "2026-08-10T10:31:00.000Z",
+          provider_checked_by_employee_id: RPC_IDS.employee,
+        }),
+        order: rpcOrder({ payment_status: "paid" }),
+        provider_status: "CLOSED",
+        refunded: false,
+        access_terminated: false,
+        retryable: false,
+        idempotent: false,
+        error_code: null,
+      },
+      error: null,
+    };
+
+    const closeServiceRefund = (repository as unknown as {
+      closeServiceRefund?: (input: Omit<typeof confirmInput, "refundedAt">) =>
+        Promise<unknown>;
+    }).closeServiceRefund;
+    expect(typeof closeServiceRefund).toBe("function");
+    if (!closeServiceRefund) return;
+    const input = {
+      refundRequestId: "refund-1",
+      serviceOrderId: "order-1",
+      transactionId: "transaction-1",
+      outTradeNo: "TSO1",
+      paymentConfigId: "config-1",
+      paymentConfigGuardVersion: 7,
+      outRefundNo: "TSRF1",
+      wechatRefundId: "wechat-refund-1",
+      refundAmountFen: 100,
+      operatorEmployeeId: "admin-1",
+      metadata: { confirmation_source: "platform_service_refund_execution" },
+    };
+    expect(await closeServiceRefund.call(repository, input)).toMatchObject({
+      providerStatus: "CLOSED",
+      refunded: false,
+      accessTerminated: false,
+      retryable: false,
+    });
+    expect(client.rpc).toHaveBeenCalledWith(
+      "platform_service_close_refund_execution",
+      {
+        p_refund_request_id: "refund-1",
+        p_service_order_id: "order-1",
+        p_transaction_id: "transaction-1",
+        p_out_trade_no: "TSO1",
+        p_payment_config_id: "config-1",
+        p_payment_config_guard_version: 7,
+        p_out_refund_no: "TSRF1",
+        p_wechat_refund_id: "wechat-refund-1",
+        p_refund_amount_fen: 100,
+        p_operator_employee_id: "admin-1",
+        p_metadata: {
+          confirmation_source: "platform_service_refund_execution",
+        },
+      },
+    );
   });
 
   test("fails closed without leaking malformed, resolved-error, or rejected RPC data", async () => {

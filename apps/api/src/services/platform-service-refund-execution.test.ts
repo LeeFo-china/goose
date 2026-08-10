@@ -155,6 +155,24 @@ function createHarness() {
       contractPeriod: null,
       idempotent: false,
     })),
+    closeServiceRefund: mock(async () => ({
+      refundRequest: {
+        ...refundRequest,
+        status: "cancelled",
+        provider_refund_status: "CLOSED",
+        provider_out_refund_no: outRefundNo,
+        provider_wechat_refund_id: "5030000000202608100000000001",
+        provider_refund_amount_fen: 980000,
+        provider_checked_at: "2026-08-10T10:31:00.000Z",
+        provider_checked_by_employee_id: employeeId,
+      },
+      order: { ...order, payment_status: "paid" },
+      providerStatus: "CLOSED" as const,
+      refunded: false as const,
+      accessTerminated: false as const,
+      retryable: false as const,
+      idempotent: false,
+    })),
   };
   const gateway = {
     queryTransactionByOutTradeNo: mock(async () => transactionResponse()),
@@ -259,7 +277,7 @@ describe("PlatformServiceRefundExecutionService", () => {
     expect(harness.repository.confirmServiceRefund).toHaveBeenCalledTimes(1);
   });
 
-  test.each(["ABNORMAL", "CLOSED"] as const)(
+  test.each(["ABNORMAL"] as const)(
     "never confirms terminal non-success status %s",
     async (status) => {
       harness.gateway.requestRefund.mockResolvedValueOnce(refundResponse(status));
@@ -271,6 +289,38 @@ describe("PlatformServiceRefundExecutionService", () => {
       expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
     },
   );
+
+  test("closes a provider-CLOSED request without terminating access", async () => {
+    harness.gateway.requestRefund.mockResolvedValueOnce(refundResponse("CLOSED"));
+    const service = await createService(harness);
+
+    const result = await service.execute(authContext, refundId);
+
+    expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
+    expect(harness.repository.closeServiceRefund).toHaveBeenCalledWith({
+      refundRequestId: refundId,
+      serviceOrderId: orderId,
+      transactionId,
+      outTradeNo,
+      paymentConfigId: configId,
+      paymentConfigGuardVersion: 7,
+      outRefundNo,
+      wechatRefundId: "5030000000202608100000000001",
+      refundAmountFen: 980000,
+      operatorEmployeeId: employeeId,
+      metadata: {
+        confirmation_source: "platform_service_refund_execution",
+        wechat_request_id: "refund-request-id",
+      },
+    });
+    expect(result).toMatchObject({
+      outcome: "provider_closed",
+      provider_status: "CLOSED",
+      refunded: false,
+      access_terminated: false,
+      retryable: false,
+    });
+  });
 
   test("keeps access unchanged when WeChat remains PROCESSING", async () => {
     harness.gateway.requestRefund.mockResolvedValueOnce(refundResponse("PROCESSING"));
@@ -286,7 +336,7 @@ describe("PlatformServiceRefundExecutionService", () => {
     expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
   });
 
-  test.each(["ABNORMAL", "CLOSED"] as const)(
+  test.each(["ABNORMAL"] as const)(
     "never confirms when a PROCESSING request is queried as %s",
     async (status) => {
       harness.gateway.requestRefund.mockResolvedValueOnce(
@@ -303,6 +353,20 @@ describe("PlatformServiceRefundExecutionService", () => {
       expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
     },
   );
+
+  test("closes a PROCESSING refund that query resolves as CLOSED", async () => {
+    harness.gateway.requestRefund.mockResolvedValueOnce(refundResponse("PROCESSING"));
+    harness.gateway.queryRefundByOutRefundNo.mockResolvedValueOnce(
+      refundResponse("CLOSED"),
+    );
+    const service = await createService(harness);
+
+    const result = await service.execute(authContext, refundId);
+
+    expect(harness.repository.closeServiceRefund).toHaveBeenCalledTimes(1);
+    expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ provider_status: "CLOSED", refunded: false });
+  });
 
   test("keeps access unchanged when both refund request and query are uncertain", async () => {
     harness.gateway.requestRefund.mockRejectedValueOnce(new Error("timeout"));
@@ -321,26 +385,35 @@ describe("PlatformServiceRefundExecutionService", () => {
     expect(harness.repository.confirmServiceRefund).not.toHaveBeenCalled();
   });
 
-  test("reuses a persisted original refund number on repeat execution", async () => {
-    const persistedOutRefundNo = "TSRFEXISTING0001";
-    harness.repository.findPlatformServiceRefundRequestById.mockResolvedValueOnce({
-      ...refundRequest,
-      out_refund_no: persistedOutRefundNo,
-    });
-    harness.gateway.requestRefund.mockImplementationOnce(async (input: unknown) => ({
-      ...refundResponse("SUCCESS"),
-      out_refund_no: (input as { outRefundNo: string }).outRefundNo,
-    }));
+  test("reuses the same deterministic refund number after an unknown first attempt", async () => {
+    harness.gateway.requestRefund
+      .mockResolvedValueOnce(refundResponse("PROCESSING"))
+      .mockResolvedValueOnce(refundResponse("SUCCESS"));
+    harness.gateway.queryRefundByOutRefundNo.mockResolvedValueOnce(
+      refundResponse("PROCESSING"),
+    );
     const service = await createService(harness);
 
-    await service.execute(authContext, refundId);
+    await expect(service.execute(authContext, refundId)).rejects.toMatchObject({
+      code: "SERVICE_REFUND_STATUS_UNKNOWN",
+    });
+    const result = await service.execute(authContext, refundId);
 
-    expect(harness.gateway.requestRefund).toHaveBeenCalledWith(
-      expect.objectContaining({ outRefundNo: persistedOutRefundNo }),
+    expect(harness.gateway.requestRefund).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ outRefundNo }),
     );
-    expect(harness.repository.confirmServiceRefund).toHaveBeenCalledWith(
-      expect.objectContaining({ outRefundNo: persistedOutRefundNo }),
+    expect(harness.gateway.requestRefund).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ outRefundNo }),
     );
+    expect(harness.gateway.queryRefundByOutRefundNo).toHaveBeenCalledWith(
+      expect.objectContaining({ outRefundNo }),
+    );
+    expect(result).toMatchObject({
+      outcome: "refunded",
+      provider_status: "SUCCESS",
+    });
   });
 
   test("replays an already finalized local refund idempotently without WeChat", async () => {

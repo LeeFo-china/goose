@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  acceptedRpcEnvelope,
+  RPC_IDS,
+  rpcOrder,
+  rpcWorkOrder,
+} from "./platform-service-rpc-result-fixtures.test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -27,24 +33,7 @@ const acceptanceInput = {
 };
 
 function acceptedEnvelope() {
-  return {
-    order: { id: "order-1", service_status: "accepted" },
-    work_order: { id: "work-1", status: "accepted" },
-    acceptance_preparation: { id: "acceptance-1", status: "accepted" },
-    contract: {
-      id: "contract-1", tenant_id: "tenant-1", status: "active",
-      service_start_at: "2026-08-10T10:00:00.000Z",
-      service_end_at: "2027-08-10T10:00:00.000Z",
-    },
-    contract_period: {
-      id: "period-1", contract_id: "contract-1", tenant_id: "tenant-1",
-      service_order_id: "order-1", status: "active",
-      starts_at: "2026-08-10T10:00:00.000Z",
-      ends_at: "2027-08-10T10:00:00.000Z",
-    },
-    idempotent: false,
-    error_code: null,
-  };
+  return acceptedRpcEnvelope();
 }
 
 describe("PlatformServiceOrderRepository access RPC results", () => {
@@ -60,8 +49,8 @@ describe("PlatformServiceOrderRepository access RPC results", () => {
     const repository = new PlatformServiceOrderRepository(() => client as never);
     rpcResult = {
       data: {
-        order: { id: "order-1", payment_status: "paid" },
-        work_order: { id: "work-1", status: "waiting_assignment" },
+        order: rpcOrder(),
+        work_order: rpcWorkOrder(),
         access_mode: "paid_onboarding",
         idempotent: false,
         error_code: null,
@@ -73,8 +62,8 @@ describe("PlatformServiceOrderRepository access RPC results", () => {
 
     rpcResult = { data: acceptedEnvelope(), error: null };
     expect(await repository.decideAcceptance(acceptanceInput)).toMatchObject({
-      contract: { id: "contract-1" },
-      contractPeriod: { id: "period-1" },
+      contract: { id: RPC_IDS.contract },
+      contractPeriod: { id: RPC_IDS.period },
       idempotent: false,
     });
   });

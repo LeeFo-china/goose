@@ -21,8 +21,12 @@ import {
   type WorkOrderRecord,
 } from "./platform-service-order-records";
 import {
+  buildCloseServiceRefundRpcParams,
+  buildConfirmServiceRefundRpcParams,
+  type CloseServiceRefundInput,
   type ConfirmServiceRefundInput,
-  parseAcceptanceResult,
+  parseOverdueAcceptanceResult,
+  parseRefundClosureResult,
   parseRefundConfirmationResult,
   parseRefundExecutionRequest,
 } from "./platform-service-rpc-results";
@@ -64,7 +68,8 @@ type ServiceClient = {
       | "platform_service_upsert_acceptance_preparation"
       | "platform_service_confirm_overdue_acceptance"
       | "platform_service_review_refund_request"
-      | "platform_service_confirm_refund",
+      | "platform_service_confirm_refund"
+      | "platform_service_close_refund_execution",
     params: Record<string, unknown>,
   ): PromiseLike<QueryResult>;
 };
@@ -84,7 +89,7 @@ type FulfillmentAttachmentFileObjectRecord = {
 };
 
 const FULFILLMENT_ATTACHMENT_SCENE = "tenant_service_fulfillment_attachment";
-const REFUND_EXECUTION_SELECT = "id,tenant_id,service_order_id,idempotency_key,reason,status,version,created_by_employee_id,reviewed_by_employee_id,reviewed_at,review_remark,out_refund_no,wechat_refund_id,refund_amount_fen,refunded_at,refunded_by_employee_id,created_at,updated_at,order:tenant_service_orders(id,tenant_id,order_no,out_trade_no,amount_fen,paid_amount_fen,payment_status,service_status,payment_config_id,payment_config_guard_version,transaction_id)";
+const REFUND_EXECUTION_SELECT = "id,tenant_id,service_order_id,idempotency_key,reason,status,version,created_by_employee_id,reviewed_by_employee_id,reviewed_at,review_remark,out_refund_no,wechat_refund_id,refund_amount_fen,refunded_at,refunded_by_employee_id,provider_refund_status,provider_out_refund_no,provider_wechat_refund_id,provider_refund_amount_fen,provider_checked_at,provider_checked_by_employee_id,created_at,updated_at,order:tenant_service_orders(id,tenant_id,order_no,out_trade_no,amount_fen,paid_amount_fen,payment_status,service_status,payment_config_id,payment_config_guard_version,transaction_id)";
 
 export class PlatformServiceFulfillmentRepository {
   constructor(
@@ -272,7 +277,7 @@ export class PlatformServiceFulfillmentRepository {
       },
       "平台确认逾期验收失败",
     );
-    return parseAcceptanceResult(data);
+    return parseOverdueAcceptanceResult(data);
   }
 
   async listPlatformServiceRefundRequests(input: {
@@ -330,23 +335,19 @@ export class PlatformServiceFulfillmentRepository {
   async confirmServiceRefund(input: ConfirmServiceRefundInput) {
     const data = await this.rpcData(
       "platform_service_confirm_refund",
-      {
-        p_refund_request_id: input.refundRequestId,
-        p_service_order_id: input.serviceOrderId,
-        p_transaction_id: input.transactionId,
-        p_out_trade_no: input.outTradeNo,
-        p_payment_config_id: input.paymentConfigId,
-        p_payment_config_guard_version: input.paymentConfigGuardVersion,
-        p_out_refund_no: input.outRefundNo,
-        p_wechat_refund_id: input.wechatRefundId,
-        p_refund_amount_fen: input.refundAmountFen,
-        p_refunded_at: input.refundedAt,
-        p_operator_employee_id: input.operatorEmployeeId,
-        p_metadata: input.metadata,
-      },
+      buildConfirmServiceRefundRpcParams(input),
       "确认平台技术服务退款失败",
     );
     return parseRefundConfirmationResult(data);
+  }
+
+  async closeServiceRefund(input: CloseServiceRefundInput) {
+    const data = await this.rpcData(
+      "platform_service_close_refund_execution",
+      buildCloseServiceRefundRpcParams(input),
+      "关闭平台技术服务退款执行失败",
+    );
+    return parseRefundClosureResult(data);
   }
 
   private async rpcData(
