@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import type { PlatformServiceTrialScopeV1 } from '@gooes/domain';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
@@ -59,18 +60,21 @@ const grantTypeBase = {
   action: 'grant', tenantId: TENANT_ID, actorEmployeeId: ACTOR_ID,
   reason: '发放', idempotencyKey: IDEMPOTENCY_KEY, allowOverride: false,
 } as const;
+const validScope: PlatformServiceTrialScopeV1 = {
+  version: 1, capabilities: ['core.projects'],
+};
 const approvedReviewWithoutScope = { ...reviewTypeBase, decision: 'approved',
   trialType: 'standard', allowOverride: false } as const;
 const rejectedReviewWithGrant = { ...reviewTypeBase, decision: 'rejected',
   trialType: 'standard', scope: { version: 1, capabilities: [] },
   allowOverride: false } as const;
 const guidedReviewWithoutAssignee = { ...reviewTypeBase, decision: 'approved',
-  trialType: 'guided', scope: { version: 1, capabilities: ['core.projects'] },
+  trialType: 'guided', scope: validScope,
   allowOverride: false } as const;
 const grantWithoutScope = { ...grantTypeBase,
   trialType: 'standard' } as const;
 const guidedGrantWithoutAssignee = { ...grantTypeBase, trialType: 'guided',
-  scope: { version: 1, capabilities: ['core.projects'] } } as const;
+  scope: validScope } as const;
 // @ts-expect-error approved review requires a scope
 const approvedReviewContract: TrialCommandInput = approvedReviewWithoutScope;
 // @ts-expect-error rejected review forbids grant configuration
