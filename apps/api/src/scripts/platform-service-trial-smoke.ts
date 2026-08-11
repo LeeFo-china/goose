@@ -114,6 +114,7 @@ export async function runPlatformServiceTrialSmoke(
     PLATFORM_SERVICE_TRIAL_SMOKE_SCENARIOS.map((name) => [name, false]),
   ) as SmokeChecks;
   let fixture: PlatformServiceTrialFixture | null = null;
+  let auxiliaryCloseFailed = false;
   try {
     try {
       fixture = await createPlatformServiceTrialFixture(db);
@@ -131,7 +132,10 @@ export async function runPlatformServiceTrialSmoke(
       throw stageFailure("COMMERCE_FAILED", error);
     }
   } finally {
-    await Promise.allSettled([dbA.close(), dbB.close()]);
+    const auxiliaryCloseResults = await Promise.allSettled([dbA.close(), dbB.close()]);
+    auxiliaryCloseFailed = auxiliaryCloseResults.some(
+      (result) => result.status === "rejected",
+    );
     try {
       if (fixture) {
         checks.fixture_cleanup = await cleanupPlatformServiceTrialFixture(db, fixture);
@@ -139,6 +143,9 @@ export async function runPlatformServiceTrialSmoke(
     } finally {
       await db.close();
     }
+  }
+  if (auxiliaryCloseFailed) {
+    throw new SmokeFailure("trial smoke auxiliary connection close failed");
   }
   if (PLATFORM_SERVICE_TRIAL_SMOKE_SCENARIOS.some((name) => !checks[name])) {
     throw new SmokeFailure("trial smoke assertion failed");

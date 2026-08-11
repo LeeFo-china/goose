@@ -52,6 +52,21 @@ describe("platform service trial smoke contract", () => {
     ]);
   });
 
+  test("fails closed on connection cleanup, bounds database work, and binds replays", async () => {
+    const [runner, commerce, lifecycle] = await Promise.all([
+      Bun.file(new URL("./platform-service-trial-smoke.ts", import.meta.url)).text(),
+      Bun.file(new URL("./platform-service-trial-smoke-commerce.ts", import.meta.url)).text(),
+      Bun.file(new URL("./platform-service-trial-smoke-lifecycle.ts", import.meta.url)).text(),
+    ]);
+    expect(runner).toContain("auxiliaryCloseResults");
+    expect(runner).toContain('result.status === "rejected"');
+    expect(commerce).toContain("set statement_timeout");
+    expect(commerce).toContain("set lock_timeout");
+    expect(commerce).toContain("await concurrencyOperation");
+    expect(lifecycle).toContain("replay.trial_id === applied.trial_id");
+    expect(lifecycle).toContain("grantReplay.trial_id === scheduledGrant.trial_id");
+  });
+
   test("accepts only the fixed local Supabase database boundary", () => {
     expect(parseLocalPlatformServiceTrialDatabaseUrl(undefined)).toEqual({
       ok: true,

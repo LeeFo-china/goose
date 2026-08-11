@@ -164,7 +164,11 @@ export async function runTrialLifecycleScenarios(
   const clockAndList = await verifyClockAndList(db);
   return {
     apply_pending: applyPending,
-    application_replay: replay.idempotent === true && replayConflict && pendingConflict,
+    application_replay: replay.idempotent === true
+      && replay.trial_id === applied.trial_id
+      && replay.version === applied.version
+      && JSON.stringify(replay.trial_snapshot) === JSON.stringify(applied.trial_snapshot)
+      && replayConflict && pendingConflict,
     application_repeat_cooldown: repeatBlocked && cooldownBlocked,
     review_scheduled_active_grace_expired:
       reviewed.status === "scheduled"
@@ -172,7 +176,12 @@ export async function runTrialLifecycleScenarios(
         "scheduled", "active", "grace_period", "expired",
       ]),
     grant_replay_conflict:
-      grantReplay.idempotent === true && grantConflict && crossResourceConflict,
+      grantReplay.idempotent === true
+      && grantReplay.trial_id === scheduledGrant.trial_id
+      && grantReplay.version === scheduledGrant.version
+      && JSON.stringify(grantReplay.trial_snapshot)
+        === JSON.stringify(scheduledGrant.trial_snapshot)
+      && grantConflict && crossResourceConflict,
     expected_version: expectedVersion && wrongExtend,
     enterprise_cross_tenant_duplicate: duplicateGrant.status === "active" && duplicateBlocked,
     extend_revoke: extended.status === "active"

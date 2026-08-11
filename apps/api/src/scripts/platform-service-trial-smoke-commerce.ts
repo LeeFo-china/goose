@@ -111,8 +111,9 @@ export async function runTrialCommerceScenarios(
     && anomalyFacts[0]?.anomaly_count === 1;
   await closePaidFixtureOrder(db, anomalyOrder.id);
 
+  await configureConcurrencyTimeouts(dbA, dbB);
   const concurrency = await withTimeout(
-    runSourceConcurrency(db, dbA, dbB, fixture, trialId),
+    (isTimedOut) => runSourceConcurrency(dbA, dbB, fixture, trialId, isTimedOut),
     CONCURRENCY_TIMEOUT_MS,
   );
   return {
@@ -197,18 +198,21 @@ async function closePaidFixtureOrder(db: TrialSql, orderId: string): Promise<voi
 }
 
 async function runSourceConcurrency(
-  db: TrialSql,
   dbA: TrialSql,
   dbB: TrialSql,
   fixture: PlatformServiceTrialFixture,
   trialId: string,
+  isTimedOut: () => boolean,
 ): Promise<boolean> {
   for (let iteration = 0; iteration < CONCURRENCY_ITERATIONS; iteration += 1) {
-    const current = await createPendingOrder(db, fixture, trialId, `race-${iteration}`);
+    if (isTimedOut()) return false;
+    const current = await createPendingOrder(dbA, fixture, trialId, `race-${iteration}`);
+    if (isTimedOut()) return false;
     const [createResult, confirmResult] = await Promise.allSettled([
       createPendingOrder(dbA, fixture, trialId, `contender-${iteration}`),
       confirmOrder(dbB, fixture, current, `race-${iteration}`),
     ]);
+    if (isTimedOut()) return false;
     if (
       createResult.status !== "rejected"
       || !(createResult.reason instanceof Error)
@@ -216,9 +220,24 @@ async function runSourceConcurrency(
       || confirmResult.status !== "fulfilled"
       || (confirmResult.value.order as SmokeJson)?.payment_status !== "paid"
     ) return false;
-    await closePaidFixtureOrder(db, current.id);
+    await closePaidFixtureOrder(dbA, current.id);
   }
   return true;
+}
+
+async function configureConcurrencyTimeouts(
+  dbA: TrialSql,
+  dbB: TrialSql,
+): Promise<void> {
+  await Promise.all([
+    configureConcurrencyConnection(dbA),
+    configureConcurrencyConnection(dbB),
+  ]);
+}
+
+async function configureConcurrencyConnection(db: TrialSql): Promise<void> {
+  await db`set statement_timeout = '2s';`;
+  await db`set lock_timeout = '1s';`;
 }
 
 async function verifyUpgradePreflight(db: TrialSql): Promise<boolean> {
@@ -254,15 +273,32 @@ async function verifyUpgradePreflight(db: TrialSql): Promise<boolean> {
     && fact.authenticated_execute === false;
 }
 
-async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
+async function withTimeout<T>(
+  operationFactory: (isTimedOut: () => boolean) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const concurrencyOperation = operationFactory(() => timedOut);
   try {
     return await Promise.race([
-      operation,
+      concurrencyOperation,
       new Promise<T>((_resolve, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("trial smoke timeout")), timeoutMs);
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error("trial smoke timeout"));
+        }, timeoutMs);
       }),
     ]);
+  } catch (error) {
+    if (timedOut) {
+      try {
+        await concurrencyOperation;
+      } catch {
+        // The original timeout remains the stable failure after DB-side cancellation.
+      }
+    }
+    throw error;
   } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
