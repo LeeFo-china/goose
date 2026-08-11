@@ -17,7 +17,7 @@ class BillingServiceTrialsController extends TenantBaseController {
     super('billing-service-trials');
   }
 
-  @Get('/billing/service-trials', { tenantServiceAccess: 'read' })
+  @Get('/billing/service-trials', { tenantServiceAccess: 'recovery' })
   async listTrials(request: FastifyRequest) {
     const authContext = await this.getRequiredTenantContext(request);
     const queryResult = ServiceTrialListQuerySchema.safeParse(
@@ -32,7 +32,7 @@ class BillingServiceTrialsController extends TenantBaseController {
     return ResponseHandler.success(data);
   }
 
-  @Get('/billing/service-trials/current', { tenantServiceAccess: 'read' })
+  @Get('/billing/service-trials/current', { tenantServiceAccess: 'recovery' })
   async getCurrentTrial(request: FastifyRequest) {
     const authContext = await this.getRequiredTenantContext(request);
     const data = await tenantServiceTrialService.getCurrentTrial(authContext);
@@ -40,7 +40,7 @@ class BillingServiceTrialsController extends TenantBaseController {
   }
 
   @Get('/billing/service-trials/applications/:id', {
-    tenantServiceAccess: 'read',
+    tenantServiceAccess: 'recovery',
   })
   async getTrial(request: FastifyRequest) {
     const authContext = await this.getRequiredTenantContext(request);
