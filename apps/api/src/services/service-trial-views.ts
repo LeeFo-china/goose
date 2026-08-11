@@ -5,9 +5,12 @@ import type {
   TrialListRecord,
   TrialPolicyRecord,
   TrialRecord,
+  SafeTrialCommandSnapshot,
 } from '@/repositories/service-trials';
 
 type ServiceTrialRecord = TrialRecord | TrialListRecord | TrialDetailRecord;
+type TrialActionFacts = Pick<TrialRecord,
+  'status' | 'starts_at' | 'trial_ends_at' | 'grace_ends_at'>;
 type ActionView = { enabled: boolean; disabled_reason: string | null };
 
 const PLATFORM_PERMISSION = {
@@ -26,7 +29,7 @@ function enabled(): ActionView {
 }
 
 export function resolveServiceTrialEffectiveStatus(
-  record: TrialRecord,
+  record: TrialActionFacts,
   now: Date,
 ): PlatformServiceTrialStatus {
   if (!['scheduled', 'active', 'grace_period'].includes(record.status)
@@ -142,8 +145,49 @@ export function serializeServiceTrialPolicy(record: TrialPolicyRecord) {
   };
 }
 
+export function serializeServiceTrialCommandSnapshot(
+  snapshot: SafeTrialCommandSnapshot,
+) {
+  return {
+    id: snapshot.id,
+    tenant_id: snapshot.tenant_id,
+    source: snapshot.source,
+    trial_type: snapshot.trial_type,
+    status: snapshot.status,
+    persisted_status: snapshot.status,
+    application_reason: null,
+    expected_user_count: snapshot.expected_user_count,
+    expected_project_count: snapshot.expected_project_count,
+    contact_name: snapshot.contact_name_masked,
+    contact_phone: snapshot.contact_phone_masked,
+    grant_reason: null,
+    review_decision: snapshot.review_decision,
+    review_reason: null,
+    revoke_reason: null,
+    withdraw_reason: null,
+    requested_at: snapshot.requested_at,
+    reviewed_at: snapshot.reviewed_at,
+    granted_at: snapshot.granted_at,
+    starts_at: snapshot.starts_at,
+    activated_at: snapshot.activated_at,
+    trial_ends_at: snapshot.trial_ends_at,
+    grace_ends_at: snapshot.grace_ends_at,
+    withdrawn_at: snapshot.withdrawn_at,
+    revoked_at: snapshot.revoked_at,
+    converted_at: snapshot.converted_at,
+    converted_order_id: snapshot.converted_order_id,
+    assignee_employee_id: null,
+    scope: snapshot.scope,
+    policy_snapshot: snapshot.policy_snapshot,
+    extension_count: snapshot.extension_count,
+    version: snapshot.version,
+    created_at: snapshot.created_at,
+    updated_at: snapshot.updated_at,
+  };
+}
+
 export function buildTrialAvailableActions(
-  record: TrialRecord,
+  record: TrialActionFacts,
   permissions: ReadonlySet<string>,
   now: Date,
 ) {

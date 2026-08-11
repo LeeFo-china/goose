@@ -20,6 +20,7 @@ import {
   TrialRowSchema,
   TrialSummarySchema,
   type PolicyCommandResult,
+  type SafeTrialCommandSnapshot,
   type TrialCommandResult,
   type TrialDetailRecord,
   type TrialListRecord,
@@ -30,6 +31,7 @@ import {
 
 export type {
   PolicyCommandResult,
+  SafeTrialCommandSnapshot,
   TrialCommandResult,
   TrialDetailRecord,
   TrialListRecord,
@@ -344,8 +346,21 @@ export class ServiceTrialRepository {
       .select(POLICY_COLUMNS).eq('is_current', true).limit(1).maybeSingle();
     const result = await querySafely(() => query, '查询技术服务试用策略失败');
     if (result.error) throw Errors.dbError('查询技术服务试用策略失败');
-    return result.data === null ? null
-      : parse(TrialPolicySchema, result.data, '查询技术服务试用策略失败');
+    if (result.data === null) return null;
+    const policy = parse(TrialPolicySchema, result.data, '查询技术服务试用策略失败');
+    if (!policy.is_current) throw Errors.dbError('查询技术服务试用策略失败');
+    return policy;
+  }
+
+  async findPolicyById(id: string): Promise<TrialPolicyRecord | null> {
+    const query = this.clientProvider().from('platform_service_trial_policies')
+      .select(POLICY_COLUMNS).eq('id', id).limit(1).maybeSingle();
+    const result = await querySafely(() => query, '查询技术服务试用策略失败');
+    if (result.error) throw Errors.dbError('查询技术服务试用策略失败');
+    if (result.data === null) return null;
+    const policy = parse(TrialPolicySchema, result.data, '查询技术服务试用策略失败');
+    if (policy.id !== id) throw Errors.dbError('查询技术服务试用策略失败');
+    return policy;
   }
 
   async executeCommand(input: TrialCommandInput): Promise<TrialCommandResult> {

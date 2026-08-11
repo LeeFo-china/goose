@@ -1,8 +1,9 @@
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-
 import { Errors } from '@/errors/error-factory';
 import type {
+  PolicyCommandResult,
   TrialCommandInput,
+  TrialCommandResult,
   TrialPolicyUpdateCommand,
 } from '@/repositories/service-trials';
 import type { AuthContext } from '@/services/authorization';
@@ -11,6 +12,7 @@ import {
   ASSIGNEE_ID,
   IDEMPOTENCY_KEY,
   makeActiveTrial,
+  makeCommandSnapshot,
   makePendingTrial,
   makePolicy,
   makeTrialDetail,
@@ -20,24 +22,20 @@ import {
   TEST_SCOPE,
   TRIAL_ID,
 } from './service-trial-test-fixtures';
-
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
-
 let PlatformServiceTrialService:
   typeof import('./platform-service-trials').PlatformServiceTrialService;
 beforeAll(async () => {
   ({ PlatformServiceTrialService } = await import('./platform-service-trials'));
 });
-
 const PERMISSION = {
   read: 'platform.service_trial.read',
   review: 'platform.service_trial.review',
   manage: 'platform.service_trial.manage',
   override: 'platform.service_trial.override',
 } as const;
-
 function platformAuth(permissionCodes: readonly string[]): AuthContext {
   return {
     authUserId: 'auth-platform', employeeId: ACTOR_ID, tenantId: null,
@@ -51,7 +49,6 @@ function platformAuth(permissionCodes: readonly string[]): AuthContext {
     permissions: permissionCodes.map((code) => ({ code, scope: 'all' })),
   };
 }
-
 function createRepository() {
   return {
     listPlatformTrials: mock(async () => ({
@@ -67,23 +64,36 @@ function createRepository() {
     })),
     findTrialById: mock(async () => makeTrialDetail(makeActiveTrial())),
     findCurrentPolicy: mock(async () => makePolicy()),
-    executeCommand: mock(async (input: TrialCommandInput) => ({
-      trial_id: 'trialId' in input ? input.trialId : TRIAL_ID,
-      tenant_id: TENANT_ID,
-      status: input.action === 'review' && input.decision === 'rejected'
-        ? 'rejected' : 'active',
-      version: 2,
-      idempotent: false,
-      ...(input.action === 'assign'
-        ? { assigned: input.assigneeEmployeeId !== null } : {}),
-    } as const)),
-    updatePolicy: mock(async (_input: TrialPolicyUpdateCommand) => ({
+    findPolicyById: mock(async () => makePolicy()),
+    executeCommand: mock(async (
+      input: TrialCommandInput,
+    ): Promise<TrialCommandResult> => {
+      const trial = input.action === 'review' && input.decision === 'rejected'
+        ? makePendingTrial({
+          status: 'rejected', review_decision: 'rejected',
+          review_reason: input.reason, reviewed_at: NOW.toISOString(),
+          reviewed_by_employee_id: ACTOR_ID, version: 2,
+        })
+        : makeActiveTrial();
+      return {
+        trial_id: 'trialId' in input ? input.trialId : TRIAL_ID,
+        tenant_id: TENANT_ID,
+        status: trial.status,
+        version: trial.version,
+        trial_snapshot: makeCommandSnapshot(trial),
+        idempotent: false,
+        ...(input.action === 'assign'
+          ? { assigned: input.assigneeEmployeeId !== null } : {}),
+      };
+    }),
+    updatePolicy: mock(async (
+      _input: TrialPolicyUpdateCommand,
+    ): Promise<PolicyCommandResult> => ({
       policy_id: makePolicy().id, version: 2, is_current: true,
       idempotent: false,
-    } as const)),
+    })),
   };
 }
-
 const approvedReview = {
   decision: 'approved' as const,
   expected_version: 1,
@@ -93,18 +103,15 @@ const approvedReview = {
   trial_days: 30,
   grace_days: 7,
 };
-
 describe('PlatformServiceTrialService reads', () => {
   let repository: ReturnType<typeof createRepository>;
   let service: InstanceType<typeof PlatformServiceTrialService>;
-
   beforeEach(() => {
     repository = createRepository();
     service = new PlatformServiceTrialService({
       repository, nowFactory: () => new Date(NOW),
     });
   });
-
   test('requires read permission and a real platform staff context', async () => {
     await expect(service.listTrials(platformAuth([]), {})).rejects.toMatchObject({
       statusCode: 403, code: 'PLATFORM_PERMISSION_REQUIRED',
@@ -116,12 +123,10 @@ describe('PlatformServiceTrialService reads', () => {
     });
     expect(repository.listPlatformTrials).not.toHaveBeenCalled();
   });
-
   test('serializes a page in one repository call without PII leakage or N+1', async () => {
     const result = await service.listTrials(platformAuth([PERMISSION.read]), {
       page: 1, pageSize: 20, status: 'pending_review',
     });
-
     expect(repository.listPlatformTrials).toHaveBeenCalledTimes(1);
     expect(repository.findTrialById).not.toHaveBeenCalled();
     expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
@@ -134,24 +139,20 @@ describe('PlatformServiceTrialService reads', () => {
     });
     expect(JSON.stringify(result)).not.toContain('13800138000');
   });
-
   test('uses the injected clock for summary and detail responses', async () => {
     const auth = platformAuth([PERMISSION.read]);
     const summary = await service.getSummary(auth);
     const detail = await service.getTrial(auth, TRIAL_ID);
-
     expect(repository.getPlatformSummary).toHaveBeenCalledWith(NOW.toISOString());
     expect(summary.server_time).toBe(NOW.toISOString());
     expect(detail.server_time).toBe(NOW.toISOString());
     expect(detail.trial.status).toBe('grace_period');
   });
-
   test('returns a strict current policy view with permission-aware update action', async () => {
     const readOnly = await service.getPolicy(platformAuth([PERMISSION.read]));
     const privileged = await service.getPolicy(platformAuth([
       PERMISSION.read, PERMISSION.manage, PERMISSION.override,
     ]));
-
     expect(readOnly).toMatchObject({
       policy: { trial_days: 30, grace_days: 7, version: 1 },
       available_actions: {
@@ -168,7 +169,6 @@ describe('PlatformServiceTrialService reads', () => {
     });
   });
 });
-
 describe('PlatformServiceTrialService permission matrix', () => {
   let repository: ReturnType<typeof createRepository>;
   let service: InstanceType<typeof PlatformServiceTrialService>;
@@ -243,6 +243,65 @@ describe('PlatformServiceTrialService permission matrix', () => {
     expect(repository.executeCommand).not.toHaveBeenCalled();
   });
 
+  test.each([
+    {
+      name: 'grant without manage', permissions: [] as string[],
+      missing: PERMISSION.manage, run: (auth: AuthContext) => service.grant(auth, {
+        tenant_id: TENANT_ID, trial_type: 'standard', reason: '评估',
+        idempotency_key: IDEMPOTENCY_KEY,
+      }),
+    },
+    {
+      name: 'extend without manage', permissions: [PERMISSION.override],
+      missing: PERMISSION.manage, run: (auth: AuthContext) => service.extend(
+        auth, TRIAL_ID, { extension_days: 7, expected_version: 2,
+          idempotency_key: IDEMPOTENCY_KEY, reason: '延期' },
+      ),
+    },
+    {
+      name: 'extend without override', permissions: [PERMISSION.manage],
+      missing: PERMISSION.override, run: (auth: AuthContext) => service.extend(
+        auth, TRIAL_ID, { extension_days: 7, expected_version: 2,
+          idempotency_key: IDEMPOTENCY_KEY, reason: '延期' },
+      ),
+    },
+    {
+      name: 'revoke without override', permissions: [PERMISSION.manage],
+      missing: PERMISSION.override, run: (auth: AuthContext) => service.revoke(auth, TRIAL_ID, {
+        expected_version: 2, idempotency_key: IDEMPOTENCY_KEY,
+        reason: '撤销',
+      }),
+    },
+    {
+      name: 'assign without manage', permissions: [] as string[],
+      missing: PERMISSION.manage, run: (auth: AuthContext) => service.assign(auth, TRIAL_ID, {
+        assignee_employee_id: ASSIGNEE_ID, expected_version: 2,
+        idempotency_key: IDEMPOTENCY_KEY,
+      }),
+    },
+    {
+      name: 'policy without override', permissions: [PERMISSION.manage],
+      missing: PERMISSION.override, run: (auth: AuthContext) => service.updatePolicy(auth, {
+        default_trial_days: 30, default_grace_days: 7,
+        reminder_days: [7, 3, 1], max_trial_days: 60,
+        max_grace_days: 14, max_schedule_ahead_days: 30,
+        max_extension_count: 1, max_extension_days: 30,
+        reapply_cooldown_days: 30, allow_repeat_application: false,
+        standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
+        expected_version: 1, idempotency_key: IDEMPOTENCY_KEY,
+        reason: '更新规则',
+      }),
+    },
+  ])('denies $name using the exact permission matrix', async ({ permissions, missing, run }) => {
+    await expect(run(platformAuth(permissions))).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'PLATFORM_PERMISSION_REQUIRED',
+      details: { permission: missing },
+    });
+    expect(repository.executeCommand).not.toHaveBeenCalled();
+    expect(repository.updatePolicy).not.toHaveBeenCalled();
+  });
+
   test('rejects an application with review permission only', async () => {
     repository.findTrialById.mockImplementationOnce(async () => makeTrialDetail(
       makePendingTrial({
@@ -283,7 +342,8 @@ describe('PlatformServiceTrialService permission matrix', () => {
       })
       .mockImplementationOnce(async () => ({
         trial_id: TRIAL_ID, tenant_id: TENANT_ID, status: 'active',
-        version: 2, idempotent: false,
+        version: 2, trial_snapshot: makeCommandSnapshot(makeActiveTrial()),
+        idempotent: false,
       }));
     await service.grant(platformAuth([PERMISSION.manage, PERMISSION.override]), {
       tenant_id: TENANT_ID, trial_type: 'standard', reason: '再次评估有明确目标',
@@ -341,8 +401,43 @@ describe('PlatformServiceTrialService permission matrix', () => {
     });
   });
 
+  test('returns the saved safe trial shape when a platform command is replayed', async () => {
+    const saved = makeActiveTrial({
+      source: 'platform_grant', application_reason: null,
+      expected_user_count: null, expected_project_count: null,
+      contact_name: null, contact_phone: null, requested_at: null,
+      requested_by_employee_id: null, review_decision: null,
+      review_reason: null, reviewed_at: null, reviewed_by_employee_id: null,
+    });
+    repository.executeCommand.mockImplementationOnce(async () => ({
+      trial_id: TRIAL_ID, tenant_id: TENANT_ID, status: saved.status,
+      version: saved.version, trial_snapshot: makeCommandSnapshot(saved),
+      idempotent: true,
+    }));
+    repository.findTrialById.mockImplementationOnce(async () => makeTrialDetail({
+      ...saved, status: 'revoked', revoked_at: NOW.toISOString(),
+      revoked_by_employee_id: ACTOR_ID, revoke_reason: '后来撤销', version: 3,
+    }));
+
+    const result = await service.grant(
+      platformAuth([PERMISSION.manage, PERMISSION.override]),
+      { tenant_id: TENANT_ID, trial_type: 'standard', reason: '评估',
+        idempotency_key: IDEMPOTENCY_KEY },
+    );
+
+    expect(repository.findTrialById).not.toHaveBeenCalled();
+    expect(result.trial).toMatchObject({
+      id: TRIAL_ID, status: 'active', persisted_status: 'active',
+      version: 2, application_reason: null, assignee_employee_id: null,
+    });
+    expect(result.trial).not.toHaveProperty('tenant');
+    expect(result.trial).not.toHaveProperty('events');
+    expect(JSON.stringify(result)).not.toContain('后来撤销');
+    expect(result.available_actions.extend.enabled).toBe(true);
+  });
+
   test('updates the complete policy with manage plus override only', async () => {
-    repository.findCurrentPolicy.mockImplementationOnce(async () =>
+    repository.findPolicyById.mockImplementationOnce(async () =>
       makePolicy({ version: 2, change_reason: '更新默认规则' }));
     const input = {
       default_trial_days: 30, default_grace_days: 7,
@@ -365,5 +460,40 @@ describe('PlatformServiceTrialService permission matrix', () => {
     expect(result.policy.version).toBe(2);
     expect(result.idempotent).toBe(false);
     expect(result.server_time).toBe(NOW.toISOString());
+  });
+
+  test('replays the policy version named by the saved command result', async () => {
+    const historical = makePolicy({
+      is_current: false, version: 2, change_reason: '已保存规则',
+    });
+    repository.findPolicyById.mockImplementationOnce(async () => historical);
+    repository.findCurrentPolicy.mockImplementationOnce(async () => makePolicy({
+      id: '77777777-7777-4777-8777-777777777777', version: 3,
+      change_reason: '后来规则',
+    }));
+    repository.updatePolicy.mockImplementationOnce(async () => ({
+      policy_id: historical.id, version: historical.version,
+      is_current: true, idempotent: true,
+    }));
+
+    const result = await service.updatePolicy(
+      platformAuth([PERMISSION.manage, PERMISSION.override]), {
+        default_trial_days: 30, default_grace_days: 7,
+        reminder_days: [7, 3, 1], max_trial_days: 60,
+        max_grace_days: 14, max_schedule_ahead_days: 30,
+        max_extension_count: 1, max_extension_days: 30,
+        reapply_cooldown_days: 30, allow_repeat_application: false,
+        standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
+        expected_version: 1, idempotency_key: IDEMPOTENCY_KEY,
+        reason: '已保存规则',
+      },
+    );
+
+    expect(repository.findPolicyById).toHaveBeenCalledWith(historical.id);
+    expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
+    expect(result.policy).toMatchObject({
+      id: historical.id, version: 2, change_reason: '已保存规则',
+    });
+    expect(result.idempotent).toBe(true);
   });
 });

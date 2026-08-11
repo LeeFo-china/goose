@@ -13,6 +13,7 @@ import type { AuthContext } from '@/services/authorization';
 import {
   buildTrialAvailableActions,
   serializeServiceTrial,
+  serializeServiceTrialCommandSnapshot,
 } from './service-trial-views';
 
 type RepositoryPort = Pick<ServiceTrialRepository,
@@ -92,7 +93,7 @@ export class TenantServiceTrialService {
       contactPhone: input.contact_phone,
       idempotencyKey: input.idempotency_key,
     });
-    return this.commandResponse(result, authContext, tenantId);
+    return this.commandResponse(result, authContext);
   }
 
   async withdraw(
@@ -110,25 +111,19 @@ export class TenantServiceTrialService {
       reason: input.reason,
       idempotencyKey: input.idempotency_key,
     });
-    return this.commandResponse(result, authContext, tenantId);
+    return this.commandResponse(result, authContext);
   }
 
-  private async commandResponse(
+  private commandResponse(
     result: TrialCommandResult,
     authContext: AuthContext,
-    tenantId: string,
   ) {
-    const record = await this.repository.findTrialById({
-      id: result.trial_id,
-      tenantId,
-    });
-    if (!record) throw trialNotFound();
     const now = this.nowFactory();
     return {
-      trial: serializeServiceTrial(record, now),
+      trial: serializeServiceTrialCommandSnapshot(result.trial_snapshot),
       idempotent: result.idempotent,
       available_actions: buildTrialAvailableActions(
-        record,
+        result.trial_snapshot,
         permissionSet(authContext),
         now,
       ),

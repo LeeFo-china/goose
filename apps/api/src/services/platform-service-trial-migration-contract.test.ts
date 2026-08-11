@@ -1,11 +1,8 @@
 import { describe, expect, test } from "bun:test";
-
 const migrationsDirectory = new URL("../../../../supabase/migrations/", import.meta.url);
 const minimumReleasedVersion = "20260811004000";
-
 const normalizeSql = (sql: string) =>
   sql.replaceAll(/--.*$/gm, " ").replaceAll(/\s+/g, " ").trim().toLowerCase();
-
 async function findMigration() {
   const glob = new Bun.Glob("*_create_platform_service_trials.sql");
   const names = Array.fromAsync(glob.scan({
@@ -19,30 +16,25 @@ async function findMigration() {
     text: name ? await Bun.file(new URL(name, migrationsDirectory)).text() : "",
   };
 }
-
 function functionDefinition(sql: string, name: string) {
   return sql.match(new RegExp(
     `CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
   ))?.[0] ?? "";
 }
-
 function functionBody(sql: string, name: string) {
   const definition = functionDefinition(sql, name);
   const start = definition.indexOf("\nAS $$\n");
   const end = definition.lastIndexOf("\n$$;");
   return normalizeSql(start < 0 || end < 0 ? "" : definition.slice(start, end));
 }
-
 function functionSignature(sql: string, name: string) {
   const definition = functionDefinition(sql, name);
   const end = definition.indexOf("\nRETURNS ");
   return normalizeSql(end < 0 ? "" : definition.slice(0, end));
 }
-
 function aclReference(name: string, argumentTypes: string) {
   return `public.${name}(${argumentTypes})`;
 }
-
 function expectServiceRoleOnly(sql: string, reference: string) {
   const normalized = normalizeSql(sql);
   for (const role of ["public", "anon", "authenticated"]) {
@@ -51,7 +43,6 @@ function expectServiceRoleOnly(sql: string, reference: string) {
   }
   expect(normalized).toContain(`grant execute on function ${reference} to service_role;`);
 }
-
 describe("platform service trial core migration", () => {
   test("uses a forward migration after the latest released version", async () => {
     const migration = await findMigration();
@@ -454,6 +445,33 @@ describe("platform service trial core migration", () => {
     expect(sql).toContain("roles.code = 'platform_operations'");
     expect(sql).toContain("permission.code <> 'platform.service_trial.override'");
     expect(sql).not.toMatch(/roles\.code\s*=\s*'(?:employee_base|staff)'/);
+  });
+
+  test("stores one immutable PII-safe trial snapshot for every trial command", async () => {
+    const migration = await findMigration();
+    const snapshot = functionBody(migration.text,
+      "platform_service_trial_command_snapshot");
+    expect(snapshot).toContain("jsonb_build_object");
+    expect(snapshot).toContain("'contact_name_masked'");
+    expect(snapshot).toContain("'contact_phone_masked'");
+    expect(snapshot).not.toMatch(/'contact_(?:name|phone)'/);
+    expect(snapshot).not.toMatch(/actor_employee_id|assignee_employee_id|application_reason|review_reason/);
+    for (const command of [
+      "apply", "withdraw", "review", "grant", "extend", "revoke", "assign",
+    ]) {
+      const body = functionBody(migration.text,
+        `platform_service_trial_${command}`);
+      expect(body).toContain("'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)");
+    }
+    const sql = normalizeSql(migration.text);
+    expect(sql).toContain("trial_id is not null and jsonb_typeof(result_envelope->'trial_snapshot') = 'object'");
+    for (const forbidden of [
+      'contact_name', 'contact_phone', 'application_reason', 'review_reason',
+      'actor_employee_id', 'assignee_employee_id', 'tenant', 'events',
+      'available_actions',
+    ]) expect(sql).toContain(`'${forbidden}'`);
+    for (const binding of ['id', 'tenant_id', 'status', 'version']) expect(sql)
+      .toContain(`result_envelope->'trial_snapshot'->${binding === 'version' ? '' : '>'}'${binding}'`);
   });
 
   test("forces RLS, closes table ACLs, and prevents sensitive audit snapshots", async () => {

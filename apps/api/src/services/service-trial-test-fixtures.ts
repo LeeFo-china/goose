@@ -3,6 +3,7 @@ import type {
   TrialListRecord,
   TrialPolicyRecord,
   TrialRecord,
+  SafeTrialCommandSnapshot,
 } from '@/repositories/service-trials';
 import type { PlatformServiceTrialScopeV1 } from '@gooes/domain';
 
@@ -120,6 +121,44 @@ export function makeTrialListRecord(
   const detail = makeTrialDetail(trial);
   const { events: _events, ...listRecord } = detail;
   return listRecord;
+}
+
+export function makeCommandSnapshot(
+  trial: TrialRecord = makePendingTrial(),
+): SafeTrialCommandSnapshot {
+  return {
+    id: trial.id,
+    tenant_id: trial.tenant_id,
+    source: trial.source,
+    trial_type: trial.trial_type,
+    status: trial.status,
+    expected_user_count: trial.expected_user_count,
+    expected_project_count: trial.expected_project_count,
+    contact_name_masked: trial.contact_name
+      ? `${[...trial.contact_name][0]}${'*'.repeat(Math.max(1,
+        [...trial.contact_name].length - 1))}` : null,
+    contact_phone_masked: trial.contact_phone
+      ? `${trial.contact_phone.slice(0, 3)}****${trial.contact_phone.slice(7)}`
+      : null,
+    review_decision: trial.review_decision,
+    requested_at: trial.requested_at,
+    reviewed_at: trial.reviewed_at,
+    granted_at: trial.granted_at,
+    starts_at: trial.starts_at,
+    activated_at: trial.activated_at,
+    trial_ends_at: trial.trial_ends_at,
+    grace_ends_at: trial.grace_ends_at,
+    withdrawn_at: trial.withdrawn_at,
+    revoked_at: trial.revoked_at,
+    converted_at: trial.converted_at,
+    converted_order_id: trial.converted_order_id,
+    scope: trial.scope_snapshot,
+    policy_snapshot: trial.policy_snapshot,
+    extension_count: trial.extension_count,
+    version: trial.version,
+    created_at: trial.created_at,
+    updated_at: trial.updated_at,
+  };
 }
 
 export function makePolicy(

@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
 
 import type {
   ServiceTrialClient,
+  SafeTrialCommandSnapshot,
   TrialCommandInput,
   TrialCommandResult,
 } from './service-trials';
@@ -44,11 +45,49 @@ function harness(rpcResult: DbResult | (() => Promise<DbResult>)) {
   };
 }
 
+const trialSnapshot: SafeTrialCommandSnapshot = {
+  id: TRIAL_ID,
+  tenant_id: TENANT_ID,
+  source: 'platform_grant',
+  trial_type: 'standard',
+  status: 'active',
+  expected_user_count: null,
+  expected_project_count: null,
+  contact_name_masked: null,
+  contact_phone_masked: null,
+  review_decision: null,
+  requested_at: null,
+  reviewed_at: null,
+  granted_at: NOW,
+  starts_at: NOW,
+  activated_at: NOW,
+  trial_ends_at: '2026-09-10T08:00:00.000Z',
+  grace_ends_at: '2026-09-17T08:00:00.000Z',
+  withdrawn_at: null,
+  revoked_at: null,
+  converted_at: null,
+  converted_order_id: null,
+  scope: { version: 1, capabilities: ['core.projects'] },
+  policy_snapshot: {
+    policy_id: '77777777-7777-4777-8777-777777777777',
+    version: 1, trial_days: 30, grace_days: 7,
+    max_trial_days: 60, max_grace_days: 14, max_schedule_days: 30,
+    max_extension_count: 1, max_extension_days: 30,
+    reapply_cooldown_days: 30, allow_repeat: false,
+    reminder_days: [7, 3, 1], override_used: false,
+  },
+  extension_count: 0,
+  version: 2,
+  created_at: NOW,
+  updated_at: NOW,
+};
+
 const commandResult = {
   trial_id: TRIAL_ID,
   tenant_id: TENANT_ID,
   status: 'active',
   version: 2,
+  trial_snapshot: trialSnapshot,
   idempotent: false,
 } as const;
 
@@ -301,6 +340,21 @@ describe('ServiceTrialRepository commands', () => {
     for (const data of [
       { ...commandResult, secret: 'unexpected' },
       { ...commandResult, version: 0 },
+      { ...commandResult, trial_snapshot: {
+        ...trialSnapshot, contact_phone: '13800138000',
+      } },
+      { ...commandResult, trial_snapshot: {
+        ...trialSnapshot, contact_name_masked: '张经理*',
+      } },
+      { ...commandResult, trial_snapshot: {
+        ...trialSnapshot, application_reason: '原始申请自由文本',
+      } },
+      { ...commandResult, trial_snapshot: {
+        ...trialSnapshot, assignee_employee_id: ASSIGNEE_ID,
+      } },
+      { ...commandResult, trial_snapshot: {
+        ...trialSnapshot, version: 3,
+      } },
       [{ ...commandResult }, { ...commandResult }],
     ]) {
       const f = harness({ data, error: null });

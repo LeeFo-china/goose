@@ -248,7 +248,7 @@ export const TrialSummarySchema = z.object({
 }).strict();
 
 export const TrialPolicySchema = z.object({
-  id: z.uuid(), is_current: z.literal(true),
+  id: z.uuid(), is_current: z.boolean(),
   trial_days: z.number().int().min(1).max(365),
   grace_days: z.number().int().min(0).max(30),
   reminder_days: z.array(z.number().int().positive()).min(1).max(10),
@@ -272,13 +272,60 @@ export const TrialPolicySchema = z.object({
   }
 });
 
-export const CommandResultSchema = z.object({
+export const SafeTrialCommandSnapshotSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  source: z.enum(PLATFORM_SERVICE_TRIAL_SOURCE_VALUES),
+  trial_type: z.enum(PLATFORM_SERVICE_TRIAL_TYPE_VALUES),
+  status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES),
+  expected_user_count: z.number().int().positive().max(100_000).nullable(),
+  expected_project_count: z.number().int().positive().max(1_000_000).nullable(),
+  contact_name_masked: z.string().min(2).max(80)
+    .regex(/^[^*]\*+$/u).nullable(),
+  contact_phone_masked: z.string().regex(/^1[3-9]\d\*{4}\d{4}$/).nullable(),
+  review_decision: z.enum(['approved', 'rejected']).nullable(),
+  requested_at: NullableDateTimeSchema,
+  reviewed_at: NullableDateTimeSchema,
+  granted_at: NullableDateTimeSchema,
+  starts_at: NullableDateTimeSchema,
+  activated_at: NullableDateTimeSchema,
+  trial_ends_at: NullableDateTimeSchema,
+  grace_ends_at: NullableDateTimeSchema,
+  withdrawn_at: NullableDateTimeSchema,
+  revoked_at: NullableDateTimeSchema,
+  converted_at: NullableDateTimeSchema,
+  converted_order_id: NullableUuidSchema,
+  scope: PlatformServiceTrialScopeSchema,
+  policy_snapshot: PolicySnapshotSchema,
+  extension_count: z.number().int().min(0).max(20),
+  version: z.number().int().positive(),
+  created_at: DateTimeSchema,
+  updated_at: DateTimeSchema,
+}).strict();
+
+const CommandResultObjectSchema = z.object({
   trial_id: z.uuid(), tenant_id: z.uuid(),
   status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES),
-  version: z.number().int().positive(), idempotent: z.boolean(),
+  version: z.number().int().positive(),
+  trial_snapshot: SafeTrialCommandSnapshotSchema,
+  idempotent: z.boolean(),
 }).strict();
-export const AssignResultSchema = CommandResultSchema
-  .extend({ assigned: z.boolean() }).strict();
+
+function validateCommandSnapshot(result: z.infer<typeof CommandResultObjectSchema>,
+  context: z.RefinementCtx): void {
+  if (result.trial_snapshot.id !== result.trial_id
+    || result.trial_snapshot.tenant_id !== result.tenant_id
+    || result.trial_snapshot.status !== result.status
+    || result.trial_snapshot.version !== result.version) {
+    context.addIssue({ code: 'custom', message: '试用命令快照绑定无效' });
+  }
+}
+
+export const CommandResultSchema = CommandResultObjectSchema
+  .superRefine(validateCommandSnapshot);
+export const AssignResultSchema = CommandResultObjectSchema
+  .extend({ assigned: z.boolean() }).strict()
+  .superRefine(validateCommandSnapshot);
 export const PolicyCommandResultSchema = z.object({
   policy_id: z.uuid(),
   version: z.number().int().positive(),
@@ -291,6 +338,8 @@ export type TrialListRecord = z.infer<typeof TrialListRawSchema>;
 export type TrialDetailRecord = z.infer<typeof TrialDetailSchema>;
 export type TrialSummary = z.infer<typeof TrialSummarySchema>;
 export type TrialPolicyRecord = z.infer<typeof TrialPolicySchema>;
+export type SafeTrialCommandSnapshot =
+  z.infer<typeof SafeTrialCommandSnapshotSchema>;
 export type TrialCommandResult = z.infer<typeof CommandResultSchema>
   | z.infer<typeof AssignResultSchema>;
 export type PolicyCommandResult = z.infer<typeof PolicyCommandResultSchema>;

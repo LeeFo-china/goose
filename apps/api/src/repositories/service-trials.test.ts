@@ -121,26 +121,22 @@ function harness(input: { tableResult?: DbResult;
     () => client as unknown as ServiceTrialClient,
   ) };
 }
-
 async function expectDbError(request: Promise<unknown>, message?: string): Promise<void> {
   await expect(request).rejects.toMatchObject({
     statusCode: 500, code: 'DB_ERROR', details: undefined, ...(message ? { message } : {}),
   });
 }
-
 describe('ServiceTrialRepository reads', () => {
   test('tenant history is tenant-scoped, bounded, stable, and strictly parsed', async () => {
     const f = harness({
       tableResult: { data: [pendingTrial], error: null, count: 21 },
     });
-
     const result = await f.repository.listTenantTrials({
       tenantId: TENANT_ID,
       page: 2,
       pageSize: 500,
       status: 'pending_review',
     });
-
     expect(result.pagination).toEqual({ page: 2, pageSize: 100,
       total: 21, totalPages: 1 });
     expect(result.list).toEqual([pendingTrial]);
@@ -153,13 +149,11 @@ describe('ServiceTrialRepository reads', () => {
     expect(select?.[2]).toEqual({ count: 'exact' });
     expect(select?.[1]).not.toContain('*');
   });
-
   test('tenant history defaults to page 1 and page size 20', async () => {
     const f = harness({ tableResult: { data: [], error: null, count: 0 } });
     await f.repository.listTenantTrials({ tenantId: TENANT_ID });
     expect(f.calls).toContainEqual(['range', 0, 19]);
   });
-
   test('rejects missing, invalid, or insufficient exact pagination counts', async () => {
     const platformRow = { ...activeTrial, tenant: tenantSummary, assignee: assigneeSummary };
     for (const input of [
@@ -176,13 +170,11 @@ describe('ServiceTrialRepository reads', () => {
       await expectDbError(request);
     }
   });
-
   test('rejects tenant history rows outside the requested tenant', async () => {
     const f = harness({ tableResult: { data: [{ ...pendingTrial,
       tenant_id: OTHER_TENANT_ID }], error: null, count: 1 } });
     await expectDbError(f.repository.listTenantTrials({ tenantId: TENANT_ID }));
   });
-
   test('selects and strictly parses the policy snapshot needed for audit facts', async () => {
     const row = { ...pendingTrial, policy_snapshot: policySnapshot };
     const shortTrialRow = { ...row, policy_snapshot: { ...policySnapshot, trial_days: 2 } };
@@ -195,7 +187,6 @@ describe('ServiceTrialRepository reads', () => {
     }], error: null, count: 1 } });
     await expectDbError(malformed.repository.listTenantTrials({ tenantId: TENANT_ID }));
   });
-
   test('current tenant trial only considers attributable statuses and one row', async () => {
     const f = harness({ tableResult: { data: pendingTrial, error: null } });
     expect(await f.repository.findCurrentTenantTrial(TENANT_ID)).toEqual(pendingTrial);
@@ -463,6 +454,15 @@ describe('ServiceTrialRepository reads', () => {
     expect(f.calls).toContainEqual(['limit', 1, undefined]);
     expect(f.calls).toContainEqual(['maybeSingle']);
     expect(String(f.calls.find((call) => call[0] === 'select')?.[1])).not.toContain('*');
+  });
+
+  test('reads one historical policy by the command result identity', async () => {
+    const historical = { ...currentPolicy, is_current: false as const };
+    const f = harness({ tableResult: { data: historical, error: null } });
+    expect(await f.repository.findPolicyById(historical.id)).toEqual(historical);
+    expect(f.calls).toContainEqual(['eq', 'id', historical.id]);
+    expect(f.calls).toContainEqual(['limit', 1, undefined]);
+    expect(f.calls).not.toContainEqual(['eq', 'is_current', true]);
   });
 
   test('rejects inconsistent current policy reminder facts', async () => {

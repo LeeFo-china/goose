@@ -421,6 +421,33 @@ CREATE TABLE public.tenant_service_trial_commands (
     jsonb_typeof(result_envelope) = 'object'
     AND pg_column_size(result_envelope) <= 16384
     AND NOT (result_envelope ?| ARRAY['contact_name', 'contact_phone', 'phone', 'mobile'])
+    AND (
+      trial_id IS NULL
+      AND NOT (result_envelope ? 'trial_snapshot')
+      OR (
+        trial_id IS NOT NULL
+        AND jsonb_typeof(result_envelope->'trial_snapshot') = 'object'
+        AND NOT ((result_envelope->'trial_snapshot')
+          ?| ARRAY[
+            'contact_name', 'contact_phone', 'phone', 'mobile',
+            'application_reason', 'grant_reason', 'review_reason',
+            'revoke_reason', 'withdraw_reason', 'actor_employee_id',
+            'requested_by_employee_id',
+            'granted_by_employee_id', 'reviewed_by_employee_id',
+            'revoked_by_employee_id', 'withdrawn_by_employee_id',
+            'assignee_employee_id', 'tenant', 'assignee', 'events',
+            'available_actions'
+          ])
+        AND ((result_envelope->>'trial_id')
+          = (result_envelope->'trial_snapshot'->>'id')) IS TRUE
+        AND ((result_envelope->>'tenant_id')
+          = (result_envelope->'trial_snapshot'->>'tenant_id')) IS TRUE
+        AND ((result_envelope->>'status')
+          = (result_envelope->'trial_snapshot'->>'status')) IS TRUE
+        AND ((result_envelope->'version')
+          = (result_envelope->'trial_snapshot'->'version')) IS TRUE
+      )
+    )
   ) IS TRUE),
   CONSTRAINT tenant_service_trial_commands_ttl_check CHECK ((
     expires_at = created_at + interval '90 days'
@@ -479,6 +506,52 @@ $$;
 CREATE TRIGGER tr_tenant_service_trial_events_immutable
 BEFORE UPDATE OR DELETE ON public.tenant_service_trial_events
 FOR EACH ROW EXECUTE FUNCTION public.platform_service_trial_protect_event();
+
+CREATE OR REPLACE FUNCTION public.platform_service_trial_command_snapshot(
+  p_trial public.tenant_service_trials
+)
+RETURNS jsonb
+LANGUAGE sql
+IMMUTABLE
+SET search_path = public, pg_temp
+AS $$
+  SELECT jsonb_build_object(
+    'id', (p_trial).id,
+    'tenant_id', (p_trial).tenant_id,
+    'source', (p_trial).source,
+    'trial_type', (p_trial).trial_type,
+    'status', (p_trial).status,
+    'expected_user_count', (p_trial).expected_user_count,
+    'expected_project_count', (p_trial).expected_project_count,
+    'contact_name_masked', CASE
+      WHEN (p_trial).contact_name IS NULL THEN NULL
+      ELSE left((p_trial).contact_name, 1)
+        || repeat('*', greatest(char_length((p_trial).contact_name) - 1, 1))
+    END,
+    'contact_phone_masked', CASE
+      WHEN (p_trial).contact_phone IS NULL THEN NULL
+      ELSE left((p_trial).contact_phone, 3) || '****' || right((p_trial).contact_phone, 4)
+    END,
+    'review_decision', (p_trial).review_decision,
+    'requested_at', (p_trial).requested_at,
+    'reviewed_at', (p_trial).reviewed_at,
+    'granted_at', (p_trial).granted_at,
+    'starts_at', (p_trial).starts_at,
+    'activated_at', (p_trial).activated_at,
+    'trial_ends_at', (p_trial).trial_ends_at,
+    'grace_ends_at', (p_trial).grace_ends_at,
+    'withdrawn_at', (p_trial).withdrawn_at,
+    'revoked_at', (p_trial).revoked_at,
+    'converted_at', (p_trial).converted_at,
+    'converted_order_id', (p_trial).converted_order_id,
+    'scope', (p_trial).scope_snapshot,
+    'policy_snapshot', (p_trial).policy_snapshot,
+    'extension_count', (p_trial).extension_count,
+    'version', (p_trial).version,
+    'created_at', (p_trial).created_at,
+    'updated_at', (p_trial).updated_at
+  );
+$$;
 
 CREATE OR REPLACE FUNCTION public.platform_service_trial_lock_tenant_actor(
   p_actor_employee_id uuid,
@@ -1124,7 +1197,8 @@ BEGIN
 
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1209,7 +1283,8 @@ BEGIN
   );
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1428,7 +1503,8 @@ BEGIN
 
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1642,7 +1718,8 @@ BEGIN
   END IF;
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1755,7 +1832,8 @@ BEGIN
   );
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1841,7 +1919,8 @@ BEGIN
   );
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
-    'status', v_trial.status, 'version', v_trial.version
+    'status', v_trial.status, 'version', v_trial.version,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -1929,7 +2008,8 @@ BEGIN
   v_result := jsonb_build_object(
     'trial_id', v_trial.id, 'tenant_id', v_trial.tenant_id,
     'status', v_trial.status, 'version', v_trial.version,
-    'assigned', p_assignee_employee_id IS NOT NULL
+    'assigned', p_assignee_employee_id IS NOT NULL,
+    'trial_snapshot', public.platform_service_trial_command_snapshot(v_trial)
   );
   RETURN public.platform_service_trial_store_command(
     v_scope_key, p_idempotency_key, v_request_hash, v_trial.tenant_id,
@@ -2663,6 +2743,10 @@ REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM PUBLIC
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM authenticated;
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM service_role;
+REVOKE ALL ON FUNCTION public.platform_service_trial_command_snapshot(public.tenant_service_trials) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_trial_command_snapshot(public.tenant_service_trials) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_trial_command_snapshot(public.tenant_service_trials) FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_trial_command_snapshot(public.tenant_service_trials) FROM service_role;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM authenticated;

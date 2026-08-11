@@ -19,12 +19,13 @@ import type { AuthContext } from '@/services/authorization';
 import {
   buildTrialAvailableActions,
   serializeServiceTrial,
+  serializeServiceTrialCommandSnapshot,
   serializeServiceTrialPolicy,
 } from './service-trial-views';
 
 type RepositoryPort = Pick<ServiceTrialRepository,
   'listPlatformTrials' | 'getPlatformSummary' | 'findTrialById'
-  | 'findCurrentPolicy' | 'executeCommand' | 'updatePolicy'>;
+  | 'findCurrentPolicy' | 'findPolicyById' | 'executeCommand' | 'updatePolicy'>;
 
 type PlatformServiceTrialDependencies = {
   repository?: RepositoryPort;
@@ -228,8 +229,8 @@ export class PlatformServiceTrialService {
         guidedScope: input.guided_scope,
       },
     });
-    const policy = await this.requirePolicy();
-    if (policy.id !== result.policy_id || policy.version < result.version) {
+    const policy = await this.repository.findPolicyById(result.policy_id);
+    if (!policy || policy.id !== result.policy_id || policy.version !== result.version) {
       throw Errors.dbError('更新后的技术服务试用策略不一致');
     }
     const now = this.nowFactory();
@@ -257,15 +258,14 @@ export class PlatformServiceTrialService {
     }
   }
 
-  private async commandResponse(result: TrialCommandResult,
+  private commandResponse(result: TrialCommandResult,
     authContext: AuthContext) {
-    const record = await this.requireTrial(result.trial_id);
     const now = this.nowFactory();
     return {
-      trial: serializeServiceTrial(record, now),
+      trial: serializeServiceTrialCommandSnapshot(result.trial_snapshot),
       idempotent: result.idempotent,
       available_actions: buildTrialAvailableActions(
-        record, permissionSet(authContext), now,
+        result.trial_snapshot, permissionSet(authContext), now,
       ),
       server_time: now.toISOString(),
     };
