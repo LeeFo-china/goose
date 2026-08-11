@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import Fastify from 'fastify';
 import type { FastifyRequest } from 'fastify';
 
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
@@ -35,9 +36,7 @@ type RegisteredRoute = {
 
 async function loadController() {
   const modulePath = `./${'index'}`;
-  const module = await import(modulePath).catch(() => null);
-  expect(module).not.toBeNull();
-  return module!.default;
+  return (await import(modulePath)).default;
 }
 
 function registeredRoutes(controller: {
@@ -219,6 +218,86 @@ describe('PlatformServiceTrialsController routes', () => {
     }
   });
 
+  test('dispatches summary, detail, and policy routes through real Fastify', async () => {
+    const [{ platformServiceTrialService }, controller] = await Promise.all([
+      import('@/services/platform-service-trials'),
+      loadController(),
+    ]);
+    const originals = Object.fromEntries(Object.keys(serviceMethods).map(
+      (name) => [name, Reflect.get(platformServiceTrialService, name)],
+    ));
+    const originalAuth = Reflect.get(controller, 'getRequiredPlatformStaffContext');
+    replaceMethod(
+      controller,
+      'getRequiredPlatformStaffContext',
+      mock(async () => authContext),
+    );
+    for (const [name, method] of Object.entries(serviceMethods)) {
+      replaceMethod(platformServiceTrialService, name, method);
+    }
+    const app = Fastify();
+    controller.registerExtraRoutes(app);
+    const policyBody = {
+      default_trial_days: 30,
+      default_grace_days: 7,
+      max_trial_days: 60,
+      max_grace_days: 14,
+      max_schedule_ahead_days: 30,
+      max_extension_count: 1,
+      max_extension_days: 30,
+      reminder_days: [7, 3, 1],
+      reapply_cooldown_days: 30,
+      allow_repeat_application: false,
+      standard_scope: { version: 1, capabilities: ['core.projects'] },
+      guided_scope: { version: 1, capabilities: ['core.projects'] },
+      expected_version: 1,
+      idempotency_key: IDEMPOTENCY_KEY,
+      reason: '更新规则',
+    };
+
+    try {
+      const summary = await app.inject({
+        method: 'GET',
+        url: '/platform/billing/service-trials/summary',
+      });
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/platform/billing/service-trials/${TRIAL_ID}`,
+      });
+      const policy = await app.inject({
+        method: 'GET',
+        url: '/platform/billing/service-trial-policy',
+      });
+      const updatePolicy = await app.inject({
+        method: 'PUT',
+        url: '/platform/billing/service-trial-policy',
+        payload: policyBody,
+      });
+
+      expect(summary.statusCode).toBe(200);
+      expect(summary.json().data).toEqual({ pending_review_count: 1 });
+      expect(detail.statusCode).toBe(200);
+      expect(detail.json().data).toEqual({ trial: { id: TRIAL_ID } });
+      expect(policy.statusCode).toBe(200);
+      expect(policy.json().data).toEqual({ policy: { version: 1 } });
+      expect(updatePolicy.statusCode).toBe(200);
+      expect(updatePolicy.json().data).toEqual({ policy: { version: 2 } });
+      expect(serviceMethods.getSummary).toHaveBeenCalledWith(authContext);
+      expect(serviceMethods.getTrial).toHaveBeenCalledWith(authContext, TRIAL_ID);
+      expect(serviceMethods.getPolicy).toHaveBeenCalledWith(authContext);
+      expect(serviceMethods.updatePolicy).toHaveBeenCalledWith(
+        authContext,
+        policyBody,
+      );
+    } finally {
+      await app.close();
+      replaceMethod(controller, 'getRequiredPlatformStaffContext', originalAuth);
+      for (const [name, method] of Object.entries(originals)) {
+        replaceMethod(platformServiceTrialService, name, method);
+      }
+    }
+  });
+
   test('rejects each invalid schema before platform service delegation', async () => {
     const [{ platformServiceTrialService }, controller] = await Promise.all([
       import('@/services/platform-service-trials'),
@@ -242,6 +321,34 @@ describe('PlatformServiceTrialsController routes', () => {
       ['POST /platform/billing/service-trials/:id/revoke', { params: { id: TRIAL_ID }, body: { reason: ' ' } }],
       ['POST /platform/billing/service-trials/:id/assign', { params: { id: TRIAL_ID }, body: { assignee_employee_id: 'bad-id' } }],
       ['PUT /platform/billing/service-trial-policy', { body: {} }],
+      ['POST /platform/billing/service-trials/:id/review', {
+        params: { id: 'bad-id' },
+        body: {
+          decision: 'rejected', expected_version: 1,
+          reason: '拒绝', idempotency_key: IDEMPOTENCY_KEY,
+        },
+      }],
+      ['POST /platform/billing/service-trials/:id/extend', {
+        params: { id: 'bad-id' },
+        body: {
+          extension_days: 7, expected_version: 1,
+          reason: '延期', idempotency_key: IDEMPOTENCY_KEY,
+        },
+      }],
+      ['POST /platform/billing/service-trials/:id/revoke', {
+        params: { id: 'bad-id' },
+        body: {
+          expected_version: 1, reason: '撤销',
+          idempotency_key: IDEMPOTENCY_KEY,
+        },
+      }],
+      ['POST /platform/billing/service-trials/:id/assign', {
+        params: { id: 'bad-id' },
+        body: {
+          assignee_employee_id: null, expected_version: 1,
+          idempotency_key: IDEMPOTENCY_KEY,
+        },
+      }],
     ] as const;
 
     try {

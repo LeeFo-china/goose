@@ -33,9 +33,7 @@ type RegisteredRoute = {
 
 async function loadController() {
   const modulePath = `./${'index'}`;
-  const module = await import(modulePath).catch(() => null);
-  expect(module).not.toBeNull();
-  return module!.default;
+  return (await import(modulePath)).default;
 }
 
 function registeredRoutes(controller: {
@@ -207,6 +205,14 @@ describe('BillingServiceTrialsController routes', () => {
         params: { id: TRIAL_ID },
         body: {
           expected_version: 0,
+          reason: '修改',
+          idempotency_key: IDEMPOTENCY_KEY,
+        },
+      }],
+      ['POST /billing/service-trials/applications/:id/withdraw', {
+        params: { id: 'bad-id' },
+        body: {
+          expected_version: 1,
           reason: '修改',
           idempotency_key: IDEMPOTENCY_KEY,
         },
