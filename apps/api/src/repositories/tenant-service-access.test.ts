@@ -11,7 +11,8 @@ type TableName =
   | "tenants"
   | "tenant_service_contracts"
   | "tenant_service_orders"
-  | "tenant_billing_subscriptions";
+  | "tenant_billing_subscriptions"
+  | "tenant_service_trials";
 
 type QueryCall = {
   table: TableName;
@@ -24,6 +25,16 @@ const rowsByTable: Record<TableName, unknown[]> = {
   tenant_service_contracts: [],
   tenant_service_orders: [{ id: "order-1", paid_at: NOW }],
   tenant_billing_subscriptions: [{ status: "locked" }],
+  tenant_service_trials: [{
+    id: "20000000-0000-4000-8000-000000000001",
+    tenant_id: TENANT_ID,
+    source: "tenant_application",
+    status: "active",
+    starts_at: "2026-08-01T00:00:00.000Z",
+    trial_ends_at: "2026-09-01T00:00:00.000Z",
+    grace_ends_at: "2026-09-08T00:00:00.000Z",
+    scope_snapshot: { version: 1, capabilities: ["core.projects"] },
+  }],
 };
 const errorsByTable: Partial<Record<TableName, unknown>> = {};
 const rejectionsByTable: Partial<Record<TableName, unknown>> = {};
@@ -110,6 +121,16 @@ describe("TenantServiceAccessRepository", () => {
     rowsByTable.tenant_service_contracts = [];
     rowsByTable.tenant_service_orders = [{ id: "order-1", paid_at: NOW }];
     rowsByTable.tenant_billing_subscriptions = [{ status: "locked" }];
+    rowsByTable.tenant_service_trials = [{
+      id: "20000000-0000-4000-8000-000000000001",
+      tenant_id: TENANT_ID,
+      source: "tenant_application",
+      status: "active",
+      starts_at: "2026-08-01T00:00:00.000Z",
+      trial_ends_at: "2026-09-01T00:00:00.000Z",
+      grace_ends_at: "2026-09-08T00:00:00.000Z",
+      scope_snapshot: { version: 1, capabilities: ["core.projects"] },
+    }];
     for (const table of Object.keys(errorsByTable) as TableName[]) {
       delete errorsByTable[table];
     }
@@ -120,7 +141,7 @@ describe("TenantServiceAccessRepository", () => {
     queryCalls.length = 0;
   });
 
-  test("loads the four bounded tenant access facts without N+1 queries", async () => {
+  test("loads the five bounded tenant access facts without N+1 queries", async () => {
     const { TenantServiceAccessRepository } =
       await import("./tenant-service-access");
     const repository = new TenantServiceAccessRepository();
@@ -135,12 +156,23 @@ describe("TenantServiceAccessRepository", () => {
       contract: null,
       paidOnboardingOrder: { id: "order-1", paid_at: NOW },
       legacySubscriptionStatus: "locked",
+      currentTrial: {
+        id: "20000000-0000-4000-8000-000000000001",
+        tenant_id: TENANT_ID,
+        source: "tenant_application",
+        status: "active",
+        starts_at: "2026-08-01T00:00:00.000Z",
+        trial_ends_at: "2026-09-01T00:00:00.000Z",
+        grace_ends_at: "2026-09-08T00:00:00.000Z",
+        scope_snapshot: { version: 1, capabilities: ["core.projects"] },
+      },
     });
     expect(fromCalls).toEqual([
       "tenants",
       "tenant_service_contracts",
       "tenant_service_orders",
       "tenant_billing_subscriptions",
+      "tenant_service_trials",
     ]);
 
     for (const table of fromCalls) {
@@ -160,6 +192,17 @@ describe("TenantServiceAccessRepository", () => {
     ]);
     expect(callsFor("tenant_billing_subscriptions", "select")).toEqual([
       ["status"],
+    ]);
+    expect(callsFor("tenant_service_trials", "select")).toEqual([[
+      "id,tenant_id,source,status,starts_at,trial_ends_at,grace_ends_at,scope_snapshot",
+    ]]);
+    expect(callsFor("tenant_service_trials", "in")).toEqual([[
+      "status",
+      ["scheduled", "active", "grace_period"],
+    ]]);
+    expect(callsFor("tenant_service_trials", "order")).toEqual([
+      ["created_at", { ascending: false }],
+      ["id", { ascending: false }],
     ]);
   });
 
@@ -230,6 +273,31 @@ describe("TenantServiceAccessRepository", () => {
     });
     expect((caught as { details?: unknown }).details).toBeUndefined();
     expect(JSON.stringify(caught)).not.toContain("SENSITIVE_ROW");
+  });
+
+  test.each([
+    { scope_snapshot: { version: 1, capabilities: ["unknown"] } },
+    { starts_at: "not-a-date:SENSITIVE_TRIAL" },
+    { tenant_id: "30000000-0000-4000-8000-000000000001" },
+  ])("fails closed for malformed trial access fact %#", async (patch) => {
+    rowsByTable.tenant_service_trials = [{
+      ...(rowsByTable.tenant_service_trials[0] as Record<string, unknown>),
+      ...patch,
+    }];
+    const { TenantServiceAccessRepository } =
+      await import("./tenant-service-access");
+
+    const caught = await new TenantServiceAccessRepository().getAccessFacts({
+      tenantId: TENANT_ID,
+      now: new Date(NOW),
+    }).catch((error: unknown) => error);
+
+    expect(caught).toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: "查询租户服务访问事实失败",
+    });
+    expect(JSON.stringify(caught)).not.toContain("SENSITIVE_TRIAL");
   });
 
   test("does not expose resolved query errors through AppError details", async () => {

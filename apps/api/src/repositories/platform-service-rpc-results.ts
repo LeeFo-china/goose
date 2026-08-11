@@ -37,6 +37,12 @@ export type PaymentConfirmationRpcResult = {
   order: { id: string; payment_status?: string } & Record<string, unknown>;
   work_order: { id: string; status?: string } & Record<string, unknown>;
   access_mode: "paid_onboarding" | null;
+  conversion_anomaly: {
+    code: "TRIAL_ALREADY_ATTRIBUTED";
+    trial_id: string;
+    order_id: string;
+    attributed_order_id: string;
+  } | null;
   idempotent: boolean;
   error_code?: string | null;
 };
@@ -157,6 +163,7 @@ export function parsePaymentConfirmationResult(
     order: result.order,
     work_order: result.work_order,
     access_mode: result.access_mode,
+    conversion_anomaly: result.conversion_anomaly,
     idempotent: result.idempotent,
     error_code: result.error_code,
   };

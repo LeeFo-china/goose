@@ -24,6 +24,7 @@ const order = {
   version: 1,
   created_at: "2026-08-03T12:00:00.000Z",
   updated_at: "2026-08-03T12:00:00.000Z",
+  source_trial_id: "00000000-0000-4000-8000-000000000501",
 } satisfies OrderRecord;
 
 const transaction = {
@@ -43,9 +44,16 @@ const transaction = {
 describe("PlatformServiceOrderPaymentConfirmation", () => {
   test("confirms payment through the platform service RPC adapter", async () => {
     const confirmPayment = mock(async (_input: unknown) => ({
-      order: { id: order.id, payment_status: "paid" },
+      order: {
+        id: order.id,
+        tenant_id: order.tenant_id,
+        payment_status: "paid",
+        transaction_id: transaction.transactionId,
+        source_trial_id: order.source_trial_id,
+      },
       work_order: { id: "work-order-1" },
       access_mode: "paid_onboarding" as const,
+      conversion_anomaly: null,
       idempotent: false,
     }));
     const { PlatformServiceOrderPaymentConfirmation } = await import(
@@ -77,6 +85,102 @@ describe("PlatformServiceOrderPaymentConfirmation", () => {
       work_order: { id: "work-order-1" },
       access_mode: "paid_onboarding",
       idempotent: false,
+      conversion_anomaly: null,
     });
+  });
+
+  test("preserves payment success while exposing a bound attribution anomaly", async () => {
+    const anomaly = {
+      code: "TRIAL_ALREADY_ATTRIBUTED" as const,
+      trial_id: order.source_trial_id,
+      order_id: order.id,
+      attributed_order_id: "00000000-0000-4000-8000-000000000302",
+    };
+    const confirmPayment = mock(async () => ({
+      order: {
+        id: order.id,
+        tenant_id: order.tenant_id,
+        payment_status: "paid",
+        transaction_id: transaction.transactionId,
+        source_trial_id: order.source_trial_id,
+      },
+      work_order: { id: "work-order-1" },
+      access_mode: "paid_onboarding" as const,
+      conversion_anomaly: anomaly,
+      idempotent: false,
+    }));
+    const { PlatformServiceOrderPaymentConfirmation } = await import(
+      "./platform-service-order-payment-confirmation"
+    );
+    const service = new PlatformServiceOrderPaymentConfirmation({
+      repository: { confirmPayment },
+    });
+
+    const result = await service.confirm({
+      order,
+      transaction,
+      notificationId: "notification-2",
+      source: "wechat_callback",
+    });
+
+    expect(result).toMatchObject({
+      order: { payment_status: "paid" },
+      conversion_anomaly: anomaly,
+    });
+  });
+
+  test.each([
+    {
+      name: "source mismatch",
+      patch: { source_trial_id: "00000000-0000-4000-8000-000000000599" },
+    },
+    {
+      name: "transaction mismatch",
+      patch: { transaction_id: "other-transaction" },
+    },
+    {
+      name: "anomaly binding mismatch",
+      patch: {
+        conversion_anomaly: {
+          code: "TRIAL_ALREADY_ATTRIBUTED",
+          trial_id: order.source_trial_id,
+          order_id: "00000000-0000-4000-8000-000000000399",
+          attributed_order_id: "00000000-0000-4000-8000-000000000302",
+        },
+      },
+    },
+  ])("rejects malformed atomic trial conversion facts: $name", async ({ patch }) => {
+    const rpcResult = {
+      order: {
+        id: order.id,
+        tenant_id: order.tenant_id,
+        payment_status: "paid",
+        transaction_id: transaction.transactionId,
+        source_trial_id: order.source_trial_id,
+      },
+      work_order: { id: "work-order-1" },
+      access_mode: "paid_onboarding" as const,
+      conversion_anomaly: null,
+      idempotent: false,
+      ...patch,
+    };
+    if ("source_trial_id" in patch || "transaction_id" in patch) {
+      rpcResult.order = { ...rpcResult.order, ...patch };
+      delete (rpcResult as Record<string, unknown>).source_trial_id;
+      delete (rpcResult as Record<string, unknown>).transaction_id;
+    }
+    const { PlatformServiceOrderPaymentConfirmation } = await import(
+      "./platform-service-order-payment-confirmation"
+    );
+    const service = new PlatformServiceOrderPaymentConfirmation({
+      repository: { confirmPayment: mock(async () => rpcResult) },
+    });
+
+    await expect(service.confirm({
+      order,
+      transaction,
+      notificationId: "notification-3",
+      source: "wechat_callback",
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
   });
 });

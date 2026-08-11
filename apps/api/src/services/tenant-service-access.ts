@@ -1,4 +1,5 @@
 import type {
+  PlatformServiceTrialCapability,
   TenantServiceAccessLevel,
   TenantServiceAccessMode,
   TenantServiceRouteAccess,
@@ -13,7 +14,8 @@ import {
 export type TenantServiceAccessErrorCode =
   | "TENANT_SERVICE_READ_ONLY"
   | "TENANT_SERVICE_ACCESS_EXPIRED"
-  | "TENANT_SERVICE_HARD_BLOCKED";
+  | "TENANT_SERVICE_HARD_BLOCKED"
+  | "TENANT_SERVICE_CAPABILITY_NOT_INCLUDED";
 
 export interface TenantServiceAccessDecision {
   mode: TenantServiceAccessMode;
@@ -28,7 +30,7 @@ export interface TenantServiceAccessDecision {
 export type ResolveTenantServiceAccessInput = {
   tenantId: string;
   routeAccess: TenantServiceRouteAccess;
-  requiredCapability?: string | null;
+  requiredCapability?: PlatformServiceTrialCapability | null;
   now: Date;
 };
 
@@ -39,7 +41,7 @@ export type TenantServiceAccessServiceDependencies = {
 type RouteDecisionInput = {
   mode: TenantServiceAccessMode;
   routeAccess: TenantServiceRouteAccess;
-  requiredCapability?: string | null;
+  requiredCapability?: PlatformServiceTrialCapability | null;
   startsAt: string | null;
   endsAt: string | null;
 };
@@ -47,7 +49,7 @@ type RouteDecisionInput = {
 type AccessResolution = Pick<
   RouteDecisionInput,
   "mode" | "startsAt" | "endsAt"
->;
+> & { capabilities: readonly PlatformServiceTrialCapability[] | null };
 
 const ACCESS_LEVEL_BY_MODE: Record<
   TenantServiceAccessMode,
@@ -75,6 +77,10 @@ const DENIALS = {
     errorCode: "TENANT_SERVICE_HARD_BLOCKED",
     reason: "租户状态不可用",
   },
+  capability: {
+    errorCode: "TENANT_SERVICE_CAPABILITY_NOT_INCLUDED",
+    reason: "当前试用不包含此功能",
+  },
 } as const;
 
 export class TenantServiceAccessService {
@@ -91,12 +97,13 @@ export class TenantServiceAccessService {
       tenantId: input.tenantId,
       now: input.now,
     });
-    const resolution = resolveAccessFacts(facts);
+    const resolution = resolveAccessFacts(facts, input.now);
 
     return resolveTenantServiceRouteDecision({
       ...resolution,
       routeAccess: input.routeAccess,
       requiredCapability: input.requiredCapability ?? null,
+      capabilities: resolution.capabilities,
     });
   }
 }
@@ -104,13 +111,27 @@ export class TenantServiceAccessService {
 export const tenantServiceAccessService = new TenantServiceAccessService();
 
 export function resolveTenantServiceRouteDecision(
-  input: RouteDecisionInput,
+  input: RouteDecisionInput & {
+    capabilities?: readonly PlatformServiceTrialCapability[] | null;
+  },
 ): TenantServiceAccessDecision {
-  // Phase one preserves this input at the service boundary. Trial scope
-  // capability pruning is intentionally added by the later trial-core plan.
-  void input.requiredCapability;
-
   const accessLevel = ACCESS_LEVEL_BY_MODE[input.mode];
+  if (
+    (input.mode === "trial" || input.mode === "grace")
+    && (input.routeAccess === "read" || input.routeAccess === "write")
+    && (!input.requiredCapability
+      || !input.capabilities?.includes(input.requiredCapability))
+  ) {
+    return {
+      mode: input.mode,
+      accessLevel,
+      allowed: false,
+      errorCode: DENIALS.capability.errorCode,
+      reason: DENIALS.capability.reason,
+      startsAt: input.startsAt,
+      endsAt: input.endsAt,
+    };
+  }
   const allowed = isRouteAllowed(input.mode, input.routeAccess);
   if (allowed) {
     return {
@@ -140,12 +161,16 @@ export function resolveTenantServiceRouteDecision(
   };
 }
 
-function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
+function resolveAccessFacts(
+  facts: TenantServiceAccessFacts,
+  now: Date,
+): AccessResolution {
   if (facts.tenantStatus !== "active") {
     return {
       mode: "hard_blocked",
       startsAt: null,
       endsAt: null,
+      capabilities: null,
     };
   }
 
@@ -154,6 +179,7 @@ function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
       mode: "paid",
       startsAt: facts.contract.service_start_at,
       endsAt: facts.contract.service_end_at,
+      capabilities: null,
     };
   }
 
@@ -162,14 +188,19 @@ function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
       mode: "paid_onboarding",
       startsAt: facts.paidOnboardingOrder.paid_at,
       endsAt: null,
+      capabilities: null,
     };
   }
+
+  const trial = resolveEffectiveTrial(facts.currentTrial, now);
+  if (trial) return trial;
 
   if (facts.legacySubscriptionStatus !== "locked") {
     return {
       mode: "legacy",
       startsAt: null,
       endsAt: null,
+      capabilities: null,
     };
   }
 
@@ -177,7 +208,34 @@ function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
     mode: "service_blocked",
     startsAt: null,
     endsAt: null,
+    capabilities: null,
   };
+}
+
+function resolveEffectiveTrial(
+  trial: TenantServiceAccessFacts["currentTrial"],
+  now: Date,
+): AccessResolution | null {
+  if (!trial) return null;
+  const nowTimestamp = now.getTime();
+  if (nowTimestamp < Date.parse(trial.starts_at)) return null;
+  if (nowTimestamp < Date.parse(trial.trial_ends_at)) {
+    return {
+      mode: "trial",
+      startsAt: trial.starts_at,
+      endsAt: trial.trial_ends_at,
+      capabilities: trial.scope_snapshot.capabilities,
+    };
+  }
+  if (nowTimestamp < Date.parse(trial.grace_ends_at)) {
+    return {
+      mode: "grace",
+      startsAt: trial.starts_at,
+      endsAt: trial.grace_ends_at,
+      capabilities: trial.scope_snapshot.capabilities,
+    };
+  }
+  return null;
 }
 
 function isRouteAllowed(

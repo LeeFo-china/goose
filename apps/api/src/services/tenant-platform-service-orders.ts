@@ -241,6 +241,7 @@ export class TenantPlatformServiceOrderService {
       termsVersion: publishedVersion.terms_version,
       termsAcceptedAt: creationNow.toISOString(),
       createdByEmployeeId: employeeId,
+      sourceTrialId: input.source_trial_id,
     });
 
     const paymentRequest = await this.createPaymentRequestForOrder(

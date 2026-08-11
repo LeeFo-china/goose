@@ -1,4 +1,7 @@
-import type { TenantServiceRouteAccess } from "@gooes/domain";
+import type {
+  PlatformServiceTrialCapability,
+  TenantServiceRouteAccess,
+} from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
@@ -18,6 +21,7 @@ type TenantServiceAccessServicePort = Pick<
 
 export type GetRequiredAuthContextOptions = {
   tenantServiceAccess?: TenantServiceRouteAccess;
+  requiredCapability?: PlatformServiceTrialCapability | null;
 };
 
 export type AuthorizationServiceDependencies = {
@@ -212,7 +216,7 @@ export class AuthorizationService {
     const decision = await this.tenantServiceAccessService.resolveForRoute({
       tenantId: authContext.tenantId,
       routeAccess: options.tenantServiceAccess ?? "write",
-      requiredCapability: null,
+      requiredCapability: options.requiredCapability ?? null,
       now: new Date(),
     });
     if (decision.allowed) {

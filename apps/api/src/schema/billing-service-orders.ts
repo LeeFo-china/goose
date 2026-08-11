@@ -20,6 +20,7 @@ export const ServiceOrderCreateSchema = z.object({
   terms_version: z.number().int().positive("条款版本必须大于 0"),
   terms_accepted: z.literal(true),
   idempotency_key: z.uuid("幂等键格式不正确"),
+  source_trial_id: z.uuid("试用来源格式不正确").optional(),
 }).strict();
 
 export const ServiceOrderActionSchema = z.object({

@@ -327,6 +327,7 @@ export async function readSmokeAccessMode(
       "id", "paid_at",
     ]),
     legacySubscriptionStatus: legacyStatus,
+    currentTrial: null,
   };
   return withIsolatedLocalSupabaseEnvironment(async () => {
     const { TenantServiceAccessService } = await import(

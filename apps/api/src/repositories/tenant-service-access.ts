@@ -1,6 +1,13 @@
 import { Errors } from "@/errors/error-factory";
 import type { TenantBillingSubscriptionStatus } from "@/repositories/billing-subscriptions";
 import { SupabaseDB } from "@/utils/supabase/index";
+import {
+  PLATFORM_SERVICE_TRIAL_SOURCE_VALUES,
+  PlatformServiceTrialScopeSchema,
+  type PlatformServiceTrialScopeV1,
+  type PlatformServiceTrialSource,
+} from "@gooes/domain";
+import { z } from "zod";
 
 export type TenantServiceContractAccessFact = {
   id: string;
@@ -13,11 +20,23 @@ export type TenantServicePaidOnboardingFact = {
   paid_at: string;
 };
 
+export type TenantServiceTrialAccessFact = {
+  id: string;
+  tenant_id: string;
+  source: PlatformServiceTrialSource;
+  status: "scheduled" | "active" | "grace_period";
+  starts_at: string;
+  trial_ends_at: string;
+  grace_ends_at: string;
+  scope_snapshot: PlatformServiceTrialScopeV1;
+};
+
 export type TenantServiceAccessFacts = {
   tenantStatus: string | null;
   contract: TenantServiceContractAccessFact | null;
   paidOnboardingOrder: TenantServicePaidOnboardingFact | null;
   legacySubscriptionStatus: TenantBillingSubscriptionStatus | null;
+  currentTrial: TenantServiceTrialAccessFact | null;
 };
 
 export type GetTenantServiceAccessFactsInput = {
@@ -35,7 +54,8 @@ type TableName =
   | "tenants"
   | "tenant_service_contracts"
   | "tenant_service_orders"
-  | "tenant_billing_subscriptions";
+  | "tenant_billing_subscriptions"
+  | "tenant_service_trials";
 
 type QueryResult = { data: unknown; error: unknown };
 
@@ -73,7 +93,13 @@ export class TenantServiceAccessRepository
   ): Promise<TenantServiceAccessFacts> {
     const nowIso = input.now.toISOString();
 
-    let results: readonly [QueryResult, QueryResult, QueryResult, QueryResult];
+    let results: readonly [
+      QueryResult,
+      QueryResult,
+      QueryResult,
+      QueryResult,
+      QueryResult,
+    ];
     try {
       results = await Promise.all([
         this.from("tenants")
@@ -102,6 +128,13 @@ export class TenantServiceAccessRepository
           .select("status")
           .eq("tenant_id", input.tenantId)
           .limit(1),
+        this.from("tenant_service_trials")
+          .select("id,tenant_id,source,status,starts_at,trial_ends_at,grace_ends_at,scope_snapshot")
+          .eq("tenant_id", input.tenantId)
+          .in("status", ["scheduled", "active", "grace_period"])
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(1),
       ]);
     } catch {
       throw Errors.dbError("查询租户服务访问事实失败");
@@ -111,8 +144,13 @@ export class TenantServiceAccessRepository
       throw Errors.dbError("查询租户服务访问事实失败");
     }
 
-    const [tenantResult, contractResult, orderResult, subscriptionResult] =
-      results;
+    const [
+      tenantResult,
+      contractResult,
+      orderResult,
+      subscriptionResult,
+      trialResult,
+    ] = results;
     const tenant = firstRow<{ status: string }>(tenantResult.data);
     const contract = firstRow<TenantServiceContractAccessFact>(
       contractResult.data,
@@ -121,12 +159,17 @@ export class TenantServiceAccessRepository
     const subscription = firstRow<{ status: TenantBillingSubscriptionStatus }>(
       subscriptionResult.data,
     );
+    const currentTrial = parseTrialAccessFact(
+      trialResult.data,
+      input.tenantId,
+    );
 
     return {
       tenantStatus: tenant?.status ?? null,
       contract,
       paidOnboardingOrder,
       legacySubscriptionStatus: subscription?.status ?? null,
+      currentTrial,
     };
   }
 
@@ -171,4 +214,34 @@ function parsePaidOnboardingFact(
   }
 
   return { id, paid_at: paidAt };
+}
+
+const TrialAccessFactSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  source: z.enum(PLATFORM_SERVICE_TRIAL_SOURCE_VALUES),
+  status: z.enum(["scheduled", "active", "grace_period"]),
+  starts_at: z.iso.datetime({ offset: true }),
+  trial_ends_at: z.iso.datetime({ offset: true }),
+  grace_ends_at: z.iso.datetime({ offset: true }),
+  scope_snapshot: PlatformServiceTrialScopeSchema,
+}).strict().superRefine((trial, context) => {
+  if (
+    Date.parse(trial.starts_at) >= Date.parse(trial.trial_ends_at)
+    || Date.parse(trial.trial_ends_at) > Date.parse(trial.grace_ends_at)
+  ) {
+    context.addIssue({ code: "custom", message: "试用访问时间无效" });
+  }
+});
+
+function parseTrialAccessFact(
+  data: unknown,
+  tenantId: string,
+): TenantServiceTrialAccessFact | null {
+  if (!Array.isArray(data) || data.length === 0) return null;
+  const parsed = TrialAccessFactSchema.safeParse(data[0]);
+  if (!parsed.success || parsed.data.tenant_id !== tenantId) {
+    throw Errors.dbError("查询租户服务访问事实失败");
+  }
+  return parsed.data;
 }

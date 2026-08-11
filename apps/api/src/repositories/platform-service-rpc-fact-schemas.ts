@@ -273,10 +273,21 @@ export const paymentConfirmationSchema = z.object({
   order: orderRpcSchema,
   work_order: workOrderRpcSchema,
   access_mode: z.literal("paid_onboarding").nullable(),
+  conversion_anomaly: z.object({
+    code: z.literal("TRIAL_ALREADY_ATTRIBUTED"),
+    trial_id: uuid,
+    order_id: uuid,
+    attributed_order_id: uuid,
+  }).strict().nullable(),
   idempotent: z.boolean(),
   error_code: z.null().optional().default(null),
 }).passthrough().superRefine((value, context) => {
   if (!factsAreBound(value)) addIssue(context, "payment work order binding invalid");
+  if (value.conversion_anomaly && (
+    value.order.source_trial_id !== value.conversion_anomaly.trial_id
+    || value.order.id !== value.conversion_anomaly.order_id
+    || value.conversion_anomaly.attributed_order_id === value.order.id
+  )) addIssue(context, "trial conversion anomaly binding invalid");
   if (
     value.order.paid_amount_fen !== value.order.amount_fen ||
     !value.order.paid_at ||

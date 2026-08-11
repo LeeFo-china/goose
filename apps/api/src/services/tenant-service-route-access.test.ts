@@ -19,6 +19,10 @@ describe("tenant service route access reader", () => {
       expect(getTenantServiceRouteAccess(request)).toBe(tenantServiceAccess);
       expect(getTenantServiceAuthOptions(request)).toEqual({
         tenantServiceAccess,
+        requiredCapability: tenantServiceAccess === "read"
+            || tenantServiceAccess === "write"
+          ? "core.projects"
+          : null,
       });
     }
   });
@@ -72,6 +76,7 @@ function createRequest(method: string, tenantServiceAccess: unknown) {
   return {
     method,
     routeOptions: {
+      url: "/projects/:id",
       config: tenantServiceAccess === undefined
         ? {}
         : { tenantServiceAccess },
