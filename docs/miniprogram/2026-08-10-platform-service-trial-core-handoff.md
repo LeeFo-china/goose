@@ -7,9 +7,10 @@
 ## 1. 当前状态与边界
 
 - Gooes 试用核心、统一访问门禁、正式购买归因和超管 Admin 已完成；
-- 本地空库已完整执行 migration 至 `20260811090000`；
+- 本地空库已完整执行 migration 至 `20260811103000`；
 - 本地真实数据库 smoke 连续 5 轮共 18/18 场景通过，包含 60 轮双连接竞争；
-- 当前尚未在本文记录 dev 发布 commit 和 dev fixture；完成 dev 发布后补充本节；
+- dev 已发布 commit `51c5d150f38adc988c9c21bd867893abac26a2fd`，发布 workflow `31480862914` 全部成功；
+- `20260811103000` 会在 develop 环境创建下述限时验收 fixture，在其他环境严格 no-op；
 - Orange 仓库本轮保持只读，本文是小程序团队后续接入依据。
 
 发布受两个平台系统配置保护：
@@ -322,16 +323,18 @@ Orange 当前需改：
 
 ## 10. Dev fixture 与验收矩阵
 
-dev 发布后应准备并记录以下脱敏 fixture：
+`20260811103000_seed_dev_platform_service_trial_fixtures.sql` 使用生产 RPC 创建以下脱敏
+fixture。六状态矩阵自 migration 应用起稳定 21 天；若 21 天后仍需联调，必须在到期前
+新增 forward migration 刷新时间，不得手工修改远端数据。
 
-| fixture | 预期状态/用途 |
+| fixture slug | 预期状态/用途 |
 | --- | --- |
-| tenant application | `pending_review`，验证申请、幂等和撤回 |
-| platform grant | `scheduled` 或 `active`，验证超管主动开通 |
-| active | scope 内 read/write 成功 |
-| grace | read 成功、write 返回只读错误 |
-| expired | 返回访问过期并展示购买入口 |
-| converted | 正式订单支付确认后仅归因一次 |
+| `dev-trial-application` | `pending_review`，验证申请、幂等和撤回 |
+| `dev-trial-platform-grant` | `scheduled`，验证超管主动开通 |
+| `dev-trial-active` | `active`，scope 内 read/write 成功 |
+| `dev-trial-grace` | `grace_period`，read 成功、write 返回只读错误 |
+| `dev-trial-expired` | `expired`，返回访问过期并展示购买入口 |
+| `dev-trial-converted` | `converted`，正式订单支付确认后仅归因一次 |
 
 验收清单：
 
