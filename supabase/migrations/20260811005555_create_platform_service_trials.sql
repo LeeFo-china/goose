@@ -490,13 +490,42 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_snapshot_role_ids uuid[];
+  v_current_role_ids uuid[];
   v_role_ids uuid[];
-  v_permission_ids uuid[];
+  v_role_permission_ids uuid[];
+  v_denied_permission_ids uuid[];
+  v_allowed_permission_ids uuid[];
   v_permission_count integer;
 BEGIN
   IF p_required_permission_codes IS NULL
     OR array_position(p_required_permission_codes, NULL) IS NOT NULL
   THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- Snapshot without holding an employee row lock. Role-management commands
+  -- lock the role before their member employees, so actor authorization must
+  -- use that same order and fail closed if membership changes while waiting.
+  SELECT coalesce(array_agg(
+    employee_role.role_id ORDER BY employee_role.role_id
+  ), '{}'::uuid[])
+  INTO v_snapshot_role_ids
+  FROM public.employee_roles AS employee_role
+  WHERE employee_role.employee_id = p_actor_employee_id;
+
+  SELECT coalesce(array_agg(locked.id ORDER BY locked.id), '{}'::uuid[])
+  INTO v_role_ids
+  FROM (
+    SELECT role.id
+    FROM public.roles AS role
+    WHERE role.id = ANY(v_snapshot_role_ids)
+      AND role.tenant_id = p_tenant_id
+      AND role.status = 'active'
+    ORDER BY role.id
+    FOR SHARE
+  ) AS locked;
+  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
@@ -510,8 +539,10 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT array_agg(locked.role_id ORDER BY locked.role_id, locked.id)
-  INTO v_role_ids
+  SELECT coalesce(array_agg(
+    locked.role_id ORDER BY locked.role_id, locked.id
+  ), '{}'::uuid[])
+  INTO v_current_role_ids
   FROM (
     SELECT employee_role.id, employee_role.role_id
     FROM public.employee_roles AS employee_role
@@ -519,30 +550,39 @@ BEGIN
     ORDER BY employee_role.role_id, employee_role.id
     FOR SHARE
   ) AS locked;
-
-  SELECT array_agg(locked.id ORDER BY locked.id)
-  INTO v_role_ids
-  FROM (
-    SELECT role.id
-    FROM public.roles AS role
-    WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
-      AND role.tenant_id = p_tenant_id
-      AND role.status = 'active'
-    ORDER BY role.id
-    FOR SHARE
-  ) AS locked;
-  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
+  IF v_current_role_ids IS DISTINCT FROM v_snapshot_role_ids THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT array_agg(locked.permission_id ORDER BY locked.permission_id, locked.id)
-  INTO v_permission_ids
+  SELECT coalesce(array_agg(
+    locked.permission_id ORDER BY locked.permission_id, locked.id
+  ) FILTER (WHERE locked.access_scope = 'all'), '{}'::uuid[])
+  INTO v_role_permission_ids
   FROM (
-    SELECT role_permission.id, role_permission.permission_id
+    SELECT role_permission.id, role_permission.permission_id,
+      role_permission.access_scope
     FROM public.role_permissions AS role_permission
     WHERE role_permission.role_id = ANY(v_role_ids)
-      AND role_permission.access_scope = 'all'
     ORDER BY role_permission.permission_id, role_permission.id
+    FOR SHARE
+  ) AS locked;
+
+  SELECT
+    coalesce(array_agg(
+      locked.permission_id ORDER BY locked.permission_id, locked.id
+    ) FILTER (WHERE locked.effect = 'deny'), '{}'::uuid[]),
+    coalesce(array_agg(
+      locked.permission_id ORDER BY locked.permission_id, locked.id
+    ) FILTER (
+      WHERE locked.effect = 'allow' AND locked.access_scope = 'all'
+    ), '{}'::uuid[])
+  INTO v_denied_permission_ids, v_allowed_permission_ids
+  FROM (
+    SELECT override.id, override.permission_id, override.effect,
+      override.access_scope
+    FROM public.employee_permission_overrides AS override
+    WHERE override.employee_id = p_actor_employee_id
+    ORDER BY override.permission_id, override.id
     FOR SHARE
   ) AS locked;
 
@@ -551,12 +591,19 @@ BEGIN
   FROM (
     SELECT permission.id, permission.code
     FROM public.permissions AS permission
-    WHERE permission.id = ANY(coalesce(v_permission_ids, '{}'::uuid[]))
+    WHERE permission.id = ANY(
+      v_role_permission_ids || v_denied_permission_ids || v_allowed_permission_ids
+    )
       AND permission.status = 'active'
     ORDER BY permission.id
     FOR SHARE
   ) AS locked
-  WHERE locked.code = ANY(p_required_permission_codes);
+  WHERE locked.code = ANY(p_required_permission_codes)
+    AND NOT (locked.id = ANY(v_denied_permission_ids))
+    AND (
+      locked.id = ANY(v_role_permission_ids)
+      OR locked.id = ANY(v_allowed_permission_ids)
+    );
   IF v_permission_count <> cardinality(p_required_permission_codes) THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
@@ -572,13 +619,39 @@ LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_snapshot_role_ids uuid[];
+  v_current_role_ids uuid[];
   v_role_ids uuid[];
-  v_permission_ids uuid[];
+  v_role_permission_ids uuid[];
+  v_denied_permission_ids uuid[];
+  v_allowed_permission_ids uuid[];
   v_permission_count integer;
 BEGIN
   IF p_required_permission_codes IS NULL
     OR array_position(p_required_permission_codes, NULL) IS NOT NULL
   THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT coalesce(array_agg(
+    employee_role.role_id ORDER BY employee_role.role_id
+  ), '{}'::uuid[])
+  INTO v_snapshot_role_ids
+  FROM public.employee_roles AS employee_role
+  WHERE employee_role.employee_id = p_actor_employee_id;
+
+  SELECT coalesce(array_agg(locked.id ORDER BY locked.id), '{}'::uuid[])
+  INTO v_role_ids
+  FROM (
+    SELECT role.id
+    FROM public.roles AS role
+    WHERE role.id = ANY(v_snapshot_role_ids)
+      AND role.tenant_id IS NULL
+      AND role.status = 'active'
+    ORDER BY role.id
+    FOR SHARE
+  ) AS locked;
+  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
@@ -592,8 +665,10 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT array_agg(locked.role_id ORDER BY locked.role_id, locked.id)
-  INTO v_role_ids
+  SELECT coalesce(array_agg(
+    locked.role_id ORDER BY locked.role_id, locked.id
+  ), '{}'::uuid[])
+  INTO v_current_role_ids
   FROM (
     SELECT employee_role.id, employee_role.role_id
     FROM public.employee_roles AS employee_role
@@ -601,30 +676,39 @@ BEGIN
     ORDER BY employee_role.role_id, employee_role.id
     FOR SHARE
   ) AS locked;
-
-  SELECT array_agg(locked.id ORDER BY locked.id)
-  INTO v_role_ids
-  FROM (
-    SELECT role.id
-    FROM public.roles AS role
-    WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
-      AND role.tenant_id IS NULL
-      AND role.status = 'active'
-    ORDER BY role.id
-    FOR SHARE
-  ) AS locked;
-  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
+  IF v_current_role_ids IS DISTINCT FROM v_snapshot_role_ids THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT array_agg(locked.permission_id ORDER BY locked.permission_id, locked.id)
-  INTO v_permission_ids
+  SELECT coalesce(array_agg(
+    locked.permission_id ORDER BY locked.permission_id, locked.id
+  ) FILTER (WHERE locked.access_scope = 'all'), '{}'::uuid[])
+  INTO v_role_permission_ids
   FROM (
-    SELECT role_permission.id, role_permission.permission_id
+    SELECT role_permission.id, role_permission.permission_id,
+      role_permission.access_scope
     FROM public.role_permissions AS role_permission
     WHERE role_permission.role_id = ANY(v_role_ids)
-      AND role_permission.access_scope = 'all'
     ORDER BY role_permission.permission_id, role_permission.id
+    FOR SHARE
+  ) AS locked;
+
+  SELECT
+    coalesce(array_agg(
+      locked.permission_id ORDER BY locked.permission_id, locked.id
+    ) FILTER (WHERE locked.effect = 'deny'), '{}'::uuid[]),
+    coalesce(array_agg(
+      locked.permission_id ORDER BY locked.permission_id, locked.id
+    ) FILTER (
+      WHERE locked.effect = 'allow' AND locked.access_scope = 'all'
+    ), '{}'::uuid[])
+  INTO v_denied_permission_ids, v_allowed_permission_ids
+  FROM (
+    SELECT override.id, override.permission_id, override.effect,
+      override.access_scope
+    FROM public.employee_permission_overrides AS override
+    WHERE override.employee_id = p_actor_employee_id
+    ORDER BY override.permission_id, override.id
     FOR SHARE
   ) AS locked;
 
@@ -633,12 +717,19 @@ BEGIN
   FROM (
     SELECT permission.id, permission.code
     FROM public.permissions AS permission
-    WHERE permission.id = ANY(coalesce(v_permission_ids, '{}'::uuid[]))
+    WHERE permission.id = ANY(
+      v_role_permission_ids || v_denied_permission_ids || v_allowed_permission_ids
+    )
       AND permission.status = 'active'
     ORDER BY permission.id
     FOR SHARE
   ) AS locked
-  WHERE locked.code = ANY(p_required_permission_codes);
+  WHERE locked.code = ANY(p_required_permission_codes)
+    AND NOT (locked.id = ANY(v_denied_permission_ids))
+    AND (
+      locked.id = ANY(v_role_permission_ids)
+      OR locked.id = ANY(v_allowed_permission_ids)
+    );
   IF v_permission_count <> cardinality(p_required_permission_codes) THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;

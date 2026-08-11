@@ -63,18 +63,25 @@ describe("platform service trial migration security follow-up", () => {
     const tenantHelper = functionBody(sql, "platform_service_trial_lock_tenant_actor");
     const platformHelper = functionBody(sql, "platform_service_trial_lock_platform_actor");
     for (const helper of [tenantHelper, platformHelper]) {
-      const employeeRoles = helper.indexOf("from public.employee_roles");
-      const roles = helper.indexOf("from public.roles", employeeRoles);
-      const rolePermissions = helper.indexOf("from public.role_permissions", roles);
-      const permissions = helper.indexOf("from public.permissions", rolePermissions);
-      expect(employeeRoles).toBeGreaterThan(-1);
-      expect(roles).toBeGreaterThan(employeeRoles);
-      expect(rolePermissions).toBeGreaterThan(roles);
-      expect(permissions).toBeGreaterThan(rolePermissions);
+      const roleSnapshot = helper.indexOf("into v_snapshot_role_ids");
+      const roles = helper.indexOf("from public.roles", roleSnapshot);
+      const employee = helper.indexOf("from public.employees", roles);
+      const membershipRecheck = helper.indexOf("into v_current_role_ids", employee);
+      const rolePermissions = helper.indexOf("from public.role_permissions", membershipRecheck);
+      const overrides = helper.indexOf("from public.employee_permission_overrides", rolePermissions);
+      const permissions = helper.indexOf("from public.permissions", overrides);
+      expect(roleSnapshot).toBeGreaterThan(-1);
+      expect(roles).toBeGreaterThan(roleSnapshot);
+      expect(employee).toBeGreaterThan(roles);
+      expect(membershipRecheck).toBeGreaterThan(employee);
+      expect(rolePermissions).toBeGreaterThan(membershipRecheck);
+      expect(overrides).toBeGreaterThan(rolePermissions);
+      expect(permissions).toBeGreaterThan(overrides);
       expect(helper.match(/for share/g)?.length ?? 0).toBeGreaterThanOrEqual(5);
       expect(helper).toContain("employee.status = 'active'");
       expect(helper).toContain("role.status = 'active'");
-      expect(helper).toContain("role_permission.access_scope = 'all'");
+      expect(helper).toContain("v_current_role_ids is distinct from v_snapshot_role_ids");
+      expect(helper).toContain("locked.access_scope = 'all'");
       expect(helper).toContain("permission.status = 'active'");
       expect(helper).toContain("cardinality(p_required_permission_codes)");
       expect(helper).toContain("service_trial_action_not_allowed");
@@ -108,6 +115,24 @@ describe("platform service trial migration security follow-up", () => {
       const body = functionBody(sql, name);
       expect(body).toContain("platform.service_trial.manage");
       expect(body).toContain("platform.service_trial.override");
+    }
+  });
+
+  test("applies active all-scope employee overrides with explicit deny precedence", async () => {
+    const sql = await migrationText();
+    for (const name of [
+      "platform_service_trial_lock_tenant_actor",
+      "platform_service_trial_lock_platform_actor",
+    ]) {
+      const helper = functionBody(sql, name);
+      expect(helper).toContain("locked.effect = 'deny'");
+      expect(helper).toContain("locked.effect = 'allow'");
+      expect(helper).toContain("locked.access_scope = 'all'");
+      expect(helper).toContain("v_denied_permission_ids");
+      expect(helper).toContain("v_allowed_permission_ids");
+      expect(helper).toContain("not (locked.id = any(v_denied_permission_ids))");
+      expect(helper).toContain("locked.id = any(v_role_permission_ids)");
+      expect(helper).toContain("locked.id = any(v_allowed_permission_ids)");
     }
   });
 
