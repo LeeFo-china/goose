@@ -352,7 +352,8 @@ describe("platform service trial core migration", () => {
       expectServiceRoleOnly(sql, aclReference(name, types));
     }
     for (const helper of [
-      ["platform_service_trial_lock_platform_actor", "uuid"],
+      ["platform_service_trial_lock_tenant_actor", "uuid, uuid, text[]"],
+      ["platform_service_trial_lock_platform_actor", "uuid, text[]"],
       ["platform_service_trial_lock_verified_enterprise_identity", "uuid, bytea"],
       ["platform_service_trial_normalize_effective_status", "uuid, uuid, timestamptz"],
       ["platform_service_trial_replay_command", "text, uuid, bytea"],

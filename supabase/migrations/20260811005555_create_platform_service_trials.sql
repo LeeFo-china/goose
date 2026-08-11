@@ -440,6 +440,12 @@ CREATE INDEX tenant_service_trials_tenant_created_idx
   ON public.tenant_service_trials (tenant_id, created_at DESC, id DESC);
 CREATE INDEX tenant_service_trials_status_requested_idx
   ON public.tenant_service_trials (status, requested_at DESC, id DESC);
+CREATE INDEX tenant_service_trials_status_created_idx
+  ON public.tenant_service_trials (status, created_at DESC, id DESC);
+CREATE INDEX tenant_service_trials_assignee_status_updated_idx
+  ON public.tenant_service_trials (assignee_employee_id, status, updated_at DESC);
+CREATE INDEX tenant_service_trials_grace_status_idx
+  ON public.tenant_service_trials (grace_ends_at, status);
 CREATE INDEX tenant_service_trials_expiry_idx
   ON public.tenant_service_trials (trial_ends_at, id)
   WHERE status IN ('scheduled', 'active', 'grace_period');
@@ -476,13 +482,24 @@ FOR EACH ROW EXECUTE FUNCTION public.platform_service_trial_protect_event();
 
 CREATE OR REPLACE FUNCTION public.platform_service_trial_lock_tenant_actor(
   p_actor_employee_id uuid,
-  p_tenant_id uuid
+  p_tenant_id uuid,
+  p_required_permission_codes text[]
 )
 RETURNS void
 LANGUAGE plpgsql
 SET search_path = public, pg_temp
 AS $$
+DECLARE
+  v_role_ids uuid[];
+  v_permission_ids uuid[];
+  v_permission_count integer;
 BEGIN
+  IF p_required_permission_codes IS NULL
+    OR array_position(p_required_permission_codes, NULL) IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
   PERFORM employee.id
   FROM public.employees AS employee
   WHERE employee.id = p_actor_employee_id
@@ -492,11 +509,63 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
+
+  SELECT array_agg(locked.role_id ORDER BY locked.role_id, locked.id)
+  INTO v_role_ids
+  FROM (
+    SELECT employee_role.id, employee_role.role_id
+    FROM public.employee_roles AS employee_role
+    WHERE employee_role.employee_id = p_actor_employee_id
+    ORDER BY employee_role.role_id, employee_role.id
+    FOR SHARE
+  ) AS locked;
+
+  SELECT array_agg(locked.id ORDER BY locked.id)
+  INTO v_role_ids
+  FROM (
+    SELECT role.id
+    FROM public.roles AS role
+    WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
+      AND role.tenant_id = p_tenant_id
+      AND role.status = 'active'
+    ORDER BY role.id
+    FOR SHARE
+  ) AS locked;
+  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT array_agg(locked.permission_id ORDER BY locked.permission_id, locked.id)
+  INTO v_permission_ids
+  FROM (
+    SELECT role_permission.id, role_permission.permission_id
+    FROM public.role_permissions AS role_permission
+    WHERE role_permission.role_id = ANY(v_role_ids)
+      AND role_permission.access_scope = 'all'
+    ORDER BY role_permission.permission_id, role_permission.id
+    FOR SHARE
+  ) AS locked;
+
+  SELECT count(DISTINCT locked.code)::integer
+  INTO v_permission_count
+  FROM (
+    SELECT permission.id, permission.code
+    FROM public.permissions AS permission
+    WHERE permission.id = ANY(coalesce(v_permission_ids, '{}'::uuid[]))
+      AND permission.status = 'active'
+    ORDER BY permission.id
+    FOR SHARE
+  ) AS locked
+  WHERE locked.code = ANY(p_required_permission_codes);
+  IF v_permission_count <> cardinality(p_required_permission_codes) THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.platform_service_trial_lock_platform_actor(
-  p_actor_employee_id uuid
+  p_actor_employee_id uuid,
+  p_required_permission_codes text[]
 )
 RETURNS void
 LANGUAGE plpgsql
@@ -504,7 +573,15 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_role_ids uuid[];
+  v_permission_ids uuid[];
+  v_permission_count integer;
 BEGIN
+  IF p_required_permission_codes IS NULL
+    OR array_position(p_required_permission_codes, NULL) IS NOT NULL
+  THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
   PERFORM employee.id
   FROM public.employees AS employee
   WHERE employee.id = p_actor_employee_id
@@ -515,24 +592,54 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT array_agg(locked.role_id ORDER BY locked.role_id)
+  SELECT array_agg(locked.role_id ORDER BY locked.role_id, locked.id)
   INTO v_role_ids
   FROM (
-    SELECT employee_role.role_id
+    SELECT employee_role.id, employee_role.role_id
     FROM public.employee_roles AS employee_role
     WHERE employee_role.employee_id = p_actor_employee_id
-    ORDER BY employee_role.role_id
+    ORDER BY employee_role.role_id, employee_role.id
     FOR SHARE
   ) AS locked;
 
-  PERFORM role.id
-  FROM public.roles AS role
-  WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
-    AND role.tenant_id IS NULL
-    AND role.status = 'active'
-  ORDER BY role.id
-  FOR SHARE;
-  IF NOT FOUND THEN
+  SELECT array_agg(locked.id ORDER BY locked.id)
+  INTO v_role_ids
+  FROM (
+    SELECT role.id
+    FROM public.roles AS role
+    WHERE role.id = ANY(coalesce(v_role_ids, '{}'::uuid[]))
+      AND role.tenant_id IS NULL
+      AND role.status = 'active'
+    ORDER BY role.id
+    FOR SHARE
+  ) AS locked;
+  IF cardinality(coalesce(v_role_ids, '{}'::uuid[])) = 0 THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT array_agg(locked.permission_id ORDER BY locked.permission_id, locked.id)
+  INTO v_permission_ids
+  FROM (
+    SELECT role_permission.id, role_permission.permission_id
+    FROM public.role_permissions AS role_permission
+    WHERE role_permission.role_id = ANY(v_role_ids)
+      AND role_permission.access_scope = 'all'
+    ORDER BY role_permission.permission_id, role_permission.id
+    FOR SHARE
+  ) AS locked;
+
+  SELECT count(DISTINCT locked.code)::integer
+  INTO v_permission_count
+  FROM (
+    SELECT permission.id, permission.code
+    FROM public.permissions AS permission
+    WHERE permission.id = ANY(coalesce(v_permission_ids, '{}'::uuid[]))
+      AND permission.status = 'active'
+    ORDER BY permission.id
+    FOR SHARE
+  ) AS locked
+  WHERE locked.code = ANY(p_required_permission_codes);
+  IF v_permission_count <> cardinality(p_required_permission_codes) THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
 END;
@@ -763,9 +870,12 @@ BEGIN
   IF p_tenant_id IS NULL OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
     OR NULLIF(btrim(p_application_reason), '') IS NULL
     OR char_length(p_application_reason) > 1000
+    OR p_expected_user_count IS NULL
     OR p_expected_user_count NOT BETWEEN 1 AND 100000
+    OR p_expected_project_count IS NULL
     OR p_expected_project_count NOT BETWEEN 1 AND 1000000
     OR NULLIF(btrim(p_contact_name), '') IS NULL OR char_length(p_contact_name) > 80
+    OR p_contact_phone IS NULL
     OR p_contact_phone !~ '^1[3-9][0-9]{9}$'
   THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
@@ -779,7 +889,7 @@ BEGIN
     'contact_name', btrim(p_contact_name), 'contact_phone', p_contact_phone
   )::text, 'sha256');
   PERFORM public.platform_service_trial_lock_tenant_actor(
-    p_actor_employee_id, p_tenant_id
+    p_actor_employee_id, p_tenant_id, ARRAY['billing.service_trial.apply']
   );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
@@ -962,7 +1072,9 @@ BEGIN
     'action', 'withdraw', 'trial_id', p_trial_id,
     'expected_version', p_expected_version, 'reason', btrim(p_reason)
   )::text, 'sha256');
-  PERFORM public.platform_service_trial_lock_tenant_actor(p_actor_employee_id, p_tenant_id);
+  PERFORM public.platform_service_trial_lock_tenant_actor(
+    p_actor_employee_id, p_tenant_id, ARRAY['billing.service_trial.apply']
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
@@ -1050,7 +1162,8 @@ DECLARE
   v_result jsonb;
 BEGIN
   IF p_trial_id IS NULL OR p_actor_employee_id IS NULL OR p_expected_version IS NULL
-    OR p_idempotency_key IS NULL OR p_decision NOT IN ('approved', 'rejected')
+    OR p_idempotency_key IS NULL OR p_decision IS NULL
+    OR p_decision NOT IN ('approved', 'rejected')
     OR NULLIF(btrim(p_reason), '') IS NULL OR char_length(p_reason) > 1000
     OR p_allow_override IS NULL
   THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
@@ -1066,14 +1179,23 @@ BEGIN
   FROM public.tenant_service_trials WHERE id = p_trial_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
   v_scope_key := 'tenant:' || v_identity.tenant_id::text;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id,
+    ARRAY['platform.service_trial.review']
+      || CASE WHEN p_trial_type = 'guided' OR p_assignee_employee_id IS NOT NULL
+        THEN ARRAY['platform.service_trial.manage'] ELSE '{}'::text[] END
+      || CASE WHEN p_allow_override
+        THEN ARRAY['platform.service_trial.override'] ELSE '{}'::text[] END
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
 
   IF p_assignee_employee_id IS NOT NULL THEN
-    PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
+    PERFORM public.platform_service_trial_lock_platform_actor(
+      p_assignee_employee_id, '{}'::text[]
+    );
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-enterprise:' || encode(v_identity.enterprise_identity_hash, 'hex'),
@@ -1125,7 +1247,7 @@ BEGIN
       btrim(p_reason), p_actor_employee_id, v_now
     );
   ELSE
-    IF p_trial_type NOT IN ('standard', 'guided')
+    IF p_trial_type IS NULL OR p_trial_type NOT IN ('standard', 'guided')
       OR NOT public.platform_service_trial_scope_valid(p_scope)
       OR (p_trial_type = 'guided' AND p_assignee_employee_id IS NULL)
     THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
@@ -1259,7 +1381,7 @@ DECLARE
   v_result jsonb;
 BEGIN
   IF p_tenant_id IS NULL OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
-    OR p_trial_type NOT IN ('standard', 'guided')
+    OR p_trial_type IS NULL OR p_trial_type NOT IN ('standard', 'guided')
     OR NOT public.platform_service_trial_scope_valid(p_scope)
     OR NULLIF(btrim(p_reason), '') IS NULL OR char_length(p_reason) > 1000
     OR (p_trial_type = 'guided' AND p_assignee_employee_id IS NULL)
@@ -1272,14 +1394,21 @@ BEGIN
     'assignee_employee_id', p_assignee_employee_id,
     'allow_override', p_allow_override
   )::text, 'sha256');
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id,
+    ARRAY['platform.service_trial.manage']
+      || CASE WHEN p_allow_override
+        THEN ARRAY['platform.service_trial.override'] ELSE '{}'::text[] END
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
 
   IF p_assignee_employee_id IS NOT NULL THEN
-    PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
+    PERFORM public.platform_service_trial_lock_platform_actor(
+      p_assignee_employee_id, '{}'::text[]
+    );
   END IF;
   SELECT regexp_replace(
     upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
@@ -1472,7 +1601,10 @@ BEGIN
   FROM public.tenant_service_trials WHERE id = p_trial_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
   v_scope_key := 'tenant:' || v_identity.tenant_id::text;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id,
+    ARRAY['platform.service_trial.manage', 'platform.service_trial.override']
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
@@ -1575,7 +1707,10 @@ BEGIN
   FROM public.tenant_service_trials WHERE id = p_trial_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
   v_scope_key := 'tenant:' || v_identity.tenant_id::text;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id,
+    ARRAY['platform.service_trial.manage', 'platform.service_trial.override']
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
@@ -1657,13 +1792,17 @@ BEGIN
   FROM public.tenant_service_trials WHERE id = p_trial_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
   v_scope_key := 'tenant:' || v_identity.tenant_id::text;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id, ARRAY['platform.service_trial.manage']
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
   IF p_assignee_employee_id IS NOT NULL THEN
-    PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
+    PERFORM public.platform_service_trial_lock_platform_actor(
+      p_assignee_employee_id, '{}'::text[]
+    );
   END IF;
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-enterprise:' || encode(v_identity.enterprise_identity_hash, 'hex'), 20260811005555
@@ -1773,7 +1912,12 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END;
 
-  IF v_trial_days NOT BETWEEN 1 AND 365 OR v_grace_days NOT BETWEEN 0 AND 30
+  IF v_trial_days IS NULL OR v_grace_days IS NULL
+    OR v_max_trial_days IS NULL OR v_max_grace_days IS NULL
+    OR v_max_schedule_days IS NULL OR v_max_extension_count IS NULL
+    OR v_max_extension_days IS NULL OR v_reapply_cooldown_days IS NULL
+    OR v_allow_repeat IS NULL OR v_reminder_days IS NULL
+    OR v_trial_days NOT BETWEEN 1 AND 365 OR v_grace_days NOT BETWEEN 0 AND 30
     OR v_max_trial_days NOT BETWEEN v_trial_days AND 365
     OR v_max_grace_days NOT BETWEEN v_grace_days AND 30
     OR v_max_schedule_days NOT BETWEEN 0 AND 365
@@ -1790,7 +1934,10 @@ BEGIN
     'action', 'update_policy', 'expected_version', p_expected_version,
     'policy', p_policy, 'reason', btrim(p_reason)
   )::text, 'sha256');
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
+  PERFORM public.platform_service_trial_lock_platform_actor(
+    p_actor_employee_id,
+    ARRAY['platform.service_trial.manage', 'platform.service_trial.override']
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
@@ -2098,6 +2245,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
+  v_order_snapshot public.tenant_service_orders%ROWTYPE;
   v_order public.tenant_service_orders%ROWTYPE;
   v_work_order public.tenant_service_work_orders%ROWTYPE;
   v_trial public.tenant_service_trials%ROWTYPE;
@@ -2114,6 +2262,50 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_PAYMENT_AMOUNT_MISMATCH';
   END IF;
 
+  -- Resolve the lock namespace without taking a business row lock. Every
+  -- payment path then takes enterprise (when sourced), tenant, trial (when
+  -- sourced), and finally order, matching source order creation.
+  SELECT *
+  INTO v_order_snapshot
+  FROM public.tenant_service_orders
+  WHERE id = p_order_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+
+  IF v_order_snapshot.source_trial_id IS NOT NULL THEN
+    SELECT trial.tenant_id, trial.enterprise_identity_hash
+    INTO v_trial_identity
+    FROM public.tenant_service_trials AS trial
+    WHERE trial.id = v_order_snapshot.source_trial_id
+      AND trial.tenant_id = v_order_snapshot.tenant_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'SERVICE_TRIAL_ORDER_SOURCE_INVALID' USING ERRCODE = 'P0001';
+    END IF;
+    PERFORM pg_advisory_xact_lock(hashtextextended(
+      'service-trial-enterprise:' || encode(v_trial_identity.enterprise_identity_hash, 'hex'),
+      20260811005555
+    ));
+  END IF;
+
+  -- Unsourced payments also take the tenant mutex so a simultaneous review or
+  -- grant cannot inspect a pre-payment formal-service snapshot.
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    'service-trial-tenant:' || v_order_snapshot.tenant_id::text, 20260811005555
+  ));
+
+  IF v_order_snapshot.source_trial_id IS NOT NULL THEN
+    SELECT trial.* INTO v_trial
+    FROM public.tenant_service_trials AS trial
+    WHERE trial.id = v_order_snapshot.source_trial_id
+      AND trial.tenant_id = v_order_snapshot.tenant_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'SERVICE_TRIAL_ORDER_SOURCE_INVALID' USING ERRCODE = 'P0001';
+    END IF;
+  END IF;
+
   SELECT *
   INTO v_order
   FROM public.tenant_service_orders
@@ -2122,6 +2314,11 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'SERVICE_ORDER_NOT_FOUND';
+  END IF;
+  IF v_order.tenant_id IS DISTINCT FROM v_order_snapshot.tenant_id
+    OR v_order.source_trial_id IS DISTINCT FROM v_order_snapshot.source_trial_id
+  THEN
+    RAISE EXCEPTION 'SERVICE_ORDER_INVALID_STATE';
   END IF;
 
   IF v_order.payment_status IN (
@@ -2225,60 +2422,46 @@ BEGIN
   -- is audit-only on conflict and deliberately has no exception branch that can
   -- roll back a trusted payment fact.
   IF v_order.source_trial_id IS NOT NULL THEN
-    SELECT trial.tenant_id, trial.enterprise_identity_hash
-    INTO v_trial_identity
-    FROM public.tenant_service_trials AS trial
-    WHERE trial.id = v_order.source_trial_id;
+    v_trial := public.platform_service_trial_normalize_effective_status(
+      v_order.source_trial_id, v_order.tenant_id, v_paid_at
+    );
 
-    IF FOUND AND v_trial_identity.tenant_id = v_order.tenant_id THEN
-      PERFORM pg_advisory_xact_lock(hashtextextended(
-        'service-trial-enterprise:' || encode(v_trial_identity.enterprise_identity_hash, 'hex'),
-        20260811005555
-      ));
-      PERFORM pg_advisory_xact_lock(hashtextextended(
-        'service-trial-tenant:' || v_order.tenant_id::text, 20260811005555
-      ));
-      v_trial := public.platform_service_trial_normalize_effective_status(
-        v_order.source_trial_id, v_order.tenant_id, v_paid_at
+    IF v_trial.converted_order_id IS NULL THEN
+      v_trial_from_status := v_trial.status;
+      UPDATE public.tenant_service_trials SET
+        status = CASE WHEN status IN (
+          'pending_review', 'scheduled', 'active', 'grace_period', 'expired'
+        ) THEN 'converted' ELSE status END,
+        converted_order_id = v_order.id,
+        converted_at = v_paid_at,
+        version = version + 1,
+        updated_at = v_paid_at
+      WHERE id = v_trial.id
+      RETURNING * INTO v_trial;
+
+      INSERT INTO public.tenant_service_trial_events (
+        tenant_id, trial_id, event_key, event_type, from_status, to_status,
+        metadata, occurred_at
+      ) VALUES (
+        v_trial.tenant_id, v_trial.id, 'formal:' || v_order.id::text,
+        'formal_purchase_attributed', v_trial_from_status, v_trial.status,
+        jsonb_build_object('order_id', v_order.id), v_paid_at
+      ) ON CONFLICT (trial_id, event_key) DO NOTHING;
+    ELSIF v_trial.converted_order_id IS DISTINCT FROM v_order.id THEN
+      v_conversion_anomaly := jsonb_build_object(
+        'code', 'TRIAL_ALREADY_ATTRIBUTED',
+        'trial_id', v_trial.id,
+        'order_id', v_order.id,
+        'attributed_order_id', v_trial.converted_order_id
       );
-
-      IF v_trial.converted_order_id IS NULL THEN
-        v_trial_from_status := v_trial.status;
-        UPDATE public.tenant_service_trials SET
-          status = CASE WHEN status IN (
-            'pending_review', 'scheduled', 'active', 'grace_period', 'expired'
-          ) THEN 'converted' ELSE status END,
-          converted_order_id = v_order.id,
-          converted_at = v_paid_at,
-          version = version + 1,
-          updated_at = v_paid_at
-        WHERE id = v_trial.id
-        RETURNING * INTO v_trial;
-
-        INSERT INTO public.tenant_service_trial_events (
-          tenant_id, trial_id, event_key, event_type, from_status, to_status,
-          metadata, occurred_at
-        ) VALUES (
-          v_trial.tenant_id, v_trial.id, 'formal:' || v_order.id::text,
-          'formal_purchase_attributed', v_trial_from_status, v_trial.status,
-          jsonb_build_object('order_id', v_order.id), v_paid_at
-        ) ON CONFLICT (trial_id, event_key) DO NOTHING;
-      ELSIF v_trial.converted_order_id IS DISTINCT FROM v_order.id THEN
-        v_conversion_anomaly := jsonb_build_object(
-          'code', 'TRIAL_ALREADY_ATTRIBUTED',
-          'trial_id', v_trial.id,
-          'order_id', v_order.id,
-          'attributed_order_id', v_trial.converted_order_id
-        );
-        INSERT INTO public.tenant_service_trial_events (
-          tenant_id, trial_id, event_key, event_type, from_status, to_status,
-          metadata, occurred_at
-        ) VALUES (
-          v_trial.tenant_id, v_trial.id, 'conversion-anomaly:' || v_order.id::text,
-          'conversion_anomaly', v_trial.status, v_trial.status,
-          v_conversion_anomaly, v_paid_at
-        ) ON CONFLICT (trial_id, event_key) DO NOTHING;
-      END IF;
+      INSERT INTO public.tenant_service_trial_events (
+        tenant_id, trial_id, event_key, event_type, from_status, to_status,
+        metadata, occurred_at
+      ) VALUES (
+        v_trial.tenant_id, v_trial.id, 'conversion-anomaly:' || v_order.id::text,
+        'conversion_anomaly', v_trial.status, v_trial.status,
+        v_conversion_anomaly, v_paid_at
+      ) ON CONFLICT (trial_id, event_key) DO NOTHING;
     END IF;
   END IF;
 
@@ -2389,14 +2572,14 @@ REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM PUBLIC
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM authenticated;
 REVOKE ALL ON FUNCTION public.platform_service_trial_protect_event() FROM service_role;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid) FROM anon;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid) FROM authenticated;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid) FROM service_role;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM anon;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM authenticated;
-REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM service_role;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_tenant_actor(uuid, uuid, text[]) FROM service_role;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid, text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid, text[]) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid, text[]) FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid, text[]) FROM service_role;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM authenticated;
