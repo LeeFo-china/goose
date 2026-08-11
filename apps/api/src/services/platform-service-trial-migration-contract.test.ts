@@ -166,12 +166,19 @@ describe("platform service trial core migration", () => {
   });
 
   test("normalizes verified enterprise identity and takes locks in canonical order", async () => {
-    const apply = functionBody((await findMigration()).text, "platform_service_trial_apply");
-    const grant = functionBody((await findMigration()).text, "platform_service_trial_grant");
+    const migration = await findMigration();
+    const apply = functionBody(migration.text, "platform_service_trial_apply");
+    const grant = functionBody(migration.text, "platform_service_trial_grant");
     for (const body of [apply, grant]) {
       expect(body).toContain("tenant.status = 'active'");
       expect(body).toContain("tenant.unified_social_credit_code");
-      expect(body).toContain("regexp_replace(upper(btrim(");
+      expect(body).toContain("public.tenant_onboarding_applications");
+      expect(body).toContain("application.status = 'approved'");
+      expect(body).toContain("application.converted_tenant_id = tenant.id");
+      expect(body).toContain("application.reviewed_at is not null");
+      expect(body).toContain("application.unified_social_credit_code");
+      expect(body).toContain("regexp_replace(");
+      expect(body).toContain("upper(btrim(");
       expect(body).toContain("extensions.digest(");
       expect(body).toContain("'sha256'");
       expect(body).toContain("service_trial_enterprise_identity_required");
@@ -182,7 +189,21 @@ describe("platform service trial core migration", () => {
       expect(body).toContain("service_trial_formal_service_active");
       expect(body).toContain("tenant_service_contracts");
       expect(body).toContain("paid_onboarding");
+      expect(body).toContain("platform_service_trial_lock_verified_enterprise_identity");
     }
+    const identityHelper = functionBody(
+      migration.text,
+      "platform_service_trial_lock_verified_enterprise_identity",
+    );
+    expect(identityHelper).toContain("for share of tenant, application");
+    expect(identityHelper).toContain("application.status = 'approved'");
+    expect(identityHelper).toContain("application.reviewed_at is not null");
+    expect(identityHelper).toContain("service_trial_enterprise_identity_required");
+    const review = functionBody(migration.text, "platform_service_trial_review");
+    expect(review).toContain("if p_decision = 'approved' then");
+    expect(review).toContain(
+      "platform_service_trial_lock_verified_enterprise_identity( v_identity.tenant_id, v_identity.enterprise_identity_hash",
+    );
   });
 
   test("normalizes effective status in each mutating command before availability checks", async () => {
@@ -213,6 +234,25 @@ describe("platform service trial core migration", () => {
 
   test("implements scoped UUID idempotency with immutable request digests", async () => {
     const migration = await findMigration();
+    for (const name of ["platform_service_trial_apply", "platform_service_trial_grant"]) {
+      expect(functionBody(migration.text, name)).toContain(
+        "v_scope_key text := 'tenant:' || p_tenant_id::text",
+      );
+    }
+    expect(functionBody(migration.text, "platform_service_trial_withdraw")).toContain(
+      "v_scope_key text := 'tenant:' || p_tenant_id::text",
+    );
+    for (const name of [
+      "platform_service_trial_review", "platform_service_trial_extend",
+      "platform_service_trial_revoke", "platform_service_trial_assign",
+    ]) {
+      const body = functionBody(migration.text, name);
+      expect(body).toContain("v_scope_key := 'tenant:' || v_identity.tenant_id::text");
+      expect(body).not.toContain("'trial:' || p_trial_id::text");
+    }
+    expect(functionBody(migration.text, "platform_service_trial_update_policy")).toContain(
+      "v_scope_key text := 'platform:service_trial_policy'",
+    );
     for (const name of [
       "platform_service_trial_apply", "platform_service_trial_withdraw",
       "platform_service_trial_review", "platform_service_trial_grant",
@@ -238,6 +278,32 @@ describe("platform service trial core migration", () => {
     expect(replay).toContain("service_trial_idempotency_conflict");
     expect(functionBody(migration.text, "platform_service_trial_store_command"))
       .toContain("delete from public.tenant_service_trial_commands");
+  });
+
+  test("validates the current actor before every idempotent replay", async () => {
+    const migration = await findMigration();
+    const tenantCommands = [
+      "platform_service_trial_apply", "platform_service_trial_withdraw",
+    ];
+    const platformCommands = [
+      "platform_service_trial_review", "platform_service_trial_grant",
+      "platform_service_trial_extend", "platform_service_trial_revoke",
+      "platform_service_trial_assign", "platform_service_trial_update_policy",
+    ];
+    for (const name of tenantCommands) {
+      const body = functionBody(migration.text, name);
+      const actorLock = body.indexOf("platform_service_trial_lock_tenant_actor");
+      const replay = body.indexOf("platform_service_trial_replay_command");
+      expect(actorLock).toBeGreaterThan(-1);
+      expect(actorLock).toBeLessThan(replay);
+    }
+    for (const name of platformCommands) {
+      const body = functionBody(migration.text, name);
+      const actorLock = body.indexOf("platform_service_trial_lock_platform_actor");
+      const replay = body.indexOf("platform_service_trial_replay_command");
+      expect(actorLock).toBeGreaterThan(-1);
+      expect(actorLock).toBeLessThan(replay);
+    }
   });
 
   test("enforces expected versions and approved state transitions", async () => {
@@ -287,6 +353,7 @@ describe("platform service trial core migration", () => {
     }
     for (const helper of [
       ["platform_service_trial_lock_platform_actor", "uuid"],
+      ["platform_service_trial_lock_verified_enterprise_identity", "uuid, bytea"],
       ["platform_service_trial_normalize_effective_status", "uuid, uuid, timestamptz"],
       ["platform_service_trial_replay_command", "text, uuid, bytea"],
       ["platform_service_trial_store_command", "text, uuid, bytea, uuid, uuid, uuid, jsonb"],
@@ -304,6 +371,14 @@ describe("platform service trial core migration", () => {
 
   test("computes a single-set summary with explicit cohort semantics", async () => {
     const body = functionBody((await findMigration()).text, "platform_service_trial_platform_summary");
+    const expiredBoundary = body.indexOf(
+      "trial.status in ('scheduled', 'active', 'grace_period') and p_now >= trial.grace_ends_at",
+    );
+    const activeBoundary = body.indexOf(
+      "trial.status = 'scheduled' and p_now >= trial.starts_at",
+    );
+    expect(expiredBoundary).toBeGreaterThan(-1);
+    expect(expiredBoundary).toBeLessThan(activeBoundary);
     expect(body).toContain("count(*) filter (where status = 'pending_review')");
     expect(body).toContain("count(*) filter (where effective_status = 'scheduled')");
     expect(body).toContain("count(*) filter (where effective_status in ('active', 'grace_period'))");

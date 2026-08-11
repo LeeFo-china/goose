@@ -24,6 +24,7 @@ SET LOCAL statement_timeout = '2min';
 LOCK TABLE public.tenants, public.employees, public.roles, public.permissions
   IN ROW SHARE MODE;
 LOCK TABLE public.employee_roles, public.role_permissions,
+  public.tenant_onboarding_applications,
   public.tenant_service_contracts IN SHARE MODE;
 LOCK TABLE public.tenant_service_orders IN ACCESS EXCLUSIVE MODE;
 
@@ -537,6 +538,42 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(
+  p_tenant_id uuid,
+  p_expected_hash bytea
+)
+RETURNS void
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_enterprise_hash bytea;
+BEGIN
+  SELECT extensions.digest(
+    regexp_replace(upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'),
+    'sha256'
+  )
+  INTO v_enterprise_hash
+  FROM public.tenants AS tenant
+  JOIN public.tenant_onboarding_applications AS application
+    ON application.converted_tenant_id = tenant.id
+  WHERE tenant.id = p_tenant_id
+    AND tenant.status = 'active'
+    AND application.status = 'approved'
+    AND application.reviewed_at IS NOT NULL
+    AND regexp_replace(
+      upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
+    ) = regexp_replace(
+      upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g'
+    )
+  FOR SHARE OF tenant, application;
+
+  IF NOT FOUND OR v_enterprise_hash IS DISTINCT FROM p_expected_hash THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.platform_service_trial_replay_command(
   p_scope_key text,
   p_idempotency_key uuid,
@@ -741,19 +778,30 @@ BEGIN
     'expected_project_count', p_expected_project_count,
     'contact_name', btrim(p_contact_name), 'contact_phone', p_contact_phone
   )::text, 'sha256');
+  PERFORM public.platform_service_trial_lock_tenant_actor(
+    p_actor_employee_id, p_tenant_id
+  );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
 
-  PERFORM public.platform_service_trial_lock_tenant_actor(
-    p_actor_employee_id, p_tenant_id
-  );
-
-  SELECT regexp_replace(upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g')
+  SELECT regexp_replace(
+    upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
+  )
   INTO v_credit_code
   FROM public.tenants AS tenant
-  WHERE tenant.id = p_tenant_id AND tenant.status = 'active';
+  JOIN public.tenant_onboarding_applications AS application
+    ON application.converted_tenant_id = tenant.id
+  WHERE tenant.id = p_tenant_id
+    AND tenant.status = 'active'
+    AND application.status = 'approved'
+    AND application.reviewed_at IS NOT NULL
+    AND regexp_replace(
+      upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
+    ) = regexp_replace(
+      upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g'
+    );
   IF NOT FOUND OR NULLIF(v_credit_code, '') IS NULL THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED' USING ERRCODE = 'P0001';
   END IF;
@@ -766,18 +814,9 @@ BEGIN
     'service-trial-tenant:' || p_tenant_id::text, 20260811005555
   ));
 
-  PERFORM tenant.id
-  FROM public.tenants AS tenant
-  WHERE tenant.id = p_tenant_id
-    AND tenant.status = 'active'
-    AND extensions.digest(
-      regexp_replace(upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g'),
-      'sha256'
-    ) = v_enterprise_hash
-  FOR SHARE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED' USING ERRCODE = 'P0001';
-  END IF;
+  PERFORM public.platform_service_trial_lock_verified_enterprise_identity(
+    p_tenant_id, v_enterprise_hash
+  );
 
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
@@ -908,7 +947,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
-  v_scope_key text := 'trial:' || p_trial_id::text;
+  v_scope_key text := 'tenant:' || p_tenant_id::text;
   v_request_hash bytea;
   v_replay jsonb;
   v_enterprise_hash bytea;
@@ -923,6 +962,7 @@ BEGIN
     'action', 'withdraw', 'trial_id', p_trial_id,
     'expected_version', p_expected_version, 'reason', btrim(p_reason)
   )::text, 'sha256');
+  PERFORM public.platform_service_trial_lock_tenant_actor(p_actor_employee_id, p_tenant_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
@@ -932,7 +972,6 @@ BEGIN
   FROM public.tenant_service_trials
   WHERE id = p_trial_id AND tenant_id = p_tenant_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
-  PERFORM public.platform_service_trial_lock_tenant_actor(p_actor_employee_id, p_tenant_id);
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-enterprise:' || encode(v_enterprise_hash, 'hex'), 20260811005555
   ));
@@ -952,7 +991,6 @@ BEGIN
   IF v_trial.status <> 'pending_review' OR v_trial.source <> 'tenant_application' THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
-
   UPDATE public.tenant_service_trials SET
     status = 'withdrawn', withdraw_reason = btrim(p_reason), withdrawn_at = v_now,
     withdrawn_by_employee_id = p_actor_employee_id,
@@ -999,7 +1037,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
-  v_scope_key text := 'trial:' || p_trial_id::text;
+  v_scope_key text;
   v_request_hash bytea;
   v_replay jsonb;
   v_identity record;
@@ -1024,15 +1062,16 @@ BEGIN
     'assignee_employee_id', p_assignee_employee_id,
     'allow_override', p_allow_override
   )::text, 'sha256');
+  SELECT tenant_id, enterprise_identity_hash INTO v_identity
+  FROM public.tenant_service_trials WHERE id = p_trial_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
+  v_scope_key := 'tenant:' || v_identity.tenant_id::text;
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
 
-  SELECT tenant_id, enterprise_identity_hash INTO v_identity
-  FROM public.tenant_service_trials WHERE id = p_trial_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   IF p_assignee_employee_id IS NOT NULL THEN
     PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
   END IF;
@@ -1055,6 +1094,11 @@ BEGIN
   END IF;
   IF v_trial.status <> 'pending_review' OR v_trial.source <> 'tenant_application' THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_decision = 'approved' THEN
+    PERFORM public.platform_service_trial_lock_verified_enterprise_identity(
+      v_identity.tenant_id, v_identity.enterprise_identity_hash
+    );
   END IF;
 
   SELECT * INTO v_policy FROM public.platform_service_trial_policies
@@ -1228,19 +1272,31 @@ BEGIN
     'assignee_employee_id', p_assignee_employee_id,
     'allow_override', p_allow_override
   )::text, 'sha256');
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
 
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   IF p_assignee_employee_id IS NOT NULL THEN
     PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
   END IF;
-  SELECT regexp_replace(upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g')
+  SELECT regexp_replace(
+    upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
+  )
   INTO v_credit_code
   FROM public.tenants AS tenant
-  WHERE tenant.id = p_tenant_id AND tenant.status = 'active';
+  JOIN public.tenant_onboarding_applications AS application
+    ON application.converted_tenant_id = tenant.id
+  WHERE tenant.id = p_tenant_id
+    AND tenant.status = 'active'
+    AND application.status = 'approved'
+    AND application.reviewed_at IS NOT NULL
+    AND regexp_replace(
+      upper(btrim(application.unified_social_credit_code)), '\s+', '', 'g'
+    ) = regexp_replace(
+      upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g'
+    );
   IF NOT FOUND OR NULLIF(v_credit_code, '') IS NULL THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED' USING ERRCODE = 'P0001';
   END IF;
@@ -1251,16 +1307,9 @@ BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-tenant:' || p_tenant_id::text, 20260811005555
   ));
-  PERFORM tenant.id FROM public.tenants AS tenant
-  WHERE tenant.id = p_tenant_id AND tenant.status = 'active'
-    AND extensions.digest(
-      regexp_replace(upper(btrim(tenant.unified_social_credit_code)), '\s+', '', 'g'),
-      'sha256'
-    ) = v_enterprise_hash
-  FOR SHARE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'SERVICE_TRIAL_ENTERPRISE_IDENTITY_REQUIRED' USING ERRCODE = 'P0001';
-  END IF;
+  PERFORM public.platform_service_trial_lock_verified_enterprise_identity(
+    p_tenant_id, v_enterprise_hash
+  );
 
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
@@ -1398,7 +1447,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
-  v_scope_key text := 'trial:' || p_trial_id::text;
+  v_scope_key text;
   v_request_hash bytea;
   v_replay jsonb;
   v_identity record;
@@ -1419,14 +1468,15 @@ BEGIN
     'expected_version', p_expected_version, 'extension_days', p_extension_days,
     'reason', btrim(p_reason), 'allow_override', p_allow_override
   )::text, 'sha256');
+  SELECT tenant_id, enterprise_identity_hash INTO v_identity
+  FROM public.tenant_service_trials WHERE id = p_trial_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
+  v_scope_key := 'tenant:' || v_identity.tenant_id::text;
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
-  SELECT tenant_id, enterprise_identity_hash INTO v_identity
-  FROM public.tenant_service_trials WHERE id = p_trial_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-enterprise:' || encode(v_identity.enterprise_identity_hash, 'hex'),
     20260811005555
@@ -1505,7 +1555,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
-  v_scope_key text := 'trial:' || p_trial_id::text;
+  v_scope_key text;
   v_request_hash bytea;
   v_replay jsonb;
   v_identity record;
@@ -1521,14 +1571,15 @@ BEGIN
     'action', 'revoke', 'trial_id', p_trial_id,
     'expected_version', p_expected_version, 'reason', btrim(p_reason)
   )::text, 'sha256');
+  SELECT tenant_id, enterprise_identity_hash INTO v_identity
+  FROM public.tenant_service_trials WHERE id = p_trial_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
+  v_scope_key := 'tenant:' || v_identity.tenant_id::text;
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
-  SELECT tenant_id, enterprise_identity_hash INTO v_identity
-  FROM public.tenant_service_trials WHERE id = p_trial_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-enterprise:' || encode(v_identity.enterprise_identity_hash, 'hex'), 20260811005555
   ));
@@ -1587,7 +1638,7 @@ SET search_path = public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
-  v_scope_key text := 'trial:' || p_trial_id::text;
+  v_scope_key text;
   v_request_hash bytea;
   v_replay jsonb;
   v_identity record;
@@ -1602,14 +1653,15 @@ BEGIN
     'expected_version', p_expected_version,
     'assignee_employee_id', p_assignee_employee_id
   )::text, 'sha256');
+  SELECT tenant_id, enterprise_identity_hash INTO v_identity
+  FROM public.tenant_service_trials WHERE id = p_trial_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
+  v_scope_key := 'tenant:' || v_identity.tenant_id::text;
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
-  SELECT tenant_id, enterprise_identity_hash INTO v_identity
-  FROM public.tenant_service_trials WHERE id = p_trial_id;
-  IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_NOT_FOUND' USING ERRCODE = 'P0001'; END IF;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   IF p_assignee_employee_id IS NOT NULL THEN
     PERFORM public.platform_service_trial_lock_platform_actor(p_assignee_employee_id);
   END IF;
@@ -1669,7 +1721,7 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 DECLARE
-  v_scope_key text := 'policy:current';
+  v_scope_key text := 'platform:service_trial_policy';
   v_request_hash bytea;
   v_replay jsonb;
   v_current public.platform_service_trial_policies%ROWTYPE;
@@ -1738,11 +1790,11 @@ BEGIN
     'action', 'update_policy', 'expected_version', p_expected_version,
     'policy', p_policy, 'reason', btrim(p_reason)
   )::text, 'sha256');
+  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
   IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
-  PERFORM public.platform_service_trial_lock_platform_actor(p_actor_employee_id);
   PERFORM pg_advisory_xact_lock(hashtextextended(
     'service-trial-policy:current', 20260811005555
   ));
@@ -1794,11 +1846,12 @@ AS $$
   WITH effective AS MATERIALIZED (
     SELECT trial.*,
       CASE
-        WHEN trial.status = 'scheduled' AND p_now >= trial.starts_at THEN 'active'
-        WHEN trial.status = 'active' AND p_now >= trial.trial_ends_at
-          AND p_now < trial.grace_ends_at THEN 'grace_period'
-        WHEN trial.status IN ('active', 'grace_period')
+        WHEN trial.status IN ('scheduled', 'active', 'grace_period')
           AND p_now >= trial.grace_ends_at THEN 'expired'
+        WHEN trial.status IN ('scheduled', 'active')
+          AND p_now >= trial.trial_ends_at
+          AND p_now < trial.grace_ends_at THEN 'grace_period'
+        WHEN trial.status = 'scheduled' AND p_now >= trial.starts_at THEN 'active'
         ELSE trial.status
       END AS effective_status
     FROM public.tenant_service_trials AS trial
@@ -2344,6 +2397,10 @@ REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) F
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM authenticated;
 REVOKE ALL ON FUNCTION public.platform_service_trial_lock_platform_actor(uuid) FROM service_role;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM authenticated;
+REVOKE ALL ON FUNCTION public.platform_service_trial_lock_verified_enterprise_identity(uuid, bytea) FROM service_role;
 REVOKE ALL ON FUNCTION public.platform_service_trial_replay_command(text, uuid, bytea) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_service_trial_replay_command(text, uuid, bytea) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_replay_command(text, uuid, bytea) FROM authenticated;
