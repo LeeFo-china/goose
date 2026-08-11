@@ -136,6 +136,11 @@ function validateTrialFacts(row: TrialRow, context: z.RefinementCtx): void {
     'scheduled', 'active', 'grace_period', 'expired', 'revoked',
   ];
   const isConvertedWithGrant = row.status === 'converted' && grantState === 'complete';
+  const isConvertedWithoutGrant = row.status === 'converted' && grantState === 'empty';
+  if (isConvertedWithoutGrant
+    && (row.source !== 'tenant_application' || reviewState !== 'empty')) {
+    issue('未发放转化事实与来源或审核状态冲突');
+  }
   if (row.source === 'tenant_application'
     && (approvedApplicationStatuses.includes(row.status) || isConvertedWithGrant)
     && (reviewState !== 'complete' || row.review_decision !== 'approved')) {

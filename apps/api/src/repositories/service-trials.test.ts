@@ -313,52 +313,51 @@ describe('ServiceTrialRepository reads', () => {
     }
   });
 
-  test('rejects impossible partial trial time facts', async () => {
-    const malformed = { ...pendingTrial, status: 'rejected',
-      review_decision: 'rejected', review_reason: '不符合条件',
-      reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID, starts_at: NOW };
-    const f = harness({ tableResult: { data: [malformed], error: null, count: 1 } });
+  const convertedOrderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const tenantApplicationActive = {
+    ...activeTrial, source: 'tenant_application',
+    application_reason: '体验项目协作', expected_user_count: 10,
+    expected_project_count: 3, contact_name: '张三', contact_phone: '13800138000',
+    requested_at: NOW, requested_by_employee_id: ACTOR_ID,
+  };
+  test.each([
+    { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
+      review_reason: '不符合条件', reviewed_at: NOW,
+      reviewed_by_employee_id: ACTOR_ID, starts_at: NOW },
+    { ...pendingTrial, converted_order_id: convertedOrderId },
+    { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
+      reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID,
+      review_reason: '不通过', granted_at: NOW },
+    tenantApplicationActive,
+    { ...pendingTrial, withdrawn_at: NOW,
+      withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '撤回' },
+    { ...pendingTrial, review_decision: 'approved', reviewed_at: NOW,
+      reviewed_by_employee_id: null, review_reason: '通过' },
+    { ...pendingTrial, source: 'platform_grant', status: 'converted',
+      application_reason: null, expected_user_count: null, expected_project_count: null,
+      contact_name: null, contact_phone: null, requested_at: null,
+      requested_by_employee_id: null,
+      converted_order_id: convertedOrderId, converted_at: NOW },
+    { ...pendingTrial, status: 'converted', review_decision: 'approved',
+      reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID, review_reason: '通过',
+      converted_order_id: convertedOrderId, converted_at: NOW },
+  ])('rejects partial or status-contradictory lifecycle facts', async (row) => {
+    const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
     await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
       .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
   });
 
-  test('rejects partial or status-contradictory lifecycle facts', async () => {
-    const convertedOrderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const tenantApplicationActive = {
-      ...activeTrial,
-      source: 'tenant_application',
-      application_reason: '体验项目协作',
-      expected_user_count: 10,
-      expected_project_count: 3,
-      contact_name: '张三',
-      contact_phone: '13800138000',
-      requested_at: NOW,
-      requested_by_employee_id: ACTOR_ID,
-    };
-    const invalidRows = [
-      { ...pendingTrial, converted_order_id: convertedOrderId },
-      { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
-        reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID,
-        review_reason: '不通过', granted_at: NOW },
-      tenantApplicationActive,
-      { ...pendingTrial, withdrawn_at: NOW,
-        withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '撤回' },
-      { ...pendingTrial, review_decision: 'approved', reviewed_at: NOW,
-        reviewed_by_employee_id: null, review_reason: '通过' },
-    ];
-    for (const row of invalidRows) {
-      const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
-      await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
-        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
-    }
-  });
-
   test('accepts conversion attribution on legal terminal trial facts', async () => {
-    const conversion = {
-      converted_order_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-      converted_at: NOW,
-    };
+    const conversion = { converted_order_id: convertedOrderId, converted_at: NOW };
     const rows = [
+      { ...pendingTrial, status: 'converted', ...conversion },
+      { ...activeTrial, status: 'converted', ...conversion },
+      { ...activeTrial, source: 'tenant_application', status: 'converted',
+        application_reason: '体验项目协作', expected_user_count: 10,
+        expected_project_count: 3, contact_name: '张三', contact_phone: '13800138000',
+        requested_at: NOW, requested_by_employee_id: ACTOR_ID, review_decision: 'approved',
+        reviewed_at: NOW,
+        reviewed_by_employee_id: ACTOR_ID, review_reason: '通过', ...conversion },
       { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
         reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID,
         review_reason: '不通过', ...conversion },
