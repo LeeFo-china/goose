@@ -126,9 +126,9 @@ async function querySafely(
 
 function pageData<T>(list: T[], count: number | null | undefined,
   page: ReturnType<typeof pagination>): PageData<T> {
-  if (count !== null && count !== undefined
-    && (!Number.isSafeInteger(count) || count < 0)) throw Errors.dbError('分页总数无效');
-  const total = count ?? 0;
+  if (count === null || count === undefined || !Number.isSafeInteger(count)
+    || count < 0 || count < list.length) throw Errors.dbError('分页总数无效');
+  const total = count;
   return { list, pagination: { page: page.page, pageSize: page.pageSize,
     total, totalPages: total === 0 ? 0 : Math.ceil(total / page.pageSize) } };
 }

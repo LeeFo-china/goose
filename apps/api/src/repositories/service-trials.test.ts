@@ -121,6 +121,12 @@ function harness(input: { tableResult?: DbResult;
   ) };
 }
 
+async function expectDbError(request: Promise<unknown>, message?: string): Promise<void> {
+  await expect(request).rejects.toMatchObject({
+    statusCode: 500, code: 'DB_ERROR', details: undefined, ...(message ? { message } : {}),
+  });
+}
+
 describe('ServiceTrialRepository reads', () => {
   test('tenant history is tenant-scoped, bounded, stable, and strictly parsed', async () => {
     const f = harness({
@@ -153,11 +159,27 @@ describe('ServiceTrialRepository reads', () => {
     expect(f.calls).toContainEqual(['range', 0, 19]);
   });
 
+  test('rejects missing, invalid, or insufficient exact pagination counts', async () => {
+    const platformRow = { ...activeTrial, tenant: tenantSummary, assignee: assigneeSummary };
+    for (const input of [
+      { count: null, platform: false, data: [] },
+      { count: undefined, platform: true, data: [] },
+      { count: -1, platform: false, data: [] },
+      { count: 1.5, platform: true, data: [] },
+      { count: 0, platform: false, data: [pendingTrial] },
+      { count: 0, platform: true, data: [platformRow] },
+    ]) {
+      const f = harness({ tableResult: { data: input.data, error: null, count: input.count } });
+      const request = input.platform ? f.repository.listPlatformTrials({})
+        : f.repository.listTenantTrials({ tenantId: TENANT_ID });
+      await expectDbError(request);
+    }
+  });
+
   test('rejects tenant history rows outside the requested tenant', async () => {
     const f = harness({ tableResult: { data: [{ ...pendingTrial,
       tenant_id: OTHER_TENANT_ID }], error: null, count: 1 } });
-    await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
-      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    await expectDbError(f.repository.listTenantTrials({ tenantId: TENANT_ID }));
   });
 
   test('selects and strictly parses the policy snapshot needed for audit facts', async () => {
@@ -171,8 +193,7 @@ describe('ServiceTrialRepository reads', () => {
     const malformed = harness({ tableResult: { data: [{ ...row,
       policy_snapshot: { ...policySnapshot, reminder_days: [3, 7, 3] },
     }], error: null, count: 1 } });
-    await expect(malformed.repository.listTenantTrials({ tenantId: TENANT_ID }))
-      .rejects.toMatchObject({ statusCode: 500, code: 'DB_ERROR' });
+    await expectDbError(malformed.repository.listTenantTrials({ tenantId: TENANT_ID }));
   });
 
   test('current tenant trial only considers attributable statuses and one row', async () => {
@@ -192,8 +213,7 @@ describe('ServiceTrialRepository reads', () => {
         withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '已撤回' },
     ]) {
       const f = harness({ tableResult: { data, error: null } });
-      await expect(f.repository.findCurrentTenantTrial(TENANT_ID)).rejects
-        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+      await expectDbError(f.repository.findCurrentTenantTrial(TENANT_ID));
     }
   });
 
@@ -268,12 +288,7 @@ describe('ServiceTrialRepository reads', () => {
     const row = { ...activeTrial,
       tenant: { ...tenantSummary, id: OTHER_TENANT_ID }, assignee: assigneeSummary };
     const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
-    await expect(f.repository.listPlatformTrials({})).rejects.toMatchObject({
-      statusCode: 500,
-      code: 'DB_ERROR',
-      message: '查询平台技术服务试用列表失败',
-      details: undefined,
-    });
+    await expectDbError(f.repository.listPlatformTrials({}), '查询平台技术服务试用列表失败');
   });
 
   test('uses database-compatible strict tenant and assignee relation facts', async () => {
@@ -294,8 +309,7 @@ describe('ServiceTrialRepository reads', () => {
         assignee: { ...assigneeSummary, status: 'deleted' } },
     ]) {
       const invalid = harness({ tableResult: { data: [row], error: null, count: 1 } });
-      await expect(invalid.repository.listPlatformTrials({})).rejects
-        .toMatchObject({ statusCode: 500, code: 'DB_ERROR' });
+      await expectDbError(invalid.repository.listPlatformTrials({}));
     }
   });
 
@@ -308,8 +322,7 @@ describe('ServiceTrialRepository reads', () => {
       { assigneeEmployeeId: ACTOR_ID },
     ]) {
       const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
-      await expect(f.repository.listPlatformTrials(input)).rejects
-        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+      await expectDbError(f.repository.listPlatformTrials(input));
     }
   });
 
@@ -343,8 +356,7 @@ describe('ServiceTrialRepository reads', () => {
       converted_order_id: convertedOrderId, converted_at: NOW },
   ])('rejects partial or status-contradictory lifecycle facts', async (row) => {
     const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
-    await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
-      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    await expectDbError(f.repository.listTenantTrials({ tenantId: TENANT_ID }));
   });
 
   test('accepts conversion attribution on legal terminal trial facts', async () => {
@@ -366,7 +378,7 @@ describe('ServiceTrialRepository reads', () => {
       { ...activeTrial, status: 'revoked', revoked_at: NOW,
         revoked_by_employee_id: ACTOR_ID, revoke_reason: '撤销', ...conversion },
     ] satisfies TrialRecord[];
-    const f = harness({ tableResult: { data: rows, error: null, count: 3 } });
+    const f = harness({ tableResult: { data: rows, error: null, count: 6 } });
     expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
       .toEqual(rows);
   });
@@ -386,11 +398,7 @@ describe('ServiceTrialRepository reads', () => {
     const malformed = harness({
       rpcResult: { data: { ...summary, secret: 'must-not-pass' }, error: null },
     });
-    await expect(malformed.repository.getPlatformSummary(NOW)).rejects.toMatchObject({
-      statusCode: 500,
-      code: 'DB_ERROR',
-      details: undefined,
-    });
+    await expectDbError(malformed.repository.getPlatformSummary(NOW));
   });
 
   test('binds summary server time to the requested instant', async () => {
@@ -407,8 +415,7 @@ describe('ServiceTrialRepository reads', () => {
     const mismatch = harness({ rpcResult: { data: {
       ...summary, server_time: '2026-08-11T16:00:01+08:00',
     }, error: null } });
-    await expect(mismatch.repository.getPlatformSummary(NOW)).rejects
-      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    await expectDbError(mismatch.repository.getPlatformSummary(NOW));
   });
 
   test('detail fetches trial, summaries, and bounded ordered events once', async () => {
@@ -432,8 +439,7 @@ describe('ServiceTrialRepository reads', () => {
     const f = harness({ tableResult: { data: { ...activeTrial,
       tenant: tenantSummary, assignee: assigneeSummary,
       events: [{ ...event, tenant_id: OTHER_TENANT_ID }] }, error: null } });
-    await expect(f.repository.findTrialById({ id: TRIAL_ID })).rejects
-      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    await expectDbError(f.repository.findTrialById({ id: TRIAL_ID }));
   });
 
   test('binds detail identity to requested id and optional tenant', async () => {
@@ -444,8 +450,7 @@ describe('ServiceTrialRepository reads', () => {
       { id: TRIAL_ID, tenantId: OTHER_TENANT_ID },
     ]) {
       const f = harness({ tableResult: { data: detail, error: null } });
-      await expect(f.repository.findTrialById(input)).rejects
-        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+      await expectDbError(f.repository.findTrialById(input));
     }
   });
 
@@ -463,11 +468,7 @@ describe('ServiceTrialRepository reads', () => {
   test('rejects inconsistent current policy reminder facts', async () => {
     const policy = { ...currentPolicy, trial_days: 5, reminder_days: [3, 7, 3] };
     const f = harness({ tableResult: { data: policy, error: null } });
-    await expect(f.repository.findCurrentPolicy()).rejects.toMatchObject({
-      statusCode: 500,
-      code: 'DB_ERROR',
-      details: undefined,
-    });
+    await expectDbError(f.repository.findCurrentPolicy());
   });
 
   test('wraps returned and rejected read failures without raw details', async () => {
