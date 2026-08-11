@@ -86,7 +86,7 @@ BEGIN
   SELECT id, recharge_guard_version
   INTO v_payment_config_id, v_payment_config_guard_version
   FROM public.platform_payment_configs
-  WHERE profile_code = 'tenant_service_provider'
+  WHERE profile_code = 'platform_direct_recharge'
     AND provider = 'wechat_pay'
     AND principal_type = 'platform'
     AND merchant_mode = 'direct_merchant'
