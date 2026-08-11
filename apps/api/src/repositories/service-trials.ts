@@ -35,7 +35,9 @@ export type {
   TrialSummary,
 } from './service-trial-records';
 
-const TRIAL_CURRENT_STATUSES = ['scheduled', 'active', 'grace_period'] as const;
+const TRIAL_CURRENT_STATUSES: readonly PlatformServiceTrialStatus[] = [
+  'pending_review', 'scheduled', 'active', 'grace_period',
+];
 export type PageData<T> = {
   list: T[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
@@ -93,7 +95,7 @@ export type ServiceTrialClient = {
   rpc(name: string, params: Record<string, unknown>): PromiseLike<QueryResult>;
 };
 
-const TRIAL_COLUMNS = 'id,tenant_id,source,trial_type,status,application_reason,expected_user_count,expected_project_count,contact_name,contact_phone,grant_reason,review_decision,review_reason,revoke_reason,withdraw_reason,requested_at,reviewed_at,granted_at,starts_at,activated_at,trial_ends_at,grace_ends_at,withdrawn_at,revoked_at,converted_at,converted_order_id,granted_by_employee_id,reviewed_by_employee_id,requested_by_employee_id,revoked_by_employee_id,withdrawn_by_employee_id,assignee_employee_id,scope_snapshot,extension_count,version,created_at,updated_at';
+const TRIAL_COLUMNS = 'id,tenant_id,source,trial_type,status,application_reason,expected_user_count,expected_project_count,contact_name,contact_phone,grant_reason,review_decision,review_reason,revoke_reason,withdraw_reason,requested_at,reviewed_at,granted_at,starts_at,activated_at,trial_ends_at,grace_ends_at,withdrawn_at,revoked_at,converted_at,converted_order_id,granted_by_employee_id,reviewed_by_employee_id,requested_by_employee_id,revoked_by_employee_id,withdrawn_by_employee_id,assignee_employee_id,scope_snapshot,policy_snapshot,extension_count,version,created_at,updated_at';
 const TENANT_RELATION = 'tenant:tenants!tenant_service_trials_tenant_id_fkey(id,name,slug)';
 const ASSIGNEE_RELATION = 'assignee:employees!tenant_service_trials_assignee_employee_id_fkey(id,name,phone,status)';
 const EVENT_RELATION = 'events:tenant_service_trial_events!tenant_service_trial_events_trial_identity_fkey(id,tenant_id,trial_id,event_key,event_type,from_status,to_status,reason,actor_employee_id,metadata,occurred_at,created_at)';
@@ -213,8 +215,13 @@ export class ServiceTrialRepository {
     if (input.status) query = query.eq('status', input.status);
     const result = await querySafely(() => query, '查询技术服务试用记录失败');
     if (result.error) throw Errors.dbError('查询技术服务试用记录失败');
-    return pageData(parse(z.array(TrialRowSchema), result.data,
-      '查询技术服务试用记录失败'), result.count, page);
+    const list = parse(z.array(TrialRowSchema), result.data,
+      '查询技术服务试用记录失败');
+    if (list.some((trial) => trial.tenant_id !== input.tenantId
+      || input.status !== undefined && trial.status !== input.status)) {
+      throw Errors.dbError('查询技术服务试用记录失败');
+    }
+    return pageData(list, result.count, page);
   }
 
   async findCurrentTenantTrial(tenantId: string): Promise<TrialRecord | null> {
@@ -224,8 +231,12 @@ export class ServiceTrialRepository {
       .limit(1).maybeSingle();
     const result = await querySafely(() => query, '查询当前技术服务试用失败');
     if (result.error) throw Errors.dbError('查询当前技术服务试用失败');
-    return result.data === null ? null
-      : parse(TrialRowSchema, result.data, '查询当前技术服务试用失败');
+    if (result.data === null) return null;
+    const trial = parse(TrialRowSchema, result.data, '查询当前技术服务试用失败');
+    if (trial.tenant_id !== tenantId || !TRIAL_CURRENT_STATUSES.includes(trial.status)) {
+      throw Errors.dbError('查询当前技术服务试用失败');
+    }
+    return trial;
   }
 
   async listPlatformTrials(input: PlatformTrialListInput): Promise<PageData<TrialListRecord>> {
@@ -252,8 +263,16 @@ export class ServiceTrialRepository {
     }
     const result = await querySafely(() => query, '查询平台技术服务试用列表失败');
     if (result.error) throw Errors.dbError('查询平台技术服务试用列表失败');
-    return pageData(parse(z.array(TrialListRawSchema), result.data,
-      '查询平台技术服务试用列表失败'), result.count, page);
+    const list = parse(z.array(TrialListRawSchema), result.data,
+      '查询平台技术服务试用列表失败');
+    if (list.some((trial) => input.status !== undefined && trial.status !== input.status
+      || input.source !== undefined && trial.source !== input.source
+      || input.trialType !== undefined && trial.trial_type !== input.trialType
+      || input.assigneeEmployeeId !== undefined
+        && trial.assignee_employee_id !== input.assigneeEmployeeId)) {
+      throw Errors.dbError('查询平台技术服务试用列表失败');
+    }
+    return pageData(list, result.count, page);
   }
 
   async getPlatformSummary(nowIso: string): Promise<TrialSummary> {
@@ -261,7 +280,11 @@ export class ServiceTrialRepository {
       'platform_service_trial_platform_summary', { p_now: nowIso },
     ), '查询平台技术服务试用概览失败');
     if (result.error) throw Errors.dbError('查询平台技术服务试用概览失败');
-    return parse(TrialSummarySchema, result.data, '查询平台技术服务试用概览失败');
+    const summary = parse(TrialSummarySchema, result.data, '查询平台技术服务试用概览失败');
+    if (Date.parse(summary.server_time) !== Date.parse(nowIso)) {
+      throw Errors.dbError('查询平台技术服务试用概览失败');
+    }
+    return summary;
   }
 
   async findTrialById(input: { id: string; tenantId?: string }): Promise<TrialDetailRecord | null> {
@@ -274,8 +297,13 @@ export class ServiceTrialRepository {
       .limit(SERVICE_TRIAL_EVENT_LIMIT, { referencedTable: 'events' }).maybeSingle();
     const result = await querySafely(() => request, '查询技术服务试用详情失败');
     if (result.error) throw Errors.dbError('查询技术服务试用详情失败');
-    return result.data === null ? null
-      : parse(TrialDetailSchema, result.data, '查询技术服务试用详情失败');
+    if (result.data === null) return null;
+    const trial = parse(TrialDetailSchema, result.data, '查询技术服务试用详情失败');
+    if (trial.id !== input.id
+      || input.tenantId !== undefined && trial.tenant_id !== input.tenantId) {
+      throw Errors.dbError('查询技术服务试用详情失败');
+    }
+    return trial;
   }
 
   async findCurrentPolicy(): Promise<TrialPolicyRecord | null> {
@@ -300,6 +328,10 @@ export class ServiceTrialRepository {
       result.data, '执行技术服务试用操作失败');
     if ('tenantId' in input && parsed.tenant_id !== input.tenantId
       || 'trialId' in input && parsed.trial_id !== input.trialId) {
+      throw Errors.dbError('执行技术服务试用操作失败');
+    }
+    if (input.action === 'assign' && 'assigned' in parsed
+      && parsed.assigned !== (input.assigneeEmployeeId !== null)) {
       throw Errors.dbError('执行技术服务试用操作失败');
     }
     return parsed;

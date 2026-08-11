@@ -1,24 +1,33 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-
+import { createClient } from '@supabase/supabase-js';
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
-
 import type { ServiceTrialClient, TrialPolicyRecord, TrialRecord } from './service-trials';
-
 let ServiceTrialRepository: typeof import('./service-trials').ServiceTrialRepository;
 beforeAll(async () => ({ ServiceTrialRepository } = await import('./service-trials')));
-
 type DbResult = { data: unknown; error: unknown; count?: number | null };
 type Call = readonly [string, ...unknown[]];
-
 const TRIAL_ID = '11111111-1111-4111-8111-111111111111';
 const TENANT_ID = '22222222-2222-4222-8222-222222222222';
 const OTHER_TENANT_ID = '33333333-3333-4333-8333-333333333333';
 const ACTOR_ID = '44444444-4444-4444-8444-444444444444';
 const ASSIGNEE_ID = '55555555-5555-4555-8555-555555555555';
 const NOW = '2026-08-11T08:00:00.000Z';
-
+const policySnapshot = {
+  policy_id: '99999999-9999-4999-8999-999999999999',
+  version: 1,
+  trial_days: 30,
+  grace_days: 7,
+  max_trial_days: 60,
+  max_grace_days: 14,
+  max_schedule_days: 30,
+  max_extension_count: 1,
+  max_extension_days: 30,
+  reapply_cooldown_days: 30,
+  allow_repeat: false,
+  reminder_days: [7, 3, 1],
+};
 const pendingTrial = {
   id: TRIAL_ID, tenant_id: TENANT_ID, source: 'tenant_application',
   trial_type: 'standard', status: 'pending_review',
@@ -35,11 +44,11 @@ const pendingTrial = {
   revoked_by_employee_id: null, withdrawn_by_employee_id: null,
   assignee_employee_id: null,
   scope_snapshot: { version: 1, capabilities: ['core.projects'] },
+  policy_snapshot: policySnapshot,
   extension_count: 0, version: 1,
   created_at: '2026-08-10T08:00:00.000Z',
   updated_at: '2026-08-10T08:00:00.000Z',
 } satisfies TrialRecord;
-
 const activeTrial = {
   ...pendingTrial, source: 'platform_grant', trial_type: 'guided', status: 'active',
   application_reason: null, expected_user_count: null, expected_project_count: null,
@@ -52,11 +61,10 @@ const activeTrial = {
   grace_ends_at: '2026-09-16T08:00:00.000Z',
   granted_by_employee_id: ACTOR_ID, assignee_employee_id: ASSIGNEE_ID,
 } satisfies TrialRecord;
-
 const tenantSummary = { id: TENANT_ID, name: '示例企业', slug: 'example' };
 const assigneeSummary = {
   id: ASSIGNEE_ID, name: '平台顾问', phone: '13900139000', status: 'active',
-};
+} as const;
 const event = {
   id: '77777777-7777-4777-8777-777777777777',
   tenant_id: TENANT_ID, trial_id: TRIAL_ID, event_key: 'trial-granted',
@@ -65,7 +73,6 @@ const event = {
   occurred_at: '2026-08-10T08:00:00.000Z',
   created_at: '2026-08-10T08:00:00.000Z',
 } as const;
-
 const currentPolicy = {
   id: '88888888-8888-4888-8888-888888888888', is_current: true,
   trial_days: 30, grace_days: 7, reminder_days: [7, 3, 1],
@@ -78,7 +85,6 @@ const currentPolicy = {
   created_at: '2026-08-10T08:00:00.000Z',
   updated_at: '2026-08-10T08:00:00.000Z',
 } satisfies TrialPolicyRecord;
-
 function harness(input: { tableResult?: DbResult;
   rpcResult?: DbResult | (() => Promise<DbResult>) }) {
   const calls: Call[] = [];
@@ -147,14 +153,48 @@ describe('ServiceTrialRepository reads', () => {
     expect(f.calls).toContainEqual(['range', 0, 19]);
   });
 
+  test('rejects tenant history rows outside the requested tenant', async () => {
+    const f = harness({ tableResult: { data: [{ ...pendingTrial,
+      tenant_id: OTHER_TENANT_ID }], error: null, count: 1 } });
+    await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
+      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+  });
+
+  test('selects and strictly parses the policy snapshot needed for audit facts', async () => {
+    const row = { ...pendingTrial, policy_snapshot: policySnapshot };
+    const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
+    expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
+      .toEqual([row]);
+    expect(String(f.calls.find((call) => call[0] === 'select')?.[1]))
+      .toContain('policy_snapshot');
+
+    const malformed = harness({ tableResult: { data: [{ ...row,
+      policy_snapshot: { ...policySnapshot, reminder_days: [3, 7, 3] },
+    }], error: null, count: 1 } });
+    await expect(malformed.repository.listTenantTrials({ tenantId: TENANT_ID }))
+      .rejects.toMatchObject({ statusCode: 500, code: 'DB_ERROR' });
+  });
+
   test('current tenant trial only considers attributable statuses and one row', async () => {
-    const f = harness({ tableResult: { data: activeTrial, error: null } });
-    expect(await f.repository.findCurrentTenantTrial(TENANT_ID)).toEqual(activeTrial);
+    const f = harness({ tableResult: { data: pendingTrial, error: null } });
+    expect(await f.repository.findCurrentTenantTrial(TENANT_ID)).toEqual(pendingTrial);
     expect(f.calls).toContainEqual(['eq', 'tenant_id', TENANT_ID]);
     expect(f.calls).toContainEqual(['in', 'status',
-      ['scheduled', 'active', 'grace_period']]);
+      ['pending_review', 'scheduled', 'active', 'grace_period']]);
     expect(f.calls).toContainEqual(['limit', 1, undefined]);
     expect(f.calls).toContainEqual(['maybeSingle']);
+  });
+
+  test('rejects a current trial outside the requested tenant or attributable statuses', async () => {
+    for (const data of [
+      { ...pendingTrial, tenant_id: OTHER_TENANT_ID },
+      { ...pendingTrial, status: 'withdrawn', withdrawn_at: NOW,
+        withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '已撤回' },
+    ]) {
+      const f = harness({ tableResult: { data, error: null } });
+      await expect(f.repository.findCurrentTenantTrial(TENANT_ID)).rejects
+        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    }
   });
 
   test('platform list exposes tenant and assignee in one query with safe keyword syntax', async () => {
@@ -194,6 +234,36 @@ describe('ServiceTrialRepository reads', () => {
     expect(orFilter).not.toContain(',()"\\%_,keyword_tenant');
   });
 
+  test('encodes literal keyword characters through the real PostgREST client URL', async () => {
+    const requests: Request[] = [];
+    const fetchStub = (async (
+      input: string | URL | Request,
+      init?: RequestInit,
+    ) => {
+      const request = input instanceof Request
+        ? input
+        : new Request(input.toString(), init);
+      requests.push(request);
+      return new Response('[]', {
+        status: 200,
+        headers: { 'content-type': 'application/json', 'content-range': '*/0' },
+      });
+    }) as typeof fetch;
+    const client = createClient('http://127.0.0.1:54321', 'test-key', {
+      global: { fetch: fetchStub },
+    });
+    const repository = new ServiceTrialRepository(
+      () => client as unknown as ServiceTrialClient,
+    );
+
+    await repository.listPlatformTrials({ keyword: 'a,()"%_' + '\\' });
+
+    const url = new URL(requests[0]!.url);
+    expect(url.searchParams.get('keyword_tenant.name'))
+      .toBe(String.raw`ilike.%a,()"\%\_\\%`);
+    expect(url.searchParams.get('or')).toBe(String.raw`(contact_name.ilike."%a,()\"\\%\\_\\\\%",contact_phone.ilike."%a,()\"\\%\\_\\\\%",keyword_tenant.not.is.null)`);
+  });
+
   test('rejects inconsistent or malformed list relations without leaking data', async () => {
     const row = { ...activeTrial,
       tenant: { ...tenantSummary, id: OTHER_TENANT_ID }, assignee: assigneeSummary };
@@ -206,6 +276,43 @@ describe('ServiceTrialRepository reads', () => {
     });
   });
 
+  test('uses database-compatible strict tenant and assignee relation facts', async () => {
+    const nullableStatusRow = { ...activeTrial, tenant: tenantSummary,
+      assignee: { ...assigneeSummary, status: null } };
+    const valid = harness({ tableResult: {
+      data: [nullableStatusRow], error: null, count: 1,
+    } });
+    expect((await valid.repository.listPlatformTrials({})).list)
+      .toEqual([nullableStatusRow]);
+
+    for (const row of [
+      { ...activeTrial, tenant: { ...tenantSummary, name: null },
+        assignee: assigneeSummary },
+      { ...activeTrial, tenant: { ...tenantSummary, slug: null },
+        assignee: assigneeSummary },
+      { ...activeTrial, tenant: tenantSummary,
+        assignee: { ...assigneeSummary, status: 'deleted' } },
+    ]) {
+      const invalid = harness({ tableResult: { data: [row], error: null, count: 1 } });
+      await expect(invalid.repository.listPlatformTrials({})).rejects
+        .toMatchObject({ statusCode: 500, code: 'DB_ERROR' });
+    }
+  });
+
+  test('rejects platform list rows that contradict requested filters', async () => {
+    const row = { ...activeTrial, tenant: tenantSummary, assignee: assigneeSummary };
+    for (const input of [
+      { status: 'pending_review' as const },
+      { source: 'tenant_application' as const },
+      { trialType: 'standard' as const },
+      { assigneeEmployeeId: ACTOR_ID },
+    ]) {
+      const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
+      await expect(f.repository.listPlatformTrials(input)).rejects
+        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    }
+  });
+
   test('rejects impossible partial trial time facts', async () => {
     const malformed = { ...pendingTrial, status: 'rejected',
       review_decision: 'rejected', review_reason: '不符合条件',
@@ -213,6 +320,56 @@ describe('ServiceTrialRepository reads', () => {
     const f = harness({ tableResult: { data: [malformed], error: null, count: 1 } });
     await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
       .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+  });
+
+  test('rejects partial or status-contradictory lifecycle facts', async () => {
+    const convertedOrderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const tenantApplicationActive = {
+      ...activeTrial,
+      source: 'tenant_application',
+      application_reason: '体验项目协作',
+      expected_user_count: 10,
+      expected_project_count: 3,
+      contact_name: '张三',
+      contact_phone: '13800138000',
+      requested_at: NOW,
+      requested_by_employee_id: ACTOR_ID,
+    };
+    const invalidRows = [
+      { ...pendingTrial, converted_order_id: convertedOrderId },
+      { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
+        reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID,
+        review_reason: '不通过', granted_at: NOW },
+      tenantApplicationActive,
+      { ...pendingTrial, withdrawn_at: NOW,
+        withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '撤回' },
+      { ...pendingTrial, review_decision: 'approved', reviewed_at: NOW,
+        reviewed_by_employee_id: null, review_reason: '通过' },
+    ];
+    for (const row of invalidRows) {
+      const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
+      await expect(f.repository.listTenantTrials({ tenantId: TENANT_ID })).rejects
+        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    }
+  });
+
+  test('accepts conversion attribution on legal terminal trial facts', async () => {
+    const conversion = {
+      converted_order_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      converted_at: NOW,
+    };
+    const rows = [
+      { ...pendingTrial, status: 'rejected', review_decision: 'rejected',
+        reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID,
+        review_reason: '不通过', ...conversion },
+      { ...pendingTrial, status: 'withdrawn', withdrawn_at: NOW,
+        withdrawn_by_employee_id: ACTOR_ID, withdraw_reason: '撤回', ...conversion },
+      { ...activeTrial, status: 'revoked', revoked_at: NOW,
+        revoked_by_employee_id: ACTOR_ID, revoke_reason: '撤销', ...conversion },
+    ] satisfies TrialRecord[];
+    const f = harness({ tableResult: { data: rows, error: null, count: 3 } });
+    expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
+      .toEqual(rows);
   });
 
   test('summary uses one exact RPC call and strictly parses the envelope', async () => {
@@ -235,6 +392,24 @@ describe('ServiceTrialRepository reads', () => {
       code: 'DB_ERROR',
       details: undefined,
     });
+  });
+
+  test('binds summary server time to the requested instant', async () => {
+    const summary = {
+      pending_review_count: 0, scheduled_count: 0, current_active_count: 0,
+      expiring_within_7_days_count: 0, month_new_count: 0,
+      month_approved_count: 0, month_converted_count: 0,
+      application_approval_rate: 0, activated_cohort_conversion_rate: 0,
+      server_time: '2026-08-11T16:00:00+08:00',
+    };
+    const equivalent = harness({ rpcResult: { data: summary, error: null } });
+    expect(await equivalent.repository.getPlatformSummary(NOW)).toEqual(summary);
+
+    const mismatch = harness({ rpcResult: { data: {
+      ...summary, server_time: '2026-08-11T16:00:01+08:00',
+    }, error: null } });
+    await expect(mismatch.repository.getPlatformSummary(NOW)).rejects
+      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
   });
 
   test('detail fetches trial, summaries, and bounded ordered events once', async () => {
@@ -260,6 +435,19 @@ describe('ServiceTrialRepository reads', () => {
       events: [{ ...event, tenant_id: OTHER_TENANT_ID }] }, error: null } });
     await expect(f.repository.findTrialById({ id: TRIAL_ID })).rejects
       .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+  });
+
+  test('binds detail identity to requested id and optional tenant', async () => {
+    const detail = { ...activeTrial, tenant: tenantSummary,
+      assignee: assigneeSummary, events: [event] };
+    for (const input of [
+      { id: OTHER_TENANT_ID },
+      { id: TRIAL_ID, tenantId: OTHER_TENANT_ID },
+    ]) {
+      const f = harness({ tableResult: { data: detail, error: null } });
+      await expect(f.repository.findTrialById(input)).rejects
+        .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+    }
   });
 
   test('reads and validates only the current policy row', async () => {

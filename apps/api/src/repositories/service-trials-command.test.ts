@@ -198,6 +198,26 @@ describe('ServiceTrialRepository commands', () => {
       .toMatchObject({ statusCode: 500, code: 'DB_ERROR' });
   });
 
+  test('binds assign result to whether an assignee was requested', async () => {
+    const assignedInput = commandCases[6]!.input;
+    const mismatchedAssigned = harness({ data: {
+      ...commandResult, assigned: false,
+    }, error: null });
+    await expect(mismatchedAssigned.repository.executeCommand(assignedInput)).rejects
+      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+
+    const clearedInput: TrialCommandInput = {
+      action: 'assign', trialId: TRIAL_ID, actorEmployeeId: ACTOR_ID,
+      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
+      assigneeEmployeeId: null,
+    };
+    const mismatchedCleared = harness({ data: {
+      ...commandResult, assigned: true,
+    }, error: null });
+    await expect(mismatchedCleared.repository.executeCommand(clearedInput)).rejects
+      .toMatchObject({ statusCode: 500, code: 'DB_ERROR', details: undefined });
+  });
+
   test.each([
     ['SERVICE_TRIAL_NOT_FOUND', 404],
     ['SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE', 403],
