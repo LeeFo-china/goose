@@ -174,6 +174,14 @@ function validateTrialFacts(row: TrialRow, context: z.RefinementCtx): void {
 }
 
 export const TrialRowSchema = TrialRowObjectSchema.superRefine(validateTrialFacts);
+const MaskedContactNameSchema = z.string().min(2).max(80).regex(/^.\*+$/u);
+const MaskedContactPhoneSchema = z.string().regex(/^1[3-9]\d\*{4}\d{4}$/);
+const TrialListRowObjectSchema = TrialRowObjectSchema.extend({
+  contact_name: MaskedContactNameSchema.nullable(),
+  contact_phone: MaskedContactPhoneSchema.nullable(),
+});
+export const TenantTrialListRawSchema = TrialListRowObjectSchema
+  .superRefine(validateTrialFacts);
 const TenantSummarySchema = z.object({
   id: z.uuid(), name: z.string().min(1), slug: z.string().min(1),
 }).strict();
@@ -197,7 +205,7 @@ const EventSchema = z.object({
 }).strict();
 
 export const TrialListRawSchema = z.object({
-  ...TrialRowObjectSchema.shape,
+  ...TrialListRowObjectSchema.shape,
   tenant: TenantSummarySchema,
   assignee: AssigneeSummarySchema.nullable(),
   keyword_tenant: z.object({}).strict().nullable().optional(),

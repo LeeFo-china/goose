@@ -42,13 +42,14 @@ export class TenantServiceTrialService {
     query: Partial<ServiceTrialListQuery>,
   ) {
     const tenantId = this.requirePermission(authContext, READ_PERMISSION);
+    const now = this.nowFactory();
     const page = await this.repository.listTenantTrials({
       tenantId,
       page: query.page,
       pageSize: query.pageSize,
       status: query.status,
+      nowIso: now.toISOString(),
     });
-    const now = this.nowFactory();
     const permissions = permissionSet(authContext);
     return {
       ...page,

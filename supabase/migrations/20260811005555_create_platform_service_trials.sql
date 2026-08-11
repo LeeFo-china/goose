@@ -276,38 +276,96 @@ CREATE TABLE public.tenant_service_trials (
     )
   ) IS TRUE),
   CONSTRAINT tenant_service_trials_status_facts_check CHECK ((
-    (status = 'pending_review' AND reviewed_at IS NULL AND granted_at IS NULL
-      AND starts_at IS NULL AND trial_ends_at IS NULL AND grace_ends_at IS NULL)
-    OR (status IN ('scheduled', 'active', 'grace_period', 'expired')
+    (status = 'pending_review'
+      AND reviewed_at IS NULL AND reviewed_by_employee_id IS NULL
+      AND review_decision IS NULL AND review_reason IS NULL
+      AND granted_at IS NULL AND granted_by_employee_id IS NULL
+      AND starts_at IS NULL AND activated_at IS NULL
+      AND trial_ends_at IS NULL AND grace_ends_at IS NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL AND revoked_at IS NULL
+      AND revoked_by_employee_id IS NULL AND revoke_reason IS NULL
+      AND converted_at IS NULL AND converted_order_id IS NULL)
+    OR (status = 'scheduled'
       AND granted_at IS NOT NULL AND granted_by_employee_id IS NOT NULL
       AND starts_at IS NOT NULL AND trial_ends_at IS NOT NULL
-      AND grace_ends_at IS NOT NULL)
-    OR (status = 'converted' AND converted_order_id IS NOT NULL AND (
-      (granted_at IS NOT NULL AND granted_by_employee_id IS NOT NULL
-        AND starts_at IS NOT NULL AND trial_ends_at IS NOT NULL
-        AND grace_ends_at IS NOT NULL)
-      OR (granted_at IS NULL AND granted_by_employee_id IS NULL
-        AND starts_at IS NULL AND trial_ends_at IS NULL
-        AND grace_ends_at IS NULL)
-    ))
+      AND grace_ends_at IS NOT NULL AND activated_at IS NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL AND revoked_at IS NULL
+      AND revoked_by_employee_id IS NULL AND revoke_reason IS NULL
+      AND converted_at IS NULL AND converted_order_id IS NULL)
+    OR (status IN ('active', 'grace_period', 'expired')
+      AND granted_at IS NOT NULL AND granted_by_employee_id IS NOT NULL
+      AND starts_at IS NOT NULL AND trial_ends_at IS NOT NULL
+      AND grace_ends_at IS NOT NULL AND activated_at IS NOT NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL AND revoked_at IS NULL
+      AND revoked_by_employee_id IS NULL AND revoke_reason IS NULL
+      AND converted_at IS NULL AND converted_order_id IS NULL)
     OR (status = 'rejected' AND review_decision = 'rejected'
       AND reviewed_at IS NOT NULL AND reviewed_by_employee_id IS NOT NULL
-      AND review_reason IS NOT NULL)
+      AND review_reason IS NOT NULL
+      AND granted_at IS NULL AND granted_by_employee_id IS NULL
+      AND starts_at IS NULL AND activated_at IS NULL
+      AND trial_ends_at IS NULL AND grace_ends_at IS NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL AND revoked_at IS NULL
+      AND revoked_by_employee_id IS NULL AND revoke_reason IS NULL)
     OR (status = 'withdrawn' AND withdrawn_at IS NOT NULL
-      AND withdrawn_by_employee_id IS NOT NULL AND withdraw_reason IS NOT NULL)
+      AND withdrawn_by_employee_id IS NOT NULL AND withdraw_reason IS NOT NULL
+      AND review_decision IS NULL AND reviewed_at IS NULL
+      AND reviewed_by_employee_id IS NULL AND review_reason IS NULL
+      AND granted_at IS NULL AND granted_by_employee_id IS NULL
+      AND starts_at IS NULL AND activated_at IS NULL
+      AND trial_ends_at IS NULL AND grace_ends_at IS NULL
+      AND revoked_at IS NULL AND revoked_by_employee_id IS NULL
+      AND revoke_reason IS NULL)
     OR (status = 'revoked' AND revoked_at IS NOT NULL
-      AND revoked_by_employee_id IS NOT NULL AND revoke_reason IS NOT NULL)
+      AND revoked_by_employee_id IS NOT NULL AND revoke_reason IS NOT NULL
+      AND granted_at IS NOT NULL AND granted_by_employee_id IS NOT NULL
+      AND starts_at IS NOT NULL AND trial_ends_at IS NOT NULL
+      AND grace_ends_at IS NOT NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL)
+    OR (status = 'converted' AND converted_at IS NOT NULL
+      AND converted_order_id IS NOT NULL
+      AND withdrawn_at IS NULL AND withdrawn_by_employee_id IS NULL
+      AND withdraw_reason IS NULL AND revoked_at IS NULL
+      AND revoked_by_employee_id IS NULL AND revoke_reason IS NULL
+      AND (
+        (granted_at IS NOT NULL AND granted_by_employee_id IS NOT NULL
+          AND starts_at IS NOT NULL AND trial_ends_at IS NOT NULL
+          AND grace_ends_at IS NOT NULL)
+        OR (granted_at IS NULL AND granted_by_employee_id IS NULL
+          AND starts_at IS NULL AND activated_at IS NULL
+          AND trial_ends_at IS NULL AND grace_ends_at IS NULL
+          AND review_decision IS NULL AND reviewed_at IS NULL
+          AND reviewed_by_employee_id IS NULL AND review_reason IS NULL)
+      ))
   ) IS TRUE),
   CONSTRAINT tenant_service_trials_review_facts_check CHECK ((
-    (review_decision IS NULL AND reviewed_at IS NULL
-      AND reviewed_by_employee_id IS NULL AND review_reason IS NULL)
-    OR (review_decision IN ('approved', 'rejected')
-      AND reviewed_at IS NOT NULL AND reviewed_by_employee_id IS NOT NULL
-      AND review_reason IS NOT NULL)
+    (source = 'platform_grant' AND review_decision IS NULL
+      AND reviewed_at IS NULL AND reviewed_by_employee_id IS NULL
+      AND review_reason IS NULL)
+    OR (source = 'tenant_application' AND (
+      (review_decision IS NULL AND reviewed_at IS NULL
+        AND reviewed_by_employee_id IS NULL AND review_reason IS NULL
+        AND (status IN ('pending_review', 'withdrawn')
+          OR (status = 'converted' AND granted_at IS NULL)))
+      OR (review_decision = 'approved' AND reviewed_at IS NOT NULL
+        AND reviewed_by_employee_id IS NOT NULL AND review_reason IS NOT NULL
+        AND status IN (
+          'scheduled', 'active', 'grace_period', 'expired', 'revoked', 'converted'
+        ) AND granted_at IS NOT NULL)
+      OR (review_decision = 'rejected' AND reviewed_at IS NOT NULL
+        AND reviewed_by_employee_id IS NOT NULL AND review_reason IS NOT NULL
+        AND status = 'rejected')
+    ))
   ) IS TRUE),
   CONSTRAINT tenant_service_trials_conversion_facts_check CHECK ((
     (converted_order_id IS NULL AND converted_at IS NULL)
-    OR (converted_order_id IS NOT NULL AND converted_at IS NOT NULL)
+    OR (converted_order_id IS NOT NULL AND converted_at IS NOT NULL
+      AND status IN ('converted', 'rejected', 'withdrawn', 'revoked'))
   ) IS TRUE),
   CONSTRAINT tenant_service_trials_duration_hard_limit_check CHECK ((
     (starts_at IS NULL AND trial_ends_at IS NULL AND grace_ends_at IS NULL)
@@ -324,6 +382,11 @@ CREATE TABLE public.tenant_service_trials (
     public.platform_service_trial_scope_valid(scope_snapshot)
     AND jsonb_typeof(policy_snapshot) = 'object'
     AND pg_column_size(policy_snapshot) <= 8192
+    AND (
+      (granted_at IS NULL AND NOT policy_snapshot ? 'override_used')
+      OR (granted_at IS NOT NULL
+        AND jsonb_typeof(policy_snapshot->'override_used') = 'boolean')
+    )
   ) IS TRUE),
   CONSTRAINT tenant_service_trials_contact_check CHECK ((
     (contact_name IS NULL OR (btrim(contact_name) <> '' AND char_length(contact_name) <= 80))
@@ -2267,6 +2330,123 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.platform_service_trial_list(
+  p_tenant_id uuid DEFAULT NULL,
+  p_platform boolean DEFAULT false,
+  p_page integer DEFAULT 1,
+  p_page_size integer DEFAULT 20,
+  p_keyword text DEFAULT NULL,
+  p_status text DEFAULT NULL,
+  p_source text DEFAULT NULL,
+  p_trial_type text DEFAULT NULL,
+  p_assignee_employee_id uuid DEFAULT NULL,
+  p_applied_from timestamptz DEFAULT NULL,
+  p_applied_to timestamptz DEFAULT NULL,
+  p_expires_from timestamptz DEFAULT NULL,
+  p_expires_to timestamptz DEFAULT NULL,
+  p_now timestamptz DEFAULT clock_timestamp()
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_result jsonb;
+BEGIN
+  IF p_platform IS NULL OR p_page IS NULL OR p_page < 1
+    OR p_page_size IS NULL OR p_page_size NOT BETWEEN 1 AND 100
+    OR p_now IS NULL
+    OR (p_platform AND p_tenant_id IS NOT NULL)
+    OR (NOT p_platform AND p_tenant_id IS NULL)
+    OR (p_status IS NOT NULL AND p_status NOT IN (
+      'pending_review', 'scheduled', 'active', 'grace_period', 'expired',
+      'rejected', 'withdrawn', 'revoked', 'converted'
+    ))
+    OR (p_source IS NOT NULL
+      AND p_source NOT IN ('tenant_application', 'platform_grant'))
+    OR (p_trial_type IS NOT NULL AND p_trial_type NOT IN ('standard', 'guided'))
+    OR (NOT p_platform AND (
+      p_keyword IS NOT NULL OR p_source IS NOT NULL OR p_trial_type IS NOT NULL
+      OR p_assignee_employee_id IS NOT NULL OR p_applied_from IS NOT NULL
+      OR p_applied_to IS NOT NULL OR p_expires_from IS NOT NULL
+      OR p_expires_to IS NOT NULL
+    ))
+  THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+
+  WITH effective AS MATERIALIZED (
+    SELECT trial.*,
+      CASE
+        WHEN trial.status IN ('scheduled', 'active', 'grace_period')
+          AND p_now >= trial.grace_ends_at THEN 'expired'
+        WHEN trial.status IN ('scheduled', 'active')
+          AND p_now >= trial.trial_ends_at
+          AND p_now < trial.grace_ends_at THEN 'grace_period'
+        WHEN trial.status = 'scheduled' AND p_now >= trial.starts_at THEN 'active'
+        ELSE trial.status
+      END AS effective_status,
+      jsonb_build_object(
+        'id', tenant.id, 'name', tenant.name, 'slug', tenant.slug
+      ) AS tenant,
+      CASE WHEN assignee.id IS NULL THEN NULL ELSE jsonb_build_object(
+        'id', assignee.id, 'name', assignee.name,
+        'phone', CASE WHEN assignee.phone IS NULL THEN NULL ELSE
+          substring(assignee.phone FROM 1 FOR 3) || '****' || right(assignee.phone, 4)
+        END, 'status', assignee.status
+      ) END AS assignee
+    FROM public.tenant_service_trials AS trial
+    JOIN public.tenants AS tenant ON tenant.id = trial.tenant_id
+    LEFT JOIN public.employees AS assignee
+      ON assignee.id = trial.assignee_employee_id
+    WHERE p_platform OR trial.tenant_id = p_tenant_id
+  ), filtered AS MATERIALIZED (
+    SELECT * FROM effective
+    WHERE (p_status IS NULL OR effective_status = p_status)
+      AND (p_source IS NULL OR source = p_source)
+      AND (p_trial_type IS NULL OR trial_type = p_trial_type)
+      AND (p_assignee_employee_id IS NULL
+        OR assignee_employee_id = p_assignee_employee_id)
+      AND (p_applied_from IS NULL OR requested_at >= p_applied_from)
+      AND (p_applied_to IS NULL OR requested_at <= p_applied_to)
+      AND (p_expires_from IS NULL OR trial_ends_at >= p_expires_from)
+      AND (p_expires_to IS NULL OR trial_ends_at <= p_expires_to)
+      AND (NULLIF(btrim(p_keyword), '') IS NULL
+        OR strpos(lower(tenant->>'name'), lower(btrim(p_keyword))) > 0
+        OR strpos(lower(coalesce(contact_name, '')), lower(btrim(p_keyword))) > 0
+        OR strpos(lower(coalesce(contact_phone, '')), lower(btrim(p_keyword))) > 0)
+  ), paged AS MATERIALIZED (
+    SELECT * FROM filtered
+    ORDER BY created_at DESC, id DESC
+    LIMIT p_page_size OFFSET (p_page - 1) * p_page_size
+  ), aggregate AS (
+    SELECT coalesce(jsonb_agg(jsonb_build_object(
+      'trial', (CASE WHEN p_platform THEN
+        to_jsonb(paged) - ARRAY['enterprise_identity_hash', 'effective_status']
+      ELSE to_jsonb(paged) - ARRAY[
+        'enterprise_identity_hash', 'effective_status', 'tenant', 'assignee'
+      ] END) || jsonb_build_object(
+        'contact_name', CASE WHEN contact_name IS NULL THEN NULL ELSE
+          substring(contact_name FROM 1 FOR 1)
+            || repeat('*', greatest(1, char_length(contact_name) - 1)) END,
+        'contact_phone', CASE WHEN contact_phone IS NULL THEN NULL ELSE
+          substring(contact_phone FROM 1 FOR 3) || '****' || right(contact_phone, 4) END
+      ),
+      'effective_status', effective_status
+    ) ORDER BY created_at DESC, id DESC), '[]'::jsonb) AS items
+    FROM paged
+  )
+  SELECT jsonb_build_object(
+    'items', aggregate.items,
+    'total', (SELECT count(*) FROM filtered),
+    'page', p_page, 'page_size', p_page_size, 'server_time', p_now
+  ) INTO v_result
+  FROM aggregate;
+  RETURN v_result;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.platform_service_trial_platform_summary(
   p_now timestamptz DEFAULT clock_timestamp()
 )
@@ -2925,6 +3105,11 @@ REVOKE ALL ON FUNCTION public.platform_service_trial_update_policy(uuid, integer
 REVOKE ALL ON FUNCTION public.platform_service_trial_update_policy(uuid, integer, uuid, jsonb, text) FROM anon;
 REVOKE ALL ON FUNCTION public.platform_service_trial_update_policy(uuid, integer, uuid, jsonb, text) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.platform_service_trial_update_policy(uuid, integer, uuid, jsonb, text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.platform_service_trial_list(uuid, boolean, integer, integer, text, text, text, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.platform_service_trial_list(uuid, boolean, integer, integer, text, text, text, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) FROM anon;
+REVOKE ALL ON FUNCTION public.platform_service_trial_list(uuid, boolean, integer, integer, text, text, text, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.platform_service_trial_list(uuid, boolean, integer, integer, text, text, text, text, uuid, timestamptz, timestamptz, timestamptz, timestamptz, timestamptz) TO service_role;
 
 REVOKE ALL ON FUNCTION public.platform_service_trial_platform_summary(timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.platform_service_trial_platform_summary(timestamptz) FROM anon;

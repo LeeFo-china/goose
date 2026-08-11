@@ -1,4 +1,5 @@
 import {
+  PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   type PlatformServiceTrialScopeV1,
   type PlatformServiceTrialSource,
   type PlatformServiceTrialStatus,
@@ -17,6 +18,7 @@ import {
   SERVICE_TRIAL_EVENT_LIMIT,
   TrialDetailSchema,
   TrialListRawSchema,
+  TenantTrialListRawSchema,
   TrialPolicySchema,
   TrialRowSchema,
   TrialSummarySchema,
@@ -50,12 +52,13 @@ export type PageData<T> = {
 };
 export type TenantTrialListInput = {
   tenantId: string; page?: number; pageSize?: number; status?: PlatformServiceTrialStatus;
+  nowIso?: string;
 };
 export type PlatformTrialListInput = {
   page?: number; pageSize?: number; keyword?: string; status?: PlatformServiceTrialStatus;
   source?: PlatformServiceTrialSource; trialType?: PlatformServiceTrialType;
   assigneeEmployeeId?: string; appliedFrom?: string; appliedTo?: string;
-  expiresFrom?: string; expiresTo?: string;
+  expiresFrom?: string; expiresTo?: string; nowIso?: string;
 };
 
 type ApplyCommand = { action: 'apply'; tenantId: string; actorEmployeeId: string;
@@ -169,12 +172,44 @@ function pageData<T>(list: T[], count: number | null | undefined,
     total, totalPages: total === 0 ? 0 : Math.ceil(total / page.pageSize) } };
 }
 
-function keywordPattern(keyword: string): string {
-  return `%${keyword.trim().replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+const ListEnvelopeBaseSchema = {
+  total: z.number().int().nonnegative(), page: z.number().int().positive(),
+  page_size: z.number().int().min(1).max(100), server_time: z.iso.datetime({ offset: true }),
+};
+const TenantListEnvelopeSchema = z.object({
+  items: z.array(z.object({ trial: TenantTrialListRawSchema,
+    effective_status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES) }).strict()),
+  ...ListEnvelopeBaseSchema,
+}).strict();
+const PlatformListEnvelopeSchema = z.object({
+  items: z.array(z.object({ trial: TrialListRawSchema,
+    effective_status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES) }).strict()),
+  ...ListEnvelopeBaseSchema,
+}).strict();
+
+function listParams(input: PlatformTrialListInput, page: ReturnType<typeof pagination>,
+  tenantId: string | null, platform: boolean) {
+  return { p_tenant_id: tenantId, p_platform: platform,
+    p_page: page.page, p_page_size: page.pageSize,
+    p_keyword: input.keyword?.trim() || null, p_status: input.status ?? null,
+    p_source: input.source ?? null, p_trial_type: input.trialType ?? null,
+    p_assignee_employee_id: input.assigneeEmployeeId ?? null,
+    p_applied_from: input.appliedFrom ?? null, p_applied_to: input.appliedTo ?? null,
+    p_expires_from: input.expiresFrom ?? null, p_expires_to: input.expiresTo ?? null,
+    p_now: input.nowIso ?? new Date().toISOString() };
 }
 
-function quotePostgrest(value: string): string {
-  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+function parseListEnvelope<T extends TrialRecord | TrialListRecord>(data: unknown,
+  schema: typeof TenantListEnvelopeSchema | typeof PlatformListEnvelopeSchema,
+  input: { status?: PlatformServiceTrialStatus; nowIso?: string },
+  page: ReturnType<typeof pagination>, fallback: string): PageData<T> {
+  const envelope = parse(schema, data, fallback);
+  if (envelope.page !== page.page || envelope.page_size !== page.pageSize
+    || input.nowIso !== undefined
+      && Date.parse(envelope.server_time) !== Date.parse(input.nowIso)
+    || envelope.items.some((item) => input.status !== undefined
+      && item.effective_status !== input.status)) throw Errors.dbError(fallback);
+  return pageData(envelope.items.map((item) => item.trial) as T[], envelope.total, page);
 }
 
 const COMMAND_ERRORS = {
@@ -249,20 +284,17 @@ export class ServiceTrialRepository {
 
   async listTenantTrials(input: TenantTrialListInput): Promise<PageData<TrialRecord>> {
     const page = pagination(input.page, input.pageSize);
-    let query = this.clientProvider().from('tenant_service_trials')
-      .select(TRIAL_COLUMNS, { count: 'exact' }).eq('tenant_id', input.tenantId)
-      .order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(page.from, page.to);
-    if (input.status) query = query.eq('status', input.status);
-    const result = await querySafely(() => query, '查询技术服务试用记录失败');
+    const params = listParams(input, page, input.tenantId, false);
+    const result = await querySafely(() => this.clientProvider().rpc(
+      'platform_service_trial_list', params,
+    ), '查询技术服务试用记录失败');
     if (result.error) throw Errors.dbError('查询技术服务试用记录失败');
-    const list = parse(z.array(TrialRowSchema), result.data,
-      '查询技术服务试用记录失败');
-    if (list.some((trial) => trial.tenant_id !== input.tenantId
-      || input.status !== undefined && trial.status !== input.status)) {
+    const parsed = parseListEnvelope<TrialRecord>(result.data, TenantListEnvelopeSchema,
+      input, page, '查询技术服务试用记录失败');
+    if (parsed.list.some((trial) => trial.tenant_id !== input.tenantId)) {
       throw Errors.dbError('查询技术服务试用记录失败');
     }
-    return pageData(list, result.count, page);
+    return parsed;
   }
 
   async findCurrentTenantTrial(tenantId: string): Promise<TrialRecord | null> {
@@ -282,38 +314,20 @@ export class ServiceTrialRepository {
 
   async listPlatformTrials(input: PlatformTrialListInput): Promise<PageData<TrialListRecord>> {
     const page = pagination(input.page, input.pageSize);
-    let query = this.clientProvider().from('tenant_service_trials').select(
-      `${TRIAL_COLUMNS},${TENANT_RELATION},${ASSIGNEE_RELATION},keyword_tenant:tenants!tenant_service_trials_tenant_id_fkey()`,
-      { count: 'exact' },
-    ).order('created_at', { ascending: false }).order('id', { ascending: false })
-      .range(page.from, page.to);
-    if (input.status) query = query.eq('status', input.status);
-    if (input.source) query = query.eq('source', input.source);
-    if (input.trialType) query = query.eq('trial_type', input.trialType);
-    if (input.assigneeEmployeeId) query = query.eq('assignee_employee_id', input.assigneeEmployeeId);
-    if (input.appliedFrom) query = query.gte('requested_at', input.appliedFrom);
-    if (input.appliedTo) query = query.lte('requested_at', input.appliedTo);
-    if (input.expiresFrom) query = query.gte('trial_ends_at', input.expiresFrom);
-    if (input.expiresTo) query = query.lte('trial_ends_at', input.expiresTo);
-    if (input.keyword?.trim()) {
-      const pattern = keywordPattern(input.keyword);
-      const rawPattern = quotePostgrest(pattern);
-      query = query.ilike('keyword_tenant.name', pattern).or(
-        `contact_name.ilike.${rawPattern},contact_phone.ilike.${rawPattern},keyword_tenant.not.is.null`,
-      );
-    }
-    const result = await querySafely(() => query, '查询平台技术服务试用列表失败');
+    const params = listParams(input, page, null, true);
+    const result = await querySafely(() => this.clientProvider().rpc(
+      'platform_service_trial_list', params,
+    ), '查询平台技术服务试用列表失败');
     if (result.error) throw Errors.dbError('查询平台技术服务试用列表失败');
-    const list = parse(z.array(TrialListRawSchema), result.data,
-      '查询平台技术服务试用列表失败');
-    if (list.some((trial) => input.status !== undefined && trial.status !== input.status
-      || input.source !== undefined && trial.source !== input.source
+    const parsed = parseListEnvelope<TrialListRecord>(result.data,
+      PlatformListEnvelopeSchema, input, page, '查询平台技术服务试用列表失败');
+    if (parsed.list.some((trial) => input.source !== undefined && trial.source !== input.source
       || input.trialType !== undefined && trial.trial_type !== input.trialType
       || input.assigneeEmployeeId !== undefined
         && trial.assignee_employee_id !== input.assigneeEmployeeId)) {
       throw Errors.dbError('查询平台技术服务试用列表失败');
     }
-    return pageData(list, result.count, page);
+    return parsed;
   }
 
   async getPlatformSummary(nowIso: string): Promise<TrialSummary> {

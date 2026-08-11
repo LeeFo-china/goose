@@ -103,7 +103,8 @@ describe('TenantServiceTrialService', () => {
     );
 
     expect(repository.listTenantTrials).toHaveBeenCalledWith({
-      tenantId: TENANT_ID, page: 2, pageSize: 10,
+      tenantId: TENANT_ID, page: 2, pageSize: 10, status: undefined,
+      nowIso: NOW.toISOString(),
     });
     expect(result.server_time).toBe(NOW.toISOString());
     expect(result.list[0]).toMatchObject({

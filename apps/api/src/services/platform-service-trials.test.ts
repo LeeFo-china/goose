@@ -51,7 +51,7 @@ function platformAuth(permissionCodes: readonly string[]): AuthContext {
 }
 function createRepository() {
   return {
-    listPlatformTrials: mock(async () => ({
+    listPlatformTrials: mock(async (_input: unknown) => ({
       list: [makeTrialListRecord()],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     })),
@@ -139,6 +139,8 @@ describe('PlatformServiceTrialService reads', () => {
       page: 1, pageSize: 20, status: 'pending_review',
     });
     expect(repository.listPlatformTrials).toHaveBeenCalledTimes(1);
+    expect(repository.listPlatformTrials.mock.calls[0]![0])
+      .toMatchObject({ status: 'pending_review', nowIso: NOW.toISOString() });
     expect(repository.findTrialById).not.toHaveBeenCalled();
     expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
     expect(result.server_time).toBe(NOW.toISOString());

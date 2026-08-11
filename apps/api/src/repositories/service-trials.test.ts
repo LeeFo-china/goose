@@ -86,6 +86,23 @@ const currentPolicy = {
   created_at: '2026-08-10T08:00:00.000Z',
   updated_at: '2026-08-10T08:00:00.000Z',
 } satisfies TrialPolicyRecord;
+function maskedListTrial<T extends object>(row: T): T & {
+  contact_name: string | null; contact_phone: string | null;
+} {
+  const facts = row as Record<string, unknown>;
+  const contactName = typeof facts.contact_name === 'string' ? facts.contact_name : null;
+  const contactPhone = typeof facts.contact_phone === 'string' ? facts.contact_phone : null;
+  const assignee = facts.assignee && typeof facts.assignee === 'object'
+    ? { ...facts.assignee as Record<string, unknown>,
+      phone: typeof (facts.assignee as { phone?: unknown }).phone === 'string'
+        ? '139****9000' : null } : facts.assignee;
+  return { ...row, contact_name: contactName ? `${[...contactName][0]}${'*'.repeat(
+    Math.max(1, [...contactName].length - 1))}` : null,
+  contact_phone: contactPhone ? `${contactPhone.slice(0, 3)}****${contactPhone.slice(-4)}` : null,
+  ...('assignee' in row ? { assignee } : {}) } as T & {
+    contact_name: string | null; contact_phone: string | null;
+  };
+}
 function harness(input: { tableResult?: DbResult;
   rpcResult?: DbResult | (() => Promise<DbResult>) }) {
   const calls: Call[] = [];
@@ -114,6 +131,15 @@ function harness(input: { tableResult?: DbResult;
     rpc(name: string, params: Record<string, unknown>) {
       calls.push(['rpc', name, params]);
       if (typeof input.rpcResult === 'function') return input.rpcResult();
+      if (name === 'platform_service_trial_list') {
+        if (result.error) return Promise.resolve(result);
+        const rows = Array.isArray(result.data) ? result.data : result.data;
+        return Promise.resolve({ data: { items: Array.isArray(rows)
+          ? rows.map((row) => ({ trial: maskedListTrial(row),
+            effective_status: params.p_status ?? row.status })) : rows,
+        total: result.count, page: params.p_page, page_size: params.p_page_size,
+        server_time: params.p_now }, error: null });
+      }
       return Promise.resolve(input.rpcResult ?? { data: null, error: null });
     },
   };
@@ -139,20 +165,15 @@ describe('ServiceTrialRepository reads', () => {
     });
     expect(result.pagination).toEqual({ page: 2, pageSize: 100,
       total: 21, totalPages: 1 });
-    expect(result.list).toEqual([pendingTrial]);
-    expect(f.calls).toContainEqual(['eq', 'tenant_id', TENANT_ID]);
-    expect(f.calls).toContainEqual(['eq', 'status', 'pending_review']);
-    expect(f.calls).toContainEqual(['order', 'created_at', { ascending: false }]);
-    expect(f.calls).toContainEqual(['order', 'id', { ascending: false }]);
-    expect(f.calls).toContainEqual(['range', 100, 199]);
-    const select = f.calls.find((call) => call[0] === 'select');
-    expect(select?.[2]).toEqual({ count: 'exact' });
-    expect(select?.[1]).not.toContain('*');
+    expect(result.list).toEqual([maskedListTrial(pendingTrial)]);
+    expect(f.calls[0]).toEqual(['rpc', 'platform_service_trial_list',
+      expect.objectContaining({ p_tenant_id: TENANT_ID, p_platform: false,
+        p_status: 'pending_review', p_page: 2, p_page_size: 100 })]);
   });
   test('tenant history defaults to page 1 and page size 20', async () => {
     const f = harness({ tableResult: { data: [], error: null, count: 0 } });
     await f.repository.listTenantTrials({ tenantId: TENANT_ID });
-    expect(f.calls).toContainEqual(['range', 0, 19]);
+    expect(f.calls[0]![2]).toMatchObject({ p_page: 1, p_page_size: 20 });
   });
   test('rejects missing, invalid, or insufficient exact pagination counts', async () => {
     const platformRow = { ...activeTrial, tenant: tenantSummary, assignee: assigneeSummary };
@@ -180,8 +201,7 @@ describe('ServiceTrialRepository reads', () => {
     const shortTrialRow = { ...row, policy_snapshot: { ...policySnapshot, trial_days: 2 } };
     const f = harness({ tableResult: { data: [row, shortTrialRow], error: null, count: 2 } });
     expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
-      .toEqual([row, shortTrialRow]);
-    expect(String(f.calls.find((call) => call[0] === 'select')?.[1])).toContain('policy_snapshot');
+      .toEqual([maskedListTrial(row), maskedListTrial(shortTrialRow)]);
     const malformed = harness({ tableResult: { data: [{ ...row,
       policy_snapshot: { ...policySnapshot, reminder_days: [3, 7, 3] },
     }], error: null, count: 1 } });
@@ -220,32 +240,14 @@ describe('ServiceTrialRepository reads', () => {
       expiresTo: '2026-09-30T23:59:59.000Z',
     });
 
-    expect(result.list).toEqual([row]);
-    expect(f.calls.filter((call) => call[0] === 'from')).toHaveLength(1);
-    const select = String(f.calls.find((call) => call[0] === 'select')?.[1]);
-    expect(select).toContain('tenant:tenants!tenant_service_trials_tenant_id_fkey');
-    expect(select).toContain('assignee:employees!tenant_service_trials_assignee_employee_id_fkey');
-    expect(select).toContain('keyword_tenant:tenants!tenant_service_trials_tenant_id_fkey()');
-    expect(select).not.toContain('*');
-    expect(f.calls).toContainEqual(['eq', 'status', 'active']);
-    expect(f.calls).toContainEqual(['eq', 'source', 'platform_grant']);
-    expect(f.calls).toContainEqual(['eq', 'trial_type', 'guided']);
-    expect(f.calls).toContainEqual(['eq', 'assignee_employee_id', ASSIGNEE_ID]);
-    expect(f.calls).toContainEqual(['gte', 'requested_at', '2026-08-01T00:00:00.000Z']);
-    expect(f.calls).toContainEqual(['lte', 'requested_at', '2026-08-31T23:59:59.000Z']);
-    expect(f.calls).toContainEqual(['gte', 'trial_ends_at', '2026-09-01T00:00:00.000Z']);
-    expect(f.calls).toContainEqual(['lte', 'trial_ends_at', '2026-09-30T23:59:59.000Z']);
-    expect(f.calls).toContainEqual(['order', 'created_at', { ascending: false }]);
-    expect(f.calls).toContainEqual(['order', 'id', { ascending: false }]);
-    const ilike = String(f.calls.find((call) => call[0] === 'ilike')?.[2]);
-    const orFilter = String(f.calls.find((call) => call[0] === 'or')?.[1]);
-    expect(ilike).toStartWith('%');
-    expect(ilike).toEndWith('%');
-    expect(orFilter).toContain('keyword_tenant.not.is.null');
-    expect(orFilter).not.toContain(',()"\\%_,keyword_tenant');
+    expect(result.list).toEqual([maskedListTrial(row)]);
+    expect(f.calls).toEqual([['rpc', 'platform_service_trial_list',
+      expect.objectContaining({ p_platform: true, p_keyword: '张三,()"\\%_',
+        p_status: 'active', p_source: 'platform_grant', p_trial_type: 'guided',
+        p_assignee_employee_id: ASSIGNEE_ID })]]);
   });
 
-  test('encodes literal keyword characters through the real PostgREST client URL', async () => {
+  test('sends literal keyword characters only as an RPC JSON parameter', async () => {
     const requests: Request[] = [];
     const fetchStub = (async (
       input: string | URL | Request,
@@ -255,7 +257,8 @@ describe('ServiceTrialRepository reads', () => {
         ? input
         : new Request(input.toString(), init);
       requests.push(request);
-      return new Response('[]', {
+      return new Response(JSON.stringify({ items: [], total: 0, page: 1,
+        page_size: 20, server_time: NOW }), {
         status: 200,
         headers: { 'content-type': 'application/json', 'content-range': '*/0' },
       });
@@ -267,12 +270,9 @@ describe('ServiceTrialRepository reads', () => {
       () => client as unknown as ServiceTrialClient,
     );
 
-    await repository.listPlatformTrials({ keyword: 'a,()"%_' + '\\' });
-
-    const url = new URL(requests[0]!.url);
-    expect(url.searchParams.get('keyword_tenant.name'))
-      .toBe(String.raw`ilike.%a,()"\%\_\\%`);
-    expect(url.searchParams.get('or')).toBe(String.raw`(contact_name.ilike."%a,()\"\\%\\_\\\\%",contact_phone.ilike."%a,()\"\\%\\_\\\\%",keyword_tenant.not.is.null)`);
+    await repository.listPlatformTrials({ keyword: 'a,()"%_' + '\\', nowIso: NOW });
+    expect(new URL(requests[0]!.url).pathname).toEndWith('/rpc/platform_service_trial_list');
+    expect(JSON.parse(await requests[0]!.clone().text()).p_keyword).toBe('a,()"%_' + '\\');
   });
 
   test('rejects inconsistent or malformed list relations without leaking data', async () => {
@@ -289,7 +289,7 @@ describe('ServiceTrialRepository reads', () => {
       data: [nullableStatusRow], error: null, count: 1,
     } });
     expect((await valid.repository.listPlatformTrials({})).list)
-      .toEqual([nullableStatusRow]);
+      .toEqual([maskedListTrial(nullableStatusRow)]);
 
     for (const row of [
       { ...activeTrial, tenant: { ...tenantSummary, name: null },
@@ -307,7 +307,6 @@ describe('ServiceTrialRepository reads', () => {
   test('rejects platform list rows that contradict requested filters', async () => {
     const row = { ...activeTrial, tenant: tenantSummary, assignee: assigneeSummary };
     for (const input of [
-      { status: 'pending_review' as const },
       { source: 'tenant_application' as const },
       { trialType: 'standard' as const },
       { assigneeEmployeeId: ACTOR_ID },
@@ -373,7 +372,7 @@ describe('ServiceTrialRepository reads', () => {
     ] satisfies TrialRecord[];
     const f = harness({ tableResult: { data: rows, error: null, count: 6 } });
     expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
-      .toEqual(rows);
+      .toEqual(rows.map((row) => maskedListTrial(row)));
   });
 
   test('summary uses one exact RPC call and strictly parses the envelope', async () => {

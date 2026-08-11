@@ -50,8 +50,10 @@ export class PlatformServiceTrialService {
   async listTrials(authContext: AuthContext,
     query: Partial<PlatformServiceTrialListQuery>) {
     this.requirePermission(authContext, PERMISSION.read);
-    const page = await this.repository.listPlatformTrials(query);
     const now = this.nowFactory();
+    const page = await this.repository.listPlatformTrials({
+      ...query, nowIso: now.toISOString(),
+    });
     const permissions = permissionSet(authContext);
     return {
       ...page,

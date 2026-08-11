@@ -47,6 +47,7 @@ export function maskServiceTrialPhone(
   phone: string | null | undefined,
 ): string | null {
   if (!phone) return null;
+  if (/^1[3-9]\d\*{4}\d{4}$/.test(phone)) return phone;
   if (!/^1[3-9]\d{9}$/.test(phone)) return null;
   return `${phone.slice(0, 3)}****${phone.slice(7)}`;
 }

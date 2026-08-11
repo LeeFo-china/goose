@@ -123,7 +123,7 @@ describe("platform service trial core migration", () => {
     expect(sql).toContain("check ((status in (");
     expect(sql).toContain(") is true)");
     expect(sql).toContain("tenant_service_trials_status_facts_check");
-    expect(sql).toContain("status = 'converted' and converted_order_id is not null");
+    expect(sql).toContain("status = 'converted' and converted_at is not null");
     expect(sql).toContain("granted_at is null and granted_by_employee_id is null");
     expect(sql).toContain("tenant_service_trials_conversion_facts_check");
     expect(sql).toContain("tenant_service_trials_duration_hard_limit_check");
