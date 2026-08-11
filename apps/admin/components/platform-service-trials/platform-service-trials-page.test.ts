@@ -11,6 +11,10 @@ import {
   getPlatformTrialDisabledReasons,
   resolvePlatformTrialAction,
 } from "./platform-service-trial-action-state";
+import {
+  beginLatestTrialDetailRequest,
+  invalidateTrialDetailRequests,
+} from "./platform-service-trial-detail-request";
 
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
@@ -164,6 +168,14 @@ describe("平台技术服务试用管理页", () => {
     expect(audit).toBeGreaterThan(dates);
     expect(detail).toContain("Skeleton");
     expect(detail).toContain("StatusAlert");
+
+    const requestCounter = { current: 0 };
+    const firstRequestIsCurrent = beginLatestTrialDetailRequest(requestCounter);
+    const secondRequestIsCurrent = beginLatestTrialDetailRequest(requestCounter);
+    expect(firstRequestIsCurrent()).toBe(false);
+    expect(secondRequestIsCurrent()).toBe(true);
+    invalidateTrialDetailRequests(requestCounter);
+    expect(secondRequestIsCurrent()).toBe(false);
   });
 
   test("动作由后端 available_actions 控制并解释禁用原因", () => {
@@ -211,6 +223,8 @@ describe("平台技术服务试用管理页", () => {
     expect(source).toContain("router.refresh()");
     expect(source).toContain("finally");
     expect(source).not.toContain("window.confirm");
+    expect(actions).toContain('role="alert"');
+    expect(actions).toContain("scopeErrorId");
 
     const events: string[] = [];
     const success = await runTrialMutationFlow({

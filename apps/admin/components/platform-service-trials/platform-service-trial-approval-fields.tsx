@@ -37,6 +37,7 @@ export function PlatformServiceTrialApprovalFields({
   setAssigneeEmployeeId,
   scope,
   setScope,
+  scopeErrorId,
 }: {
   trialId: string;
   trialType: PlatformServiceTrialType;
@@ -51,6 +52,7 @@ export function PlatformServiceTrialApprovalFields({
   setAssigneeEmployeeId: (value: string) => void;
   scope: PlatformServiceTrialCapability[];
   setScope: (value: PlatformServiceTrialCapability[]) => void;
+  scopeErrorId?: string;
 }) {
   return (
     <>
@@ -81,7 +83,11 @@ export function PlatformServiceTrialApprovalFields({
         <FieldLabel htmlFor={`trial-assignee-${trialId}`}>跟进人员工 ID</FieldLabel>
         <Input id={`trial-assignee-${trialId}`} value={assigneeEmployeeId} onChange={(event) => setAssigneeEmployeeId(event.target.value)} placeholder={trialType === "guided" ? "陪跑试用必填" : "可选"} required={trialType === "guided"} />
       </Field>
-      <FieldSet>
+      <FieldSet
+        aria-describedby={scopeErrorId}
+        aria-invalid={Boolean(scopeErrorId)}
+        data-invalid={Boolean(scopeErrorId)}
+      >
         <FieldLegend variant="label">试用范围</FieldLegend>
         <div className="grid gap-2 sm:grid-cols-2">
           {trialCapabilityOptions.map((option) => (

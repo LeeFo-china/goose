@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, RefreshCw } from "lucide-react";
 
 import { StatusAlert } from "@/components/admin/status-alert";
@@ -22,6 +22,10 @@ import {
   getPlatformTrialDisabledReasons,
   resolvePlatformTrialAction,
 } from "./platform-service-trial-action-state";
+import {
+  beginLatestTrialDetailRequest,
+  invalidateTrialDetailRequests,
+} from "./platform-service-trial-detail-request";
 import {
   formatTrialDateTime,
   getTrialCapabilityLabel,
@@ -48,8 +52,10 @@ export function PlatformServiceTrialDetail({
   const [data, setData] = useState<PlatformServiceTrialDetailData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const detailRequestCounter = useRef(0);
 
   const loadDetail = useCallback(async () => {
+    const isCurrentRequest = beginLatestTrialDetailRequest(detailRequestCounter);
     setLoading(true);
     setError("");
     try {
@@ -57,18 +63,24 @@ export function PlatformServiceTrialDetail({
         `/platform/billing/service-trials/${trial.id}`,
         { fallbackMessage: "技术服务试用详情加载失败" },
       );
-      setData(result);
+      if (isCurrentRequest()) setData(result);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "技术服务试用详情加载失败");
+      if (isCurrentRequest()) {
+        setError(caught instanceof Error ? caught.message : "技术服务试用详情加载失败");
+      }
     } finally {
-      setLoading(false);
+      if (isCurrentRequest()) setLoading(false);
     }
   }, [trial.id]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      invalidateTrialDetailRequests(detailRequestCounter);
+      return;
+    }
     setData(null);
     void loadDetail();
+    return () => invalidateTrialDetailRequests(detailRequestCounter);
   }, [loadDetail, open]);
 
   const current = data?.trial ?? trial;

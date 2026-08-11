@@ -91,6 +91,10 @@ export function PlatformServiceTrialActionDialog({
   );
   const meta = dialogMeta[kind];
   const Icon = dialogIcons[kind];
+  const errorId = `trial-action-error-${kind}-${trial.id}`;
+  const scopeErrorId = error === "请至少选择一项试用范围" && scope.length === 0
+    ? errorId
+    : undefined;
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -187,6 +191,7 @@ export function PlatformServiceTrialActionDialog({
                 setAssigneeEmployeeId={setAssigneeEmployeeId}
                 scope={scope}
                 setScope={setScope}
+                scopeErrorId={scopeErrorId}
               />
             ) : null}
             {kind === "extend" ? (
@@ -224,12 +229,15 @@ export function PlatformServiceTrialActionDialog({
                   onChange={(event) => setReason(event.target.value)}
                   maxLength={500}
                   aria-invalid={Boolean(error && !reason.trim())}
+                  aria-describedby={error ? errorId : undefined}
                   required
                 />
               </Field>
             ) : null}
           </FieldGroup>
-          <FieldError>{error}</FieldError>
+          <div id={errorId} role="alert" aria-live="assertive">
+            <FieldError>{error}</FieldError>
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
               取消
@@ -265,6 +273,7 @@ export function PlatformServiceTrialGrantDialog({
   const [scope, setScope] = useState<PlatformServiceTrialCapability[]>(
     trialCapabilityOptions.map((option) => option.value),
   );
+  const errorId = "grant-trial-error";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -336,10 +345,13 @@ export function PlatformServiceTrialGrantDialog({
               setAssigneeEmployeeId={setAssigneeEmployeeId}
               scope={scope}
               setScope={setScope}
+              scopeErrorId={error && scope.length === 0 ? errorId : undefined}
             />
             <Field><FieldLabel htmlFor="grant-trial-reason">开通原因</FieldLabel><Textarea id="grant-trial-reason" name="reason" maxLength={500} required /></Field>
           </FieldGroup>
-          <FieldError>{error}</FieldError>
+          <div id={errorId} role="alert" aria-live="assertive">
+            <FieldError>{error}</FieldError>
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>取消</Button>
             <Button type="submit" disabled={submitting}>
