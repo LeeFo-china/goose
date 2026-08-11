@@ -6,6 +6,7 @@ import {
 } from '@gooes/domain';
 import { z } from 'zod';
 
+import { ErrorCodes } from '@/errors/error-codes';
 import { Errors } from '@/errors/error-factory';
 import { matchesPostgresError } from '@/errors/postgres-error-details';
 import { SupabaseDB } from '@/utils/supabase/index';
@@ -65,7 +66,7 @@ type WithdrawCommand = { action: 'withdraw'; trialId: string; tenantId: string;
 type ReviewCommandBase = { action: 'review'; trialId: string; actorEmployeeId: string;
   expectedVersion: number; idempotencyKey: string; reason: string };
 type ApprovedReviewCommand = ReviewCommandBase & { decision: 'approved';
-  scope: PlatformServiceTrialScopeV1; trialDays?: number; graceDays?: number;
+  scope?: PlatformServiceTrialScopeV1; trialDays?: number; graceDays?: number;
   startsAt?: string; allowOverride: boolean } & (
     { trialType: 'guided'; assigneeEmployeeId: string }
     | { trialType: 'standard'; assigneeEmployeeId?: string | null }
@@ -75,7 +76,7 @@ type RejectedReviewCommand = ReviewCommandBase & { decision: 'rejected';
   startsAt?: never; assigneeEmployeeId?: never; allowOverride: false };
 type ReviewCommand = ApprovedReviewCommand | RejectedReviewCommand;
 type GrantCommandBase = { action: 'grant'; tenantId: string; actorEmployeeId: string;
-  scope: PlatformServiceTrialScopeV1; reason: string; idempotencyKey: string;
+  scope?: PlatformServiceTrialScopeV1; reason: string; idempotencyKey: string;
   trialDays?: number; graceDays?: number; startsAt?: string; allowOverride: boolean };
 type GrantCommand = GrantCommandBase & (
   { trialType: 'guided'; assigneeEmployeeId: string }
@@ -191,6 +192,11 @@ const COMMAND_ERRORS = {
 } as const;
 
 function throwCommandError(error: unknown): never {
+  if (matchesPostgresError(error, 'P0001', 'SERVICE_TRIAL_OVERRIDE_REQUIRED')) {
+    throw Errors.business(403, '缺少平台操作权限',
+      ErrorCodes.PLATFORM_PERMISSION_REQUIRED,
+      { permission: 'platform.service_trial.override' });
+  }
   for (const [code, [status, message]] of Object.entries(COMMAND_ERRORS)) {
     if (matchesPostgresError(error, 'P0001', code)) {
       throw Errors.business(status, message, code);

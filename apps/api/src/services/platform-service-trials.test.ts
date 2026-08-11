@@ -68,6 +68,14 @@ function createRepository() {
     executeCommand: mock(async (
       input: TrialCommandInput,
     ): Promise<TrialCommandResult> => {
+      if ((input.action === 'grant'
+        || input.action === 'review' && input.decision === 'approved')
+        && !input.allowOverride
+        && ((input.trialDays ?? 0) > 60 || (input.graceDays ?? 0) > 14)) {
+        throw Errors.business(403, '缺少平台操作权限',
+          'PLATFORM_PERMISSION_REQUIRED',
+          { permission: PERMISSION.override });
+      }
       const trial = input.action === 'review' && input.decision === 'rejected'
         ? makePendingTrial({
           status: 'rejected', review_decision: 'rejected',
@@ -86,22 +94,25 @@ function createRepository() {
           ? { assigned: input.assigneeEmployeeId !== null } : {}),
       };
     }),
-    updatePolicy: mock(async (
-      _input: TrialPolicyUpdateCommand,
-    ): Promise<PolicyCommandResult> => ({
+    updatePolicy: mock(async (_input: TrialPolicyUpdateCommand):
+    Promise<PolicyCommandResult> => ({
       policy_id: makePolicy().id, version: 2, is_current: true,
       idempotent: false,
     })),
   };
 }
-const approvedReview = {
-  decision: 'approved' as const,
-  expected_version: 1,
-  idempotency_key: IDEMPOTENCY_KEY,
-  reason: '符合试用条件',
+const approvedReview = { decision: 'approved' as const, expected_version: 1,
+  idempotency_key: IDEMPOTENCY_KEY, reason: '符合试用条件',
   trial_type: 'standard' as const,
-  trial_days: 30,
-  grace_days: 7,
+  trial_days: 30, grace_days: 7,
+};
+const policyUpdateInput = { default_trial_days: 30, default_grace_days: 7,
+  reminder_days: [7, 3, 1], max_trial_days: 60,
+  max_grace_days: 14, max_schedule_ahead_days: 30,
+  max_extension_count: 1, max_extension_days: 30,
+  reapply_cooldown_days: 30, allow_repeat_application: false,
+  standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
+  expected_version: 1, idempotency_key: IDEMPOTENCY_KEY, reason: '更新规则',
 };
 describe('PlatformServiceTrialService reads', () => {
   let repository: ReturnType<typeof createRepository>;
@@ -172,14 +183,12 @@ describe('PlatformServiceTrialService reads', () => {
 describe('PlatformServiceTrialService permission matrix', () => {
   let repository: ReturnType<typeof createRepository>;
   let service: InstanceType<typeof PlatformServiceTrialService>;
-
   beforeEach(() => {
     repository = createRepository();
     service = new PlatformServiceTrialService({
       repository, nowFactory: () => new Date(NOW),
     });
   });
-
   test.each([
     {
       name: 'ordinary standard review', permissions: [PERMISSION.review],
@@ -208,10 +217,9 @@ describe('PlatformServiceTrialService permission matrix', () => {
     await service.review(platformAuth(permissions), TRIAL_ID, input);
     expect(repository.executeCommand.mock.calls[0]![0]).toMatchObject({
       action: 'review', trialId: TRIAL_ID, actorEmployeeId: ACTOR_ID,
-      scope: TEST_SCOPE, allowOverride,
+      scope: 'scope' in input ? input.scope : undefined, allowOverride,
     });
   });
-
   test.each([
     {
       name: 'guided without manage', permissions: [PERMISSION.review],
@@ -240,15 +248,30 @@ describe('PlatformServiceTrialService permission matrix', () => {
         statusCode: 403, code: 'PLATFORM_PERMISSION_REQUIRED',
         details: { permission: missing },
       });
-    expect(repository.executeCommand).not.toHaveBeenCalled();
+    if (missing === PERMISSION.override) {
+      expect(repository.executeCommand).toHaveBeenCalledTimes(1);
+    } else {
+      expect(repository.executeCommand).not.toHaveBeenCalled();
+    }
   });
-
   test.each([
+    {
+      name: 'review without review', permissions: [] as string[],
+      missing: PERMISSION.review,
+      run: (auth: AuthContext) => service.review(auth, TRIAL_ID, approvedReview),
+    },
     {
       name: 'grant without manage', permissions: [] as string[],
       missing: PERMISSION.manage, run: (auth: AuthContext) => service.grant(auth, {
         tenant_id: TENANT_ID, trial_type: 'standard', reason: '评估',
         idempotency_key: IDEMPOTENCY_KEY,
+      }),
+    },
+    {
+      name: 'out-of-policy grant without override', permissions: [PERMISSION.manage],
+      missing: PERMISSION.override, run: (auth: AuthContext) => service.grant(auth, {
+        tenant_id: TENANT_ID, trial_type: 'standard', trial_days: 61,
+        reason: '超界评估', idempotency_key: IDEMPOTENCY_KEY,
       }),
     },
     {
@@ -266,6 +289,13 @@ describe('PlatformServiceTrialService permission matrix', () => {
       ),
     },
     {
+      name: 'revoke without manage', permissions: [PERMISSION.override],
+      missing: PERMISSION.manage,
+      run: (auth: AuthContext) => service.revoke(auth, TRIAL_ID, {
+        expected_version: 2, idempotency_key: IDEMPOTENCY_KEY, reason: '撤销',
+      }),
+    },
+    {
       name: 'revoke without override', permissions: [PERMISSION.manage],
       missing: PERMISSION.override, run: (auth: AuthContext) => service.revoke(auth, TRIAL_ID, {
         expected_version: 2, idempotency_key: IDEMPOTENCY_KEY,
@@ -280,28 +310,28 @@ describe('PlatformServiceTrialService permission matrix', () => {
       }),
     },
     {
-      name: 'policy without override', permissions: [PERMISSION.manage],
-      missing: PERMISSION.override, run: (auth: AuthContext) => service.updatePolicy(auth, {
-        default_trial_days: 30, default_grace_days: 7,
-        reminder_days: [7, 3, 1], max_trial_days: 60,
-        max_grace_days: 14, max_schedule_ahead_days: 30,
-        max_extension_count: 1, max_extension_days: 30,
-        reapply_cooldown_days: 30, allow_repeat_application: false,
-        standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
-        expected_version: 1, idempotency_key: IDEMPOTENCY_KEY,
-        reason: '更新规则',
-      }),
+      name: 'policy without manage', permissions: [PERMISSION.override],
+      missing: PERMISSION.manage,
+      run: (auth: AuthContext) => service.updatePolicy(auth, policyUpdateInput),
     },
-  ])('denies $name using the exact permission matrix', async ({ permissions, missing, run }) => {
+    {
+      name: 'policy without override', permissions: [PERMISSION.manage],
+      missing: PERMISSION.override,
+      run: (auth: AuthContext) => service.updatePolicy(auth, policyUpdateInput),
+    },
+  ])('denies $name using the exact permission matrix', async ({ name, permissions, missing, run }) => {
     await expect(run(platformAuth(permissions))).rejects.toMatchObject({
       statusCode: 403,
       code: 'PLATFORM_PERMISSION_REQUIRED',
       details: { permission: missing },
     });
-    expect(repository.executeCommand).not.toHaveBeenCalled();
+    if (name === 'out-of-policy grant without override') {
+      expect(repository.executeCommand).toHaveBeenCalledTimes(1);
+    } else {
+      expect(repository.executeCommand).not.toHaveBeenCalled();
+    }
     expect(repository.updatePolicy).not.toHaveBeenCalled();
   });
-
   test('rejects an application with review permission only', async () => {
     repository.findTrialById.mockImplementationOnce(async () => makeTrialDetail(
       makePendingTrial({
@@ -321,39 +351,28 @@ describe('PlatformServiceTrialService permission matrix', () => {
       allowOverride: false,
     });
   });
-
-  test('uses manage for ordinary grants and defaults scope from policy', async () => {
+  test('forwards immutable grant intent before mutable policy derivation', async () => {
     await service.grant(platformAuth([PERMISSION.manage]), {
       tenant_id: TENANT_ID, trial_type: 'standard', reason: '重点租户评估',
       idempotency_key: IDEMPOTENCY_KEY,
     });
     expect(repository.executeCommand).toHaveBeenCalledWith({
       action: 'grant', tenantId: TENANT_ID, actorEmployeeId: ACTOR_ID,
-      trialType: 'standard', scope: TEST_SCOPE, reason: '重点租户评估',
+      trialType: 'standard', scope: undefined, reason: '重点租户评估',
       idempotencyKey: IDEMPOTENCY_KEY, allowOverride: false,
     });
+    expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
   });
-
-  test('retries only a repeat grant with manage plus override', async () => {
-    repository.executeCommand
-      .mockImplementationOnce(async () => {
-        throw Errors.business(403, '重复试用需要平台特批',
-          'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE');
-      })
-      .mockImplementationOnce(async () => ({
-        trial_id: TRIAL_ID, tenant_id: TENANT_ID, status: 'active',
-        version: 2, trial_snapshot: makeCommandSnapshot(makeActiveTrial()),
-        idempotent: false,
-      }));
+  test('forwards current override capability in one stable grant intent', async () => {
     await service.grant(platformAuth([PERMISSION.manage, PERMISSION.override]), {
       tenant_id: TENANT_ID, trial_type: 'standard', reason: '再次评估有明确目标',
       idempotency_key: IDEMPOTENCY_KEY,
     });
-    expect(repository.executeCommand).toHaveBeenCalledTimes(2);
-    expect(repository.executeCommand.mock.calls.map(([input]) =>
-      input.action === 'grant' && input.allowOverride)).toEqual([false, true]);
+    expect(repository.executeCommand).toHaveBeenCalledTimes(1);
+    expect(repository.executeCommand.mock.calls[0]![0]).toMatchObject({
+      action: 'grant', allowOverride: true,
+    });
   });
-
   test('does not convert repeat errors into override for manage-only callers', async () => {
     repository.executeCommand.mockImplementationOnce(async () => {
       throw Errors.business(403, '重复试用需要平台特批',
@@ -365,7 +384,6 @@ describe('PlatformServiceTrialService permission matrix', () => {
     })).rejects.toMatchObject({ code: 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE' });
     expect(repository.executeCommand).toHaveBeenCalledTimes(1);
   });
-
   test.each([
     ['extend', [PERMISSION.manage, PERMISSION.override]],
     ['revoke', [PERMISSION.manage, PERMISSION.override]],
@@ -391,16 +409,15 @@ describe('PlatformServiceTrialService permission matrix', () => {
       action, trialId: TRIAL_ID, actorEmployeeId: ACTOR_ID,
     });
   });
-
-  test('marks extension policy bypass only when snapshot limits are exceeded', async () => {
+  test('forwards stable override capability without mutable extension reads', async () => {
     await service.extend(platformAuth([PERMISSION.manage, PERMISSION.override]),
       TRIAL_ID, { extension_days: 31, expected_version: 2,
         idempotency_key: IDEMPOTENCY_KEY, reason: '例外延期' });
     expect(repository.executeCommand.mock.calls[0]![0]).toMatchObject({
       action: 'extend', allowOverride: true,
     });
+    expect(repository.findTrialById).not.toHaveBeenCalled();
   });
-
   test('returns the saved safe trial shape when a platform command is replayed', async () => {
     const saved = makeActiveTrial({
       source: 'platform_grant', application_reason: null,
@@ -414,18 +431,20 @@ describe('PlatformServiceTrialService permission matrix', () => {
       version: saved.version, trial_snapshot: makeCommandSnapshot(saved),
       idempotent: true,
     }));
+    repository.findCurrentPolicy.mockImplementationOnce(async () => makePolicy({
+      standard_scope: { version: 1, capabilities: ['core.files'] }, version: 9,
+    }));
     repository.findTrialById.mockImplementationOnce(async () => makeTrialDetail({
       ...saved, status: 'revoked', revoked_at: NOW.toISOString(),
       revoked_by_employee_id: ACTOR_ID, revoke_reason: '后来撤销', version: 3,
     }));
-
     const result = await service.grant(
       platformAuth([PERMISSION.manage, PERMISSION.override]),
       { tenant_id: TENANT_ID, trial_type: 'standard', reason: '评估',
         idempotency_key: IDEMPOTENCY_KEY },
     );
-
     expect(repository.findTrialById).not.toHaveBeenCalled();
+    expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
     expect(result.trial).toMatchObject({
       id: TRIAL_ID, status: 'active', persisted_status: 'active',
       version: 2, application_reason: null, assignee_employee_id: null,
@@ -435,20 +454,10 @@ describe('PlatformServiceTrialService permission matrix', () => {
     expect(JSON.stringify(result)).not.toContain('后来撤销');
     expect(result.available_actions.extend.enabled).toBe(true);
   });
-
   test('updates the complete policy with manage plus override only', async () => {
     repository.findPolicyById.mockImplementationOnce(async () =>
       makePolicy({ version: 2, change_reason: '更新默认规则' }));
-    const input = {
-      default_trial_days: 30, default_grace_days: 7,
-      reminder_days: [7, 3, 1], max_trial_days: 60,
-      max_grace_days: 14, max_schedule_ahead_days: 30,
-      max_extension_count: 1, max_extension_days: 30,
-      reapply_cooldown_days: 30, allow_repeat_application: false,
-      standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
-      expected_version: 1, idempotency_key: IDEMPOTENCY_KEY,
-      reason: '更新默认规则',
-    };
+    const input = { ...policyUpdateInput, reason: '更新默认规则' };
     const result = await service.updatePolicy(
       platformAuth([PERMISSION.manage, PERMISSION.override]), input,
     );
@@ -461,7 +470,6 @@ describe('PlatformServiceTrialService permission matrix', () => {
     expect(result.idempotent).toBe(false);
     expect(result.server_time).toBe(NOW.toISOString());
   });
-
   test('replays the policy version named by the saved command result', async () => {
     const historical = makePolicy({
       is_current: false, version: 2, change_reason: '已保存规则',
@@ -475,20 +483,10 @@ describe('PlatformServiceTrialService permission matrix', () => {
       policy_id: historical.id, version: historical.version,
       is_current: true, idempotent: true,
     }));
-
     const result = await service.updatePolicy(
-      platformAuth([PERMISSION.manage, PERMISSION.override]), {
-        default_trial_days: 30, default_grace_days: 7,
-        reminder_days: [7, 3, 1], max_trial_days: 60,
-        max_grace_days: 14, max_schedule_ahead_days: 30,
-        max_extension_count: 1, max_extension_days: 30,
-        reapply_cooldown_days: 30, allow_repeat_application: false,
-        standard_scope: TEST_SCOPE, guided_scope: TEST_SCOPE,
-        expected_version: 1, idempotency_key: IDEMPOTENCY_KEY,
-        reason: '已保存规则',
-      },
+      platformAuth([PERMISSION.manage, PERMISSION.override]),
+      { ...policyUpdateInput, reason: '已保存规则' },
     );
-
     expect(repository.findPolicyById).toHaveBeenCalledWith(historical.id);
     expect(repository.findCurrentPolicy).not.toHaveBeenCalled();
     expect(result.policy).toMatchObject({

@@ -50,7 +50,6 @@ describe("platform service trial core migration", () => {
     expect(migration.name.slice(0, 14).localeCompare(minimumReleasedVersion)).toBeGreaterThan(0);
     expect(migration.text).not.toBe("");
   });
-
   test("locks and fails closed before any trial DDL", async () => {
     const migration = await findMigration();
     const sql = normalizeSql(migration.text);
@@ -465,11 +464,11 @@ describe("platform service trial core migration", () => {
     }
     const sql = normalizeSql(migration.text);
     expect(sql).toContain("trial_id is not null and jsonb_typeof(result_envelope->'trial_snapshot') = 'object'");
-    for (const forbidden of [
-      'contact_name', 'contact_phone', 'application_reason', 'review_reason',
-      'actor_employee_id', 'assignee_employee_id', 'tenant', 'events',
-      'available_actions',
-    ]) expect(sql).toContain(`'${forbidden}'`);
+    expect(sql).toContain("result_envelope - array[");
+    expect(sql).toContain("'assigned', 'trial_snapshot' ] = '{}'::jsonb");
+    expect(sql).toContain("(result_envelope->'trial_snapshot') - array[");
+    expect(sql).toContain("(result_envelope->'trial_snapshot'->'policy_snapshot') - array[");
+    expect(sql).toContain("result_envelope ?& array['policy_id', 'version', 'is_current']");
     for (const binding of ['id', 'tenant_id', 'status', 'version']) expect(sql)
       .toContain(`result_envelope->'trial_snapshot'->${binding === 'version' ? '' : '>'}'${binding}'`);
   });
@@ -494,6 +493,7 @@ describe("platform service trial core migration", () => {
     )).map((match) => match[0]).join("\n");
     expect(auditWrites).not.toMatch(/contact_phone|contact_name/);
     expect(sql).toContain("not (metadata ?| array['contact_name', 'contact_phone', 'phone', 'mobile'])");
-    expect(sql).toContain("not (result_envelope ?| array['contact_name', 'contact_phone', 'phone', 'mobile'])");
+    expect(sql).toContain("result_envelope - array[");
+    expect(sql).toContain("(result_envelope->'trial_snapshot') - array[");
   });
 });

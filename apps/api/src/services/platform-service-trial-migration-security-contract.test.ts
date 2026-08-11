@@ -98,14 +98,25 @@ describe("platform service trial migration security follow-up", () => {
     expect(review).toContain(
       "case when p_trial_type = 'guided' or p_assignee_employee_id is not null",
     );
+    expect(review).toContain("v_override_needed and not p_allow_override");
     expect(review).toContain(
-      "case when p_allow_override then array['platform.service_trial.override']",
+      "v_replay->'trial_snapshot'->'policy_snapshot'->'override_used'",
     );
+    const reviewHash = review.slice(
+      review.indexOf('v_request_hash :='), review.indexOf('select tenant_id'),
+    );
+    expect(reviewHash).not.toContain('allow_override');
     const grant = functionBody(sql, "platform_service_trial_grant");
     expect(grant).toContain("platform.service_trial.manage");
+    expect(grant).toContain("v_override_needed and not p_allow_override");
     expect(grant).toContain(
-      "case when p_allow_override then array['platform.service_trial.override']",
+      "v_replay->'trial_snapshot'->'policy_snapshot'->'override_used'",
     );
+    const grantHash = grant.slice(
+      grant.indexOf('v_request_hash :='),
+      grant.indexOf('perform public.platform_service_trial_lock_platform_actor'),
+    );
+    expect(grantHash).not.toContain('allow_override');
     expect(functionBody(sql, "platform_service_trial_assign"))
       .toContain("platform.service_trial.manage");
     for (const name of [
@@ -133,6 +144,26 @@ describe("platform service trial migration security follow-up", () => {
       expect(helper).toContain("not (locked.id = any(v_denied_permission_ids))");
       expect(helper).toContain("locked.id = any(v_role_permission_ids)");
       expect(helper).toContain("locked.id = any(v_allowed_permission_ids)");
+    }
+  });
+
+  test("rechecks saved override facts while ordinary replays bypass changed policy", async () => {
+    const sql = await migrationText();
+    for (const name of [
+      "platform_service_trial_review", "platform_service_trial_grant",
+    ]) {
+      const body = functionBody(sql, name);
+      const replay = body.indexOf("if v_replay is not null then");
+      const policy = body.indexOf("from public.platform_service_trial_policies");
+      const replayGuard = body.slice(replay, body.indexOf("return v_replay", replay));
+      expect(replay).toBeGreaterThan(0);
+      expect(replay).toBeLessThan(policy);
+      expect(replayGuard).toContain(
+        "policy_snapshot'->'override_used') = 'true'::jsonb",
+      );
+      expect(replayGuard).toContain("if not p_allow_override");
+      expect(replayGuard).toContain("platform.service_trial.override");
+      expect(replayGuard).toContain("platform_service_trial_lock_platform_actor");
     }
   });
 

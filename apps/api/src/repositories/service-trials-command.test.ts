@@ -102,26 +102,18 @@ const grantTypeBase = {
 const validScope: PlatformServiceTrialScopeV1 = {
   version: 1, capabilities: ['core.projects'],
 };
-const approvedReviewWithoutScope = { ...reviewTypeBase, decision: 'approved',
-  trialType: 'standard', allowOverride: false } as const;
 const rejectedReviewWithGrant = { ...reviewTypeBase, decision: 'rejected',
   trialType: 'standard', scope: { version: 1, capabilities: [] },
   allowOverride: false } as const;
 const guidedReviewWithoutAssignee = { ...reviewTypeBase, decision: 'approved',
   trialType: 'guided', scope: validScope,
   allowOverride: false } as const;
-const grantWithoutScope = { ...grantTypeBase,
-  trialType: 'standard' } as const;
 const guidedGrantWithoutAssignee = { ...grantTypeBase, trialType: 'guided',
   scope: validScope } as const;
-// @ts-expect-error approved review requires a scope
-const approvedReviewContract: TrialCommandInput = approvedReviewWithoutScope;
 // @ts-expect-error rejected review forbids grant configuration
 const rejectedReviewContract: TrialCommandInput = rejectedReviewWithGrant;
 // @ts-expect-error guided review requires a non-null assignee
 const guidedReviewContract: TrialCommandInput = guidedReviewWithoutAssignee;
-// @ts-expect-error grant requires a scope
-const grantScopeContract: TrialCommandInput = grantWithoutScope;
 // @ts-expect-error guided grant requires a non-null assignee
 const guidedGrantContract: TrialCommandInput = guidedGrantWithoutAssignee;
 
@@ -410,6 +402,17 @@ describe('ServiceTrialRepository commands', () => {
       expect(String(error)).not.toContain('sensitive context');
     },
   );
+
+  test('maps an authoritative override denial to the public permission error', async () => {
+    const f = harness({ data: null, error: {
+      code: 'P0001', message: 'SERVICE_TRIAL_OVERRIDE_REQUIRED',
+    } });
+    await expect(f.repository.executeCommand(commandCases[3]!.input)).rejects
+      .toMatchObject({
+        statusCode: 403, code: 'PLATFORM_PERMISSION_REQUIRED',
+        details: { permission: 'platform.service_trial.override' },
+      });
+  });
 
   test('wraps unknown returned and rejected RPC failures without raw details', async () => {
     for (const f of [

@@ -420,24 +420,60 @@ CREATE TABLE public.tenant_service_trial_commands (
   CONSTRAINT tenant_service_trial_commands_result_check CHECK ((
     jsonb_typeof(result_envelope) = 'object'
     AND pg_column_size(result_envelope) <= 16384
-    AND NOT (result_envelope ?| ARRAY['contact_name', 'contact_phone', 'phone', 'mobile'])
     AND (
-      trial_id IS NULL
-      AND NOT (result_envelope ? 'trial_snapshot')
+      (
+        trial_id IS NULL
+        AND result_envelope ?& ARRAY['policy_id', 'version', 'is_current']
+        AND result_envelope
+          - ARRAY['policy_id', 'version', 'is_current'] = '{}'::jsonb
+      )
       OR (
         trial_id IS NOT NULL
         AND jsonb_typeof(result_envelope->'trial_snapshot') = 'object'
-        AND NOT ((result_envelope->'trial_snapshot')
-          ?| ARRAY[
-            'contact_name', 'contact_phone', 'phone', 'mobile',
-            'application_reason', 'grant_reason', 'review_reason',
-            'revoke_reason', 'withdraw_reason', 'actor_employee_id',
-            'requested_by_employee_id',
-            'granted_by_employee_id', 'reviewed_by_employee_id',
-            'revoked_by_employee_id', 'withdrawn_by_employee_id',
-            'assignee_employee_id', 'tenant', 'assignee', 'events',
-            'available_actions'
-          ])
+        AND result_envelope ?& ARRAY[
+          'trial_id', 'tenant_id', 'status', 'version', 'trial_snapshot'
+        ]
+        AND result_envelope - ARRAY[
+          'trial_id', 'tenant_id', 'status', 'version', 'assigned',
+          'trial_snapshot'
+        ] = '{}'::jsonb
+        AND (result_envelope->'trial_snapshot') ?& ARRAY[
+          'id', 'tenant_id', 'source', 'trial_type', 'status',
+          'expected_user_count', 'expected_project_count',
+          'contact_name_masked', 'contact_phone_masked', 'review_decision',
+          'requested_at', 'reviewed_at', 'granted_at', 'starts_at',
+          'activated_at', 'trial_ends_at', 'grace_ends_at', 'withdrawn_at',
+          'revoked_at', 'converted_at', 'converted_order_id', 'scope',
+          'policy_snapshot', 'extension_count', 'version', 'created_at',
+          'updated_at'
+        ]
+        AND (result_envelope->'trial_snapshot') - ARRAY[
+          'id', 'tenant_id', 'source', 'trial_type', 'status',
+          'expected_user_count', 'expected_project_count',
+          'contact_name_masked', 'contact_phone_masked', 'review_decision',
+          'requested_at', 'reviewed_at', 'granted_at', 'starts_at',
+          'activated_at', 'trial_ends_at', 'grace_ends_at', 'withdrawn_at',
+          'revoked_at', 'converted_at', 'converted_order_id', 'scope',
+          'policy_snapshot', 'extension_count', 'version', 'created_at',
+          'updated_at'
+        ] = '{}'::jsonb
+        AND (result_envelope->'trial_snapshot'->'scope')
+          ?& ARRAY['version', 'capabilities']
+        AND (result_envelope->'trial_snapshot'->'scope')
+          - ARRAY['version', 'capabilities'] = '{}'::jsonb
+        AND (result_envelope->'trial_snapshot'->'policy_snapshot') ?& ARRAY[
+          'policy_id', 'version', 'trial_days', 'grace_days',
+          'max_trial_days', 'max_grace_days', 'max_schedule_days',
+          'max_extension_count', 'max_extension_days',
+          'reapply_cooldown_days', 'allow_repeat', 'reminder_days'
+        ]
+        AND (result_envelope->'trial_snapshot'->'policy_snapshot') - ARRAY[
+          'policy_id', 'version', 'trial_days', 'grace_days',
+          'max_trial_days', 'max_grace_days', 'max_schedule_days',
+          'max_extension_count', 'max_extension_days',
+          'reapply_cooldown_days', 'allow_repeat', 'reminder_days',
+          'override_used'
+        ] = '{}'::jsonb
         AND ((result_envelope->>'trial_id')
           = (result_envelope->'trial_snapshot'->>'id')) IS TRUE
         AND ((result_envelope->>'tenant_id')
@@ -1324,6 +1360,9 @@ DECLARE
   v_trial_days integer;
   v_grace_days integer;
   v_starts_at timestamptz;
+  v_scope jsonb;
+  v_override_needed boolean;
+  v_repeat_requires_override boolean;
   v_status text;
   v_result jsonb;
 BEGIN
@@ -1338,8 +1377,7 @@ BEGIN
     'expected_version', p_expected_version, 'reason', btrim(p_reason),
     'trial_type', p_trial_type, 'scope', p_scope, 'trial_days', p_trial_days,
     'grace_days', p_grace_days, 'starts_at', p_starts_at,
-    'assignee_employee_id', p_assignee_employee_id,
-    'allow_override', p_allow_override
+    'assignee_employee_id', p_assignee_employee_id
   )::text, 'sha256');
   SELECT tenant_id, enterprise_identity_hash INTO v_identity
   FROM public.tenant_service_trials WHERE id = p_trial_id;
@@ -1350,13 +1388,23 @@ BEGIN
     ARRAY['platform.service_trial.review']
       || CASE WHEN p_trial_type = 'guided' OR p_assignee_employee_id IS NOT NULL
         THEN ARRAY['platform.service_trial.manage'] ELSE '{}'::text[] END
-      || CASE WHEN p_allow_override
-        THEN ARRAY['platform.service_trial.override'] ELSE '{}'::text[] END
   );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
-  IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
+  IF v_replay IS NOT NULL THEN
+    IF (v_replay->'trial_snapshot'->'policy_snapshot'->'override_used')
+      = 'true'::jsonb
+    THEN
+      IF NOT p_allow_override THEN
+        RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+      END IF;
+      PERFORM public.platform_service_trial_lock_platform_actor(
+        p_actor_employee_id, ARRAY['platform.service_trial.override']
+      );
+    END IF;
+    RETURN v_replay;
+  END IF;
 
   IF p_assignee_employee_id IS NOT NULL THEN
     PERFORM public.platform_service_trial_lock_platform_actor(
@@ -1373,7 +1421,19 @@ BEGIN
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
-  IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
+  IF v_replay IS NOT NULL THEN
+    IF (v_replay->'trial_snapshot'->'policy_snapshot'->'override_used')
+      = 'true'::jsonb
+    THEN
+      IF NOT p_allow_override THEN
+        RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+      END IF;
+      PERFORM public.platform_service_trial_lock_platform_actor(
+        p_actor_employee_id, ARRAY['platform.service_trial.override']
+      );
+    END IF;
+    RETURN v_replay;
+  END IF;
   v_trial := public.platform_service_trial_normalize_effective_status(
     p_trial_id, v_identity.tenant_id, v_now
   );
@@ -1414,7 +1474,6 @@ BEGIN
     );
   ELSE
     IF p_trial_type IS NULL OR p_trial_type NOT IN ('standard', 'guided')
-      OR NOT public.platform_service_trial_scope_valid(p_scope)
       OR (p_trial_type = 'guided' AND p_assignee_employee_id IS NULL)
     THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
     IF EXISTS (
@@ -1432,26 +1491,39 @@ BEGIN
         AND paid_onboarding.service_access_terminated_at IS NULL
     ) THEN RAISE EXCEPTION 'SERVICE_TRIAL_FORMAL_SERVICE_ACTIVE' USING ERRCODE = 'P0001'; END IF;
 
-    IF EXISTS (SELECT 1 FROM public.tenant_service_trials AS previous
+    v_scope := coalesce(p_scope, CASE WHEN p_trial_type = 'guided'
+      THEN v_policy.guided_scope ELSE v_policy.standard_scope END);
+    IF NOT public.platform_service_trial_scope_valid(v_scope) THEN
+      RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+    END IF;
+    v_repeat_requires_override := EXISTS (
+      SELECT 1 FROM public.tenant_service_trials AS previous
       WHERE previous.enterprise_identity_hash = v_trial.enterprise_identity_hash
         AND previous.id <> v_trial.id
-        AND (previous.granted_at IS NOT NULL OR previous.converted_order_id IS NOT NULL))
-      AND NOT v_policy.allow_repeat AND NOT p_allow_override
-    THEN RAISE EXCEPTION 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE' USING ERRCODE = 'P0001'; END IF;
-    IF p_allow_override AND NULLIF(btrim(p_reason), '') IS NULL THEN
+        AND (previous.granted_at IS NOT NULL OR previous.converted_order_id IS NOT NULL)
+    ) AND NOT v_policy.allow_repeat;
+    IF v_repeat_requires_override AND NOT p_allow_override THEN
       RAISE EXCEPTION 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE' USING ERRCODE = 'P0001';
     END IF;
 
     v_trial_days := coalesce(p_trial_days, v_policy.trial_days);
     v_grace_days := coalesce(p_grace_days, v_policy.grace_days);
     v_starts_at := coalesce(p_starts_at, v_now);
+    v_override_needed := v_repeat_requires_override
+      OR v_trial_days > v_policy.max_trial_days
+      OR v_grace_days > v_policy.max_grace_days
+      OR v_starts_at > v_now + make_interval(days => v_policy.max_schedule_days);
     IF v_trial_days NOT BETWEEN 1 AND 365 OR v_grace_days NOT BETWEEN 0 AND 30
-      OR (NOT p_allow_override AND (
-        v_trial_days > v_policy.max_trial_days
-        OR v_grace_days > v_policy.max_grace_days
-        OR v_starts_at > v_now + make_interval(days => v_policy.max_schedule_days)
-      )) OR v_starts_at < v_now - interval '5 minutes'
+      OR v_starts_at < v_now - interval '5 minutes'
     THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
+    IF v_override_needed AND NOT p_allow_override THEN
+      RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+    END IF;
+    IF v_override_needed THEN
+      PERFORM public.platform_service_trial_lock_platform_actor(
+        p_actor_employee_id, ARRAY['platform.service_trial.override']
+      );
+    END IF;
     v_status := CASE WHEN v_starts_at > v_now THEN 'scheduled' ELSE 'active' END;
 
     UPDATE public.tenant_service_trials SET
@@ -1463,7 +1535,7 @@ BEGIN
       activated_at = CASE WHEN v_status = 'active' THEN v_now ELSE NULL END,
       trial_ends_at = v_starts_at + make_interval(days => v_trial_days),
       grace_ends_at = v_starts_at + make_interval(days => v_trial_days + v_grace_days),
-      scope_snapshot = p_scope, assignee_employee_id = p_assignee_employee_id,
+      scope_snapshot = v_scope, assignee_employee_id = p_assignee_employee_id,
       policy_snapshot = jsonb_build_object(
         'policy_id', v_policy.id, 'version', v_policy.version,
         'trial_days', v_trial_days, 'grace_days', v_grace_days,
@@ -1475,7 +1547,7 @@ BEGIN
         'reapply_cooldown_days', v_policy.reapply_cooldown_days,
         'allow_repeat', v_policy.allow_repeat,
         'reminder_days', to_jsonb(v_policy.reminder_days),
-        'override_used', p_allow_override
+        'override_used', v_override_needed
       ), version = version + 1, updated_at = v_now
     WHERE id = v_trial.id RETURNING * INTO v_trial;
     INSERT INTO public.tenant_service_trial_events (
@@ -1485,7 +1557,7 @@ BEGIN
       v_trial.tenant_id, v_trial.id, 'application-approved',
       'application_approved', 'pending_review', v_status, btrim(p_reason),
       p_actor_employee_id,
-      jsonb_build_object('trial_type', p_trial_type, 'override_used', p_allow_override),
+      jsonb_build_object('trial_type', p_trial_type, 'override_used', v_override_needed),
       v_now
     );
     IF v_status = 'active' THEN
@@ -1544,12 +1616,14 @@ DECLARE
   v_trial_days integer;
   v_grace_days integer;
   v_starts_at timestamptz;
+  v_scope jsonb;
+  v_override_needed boolean;
+  v_repeat_requires_override boolean;
   v_status text;
   v_result jsonb;
 BEGIN
   IF p_tenant_id IS NULL OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
     OR p_trial_type IS NULL OR p_trial_type NOT IN ('standard', 'guided')
-    OR NOT public.platform_service_trial_scope_valid(p_scope)
     OR NULLIF(btrim(p_reason), '') IS NULL OR char_length(p_reason) > 1000
     OR (p_trial_type = 'guided' AND p_assignee_employee_id IS NULL)
     OR p_allow_override IS NULL
@@ -1558,19 +1632,28 @@ BEGIN
     'action', 'grant', 'tenant_id', p_tenant_id, 'trial_type', p_trial_type,
     'scope', p_scope, 'reason', btrim(p_reason), 'trial_days', p_trial_days,
     'grace_days', p_grace_days, 'starts_at', p_starts_at,
-    'assignee_employee_id', p_assignee_employee_id,
-    'allow_override', p_allow_override
+    'assignee_employee_id', p_assignee_employee_id
   )::text, 'sha256');
   PERFORM public.platform_service_trial_lock_platform_actor(
     p_actor_employee_id,
     ARRAY['platform.service_trial.manage']
-      || CASE WHEN p_allow_override
-        THEN ARRAY['platform.service_trial.override'] ELSE '{}'::text[] END
   );
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
-  IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
+  IF v_replay IS NOT NULL THEN
+    IF (v_replay->'trial_snapshot'->'policy_snapshot'->'override_used')
+      = 'true'::jsonb
+    THEN
+      IF NOT p_allow_override THEN
+        RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+      END IF;
+      PERFORM public.platform_service_trial_lock_platform_actor(
+        p_actor_employee_id, ARRAY['platform.service_trial.override']
+      );
+    END IF;
+    RETURN v_replay;
+  END IF;
 
   IF p_assignee_employee_id IS NOT NULL THEN
     PERFORM public.platform_service_trial_lock_platform_actor(
@@ -1610,7 +1693,19 @@ BEGIN
   v_replay := public.platform_service_trial_replay_command(
     v_scope_key, p_idempotency_key, v_request_hash
   );
-  IF v_replay IS NOT NULL THEN RETURN v_replay; END IF;
+  IF v_replay IS NOT NULL THEN
+    IF (v_replay->'trial_snapshot'->'policy_snapshot'->'override_used')
+      = 'true'::jsonb
+    THEN
+      IF NOT p_allow_override THEN
+        RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+      END IF;
+      PERFORM public.platform_service_trial_lock_platform_actor(
+        p_actor_employee_id, ARRAY['platform.service_trial.override']
+      );
+    END IF;
+    RETURN v_replay;
+  END IF;
 
   FOR v_existing IN
     SELECT id, tenant_id FROM public.tenant_service_trials
@@ -1648,26 +1743,37 @@ BEGIN
   SELECT * INTO v_policy FROM public.platform_service_trial_policies
   WHERE is_current = true FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
-  IF EXISTS (SELECT 1 FROM public.tenant_service_trials
+  v_scope := coalesce(p_scope, CASE WHEN p_trial_type = 'guided'
+    THEN v_policy.guided_scope ELSE v_policy.standard_scope END);
+  IF NOT public.platform_service_trial_scope_valid(v_scope) THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
+  END IF;
+  v_repeat_requires_override := EXISTS (SELECT 1 FROM public.tenant_service_trials
     WHERE enterprise_identity_hash = v_enterprise_hash
       AND (granted_at IS NOT NULL OR converted_order_id IS NOT NULL))
-    AND NOT v_policy.allow_repeat AND NOT p_allow_override
-  THEN RAISE EXCEPTION 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE' USING ERRCODE = 'P0001'; END IF;
-  IF p_allow_override AND NULLIF(btrim(p_reason), '') IS NULL THEN
+    AND NOT v_policy.allow_repeat;
+  IF v_repeat_requires_override AND NOT p_allow_override THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE' USING ERRCODE = 'P0001';
   END IF;
 
   v_trial_days := coalesce(p_trial_days, v_policy.trial_days);
   v_grace_days := coalesce(p_grace_days, v_policy.grace_days);
   v_starts_at := coalesce(p_starts_at, v_now);
+  v_override_needed := v_repeat_requires_override
+    OR v_trial_days > v_policy.max_trial_days
+    OR v_grace_days > v_policy.max_grace_days
+    OR v_starts_at > v_now + make_interval(days => v_policy.max_schedule_days);
   IF v_trial_days NOT BETWEEN 1 AND 365 OR v_grace_days NOT BETWEEN 0 AND 30
     OR v_starts_at < v_now - interval '5 minutes'
-    OR (NOT p_allow_override AND (
-      v_trial_days > v_policy.max_trial_days
-      OR v_grace_days > v_policy.max_grace_days
-      OR v_starts_at > v_now + make_interval(days => v_policy.max_schedule_days)
-    ))
   THEN RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001'; END IF;
+  IF v_override_needed AND NOT p_allow_override THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_override_needed THEN
+    PERFORM public.platform_service_trial_lock_platform_actor(
+      p_actor_employee_id, ARRAY['platform.service_trial.override']
+    );
+  END IF;
   v_status := CASE WHEN v_starts_at > v_now THEN 'scheduled' ELSE 'active' END;
 
   INSERT INTO public.tenant_service_trials (
@@ -1681,7 +1787,7 @@ BEGIN
     CASE WHEN v_status = 'active' THEN v_now ELSE NULL END,
     v_starts_at + make_interval(days => v_trial_days),
     v_starts_at + make_interval(days => v_trial_days + v_grace_days),
-    p_assignee_employee_id, p_scope,
+    p_assignee_employee_id, v_scope,
     jsonb_build_object(
       'policy_id', v_policy.id, 'version', v_policy.version,
       'trial_days', v_trial_days, 'grace_days', v_grace_days,
@@ -1693,7 +1799,7 @@ BEGIN
       'reapply_cooldown_days', v_policy.reapply_cooldown_days,
       'allow_repeat', v_policy.allow_repeat,
       'reminder_days', to_jsonb(v_policy.reminder_days),
-      'override_used', p_allow_override
+      'override_used', v_override_needed
     )
   ) RETURNING * INTO v_trial;
   INSERT INTO public.tenant_service_trial_events (
@@ -1702,7 +1808,7 @@ BEGIN
   ) VALUES (
     v_trial.tenant_id, v_trial.id, 'trial-granted', 'trial_granted',
     v_trial.status, btrim(p_reason), p_actor_employee_id,
-    jsonb_build_object('trial_type', p_trial_type, 'override_used', p_allow_override),
+    jsonb_build_object('trial_type', p_trial_type, 'override_used', v_override_needed),
     v_now
   );
   IF v_status = 'active' THEN
@@ -1752,6 +1858,7 @@ DECLARE
   v_from_status text;
   v_new_end timestamptz;
   v_grace_days integer;
+  v_override_needed boolean;
   v_result jsonb;
 BEGIN
   IF p_trial_id IS NULL OR p_actor_employee_id IS NULL OR p_expected_version IS NULL
@@ -1763,7 +1870,7 @@ BEGIN
   v_request_hash := extensions.digest(jsonb_build_object(
     'action', 'extend', 'trial_id', p_trial_id,
     'expected_version', p_expected_version, 'extension_days', p_extension_days,
-    'reason', btrim(p_reason), 'allow_override', p_allow_override
+    'reason', btrim(p_reason)
   )::text, 'sha256');
   SELECT tenant_id, enterprise_identity_hash INTO v_identity
   FROM public.tenant_service_trials WHERE id = p_trial_id;
@@ -1798,10 +1905,16 @@ BEGIN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
   v_from_status := v_trial.status;
-  IF NOT p_allow_override AND (
-    v_trial.extension_count >= coalesce((v_trial.policy_snapshot->>'max_extension_count')::integer, 1)
-    OR p_extension_days > coalesce((v_trial.policy_snapshot->>'max_extension_days')::integer, 30)
-  ) THEN RAISE EXCEPTION 'SERVICE_TRIAL_EXTENSION_INVALID' USING ERRCODE = 'P0001'; END IF;
+  v_override_needed := (
+    v_trial.extension_count >= coalesce(
+      (v_trial.policy_snapshot->>'max_extension_count')::integer, 1
+    ) OR p_extension_days > coalesce(
+      (v_trial.policy_snapshot->>'max_extension_days')::integer, 30
+    )
+  );
+  IF v_override_needed AND NOT p_allow_override THEN
+    RAISE EXCEPTION 'SERVICE_TRIAL_OVERRIDE_REQUIRED' USING ERRCODE = 'P0001';
+  END IF;
   IF v_trial.extension_count >= 20 THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_EXTENSION_INVALID' USING ERRCODE = 'P0001';
   END IF;
@@ -1827,7 +1940,8 @@ BEGIN
     v_trial.tenant_id, v_trial.id, 'extend:' || v_trial.version::text,
     'trial_extended', v_from_status, 'active', btrim(p_reason),
     p_actor_employee_id,
-    jsonb_build_object('extension_days', p_extension_days, 'override_used', p_allow_override),
+    jsonb_build_object('extension_days', p_extension_days,
+      'override_used', v_override_needed),
     v_now
   );
   v_result := jsonb_build_object(

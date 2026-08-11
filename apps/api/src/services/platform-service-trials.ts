@@ -31,10 +31,6 @@ type PlatformServiceTrialDependencies = {
   repository?: RepositoryPort;
   nowFactory?: () => Date;
 };
-type RepeatAwareCommand =
-  | Extract<TrialCommandInput, { action: 'grant' }>
-  | Extract<TrialCommandInput, { action: 'review'; decision: 'approved' }>;
-
 const PERMISSION = {
   read: 'platform.service_trial.read',
   review: 'platform.service_trial.review',
@@ -107,10 +103,6 @@ export class PlatformServiceTrialService {
     if (input.trial_type === 'guided' || input.assignee_employee_id) {
       this.requirePermission(authContext, PERMISSION.manage);
     }
-    const policy = await this.requirePolicy();
-    const now = this.nowFactory();
-    const allowOverride = exceedsGrantPolicy(input, policy, now);
-    if (allowOverride) this.requirePermission(authContext, PERMISSION.override);
     if (input.trial_type === 'guided' && !input.assignee_employee_id) {
       throw Errors.badRequest('陪跑试用必须指定平台跟进人');
     }
@@ -118,46 +110,43 @@ export class PlatformServiceTrialService {
       action: 'review', trialId, actorEmployeeId,
       decision: 'approved', expectedVersion: input.expected_version,
       idempotencyKey: input.idempotency_key, reason: input.reason,
-      scope: input.scope ?? (input.trial_type === 'guided'
-        ? policy.guided_scope : policy.standard_scope),
+      scope: input.scope,
       trialDays: input.trial_days,
       graceDays: input.grace_days,
       startsAt: input.starts_at,
-      allowOverride,
+      allowOverride: hasPermission(authContext, PERMISSION.override),
     } as const;
-    const command: RepeatAwareCommand = input.trial_type === 'guided'
+    const command: Extract<TrialCommandInput, {
+      action: 'review'; decision: 'approved';
+    }> = input.trial_type === 'guided'
       ? { ...commandBase, trialType: 'guided',
         assigneeEmployeeId: requireAssignee(input.assignee_employee_id) }
       : { ...commandBase, trialType: 'standard',
         assigneeEmployeeId: input.assignee_employee_id };
-    const result = await this.executeRepeatAware(command, authContext);
+    const result = await this.repository.executeCommand(command);
     return this.commandResponse(result, authContext);
   }
 
   async grant(authContext: AuthContext, input: PlatformServiceTrialGrantInput) {
     const actorEmployeeId = this.requirePermission(authContext, PERMISSION.manage);
-    const policy = await this.requirePolicy();
-    const now = this.nowFactory();
-    const allowOverride = exceedsGrantPolicy(input, policy, now);
-    if (allowOverride) this.requirePermission(authContext, PERMISSION.override);
     if (input.trial_type === 'guided' && !input.assignee_employee_id) {
       throw Errors.badRequest('陪跑试用必须指定平台跟进人');
     }
     const commandBase = {
       action: 'grant', tenantId: input.tenant_id, actorEmployeeId,
-      scope: input.scope ?? (input.trial_type === 'guided'
-        ? policy.guided_scope : policy.standard_scope),
+      scope: input.scope,
       reason: input.reason, idempotencyKey: input.idempotency_key,
       trialDays: input.trial_days, graceDays: input.grace_days,
       startsAt: input.starts_at,
-      allowOverride,
+      allowOverride: hasPermission(authContext, PERMISSION.override),
     } as const;
-    const command: RepeatAwareCommand = input.trial_type === 'guided'
+    const command: Extract<TrialCommandInput, { action: 'grant' }> =
+      input.trial_type === 'guided'
       ? { ...commandBase, trialType: 'guided',
         assigneeEmployeeId: requireAssignee(input.assignee_employee_id) }
       : { ...commandBase, trialType: 'standard',
         assigneeEmployeeId: input.assignee_employee_id };
-    const result = await this.executeRepeatAware(command, authContext);
+    const result = await this.repository.executeCommand(command);
     return this.commandResponse(result, authContext);
   }
 
@@ -165,17 +154,13 @@ export class PlatformServiceTrialService {
     input: PlatformServiceTrialExtendInput) {
     const actorEmployeeId = this.requirePermission(authContext, PERMISSION.manage);
     this.requirePermission(authContext, PERMISSION.override);
-    const current = await this.requireTrial(trialId);
-    const allowOverride = current.extension_count
-      >= current.policy_snapshot.max_extension_count
-      || input.extension_days > current.policy_snapshot.max_extension_days;
     const result = await this.repository.executeCommand({
       action: 'extend', trialId, actorEmployeeId,
       expectedVersion: input.expected_version,
       idempotencyKey: input.idempotency_key,
       extensionDays: input.extension_days,
       reason: input.reason,
-      allowOverride,
+      allowOverride: true,
     });
     return this.commandResponse(result, authContext);
   }
@@ -240,22 +225,6 @@ export class PlatformServiceTrialService {
       available_actions: { update_policy: policyAction(authContext) },
       server_time: now.toISOString(),
     };
-  }
-
-  private async executeRepeatAware(
-    command: RepeatAwareCommand,
-    authContext: AuthContext,
-  ): Promise<TrialCommandResult> {
-    try {
-      return await this.repository.executeCommand(command);
-    } catch (error) {
-      if (!hasErrorCode(error, 'SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE')
-        || !hasPermission(authContext, PERMISSION.override)
-        || !('allowOverride' in command) || command.allowOverride) {
-        throw error;
-      }
-      return this.repository.executeCommand({ ...command, allowOverride: true });
-    }
   }
 
   private commandResponse(result: TrialCommandResult,
@@ -326,27 +295,6 @@ function hasPermission(authContext: AuthContext, permission: string): boolean {
 function permissionSet(authContext: AuthContext): ReadonlySet<string> {
   if (authContext.isPlatformSuperAdmin) return new Set(Object.values(PERMISSION));
   return new Set(authContext.permissions.map((item) => item.code));
-}
-
-function exceedsGrantPolicy(input: {
-  trial_days?: number;
-  grace_days?: number;
-  starts_at?: string;
-}, policy: {
-  max_trial_days: number;
-  max_grace_days: number;
-  max_schedule_days: number;
-}, now: Date): boolean {
-  return (input.trial_days ?? 0) > policy.max_trial_days
-    || (input.grace_days ?? 0) > policy.max_grace_days
-    || input.starts_at !== undefined
-      && Date.parse(input.starts_at)
-        > now.getTime() + policy.max_schedule_days * 86_400_000;
-}
-
-function hasErrorCode(error: unknown, code: string): boolean {
-  return Boolean(error && typeof error === 'object' && 'code' in error
-    && error.code === code);
 }
 
 function policyAction(authContext: AuthContext) {
