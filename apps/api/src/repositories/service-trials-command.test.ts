@@ -218,6 +218,85 @@ describe('ServiceTrialRepository commands', () => {
     },
   );
 
+  test('maps a complete policy replacement to the exact RPC signature', async () => {
+    const result = {
+      policy_id: '77777777-7777-4777-8777-777777777777',
+      version: 2,
+      is_current: true,
+      idempotent: false,
+    } as const;
+    const f = harness({ data: result, error: null });
+    const policy = {
+      trialDays: 30,
+      graceDays: 7,
+      reminderDays: [7, 3, 1],
+      maxTrialDays: 60,
+      maxGraceDays: 14,
+      maxScheduleDays: 30,
+      maxExtensionCount: 1,
+      maxExtensionDays: 30,
+      reapplyCooldownDays: 30,
+      allowRepeat: false,
+      standardScope: validScope,
+      guidedScope: validScope,
+    };
+
+    expect(await f.repository.updatePolicy({
+      actorEmployeeId: ACTOR_ID,
+      expectedVersion: 1,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      reason: '调整默认试用规则',
+      policy,
+    })).toEqual(result);
+    expect(f.calls).toEqual([['rpc', 'platform_service_trial_update_policy', {
+      p_actor_employee_id: ACTOR_ID,
+      p_expected_version: 1,
+      p_idempotency_key: IDEMPOTENCY_KEY,
+      p_policy: {
+        trial_days: 30,
+        grace_days: 7,
+        reminder_days: [7, 3, 1],
+        max_trial_days: 60,
+        max_grace_days: 14,
+        max_schedule_days: 30,
+        max_extension_count: 1,
+        max_extension_days: 30,
+        reapply_cooldown_days: 30,
+        allow_repeat: false,
+        standard_scope: validScope,
+        guided_scope: validScope,
+      },
+      p_reason: '调整默认试用规则',
+    }]]);
+  });
+
+  test('strictly validates and binds policy update envelopes', async () => {
+    const input = {
+      actorEmployeeId: ACTOR_ID,
+      expectedVersion: 1,
+      idempotencyKey: IDEMPOTENCY_KEY,
+      reason: '调整默认试用规则',
+      policy: {
+        trialDays: 30, graceDays: 7, reminderDays: [7, 3, 1],
+        maxTrialDays: 60, maxGraceDays: 14, maxScheduleDays: 30,
+        maxExtensionCount: 1, maxExtensionDays: 30,
+        reapplyCooldownDays: 30, allowRepeat: false,
+        standardScope: validScope, guidedScope: validScope,
+      },
+    };
+    for (const data of [
+      { policy_id: TRIAL_ID, version: 2, is_current: true,
+        idempotent: false, secret: 'unexpected' },
+      { policy_id: TRIAL_ID, version: 2, is_current: false,
+        idempotent: false },
+    ]) {
+      const f = harness({ data, error: null });
+      await expect(f.repository.updatePolicy(input)).rejects.toMatchObject({
+        statusCode: 500, code: 'DB_ERROR', details: undefined,
+      });
+    }
+  });
+
   test('strictly validates command envelopes and action-specific assigned fact', async () => {
     for (const data of [
       { ...commandResult, secret: 'unexpected' },

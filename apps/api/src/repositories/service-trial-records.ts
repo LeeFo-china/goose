@@ -279,6 +279,12 @@ export const CommandResultSchema = z.object({
 }).strict();
 export const AssignResultSchema = CommandResultSchema
   .extend({ assigned: z.boolean() }).strict();
+export const PolicyCommandResultSchema = z.object({
+  policy_id: z.uuid(),
+  version: z.number().int().positive(),
+  is_current: z.literal(true),
+  idempotent: z.boolean(),
+}).strict();
 
 export type TrialRecord = z.infer<typeof TrialRowSchema>;
 export type TrialListRecord = z.infer<typeof TrialListRawSchema>;
@@ -287,3 +293,4 @@ export type TrialSummary = z.infer<typeof TrialSummarySchema>;
 export type TrialPolicyRecord = z.infer<typeof TrialPolicySchema>;
 export type TrialCommandResult = z.infer<typeof CommandResultSchema>
   | z.infer<typeof AssignResultSchema>;
+export type PolicyCommandResult = z.infer<typeof PolicyCommandResultSchema>;

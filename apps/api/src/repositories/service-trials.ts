@@ -12,12 +12,14 @@ import { SupabaseDB } from '@/utils/supabase/index';
 import {
   AssignResultSchema,
   CommandResultSchema,
+  PolicyCommandResultSchema,
   SERVICE_TRIAL_EVENT_LIMIT,
   TrialDetailSchema,
   TrialListRawSchema,
   TrialPolicySchema,
   TrialRowSchema,
   TrialSummarySchema,
+  type PolicyCommandResult,
   type TrialCommandResult,
   type TrialDetailRecord,
   type TrialListRecord,
@@ -27,6 +29,7 @@ import {
 } from './service-trial-records';
 
 export type {
+  PolicyCommandResult,
   TrialCommandResult,
   TrialDetailRecord,
   TrialListRecord,
@@ -85,6 +88,26 @@ type AssignCommand = { action: 'assign'; trialId: string; actorEmployeeId: strin
   expectedVersion: number; idempotencyKey: string; assigneeEmployeeId: string | null };
 export type TrialCommandInput = ApplyCommand | WithdrawCommand | ReviewCommand
   | GrantCommand | ExtendCommand | RevokeCommand | AssignCommand;
+export type TrialPolicyUpdateCommand = {
+  actorEmployeeId: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+  reason: string;
+  policy: {
+    trialDays: number;
+    graceDays: number;
+    reminderDays: number[];
+    maxTrialDays: number;
+    maxGraceDays: number;
+    maxScheduleDays: number;
+    maxExtensionCount: number;
+    maxExtensionDays: number;
+    reapplyCooldownDays: number;
+    allowRepeat: boolean;
+    standardScope: PlatformServiceTrialScopeV1;
+    guidedScope: PlatformServiceTrialScopeV1;
+  };
+};
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
 export type ServiceTrialQuery = PromiseLike<QueryResult> & {
@@ -345,6 +368,45 @@ export class ServiceTrialRepository {
       throw Errors.dbError('执行技术服务试用操作失败');
     }
     return parsed;
+  }
+
+  async updatePolicy(
+    input: TrialPolicyUpdateCommand,
+  ): Promise<PolicyCommandResult> {
+    let result: QueryResult;
+    try {
+      result = await this.clientProvider().rpc(
+        'platform_service_trial_update_policy',
+        {
+          p_actor_employee_id: input.actorEmployeeId,
+          p_expected_version: input.expectedVersion,
+          p_idempotency_key: input.idempotencyKey,
+          p_policy: {
+            trial_days: input.policy.trialDays,
+            grace_days: input.policy.graceDays,
+            reminder_days: input.policy.reminderDays,
+            max_trial_days: input.policy.maxTrialDays,
+            max_grace_days: input.policy.maxGraceDays,
+            max_schedule_days: input.policy.maxScheduleDays,
+            max_extension_count: input.policy.maxExtensionCount,
+            max_extension_days: input.policy.maxExtensionDays,
+            reapply_cooldown_days: input.policy.reapplyCooldownDays,
+            allow_repeat: input.policy.allowRepeat,
+            standard_scope: input.policy.standardScope,
+            guided_scope: input.policy.guidedScope,
+          },
+          p_reason: input.reason,
+        },
+      );
+    } catch {
+      throw Errors.dbError('更新技术服务试用策略失败');
+    }
+    if (result.error) throwCommandError(result.error);
+    return parse(
+      PolicyCommandResultSchema,
+      result.data,
+      '更新技术服务试用策略失败',
+    );
   }
 }
 
