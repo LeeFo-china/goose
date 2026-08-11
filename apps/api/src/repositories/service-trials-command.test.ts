@@ -65,12 +65,12 @@ const rejectedReviewWithGrant = { ...reviewTypeBase, decision: 'rejected',
   trialType: 'standard', scope: { version: 1, capabilities: [] },
   allowOverride: false } as const;
 const guidedReviewWithoutAssignee = { ...reviewTypeBase, decision: 'approved',
-  trialType: 'guided', scope: { version: 1, capabilities: [] },
+  trialType: 'guided', scope: { version: 1, capabilities: ['core.projects'] },
   allowOverride: false } as const;
 const grantWithoutScope = { ...grantTypeBase,
   trialType: 'standard' } as const;
 const guidedGrantWithoutAssignee = { ...grantTypeBase, trialType: 'guided',
-  scope: { version: 1, capabilities: [] } } as const;
+  scope: { version: 1, capabilities: ['core.projects'] } } as const;
 // @ts-expect-error approved review requires a scope
 const approvedReviewContract: TrialCommandInput = approvedReviewWithoutScope;
 // @ts-expect-error rejected review forbids grant configuration
