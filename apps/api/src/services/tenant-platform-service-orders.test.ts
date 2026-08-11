@@ -17,8 +17,8 @@ const orderId = "00000000-0000-4000-8000-000000000301";
 const productId = "00000000-0000-4000-8000-000000000101";
 const productVersionId = "00000000-0000-4000-8000-000000000201";
 const configId = "00000000-0000-4000-8000-000000000401";
+const sourceTrialId = "00000000-0000-4000-8000-000000000501";
 const now = new Date("2026-08-03T12:00:00.000Z");
-
 const tenantAuth = {
   authUserId: "auth-tenant",
   employeeId,
@@ -333,7 +333,6 @@ describe("TenantPlatformServiceOrderService", () => {
       "./tenant-platform-service-orders"
     );
     const service = new TenantPlatformServiceOrderService(dependencies);
-
     await expect(service.createOrder(tenantAuth, {
       product_code: "platform_service_1y",
       terms_version: 0,
@@ -364,7 +363,7 @@ describe("TenantPlatformServiceOrderService", () => {
     });
   });
 
-  test("creates one order for the same tenant idempotency key", async () => {
+  test("rejects an idempotent retry with a different trial source", async () => {
     dependencies.repository.findOrderByIdempotencyKey.mockImplementationOnce(
       async () => order,
     );
@@ -373,15 +372,18 @@ describe("TenantPlatformServiceOrderService", () => {
     );
     const service = new TenantPlatformServiceOrderService(dependencies);
 
-    const result = await service.createOrder(tenantAuth, {
+    await expect(service.createOrder(tenantAuth, {
       product_code: "platform_service_1y",
       terms_version: 1,
       terms_accepted: true,
       idempotency_key: "00000000-0000-4000-8000-000000000905",
-    }, "openid-user");
-
-    expect(result.idempotent).toBe(true);
+      source_trial_id: sourceTrialId,
+    }, "openid-user")).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SERVICE_TRIAL_ORDER_SOURCE_INVALID",
+    });
     expect(dependencies.repository.createPendingOrder).not.toHaveBeenCalled();
+    expect(dependencies.wechatPayGateway.createJsapiPrepay).not.toHaveBeenCalled();
   });
 
   test("creates JSAPI prepay with the platform ordinary payment profile", async () => {

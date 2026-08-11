@@ -31,7 +31,6 @@ export type ResolveTenantServiceAccessInput = {
   tenantId: string;
   routeAccess: TenantServiceRouteAccess;
   requiredCapability?: PlatformServiceTrialCapability | null;
-  now: Date;
 };
 
 export type TenantServiceAccessServiceDependencies = {
@@ -95,9 +94,8 @@ export class TenantServiceAccessService {
   ): Promise<TenantServiceAccessDecision> {
     const facts = await this.repository.getAccessFacts({
       tenantId: input.tenantId,
-      now: input.now,
     });
-    const resolution = resolveAccessFacts(facts, input.now);
+    const resolution = resolveAccessFacts(facts);
 
     return resolveTenantServiceRouteDecision({
       ...resolution,
@@ -161,10 +159,7 @@ export function resolveTenantServiceRouteDecision(
   };
 }
 
-function resolveAccessFacts(
-  facts: TenantServiceAccessFacts,
-  now: Date,
-): AccessResolution {
+function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
   if (facts.tenantStatus !== "active") {
     return {
       mode: "hard_blocked",
@@ -192,7 +187,7 @@ function resolveAccessFacts(
     };
   }
 
-  const trial = resolveEffectiveTrial(facts.currentTrial, now);
+  const trial = resolveEffectiveTrial(facts.currentTrial);
   if (trial) return trial;
 
   if (facts.legacySubscriptionStatus !== "locked") {
@@ -214,12 +209,9 @@ function resolveAccessFacts(
 
 function resolveEffectiveTrial(
   trial: TenantServiceAccessFacts["currentTrial"],
-  now: Date,
 ): AccessResolution | null {
   if (!trial) return null;
-  const nowTimestamp = now.getTime();
-  if (nowTimestamp < Date.parse(trial.starts_at)) return null;
-  if (nowTimestamp < Date.parse(trial.trial_ends_at)) {
+  if (trial.status === "active") {
     return {
       mode: "trial",
       startsAt: trial.starts_at,
@@ -227,15 +219,12 @@ function resolveEffectiveTrial(
       capabilities: trial.scope_snapshot.capabilities,
     };
   }
-  if (nowTimestamp < Date.parse(trial.grace_ends_at)) {
-    return {
-      mode: "grace",
-      startsAt: trial.starts_at,
-      endsAt: trial.grace_ends_at,
-      capabilities: trial.scope_snapshot.capabilities,
-    };
-  }
-  return null;
+  return {
+    mode: "grace",
+    startsAt: trial.starts_at,
+    endsAt: trial.grace_ends_at,
+    capabilities: trial.scope_snapshot.capabilities,
+  };
 }
 
 function isRouteAllowed(

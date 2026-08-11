@@ -217,7 +217,6 @@ export class AuthorizationService {
       tenantId: authContext.tenantId,
       routeAccess: options.tenantServiceAccess ?? "write",
       requiredCapability: options.requiredCapability ?? null,
-      now: new Date(),
     });
     if (decision.allowed) {
       return;

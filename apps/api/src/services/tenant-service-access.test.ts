@@ -19,6 +19,7 @@ const ROUTE_ACCESSES = [
 ] as const;
 
 const baseFacts: TenantServiceAccessFacts = {
+  evaluatedAt: NOW.toISOString(),
   tenantStatus: "active",
   contract: null,
   paidOnboardingOrder: null,
@@ -45,7 +46,6 @@ describe("TenantServiceAccessService", () => {
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
       routeAccess: "recovery",
-      now: NOW,
     });
 
     expect(decision).toEqual({
@@ -108,6 +108,7 @@ describe("TenantServiceAccessService", () => {
       facts: {
         ...baseFacts,
         currentTrial: trialFact({
+          status: "grace_period",
           trial_ends_at: "2026-08-09T00:00:00.000Z",
           grace_ends_at: "2026-08-16T00:00:00.000Z",
         }),
@@ -142,11 +143,10 @@ describe("TenantServiceAccessService", () => {
       tenantId: TENANT_ID,
       routeAccess: expected.mode === "service_blocked" ? "read" : "write",
       requiredCapability: "core.projects",
-      now: NOW,
     });
 
     expect(decision).toMatchObject(expected);
-    expect(getAccessFacts).toHaveBeenCalledWith({ tenantId: TENANT_ID, now: NOW });
+    expect(getAccessFacts).toHaveBeenCalledWith({ tenantId: TENANT_ID });
   });
 
   test("does not prune paid access by trial capability", async () => {
@@ -165,7 +165,6 @@ describe("TenantServiceAccessService", () => {
       tenantId: TENANT_ID,
       routeAccess: "write",
       requiredCapability: "core.files",
-      now: NOW,
     });
 
     expect(decision).toMatchObject({
@@ -191,7 +190,6 @@ describe("TenantServiceAccessService", () => {
       tenantId: TENANT_ID,
       routeAccess: "read",
       requiredCapability: "core.files",
-      now: NOW,
     })).toMatchObject({
       mode: "trial",
       allowed: false,
@@ -206,11 +204,7 @@ describe("TenantServiceAccessService", () => {
       repository: {
         getAccessFacts: mock(async () => ({
           ...baseFacts,
-          currentTrial: trialFact({
-            status: "grace_period",
-            trial_ends_at: "2026-08-01T00:00:00.000Z",
-            grace_ends_at: "2026-08-09T00:00:00.000Z",
-          }),
+          currentTrial: null,
         })),
       },
     });
@@ -219,7 +213,6 @@ describe("TenantServiceAccessService", () => {
       tenantId: TENANT_ID,
       routeAccess: "read",
       requiredCapability: "core.projects",
-      now: NOW,
     })).toMatchObject({
       mode: "service_blocked",
       allowed: false,
