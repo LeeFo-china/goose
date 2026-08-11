@@ -60,6 +60,7 @@ const activeTrial = {
   trial_ends_at: '2026-09-09T08:00:00.000Z',
   grace_ends_at: '2026-09-16T08:00:00.000Z',
   granted_by_employee_id: ACTOR_ID, assignee_employee_id: ASSIGNEE_ID,
+  policy_snapshot: { ...policySnapshot, override_used: false },
 } satisfies TrialRecord;
 const tenantSummary = { id: TENANT_ID, name: '示例企业', slug: 'example' };
 const assigneeSummary = {
@@ -184,12 +185,11 @@ describe('ServiceTrialRepository reads', () => {
 
   test('selects and strictly parses the policy snapshot needed for audit facts', async () => {
     const row = { ...pendingTrial, policy_snapshot: policySnapshot };
-    const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
+    const shortTrialRow = { ...row, policy_snapshot: { ...policySnapshot, trial_days: 2 } };
+    const f = harness({ tableResult: { data: [row, shortTrialRow], error: null, count: 2 } });
     expect((await f.repository.listTenantTrials({ tenantId: TENANT_ID })).list)
-      .toEqual([row]);
-    expect(String(f.calls.find((call) => call[0] === 'select')?.[1]))
-      .toContain('policy_snapshot');
-
+      .toEqual([row, shortTrialRow]);
+    expect(String(f.calls.find((call) => call[0] === 'select')?.[1])).toContain('policy_snapshot');
     const malformed = harness({ tableResult: { data: [{ ...row,
       policy_snapshot: { ...policySnapshot, reminder_days: [3, 7, 3] },
     }], error: null, count: 1 } });
@@ -354,6 +354,8 @@ describe('ServiceTrialRepository reads', () => {
     { ...pendingTrial, status: 'converted', review_decision: 'approved',
       reviewed_at: NOW, reviewed_by_employee_id: ACTOR_ID, review_reason: '通过',
       converted_order_id: convertedOrderId, converted_at: NOW },
+    { ...pendingTrial, policy_snapshot: { ...policySnapshot, override_used: false } },
+    { ...activeTrial, policy_snapshot: policySnapshot },
   ])('rejects partial or status-contradictory lifecycle facts', async (row) => {
     const f = harness({ tableResult: { data: [row], error: null, count: 1 } });
     await expectDbError(f.repository.listTenantTrials({ tenantId: TENANT_ID }));
@@ -422,8 +424,7 @@ describe('ServiceTrialRepository reads', () => {
     const detail = { ...activeTrial, tenant: tenantSummary,
       assignee: assigneeSummary, events: [event] };
     const f = harness({ tableResult: { data: detail, error: null } });
-    expect(await f.repository.findTrialById({ id: TRIAL_ID, tenantId: TENANT_ID }))
-      .toEqual(detail);
+    expect(await f.repository.findTrialById({ id: TRIAL_ID, tenantId: TENANT_ID })).toEqual(detail);
     expect(f.calls.filter((call) => call[0] === 'from')).toHaveLength(1);
     expect(f.calls).toContainEqual(['eq', 'id', TRIAL_ID]);
     expect(f.calls).toContainEqual(['eq', 'tenant_id', TENANT_ID]);
@@ -461,8 +462,7 @@ describe('ServiceTrialRepository reads', () => {
     expect(f.calls).toContainEqual(['eq', 'is_current', true]);
     expect(f.calls).toContainEqual(['limit', 1, undefined]);
     expect(f.calls).toContainEqual(['maybeSingle']);
-    expect(String(f.calls.find((call) => call[0] === 'select')?.[1]))
-      .not.toContain('*');
+    expect(String(f.calls.find((call) => call[0] === 'select')?.[1])).not.toContain('*');
   });
 
   test('rejects inconsistent current policy reminder facts', async () => {

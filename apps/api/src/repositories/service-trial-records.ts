@@ -30,8 +30,8 @@ const PolicySnapshotSchema = z.object({
   if (policy.trial_days > policy.max_trial_days
     || policy.grace_days > policy.max_grace_days
     || new Set(policy.reminder_days).size !== policy.reminder_days.length
-    || policy.reminder_days.some((day, index) => day > policy.trial_days
-      || index > 0 && policy.reminder_days[index - 1]! <= day)) {
+    || policy.reminder_days.some((day, index) => index > 0
+      && policy.reminder_days[index - 1]! <= day)) {
     context.addIssue({ code: 'custom', message: '试用策略快照边界无效' });
   }
 });
@@ -97,8 +97,12 @@ function validateTrialFacts(row: TrialRow, context: z.RefinementCtx): void {
   const revokeState = state([row.revoked_at,
     row.revoked_by_employee_id, row.revoke_reason]);
   const conversionState = state([row.converted_at, row.converted_order_id]);
+  const hasOverrideFact = row.policy_snapshot.override_used !== undefined;
   if (state(durationFacts) === 'partial' || grantState === 'partial') {
     issue('试用发放时间事实不完整');
+  }
+  if ((grantState === 'complete') !== hasOverrideFact) {
+    issue('策略快照特批事实与发放状态冲突');
   }
   if (reviewState === 'partial') issue('审核事实不完整');
   if (withdrawState === 'partial') issue('撤回事实不完整');

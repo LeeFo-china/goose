@@ -51,6 +51,37 @@ const commandResult = {
   idempotent: false,
 } as const;
 
+const reviewTypeBase = {
+  action: 'review', trialId: TRIAL_ID, actorEmployeeId: ACTOR_ID,
+  expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY, reason: '审核',
+} as const;
+const grantTypeBase = {
+  action: 'grant', tenantId: TENANT_ID, actorEmployeeId: ACTOR_ID,
+  reason: '发放', idempotencyKey: IDEMPOTENCY_KEY, allowOverride: false,
+} as const;
+const approvedReviewWithoutScope = { ...reviewTypeBase, decision: 'approved',
+  trialType: 'standard', allowOverride: false } as const;
+const rejectedReviewWithGrant = { ...reviewTypeBase, decision: 'rejected',
+  trialType: 'standard', scope: { version: 1, capabilities: [] },
+  allowOverride: false } as const;
+const guidedReviewWithoutAssignee = { ...reviewTypeBase, decision: 'approved',
+  trialType: 'guided', scope: { version: 1, capabilities: [] },
+  allowOverride: false } as const;
+const grantWithoutScope = { ...grantTypeBase,
+  trialType: 'standard' } as const;
+const guidedGrantWithoutAssignee = { ...grantTypeBase, trialType: 'guided',
+  scope: { version: 1, capabilities: [] } } as const;
+// @ts-expect-error approved review requires a scope
+const approvedReviewContract: TrialCommandInput = approvedReviewWithoutScope;
+// @ts-expect-error rejected review forbids grant configuration
+const rejectedReviewContract: TrialCommandInput = rejectedReviewWithGrant;
+// @ts-expect-error guided review requires a non-null assignee
+const guidedReviewContract: TrialCommandInput = guidedReviewWithoutAssignee;
+// @ts-expect-error grant requires a scope
+const grantScopeContract: TrialCommandInput = grantWithoutScope;
+// @ts-expect-error guided grant requires a non-null assignee
+const guidedGrantContract: TrialCommandInput = guidedGrantWithoutAssignee;
+
 const commandCases: Array<{
   name: string;
   input: TrialCommandInput;

@@ -57,15 +57,25 @@ type ApplyCommand = { action: 'apply'; tenantId: string; actorEmployeeId: string
   contactName: string; contactPhone: string; idempotencyKey: string };
 type WithdrawCommand = { action: 'withdraw'; trialId: string; tenantId: string;
   actorEmployeeId: string; expectedVersion: number; reason: string; idempotencyKey: string };
-type ReviewCommand = { action: 'review'; trialId: string; actorEmployeeId: string;
-  decision: 'approved' | 'rejected'; expectedVersion: number; idempotencyKey: string;
-  reason: string; trialType?: PlatformServiceTrialType; scope?: PlatformServiceTrialScopeV1;
-  trialDays?: number; graceDays?: number; startsAt?: string;
-  assigneeEmployeeId?: string | null; allowOverride: boolean };
-type GrantCommand = { action: 'grant'; tenantId: string; actorEmployeeId: string;
-  trialType: PlatformServiceTrialType; scope?: PlatformServiceTrialScopeV1; reason: string;
-  idempotencyKey: string; trialDays?: number; graceDays?: number; startsAt?: string;
-  assigneeEmployeeId?: string | null; allowOverride: boolean };
+type ReviewCommandBase = { action: 'review'; trialId: string; actorEmployeeId: string;
+  expectedVersion: number; idempotencyKey: string; reason: string };
+type ApprovedReviewCommand = ReviewCommandBase & { decision: 'approved';
+  scope: PlatformServiceTrialScopeV1; trialDays?: number; graceDays?: number;
+  startsAt?: string; allowOverride: boolean } & (
+    { trialType: 'guided'; assigneeEmployeeId: string }
+    | { trialType: 'standard'; assigneeEmployeeId?: string | null }
+  );
+type RejectedReviewCommand = ReviewCommandBase & { decision: 'rejected';
+  trialType?: never; scope?: never; trialDays?: never; graceDays?: never;
+  startsAt?: never; assigneeEmployeeId?: never; allowOverride: false };
+type ReviewCommand = ApprovedReviewCommand | RejectedReviewCommand;
+type GrantCommandBase = { action: 'grant'; tenantId: string; actorEmployeeId: string;
+  scope: PlatformServiceTrialScopeV1; reason: string; idempotencyKey: string;
+  trialDays?: number; graceDays?: number; startsAt?: string; allowOverride: boolean };
+type GrantCommand = GrantCommandBase & (
+  { trialType: 'guided'; assigneeEmployeeId: string }
+  | { trialType: 'standard'; assigneeEmployeeId?: string | null }
+);
 type ExtendCommand = { action: 'extend'; trialId: string; actorEmployeeId: string;
   expectedVersion: number; idempotencyKey: string; extensionDays: number;
   reason: string; allowOverride: boolean };
