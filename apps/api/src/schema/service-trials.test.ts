@@ -129,6 +129,57 @@ describe("service trial schemas", () => {
     expect(PlatformServiceTrialGrantSchema.safeParse(grant).success).toBe(false);
   });
 
+  test("allows override durations only within database hard limits", () => {
+    const command = {
+      expected_version: 1,
+      idempotency_key: randomUUID(),
+      reason: "高权限例外试用",
+    };
+    const grant = {
+      tenant_id: randomUUID(),
+      trial_type: "standard" as const,
+      scope,
+      assignee_employee_id: null,
+      reason: command.reason,
+      idempotency_key: command.idempotency_key,
+    };
+    const approvedReview = {
+      ...command,
+      decision: "approved" as const,
+      trial_type: "standard" as const,
+      scope,
+      assignee_employee_id: null,
+    };
+
+    expect(PlatformServiceTrialGrantSchema.safeParse({
+      ...grant,
+      trial_days: 61,
+      grace_days: 15,
+    }).success).toBe(true);
+    expect(PlatformServiceTrialReviewSchema.safeParse({
+      ...approvedReview,
+      trial_days: 61,
+      grace_days: 15,
+    }).success).toBe(true);
+    expect(PlatformServiceTrialExtendSchema.safeParse({
+      ...command,
+      extension_days: 31,
+    }).success).toBe(true);
+
+    expect(PlatformServiceTrialGrantSchema.safeParse({
+      ...grant,
+      trial_days: 366,
+    }).success).toBe(false);
+    expect(PlatformServiceTrialReviewSchema.safeParse({
+      ...approvedReview,
+      grace_days: 31,
+    }).success).toBe(false);
+    expect(PlatformServiceTrialExtendSchema.safeParse({
+      ...command,
+      extension_days: 366,
+    }).success).toBe(false);
+  });
+
   test("uses a strict decision union for approved and rejected reviews", () => {
     const command = {
       expected_version: 1,
@@ -177,7 +228,7 @@ describe("service trial schemas", () => {
     }).success).toBe(true);
     expect(PlatformServiceTrialExtendSchema.safeParse({
       ...command,
-      extension_days: 31,
+      extension_days: 366,
     }).success).toBe(false);
     expect(PlatformServiceTrialAssignSchema.safeParse({
       expected_version: 2,

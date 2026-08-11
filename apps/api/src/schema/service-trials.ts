@@ -19,8 +19,18 @@ const TrialDaysSchema = z
   .number()
   .int()
   .min(1, '试用天数不能少于 1 天')
-  .max(60, '试用天数不能超过 60 天');
+  .max(365, '试用天数不能超过 365 天');
 const GraceDaysSchema = z
+  .number()
+  .int()
+  .min(0, '宽限期天数不能小于 0')
+  .max(30, '宽限期天数不能超过 30 天');
+const PolicyTrialDaysSchema = z
+  .number()
+  .int()
+  .min(1, '试用天数不能少于 1 天')
+  .max(60, '试用天数不能超过 60 天');
+const PolicyGraceDaysSchema = z
   .number()
   .int()
   .min(0, '宽限期天数不能小于 0')
@@ -161,7 +171,7 @@ export const PlatformServiceTrialExtendSchema = VersionedReasonCommandSchema.ext
     .number()
     .int()
     .min(1, '延期天数不能少于 1 天')
-    .max(30, '延期天数不能超过 30 天'),
+    .max(365, '延期天数不能超过 365 天'),
 }).strict();
 
 export const PlatformServiceTrialRevokeSchema = VersionedReasonCommandSchema;
@@ -189,10 +199,10 @@ const ReminderDaysSchema = z
 
 export const PlatformServiceTrialPolicyUpdateSchema = z
   .object({
-    default_trial_days: TrialDaysSchema,
-    default_grace_days: GraceDaysSchema,
-    max_trial_days: TrialDaysSchema,
-    max_grace_days: GraceDaysSchema,
+    default_trial_days: PolicyTrialDaysSchema,
+    default_grace_days: PolicyGraceDaysSchema,
+    max_trial_days: PolicyTrialDaysSchema,
+    max_grace_days: PolicyGraceDaysSchema,
     max_schedule_ahead_days: z.number().int().min(0).max(30),
     max_extension_count: z.number().int().min(0).max(10),
     max_extension_days: z.number().int().min(1).max(30),
