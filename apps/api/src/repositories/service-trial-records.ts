@@ -27,8 +27,9 @@ const PolicySnapshotSchema = z.object({
   reminder_days: z.array(z.number().int().positive()).min(1).max(10),
   override_used: z.boolean().optional(),
 }).strict().superRefine((policy, context) => {
-  if (policy.trial_days > policy.max_trial_days
-    || policy.grace_days > policy.max_grace_days
+  const exceedsPolicyMaximum = policy.trial_days > policy.max_trial_days
+    || policy.grace_days > policy.max_grace_days;
+  if ((!policy.override_used && exceedsPolicyMaximum)
     || new Set(policy.reminder_days).size !== policy.reminder_days.length
     || policy.reminder_days.some((day, index) => index > 0
       && policy.reminder_days[index - 1]! <= day)) {
