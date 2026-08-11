@@ -56,6 +56,7 @@ export async function getPlayParams(this: any, input: TenantServiceAccessInput &
     permissionCode: "project.read",
     allowCustomer: true,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   const camera = await projectCameraRepository.findByProjectCamera(
     input.projectId,

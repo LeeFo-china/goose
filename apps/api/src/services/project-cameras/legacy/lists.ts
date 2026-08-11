@@ -56,6 +56,7 @@ export async function listProjectCameras(this: any, input: TenantServiceAccessIn
     permissionCode: "project.read",
     allowCustomer: true,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   const cameras: ProjectCameraRow[] = await this.enrichTencentCameraStatuses(
     await projectCameraRepository.listByProjectId(input.projectId, actor.tenantId),
@@ -84,7 +85,10 @@ export async function listCameraBindProjectOptions(this: any, input: TenantServi
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
-    { tenantServiceAccess: input.tenantServiceAccess },
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
   if (!authContext.employeeId) {
     throw Errors.business(
@@ -117,7 +121,10 @@ export async function listCameraProjectGroups(this: any, input: TenantServiceAcc
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
-    { tenantServiceAccess: input.tenantServiceAccess },
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
   if (!authContext.employeeId) {
     throw Errors.business(

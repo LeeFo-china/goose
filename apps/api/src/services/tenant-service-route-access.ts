@@ -22,6 +22,11 @@ export interface TenantServiceRouteAccessResolution {
   isMissing: boolean;
 }
 
+export type TenantServiceAuthOptions = {
+  tenantServiceAccess: TenantServiceRouteAccess;
+  requiredCapability: PlatformServiceTrialCapability | null;
+};
+
 const ROUTE_ACCESS_VALUES = new Set<string>(
   TENANT_SERVICE_ROUTE_ACCESS_VALUES,
 );
@@ -56,10 +61,7 @@ export function getTenantServiceRouteAccess(
 
 export function getTenantServiceAuthOptions(
   request: TenantServiceRouteAccessRequest,
-): {
-  tenantServiceAccess: TenantServiceRouteAccess;
-  requiredCapability: PlatformServiceTrialCapability | null;
-} {
+): TenantServiceAuthOptions {
   const tenantServiceAccess = getTenantServiceRouteAccess(request);
   const resolution = resolveTenantServiceRouteCapability({
     method: request.method,
