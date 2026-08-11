@@ -39,6 +39,15 @@ export default function PlatformServiceOrdersLoading() {
             <Skeleton className="h-9 w-36" />
             <Skeleton className="h-9 w-20" />
           </div>
+          <div data-testid="trial-filter-date-skeleton" className="flex flex-wrap gap-2">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <Skeleton key={index} className="h-9 w-[9.5rem]" />
+            ))}
+            <div className="ml-auto flex gap-2">
+              <Skeleton className="h-9 w-20" />
+              <Skeleton className="h-9 w-20" />
+            </div>
+          </div>
         </div>
         <div className="flex-1 p-3">
           <div className="flex flex-col gap-1">

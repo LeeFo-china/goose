@@ -34,11 +34,15 @@ import type {
 import { PlatformServiceWorkOrderTable } from "@/components/platform-service-orders/platform-service-work-order-table";
 import { PlatformServiceTrialFilters } from "@/components/platform-service-trials/platform-service-trial-filters";
 import {
-  buildServiceTrialQuery,
   trialSourceOptions,
   trialStatusOptions,
   trialTypeOptions,
 } from "@/components/platform-service-trials/platform-service-trial-rules";
+import {
+  buildPlatformServiceTrialTabQuery,
+  buildServiceTrialQuery,
+  getPlatformServiceTrialPermissions,
+} from "@/components/platform-service-trials/platform-service-trial-page-state";
 import { PlatformServiceTrialGrantDialog } from "@/components/platform-service-trials/platform-service-trial-action-dialog";
 import { PlatformServiceTrialPolicyDialog } from "@/components/platform-service-trials/platform-service-trial-policy-dialog";
 import { PlatformServiceTrialTable } from "@/components/platform-service-trials/platform-service-trial-table";
@@ -55,9 +59,6 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 const READ_PERMISSION = "platform.service_order.read";
 const WORK_ORDER_MANAGE_PERMISSION = "platform.service_work_order.manage";
 const REFUND_REVIEW_PERMISSION = "platform.service_refund.review";
-const TRIAL_READ_PERMISSION = "platform.service_trial.read";
-const TRIAL_MANAGE_PERMISSION = "platform.service_trial.manage";
-const TRIAL_OVERRIDE_PERMISSION = "platform.service_trial.override";
 
 type SearchParams = Promise<{
   tab?: string;
@@ -140,9 +141,16 @@ export default async function PlatformServiceOrdersPage({
   const canRead = isPlatformAdmin && permissions.has(READ_PERMISSION);
   const canManageWorkOrder = isPlatformAdmin && permissions.has(WORK_ORDER_MANAGE_PERMISSION);
   const canReviewRefund = isPlatformAdmin && permissions.has(REFUND_REVIEW_PERMISSION);
-  const canReadTrials = isPlatformAdmin && permissions.has(TRIAL_READ_PERMISSION);
-  const canGrantTrial = canReadTrials && permissions.has(TRIAL_MANAGE_PERMISSION);
-  const canUpdateTrialPolicy = canGrantTrial && permissions.has(TRIAL_OVERRIDE_PERMISSION);
+  const trialPermissions = getPlatformServiceTrialPermissions({
+    tenantId: session.tenant?.id ?? null,
+    roles: session.roles,
+    permissionCodes: [...permissions],
+    isPlatformStaff: session.is_platform_staff,
+    isPlatformSuperAdmin: session.is_platform_super_admin,
+  });
+  const canReadTrials = trialPermissions.canRead;
+  const canGrantTrial = trialPermissions.canGrant;
+  const canUpdateTrialPolicy = trialPermissions.canUpdatePolicy;
   const params = await searchParams;
   const activeTab = normalizePlatformServiceTab(params.tab);
   const page = readPositiveInteger(params.page, 1);
@@ -395,10 +403,7 @@ export default async function PlatformServiceOrdersPage({
               </TabsTrigger>
               <TabsTrigger value="trials" asChild className={platformTabsTriggerClassName}>
                 <Link
-                  href={`/platform/service-orders?${buildQuery({
-                    tab: "trials",
-                    trialPageSize,
-                  })}`}
+                  href={`/platform/service-orders?${buildPlatformServiceTrialTabQuery(trialPageSize)}`}
                 >
                   试用管理
                 </Link>

@@ -77,45 +77,6 @@ export const trialCapabilityOptions = PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES.m
   (value) => ({ value, label: capabilityLabels[value] }),
 );
 
-export function buildServiceTrialQuery(input: {
-  page: number;
-  pageSize: number;
-  keyword?: string;
-  status?: string;
-  source?: string;
-  trialType?: string;
-  assigneeEmployeeId?: string;
-  appliedFrom?: string;
-  appliedTo?: string;
-  expiresFrom?: string;
-  expiresTo?: string;
-}) {
-  const query = new URLSearchParams();
-  query.set("page", String(input.page));
-  query.set("pageSize", String(input.pageSize));
-  setQueryValue(query, "keyword", input.keyword);
-  setQueryValue(query, "status", input.status);
-  setQueryValue(query, "source", input.source);
-  setQueryValue(query, "trialType", input.trialType);
-  setQueryValue(query, "assigneeEmployeeId", input.assigneeEmployeeId);
-  setQueryValue(query, "appliedFrom", toDateBoundary(input.appliedFrom, "start"));
-  setQueryValue(query, "appliedTo", toDateBoundary(input.appliedTo, "end"));
-  setQueryValue(query, "expiresFrom", toDateBoundary(input.expiresFrom, "start"));
-  setQueryValue(query, "expiresTo", toDateBoundary(input.expiresTo, "end"));
-  return query.toString();
-}
-
-function setQueryValue(query: URLSearchParams, key: string, value?: string) {
-  if (value) query.set(key, value);
-}
-
-function toDateBoundary(value: string | undefined, boundary: "start" | "end") {
-  if (!value) return undefined;
-  const suffix = boundary === "start" ? "T00:00:00.000Z" : "T23:59:59.999Z";
-  const date = new Date(`${value}${suffix}`);
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
-}
-
 export function getTrialStatusMeta(status: PlatformServiceTrialStatus) {
   return { label: statusLabels[status], variant: statusVariants[status] };
 }

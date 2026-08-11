@@ -1,6 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
+import {
+  buildPlatformServiceTrialTabQuery,
+  buildServiceTrialQuery,
+  getPlatformServiceTrialPermissions,
+} from "./platform-service-trial-page-state";
+import { runTrialMutationFlow } from "./platform-service-trial-action-execution";
+import {
+  getPlatformTrialDisabledReasons,
+  resolvePlatformTrialAction,
+} from "./platform-service-trial-action-state";
+
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
   expect(existsSync(url), path).toBe(true);
@@ -15,7 +26,7 @@ describe("平台技术服务试用管理页", () => {
     const orderRules = readSource(
       "../platform-service-orders/platform-service-order-rules.ts",
     );
-    const trialRules = readSource("./platform-service-trial-rules.ts");
+    const trialPageState = readSource("./platform-service-trial-page-state.ts");
 
     expect(page).toContain("试用管理");
     expect(orderRules).toContain('"trials"');
@@ -25,25 +36,66 @@ describe("平台技术服务试用管理页", () => {
     expect(page).toContain("trialStatus");
     expect(page).toContain("trialSource");
     expect(page).toContain("trialType");
-    expect(trialRules).toContain('query.set("page", String(input.page))');
-    expect(trialRules).toContain('query.set("pageSize", String(input.pageSize))');
+    expect(trialPageState).toContain('query.set("page", String(input.page))');
+    expect(trialPageState).toContain('query.set("pageSize", String(input.pageSize))');
     expect(page).not.toContain("pageSize=100");
+
+    const tabQuery = new URLSearchParams(buildPlatformServiceTrialTabQuery(50));
+    expect(Object.fromEntries(tabQuery)).toEqual({
+      tab: "trials",
+      trialPageSize: "50",
+    });
+    const backendQuery = new URLSearchParams(buildServiceTrialQuery({
+      page: 3,
+      pageSize: 20,
+      keyword: "装企",
+      status: "active",
+    }));
+    expect(Object.fromEntries(backendQuery)).toEqual({
+      page: "3",
+      pageSize: "20",
+      keyword: "装企",
+      status: "active",
+    });
   });
 
   test("按读写权限加载列表概览并控制主动开通和规则入口", () => {
     const page = readSource(
       "../../app/(console)/platform/service-orders/page.tsx",
     );
+    const pageState = readSource("./platform-service-trial-page-state.ts");
 
-    expect(page).toContain('platform.service_trial.read');
-    expect(page).toContain('platform.service_trial.manage');
-    expect(page).toContain('platform.service_trial.override');
+    expect(pageState).toContain('platform.service_trial.read');
+    expect(pageState).toContain('platform.service_trial.manage');
+    expect(pageState).toContain('platform.service_trial.override');
     expect(page).toContain("/platform/billing/service-trials?");
     expect(page).toContain("/platform/billing/service-trials/summary");
     expect(page).toContain("Promise.all");
     expect(page).toContain("canGrantTrial");
     expect(page).toContain("canUpdateTrialPolicy");
     expect(page).toContain("disabledReason");
+
+    expect(getPlatformServiceTrialPermissions({
+      tenantId: null,
+      roles: ["platform_staff"],
+      permissionCodes: [
+        "platform.service_trial.read",
+        "platform.service_trial.manage",
+        "platform.service_trial.override",
+      ],
+    })).toEqual({ canRead: true, canGrant: true, canUpdatePolicy: true });
+    expect(getPlatformServiceTrialPermissions({
+      tenantId: null,
+      roles: ["platform_admin"],
+      permissionCodes: [],
+      isPlatformSuperAdmin: true,
+    })).toEqual({ canRead: true, canGrant: true, canUpdatePolicy: true });
+    expect(getPlatformServiceTrialPermissions({
+      tenantId: "tenant-id",
+      roles: ["platform_staff"],
+      permissionCodes: ["platform.service_trial.read"],
+      isPlatformStaff: true,
+    })).toEqual({ canRead: false, canGrant: false, canUpdatePolicy: false });
   });
 
   test("展示四项紧凑指标和完整筛选工具栏", () => {
@@ -117,9 +169,10 @@ describe("平台技术服务试用管理页", () => {
   test("动作由后端 available_actions 控制并解释禁用原因", () => {
     const detail = readSource("./platform-service-trial-detail.tsx");
     const actions = readSource("./platform-service-trial-action-dialog.tsx");
+    const actionState = readSource("./platform-service-trial-action-state.ts");
 
     expect(detail).toContain("available_actions");
-    expect(detail).toContain("disabled_reason");
+    expect(actionState).toContain("disabled_reason");
     expect(actions).toContain("DialogTitle");
     expect(actions).toContain("action.enabled");
     expect(actions).toContain("action.disabled_reason");
@@ -127,9 +180,24 @@ describe("平台技术服务试用管理页", () => {
     expect(actions).toContain("extend");
     expect(actions).toContain("revoke");
     expect(actions).toContain("assign");
+
+    const review = { enabled: true, disabled_reason: null };
+    const availableActions = {
+      withdraw: { enabled: false, disabled_reason: "无试用申请权限" },
+      review,
+      extend: { enabled: false, disabled_reason: "当前状态不可延期" },
+    };
+    expect(resolvePlatformTrialAction(availableActions, "review")).toBe(review);
+    expect(resolvePlatformTrialAction(availableActions, "assign")).toEqual({
+      enabled: false,
+      disabled_reason: "后端未提供当前操作",
+    });
+    expect(getPlatformTrialDisabledReasons(availableActions)).toEqual([
+      { key: "extend", reason: "当前状态不可延期" },
+    ]);
   });
 
-  test("提交期间按钮不跳动，成功刷新列表和详情，失败保留表单", () => {
+  test("提交期间按钮不跳动，成功刷新列表和详情，失败保留表单", async () => {
     const actions = readSource("./platform-service-trial-action-dialog.tsx");
     const policy = readSource("./platform-service-trial-policy-dialog.tsx");
     const source = `${actions}\n${policy}`;
@@ -143,6 +211,44 @@ describe("平台技术服务试用管理页", () => {
     expect(source).toContain("router.refresh()");
     expect(source).toContain("finally");
     expect(source).not.toContain("window.confirm");
+
+    const events: string[] = [];
+    const success = await runTrialMutationFlow({
+      mutate: async () => { events.push("mutate"); },
+      refreshList: () => { events.push("list"); },
+      onMutationSucceeded: () => { events.push("success"); },
+      loadDetail: async () => { events.push("detail"); return { id: "trial-1" }; },
+      updateDetail: () => { events.push("update"); },
+    });
+    expect(events).toEqual(["mutate", "list", "success", "detail", "update"]);
+    expect(success.detailRefreshError).toBeNull();
+
+    events.length = 0;
+    const partialSuccess = await runTrialMutationFlow({
+      mutate: async () => { events.push("mutate"); },
+      refreshList: () => { events.push("list"); },
+      onMutationSucceeded: () => { events.push("success"); },
+      loadDetail: async () => { events.push("detail"); throw new Error("detail failed"); },
+      updateDetail: () => { events.push("update"); },
+    });
+    expect(events).toEqual(["mutate", "list", "success", "detail"]);
+    expect(partialSuccess.detailRefreshError).toBeInstanceOf(Error);
+
+    events.length = 0;
+    const formState = { open: true, reason: "保留原操作原因" };
+    await expect(runTrialMutationFlow({
+      mutate: async () => { events.push("mutate"); throw new Error("mutation failed"); },
+      refreshList: () => { events.push("list"); },
+      onMutationSucceeded: () => {
+        events.push("success");
+        formState.open = false;
+        formState.reason = "";
+      },
+      loadDetail: async () => { events.push("detail"); return { id: "trial-1" }; },
+      updateDetail: () => { events.push("update"); },
+    })).rejects.toThrow("mutation failed");
+    expect(events).toEqual(["mutate"]);
+    expect(formState).toEqual({ open: true, reason: "保留原操作原因" });
   });
 
   test("试用规则展示影响边界并使用后端权限动作", () => {
@@ -167,6 +273,7 @@ describe("平台技术服务试用管理页", () => {
     expect(loading).toContain("试用管理");
     expect(loading).toContain("trial-summary-skeleton");
     expect(loading).toContain("trial-filter-skeleton");
+    expect(loading).toContain("trial-filter-date-skeleton");
     expect(loading).toContain("h-14 w-full");
   });
 

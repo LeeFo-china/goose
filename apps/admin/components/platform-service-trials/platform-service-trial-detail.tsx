@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, RefreshCw } from "lucide-react";
 
@@ -20,6 +19,10 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 import { PlatformServiceTrialActionDialog } from "./platform-service-trial-action-dialog";
 import {
+  getPlatformTrialDisabledReasons,
+  resolvePlatformTrialAction,
+} from "./platform-service-trial-action-state";
+import {
   formatTrialDateTime,
   getTrialCapabilityLabel,
   getTrialSourceLabel,
@@ -27,16 +30,11 @@ import {
   getTrialTypeLabel,
 } from "./platform-service-trial-rules";
 import type {
-  PlatformServiceTrialAction,
-  PlatformServiceTrialAvailableActions,
   PlatformServiceTrialDetailData,
   PlatformServiceTrialListItem,
 } from "./platform-service-trial-types";
 
-const unavailableAction: PlatformServiceTrialAction = {
-  enabled: false,
-  disabled_reason: "后端未提供当前操作",
-};
+const purchaseContractReason = "正式购买衔接尚未开放，请从技术服务套餐页独立办理";
 
 export function PlatformServiceTrialDetail({
   trial,
@@ -77,10 +75,8 @@ export function PlatformServiceTrialDetail({
   const actions = data?.available_actions ?? trial.available_actions;
   const statusMeta = getTrialStatusMeta(current.status);
   const disabledReasons = useMemo(
-    () => Object.entries(actions)
-      .filter((entry): entry is [string, PlatformServiceTrialAction] => Boolean(entry[1]))
-      .filter(([, action]) => !action.enabled && Boolean(action.disabled_reason))
-      .map(([key, action]) => `${actionLabel(key)}：${action.disabled_reason}`),
+    () => getPlatformTrialDisabledReasons(actions)
+      .map(({ key, reason }) => `${actionLabel(key)}：${reason}`),
     [actions],
   );
 
@@ -169,30 +165,20 @@ export function PlatformServiceTrialDetail({
 
         <div className="shrink-0 border-t bg-card px-5 py-3">
           <div className="flex flex-wrap gap-2">
-            <PlatformServiceTrialActionDialog kind="approve" trial={current} action={actions.review ?? unavailableAction} onTrialUpdated={setData} />
-            <PlatformServiceTrialActionDialog kind="reject" trial={current} action={actions.review ?? unavailableAction} onTrialUpdated={setData} />
-            <PlatformServiceTrialActionDialog kind="extend" trial={current} action={actions.extend ?? unavailableAction} onTrialUpdated={setData} />
-            <PlatformServiceTrialActionDialog kind="revoke" trial={current} action={actions.revoke ?? unavailableAction} onTrialUpdated={setData} />
-            <PlatformServiceTrialActionDialog kind="assign" trial={current} action={actions.assign ?? unavailableAction} onTrialUpdated={setData} />
-            {actions.purchase?.enabled ? (
-              <Button type="button" size="sm" variant="outline" asChild>
-                <Link href={`/platform/service-products?sourceTrialId=${current.id}`}>
-                  <ExternalLink data-icon="inline-start" />
-                  查看正式套餐
-                </Link>
-              </Button>
-            ) : (
-              <Button type="button" size="sm" variant="outline" disabled title={actions.purchase?.disabled_reason || undefined}>
-                <ExternalLink data-icon="inline-start" />
-                查看正式套餐
-              </Button>
-            )}
+            <PlatformServiceTrialActionDialog kind="approve" trial={current} action={resolvePlatformTrialAction(actions, "review")} onTrialUpdated={setData} />
+            <PlatformServiceTrialActionDialog kind="reject" trial={current} action={resolvePlatformTrialAction(actions, "review")} onTrialUpdated={setData} />
+            <PlatformServiceTrialActionDialog kind="extend" trial={current} action={resolvePlatformTrialAction(actions, "extend")} onTrialUpdated={setData} />
+            <PlatformServiceTrialActionDialog kind="revoke" trial={current} action={resolvePlatformTrialAction(actions, "revoke")} onTrialUpdated={setData} />
+            <PlatformServiceTrialActionDialog kind="assign" trial={current} action={resolvePlatformTrialAction(actions, "assign")} onTrialUpdated={setData} />
+            <Button type="button" size="sm" variant="outline" disabled title={purchaseContractReason}>
+              <ExternalLink data-icon="inline-start" />
+              办理正式购买
+            </Button>
           </div>
-          {disabledReasons.length ? (
-            <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
-              {disabledReasons.map((reason) => <span key={reason}>{reason}</span>)}
-            </div>
-          ) : null}
+          <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+            {disabledReasons.map((reason) => <span key={reason}>{reason}</span>)}
+            <span>{purchaseContractReason}</span>
+          </div>
         </div>
       </SheetContent>
     </Sheet>
@@ -211,8 +197,8 @@ function DetailSkeleton() {
   return <div className="flex flex-col gap-4">{Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-24 w-full" />)}</div>;
 }
 
-function actionLabel(key: string) {
-  return ({ review: "审批", extend: "延期", revoke: "撤销", assign: "分配", purchase: "购买" } as Record<string, string>)[key] || key;
+function actionLabel(key: "review" | "extend" | "revoke" | "assign") {
+  return ({ review: "审批", extend: "延期", revoke: "撤销", assign: "分配" } as const)[key];
 }
 
 function eventLabel(type: string) {
