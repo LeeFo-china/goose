@@ -396,6 +396,7 @@ export async function verifyAccessDecisions(
   const { TenantServiceAccessService } = await import("../services/tenant-service-access");
   const service = new TenantServiceAccessService({
     repository: { getAccessFacts: async () => readAccessFacts(db, tenantId) },
+    trialAccessEnabled: async () => true,
   });
   const included = await service.resolveForRoute({
     tenantId, routeAccess: "write", requiredCapability: "core.projects",

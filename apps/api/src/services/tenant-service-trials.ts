@@ -15,6 +15,7 @@ import {
   serializeServiceTrial,
   serializeServiceTrialCommandSnapshot,
 } from './service-trial-views';
+import { platformServiceTrialRollout } from './platform-service-trial-rollout';
 
 type RepositoryPort = Pick<ServiceTrialRepository,
   'listTenantTrials' | 'findCurrentTenantTrial' | 'findTrialById'
@@ -23,6 +24,7 @@ type RepositoryPort = Pick<ServiceTrialRepository,
 type TenantServiceTrialDependencies = {
   repository?: RepositoryPort;
   nowFactory?: () => Date;
+  applicationEnabled?: () => Promise<boolean>;
 };
 
 const READ_PERMISSION = 'billing.service_trial.read';
@@ -31,10 +33,13 @@ const APPLY_PERMISSION = 'billing.service_trial.apply';
 export class TenantServiceTrialService {
   private readonly repository: RepositoryPort;
   private readonly nowFactory: () => Date;
+  private readonly applicationEnabled: () => Promise<boolean>;
 
   constructor(dependencies: TenantServiceTrialDependencies = {}) {
     this.repository = dependencies.repository ?? serviceTrialRepository;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+    this.applicationEnabled = dependencies.applicationEnabled
+      ?? (() => platformServiceTrialRollout.isApplicationEnabled());
   }
 
   async listTrials(
@@ -83,6 +88,13 @@ export class TenantServiceTrialService {
     input: ServiceTrialApplicationCreateInput,
   ) {
     const { tenantId, employeeId } = this.requireWrite(authContext);
+    if (!await this.applicationEnabled()) {
+      throw Errors.business(
+        403,
+        '技术服务试用自主申请尚未开放',
+        'SERVICE_TRIAL_APPLICATION_DISABLED',
+      );
+    }
     const result = await this.repository.executeCommand({
       action: 'apply',
       tenantId,

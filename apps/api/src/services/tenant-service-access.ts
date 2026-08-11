@@ -10,6 +10,7 @@ import {
   type TenantServiceAccessFacts,
   type TenantServiceAccessRepositoryPort,
 } from "@/repositories/tenant-service-access";
+import { platformServiceTrialRollout } from "@/services/platform-service-trial-rollout";
 
 export type TenantServiceAccessErrorCode =
   | "TENANT_SERVICE_READ_ONLY"
@@ -35,6 +36,7 @@ export type ResolveTenantServiceAccessInput = {
 
 export type TenantServiceAccessServiceDependencies = {
   repository?: TenantServiceAccessRepositoryPort;
+  trialAccessEnabled?: () => Promise<boolean>;
 };
 
 type RouteDecisionInput = {
@@ -84,9 +86,12 @@ const DENIALS = {
 
 export class TenantServiceAccessService {
   private readonly repository: TenantServiceAccessRepositoryPort;
+  private readonly trialAccessEnabled: () => Promise<boolean>;
 
   constructor(dependencies: TenantServiceAccessServiceDependencies = {}) {
     this.repository = dependencies.repository ?? tenantServiceAccessRepository;
+    this.trialAccessEnabled = dependencies.trialAccessEnabled
+      ?? (() => platformServiceTrialRollout.isAccessEnabled());
   }
 
   async resolveForRoute(
@@ -95,7 +100,10 @@ export class TenantServiceAccessService {
     const facts = await this.repository.getAccessFacts({
       tenantId: input.tenantId,
     });
-    const resolution = resolveAccessFacts(facts);
+    const trialAccessEnabled = facts.currentTrial
+      ? await this.trialAccessEnabled()
+      : false;
+    const resolution = resolveAccessFacts(facts, trialAccessEnabled);
 
     return resolveTenantServiceRouteDecision({
       ...resolution,
@@ -159,7 +167,10 @@ export function resolveTenantServiceRouteDecision(
   };
 }
 
-function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
+function resolveAccessFacts(
+  facts: TenantServiceAccessFacts,
+  trialAccessEnabled: boolean,
+): AccessResolution {
   if (facts.tenantStatus !== "active") {
     return {
       mode: "hard_blocked",
@@ -187,7 +198,9 @@ function resolveAccessFacts(facts: TenantServiceAccessFacts): AccessResolution {
     };
   }
 
-  const trial = resolveEffectiveTrial(facts.currentTrial);
+  const trial = trialAccessEnabled
+    ? resolveEffectiveTrial(facts.currentTrial)
+    : null;
   if (trial) return trial;
 
   if (facts.legacySubscriptionStatus !== "locked") {

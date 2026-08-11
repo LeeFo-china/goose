@@ -2167,7 +2167,7 @@ BEGIN
   IF v_trial.version IS DISTINCT FROM p_expected_version THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_VERSION_CONFLICT' USING ERRCODE = 'P0001';
   END IF;
-  IF v_trial.status IN ('rejected', 'withdrawn', 'revoked', 'expired', 'converted') THEN
+  IF v_trial.status NOT IN ('scheduled', 'active', 'grace_period') THEN
     RAISE EXCEPTION 'SERVICE_TRIAL_ACTION_NOT_ALLOWED' USING ERRCODE = 'P0001';
   END IF;
   UPDATE public.tenant_service_trials SET

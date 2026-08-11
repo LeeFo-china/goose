@@ -72,6 +72,7 @@ export async function runTrialCommerceScenarios(
   const { TenantServiceAccessService } = await import("../services/tenant-service-access");
   const service = new TenantServiceAccessService({
     repository: { getAccessFacts: async () => readAccessFacts(db, tenant.tenantId) },
+    trialAccessEnabled: async () => true,
   });
   const paidDecision = await service.resolveForRoute({
     tenantId: tenant.tenantId, routeAccess: "write",

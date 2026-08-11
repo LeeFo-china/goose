@@ -119,6 +119,9 @@ describe("platform service trial migration security follow-up", () => {
     expect(grantHash).not.toContain('allow_override');
     expect(functionBody(sql, "platform_service_trial_assign"))
       .toContain("platform.service_trial.manage");
+    expect(functionBody(sql, "platform_service_trial_assign")).toContain(
+      "v_trial.status not in ('scheduled', 'active', 'grace_period')",
+    );
     for (const name of [
       "platform_service_trial_extend", "platform_service_trial_revoke",
       "platform_service_trial_update_policy",

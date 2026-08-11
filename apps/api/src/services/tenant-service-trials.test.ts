@@ -81,7 +81,29 @@ describe('TenantServiceTrialService', () => {
     service = new TenantServiceTrialService({
       repository,
       nowFactory: () => new Date(NOW),
+      applicationEnabled: async () => true,
     });
+  });
+
+  test('fails closed before creating an application when rollout is disabled', async () => {
+    service = new TenantServiceTrialService({
+      repository,
+      nowFactory: () => new Date(NOW),
+      applicationEnabled: async () => false,
+    });
+
+    await expect(service.apply(
+      tenantAuth(['billing.service_trial.apply']),
+      {
+        application_reason: '体验项目协作', expected_user_count: 10,
+        expected_project_count: 3, contact_name: '张经理',
+        contact_phone: '13800138000', idempotency_key: IDEMPOTENCY_KEY,
+      },
+    )).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'SERVICE_TRIAL_APPLICATION_DISABLED',
+    });
+    expect(repository.executeCommand).not.toHaveBeenCalled();
   });
 
   test('requires read permission before querying tenant trial history', async () => {

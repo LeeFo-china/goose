@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw, SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
@@ -35,6 +35,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { trialCapabilityOptions } from "./platform-service-trial-rules";
+import { createTrialIdempotencyIntent } from "./platform-service-trial-idempotency";
 import type {
   PlatformServiceTrialCapability,
   PlatformServiceTrialPolicyData,
@@ -54,6 +55,7 @@ export function PlatformServiceTrialPolicyDialog({
   const [allowRepeat, setAllowRepeat] = useState(false);
   const [standardScope, setStandardScope] = useState<PlatformServiceTrialCapability[]>([]);
   const [guidedScope, setGuidedScope] = useState<PlatformServiceTrialCapability[]>([]);
+  const idempotencyIntent = useRef(createTrialIdempotencyIntent()).current;
 
   useEffect(() => {
     if (!open) return;
@@ -119,7 +121,7 @@ export function PlatformServiceTrialPolicyDialog({
             standard_scope: { version: 1, capabilities: standardScope },
             guided_scope: { version: 1, capabilities: guidedScope },
             expected_version: data.policy.version,
-            idempotency_key: crypto.randomUUID(),
+            idempotency_key: idempotencyIntent.current(),
             reason: String(form.get("reason") || "").trim(),
           }),
           fallbackMessage: "试用规则保存失败",
@@ -138,12 +140,17 @@ export function PlatformServiceTrialPolicyDialog({
     }
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen && !open) idempotencyIntent.beginNew();
+    setOpen(nextOpen);
+  }
+
   const updateAction = data?.available_actions.update_policy;
   const canUpdate = updateAction?.enabled === true;
   const policy = data?.policy;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" variant="outline" title={disabledReason}>
           <SlidersHorizontal data-icon="inline-start" />

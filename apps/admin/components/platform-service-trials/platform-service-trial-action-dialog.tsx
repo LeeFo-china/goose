@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarPlus, Check, Clock3, Settings2, UserRoundPlus, X } from "lucide-react";
 import { toast } from "sonner";
@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { runTrialMutationFlow } from "./platform-service-trial-action-execution";
+import { createTrialIdempotencyIntent } from "./platform-service-trial-idempotency";
 import { PlatformServiceTrialApprovalFields } from "./platform-service-trial-approval-fields";
 import { trialCapabilityOptions } from "./platform-service-trial-rules";
 import type {
@@ -89,6 +90,7 @@ export function PlatformServiceTrialActionDialog({
   const [scope, setScope] = useState<PlatformServiceTrialCapability[]>(
     trial.scope.capabilities,
   );
+  const idempotencyIntent = useRef(createTrialIdempotencyIntent()).current;
   const meta = dialogMeta[kind];
   const Icon = dialogIcons[kind];
   const errorId = `trial-action-error-${kind}-${trial.id}`;
@@ -126,6 +128,7 @@ export function PlatformServiceTrialActionDialog({
               graceDays,
               extensionDays,
               scope,
+              idempotencyKey: idempotencyIntent.current(),
             })),
             fallbackMessage: `${meta.label}试用失败`,
           });
@@ -153,8 +156,13 @@ export function PlatformServiceTrialActionDialog({
     }
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen && !open) idempotencyIntent.beginNew();
+    setOpen(nextOpen);
+  }
+
   return (
-    <Dialog open={action.enabled ? open : false} onOpenChange={setOpen}>
+    <Dialog open={action.enabled ? open : false} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button
           type="button"
@@ -273,6 +281,7 @@ export function PlatformServiceTrialGrantDialog({
   const [scope, setScope] = useState<PlatformServiceTrialCapability[]>(
     trialCapabilityOptions.map((option) => option.value),
   );
+  const idempotencyIntent = useRef(createTrialIdempotencyIntent()).current;
   const errorId = "grant-trial-error";
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -299,7 +308,7 @@ export function PlatformServiceTrialGrantDialog({
           scope: { version: 1, capabilities: scope },
           assignee_employee_id: normalizedAssignee || null,
           reason,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key: idempotencyIntent.current(),
         }),
         fallbackMessage: "主动开通试用失败",
       });
@@ -315,8 +324,13 @@ export function PlatformServiceTrialGrantDialog({
     }
   }
 
+  function handleOpenChange(nextOpen: boolean) {
+    if (nextOpen && !open) idempotencyIntent.beginNew();
+    setOpen(nextOpen);
+  }
+
   return (
-    <Dialog open={!disabledReason ? open : false} onOpenChange={setOpen}>
+    <Dialog open={!disabledReason ? open : false} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button type="button" disabled={Boolean(disabledReason)} title={disabledReason}>
           <CalendarPlus data-icon="inline-start" />
@@ -380,8 +394,12 @@ function buildActionBody(input: {
   graceDays: string;
   extensionDays: string;
   scope: PlatformServiceTrialCapability[];
+  idempotencyKey: string;
 }) {
-  const common = { expected_version: input.trial.version, idempotency_key: crypto.randomUUID() };
+  const common = {
+    expected_version: input.trial.version,
+    idempotency_key: input.idempotencyKey,
+  };
   if (input.kind === "assign") return { ...common, assignee_employee_id: input.assigneeEmployeeId.trim() || null };
   if (input.kind === "extend") return { ...common, extension_days: Number(input.extensionDays), reason: input.reason };
   if (input.kind === "revoke") return { ...common, reason: input.reason };

@@ -41,7 +41,9 @@ describe("TenantServiceAccessService", () => {
       paidOnboardingOrder: { id: "order-1", paid_at: NOW.toISOString() },
       currentTrial: trialFact(),
     }));
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
@@ -137,7 +139,9 @@ describe("TenantServiceAccessService", () => {
   ])("resolves $name", async ({ facts, expected }) => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const getAccessFacts = mock(async () => facts);
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
@@ -159,7 +163,9 @@ describe("TenantServiceAccessService", () => {
         service_end_at: "2027-08-01T00:00:00.000Z",
       },
     }));
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
@@ -178,6 +184,7 @@ describe("TenantServiceAccessService", () => {
   test("denies trial routes outside the immutable scope", async () => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => true,
       repository: {
         getAccessFacts: mock(async () => ({
           ...baseFacts,
@@ -201,6 +208,7 @@ describe("TenantServiceAccessService", () => {
   test("treats an expired effective trial as service blocked before locked legacy", async () => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => true,
       repository: {
         getAccessFacts: mock(async () => ({
           ...baseFacts,
@@ -217,6 +225,29 @@ describe("TenantServiceAccessService", () => {
       mode: "service_blocked",
       allowed: false,
       errorCode: "TENANT_SERVICE_ACCESS_EXPIRED",
+    });
+  });
+
+  test('ignores trial facts while the access rollout switch is closed', async () => {
+    const { TenantServiceAccessService } = await import('./tenant-service-access');
+    const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => false,
+      repository: {
+        getAccessFacts: mock(async () => ({
+          ...baseFacts,
+          currentTrial: trialFact(),
+        })),
+      },
+    });
+
+    expect(await service.resolveForRoute({
+      tenantId: TENANT_ID,
+      routeAccess: 'read',
+      requiredCapability: 'core.projects',
+    })).toMatchObject({
+      mode: 'service_blocked',
+      allowed: false,
+      errorCode: 'TENANT_SERVICE_ACCESS_EXPIRED',
     });
   });
 });
