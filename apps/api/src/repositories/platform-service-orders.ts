@@ -29,13 +29,13 @@ import {
   parseAcceptanceResult,
   parsePaymentConfirmationResult,
 } from "./platform-service-rpc-results";
+import { parsePendingOrderTrialAttribution, throwPendingOrderCreationError } from "./platform-service-order-trial-attribution";
 import {
   type FulfillmentAttachmentPreviewRecord,
   TENANT_FULFILLMENT_ATTACHMENT_PREVIEW_SELECT,
 } from "./platform-service-fulfillment-attachment-preview-records";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
-
 type ServiceQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): ServiceQuery;
   insert(record: Record<string, unknown>): ServiceQuery;
@@ -50,7 +50,6 @@ type ServiceQuery = PromiseLike<QueryResult> & {
   maybeSingle(): Promise<QueryResult>;
   single(): Promise<QueryResult>;
 };
-
 type ServiceClient = {
   from(
     table:
@@ -335,10 +334,11 @@ export class PlatformServiceOrderRepository {
         p_terms_version: input.termsVersion,
         p_terms_accepted_at: input.termsAcceptedAt,
         p_created_by_employee_id: input.createdByEmployeeId,
+        p_source_trial_id: input.sourceTrialId ?? null,
       },
     );
-    if (error) throw Errors.dbError("创建平台技术服务订单失败", error);
-    return data as OrderRecord;
+    if (error) throwPendingOrderCreationError(error);
+    return parsePendingOrderTrialAttribution(data, input);
   }
 
   async markPrepayCreated(input: { orderId: string; prepayId: string }) {

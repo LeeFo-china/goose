@@ -152,6 +152,7 @@ function harness(order: CancelableServiceOrderRecord = claimedOrder) {
           order: paidOrder,
           work_order: { id: "work-order-1" },
           access_mode: null,
+          conversion_anomaly: null,
           idempotent: true,
         })),
       },

@@ -55,6 +55,7 @@ export async function createTencentDevice(this: any, input: TenantServiceAccessI
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   if (!actor.tenantId) {
     throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
@@ -142,6 +143,7 @@ export async function getTencentDevicePassword(this: any, input: TenantServiceAc
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const result = await tencentIotVideoService.getDevicePassword(input.deviceId);
@@ -165,6 +167,7 @@ export async function resetTencentDevicePassword(this: any, input: TenantService
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const password = input.payload.password?.trim() || generateSipPassword();

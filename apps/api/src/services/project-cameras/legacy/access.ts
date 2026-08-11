@@ -155,7 +155,10 @@ export async function resolveActor(this: any, input: TenantServiceAccessInput & 
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
-    { tenantServiceAccess: input.tenantServiceAccess },
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
 
   if (

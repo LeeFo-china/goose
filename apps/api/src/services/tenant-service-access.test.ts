@@ -19,10 +19,12 @@ const ROUTE_ACCESSES = [
 ] as const;
 
 const baseFacts: TenantServiceAccessFacts = {
+  evaluatedAt: NOW.toISOString(),
   tenantStatus: "active",
   contract: null,
   paidOnboardingOrder: null,
   legacySubscriptionStatus: "locked",
+  currentTrial: null,
 };
 
 describe("TenantServiceAccessService", () => {
@@ -37,13 +39,15 @@ describe("TenantServiceAccessService", () => {
         service_end_at: "2027-08-01T00:00:00.000Z",
       },
       paidOnboardingOrder: { id: "order-1", paid_at: NOW.toISOString() },
+      currentTrial: trialFact(),
     }));
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
       routeAccess: "recovery",
-      now: NOW,
     });
 
     expect(decision).toEqual({
@@ -68,6 +72,7 @@ describe("TenantServiceAccessService", () => {
           service_end_at: "2027-08-01T00:00:00.000Z",
         },
         paidOnboardingOrder: { id: "order-1", paid_at: NOW.toISOString() },
+        currentTrial: trialFact(),
       },
       expected: {
         mode: "paid",
@@ -80,11 +85,40 @@ describe("TenantServiceAccessService", () => {
       facts: {
         ...baseFacts,
         paidOnboardingOrder: { id: "order-1", paid_at: NOW.toISOString() },
+        currentTrial: trialFact(),
       },
       expected: {
         mode: "paid_onboarding",
         startsAt: NOW.toISOString(),
         endsAt: null,
+      },
+    },
+    {
+      name: "active trial wins over locked legacy",
+      facts: {
+        ...baseFacts,
+        currentTrial: trialFact(),
+      },
+      expected: {
+        mode: "trial",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        endsAt: "2026-09-01T00:00:00.000Z",
+      },
+    },
+    {
+      name: "effective grace wins over locked legacy",
+      facts: {
+        ...baseFacts,
+        currentTrial: trialFact({
+          status: "grace_period",
+          trial_ends_at: "2026-08-09T00:00:00.000Z",
+          grace_ends_at: "2026-08-16T00:00:00.000Z",
+        }),
+      },
+      expected: {
+        mode: "grace",
+        startsAt: "2026-08-01T00:00:00.000Z",
+        endsAt: "2026-08-16T00:00:00.000Z",
       },
     },
     {
@@ -105,20 +139,21 @@ describe("TenantServiceAccessService", () => {
   ])("resolves $name", async ({ facts, expected }) => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const getAccessFacts = mock(async () => facts);
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
       routeAccess: expected.mode === "service_blocked" ? "read" : "write",
       requiredCapability: "core.projects",
-      now: NOW,
     });
 
     expect(decision).toMatchObject(expected);
-    expect(getAccessFacts).toHaveBeenCalledWith({ tenantId: TENANT_ID, now: NOW });
+    expect(getAccessFacts).toHaveBeenCalledWith({ tenantId: TENANT_ID });
   });
 
-  test("passes requiredCapability through phase one without pruning paid access", async () => {
+  test("does not prune paid access by trial capability", async () => {
     const { TenantServiceAccessService } = await import("./tenant-service-access");
     const getAccessFacts = mock(async () => ({
       ...baseFacts,
@@ -128,13 +163,14 @@ describe("TenantServiceAccessService", () => {
         service_end_at: "2027-08-01T00:00:00.000Z",
       },
     }));
-    const service = new TenantServiceAccessService({ repository: { getAccessFacts } });
+    const service = new TenantServiceAccessService({
+      repository: { getAccessFacts }, trialAccessEnabled: async () => true,
+    });
 
     const decision = await service.resolveForRoute({
       tenantId: TENANT_ID,
       routeAccess: "write",
-      requiredCapability: "future.capability",
-      now: NOW,
+      requiredCapability: "core.files",
     });
 
     expect(decision).toMatchObject({
@@ -142,6 +178,76 @@ describe("TenantServiceAccessService", () => {
       allowed: true,
       errorCode: null,
       reason: null,
+    });
+  });
+
+  test("denies trial routes outside the immutable scope", async () => {
+    const { TenantServiceAccessService } = await import("./tenant-service-access");
+    const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => true,
+      repository: {
+        getAccessFacts: mock(async () => ({
+          ...baseFacts,
+          currentTrial: trialFact(),
+        })),
+      },
+    });
+
+    expect(await service.resolveForRoute({
+      tenantId: TENANT_ID,
+      routeAccess: "read",
+      requiredCapability: "core.files",
+    })).toMatchObject({
+      mode: "trial",
+      allowed: false,
+      errorCode: "TENANT_SERVICE_CAPABILITY_NOT_INCLUDED",
+      reason: "当前试用不包含此功能",
+    });
+  });
+
+  test("treats an expired effective trial as service blocked before locked legacy", async () => {
+    const { TenantServiceAccessService } = await import("./tenant-service-access");
+    const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => true,
+      repository: {
+        getAccessFacts: mock(async () => ({
+          ...baseFacts,
+          currentTrial: null,
+        })),
+      },
+    });
+
+    expect(await service.resolveForRoute({
+      tenantId: TENANT_ID,
+      routeAccess: "read",
+      requiredCapability: "core.projects",
+    })).toMatchObject({
+      mode: "service_blocked",
+      allowed: false,
+      errorCode: "TENANT_SERVICE_ACCESS_EXPIRED",
+    });
+  });
+
+  test('ignores trial facts while the access rollout switch is closed', async () => {
+    const { TenantServiceAccessService } = await import('./tenant-service-access');
+    const service = new TenantServiceAccessService({
+      trialAccessEnabled: async () => false,
+      repository: {
+        getAccessFacts: mock(async () => ({
+          ...baseFacts,
+          currentTrial: trialFact(),
+        })),
+      },
+    });
+
+    expect(await service.resolveForRoute({
+      tenantId: TENANT_ID,
+      routeAccess: 'read',
+      requiredCapability: 'core.projects',
+    })).toMatchObject({
+      mode: 'service_blocked',
+      allowed: false,
+      errorCode: 'TENANT_SERVICE_ACCESS_EXPIRED',
     });
   });
 });
@@ -191,6 +297,7 @@ describe("resolveTenantServiceRouteDecision", () => {
           mode,
           routeAccess,
           requiredCapability: "core.projects",
+          capabilities: ["core.projects"],
           startsAt: DECISION_STARTS_AT,
           endsAt: DECISION_ENDS_AT,
         })).toEqual({
@@ -206,3 +313,20 @@ describe("resolveTenantServiceRouteDecision", () => {
     },
   );
 });
+
+function trialFact(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "20000000-0000-4000-8000-000000000001",
+    tenant_id: TENANT_ID,
+    source: "tenant_application" as const,
+    status: "active" as const,
+    starts_at: "2026-08-01T00:00:00.000Z",
+    trial_ends_at: "2026-09-01T00:00:00.000Z",
+    grace_ends_at: "2026-09-08T00:00:00.000Z",
+    scope_snapshot: {
+      version: 1 as const,
+      capabilities: ["core.projects" as const],
+    },
+    ...overrides,
+  };
+}

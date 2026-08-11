@@ -22,6 +22,7 @@ describe("platform service RPC business fact boundary", () => {
       order: rpcOrder(),
       work_order: rpcWorkOrder(),
       access_mode: "paid_onboarding",
+      conversion_anomaly: null,
       idempotent: false,
       error_code: null,
     };
@@ -60,6 +61,7 @@ describe("platform service RPC business fact boundary", () => {
     const base = {
       order: rpcOrder(),
       work_order: rpcWorkOrder(),
+      conversion_anomaly: null,
       idempotent: true,
       error_code: null,
     };

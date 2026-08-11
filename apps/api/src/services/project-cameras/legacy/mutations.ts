@@ -55,6 +55,7 @@ export async function createProjectCamera(this: any, input: TenantServiceAccessI
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   if (!actor.tenantId) {
     throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
@@ -113,6 +114,7 @@ export async function updateProjectCamera(this: any, input: TenantServiceAccessI
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const camera = await projectCameraRepository.update(
@@ -136,6 +138,7 @@ export async function deleteProjectCamera(this: any, input: TenantServiceAccessI
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   await projectCameraRepository.softDelete(input.projectId, input.cameraId, actor.tenantId);
   await tenantDeviceRepository.markUnboundByCameraId(

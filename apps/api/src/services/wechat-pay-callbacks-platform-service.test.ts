@@ -130,6 +130,7 @@ const confirmService = mock(async () => ({
   order: { id: serviceOrder.id, payment_status: "paid" },
   work_order: { id: "work-order-1" },
   access_mode: "paid_onboarding" as const,
+  conversion_anomaly: null,
   idempotent: false,
 }));
 const unexpectedCreditRepositoryOperation = mock(async (): Promise<never> => {

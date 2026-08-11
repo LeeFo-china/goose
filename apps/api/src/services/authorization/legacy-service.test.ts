@@ -111,7 +111,6 @@ describe("AuthorizationService tenant service access guard", () => {
       tenantId: "tenant-1",
       routeAccess: current.routeAccess,
       requiredCapability: null,
-      now: expect.any(Date),
     });
   });
 
@@ -222,7 +221,6 @@ describe("AuthorizationService tenant service access guard", () => {
       tenantId: "tenant-1",
       routeAccess: "session",
       requiredCapability: null,
-      now: expect.any(Date),
     });
   });
 

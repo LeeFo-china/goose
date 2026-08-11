@@ -19,6 +19,7 @@ import {
 import { projectRepository } from "@/repositories/projects";
 import { tenantDeviceRepository, type TenantDeviceRow } from "@/repositories/tenant-devices";
 import { projectStatusService } from "@/services/project-status";
+import type { TenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type {
   CreateProjectCameraInput,
   ProjectCameraBindOptionsQueryInput,
@@ -27,7 +28,6 @@ import type {
   UpdateProjectCameraTencentDevicePasswordInput,
   UpdateProjectCameraInput,
 } from "@/schema/project-cameras";
-import type { TenantServiceRouteAccess } from "@gooes/domain";
 
 export type CameraActor = {
   userId: string;
@@ -41,9 +41,7 @@ export type RequestLogMeta = {
   userAgent?: string | null;
 };
 
-export type TenantServiceAccessInput = {
-  tenantServiceAccess: TenantServiceRouteAccess;
-};
+export type TenantServiceAccessInput = TenantServiceAuthOptions;
 
 export function normalizeCapabilities(value: unknown) {
   if (!Array.isArray(value)) {

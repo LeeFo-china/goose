@@ -14,6 +14,7 @@ export * from './payment';
 export * from './permission';
 export * from './platform-service';
 export * from './platform-service-access';
+export * from './platform-service-trial';
 export * from './post';
 export * from './project-acceptance';
 export * from './project-log';

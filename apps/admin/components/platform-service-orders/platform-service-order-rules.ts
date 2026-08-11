@@ -12,18 +12,20 @@ import type {
   ServiceTenantSummary,
 } from "./platform-service-order-types";
 
-export type PlatformServiceTab = "orders" | "workOrders" | "refunds";
+export type PlatformServiceTab = "orders" | "workOrders" | "refunds" | "trials";
 
 export const platformServiceTabs: PlatformServiceTab[] = [
   "orders",
   "workOrders",
   "refunds",
+  "trials",
 ];
 
 export const platformServiceTabLabels: Record<PlatformServiceTab, string> = {
   orders: "服务订单",
   workOrders: "实施工单",
   refunds: "退款审核",
+  trials: "试用管理",
 };
 
 export const paymentStatusOptions: ReadonlyArray<{

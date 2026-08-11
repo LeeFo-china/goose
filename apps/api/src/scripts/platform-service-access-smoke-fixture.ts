@@ -319,6 +319,7 @@ export async function readSmokeAccessMode(
     ? fact.legacy_status
     : null;
   const facts: TenantServiceAccessFacts = {
+    evaluatedAt: new Date().toISOString(),
     tenantStatus: typeof fact?.status === "string" ? fact.status : null,
     contract: readAccessObject(fact?.contract, [
       "id", "service_start_at", "service_end_at",
@@ -327,6 +328,7 @@ export async function readSmokeAccessMode(
       "id", "paid_at",
     ]),
     legacySubscriptionStatus: legacyStatus,
+    currentTrial: null,
   };
   return withIsolatedLocalSupabaseEnvironment(async () => {
     const { TenantServiceAccessService } = await import(
@@ -338,7 +340,6 @@ export async function readSmokeAccessMode(
     return (await service.resolveForRoute({
       tenantId,
       routeAccess: "write",
-      now: new Date(),
     })).mode;
   });
 }

@@ -55,6 +55,7 @@ export async function listEzvizDeviceChannels(this: any, input: TenantServiceAcc
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const [channels, bindings, tenantDeviceAssets] = await Promise.all([
@@ -124,6 +125,7 @@ export async function listTencentDeviceChannels(this: any, input: TenantServiceA
     permissionCode: "project.update",
     allowCustomer: false,
     tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const [deviceSummaries, channels, bindings, tenantDeviceAssets] = await Promise.all([

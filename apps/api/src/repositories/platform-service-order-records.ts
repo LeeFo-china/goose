@@ -58,6 +58,7 @@ export type OrderRecord = {
   transaction_id?: string | null;
   service_access_terminated_at?: string | null;
   service_access_termination_reason?: string | null;
+  source_trial_id?: string | null;
   prepay_id: string | null;
   payment_expires_at: string;
   paid_at: string | null;
@@ -87,6 +88,7 @@ export type CreatePendingOrderInput = {
   termsVersion: number;
   termsAcceptedAt: string;
   createdByEmployeeId: string;
+  sourceTrialId?: string;
 };
 
 export type ProductDraftCreateInput = {
@@ -371,6 +373,7 @@ export const PLATFORM_SERVICE_ORDER_SELECT = [
   "payment_status",
   "service_status",
   "transaction_id",
+  "source_trial_id",
   "payment_expires_at",
   "paid_at",
   "closed_at",
@@ -478,6 +481,7 @@ export const TENANT_INTERNAL_ORDER_SELECT = [
   "payer_openid",
   "product_snapshot",
   "transaction_id",
+  "source_trial_id",
   "prepay_id",
   "payment_expires_at",
   "paid_at",

@@ -6947,6 +6947,90 @@ export type Database = {
           },
         ]
       }
+      platform_service_trial_policies: {
+        Row: {
+          allow_repeat: boolean
+          change_reason: string | null
+          created_at: string
+          created_by_employee_id: string | null
+          grace_days: number
+          guided_scope: Json
+          id: string
+          is_current: boolean
+          max_extension_count: number
+          max_extension_days: number
+          max_grace_days: number
+          max_schedule_days: number
+          max_trial_days: number
+          reapply_cooldown_days: number
+          reminder_days: number[]
+          standard_scope: Json
+          trial_days: number
+          updated_at: string
+          updated_by_employee_id: string | null
+          version: number
+        }
+        Insert: {
+          allow_repeat?: boolean
+          change_reason?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          grace_days?: number
+          guided_scope: Json
+          id?: string
+          is_current?: boolean
+          max_extension_count?: number
+          max_extension_days?: number
+          max_grace_days?: number
+          max_schedule_days?: number
+          max_trial_days?: number
+          reapply_cooldown_days?: number
+          reminder_days?: number[]
+          standard_scope: Json
+          trial_days?: number
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Update: {
+          allow_repeat?: boolean
+          change_reason?: string | null
+          created_at?: string
+          created_by_employee_id?: string | null
+          grace_days?: number
+          guided_scope?: Json
+          id?: string
+          is_current?: boolean
+          max_extension_count?: number
+          max_extension_days?: number
+          max_grace_days?: number
+          max_schedule_days?: number
+          max_trial_days?: number
+          reapply_cooldown_days?: number
+          reminder_days?: number[]
+          standard_scope?: Json
+          trial_days?: number
+          updated_at?: string
+          updated_by_employee_id?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_service_trial_policies_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_service_trial_policies_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_virtual_goods_operations: {
         Row: {
           channel_id: string
@@ -16404,6 +16488,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "tenant_service_orders_source_trial_tenant_fkey"
+            columns: ["source_trial_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_trials"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
             foreignKeyName: "tenant_service_orders_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
@@ -16643,6 +16734,324 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_service_trial_commands: {
+        Row: {
+          actor_employee_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          idempotency_key: string
+          request_hash: string
+          result_envelope: Json
+          scope_key: string
+          tenant_id: string | null
+          trial_id: string | null
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          idempotency_key: string
+          request_hash: string
+          result_envelope: Json
+          scope_key: string
+          tenant_id?: string | null
+          trial_id?: string | null
+        }
+        Update: {
+          actor_employee_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          idempotency_key?: string
+          request_hash?: string
+          result_envelope?: Json
+          scope_key?: string
+          tenant_id?: string | null
+          trial_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_trial_commands_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_commands_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_commands_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_commands_trial_identity_fkey"
+            columns: ["trial_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_trials"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      tenant_service_trial_events: {
+        Row: {
+          actor_employee_id: string | null
+          created_at: string
+          event_key: string
+          event_type: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          occurred_at: string
+          reason: string | null
+          tenant_id: string
+          to_status: string | null
+          trial_id: string
+        }
+        Insert: {
+          actor_employee_id?: string | null
+          created_at?: string
+          event_key: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          reason?: string | null
+          tenant_id: string
+          to_status?: string | null
+          trial_id: string
+        }
+        Update: {
+          actor_employee_id?: string | null
+          created_at?: string
+          event_key?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          reason?: string | null
+          tenant_id?: string
+          to_status?: string | null
+          trial_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_trial_events_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_events_trial_identity_fkey"
+            columns: ["trial_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_trials"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      tenant_service_trials: {
+        Row: {
+          activated_at: string | null
+          application_reason: string | null
+          assignee_employee_id: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          converted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          enterprise_identity_hash: string
+          expected_project_count: number | null
+          expected_user_count: number | null
+          extension_count: number
+          grace_ends_at: string | null
+          grant_reason: string | null
+          granted_at: string | null
+          granted_by_employee_id: string | null
+          id: string
+          policy_snapshot: Json
+          requested_at: string | null
+          requested_by_employee_id: string | null
+          review_decision: string | null
+          review_reason: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by_employee_id: string | null
+          scope_snapshot: Json
+          source: string
+          starts_at: string | null
+          status: string
+          tenant_id: string
+          trial_ends_at: string | null
+          trial_type: string
+          updated_at: string
+          version: number
+          withdraw_reason: string | null
+          withdrawn_at: string | null
+          withdrawn_by_employee_id: string | null
+        }
+        Insert: {
+          activated_at?: string | null
+          application_reason?: string | null
+          assignee_employee_id?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          converted_at?: string | null
+          converted_order_id?: string | null
+          created_at?: string
+          enterprise_identity_hash: string
+          expected_project_count?: number | null
+          expected_user_count?: number | null
+          extension_count?: number
+          grace_ends_at?: string | null
+          grant_reason?: string | null
+          granted_at?: string | null
+          granted_by_employee_id?: string | null
+          id?: string
+          policy_snapshot: Json
+          requested_at?: string | null
+          requested_by_employee_id?: string | null
+          review_decision?: string | null
+          review_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by_employee_id?: string | null
+          scope_snapshot: Json
+          source: string
+          starts_at?: string | null
+          status: string
+          tenant_id: string
+          trial_ends_at?: string | null
+          trial_type: string
+          updated_at?: string
+          version?: number
+          withdraw_reason?: string | null
+          withdrawn_at?: string | null
+          withdrawn_by_employee_id?: string | null
+        }
+        Update: {
+          activated_at?: string | null
+          application_reason?: string | null
+          assignee_employee_id?: string | null
+          contact_name?: string | null
+          contact_phone?: string | null
+          converted_at?: string | null
+          converted_order_id?: string | null
+          created_at?: string
+          enterprise_identity_hash?: string
+          expected_project_count?: number | null
+          expected_user_count?: number | null
+          extension_count?: number
+          grace_ends_at?: string | null
+          grant_reason?: string | null
+          granted_at?: string | null
+          granted_by_employee_id?: string | null
+          id?: string
+          policy_snapshot?: Json
+          requested_at?: string | null
+          requested_by_employee_id?: string | null
+          review_decision?: string | null
+          review_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          revoked_by_employee_id?: string | null
+          scope_snapshot?: Json
+          source?: string
+          starts_at?: string | null
+          status?: string
+          tenant_id?: string
+          trial_ends_at?: string | null
+          trial_type?: string
+          updated_at?: string
+          version?: number
+          withdraw_reason?: string | null
+          withdrawn_at?: string | null
+          withdrawn_by_employee_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_trials_assignee_employee_id_fkey"
+            columns: ["assignee_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_converted_order_identity_fkey"
+            columns: ["converted_order_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_orders"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_granted_by_employee_id_fkey"
+            columns: ["granted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_requested_by_employee_id_fkey"
+            columns: ["requested_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_reviewed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_revoked_by_employee_id_fkey"
+            columns: ["revoked_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trials_withdrawn_by_employee_id_fkey"
+            columns: ["withdrawn_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
             referencedColumns: ["id"]
           },
         ]
@@ -24039,6 +24448,7 @@ export type Database = {
           p_product_snapshot: Json
           p_product_version_id: string
           p_required_channel?: string
+          p_source_trial_id?: string
           p_tenant_id: string
           p_term_years: number
           p_terms_accepted_at: string
@@ -24195,6 +24605,232 @@ export type Database = {
           p_remark?: string
           p_to_status: string
           p_work_order_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_access_facts: {
+        Args: { p_tenant_id: string }
+        Returns: Json
+      }
+      platform_service_trial_apply: {
+        Args: {
+          p_actor_employee_id: string
+          p_application_reason: string
+          p_contact_name: string
+          p_contact_phone: string
+          p_expected_project_count: number
+          p_expected_user_count: number
+          p_idempotency_key: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_assign: {
+        Args: {
+          p_actor_employee_id: string
+          p_assignee_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_command_snapshot: {
+        Args: {
+          p_trial: Database["public"]["Tables"]["tenant_service_trials"]["Row"]
+        }
+        Returns: Json
+      }
+      platform_service_trial_extend: {
+        Args: {
+          p_actor_employee_id: string
+          p_allow_override?: boolean
+          p_expected_version: number
+          p_extension_days: number
+          p_idempotency_key: string
+          p_reason: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_grant: {
+        Args: {
+          p_actor_employee_id: string
+          p_allow_override?: boolean
+          p_assignee_employee_id?: string
+          p_grace_days?: number
+          p_idempotency_key: string
+          p_reason: string
+          p_scope: Json
+          p_starts_at?: string
+          p_tenant_id: string
+          p_trial_days?: number
+          p_trial_type: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_list: {
+        Args: {
+          p_applied_from?: string
+          p_applied_to?: string
+          p_assignee_employee_id?: string
+          p_expires_from?: string
+          p_expires_to?: string
+          p_keyword?: string
+          p_now?: string
+          p_page?: number
+          p_page_size?: number
+          p_platform?: boolean
+          p_source?: string
+          p_status?: string
+          p_tenant_id?: string
+          p_trial_type?: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_lock_platform_actor: {
+        Args: {
+          p_actor_employee_id: string
+          p_required_permission_codes: string[]
+        }
+        Returns: undefined
+      }
+      platform_service_trial_lock_tenant_actor: {
+        Args: {
+          p_actor_employee_id: string
+          p_required_permission_codes: string[]
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      platform_service_trial_lock_verified_enterprise_identity: {
+        Args: { p_expected_hash: string; p_tenant_id: string }
+        Returns: undefined
+      }
+      platform_service_trial_normalize_effective_status: {
+        Args: { p_now: string; p_tenant_id: string; p_trial_id: string }
+        Returns: {
+          activated_at: string | null
+          application_reason: string | null
+          assignee_employee_id: string | null
+          contact_name: string | null
+          contact_phone: string | null
+          converted_at: string | null
+          converted_order_id: string | null
+          created_at: string
+          enterprise_identity_hash: string
+          expected_project_count: number | null
+          expected_user_count: number | null
+          extension_count: number
+          grace_ends_at: string | null
+          grant_reason: string | null
+          granted_at: string | null
+          granted_by_employee_id: string | null
+          id: string
+          policy_snapshot: Json
+          requested_at: string | null
+          requested_by_employee_id: string | null
+          review_decision: string | null
+          review_reason: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          revoke_reason: string | null
+          revoked_at: string | null
+          revoked_by_employee_id: string | null
+          scope_snapshot: Json
+          source: string
+          starts_at: string | null
+          status: string
+          tenant_id: string
+          trial_ends_at: string | null
+          trial_type: string
+          updated_at: string
+          version: number
+          withdraw_reason: string | null
+          withdrawn_at: string | null
+          withdrawn_by_employee_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tenant_service_trials"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      platform_service_trial_platform_summary: {
+        Args: { p_now?: string }
+        Returns: Json
+      }
+      platform_service_trial_replay_command: {
+        Args: {
+          p_idempotency_key: string
+          p_request_hash: string
+          p_scope_key: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_review: {
+        Args: {
+          p_actor_employee_id: string
+          p_allow_override?: boolean
+          p_assignee_employee_id?: string
+          p_decision: string
+          p_expected_version: number
+          p_grace_days?: number
+          p_idempotency_key: string
+          p_reason: string
+          p_scope?: Json
+          p_starts_at?: string
+          p_trial_days?: number
+          p_trial_id: string
+          p_trial_type?: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_revoke: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_scope_valid: {
+        Args: { p_scope: Json }
+        Returns: boolean
+      }
+      platform_service_trial_store_command: {
+        Args: {
+          p_actor_employee_id: string
+          p_idempotency_key: string
+          p_request_hash: string
+          p_result_envelope: Json
+          p_scope_key: string
+          p_tenant_id: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_update_policy: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_policy: Json
+          p_reason: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_withdraw: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason: string
+          p_tenant_id: string
+          p_trial_id: string
         }
         Returns: Json
       }

@@ -32,6 +32,25 @@ import type {
   PlatformServiceWorkOrderListItem,
 } from "@/components/platform-service-orders/platform-service-order-types";
 import { PlatformServiceWorkOrderTable } from "@/components/platform-service-orders/platform-service-work-order-table";
+import { PlatformServiceTrialFilters } from "@/components/platform-service-trials/platform-service-trial-filters";
+import {
+  trialSourceOptions,
+  trialStatusOptions,
+  trialTypeOptions,
+} from "@/components/platform-service-trials/platform-service-trial-rules";
+import {
+  buildPlatformServiceTrialTabQuery,
+  buildServiceTrialQuery,
+  getPlatformServiceTrialPermissions,
+} from "@/components/platform-service-trials/platform-service-trial-page-state";
+import { PlatformServiceTrialGrantDialog } from "@/components/platform-service-trials/platform-service-trial-action-dialog";
+import { PlatformServiceTrialPolicyDialog } from "@/components/platform-service-trials/platform-service-trial-policy-dialog";
+import { PlatformServiceTrialTable } from "@/components/platform-service-trials/platform-service-trial-table";
+import type {
+  PlatformServiceTrialListData,
+  PlatformServiceTrialListItem,
+  PlatformServiceTrialSummary,
+} from "@/components/platform-service-trials/platform-service-trial-types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
@@ -49,18 +68,44 @@ type SearchParams = Promise<{
   workOrderPageSize?: string;
   refundPage?: string;
   refundPageSize?: string;
+  trialPage?: string;
+  trialPageSize?: string;
   keyword?: string;
   tenantKeyword?: string;
   status?: string;
   paymentStatus?: string;
   serviceStatus?: string;
   assigneeEmployeeId?: string;
+  trialKeyword?: string;
+  trialStatus?: string;
+  trialSource?: string;
+  trialType?: string;
+  trialAssigneeEmployeeId?: string;
+  trialAppliedFrom?: string;
+  trialAppliedTo?: string;
+  trialExpiresFrom?: string;
+  trialExpiresTo?: string;
 }>;
 
 function emptyPage<RecordType>(page: number, pageSize: number): PageData<RecordType> {
   return {
     list: [],
     pagination: { page, pageSize, total: 0, totalPages: 0 },
+  };
+}
+
+function emptyTrialSummary(): PlatformServiceTrialSummary {
+  return {
+    pending_review_count: 0,
+    scheduled_count: 0,
+    current_active_count: 0,
+    expiring_within_7_days_count: 0,
+    month_new_count: 0,
+    month_approved_count: 0,
+    month_converted_count: 0,
+    application_approval_rate: 0,
+    activated_cohort_conversion_rate: 0,
+    server_time: new Date(0).toISOString(),
   };
 }
 
@@ -96,6 +141,16 @@ export default async function PlatformServiceOrdersPage({
   const canRead = isPlatformAdmin && permissions.has(READ_PERMISSION);
   const canManageWorkOrder = isPlatformAdmin && permissions.has(WORK_ORDER_MANAGE_PERMISSION);
   const canReviewRefund = isPlatformAdmin && permissions.has(REFUND_REVIEW_PERMISSION);
+  const trialPermissions = getPlatformServiceTrialPermissions({
+    tenantId: session.tenant?.id ?? null,
+    roles: session.roles,
+    permissionCodes: [...permissions],
+    isPlatformStaff: session.is_platform_staff,
+    isPlatformSuperAdmin: session.is_platform_super_admin,
+  });
+  const canReadTrials = trialPermissions.canRead;
+  const canGrantTrial = trialPermissions.canGrant;
+  const canUpdateTrialPolicy = trialPermissions.canUpdatePolicy;
   const params = await searchParams;
   const activeTab = normalizePlatformServiceTab(params.tab);
   const page = readPositiveInteger(params.page, 1);
@@ -104,6 +159,8 @@ export default async function PlatformServiceOrdersPage({
   const workOrderPageSize = normalizePlatformListPageSize(params.workOrderPageSize);
   const refundPage = readPositiveInteger(params.refundPage, 1);
   const refundPageSize = normalizePlatformListPageSize(params.refundPageSize);
+  const trialPage = readPositiveInteger(params.trialPage, 1);
+  const trialPageSize = normalizePlatformListPageSize(params.trialPageSize);
   const keyword = cleanParam(params.keyword);
   const tenantKeyword = cleanParam(params.tenantKeyword);
   const paymentStatus = pickParam(
@@ -125,6 +182,24 @@ export default async function PlatformServiceOrdersPage({
     refundStatusOptions.map((item) => item.value),
   );
   const assigneeEmployeeId = cleanParam(params.assigneeEmployeeId);
+  const trialKeyword = cleanParam(params.trialKeyword);
+  const trialStatus = pickParam(
+    params.trialStatus,
+    trialStatusOptions.map((item) => item.value),
+  );
+  const trialSource = pickParam(
+    params.trialSource,
+    trialSourceOptions.map((item) => item.value),
+  );
+  const trialType = pickParam(
+    params.trialType,
+    trialTypeOptions.map((item) => item.value),
+  );
+  const trialAssigneeEmployeeId = cleanParam(params.trialAssigneeEmployeeId);
+  const trialAppliedFrom = cleanParam(params.trialAppliedFrom);
+  const trialAppliedTo = cleanParam(params.trialAppliedTo);
+  const trialExpiresFrom = cleanParam(params.trialExpiresFrom);
+  const trialExpiresTo = cleanParam(params.trialExpiresTo);
 
   let orders = emptyPage<PlatformServiceOrderListItem>(page, pageSize);
   let workOrders = emptyPage<PlatformServiceWorkOrderListItem>(
@@ -135,6 +210,11 @@ export default async function PlatformServiceOrdersPage({
     refundPage,
     refundPageSize,
   );
+  let trials: PlatformServiceTrialListData = {
+    ...emptyPage<PlatformServiceTrialListItem>(trialPage, trialPageSize),
+    server_time: new Date().toISOString(),
+  };
+  let trialSummary = emptyTrialSummary();
   let error: string | null = null;
   const permissionError = activeTab === "orders"
     ? canRead
@@ -144,9 +224,13 @@ export default async function PlatformServiceOrdersPage({
       ? canManageWorkOrder
         ? null
         : "当前账号缺少平台技术服务工单管理权限"
-      : canReviewRefund
-        ? null
-        : "当前账号缺少平台技术服务退款审核权限";
+      : activeTab === "refunds"
+        ? canReviewRefund
+          ? null
+          : "当前账号缺少平台技术服务退款审核权限"
+        : canReadTrials
+          ? null
+          : "当前账号缺少平台技术服务试用查看权限";
 
   if (permissionError) {
     error = permissionError;
@@ -178,7 +262,7 @@ export default async function PlatformServiceOrdersPage({
     );
     workOrders = result.data;
     error = result.error;
-  } else {
+  } else if (activeTab === "refunds") {
     const result = await fetchBackend<PageData<PlatformServiceRefundRequestListItem>>(
       `/platform/billing/service-refund-requests?${buildServiceRefundRequestQuery({
         page: refundPage,
@@ -191,46 +275,105 @@ export default async function PlatformServiceOrdersPage({
     );
     refunds = result.data;
     error = result.error;
+  } else {
+    const [listResult, summaryResult] = await Promise.all([
+      fetchBackend<PlatformServiceTrialListData>(
+        `/platform/billing/service-trials?${buildServiceTrialQuery({
+          page: trialPage,
+          pageSize: trialPageSize,
+          keyword: trialKeyword,
+          status: trialStatus,
+          source: trialSource,
+          trialType,
+          assigneeEmployeeId: trialAssigneeEmployeeId,
+          appliedFrom: trialAppliedFrom,
+          appliedTo: trialAppliedTo,
+          expiresFrom: trialExpiresFrom,
+          expiresTo: trialExpiresTo,
+        })}`,
+        trials,
+      ),
+      fetchBackend<PlatformServiceTrialSummary>(
+        "/platform/billing/service-trials/summary",
+        trialSummary,
+      ),
+    ]);
+    trials = listResult.data;
+    trialSummary = summaryResult.data;
+    error = listResult.error || summaryResult.error;
   }
 
   const activePagination = activeTab === "orders"
     ? orders.pagination
     : activeTab === "workOrders"
       ? workOrders.pagination
-      : refunds.pagination;
+      : activeTab === "refunds"
+        ? refunds.pagination
+        : trials.pagination;
   const activeList = activeTab === "orders"
     ? orders.list
     : activeTab === "workOrders"
       ? workOrders.list
-      : refunds.list;
+      : activeTab === "refunds"
+        ? refunds.list
+        : trials.list;
   const activePageSize = activeTab === "orders"
     ? pageSize
     : activeTab === "workOrders"
       ? workOrderPageSize
-      : refundPageSize;
+      : activeTab === "refunds"
+        ? refundPageSize
+        : trialPageSize;
   const pageKey = activeTab === "orders"
     ? "page"
     : activeTab === "workOrders"
       ? "workOrderPage"
-      : "refundPage";
+      : activeTab === "refunds"
+        ? "refundPage"
+        : "trialPage";
   const pageSizeKey = activeTab === "orders"
     ? "pageSize"
     : activeTab === "workOrders"
       ? "workOrderPageSize"
-      : "refundPageSize";
+      : activeTab === "refunds"
+        ? "refundPageSize"
+        : "trialPageSize";
+  const grantTrialDisabledReason = canGrantTrial
+    ? undefined
+    : "当前账号缺少平台技术服务试用管理权限";
+  const policyDisabledReason = canUpdateTrialPolicy
+    ? undefined
+    : "当前账号缺少平台技术服务试用规则修改权限";
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
       <Tabs defaultValue={activeTab} className="contents">
         <PlatformListPageShell
           title="平台技术服务"
-          description="跟踪年度技术服务订单、实施工单、履约记录和退款审核，保证支付、交付、验收关系清晰。"
+          description="跟踪试用、订单、实施和退款进度，保证企业资格、服务范围与后续动作清晰。"
           leading={
             <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground">
               <BriefcaseBusiness aria-hidden="true" />
             </span>
           }
           error={error}
+          action={activeTab === "trials" && canReadTrials ? (
+            <div className="flex flex-wrap gap-2">
+              <PlatformServiceTrialPolicyDialog disabledReason={policyDisabledReason} />
+              <PlatformServiceTrialGrantDialog disabledReason={grantTrialDisabledReason} />
+            </div>
+          ) : null}
+          summary={activeTab === "trials" && canReadTrials ? (
+            <div
+              className="grid shrink-0 grid-cols-2 overflow-hidden rounded-md border bg-card lg:grid-cols-4 lg:divide-x"
+              aria-label="技术服务试用概览"
+            >
+              <TrialMetric label="待审核" value={trialSummary.pending_review_count} />
+              <TrialMetric label="试用中" value={trialSummary.current_active_count} />
+              <TrialMetric label="7 天内到期" value={trialSummary.expiring_within_7_days_count} />
+              <TrialMetric label="本月转正式" value={trialSummary.month_converted_count} />
+            </div>
+          ) : null}
           tabs={
             <TabsList className={platformTabsListClassName}>
               <TabsTrigger value="orders" asChild className={platformTabsTriggerClassName}>
@@ -258,9 +401,31 @@ export default async function PlatformServiceOrdersPage({
                   退款审核
                 </Link>
               </TabsTrigger>
+              <TabsTrigger value="trials" asChild className={platformTabsTriggerClassName}>
+                <Link
+                  href={`/platform/service-orders?${buildPlatformServiceTrialTabQuery(trialPageSize)}`}
+                >
+                  试用管理
+                </Link>
+              </TabsTrigger>
             </TabsList>
           }
-          filters={
+          filters={activeTab === "trials" ? (
+            <PlatformServiceTrialFilters
+              values={{
+                keyword: trialKeyword,
+                status: trialStatus,
+                source: trialSource,
+                trialType,
+                assigneeEmployeeId: trialAssigneeEmployeeId,
+                appliedFrom: trialAppliedFrom,
+                appliedTo: trialAppliedTo,
+                expiresFrom: trialExpiresFrom,
+                expiresTo: trialExpiresTo,
+              }}
+              pageSize={trialPageSize}
+            />
+          ) : (
             <PlatformServiceOrderFilters
               activeTab={activeTab}
               keyword={keyword}
@@ -270,7 +435,7 @@ export default async function PlatformServiceOrdersPage({
               serviceStatus={serviceStatus}
               assigneeEmployeeId={assigneeEmployeeId}
             />
-          }
+          )}
           pagination={activePagination}
           currentCount={getListCurrentCount({
             list: activeList,
@@ -280,7 +445,11 @@ export default async function PlatformServiceOrdersPage({
           pageKey={pageKey}
           pageSizeKey={pageSizeKey}
           tableViewportTestId="platform-service-orders-table-viewport"
-          unit={activeTab === "orders" ? "笔订单" : activeTab === "workOrders" ? "张工单" : "条退款"}
+          unit={activeTab === "orders"
+            ? "笔订单"
+            : activeTab === "workOrders"
+              ? "张工单"
+              : activeTab === "refunds" ? "条退款" : "条试用"}
         >
           {activeTab === "orders" ? (
             <PlatformServiceOrderTable
@@ -292,14 +461,28 @@ export default async function PlatformServiceOrdersPage({
               workOrders={workOrders.list}
               canManage={canManageWorkOrder}
             />
-          ) : (
+          ) : activeTab === "refunds" ? (
             <PlatformServiceRefundRequestTable
               requests={refunds.list}
               canReview={canReviewRefund}
             />
+          ) : (
+            <PlatformServiceTrialTable
+              trials={trials.list}
+              serverTime={trials.server_time}
+            />
           )}
         </PlatformListPageShell>
       </Tabs>
+    </div>
+  );
+}
+
+function TrialMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-3 border-b px-4 py-3 last:border-b-0 lg:border-b-0">
+      <span className="truncate text-sm text-muted-foreground">{label}</span>
+      <strong className="text-xl font-semibold tabular-nums">{value}</strong>
     </div>
   );
 }

@@ -52,6 +52,7 @@ describe("PlatformServiceOrderRepository access RPC results", () => {
         order: rpcOrder(),
         work_order: rpcWorkOrder(),
         access_mode: "paid_onboarding",
+        conversion_anomaly: null,
         idempotent: false,
         error_code: null,
       },
