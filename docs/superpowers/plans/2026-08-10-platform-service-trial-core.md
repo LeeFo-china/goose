@@ -19,7 +19,7 @@
 - `packages/domain/src/platform-service-trial.ts`：试用状态、来源、类型、scope 和动作契约。
 - `packages/domain/src/permission.ts`：租户和平台试用权限。
 - `apps/api/src/schema/service-trials.ts`：租户申请、平台命令、列表和规则 schema。
-- `supabase/migrations/20260810200000_create_platform_service_trials.sql`：规则、试用、事件、命令、约束、索引、权限和 RPC。
+- `supabase/migrations/20260811005555_create_platform_service_trials.sql`：规则、试用、事件、命令、约束、索引、权限和 RPC。
 - `apps/api/src/repositories/service-trials.ts`：唯一数据库访问层。
 - `apps/api/src/services/tenant-service-trials.ts`：租户查询、申请和撤回。
 - `apps/api/src/services/platform-service-trials.ts`：平台查询、主动开通、审核、延期、撤销、分配和规则。
@@ -122,7 +122,7 @@ git commit -m "feat(trial): 定义试用权限与接口契约"
 
 **Files:**
 - Create: `apps/api/src/services/platform-service-trial-migration-contract.test.ts`
-- Create: `supabase/migrations/20260810200000_create_platform_service_trials.sql`
+- Create: `supabase/migrations/20260811005555_create_platform_service_trials.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -141,7 +141,7 @@ expect(sql).toContain("service_trial_revoke");
 expect(sql).toContain("service_trial_assign");
 expect(sql).toContain("service_trial_update_policy");
 expect(sql).toContain("service_trial_platform_summary");
-expect(sql).toContain("CREATE OR REPLACE FUNCTION public.platform_service_create_order");
+expect(sql).toContain("CREATE OR REPLACE FUNCTION public.platform_service_create_pending_order");
 expect(sql).toContain("CREATE OR REPLACE FUNCTION public.platform_service_confirm_payment");
 expect(sql).toContain("pg_advisory_xact_lock");
 ```
@@ -192,7 +192,9 @@ END;
 
 租户管理员默认获得 apply/read；`platform_admin` 获得四个平台权限；`platform_operations` 获得 read/review/manage，不获得 override。重复运行 migration 必须幂等。
 
-- [ ] **Step 7: 补订单 FK 与唯一归因**
+- [ ] **Step 7: 为既有来源列补历史 preflight、订单 FK 与唯一归因**
+
+`source_trial_id` 已由 Access Foundation migration 建立；本 migration 不重复新增列，先对历史非空值 fail-closed preflight，再建立复合 FK 与未关闭订单部分唯一索引。
 
 ```sql
 ALTER TABLE public.tenant_service_orders
@@ -205,7 +207,7 @@ ON public.tenant_service_orders(source_trial_id)
 WHERE source_trial_id IS NOT NULL AND payment_status <> 'closed';
 ```
 
-同一 migration 必须扩展 `platform_service_create_order`：可选接收 `source_trial_id`，在数据库锁内校验同租户、试用有效且没有另一张未关闭来源订单；并扩展 `platform_service_confirm_payment`：只消费订单快照中的来源，正常时把该试用原子标记 `converted` 并写 event，重复回调返回同一结果，若来源已被其他订单转换则确认资金和工单但写 anomaly event，不回滚已成功支付。
+同一 migration 必须扩展 `platform_service_create_pending_order`：可选接收 `source_trial_id`，在数据库锁内校验同租户、试用有效且没有另一张未关闭来源订单；并扩展 `platform_service_confirm_payment`：只消费订单快照中的来源，正常时把该试用原子标记 `converted` 并写 event，重复回调返回同一结果，若来源已被其他订单转换则确认资金和工单但写 anomaly event，不回滚已成功支付。
 
 - [ ] **Step 8: 运行 GREEN 并提交**
 

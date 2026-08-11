@@ -112,6 +112,11 @@ export type PlatformServiceRefundRequestListItem = {
   reviewed_by_employee_id?: string | null;
   reviewed_at?: string | null;
   review_remark?: string | null;
+  out_refund_no?: string | null;
+  wechat_refund_id?: string | null;
+  refund_amount_fen?: number | null;
+  refunded_at?: string | null;
+  refunded_by_employee_id?: string | null;
   created_at: string;
   updated_at: string;
   order?: {

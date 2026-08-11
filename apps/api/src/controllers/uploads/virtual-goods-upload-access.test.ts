@@ -77,6 +77,7 @@ describe("assertVirtualGoodsUploadSceneAccess", () => {
       customerId: null,
       visitorId: null,
       isPlatformAdmin: true,
+      isPlatformIdentity: true,
     });
     expect(deps.assertPermission).toHaveBeenCalledWith(
       platformContext,
@@ -102,6 +103,7 @@ describe("assertVirtualGoodsUploadSceneAccess", () => {
       customerId: null,
       visitorId: null,
       isPlatformAdmin: false,
+      isPlatformIdentity: true,
     });
     expect(deps.assertPermission).toHaveBeenCalledWith(
       operatorContext,

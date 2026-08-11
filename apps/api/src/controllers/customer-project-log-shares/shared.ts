@@ -1,5 +1,7 @@
 import { BaseController } from "@/controllers/BaseController";
 import { Errors } from "@/errors/error-factory";
+import { authorizationService } from "@/services/authorization";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type { FastifyRequest } from "fastify";
 
 export abstract class CustomerProjectLogSharesBaseController extends BaseController {
@@ -20,6 +22,13 @@ export abstract class CustomerProjectLogSharesBaseController extends BaseControl
 
   protected getOptionalAuthUserId(request: FastifyRequest) {
     return request.user?.sub;
+  }
+
+  protected getRequiredTenantAuthContext(request: FastifyRequest) {
+    return authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
   }
 
   protected getCustomerProjectScope(request: FastifyRequest) {

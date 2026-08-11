@@ -14,6 +14,7 @@ import {
   WechatRebindRequestSchema,
 } from "@/schema/wechat";
 import { authorizationService, type AuthContext } from "@/services/authorization";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { accessPolicyService } from "@/services/access-policy";
 import { marketingPageService } from "@/services/marketing-pages";
 import { systemSettingsService } from "@/services/system-settings";
@@ -65,7 +66,10 @@ export function serializeTenantFromAuthContext(this: any, authContext: AuthConte
 }
 
 export async function getRequiredAuthContext(this: any, request: FastifyRequest) {
-  return authorizationService.getRequiredAuthContext(request.user?.sub);
+  return authorizationService.getRequiredAuthContext(
+    request.user?.sub,
+    getTenantServiceAuthOptions(request),
+  );
 }
 
 export function serializeBackgroundError(this: any, error: unknown) {
@@ -161,6 +165,7 @@ export function prewarmVisitorHomeData(this: any, request: FastifyRequest) {
         scene: "visitor",
         refresh: false,
       },
+      tenantServiceAccess: "public_or_callback",
     });
   });
 }

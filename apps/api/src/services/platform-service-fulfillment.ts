@@ -7,10 +7,7 @@ import {
   platformServiceOrderShippingReportRepository,
   type PlatformServiceOrderShippingReportRepository,
 } from "@/repositories/platform-service-order-shipping-reports";
-import type {
-  AtomicActionResult,
-  OrderRecord,
-} from "@/repositories/platform-service-order-records";
+import type { AtomicActionResult, OrderRecord } from "@/repositories/platform-service-order-records";
 import type {
   PlatformServiceAcceptancePreparationInput,
   PlatformServiceFulfillmentRecordInput,
@@ -272,7 +269,7 @@ export class PlatformServiceFulfillmentService {
       title: input.title,
       content: input.content,
       occurredAt: input.occurred_at,
-      fileIds: input.file_ids,
+      fileIds: uniqueFileIds(input.file_ids),
       createdByEmployeeId: employeeId,
     });
   }
@@ -295,16 +292,23 @@ export class PlatformServiceFulfillmentService {
         ),
       )
       : null;
-    return this.repository.upsertAcceptancePreparation({
+    const result = await this.repository.upsertAcceptancePreparation({
       tenantId: workOrder.tenant_id,
       serviceOrderId: workOrder.service_order_id,
       workOrderId,
       status: input.status,
       summary: input.summary,
-      fileIds: input.file_ids,
+      fileIds: uniqueFileIds(input.file_ids),
       preparedByEmployeeId: employeeId,
       acceptanceDueAt: acceptanceDueAt?.toISOString() ?? null,
     });
+    if (!result.acceptancePreparation) {
+      throwBusinessConflict(
+        result.errorCode,
+        "平台技术服务验收准备状态已更新，请刷新后重试",
+      );
+    }
+    return result.acceptancePreparation;
   }
 
   async confirmOverdueAcceptance(
@@ -320,7 +324,10 @@ export class PlatformServiceFulfillmentService {
       remark: input.remark,
       metadata: input.metadata,
     });
-    if (!result.workOrder || !result.order || !result.acceptancePreparation) {
+    if (
+      !result.workOrder || !result.order || !result.acceptancePreparation ||
+      !result.contract || !result.contractPeriod
+    ) {
       throwBusinessConflict(
         result.errorCode,
         result.errorCode === "SERVICE_ACCEPTANCE_NOT_OVERDUE"
@@ -341,6 +348,9 @@ export class PlatformServiceFulfillmentService {
         result.acceptancePreparation,
         now,
       ),
+      contract: result.contract,
+      contract_period: result.contractPeriod,
+      idempotent: result.idempotent === true,
       wechat_shipping_report: orderShippingReport,
       server_time: now.toISOString(),
     };
@@ -457,6 +467,15 @@ function throwBusinessConflict(errorCode: string | undefined, message: string): 
 
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
+}
+
+function uniqueFileIds(fileIds: string[]) {
+  const seen = new Set<string>();
+  return fileIds.map((fileId) => fileId.toLowerCase()).filter((fileId) => {
+    if (seen.has(fileId)) return false;
+    seen.add(fileId);
+    return true;
+  });
 }
 
 function hasPermission(authContext: AuthContext, permissionCode: string) {

@@ -39,11 +39,12 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
 
-export async function createTencentDevice(this: any, input: {
+export async function createTencentDevice(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   payload: CreateProjectCameraTencentDeviceInput;
@@ -53,6 +54,8 @@ export async function createTencentDevice(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   if (!actor.tenantId) {
     throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
@@ -129,7 +132,7 @@ export async function createTencentDevice(this: any, input: {
   };
 }
 
-export async function getTencentDevicePassword(this: any, input: {
+export async function getTencentDevicePassword(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   deviceId: string;
@@ -139,6 +142,8 @@ export async function getTencentDevicePassword(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const result = await tencentIotVideoService.getDevicePassword(input.deviceId);
@@ -150,7 +155,7 @@ export async function getTencentDevicePassword(this: any, input: {
   };
 }
 
-export async function resetTencentDevicePassword(this: any, input: {
+export async function resetTencentDevicePassword(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   deviceId: string;
@@ -161,6 +166,8 @@ export async function resetTencentDevicePassword(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const password = input.payload.password?.trim() || generateSipPassword();

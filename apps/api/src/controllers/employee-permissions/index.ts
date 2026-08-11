@@ -16,11 +16,9 @@ class EmployeePermissionsController extends TenantBaseController {
     super("employee_permissions");
   }
 
-  @Get("/auth/me/permissions")
+  @Get("/auth/me/permissions", { tenantServiceAccess: "session" })
   async getMyPermissions(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request, {
-      allowedWhenBillingLocked: true,
-    });
+    const authContext = await this.getRequiredAuthContext(request);
     return ResponseHandler.success(authContext);
   }
 

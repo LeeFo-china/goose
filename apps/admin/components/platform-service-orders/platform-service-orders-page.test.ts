@@ -90,6 +90,27 @@ describe("平台技术服务履约页", () => {
     expect(source).toContain("/shipping-report/retry");
   });
 
+  test("退款审核通过后才显示执行入口且仅成功结果终止访问", () => {
+    const actions = readSource("./platform-service-refund-actions.tsx");
+    const rules = readSource("./platform-service-order-rules.ts");
+
+    expect(actions).toContain('request.status === "approved"');
+    expect(actions).toContain("执行微信退款");
+    expect(actions).toContain(
+      "/platform/billing/service-refund-requests/${request.id}/execute",
+    );
+    expect(actions).toContain("审核通过不等于退款成功");
+    expect(actions).toContain("toast.success");
+    expect(actions).toContain("getPlatformServiceRefundExecutionFeedback(result)");
+    expect(actions).toContain("toast.warning");
+    expect(rules).toContain(
+      "微信退款已关闭，访问未终止，请重新发起退款申请",
+    );
+    expect(actions).toContain("toast.error");
+    expect(actions).toContain("refreshAfterDialogClose(router)");
+    expect(actions).toContain("min-h-8");
+  });
+
   test("工单操作使用后端动作开关并按状态机过滤推进目标", () => {
     const actions = [
       readSource("./platform-service-work-order-actions.tsx"),

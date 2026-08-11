@@ -39,6 +39,7 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
@@ -131,7 +132,7 @@ export async function assertProjectExists(this: any, projectId: string, tenantId
   return project;
 }
 
-export async function resolveActor(this: any, input: {
+export async function resolveActor(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   permissionCode: "project.read" | "project.update";
@@ -154,6 +155,10 @@ export async function resolveActor(this: any, input: {
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
 
   if (

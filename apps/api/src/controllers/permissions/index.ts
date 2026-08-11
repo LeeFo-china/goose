@@ -6,7 +6,9 @@ import {
   UpdatePermissionSchema,
 } from "@/schema/permissions";
 import { accessPolicyService } from "@/services/access-policy";
+import { authorizationService } from "@/services/authorization";
 import { permissionService } from "@/services/permissions";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Delete } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -20,7 +22,11 @@ class PermissionsController extends PlatformBaseController<
   }
 
   private async getRequiredPermissionReadContext(request: FastifyRequest) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
+    request.authContext = authContext;
     if (authContext.isPlatformAdmin) {
       return authContext;
     }

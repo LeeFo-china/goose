@@ -82,6 +82,7 @@ describe("platform service fulfillment schemas", () => {
   });
 
   test("validates fulfillment record evidence and attachment bounds", () => {
+    const duplicateFileId = randomUUID();
     const valid = {
       record_type: "server_configuration",
       title: "服务器安全基线配置",
@@ -99,9 +100,14 @@ describe("platform service fulfillment schemas", () => {
       ...valid,
       file_ids: Array.from({ length: 11 }, () => randomUUID()),
     }).success).toBe(false);
+    expect(PlatformServiceFulfillmentRecordSchema.safeParse({
+      ...valid,
+      file_ids: [duplicateFileId, duplicateFileId.toUpperCase()],
+    }).success).toBe(false);
   });
 
   test("validates acceptance preparation without customer confirmation action", () => {
+    const duplicateFileId = randomUUID();
     expect(PlatformServiceAcceptancePreparationSchema.safeParse({
       status: "submitted",
       summary: "客户专属系统环境已部署，服务器配置及首次操作培训已完成。",
@@ -110,6 +116,11 @@ describe("platform service fulfillment schemas", () => {
     expect(PlatformServiceAcceptancePreparationSchema.safeParse({
       status: "accepted",
       summary: "客户已确认",
+    }).success).toBe(false);
+    expect(PlatformServiceAcceptancePreparationSchema.safeParse({
+      status: "draft",
+      summary: "验收准备",
+      file_ids: [duplicateFileId, duplicateFileId.toUpperCase()],
     }).success).toBe(false);
   });
 

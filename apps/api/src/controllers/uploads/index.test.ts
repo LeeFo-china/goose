@@ -22,6 +22,26 @@ import {
 
 beforeEach(resetUploadControllerMocks);
 describe("UploadController project payment direct upload", () => {
+  test("checks tenant service write access before the employee JWT fast path", async () => {
+    const { default: controller } = await import("./index");
+
+    await controller.initDirectCosUpload(
+      buildRequest({
+        scene: "project_payment",
+        project_id: projectId,
+        filename: "payment.jpg",
+        mimetype: "image/jpeg",
+        size_bytes: 120000,
+      }),
+      {} as never,
+    );
+
+    expect(getRequiredAuthContext).toHaveBeenCalledTimes(1);
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", {
+      tenantServiceAccess: "write",
+    });
+  });
+
   test("rejects read-only applyment upload init before creating an upload", async () => {
     denyApplymentUpload();
     const { default: controller } = await import("./index");
@@ -388,8 +408,28 @@ describe("UploadController tenant onboarding license direct upload", () => {
 
     await expect(controller.getPublicUrl({
       ...buildVisitorRequest({}, visitorId),
+      method: "GET",
+      routeOptions: { config: { tenantServiceAccess: "read" } },
       query: { path },
     } as FastifyRequest, {} as never)).rejects.toMatchObject({ statusCode: 403 });
     expect(resolveStoredFileUrl).not.toHaveBeenCalled();
+  });
+
+  test("checks tenant service read access before resolving an employee public URL", async () => {
+    const { default: controller } = await import("./index");
+
+    await controller.getPublicUrl({
+      ...buildRequest({}),
+      method: "GET",
+      routeOptions: { config: { tenantServiceAccess: "read" } },
+      query: { path: `tenants/${tenantId}/project-log/file.jpg` },
+    } as FastifyRequest, {
+      redirect: () => undefined,
+    } as never);
+
+    expect(getRequiredAuthContext).toHaveBeenCalledTimes(1);
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", {
+      tenantServiceAccess: "read",
+    });
   });
 });

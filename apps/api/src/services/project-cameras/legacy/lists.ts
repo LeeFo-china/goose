@@ -40,11 +40,12 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
 
-export async function listProjectCameras(this: any, input: {
+export async function listProjectCameras(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   meta?: RequestLogMeta;
@@ -54,6 +55,8 @@ export async function listProjectCameras(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.read",
     allowCustomer: true,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   const cameras: ProjectCameraRow[] = await this.enrichTencentCameraStatuses(
     await projectCameraRepository.listByProjectId(input.projectId, actor.tenantId),
@@ -72,7 +75,7 @@ export async function listProjectCameras(this: any, input: {
   };
 }
 
-export async function listCameraBindProjectOptions(this: any, input: {
+export async function listCameraBindProjectOptions(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   query: ProjectCameraBindOptionsQueryInput;
 }) {
@@ -82,6 +85,10 @@ export async function listCameraBindProjectOptions(this: any, input: {
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
   if (!authContext.employeeId) {
     throw Errors.business(
@@ -104,7 +111,7 @@ export async function listCameraBindProjectOptions(this: any, input: {
   });
 }
 
-export async function listCameraProjectGroups(this: any, input: {
+export async function listCameraProjectGroups(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   query: ProjectCameraProjectGroupsQueryInput;
 }) {
@@ -114,6 +121,10 @@ export async function listCameraProjectGroups(this: any, input: {
 
   const authContext = await authorizationService.getRequiredAuthContext(
     input.authUserId,
+    {
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
+    },
   );
   if (!authContext.employeeId) {
     throw Errors.business(

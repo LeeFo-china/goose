@@ -107,7 +107,11 @@ class DepartmentController extends TenantBaseController<
     fastify: FastifyInstance,
     resourceName = "departments",
   ) => {
-    fastify.post(`/${resourceName}/enable-batch`, this.enableBatch);
+    fastify.post(
+      `/${resourceName}/enable-batch`,
+      { config: { tenantServiceAccess: "write" } },
+      this.enableBatch,
+    );
   };
 }
 

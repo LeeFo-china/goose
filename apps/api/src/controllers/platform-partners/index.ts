@@ -21,6 +21,8 @@ import {
 } from "@/schema/platform-partners";
 import { platformPartnerTenantOnboardingService } from "@/services/platform-partner-tenant-onboarding";
 import { platformPartnersService } from "@/services/platform-partners";
+import { authorizationService } from "@/services/authorization";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyReply, FastifyRequest } from "fastify";
@@ -45,7 +47,11 @@ class PlatformPartnersController extends PlatformBaseController {
 
   @Post("/partner-onboarding/tenant-binding")
   async bindTenantByInviteCode(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getRequiredAuthContext(request);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
+    request.authContext = authContext;
     const bodyResult = TenantPartnerInviteBindingCreateSchema.safeParse(
       request.body || {},
     );

@@ -33,6 +33,24 @@ describe("billing service order schemas", () => {
     }).success).toBe(true);
   });
 
+  test("accepts an optional strict trial attribution source", () => {
+    const sourceTrialId = randomUUID();
+    expect(ServiceOrderCreateSchema.parse({
+      product_code: "platform_service_1y",
+      terms_version: 1,
+      terms_accepted: true,
+      idempotency_key: randomUUID(),
+      source_trial_id: sourceTrialId,
+    })).toMatchObject({ source_trial_id: sourceTrialId });
+    expect(ServiceOrderCreateSchema.safeParse({
+      product_code: "platform_service_1y",
+      terms_version: 1,
+      terms_accepted: true,
+      idempotency_key: randomUUID(),
+      source_trial_id: "not-a-trial-id",
+    }).success).toBe(false);
+  });
+
   test("rejects service order creation with client-controlled amount", () => {
     expect(ServiceOrderCreateSchema.safeParse({
       product_code: "platform_service_1y",

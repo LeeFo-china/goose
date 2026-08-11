@@ -26,12 +26,16 @@ import {
   TENANT_PUBLIC_ORDER_SELECT,
 } from "./platform-service-order-records";
 import {
+  parseAcceptanceResult,
+  parsePaymentConfirmationResult,
+} from "./platform-service-rpc-results";
+import { parsePendingOrderTrialAttribution, throwPendingOrderCreationError } from "./platform-service-order-trial-attribution";
+import {
   type FulfillmentAttachmentPreviewRecord,
   TENANT_FULFILLMENT_ATTACHMENT_PREVIEW_SELECT,
 } from "./platform-service-fulfillment-attachment-preview-records";
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
-
 type ServiceQuery = PromiseLike<QueryResult> & {
   select(columns: string, options?: { count: "exact" }): ServiceQuery;
   insert(record: Record<string, unknown>): ServiceQuery;
@@ -46,7 +50,6 @@ type ServiceQuery = PromiseLike<QueryResult> & {
   maybeSingle(): Promise<QueryResult>;
   single(): Promise<QueryResult>;
 };
-
 type ServiceClient = {
   from(
     table:
@@ -331,10 +334,11 @@ export class PlatformServiceOrderRepository {
         p_terms_version: input.termsVersion,
         p_terms_accepted_at: input.termsAcceptedAt,
         p_created_by_employee_id: input.createdByEmployeeId,
+        p_source_trial_id: input.sourceTrialId ?? null,
       },
     );
-    if (error) throw Errors.dbError("创建平台技术服务订单失败", error);
-    return data as OrderRecord;
+    if (error) throwPendingOrderCreationError(error);
+    return parsePendingOrderTrialAttribution(data, input);
   }
 
   async markPrepayCreated(input: { orderId: string; prepayId: string }) {
@@ -403,7 +407,7 @@ export class PlatformServiceOrderRepository {
   }
 
   async confirmPayment(input: ConfirmPaymentInput) {
-    const { data, error } = await this.clientProvider().rpc(
+    const data = await this.rpcData(
       "platform_service_confirm_payment",
       {
         p_order_id: input.orderId,
@@ -413,9 +417,9 @@ export class PlatformServiceOrderRepository {
         p_notification_id: input.notificationId,
         p_metadata: input.metadata,
       },
+      "确认平台技术服务支付失败",
     );
-    if (error) throw Errors.dbError("确认平台技术服务支付失败", error);
-    return data as Record<string, unknown>;
+    return parsePaymentConfirmationResult(data);
   }
 
   async requestRefundReview(input: RefundReviewInput): Promise<RefundReviewResult> {
@@ -449,7 +453,7 @@ export class PlatformServiceOrderRepository {
   }
 
   async decideAcceptance(input: AcceptanceDecisionInput): Promise<AtomicActionResult> {
-    const { data, error } = await this.clientProvider().rpc(
+    const data = await this.rpcData(
       "tenant_service_decide_acceptance",
       {
         p_tenant_id: input.tenantId,
@@ -460,24 +464,20 @@ export class PlatformServiceOrderRepository {
         p_remark: input.remark ?? null,
         p_metadata: {},
       },
+      "提交平台技术服务验收决定失败",
     );
-    if (error) throw Errors.dbError("提交平台技术服务验收决定失败", error);
-    const result = data as {
-      work_order?: unknown;
-      order?: unknown;
-      acceptance_preparation?: unknown;
-      error_code?: unknown;
-    } | null;
-    return {
-      workOrder: (result?.work_order as AtomicActionResult["workOrder"]) ?? null,
-      order: (result?.order as OrderRecord | null) ?? null,
-      acceptancePreparation:
-        (result?.acceptance_preparation as AtomicActionResult["acceptancePreparation"]) ??
-          null,
-      errorCode: typeof result?.error_code === "string"
-        ? result.error_code
-        : undefined,
-    };
+    return parseAcceptanceResult(data);
+  }
+  private async rpcData(
+    name: Parameters<ServiceClient["rpc"]>[0], params: Record<string, unknown>, message: string,
+  ) {
+    try {
+      const { data, error } = await this.clientProvider().rpc(name, params);
+      if (error) throw Errors.dbError(message);
+      return data;
+    } catch {
+      throw Errors.dbError(message);
+    }
   }
   private products() {
     return this.clientProvider().from("platform_service_products");

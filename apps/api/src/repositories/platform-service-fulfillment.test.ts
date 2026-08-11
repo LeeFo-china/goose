@@ -34,6 +34,13 @@ const query = {
     calls.push(["insert", record]);
     return query;
   },
+  upsert(
+    record: Record<string, unknown> | Array<Record<string, unknown>>,
+    options: Record<string, unknown>,
+  ) {
+    calls.push(["upsert", record, options]);
+    return query;
+  },
   update(patch: Record<string, unknown>) {
     calls.push(["update", patch]);
     return query;
@@ -60,6 +67,10 @@ const query = {
   },
   range(from: number, to: number) {
     calls.push(["range", from, to]);
+    return query;
+  },
+  limit(value: number) {
+    calls.push(["limit", value]);
     return query;
   },
   maybeSingle: mock(async () => maybeResult),
@@ -199,6 +210,8 @@ describe("PlatformServiceFulfillmentRepository", () => {
       "./platform-service-fulfillment"
     );
     const repository = new PlatformServiceFulfillmentRepository(() => client);
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+    const uppercaseFileId = canonicalFileId.toUpperCase();
     singleResult = {
       data: { id: "record-1", work_order_id: "work-1" },
       error: null,
@@ -206,7 +219,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
     listResult = {
       data: [
         {
-          id: "file-1",
+          id: canonicalFileId,
           tenant_id: null,
           scene: "tenant_service_fulfillment_attachment",
           provider: "tencent_cos",
@@ -219,7 +232,7 @@ describe("PlatformServiceFulfillmentRepository", () => {
           size_bytes: 2048,
         },
         {
-          id: "file-2",
+          id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
           tenant_id: null,
           scene: "tenant_service_fulfillment_attachment",
           provider: "tencent_cos",
@@ -244,30 +257,138 @@ describe("PlatformServiceFulfillmentRepository", () => {
       title: "服务器配置",
       content: "已完成配置",
       occurredAt: "2026-08-04T10:00:00.000Z",
-      fileIds: ["file-1", "file-2"],
+      fileIds: [
+        uppercaseFileId,
+        canonicalFileId,
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      ],
       createdByEmployeeId: "admin-1",
     });
 
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_records"]);
     expect(calls).toContainEqual(["from", "platform_file_objects"]);
-    expect(calls).toContainEqual(["in", "id", ["file-1", "file-2"]]);
+    expect(calls).toContainEqual([
+      "in",
+      "id",
+      [canonicalFileId, "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+    ]);
     expect(calls).toContainEqual(["from", "tenant_service_fulfillment_attachments"]);
     const insertCalls = calls.filter(([method]) => method === "insert");
     expect(insertCalls).toHaveLength(2);
     expect(insertCalls[1]?.[1]).toEqual([
       expect.objectContaining({
-        file_id: "file-1",
+        file_id: canonicalFileId,
         file_name: "部署说明.pdf",
         mime_type: "application/pdf",
         size_bytes: 2048,
       }),
       expect.objectContaining({
-        file_id: "file-2",
+        file_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         file_name: "培训照片.png",
         mime_type: "image/png",
         size_bytes: 4096,
       }),
     ]);
+  });
+
+  test("upserts acceptance preparation through the atomic RPC before attachments", async () => {
+    const { PlatformServiceFulfillmentRepository } = await import(
+      "./platform-service-fulfillment"
+    );
+    const repository = new PlatformServiceFulfillmentRepository(() => client);
+    const canonicalFileId = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+    rpcResult = {
+      data: {
+        acceptance_preparation: {
+          id: "acceptance-1",
+          work_order_id: "work-1",
+          status: "submitted",
+        },
+        order: { id: "order-1" },
+        work_order: { id: "work-1" },
+        error_code: null,
+      },
+      error: null,
+    };
+    listResult = {
+      data: [{
+        id: canonicalFileId,
+        tenant_id: null,
+        scene: "tenant_service_fulfillment_attachment",
+        provider: "tencent_cos",
+        visibility: "private",
+        status: "active",
+        deleted_at: null,
+        created_by_employee_id: "admin-1",
+        original_name: "验收记录.pdf",
+        mime_type: "application/pdf",
+        size_bytes: 1024,
+      }],
+      error: null,
+      count: 1,
+    };
+
+    const result = await repository.upsertAcceptancePreparation({
+      tenantId: "tenant-1",
+      serviceOrderId: "order-1",
+      workOrderId: "work-1",
+      status: "submitted",
+      summary: "部署和培训已完成",
+      fileIds: [canonicalFileId.toUpperCase()],
+      preparedByEmployeeId: "admin-1",
+      acceptanceDueAt: "2026-08-13T10:00:00.000Z",
+    });
+
+    expect(client.rpc).toHaveBeenCalledWith(
+      "platform_service_upsert_acceptance_preparation",
+      {
+        p_work_order_id: "work-1",
+        p_status: "submitted",
+        p_summary: "部署和培训已完成",
+        p_prepared_by_employee_id: "admin-1",
+        p_acceptance_due_at: "2026-08-13T10:00:00.000Z",
+      },
+    );
+    expect(calls).not.toContainEqual([
+      "from",
+      "tenant_service_acceptance_preparations",
+    ]);
+    const rpcPosition = calls.findIndex(([method]) => method === "rpc");
+    const attachmentPosition = calls.findIndex((call) =>
+      call[0] === "from" && call[1] === "tenant_service_fulfillment_attachments"
+    );
+    expect(attachmentPosition).toBeGreaterThan(rpcPosition);
+    expect(calls.slice(attachmentPosition)).toContainEqual([
+      "upsert",
+      [expect.objectContaining({ file_id: canonicalFileId })],
+      {
+        onConflict: "work_order_id,fulfillment_record_id,file_id",
+        ignoreDuplicates: true,
+      },
+    ]);
+    expect(result).toMatchObject({
+      acceptancePreparation: { id: "acceptance-1", status: "submitted" },
+      errorCode: undefined,
+    });
+  });
+
+  test("wraps acceptance preparation RPC database errors", async () => {
+    const { PlatformServiceFulfillmentRepository } = await import(
+      "./platform-service-fulfillment"
+    );
+    const repository = new PlatformServiceFulfillmentRepository(() => client);
+    rpcResult = { data: null, error: { message: "rpc failed" } };
+
+    await expect(repository.upsertAcceptancePreparation({
+      tenantId: "tenant-1",
+      serviceOrderId: "order-1",
+      workOrderId: "work-1",
+      status: "draft",
+      summary: "部署准备",
+      fileIds: [],
+      preparedByEmployeeId: "admin-1",
+      acceptanceDueAt: null,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
   });
 
   test("reviews service refunds through the dedicated atomic RPC", async () => {
@@ -293,4 +414,5 @@ describe("PlatformServiceFulfillmentRepository", () => {
       }),
     );
   });
+
 });

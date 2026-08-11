@@ -46,12 +46,17 @@ describe("UploadPreviewController", () => {
 
     await controller.getWechatPayApplymentPreview(
       {
+        method: "GET",
         params: { id: FILE_ID },
+        routeOptions: { config: { tenantServiceAccess: "read" } },
         user: { sub: "auth-1" },
       } as FastifyRequest,
       { redirect, header } as never,
     );
 
+    expect(getRequiredAuthContext).toHaveBeenCalledWith("auth-1", {
+      tenantServiceAccess: "read",
+    });
     expect(resolveWechatPayApplymentPreviewUrl).toHaveBeenCalledWith({
       authContext: expect.objectContaining({
         authUserId: "auth-1",
@@ -82,7 +87,9 @@ describe("UploadPreviewController", () => {
 
     await controller.getWechatPayApplymentPreview(
       {
+        method: "GET",
         params: { id: FILE_ID },
+        routeOptions: { config: { tenantServiceAccess: "read" } },
         user: { sub: "platform-auth" },
       } as FastifyRequest,
       {

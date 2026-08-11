@@ -159,20 +159,25 @@ function createDependencies() {
       decideAcceptance: mock(async (input: {
         decision: "accepted" | "rejected";
       }): Promise<AtomicActionResult> => ({
-        workOrder: {
-          ...workOrder,
-          status: input.decision === "accepted" ? "accepted" : "rectifying",
-          version: 6,
-        },
-        order: {
-          ...order,
-          service_status: input.decision === "accepted" ? "accepted" : "rectifying",
-          version: 5,
-        },
-        acceptancePreparation: {
-          ...acceptancePreparation,
-          status: input.decision,
-        },
+        workOrder: { ...workOrder, status: input.decision === "accepted" ? "accepted" : "rectifying", version: 6 },
+        order: { ...order, service_status: input.decision === "accepted" ? "accepted" : "rectifying", version: 5 },
+        acceptancePreparation: { ...acceptancePreparation, status: input.decision },
+        contract: input.decision === "accepted"
+          ? {
+            id: "00000000-0000-4000-8000-000000000901", tenant_id: tenantId, status: "active",
+            service_start_at: "2026-08-03T12:00:00.000Z",
+            service_end_at: "2027-08-03T12:00:00.000Z",
+          }
+          : null,
+        contractPeriod: input.decision === "accepted"
+          ? {
+            id: "00000000-0000-4000-8000-000000000902", contract_id: "00000000-0000-4000-8000-000000000901",
+            tenant_id: tenantId, service_order_id: orderId, status: "active",
+            starts_at: "2026-08-03T12:00:00.000Z",
+            ends_at: "2027-08-03T12:00:00.000Z",
+          }
+          : null,
+        idempotent: false,
       })),
     },
     accessPolicyService: {
@@ -415,6 +420,15 @@ describe("Tenant platform service order acceptance", () => {
     });
     expect(result.work_order).toMatchObject({ status: "accepted", version: 6 });
     expect(result.acceptance_preparation).toMatchObject({ status: "accepted" });
+    expect(result.contract).toMatchObject({
+      id: "00000000-0000-4000-8000-000000000901",
+      status: "active",
+    });
+    expect(result.contract_period).toMatchObject({
+      id: "00000000-0000-4000-8000-000000000902",
+      status: "active",
+    });
+    expect(result.idempotent).toBe(false);
     expect(dependencies.orderShippingReporter.reportAcceptedOrder)
       .toHaveBeenCalledWith({
         order: expect.objectContaining({
@@ -454,6 +468,8 @@ describe("Tenant platform service order acceptance", () => {
     );
     expect(result.work_order).toMatchObject({ status: "rectifying", version: 6 });
     expect(result.acceptance_preparation).toMatchObject({ status: "rejected" });
+    expect(result.contract).toBeNull();
+    expect(result.contract_period).toBeNull();
     expect(dependencies.orderShippingReporter.reportAcceptedOrder)
       .not.toHaveBeenCalled();
   });

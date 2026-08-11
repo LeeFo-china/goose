@@ -8,6 +8,7 @@ import type { CreateProjectLogCommentInput } from "@/schema/project-log-comments
 import { accessPolicyService } from "@/services/access-policy";
 import { authorizationService } from "@/services/authorization";
 import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
+import type { TenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type { ProjectLogCommentAuthorType } from "@gooes/domain";
 
 type CommentAuthor = {
@@ -42,7 +43,7 @@ function normalizeImages(value: unknown): string[] {
 }
 
 class ProjectLogCommentsService {
-  async createComment(input: {
+  async createComment(input: TenantServiceAuthOptions & {
     authUserId: string | undefined;
     tokenRoles: string[];
     payload: CreateProjectLogCommentInput;
@@ -51,6 +52,8 @@ class ProjectLogCommentsService {
     const log = await this.assertProjectLogReadable({
       logId: input.payload.log_id,
       author,
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
     });
 
     if (input.payload.parent_id) {
@@ -103,7 +106,7 @@ class ProjectLogCommentsService {
     return this.attachAuthor(row, author.profile);
   }
 
-  async listComments(input: {
+  async listComments(input: TenantServiceAuthOptions & {
     authUserId: string | undefined;
     tokenRoles: string[];
     logId: string;
@@ -112,6 +115,8 @@ class ProjectLogCommentsService {
     const log = await this.assertProjectLogReadable({
       logId: input.logId,
       author: viewer,
+      tenantServiceAccess: input.tenantServiceAccess,
+      requiredCapability: input.requiredCapability,
     });
 
     const rows = await projectLogCommentsRepository.listByLog({
@@ -203,7 +208,7 @@ class ProjectLogCommentsService {
     return log;
   }
 
-  private async assertProjectLogReadable(input: {
+  private async assertProjectLogReadable(input: TenantServiceAuthOptions & {
     logId: string;
     author: ResolvedCommentAuthor;
   }): Promise<ProjectLogAccessInfo> {
@@ -227,6 +232,10 @@ class ProjectLogCommentsService {
 
     const authContext = await authorizationService.getRequiredAuthContext(
       input.author.auth_user_id,
+      {
+        tenantServiceAccess: input.tenantServiceAccess,
+        requiredCapability: input.requiredCapability,
+      },
     );
     const tenantId = accessPolicyService.assertTenantContext(authContext);
     if (tenantId !== log.tenant_id) {

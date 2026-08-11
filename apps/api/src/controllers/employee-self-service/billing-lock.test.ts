@@ -128,6 +128,10 @@ beforeEach(() => {
 
 function buildRequest(): FastifyRequest {
   return {
+    method: "GET",
+    routeOptions: {
+      config: { tenantServiceAccess: "read" },
+    },
     query: {},
     user: {
       sub: authUserId,
@@ -151,7 +155,7 @@ describe("EmployeeSelfServiceController billing lock access", () => {
     const response = await controller.getEmployeeBootstrap(request, {} as never);
 
     expect(getRequiredAuthContext).toHaveBeenCalledWith(authUserId, {
-      allowedWhenBillingLocked: true,
+      tenantServiceAccess: "read",
     });
     expect(assertTenantContext).toHaveBeenCalledWith(authContext);
     expect(response.data.context).toEqual(authContext);

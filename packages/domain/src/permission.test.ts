@@ -3,6 +3,54 @@ import { PermissionCodeConfig, PERMISSION_CODE_VALUES } from "./permission";
 import type { PermissionCode } from "./permission";
 
 describe("domain permissions", () => {
+  test("exposes tenant and platform service trial permissions", () => {
+    const expectedPermissions = {
+      "billing.service_trial.apply": {
+        label: "申请技术服务试用",
+        module: "billing",
+        resource: "service_trial",
+        action: "apply",
+      },
+      "billing.service_trial.read": {
+        label: "查看技术服务试用",
+        module: "billing",
+        resource: "service_trial",
+        action: "read",
+      },
+      "platform.service_trial.read": {
+        label: "查看平台技术服务试用",
+        module: "platform_service",
+        resource: "service_trial",
+        action: "read",
+      },
+      "platform.service_trial.review": {
+        label: "审核平台技术服务试用",
+        module: "platform_service",
+        resource: "service_trial",
+        action: "review",
+      },
+      "platform.service_trial.manage": {
+        label: "管理平台技术服务试用",
+        module: "platform_service",
+        resource: "service_trial",
+        action: "manage",
+      },
+      "platform.service_trial.override": {
+        label: "例外处理平台技术服务试用",
+        module: "platform_service",
+        resource: "service_trial",
+        action: "override",
+      },
+    } as const;
+
+    for (const code of Object.keys(expectedPermissions) as Array<
+      keyof typeof expectedPermissions
+    >) {
+      expect(PERMISSION_CODE_VALUES).toContain(code);
+      expect(PermissionCodeConfig[code]).toEqual(expectedPermissions[code]);
+    }
+  });
+
   test("exposes platform operator foundation permissions", () => {
     const platformFoundationPermissions = {
       "platform.dashboard.read": "查看平台概览",

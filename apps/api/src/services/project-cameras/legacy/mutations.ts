@@ -39,11 +39,12 @@ import {
   type ProjectCameraProjectGroupsQueryInput,
   type ProjectCameraRow,
   type RequestLogMeta,
+  type TenantServiceAccessInput,
   type UpdateProjectCameraInput,
   type UpdateProjectCameraTencentDevicePasswordInput,
 } from "./shared";
 
-export async function createProjectCamera(this: any, input: {
+export async function createProjectCamera(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   payload: CreateProjectCameraInput;
@@ -53,6 +54,8 @@ export async function createProjectCamera(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   if (!actor.tenantId) {
     throw Errors.business(403, "缺少租户上下文", ErrorCodes.CAMERA_ACCESS_DENIED);
@@ -99,7 +102,7 @@ export async function createProjectCamera(this: any, input: {
   return { id: camera.id };
 }
 
-export async function updateProjectCamera(this: any, input: {
+export async function updateProjectCamera(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   cameraId: string;
@@ -110,6 +113,8 @@ export async function updateProjectCamera(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
 
   const camera = await projectCameraRepository.update(
@@ -122,7 +127,7 @@ export async function updateProjectCamera(this: any, input: {
   return serializeCamera(camera);
 }
 
-export async function deleteProjectCamera(this: any, input: {
+export async function deleteProjectCamera(this: any, input: TenantServiceAccessInput & {
   authUserId?: string | null;
   projectId: string;
   cameraId: string;
@@ -132,6 +137,8 @@ export async function deleteProjectCamera(this: any, input: {
     projectId: input.projectId,
     permissionCode: "project.update",
     allowCustomer: false,
+    tenantServiceAccess: input.tenantServiceAccess,
+    requiredCapability: input.requiredCapability,
   });
   await projectCameraRepository.softDelete(input.projectId, input.cameraId, actor.tenantId);
   await tenantDeviceRepository.markUnboundByCameraId(

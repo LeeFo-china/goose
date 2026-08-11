@@ -45,6 +45,7 @@ import {
   createServiceOrderPaymentRequest,
 } from "@/services/tenant-platform-service-order-payment";
 import {
+  assertSameTrialSourceIntent,
   createServiceTradeNo,
   normalizeServiceOrderPage,
   normalizeServiceOrderPageSize,
@@ -195,6 +196,7 @@ export class TenantPlatformServiceOrderService {
       idempotencyKey: input.idempotency_key,
     });
     if (existing) {
+      assertSameTrialSourceIntent(existing.source_trial_id, input.source_trial_id);
       return this.buildExistingOrderResponse(existing);
     }
 
@@ -241,6 +243,7 @@ export class TenantPlatformServiceOrderService {
       termsVersion: publishedVersion.terms_version,
       termsAcceptedAt: creationNow.toISOString(),
       createdByEmployeeId: employeeId,
+      sourceTrialId: input.source_trial_id,
     });
 
     const paymentRequest = await this.createPaymentRequestForOrder(

@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import {
+  acceptedRpcEnvelope,
+  RPC_IDS,
+  rpcOrder,
+} from "./platform-service-rpc-result-fixtures.test-helpers";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -375,11 +380,7 @@ describe("PlatformServiceOrderRepository", () => {
     );
     const repository = new PlatformServiceOrderRepository(() => client);
     rpcResult = {
-      data: {
-        work_order: { id: "work-order-1", status: "accepted" },
-        order: { id: "order-1", service_status: "accepted" },
-        acceptance_preparation: { id: "acceptance-1", status: "accepted" },
-      },
+      data: acceptedRpcEnvelope(),
       error: null,
     };
 
@@ -410,9 +411,14 @@ describe("PlatformServiceOrderRepository", () => {
       "./platform-service-orders"
     );
     const repository = new PlatformServiceOrderRepository(() => client);
+    const sourceTrialId = "00000000-0000-4000-8000-000000000501";
+    rpcResult = {
+      data: rpcOrder({ source_trial_id: sourceTrialId }),
+      error: null,
+    };
 
     await repository.createPendingOrder({
-      tenantId: "tenant-1",
+      tenantId: RPC_IDS.tenant,
       productId: "product-1",
       productVersionId: "version-1",
       orderNo: "TSO202608030001",
@@ -430,13 +436,15 @@ describe("PlatformServiceOrderRepository", () => {
       termsVersion: 1,
       termsAcceptedAt: "2026-08-03T12:00:00.000Z",
       createdByEmployeeId: "employee-1",
+      sourceTrialId,
     });
 
     expect(client.rpc).toHaveBeenCalledWith(
       "platform_service_create_pending_order",
       expect.objectContaining({
-        p_tenant_id: "tenant-1",
+        p_tenant_id: RPC_IDS.tenant,
         p_amount_fen: 100,
+        p_source_trial_id: sourceTrialId,
       }),
     );
   });

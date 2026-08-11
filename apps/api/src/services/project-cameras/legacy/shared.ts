@@ -19,6 +19,7 @@ import {
 import { projectRepository } from "@/repositories/projects";
 import { tenantDeviceRepository, type TenantDeviceRow } from "@/repositories/tenant-devices";
 import { projectStatusService } from "@/services/project-status";
+import type { TenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import type {
   CreateProjectCameraInput,
   ProjectCameraBindOptionsQueryInput,
@@ -39,6 +40,8 @@ export type RequestLogMeta = {
   ip?: string | null;
   userAgent?: string | null;
 };
+
+export type TenantServiceAccessInput = TenantServiceAuthOptions;
 
 export function normalizeCapabilities(value: unknown) {
   if (!Array.isArray(value)) {

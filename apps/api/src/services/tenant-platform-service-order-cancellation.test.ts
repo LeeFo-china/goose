@@ -148,7 +148,13 @@ function harness(order: CancelableServiceOrderRecord = claimedOrder) {
       secretBundleService: { load: mock(async () => secretBundle) },
       wechatPayGateway,
       paymentConfirmation: {
-        confirm: mock(async () => ({ order: paidOrder })),
+        confirm: mock(async () => ({
+          order: paidOrder,
+          work_order: { id: "work-order-1" },
+          access_mode: null,
+          conversion_anomaly: null,
+          idempotent: true,
+        })),
       },
       nowFactory: () => new Date("2026-08-10T12:01:00.000Z"),
     },

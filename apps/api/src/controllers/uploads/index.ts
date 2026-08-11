@@ -4,7 +4,8 @@ import { Errors } from "@/errors/error-factory";
 import { ErrorCodes } from "@/errors/error-codes";
 import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import { authorizationService } from "@/services/authorization";
+import { authorizationService, type AuthContext } from "@/services/authorization";
+import { getTenantServiceAuthOptions } from "@/services/tenant-service-route-access";
 import { accessPolicyService } from "@/services/access-policy";
 import {
   platformFileStorageService,
@@ -98,7 +99,9 @@ const UploadPublicUrlQuerySchema = z.object({
     .refine((value) => !value.startsWith("/"), "图片路径不合法")
     .refine((value) => !value.includes("\\"), "图片路径不合法"),
 });
-type UploadActorContext = DirectUploadActorContext;
+type UploadActorContext = DirectUploadActorContext & {
+  authContext?: AuthContext;
+};
 
 function logUploadImagesTiming(
   stage: string,
@@ -127,7 +130,10 @@ class UploadController extends BaseController {
       throw Errors.fromZod(queryResult.error);
     }
 
-    const actorContext = await this.resolveUploadActorContext(user);
+    const actorContext = await this.resolveUploadActorContext(
+      user,
+      getTenantServiceAuthOptions(request),
+    );
     this.assertStoredFileAccess(queryResult.data.path, actorContext);
 
     const publicUrl = resolveStoredFileUrl(queryResult.data.path);
@@ -162,12 +168,16 @@ class UploadController extends BaseController {
       ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
-      ?? await this.resolveUploadActorContext(user);
+      ?? await this.resolveUploadActorContext(
+        user,
+        getTenantServiceAuthOptions(request),
+      );
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
       result.data.project_id,
       actorContext,
+      getTenantServiceAuthOptions(request),
     );
     const directUpload = await platformFileStorageService.createDirectUpload({
       filename: result.data.filename,
@@ -219,12 +229,16 @@ class UploadController extends BaseController {
       ?? await assertPlatformServiceFulfillmentUploadSceneAccess(user, scene)
       ?? await assertApplymentUploadSceneAccess(user, scene)
       ?? await assertSupplierLicenseUploadSceneAccess(user, scene)
-      ?? await this.resolveUploadActorContext(user);
+      ?? await this.resolveUploadActorContext(
+        user,
+        getTenantServiceAuthOptions(request),
+      );
     await this.assertDirectUploadProjectAccess(
       user,
       scene,
       result.data.project_id,
       actorContext,
+      getTenantServiceAuthOptions(request),
     );
     assertDirectObjectKeyBelongsToActor({
       objectKey: result.data.object_key,
@@ -270,17 +284,13 @@ class UploadController extends BaseController {
     scene: UploadScene,
     projectId: string | undefined,
     actorContext: UploadActorContext,
+    authOptions: ReturnType<typeof getTenantServiceAuthOptions>,
   ) {
     if (scene === "tenant_onboarding_license" && !actorContext.visitorId) {
       throw Errors.forbidden();
     }
-    if (scene === "supplier_business_license" && actorContext.isPlatformAdmin) {
-      return;
-    }
-    if (
-      scene === "tenant_service_fulfillment_attachment" &&
-      actorContext.isPlatformAdmin
-    ) {
+    if (scene === "supplier_business_license" && actorContext.isPlatformIdentity) return;
+    if (scene === "tenant_service_fulfillment_attachment" && actorContext.isPlatformIdentity) {
       return;
     }
 
@@ -305,23 +315,6 @@ class UploadController extends BaseController {
       throw Errors.forbidden();
     }
 
-    const authContext = await authorizationService.getRequiredAuthContext(user.sub);
-    if (scene === "project_payment") {
-      if (!actorContext.employeeId) {
-        throw Errors.forbidden();
-      }
-
-      const canConfirmProjectPayment = await accessPolicyService.canAccessProject(
-        authContext,
-        projectId,
-        FINANCE_PAYMENT_CONFIRM_PERMISSION,
-      );
-      if (!canConfirmProjectPayment) {
-        throw Errors.forbidden();
-      }
-      return;
-    }
-
     if (scene === "project_acceptance" && actorContext.customerId) {
       const project = await customerSelfServiceService.findOwnedProject({
         projectId,
@@ -336,6 +329,20 @@ class UploadController extends BaseController {
 
     if (!actorContext.employeeId) {
       throw Errors.forbidden();
+    }
+
+    const authContext = actorContext.authContext ??
+      await authorizationService.getRequiredAuthContext(user.sub, authOptions);
+    if (scene === "project_payment") {
+      const canConfirmProjectPayment = await accessPolicyService.canAccessProject(
+        authContext,
+        projectId,
+        FINANCE_PAYMENT_CONFIRM_PERMISSION,
+      );
+      if (!canConfirmProjectPayment) {
+        throw Errors.forbidden();
+      }
+      return;
     }
 
     const canWriteLog = scene === "project_log"
@@ -363,7 +370,7 @@ class UploadController extends BaseController {
       throw Errors.business(403, "私有文件不能通过公开地址访问", ErrorCodes.FORBIDDEN);
     }
 
-    if (actorContext.isPlatformAdmin) {
+    if (actorContext.isPlatformIdentity) {
       return;
     }
 
@@ -379,7 +386,10 @@ class UploadController extends BaseController {
     }
   }
 
-  private async resolveUploadActorContext(user: JwtPayload): Promise<UploadActorContext> {
+  private async resolveUploadActorContext(
+    user: JwtPayload,
+    authOptions: ReturnType<typeof getTenantServiceAuthOptions>,
+  ): Promise<UploadActorContext> {
     const tokenTenantId = user.tenant_id ?? null;
     const tokenEmployeeId = user.employee_id ?? null;
     const tokenCustomerId = user.customer_id ?? null;
@@ -392,16 +402,30 @@ class UploadController extends BaseController {
         customerId: null,
         visitorId,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
     if (tokenTenantId && tokenEmployeeId) {
+      if (!user.sub) throw Errors.unauthorized();
+      const authContext = await authorizationService.getRequiredAuthContext(
+        user.sub,
+        authOptions,
+      );
+      if (
+        authContext.tenantId !== tokenTenantId ||
+        authContext.employeeId !== tokenEmployeeId
+      ) {
+        throw Errors.forbidden();
+      }
       return {
         tenantId: tokenTenantId,
         employeeId: tokenEmployeeId,
         customerId: null,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
+        authContext,
       };
     }
 
@@ -412,6 +436,7 @@ class UploadController extends BaseController {
         customerId: tokenCustomerId,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
@@ -419,7 +444,10 @@ class UploadController extends BaseController {
     if (!authUserId) {
       throw Errors.unauthorized();
     }
-    const authContext = await authorizationService.getRequiredAuthContext(authUserId);
+    const authContext = await authorizationService.getRequiredAuthContext(
+      authUserId,
+      authOptions,
+    );
     if (authContext.tenantId || authContext.employeeId) {
       return {
         tenantId: authContext.tenantId,
@@ -427,6 +455,8 @@ class UploadController extends BaseController {
         customerId: null,
         visitorId: null,
         isPlatformAdmin: authContext.isPlatformAdmin,
+        isPlatformIdentity: authContext.isPlatformStaff === true || authContext.isPlatformAdmin,
+        authContext,
       };
     }
 
@@ -438,6 +468,7 @@ class UploadController extends BaseController {
         customerId: membership.identity_id,
         visitorId: null,
         isPlatformAdmin: false,
+        isPlatformIdentity: false,
       };
     }
 
@@ -448,6 +479,7 @@ class UploadController extends BaseController {
       customerId: customer?.id ?? null,
       visitorId: null,
       isPlatformAdmin: false,
+      isPlatformIdentity: false,
     };
   }
 
