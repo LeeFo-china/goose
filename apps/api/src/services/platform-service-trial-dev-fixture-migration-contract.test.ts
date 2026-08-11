@@ -47,6 +47,8 @@ describe('platform service trial dev fixture migration contract', () => {
   });
 
   test('uses the production commands for application, grant, and conversion', () => {
+    expect(sql).toContain("profile_code = 'platform_direct_recharge'");
+    expect(sql).not.toContain("profile_code = 'tenant_service_provider'");
     expect(sql).toContain('public.platform_service_trial_apply(');
     expect(sql.match(/public\.platform_service_trial_grant\(/g)?.length).toBe(5);
     expect(sql.match(/public\.platform_service_trial_normalize_effective_status\(/g)?.length)
