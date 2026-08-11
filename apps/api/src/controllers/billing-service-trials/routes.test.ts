@@ -80,9 +80,9 @@ describe('BillingServiceTrialsController routes', () => {
       path,
       tenantServiceAccess,
     }))).toEqual([
-      { method: 'GET', path: '/billing/service-trials', tenantServiceAccess: 'read' },
-      { method: 'GET', path: '/billing/service-trials/current', tenantServiceAccess: 'read' },
-      { method: 'GET', path: '/billing/service-trials/applications/:id', tenantServiceAccess: 'read' },
+      { method: 'GET', path: '/billing/service-trials', tenantServiceAccess: 'recovery' },
+      { method: 'GET', path: '/billing/service-trials/current', tenantServiceAccess: 'recovery' },
+      { method: 'GET', path: '/billing/service-trials/applications/:id', tenantServiceAccess: 'recovery' },
       { method: 'POST', path: '/billing/service-trials/applications', tenantServiceAccess: 'recovery' },
       { method: 'POST', path: '/billing/service-trials/applications/:id/withdraw', tenantServiceAccess: 'recovery' },
     ]);
