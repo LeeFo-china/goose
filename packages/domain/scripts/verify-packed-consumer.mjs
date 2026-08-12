@@ -60,10 +60,16 @@ try {
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
   EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
   type PlatformServiceTrialScopeV1,
   type PlatformServiceTrialStatus,
+  type ServiceTrialFollowUpStatus,
+  type ServiceTrialFollowUpType,
+  type ServiceTrialNotificationEvent,
   type EmployeeServiceAccessSummary,
   type SiteContentDraftBlock,
   type SiteContentPublicDetail,
@@ -76,6 +82,12 @@ const trialScopeSchema: z.ZodType<PlatformServiceTrialScopeV1> =
   PlatformServiceTrialScopeSchema;
 const trialStatus: PlatformServiceTrialStatus =
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES[2];
+const followUpType: ServiceTrialFollowUpType =
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES[0];
+const followUpStatus: ServiceTrialFollowUpStatus =
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES[1];
+const notificationEvent: ServiceTrialNotificationEvent =
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES[5];
 const employeeAccess: EmployeeServiceAccessSummary =
   EmployeeServiceAccessSummarySchema.parse({
     can_enter_workspace: false,
@@ -109,6 +121,9 @@ void schema;
 void assertTypes;
 void trialScopeSchema;
 void trialStatus;
+void followUpType;
+void followUpStatus;
+void notificationEvent;
 void employeeAccess;
 `,
   );
@@ -122,6 +137,9 @@ void employeeAccess;
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
   EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
 } from '@gooes/domain';
@@ -137,6 +155,13 @@ const expectedTrialStatuses = [
   'withdrawn',
   'revoked',
   'converted',
+];
+const expectedFollowUpTypes = ['phone', 'wechat', 'online_meeting', 'onsite', 'other'];
+const expectedFollowUpStatuses = ['pending', 'completed', 'canceled'];
+const expectedNotificationEvents = [
+  'application_submitted', 'approved', 'rejected', 'extended', 'revoked',
+  'expires_in_7_days', 'expires_in_3_days', 'expires_in_1_day',
+  'entered_grace', 'expired', 'converted',
 ];
 
 if (!(SiteContentDraftBlockSchema instanceof z.ZodType)) {
@@ -157,6 +182,12 @@ if (EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[3] !== 'grace_period') {
 
 if (JSON.stringify(PLATFORM_SERVICE_TRIAL_STATUS_VALUES) !== JSON.stringify(expectedTrialStatuses)) {
   throw new Error('packed domain 缺少完整的试用状态契约');
+}
+
+if (JSON.stringify(SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES) !== JSON.stringify(expectedFollowUpTypes)
+  || JSON.stringify(SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES) !== JSON.stringify(expectedFollowUpStatuses)
+  || JSON.stringify(SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES) !== JSON.stringify(expectedNotificationEvents)) {
+  throw new Error('packed domain 缺少完整的试用运营契约');
 }
 
 if (!SiteContentDraftBlockSchema.safeParse({ type: 'paragraph', text: 'packed consumer' }).success) {

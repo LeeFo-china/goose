@@ -14,6 +14,24 @@ export const ASSIGNEE_ID = '44444444-4444-4444-8444-444444444444';
 export const IDEMPOTENCY_KEY = '55555555-5555-4555-8555-555555555555';
 export const NOW = new Date('2026-08-11T08:00:00.000Z');
 
+const followUpFixture = {
+  id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, tenant_id: TENANT_ID,
+  follow_up_type: 'online_meeting' as const, status: 'pending' as const,
+  summary: '陪跑试用首次跟进', result: '待与租户确认首次陪跑安排',
+  next_follow_up_at: NOW.toISOString(), created_by_employee_id: ACTOR_ID,
+  created_at: NOW.toISOString(), idempotent: false,
+};
+
+export const trialOperationsNoop = {
+  listFollowUps: async () => ({
+    list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  }),
+  createFollowUp: async () => followUpFixture,
+  cancelFollowUp: async () => ({
+    ...followUpFixture, status: 'canceled' as const,
+  }),
+};
+
 export const TEST_SCOPE: PlatformServiceTrialScopeV1 = {
   version: 1,
   capabilities: ['core.projects', 'core.customers'],

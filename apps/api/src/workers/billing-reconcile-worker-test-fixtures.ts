@@ -7,6 +7,13 @@ export const BRANDING_VIRTUAL_PAYMENT_RESULT = {
   grantRecovered: 0,
 };
 
+export const TRIAL_REMINDER_RESULT = {
+  claimed: 0,
+  sent: 0,
+  failed: 0,
+  errors: [],
+};
+
 const WORKER_ENV_KEYS = [
   "BILLING_RECONCILE_WORKER_ENABLED",
   "BILLING_RECONCILE_BATCH_SIZE",
@@ -15,6 +22,7 @@ const WORKER_ENV_KEYS = [
   "BILLING_BRANDING_ADDON_EXPIRATION_BATCH_SIZE",
   "BILLING_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE",
   "BILLING_REFUND_RECONCILE_BATCH_SIZE",
+  "BILLING_SERVICE_TRIAL_REMINDER_BATCH_SIZE",
   "SUPABASE_URL",
   "SUPABASE_PUBLISH",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -52,5 +60,11 @@ export function setSupabaseTestEnv(): void {
 export function createBrandingVirtualPaymentService() {
   return {
     reconcile: async () => BRANDING_VIRTUAL_PAYMENT_RESULT,
+  };
+}
+
+export function createTrialReminderService() {
+  return {
+    runReminderBatch: async () => TRIAL_REMINDER_RESULT,
   };
 }

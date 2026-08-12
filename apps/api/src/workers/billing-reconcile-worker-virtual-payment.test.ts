@@ -7,6 +7,8 @@ import {
   test,
 } from "bun:test";
 
+import { createTrialReminderService } from "./billing-reconcile-worker-test-fixtures";
+
 const SUBSCRIPTION_RESULT = {
   ensured: 1,
   reminded: 0,
@@ -44,6 +46,7 @@ const VIRTUAL_PAYMENT_RESULT = {
 const WORKER_ENV_KEYS = [
   "BILLING_RECONCILE_WORKER_ENABLED",
   "BILLING_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE",
+  "BILLING_SERVICE_TRIAL_REMINDER_BATCH_SIZE",
   "SUPABASE_URL",
   "SUPABASE_PUBLISH",
   "SUPABASE_SERVICE_ROLE_KEY",
@@ -218,5 +221,6 @@ function successfulDependencies() {
     refundReconciliationService: {
       runBatch: mock(async () => REFUND_RESULT),
     },
+    trialReminderService: createTrialReminderService(),
   };
 }

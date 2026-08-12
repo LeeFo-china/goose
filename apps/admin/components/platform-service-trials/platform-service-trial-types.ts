@@ -4,6 +4,8 @@ import type {
   PlatformServiceTrialSource,
   PlatformServiceTrialStatus,
   PlatformServiceTrialType,
+  ServiceTrialFollowUpStatus,
+  ServiceTrialFollowUpType,
 } from "@gooes/domain";
 
 import type { PageData } from "@/components/platform-service-orders/platform-service-order-types";
@@ -14,6 +16,8 @@ export type {
   PlatformServiceTrialSource,
   PlatformServiceTrialStatus,
   PlatformServiceTrialType,
+  ServiceTrialFollowUpStatus,
+  ServiceTrialFollowUpType,
 };
 
 export type PlatformServiceTrialAction = {
@@ -124,6 +128,24 @@ export type PlatformServiceTrialDetailData = {
   available_actions: PlatformServiceTrialAvailableActions;
   server_time: string;
 };
+
+export type PlatformServiceTrialFollowUp = {
+  id: string;
+  trial_id: string;
+  tenant_id: string;
+  follow_up_type: ServiceTrialFollowUpType;
+  status: ServiceTrialFollowUpStatus;
+  summary: string;
+  result: string;
+  next_follow_up_at: string | null;
+  created_by_employee_id: string;
+  created_at: string;
+  idempotent?: boolean;
+};
+
+export type PlatformServiceTrialFollowUpPage = PageData<
+  PlatformServiceTrialFollowUp
+>;
 
 export type PlatformServiceTrialPolicy = {
   id: string;

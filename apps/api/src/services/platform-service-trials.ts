@@ -15,7 +15,16 @@ import type {
   PlatformServiceTrialReviewInput,
   PlatformServiceTrialRevokeInput,
 } from '@/schema/service-trials';
+import type {
+  CancelServiceTrialFollowUpInput,
+  CreateServiceTrialFollowUpInput,
+  ServiceTrialFollowUpListQuery,
+} from '@/schema/service-trial-followups';
 import type { AuthContext } from '@/services/authorization';
+import {
+  platformServiceTrialOperationsService,
+  type PlatformServiceTrialOperationsService,
+} from './platform-service-trial-operations';
 import {
   buildTrialAvailableActions,
   serializeServiceTrial,
@@ -26,9 +35,12 @@ import {
 type RepositoryPort = Pick<ServiceTrialRepository,
   'listPlatformTrials' | 'getPlatformSummary' | 'findTrialById'
   | 'findCurrentPolicy' | 'findPolicyById' | 'executeCommand' | 'updatePolicy'>;
+type OperationsServicePort = Pick<PlatformServiceTrialOperationsService,
+  'listFollowUps' | 'createFollowUp' | 'cancelFollowUp'>;
 
 type PlatformServiceTrialDependencies = {
   repository?: RepositoryPort;
+  operationsService?: OperationsServicePort;
   nowFactory?: () => Date;
 };
 const PERMISSION = {
@@ -40,11 +52,31 @@ const PERMISSION = {
 
 export class PlatformServiceTrialService {
   private readonly repository: RepositoryPort;
+  private readonly operationsService: OperationsServicePort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: PlatformServiceTrialDependencies = {}) {
     this.repository = dependencies.repository ?? serviceTrialRepository;
+    this.operationsService = dependencies.operationsService
+      ?? platformServiceTrialOperationsService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+  }
+
+  listFollowUps(authContext: AuthContext, trialId: string,
+    query: ServiceTrialFollowUpListQuery) {
+    return this.operationsService.listFollowUps(authContext, trialId, query);
+  }
+
+  createFollowUp(authContext: AuthContext, trialId: string,
+    input: CreateServiceTrialFollowUpInput) {
+    return this.operationsService.createFollowUp(authContext, trialId, input);
+  }
+
+  cancelFollowUp(authContext: AuthContext, trialId: string, followUpId: string,
+    input: CancelServiceTrialFollowUpInput) {
+    return this.operationsService.cancelFollowUp(
+      authContext, trialId, followUpId, input,
+    );
   }
 
   async listTrials(authContext: AuthContext,
@@ -126,6 +158,11 @@ export class PlatformServiceTrialService {
       : { ...commandBase, trialType: 'standard',
         assigneeEmployeeId: input.assignee_employee_id };
     const result = await this.repository.executeCommand(command);
+    if (input.trial_type === 'guided') {
+      await this.createInitialGuidedFollowUp(
+        authContext, result, input.idempotency_key,
+      );
+    }
     return this.commandResponse(result, authContext);
   }
 
@@ -149,6 +186,11 @@ export class PlatformServiceTrialService {
       : { ...commandBase, trialType: 'standard',
         assigneeEmployeeId: input.assignee_employee_id };
     const result = await this.repository.executeCommand(command);
+    if (input.trial_type === 'guided') {
+      await this.createInitialGuidedFollowUp(
+        authContext, result, input.idempotency_key,
+      );
+    }
     return this.commandResponse(result, authContext);
   }
 
@@ -240,6 +282,23 @@ export class PlatformServiceTrialService {
       ),
       server_time: now.toISOString(),
     };
+  }
+
+  private async createInitialGuidedFollowUp(
+    authContext: AuthContext,
+    result: TrialCommandResult,
+    idempotencyKey: string,
+  ) {
+    const startsAt = result.trial_snapshot.starts_at;
+    if (!startsAt) throw Errors.dbError('陪跑试用缺少开始时间事实');
+    await this.operationsService.createFollowUp(authContext, result.trial_id, {
+      follow_up_type: 'online_meeting',
+      status: 'pending',
+      summary: '陪跑试用首次跟进',
+      result: '待与租户确认首次陪跑安排',
+      next_follow_up_at: startsAt,
+      idempotency_key: idempotencyKey,
+    });
   }
 
   private trialResponse(record: Parameters<typeof serializeServiceTrial>[0],

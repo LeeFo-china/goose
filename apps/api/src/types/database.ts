@@ -6947,6 +6947,21 @@ export type Database = {
           },
         ]
       }
+      platform_service_trial_operations_state: {
+        Row: {
+          cutover_at: string
+          singleton: boolean
+        }
+        Insert: {
+          cutover_at: string
+          singleton?: boolean
+        }
+        Update: {
+          cutover_at?: string
+          singleton?: boolean
+        }
+        Relationships: []
+      }
       platform_service_trial_policies: {
         Row: {
           allow_repeat: boolean
@@ -16866,6 +16881,173 @@ export type Database = {
           },
         ]
       }
+      tenant_service_trial_followups: {
+        Row: {
+          cancel_idempotency_key: string | null
+          cancel_request_hash: string | null
+          canceled_at: string | null
+          canceled_by_employee_id: string | null
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at: string
+          created_by_employee_id: string
+          follow_up_type: string
+          id: string
+          next_follow_up_at: string | null
+          result: string
+          status: string
+          summary: string
+          tenant_id: string
+          trial_id: string
+        }
+        Insert: {
+          cancel_idempotency_key?: string | null
+          cancel_request_hash?: string | null
+          canceled_at?: string | null
+          canceled_by_employee_id?: string | null
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at?: string
+          created_by_employee_id: string
+          follow_up_type: string
+          id?: string
+          next_follow_up_at?: string | null
+          result: string
+          status?: string
+          summary: string
+          tenant_id: string
+          trial_id: string
+        }
+        Update: {
+          cancel_idempotency_key?: string | null
+          cancel_request_hash?: string | null
+          canceled_at?: string | null
+          canceled_by_employee_id?: string | null
+          create_idempotency_key?: string
+          create_request_hash?: string
+          created_at?: string
+          created_by_employee_id?: string
+          follow_up_type?: string
+          id?: string
+          next_follow_up_at?: string | null
+          result?: string
+          status?: string
+          summary?: string
+          tenant_id?: string
+          trial_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_trial_followups_canceled_by_employee_id_fkey"
+            columns: ["canceled_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_followups_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_followups_trial_identity_fkey"
+            columns: ["trial_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_trials"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
+      tenant_service_trial_notification_deliveries: {
+        Row: {
+          attempt_count: number
+          completed_lease_token: string | null
+          created_at: string
+          due_at: string
+          event_type: string
+          id: string
+          last_error_code: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          notification_id: string | null
+          recipient_employee_id: string
+          retry_at: string | null
+          sent_at: string | null
+          source: string
+          status: string
+          target_date: string
+          tenant_id: string
+          trial_id: string
+          updated_at: string
+        }
+        Insert: {
+          attempt_count?: number
+          completed_lease_token?: string | null
+          created_at?: string
+          due_at: string
+          event_type: string
+          id?: string
+          last_error_code?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          notification_id?: string | null
+          recipient_employee_id: string
+          retry_at?: string | null
+          sent_at?: string | null
+          source: string
+          status?: string
+          target_date: string
+          tenant_id: string
+          trial_id: string
+          updated_at?: string
+        }
+        Update: {
+          attempt_count?: number
+          completed_lease_token?: string | null
+          created_at?: string
+          due_at?: string
+          event_type?: string
+          id?: string
+          last_error_code?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          notification_id?: string | null
+          recipient_employee_id?: string
+          retry_at?: string | null
+          sent_at?: string | null
+          source?: string
+          status?: string
+          target_date?: string
+          tenant_id?: string
+          trial_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_service_trial_notification_de_recipient_employee_id_fkey"
+            columns: ["recipient_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_notification_deliveri_notification_id_fkey"
+            columns: ["notification_id"]
+            isOneToOne: false
+            referencedRelation: "notifications"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_service_trial_notification_deliveries_trial_identity_fke"
+            columns: ["trial_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_service_trials"
+            referencedColumns: ["id", "tenant_id"]
+          },
+        ]
+      }
       tenant_service_trials: {
         Row: {
           activated_at: string | null
@@ -24635,11 +24817,63 @@ export type Database = {
         }
         Returns: Json
       }
+      platform_service_trial_cancel_follow_up: {
+        Args: {
+          p_actor_employee_id: string
+          p_follow_up_id: string
+          p_idempotency_key: string
+          p_tenant_id: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_claim_notification_deliveries: {
+        Args: { p_limit?: number }
+        Returns: {
+          delivery_id: string
+          event_type: string
+          grace_ends_at: string
+          lease_token: string
+          recipient_employee_id: string
+          source: string
+          starts_at: string
+          tenant_id: string
+          trial_ends_at: string
+          trial_id: string
+          trial_status: string
+        }[]
+      }
       platform_service_trial_command_snapshot: {
         Args: {
           p_trial: Database["public"]["Tables"]["tenant_service_trials"]["Row"]
         }
         Returns: Json
+      }
+      platform_service_trial_complete_notification_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_lease_token: string
+          p_notification_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_create_follow_up: {
+        Args: {
+          p_actor_employee_id: string
+          p_follow_up_type: string
+          p_idempotency_key: string
+          p_next_follow_up_at: string
+          p_result: string
+          p_status: string
+          p_summary: string
+          p_tenant_id: string
+          p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_enqueue_due_notifications: {
+        Args: { p_now: string }
+        Returns: number
       }
       platform_service_trial_extend: {
         Args: {
@@ -24650,6 +24884,14 @@ export type Database = {
           p_idempotency_key: string
           p_reason: string
           p_trial_id: string
+        }
+        Returns: Json
+      }
+      platform_service_trial_fail_notification_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_error_code: string
+          p_lease_token: string
         }
         Returns: Json
       }

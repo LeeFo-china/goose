@@ -470,6 +470,7 @@ export default async function PlatformServiceOrdersPage({
             <PlatformServiceTrialTable
               trials={trials.list}
               serverTime={trials.server_time}
+              canManage={canGrantTrial}
             />
           )}
         </PlatformListPageShell>

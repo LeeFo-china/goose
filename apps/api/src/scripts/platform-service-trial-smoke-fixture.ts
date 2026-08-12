@@ -222,6 +222,16 @@ export async function cleanupPlatformServiceTrialFixture(
   const fileArray = `{${fileIds.join(",")}}`;
   await db.begin(async (tx) => {
     await tx`set local session_replication_role = replica`;
+    await tx`delete from public.notifications where target_type = 'service_trial_delivery'
+      and target_id in (
+        select delivery.id::text
+        from public.tenant_service_trial_notification_deliveries as delivery
+        where delivery.tenant_id = any(${tenantArray}::uuid[])
+      )`;
+    await tx`delete from public.tenant_service_trial_notification_deliveries
+      where tenant_id = any(${tenantArray}::uuid[])`;
+    await tx`delete from public.tenant_service_trial_followups
+      where tenant_id = any(${tenantArray}::uuid[])`;
     await tx`delete from public.tenant_service_trial_events where tenant_id = any(${tenantArray}::uuid[])`;
     await tx`delete from public.tenant_service_trial_commands where tenant_id = any(${tenantArray}::uuid[])`;
     await tx`delete from public.tenant_service_work_order_events where tenant_id = any(${tenantArray}::uuid[])`;
@@ -259,6 +269,13 @@ export async function cleanupPlatformServiceTrialFixture(
           where tenant_id = any(${tenantArray}::uuid[]))
       + (select count(*) from public.tenant_service_orders
           where tenant_id = any(${tenantArray}::uuid[]))
+      + (select count(*) from public.tenant_service_trial_followups
+          where tenant_id = any(${tenantArray}::uuid[]))
+      + (select count(*) from public.tenant_service_trial_notification_deliveries
+          where tenant_id = any(${tenantArray}::uuid[]))
+      + (select count(*) from public.notifications
+          where target_type = 'service_trial_delivery'
+            and tenant_id = any(${tenantArray}::uuid[]))
     )::int as count;
   `;
   return residual[0]?.count === 0;

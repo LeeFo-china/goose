@@ -19,15 +19,18 @@ import {
   getTrialSourceLabel,
   getTrialStatusMeta,
   getTrialTypeLabel,
+  isTrialExpiringSoon,
 } from "./platform-service-trial-rules";
 import type { PlatformServiceTrialListItem } from "./platform-service-trial-types";
 
 export function PlatformServiceTrialTable({
   trials,
   serverTime,
+  canManage,
 }: {
   trials: PlatformServiceTrialListItem[];
   serverTime: string;
+  canManage: boolean;
 }) {
   const [selectedTrial, setSelectedTrial] = useState<PlatformServiceTrialListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -86,9 +89,13 @@ export function PlatformServiceTrialTable({
       id: "remaining",
       header: "剩余时间",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap tabular-nums text-muted-foreground">
-          {formatTrialRemaining(row.original, serverTime)}
-        </span>
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          <span className="tabular-nums text-muted-foreground">
+            {formatTrialRemaining(row.original, serverTime)}
+          </span>
+          {isTrialExpiringSoon(row.original, serverTime)
+            ? <Badge variant="warning">即将到期</Badge> : null}
+        </div>
       ),
     },
     {
@@ -154,6 +161,7 @@ export function PlatformServiceTrialTable({
           trial={selectedTrial}
           open={detailOpen}
           onOpenChange={setDetailOpen}
+          canManage={canManage}
         />
       ) : null}
     </>
