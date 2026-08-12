@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 const migrationsDirectory = new URL('../../../../supabase/migrations/', import.meta.url);
 const minimumReleasedVersion = '20260812070956';
-const normalizeSql = (sql: string) =>
-  sql.replaceAll(/--.*$/gm, ' ').replaceAll(/\s+/g, ' ').trim().toLowerCase();
+const normalizeSql = (sql: string) => sql.replaceAll(/--.*$/gm, ' ')
+  .replaceAll(/\s+/g, ' ').trim().toLowerCase();
 async function findMigration() {
   const glob = new Bun.Glob('*_create_platform_service_trial_operations.sql');
   const names = await Array.fromAsync(glob.scan({
@@ -172,7 +172,6 @@ describe('platform service trial operations migration', () => {
       'create index tenant_service_trial_followups_next_status_idx on public.tenant_service_trial_followups (next_follow_up_at, status)',
     );
   });
-
   test('[Task 2A] creates and cancels follow-ups with normalized idempotency and canonical locks', async () => {
     const migration = await findMigration();
     const create = functionBody(migration.text, 'platform_service_trial_create_follow_up');
@@ -373,6 +372,7 @@ describe('platform service trial operations migration', () => {
     expect(claim).toContain('delivery.lease_expires_at <= v_now');
     expect(claim).toContain('extensions.gen_random_bytes(16)');
     expect(claim).toContain("status = 'processing'");
+    expect(claim).toContain('retry_at = null');
     expect(claim).toContain("interval '2 minutes'");
     expect(claim).toContain('order by');
     expect(claim).toContain('coalesce(delivery.retry_at, delivery.due_at)');

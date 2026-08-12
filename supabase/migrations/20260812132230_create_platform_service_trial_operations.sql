@@ -853,7 +853,8 @@ BEGIN
   ), claimed AS (
     UPDATE public.tenant_service_trial_notification_deliveries AS delivery
     SET status = 'processing', lease_token = selected.next_lease_token,
-      lease_expires_at = v_now + interval '2 minutes', updated_at = v_now
+      lease_expires_at = v_now + interval '2 minutes', retry_at = NULL,
+      updated_at = v_now
     FROM selected
     WHERE delivery.id = selected.id
     RETURNING delivery.*
