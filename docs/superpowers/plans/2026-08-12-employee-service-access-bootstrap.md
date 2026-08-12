@@ -14,7 +14,7 @@
 
 - `packages/domain/src/platform-service-access.ts`：共享 service access 状态、动作和响应类型。
 - `packages/domain/src/platform-service-access.test.ts`：共享枚举与 schema 契约。
-- `supabase/migrations/20260812071000_add_employee_service_access_bootstrap.sql`：原位替换 access-facts RPC，增加 bounded latest trial fact；实际执行时先用 `supabase migration new add_employee_service_access_bootstrap` 生成，并将本文路径同步为 CLI 返回的唯一文件名。
+- `supabase/migrations/20260812070956_add_employee_service_access_bootstrap.sql`：原位替换 access-facts RPC，增加 bounded latest trial fact；该文件由 `supabase migration new add_employee_service_access_bootstrap` 生成。
 - `apps/api/src/repositories/tenant-service-access.ts`：严格解析 current/latest trial 与 DB server time。
 - `apps/api/src/repositories/tenant-service-access.test.ts`：RPC envelope、兼容旧 envelope、绑定和脱敏测试。
 - `apps/api/src/services/employee-service-access.ts`：纯 service_access projector 与编排 service。
@@ -80,7 +80,7 @@ git commit -m "feat(domain): 定义员工服务访问摘要"
 ### Task 2: 扩展数据库同一时钟访问事实
 
 **Files:**
-- Create via CLI: `supabase/migrations/20260812071000_add_employee_service_access_bootstrap.sql`
+- Create via CLI: `supabase/migrations/20260812070956_add_employee_service_access_bootstrap.sql`
 - Modify: `apps/api/src/repositories/tenant-service-access.ts`
 - Modify: `apps/api/src/repositories/tenant-service-access.test.ts`
 - Create: `apps/api/src/services/employee-service-access-migration-contract.test.ts`

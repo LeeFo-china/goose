@@ -441,6 +441,7 @@ export async function readAccessFacts(
     legacySubscriptionStatus:
       fact.legacy_subscription_status as TenantServiceAccessFacts["legacySubscriptionStatus"],
     currentTrial: fact.current_trial as TenantServiceAccessFacts["currentTrial"],
+    latestTrial: (fact.latest_trial ?? null) as TenantServiceAccessFacts["latestTrial"],
   };
 }
 
