@@ -318,6 +318,7 @@ describe('platform service trial operations migration', () => {
       'tenant_service_trial_notifications_lease_idx',
       'tenant_service_trial_notifications_trial_event_idx',
     ]) expect(sql).toContain(`create index ${index}`);
+    expect(sql).toContain('create unique index notifications_service_trial_delivery_unique_idx');
     for (const tableName of [
       'tenant_service_trial_followups',
       'tenant_service_trial_notification_deliveries',
@@ -330,7 +331,6 @@ describe('platform service trial operations migration', () => {
       expect(sql).toContain(`grant select on table public.${tableName} to service_role;`);
     }
   });
-
   test('[Task 2B] uses cutover and immutable policy snapshots for only future time boundaries', async () => {
     const migration = await findMigration();
     const sql = normalizeSql(migration.text);

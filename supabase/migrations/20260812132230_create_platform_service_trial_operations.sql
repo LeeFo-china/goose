@@ -58,6 +58,9 @@ BEGIN
     + (SELECT count(*) FROM pg_constraint
       WHERE conname LIKE 'tenant_service_trial_followups_%'
         OR conname LIKE 'tenant_service_trial_notification_deliveries_%')
+    + (SELECT count(*) FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND indexname = 'notifications_service_trial_delivery_unique_idx')
   INTO v_partial_count;
 
   IF v_partial_count <> 0 THEN
@@ -221,6 +224,9 @@ CREATE INDEX tenant_service_trial_followups_trial_created_idx
   ON public.tenant_service_trial_followups (trial_id, created_at DESC, id DESC);
 CREATE INDEX tenant_service_trial_followups_next_status_idx
   ON public.tenant_service_trial_followups (next_follow_up_at, status);
+CREATE UNIQUE INDEX notifications_service_trial_delivery_unique_idx
+  ON public.notifications (target_type, target_id, recipient_employee_id)
+  WHERE target_type = 'service_trial_delivery';
 CREATE INDEX tenant_service_trial_notifications_due_claim_idx
   ON public.tenant_service_trial_notification_deliveries (
     status, retry_at, due_at, id
