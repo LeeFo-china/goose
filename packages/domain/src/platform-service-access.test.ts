@@ -99,5 +99,26 @@ describe("platform service access domain contract", () => {
       access_level: "none",
       can_enter_workspace: true,
     }).success).toBe(false);
+    expect(EmployeeServiceAccessSummarySchema.safeParse({
+      ...summary,
+      access_mode: "hard_blocked",
+    }).success).toBe(false);
+    expect(EmployeeServiceAccessSummarySchema.safeParse({
+      ...summary,
+      access_status: "pending_review",
+      can_enter_workspace: false,
+      access_level: "none",
+    }).success).toBe(false);
+    expect(EmployeeServiceAccessSummarySchema.safeParse({
+      ...summary,
+      access_mode: "trial",
+    }).success).toBe(false);
+    expect(EmployeeServiceAccessSummarySchema.safeParse({
+      ...summary,
+      access_status: "grace_period",
+      access_mode: "grace",
+      access_level: "read_only",
+      readonly: true,
+    }).success).toBe(false);
   });
 });

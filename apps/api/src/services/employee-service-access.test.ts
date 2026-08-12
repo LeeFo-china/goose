@@ -203,6 +203,95 @@ describe("EmployeeServiceAccessService", () => {
     expect(result.can_enter_workspace).toBe(false);
     expect(result.trial_status).toBe("active");
   });
+
+  test.each([
+    {
+      name: "hard blocked tenant",
+      facts: { ...baseFacts, tenantStatus: "suspended", currentTrial: currentTrial("active") },
+      expectedMode: "hard_blocked",
+    },
+    {
+      name: "paid contract",
+      facts: { ...baseFacts, contract: contractFact(), currentTrial: currentTrial("active") },
+      expectedMode: "paid",
+    },
+  ])("does not read trial rollout before $name priority", async ({
+    facts,
+    expectedMode,
+  }) => {
+    const { EmployeeServiceAccessService } = await import(
+      "./employee-service-access"
+    );
+    const trialAccessEnabled = mock(async () => {
+      throw new Error("rollout unavailable");
+    });
+    const service = new EmployeeServiceAccessService({
+      repository: { getAccessFacts: async () => facts },
+      trialAccessEnabled,
+      trialApplicationEnabled: async () => false,
+    });
+
+    const result = await service.resolve({ tenantId: TENANT_ID, permissionCodes: [] });
+
+    expect(result.access_mode).toBe(expectedMode);
+    expect(trialAccessEnabled).not.toHaveBeenCalled();
+  });
+
+  test("returns the immutable trial capabilities for bootstrap data pruning", async () => {
+    const { EmployeeServiceAccessService } = await import(
+      "./employee-service-access"
+    );
+    const service = new EmployeeServiceAccessService({
+      repository: {
+        getAccessFacts: async () => ({
+          ...latestTrial("active"),
+          currentTrial: currentTrial("active"),
+        }),
+      },
+      trialAccessEnabled: async () => true,
+      trialApplicationEnabled: async () => false,
+    });
+
+    const result = await service.resolveBootstrap({
+      tenantId: TENANT_ID,
+      permissionCodes: [],
+    });
+
+    expect(result.serviceAccess.access_status).toBe("workspace_available");
+    expect(result.capabilities).toEqual(["core.employees"]);
+  });
+
+  test.each([
+    { status: "grace_period" as const, action: "secondary_action" as const },
+    { status: "expired" as const, action: "primary_action" as const },
+  ])("keeps trial attribution in the $status purchase action", async ({
+    status,
+    action,
+  }) => {
+    const { EmployeeServiceAccessService } = await import(
+      "./employee-service-access"
+    );
+    const service = new EmployeeServiceAccessService({
+      repository: {
+        getAccessFacts: async () => ({
+          ...latestTrial(status),
+          currentTrial: status === "grace_period" ? currentTrial(status) : null,
+        }),
+      },
+      trialAccessEnabled: async () => true,
+      trialApplicationEnabled: async () => false,
+    });
+
+    const result = await service.resolve({
+      tenantId: TENANT_ID,
+      permissionCodes: [],
+    });
+
+    expect(result[action]).toMatchObject({
+      key: "purchase_service",
+      path: `/packageEmployees/pages/platformServicePaymentSmoke/index?source_trial_id=${TRIAL_ID}`,
+    });
+  });
 });
 
 function latestTrial(

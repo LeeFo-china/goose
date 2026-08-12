@@ -82,7 +82,7 @@ const employeeAccess: EmployeeServiceAccessSummary =
     readonly: false,
     access_mode: 'service_blocked',
     access_level: 'none',
-    access_status: EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[1],
+    access_status: EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[5],
     trial_id: null,
     trial_status: null,
     starts_at: null,

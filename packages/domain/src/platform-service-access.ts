@@ -80,10 +80,24 @@ export const EmployeeServiceAccessSummarySchema = z.object({
   if (hasTrialId !== hasTrialStatus) {
     context.addIssue({ code: 'custom', message: 'trial facts must be complete' });
   }
+  const expectedTrialStatus = expectedTrialStatusFor(summary.access_status);
+  if (expectedTrialStatus && summary.trial_status !== expectedTrialStatus) {
+    context.addIssue({ code: 'custom', message: 'trial status mismatch' });
+  }
+  if (summary.access_mode === 'trial' && summary.trial_status !== 'active') {
+    context.addIssue({ code: 'custom', message: 'trial access facts missing' });
+  }
+  if (summary.access_mode === 'grace'
+    && summary.trial_status !== 'grace_period') {
+    context.addIssue({ code: 'custom', message: 'grace trial facts missing' });
+  }
 
   if (summary.access_status === 'workspace_available') {
     if (!summary.can_enter_workspace || summary.readonly
-      || summary.access_level !== 'read_write') {
+      || summary.access_level !== 'read_write'
+      || !['paid', 'paid_onboarding', 'trial', 'legacy'].includes(
+        summary.access_mode,
+      )) {
       context.addIssue({ code: 'custom', message: 'workspace access invalid' });
     }
     return;
@@ -102,9 +116,11 @@ export const EmployeeServiceAccessSummarySchema = z.object({
     || summary.access_level !== 'none') {
     context.addIssue({ code: 'custom', message: 'blocked access invalid' });
   }
-  if (summary.access_status === 'hard_blocked'
-    && summary.access_mode !== 'hard_blocked') {
-    context.addIssue({ code: 'custom', message: 'hard block mode invalid' });
+  const expectedBlockedMode = summary.access_status === 'hard_blocked'
+    ? 'hard_blocked'
+    : 'service_blocked';
+  if (summary.access_mode !== expectedBlockedMode) {
+    context.addIssue({ code: 'custom', message: 'blocked access mode invalid' });
   }
 });
 
@@ -115,3 +131,9 @@ export type EmployeeServiceAccessAction = z.infer<
 export type EmployeeServiceAccessSummary = z.infer<
   typeof EmployeeServiceAccessSummarySchema
 >;
+
+function expectedTrialStatusFor(status: EmployeeServiceAccessStatus) {
+  if (status === 'pending_review' || status === 'scheduled'
+    || status === 'expired') return status;
+  return status === 'grace_period' ? 'grace_period' : null;
+}

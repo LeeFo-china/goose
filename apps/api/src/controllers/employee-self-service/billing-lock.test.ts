@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { EmployeeServiceAccessSummary } from "@gooes/domain";
 import type { FastifyRequest } from "fastify";
 import type { AuthContext } from "@/services/authorization";
+import type { EmployeeServiceAccessBootstrapResolution } from "@/services/employee-service-access";
 
 const authUserId = "auth-user-1";
 const tenantId = "tenant-1";
@@ -48,14 +49,21 @@ const getUserProfileByAuthUserId = mock(async () => ({
   profile_completed_at: "2026-07-04T00:00:00.000Z",
 }));
 const resolveForEmployee = mock(async () => ({
-  scene: "employee_home",
-  version: 1,
+  version: "rule-1",
   rules_version: "test-rules",
   matched_rule: null,
+  scenes: {
+    employee_home: {
+      blocks: [],
+      quick_actions: [],
+    },
+  },
 }));
 const getStats = mock(async () => null);
 const getSummary = mock(async () => null);
-const resolveServiceAccess = mock(async () => workspaceAccess());
+const resolveServiceAccess = mock(
+  async (): Promise<EmployeeServiceAccessBootstrapResolution> => unrestrictedAccess(),
+);
 
 mock.module("@/services/authorization", () => ({
   authorizationService: {
@@ -88,10 +96,15 @@ mock.module("@/services/employee-personalization", () => ({
     getRulesVersionForTenant: mock(() => "test-rules"),
     resolveForEmployee,
     getEmptyPayload: mock((scene: string) => ({
-      scene,
-      version: 0,
+      version: "empty",
       rules_version: "test-rules",
       matched_rule: null,
+      scenes: {
+        [scene]: {
+          blocks: [],
+          quick_actions: [],
+        },
+      },
     })),
   },
 }));
@@ -109,7 +122,7 @@ mock.module("@/services/task-center", () => ({
 }));
 
 mock.module("@/services/employee-service-access", () => ({
-  employeeServiceAccessService: { resolve: resolveServiceAccess },
+  employeeServiceAccessService: { resolveBootstrap: resolveServiceAccess },
 }));
 
 mock.module("@/services/projects", () => ({
@@ -126,6 +139,7 @@ mock.module("@/services/customer-core", () => ({
 
 beforeEach(() => {
   getRequiredAuthContext.mockClear();
+  getRequiredAuthContext.mockImplementation(async () => authContext);
   assertTenantContext.mockClear();
   assertPermission.mockClear();
   hasPermission.mockClear();
@@ -135,7 +149,7 @@ beforeEach(() => {
   getStats.mockClear();
   getSummary.mockClear();
   resolveServiceAccess.mockClear();
-  resolveServiceAccess.mockImplementation(async () => workspaceAccess());
+  resolveServiceAccess.mockImplementation(async () => unrestrictedAccess());
 });
 
 function buildRequest(): FastifyRequest {
@@ -181,7 +195,10 @@ describe("EmployeeSelfServiceController billing lock access", () => {
   });
 
   test("returns blocked service status without loading employee home data", async () => {
-    resolveServiceAccess.mockImplementation(async () => blockedAccess());
+    resolveServiceAccess.mockImplementation(async () => ({
+      serviceAccess: blockedAccess(),
+      capabilities: null,
+    }));
     const { default: controller } = await import(".");
     const request = buildRequest();
     request.user = {
@@ -205,7 +222,9 @@ describe("EmployeeSelfServiceController billing lock access", () => {
   test("rechecks service access before reusing cached home data", async () => {
     let accessAttempt = 0;
     resolveServiceAccess.mockImplementation(async () =>
-      accessAttempt++ === 0 ? workspaceAccess() : blockedAccess());
+      accessAttempt++ === 0
+        ? unrestrictedAccess()
+        : { serviceAccess: blockedAccess(), capabilities: null });
     const { default: controller } = await import(".");
     const request = buildRequest();
     request.query = { home_mode: "inline", tasks_mode: "inline" };
@@ -220,7 +239,83 @@ describe("EmployeeSelfServiceController billing lock access", () => {
     expect(getStats).toHaveBeenCalledTimes(1);
     expect(getSummary).toHaveBeenCalledTimes(1);
   });
+
+  test("does not load home data outside a limited trial scope", async () => {
+    resolveServiceAccess.mockImplementation(async () => ({
+      serviceAccess: { ...workspaceAccess(), access_mode: "trial" },
+      capabilities: ["core.projects"],
+    }));
+    const { default: controller } = await import(".");
+    const request = buildRequest();
+    request.query = { home_mode: "inline", tasks_mode: "inline" };
+    request.user = { ...request.user, sub: "auth-user-limited-trial" };
+
+    const response = await controller.getEmployeeBootstrap(request, {} as never);
+
+    expect(response.data.home_stats).toBeNull();
+    expect(response.data.task_summary).toBeNull();
+    expect(response.data.personalization).toEqual({
+      version: "empty",
+      rules_version: "test-rules",
+      matched_rule: null,
+      scenes: {
+        employee_home: {
+          blocks: [],
+          quick_actions: [],
+        },
+      },
+    });
+    expect(getStats).toHaveBeenCalledTimes(1);
+    expect(getSummary).not.toHaveBeenCalled();
+    expect(resolveForEmployee).not.toHaveBeenCalled();
+  });
+
+  test("does not reuse an in-flight broad bootstrap after trial scope narrows", async () => {
+    getRequiredAuthContext.mockImplementation(async () => ({
+      ...authContext,
+      authUserId: "auth-user-concurrent-scope",
+    }));
+    let releaseHomeStats!: (value: null) => void;
+    const pendingHomeStats = new Promise<null>((resolve) => {
+      releaseHomeStats = resolve;
+    });
+    getStats.mockImplementationOnce(async () => pendingHomeStats);
+    let accessAttempt = 0;
+    resolveServiceAccess.mockImplementation(async () => {
+      accessAttempt += 1;
+      return accessAttempt === 1
+        ? unrestrictedAccess()
+        : {
+            serviceAccess: { ...workspaceAccess(), access_mode: "trial" },
+            capabilities: ["core.customers"],
+          };
+    });
+    const { default: controller } = await import(".");
+    const request = buildRequest();
+    request.query = { home_mode: "inline", tasks_mode: "inline" };
+    request.user = { ...request.user, sub: "auth-user-concurrent-scope" };
+
+    const broadBootstrap = controller.getEmployeeBootstrap(request, {} as never);
+    for (let attempt = 0; attempt < 20 && getStats.mock.calls.length === 0; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(getStats).toHaveBeenCalledTimes(1);
+    const limitedBootstrap = await controller.getEmployeeBootstrap(
+      request,
+      {} as never,
+    );
+
+    expect(limitedBootstrap.data.home_stats).toBeNull();
+    expect(limitedBootstrap.data.task_summary).toBeNull();
+    expect(resolveServiceAccess).toHaveBeenCalledTimes(2);
+    releaseHomeStats(null);
+    await broadBootstrap;
+  });
 });
+
+function unrestrictedAccess(): EmployeeServiceAccessBootstrapResolution {
+  return { serviceAccess: workspaceAccess(), capabilities: null };
+}
 
 function workspaceAccess(): EmployeeServiceAccessSummary {
   return {

@@ -123,10 +123,16 @@ Orange 应以 action key 做 exhaustive switch。`path` 仅作为已知小程序
 承接页刷新使用现有：
 
 ```ts
-EmployeeBootstrapService.getBootstrap({ force: true })
+AuthService.ensureEmployeeBootstrap(
+  'service-access-landing:refresh',
+  { force: true },
+)
 ```
 
-刷新后重新执行同一个纯导航函数，禁止页面各自拼接状态。
+必须从 `AuthService` 入口强制刷新，不能只调用底层
+`EmployeeBootstrapService.getBootstrap({ force: true })`。前者会同时清除 token 维度的
+bootstrap 结果缓存并向下传递 `force`；只刷新底层会让后续首页/session 再读到 AuthService
+中的旧结果，造成重复重定向。刷新后重新执行同一个纯导航函数，禁止页面各自拼接状态。
 
 ## Action 路径
 
@@ -137,10 +143,10 @@ EmployeeBootstrapService.getBootstrap({ force: true })
 | `enter_workspace` / `enter_readonly_workspace` | `/pages/index/index` |
 | `view_trial` | `/packageEmployees/pages/platformServiceTrialDetail/index?id=<trial_id>`；没有 ID 时为试用列表 |
 | `apply_trial` | `/packageEmployees/pages/platformServiceTrialApply/index` |
-| `purchase_service` | `/packageEmployees/pages/platformServicePaymentSmoke/index` |
+| `purchase_service` | 无试用来源时为 `/packageEmployees/pages/platformServicePaymentSmoke/index`；试用宽限/到期时后端会追加 `?source_trial_id=<trial_id>` |
 | `contact_platform` / `refresh` | `null`，由承接页执行本地交互 |
 
-从试用详情进入购买时，Orange 继续使用现有逻辑透传：
+无论从试用详情还是服务状态承接页进入购买，Orange 都应保留后端 action path 中已有的：
 
 ```text
 source_trial_id=<trial_id>
@@ -205,7 +211,7 @@ source_trial_id=<trial_id>
 tgz。交付时同时提供 tgz 的 SHA-256；Orange 在 `package.json` 与 lockfile 中均指向新制品。
 
 - 本机交付文件：`/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.16.0.tgz`
-- SHA-256：`a23ad1e4bb77704797a41f76a3b2755d3077a88b1e4e04af8e25aa74eb0aa848`
+- SHA-256：`78e12ce9eb02fd0ff5dd51dee41a2630209579dc5d7a22a25d3f9d3ec7a04a54`
 - Orange-owned 安装命令：
 
 ```bash

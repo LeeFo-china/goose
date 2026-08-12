@@ -5,6 +5,7 @@ import { employeePersonalizationService } from "@/services/employee-personalizat
 import { employeeServiceAccessService } from "@/services/employee-service-access";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { taskCenterService } from "@/services/task-center";
+import type { PlatformServiceTrialCapability } from "@gooes/domain";
 import type { FastifyRequest } from "fastify";
 import {
   buildServiceBlockedBootstrapResponse,
@@ -33,7 +34,7 @@ type EmployeeBootstrapDebugTiming = Record<string, number | string | null>;
 
 type EmployeeBootstrapHandlerOptions = {
   getRequiredTenantContext: (request: FastifyRequest) => Promise<TenantAuthContext>;
-  resolveServiceAccess?: typeof employeeServiceAccessService.resolve;
+  resolveServiceAccess?: typeof employeeServiceAccessService.resolveBootstrap;
 };
 
 export class EmployeeBootstrapHandler {
@@ -46,11 +47,11 @@ export class EmployeeBootstrapHandler {
   constructor(private readonly options: EmployeeBootstrapHandlerOptions) {}
 
   private resolveServiceAccess(
-    input: Parameters<typeof employeeServiceAccessService.resolve>[0],
+    input: Parameters<typeof employeeServiceAccessService.resolveBootstrap>[0],
   ) {
     return this.options.resolveServiceAccess
       ? this.options.resolveServiceAccess(input)
-      : employeeServiceAccessService.resolve(input);
+      : employeeServiceAccessService.resolveBootstrap(input);
   }
 
   private getCachedBootstrap(cacheKey: string) {
@@ -112,6 +113,7 @@ export class EmployeeBootstrapHandler {
   private bootstrapCacheKey(
     authContext: TenantAuthContext,
     query: EmployeeBootstrapQuery,
+    capabilities: readonly PlatformServiceTrialCapability[] | null,
   ) {
     return [
       authContext.authUserId,
@@ -119,6 +121,7 @@ export class EmployeeBootstrapHandler {
       authContext.employeeId,
       query.home_mode,
       query.tasks_mode,
+      capabilities?.join(",") ?? "unrestricted",
       employeePersonalizationService.getRulesVersionForTenant(
         authContext.tenantId,
       ),
@@ -187,22 +190,30 @@ export class EmployeeBootstrapHandler {
     authContext: TenantAuthContext,
     query: EmployeeBootstrapQuery,
     serviceAccess: EmployeeBootstrapResponse["service_access"],
+    capabilities: readonly PlatformServiceTrialCapability[] | null,
     debugTiming?: EmployeeBootstrapDebugTiming,
   ): Promise<EmployeeBootstrapResponse> {
     const startedAt = Date.now();
     const { home_mode: homeMode, tasks_mode: tasksMode } = query;
-    prewarmDeferredHomeData(request, authContext);
+    prewarmDeferredHomeData(request, authContext, capabilities);
     prewarmDeferredSummaryData(request, authContext, {
       includeHomeStats: homeMode === "defer",
       includeTaskSummary: tasksMode === "defer",
+      capabilities,
     });
 
     const profileStartedAt = Date.now();
     const [homeStats, taskSummary, profileResult, personalization] = await Promise.all([
-      homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
-      tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
+      homeMode === "inline" && allows(capabilities, "core.projects")
+        ? homeDashboardService.getStats(authContext)
+        : Promise.resolve(null),
+      tasksMode === "inline" && allows(capabilities, "core.workflows")
+        ? taskCenterService.getSummary(authContext)
+        : Promise.resolve(null),
       getUserProfileForBootstrap(request, authContext),
-      this.resolveBootstrapPersonalization(request, authContext, "employee_home"),
+      allows(capabilities, "core.employees")
+        ? this.resolveBootstrapPersonalization(request, authContext, "employee_home")
+        : Promise.resolve(employeePersonalizationService.getEmptyPayload("employee_home")),
     ]);
 
     request.log.info(
@@ -275,10 +286,11 @@ export class EmployeeBootstrapHandler {
     }
 
     const serviceAccessStartedAt = Date.now();
-    const serviceAccess = await this.resolveServiceAccess({
+    const serviceAccessResolution = await this.resolveServiceAccess({
       tenantId: authContext.tenantId,
       permissionCodes: authContext.permissions.map(({ code }) => code),
     });
+    const { serviceAccess, capabilities } = serviceAccessResolution;
     debugTiming.service_access_ms = Date.now() - serviceAccessStartedAt;
     if (!serviceAccess.can_enter_workspace) {
       return this.withBootstrapDebugTiming(
@@ -294,10 +306,12 @@ export class EmployeeBootstrapHandler {
 
     const permissionsStartedAt = Date.now();
     accessPolicyService.assertPermission(authContext, "dashboard.read");
-    this.assertTaskSummaryReadable(authContext);
+    if (allows(capabilities, "core.workflows")) {
+      this.assertTaskSummaryReadable(authContext);
+    }
     debugTiming.permissions_ms = Date.now() - permissionsStartedAt;
 
-    const cacheKey = this.bootstrapCacheKey(authContext, query);
+    const cacheKey = this.bootstrapCacheKey(authContext, query, capabilities);
     const cached = this.getCachedBootstrap(cacheKey);
     if (cached) {
       request.log.info(
@@ -349,6 +363,7 @@ export class EmployeeBootstrapHandler {
       authContext,
       query,
       serviceAccess,
+      capabilities,
       debugTiming,
     ).then((response) => {
       this.setCachedBootstrap(cacheKey, response);
@@ -392,4 +407,11 @@ export class EmployeeBootstrapHandler {
       startedAt,
     );
   }
+}
+
+function allows(
+  capabilities: readonly PlatformServiceTrialCapability[] | null,
+  capability: PlatformServiceTrialCapability,
+) {
+  return capabilities === null || capabilities.includes(capability);
 }

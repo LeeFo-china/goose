@@ -1,9 +1,12 @@
-import type {
-  EmployeeServiceAccessAction,
-  EmployeeServiceAccessSummary,
-  PlatformServiceTrialStatus,
+import {
+  EmployeeServiceAccessSummarySchema,
+  type PlatformServiceTrialCapability,
+  type EmployeeServiceAccessAction,
+  type EmployeeServiceAccessSummary,
+  type PlatformServiceTrialStatus,
 } from "@gooes/domain";
 
+import { Errors } from "@/errors/error-factory";
 import {
   tenantServiceAccessRepository,
   type TenantServiceAccessFacts,
@@ -27,6 +30,11 @@ const PURCHASE_PATH =
 type ResolveEmployeeServiceAccessInput = {
   tenantId: string;
   permissionCodes: readonly string[];
+};
+
+export type EmployeeServiceAccessBootstrapResolution = {
+  serviceAccess: EmployeeServiceAccessSummary;
+  capabilities: readonly PlatformServiceTrialCapability[] | null;
 };
 
 type FactsResolver = (
@@ -62,10 +70,16 @@ export class EmployeeServiceAccessService {
   async resolve(
     input: ResolveEmployeeServiceAccessInput,
   ): Promise<EmployeeServiceAccessSummary> {
+    return (await this.resolveBootstrap(input)).serviceAccess;
+  }
+
+  async resolveBootstrap(
+    input: ResolveEmployeeServiceAccessInput,
+  ): Promise<EmployeeServiceAccessBootstrapResolution> {
     const facts = await this.repository.getAccessFacts({
       tenantId: input.tenantId,
     });
-    const trialEnabled = facts.currentTrial
+    const trialEnabled = trialCanAffectDecision(facts)
       ? await this.trialAccessEnabled()
       : false;
     const decision = this.resolveFacts(facts, trialEnabled);
@@ -74,8 +88,27 @@ export class EmployeeServiceAccessService {
       && input.permissionCodes.includes("billing.service_trial.apply")
       && await this.trialApplicationEnabled();
 
-    return projectEmployeeServiceAccess(facts, decision, mayApply);
+    const projected = EmployeeServiceAccessSummarySchema.safeParse(
+      projectEmployeeServiceAccess(facts, decision, mayApply),
+    );
+    if (!projected.success) {
+      throw Errors.dbError("员工服务访问事实不一致");
+    }
+
+    return {
+      serviceAccess: projected.data,
+      capabilities: decision.mode === "trial" || decision.mode === "grace"
+        ? facts.currentTrial?.scope_snapshot.capabilities ?? null
+        : null,
+    };
   }
+}
+
+function trialCanAffectDecision(facts: TenantServiceAccessFacts) {
+  return facts.tenantStatus === "active"
+    && facts.contract === null
+    && facts.paidOnboardingOrder === null
+    && facts.currentTrial !== null;
 }
 
 function canOfferApplication(status: PlatformServiceTrialStatus | null) {
@@ -138,7 +171,11 @@ function projectEmployeeServiceAccess(
         "只读进入工作台",
         WORKSPACE_PATH,
       ),
-      secondary_action: action("purchase_service", "购买正式服务", PURCHASE_PATH),
+      secondary_action: action(
+        "purchase_service",
+        "购买正式服务",
+        purchasePath(base.trial_id),
+      ),
     };
   }
 
@@ -181,7 +218,11 @@ function projectServiceBlocked(
     return blockedSummary(base, "expired", {
       title: "试用服务已到期",
       message: "试用和宽限期均已结束，可购买正式平台技术服务。",
-      primary: action("purchase_service", "购买正式服务", PURCHASE_PATH),
+      primary: action(
+        "purchase_service",
+        "购买正式服务",
+        purchasePath(base.trial_id),
+      ),
       secondary: trialAction(base.trial_id),
     });
   }
@@ -246,4 +287,10 @@ function trialAction(trialId: string | null) {
 
 function trialDetailPath(trialId: string) {
   return `${TRIAL_DETAIL_PATH}?id=${encodeURIComponent(trialId)}`;
+}
+
+function purchasePath(trialId: string | null) {
+  return trialId
+    ? `${PURCHASE_PATH}?source_trial_id=${encodeURIComponent(trialId)}`
+    : PURCHASE_PATH;
 }

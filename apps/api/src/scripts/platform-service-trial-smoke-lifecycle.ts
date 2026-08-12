@@ -39,6 +39,7 @@ export async function runTrialLifecycleScenarios(
     && applied.idempotent === false
     && pendingRows[0]?.status === "pending_review"
     && pendingRows[0]?.version === 1;
+  const pendingAccessFacts = await readAccessFacts(db, lifecycle.tenantId);
   const replay = await applyTrial(db, lifecycle.tenantId, lifecycle.employeeId, applyKey);
   const replayConflict = await hasErrorCode(
     () => applyTrial(db, lifecycle.tenantId, lifecycle.employeeId, applyKey, "changed"),
@@ -56,6 +57,7 @@ export async function runTrialLifecycleScenarios(
     expectedVersion: 1,
     startsAt,
   });
+  const scheduledAccessFacts = await readAccessFacts(db, lifecycle.tenantId);
   const snapshots = await Promise.all([
     effectiveStatusAt(db, String(applied.trial_id), new Date(startsAt.getTime() - 1_000)),
     effectiveStatusAt(db, String(applied.trial_id), new Date(startsAt.getTime() + 1_000)),
@@ -72,6 +74,7 @@ export async function runTrialLifecycleScenarios(
       ${new Date(startsAt.getTime() + 172_801_000).toISOString()}::timestamptz
     ) as result;
   `;
+  const expiredAccessFacts = await readAccessFacts(db, lifecycle.tenantId);
   const repeatBlocked = await hasErrorCode(
     () => applyTrial(db, lifecycle.tenantId, lifecycle.employeeId, crypto.randomUUID()),
     "SERVICE_TRIAL_REPEAT_REQUIRES_OVERRIDE",
@@ -172,6 +175,9 @@ export async function runTrialLifecycleScenarios(
     application_repeat_cooldown: repeatBlocked && cooldownBlocked,
     review_scheduled_active_grace_expired:
       reviewed.status === "scheduled"
+      && pendingAccessFacts.latestTrial?.status === "pending_review"
+      && scheduledAccessFacts.latestTrial?.status === "scheduled"
+      && expiredAccessFacts.latestTrial?.status === "expired"
       && JSON.stringify(snapshots) === JSON.stringify([
         "scheduled", "active", "grace_period", "expired",
       ]),
@@ -394,15 +400,25 @@ export async function verifyAccessDecisions(
   tenantId: string,
 ): Promise<boolean> {
   const { TenantServiceAccessService } = await import("../services/tenant-service-access");
+  const { EmployeeServiceAccessService } = await import("../services/employee-service-access");
+  const repository = { getAccessFacts: async () => readAccessFacts(db, tenantId) };
   const service = new TenantServiceAccessService({
-    repository: { getAccessFacts: async () => readAccessFacts(db, tenantId) },
+    repository,
     trialAccessEnabled: async () => true,
+  });
+  const employeeService = new EmployeeServiceAccessService({
+    repository,
+    trialAccessEnabled: async () => true,
+    trialApplicationEnabled: async () => false,
   });
   const included = await service.resolveForRoute({
     tenantId, routeAccess: "write", requiredCapability: "core.projects",
   });
   const excluded = await service.resolveForRoute({
     tenantId, routeAccess: "write", requiredCapability: "core.customers",
+  });
+  const employeeActive = await employeeService.resolve({
+    tenantId, permissionCodes: [],
   });
   const trialRows = await db<Array<{ id: string }>>`
     update public.tenant_service_trials set status = 'active',
@@ -418,10 +434,16 @@ export async function verifyAccessDecisions(
   const graceWrite = await service.resolveForRoute({
     tenantId, routeAccess: "write", requiredCapability: "core.projects",
   });
+  const employeeGrace = await employeeService.resolve({
+    tenantId, permissionCodes: [],
+  });
   return trialRows.length === 1 && included.allowed && !excluded.allowed
     && excluded.errorCode === "TENANT_SERVICE_CAPABILITY_NOT_INCLUDED"
     && graceRead.allowed && !graceWrite.allowed
-    && graceWrite.errorCode === "TENANT_SERVICE_READ_ONLY";
+    && graceWrite.errorCode === "TENANT_SERVICE_READ_ONLY"
+    && employeeActive.access_status === "workspace_available"
+    && employeeGrace.access_status === "grace_period"
+    && employeeActive.trial_id === employeeGrace.trial_id;
 }
 
 export async function readAccessFacts(

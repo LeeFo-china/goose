@@ -133,7 +133,8 @@ Orange 需要新增服务状态承接页和稳定导航函数：
 3. `workspace_available` 直接进入首页。
 4. `grace_period` reLaunch 到承接页；点击 `enter_readonly_workspace` 时记录本次 bootstrap 的明确用户确认，再进入首页，不重新推导状态。
 5. 其他状态留在承接页，按钮只按 action key 跳转现有试用详情、试用申请或正式购买页。
-6. 承接页刷新必须 force refresh bootstrap；结果变化后重新执行同一导航函数。
+6. 承接页刷新必须通过 Orange `AuthService.ensureEmployeeBootstrap(..., { force: true })`
+   刷新 bootstrap，确保 token 级结果缓存和底层请求缓存一起失效；结果变化后重新执行同一导航函数。
 7. 老后端没有 `service_access` 时临时按既有流程处理；开发环境完成联合验证后移除 fallback。
 8. 稳定错误码只处理真实请求失败；业务状态不再通过 402/403 异常驱动登录导航。
 
