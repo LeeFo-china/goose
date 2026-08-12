@@ -1,8 +1,10 @@
 import {
   PLATFORM_SERVICE_TRIAL_SOURCE_VALUES,
+  PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   PlatformServiceTrialScopeSchema,
   type PlatformServiceTrialScopeV1,
   type PlatformServiceTrialSource,
+  type PlatformServiceTrialStatus,
 } from "@gooes/domain";
 import { z } from "zod";
 
@@ -32,6 +34,15 @@ export type TenantServiceTrialAccessFact = {
   scope_snapshot: PlatformServiceTrialScopeV1;
 };
 
+export type TenantServiceLatestTrialFact = {
+  id: string;
+  tenant_id: string;
+  status: PlatformServiceTrialStatus;
+  starts_at: string | null;
+  trial_ends_at: string | null;
+  grace_ends_at: string | null;
+};
+
 export type TenantServiceAccessFacts = {
   evaluatedAt: string;
   tenantStatus: string | null;
@@ -39,6 +50,7 @@ export type TenantServiceAccessFacts = {
   paidOnboardingOrder: TenantServicePaidOnboardingFact | null;
   legacySubscriptionStatus: TenantBillingSubscriptionStatus | null;
   currentTrial: TenantServiceTrialAccessFact | null;
+  latestTrial: TenantServiceLatestTrialFact | null;
 };
 
 export type GetTenantServiceAccessFactsInput = { tenantId: string };
@@ -58,6 +70,34 @@ type UntypedClient = {
 };
 
 const dateTime = z.iso.datetime({ offset: true });
+const latestTrialSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  status: z.enum(PLATFORM_SERVICE_TRIAL_STATUS_VALUES),
+  starts_at: dateTime.nullable(),
+  trial_ends_at: dateTime.nullable(),
+  grace_ends_at: dateTime.nullable(),
+}).strict().superRefine((trial, context) => {
+  const times = [trial.starts_at, trial.trial_ends_at, trial.grace_ends_at];
+  const hasAllTimes = times.every((value) => value !== null);
+  const hasNoTimes = times.every((value) => value === null);
+  const requiresTimes = [
+    "scheduled", "active", "grace_period", "expired", "revoked",
+  ].includes(trial.status);
+  const requiresNoTimes = [
+    "pending_review", "rejected", "withdrawn",
+  ].includes(trial.status);
+  if (requiresTimes && !hasAllTimes || requiresNoTimes && !hasNoTimes
+    || trial.status === "converted" && !hasAllTimes && !hasNoTimes) {
+    context.addIssue({ code: "custom", message: "latest trial time invalid" });
+    return;
+  }
+  if (!hasAllTimes) return;
+  if (Date.parse(trial.starts_at!) >= Date.parse(trial.trial_ends_at!)
+    || Date.parse(trial.trial_ends_at!) > Date.parse(trial.grace_ends_at!)) {
+    context.addIssue({ code: "custom", message: "latest trial range invalid" });
+  }
+});
 const accessFactsSchema = z.object({
   server_time: dateTime,
   tenant_id: z.uuid(),
@@ -84,6 +124,7 @@ const accessFactsSchema = z.object({
     grace_ends_at: dateTime,
     scope_snapshot: PlatformServiceTrialScopeSchema,
   }).strict().nullable(),
+  latest_trial: latestTrialSchema.nullable().optional(),
 }).strict().superRefine((facts, context) => {
   const now = Date.parse(facts.server_time);
   const contract = facts.contract;
@@ -97,16 +138,32 @@ const accessFactsSchema = z.object({
   ) context.addIssue({ code: "custom", message: "paid order time invalid" });
 
   const trial = facts.current_trial;
-  if (!trial) return;
-  const startsAt = Date.parse(trial.starts_at);
-  const trialEndsAt = Date.parse(trial.trial_ends_at);
-  const graceEndsAt = Date.parse(trial.grace_ends_at);
-  if (
-    startsAt >= trialEndsAt || trialEndsAt > graceEndsAt
-    || now < startsAt || now >= graceEndsAt
-    || trial.status === "active" && now >= trialEndsAt
-    || trial.status === "grace_period" && now < trialEndsAt
-  ) context.addIssue({ code: "custom", message: "trial time invalid" });
+  if (trial) {
+    const startsAt = Date.parse(trial.starts_at);
+    const trialEndsAt = Date.parse(trial.trial_ends_at);
+    const graceEndsAt = Date.parse(trial.grace_ends_at);
+    if (
+      startsAt >= trialEndsAt || trialEndsAt > graceEndsAt
+      || now < startsAt || now >= graceEndsAt
+      || trial.status === "active" && now >= trialEndsAt
+      || trial.status === "grace_period" && now < trialEndsAt
+    ) context.addIssue({ code: "custom", message: "trial time invalid" });
+  }
+
+  const latestTrial = facts.latest_trial;
+  if (!latestTrial?.starts_at || !latestTrial.trial_ends_at
+    || !latestTrial.grace_ends_at) return;
+  const latestStartsAt = Date.parse(latestTrial.starts_at);
+  const latestTrialEndsAt = Date.parse(latestTrial.trial_ends_at);
+  const latestGraceEndsAt = Date.parse(latestTrial.grace_ends_at);
+  if (latestTrial.status === "scheduled" && now >= latestStartsAt
+    || latestTrial.status === "active"
+      && (now < latestStartsAt || now >= latestTrialEndsAt)
+    || latestTrial.status === "grace_period"
+      && (now < latestTrialEndsAt || now >= latestGraceEndsAt)
+    || latestTrial.status === "expired" && now < latestGraceEndsAt) {
+    context.addIssue({ code: "custom", message: "latest trial status invalid" });
+  }
 });
 
 export class TenantServiceAccessRepository
@@ -136,6 +193,8 @@ export class TenantServiceAccessRepository
       || parsed.data.tenant_id !== input.tenantId
       || parsed.data.current_trial !== null
         && parsed.data.current_trial.tenant_id !== input.tenantId
+      || parsed.data.latest_trial != null
+        && parsed.data.latest_trial.tenant_id !== input.tenantId
     ) throw Errors.dbError("查询租户服务访问事实失败");
 
     return {
@@ -145,6 +204,7 @@ export class TenantServiceAccessRepository
       paidOnboardingOrder: parsed.data.paid_onboarding_order,
       legacySubscriptionStatus: parsed.data.legacy_subscription_status,
       currentTrial: parsed.data.current_trial,
+      latestTrial: parsed.data.latest_trial ?? null,
     };
   }
 }

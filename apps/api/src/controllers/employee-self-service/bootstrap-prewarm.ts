@@ -5,6 +5,7 @@ import { homeDashboardService } from "@/services/home-dashboard";
 import { projectSer } from "@/services/projects";
 import { taskCenterService } from "@/services/task-center";
 import type { FastifyRequest } from "fastify";
+import type { PlatformServiceTrialCapability } from "@gooes/domain";
 
 type TenantAuthContext = AuthContext & { tenantId: string };
 
@@ -16,10 +17,12 @@ function resolveProjectHomeOwnership(authContext: TenantAuthContext) {
 export function prewarmDeferredHomeData(
   request: FastifyRequest,
   authContext: TenantAuthContext,
+  capabilities: readonly PlatformServiceTrialCapability[] | null,
 ) {
   const startedAt = Date.now();
   const tasks: Promise<unknown>[] = [];
-  if (accessPolicyService.hasPermission(authContext, "project.read")) {
+  if (allows(capabilities, "core.projects")
+    && accessPolicyService.hasPermission(authContext, "project.read")) {
     tasks.push(projectSer.listProjects({
       authContext,
       query: {
@@ -31,7 +34,8 @@ export function prewarmDeferredHomeData(
       },
     }));
   }
-  if (accessPolicyService.hasPermission(authContext, "customer.read")) {
+  if (allows(capabilities, "core.customers")
+    && accessPolicyService.hasPermission(authContext, "customer.read")) {
     tasks.push(customerCoreService.listCustomers({
       authContext,
       query: {
@@ -77,6 +81,7 @@ export function prewarmDeferredSummaryData(
   options: {
     includeHomeStats: boolean;
     includeTaskSummary: boolean;
+    capabilities: readonly PlatformServiceTrialCapability[] | null;
   },
 ) {
   if (!options.includeHomeStats && !options.includeTaskSummary) {
@@ -85,10 +90,11 @@ export function prewarmDeferredSummaryData(
 
   const startedAt = Date.now();
   const tasks: Promise<unknown>[] = [];
-  if (options.includeHomeStats) {
+  if (options.includeHomeStats && allows(options.capabilities, "core.projects")) {
     tasks.push(homeDashboardService.getStats(authContext));
   }
-  if (options.includeTaskSummary) {
+  if (options.includeTaskSummary
+    && allows(options.capabilities, "core.workflows")) {
     tasks.push(taskCenterService.getSummary(authContext));
   }
 
@@ -117,4 +123,11 @@ export function prewarmDeferredSummaryData(
       "[employee-bootstrap] deferred summary data prewarm failed",
     );
   });
+}
+
+function allows(
+  capabilities: readonly PlatformServiceTrialCapability[] | null,
+  capability: PlatformServiceTrialCapability,
+) {
+  return capabilities === null || capabilities.includes(capability);
 }

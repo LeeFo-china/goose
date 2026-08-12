@@ -57,11 +57,14 @@ try {
   await writeFile(
     join(consumerRoot, 'verify.ts'),
     `import {
+  EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
   type PlatformServiceTrialScopeV1,
   type PlatformServiceTrialStatus,
+  type EmployeeServiceAccessSummary,
   type SiteContentDraftBlock,
   type SiteContentPublicDetail,
   type SiteContentPublicSummary,
@@ -73,6 +76,23 @@ const trialScopeSchema: z.ZodType<PlatformServiceTrialScopeV1> =
   PlatformServiceTrialScopeSchema;
 const trialStatus: PlatformServiceTrialStatus =
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES[2];
+const employeeAccess: EmployeeServiceAccessSummary =
+  EmployeeServiceAccessSummarySchema.parse({
+    can_enter_workspace: false,
+    readonly: false,
+    access_mode: 'service_blocked',
+    access_level: 'none',
+    access_status: EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[5],
+    trial_id: null,
+    trial_status: null,
+    starts_at: null,
+    ends_at: null,
+    title: '审核中',
+    message: '请等待平台审核',
+    primary_action: null,
+    secondary_action: null,
+    evaluated_at: '2026-08-12T00:00:00.000Z',
+  });
 
 const assertTypes = (
   block: SiteContentDraftBlock,
@@ -89,6 +109,7 @@ void schema;
 void assertTypes;
 void trialScopeSchema;
 void trialStatus;
+void employeeAccess;
 `,
   );
   await execFileAsync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], {
@@ -98,6 +119,8 @@ void trialStatus;
   await writeFile(
     join(consumerRoot, 'verify.mjs'),
     `import {
+  EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
@@ -122,6 +145,14 @@ if (!(SiteContentDraftBlockSchema instanceof z.ZodType)) {
 
 if (!(PlatformServiceTrialScopeSchema instanceof z.ZodType)) {
   throw new Error('packed trial scope schema 与 consumer 使用了不同的 Zod 类型身份');
+}
+
+if (!(EmployeeServiceAccessSummarySchema instanceof z.ZodType)) {
+  throw new Error('packed employee service access schema 与 consumer 使用了不同的 Zod 类型身份');
+}
+
+if (EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[3] !== 'grace_period') {
+  throw new Error('packed domain 缺少员工服务状态契约');
 }
 
 if (JSON.stringify(PLATFORM_SERVICE_TRIAL_STATUS_VALUES) !== JSON.stringify(expectedTrialStatuses)) {

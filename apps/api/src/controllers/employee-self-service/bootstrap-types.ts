@@ -1,4 +1,5 @@
 import type { AuthContext } from "@/services/authorization";
+import type { EmployeeServiceAccessSummary } from "@gooes/domain";
 import type { customerSelfServiceService } from "@/services/customer-self-service";
 import type { EmployeePersonalizationPayload } from "@/services/employee-personalization";
 import type { homeDashboardService } from "@/services/home-dashboard";
@@ -21,6 +22,7 @@ export type EmployeeBootstrapProfile = {
 export type EmployeeBootstrapResponse = {
   context: TenantAuthContext;
   profile: EmployeeBootstrapProfile;
+  service_access: EmployeeServiceAccessSummary;
   home_stats: Awaited<ReturnType<typeof homeDashboardService.getStats>> | null;
   home_mode: EmployeeBootstrapQuery["home_mode"];
   task_summary: Awaited<ReturnType<typeof taskCenterService.getSummary>> | null;

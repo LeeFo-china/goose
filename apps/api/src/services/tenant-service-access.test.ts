@@ -25,6 +25,7 @@ const baseFacts: TenantServiceAccessFacts = {
   paidOnboardingOrder: null,
   legacySubscriptionStatus: "locked",
   currentTrial: null,
+  latestTrial: null,
 };
 
 describe("TenantServiceAccessService", () => {
