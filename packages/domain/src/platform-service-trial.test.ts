@@ -6,6 +6,9 @@ import {
   PLATFORM_SERVICE_TRIAL_SOURCE_VALUES,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   PLATFORM_SERVICE_TRIAL_TYPE_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
   PlatformServiceTrialScopeSchema,
 } from "./platform-service-trial";
 
@@ -56,6 +59,34 @@ describe("platform service trial domain contract", () => {
       "core.workflows",
       "core.files",
       "core.notifications",
+    ]);
+  });
+
+  test("keeps follow-up and notification values stable", () => {
+    expect(SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES).toEqual([
+      "phone",
+      "wechat",
+      "online_meeting",
+      "onsite",
+      "other",
+    ]);
+    expect(SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES).toEqual([
+      "pending",
+      "completed",
+      "canceled",
+    ]);
+    expect(SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES).toEqual([
+      "application_submitted",
+      "approved",
+      "rejected",
+      "extended",
+      "revoked",
+      "expires_in_7_days",
+      "expires_in_3_days",
+      "expires_in_1_day",
+      "entered_grace",
+      "expired",
+      "converted",
     ]);
   });
 
