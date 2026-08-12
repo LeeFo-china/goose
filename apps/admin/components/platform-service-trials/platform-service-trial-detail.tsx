@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { PlatformServiceTrialActionDialog } from "./platform-service-trial-action-dialog";
+import { PlatformServiceTrialFollowUps } from "./platform-service-trial-follow-ups";
 import {
   getPlatformTrialDisabledReasons,
   resolvePlatformTrialAction,
@@ -44,10 +45,12 @@ export function PlatformServiceTrialDetail({
   trial,
   open,
   onOpenChange,
+  canManage,
 }: {
   trial: PlatformServiceTrialListItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canManage: boolean;
 }) {
   const [data, setData] = useState<PlatformServiceTrialDetailData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -154,6 +157,13 @@ export function PlatformServiceTrialDetail({
                 <Fact label="转正式时间" value={formatTrialDateTime(current.converted_at)} numeric />
                 <Fact label="关联订单" value={current.converted_order_id} />
               </DetailSection>
+              <Separator />
+              <PlatformServiceTrialFollowUps
+                trialId={current.id}
+                enabled={open && Boolean(data)}
+                canManage={canManage}
+                onTrialRefresh={loadDetail}
+              />
               <Separator />
               <section className="flex flex-col gap-3">
                 <h3 className="text-base font-semibold">审计时间线</h3>

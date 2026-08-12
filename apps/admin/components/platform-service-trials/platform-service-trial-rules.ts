@@ -133,6 +133,17 @@ export function formatTrialRemaining(
   return `剩余 ${Math.ceil(remainingMs / 86_400_000)} 天`;
 }
 
+export function isTrialExpiringSoon(
+  trial: Pick<PlatformServiceTrialRecord, "status" | "trial_ends_at">,
+  serverTime: string,
+) {
+  if (trial.status !== "active" || !trial.trial_ends_at) return false;
+  const remainingMs = Date.parse(trial.trial_ends_at) - Date.parse(serverTime);
+  return Number.isFinite(remainingMs)
+    && remainingMs > 0
+    && remainingMs <= 7 * 86_400_000;
+}
+
 export function getTrialConversionLabel(trial: PlatformServiceTrialRecord) {
   return trial.converted_at ? "已转正式" : "未转正式";
 }

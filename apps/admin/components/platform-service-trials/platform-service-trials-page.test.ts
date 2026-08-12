@@ -15,6 +15,7 @@ import {
   beginLatestTrialDetailRequest,
   invalidateTrialDetailRequests,
 } from "./platform-service-trial-detail-request";
+import { isTrialExpiringSoon } from "./platform-service-trial-rules";
 
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
@@ -176,6 +177,46 @@ describe("平台技术服务试用管理页", () => {
     expect(secondRequestIsCurrent()).toBe(true);
     invalidateTrialDetailRequests(requestCounter);
     expect(secondRequestIsCurrent()).toBe(false);
+  });
+
+  test("详情提供分页跟进时间线、稳定提交反馈和即将到期提示", () => {
+    const page = readSource(
+      "../../app/(console)/platform/service-orders/page.tsx",
+    );
+    const detail = readSource("./platform-service-trial-detail.tsx");
+    const table = readSource("./platform-service-trial-table.tsx");
+    const followUps = readSource("./platform-service-trial-follow-ups.tsx");
+    const form = readSource("./platform-service-trial-follow-up-form.tsx");
+
+    expect(page).toContain("canManage={canGrantTrial}");
+    expect(detail).toContain("PlatformServiceTrialFollowUps");
+    expect(detail).toContain("onTrialRefresh={loadDetail}");
+    expect(followUps).toContain("/follow-ups?page=");
+    expect(followUps).toContain("pageSize=10");
+    expect(followUps).toContain("Empty");
+    expect(followUps).toContain("Skeleton");
+    expect(followUps).toContain("上一页");
+    expect(followUps).toContain("下一页");
+    expect(form).toContain("DialogTitle");
+    expect(form).toContain("FieldGroup");
+    expect(form).toContain("SelectGroup");
+    expect(form).toContain("Textarea");
+    expect(form).toContain("Spinner");
+    expect(form).toContain("invisible");
+    expect(form).toContain("idempotencyIntent.current()");
+    expect(form).toContain("next_follow_up_at");
+    expect(form).toContain("setSummary(\"\")");
+    expect(table).toContain("isTrialExpiringSoon");
+    expect(table).toContain("即将到期");
+    expect(isTrialExpiringSoon({
+      status: "active", trial_ends_at: "2026-08-19T00:00:00.000Z",
+    }, "2026-08-12T00:00:00.000Z")).toBe(true);
+    expect(isTrialExpiringSoon({
+      status: "active", trial_ends_at: "2026-08-19T00:00:00.001Z",
+    }, "2026-08-12T00:00:00.000Z")).toBe(false);
+    expect(isTrialExpiringSoon({
+      status: "grace_period", trial_ends_at: "2026-08-11T00:00:00.000Z",
+    }, "2026-08-12T00:00:00.000Z")).toBe(false);
   });
 
   test("动作由后端 available_actions 控制并解释禁用原因", () => {
