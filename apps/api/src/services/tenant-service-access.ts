@@ -103,8 +103,15 @@ export class TenantServiceAccessService {
     const trialAccessEnabled = facts.currentTrial
       ? await this.trialAccessEnabled()
       : false;
-    const resolution = resolveAccessFacts(facts, trialAccessEnabled);
+    return this.resolveFactsForRoute(facts, trialAccessEnabled, input);
+  }
 
+  resolveFactsForRoute(
+    facts: TenantServiceAccessFacts,
+    trialAccessEnabled: boolean,
+    input: Omit<ResolveTenantServiceAccessInput, "tenantId">,
+  ): TenantServiceAccessDecision {
+    const resolution = resolveAccessFacts(facts, trialAccessEnabled);
     return resolveTenantServiceRouteDecision({
       ...resolution,
       routeAccess: input.routeAccess,
