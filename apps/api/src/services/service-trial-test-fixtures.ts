@@ -106,7 +106,8 @@ export function makeTrialDetail(
 ): TrialDetailRecord {
   return {
     ...trial,
-    tenant: { id: trial.tenant_id, name: '示例装企', slug: 'example-tenant' },
+    tenant: { id: trial.tenant_id, name: '示例装企', slug: 'example-tenant',
+      contact_name: '张经理', contact_phone: '13800138000' },
     assignee: trial.assignee_employee_id
       ? { id: trial.assignee_employee_id, name: '运营小王',
         phone: '13900139000', status: 'active' }
@@ -120,7 +121,15 @@ export function makeTrialListRecord(
 ): TrialListRecord {
   const detail = makeTrialDetail(trial);
   const { events: _events, ...listRecord } = detail;
-  return listRecord;
+  return { ...listRecord,
+    contact_name: listRecord.contact_name
+      ? `${[...listRecord.contact_name][0]}${'*'.repeat(Math.max(1,
+        [...listRecord.contact_name].length - 1))}` : null,
+    contact_phone: listRecord.contact_phone
+      ? `${listRecord.contact_phone.slice(0, 3)}****${listRecord.contact_phone.slice(7)}`
+      : null,
+    tenant: { ...listRecord.tenant,
+    contact_name: '张**', contact_phone: '138****8000' } };
 }
 
 export function makeCommandSnapshot(

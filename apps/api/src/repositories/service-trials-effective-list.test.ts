@@ -49,7 +49,8 @@ function harness(data: unknown) {
 
 describe('ServiceTrialRepository effective-status list RPC', () => {
   test('binds platform filters, exact pagination and effective status in one RPC', async () => {
-    const row = { ...scheduled, tenant: { id: TENANT_ID, name: '示例企业', slug: 'example' },
+    const row = { ...scheduled, tenant: { id: TENANT_ID, name: '示例企业', slug: 'example',
+      contact_name: '张**', contact_phone: '138****8000' },
       assignee: null };
     const f = harness({ items: [{ trial: row, effective_status: 'active' }],
       total: 21, page: 2, page_size: 10, server_time: NOW });

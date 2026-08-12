@@ -36,6 +36,8 @@ export type PlatformServiceTrialTenant = {
   id: string;
   name: string;
   slug: string;
+  contact_name: string | null;
+  contact_phone: string | null;
 };
 
 export type PlatformServiceTrialAssignee = {

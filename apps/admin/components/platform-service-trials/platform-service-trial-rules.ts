@@ -93,6 +93,13 @@ export function getTrialCapabilityLabel(capability: PlatformServiceTrialCapabili
   return capabilityLabels[capability];
 }
 
+export function formatTrialTenantContact(
+  tenant: Pick<PlatformServiceTrialRecord["tenant"], "contact_name" | "contact_phone">,
+) {
+  return [tenant.contact_name, tenant.contact_phone].filter(Boolean).join(" · ")
+    || "未留联系方式";
+}
+
 export function formatTrialDateTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);

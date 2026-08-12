@@ -14,6 +14,7 @@ import {
   formatTrialDateTime,
   formatTrialPeriod,
   formatTrialRemaining,
+  formatTrialTenantContact,
   getTrialConversionLabel,
   getTrialSourceLabel,
   getTrialStatusMeta,
@@ -44,11 +45,11 @@ export function PlatformServiceTrialTable({
         <div className="min-w-0">
           <div className="truncate font-semibold">{row.original.tenant.name}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {row.original.contact_name || row.original.contact_phone || row.original.tenant.slug}
+            {formatTrialTenantContact(row.original.tenant)}
           </div>
         </div>
       ),
-      meta: { cellClassName: "min-w-[180px]" },
+      meta: { cellClassName: "min-w-[220px]" },
     },
     {
       accessorKey: "source",

@@ -62,7 +62,9 @@ const activeTrial = {
   granted_by_employee_id: ACTOR_ID, assignee_employee_id: ASSIGNEE_ID,
   policy_snapshot: { ...policySnapshot, override_used: false },
 } satisfies TrialRecord;
-const tenantSummary = { id: TENANT_ID, name: '示例企业', slug: 'example' };
+const tenantSummary = { id: TENANT_ID, name: '示例企业', slug: 'example',
+  contact_name: '张*', contact_phone: '138****8000' };
+const tenantDetailSummary = { ...tenantSummary, contact_name: '张三', contact_phone: '13800138000' };
 const assigneeSummary = {
   id: ASSIGNEE_ID, name: '平台顾问', phone: '13900139000', status: 'active',
 } as const;
@@ -216,7 +218,6 @@ describe('ServiceTrialRepository reads', () => {
     expect(f.calls).toContainEqual(['limit', 1, undefined]);
     expect(f.calls).toContainEqual(['maybeSingle']);
   });
-
   test('rejects a current trial outside the requested tenant or attributable statuses', async () => {
     for (const data of [
       { ...pendingTrial, tenant_id: OTHER_TENANT_ID },
@@ -411,7 +412,7 @@ describe('ServiceTrialRepository reads', () => {
   });
 
   test('detail fetches trial, summaries, and bounded ordered events once', async () => {
-    const detail = { ...activeTrial, tenant: tenantSummary,
+    const detail = { ...activeTrial, tenant: tenantDetailSummary,
       assignee: assigneeSummary, events: [event] };
     const f = harness({ tableResult: { data: detail, error: null } });
     expect(await f.repository.findTrialById({ id: TRIAL_ID, tenantId: TENANT_ID })).toEqual(detail);
@@ -428,13 +429,13 @@ describe('ServiceTrialRepository reads', () => {
 
   test('detail rejects event aggregate binding violations', async () => {
     const f = harness({ tableResult: { data: { ...activeTrial,
-      tenant: tenantSummary, assignee: assigneeSummary,
+      tenant: tenantDetailSummary, assignee: assigneeSummary,
       events: [{ ...event, tenant_id: OTHER_TENANT_ID }] }, error: null } });
     await expectDbError(f.repository.findTrialById({ id: TRIAL_ID }));
   });
 
   test('binds detail identity to requested id and optional tenant', async () => {
-    const detail = { ...activeTrial, tenant: tenantSummary,
+    const detail = { ...activeTrial, tenant: tenantDetailSummary,
       assignee: assigneeSummary, events: [event] };
     for (const input of [
       { id: OTHER_TENANT_ID },
