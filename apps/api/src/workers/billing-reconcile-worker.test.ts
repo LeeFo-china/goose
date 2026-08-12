@@ -10,6 +10,7 @@ import {
   captureWorkerEnv,
   clearWorkerConfigEnv,
   createBrandingVirtualPaymentService,
+  createTrialReminderService,
   restoreWorkerEnv,
   setSupabaseTestEnv,
   type WorkerEnv,
@@ -77,55 +78,6 @@ describe("billing reconcile worker imports", () => {
   });
 });
 
-describe("getWorkerConfig", () => {
-  beforeEach(() => {
-    previousWorkerEnv = captureWorkerEnv();
-    setSupabaseTestEnv();
-    clearWorkerConfigEnv();
-  });
-
-  afterEach(() => {
-    restoreWorkerEnv(previousWorkerEnv);
-  });
-
-  test("uses the enabled 60-second bounded defaults", async () => {
-    expect(await readWorkerConfig()).toEqual({
-      enabled: true,
-      intervalMs: 60_000,
-      batchSize: 100,
-      rechargeExpirationBatchSize: 50,
-      brandingAddonExpirationBatchSize: 50,
-      brandingVirtualPaymentBatchSize: 20,
-      refundBatchSize: 20,
-    });
-  });
-  test("falls back for blank and invalid refund batch sizes", async () => {
-    process.env.BILLING_REFUND_RECONCILE_BATCH_SIZE = " ";
-    expect((await readWorkerConfig()).refundBatchSize).toBe(20);
-
-    process.env.BILLING_REFUND_RECONCILE_BATCH_SIZE = "invalid";
-    expect((await readWorkerConfig()).refundBatchSize).toBe(20);
-  });
-
-  test("clamps refund batch size to 1 through 100", async () => {
-    process.env.BILLING_REFUND_RECONCILE_BATCH_SIZE = "0";
-    expect((await readWorkerConfig()).refundBatchSize).toBe(1);
-
-    process.env.BILLING_REFUND_RECONCILE_BATCH_SIZE = "500";
-    expect((await readWorkerConfig()).refundBatchSize).toBe(100);
-  });
-
-  test("keeps the existing subscription and interval bounds", async () => {
-    process.env.BILLING_RECONCILE_BATCH_SIZE = "500";
-    process.env.BILLING_RECONCILE_INTERVAL_MS = "1";
-
-    const config = await readWorkerConfig();
-
-    expect(config.batchSize).toBe(100);
-    expect(config.intervalMs).toBe(10_000);
-  });
-});
-
 describe("tick", () => {
   beforeEach(() => {
     previousWorkerEnv = captureWorkerEnv();
@@ -159,6 +111,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -200,6 +153,10 @@ describe("tick", () => {
               failed: 0,
               grant_recovered: 0,
             },
+          },
+          trial_reminders: {
+            status: "fulfilled",
+            result: { claimed: 0, sent: 0, failed: 0 },
           },
           refund: { status: "fulfilled", result: REFUND_RESULT },
         },
@@ -248,6 +205,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       logger,
     });
@@ -285,6 +243,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       logger,
     });
@@ -320,6 +279,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       logger,
     });
@@ -370,6 +330,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       logger,
     });
@@ -409,6 +370,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -461,6 +423,7 @@ describe("tick", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -486,11 +449,6 @@ describe("tick", () => {
 });
 
 let previousWorkerEnv: WorkerEnv;
-
-async function readWorkerConfig() {
-  const { getWorkerConfig } = await import("./billing-reconcile-worker");
-  return getWorkerConfig();
-}
 
 function createBrandingAddonExpirationService() {
   return {

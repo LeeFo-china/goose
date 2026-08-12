@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { createBrandingVirtualPaymentService } from "./billing-reconcile-worker-test-fixtures";
+import {
+  createBrandingVirtualPaymentService,
+  createTrialReminderService,
+} from "./billing-reconcile-worker-test-fixtures";
 
 const SUBSCRIPTION_RESULT = {
   ensured: 1,
@@ -66,6 +69,7 @@ describe("billing reconcile worker branding add-on child", () => {
       },
       brandingVirtualPaymentReconciliationService:
         createBrandingVirtualPaymentService(),
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       logger,
     });
@@ -99,6 +103,7 @@ describe("billing reconcile worker branding add-on child", () => {
       },
       brandingVirtualPaymentReconciliationService:
         createBrandingVirtualPaymentService(),
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService: {
         runBatch: mock(async () => REFUND_RESULT),
       },

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 
 import type { BillingDueCheckResult } from "@/services/billing-subscriptions";
 
-import { BRANDING_VIRTUAL_PAYMENT_RESULT } from "./billing-reconcile-worker-test-fixtures";
+import {
+  BRANDING_VIRTUAL_PAYMENT_RESULT,
+  createTrialReminderService,
+} from "./billing-reconcile-worker-test-fixtures";
 
 const SUBSCRIPTION_RESULT: BillingDueCheckResult = {
   ensured: 1,
@@ -195,6 +198,7 @@ describe("billing reconcile worker partial failures", () => {
       rechargeExpirationService,
       brandingAddonExpirationService,
       brandingVirtualPaymentReconciliationService,
+      trialReminderService: createTrialReminderService(),
       refundReconciliationService,
       healthEvidence: { markHealthy },
       logger,
@@ -258,6 +262,7 @@ async function runTick(overrides: TickOverrides) {
     rechargeExpirationService,
     brandingAddonExpirationService,
     brandingVirtualPaymentReconciliationService,
+    trialReminderService: createTrialReminderService(),
     refundReconciliationService,
     healthEvidence: { markHealthy },
     logger,
