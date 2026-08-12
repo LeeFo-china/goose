@@ -118,7 +118,9 @@ type EmployeeServiceAccessSummary = {
 - 响应新增 required `service_access`。
 - `service_access.can_enter_workspace=false` 时：`home_stats=null`、`task_summary=null`、`personalization` 返回空 payload、projects/customers 继续为 defer/null；不得启动后台预热。
 - `grace_period` 可构建只读首页所需 read 数据，但 Orange 登录导航仍先进入承接页。
-- bootstrap cache key 继续绑定 auth user、tenant、employee 和查询模式；缓存 TTL 保持 15 秒。强制刷新沿用 `force` 行为。
+- 首页数据缓存 key 继续绑定 auth user、tenant、employee 和查询模式，TTL 保持 15 秒；但
+  `service_access` 必须在每次 bootstrap 请求中先按数据库事实重算，缓存命中时只复用首页数据并
+  覆盖为最新访问摘要，避免到期、暂停或正式开通被旧缓存掩盖。强制刷新沿用 `force` 行为。
 - RPC malformed、同租户出现多个有效试用、ID/时间/状态绑定不一致均映射脱敏 `DB_ERROR`，不返回原始 PostgREST 细节。
 - `platform_service_trial_access_facts` 保持 service-role only、固定 `search_path`、单 SQL statement、分页无关且每类事实 `LIMIT` 有界。
 

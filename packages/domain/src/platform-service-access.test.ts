@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import packageJson from "../package.json";
 
 import {
   EMPLOYEE_SERVICE_ACCESS_ACTION_VALUES,
@@ -9,6 +10,12 @@ import {
 } from "./platform-service-access";
 
 describe("platform service access domain contract", () => {
+  test("ships employee bootstrap access under a new immutable version", () => {
+    const [major, minor] = packageJson.version.split(".").map(Number);
+    expect(major).toBe(1);
+    expect(minor).toBeGreaterThanOrEqual(16);
+  });
+
   test("keeps service modes and route access values stable", () => {
     expect(TENANT_SERVICE_ACCESS_MODE_VALUES).toEqual([
       "paid",
