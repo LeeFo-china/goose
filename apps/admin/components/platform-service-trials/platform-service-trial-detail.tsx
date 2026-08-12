@@ -120,8 +120,8 @@ export function PlatformServiceTrialDetail({
               <DetailSection title="企业概况">
                 <Fact label="企业名称" value={current.tenant.name} />
                 <Fact label="企业标识" value={current.tenant.slug} />
-                <Fact label="联系人" value={current.contact_name} />
-                <Fact label="联系电话" value={current.contact_phone} />
+                <Fact label="装企联系人" value={current.tenant.contact_name} />
+                <Fact label="装企联系电话" value={current.tenant.contact_phone} />
                 <Fact label="平台跟进人" value={current.assignee?.name || "未分配"} />
               </DetailSection>
               <Separator />
@@ -131,6 +131,8 @@ export function PlatformServiceTrialDetail({
                 <Fact label="申请原因" value={current.application_reason || current.grant_reason} wide />
                 <Fact label="预计人数" value={current.expected_user_count} />
                 <Fact label="预计项目" value={current.expected_project_count} />
+                <Fact label="申请联系人" value={current.contact_name} />
+                <Fact label="申请联系电话" value={current.contact_phone} />
                 <Fact label="审核意见" value={current.review_reason} wide />
               </DetailSection>
               <Separator />

@@ -183,8 +183,17 @@ const TrialListRowObjectSchema = TrialRowObjectSchema.extend({
 });
 export const TenantTrialListRawSchema = TrialListRowObjectSchema
   .superRefine(validateTrialFacts);
-const TenantSummarySchema = z.object({
+const TenantIdentitySchema = z.object({
   id: z.uuid(), name: z.string().min(1), slug: z.string().min(1),
+});
+const RawTenantSummarySchema = TenantIdentitySchema.extend({
+  contact_name: z.string().max(80).transform((value) => value.trim() || null).nullable(),
+  contact_phone: z.string().max(30).transform((value) => value.trim() || null).nullable(),
+}).strict();
+const MaskedTenantSummarySchema = TenantIdentitySchema.extend({
+  contact_name: MaskedContactNameSchema.nullable(),
+  contact_phone: z.string().max(37)
+    .regex(/^(?:\*{4}|.\*{4}.|.{3}\*{4}.{4})$/u).nullable(),
 }).strict();
 const AssigneeSummarySchema = z.object({
   id: z.uuid(), name: z.string().nullable(), phone: z.string().nullable(),
@@ -207,7 +216,7 @@ const EventSchema = z.object({
 
 export const TrialListRawSchema = z.object({
   ...TrialListRowObjectSchema.shape,
-  tenant: TenantSummarySchema,
+  tenant: MaskedTenantSummarySchema,
   assignee: AssigneeSummarySchema.nullable(),
   keyword_tenant: z.object({}).strict().nullable().optional(),
 }).strict().superRefine((row, context) => {
@@ -222,7 +231,7 @@ export const TrialListRawSchema = z.object({
 
 export const TrialDetailSchema = z.object({
   ...TrialRowObjectSchema.shape,
-  tenant: TenantSummarySchema,
+  tenant: RawTenantSummarySchema,
   assignee: AssigneeSummarySchema.nullable(),
   events: z.array(EventSchema).max(SERVICE_TRIAL_EVENT_LIMIT),
 }).strict().superRefine((row, context) => {
