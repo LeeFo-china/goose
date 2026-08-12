@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { PlatformServiceTrialFollowUpForm } from "./platform-service-trial-follow-up-form";
+import { PlatformServiceTrialFollowUpCancel } from "./platform-service-trial-follow-up-cancel";
 import { formatTrialDateTime } from "./platform-service-trial-rules";
 import type {
   PlatformServiceTrialFollowUp,
@@ -115,7 +116,17 @@ export function PlatformServiceTrialFollowUps({
       ) : null}
       {data?.list.length ? (
         <ol className="flex flex-col">
-          {data.list.map((followUp) => <FollowUpItem key={followUp.id} followUp={followUp} />)}
+          {data.list.map((followUp) => (
+            <FollowUpItem
+              key={followUp.id}
+              trialId={trialId}
+              followUp={followUp}
+              canManage={canManage}
+              onCanceled={async () => {
+                await Promise.all([loadPage(page), onTrialRefresh()]);
+              }}
+            />
+          ))}
         </ol>
       ) : null}
 
@@ -134,7 +145,12 @@ export function PlatformServiceTrialFollowUps({
   );
 }
 
-function FollowUpItem({ followUp }: { followUp: PlatformServiceTrialFollowUp }) {
+function FollowUpItem({ trialId, followUp, canManage, onCanceled }: {
+  trialId: string;
+  followUp: PlatformServiceTrialFollowUp;
+  canManage: boolean;
+  onCanceled: () => Promise<void>;
+}) {
   return (
     <li className="grid gap-2 border-b py-3 first:pt-0 last:border-b-0 last:pb-0 sm:grid-cols-[10rem_1fr]">
       <div className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -154,6 +170,12 @@ function FollowUpItem({ followUp }: { followUp: PlatformServiceTrialFollowUp }) 
             下次跟进：{formatTrialDateTime(followUp.next_follow_up_at)}
           </p>
         ) : null}
+        <PlatformServiceTrialFollowUpCancel
+          trialId={trialId}
+          followUp={followUp}
+          canManage={canManage}
+          onCanceled={onCanceled}
+        />
       </div>
     </li>
   );

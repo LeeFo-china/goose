@@ -16,7 +16,7 @@ const authContext = {
 } as unknown as AuthContext;
 
 describe('PlatformServiceTrialService follow-ups', () => {
-  test('delegates paginated reads and creates to the operations service', async () => {
+  test('delegates paginated reads, creates, and cancellation to operations', async () => {
     const { PlatformServiceTrialService } = await import('./platform-service-trials');
     const followUp = {
       id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, tenant_id: TENANT_ID,
@@ -32,6 +32,7 @@ describe('PlatformServiceTrialService follow-ups', () => {
     const operationsService = {
       listFollowUps: mock(async () => page),
       createFollowUp: mock(async () => followUp),
+      cancelFollowUp: mock(async () => ({ ...followUp, status: 'canceled' as const })),
     };
     const service = new PlatformServiceTrialService({ operationsService });
     const query = { page: 2, pageSize: 10, status: 'pending' as const };
@@ -46,11 +47,19 @@ describe('PlatformServiceTrialService follow-ups', () => {
       .resolves.toEqual(page);
     await expect(service.createFollowUp(authContext, TRIAL_ID, input))
       .resolves.toEqual(followUp);
+    await expect(service.cancelFollowUp(
+      authContext, TRIAL_ID, followUp.id,
+      { status: 'canceled', idempotency_key: IDEMPOTENCY_KEY },
+    )).resolves.toMatchObject({ id: followUp.id, status: 'canceled' });
     expect(operationsService.listFollowUps).toHaveBeenCalledWith(
       authContext, TRIAL_ID, query,
     );
     expect(operationsService.createFollowUp).toHaveBeenCalledWith(
       authContext, TRIAL_ID, input,
+    );
+    expect(operationsService.cancelFollowUp).toHaveBeenCalledWith(
+      authContext, TRIAL_ID, followUp.id,
+      { status: 'canceled', idempotency_key: IDEMPOTENCY_KEY },
     );
   });
 });

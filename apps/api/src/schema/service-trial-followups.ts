@@ -15,6 +15,11 @@ const CreateFollowUpStatusSchema = z
   .enum(SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES)
   .exclude(['canceled']);
 
+export const ServiceTrialFollowUpParamSchema = z.object({
+  id: z.uuid('无效的试用 ID'),
+  followUpId: z.uuid('无效的跟进 ID'),
+}).strict();
+
 export const ServiceTrialFollowUpListQuerySchema = PaginationQuerySchema.extend({
   status: z.enum(SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES).optional(),
 }).strict();

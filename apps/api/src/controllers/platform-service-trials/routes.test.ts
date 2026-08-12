@@ -23,6 +23,9 @@ const serviceMethods = {
     list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
   })),
   createFollowUp: mock(async () => ({ id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID })),
+  cancelFollowUp: mock(async () => ({
+    id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, status: 'canceled',
+  })),
   getPolicy: mock(async () => ({ policy: { version: 1 } })),
   updatePolicy: mock(async () => ({ policy: { version: 2 } })),
 };
@@ -80,7 +83,7 @@ beforeEach(() => {
 });
 
 describe('PlatformServiceTrialsController routes', () => {
-  test('registers the twelve platform routes with explicit metadata', async () => {
+  test('registers the thirteen platform routes with explicit metadata', async () => {
     const routes = registeredRoutes(await loadController());
 
     expect(routes.map(({ method, path, tenantServiceAccess }) => ({
@@ -98,6 +101,7 @@ describe('PlatformServiceTrialsController routes', () => {
       { method: 'POST', path: '/platform/billing/service-trials/:id/assign', tenantServiceAccess: 'write' },
       { method: 'GET', path: '/platform/billing/service-trials/:id/follow-ups', tenantServiceAccess: 'read' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/follow-ups', tenantServiceAccess: 'write' },
+      { method: 'POST', path: '/platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', tenantServiceAccess: 'write' },
       { method: 'GET', path: '/platform/billing/service-trial-policy', tenantServiceAccess: 'read' },
       { method: 'PUT', path: '/platform/billing/service-trial-policy', tenantServiceAccess: 'write' },
     ]);
@@ -183,6 +187,10 @@ describe('PlatformServiceTrialsController routes', () => {
       ['POST /platform/billing/service-trials/:id/follow-ups', {
         params: { id: TRIAL_ID }, body: followUpBody,
       }],
+      ['POST /platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', {
+        params: { id: TRIAL_ID, followUpId: IDEMPOTENCY_KEY },
+        body: { status: 'canceled', idempotency_key: IDEMPOTENCY_KEY },
+      }],
       ['GET /platform/billing/service-trial-policy', {}],
       ['PUT /platform/billing/service-trial-policy', { body: policyBody }],
     ] as const;
@@ -214,9 +222,13 @@ describe('PlatformServiceTrialsController routes', () => {
       expect(serviceMethods.createFollowUp).toHaveBeenCalledWith(
         authContext, TRIAL_ID, followUpBody,
       );
+      expect(serviceMethods.cancelFollowUp).toHaveBeenCalledWith(
+        authContext, TRIAL_ID, IDEMPOTENCY_KEY,
+        { status: 'canceled', idempotency_key: IDEMPOTENCY_KEY },
+      );
       expect(serviceMethods.getPolicy).toHaveBeenCalledWith(authContext);
       expect(serviceMethods.updatePolicy).toHaveBeenCalledWith(authContext, policyBody);
-      expect(requireContext).toHaveBeenCalledTimes(12);
+      expect(requireContext).toHaveBeenCalledTimes(13);
       calls.forEach(([, request], index) => {
         expect(requireContext).toHaveBeenNthCalledWith(index + 1, request);
       });
@@ -232,6 +244,7 @@ describe('PlatformServiceTrialsController routes', () => {
         { trial: { id: TRIAL_ID } },
         { list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 } },
         { id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID },
+        { id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, status: 'canceled' },
         { policy: { version: 1 } },
         { policy: { version: 2 } },
       ]);
@@ -351,6 +364,10 @@ describe('PlatformServiceTrialsController routes', () => {
       ['POST /platform/billing/service-trials/:id/follow-ups', {
         params: { id: TRIAL_ID }, body: { follow_up_type: 'phone', summary: ' ', result: '结果' },
       }],
+      ['POST /platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', {
+        params: { id: TRIAL_ID, followUpId: 'bad-id' },
+        body: { status: 'canceled', idempotency_key: IDEMPOTENCY_KEY },
+      }],
       ['PUT /platform/billing/service-trial-policy', { body: {} }],
       ['POST /platform/billing/service-trials/:id/review', {
         params: { id: 'bad-id' },
@@ -409,9 +426,9 @@ describe('PlatformServiceTrialsController routes', () => {
     expect(routeIndex.match(/import PlatformServiceTrialsController /g)).toHaveLength(1);
     expect(routeIndex.match(/PlatformServiceTrialsController\.registerExtraRoutes\(app\)/g)).toHaveLength(1);
     expect(source).toContain('extends PlatformBaseController');
-    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(12);
+    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(13);
     expect(source).not.toContain('getRequiredPlatformPermissionContext');
-    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(12);
+    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(13);
     expect(source).not.toContain('throw new Error');
     expect(source).not.toContain('.from(');
     expect(source).not.toContain('.rpc(');

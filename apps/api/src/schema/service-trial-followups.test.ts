@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import {
   CancelServiceTrialFollowUpSchema,
   CreateServiceTrialFollowUpSchema,
+  ServiceTrialFollowUpParamSchema,
   ServiceTrialFollowUpListQuerySchema,
 } from "./service-trial-followups";
 
@@ -181,6 +182,17 @@ describe("service trial follow-up schemas", () => {
     expect(CancelServiceTrialFollowUpSchema.safeParse({
       ...cancelCommand,
       reason: "不再需要跟进",
+    }).success).toBe(false);
+  });
+
+  test("requires bound trial and follow-up UUID path params", () => {
+    expect(ServiceTrialFollowUpParamSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      followUpId: "22222222-2222-4222-8222-222222222222",
+    })).toBeTruthy();
+    expect(ServiceTrialFollowUpParamSchema.safeParse({
+      id: "11111111-1111-4111-8111-111111111111",
+      followUpId: "bad-id",
     }).success).toBe(false);
   });
 

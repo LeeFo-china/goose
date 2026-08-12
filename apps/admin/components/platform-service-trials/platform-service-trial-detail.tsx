@@ -226,5 +226,5 @@ function actionLabel(key: "review" | "extend" | "revoke" | "assign") {
 }
 
 function eventLabel(type: string) {
-  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
+  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", trial_follow_up_created: "新增试用跟进", trial_follow_up_canceled: "取消试用跟进", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
 }

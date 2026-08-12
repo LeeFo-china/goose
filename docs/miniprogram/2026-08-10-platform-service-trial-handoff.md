@@ -12,6 +12,7 @@
 - 平台审核、主动开通、延期、撤销、分配跟进人和规则管理；
 - 员工登录后的统一 `service_access` 承接；
 - 平台跟进记录、7/3/1 天提醒、进入宽限期、正式到期和转正式通知；
+- 陪跑试用开通或批准后自动建立首次待跟进任务，命令重试复用原幂等键补偿；
 - Admin `/platform/service-orders?tab=trials` 的试用管理、详情和跟进时间线；
 - billing reconcile worker 有界领取、幂等发送、失败隔离和指数退避。
 
@@ -61,6 +62,7 @@ POST /billing/service-orders
 ```text
 GET  /platform/billing/service-trials/:id/follow-ups?page=1&pageSize=20
 POST /platform/billing/service-trials/:id/follow-ups
+POST /platform/billing/service-trials/:id/follow-ups/:followUpId/cancel
 ```
 
 跟进记录是平台运营事实，不改变租户试用授权状态。Orange 不新增跟进表单、不直连
@@ -141,6 +143,9 @@ Admin 可新增：
 
 跟进列表分页，默认 1/20、最大 100，按 `created_at desc, id desc` 稳定排序。已完成正文不可
 修改；待跟进只能通过受控命令取消。所有跟进新增/取消均写不可变试用事件。
+
+`guided` 试用在平台主动开通或批准时，由后端自动创建“陪跑试用首次跟进”待办；若首次
+响应不确定，平台端以原开通/审批幂等键重试即可补齐，禁止人工另造重复任务。
 
 ## 8. 稳定错误码
 

@@ -187,6 +187,7 @@ describe("平台技术服务试用管理页", () => {
     const table = readSource("./platform-service-trial-table.tsx");
     const followUps = readSource("./platform-service-trial-follow-ups.tsx");
     const form = readSource("./platform-service-trial-follow-up-form.tsx");
+    const cancel = readSource("./platform-service-trial-follow-up-cancel.tsx");
 
     expect(page).toContain("canManage={canGrantTrial}");
     expect(detail).toContain("PlatformServiceTrialFollowUps");
@@ -206,6 +207,13 @@ describe("平台技术服务试用管理页", () => {
     expect(form).toContain("idempotencyIntent.current()");
     expect(form).toContain("next_follow_up_at");
     expect(form).toContain("setSummary(\"\")");
+    expect(followUps).toContain("PlatformServiceTrialFollowUpCancel");
+    expect(cancel).toContain("AlertDialog");
+    expect(cancel).toContain("/cancel");
+    expect(cancel).toContain('status: "canceled"');
+    expect(cancel).toContain("idempotencyIntent.current()");
+    expect(detail).toContain('trial_follow_up_created: "新增试用跟进"');
+    expect(detail).toContain('trial_follow_up_canceled: "取消试用跟进"');
     expect(table).toContain("isTrialExpiringSoon");
     expect(table).toContain("即将到期");
     expect(isTrialExpiringSoon({

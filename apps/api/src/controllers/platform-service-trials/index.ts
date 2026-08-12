@@ -13,7 +13,9 @@ import {
   ServiceTrialParamSchema,
 } from '@/schema/service-trials';
 import {
+  CancelServiceTrialFollowUpSchema,
   CreateServiceTrialFollowUpSchema,
+  ServiceTrialFollowUpParamSchema,
   ServiceTrialFollowUpListQuerySchema,
 } from '@/schema/service-trial-followups';
 import { platformServiceTrialService } from '@/services/platform-service-trials';
@@ -201,6 +203,27 @@ class PlatformServiceTrialsController extends PlatformBaseController {
 
     const data = await platformServiceTrialService.createFollowUp(
       authContext, paramsResult.data.id, bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post('/platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', {
+    tenantServiceAccess: 'write',
+  })
+  async cancelFollowUp(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const paramsResult = ServiceTrialFollowUpParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = CancelServiceTrialFollowUpSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformServiceTrialService.cancelFollowUp(
+      authContext, paramsResult.data.id, paramsResult.data.followUpId,
+      bodyResult.data,
     );
     return ResponseHandler.success(data);
   }

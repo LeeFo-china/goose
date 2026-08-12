@@ -19,8 +19,7 @@ import {
   makeTrialListRecord,
   NOW,
   TENANT_ID,
-  TEST_SCOPE,
-  TRIAL_ID,
+  TEST_SCOPE, trialOperationsNoop, TRIAL_ID,
 } from './service-trial-test-fixtures';
 process.env.SUPABASE_URL ??= 'http://127.0.0.1:54321';
 process.env.SUPABASE_PUBLISH ??= 'test-publish-key';
@@ -188,7 +187,8 @@ describe('PlatformServiceTrialService permission matrix', () => {
   beforeEach(() => {
     repository = createRepository();
     service = new PlatformServiceTrialService({
-      repository, nowFactory: () => new Date(NOW),
+      repository, operationsService: trialOperationsNoop,
+      nowFactory: () => new Date(NOW),
     });
   });
   test.each([
