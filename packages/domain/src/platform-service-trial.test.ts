@@ -13,7 +13,7 @@ import {
 } from "./platform-service-trial";
 
 describe("platform service trial domain contract", () => {
-  test("ships trial exports under an immutable post-1.14 package version", async () => {
+  test("ships operations exports under an immutable post-1.16 package version", async () => {
     const packageJson = JSON.parse(
       await readFile(new URL("../package.json", import.meta.url), "utf8"),
     ) as { version?: unknown };
@@ -25,7 +25,7 @@ describe("platform service trial domain contract", () => {
     expect(versionParts.every(Number.isSafeInteger)).toBe(true);
     expect(
       versionParts[0] > 1 ||
-        (versionParts[0] === 1 && versionParts[1] >= 15),
+        (versionParts[0] === 1 && versionParts[1] >= 17),
     ).toBe(true);
   });
 

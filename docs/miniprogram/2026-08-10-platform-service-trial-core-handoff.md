@@ -33,7 +33,9 @@
 - 正式付款确认与试用转化同一数据库事务落库；
 - Admin 路径 `/platform/service-orders?tab=trials` 的完整运营入口。
 
-当前未实现：试用跟进记录的 `GET/POST .../:id/follow-ups`。Orange 不得调用或模拟该能力。
+运营阶段已实现平台侧试用跟进与通知提醒；最终契约以
+[`2026-08-10-platform-service-trial-handoff.md`](./2026-08-10-platform-service-trial-handoff.md)
+为准。跟进接口仍只供 Gooes Admin 使用，Orange 不得调用或模拟。
 
 ## 2. 业务规则
 
