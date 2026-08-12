@@ -15,7 +15,15 @@ import type {
   PlatformServiceTrialReviewInput,
   PlatformServiceTrialRevokeInput,
 } from '@/schema/service-trials';
+import type {
+  CreateServiceTrialFollowUpInput,
+  ServiceTrialFollowUpListQuery,
+} from '@/schema/service-trial-followups';
 import type { AuthContext } from '@/services/authorization';
+import {
+  platformServiceTrialOperationsService,
+  type PlatformServiceTrialOperationsService,
+} from './platform-service-trial-operations';
 import {
   buildTrialAvailableActions,
   serializeServiceTrial,
@@ -26,9 +34,12 @@ import {
 type RepositoryPort = Pick<ServiceTrialRepository,
   'listPlatformTrials' | 'getPlatformSummary' | 'findTrialById'
   | 'findCurrentPolicy' | 'findPolicyById' | 'executeCommand' | 'updatePolicy'>;
+type OperationsServicePort = Pick<PlatformServiceTrialOperationsService,
+  'listFollowUps' | 'createFollowUp'>;
 
 type PlatformServiceTrialDependencies = {
   repository?: RepositoryPort;
+  operationsService?: OperationsServicePort;
   nowFactory?: () => Date;
 };
 const PERMISSION = {
@@ -40,11 +51,24 @@ const PERMISSION = {
 
 export class PlatformServiceTrialService {
   private readonly repository: RepositoryPort;
+  private readonly operationsService: OperationsServicePort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: PlatformServiceTrialDependencies = {}) {
     this.repository = dependencies.repository ?? serviceTrialRepository;
+    this.operationsService = dependencies.operationsService
+      ?? platformServiceTrialOperationsService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
+  }
+
+  listFollowUps(authContext: AuthContext, trialId: string,
+    query: ServiceTrialFollowUpListQuery) {
+    return this.operationsService.listFollowUps(authContext, trialId, query);
+  }
+
+  createFollowUp(authContext: AuthContext, trialId: string,
+    input: CreateServiceTrialFollowUpInput) {
+    return this.operationsService.createFollowUp(authContext, trialId, input);
   }
 
   async listTrials(authContext: AuthContext,
