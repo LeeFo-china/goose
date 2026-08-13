@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   PlatformServiceTrialAssignSchema,
+  PlatformServiceTrialAssigneeCandidatesQuerySchema,
   PlatformServiceTrialExtendSchema,
   PlatformServiceTrialGrantSchema,
   PlatformServiceTrialListQuerySchema,
@@ -92,6 +93,48 @@ describe("service trial schemas", () => {
       .toBe(false);
     expect(PlatformServiceTrialListQuerySchema.safeParse({ unknown: true }).success)
       .toBe(false);
+  });
+
+  test("defaults strict assignee candidate pagination and normalizes optional filters", () => {
+    const includeEmployeeId = randomUUID();
+
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.parse({})).toEqual({
+      page: 1,
+      pageSize: 20,
+    });
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.parse({
+      page: "2",
+      pageSize: "100",
+      keyword: "  张经理  ",
+      includeEmployeeId,
+    })).toEqual({
+      page: 2,
+      pageSize: 100,
+      keyword: "张经理",
+      includeEmployeeId,
+    });
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.parse({
+      keyword: " ",
+      includeEmployeeId: "undefined",
+    })).toEqual({ page: 1, pageSize: 20 });
+  });
+
+  test("bounds and strictly validates assignee candidate filters", () => {
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.safeParse({
+      keyword: "候".repeat(80),
+    }).success).toBe(true);
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.safeParse({
+      pageSize: 101,
+    }).success).toBe(false);
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.safeParse({
+      keyword: "候".repeat(81),
+    }).success).toBe(false);
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.safeParse({
+      includeEmployeeId: "not-a-uuid",
+    }).success).toBe(false);
+    expect(PlatformServiceTrialAssigneeCandidatesQuerySchema.safeParse({
+      unknown: true,
+    }).success).toBe(false);
   });
 
   test("does not inject policy duration defaults into grants", () => {
