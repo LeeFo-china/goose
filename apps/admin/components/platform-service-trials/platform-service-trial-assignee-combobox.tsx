@@ -1,0 +1,303 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { requestBackendJson } from "@/lib/backend-client";
+import { cn } from "@/lib/utils";
+
+import {
+  ASSIGNEE_CANDIDATE_PAGE_SIZE,
+  ASSIGNEE_SEARCH_DEBOUNCE_MS,
+  buildTrialAssigneeCandidatesPath,
+  clampTrialAssigneeSearchPage,
+  formatTrialAssigneeCandidate,
+  formatTrialAssigneeCandidateMeta,
+  getTrialAssigneeEmptyMessage,
+  getTrialAssigneeSelectionActions,
+  getVisibleTrialAssigneeCandidates,
+  parseTrialAssigneeCandidatePage,
+  resetTrialAssigneeSearchPage,
+  resolveTrialAssigneeCandidateTransition,
+  selectTrialAssigneeCandidate,
+} from "./platform-service-trial-assignee-options";
+import type {
+  PlatformServiceTrialAssigneeCandidate,
+  PlatformServiceTrialAssigneeCandidatePage,
+} from "./platform-service-trial-types";
+
+type Props = {
+  id?: string;
+  value: string | null;
+  onChange: (employeeId: string | null) => void;
+  onCandidateChange?: (candidate: PlatformServiceTrialAssigneeCandidate | null) => void;
+  initialCandidate?: PlatformServiceTrialAssigneeCandidate | null;
+  allowClear?: boolean;
+  required?: boolean;
+  disabled?: boolean;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  "aria-label"?: string;
+};
+
+const EMPTY_PAGE: PlatformServiceTrialAssigneeCandidatePage = {
+  list: [],
+  pagination: { page: 1, pageSize: ASSIGNEE_CANDIDATE_PAGE_SIZE, total: 0, totalPages: 0 },
+};
+
+export function PlatformServiceTrialAssigneeCombobox({
+  id,
+  value,
+  onChange,
+  onCandidateChange,
+  initialCandidate = null,
+  allowClear = false,
+  required = false,
+  disabled = false,
+  placeholder = "选择平台跟进人",
+  searchPlaceholder = "搜索姓名或手机号",
+  "aria-label": ariaLabel = "平台跟进人",
+}: Props) {
+  const [open, setOpen] = useState(false);
+  const [keyword, setKeyword] = useState("");
+  const [search, setSearch] = useState({ page: 1, keyword: "" });
+  const [result, setResult] = useState(EMPTY_PAGE);
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
+  const [selectedCandidate, setSelectedCandidate] = useState<
+    PlatformServiceTrialAssigneeCandidate | null
+  >(() => resolveTrialAssigneeCandidateTransition({
+    value,
+    currentCandidate: null,
+    initialCandidate,
+  }));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!open || disabled) return;
+    const timeoutId = window.setTimeout(() => {
+      setSearch((current) => resetTrialAssigneeSearchPage(current, keyword));
+    }, ASSIGNEE_SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timeoutId);
+  }, [disabled, keyword, open]);
+
+  useEffect(() => {
+    if (!open || disabled) return;
+    const controller = new AbortController();
+    const path = buildTrialAssigneeCandidatesPath({
+      page: search.page,
+      pageSize: ASSIGNEE_CANDIDATE_PAGE_SIZE,
+      keyword: search.keyword,
+      includeEmployeeId: value || undefined,
+    });
+    setLoading(true);
+    setError("");
+    requestBackendJson<unknown>(path, {
+      signal: controller.signal,
+      fallbackMessage: "平台跟进人加载失败",
+    })
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        const nextResult = parseTrialAssigneeCandidatePage(data);
+        const nextPage = clampTrialAssigneeSearchPage(
+          search.page,
+          nextResult.pagination.totalPages,
+        );
+        setResult(nextResult);
+        setLoadedPath(path);
+        const selected = nextResult.list.find((candidate) => candidate.id === value);
+        if (selected) {
+          setSelectedCandidate((currentCandidate) =>
+            resolveTrialAssigneeCandidateTransition({
+              value,
+              currentCandidate,
+              initialCandidate: null,
+              confirmedCandidate: selected,
+            }));
+          onCandidateChange?.(selected);
+        }
+        if (nextPage !== search.page) {
+          setSearch((current) => current.page === search.page
+            ? { ...current, page: nextPage }
+            : current);
+        }
+      })
+      .catch((caught) => {
+        if (controller.signal.aborted) return;
+        setError(caught instanceof Error ? caught.message : "平台跟进人加载失败");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [disabled, onCandidateChange, open, search.keyword, search.page, value]);
+
+  useEffect(() => {
+    setSelectedCandidate((currentCandidate) =>
+      resolveTrialAssigneeCandidateTransition({
+        value,
+        currentCandidate,
+        initialCandidate,
+      }));
+  }, [initialCandidate, value]);
+
+  const currentPath = buildTrialAssigneeCandidatesPath({
+    page: search.page,
+    pageSize: ASSIGNEE_CANDIDATE_PAGE_SIZE,
+    keyword: search.keyword,
+    includeEmployeeId: value || undefined,
+  });
+  const keywordIsCurrent = resetTrialAssigneeSearchPage(search, keyword) === search;
+  const resultIsCurrent = !loading && !error && keywordIsCurrent && loadedPath === currentPath;
+  const candidates = getVisibleTrialAssigneeCandidates({
+    candidates: result.list,
+    value,
+    selectedCandidate,
+    resultIsCurrent,
+  });
+  const selectionActions = getTrialAssigneeSelectionActions({
+    value,
+    allowClear,
+    required,
+  });
+  const selectedLabel = value && selectedCandidate?.id === value
+    ? formatTrialAssigneeCandidate(selectedCandidate)
+    : value
+      ? loading ? "正在加载负责人..." : "当前负责人信息暂不可用"
+      : placeholder;
+  const totalPages = resultIsCurrent ? result.pagination.totalPages : 0;
+  const emptyMessage = getTrialAssigneeEmptyMessage({ loading, error });
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (disabled) {
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
+    setOpen(nextOpen);
+    if (!nextOpen) setLoading(false);
+  }
+
+  function choose(candidate: PlatformServiceTrialAssigneeCandidate) {
+    const employeeId = selectTrialAssigneeCandidate(candidate);
+    if (!employeeId) return;
+    setSelectedCandidate(candidate);
+    onCandidateChange?.(candidate);
+    onChange(employeeId);
+    handleOpenChange(false);
+  }
+
+  function clear() {
+    setSelectedCandidate(null);
+    onCandidateChange?.(null);
+    onChange(null);
+    handleOpenChange(false);
+  }
+
+  return (
+    <Popover open={open} onOpenChange={handleOpenChange}>
+      <PopoverTrigger asChild>
+        <Button
+          id={id}
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-label={ariaLabel}
+          aria-expanded={open}
+          aria-required={required}
+          disabled={disabled}
+          className="w-full justify-between font-normal"
+        >
+          <span className={cn("truncate", !value && "text-muted-foreground")}>
+            {selectedLabel}
+          </span>
+          {loading ? (
+            <Loader2 data-icon="inline-end" className="animate-spin opacity-60" />
+          ) : (
+            <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-[var(--radix-popover-trigger-width)] p-0"
+        align="start"
+      >
+        <Command label={ariaLabel} shouldFilter={false}>
+          <CommandInput
+            value={keyword}
+            onValueChange={setKeyword}
+            maxLength={80}
+            placeholder={searchPlaceholder}
+          />
+          <CommandList label={`${ariaLabel}候选列表`}>
+            {emptyMessage ? <CommandEmpty>{emptyMessage}</CommandEmpty> : null}
+            <CommandGroup>
+              {selectionActions.includes("clear") ? (
+                <CommandItem value="__clear_assignee__" onSelect={clear}>
+                  <Check className="opacity-0" />
+                  取消当前分配
+                </CommandItem>
+              ) : null}
+              {candidates.map((candidate) => (
+                <CommandItem
+                  key={candidate.id}
+                  value={candidate.id}
+                  disabled={!candidate.selectable}
+                  onSelect={() => choose(candidate)}
+                >
+                  <Check className={cn("opacity-0", value === candidate.id && "opacity-100")} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">
+                      {candidate.name?.trim() || "未命名平台人员"}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {formatTrialAssigneeCandidateMeta(candidate)}
+                    </span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            {error ? (
+              <p className="px-3 py-2 text-xs text-destructive" role="alert">{error}</p>
+            ) : null}
+          </CommandList>
+          {totalPages > 1 ? (
+            <div className="flex items-center justify-between border-t px-2 py-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={loading || search.page <= 1}
+                onClick={() => setSearch((current) => ({ ...current, page: current.page - 1 }))}
+              >
+                上一页
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                {search.page} / {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={loading || search.page >= totalPages}
+                onClick={() => setSearch((current) => ({ ...current, page: current.page + 1 }))}
+              >
+                下一页
+              </Button>
+            </div>
+          ) : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}

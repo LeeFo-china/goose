@@ -51,6 +51,31 @@ export type PlatformServiceTrialAssignee = {
   status: string | null;
 };
 
+export type PlatformServiceTrialAssigneeCandidateRole = {
+  code: string;
+  name: string | null;
+};
+
+export type PlatformServiceTrialAssigneeCandidate = {
+  id: string;
+  name: string | null;
+  phone_masked: string | null;
+  status: "active" | "suspended" | "leaved" | "pending";
+  roles: PlatformServiceTrialAssigneeCandidateRole[];
+  selectable: boolean;
+  historical: boolean;
+};
+
+export type PlatformServiceTrialAssigneeCandidatePage = {
+  list: PlatformServiceTrialAssigneeCandidate[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
 export type PlatformServiceTrialEvent = {
   id: string;
   event_type: string;

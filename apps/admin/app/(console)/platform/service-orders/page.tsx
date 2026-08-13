@@ -40,8 +40,11 @@ import {
 } from "@/components/platform-service-trials/platform-service-trial-rules";
 import {
   buildPlatformServiceTrialTabQuery,
+  buildTrialAssigneeFilterCandidatePath,
   buildServiceTrialQuery,
+  emptyPlatformServiceTrialSummary,
   getPlatformServiceTrialPermissions,
+  normalizeTrialAssigneeFilterValue,
 } from "@/components/platform-service-trials/platform-service-trial-page-state";
 import { PlatformServiceTrialGrantDialog } from "@/components/platform-service-trials/platform-service-trial-action-dialog";
 import { PlatformServiceTrialPolicyDialog } from "@/components/platform-service-trials/platform-service-trial-policy-dialog";
@@ -49,6 +52,8 @@ import { PlatformServiceTrialTable } from "@/components/platform-service-trials/
 import type {
   PlatformServiceTrialListData,
   PlatformServiceTrialListItem,
+  PlatformServiceTrialAssigneeCandidate,
+  PlatformServiceTrialAssigneeCandidatePage,
   PlatformServiceTrialSummary,
 } from "@/components/platform-service-trials/platform-service-trial-types";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -91,21 +96,6 @@ function emptyPage<RecordType>(page: number, pageSize: number): PageData<RecordT
   return {
     list: [],
     pagination: { page, pageSize, total: 0, totalPages: 0 },
-  };
-}
-
-function emptyTrialSummary(): PlatformServiceTrialSummary {
-  return {
-    pending_review_count: 0,
-    scheduled_count: 0,
-    current_active_count: 0,
-    expiring_within_7_days_count: 0,
-    month_new_count: 0,
-    month_approved_count: 0,
-    month_converted_count: 0,
-    application_approval_rate: 0,
-    activated_cohort_conversion_rate: 0,
-    server_time: new Date(0).toISOString(),
   };
 }
 
@@ -195,7 +185,9 @@ export default async function PlatformServiceOrdersPage({
     params.trialType,
     trialTypeOptions.map((item) => item.value),
   );
-  const trialAssigneeEmployeeId = cleanParam(params.trialAssigneeEmployeeId);
+  const trialAssigneeEmployeeId = normalizeTrialAssigneeFilterValue(
+    cleanParam(params.trialAssigneeEmployeeId),
+  );
   const trialAppliedFrom = cleanParam(params.trialAppliedFrom);
   const trialAppliedTo = cleanParam(params.trialAppliedTo);
   const trialExpiresFrom = cleanParam(params.trialExpiresFrom);
@@ -214,7 +206,8 @@ export default async function PlatformServiceOrdersPage({
     ...emptyPage<PlatformServiceTrialListItem>(trialPage, trialPageSize),
     server_time: new Date().toISOString(),
   };
-  let trialSummary = emptyTrialSummary();
+  let trialSummary = emptyPlatformServiceTrialSummary();
+  let initialAssigneeCandidate: PlatformServiceTrialAssigneeCandidate | null = null;
   let error: string | null = null;
   const permissionError = activeTab === "orders"
     ? canRead
@@ -276,7 +269,10 @@ export default async function PlatformServiceOrdersPage({
     refunds = result.data;
     error = result.error;
   } else {
-    const [listResult, summaryResult] = await Promise.all([
+    const assigneeCandidatePath = canGrantTrial
+      ? buildTrialAssigneeFilterCandidatePath(trialAssigneeEmployeeId)
+      : null;
+    const [listResult, summaryResult, assigneeCandidateResult] = await Promise.all([
       fetchBackend<PlatformServiceTrialListData>(
         `/platform/billing/service-trials?${buildServiceTrialQuery({
           page: trialPage,
@@ -297,9 +293,21 @@ export default async function PlatformServiceOrdersPage({
         "/platform/billing/service-trials/summary",
         trialSummary,
       ),
+      assigneeCandidatePath
+        ? fetchBackend<PlatformServiceTrialAssigneeCandidatePage>(
+            assigneeCandidatePath,
+            {
+              list: [],
+              pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+            },
+          )
+        : Promise.resolve({ data: null, error: null }),
     ]);
     trials = listResult.data;
     trialSummary = summaryResult.data;
+    initialAssigneeCandidate = assigneeCandidateResult.data?.list.find(
+      (candidate) => candidate.id === trialAssigneeEmployeeId,
+    ) ?? null;
     error = listResult.error || summaryResult.error;
   }
 
@@ -424,6 +432,8 @@ export default async function PlatformServiceOrdersPage({
                 expiresTo: trialExpiresTo,
               }}
               pageSize={trialPageSize}
+              initialAssigneeCandidate={initialAssigneeCandidate}
+              canManage={canGrantTrial}
             />
           ) : (
             <PlatformServiceOrderFilters

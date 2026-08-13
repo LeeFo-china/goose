@@ -1,3 +1,5 @@
+import type { PlatformServiceTrialSummary } from "./platform-service-trial-types";
+
 const TRIAL_READ_PERMISSION = "platform.service_trial.read";
 const TRIAL_MANAGE_PERMISSION = "platform.service_trial.manage";
 const TRIAL_OVERRIDE_PERMISSION = "platform.service_trial.override";
@@ -43,6 +45,40 @@ export function buildPlatformServiceTrialTabQuery(pageSize: number) {
     tab: "trials",
     trialPageSize: String(pageSize),
   }).toString();
+}
+
+export function emptyPlatformServiceTrialSummary(): PlatformServiceTrialSummary {
+  return {
+    pending_review_count: 0,
+    scheduled_count: 0,
+    current_active_count: 0,
+    expiring_within_7_days_count: 0,
+    month_new_count: 0,
+    month_approved_count: 0,
+    month_converted_count: 0,
+    application_approval_rate: 0,
+    activated_cohort_conversion_rate: 0,
+    server_time: new Date(0).toISOString(),
+  };
+}
+
+export function normalizeTrialAssigneeFilterValue(value?: string): string | undefined {
+  if (!value) return undefined;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    .test(value)
+    ? value
+    : undefined;
+}
+
+export function buildTrialAssigneeFilterCandidatePath(value?: string): string | null {
+  const includeEmployeeId = normalizeTrialAssigneeFilterValue(value);
+  if (!includeEmployeeId) return null;
+  const query = new URLSearchParams({
+    page: "1",
+    pageSize: "20",
+    includeEmployeeId,
+  });
+  return `/platform/billing/service-trials/assignee-candidates?${query.toString()}`;
 }
 
 export function getPlatformServiceTrialPermissions({

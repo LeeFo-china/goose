@@ -3,6 +3,7 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Field,
+  FieldDescription,
   FieldLabel,
   FieldLegend,
   FieldSet,
@@ -18,7 +19,9 @@ import {
 } from "@/components/ui/select";
 
 import { trialCapabilityOptions, trialTypeOptions } from "./platform-service-trial-rules";
+import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-assignee-combobox";
 import type {
+  PlatformServiceTrialAssigneeCandidate,
   PlatformServiceTrialCapability,
   PlatformServiceTrialType,
 } from "./platform-service-trial-types";
@@ -35,6 +38,8 @@ export function PlatformServiceTrialApprovalFields({
   setGraceDays,
   assigneeEmployeeId,
   setAssigneeEmployeeId,
+  assigneeCandidate,
+  setAssigneeCandidate,
   scope,
   setScope,
   scopeErrorId,
@@ -48,8 +53,10 @@ export function PlatformServiceTrialApprovalFields({
   setTrialDays: (value: string) => void;
   graceDays: string;
   setGraceDays: (value: string) => void;
-  assigneeEmployeeId: string;
-  setAssigneeEmployeeId: (value: string) => void;
+  assigneeEmployeeId: string | null;
+  setAssigneeEmployeeId: (value: string | null) => void;
+  assigneeCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  setAssigneeCandidate: (value: PlatformServiceTrialAssigneeCandidate | null) => void;
   scope: PlatformServiceTrialCapability[];
   setScope: (value: PlatformServiceTrialCapability[]) => void;
   scopeErrorId?: string;
@@ -80,8 +87,20 @@ export function PlatformServiceTrialApprovalFields({
         </Field>
       </div>
       <Field>
-        <FieldLabel htmlFor={`trial-assignee-${trialId}`}>跟进人员工 ID</FieldLabel>
-        <Input id={`trial-assignee-${trialId}`} value={assigneeEmployeeId} onChange={(event) => setAssigneeEmployeeId(event.target.value)} placeholder={trialType === "guided" ? "陪跑试用必填" : "可选"} required={trialType === "guided"} />
+        <FieldLabel htmlFor={`trial-assignee-${trialId}`}>平台跟进人</FieldLabel>
+        <PlatformServiceTrialAssigneeCombobox
+          id={`trial-assignee-${trialId}`}
+          value={assigneeEmployeeId}
+          onChange={setAssigneeEmployeeId}
+          onCandidateChange={setAssigneeCandidate}
+          initialCandidate={assigneeCandidate}
+          required={trialType === "guided"}
+          allowClear={trialType !== "guided"}
+          placeholder={trialType === "guided" ? "请选择陪跑跟进人" : "选择平台跟进人（可选）"}
+        />
+        <FieldDescription>
+          {trialType === "guided" ? "陪跑试用必须选择一位有效平台人员。" : "可按姓名或手机号搜索。"}
+        </FieldDescription>
       </Field>
       <FieldSet
         aria-describedby={scopeErrorId}

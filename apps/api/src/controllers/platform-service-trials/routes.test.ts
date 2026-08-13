@@ -13,6 +13,9 @@ const authContext = { tenantId: null, employeeId: 'platform-employee-1' };
 const serviceMethods = {
   listTrials: mock(async () => ({ list: [], pagination: {} })),
   getSummary: mock(async () => ({ pending_review_count: 1 })),
+  listAssigneeCandidates: mock(async () => ({
+    list: [], pagination: { page: 2, pageSize: 10, total: 0, totalPages: 0 },
+  })),
   getTrial: mock(async () => ({ trial: { id: TRIAL_ID } })),
   grant: mock(async () => ({ trial: { id: TRIAL_ID }, idempotent: false })),
   review: mock(async () => ({ trial: { id: TRIAL_ID, status: 'active' } })),
@@ -83,7 +86,7 @@ beforeEach(() => {
 });
 
 describe('PlatformServiceTrialsController routes', () => {
-  test('registers the thirteen platform routes with explicit metadata', async () => {
+  test('registers the fourteen platform routes with explicit metadata', async () => {
     const routes = registeredRoutes(await loadController());
 
     expect(routes.map(({ method, path, tenantServiceAccess }) => ({
@@ -93,6 +96,7 @@ describe('PlatformServiceTrialsController routes', () => {
     }))).toEqual([
       { method: 'GET', path: '/platform/billing/service-trials', tenantServiceAccess: 'read' },
       { method: 'GET', path: '/platform/billing/service-trials/summary', tenantServiceAccess: 'read' },
+      { method: 'GET', path: '/platform/billing/service-trials/assignee-candidates', tenantServiceAccess: 'read' },
       { method: 'GET', path: '/platform/billing/service-trials/:id', tenantServiceAccess: 'read' },
       { method: 'POST', path: '/platform/billing/service-trials', tenantServiceAccess: 'write' },
       { method: 'POST', path: '/platform/billing/service-trials/:id/review', tenantServiceAccess: 'write' },
@@ -175,6 +179,9 @@ describe('PlatformServiceTrialsController routes', () => {
     const calls = [
       ['GET /platform/billing/service-trials', { query: { page: '2', pageSize: '10', trialType: 'guided' } }],
       ['GET /platform/billing/service-trials/summary', {}],
+      ['GET /platform/billing/service-trials/assignee-candidates', {
+        query: { page: '2', pageSize: '10', keyword: '运营', includeEmployeeId: TRIAL_ID },
+      }],
       ['GET /platform/billing/service-trials/:id', { params: { id: TRIAL_ID } }],
       ['POST /platform/billing/service-trials', { body: grantBody }],
       ['POST /platform/billing/service-trials/:id/review', { params: { id: TRIAL_ID }, body: reviewBody }],
@@ -210,6 +217,9 @@ describe('PlatformServiceTrialsController routes', () => {
         trialType: 'guided',
       });
       expect(serviceMethods.getSummary).toHaveBeenCalledWith(authContext);
+      expect(serviceMethods.listAssigneeCandidates).toHaveBeenCalledWith(authContext, {
+        page: 2, pageSize: 10, keyword: '运营', includeEmployeeId: TRIAL_ID,
+      });
       expect(serviceMethods.getTrial).toHaveBeenCalledWith(authContext, TRIAL_ID);
       expect(serviceMethods.grant).toHaveBeenCalledWith(authContext, grantBody);
       expect(serviceMethods.review).toHaveBeenCalledWith(authContext, TRIAL_ID, reviewBody);
@@ -228,7 +238,7 @@ describe('PlatformServiceTrialsController routes', () => {
       );
       expect(serviceMethods.getPolicy).toHaveBeenCalledWith(authContext);
       expect(serviceMethods.updatePolicy).toHaveBeenCalledWith(authContext, policyBody);
-      expect(requireContext).toHaveBeenCalledTimes(13);
+      expect(requireContext).toHaveBeenCalledTimes(14);
       calls.forEach(([, request], index) => {
         expect(requireContext).toHaveBeenNthCalledWith(index + 1, request);
       });
@@ -236,6 +246,7 @@ describe('PlatformServiceTrialsController routes', () => {
       expect(responses.map((response) => response.data)).toEqual([
         { list: [], pagination: {} },
         { pending_review_count: 1 },
+        { list: [], pagination: { page: 2, pageSize: 10, total: 0, totalPages: 0 } },
         { trial: { id: TRIAL_ID } },
         { trial: { id: TRIAL_ID }, idempotent: false },
         { trial: { id: TRIAL_ID, status: 'active' } },
@@ -256,7 +267,7 @@ describe('PlatformServiceTrialsController routes', () => {
     }
   });
 
-  test('dispatches summary, detail, and policy routes through real Fastify', async () => {
+  test('dispatches static reads, detail, and policy routes through real Fastify', async () => {
     const [{ platformServiceTrialService }, controller] = await Promise.all([
       import('@/services/platform-service-trials'),
       loadController(),
@@ -298,6 +309,10 @@ describe('PlatformServiceTrialsController routes', () => {
         method: 'GET',
         url: '/platform/billing/service-trials/summary',
       });
+      const candidates = await app.inject({
+        method: 'GET',
+        url: `/platform/billing/service-trials/assignee-candidates?page=2&pageSize=10&includeEmployeeId=${TRIAL_ID}`,
+      });
       const detail = await app.inject({
         method: 'GET',
         url: `/platform/billing/service-trials/${TRIAL_ID}`,
@@ -314,6 +329,10 @@ describe('PlatformServiceTrialsController routes', () => {
 
       expect(summary.statusCode).toBe(200);
       expect(summary.json().data).toEqual({ pending_review_count: 1 });
+      expect(candidates.statusCode).toBe(200);
+      expect(candidates.json().data).toEqual({
+        list: [], pagination: { page: 2, pageSize: 10, total: 0, totalPages: 0 },
+      });
       expect(detail.statusCode).toBe(200);
       expect(detail.json().data).toEqual({ trial: { id: TRIAL_ID } });
       expect(policy.statusCode).toBe(200);
@@ -321,6 +340,9 @@ describe('PlatformServiceTrialsController routes', () => {
       expect(updatePolicy.statusCode).toBe(200);
       expect(updatePolicy.json().data).toEqual({ policy: { version: 2 } });
       expect(serviceMethods.getSummary).toHaveBeenCalledWith(authContext);
+      expect(serviceMethods.listAssigneeCandidates).toHaveBeenCalledWith(authContext, {
+        page: 2, pageSize: 10, includeEmployeeId: TRIAL_ID,
+      });
       expect(serviceMethods.getTrial).toHaveBeenCalledWith(authContext, TRIAL_ID);
       expect(serviceMethods.getPolicy).toHaveBeenCalledWith(authContext);
       expect(serviceMethods.updatePolicy).toHaveBeenCalledWith(
@@ -352,6 +374,9 @@ describe('PlatformServiceTrialsController routes', () => {
     const routes = registeredRoutes(controller);
     const invalidRequests = [
       ['GET /platform/billing/service-trials', { query: { pageSize: '101' } }],
+      ['GET /platform/billing/service-trials/assignee-candidates', {
+        query: { pageSize: '101', unknown: 'rejected' },
+      }],
       ['GET /platform/billing/service-trials/:id', { params: { id: 'bad-id' } }],
       ['POST /platform/billing/service-trials', { body: {} }],
       ['POST /platform/billing/service-trials/:id/review', { params: { id: TRIAL_ID }, body: { decision: 'maybe' } }],
@@ -426,9 +451,9 @@ describe('PlatformServiceTrialsController routes', () => {
     expect(routeIndex.match(/import PlatformServiceTrialsController /g)).toHaveLength(1);
     expect(routeIndex.match(/PlatformServiceTrialsController\.registerExtraRoutes\(app\)/g)).toHaveLength(1);
     expect(source).toContain('extends PlatformBaseController');
-    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(13);
+    expect(source.match(/getRequiredPlatformStaffContext\(request\)/g)).toHaveLength(14);
     expect(source).not.toContain('getRequiredPlatformPermissionContext');
-    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(13);
+    expect(source.match(/ResponseHandler\.success/g)).toHaveLength(14);
     expect(source).not.toContain('throw new Error');
     expect(source).not.toContain('.from(');
     expect(source).not.toContain('.rpc(');
