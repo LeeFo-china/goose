@@ -204,11 +204,13 @@ export function refreshPlatformCosPublicBaseUrlCache() {
   return refreshPromise;
 }
 
+export async function ensurePlatformCosAccessConfigCache() {
+  if (!cachedCosAccessConfig || Date.now() >= cacheExpiresAt) await refreshPlatformCosPublicBaseUrlCache();
+}
 function getPlatformCosPublicBaseUrl() {
   if (Date.now() >= cacheExpiresAt) {
     refreshPlatformCosPublicBaseUrlCache();
   }
-
   return cachedPlatformCosPublicBaseUrl;
 }
 
@@ -216,7 +218,6 @@ function parseAccessRule(value: unknown, fallback: PlatformFileAccessRule) {
   if (!value || typeof value !== "object") {
     return fallback;
   }
-
   const row = value as Record<string, unknown>;
   const accessMode = row.access_mode === "public" || row.access_mode === "signed"
     ? row.access_mode
