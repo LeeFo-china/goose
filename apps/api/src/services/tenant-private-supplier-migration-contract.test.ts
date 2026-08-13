@@ -15,6 +15,13 @@ const repairMigrationPath = new URL(
 const repairSql = existsSync(repairMigrationPath)
   ? readFileSync(repairMigrationPath, "utf8")
   : "";
+const secondRepairMigrationPath = new URL(
+  "../../../../supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql",
+  import.meta.url,
+);
+const secondRepairSql = existsSync(secondRepairMigrationPath)
+  ? readFileSync(secondRepairMigrationPath, "utf8")
+  : "";
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -197,6 +204,31 @@ describe("tenant private supplier migration contract", () => {
     }
   });
 
+  test("rejects allocation when the tenant key already belongs to a create command", () => {
+    expect(secondRepairSql).toContain(
+      "CREATE OR REPLACE FUNCTION public.allocate_tenant_supplier_code",
+    );
+
+    for (const source of [sql, repairSql, secondRepairSql]) {
+      const allocator = compact(
+        extractFunction("allocate_tenant_supplier_code", source),
+      );
+      const eventGuard = compact(
+        extractFunction("guard_tenant_supplier_allocation_event_key", source),
+      );
+
+      expect(allocator).toContain(
+        "event.tenant_id = p_tenant_id AND event.idempotency_key = p_idempotency_key AND event.command IN ( 'create_tenant_private_supplier', 'create_tenant_shared_supplier_relationship', 'create_tenant_supplier' )",
+      );
+      expect(allocator).toMatch(
+        /IF FOUND THEN RAISE EXCEPTION USING ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CODE_ALLOCATION_CONFLICT'/,
+      );
+      expect(eventGuard).toContain(
+        "'supplier-code-allocation:' || NEW.tenant_id::text || ':' || NEW.idempotency_key",
+      );
+    }
+  });
+
   test("creates private supplier, relationship, optional contact and address atomically", () => {
     const fn = compact(extractFunction("create_tenant_private_supplier"));
     const codeConsumer = compact(
@@ -297,6 +329,34 @@ describe("tenant private supplier migration contract", () => {
       "supplier.ownership_scope = 'tenant' AND ( relationship.id IS NULL OR relationship.tenant_id IS DISTINCT FROM supplier.owner_tenant_id OR relationship.internal_supplier_code IS DISTINCT FROM upper(btrim(supplier.code)) )",
     );
     expect(repairSql).toContain("SUPPLIER_PRIVATE_CODE_INCONSISTENT");
+  });
+
+  test("normalizes safe legacy private codes before installing immutable protection", () => {
+    expect(secondRepairSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(secondRepairSql).toContain("BEGIN;");
+    expect(secondRepairSql).toContain(
+      "DROP TRIGGER IF EXISTS tr_suppliers_guard_private_code_immutable",
+    );
+    expect(compact(secondRepairSql)).toContain(
+      "relationship.internal_supplier_code IS DISTINCT FROM upper(btrim(supplier.code))",
+    );
+    expect(secondRepairSql).toContain("SUPPLIER_PRIVATE_CODE_INCONSISTENT");
+    expect(compact(secondRepairSql)).toContain(
+      "UPDATE public.suppliers AS supplier SET code = relationship.internal_supplier_code FROM public.tenant_suppliers AS relationship WHERE supplier.ownership_scope = 'tenant' AND relationship.supplier_id = supplier.id AND relationship.tenant_id = supplier.owner_tenant_id AND supplier.code IS DISTINCT FROM relationship.internal_supplier_code",
+    );
+    expect(secondRepairSql).toMatch(
+      /CREATE TRIGGER tr_suppliers_guard_private_code_immutable\s+BEFORE UPDATE OF code\s+ON public\.suppliers/,
+    );
+    expect(compact(secondRepairSql)).toContain(
+      "supplier.code IS DISTINCT FROM relationship.internal_supplier_code",
+    );
+
+    expect(compact(sql)).toContain(
+      "SET internal_supplier_code = upper(btrim(supplier.code)) FROM public.suppliers AS supplier WHERE supplier.id = relationship.supplier_id AND supplier.ownership_scope = 'tenant' AND supplier.owner_tenant_id = relationship.tenant_id",
+    );
+    expect(compact(repairSql)).toContain(
+      "UPDATE public.suppliers AS supplier SET code = relationship.internal_supplier_code FROM public.tenant_suppliers AS relationship",
+    );
   });
 
   test("replaces global supplier identity uniqueness with scoped partial indexes", () => {

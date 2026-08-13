@@ -201,6 +201,48 @@ SET internal_supplier_code =
 FROM ranked_relationships AS ranked
 WHERE ranked.id = relationship.id;
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.suppliers AS supplier
+    WHERE supplier.ownership_scope = 'tenant'
+      AND upper(btrim(supplier.code)) !~ '^[A-Z0-9_-]{2,64}$'
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PRIVATE_CODE_INCONSISTENT';
+  END IF;
+END;
+$$;
+
+UPDATE public.suppliers AS supplier
+SET code = upper(btrim(supplier.code))
+WHERE supplier.ownership_scope = 'tenant'
+  AND supplier.code IS DISTINCT FROM upper(btrim(supplier.code));
+
+UPDATE public.tenant_suppliers AS relationship
+SET internal_supplier_code = upper(btrim(supplier.code))
+FROM public.suppliers AS supplier
+WHERE supplier.id = relationship.supplier_id
+  AND supplier.ownership_scope = 'tenant'
+  AND supplier.owner_tenant_id = relationship.tenant_id;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT relationship.tenant_id, relationship.internal_supplier_code
+    FROM public.tenant_suppliers AS relationship
+    GROUP BY relationship.tenant_id, relationship.internal_supplier_code
+    HAVING count(*) > 1
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CODE_CONFLICT';
+  END IF;
+END;
+$$;
+
 INSERT INTO public.tenant_supplier_code_registry (
   tenant_id,
   normalized_code,
@@ -366,6 +408,13 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-code-allocation:' || NEW.tenant_id::text || ':' || NEW.idempotency_key,
+      0
+    )
+  );
+
   IF NEW.command IN (
     'create_tenant_private_supplier',
     'create_tenant_shared_supplier_relationship',
@@ -531,6 +580,7 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
   v_existing_registry public.tenant_supplier_code_registry%ROWTYPE;
   v_registry public.tenant_supplier_code_registry%ROWTYPE;
   v_counter public.tenant_supplier_code_counters%ROWTYPE;
@@ -577,6 +627,26 @@ BEGIN
       0
     )
   );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.tenant_id = p_tenant_id
+    AND event.idempotency_key = p_idempotency_key
+    AND event.command IN (
+      'create_tenant_private_supplier',
+      'create_tenant_shared_supplier_relationship',
+      'create_tenant_supplier'
+    )
+  ORDER BY event.created_at, event.id
+  LIMIT 1
+  FOR UPDATE;
+
+  IF FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CODE_ALLOCATION_CONFLICT';
+  END IF;
 
   SELECT registry.*
   INTO v_existing_registry
