@@ -8,6 +8,7 @@ import {
   PlatformDouyinMiniappReleaseEmptyObjectSchema,
   PlatformDouyinMiniappReleaseListQuerySchema,
   PlatformDouyinMiniappReleaseParamsSchema,
+  PromoteLatestPlatformDouyinTemplateSchema,
   SubmitPlatformDouyinMiniappReleaseAuditSchema,
   UpdatePlatformDouyinMiniappConfigSchema,
   UploadPlatformDouyinMiniappReleaseSchema,
@@ -16,6 +17,10 @@ import { getPlatformDouyinMiniappReleasesService } from
   "@/services/platform-douyin-miniapp-releases";
 import type { PlatformDouyinMiniappReleasesService } from
   "@/services/platform-douyin-miniapp-releases";
+import {
+  getPlatformDouyinTemplatePromotionService,
+  type PlatformDouyinTemplatePromotionService,
+} from "@/services/platform-douyin-template-promotion";
 import {
   PlatformDouyinMiniappsService,
   platformDouyinMiniappsService,
@@ -28,6 +33,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 type ControllerService = Pick<
   PlatformDouyinMiniappsService,
   | "list"
+  | "getTemplateSource"
   | "get"
   | "bind"
   | "createTemplateDevelopment"
@@ -43,12 +49,19 @@ type ReleaseControllerService = Pick<
 >;
 
 type ReleaseServiceProvider = () => Promise<ReleaseControllerService>;
+type PromotionControllerService = Pick<
+  PlatformDouyinTemplatePromotionService,
+  "promoteLatest"
+>;
+type PromotionServiceProvider = () => Promise<PromotionControllerService>;
 
 export class PlatformDouyinMiniappsController extends PlatformBaseController {
   constructor(
     private readonly service: ControllerService = platformDouyinMiniappsService,
     private readonly releaseServiceProvider: ReleaseServiceProvider =
       getPlatformDouyinMiniappReleasesService,
+    private readonly promotionServiceProvider: PromotionServiceProvider =
+      getPlatformDouyinTemplatePromotionService,
   ) {
     super("platform-douyin-miniapps");
   }
@@ -59,6 +72,13 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     const queryResult = PlatformDouyinMiniappListQuerySchema.safeParse(request.query || {});
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await this.service.list(authContext, queryResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/douyin-miniapps/template-source")
+  async getTemplateSource(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    const data = await this.service.getTemplateSource(authContext);
     return ResponseHandler.success(data);
   }
 
@@ -141,6 +161,24 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
     const releaseService = await this.releaseServiceProvider();
     const data = await releaseService.upload(authContext, installationId, bodyResult.data);
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/platform/douyin-miniapps/:id/releases/promote-latest-template")
+  async promoteLatestTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    const installationId = this.parseInstallationId(request);
+    this.parseEmptyRequestPart(request.query);
+    const bodyResult = PromoteLatestPlatformDouyinTemplateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const promotionService = await this.promotionServiceProvider();
+    const data = await promotionService.promoteLatest(
+      authContext,
+      installationId,
+      bodyResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

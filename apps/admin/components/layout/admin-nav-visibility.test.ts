@@ -45,6 +45,24 @@ function createPlatformSuperAdminSession(): AdminSession {
 }
 
 describe("admin nav visibility", () => {
+  test("registers Douyin publishing with the platform management permission", () => {
+    const item = platformNavGroups.flatMap((group) => group.items).find(
+      (candidate) => candidate.href === "/platform/douyin-miniapps",
+    );
+
+    expect(item?.label).toBe("抖音发布");
+    expect(item?.requiredPermissions).toEqual([{
+      code: "platform.douyin_miniapp.manage",
+      scope: "all",
+    }]);
+    expect(item?.allowPlatformAdminPermissionBypass).toBe(false);
+    expect(hasMenuItemAccess(createSession([{
+      code: "platform.douyin_miniapp.manage",
+      scope: "self",
+    }]), item!)).toBe(false);
+    expect(hasMenuItemAccess(createPlatformSuperAdminSession(), item!)).toBe(false);
+  });
+
   test("consolidates tenant operations into one platform nav item", () => {
     const platformItems = platformNavGroups.flatMap((group) => group.items);
     const tenantManagementItem = platformItems.find(

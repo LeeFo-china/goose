@@ -23,6 +23,7 @@ type InstallationRepositoryPort = Pick<
   PlatformDouyinMiniappsRepository,
   | "list"
   | "findById"
+  | "findByAuthorizerAppId"
   | "findTenantStatusById"
   | "createTemplateDevelopmentAtomically"
   | "updateRuntimeConfig"
@@ -86,6 +87,29 @@ export class PlatformDouyinMiniappsService {
   async get(authContext: AuthContext, installationId: string) {
     this.assertCanManage(authContext);
     return sanitizeInstallation(await this.requireInstallation(installationId));
+  }
+
+  async getTemplateSource(authContext: AuthContext) {
+    this.assertCanManage(authContext);
+    const config = this.configProvider();
+    const templateAppId = config.templateAppId;
+    const installation = await this.repository.findByAuthorizerAppId(templateAppId);
+    if (
+      !installation
+      || installation.component_appid !== config.componentAppId
+      || installation.installation_kind !== "template_development"
+      || installation.authorization_status !== "active"
+    ) {
+      throw Errors.business(
+        409,
+        "已配置的抖音模板开发小程序不可用",
+        "DOUYIN_TEMPLATE_SOURCE_NOT_ACTIVE",
+      );
+    }
+    return {
+      template_app_id: templateAppId,
+      installation: sanitizeInstallation(installation),
+    };
   }
 
   async bind(

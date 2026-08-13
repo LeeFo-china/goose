@@ -23,7 +23,8 @@ export function hasMenuItemAccess(
   if (requirements.length === 0) return true;
 
   return requirements.every((requirement) =>
-    isPlatformSuperAdminAccess(session, requirement.code) ||
+    (item.allowPlatformAdminPermissionBypass !== false
+      && isPlatformSuperAdminAccess(session, requirement.code)) ||
     session.permissions.some((permission) => {
       if (permission.code !== requirement.code) return false;
       if (!requirement.scope) return true;

@@ -52,6 +52,7 @@ export type AdminMenuItem = {
   icon: LucideIcon;
   permission?: string | null;
   requiredPermissions?: AdminMenuPermissionRequirement[];
+  allowPlatformAdminPermissionBypass?: boolean;
   activeMatch?: "exact" | "prefix";
 };
 
@@ -70,6 +71,16 @@ export const platformNavGroups: AdminMenuGroup[] = [
         activeHrefs: ["/platform/tenant-onboarding"],
         label: "租户管理",
         icon: Building2,
+      },
+      {
+        href: "/platform/douyin-miniapps",
+        label: "抖音发布",
+        icon: AppWindow,
+        requiredPermissions: [{
+          code: "platform.douyin_miniapp.manage",
+          scope: "all",
+        }],
+        allowPlatformAdminPermissionBypass: false,
       },
       {
         href: "/platform/suppliers",

@@ -39,6 +39,13 @@ export const DouyinRuntimeConfigSchema = z.strictObject({
 export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema.extend({
   page: z.coerce.number().int().min(1, "页码必须大于 0")
     .max(10_000, "页码不能超过 10000").default(1),
+  installation_kind: z.enum(["merchant", "template_development"]).optional(),
+  authorization_status: z.enum([
+    "authorized_unbound",
+    "active",
+    "disabled",
+    "revoked",
+  ]).optional(),
 }).strict();
 
 export const PlatformDouyinMiniappIdParamsSchema = z.strictObject({
@@ -65,6 +72,10 @@ export const UploadPlatformDouyinMiniappReleaseSchema = z.strictObject({
     .regex(ReleaseSemverPattern, "模板版本必须符合 SemVer 格式"),
   description: z.string().trim().min(1, "版本描述不能为空")
     .max(200, "版本描述不能超过 200 个字符"),
+  channel: z.enum(["default", "1"], "无效的发布通道"),
+});
+
+export const PromoteLatestPlatformDouyinTemplateSchema = z.strictObject({
   channel: z.enum(["default", "1"], "无效的发布通道"),
 });
 
