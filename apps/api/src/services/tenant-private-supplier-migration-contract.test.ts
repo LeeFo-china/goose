@@ -29,6 +29,13 @@ const indexRepairMigrationPath = new URL(
 const indexRepairSql = existsSync(indexRepairMigrationPath)
   ? readFileSync(indexRepairMigrationPath, "utf8")
   : "";
+const readVisibilityMigrationPath = new URL(
+  "../../../../supabase/migrations/20260813160400_harden_tenant_supplier_read_visibility.sql",
+  import.meta.url,
+);
+const readVisibilitySql = existsSync(readVisibilityMigrationPath)
+  ? readFileSync(readVisibilityMigrationPath, "utf8")
+  : "";
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -435,5 +442,33 @@ describe("tenant private supplier migration contract", () => {
         `GRANT EXECUTE ON FUNCTION ${signature} TO service_role;`,
       );
     }
+  });
+
+  test("keeps relationship reads tenant-visible and the shared directory platform-only", () => {
+    const relationshipList = compact(
+      extractFunction("list_tenant_suppliers_for_tenant", readVisibilitySql),
+    );
+    const sharedDirectory = compact(
+      extractFunction("list_available_suppliers_for_tenant", readVisibilitySql),
+    );
+
+    expect(readVisibilitySql).toMatch(/^-- Rollback: forward-only\./);
+    expect(readVisibilitySql).toContain("BEGIN;");
+    expect(readVisibilitySql).toContain("SET LOCAL lock_timeout = '5s';");
+    expect(readVisibilitySql).toContain("SET LOCAL statement_timeout = '5min';");
+    expect(relationshipList).toContain(
+      "supplier.ownership_scope = 'platform' OR ( supplier.ownership_scope = 'tenant' AND supplier.owner_tenant_id = p_tenant_id )",
+    );
+    expect(relationshipList).toContain(
+      "'ownership_scope', supplier.ownership_scope",
+    );
+    expect(relationshipList).toContain(
+      "'owner_tenant_id', supplier.owner_tenant_id",
+    );
+    expect(sharedDirectory).toContain("supplier.ownership_scope = 'platform'");
+    expect(sharedDirectory).toContain("supplier.owner_tenant_id IS NULL");
+    expect(sharedDirectory).toContain("supplier.ownership_scope");
+    expect(sharedDirectory).toContain("supplier.owner_tenant_id");
+    expect(readVisibilitySql).toMatch(/COMMIT;\s*$/);
   });
 });

@@ -16,6 +16,7 @@
 
 - `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`：内部编码登记、原子创建、历史关系补码和审计。
 - `supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql`：已应用环境的租户级分配幂等与私有供应商编码不可变收口。
+- `supabase/migrations/20260813160400_harden_tenant_supplier_read_visibility.sql`：关系列表仅暴露当前租户可见主档，共享目录仅返回平台供应商。
 - `supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql`：阻断创建键后置分配，并在不可变保护前安全规范化旧私有编码。
 - `supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql`：为创建键反向冲突查询增加最小部分索引。
 - `apps/api/src/schema/tenant-suppliers.ts`：分配、共享关系、私有创建和主档更新 schema。
@@ -120,6 +121,9 @@ git commit -m "feat(db): 建立租户私有供应商命令"
 - Modify: `apps/api/src/repositories/tenant-suppliers.ts`
 - Modify: `apps/api/src/repositories/tenant-suppliers.test.ts`
 - Modify: `apps/api/src/types/database.ts`
+- Modify: `apps/api/src/repositories/tenant-suppliers-mappers.ts`
+- Modify: `apps/api/src/repositories/supplier-command-errors.ts`
+- Create: `supabase/migrations/20260813160400_harden_tenant_supplier_read_visibility.sql`
 
 - [ ] **Step 1: 写 RED 测试**
 

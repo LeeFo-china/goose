@@ -12,10 +12,12 @@ import { Errors } from "@/errors/error-factory";
 
 export const SUPPLIER_SELECT = [
   "id", "code", "name", "legal_name", "supplier_type",
+  "ownership_scope", "owner_tenant_id",
   "onboarding_status", "operational_status", "version",
 ].join(",");
 export const RELATIONSHIP_FIELDS = [
   "id", "tenant_id", "supplier_id", "relationship_status",
+  "internal_supplier_code",
   "settlement_term_days", "credit_limit_minor",
   "invoice_required_before_payment", "default_currency",
   "default_tax_inclusive", "tenant_owner_employee_id",
@@ -45,7 +47,7 @@ export const EVENT_SELECT = [
 
 const nullableText = z.string().nullable();
 const timestamp = z.string();
-export const SupplierSchema = z.object({
+const BaseSupplierSchema = z.object({
   id: z.uuid(),
   code: z.string(),
   name: z.string(),
@@ -54,7 +56,26 @@ export const SupplierSchema = z.object({
   onboarding_status: z.enum(SUPPLIER_ONBOARDING_STATUS_VALUES),
   operational_status: z.enum(SUPPLIER_OPERATIONAL_STATUS_VALUES),
   version: z.number().int().positive(),
+});
+export const SupplierSchema = BaseSupplierSchema.extend({
+  ownership_scope: z.enum(["platform", "tenant"]).optional(),
+  owner_tenant_id: z.uuid().nullable().optional(),
 }).strict();
+export const OwnedSupplierSchema = BaseSupplierSchema.extend({
+  ownership_scope: z.enum(["platform", "tenant"]),
+  owner_tenant_id: z.uuid().nullable(),
+}).strict().superRefine((supplier, context) => {
+  const validOwner = supplier.ownership_scope === "platform"
+    ? supplier.owner_tenant_id === null
+    : supplier.owner_tenant_id !== null;
+  if (!validOwner) {
+    context.addIssue({
+      code: "custom",
+      path: ["owner_tenant_id"],
+      message: "供应商归属数据不一致",
+    });
+  }
+});
 export const EligibilitySchema = z.object({
   eligible: z.boolean(),
   blocking_reasons: z.array(z.enum(SUPPLIER_ORDER_BLOCKING_REASON_VALUES)),
@@ -75,6 +96,7 @@ export const RelationshipSchema = z.object({
   tenant_id: z.uuid(),
   supplier_id: z.uuid(),
   relationship_status: z.enum(TENANT_SUPPLIER_RELATIONSHIP_STATUS_VALUES),
+  internal_supplier_code: z.string(),
   settlement_term_days: z.number().int().nonnegative(),
   credit_limit_minor: safeInteger,
   invoice_required_before_payment: z.boolean(),
@@ -92,13 +114,33 @@ export const RelationshipSchema = z.object({
   supplier: SupplierSchema,
   eligibility: EligibilitySchema.optional(),
 }).strict();
+export const VisibleRelationshipSchema = RelationshipSchema.extend({
+  supplier: OwnedSupplierSchema,
+}).strict().superRefine((relationship, context) => {
+  if (
+    relationship.supplier.ownership_scope === "tenant" &&
+    relationship.supplier.owner_tenant_id !== relationship.tenant_id
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["supplier", "owner_tenant_id"],
+      message: "私有供应商不属于当前租户",
+    });
+  }
+});
+export const PlatformRelationshipSchema = VisibleRelationshipSchema.refine(
+  (relationship) =>
+    relationship.supplier.ownership_scope === "platform" &&
+    relationship.supplier.owner_tenant_id === null,
+  { message: "共享供应商关系必须引用平台供应商" },
+);
 export const SUPPLIER_CONTRACT_HEALTH_VALUES = [
   "valid",
   "expiring",
   "expired",
   "missing",
 ] as const;
-export const RelationshipListItemSchema = RelationshipSchema.extend({
+export const RelationshipListItemSchema = VisibleRelationshipSchema.extend({
   contract_health: z.enum(SUPPLIER_CONTRACT_HEALTH_VALUES),
 }).strict();
 export const SettingsSchema = z.object({
@@ -148,8 +190,13 @@ export const EventSchema = z.object({
   result_version: z.number().int().positive(),
   created_at: timestamp,
 }).strict();
+const PlatformDirectorySupplierSchema = OwnedSupplierSchema.refine(
+  (supplier) =>
+    supplier.ownership_scope === "platform" && supplier.owner_tenant_id === null,
+  { message: "共享供应商目录只能包含平台供应商" },
+);
 export const DirectoryEnvelopeSchema = z.object({
-  items: z.array(SupplierSchema),
+  items: z.array(PlatformDirectorySupplierSchema),
   total: z.number().int().nonnegative(),
   page: z.number().int().positive(),
   page_size: z.number().int().positive().max(100),
@@ -173,8 +220,114 @@ export const MutationEnvelopeSchema = z.object({
   version: z.number().int().nonnegative().optional(),
 }).strict();
 
+export const CodeAllocationSchema = z.object({
+  allocation_id: z.uuid(),
+  code: z.string().regex(/^SUP-[0-9]{6}$/),
+  idempotent: z.boolean(),
+}).strict();
+
+const SupplierContactSnapshotSchema = z.object({
+  id: z.uuid(),
+  supplier_id: z.uuid(),
+  contact_type: z.string(),
+  name: z.string(),
+  phone: nullableText,
+  email: nullableText,
+  is_public: z.boolean(),
+  is_primary: z.boolean(),
+  status: z.string(),
+  version: z.number().int().positive(),
+  created_by_employee_id: z.uuid(),
+  updated_by_employee_id: z.uuid(),
+  created_at: timestamp,
+  updated_at: timestamp,
+}).strict();
+
+const SupplierAddressSnapshotSchema = z.object({
+  id: z.uuid(),
+  supplier_id: z.uuid(),
+  address_type: z.string(),
+  province: nullableText,
+  city: nullableText,
+  district: nullableText,
+  region_code: z.string(),
+  address_detail: z.string(),
+  latitude: z.union([z.number(), z.string()]).nullable(),
+  longitude: z.union([z.number(), z.string()]).nullable(),
+  is_default: z.boolean(),
+  status: z.string(),
+  version: z.number().int().positive(),
+  created_by_employee_id: z.uuid(),
+  updated_by_employee_id: z.uuid(),
+  created_at: timestamp,
+  updated_at: timestamp,
+}).strict();
+
+const PrivateSupplierSnapshotSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+  legal_name: z.string(),
+  unified_social_credit_code: nullableText,
+  legal_representative_name: nullableText,
+  registered_address_text: nullableText,
+  supplier_type: z.enum(SUPPLIER_TYPE_VALUES),
+  onboarding_status: z.enum(SUPPLIER_ONBOARDING_STATUS_VALUES),
+  operational_status: z.enum(SUPPLIER_OPERATIONAL_STATUS_VALUES),
+  review_remark: nullableText,
+  reviewed_by_employee_id: z.uuid().nullable(),
+  reviewed_at: nullableText,
+  blacklisted_by_employee_id: z.uuid().nullable(),
+  blacklisted_at: nullableText,
+  blacklist_reason: nullableText,
+  version: z.number().int().positive(),
+  created_by_employee_id: z.uuid(),
+  updated_by_employee_id: z.uuid(),
+  created_at: timestamp,
+  updated_at: timestamp,
+  ownership_scope: z.literal("tenant"),
+  owner_tenant_id: z.uuid(),
+}).strict();
+
+export const PrivateSupplierRelationshipSchema = RelationshipSchema.extend({
+  supplier: PrivateSupplierSnapshotSchema,
+  primary_contact: SupplierContactSnapshotSchema.nullable(),
+  address: SupplierAddressSnapshotSchema.nullable(),
+}).strict().superRefine((relationship, context) => {
+  if (relationship.supplier.owner_tenant_id !== relationship.tenant_id) {
+    context.addIssue({
+      code: "custom",
+      path: ["supplier", "owner_tenant_id"],
+      message: "私有供应商不属于当前租户",
+    });
+  }
+  if (relationship.supplier.code !== relationship.internal_supplier_code) {
+    context.addIssue({
+      code: "custom",
+      path: ["internal_supplier_code"],
+      message: "私有供应商编码不一致",
+    });
+  }
+});
+
+export const CreateRelationshipCommandEnvelopeSchema = z.object({
+  status: z.enum(["created", "supplier_not_found", "state_conflict"]),
+  idempotent: z.boolean().optional(),
+  tenant_supplier: z.unknown().optional(),
+  error_code: z.string().optional(),
+  reason: z.string().optional(),
+  version: z.number().int().nonnegative().optional(),
+}).strict();
+
 export type TenantSupplierSettings = z.infer<typeof SettingsSchema>;
 export type TenantSupplierDetail = z.infer<typeof RelationshipSchema>;
+export type TenantVisibleSupplierDetail = z.infer<
+  typeof VisibleRelationshipSchema
+>;
+export type TenantPrivateSupplierDetail = z.infer<
+  typeof PrivateSupplierRelationshipSchema
+>;
+export type CodeAllocation = z.infer<typeof CodeAllocationSchema>;
 export type TenantSupplierListItem = z.infer<
   typeof RelationshipListItemSchema
 >;

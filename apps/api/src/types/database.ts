@@ -17733,6 +17733,122 @@ export type Database = {
           },
         ]
       }
+      tenant_supplier_code_counters: {
+        Row: {
+          next_value: number
+          tenant_id: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          next_value: number
+          tenant_id: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          next_value?: number
+          tenant_id?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_supplier_code_counters_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_code_counters_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_supplier_code_registry: {
+        Row: {
+          abandoned_at: string | null
+          actor_employee_id: string | null
+          actor_user_id: string | null
+          consumed_at: string | null
+          created_at: string
+          display_code: string
+          id: string
+          idempotency_key: string | null
+          normalized_code: string
+          request_digest: Json | null
+          source: string
+          status: string
+          tenant_id: string
+          tenant_supplier_id: string | null
+        }
+        Insert: {
+          abandoned_at?: string | null
+          actor_employee_id?: string | null
+          actor_user_id?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          display_code: string
+          id?: string
+          idempotency_key?: string | null
+          normalized_code: string
+          request_digest?: Json | null
+          source: string
+          status: string
+          tenant_id: string
+          tenant_supplier_id?: string | null
+        }
+        Update: {
+          abandoned_at?: string | null
+          actor_employee_id?: string | null
+          actor_user_id?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          display_code?: string
+          id?: string
+          idempotency_key?: string | null
+          normalized_code?: string
+          request_digest?: Json | null
+          source?: string
+          status?: string
+          tenant_id?: string
+          tenant_supplier_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_supplier_code_registry_actor_employee_id_fkey"
+            columns: ["actor_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_code_registry_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_code_registry_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_supplier_code_registry_tenant_supplier_id_fkey"
+            columns: ["tenant_supplier_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_supplier_settings: {
         Row: {
           created_at: string
@@ -17809,6 +17925,7 @@ export type Database = {
           default_tax_inclusive: boolean
           ended_at: string | null
           id: string
+          internal_supplier_code: string
           invoice_required_before_payment: boolean
           relationship_status: string
           remark: string | null
@@ -17829,6 +17946,7 @@ export type Database = {
           default_tax_inclusive?: boolean
           ended_at?: string | null
           id?: string
+          internal_supplier_code: string
           invoice_required_before_payment?: boolean
           relationship_status?: string
           remark?: string | null
@@ -17849,6 +17967,7 @@ export type Database = {
           default_tax_inclusive?: boolean
           ended_at?: string | null
           id?: string
+          internal_supplier_code?: string
           invoice_required_before_payment?: boolean
           relationship_status?: string
           remark?: string | null
@@ -20840,6 +20959,10 @@ export type Database = {
       }
     }
     Functions: {
+      abandon_tenant_supplier_code_reservations: {
+        Args: { p_limit?: number }
+        Returns: number
+      }
       activate_wechat_pay_applyment_config: {
         Args: {
           p_applyment_id: string
@@ -20848,6 +20971,15 @@ export type Database = {
           p_platform_payment_config_id: string
         }
         Returns: string
+      }
+      allocate_tenant_supplier_code: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       apply_tenant_entitlement_action: {
         Args: {
@@ -20956,6 +21088,14 @@ export type Database = {
         Returns: undefined
       }
       assert_supplier_purchase_order_actor: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_tenant_id: string
+        }
+        Returns: undefined
+      }
+      assert_tenant_supplier_actor: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -23088,6 +23228,19 @@ export type Database = {
         }
         Returns: Json
       }
+      consume_tenant_supplier_code: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allocation_id: string
+          p_code_source: string
+          p_creation_idempotency_key: string
+          p_internal_supplier_code: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: string
+      }
       convert_supplier_purchase_requisition: {
         Args: {
           p_actor_employee_id: string
@@ -23563,6 +23716,37 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_tenant_private_supplier: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address: Json
+          p_allocation_id: string
+          p_code_source: string
+          p_idempotency_key: string
+          p_internal_supplier_code: string
+          p_legal_name: string
+          p_name: string
+          p_primary_contact: Json
+          p_supplier_type: string
+          p_tenant_id: string
+          p_unified_social_credit_code: string
+        }
+        Returns: Json
+      }
+      create_tenant_shared_supplier_relationship: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_allocation_id: string
+          p_code_source: string
+          p_idempotency_key: string
+          p_internal_supplier_code: string
+          p_supplier_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       create_tenant_supplier: {
         Args: {

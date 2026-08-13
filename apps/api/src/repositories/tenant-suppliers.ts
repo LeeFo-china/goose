@@ -12,12 +12,19 @@ import type {
   TenantSupplierChildPageInput,
   TenantSupplierContractPolicyCommand,
   TenantSupplierCreateCommand,
+  TenantSupplierPrivateCreateInput,
+  TenantSupplierSharedCreateInput,
   TenantSupplierDirectoryInput,
   TenantSupplierLifecycleCommand,
   TenantSupplierListInput,
   TenantSupplierUpdateCommand,
 } from "@/schema/tenant-suppliers";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  allocateInternalCode,
+  createPrivateSupplier,
+  createSharedRelationship,
+} from "./tenant-supplier-private-commands";
 
 import {
   CONTRACT_SELECT,
@@ -32,6 +39,7 @@ import {
   RelationshipSchema,
   SETTINGS_SELECT,
   SettingsSchema,
+  VisibleRelationshipSchema,
   compact,
   envelopeToPage,
   normalizePage,
@@ -41,12 +49,14 @@ import {
   toRange,
   versionConflict,
   type SupplierContract,
+  type CodeAllocation,
   type SupplierContractMutationResult,
   type SupplierContractPage,
   type SupplierDirectoryPage,
   type SupplierEventPage,
   type SupplierOrderEligibility,
   type TenantSupplierDetail,
+  type TenantPrivateSupplierDetail,
   type TenantSupplierListItem,
   type TenantSupplierMutationResult,
   type TenantSupplierPage,
@@ -54,6 +64,7 @@ import {
 } from "./tenant-suppliers-mappers";
 
 export type {
+  CodeAllocation,
   SupplierContract,
   SupplierContractMutationResult,
   SupplierContractPage,
@@ -61,11 +72,20 @@ export type {
   SupplierEventPage,
   SupplierOrderEligibility,
   TenantSupplierDetail,
+  TenantPrivateSupplierDetail,
   TenantSupplierListItem,
   TenantSupplierMutationResult,
   TenantSupplierPage,
   TenantSupplierSettings,
 } from "./tenant-suppliers-mappers";
+
+export type AllocateCodeCommand = SupplierCommandContext & {
+  tenant_id: string;
+};
+export type CreatePrivateSupplierCommand = TenantSupplierPrivateCreateInput &
+  SupplierCommandContext & { tenant_id: string };
+export type CreateSharedRelationshipCommand = TenantSupplierSharedCreateInput &
+  SupplierCommandContext & { tenant_id: string };
 
 export type AtomicSupplierContractCreateCommand =
   SupplierContractCreateCommand &
@@ -84,6 +104,11 @@ export interface TenantSuppliersRepositoryPort {
   listRelationships(input: TenantSupplierListInput): Promise<TenantSupplierPage>;
   listDirectory(input: TenantSupplierDirectoryInput): Promise<SupplierDirectoryPage>;
   findRelationship(input: TenantOwnedId): Promise<TenantSupplierDetail | null>;
+  allocateInternalCode(input: AllocateCodeCommand): Promise<CodeAllocation>;
+  createPrivateSupplier(input: CreatePrivateSupplierCommand):
+    Promise<TenantPrivateSupplierDetail>;
+  createSharedRelationship(input: CreateSharedRelationshipCommand):
+    Promise<TenantSupplierDetail>;
   createRelationship(input: TenantSupplierCreateCommand):
     Promise<TenantSupplierMutationResult>;
   updateRelationship(input: TenantSupplierUpdateCommand):
@@ -194,7 +219,19 @@ export class TenantSuppliersRepository implements TenantSuppliersRepositoryPort 
     if (error) throw Errors.dbError("查询租户供应商详情失败", error);
     return data === null
       ? null
-      : parse(RelationshipSchema, data, "查询租户供应商详情失败");
+      : parse(VisibleRelationshipSchema, data, "查询租户供应商详情失败");
+  }
+
+  async allocateInternalCode(input: AllocateCodeCommand) {
+    return allocateInternalCode(this.client, input);
+  }
+
+  async createPrivateSupplier(input: CreatePrivateSupplierCommand) {
+    return createPrivateSupplier(this.client, input);
+  }
+
+  async createSharedRelationship(input: CreateSharedRelationshipCommand) {
+    return createSharedRelationship(this.client, input);
   }
 
   createRelationship(input: TenantSupplierCreateCommand) {
@@ -413,6 +450,7 @@ export class TenantSuppliersRepository implements TenantSuppliersRepositoryPort 
     if (error) throw Errors.dbError(message, error);
     return data;
   }
+
 }
 
 function conflictResult(
