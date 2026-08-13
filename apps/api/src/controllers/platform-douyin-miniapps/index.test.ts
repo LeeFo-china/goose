@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, mock, test } from "bun:test";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 let PlatformDouyinMiniappsController:
   typeof import(".").PlatformDouyinMiniappsController;
 
@@ -27,6 +26,10 @@ function createController() {
       list: [],
       pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
     })),
+    getTemplateSource: mock(async () => ({
+      template_app_id: "tt0d647bd99301341b01",
+      installation: { id: "template-installation" },
+    })),
     get: mock(async () => ({ id: "installation" })),
     bind: mock(async () => ({ id: "installation" })),
     createTemplateDevelopment: mock(async () => ({ id: "installation" })),
@@ -47,19 +50,35 @@ function createController() {
     publish: mock(async () => ({ id: "release", status: "released" })),
   };
   const releaseServiceProvider = mock(async () => releaseService);
+  const promotionService = {
+    promoteLatest: mock(async () => ({
+      id: "release",
+      status: "testing",
+      test_qr_url: "https://p3.douyinpic.com/test-qr",
+    })),
+  };
+  const promotionServiceProvider = mock(async () => promotionService);
   const controller = new PlatformDouyinMiniappsController(
     service as never,
     releaseServiceProvider as never,
+    promotionServiceProvider as never,
   );
   const authContext = { isPlatformAdmin: true, permissions: [] };
   (controller as unknown as Record<string, unknown>).getRequiredPlatformPermissionContext =
     mock(async () => authContext);
-  return { controller, service, releaseService, releaseServiceProvider, authContext };
+  return {
+    controller,
+    service,
+    releaseService,
+    releaseServiceProvider,
+    promotionService,
+    promotionServiceProvider,
+    authContext,
+  };
 }
 
 const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const RELEASE_ID = "11111111-1111-4111-8111-111111111111";
-
 describe("PlatformDouyinMiniappsController", () => {
   test("registers all platform installation management routes", () => {
     const { controller } = createController();
@@ -74,6 +93,7 @@ describe("PlatformDouyinMiniappsController", () => {
 
     expect(routes).toEqual([
       { method: "GET", path: "/platform/douyin-miniapps" },
+      { method: "GET", path: "/platform/douyin-miniapps/template-source" },
       { method: "GET", path: "/platform/douyin-miniapps/:id" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/bind" },
       { method: "POST", path: "/platform/douyin-miniapps/template-development" },
@@ -83,6 +103,10 @@ describe("PlatformDouyinMiniappsController", () => {
       { method: "POST", path: "/platform/douyin-miniapps/:id/enable" },
       { method: "GET", path: "/platform/douyin-miniapps/:id/releases" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/releases/upload" },
+      {
+        method: "POST",
+        path: "/platform/douyin-miniapps/:id/releases/promote-latest-template",
+      },
       { method: "POST", path: "/platform/douyin-miniapps/:id/releases/:releaseId/test-qr" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/releases/:releaseId/submit-audit" },
       { method: "POST", path: "/platform/douyin-miniapps/:id/releases/:releaseId/sync-status" },
@@ -99,6 +123,19 @@ describe("PlatformDouyinMiniappsController", () => {
       data: {
         list: [],
         pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+      },
+      message: "success",
+    });
+  });
+
+  test("returns the server-configured template source", async () => {
+    const { controller, service, authContext } = createController();
+    const result = await controller.getTemplateSource({} as never, {} as never);
+    expect(service.getTemplateSource).toHaveBeenCalledWith(authContext);
+    expect(result).toMatchObject({
+      data: {
+        template_app_id: "tt0d647bd99301341b01",
+        installation: { id: "template-installation" },
       },
       message: "success",
     });
@@ -253,6 +290,53 @@ describe("PlatformDouyinMiniappsController", () => {
     });
   });
 
+  test("promotes the selected template app draft and returns the test release", async () => {
+    const {
+      controller,
+      promotionService,
+      promotionServiceProvider,
+      authContext,
+    } = createController();
+    const result = await controller.promoteLatestTemplate({
+      params: { id: INSTALLATION_ID },
+      query: {},
+      body: {
+        channel: "default",
+      },
+    } as never, {} as never);
+
+    expect(promotionServiceProvider).toHaveBeenCalledTimes(1);
+    expect(promotionService.promoteLatest).toHaveBeenCalledWith(
+      authContext,
+      INSTALLATION_ID,
+      {
+        channel: "default",
+      },
+    );
+    expect(result).toMatchObject({
+      data: { id: "release", status: "testing" },
+      message: "success",
+    });
+  });
+
+  test("rejects invalid template promotion bodies before resolving the service", async () => {
+    for (const body of [
+      { channel: "beta" },
+      {
+        channel: "default",
+        template_app_id: "ttd033a68e4e56ccd301",
+      },
+    ]) {
+      const { controller, promotionServiceProvider } = createController();
+      await expect(controller.promoteLatestTemplate({
+        params: { id: INSTALLATION_ID },
+        query: {},
+        body,
+      } as never, {} as never)).rejects.toMatchObject({ statusCode: 400 });
+      expect(promotionServiceProvider).not.toHaveBeenCalled();
+    }
+  });
+
   test("rejects malformed upload versions and unknown fields before provider access", async () => {
     for (const body of [
       {
@@ -377,6 +461,13 @@ describe("PlatformDouyinMiniappsController", () => {
         action: "getReleaseTestQr",
         params: { id: INSTALLATION_ID, releaseId: RELEASE_ID },
         body: {},
+      },
+      {
+        action: "promoteLatestTemplate",
+        params: { id: INSTALLATION_ID },
+        body: {
+          channel: "default",
+        },
       },
       {
         action: "submitReleaseAudit",

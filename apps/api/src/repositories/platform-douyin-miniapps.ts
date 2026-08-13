@@ -77,9 +77,22 @@ export class PlatformDouyinMiniappsRepository {
     return execute("查询抖音小程序安装列表失败", async () => {
       const from = (query.page - 1) * query.pageSize;
       const to = from + query.pageSize - 1;
-      const result = await this.client
+      let databaseQuery = this.client
         .from("douyin_miniapp_installations")
-        .select(SAFE_INSTALLATION_SELECT, { count: "exact" })
+        .select(SAFE_INSTALLATION_SELECT, { count: "exact" });
+      if (query.installation_kind) {
+        databaseQuery = databaseQuery.eq(
+          "installation_kind",
+          query.installation_kind,
+        );
+      }
+      if (query.authorization_status) {
+        databaseQuery = databaseQuery.eq(
+          "authorization_status",
+          query.authorization_status,
+        );
+      }
+      const result = await databaseQuery
         .order("updated_at", { ascending: false })
         .range(from, to);
       assertSuccess(result, "查询抖音小程序安装列表失败");

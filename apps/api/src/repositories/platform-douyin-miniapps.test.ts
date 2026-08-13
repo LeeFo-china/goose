@@ -115,6 +115,30 @@ describe("PlatformDouyinMiniappsRepository", () => {
     expect(String(select.args[0])).toContain("tenant:tenants");
   });
 
+  test("applies bounded installation kind and authorization status filters", async () => {
+    const { client, calls } = createClient([{
+      data: [managementRow], error: null, count: 1,
+    }]);
+    const repository = new PlatformDouyinMiniappsRepository(client);
+
+    await repository.list({
+      page: 1,
+      pageSize: 100,
+      installation_kind: "merchant",
+      authorization_status: "active",
+    });
+
+    expect(calls).toContainEqual({
+      method: "eq",
+      args: ["installation_kind", "merchant"],
+    });
+    expect(calls).toContainEqual({
+      method: "eq",
+      args: ["authorization_status", "active"],
+    });
+    expect(calls).toContainEqual({ method: "range", args: [0, 99] });
+  });
+
   test("finds safe installations by id and AppID", async () => {
     for (const [method, column, value] of [
       ["findById", "id", managementRow.id],
