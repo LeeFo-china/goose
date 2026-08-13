@@ -53,6 +53,7 @@ describe("supplier purchase requisition database types", () => {
     const existingFunctionNames: Array<keyof Functions> = [
       "create_supplier_product",
       "set_tenant_supplier_module",
+      "set_tenant_supplier_rollout_settings",
       "submit_supplier_purchase_order",
     ];
 

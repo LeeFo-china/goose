@@ -25822,6 +25822,23 @@ export type Database = {
         }
         Returns: Json
       }
+      set_tenant_supplier_rollout_settings: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_module_enabled: boolean
+          p_ownership_reads_enabled: boolean
+          p_private_catalog_writes_enabled: boolean
+          p_private_supplier_writes_enabled: boolean
+          p_procurement_snapshot_v1_enabled: boolean
+          p_reason?: string
+          p_require_active_contract_for_new_order: boolean
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       start_workflow_instance: {
         Args: {
           p_context: Json
