@@ -66,7 +66,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     }]),
     listSiteLogs: mock(async () => ({ rows: [{
       id: "44444444-4444-4444-8444-444444444444", stage_code: "water-electric",
-      node_name: "水电施工", images: [storedCover, "http://unsafe.test/a.jpg",
+      node_name: "水电施工", images: [storedCover,
+        "project-log/e2e/broken-legacy-image.jpg", "http://unsafe.test/a.jpg",
         ...Array.from({ length: 12 }, (_, index) => `https://cdn.example.com/${index}.jpg`)],
       created_at: "2026-07-20T00:00:00.000Z",
     }], total: 1 })),
@@ -203,6 +204,7 @@ describe("DouyinMiniappContentService", () => {
     expect(result.items[0]!.images).toHaveLength(9);
     expect(result.items[0]!.images[0]).toBe(resolvedCover);
     expect(result.items[0]!.images.every((url) => url.startsWith("https://"))).toBe(true);
+    expect(result.items[0]!.images.join(",")).not.toContain("broken-legacy-image");
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
   });
 
