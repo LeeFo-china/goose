@@ -32,6 +32,15 @@ test("case and site cards lazy load media and expose native press feedback", asy
   }
 });
 
+test("site cards keep a compact 240rpx square media layout", async () => {
+  const style = await readSource("components/site-card/index.ttss");
+  expect(style).toMatch(/\.site\s*\{[^}]*height:\s*240rpx/);
+  expect(style).toMatch(
+    /\.site-image\s*\{[^}]*box-sizing:\s*border-box[^}]*width:\s*240rpx[^}]*height:\s*240rpx/,
+  );
+  expect(style).toMatch(/\.site-skeleton\s*\{[^}]*height:\s*192rpx/);
+});
+
 test("home keeps one lead intent and uses direct Chinese section headings", async () => {
   const [template, config] = await Promise.all([
     readSource("pages/home/index.ttml"),
