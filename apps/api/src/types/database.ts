@@ -560,6 +560,8 @@ export type Database = {
           legal_name: string | null
           logo_file_id: string | null
           name: string
+          owner_tenant_id: string | null
+          ownership_scope: string
           sort_order: number
           status: string
           updated_at: string
@@ -574,6 +576,8 @@ export type Database = {
           legal_name?: string | null
           logo_file_id?: string | null
           name: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           sort_order?: number
           status?: string
           updated_at?: string
@@ -588,6 +592,8 @@ export type Database = {
           legal_name?: string | null
           logo_file_id?: string | null
           name?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           sort_order?: number
           status?: string
           updated_at?: string
@@ -610,6 +616,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "catalog_brands_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "catalog_brands_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "catalog_brands_updated_by_employee_id_fkey"
             columns: ["updated_by_employee_id"]
             isOneToOne: false
@@ -626,6 +646,8 @@ export type Database = {
           id: string
           level: number
           name: string
+          owner_tenant_id: string | null
+          ownership_scope: string
           parent_id: string | null
           sort_order: number
           status: string
@@ -640,6 +662,8 @@ export type Database = {
           id?: string
           level: number
           name: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           parent_id?: string | null
           sort_order?: number
           status?: string
@@ -654,6 +678,8 @@ export type Database = {
           id?: string
           level?: number
           name?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           parent_id?: string | null
           sort_order?: number
           status?: string
@@ -667,6 +693,20 @@ export type Database = {
             columns: ["created_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_categories_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "catalog_categories_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
@@ -11679,6 +11719,8 @@ export type Database = {
           id: string
           name: string
           operation_source: string
+          owner_tenant_id: string | null
+          ownership_scope: string | null
           product_code: string
           proxy_reason: string
           status: string
@@ -11698,6 +11740,8 @@ export type Database = {
           id?: string
           name: string
           operation_source?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string | null
           product_code: string
           proxy_reason: string
           status?: string
@@ -11717,6 +11761,8 @@ export type Database = {
           id?: string
           name?: string
           operation_source?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string | null
           product_code?: string
           proxy_reason?: string
           status?: string
@@ -11766,6 +11812,20 @@ export type Database = {
             columns: ["created_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_products_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_products_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
@@ -13298,6 +13358,8 @@ export type Database = {
           model: string | null
           name: string
           operation_source: string
+          owner_tenant_id: string | null
+          ownership_scope: string | null
           proxy_reason: string
           purchase_unit_id: string
           serial_managed: boolean
@@ -13323,6 +13385,8 @@ export type Database = {
           model?: string | null
           name: string
           operation_source?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string | null
           proxy_reason: string
           purchase_unit_id: string
           serial_managed?: boolean
@@ -13348,6 +13412,8 @@ export type Database = {
           model?: string | null
           name?: string
           operation_source?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string | null
           proxy_reason?: string
           purchase_unit_id?: string
           serial_managed?: boolean
@@ -13394,6 +13460,20 @@ export type Database = {
             columns: ["created_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "supplier_skus_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
@@ -13447,6 +13527,8 @@ export type Database = {
           name: string
           onboarding_status: string
           operational_status: string
+          owner_tenant_id: string | null
+          ownership_scope: string
           registered_address_text: string | null
           review_remark: string | null
           reviewed_at: string | null
@@ -13470,6 +13552,8 @@ export type Database = {
           name: string
           onboarding_status?: string
           operational_status?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           registered_address_text?: string | null
           review_remark?: string | null
           reviewed_at?: string | null
@@ -13493,6 +13577,8 @@ export type Database = {
           name?: string
           onboarding_status?: string
           operational_status?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
           registered_address_text?: string | null
           review_remark?: string | null
           reviewed_at?: string | null
@@ -13516,6 +13602,20 @@ export type Database = {
             columns: ["created_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suppliers_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "suppliers_owner_tenant_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
           {
@@ -17639,6 +17739,10 @@ export type Database = {
           enabled_at: string | null
           enabled_by_employee_id: string | null
           module_enabled: boolean
+          ownership_reads_enabled: boolean
+          private_catalog_writes_enabled: boolean
+          private_supplier_writes_enabled: boolean
+          procurement_snapshot_v1_enabled: boolean
           require_active_contract_for_new_order: boolean
           tenant_id: string
           updated_at: string
@@ -17649,6 +17753,10 @@ export type Database = {
           enabled_at?: string | null
           enabled_by_employee_id?: string | null
           module_enabled?: boolean
+          ownership_reads_enabled?: boolean
+          private_catalog_writes_enabled?: boolean
+          private_supplier_writes_enabled?: boolean
+          procurement_snapshot_v1_enabled?: boolean
           require_active_contract_for_new_order?: boolean
           tenant_id: string
           updated_at?: string
@@ -17659,6 +17767,10 @@ export type Database = {
           enabled_at?: string | null
           enabled_by_employee_id?: string | null
           module_enabled?: boolean
+          ownership_reads_enabled?: boolean
+          private_catalog_writes_enabled?: boolean
+          private_supplier_writes_enabled?: boolean
+          procurement_snapshot_v1_enabled?: boolean
           require_active_contract_for_new_order?: boolean
           tenant_id?: string
           updated_at?: string
