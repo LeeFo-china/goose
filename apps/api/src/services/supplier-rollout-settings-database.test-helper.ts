@@ -25,6 +25,7 @@ type CommandResult = {
   exitCode: number;
   stdout: string;
   stderr: string;
+  timedOut: boolean;
 };
 
 type CommandRunner = (
@@ -38,6 +39,8 @@ const defaultRunner: CommandRunner = (command, args, input) => {
     cwd: fileURLToPath(new URL("../../../../", import.meta.url)),
     encoding: "utf8",
     input,
+    timeout: 15_000,
+    killSignal: "SIGKILL",
   });
   return {
     exitCode: result.status ?? 1,
@@ -45,6 +48,9 @@ const defaultRunner: CommandRunner = (command, args, input) => {
     stderr: result.error
       ? `${result.stderr ?? ""}\n${result.error.message}`.trim()
       : result.stderr ?? "",
+    timedOut: result.error !== undefined &&
+      "code" in result.error &&
+      result.error.code === "ETIMEDOUT",
   };
 };
 
@@ -99,6 +105,12 @@ export function resolveLocalSupabasePostgres(
   }
 
   const dockerPs = runner("docker", ["ps", "--format", "{{json .}}"]);
+  if (dockerPs.timedOut) {
+    return {
+      available: false,
+      reason: "命令阶段 docker ps 超过 15 秒，已终止；请确认 Docker 可用并先运行 supabase start",
+    };
+  }
   if (dockerPs.exitCode !== 0) {
     return {
       available: false,
@@ -142,6 +154,11 @@ export function executePsql(
     "ON_ERROR_STOP=1",
     "--no-psqlrc",
   ], sql);
+  if (result.timedOut) {
+    throw new Error(
+      "命令阶段 docker exec psql 超过 15 秒，已终止；本地数据库行为验证未完成",
+    );
+  }
   if (result.exitCode !== 0) {
     throw new Error(
       `命令 docker exec psql 失败（exit code ${result.exitCode}）；本地数据库行为验证未完成`,

@@ -44,20 +44,32 @@ export function assertSupplierRolloutTransition(
   target: SupplierRolloutState,
 ): void {
   const effectiveTarget = effectiveSupplierRolloutSettings(target);
+  const currentLevel = rolloutLevel(effectiveSupplierRolloutSettings(current));
+  const targetLevel = rolloutLevel(effectiveTarget);
+
+  if (Math.abs(targetLevel - currentLevel) > 1) {
+    throwSupplierRolloutOrderInvalid();
+  }
+}
+
+export function assertSupplierRolloutDependencies(
+  target: SupplierRolloutState,
+): void {
+  const effectiveTarget = effectiveSupplierRolloutSettings(target);
   const hasInvalidDependency = Object.keys(DISABLED_FLAGS).some((key) =>
     target[key as keyof typeof DISABLED_FLAGS] !==
       effectiveTarget[key as keyof typeof DISABLED_FLAGS]
   );
-  const currentLevel = rolloutLevel(effectiveSupplierRolloutSettings(current));
-  const targetLevel = rolloutLevel(effectiveTarget);
 
-  if (hasInvalidDependency || Math.abs(targetLevel - currentLevel) > 1) {
-    throw Errors.business(
-      409,
-      "供应商灰度开关必须按顺序逐步调整",
-      "SUPPLIER_ROLLOUT_ORDER_INVALID",
-    );
-  }
+  if (hasInvalidDependency) throwSupplierRolloutOrderInvalid();
+}
+
+function throwSupplierRolloutOrderInvalid(): never {
+  throw Errors.business(
+    409,
+    "供应商灰度开关必须按顺序逐步调整",
+    "SUPPLIER_ROLLOUT_ORDER_INVALID",
+  );
 }
 
 function rolloutLevel(settings: SupplierRolloutState): number {

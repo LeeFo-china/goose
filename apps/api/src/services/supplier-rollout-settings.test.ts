@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  assertSupplierRolloutDependencies,
   assertSupplierRolloutTransition,
   effectiveSupplierRolloutSettings,
 } from "./supplier-rollout-settings";
@@ -53,20 +54,37 @@ describe("supplier rollout settings", () => {
     }
   });
 
-  test("rejects skipped and dependency-invalid transitions", () => {
+  test("rejects skipped transitions", () => {
+    expect(() => assertSupplierRolloutTransition(disabled, {
+      ...disabled,
+      module_enabled: true,
+      ownership_reads_enabled: true,
+      private_supplier_writes_enabled: true,
+    })).toThrow("供应商灰度开关必须按顺序逐步调整");
+  });
+
+  test("rejects dependency-invalid targets", () => {
     for (const target of [
-      {
-        ...disabled,
-        module_enabled: true,
-        ownership_reads_enabled: true,
-        private_supplier_writes_enabled: true,
-      },
       { ...disabled, module_enabled: true, private_supplier_writes_enabled: true },
       { ...disabled, ownership_reads_enabled: true },
     ]) {
-      expect(() => assertSupplierRolloutTransition(disabled, target))
+      expect(() => assertSupplierRolloutDependencies(target))
         .toThrow("供应商灰度开关必须按顺序逐步调整");
     }
+  });
+
+  test("validates target dependencies independently from current state", () => {
+    expect(() => assertSupplierRolloutDependencies({
+      ...disabled,
+      module_enabled: true,
+      private_supplier_writes_enabled: true,
+    })).toThrow("供应商灰度开关必须按顺序逐步调整");
+
+    expect(() => assertSupplierRolloutDependencies({
+      ...disabled,
+      module_enabled: true,
+      ownership_reads_enabled: true,
+    })).not.toThrow();
   });
 
   test("normalizes invalid tenant-visible combinations fail closed", () => {

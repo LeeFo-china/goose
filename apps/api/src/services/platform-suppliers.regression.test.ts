@@ -215,6 +215,60 @@ describe("PlatformSuppliersService regression boundaries", () => {
     });
     expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
   });
+
+  test("rejects dependency-invalid flags before a stale version reaches the repository", async () => {
+    const { service, repository } = await createHarness();
+
+    await expect(service.setTenantSupplierSettings(
+      auth(["platform.supplier.manage"]),
+      {
+        tenantId: TENANT_ID,
+        module_enabled: true,
+        require_active_contract_for_new_order: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
+        expected_version: 0,
+        idempotencyKey: "stale-invalid-rollout-1",
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_ROLLOUT_ORDER_INVALID",
+    });
+    expect(repository.getTenantSupplierSettings).not.toHaveBeenCalled();
+    expect(repository.setTenantSupplierSettings).not.toHaveBeenCalled();
+  });
+
+  test("lets a dependency-valid stale version reach the repository conflict", async () => {
+    const { service, repository } = await createHarness();
+    repository.setTenantSupplierSettings.mockImplementationOnce(async () => {
+      throw Object.assign(new Error("数据版本已变化，请刷新后重试"), {
+        statusCode: 409,
+        code: "SUPPLIER_VERSION_CONFLICT",
+      });
+    });
+
+    await expect(service.setTenantSupplierSettings(
+      auth(["platform.supplier.manage"]),
+      {
+        tenantId: TENANT_ID,
+        module_enabled: true,
+        require_active_contract_for_new_order: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: false,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
+        expected_version: 0,
+        idempotencyKey: "stale-valid-rollout-1",
+      },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_VERSION_CONFLICT",
+    });
+    expect(repository.getTenantSupplierSettings).toHaveBeenCalledTimes(1);
+    expect(repository.setTenantSupplierSettings).toHaveBeenCalledTimes(1);
+  });
 });
 
 function mutatedSupplier(action: string) {

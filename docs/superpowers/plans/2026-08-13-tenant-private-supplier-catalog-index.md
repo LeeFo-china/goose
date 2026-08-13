@@ -46,7 +46,7 @@
 - migration contract 覆盖约束、索引、原子性、RLS/FORCE RLS、REVOKE/GRANT 和稳定错误码。
 - Admin 列表有分页、加载态、空态、错误态和权限拒绝态；写操作带幂等键。
 - 阶段 PR 只包含该阶段文件，不包含 `packages/domain/gooes-domain-1.13.0.tgz` 或其他用户改动。
-- 进入下一阶段前，当前阶段已完成审查并合并；数据库变更应用后使用 `supabase migration list` 核对 Local/Remote。
+- 进入下一阶段前，当前阶段已完成审查并合并；数据库变更应用后使用 `supabase migration list --local` 核对本地迁移，远端状态另行执行只读核对。
 
 ## 最终生产放行门禁
 

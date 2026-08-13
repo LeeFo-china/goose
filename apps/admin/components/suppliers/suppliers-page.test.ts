@@ -130,6 +130,8 @@ describe("平台租户供应商模块开关", () => {
     expect(card).toContain("hasEnabledChildFlags");
     expect(card).toContain("controlsLocked");
     expect(card).toContain("请先逆序关闭子开关");
+    expect(card).toContain("以下开关仅用于预配置");
+    expect(card).toContain("对应后续阶段交付后才会生效");
     expect(settingsApi).toContain("expected_version: current.version");
     expect(settingsApi).toContain('"Idempotency-Key"');
     expect(card).toContain("模块启用时间");

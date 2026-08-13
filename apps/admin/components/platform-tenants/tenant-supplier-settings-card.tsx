@@ -289,6 +289,13 @@ export function TenantSupplierSettingsCard({
             </AlertDescription>
           </Alert>
         ) : null}
+        <Alert>
+          <AlertTitle>分阶段能力预配置</AlertTitle>
+          <AlertDescription>
+            以下开关仅用于预配置；对应后续阶段交付后才会生效。
+            启用开关不会让尚未交付的租户端能力提前上线。
+          </AlertDescription>
+        </Alert>
         <FieldGroup className="gap-3">
           {rolloutFields.map((field) => {
             const disabled = controlsLocked ||

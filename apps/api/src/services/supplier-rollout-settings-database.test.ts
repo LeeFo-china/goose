@@ -309,6 +309,7 @@ describe("supplier rollout local PostgreSQL helper", () => {
           State: "running",
         }),
         stderr: "",
+        timedOut: false,
       };
     });
 
@@ -325,6 +326,7 @@ describe("supplier rollout local PostgreSQL helper", () => {
       exitCode: 37,
       stdout: simulatedSecret,
       stderr: `diagnostic:${simulatedSecret}`,
+      timedOut: false,
     }));
 
     expect(resolution.available).toBe(false);
@@ -335,6 +337,44 @@ describe("supplier rollout local PostgreSQL helper", () => {
     expect(resolution.reason).toContain("exit code 37");
     expect(resolution.reason).toContain("supabase start");
     expect(resolution.reason).not.toContain(simulatedSecret);
+  });
+
+  test("reports docker ps timeouts without exposing command output", () => {
+    const simulatedSecret = "SUPABASE_TIMEOUT_SECRET_SHOULD_NOT_APPEAR";
+    const resolution = resolveLocalSupabasePostgres(() => ({
+      exitCode: 1,
+      stdout: simulatedSecret,
+      stderr: `diagnostic:${simulatedSecret}`,
+      timedOut: true,
+    }));
+
+    expect(resolution).toEqual({
+      available: false,
+      reason: "命令阶段 docker ps 超过 15 秒，已终止；请确认 Docker 可用并先运行 supabase start",
+    });
+    expect(JSON.stringify(resolution)).not.toContain(simulatedSecret);
+  });
+
+  test("reports psql timeouts without exposing command output", () => {
+    const simulatedSecret = "PSQL_TIMEOUT_SECRET_SHOULD_NOT_APPEAR";
+    let timeoutError: unknown;
+
+    try {
+      executePsql("local-postgres", "select 1", () => ({
+        exitCode: 1,
+        stdout: simulatedSecret,
+        stderr: `diagnostic:${simulatedSecret}`,
+        timedOut: true,
+      }));
+    } catch (error) {
+      timeoutError = error;
+    }
+
+    expect(timeoutError).toBeInstanceOf(Error);
+    expect((timeoutError as Error).message).toBe(
+      "命令阶段 docker exec psql 超过 15 秒，已终止；本地数据库行为验证未完成",
+    );
+    expect((timeoutError as Error).message).not.toContain(simulatedSecret);
   });
 
   const localPostgres = resolveLocalSupabasePostgres();

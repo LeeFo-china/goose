@@ -23,7 +23,10 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
-import { assertSupplierRolloutTransition } from "@/services/supplier-rollout-settings";
+import {
+  assertSupplierRolloutDependencies,
+  assertSupplierRolloutTransition,
+} from "@/services/supplier-rollout-settings";
 import {
   assertQualificationTypeRules,
   createContext,
@@ -306,6 +309,7 @@ export class PlatformSuppliersService {
   }
   async setTenantSupplierSettings(auth: AuthContext, input: SettingsRequest) {
     const actor = this.require(auth, "manage");
+    assertSupplierRolloutDependencies(input);
     const current = await this.repository.getTenantSupplierSettings(input.tenantId);
     if ((current?.version ?? 0) === input.expected_version) {
       assertSupplierRolloutTransition(current ?? {
