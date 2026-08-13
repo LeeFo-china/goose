@@ -18,7 +18,10 @@ import type {
   DouyinContentPageQuery,
 } from "@/schema/douyin-miniapp";
 import type { JwtPayload } from "@/utils/jwt";
-import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
+import {
+  ensurePlatformCosAccessConfigCache,
+  resolveStoredFileUrlList,
+} from "@/services/files/file-url-resolver";
 
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
@@ -26,6 +29,7 @@ type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "listProjectImageLogs">;
 type Dependencies = {
   readonly repository?: RepositoryPort;
+  readonly prepareImageUrls?: () => Promise<void>;
   readonly resolveImageUrls?: (value: unknown) => string[];
 };
 type ContentContext = {
@@ -36,10 +40,13 @@ type ContentContext = {
 
 export class DouyinMiniappContentService {
   private readonly repository: RepositoryPort;
+  private readonly prepareImageUrls: () => Promise<void>;
   private readonly resolveImageUrls: (value: unknown) => string[];
 
   constructor(dependencies: Dependencies = {}) {
     this.repository = dependencies.repository ?? douyinMiniappContentRepository;
+    this.prepareImageUrls = dependencies.prepareImageUrls ??
+      ensurePlatformCosAccessConfigCache;
     this.resolveImageUrls = dependencies.resolveImageUrls ?? resolveStoredFileUrlList;
   }
 
@@ -139,6 +146,7 @@ export class DouyinMiniappContentService {
     const result = await this.repository.listSiteLogs({
       tenantId: context.tenantId, projectId, ...query,
     });
+    if (result.rows.length > 0) await this.prepareImageUrls();
     return page(result.rows.map((log) => mapLog(log, this.resolveImageUrls)), query, result.total);
   }
 
@@ -202,7 +210,10 @@ export class DouyinMiniappContentService {
   ): Promise<Map<string, string[]>> {
     const projectIds = [...new Set(projects.map((project) => project.id))];
     if (projectIds.length === 0) return new Map();
-    const logs = await this.repository.listProjectImageLogs({ tenantId, projectIds });
+    const [logs] = await Promise.all([
+      this.repository.listProjectImageLogs({ tenantId, projectIds }),
+      this.prepareImageUrls(),
+    ]);
     return projectImageMap(logs, this.resolveImageUrls);
   }
 }

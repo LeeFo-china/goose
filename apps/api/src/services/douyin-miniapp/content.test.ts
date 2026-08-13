@@ -50,6 +50,13 @@ function resolveImageUrls(value: unknown) {
 }
 
 function dependencies(overrides: Record<string, unknown> = {}) {
+  let imageUrlsReady = false;
+  const prepareImageUrls = mock(async () => {
+    imageUrlsReady = true;
+  });
+  const readyAwareResolveImageUrls = (value: unknown) => imageUrlsReady
+    ? resolveImageUrls(value)
+    : [];
   const repository = {
     findActiveInstallation: mock(async () => installation),
     findPublishedCompany: mock(async () => company),
@@ -73,7 +80,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     }], total: 1 })),
     ...overrides,
   };
-  return { repository, resolveImageUrls };
+  return { repository, prepareImageUrls,
+    resolveImageUrls: readyAwareResolveImageUrls };
 }
 
 describe("DouyinMiniappContentService", () => {
@@ -110,6 +118,7 @@ describe("DouyinMiniappContentService", () => {
       tenantId: TENANT_ID,
       projectIds: [PROJECT_ID],
     });
+    expect(deps.prepareImageUrls).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result)).not.toMatch(/260000|customer|signed_amount|latitude|longitude/i);
   });
 
