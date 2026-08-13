@@ -13,6 +13,7 @@ import type {
   TenantSupplierContractPolicyCommand,
   TenantSupplierCreateCommand,
   TenantSupplierPrivateCreateInput,
+  TenantPrivateSupplierUpdateInput,
   TenantSupplierSharedCreateInput,
   TenantSupplierDirectoryInput,
   TenantSupplierLifecycleCommand,
@@ -24,6 +25,7 @@ import {
   allocateInternalCode,
   createPrivateSupplier,
   createSharedRelationship,
+  updatePrivateSupplierMaster,
 } from "./tenant-supplier-private-commands";
 
 import {
@@ -57,6 +59,7 @@ import {
   type SupplierOrderEligibility,
   type TenantSupplierDetail,
   type TenantPrivateSupplierDetail,
+  type TenantPrivateSupplierMaster,
   type TenantSupplierListItem,
   type TenantSupplierMutationResult,
   type TenantSupplierPage,
@@ -73,6 +76,7 @@ export type {
   SupplierOrderEligibility,
   TenantSupplierDetail,
   TenantPrivateSupplierDetail,
+  TenantPrivateSupplierMaster,
   TenantSupplierListItem,
   TenantSupplierMutationResult,
   TenantSupplierPage,
@@ -86,6 +90,12 @@ export type CreatePrivateSupplierCommand = TenantSupplierPrivateCreateInput &
   SupplierCommandContext & { tenant_id: string };
 export type CreateSharedRelationshipCommand = TenantSupplierSharedCreateInput &
   SupplierCommandContext & { tenant_id: string };
+export type UpdatePrivateSupplierMasterCommand =
+  TenantPrivateSupplierUpdateInput & {
+    tenant_id: string;
+    tenant_supplier_id: string;
+    updated_by_employee_id: string;
+  };
 
 export type AtomicSupplierContractCreateCommand =
   SupplierContractCreateCommand &
@@ -109,6 +119,8 @@ export interface TenantSuppliersRepositoryPort {
     Promise<TenantPrivateSupplierDetail>;
   createSharedRelationship(input: CreateSharedRelationshipCommand):
     Promise<TenantSupplierDetail>;
+  updatePrivateSupplierMaster(input: UpdatePrivateSupplierMasterCommand):
+    Promise<TenantPrivateSupplierMaster>;
   createRelationship(input: TenantSupplierCreateCommand):
     Promise<TenantSupplierMutationResult>;
   updateRelationship(input: TenantSupplierUpdateCommand):
@@ -232,6 +244,10 @@ export class TenantSuppliersRepository implements TenantSuppliersRepositoryPort 
 
   async createSharedRelationship(input: CreateSharedRelationshipCommand) {
     return createSharedRelationship(this.client, input);
+  }
+
+  async updatePrivateSupplierMaster(input: UpdatePrivateSupplierMasterCommand) {
+    return updatePrivateSupplierMaster(this.client, input);
   }
 
   createRelationship(input: TenantSupplierCreateCommand) {

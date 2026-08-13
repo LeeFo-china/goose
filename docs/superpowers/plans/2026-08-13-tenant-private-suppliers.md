@@ -160,6 +160,10 @@ git commit -m "feat(api): 接入私有供应商数据库命令"
 **Files:**
 - Modify: `apps/api/src/services/tenant-suppliers.ts`
 - Modify: `apps/api/src/services/tenant-suppliers.test.ts`
+- Create: `apps/api/src/services/tenant-supplier-private-commands.ts`
+- Create: `apps/api/src/services/tenant-supplier-private-commands.test.ts`
+- Modify: `apps/api/src/repositories/tenant-supplier-private-commands.ts`
+- Modify: `apps/api/src/repositories/tenant-supplier-private-commands.test.ts`
 
 - [ ] **Step 1: 写 RED 测试**
 

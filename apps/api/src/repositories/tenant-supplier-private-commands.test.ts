@@ -181,4 +181,78 @@ describe("TenantSuppliersRepository private supplier commands", () => {
       idempotency_key: `error-${businessCode}`,
     })).rejects.toMatchObject({ code: businessCode, statusCode });
   });
+
+  test("updates only a current-tenant private supplier master with version guards", async () => {
+    const privateRelationshipRow = ownershipRow(privateRelationship);
+    const { repository, requests } = await createRepository((request) => ({
+      body: request.url.includes("tenant_suppliers")
+        ? privateRelationshipRow
+        : { ...privateRelationship.supplier, name: "新版私有供应商", version: 2 },
+    }));
+
+    const result = await repository.updatePrivateSupplierMaster({
+      tenant_id: TENANT_ID,
+      tenant_supplier_id: relationship.id,
+      expected_version: 1,
+      name: "新版私有供应商",
+      updated_by_employee_id: EMPLOYEE_ID,
+    });
+
+    expect(result).toMatchObject({
+      name: "新版私有供应商",
+      ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID,
+      version: 2,
+    });
+    expect(requests).toHaveLength(2);
+    const updateUrl = new URL(requests[1]!.url);
+    expect(updateUrl.searchParams.get("id")).toBe(`eq.${SUPPLIER_ID}`);
+    expect(updateUrl.searchParams.get("ownership_scope")).toBe("eq.tenant");
+    expect(updateUrl.searchParams.get("owner_tenant_id")).toBe(`eq.${TENANT_ID}`);
+    expect(updateUrl.searchParams.get("version")).toBe("eq.1");
+    expect(await requests[1]!.clone().json()).toEqual({
+      name: "新版私有供应商",
+      updated_by_employee_id: EMPLOYEE_ID,
+      version: 2,
+    });
+  });
+
+  test("does not update a platform supplier through the private master command", async () => {
+    const { repository, requests } = await createRepository(() => ({
+      body: ownershipRow(relationship),
+    }));
+
+    await expect(repository.updatePrivateSupplierMaster({
+      tenant_id: TENANT_ID,
+      tenant_supplier_id: relationship.id,
+      expected_version: 1,
+      name: "越权更新",
+      updated_by_employee_id: EMPLOYEE_ID,
+    })).rejects.toMatchObject({
+      statusCode: 404,
+      code: "TENANT_SUPPLIER_NOT_FOUND",
+    });
+    expect(requests).toHaveLength(1);
+  });
 });
+
+function ownershipRow(input: typeof relationship | typeof privateRelationship) {
+  const supplier = input.supplier;
+  return {
+    id: input.id,
+    tenant_id: input.tenant_id,
+    supplier_id: input.supplier_id,
+    supplier: {
+      id: supplier.id,
+      code: supplier.code,
+      name: supplier.name,
+      legal_name: supplier.legal_name,
+      supplier_type: supplier.supplier_type,
+      ownership_scope: supplier.ownership_scope,
+      owner_tenant_id: supplier.owner_tenant_id,
+      onboarding_status: supplier.onboarding_status,
+      operational_status: supplier.operational_status,
+      version: supplier.version,
+    },
+  };
+}

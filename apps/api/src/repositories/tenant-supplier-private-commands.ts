@@ -10,18 +10,29 @@ import {
   CodeAllocationSchema,
   CreateRelationshipCommandEnvelopeSchema,
   PlatformRelationshipSchema,
+  RelationshipOwnershipSchema,
   PrivateSupplierRelationshipSchema,
+  PrivateSupplierMasterSchema,
+  compact,
   parse,
 } from "./tenant-suppliers-mappers";
 import type {
   AllocateCodeCommand,
   CreatePrivateSupplierCommand,
   CreateSharedRelationshipCommand,
+  UpdatePrivateSupplierMasterCommand,
 } from "./tenant-suppliers";
 
 type RpcResult = PromiseLike<{ data: unknown; error: unknown }>;
+type Query = {
+  select: (...args: unknown[]) => Query;
+  update: (value: Record<string, unknown>) => Query;
+  eq: (column: string, value: unknown) => Query;
+  maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+};
 export type TenantSupplierCommandClient = {
   rpc: (name: string, params: Record<string, unknown>) => RpcResult;
+  from: (table: string) => Query;
 };
 
 export async function allocateInternalCode(
@@ -96,6 +107,82 @@ export async function createSharedRelationship(
     result,
     PlatformRelationshipSchema,
     "关联平台共享供应商失败",
+  );
+}
+
+export async function updatePrivateSupplierMaster(
+  client: TenantSupplierCommandClient,
+  input: UpdatePrivateSupplierMasterCommand,
+) {
+  const {
+    tenant_id,
+    tenant_supplier_id,
+    expected_version,
+    updated_by_employee_id,
+    ...fields
+  } = input;
+  const { data: relationshipData, error: relationshipError } = await client
+    .from("tenant_suppliers")
+    .select([
+      "id", "tenant_id", "supplier_id",
+      "supplier:suppliers!inner(id,code,name,legal_name,supplier_type,ownership_scope,owner_tenant_id,onboarding_status,operational_status,version)",
+    ].join(","))
+    .eq("tenant_id", tenant_id)
+    .eq("id", tenant_supplier_id)
+    .maybeSingle();
+  if (relationshipError) {
+    throw Errors.dbError("查询租户私有供应商失败", relationshipError);
+  }
+  const relationship = relationshipData === null
+    ? null
+    : parse(
+      RelationshipOwnershipSchema,
+      relationshipData,
+      "查询租户私有供应商失败",
+    );
+  if (
+    !relationship ||
+    relationship.supplier.ownership_scope !== "tenant" ||
+    relationship.supplier.owner_tenant_id !== tenant_id
+  ) {
+    throw Errors.business(
+      404,
+      "租户私有供应商不存在",
+      "TENANT_SUPPLIER_NOT_FOUND",
+    );
+  }
+  const { data, error } = await client.from("suppliers")
+    .update(compact({
+      ...fields,
+      updated_by_employee_id,
+      version: expected_version + 1,
+    }))
+    .eq("id", relationship.supplier_id)
+    .eq("ownership_scope", "tenant")
+    .eq("owner_tenant_id", tenant_id)
+    .eq("version", expected_version)
+    .select([
+      "id", "code", "name", "legal_name", "unified_social_credit_code",
+      "legal_representative_name", "registered_address_text", "supplier_type",
+      "onboarding_status", "operational_status", "review_remark",
+      "reviewed_by_employee_id", "reviewed_at", "blacklisted_by_employee_id",
+      "blacklisted_at", "blacklist_reason", "version", "created_by_employee_id",
+      "updated_by_employee_id", "created_at", "updated_at", "ownership_scope",
+      "owner_tenant_id",
+    ].join(","))
+    .maybeSingle();
+  if (error) throw Errors.dbError("更新租户私有供应商主档失败", error);
+  if (data === null) {
+    throw Errors.business(
+      409,
+      "数据版本已变化，请刷新后重试",
+      "SUPPLIER_VERSION_CONFLICT",
+    );
+  }
+  return parse(
+    PrivateSupplierMasterSchema,
+    data,
+    "更新租户私有供应商主档失败",
   );
 }
 

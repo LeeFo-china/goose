@@ -134,6 +134,25 @@ export const PlatformRelationshipSchema = VisibleRelationshipSchema.refine(
     relationship.supplier.owner_tenant_id === null,
   { message: "共享供应商关系必须引用平台供应商" },
 );
+export const RelationshipOwnershipSchema = z.object({
+  id: z.uuid(),
+  tenant_id: z.uuid(),
+  supplier_id: z.uuid(),
+  supplier: OwnedSupplierSchema,
+}).strict();
+export const PrivateRelationshipOwnershipSchema =
+  RelationshipOwnershipSchema.superRefine((relationship, context) => {
+  if (
+    relationship.supplier.ownership_scope !== "tenant" ||
+    relationship.supplier.owner_tenant_id !== relationship.tenant_id
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["supplier", "owner_tenant_id"],
+      message: "私有供应商不属于当前租户",
+    });
+  }
+  });
 export const SUPPLIER_CONTRACT_HEALTH_VALUES = [
   "valid",
   "expiring",
@@ -310,6 +329,8 @@ export const PrivateSupplierRelationshipSchema = RelationshipSchema.extend({
   }
 });
 
+export const PrivateSupplierMasterSchema = PrivateSupplierSnapshotSchema;
+
 export const CreateRelationshipCommandEnvelopeSchema = z.object({
   status: z.enum(["created", "supplier_not_found", "state_conflict"]),
   idempotent: z.boolean().optional(),
@@ -326,6 +347,9 @@ export type TenantVisibleSupplierDetail = z.infer<
 >;
 export type TenantPrivateSupplierDetail = z.infer<
   typeof PrivateSupplierRelationshipSchema
+>;
+export type TenantPrivateSupplierMaster = z.infer<
+  typeof PrivateSupplierMasterSchema
 >;
 export type CodeAllocation = z.infer<typeof CodeAllocationSchema>;
 export type TenantSupplierListItem = z.infer<

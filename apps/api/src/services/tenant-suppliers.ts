@@ -10,6 +10,9 @@ import type {
   SupplierContractUpdateInput,
   TenantSupplierContractPolicyInput,
   TenantSupplierCreateInput,
+  TenantSupplierPrivateCreateInput,
+  TenantSupplierSharedCreateInput,
+  TenantPrivateSupplierUpdateInput,
   TenantSupplierDirectoryQuery,
   TenantSupplierListQuery,
   TenantSupplierUpdateInput,
@@ -17,10 +20,19 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
+import {
+  allocateInternalCode as allocateTenantSupplierCode,
+  createPrivateSupplier as createTenantPrivateSupplier,
+  createSharedRelationship as createTenantSharedRelationship,
+  requireActor as requireSupplierActor,
+  requirePrivateSupplierWrites,
+  updatePrivateSupplierMaster as updateTenantPrivateSupplierMaster,
+} from "./tenant-supplier-private-commands";
 
 const PERMISSION = {
   view: "supplier.view",
   manage: "supplier.manage",
+  master: "supplier.master.manage",
   contract: "supplier.contract.manage",
 } as const;
 
@@ -131,6 +143,60 @@ export class TenantSuppliersService {
         actor_employee_id: actor.employeeId,
         idempotency_key: idempotencyKey,
       })));
+  }
+
+  async allocateInternalCode(
+    authContext: AuthContext,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActor(authContext, "master");
+    await requirePrivateSupplierWrites(this.repository, actor);
+    return allocateTenantSupplierCode(this.repository, actor, idempotencyKey);
+  }
+
+  async createPrivateSupplier(
+    authContext: AuthContext,
+    input: TenantSupplierPrivateCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActor(authContext, "master");
+    await requirePrivateSupplierWrites(this.repository, actor);
+    return createTenantPrivateSupplier(
+      this.repository,
+      actor,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  async createSharedRelationship(
+    authContext: AuthContext,
+    input: TenantSupplierSharedCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActor(authContext, "manage");
+    await this.requireEnabled(actor.tenantId);
+    return createTenantSharedRelationship(
+      this.repository,
+      actor,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  async updatePrivateSupplierMaster(
+    authContext: AuthContext,
+    tenantSupplierId: string,
+    input: TenantPrivateSupplierUpdateInput,
+  ) {
+    const actor = this.requireActor(authContext, "master");
+    await requirePrivateSupplierWrites(this.repository, actor);
+    return updateTenantPrivateSupplierMaster(
+      this.repository,
+      actor,
+      tenantSupplierId,
+      input,
+    );
   }
 
   async updateRelationship(
@@ -325,14 +391,7 @@ export class TenantSuppliersService {
     permission: keyof typeof PERMISSION,
   ) {
     const tenantId = this.requireTenant(authContext, permission);
-    if (!authContext.employeeId || !authContext.authUserId) {
-      throw Errors.forbidden();
-    }
-    return {
-      tenantId,
-      authUserId: authContext.authUserId,
-      employeeId: authContext.employeeId,
-    };
+    return requireSupplierActor(authContext, tenantId);
   }
 
   private async requireEnabled(tenantId: string) {
