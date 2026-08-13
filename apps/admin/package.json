@@ -15,6 +15,7 @@
     "test:e2e:supplier-purchase-order": "env -u NO_COLOR playwright test --config=playwright.supplier-purchase-order.config.ts",
     "test:e2e:supplier-payment": "env -u NO_COLOR playwright test --config=playwright.supplier-payment.config.ts",
     "test:e2e:supplier-product-pricing": "env -u NO_COLOR playwright test --config=playwright.supplier-product-pricing.config.ts",
+    "test:e2e:supplier-rollout": "env -u NO_COLOR playwright test --config=playwright.supplier-rollout.config.ts",
     "test:e2e:wechat-pay-applyment": "env -u NO_COLOR playwright test --config=playwright.wechat-pay-applyment.config.ts",
     "test:e2e:headed": "env -u NO_COLOR playwright test --headed",
     "test:e2e:ui": "env -u NO_COLOR playwright test --ui",
