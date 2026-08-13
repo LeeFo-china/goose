@@ -26291,6 +26291,21 @@ export type Database = {
         }
         Returns: Json
       }
+      update_tenant_private_supplier_master: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_legal_name: string
+          p_name: string
+          p_supplier_type: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+          p_unified_social_credit_code: string
+          p_unified_social_credit_code_provided: boolean
+        }
+        Returns: Json
+      }
       update_tenant_service_provider_profile: {
         Args: { p_expected_version: number; p_patch: Json; p_tenant_id: string }
         Returns: Json

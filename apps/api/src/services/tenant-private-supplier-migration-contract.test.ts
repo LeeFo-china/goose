@@ -36,7 +36,6 @@ const readVisibilityMigrationPath = new URL(
 const readVisibilitySql = existsSync(readVisibilityMigrationPath)
   ? readFileSync(readVisibilityMigrationPath, "utf8")
   : "";
-
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
@@ -471,4 +470,5 @@ describe("tenant private supplier migration contract", () => {
     expect(sharedDirectory).toContain("supplier.owner_tenant_id");
     expect(readVisibilitySql).toMatch(/COMMIT;\s*$/);
   });
+
 });

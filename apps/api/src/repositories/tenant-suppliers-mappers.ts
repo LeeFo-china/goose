@@ -339,6 +339,17 @@ export const CreateRelationshipCommandEnvelopeSchema = z.object({
   reason: z.string().optional(),
   version: z.number().int().nonnegative().optional(),
 }).strict();
+export const UpdatePrivateSupplierMasterEnvelopeSchema = z.object({
+  status: z.enum([
+    "updated",
+    "supplier_not_found",
+    "tenant_supplier_not_found",
+    "version_conflict",
+  ]),
+  supplier: z.unknown().optional(),
+  error_code: z.string().optional(),
+  version: z.number().int().nonnegative().optional(),
+}).strict();
 
 export type TenantSupplierSettings = z.infer<typeof SettingsSchema>;
 export type TenantSupplierDetail = z.infer<typeof RelationshipSchema>;

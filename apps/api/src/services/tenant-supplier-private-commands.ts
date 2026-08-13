@@ -7,6 +7,8 @@ import type {
 } from "@/schema/tenant-suppliers";
 import type { AuthContext } from "@/services/authorization";
 import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
+import { resolveSupplierOwnershipAccess } from "@/services/supplier-ownership-access";
+import type { TenantSupplierDetail } from "@/repositories/tenant-suppliers";
 
 export type SupplierActor = {
   tenantId: string;
@@ -90,8 +92,36 @@ export function updatePrivateSupplierMaster(
     ...omitTenantId(input),
     tenant_id: actor.tenantId,
     tenant_supplier_id: tenantSupplierId,
-    updated_by_employee_id: actor.employeeId,
+    actor_user_id: actor.authUserId,
+    actor_employee_id: actor.employeeId,
   });
+}
+
+export function assertPrivateSupplierMasterWritable(
+  relationship: TenantSupplierDetail,
+  tenantId: string,
+) {
+  const ownership = relationship.supplier.ownership_scope === "tenant" &&
+      relationship.supplier.owner_tenant_id
+    ? {
+      ownershipScope: "tenant" as const,
+      ownerTenantId: relationship.supplier.owner_tenant_id,
+    }
+    : { ownershipScope: "platform" as const, ownerTenantId: null };
+  const access = resolveSupplierOwnershipAccess({
+    actor: { kind: "tenant", tenantId },
+    resourceKind: "supplier",
+    ownership,
+    relationshipStatus: relationship.relationship_status,
+    operation: "write",
+    permissionGranted: true,
+  });
+  if (access.writable) return;
+  throw Errors.business(
+    access.visible ? 403 : 404,
+    "当前供应商主档不可由本租户维护",
+    access.visible ? "PRIVATE_RESOURCE_FORBIDDEN" : "TENANT_SUPPLIER_NOT_FOUND",
+  );
 }
 
 export function requireActor(

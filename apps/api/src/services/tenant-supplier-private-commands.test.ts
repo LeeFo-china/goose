@@ -28,6 +28,7 @@ async function createService(overrides: Record<string, unknown> = {}) {
       name: "新版私有供应商",
       version: 2,
     })),
+    findRelationship: mock(async () => privateRelationship),
     ...overrides,
   };
   const accessPolicy = {
@@ -150,8 +151,36 @@ describe("TenantSuppliersService private supplier commands", () => {
       tenant_supplier_id: RELATIONSHIP_ID,
       expected_version: 1,
       name: "新版私有供应商",
-      updated_by_employee_id: EMPLOYEE_ID,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
     });
+  });
+
+  test("rejects platform and foreign private masters at the service boundary", async () => {
+    for (const supplierOverride of [
+      { ownership_scope: "platform", owner_tenant_id: null },
+      {
+        ownership_scope: "tenant",
+        owner_tenant_id: "00000000-0000-4000-8000-000000000999",
+      },
+    ]) {
+      const { service, repository } = await createService({
+        findRelationship: mock(async () => ({
+          ...privateRelationship,
+          supplier: { ...privateRelationship.supplier, ...supplierOverride },
+        })),
+      });
+      await expect(service.updatePrivateSupplierMaster(
+        auth(["supplier.master.manage"]),
+        RELATIONSHIP_ID,
+        { expected_version: 1, name: "越权更新" },
+      )).rejects.toMatchObject({
+        code: supplierOverride.ownership_scope === "platform"
+          ? "PRIVATE_RESOURCE_FORBIDDEN"
+          : "TENANT_SUPPLIER_NOT_FOUND",
+      });
+      expect(repository.updatePrivateSupplierMaster).not.toHaveBeenCalled();
+    }
   });
 });
 
@@ -208,6 +237,9 @@ const supplier = {
 const platformRelationship = { id: RELATIONSHIP_ID, supplier };
 const privateRelationship = {
   id: RELATIONSHIP_ID,
+  tenant_id: TENANT_ID,
+  supplier_id: SUPPLIER_ID,
+  relationship_status: "active",
   supplier: {
     ...supplier,
     code: "SUP-000001",

@@ -162,8 +162,14 @@ git commit -m "feat(api): 接入私有供应商数据库命令"
 - Modify: `apps/api/src/services/tenant-suppliers.test.ts`
 - Create: `apps/api/src/services/tenant-supplier-private-commands.ts`
 - Create: `apps/api/src/services/tenant-supplier-private-commands.test.ts`
+- Create: `apps/api/src/services/tenant-private-supplier-master-update-migration-contract.test.ts`
 - Modify: `apps/api/src/repositories/tenant-supplier-private-commands.ts`
 - Modify: `apps/api/src/repositories/tenant-supplier-private-commands.test.ts`
+- Modify: `apps/api/src/repositories/tenant-suppliers-mappers.ts`
+- Modify: `apps/api/src/repositories/tenant-suppliers.ts`
+- Modify: `apps/api/src/errors/error-codes.ts`
+- Modify: `apps/api/src/types/database.ts`
+- Create: `supabase/migrations/20260813160500_create_tenant_private_supplier_master_update.sql`
 
 - [ ] **Step 1: 写 RED 测试**
 
@@ -171,7 +177,7 @@ git commit -m "feat(api): 接入私有供应商数据库命令"
 
 - [ ] **Step 2: 实现 service**
 
-service 只生成 command DTO、调用 ownership access 与 repository；不直接 `.from()`。分配接口不因表单字段为空自动调用；私有创建必须由 schema 明确给出 `generated/manual`。
+service 只生成 command DTO、调用 ownership access 与 repository；不直接 `.from()`。分配接口不因表单字段为空自动调用；私有创建必须由 schema 明确给出 `generated/manual`。私有主档更新通过单个 RPC 在同一事务中锁定租户关系和 supplier、复核归属与版本后更新，避免 service 预读与写入之间的竞态窗口。
 
 - [ ] **Step 3: 运行 GREEN 并提交**
 

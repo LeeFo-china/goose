@@ -183,11 +183,16 @@ describe("TenantSuppliersRepository private supplier commands", () => {
   });
 
   test("updates only a current-tenant private supplier master with version guards", async () => {
-    const privateRelationshipRow = ownershipRow(privateRelationship);
-    const { repository, requests } = await createRepository((request) => ({
-      body: request.url.includes("tenant_suppliers")
-        ? privateRelationshipRow
-        : { ...privateRelationship.supplier, name: "新版私有供应商", version: 2 },
+    const { repository, requests } = await createRepository(() => ({
+      body: {
+        status: "updated",
+        supplier: {
+          ...privateRelationship.supplier,
+          name: "新版私有供应商",
+          version: 2,
+        },
+        version: 2,
+      },
     }));
 
     const result = await repository.updatePrivateSupplierMaster({
@@ -195,7 +200,8 @@ describe("TenantSuppliersRepository private supplier commands", () => {
       tenant_supplier_id: relationship.id,
       expected_version: 1,
       name: "新版私有供应商",
-      updated_by_employee_id: EMPLOYEE_ID,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
     });
 
     expect(result).toMatchObject({
@@ -204,22 +210,31 @@ describe("TenantSuppliersRepository private supplier commands", () => {
       owner_tenant_id: TENANT_ID,
       version: 2,
     });
-    expect(requests).toHaveLength(2);
-    const updateUrl = new URL(requests[1]!.url);
-    expect(updateUrl.searchParams.get("id")).toBe(`eq.${SUPPLIER_ID}`);
-    expect(updateUrl.searchParams.get("ownership_scope")).toBe("eq.tenant");
-    expect(updateUrl.searchParams.get("owner_tenant_id")).toBe(`eq.${TENANT_ID}`);
-    expect(updateUrl.searchParams.get("version")).toBe("eq.1");
-    expect(await requests[1]!.clone().json()).toEqual({
-      name: "新版私有供应商",
-      updated_by_employee_id: EMPLOYEE_ID,
-      version: 2,
+    expect(requests).toHaveLength(1);
+    expect(requests[0]!.url).toContain(
+      "/rpc/update_tenant_private_supplier_master",
+    );
+    expect(await requests[0]!.clone().json()).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_tenant_supplier_id: relationship.id,
+      p_expected_version: 1,
+      p_name: "新版私有供应商",
+      p_legal_name: null,
+      p_unified_social_credit_code: null,
+      p_unified_social_credit_code_provided: false,
+      p_supplier_type: null,
+      p_actor_user_id: USER_ID,
+      p_actor_employee_id: EMPLOYEE_ID,
     });
   });
 
   test("does not update a platform supplier through the private master command", async () => {
     const { repository, requests } = await createRepository(() => ({
-      body: ownershipRow(relationship),
+      body: {
+        code: "P0001",
+        message: "SUPPLIER_OWNERSHIP_CONFLICT",
+      },
+      status: 400,
     }));
 
     await expect(repository.updatePrivateSupplierMaster({
@@ -227,32 +242,12 @@ describe("TenantSuppliersRepository private supplier commands", () => {
       tenant_supplier_id: relationship.id,
       expected_version: 1,
       name: "越权更新",
-      updated_by_employee_id: EMPLOYEE_ID,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
     })).rejects.toMatchObject({
-      statusCode: 404,
-      code: "TENANT_SUPPLIER_NOT_FOUND",
+      statusCode: 409,
+      code: "SUPPLIER_OWNERSHIP_CONFLICT",
     });
     expect(requests).toHaveLength(1);
   });
 });
-
-function ownershipRow(input: typeof relationship | typeof privateRelationship) {
-  const supplier = input.supplier;
-  return {
-    id: input.id,
-    tenant_id: input.tenant_id,
-    supplier_id: input.supplier_id,
-    supplier: {
-      id: supplier.id,
-      code: supplier.code,
-      name: supplier.name,
-      legal_name: supplier.legal_name,
-      supplier_type: supplier.supplier_type,
-      ownership_scope: supplier.ownership_scope,
-      owner_tenant_id: supplier.owner_tenant_id,
-      onboarding_status: supplier.onboarding_status,
-      operational_status: supplier.operational_status,
-      version: supplier.version,
-    },
-  };
-}

@@ -22,6 +22,7 @@ import type { AuthContext } from "@/services/authorization";
 import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
 import {
   allocateInternalCode as allocateTenantSupplierCode,
+  assertPrivateSupplierMasterWritable,
   createPrivateSupplier as createTenantPrivateSupplier,
   createSharedRelationship as createTenantSharedRelationship,
   requireActor as requireSupplierActor,
@@ -45,19 +46,10 @@ export type TenantSuppliersServiceDependencies = {
   accessPolicy?: AccessPolicyPort;
 };
 export type RelationshipAction =
-  | "activate"
-  | "suspend"
-  | "terminate"
-  | "blacklist";
+  | "activate" | "suspend" | "terminate" | "blacklist";
 export type ContractAction = "activate" | "terminate";
-type LifecycleInput = {
-  expected_version: number;
-  reason?: string;
-};
-type ChildPageQuery = {
-  page: number;
-  pageSize: number;
-};
+type LifecycleInput = { expected_version: number; reason?: string };
+type ChildPageQuery = { page: number; pageSize: number };
 
 export class TenantSuppliersService {
   private readonly repository: TenantSuppliersRepositoryPort;
@@ -191,6 +183,11 @@ export class TenantSuppliersService {
   ) {
     const actor = this.requireActor(authContext, "master");
     await requirePrivateSupplierWrites(this.repository, actor);
+    const relationship = await this.requireRelationship(
+      actor.tenantId,
+      tenantSupplierId,
+    );
+    assertPrivateSupplierMasterWritable(relationship, actor.tenantId);
     return updateTenantPrivateSupplierMaster(
       this.repository,
       actor,

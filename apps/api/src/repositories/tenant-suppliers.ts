@@ -94,7 +94,8 @@ export type UpdatePrivateSupplierMasterCommand =
   TenantPrivateSupplierUpdateInput & {
     tenant_id: string;
     tenant_supplier_id: string;
-    updated_by_employee_id: string;
+    actor_user_id: string;
+    actor_employee_id: string;
   };
 
 export type AtomicSupplierContractCreateCommand =
