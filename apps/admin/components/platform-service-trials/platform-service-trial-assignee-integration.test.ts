@@ -64,9 +64,9 @@ describe("platform service trial assignee integration", () => {
       phone: "138****8000",
       status: "active",
     });
-    expect(current).toMatchObject({ selectable: false, historical: true });
+    expect(current).toMatchObject({ selectable: false, historical: false });
     expect(describePlatformServiceTrialAssigneeChange(current, null)).toEqual({
-      current: "王运营 · 138****8000 · 历史负责人（历史记录）",
+      current: "王运营 · 138****8000 · 当前负责人（资格待确认）",
       next: "将取消当前分配",
     });
   });
@@ -112,12 +112,22 @@ describe("platform service trial assignee integration", () => {
     expect(filters).toContain("initialCandidate");
     expect(filters).toContain("allowClear");
     expect(page).toContain("initialAssigneeCandidate");
+    expect(page).toContain("canManage={canGrantTrial}");
+    expect(filters).toContain("disabled={!canManage}");
     expect(pageState).toContain("includeEmployeeId");
     expect(buildTrialAssigneeFilterCandidatePath(ACTIVE_ASSIGNEE_ID)).toBe(
       `/platform/billing/service-trials/assignee-candidates?page=1&pageSize=20&includeEmployeeId=${ACTIVE_ASSIGNEE_ID}`,
     );
     expect(buildTrialAssigneeFilterCandidatePath("untrusted-value")).toBeNull();
     expect(buildTrialAssigneeFilterCandidatePath(undefined)).toBeNull();
+  });
+
+  test("read-only trial access keeps the hidden filter without calling the manage-only picker", () => {
+    const filters = readSource("./platform-service-trial-filters.tsx");
+
+    expect(filters).toContain("canManage: boolean");
+    expect(filters).toContain("disabled={!canManage}");
+    expect(filters).toContain('name="trialAssigneeEmployeeId"');
   });
 
   test("bound inactive assignees remain readable, disabled and never expose their value", () => {

@@ -33,10 +33,12 @@ export function PlatformServiceTrialFilters({
   values,
   pageSize,
   initialAssigneeCandidate,
+  canManage,
 }: {
   values: PlatformServiceTrialFilterValues;
   pageSize: number;
   initialAssigneeCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  canManage: boolean;
 }) {
   const [assigneeEmployeeId, setAssigneeEmployeeId] = useState<string | null>(
     values.assigneeEmployeeId ?? null,
@@ -99,6 +101,7 @@ export function PlatformServiceTrialFilters({
             onChange={setAssigneeEmployeeId}
             initialCandidate={initialAssigneeCandidate}
             allowClear
+            disabled={!canManage}
             placeholder="全部跟进人"
             aria-label="按平台跟进人筛选"
           />

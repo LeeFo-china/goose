@@ -28,6 +28,7 @@ import {
   getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
   resetTrialAssigneeSearchPage,
+  resolveTrialAssigneeCandidateTransition,
   selectTrialAssigneeCandidate,
 } from "./platform-service-trial-assignee-options";
 import type {
@@ -74,20 +75,24 @@ export function PlatformServiceTrialAssigneeCombobox({
   const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<
     PlatformServiceTrialAssigneeCandidate | null
-  >(() => value && initialCandidate?.id === value ? initialCandidate : null);
+  >(() => resolveTrialAssigneeCandidateTransition({
+    value,
+    currentCandidate: null,
+    initialCandidate,
+  }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const timeoutId = window.setTimeout(() => {
       setSearch((current) => resetTrialAssigneeSearchPage(current, keyword));
     }, ASSIGNEE_SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timeoutId);
-  }, [keyword, open]);
+  }, [disabled, keyword, open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     const controller = new AbortController();
     const path = buildTrialAssigneeCandidatesPath({
       page: search.page,
@@ -112,7 +117,13 @@ export function PlatformServiceTrialAssigneeCombobox({
         setLoadedPath(path);
         const selected = nextResult.list.find((candidate) => candidate.id === value);
         if (selected) {
-          setSelectedCandidate(selected);
+          setSelectedCandidate((currentCandidate) =>
+            resolveTrialAssigneeCandidateTransition({
+              value,
+              currentCandidate,
+              initialCandidate: null,
+              confirmedCandidate: selected,
+            }));
           onCandidateChange?.(selected);
         }
         if (nextPage !== search.page) {
@@ -129,16 +140,16 @@ export function PlatformServiceTrialAssigneeCombobox({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [onCandidateChange, open, search.keyword, search.page, value]);
+  }, [disabled, onCandidateChange, open, search.keyword, search.page, value]);
 
   useEffect(() => {
-    if (!value) {
-      setSelectedCandidate(null);
-      return;
-    }
-    if (selectedCandidate?.id === value) return;
-    if (initialCandidate?.id === value) setSelectedCandidate(initialCandidate);
-  }, [initialCandidate, selectedCandidate, value]);
+    setSelectedCandidate((currentCandidate) =>
+      resolveTrialAssigneeCandidateTransition({
+        value,
+        currentCandidate,
+        initialCandidate,
+      }));
+  }, [initialCandidate, value]);
 
   const currentPath = buildTrialAssigneeCandidatesPath({
     page: search.page,
@@ -168,6 +179,11 @@ export function PlatformServiceTrialAssigneeCombobox({
   const emptyMessage = getTrialAssigneeEmptyMessage({ loading, error });
 
   function handleOpenChange(nextOpen: boolean) {
+    if (disabled) {
+      setOpen(false);
+      setLoading(false);
+      return;
+    }
     setOpen(nextOpen);
     if (!nextOpen) setLoading(false);
   }

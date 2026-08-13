@@ -139,6 +139,8 @@ export function formatTrialAssigneeCandidateMeta(
   if (candidate.phone_masked) parts.push(candidate.phone_masked);
   if (candidate.historical) {
     parts.push(`历史负责人（${formatHistoricalStatus(candidate.status)}）`);
+  } else if (!candidate.selectable) {
+    parts.push("当前负责人（资格待确认）");
   } else {
     const roles = candidate.roles.map((role) => role.name?.trim() || role.code);
     if (roles.length > 0) parts.push(roles.join("、"));
@@ -202,7 +204,39 @@ export function createHistoricalTrialAssigneeCandidate(
 export function createBoundTrialAssigneeCandidate(
   assignee: PlatformServiceTrialAssignee,
 ): PlatformServiceTrialAssigneeCandidate {
-  return createHistoricalTrialAssigneeCandidate(assignee);
+  if (assignee.status !== "active") {
+    return createHistoricalTrialAssigneeCandidate(assignee);
+  }
+  return {
+    id: assignee.id,
+    name: assignee.name,
+    phone_masked: assignee.phone,
+    status: "active",
+    roles: [],
+    selectable: false,
+    historical: false,
+  };
+}
+
+export function resolveTrialAssigneeCandidateTransition({
+  value,
+  currentCandidate,
+  initialCandidate,
+  confirmedCandidate,
+}: {
+  value: string | null;
+  currentCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  initialCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  confirmedCandidate?: PlatformServiceTrialAssigneeCandidate | null;
+}): PlatformServiceTrialAssigneeCandidate | null {
+  if (!value) return null;
+  if (confirmedCandidate?.id === value
+    && confirmedCandidate.selectable
+    && !confirmedCandidate.historical) {
+    return confirmedCandidate;
+  }
+  if (currentCandidate?.id === value) return currentCandidate;
+  return initialCandidate?.id === value ? initialCandidate : null;
 }
 
 function normalizeKeyword(keyword: string | undefined): string {

@@ -6,6 +6,7 @@ import {
   ASSIGNEE_SEARCH_DEBOUNCE_MS,
   buildTrialAssigneeCandidatesPath,
   clampTrialAssigneeSearchPage,
+  createBoundTrialAssigneeCandidate,
   createHistoricalTrialAssigneeCandidate,
   formatTrialAssigneeCandidate,
   formatTrialAssigneeCandidateMeta,
@@ -13,6 +14,7 @@ import {
   getTrialAssigneeSelectionActions,
   getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
+  resolveTrialAssigneeCandidateTransition,
   resetTrialAssigneeSearchPage,
   selectTrialAssigneeCandidate,
 } from "./platform-service-trial-assignee-options";
@@ -159,8 +161,8 @@ describe("platform service trial assignee options", () => {
     expect(formatTrialAssigneeCandidate(historical)).not.toContain(INCLUDED_ID);
   });
 
-  test("treats even an active bound relation as historical until the candidate API confirms it", () => {
-    const boundActive = createHistoricalTrialAssigneeCandidate({
+  test("shows an active bound relation as the current unconfirmed assignee", () => {
+    const boundActive = createBoundTrialAssigneeCandidate({
       id: INCLUDED_ID,
       name: "王运营",
       phone: "138****8000",
@@ -170,11 +172,61 @@ describe("platform service trial assignee options", () => {
     expect(boundActive).toMatchObject({
       status: "active",
       selectable: false,
-      historical: true,
+      historical: false,
     });
     expect(formatTrialAssigneeCandidate(boundActive))
-      .toBe("王运营 · 138****8000 · 历史负责人（历史记录）");
+      .toBe("王运营 · 138****8000 · 当前负责人（资格待确认）");
     expect(formatTrialAssigneeCandidate(boundActive)).not.toContain(INCLUDED_ID);
+  });
+
+  test("reconciles reopen, prop changes, API confirmation and clear without stale candidates", () => {
+    const boundActive = createBoundTrialAssigneeCandidate({
+      id: ACTIVE_ID,
+      name: "王运营",
+      phone: "138****8000",
+      status: "active",
+    });
+    const boundInactive = createBoundTrialAssigneeCandidate({
+      id: INCLUDED_ID,
+      name: "李顾问",
+      phone: "139****9000",
+      status: "suspended",
+    });
+    const confirmedActive = { ...activeCandidate, id: INCLUDED_ID };
+
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: ACTIVE_ID,
+      currentCandidate: null,
+      initialCandidate: boundActive,
+    })).toBe(boundActive);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: ACTIVE_ID,
+      currentCandidate: boundActive,
+      initialCandidate: boundActive,
+      confirmedCandidate: activeCandidate,
+    })).toBe(activeCandidate);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: INCLUDED_ID,
+      currentCandidate: boundInactive,
+      initialCandidate: boundInactive,
+      confirmedCandidate: boundInactive,
+    })).toBe(boundInactive);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: INCLUDED_ID,
+      currentCandidate: boundInactive,
+      initialCandidate: boundInactive,
+      confirmedCandidate: confirmedActive,
+    })).toBe(confirmedActive);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: ACTIVE_ID,
+      currentCandidate: confirmedActive,
+      initialCandidate: boundActive,
+    })).toBe(boundActive);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: null,
+      currentCandidate: activeCandidate,
+      initialCandidate: boundActive,
+    })).toBeNull();
   });
 
   test("strictly binds records and pagination from the response data", () => {
@@ -217,6 +269,7 @@ describe("platform service trial assignee options", () => {
 
     expect(ASSIGNEE_SEARCH_DEBOUNCE_MS).toBe(250);
     expect(source).toContain("new AbortController()");
+    expect(source).toContain("if (!open || disabled) return");
     expect(source).toContain("controller.abort()");
     expect(source).toContain("<Command label={ariaLabel}");
     expect(source).toContain('label={`${ariaLabel}候选列表`}');

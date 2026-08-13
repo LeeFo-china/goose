@@ -433,6 +433,7 @@ export default async function PlatformServiceOrdersPage({
               }}
               pageSize={trialPageSize}
               initialAssigneeCandidate={initialAssigneeCandidate}
+              canManage={canGrantTrial}
             />
           ) : (
             <PlatformServiceOrderFilters
