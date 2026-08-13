@@ -1,6 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
+import { resolveSupplierOwnershipAccess } from "./supplier-ownership-access";
+
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "30000000-0000-4000-8000-000000000001";
 const TENANT_SUPPLIER_ID = "30000000-0000-4000-8000-000000000002";
@@ -54,6 +59,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       })),
       findRelationship: mock(async () => relationship),
     },
+    ownershipAccess: mock(resolveSupplierOwnershipAccess),
     ...overrides,
   };
 }
@@ -88,10 +94,11 @@ describe("SupplierProductAccessService", () => {
   });
 
   test("returns a server-derived supplier proxy scope", async () => {
+    const deps = dependencies();
     const { SupplierProductAccessService } = await import(
       "./supplier-product-access"
     );
-    const service = new SupplierProductAccessService(dependencies() as never);
+    const service = new SupplierProductAccessService(deps as never);
 
     await expect(service.requireProductWrite(
       auth("supplier.product.manage"),
@@ -102,6 +109,17 @@ describe("SupplierProductAccessService", () => {
       supplierId: SUPPLIER_ID,
       authUserId: USER_ID,
       employeeId: EMPLOYEE_ID,
+    });
+    expect(deps.ownershipAccess).toHaveBeenCalledWith({
+      actor: { kind: "tenant", tenantId: TENANT_ID },
+      resourceKind: "product",
+      ownership: {
+        ownershipScope: "tenant",
+        ownerTenantId: TENANT_ID,
+      },
+      relationshipStatus: "active",
+      operation: "write",
+      permissionGranted: true,
     });
   });
 
@@ -141,6 +159,98 @@ describe("SupplierProductAccessService", () => {
         auth("supplier.cost-price.manage"),
         TENANT_SUPPLIER_ID,
       )).rejects.toMatchObject({ code: "SUPPLIER_ORDER_NOT_ELIGIBLE" });
+  });
+
+  test.each([
+    "evaluating",
+    "suspended",
+    "terminated",
+    "blacklisted",
+  ] as const)(
+    "allows historical product reads for a %s relationship through the policy",
+    async (relationshipStatus) => {
+      const deps = dependencies({
+        repository: {
+          getSettings: mock(async () => ({
+            tenant_id: TENANT_ID,
+            module_enabled: true,
+          })),
+          findRelationship: mock(async () => ({
+            ...relationship,
+            relationship_status: relationshipStatus,
+          })),
+        },
+        ownershipAccess: mock(() => ({
+          visible: true,
+          writable: false,
+          historicalOnly: true,
+          reason: "inactive_relationship" as const,
+        })),
+      });
+      const { SupplierProductAccessService } = await import(
+        "./supplier-product-access"
+      );
+
+      await expect(new SupplierProductAccessService(deps as never)
+        .requireProductRead(
+          auth("supplier.product.view"),
+          TENANT_SUPPLIER_ID,
+        )).resolves.toMatchObject({ supplierId: SUPPLIER_ID });
+      expect(deps.ownershipAccess).toHaveBeenCalledWith(expect.objectContaining({
+        relationshipStatus,
+        operation: "read",
+      }));
+    },
+  );
+
+  test("maps pure-policy write denial to the existing eligibility error", async () => {
+    const deps = dependencies({
+      ownershipAccess: mock(() => ({
+        visible: true,
+        writable: false,
+        historicalOnly: true,
+        reason: "inactive_relationship" as const,
+      })),
+    });
+    const { SupplierProductAccessService } = await import(
+      "./supplier-product-access"
+    );
+
+    await expect(new SupplierProductAccessService(deps as never)
+      .requireProductWrite(
+        auth("supplier.product.manage"),
+        TENANT_SUPPLIER_ID,
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      });
+  });
+
+  test("maps a foreign tenant relationship to the existing non-disclosing error", async () => {
+    const deps = dependencies({
+      repository: {
+        getSettings: mock(async () => ({
+          tenant_id: TENANT_ID,
+          module_enabled: true,
+        })),
+        findRelationship: mock(async () => ({
+          ...relationship,
+          tenant_id: "30000000-0000-4000-8000-000000000099",
+        })),
+      },
+    });
+    const { SupplierProductAccessService } = await import(
+      "./supplier-product-access"
+    );
+
+    await expect(new SupplierProductAccessService(deps as never)
+      .requireProductRead(
+        auth("supplier.product.view"),
+        TENANT_SUPPLIER_ID,
+      )).rejects.toMatchObject({
+        statusCode: 404,
+        code: "TENANT_SUPPLIER_NOT_FOUND",
+      });
   });
 });
 

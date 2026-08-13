@@ -6,6 +6,11 @@ import {
 } from "@/repositories/tenant-suppliers";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  resolveSupplierOwnershipAccess,
+  type SupplierAccessDecision,
+  type SupplierOwnershipAccessInput,
+} from "@/services/supplier-ownership-access";
 
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
@@ -21,6 +26,9 @@ type RelationshipRepositoryPort = {
     id: string;
   }): Promise<TenantSupplierDetail | null>;
 };
+type OwnershipAccessPort = (
+  input: SupplierOwnershipAccessInput,
+) => SupplierAccessDecision;
 
 export type SupplierProxyScope = {
   tenantId: string;
@@ -33,15 +41,19 @@ export type SupplierProxyScope = {
 export type SupplierProductAccessDependencies = {
   accessPolicy?: AccessPolicyPort;
   repository?: RelationshipRepositoryPort;
+  ownershipAccess?: OwnershipAccessPort;
 };
 
 export class SupplierProductAccessService {
   private readonly accessPolicy: AccessPolicyPort;
   private readonly repository: RelationshipRepositoryPort;
+  private readonly ownershipAccess: OwnershipAccessPort;
 
   constructor(dependencies: SupplierProductAccessDependencies = {}) {
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.repository = dependencies.repository ?? tenantSuppliersRepository;
+    this.ownershipAccess = dependencies.ownershipAccess ??
+      resolveSupplierOwnershipAccess;
   }
 
   requireProductRead(
@@ -126,10 +138,23 @@ export class SupplierProductAccessService {
       );
     }
 
+    const operation = write ? "write" : "read";
+    const decision = this.ownershipAccess({
+      actor: { kind: "tenant", tenantId },
+      resourceKind: "product",
+      ownership: {
+        ownershipScope: "tenant",
+        ownerTenantId: relationship.tenant_id,
+      },
+      relationshipStatus: relationship.relationship_status,
+      operation,
+      permissionGranted: true,
+    });
+    this.assertDecision(decision, relationship, write);
+
     if (
       write &&
       (
-        relationship.relationship_status !== "active" ||
         relationship.supplier.onboarding_status !== "approved" ||
         relationship.supplier.operational_status !== "active"
       )
@@ -155,6 +180,35 @@ export class SupplierProductAccessService {
       authUserId: auth.authUserId,
       employeeId: auth.employeeId,
     };
+  }
+
+  private assertDecision(
+    decision: SupplierAccessDecision,
+    relationship: TenantSupplierDetail,
+    write: boolean,
+  ): void {
+    if (decision.visible && (!write || decision.writable)) return;
+
+    if (decision.reason === "permission_denied") {
+      throw Errors.forbidden();
+    }
+    if (decision.reason === "foreign_tenant") {
+      throw Errors.business(
+        404,
+        "租户供应商合作关系不存在",
+        "TENANT_SUPPLIER_NOT_FOUND",
+      );
+    }
+    throw Errors.business(
+      409,
+      "供应商当前不满足代录条件",
+      "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      {
+        relationship_status: relationship.relationship_status,
+        supplier_onboarding_status: relationship.supplier.onboarding_status,
+        supplier_operational_status: relationship.supplier.operational_status,
+      },
+    );
   }
 }
 
