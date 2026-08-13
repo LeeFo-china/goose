@@ -222,6 +222,23 @@ describe("platform service trial assignee options", () => {
       currentCandidate: confirmedActive,
       initialCandidate: boundActive,
     })).toBe(boundActive);
+    const suspendedSameId = createBoundTrialAssigneeCandidate({
+      id: ACTIVE_ID,
+      name: "王运营（已停用）",
+      phone: "138****8001",
+      status: "suspended",
+    });
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: ACTIVE_ID,
+      currentCandidate: activeCandidate,
+      initialCandidate: suspendedSameId,
+    })).toBe(suspendedSameId);
+    expect(resolveTrialAssigneeCandidateTransition({
+      value: ACTIVE_ID,
+      currentCandidate: activeCandidate,
+      initialCandidate: suspendedSameId,
+      confirmedCandidate: activeCandidate,
+    })).toBe(activeCandidate);
     expect(resolveTrialAssigneeCandidateTransition({
       value: null,
       currentCandidate: activeCandidate,

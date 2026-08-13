@@ -235,8 +235,8 @@ export function resolveTrialAssigneeCandidateTransition({
     && !confirmedCandidate.historical) {
     return confirmedCandidate;
   }
-  if (currentCandidate?.id === value) return currentCandidate;
-  return initialCandidate?.id === value ? initialCandidate : null;
+  if (initialCandidate?.id === value) return initialCandidate;
+  return currentCandidate?.id === value ? currentCandidate : null;
 }
 
 function normalizeKeyword(keyword: string | undefined): string {
