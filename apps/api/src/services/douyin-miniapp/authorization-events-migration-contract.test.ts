@@ -9,6 +9,10 @@ const authorizationUpsertAliasFixMigration = new URL(
   "../../../../../supabase/migrations/20260724190000_fix_douyin_authorization_event_upsert_alias.sql",
   import.meta.url,
 );
+const revocationUpsertAliasFixMigration = new URL(
+  "../../../../../supabase/migrations/20260813134000_fix_douyin_revocation_event_upsert_alias.sql",
+  import.meta.url,
+);
 
 function sql(): string {
   return existsSync(migration)
@@ -353,6 +357,68 @@ describe("douyin authorization event ledger migration", () => {
     expect(insert).toBeGreaterThan(-1);
     expect(conflict).toBeGreaterThan(insert);
     expect(existingRowReference).toBeGreaterThan(conflict);
+  });
+
+  test("declares the installation alias used by revocation upsert conflict handling", () => {
+    const source = existsSync(revocationUpsertAliasFixMigration)
+      ? readFileSync(revocationUpsertAliasFixMigration, "utf8")
+        .replace(/--.*$/gm, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      : "";
+    const body = functionBody(source, "complete_douyin_revocation_event");
+    const insert = body.indexOf(
+      "INSERT INTO public.douyin_miniapp_installations AS installation(",
+    );
+    const conflict = body.indexOf(
+      "ON CONFLICT (authorizer_appid) DO UPDATE SET",
+      insert,
+    );
+    const existingRowReference = body.indexOf(
+      "WHERE installation.authorization_event_occurred_at IS NULL",
+      conflict,
+    );
+
+    expect(existsSync(revocationUpsertAliasFixMigration)).toBe(true);
+    expect(insert).toBeGreaterThan(-1);
+    expect(conflict).toBeGreaterThan(insert);
+    expect(existingRowReference).toBeGreaterThan(conflict);
+  });
+
+  test("reclaims only a bounded batch of expired revocation deliveries", () => {
+    const source = existsSync(revocationUpsertAliasFixMigration)
+      ? readFileSync(revocationUpsertAliasFixMigration, "utf8")
+        .replace(/--.*$/gm, "")
+        .replace(/\s+/g, " ")
+        .trim()
+      : "";
+    const recovery = source.indexOf(
+      "FOR v_event IN SELECT delivery.event_key",
+    );
+    const limit = source.indexOf("LIMIT 100", recovery);
+    const reclaim = source.indexOf(
+      "public.claim_douyin_authorization_event(",
+      limit,
+    );
+    const complete = source.indexOf(
+      "public.complete_douyin_revocation_event(",
+      reclaim,
+    );
+
+    expect(recovery).toBeGreaterThan(-1);
+    expect(source.slice(recovery, limit)).toContain(
+      "delivery.event_name = 'UNAUTHORIZED'",
+    );
+    expect(source.slice(recovery, limit)).toContain(
+      "delivery.processing_state = 'processing'",
+    );
+    expect(source.slice(recovery, limit)).toContain(
+      "delivery.claim_expires_at <= clock_timestamp()",
+    );
+    expect(limit).toBeGreaterThan(recovery);
+    expect(reclaim).toBeGreaterThan(limit);
+    expect(complete).toBeGreaterThan(reclaim);
+    expect(source).toContain("MESSAGE = 'DOUYIN_REVOCATION_RECOVERY_FAILED'");
   });
 
   test("keeps a revoke tombstone authoritative over an older or same-time authorization", () => {
