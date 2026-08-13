@@ -329,6 +329,7 @@ export async function readSmokeAccessMode(
     ]),
     legacySubscriptionStatus: legacyStatus,
     currentTrial: null,
+    latestTrial: null,
   };
   return withIsolatedLocalSupabaseEnvironment(async () => {
     const { TenantServiceAccessService } = await import(

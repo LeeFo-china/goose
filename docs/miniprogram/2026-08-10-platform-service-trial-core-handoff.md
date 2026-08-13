@@ -33,7 +33,9 @@
 - 正式付款确认与试用转化同一数据库事务落库；
 - Admin 路径 `/platform/service-orders?tab=trials` 的完整运营入口。
 
-当前未实现：试用跟进记录的 `GET/POST .../:id/follow-ups`。Orange 不得调用或模拟该能力。
+运营阶段已实现平台侧试用跟进与通知提醒；最终契约以
+[`2026-08-10-platform-service-trial-handoff.md`](./2026-08-10-platform-service-trial-handoff.md)
+为准。跟进接口仍只供 Gooes Admin 使用，Orange 不得调用或模拟。
 
 ## 2. 业务规则
 
@@ -357,3 +359,33 @@ fixture。六状态矩阵自 migration 应用起稳定 21 天；若 21 天后仍
 - Orange：小程序入口、申请/状态页、服务 wrapper/type、actions 交互、分页和真机验收；
 - Orange 不修改 Gooes 数据结构，不直连 Supabase，不自行审批或计算试用有效期；
 - 本次只在 Gooes 写入本文，Orange 工作区未修改、未格式化、未生成、未暂存、未提交。
+
+## 12. `@gooes/domain` 正式交付
+
+试用契约以新的不可变版本交付，不再复用已被消费过的 `1.14.0`：
+
+- 包版本：`@gooes/domain@1.15.0`；
+- 本机交付文件：`/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.15.0.tgz`；
+- SHA-256：`d635834cbe59c91d3c35f30167337e0d743b2cc7045e597870a283902352e624`；
+- tarball 内 `package.json`、根 `dist/index.d.ts` 与
+  `dist/platform-service-trial.d.ts` 已校验；
+- 已通过临时独立消费者安装、TypeScript 编译和运行时 Zod 身份校验。
+
+本版本从 `@gooes/domain` 根入口导出：
+
+- `PLATFORM_SERVICE_TRIAL_STATUS_VALUES` / `PlatformServiceTrialStatus`；
+- `PLATFORM_SERVICE_TRIAL_SOURCE_VALUES` / `PlatformServiceTrialSource`；
+- `PLATFORM_SERVICE_TRIAL_TYPE_VALUES` / `PlatformServiceTrialType`；
+- `PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES` /
+  `PlatformServiceTrialCapability`；
+- `PlatformServiceTrialScopeSchema` / `PlatformServiceTrialScopeV1`。
+
+Orange 侧由小程序团队在其独立提交中执行：
+
+```bash
+pnpm add "/Users/leefo/Public/work/gooes/.artifacts/domain/gooes-domain-1.15.0.tgz"
+```
+
+安装后应核对 lockfile 指向 `gooes-domain-1.15.0.tgz`，并在交付记录中同时保留上述
+版本和 SHA-256。不得继续使用 `1.14.0` 文件名承载新内容，也不得复制或在 Orange
+本地重定义试用枚举。Orange 工作区仍只由小程序团队修改、验证和提交。

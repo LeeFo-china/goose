@@ -22,7 +22,7 @@ class EmployeeSelfServiceController extends TenantBaseController {
     super("employee_self_service");
   }
 
-  @Get("/employee/bootstrap", { tenantServiceAccess: "read" })
+  @Get("/employee/bootstrap", { tenantServiceAccess: "session" })
   async getEmployeeBootstrap(request: FastifyRequest, reply: FastifyReply) {
     return ResponseHandler.success(
       await this.bootstrapHandler.getEmployeeBootstrap(request),

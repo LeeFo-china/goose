@@ -93,6 +93,13 @@ export function getTrialCapabilityLabel(capability: PlatformServiceTrialCapabili
   return capabilityLabels[capability];
 }
 
+export function formatTrialTenantContact(
+  tenant: Pick<PlatformServiceTrialRecord["tenant"], "contact_name" | "contact_phone">,
+) {
+  return [tenant.contact_name, tenant.contact_phone].filter(Boolean).join(" · ")
+    || "未留联系方式";
+}
+
 export function formatTrialDateTime(value?: string | null) {
   if (!value) return "-";
   const date = new Date(value);
@@ -124,6 +131,17 @@ export function formatTrialRemaining(
     return "已到期";
   }
   return `剩余 ${Math.ceil(remainingMs / 86_400_000)} 天`;
+}
+
+export function isTrialExpiringSoon(
+  trial: Pick<PlatformServiceTrialRecord, "status" | "trial_ends_at">,
+  serverTime: string,
+) {
+  if (trial.status !== "active" || !trial.trial_ends_at) return false;
+  const remainingMs = Date.parse(trial.trial_ends_at) - Date.parse(serverTime);
+  return Number.isFinite(remainingMs)
+    && remainingMs > 0
+    && remainingMs <= 7 * 86_400_000;
 }
 
 export function getTrialConversionLabel(trial: PlatformServiceTrialRecord) {

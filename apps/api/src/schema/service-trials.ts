@@ -8,6 +8,16 @@ import { z } from 'zod';
 
 import { PaginationQuerySchema } from './request';
 
+const optionalQueryValue = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => {
+    if (value == null) return undefined;
+    if (typeof value !== 'string') return value;
+    const normalized = value.trim();
+    return normalized === '' || normalized === 'undefined' || normalized === 'null'
+      ? undefined
+      : normalized;
+  }, schema.optional());
+
 const IdempotencyKeySchema = z.uuidv4('幂等键必须是 UUID v4');
 const ExpectedVersionSchema = z.number().int().positive('版本必须大于 0');
 const ReasonSchema = z
@@ -109,6 +119,16 @@ export const PlatformServiceTrialListQuerySchema = PaginationQuerySchema.extend(
   expiresFrom: DateTimeSchema.optional(),
   expiresTo: DateTimeSchema.optional(),
 }).strict();
+
+export const PlatformServiceTrialAssigneeCandidatesQuerySchema =
+  PaginationQuerySchema.extend({
+    keyword: optionalQueryValue(
+      z.string().trim().max(80, '关键词不能超过 80 个字符'),
+    ),
+    includeEmployeeId: optionalQueryValue(
+      z.uuid('无效的平台跟进人 ID'),
+    ),
+  }).strict();
 
 export const ServiceTrialParamSchema = z
   .object({
@@ -246,6 +266,8 @@ export type ServiceTrialWithdrawInput = z.infer<typeof ServiceTrialWithdrawSchem
 export type ServiceTrialListQuery = z.infer<typeof ServiceTrialListQuerySchema>;
 export type PlatformServiceTrialListQuery =
   z.infer<typeof PlatformServiceTrialListQuerySchema>;
+export type PlatformServiceTrialAssigneeCandidatesQuery =
+  z.infer<typeof PlatformServiceTrialAssigneeCandidatesQuerySchema>;
 export type PlatformServiceTrialGrantInput =
   z.infer<typeof PlatformServiceTrialGrantSchema>;
 export type PlatformServiceTrialReviewInput =

@@ -14,6 +14,24 @@ export const ASSIGNEE_ID = '44444444-4444-4444-8444-444444444444';
 export const IDEMPOTENCY_KEY = '55555555-5555-4555-8555-555555555555';
 export const NOW = new Date('2026-08-11T08:00:00.000Z');
 
+const followUpFixture = {
+  id: IDEMPOTENCY_KEY, trial_id: TRIAL_ID, tenant_id: TENANT_ID,
+  follow_up_type: 'online_meeting' as const, status: 'pending' as const,
+  summary: '陪跑试用首次跟进', result: '待与租户确认首次陪跑安排',
+  next_follow_up_at: NOW.toISOString(), created_by_employee_id: ACTOR_ID,
+  created_at: NOW.toISOString(), idempotent: false,
+};
+
+export const trialOperationsNoop = {
+  listFollowUps: async () => ({
+    list: [], pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+  }),
+  createFollowUp: async () => followUpFixture,
+  cancelFollowUp: async () => ({
+    ...followUpFixture, status: 'canceled' as const,
+  }),
+};
+
 export const TEST_SCOPE: PlatformServiceTrialScopeV1 = {
   version: 1,
   capabilities: ['core.projects', 'core.customers'],
@@ -106,7 +124,8 @@ export function makeTrialDetail(
 ): TrialDetailRecord {
   return {
     ...trial,
-    tenant: { id: trial.tenant_id, name: '示例装企', slug: 'example-tenant' },
+    tenant: { id: trial.tenant_id, name: '示例装企', slug: 'example-tenant',
+      contact_name: '张经理', contact_phone: '13800138000' },
     assignee: trial.assignee_employee_id
       ? { id: trial.assignee_employee_id, name: '运营小王',
         phone: '13900139000', status: 'active' }
@@ -120,7 +139,15 @@ export function makeTrialListRecord(
 ): TrialListRecord {
   const detail = makeTrialDetail(trial);
   const { events: _events, ...listRecord } = detail;
-  return listRecord;
+  return { ...listRecord,
+    contact_name: listRecord.contact_name
+      ? `${[...listRecord.contact_name][0]}${'*'.repeat(Math.max(1,
+        [...listRecord.contact_name].length - 1))}` : null,
+    contact_phone: listRecord.contact_phone
+      ? `${listRecord.contact_phone.slice(0, 3)}****${listRecord.contact_phone.slice(7)}`
+      : null,
+    tenant: { ...listRecord.tenant,
+    contact_name: '张**', contact_phone: '138****8000' } };
 }
 
 export function makeCommandSnapshot(

@@ -175,4 +175,25 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
       "33333333-3333-4333-8333-333333333333"] });
     expect(calls).toContainEqual({ method: "range", args: [0, 19] });
   });
+
+  test("loads project image candidates in one bounded tenant-scoped query", async () => {
+    const imageLog = {
+      project_id: project.id,
+      images: ["tenants/33333333-3333-4333-8333-333333333333/project_log/cover.jpg"],
+      created_at: "2026-07-20T00:00:00.000Z",
+    };
+    const { client, calls } = clientWith([{ data: [imageLog], error: null }]);
+    const repository = new Repository(client as never);
+    const tenantId = "33333333-3333-4333-8333-333333333333";
+
+    await repository.listProjectImageLogs({ tenantId, projectIds: [project.id] });
+
+    expect(calls).toContainEqual({ method: "from", args: ["project_logs"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id", tenantId] });
+    expect(calls).toContainEqual({ method: "in", args: ["project_id", [project.id]] });
+    expect(calls).toContainEqual({ method: "order", args: ["created_at", {
+      ascending: false,
+    }] });
+    expect(calls).toContainEqual({ method: "limit", args: [20] });
+  });
 });

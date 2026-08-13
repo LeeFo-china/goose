@@ -14,19 +14,23 @@ import {
   formatTrialDateTime,
   formatTrialPeriod,
   formatTrialRemaining,
+  formatTrialTenantContact,
   getTrialConversionLabel,
   getTrialSourceLabel,
   getTrialStatusMeta,
   getTrialTypeLabel,
+  isTrialExpiringSoon,
 } from "./platform-service-trial-rules";
 import type { PlatformServiceTrialListItem } from "./platform-service-trial-types";
 
 export function PlatformServiceTrialTable({
   trials,
   serverTime,
+  canManage,
 }: {
   trials: PlatformServiceTrialListItem[];
   serverTime: string;
+  canManage: boolean;
 }) {
   const [selectedTrial, setSelectedTrial] = useState<PlatformServiceTrialListItem | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -44,11 +48,11 @@ export function PlatformServiceTrialTable({
         <div className="min-w-0">
           <div className="truncate font-semibold">{row.original.tenant.name}</div>
           <div className="truncate text-xs text-muted-foreground">
-            {row.original.contact_name || row.original.contact_phone || row.original.tenant.slug}
+            {formatTrialTenantContact(row.original.tenant)}
           </div>
         </div>
       ),
-      meta: { cellClassName: "min-w-[180px]" },
+      meta: { cellClassName: "min-w-[220px]" },
     },
     {
       accessorKey: "source",
@@ -85,9 +89,13 @@ export function PlatformServiceTrialTable({
       id: "remaining",
       header: "剩余时间",
       cell: ({ row }) => (
-        <span className="whitespace-nowrap tabular-nums text-muted-foreground">
-          {formatTrialRemaining(row.original, serverTime)}
-        </span>
+        <div className="flex items-center gap-2 whitespace-nowrap">
+          <span className="tabular-nums text-muted-foreground">
+            {formatTrialRemaining(row.original, serverTime)}
+          </span>
+          {isTrialExpiringSoon(row.original, serverTime)
+            ? <Badge variant="warning">即将到期</Badge> : null}
+        </div>
       ),
     },
     {
@@ -153,6 +161,7 @@ export function PlatformServiceTrialTable({
           trial={selectedTrial}
           open={detailOpen}
           onOpenChange={setDetailOpen}
+          canManage={canManage}
         />
       ) : null}
     </>

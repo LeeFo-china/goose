@@ -4,6 +4,8 @@ import type {
   PlatformServiceTrialSource,
   PlatformServiceTrialStatus,
   PlatformServiceTrialType,
+  ServiceTrialFollowUpStatus,
+  ServiceTrialFollowUpType,
 } from "@gooes/domain";
 
 import type { PageData } from "@/components/platform-service-orders/platform-service-order-types";
@@ -14,6 +16,8 @@ export type {
   PlatformServiceTrialSource,
   PlatformServiceTrialStatus,
   PlatformServiceTrialType,
+  ServiceTrialFollowUpStatus,
+  ServiceTrialFollowUpType,
 };
 
 export type PlatformServiceTrialAction = {
@@ -36,6 +40,8 @@ export type PlatformServiceTrialTenant = {
   id: string;
   name: string;
   slug: string;
+  contact_name: string | null;
+  contact_phone: string | null;
 };
 
 export type PlatformServiceTrialAssignee = {
@@ -43,6 +49,31 @@ export type PlatformServiceTrialAssignee = {
   name: string | null;
   phone: string | null;
   status: string | null;
+};
+
+export type PlatformServiceTrialAssigneeCandidateRole = {
+  code: string;
+  name: string | null;
+};
+
+export type PlatformServiceTrialAssigneeCandidate = {
+  id: string;
+  name: string | null;
+  phone_masked: string | null;
+  status: "active" | "suspended" | "leaved" | "pending";
+  roles: PlatformServiceTrialAssigneeCandidateRole[];
+  selectable: boolean;
+  historical: boolean;
+};
+
+export type PlatformServiceTrialAssigneeCandidatePage = {
+  list: PlatformServiceTrialAssigneeCandidate[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 };
 
 export type PlatformServiceTrialEvent = {
@@ -122,6 +153,24 @@ export type PlatformServiceTrialDetailData = {
   available_actions: PlatformServiceTrialAvailableActions;
   server_time: string;
 };
+
+export type PlatformServiceTrialFollowUp = {
+  id: string;
+  trial_id: string;
+  tenant_id: string;
+  follow_up_type: ServiceTrialFollowUpType;
+  status: ServiceTrialFollowUpStatus;
+  summary: string;
+  result: string;
+  next_follow_up_at: string | null;
+  created_by_employee_id: string;
+  created_at: string;
+  idempotent?: boolean;
+};
+
+export type PlatformServiceTrialFollowUpPage = PageData<
+  PlatformServiceTrialFollowUp
+>;
 
 export type PlatformServiceTrialPolicy = {
   id: string;

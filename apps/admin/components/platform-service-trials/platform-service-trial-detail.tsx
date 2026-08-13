@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { PlatformServiceTrialActionDialog } from "./platform-service-trial-action-dialog";
+import { PlatformServiceTrialFollowUps } from "./platform-service-trial-follow-ups";
 import {
   getPlatformTrialDisabledReasons,
   resolvePlatformTrialAction,
@@ -44,10 +45,12 @@ export function PlatformServiceTrialDetail({
   trial,
   open,
   onOpenChange,
+  canManage,
 }: {
   trial: PlatformServiceTrialListItem;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  canManage: boolean;
 }) {
   const [data, setData] = useState<PlatformServiceTrialDetailData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,8 +123,8 @@ export function PlatformServiceTrialDetail({
               <DetailSection title="企业概况">
                 <Fact label="企业名称" value={current.tenant.name} />
                 <Fact label="企业标识" value={current.tenant.slug} />
-                <Fact label="联系人" value={current.contact_name} />
-                <Fact label="联系电话" value={current.contact_phone} />
+                <Fact label="装企联系人" value={current.tenant.contact_name} />
+                <Fact label="装企联系电话" value={current.tenant.contact_phone} />
                 <Fact label="平台跟进人" value={current.assignee?.name || "未分配"} />
               </DetailSection>
               <Separator />
@@ -131,6 +134,8 @@ export function PlatformServiceTrialDetail({
                 <Fact label="申请原因" value={current.application_reason || current.grant_reason} wide />
                 <Fact label="预计人数" value={current.expected_user_count} />
                 <Fact label="预计项目" value={current.expected_project_count} />
+                <Fact label="申请联系人" value={current.contact_name} />
+                <Fact label="申请联系电话" value={current.contact_phone} />
                 <Fact label="审核意见" value={current.review_reason} wide />
               </DetailSection>
               <Separator />
@@ -152,6 +157,13 @@ export function PlatformServiceTrialDetail({
                 <Fact label="转正式时间" value={formatTrialDateTime(current.converted_at)} numeric />
                 <Fact label="关联订单" value={current.converted_order_id} />
               </DetailSection>
+              <Separator />
+              <PlatformServiceTrialFollowUps
+                trialId={current.id}
+                enabled={open && Boolean(data)}
+                canManage={canManage}
+                onTrialRefresh={loadDetail}
+              />
               <Separator />
               <section className="flex flex-col gap-3">
                 <h3 className="text-base font-semibold">审计时间线</h3>
@@ -214,5 +226,5 @@ function actionLabel(key: "review" | "extend" | "revoke" | "assign") {
 }
 
 function eventLabel(type: string) {
-  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
+  return ({ application_submitted: "提交试用申请", application_withdrawn: "撤回试用申请", application_approved: "通过试用申请", application_rejected: "驳回试用申请", trial_granted: "开通试用", trial_activated: "试用生效", trial_grace_started: "进入宽限期", trial_expired: "试用到期", trial_extended: "延长试用", trial_revoked: "撤销试用", trial_assigned: "分配跟进人", trial_follow_up_created: "新增试用跟进", trial_follow_up_canceled: "取消试用跟进", formal_purchase_attributed: "转为正式服务", conversion_anomaly: "转化异常" } as Record<string, string>)[type] || type;
 }

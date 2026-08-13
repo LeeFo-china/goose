@@ -4,6 +4,7 @@ import { PlatformBaseController } from '@/controllers/PlatformBaseController';
 import { Errors } from '@/errors/error-factory';
 import {
   PlatformServiceTrialAssignSchema,
+  PlatformServiceTrialAssigneeCandidatesQuerySchema,
   PlatformServiceTrialExtendSchema,
   PlatformServiceTrialGrantSchema,
   PlatformServiceTrialListQuerySchema,
@@ -12,6 +13,12 @@ import {
   PlatformServiceTrialRevokeSchema,
   ServiceTrialParamSchema,
 } from '@/schema/service-trials';
+import {
+  CancelServiceTrialFollowUpSchema,
+  CreateServiceTrialFollowUpSchema,
+  ServiceTrialFollowUpParamSchema,
+  ServiceTrialFollowUpListQuerySchema,
+} from '@/schema/service-trial-followups';
 import { platformServiceTrialService } from '@/services/platform-service-trials';
 import { Get, Post, Put } from '@/utils/decorators/route';
 import { ResponseHandler } from '@/utils/response';
@@ -42,6 +49,22 @@ class PlatformServiceTrialsController extends PlatformBaseController {
   async getSummary(request: FastifyRequest) {
     const authContext = await this.getRequiredPlatformStaffContext(request);
     const data = await platformServiceTrialService.getSummary(authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get('/platform/billing/service-trials/assignee-candidates', {
+    tenantServiceAccess: 'read',
+  })
+  async listAssigneeCandidates(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const queryResult = PlatformServiceTrialAssigneeCandidatesQuerySchema
+      .safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformServiceTrialService.listAssigneeCandidates(
+      authContext,
+      queryResult.data,
+    );
     return ResponseHandler.success(data);
   }
 
@@ -160,6 +183,63 @@ class PlatformServiceTrialsController extends PlatformBaseController {
     const data = await platformServiceTrialService.assign(
       authContext,
       paramsResult.data.id,
+      bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get('/platform/billing/service-trials/:id/follow-ups', {
+    tenantServiceAccess: 'read',
+  })
+  async listFollowUps(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const paramsResult = ServiceTrialParamSchema.safeParse(request.params || {});
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const queryResult = ServiceTrialFollowUpListQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformServiceTrialService.listFollowUps(
+      authContext, paramsResult.data.id, queryResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post('/platform/billing/service-trials/:id/follow-ups', {
+    tenantServiceAccess: 'write',
+  })
+  async createFollowUp(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const paramsResult = ServiceTrialParamSchema.safeParse(request.params || {});
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = CreateServiceTrialFollowUpSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformServiceTrialService.createFollowUp(
+      authContext, paramsResult.data.id, bodyResult.data,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Post('/platform/billing/service-trials/:id/follow-ups/:followUpId/cancel', {
+    tenantServiceAccess: 'write',
+  })
+  async cancelFollowUp(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const paramsResult = ServiceTrialFollowUpParamSchema.safeParse(
+      request.params || {},
+    );
+    if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
+    const bodyResult = CancelServiceTrialFollowUpSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+
+    const data = await platformServiceTrialService.cancelFollowUp(
+      authContext, paramsResult.data.id, paramsResult.data.followUpId,
       bodyResult.data,
     );
     return ResponseHandler.success(data);

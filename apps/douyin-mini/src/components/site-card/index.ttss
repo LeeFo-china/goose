@@ -1,7 +1,7 @@
 @import "../../styles/tokens.ttss";
 
-.site { display: flex; width: 100%; min-height: 220rpx; padding: 0; text-align: left; }
-.site-image { width: 240rpx; min-height: 220rpx; flex: none; background: #eceae6; }
+.site { display: flex; width: 100%; height: 240rpx; min-height: 240rpx; padding: 0; text-align: left; }
+.site-image { box-sizing: border-box; width: 240rpx; height: 240rpx; flex: none; background: #eceae6; }
 .site-image--empty { display: flex; align-items: center; justify-content: center; padding: 20rpx; color: #706c67; font-size: 22rpx; text-align: center; }
 .site-body { min-width: 0; flex: 1; padding: 28rpx 26rpx; }
 .site-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
@@ -10,7 +10,7 @@
 .site-meta { margin-top: 14rpx; color: #625f5b; font-size: 24rpx; line-height: 1.5; }
 .site-time { margin-top: 18rpx; color: #706c67; font-size: 22rpx; line-height: 1.5; }
 .site--loading, .site--state { align-items: center; justify-content: center; }
-.site-skeleton { width: calc(100% - 48rpx); height: 172rpx; border-radius: 16rpx; background: #eceae6; animation: site-pulse 1.4s ease-in-out infinite; }
+.site-skeleton { width: calc(100% - 48rpx); height: 192rpx; border-radius: 16rpx; background: #eceae6; animation: site-pulse 1.4s ease-in-out infinite; }
 .site--state { flex-direction: column; color: #625f5b; font-size: 26rpx; }
 .state-action { min-width: 144rpx; min-height: 88rpx; margin-top: 18rpx; border-radius: 12rpx; background: #191817; color: #fff; font-size: 26rpx; line-height: 88rpx; }
 @keyframes site-pulse { 50% { opacity: .55; } }

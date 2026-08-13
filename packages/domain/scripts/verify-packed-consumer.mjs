@@ -57,7 +57,20 @@ try {
   await writeFile(
     join(consumerRoot, 'verify.ts'),
     `import {
+  EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  EmployeeServiceAccessSummarySchema,
+  PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
+  PlatformServiceTrialScopeSchema,
   SiteContentDraftBlockSchema,
+  type PlatformServiceTrialScopeV1,
+  type PlatformServiceTrialStatus,
+  type ServiceTrialFollowUpStatus,
+  type ServiceTrialFollowUpType,
+  type ServiceTrialNotificationEvent,
+  type EmployeeServiceAccessSummary,
   type SiteContentDraftBlock,
   type SiteContentPublicDetail,
   type SiteContentPublicSummary,
@@ -65,6 +78,33 @@ try {
 import { z } from 'zod';
 
 const schema: z.ZodType<SiteContentDraftBlock> = SiteContentDraftBlockSchema;
+const trialScopeSchema: z.ZodType<PlatformServiceTrialScopeV1> =
+  PlatformServiceTrialScopeSchema;
+const trialStatus: PlatformServiceTrialStatus =
+  PLATFORM_SERVICE_TRIAL_STATUS_VALUES[2];
+const followUpType: ServiceTrialFollowUpType =
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES[0];
+const followUpStatus: ServiceTrialFollowUpStatus =
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES[1];
+const notificationEvent: ServiceTrialNotificationEvent =
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES[5];
+const employeeAccess: EmployeeServiceAccessSummary =
+  EmployeeServiceAccessSummarySchema.parse({
+    can_enter_workspace: false,
+    readonly: false,
+    access_mode: 'service_blocked',
+    access_level: 'none',
+    access_status: EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[5],
+    trial_id: null,
+    trial_status: null,
+    starts_at: null,
+    ends_at: null,
+    title: '审核中',
+    message: '请等待平台审核',
+    primary_action: null,
+    secondary_action: null,
+    evaluated_at: '2026-08-12T00:00:00.000Z',
+  });
 
 const assertTypes = (
   block: SiteContentDraftBlock,
@@ -79,6 +119,12 @@ const assertTypes = (
 
 void schema;
 void assertTypes;
+void trialScopeSchema;
+void trialStatus;
+void followUpType;
+void followUpStatus;
+void notificationEvent;
+void employeeAccess;
 `,
   );
   await execFileAsync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], {
@@ -87,15 +133,72 @@ void assertTypes;
 
   await writeFile(
     join(consumerRoot, 'verify.mjs'),
-    `import { SiteContentDraftBlockSchema } from '@gooes/domain';
+    `import {
+  EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  EmployeeServiceAccessSummarySchema,
+  PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
+  SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES,
+  SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES,
+  PlatformServiceTrialScopeSchema,
+  SiteContentDraftBlockSchema,
+} from '@gooes/domain';
 import { z } from 'zod';
+
+const expectedTrialStatuses = [
+  'pending_review',
+  'scheduled',
+  'active',
+  'grace_period',
+  'expired',
+  'rejected',
+  'withdrawn',
+  'revoked',
+  'converted',
+];
+const expectedFollowUpTypes = ['phone', 'wechat', 'online_meeting', 'onsite', 'other'];
+const expectedFollowUpStatuses = ['pending', 'completed', 'canceled'];
+const expectedNotificationEvents = [
+  'application_submitted', 'approved', 'rejected', 'extended', 'revoked',
+  'expires_in_7_days', 'expires_in_3_days', 'expires_in_1_day',
+  'entered_grace', 'expired', 'converted',
+];
 
 if (!(SiteContentDraftBlockSchema instanceof z.ZodType)) {
   throw new Error('packed domain schema 与 consumer 使用了不同的 Zod 类型身份');
 }
 
+if (!(PlatformServiceTrialScopeSchema instanceof z.ZodType)) {
+  throw new Error('packed trial scope schema 与 consumer 使用了不同的 Zod 类型身份');
+}
+
+if (!(EmployeeServiceAccessSummarySchema instanceof z.ZodType)) {
+  throw new Error('packed employee service access schema 与 consumer 使用了不同的 Zod 类型身份');
+}
+
+if (EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[3] !== 'grace_period') {
+  throw new Error('packed domain 缺少员工服务状态契约');
+}
+
+if (JSON.stringify(PLATFORM_SERVICE_TRIAL_STATUS_VALUES) !== JSON.stringify(expectedTrialStatuses)) {
+  throw new Error('packed domain 缺少完整的试用状态契约');
+}
+
+if (JSON.stringify(SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES) !== JSON.stringify(expectedFollowUpTypes)
+  || JSON.stringify(SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES) !== JSON.stringify(expectedFollowUpStatuses)
+  || JSON.stringify(SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES) !== JSON.stringify(expectedNotificationEvents)) {
+  throw new Error('packed domain 缺少完整的试用运营契约');
+}
+
 if (!SiteContentDraftBlockSchema.safeParse({ type: 'paragraph', text: 'packed consumer' }).success) {
   throw new Error('packed domain schema 无法执行解析');
+}
+
+if (!PlatformServiceTrialScopeSchema.safeParse({
+  version: 1,
+  capabilities: ['core.projects', 'core.customers'],
+}).success) {
+  throw new Error('packed trial scope schema 无法执行解析');
 }
 `,
   );

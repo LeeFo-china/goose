@@ -216,7 +216,7 @@ describe("tenant service route inventory", () => {
           "read",
         ],
         ["GET /auth/me/permissions", "session"],
-        ["GET /employee/bootstrap", "read"],
+        ["GET /employee/bootstrap", "session"],
         ["GET /employee/personalization", "read"],
         ["POST /departments/enable-batch", "write"],
       ] as const;

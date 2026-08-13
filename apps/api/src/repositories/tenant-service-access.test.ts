@@ -26,6 +26,14 @@ function envelope(patch: Record<string, unknown> = {}) {
       grace_ends_at: "2026-09-08T00:00:00.000Z",
       scope_snapshot: { version: 1, capabilities: ["core.projects"] },
     },
+    latest_trial: {
+      id: TRIAL_ID,
+      tenant_id: TENANT_ID,
+      status: "active",
+      starts_at: "2026-08-10T08:00:00.000Z",
+      trial_ends_at: "2026-09-01T00:00:00.000Z",
+      grace_ends_at: "2026-09-08T00:00:00.000Z",
+    },
     ...patch,
   };
 }
@@ -71,6 +79,11 @@ describe("TenantServiceAccessRepository", () => {
           source: "tenant_application",
           status: "active",
         }),
+        latestTrial: expect.objectContaining({
+          id: TRIAL_ID,
+          tenant_id: TENANT_ID,
+          status: "active",
+        }),
     });
     expect(rpc).toHaveBeenCalledWith("platform_service_trial_access_facts", {
       p_tenant_id: TENANT_ID,
@@ -105,6 +118,7 @@ describe("TenantServiceAccessRepository", () => {
       data: envelope({
         server_time: entry.server_time,
         current_trial: { ...current, status: entry.status },
+        latest_trial: { ...envelope().latest_trial, status: entry.status },
       }),
       error: null,
     });
@@ -156,11 +170,105 @@ describe("TenantServiceAccessRepository", () => {
       data: envelope({
         server_time: "2099-01-01T00:00:00.000Z",
         current_trial: null,
+        latest_trial: { ...envelope().latest_trial, status: "expired" },
       }),
       error: null,
     });
     await expect(repository.getAccessFacts({ tenantId: TENANT_ID })).resolves
       .toMatchObject({ currentTrial: null });
+  });
+
+  test.each([
+    { status: "pending_review", startsAt: null, trialEndsAt: null, graceEndsAt: null },
+    {
+      status: "scheduled",
+      startsAt: "2026-08-20T00:00:00.000Z",
+      trialEndsAt: "2026-09-20T00:00:00.000Z",
+      graceEndsAt: "2026-09-27T00:00:00.000Z",
+    },
+    {
+      status: "expired",
+      startsAt: "2026-07-01T00:00:00.000Z",
+      trialEndsAt: "2026-07-31T00:00:00.000Z",
+      graceEndsAt: "2026-08-07T00:00:00.000Z",
+    },
+    {
+      status: "converted",
+      startsAt: "2026-07-01T00:00:00.000Z",
+      trialEndsAt: "2026-07-31T00:00:00.000Z",
+      graceEndsAt: "2026-08-07T00:00:00.000Z",
+    },
+  ])("strictly parses the latest $status trial", async ({
+    status, startsAt, trialEndsAt, graceEndsAt,
+  }) => {
+    const { repository } = await repositoryWith({
+      data: envelope({
+        current_trial: null,
+        latest_trial: {
+          id: TRIAL_ID,
+          tenant_id: TENANT_ID,
+          status,
+          starts_at: startsAt,
+          trial_ends_at: trialEndsAt,
+          grace_ends_at: graceEndsAt,
+        },
+      }),
+      error: null,
+    });
+
+    await expect(repository.getAccessFacts({ tenantId: TENANT_ID })).resolves
+      .toMatchObject({ latestTrial: { id: TRIAL_ID, status } });
+  });
+
+  test("normalizes an old access envelope without latest_trial", async () => {
+    const legacyEnvelope = envelope();
+    delete (legacyEnvelope as { latest_trial?: unknown }).latest_trial;
+    const { repository } = await repositoryWith({
+      data: legacyEnvelope,
+      error: null,
+    });
+
+    await expect(repository.getAccessFacts({ tenantId: TENANT_ID })).resolves
+      .toMatchObject({ latestTrial: null });
+  });
+
+  test.each([
+    { tenant_id: TRIAL_ID },
+    { status: "scheduled", starts_at: null },
+    { status: "pending_review", starts_at: NOW },
+    { status: "SENSITIVE_INVALID_STATUS" },
+  ])("fails closed for malformed latest trial facts %#", async (patch) => {
+    const latest = envelope().latest_trial;
+    const { repository } = await repositoryWith({
+      data: envelope({
+        current_trial: null,
+        latest_trial: { ...latest, ...patch },
+      }),
+      error: null,
+    });
+    const caught = await repository.getAccessFacts({ tenantId: TENANT_ID })
+      .catch((error: unknown) => error);
+    expect(caught).toMatchObject({ statusCode: 500, code: "DB_ERROR" });
+    expect(JSON.stringify(caught)).not.toContain("SENSITIVE_INVALID_STATUS");
+  });
+
+  test("fails closed for a time-inconsistent latest effective status", async () => {
+    const { repository } = await repositoryWith({
+      data: envelope({
+        current_trial: null,
+        latest_trial: {
+          ...envelope().latest_trial,
+          status: "scheduled",
+          starts_at: "2026-07-01T00:00:00.000Z",
+          trial_ends_at: "2026-07-31T00:00:00.000Z",
+          grace_ends_at: "2026-08-07T00:00:00.000Z",
+        },
+      }),
+      error: null,
+    });
+
+    await expect(repository.getAccessFacts({ tenantId: TENANT_ID })).rejects
+      .toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
   test.each([

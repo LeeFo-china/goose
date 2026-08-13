@@ -2,9 +2,14 @@ import { Errors } from "@/errors/error-factory";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { employeePersonalizationService } from "@/services/employee-personalization";
+import { employeeServiceAccessService } from "@/services/employee-service-access";
 import { homeDashboardService } from "@/services/home-dashboard";
 import { taskCenterService } from "@/services/task-center";
+import type { PlatformServiceTrialCapability } from "@gooes/domain";
 import type { FastifyRequest } from "fastify";
+import {
+  buildServiceBlockedBootstrapResponse,
+} from "./bootstrap-service-access";
 import {
   getUserProfileForBootstrap,
   serializeAuthProfile,
@@ -29,6 +34,7 @@ type EmployeeBootstrapDebugTiming = Record<string, number | string | null>;
 
 type EmployeeBootstrapHandlerOptions = {
   getRequiredTenantContext: (request: FastifyRequest) => Promise<TenantAuthContext>;
+  resolveServiceAccess?: typeof employeeServiceAccessService.resolveBootstrap;
 };
 
 export class EmployeeBootstrapHandler {
@@ -39,6 +45,14 @@ export class EmployeeBootstrapHandler {
   private bootstrapInFlight = new Map<string, Promise<EmployeeBootstrapResponse>>();
 
   constructor(private readonly options: EmployeeBootstrapHandlerOptions) {}
+
+  private resolveServiceAccess(
+    input: Parameters<typeof employeeServiceAccessService.resolveBootstrap>[0],
+  ) {
+    return this.options.resolveServiceAccess
+      ? this.options.resolveServiceAccess(input)
+      : employeeServiceAccessService.resolveBootstrap(input);
+  }
 
   private getCachedBootstrap(cacheKey: string) {
     const item = this.bootstrapCache.get(cacheKey);
@@ -99,6 +113,7 @@ export class EmployeeBootstrapHandler {
   private bootstrapCacheKey(
     authContext: TenantAuthContext,
     query: EmployeeBootstrapQuery,
+    capabilities: readonly PlatformServiceTrialCapability[] | null,
   ) {
     return [
       authContext.authUserId,
@@ -106,27 +121,10 @@ export class EmployeeBootstrapHandler {
       authContext.employeeId,
       query.home_mode,
       query.tasks_mode,
+      capabilities?.join(",") ?? "unrestricted",
       employeePersonalizationService.getRulesVersionForTenant(
         authContext.tenantId,
       ),
-    ].join(":");
-  }
-
-  private bootstrapTokenCacheKey(
-    user: FastifyRequest["user"],
-    query: EmployeeBootstrapQuery,
-  ) {
-    if (!user?.sub || !user.tenant_id || !user.employee_id) {
-      return null;
-    }
-
-    return [
-      user.sub,
-      user.tenant_id,
-      user.employee_id,
-      query.home_mode,
-      query.tasks_mode,
-      employeePersonalizationService.getRulesVersionForTenant(user.tenant_id),
     ].join(":");
   }
 
@@ -191,22 +189,31 @@ export class EmployeeBootstrapHandler {
     request: FastifyRequest,
     authContext: TenantAuthContext,
     query: EmployeeBootstrapQuery,
+    serviceAccess: EmployeeBootstrapResponse["service_access"],
+    capabilities: readonly PlatformServiceTrialCapability[] | null,
     debugTiming?: EmployeeBootstrapDebugTiming,
   ): Promise<EmployeeBootstrapResponse> {
     const startedAt = Date.now();
     const { home_mode: homeMode, tasks_mode: tasksMode } = query;
-    prewarmDeferredHomeData(request, authContext);
+    prewarmDeferredHomeData(request, authContext, capabilities);
     prewarmDeferredSummaryData(request, authContext, {
       includeHomeStats: homeMode === "defer",
       includeTaskSummary: tasksMode === "defer",
+      capabilities,
     });
 
     const profileStartedAt = Date.now();
     const [homeStats, taskSummary, profileResult, personalization] = await Promise.all([
-      homeMode === "inline" ? homeDashboardService.getStats(authContext) : Promise.resolve(null),
-      tasksMode === "inline" ? taskCenterService.getSummary(authContext) : Promise.resolve(null),
+      homeMode === "inline" && allows(capabilities, "core.projects")
+        ? homeDashboardService.getStats(authContext)
+        : Promise.resolve(null),
+      tasksMode === "inline" && allows(capabilities, "core.workflows")
+        ? taskCenterService.getSummary(authContext)
+        : Promise.resolve(null),
       getUserProfileForBootstrap(request, authContext),
-      this.resolveBootstrapPersonalization(request, authContext, "employee_home"),
+      allows(capabilities, "core.employees")
+        ? this.resolveBootstrapPersonalization(request, authContext, "employee_home")
+        : Promise.resolve(employeePersonalizationService.getEmptyPayload("employee_home")),
     ]);
 
     request.log.info(
@@ -230,6 +237,7 @@ export class EmployeeBootstrapHandler {
     const response = {
       context: authContext,
       profile: serializeAuthProfile(authContext, profileResult.userProfile),
+      service_access: serviceAccess,
       home_stats: homeStats,
       home_mode: homeMode,
       task_summary: taskSummary,
@@ -258,9 +266,6 @@ export class EmployeeBootstrapHandler {
     request: FastifyRequest,
     query: EmployeeBootstrapQuery,
     startedAt: number,
-    options: {
-      skipCacheLookup?: boolean;
-    } = {},
   ) {
     const debugTiming: EmployeeBootstrapDebugTiming = {};
     const authContextStartedAt = Date.now();
@@ -280,61 +285,35 @@ export class EmployeeBootstrapHandler {
       throw Errors.business(403, "员工身份缺失，无法加载员工首页", "EMPLOYEE_MISSING");
     }
 
+    const serviceAccessStartedAt = Date.now();
+    const serviceAccessResolution = await this.resolveServiceAccess({
+      tenantId: authContext.tenantId,
+      permissionCodes: authContext.permissions.map(({ code }) => code),
+    });
+    const { serviceAccess, capabilities } = serviceAccessResolution;
+    debugTiming.service_access_ms = Date.now() - serviceAccessStartedAt;
+    if (!serviceAccess.can_enter_workspace) {
+      return this.withBootstrapDebugTiming(
+        await buildServiceBlockedBootstrapResponse(
+          request,
+          authContext,
+          serviceAccess,
+        ),
+        query,
+        { ...debugTiming, total_ms: Date.now() - startedAt },
+      );
+    }
+
     const permissionsStartedAt = Date.now();
     accessPolicyService.assertPermission(authContext, "dashboard.read");
-    this.assertTaskSummaryReadable(authContext);
+    if (allows(capabilities, "core.workflows")) {
+      this.assertTaskSummaryReadable(authContext);
+    }
     debugTiming.permissions_ms = Date.now() - permissionsStartedAt;
 
-    const cacheKey = this.bootstrapCacheKey(authContext, query);
-    if (!options.skipCacheLookup) {
-      const cached = this.getCachedBootstrap(cacheKey);
-      if (cached) {
-        request.log.info(
-          {
-            requestId: request.id,
-            durationMs: Date.now() - startedAt,
-            employeeId: authContext.employeeId,
-            tenantId: authContext.tenantId,
-          },
-          "[employee-bootstrap] bootstrap cache hit",
-        );
-
-        return this.withBootstrapDebugTiming(cached, query, {
-          ...debugTiming,
-          cache: "hit",
-          total_ms: Date.now() - startedAt,
-        });
-      }
-
-      const existingRequest = this.bootstrapInFlight.get(cacheKey);
-      if (existingRequest) {
-        const response = await existingRequest;
-        request.log.info(
-          {
-            requestId: request.id,
-            durationMs: Date.now() - startedAt,
-            employeeId: authContext.employeeId,
-            tenantId: authContext.tenantId,
-          },
-          "[employee-bootstrap] bootstrap in-flight reused",
-        );
-
-        return this.withBootstrapDebugTiming(response, query, {
-          ...debugTiming,
-          cache: "in_flight",
-          total_ms: Date.now() - startedAt,
-        });
-      }
-    } else {
-      const buildStartedAt = Date.now();
-      const response = await this.buildEmployeeBootstrapResponse(
-        request,
-        authContext,
-        query,
-        debugTiming,
-      );
-      debugTiming.build_ms = Date.now() - buildStartedAt;
-      this.setCachedBootstrap(cacheKey, response);
+    const cacheKey = this.bootstrapCacheKey(authContext, query, capabilities);
+    const cached = this.getCachedBootstrap(cacheKey);
+    if (cached) {
       request.log.info(
         {
           requestId: request.id,
@@ -342,12 +321,38 @@ export class EmployeeBootstrapHandler {
           employeeId: authContext.employeeId,
           tenantId: authContext.tenantId,
         },
-        "[employee-bootstrap] bootstrap resolved",
+        "[employee-bootstrap] bootstrap cache hit",
       );
 
-      return this.withBootstrapDebugTiming(response, query, {
+      return this.withBootstrapDebugTiming({
+        ...cached,
+        service_access: serviceAccess,
+      }, query, {
         ...debugTiming,
-        cache: "miss",
+        cache: "hit",
+        total_ms: Date.now() - startedAt,
+      });
+    }
+
+    const existingRequest = this.bootstrapInFlight.get(cacheKey);
+    if (existingRequest) {
+      const response = await existingRequest;
+      request.log.info(
+        {
+          requestId: request.id,
+          durationMs: Date.now() - startedAt,
+          employeeId: authContext.employeeId,
+          tenantId: authContext.tenantId,
+        },
+        "[employee-bootstrap] bootstrap in-flight reused",
+      );
+
+      return this.withBootstrapDebugTiming({
+        ...response,
+        service_access: serviceAccess,
+      }, query, {
+        ...debugTiming,
+        cache: "in_flight",
         total_ms: Date.now() - startedAt,
       });
     }
@@ -357,6 +362,8 @@ export class EmployeeBootstrapHandler {
       request,
       authContext,
       query,
+      serviceAccess,
+      capabilities,
       debugTiming,
     ).then((response) => {
       this.setCachedBootstrap(cacheKey, response);
@@ -394,68 +401,17 @@ export class EmployeeBootstrapHandler {
       throw Errors.fromZod(queryResult.error);
     }
 
-    const tokenCacheKey = this.bootstrapTokenCacheKey(request.user, queryResult.data);
-    if (tokenCacheKey) {
-      const cached = this.getCachedBootstrap(tokenCacheKey);
-      if (cached) {
-        request.log.info(
-          {
-            requestId: request.id,
-            durationMs: Date.now() - startedAt,
-            authUserId: request.user?.sub ?? null,
-            employeeId: request.user?.employee_id ?? null,
-            tenantId: request.user?.tenant_id ?? null,
-          },
-          "[employee-bootstrap] bootstrap token cache hit",
-        );
-
-        return this.withBootstrapDebugTiming(cached, queryResult.data, {
-          cache: "token_hit",
-          total_ms: Date.now() - startedAt,
-        });
-      }
-
-      const existingRequest = this.bootstrapInFlight.get(tokenCacheKey);
-      if (existingRequest) {
-        const response = await existingRequest;
-        request.log.info(
-          {
-            requestId: request.id,
-            durationMs: Date.now() - startedAt,
-            authUserId: request.user?.sub ?? null,
-            employeeId: request.user?.employee_id ?? null,
-            tenantId: request.user?.tenant_id ?? null,
-          },
-          "[employee-bootstrap] bootstrap token in-flight reused",
-        );
-
-        return this.withBootstrapDebugTiming(response, queryResult.data, {
-          cache: "token_in_flight",
-          total_ms: Date.now() - startedAt,
-        });
-      }
-
-      const responsePromise = this.resolveEmployeeBootstrap(
-        request,
-        queryResult.data,
-        startedAt,
-        { skipCacheLookup: true },
-      ).then((response) => {
-        this.setCachedBootstrap(tokenCacheKey, this.stripBootstrapDebugTiming(response));
-        return response;
-      }).finally(() => {
-        if (this.bootstrapInFlight.get(tokenCacheKey) === responsePromise) {
-          this.bootstrapInFlight.delete(tokenCacheKey);
-        }
-      });
-      this.bootstrapInFlight.set(tokenCacheKey, responsePromise);
-      return responsePromise;
-    }
-
     return this.resolveEmployeeBootstrap(
       request,
       queryResult.data,
       startedAt,
     );
   }
+}
+
+function allows(
+  capabilities: readonly PlatformServiceTrialCapability[] | null,
+  capability: PlatformServiceTrialCapability,
+) {
+  return capabilities === null || capabilities.includes(capability);
 }

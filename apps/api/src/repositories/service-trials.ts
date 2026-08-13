@@ -135,7 +135,7 @@ export type ServiceTrialClient = {
 };
 
 const TRIAL_COLUMNS = 'id,tenant_id,source,trial_type,status,application_reason,expected_user_count,expected_project_count,contact_name,contact_phone,grant_reason,review_decision,review_reason,revoke_reason,withdraw_reason,requested_at,reviewed_at,granted_at,starts_at,activated_at,trial_ends_at,grace_ends_at,withdrawn_at,revoked_at,converted_at,converted_order_id,granted_by_employee_id,reviewed_by_employee_id,requested_by_employee_id,revoked_by_employee_id,withdrawn_by_employee_id,assignee_employee_id,scope_snapshot,policy_snapshot,extension_count,version,created_at,updated_at';
-const TENANT_RELATION = 'tenant:tenants!tenant_service_trials_tenant_id_fkey(id,name,slug)';
+const TENANT_RELATION = 'tenant:tenants!tenant_service_trials_tenant_id_fkey(id,name,slug,contact_name,contact_phone)';
 const ASSIGNEE_RELATION = 'assignee:employees!tenant_service_trials_assignee_employee_id_fkey(id,name,phone,status)';
 const EVENT_RELATION = 'events:tenant_service_trial_events!tenant_service_trial_events_trial_identity_fkey(id,tenant_id,trial_id,event_key,event_type,from_status,to_status,reason,actor_employee_id,metadata,occurred_at,created_at)';
 const POLICY_COLUMNS = 'id,is_current,trial_days,grace_days,reminder_days,max_trial_days,max_grace_days,max_schedule_days,max_extension_count,max_extension_days,reapply_cooldown_days,allow_repeat,standard_scope,guided_scope,version,change_reason,created_at,updated_at';

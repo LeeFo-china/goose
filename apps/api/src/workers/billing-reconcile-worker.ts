@@ -13,6 +13,17 @@ import type {
   BrandingVirtualReconciliationTelemetry,
 } from "@/services/branding-virtual-payment-reconciliation";
 import { markBillingReconcileWorkerHealthy } from "@/workers/billing-reconcile-worker-health";
+import {
+  loadDefaultBrandingAddonExpirationService,
+  loadDefaultBrandingVirtualPaymentService,
+  loadDefaultRechargeExpirationService,
+  loadDefaultTrialReminderService,
+  summarizeBrandingVirtualPaymentResult,
+  summarizeExpirationResult,
+  summarizeRefundResult,
+  summarizeSubscriptionResult,
+  summarizeTrialReminderResult,
+} from "@/workers/billing-reconcile-worker-children";
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 10_000;
@@ -22,6 +33,7 @@ const DEFAULT_RECHARGE_EXPIRATION_BATCH_SIZE = 50;
 const DEFAULT_BRANDING_ADDON_EXPIRATION_BATCH_SIZE = 50;
 const DEFAULT_BRANDING_VIRTUAL_PAYMENT_RECONCILE_BATCH_SIZE = 20;
 const DEFAULT_REFUND_BATCH_SIZE = 20;
+const DEFAULT_SERVICE_TRIAL_REMINDER_BATCH_SIZE = 50;
 const MIN_BATCH_SIZE = 1;
 const MAX_BATCH_SIZE = 100;
 
@@ -33,6 +45,7 @@ export type BillingReconcileWorkerConfig = {
   brandingAddonExpirationBatchSize: number;
   brandingVirtualPaymentBatchSize: number;
   refundBatchSize: number;
+  serviceTrialReminderBatchSize: number;
 };
 
 type WorkerLogger = (
@@ -63,6 +76,11 @@ type BillingReconcileWorkerDependencies = {
   refundReconciliationService?: {
     runBatch(input: { limit: number }): Promise<RefundReconciliationSummary>;
   };
+  trialReminderService?: {
+    runReminderBatch(input: { limit: number }): Promise<{
+      claimed: number; sent: number; failed: number; errors: string[];
+    }>;
+  };
   logger?: WorkerLogger;
   healthEvidence?: { markHealthy(): Promise<void> };
 };
@@ -79,15 +97,16 @@ type FulfilledChildResult<Result> = {
 type BillingReconcileTickResults = {
   subscription: ChildResult<ReturnType<typeof summarizeSubscriptionResult>>;
   rechargeExpiration: ChildResult<
-    ReturnType<typeof summarizeRechargeExpirationResult>
+    ReturnType<typeof summarizeExpirationResult>
   >;
   brandingAddonExpiration: ChildResult<
-    ReturnType<typeof summarizeBrandingAddonExpirationResult>
+    ReturnType<typeof summarizeExpirationResult>
   >;
   brandingVirtualPayment: ChildResult<
     ReturnType<typeof summarizeBrandingVirtualPaymentResult>
   >;
   refund: ChildResult<ReturnType<typeof summarizeRefundResult>>;
+  trialReminders: ChildResult<ReturnType<typeof summarizeTrialReminderResult>>;
 };
 
 type SuccessfulBillingReconcileTickResults = {
@@ -95,15 +114,18 @@ type SuccessfulBillingReconcileTickResults = {
     ReturnType<typeof summarizeSubscriptionResult>
   >;
   rechargeExpiration: FulfilledChildResult<
-    ReturnType<typeof summarizeRechargeExpirationResult>
+    ReturnType<typeof summarizeExpirationResult>
   >;
   brandingAddonExpiration: FulfilledChildResult<
-    ReturnType<typeof summarizeBrandingAddonExpirationResult>
+    ReturnType<typeof summarizeExpirationResult>
   >;
   brandingVirtualPayment: FulfilledChildResult<
     ReturnType<typeof summarizeBrandingVirtualPaymentResult>
   >;
   refund: FulfilledChildResult<ReturnType<typeof summarizeRefundResult>>;
+  trialReminders: FulfilledChildResult<
+    ReturnType<typeof summarizeTrialReminderResult>
+  >;
 };
 
 let stopping = false;
@@ -196,6 +218,12 @@ export function getWorkerConfig(): BillingReconcileWorkerConfig {
       MIN_BATCH_SIZE,
       MAX_BATCH_SIZE,
     ),
+    serviceTrialReminderBatchSize: parseNumberEnv(
+      "BILLING_SERVICE_TRIAL_REMINDER_BATCH_SIZE",
+      DEFAULT_SERVICE_TRIAL_REMINDER_BATCH_SIZE,
+      MIN_BATCH_SIZE,
+      MAX_BATCH_SIZE,
+    ),
   };
 }
 
@@ -235,7 +263,7 @@ export async function tick(
           batchSize: config.rechargeExpirationBatchSize,
         });
       },
-      summarizeRechargeExpirationResult,
+      summarizeExpirationResult,
     );
     const brandingAddonExpiration = await runChild(
       async () => {
@@ -245,18 +273,28 @@ export async function tick(
           batchSize: config.brandingAddonExpirationBatchSize,
         });
       },
-      summarizeBrandingAddonExpirationResult,
+      summarizeExpirationResult,
     );
     const brandingVirtualPayment = await runChild(
       async () => {
         const service =
           dependencies.brandingVirtualPaymentReconciliationService ??
-            await loadDefaultBrandingVirtualPaymentReconciliationService();
+            await loadDefaultBrandingVirtualPaymentService();
         return service.reconcile({
           batchSize: config.brandingVirtualPaymentBatchSize,
         });
       },
       summarizeBrandingVirtualPaymentResult,
+    );
+    const trialReminders = await runChild(
+      async () => {
+        const service = dependencies.trialReminderService
+          ?? await loadDefaultTrialReminderService();
+        return service.runReminderBatch({
+          limit: config.serviceTrialReminderBatchSize,
+        });
+      },
+      summarizeTrialReminderResult,
     );
     const refund = await runChild(
       () => refundReconciliationService.runBatch({
@@ -269,6 +307,7 @@ export async function tick(
       rechargeExpiration,
       brandingAddonExpiration,
       brandingVirtualPayment,
+      trialReminders,
       refund,
     };
     const childrenSucceeded = isSuccessfulBillingReconcileTick(tickResults);
@@ -294,6 +333,7 @@ export async function tick(
         recharge_expiration: rechargeExpiration,
         branding_addon_expiration: brandingAddonExpiration,
         branding_virtual_payment: brandingVirtualPayment,
+        trial_reminders: trialReminders,
         refund,
       },
       ...(healthEvidenceFailed
@@ -313,6 +353,7 @@ function isSuccessfulBillingReconcileTick(
     results.rechargeExpiration.status !== "fulfilled" ||
     results.brandingAddonExpiration.status !== "fulfilled" ||
     results.brandingVirtualPayment.status !== "fulfilled" ||
+    results.trialReminders.status !== "fulfilled" ||
     results.refund.status !== "fulfilled"
   ) {
     return false;
@@ -325,6 +366,7 @@ function isSuccessfulBillingReconcileTick(
     results.brandingAddonExpiration.result.release_failed === 0 &&
     results.brandingVirtualPayment.result.failed === 0 &&
     (results.brandingVirtualPayment.result.refund_failed ?? 0) === 0 &&
+    results.trialReminders.result.failed === 0 &&
     results.refund.result.failed === 0;
 }
 
@@ -339,112 +381,6 @@ async function runChild<Result, Summary>(
   }
 }
 
-function summarizeSubscriptionResult(result: BillingDueCheckResult) {
-  return {
-    ensured: result.ensured,
-    reminded: result.reminded,
-    charged: result.charged,
-    locked: result.locked,
-    skipped: result.skipped,
-    error_count: result.errors.length,
-  };
-}
-
-function summarizeRefundResult(result: RefundReconciliationSummary) {
-  return {
-    claimed: result.claimed,
-    success: result.success,
-    processing: result.processing,
-    closed: result.closed,
-    abnormal: result.abnormal,
-    rescheduled: result.rescheduled,
-    failed: result.failed,
-  };
-}
-
-function summarizeRechargeExpirationResult(
-  result: BillingRechargeExpirationTelemetry,
-) {
-  return {
-    claimed: result.claimed,
-    paid: result.paid,
-    closed: result.closed,
-    retried: result.retried,
-    failed: result.failed,
-    release_failed: result.release_failed,
-  };
-}
-
-function summarizeBrandingAddonExpirationResult(
-  result: BrandingAddonExpirationTelemetry,
-) {
-  return {
-    claimed: result.claimed,
-    paid: result.paid,
-    closed: result.closed,
-    retried: result.retried,
-    failed: result.failed,
-    release_failed: result.release_failed,
-  };
-}
-
-function summarizeBrandingVirtualPaymentResult(
-  result: BrandingVirtualReconciliationTelemetry,
-) {
-  return {
-    claimed: result.claimed,
-    queried: result.queried,
-    confirmed: result.confirmed,
-    closed: result.closed,
-    failed: result.failed,
-    grant_recovered: result.grantRecovered,
-    ...(result.refundClaimed === undefined ? {} : {
-      refund_claimed: result.refundClaimed,
-      refund_queried: result.refundQueried ?? 0,
-      refund_succeeded: result.refundSucceeded ?? 0,
-      refund_failed: result.refundFailed ?? 0,
-      refund_compensated: result.refundCompensated ?? 0,
-      refund_pending: result.refundPending ?? 0,
-      refund_rescheduled: result.refundRescheduled ?? 0,
-      refund_terminal_failed: result.refundTerminalFailed ?? 0,
-      refund_conflicts: result.refundConflicts ?? 0,
-    }),
-  };
-}
-
-async function loadDefaultRechargeExpirationService() {
-  const { billingRechargeExpirationService } = await import(
-    "@/services/billing-recharge-expiration"
-  );
-  return billingRechargeExpirationService;
-}
-
-async function loadDefaultBrandingAddonExpirationService() {
-  const { brandingAddonExpirationService } = await import(
-    "@/services/branding-addon-expiration"
-  );
-  return brandingAddonExpirationService;
-}
-
-async function loadDefaultBrandingVirtualPaymentReconciliationService() {
-  const [paymentModule, refundModule] = await Promise.all([
-    import("@/services/branding-virtual-payment-reconciliation"),
-    import("@/services/branding-virtual-refund-reconciliation"),
-  ]);
-  return {
-    reconcile: async (input: { batchSize: number }) => {
-      const [payment, refund] = await Promise.all([
-        paymentModule.brandingVirtualPaymentReconciliationService.reconcile(input),
-        refundModule.brandingVirtualRefundReconciliationService.reconcile(input),
-      ]);
-      return {
-        ...payment,
-        ...refund,
-        failed: payment.failed + refund.refundFailed,
-      };
-    },
-  };
-}
 
 function registerShutdownSignalHandlers(): void {
   process.on("SIGINT", () => {

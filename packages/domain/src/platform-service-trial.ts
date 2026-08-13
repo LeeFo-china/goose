@@ -31,6 +31,34 @@ export const PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES = [
   'core.notifications',
 ] as const;
 
+export const SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES = [
+  'phone',
+  'wechat',
+  'online_meeting',
+  'onsite',
+  'other',
+] as const;
+
+export const SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES = [
+  'pending',
+  'completed',
+  'canceled',
+] as const;
+
+export const SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES = [
+  'application_submitted',
+  'approved',
+  'rejected',
+  'extended',
+  'revoked',
+  'expires_in_7_days',
+  'expires_in_3_days',
+  'expires_in_1_day',
+  'entered_grace',
+  'expired',
+  'converted',
+] as const;
+
 export type PlatformServiceTrialStatus =
   (typeof PLATFORM_SERVICE_TRIAL_STATUS_VALUES)[number];
 export type PlatformServiceTrialSource =
@@ -39,6 +67,12 @@ export type PlatformServiceTrialType =
   (typeof PLATFORM_SERVICE_TRIAL_TYPE_VALUES)[number];
 export type PlatformServiceTrialCapability =
   (typeof PLATFORM_SERVICE_TRIAL_CAPABILITY_VALUES)[number];
+export type ServiceTrialFollowUpType =
+  (typeof SERVICE_TRIAL_FOLLOW_UP_TYPE_VALUES)[number];
+export type ServiceTrialFollowUpStatus =
+  (typeof SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES)[number];
+export type ServiceTrialNotificationEvent =
+  (typeof SERVICE_TRIAL_NOTIFICATION_EVENT_VALUES)[number];
 
 export type PlatformServiceTrialScopeV1 = {
   version: 1;

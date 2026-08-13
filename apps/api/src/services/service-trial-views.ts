@@ -52,12 +52,29 @@ export function maskServiceTrialPhone(
   return `${phone.slice(0, 3)}****${phone.slice(7)}`;
 }
 
-function maskContactName(name: string | null): string | null {
+export function maskServiceTrialContactName(
+  name: string | null | undefined,
+): string | null {
   if (!name) return null;
+  if (/^.\*+$/u.test(name)) return name;
   const characters = [...name];
   return characters.length === 1
     ? `${characters[0]}*`
     : `${characters[0]}${'*'.repeat(characters.length - 1)}`;
+}
+
+function maskTenantContactPhone(
+  phone: string | null | undefined,
+): string | null {
+  const normalized = phone?.trim();
+  if (!normalized) return null;
+  if (/^(?:\*{4}|.\*{4}.|.{3}\*{4}.{4})$/u.test(normalized)) return normalized;
+  const characters = [...normalized];
+  if (characters.length === 1) return '****';
+  if (characters.length < 8) {
+    return `${characters[0]}****${characters.at(-1)}`;
+  }
+  return `${characters.slice(0, 3).join('')}****${characters.slice(-4).join('')}`;
 }
 
 export function serializeServiceTrial(
@@ -74,7 +91,7 @@ export function serializeServiceTrial(
     application_reason: record.application_reason,
     expected_user_count: record.expected_user_count,
     expected_project_count: record.expected_project_count,
-    contact_name: maskContactName(record.contact_name),
+    contact_name: maskServiceTrialContactName(record.contact_name),
     contact_phone: maskServiceTrialPhone(record.contact_phone),
     grant_reason: record.grant_reason,
     review_decision: record.review_decision,
@@ -102,7 +119,11 @@ export function serializeServiceTrial(
   };
   return {
     ...trial,
-    ...('tenant' in record ? { tenant: record.tenant } : {}),
+    ...('tenant' in record ? { tenant: {
+      ...record.tenant,
+      contact_name: maskServiceTrialContactName(record.tenant.contact_name),
+      contact_phone: maskTenantContactPhone(record.tenant.contact_phone),
+    } } : {}),
     ...('assignee' in record ? {
       assignee: record.assignee ? {
         id: record.assignee.id,
