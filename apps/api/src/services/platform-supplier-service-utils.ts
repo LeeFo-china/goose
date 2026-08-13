@@ -133,12 +133,20 @@ export function qualificationState(input: SupplierQualification) {
 export function settingsState(input: {
   module_enabled: boolean;
   require_active_contract_for_new_order: boolean;
+  ownership_reads_enabled: boolean;
+  private_supplier_writes_enabled: boolean;
+  private_catalog_writes_enabled: boolean;
+  procurement_snapshot_v1_enabled: boolean;
   version: number;
 }) {
   return {
     module_enabled: input.module_enabled,
     require_active_contract_for_new_order:
       input.require_active_contract_for_new_order,
+    ownership_reads_enabled: input.ownership_reads_enabled,
+    private_supplier_writes_enabled: input.private_supplier_writes_enabled,
+    private_catalog_writes_enabled: input.private_catalog_writes_enabled,
+    procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
     version: input.version,
   };
 }

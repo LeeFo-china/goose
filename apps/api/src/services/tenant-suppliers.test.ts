@@ -85,7 +85,6 @@ describe("TenantSuppliersService tenant and permission boundaries", () => {
     });
 
     const reads = [
-      () => service.getSettings(auth(["supplier.view"])),
       () => service.listRelationships(auth(["supplier.view"]), {
         page: 1,
         pageSize: 20,
@@ -114,6 +113,30 @@ describe("TenantSuppliersService tenant and permission boundaries", () => {
     }
     expect(dependencies.repository.listRelationships).not.toHaveBeenCalled();
     expect(dependencies.repository.listDirectory).not.toHaveBeenCalled();
+    await expect(service.getSettings(auth(["supplier.view"]))).resolves
+      .toMatchObject({ module_enabled: false });
+  });
+
+  test("returns fail-closed effective rollout flags to the tenant", async () => {
+    const { service } = await createService({
+      getSettings: mock(async () => ({
+        ...settings,
+        module_enabled: false,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: true,
+      })),
+    });
+
+    await expect(service.getSettings(auth(["supplier.view"]))).resolves
+      .toMatchObject({
+        module_enabled: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: false,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
+      });
   });
 });
 

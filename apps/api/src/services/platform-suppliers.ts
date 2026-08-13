@@ -23,6 +23,7 @@ import type {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { platformAuditLogService } from "@/services/platform-audit-logs";
+import { assertSupplierRolloutTransition } from "@/services/supplier-rollout-settings";
 import {
   assertQualificationTypeRules,
   createContext,
@@ -65,6 +66,10 @@ type CreateSupplierRequest = { supplierId: string; input: PlatformSupplierCreate
 type SettingsRequest = {
   tenantId: string; module_enabled: boolean;
   require_active_contract_for_new_order: boolean;
+  ownership_reads_enabled: boolean;
+  private_supplier_writes_enabled: boolean;
+  private_catalog_writes_enabled: boolean;
+  procurement_snapshot_v1_enabled: boolean;
   expected_version: number; reason?: string; idempotencyKey: string;
 };
 export class PlatformSuppliersService {
@@ -301,11 +306,25 @@ export class PlatformSuppliersService {
   }
   async setTenantSupplierSettings(auth: AuthContext, input: SettingsRequest) {
     const actor = this.require(auth, "manage");
+    const current = await this.repository.getTenantSupplierSettings(input.tenantId);
+    if ((current?.version ?? 0) === input.expected_version) {
+      assertSupplierRolloutTransition(current ?? {
+        module_enabled: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: false,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
+      }, input);
+    }
     const result = await this.mapIdempotencyError(() =>
       this.repository.setTenantSupplierSettings({
         tenant_id: input.tenantId, module_enabled: input.module_enabled,
         require_active_contract_for_new_order:
           input.require_active_contract_for_new_order,
+        ownership_reads_enabled: input.ownership_reads_enabled,
+        private_supplier_writes_enabled: input.private_supplier_writes_enabled,
+        private_catalog_writes_enabled: input.private_catalog_writes_enabled,
+        procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
         expected_version: input.expected_version, actor_user_id: actor.authUserId,
         actor_employee_id: actor.employeeId,
         idempotency_key: input.idempotencyKey,
@@ -314,15 +333,19 @@ export class PlatformSuppliersService {
     if (result.idempotent) return result.setting;
     const setting = result.setting;
     await this.audit.recordBestEffort({
-      action: input.module_enabled
-        ? "tenant_supplier_module_enable"
-        : "tenant_supplier_module_disable",
+      action: !input.module_enabled
+        ? "tenant_supplier_module_disable"
+        : current?.module_enabled
+          ? "tenant_supplier_rollout_update"
+          : "tenant_supplier_module_enable",
       actorEmployeeId: actor.employeeId, actorUserId: actor.authUserId,
       targetTenantId: input.tenantId, resourceType: "tenant_supplier_settings",
       resourceId: input.tenantId,
       resourceLabel: `租户 ${input.tenantId}`,
       status: "success",
-      summary: `${input.module_enabled ? "启用" : "停用"}租户供应商模块`,
+      summary: current?.module_enabled === input.module_enabled
+        ? "调整租户供应商灰度开关"
+        : `${input.module_enabled ? "启用" : "停用"}租户供应商模块`,
       metadata: {
         from: result.previous_setting ? settingsState(result.previous_setting) : null,
         to: settingsState(setting),

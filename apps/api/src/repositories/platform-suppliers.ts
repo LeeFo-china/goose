@@ -67,7 +67,7 @@ const REGION_SELECT = "id,supplier_id,region_code,region_level,status,valid_from
 const ADDRESS_SELECT = "id,supplier_id,address_type,province,city,district,region_code,address_detail,longitude,latitude,is_default,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const CONTACT_SELECT = "id,supplier_id,contact_type,name,phone,email,is_public,is_primary,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const EVENT_SELECT = "id,tenant_id,resource_type,resource_id,command,from_state,to_state,reason,actor_user_id,actor_employee_id,idempotency_key,result_version,created_at";
-const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
+const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,ownership_reads_enabled,private_supplier_writes_enabled,private_catalog_writes_enabled,procurement_snapshot_v1_enabled,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
 const mutationStatus = z.object({
   status: z.enum([
     "created", "updated", "supplier_not_found", "state_conflict",
@@ -401,9 +401,13 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return data === null ? null : parse(SettingsSchema, data, "查询租户供应商设置失败");
   }
   async setTenantSupplierSettings(input: PlatformTenantSupplierSettingsCommand) {
-    const data = await this.rpc("set_tenant_supplier_module", {
+    const data = await this.rpc("set_tenant_supplier_rollout_settings", {
       p_tenant_id: input.tenant_id, p_module_enabled: input.module_enabled,
       p_require_active_contract_for_new_order: input.require_active_contract_for_new_order,
+      p_ownership_reads_enabled: input.ownership_reads_enabled,
+      p_private_supplier_writes_enabled: input.private_supplier_writes_enabled,
+      p_private_catalog_writes_enabled: input.private_catalog_writes_enabled,
+      p_procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
       p_expected_version: input.expected_version, p_actor_user_id: input.actor_user_id,
       p_actor_employee_id: input.actor_employee_id,
       p_idempotency_key: input.idempotency_key,

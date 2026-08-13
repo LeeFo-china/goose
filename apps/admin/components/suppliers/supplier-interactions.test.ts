@@ -33,6 +33,10 @@ function settings(
     tenant_id: "tenant-1",
     module_enabled: false,
     require_active_contract_for_new_order: false,
+    ownership_reads_enabled: false,
+    private_supplier_writes_enabled: false,
+    private_catalog_writes_enabled: false,
+    procurement_snapshot_v1_enabled: false,
     enabled_by_employee_id: null,
     enabled_at: null,
     version: 0,
@@ -99,6 +103,10 @@ describe("供应商设置运行时交互", () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
       module_enabled: true,
       require_active_contract_for_new_order: false,
+      ownership_reads_enabled: false,
+      private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
       expected_version: 0,
     });
     expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
@@ -130,6 +138,10 @@ describe("供应商设置运行时交互", () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
       module_enabled: false,
       require_active_contract_for_new_order: true,
+      ownership_reads_enabled: false,
+      private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
       expected_version: 4,
       reason: "合同结清后停用",
     });
@@ -162,6 +174,41 @@ describe("供应商设置运行时交互", () => {
     expect(attempts).toBe(2);
     expect(latest?.module_enabled).toBe(true);
     expect(latest?.version).toBe(2);
+  });
+
+  test("单次 rollout 操作发送一个目标变化和完整当前状态", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({ input, init });
+      return jsonResponse({
+        success: true,
+        data: settings({
+          module_enabled: true,
+          ownership_reads_enabled: true,
+          version: 3,
+        }),
+      });
+    }) as typeof fetch;
+
+    await updatePlatformTenantSupplierModule({
+      tenantId: "tenant-1",
+      current: settings({ module_enabled: true, version: 2 }),
+      intent: { moduleEnabled: true, ownershipReadsEnabled: true },
+      idempotencyKey: "rollout-ownership-1",
+    });
+
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      module_enabled: true,
+      require_active_contract_for_new_order: false,
+      ownership_reads_enabled: true,
+      private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
+      expected_version: 2,
+    });
+    expect(new Headers(calls[0]?.init?.headers).get("Idempotency-Key")).toBe(
+      "rollout-ownership-1",
+    );
   });
 
   test("租户合同策略只发送策略值和乐观锁版本", async () => {
@@ -242,12 +289,20 @@ describe("供应商设置运行时交互", () => {
       {
         module_enabled: false,
         require_active_contract_for_new_order: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: false,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
         expected_version: 2,
         reason: "停止供应商采购",
       },
       {
         module_enabled: false,
         require_active_contract_for_new_order: false,
+        ownership_reads_enabled: false,
+        private_supplier_writes_enabled: false,
+        private_catalog_writes_enabled: false,
+        procurement_snapshot_v1_enabled: false,
         expected_version: 3,
         reason: "停止供应商采购",
       },

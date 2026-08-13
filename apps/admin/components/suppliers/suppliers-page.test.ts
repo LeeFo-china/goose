@@ -115,7 +115,21 @@ describe("平台租户供应商模块开关", () => {
     expect(card).toContain("const reason = disableReason.trim()");
     expect(card).toContain("pendingIntent");
     expect(card).toContain("重新加载");
-    expect(card).not.toContain("<Switch");
+    expect(card).toContain("<Switch");
+    for (const flag of [
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+    ]) {
+      expect(card).toContain(flag);
+    }
+    expect(card).toContain('orientation="horizontal"');
+    expect(card).toContain("FieldDescription");
+    expect(card).toContain("canToggleSupplierRolloutFlag");
+    expect(card).toContain("hasEnabledChildFlags");
+    expect(card).toContain("controlsLocked");
+    expect(card).toContain("请先逆序关闭子开关");
     expect(settingsApi).toContain("expected_version: current.version");
     expect(settingsApi).toContain('"Idempotency-Key"');
     expect(card).toContain("模块启用时间");

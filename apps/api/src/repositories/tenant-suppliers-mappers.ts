@@ -27,6 +27,8 @@ export const RELATIONSHIP_SELECT =
   `${RELATIONSHIP_FIELDS},supplier:suppliers!inner(${SUPPLIER_SELECT})`;
 export const SETTINGS_SELECT = [
   "tenant_id", "module_enabled", "require_active_contract_for_new_order",
+  "ownership_reads_enabled", "private_supplier_writes_enabled",
+  "private_catalog_writes_enabled", "procurement_snapshot_v1_enabled",
   "enabled_by_employee_id", "enabled_at", "version", "created_at", "updated_at",
 ].join(",");
 export const CONTRACT_SELECT = [
@@ -103,6 +105,10 @@ export const SettingsSchema = z.object({
   tenant_id: z.uuid(),
   module_enabled: z.boolean(),
   require_active_contract_for_new_order: z.boolean(),
+  ownership_reads_enabled: z.boolean(),
+  private_supplier_writes_enabled: z.boolean(),
+  private_catalog_writes_enabled: z.boolean(),
+  procurement_snapshot_v1_enabled: z.boolean(),
   enabled_by_employee_id: z.uuid().nullable(),
   enabled_at: nullableText,
   version: z.number().int().positive(),

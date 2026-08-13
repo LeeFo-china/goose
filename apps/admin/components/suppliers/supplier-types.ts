@@ -23,6 +23,10 @@ export type TenantSupplierSettings = {
   tenant_id: string;
   module_enabled: boolean;
   require_active_contract_for_new_order: boolean;
+  ownership_reads_enabled: boolean;
+  private_supplier_writes_enabled: boolean;
+  private_catalog_writes_enabled: boolean;
+  procurement_snapshot_v1_enabled: boolean;
   enabled_by_employee_id: string | null;
   enabled_at: string | null;
   version: number;

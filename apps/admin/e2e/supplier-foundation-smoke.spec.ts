@@ -134,6 +134,14 @@ test.describe("供应商 Phase 0 平台工作台", () => {
       "平台测试账号缺少 platform.supplier.view",
     );
     await expect(supplierModuleTitle).toBeVisible();
+    for (const name of [
+      "所有权读取",
+      "私有供应商写入",
+      "私有目录写入",
+      "采购单快照 V1",
+    ]) {
+      await expect(page.getByRole("switch", { name })).toBeVisible();
+    }
     await expect(
       page.getByText("控制该租户是否可建立供应商合作关系。", {
         exact: false,

@@ -53,6 +53,30 @@ async function createRepository(
 }
 
 describe("TenantSuppliersRepository queries", () => {
+  test("returns all rollout flags for tenant-side effective mapping", async () => {
+    const { repository, requests } = await createRepository(() => ({
+      body: settings,
+    }));
+
+    const result = await repository.getSettings(TENANT_ID);
+
+    expect(result).toMatchObject({
+      ownership_reads_enabled: false,
+      private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
+    });
+    const url = new URL(requests[0]?.url ?? "http://invalid");
+    for (const flag of [
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+    ]) {
+      expect(url.searchParams.get("select")).toContain(flag);
+    }
+  });
+
   test("uses one tenant-scoped RPC for exact eligibility-filtered pagination", async () => {
     const { repository, requests } = await createRepository(() => ({
       body: {
@@ -453,6 +477,10 @@ const settings = {
   tenant_id: TENANT_ID,
   module_enabled: true,
   require_active_contract_for_new_order: false,
+  ownership_reads_enabled: false,
+  private_supplier_writes_enabled: false,
+  private_catalog_writes_enabled: false,
+  procurement_snapshot_v1_enabled: false,
   enabled_by_employee_id: EMPLOYEE_ID,
   enabled_at: NOW,
   version: 1,

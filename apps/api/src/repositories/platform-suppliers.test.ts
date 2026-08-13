@@ -6,7 +6,6 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const SUPPLIER_ID = "00000000-0000-4000-8000-000000000101";
 const QUALIFICATION_ID = "00000000-0000-4000-8000-000000000201";
 const TYPE_ID = "00000000-0000-4000-8000-000000000202";
-const TENANT_ID = "00000000-0000-4000-8000-000000000301";
 const ACTOR_USER_ID = "00000000-0000-4000-8000-000000000401";
 const ACTOR_EMPLOYEE_ID = "00000000-0000-4000-8000-000000000402";
 const NOW = "2026-07-24T00:00:00.000Z";
@@ -246,7 +245,7 @@ describe("PlatformSuppliersRepository", () => {
     });
   });
 
-  test("calls the four command RPCs with migration-exact payloads", async () => {
+  test("calls the three supplier command RPCs with migration-exact payloads", async () => {
     const { repository, requests } = await createRepository((request) => {
       if (request.url.includes("review_supplier_qualification")) {
         return {
@@ -258,11 +257,6 @@ describe("PlatformSuppliersRepository", () => {
             version: 2,
           },
         };
-      }
-      if (request.url.includes("set_tenant_supplier_module")) {
-        return { body: { status: "updated", idempotent: false, setting: settingsRow,
-          previous_setting: { ...settingsRow, module_enabled: false, version: 1 },
-          version: 2 } };
       }
       return {
         body: {
@@ -305,24 +299,13 @@ describe("PlatformSuppliersRepository", () => {
       expected_version: 1,
       ...context,
     });
-    const module = await repository.setTenantSupplierSettings({
-      tenant_id: TENANT_ID,
-      module_enabled: true,
-      require_active_contract_for_new_order: false,
-      expected_version: 1,
-      ...context,
-    });
     expect(mutated).toMatchObject({ previous_supplier: { version: 1 } });
     expect(reviewed).toMatchObject({ previous_qualification: { version: 1 } });
-    expect(module).toMatchObject({
-      idempotent: false, previous_setting: { module_enabled: false }, setting: settingsRow,
-    });
 
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/create_platform_supplier",
       "/rest/v1/rpc/mutate_platform_supplier",
       "/rest/v1/rpc/review_supplier_qualification",
-      "/rest/v1/rpc/set_tenant_supplier_module",
     ]);
     expect(await requests[0]?.clone().json()).toEqual({
       p_supplier_id: SUPPLIER_ID,
@@ -354,15 +337,6 @@ describe("PlatformSuppliersRepository", () => {
       p_actor_employee_id: ACTOR_EMPLOYEE_ID,
       p_idempotency_key: "command-1",
       p_reason: null,
-    });
-    expect(await requests[3]?.clone().json()).toMatchObject({
-      p_tenant_id: TENANT_ID,
-      p_module_enabled: true,
-      p_require_active_contract_for_new_order: false,
-      p_expected_version: 1,
-      p_actor_user_id: ACTOR_USER_ID,
-      p_actor_employee_id: ACTOR_EMPLOYEE_ID,
-      p_idempotency_key: "command-1",
     });
   });
 
@@ -457,16 +431,6 @@ const contactRow = {
   version: 1,
   created_by_employee_id: ACTOR_EMPLOYEE_ID,
   updated_by_employee_id: ACTOR_EMPLOYEE_ID,
-  created_at: NOW,
-  updated_at: NOW,
-};
-const settingsRow = {
-  tenant_id: TENANT_ID,
-  module_enabled: true,
-  require_active_contract_for_new_order: false,
-  enabled_by_employee_id: ACTOR_EMPLOYEE_ID,
-  enabled_at: NOW,
-  version: 2,
   created_at: NOW,
   updated_at: NOW,
 };

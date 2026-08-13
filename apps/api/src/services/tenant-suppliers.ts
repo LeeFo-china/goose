@@ -16,6 +16,7 @@ import type {
 } from "@/schema/tenant-suppliers";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
 
 const PERMISSION = {
   view: "supplier.view",
@@ -57,7 +58,13 @@ export class TenantSuppliersService {
 
   async getSettings(authContext: AuthContext) {
     const tenantId = this.requireTenant(authContext, "view");
-    return this.requireEnabled(tenantId);
+    const settings = await this.repository.getSettings(tenantId);
+    if (settings) return effectiveSupplierRolloutSettings(settings);
+    throw Errors.business(
+      403,
+      "当前租户尚未启用供应商模块",
+      "SUPPLIER_MODULE_DISABLED",
+    );
   }
 
   async updateContractPolicy(
