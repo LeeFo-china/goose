@@ -4,6 +4,7 @@ import { PlatformBaseController } from '@/controllers/PlatformBaseController';
 import { Errors } from '@/errors/error-factory';
 import {
   PlatformServiceTrialAssignSchema,
+  PlatformServiceTrialAssigneeCandidatesQuerySchema,
   PlatformServiceTrialExtendSchema,
   PlatformServiceTrialGrantSchema,
   PlatformServiceTrialListQuerySchema,
@@ -48,6 +49,22 @@ class PlatformServiceTrialsController extends PlatformBaseController {
   async getSummary(request: FastifyRequest) {
     const authContext = await this.getRequiredPlatformStaffContext(request);
     const data = await platformServiceTrialService.getSummary(authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get('/platform/billing/service-trials/assignee-candidates', {
+    tenantServiceAccess: 'read',
+  })
+  async listAssigneeCandidates(request: FastifyRequest) {
+    const authContext = await this.getRequiredPlatformStaffContext(request);
+    const queryResult = PlatformServiceTrialAssigneeCandidatesQuerySchema
+      .safeParse(request.query || {});
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await platformServiceTrialService.listAssigneeCandidates(
+      authContext,
+      queryResult.data,
+    );
     return ResponseHandler.success(data);
   }
 

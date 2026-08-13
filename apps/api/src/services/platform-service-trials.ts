@@ -1,6 +1,9 @@
 import { ErrorCodes } from '@/errors/error-codes';
 import { Errors } from '@/errors/error-factory';
 import {
+  platformServiceTrialAssigneesRepository,
+} from '@/repositories/platform-service-trial-assignees';
+import {
   serviceTrialRepository,
   type ServiceTrialRepository,
   type TrialCommandInput,
@@ -8,6 +11,7 @@ import {
 } from '@/repositories/service-trials';
 import type {
   PlatformServiceTrialAssignInput,
+  PlatformServiceTrialAssigneeCandidatesQuery,
   PlatformServiceTrialExtendInput,
   PlatformServiceTrialGrantInput,
   PlatformServiceTrialListQuery,
@@ -26,6 +30,10 @@ import {
   type PlatformServiceTrialOperationsService,
 } from './platform-service-trial-operations';
 import {
+  serializeAssigneeCandidatePage,
+  type AssigneeCandidatePageView,
+} from './platform-service-trial-assignee-views';
+import {
   buildTrialAvailableActions,
   serializeServiceTrial,
   serializeServiceTrialCommandSnapshot,
@@ -37,9 +45,12 @@ type RepositoryPort = Pick<ServiceTrialRepository,
   | 'findCurrentPolicy' | 'findPolicyById' | 'executeCommand' | 'updatePolicy'>;
 type OperationsServicePort = Pick<PlatformServiceTrialOperationsService,
   'listFollowUps' | 'createFollowUp' | 'cancelFollowUp'>;
+type AssigneeRepositoryPort = Pick<typeof platformServiceTrialAssigneesRepository,
+  'listCandidates'>;
 
 type PlatformServiceTrialDependencies = {
   repository?: RepositoryPort;
+  assigneeRepository?: AssigneeRepositoryPort;
   operationsService?: OperationsServicePort;
   nowFactory?: () => Date;
 };
@@ -52,11 +63,14 @@ const PERMISSION = {
 
 export class PlatformServiceTrialService {
   private readonly repository: RepositoryPort;
+  private readonly assigneeRepository: AssigneeRepositoryPort;
   private readonly operationsService: OperationsServicePort;
   private readonly nowFactory: () => Date;
 
   constructor(dependencies: PlatformServiceTrialDependencies = {}) {
     this.repository = dependencies.repository ?? serviceTrialRepository;
+    this.assigneeRepository = dependencies.assigneeRepository
+      ?? platformServiceTrialAssigneesRepository;
     this.operationsService = dependencies.operationsService
       ?? platformServiceTrialOperationsService;
     this.nowFactory = dependencies.nowFactory ?? (() => new Date());
@@ -95,6 +109,15 @@ export class PlatformServiceTrialService {
       })),
       server_time: now.toISOString(),
     };
+  }
+
+  async listAssigneeCandidates(
+    authContext: AuthContext,
+    query: PlatformServiceTrialAssigneeCandidatesQuery,
+  ): Promise<AssigneeCandidatePageView> {
+    this.requirePermission(authContext, PERMISSION.manage);
+    const page = await this.assigneeRepository.listCandidates(query);
+    return serializeAssigneeCandidatePage(page, query.includeEmployeeId);
   }
 
   async getSummary(authContext: AuthContext) {
