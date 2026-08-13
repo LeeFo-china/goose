@@ -54,6 +54,12 @@ const requiredText = (
 ) => z.string().trim().min(1, emptyMessage).max(max, maxMessage);
 const optionalText = (max: number, message: string) =>
   z.string().trim().min(1, "字段不能为空").max(max, message).nullable().optional();
+const unifiedSocialCreditCode = optionalText(
+  64,
+  "统一社会信用代码不能超过 64 个字符",
+).transform((value) =>
+  typeof value === "string" ? value.toUpperCase() : value
+).optional();
 const optionalDate = (message: string) =>
   z.iso.date({ message }).nullable().optional();
 const hasDateOrder = (
@@ -164,6 +170,7 @@ const privateSupplierMasterFields = {
     "供应商法定名称不能为空",
     "供应商法定名称不能超过 160 个字符",
   ),
+  unified_social_credit_code: unifiedSocialCreditCode,
   supplier_type: SupplierTypeSchema,
 };
 const primaryContact = z.object({
@@ -231,6 +238,7 @@ export const TenantPrivateSupplierUpdateSchema = z.object({
   expected_version: expectedVersion,
   name: privateSupplierMasterFields.name.optional(),
   legal_name: privateSupplierMasterFields.legal_name.optional(),
+  unified_social_credit_code: unifiedSocialCreditCode,
   supplier_type: SupplierTypeSchema.optional(),
 }).strict().refine(hasUpdateField, {
   message: "至少需要提交一个私有供应商主档更新字段",

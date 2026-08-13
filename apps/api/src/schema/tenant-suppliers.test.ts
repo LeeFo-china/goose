@@ -83,8 +83,12 @@ describe("tenant supplier internal code contracts", () => {
 
     expect(TenantSupplierPrivateCreateSchema.parse({
       ...privateSupplier,
-      internal_supplier_code: "a_1",
-    }).internal_supplier_code).toBe("A_1");
+      internal_supplier_code: "a1",
+    }).internal_supplier_code).toBe("A1");
+    expect(TenantSupplierPrivateCreateSchema.parse({
+      ...privateSupplier,
+      internal_supplier_code: "a".repeat(64),
+    }).internal_supplier_code).toBe("A".repeat(64));
   });
 
   test("requires the same generated or manual code contract for shared suppliers", () => {
@@ -141,6 +145,60 @@ describe("tenant private supplier master contracts", () => {
       primary_contact: { name: "张三", phone: "13800000000" },
       address: { region_code: "330106", address_detail: "文三路 1 号" },
     });
+  });
+
+  test("normalizes optional unified social credit codes on create and update", () => {
+    expect(TenantSupplierPrivateCreateSchema.parse({
+      ...validPrivateSupplier,
+      unified_social_credit_code: " 91330100abc123xyz0 ",
+    }).unified_social_credit_code).toBe("91330100ABC123XYZ0");
+
+    expect(TenantPrivateSupplierUpdateSchema.parse({
+      expected_version: 2,
+      unified_social_credit_code: " 91330100def456uvw0 ",
+    })).toEqual({
+      expected_version: 2,
+      unified_social_credit_code: "91330100DEF456UVW0",
+    });
+    expect(TenantPrivateSupplierUpdateSchema.parse({
+      expected_version: 2,
+      unified_social_credit_code: null,
+    }).unified_social_credit_code).toBeNull();
+
+    for (const unified_social_credit_code of ["   ", "A".repeat(65)]) {
+      expect(TenantSupplierPrivateCreateSchema.safeParse({
+        ...validPrivateSupplier,
+        unified_social_credit_code,
+      }).success).toBe(false);
+    }
+  });
+
+  test("rejects ownership and tenant field injection on private and shared create", () => {
+    const createCases = [
+      {
+        schema: TenantSupplierPrivateCreateSchema,
+        input: validPrivateSupplier,
+      },
+      {
+        schema: TenantSupplierSharedCreateSchema,
+        input: {
+          supplier_id: supplierId,
+          code_source: "manual",
+          internal_supplier_code: "SHARED-01",
+        },
+      },
+    ] as const;
+
+    for (const { schema, input } of createCases) {
+      for (const forbidden of [
+        { ownership_scope: "tenant" },
+        { owner_tenant_id: supplierId },
+        { code: "FORBIDDEN" },
+        { tenant_id: supplierId },
+      ]) {
+        expect(schema.safeParse({ ...input, ...forbidden }).success).toBe(false);
+      }
+    }
   });
 
   test("rejects oversized master, contact, and address fields", () => {
