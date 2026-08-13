@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { randomUUID } from "node:crypto";
 
 import {
+  createConcurrentFixture,
   executePsql,
   parseSupabasePostgresContainer,
   resolveLocalSupabasePostgres,
+  startPsqlSession,
+  waitForMarker,
+  type PsqlSession,
 } from "./supplier-rollout-settings-database.test-helper";
 
 const rolloutSignature = [
@@ -289,17 +293,145 @@ describe("supplier rollout local PostgreSQL helper", () => {
     );
   });
 
-  const localPostgres = resolveLocalSupabasePostgres();
-  if (!localPostgres.available) {
-    test.skip(
-      `requires local Supabase PostgreSQL: ${localPostgres.reason}`,
-      () => {},
-    );
-  } else {
-    test("executes rollout, ordering, locking, idempotency, audit, and ACL behavior", () => {
-      const output = executePsql(localPostgres.container, behaviorSql());
-
-      expect(output).toContain("SUPPLIER_ROLLOUT_DATABASE_BEHAVIOR_OK");
+  test("resolves exclusively through the labeled docker container", () => {
+    const commands: string[] = [];
+    const resolution = resolveLocalSupabasePostgres((command, args) => {
+      commands.push([command, ...args].join(" "));
+      if (command !== "docker") {
+        throw new Error(`unexpected command: ${command}`);
+      }
+      return {
+        exitCode: 0,
+        stdout: JSON.stringify({
+          Image: "public.ecr.aws/supabase/postgres:17.6.1.106",
+          Labels: "com.supabase.cli.project=gooes",
+          Names: "resolved-without-status",
+          State: "running",
+        }),
+        stderr: "",
+      };
     });
-  }
+
+    expect(commands).toEqual(["docker ps --format {{json .}}"]);
+    expect(resolution).toEqual({
+      available: true,
+      container: "resolved-without-status",
+    });
+  });
+
+  test("does not expose command output when docker ps fails", () => {
+    const simulatedSecret = "SUPABASE_SECRET_SHOULD_NOT_APPEAR";
+    const resolution = resolveLocalSupabasePostgres(() => ({
+      exitCode: 37,
+      stdout: simulatedSecret,
+      stderr: `diagnostic:${simulatedSecret}`,
+    }));
+
+    expect(resolution.available).toBe(false);
+    if (resolution.available) {
+      throw new Error("expected docker resolution failure");
+    }
+    expect(resolution.reason).toContain("docker ps");
+    expect(resolution.reason).toContain("exit code 37");
+    expect(resolution.reason).toContain("supabase start");
+    expect(resolution.reason).not.toContain(simulatedSecret);
+  });
+
+  const localPostgres = resolveLocalSupabasePostgres();
+  test("executes rollout, ordering, locking, idempotency, audit, and ACL behavior", () => {
+    if (!localPostgres.available) {
+      throw new Error(
+        `本地 Supabase PostgreSQL 不可用：${localPostgres.reason}；请先运行 supabase start`,
+      );
+    }
+
+    const output = executePsql(localPostgres.container, behaviorSql());
+
+    expect(output).toContain("SUPPLIER_ROLLOUT_DATABASE_BEHAVIOR_OK");
+  });
+
+  test("serializes two real sessions and rejects the stale concurrent writer", async () => {
+    if (!localPostgres.available) {
+      throw new Error(
+        `本地 Supabase PostgreSQL 不可用：${localPostgres.reason}；请先运行 supabase start`,
+      );
+    }
+
+    const fixture = createConcurrentFixture();
+    let testFailure: unknown;
+    let cleanupFailure: unknown;
+    let sessionA: PsqlSession | undefined;
+    let sessionB: PsqlSession | undefined;
+
+    try {
+      executePsql(localPostgres.container, fixture.setupSql);
+      sessionA = startPsqlSession(
+        localPostgres.container,
+        fixture.sessionASql,
+      );
+      await waitForMarker(sessionA, "SESSION_A_LOCKED");
+
+      sessionB = startPsqlSession(
+        localPostgres.container,
+        fixture.sessionBSql,
+      );
+      await waitForMarker(sessionB, "SESSION_B_STARTED");
+      expect(sessionA.child.exitCode).toBeNull();
+      expect(sessionB.child.exitCode).toBeNull();
+
+      const [sessionAExitCode, sessionBExitCode] = await Promise.all([
+        sessionA.completed,
+        sessionB.completed,
+      ]);
+      expect(sessionAExitCode).toBe(0);
+      expect(sessionBExitCode).toBe(0);
+      expect(sessionA.output.stdout).toContain("SESSION_A_COMMITTED");
+      expect(sessionB.output.stdout).toContain(
+        "SESSION_B_VERSION_CONFLICT",
+      );
+
+      const verification = executePsql(
+        localPostgres.container,
+        fixture.verifySql,
+      );
+      expect(verification).toContain(
+        "SUPPLIER_ROLLOUT_CONCURRENT_VERIFY_OK",
+      );
+    } catch (error) {
+      testFailure = error;
+    } finally {
+      const sessions = [sessionA, sessionB].filter(
+        (session): session is PsqlSession => session !== undefined,
+      );
+      for (const session of sessions) {
+        if (session.child.exitCode === null) {
+          session.child.kill("SIGTERM");
+        }
+      }
+      await Promise.allSettled(sessions.map((session) => session.completed));
+
+      try {
+        const cleanup = executePsql(
+          localPostgres.container,
+          fixture.cleanupSql,
+        );
+        expect(cleanup).toContain("SUPPLIER_ROLLOUT_CONCURRENT_CLEANUP_OK");
+      } catch (error) {
+        cleanupFailure = error;
+      }
+    }
+
+    if (testFailure && cleanupFailure) {
+      throw new AggregateError(
+        [testFailure, cleanupFailure],
+        "并发行为验证及精确 fixture 清理均失败",
+      );
+    }
+    if (cleanupFailure) {
+      throw cleanupFailure;
+    }
+    if (testFailure) {
+      throw testFailure;
+    }
+  }, 30_000);
 });
