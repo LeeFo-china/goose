@@ -15,6 +15,7 @@
 ## File Map
 
 - `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`：内部编码登记、原子创建、历史关系补码和审计。
+- `supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql`：已应用环境的租户级分配幂等与私有供应商编码不可变收口。
 - `apps/api/src/schema/tenant-suppliers.ts`：分配、共享关系、私有创建和主档更新 schema。
 - `apps/api/src/repositories/tenant-suppliers.ts`：分页查询和 RPC gateway。
 - `apps/api/src/services/tenant-suppliers.ts`：权限、所有权和命令编排。
@@ -67,6 +68,7 @@ git commit -m "feat(api): 定义私有供应商接口契约"
 **Files:**
 - Create: `apps/api/src/services/tenant-private-supplier-migration-contract.test.ts`
 - Create: `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`
+- Create: `supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -98,7 +100,7 @@ cd ../.. && supabase migration new create_tenant_private_suppliers
 ```bash
 cd apps/api && bun test src/services/tenant-private-supplier-migration-contract.test.ts
 cd ../.. && git diff --check
-git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813160000_create_tenant_private_suppliers.sql
+git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813160000_create_tenant_private_suppliers.sql supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql
 git commit -m "feat(db): 建立租户私有供应商命令"
 ```
 
