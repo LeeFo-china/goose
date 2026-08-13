@@ -69,7 +69,7 @@ Cover:
 - `.range(offset, to)` and exact count;
 - escaped name/phone keyword search;
 - one batched role query, never N+1;
-- optional historical employee query by exact ID;
+- optional exact-ID query using the same active platform-role eligibility predicates;
 - resolved database errors use `Errors.dbError` without leaking sentinel details.
 
 - [ ] **Step 5: Run repository tests and verify RED**
@@ -80,7 +80,7 @@ Expected: FAIL because the repository module does not exist.
 
 - [ ] **Step 6: Implement the repository**
 
-Define a narrow record and page type. Query active platform candidates with exact count and range, then batch-load active platform roles for returned employee IDs. If `includeEmployeeId` is absent from the page, fetch that single platform employee as historical display context. Do not return full phone outside repository records.
+Define a narrow record and page type. Query active platform candidates with exact count and range, then batch-load active platform roles for returned employee IDs. If `includeEmployeeId` is absent from the page, fetch it only when the employee satisfies the same active, tenant-null, active platform-role predicates; otherwise return no included employee. Historical inactive display context comes from the trial's already-bound `assignee` relation at Admin call sites, not this endpoint. Do not return full phone outside repository records.
 
 - [ ] **Step 7: Run Task 1 tests and commit**
 
@@ -119,7 +119,7 @@ Add tests proving:
 - `platform.service_trial.manage` is required;
 - `platform.operator.read` is not required;
 - ordinary active candidates are selectable;
-- historical inactive candidate is returned once with `historical=true` and `selectable=false`;
+- an eligible included candidate is returned once and remains selectable;
 - phone is always masked;
 - pagination is preserved and no extra repository calls occur.
 
@@ -205,7 +205,7 @@ Cover the component's pure query, projection and selection-state helpers:
 - selection returns only the employee UUID to the parent;
 - guided required mode has no clear option;
 - assign/filter mode exposes an explicit clear action;
-- historical inactive value is labeled and disabled;
+- a historical inactive initial value supplied by the trial's bound `assignee` relation is labeled and disabled;
 - candidate response binding rejects malformed pagination and records;
 - a source-contract assertion locks 250ms debounce, AbortController cleanup, loading, empty and request-error UI states.
 
@@ -299,7 +299,7 @@ Assert:
 - assign dialog permits explicit clear and renders before/after summary;
 - grant and review payloads still send the selected `assignee_employee_id`;
 - filter uses a readable picker but serializes `trialAssigneeEmployeeId` into the URL;
-- page reload passes the filter UUID as `includeEmployeeId` to restore its label.
+- page reload passes the filter UUID as `includeEmployeeId` to restore its label only while it remains an eligible candidate.
 
 - [ ] **Step 2: Run integration tests and verify RED**
 

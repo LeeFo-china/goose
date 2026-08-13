@@ -36,7 +36,7 @@
 - `page`：默认 1；
 - `pageSize`：默认 20，最大 100；
 - `keyword`：可选，最多 80 字符，按姓名或手机号搜索；
-- `includeEmployeeId`：可选 UUID，仅用于回显当前历史负责人。
+- `includeEmployeeId`：可选 UUID，仅用于回显不在当前分页内、但仍符合候选资格的人员。
 
 权限：
 
@@ -69,7 +69,7 @@
 }
 ```
 
-普通候选只包含 active、tenant_id 为 NULL 且至少拥有一个 active 平台角色的员工。`includeEmployeeId` 指向的当前负责人即使已停用，也可以额外返回为 `historical=true, selectable=false`，用于可读回显，不能重新选择。手机号始终脱敏，不返回完整手机号。
+接口只返回 active、tenant_id 为 NULL 且至少拥有一个 active 平台角色的员工。`includeEmployeeId` 使用相同资格条件精确补取当前分页外的有效候选，不能用于任意员工查询。已停用历史负责人的可读信息来自试用详情已经绑定的 `assignee` 关系，由 Admin 作为 `historical=true, selectable=false` 的初始值展示，不通过候选接口补取。手机号始终脱敏，不返回完整手机号。
 
 查询必须限定必要列、使用 `.range()` 分页、exact count，并批量读取角色，避免 N+1。关键词为空时不附加搜索条件。
 
@@ -90,7 +90,7 @@
 
 - 主动开通与审批共用 approval fields 中的选择器；
 - 分配弹窗使用同一选择器，并显示“当前负责人 → 新负责人”或“将取消当前分配”的确认摘要；
-- 列表筛选使用同一选择器的单选模式，选择后 URL 仍保存 `trialAssigneeEmployeeId=<uuid>`；重载时通过 `includeEmployeeId` 恢复可读标签；
+- 列表筛选使用同一选择器的单选模式，选择后 URL 仍保存 `trialAssigneeEmployeeId=<uuid>`；重载时仅通过 `includeEmployeeId` 恢复仍有效候选的可读标签；
 - 页面、标签、帮助文案不出现“员工 ID”“UUID”等数据库术语。
 
 ## 错误与安全
@@ -107,8 +107,8 @@
 ### API
 
 - schema 覆盖分页默认值、pageSize 上限、keyword 长度和 includeEmployeeId UUID；
-- repository 覆盖必要列、active 平台员工、分页搜索、exact count、角色批量查询和历史负责人；
-- service 覆盖 `platform.service_trial.manage` 权限、手机号脱敏、历史人员不可选和错误脱敏；
+- repository 覆盖必要列、active 平台员工、分页搜索、exact count、角色批量查询和当前分页外的有效候选；
+- service 覆盖 `platform.service_trial.manage` 权限、手机号脱敏、候选资格和错误脱敏；
 - controller 覆盖真实路由注册、request-aware 身份、Zod 失败前不调用 service。
 
 ### Admin

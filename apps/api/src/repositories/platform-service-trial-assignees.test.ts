@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-role-key';
 const EMPLOYEE_ID = '11111111-1111-4111-8111-111111111111';
 const SECOND_EMPLOYEE_ID = '22222222-2222-4222-8222-222222222222';
 const INCLUDED_EMPLOYEE_ID = '33333333-3333-4333-8333-333333333333';
+const ROLE_ID = '44444444-4444-4444-8444-444444444444';
 
 type QueryResult = {
   data: unknown;
@@ -66,8 +67,7 @@ function employee(
     name: '张经理',
     phone: '13800008000',
     status: 'active',
-    employee_roles: [{ role: { id: 'role-filter-only' } }],
-    secret: 'must-not-leak',
+    employee_roles: [{ role: { id: ROLE_ID } }],
     ...overrides,
   };
 }
@@ -161,7 +161,7 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
     expect(callsFor(harness.calls, 'employees', 'like')).toContainEqual({
       table: 'employees',
       method: 'like',
-      args: ['employee_roles.role.code', 'platform_%'],
+      args: ['employee_roles.role.code', 'platform\\_%'],
     });
     expect(callsFor(harness.calls, 'employees', 'range')).toEqual([{
       table: 'employees', method: 'range', args: [20, 39],
@@ -187,7 +187,7 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
     expect(callsFor(harness.calls, 'employee_roles', 'like')).toContainEqual({
       table: 'employee_roles',
       method: 'like',
-      args: ['role.code', 'platform_%'],
+      args: ['role.code', 'platform\\_%'],
     });
   });
 
@@ -216,14 +216,13 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
     expect(callsFor(harness.calls, 'employee_roles', 'select')).toHaveLength(0);
   });
 
-  test('fetches an absent included employee exactly once and shares the role batch', async () => {
+  test('fetches an absent eligible employee exactly once and shares the role batch', async () => {
     const harness = createHarness({
       employees: [
         { data: [employee(EMPLOYEE_ID)], error: null, count: 1 },
         {
           data: employee(INCLUDED_EMPLOYEE_ID, {
-            name: '历史员工',
-            status: 'suspended',
+            name: '当前员工',
           }),
           error: null,
         },
@@ -232,6 +231,9 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
         data: [{
           employee_id: EMPLOYEE_ID,
           role: { code: 'platform_operations', name: '平台运营' },
+        }, {
+          employee_id: INCLUDED_EMPLOYEE_ID,
+          role: { code: 'platform_technical_operations', name: '技术运营' },
         }],
         error: null,
       }],
@@ -251,15 +253,56 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
 
     expect(result.includedEmployee).toEqual({
       id: INCLUDED_EMPLOYEE_ID,
-      name: '历史员工',
+      name: '当前员工',
       phone: '13800008000',
-      status: 'suspended',
-      roles: [],
+      status: 'active',
+      roles: [{ code: 'platform_technical_operations', name: '技术运营' }],
     });
     expect(callsFor(harness.calls, 'employees', 'maybeSingle')).toHaveLength(1);
     expect(callsFor(harness.calls, 'employees', 'eq')).toContainEqual({
       table: 'employees', method: 'eq', args: ['id', INCLUDED_EMPLOYEE_ID],
     });
+    expect(callsFor(harness.calls, 'employees', 'eq')).toContainEqual({
+      table: 'employees', method: 'eq', args: ['status', 'active'],
+    });
+    expect(callsFor(harness.calls, 'employees', 'eq')).toContainEqual({
+      table: 'employees',
+      method: 'eq',
+      args: ['employee_roles.role.status', 'active'],
+    });
+    expect(callsFor(harness.calls, 'employees', 'is')).toContainEqual({
+      table: 'employees',
+      method: 'is',
+      args: ['employee_roles.role.tenant_id', null],
+    });
+    expect(callsFor(harness.calls, 'employees', 'like')).toContainEqual({
+      table: 'employees',
+      method: 'like',
+      args: ['employee_roles.role.code', 'platform\\_%'],
+    });
+    expect(callsFor(harness.calls, 'employees', 'select')).toEqual([
+      {
+        table: 'employees',
+        method: 'select',
+        args: [
+          'id,name,phone,status,employee_roles!inner(role:roles!employee_roles_role_id_fkey!inner(id))',
+          { count: 'exact' },
+        ],
+      },
+      {
+        table: 'employees',
+        method: 'select',
+        args: [
+          'id,name,phone,status,employee_roles!inner(role:roles!employee_roles_role_id_fkey!inner(id))',
+        ],
+      },
+    ]);
+    expect(callsFor(harness.calls, 'employees', 'eq').filter(
+      (call) => call.args[0] === 'status',
+    )).toHaveLength(2);
+    expect(callsFor(harness.calls, 'employees', 'is').filter(
+      (call) => call.args[0] === 'employee_roles.role.tenant_id',
+    )).toHaveLength(2);
     expect(callsFor(harness.calls, 'employee_roles', 'in')).toEqual([{
       table: 'employee_roles',
       method: 'in',
@@ -267,6 +310,39 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
     }]);
     expect(callsFor(harness.calls, 'employee_roles', 'select')).toHaveLength(1);
   });
+
+  test.each(['inactive', 'roleless', 'tenant-scoped'])(
+    'returns null when an included employee is %s',
+    async () => {
+      const harness = createHarness({
+        employees: [
+          { data: [], error: null, count: 0 },
+          { data: null, error: null },
+        ],
+      });
+      const { PlatformServiceTrialAssigneesRepository } = await import(
+        './platform-service-trial-assignees'
+      );
+      const repository = new PlatformServiceTrialAssigneesRepository(
+        harness.clientProvider,
+      );
+
+      const result = await repository.listCandidates({
+        page: 1,
+        pageSize: 20,
+        includeEmployeeId: INCLUDED_EMPLOYEE_ID,
+      });
+
+      expect(result.includedEmployee).toBeNull();
+      expect(callsFor(harness.calls, 'employee_roles', 'select')).toHaveLength(0);
+      expect(callsFor(harness.calls, 'employees', 'eq').filter(
+        (call) => call.args[0] === 'status',
+      )).toHaveLength(2);
+      expect(callsFor(harness.calls, 'employees', 'like').filter(
+        (call) => call.args[0] === 'employee_roles.role.code',
+      )).toHaveLength(2);
+    },
+  );
 
   test('does not refetch an included employee already present in the page', async () => {
     const harness = createHarness({
@@ -329,5 +405,37 @@ describe('PlatformServiceTrialAssigneesRepository', () => {
       });
       expect((error as Error).message).not.toContain('sentinel');
     }
+  });
+
+  test.each([
+    ['employee row', {
+      employees: [{
+        data: [{ id: EMPLOYEE_ID, name: '缺少字段', status: 'active' }],
+        error: null,
+        count: 1,
+      }],
+    }],
+    ['role row', {
+      employees: [{ data: [employee(EMPLOYEE_ID)], error: null, count: 1 }],
+      employee_roles: [{
+        data: [{ employee_id: EMPLOYEE_ID, role: { code: 42, name: null } }],
+        error: null,
+      }],
+    }],
+  ])('fails closed on a malformed %s', async (_label, responses) => {
+    const harness = createHarness(responses);
+    const { PlatformServiceTrialAssigneesRepository } = await import(
+      './platform-service-trial-assignees'
+    );
+    const repository = new PlatformServiceTrialAssigneesRepository(
+      harness.clientProvider,
+    );
+
+    await expect(repository.listCandidates({ page: 1, pageSize: 20 }))
+      .rejects.toMatchObject({
+        statusCode: 500,
+        code: 'DB_ERROR',
+        details: undefined,
+      });
   });
 });
