@@ -20,8 +20,10 @@ import {
   ASSIGNEE_CANDIDATE_PAGE_SIZE,
   ASSIGNEE_SEARCH_DEBOUNCE_MS,
   buildTrialAssigneeCandidatesPath,
+  clampTrialAssigneeSearchPage,
   formatTrialAssigneeCandidate,
   formatTrialAssigneeCandidateMeta,
+  getTrialAssigneeEmptyMessage,
   getTrialAssigneeSelectionActions,
   getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
@@ -100,10 +102,19 @@ export function PlatformServiceTrialAssigneeCombobox({
       .then((data) => {
         if (controller.signal.aborted) return;
         const nextResult = parseTrialAssigneeCandidatePage(data);
+        const nextPage = clampTrialAssigneeSearchPage(
+          search.page,
+          nextResult.pagination.totalPages,
+        );
         setResult(nextResult);
         setLoadedPath(path);
         const selected = nextResult.list.find((candidate) => candidate.id === value);
         if (selected) setSelectedCandidate(selected);
+        if (nextPage !== search.page) {
+          setSearch((current) => current.page === search.page
+            ? { ...current, page: nextPage }
+            : current);
+        }
       })
       .catch((caught) => {
         if (controller.signal.aborted) return;
@@ -149,23 +160,29 @@ export function PlatformServiceTrialAssigneeCombobox({
       ? loading ? "正在加载负责人..." : "当前负责人信息暂不可用"
       : placeholder;
   const totalPages = resultIsCurrent ? result.pagination.totalPages : 0;
+  const emptyMessage = getTrialAssigneeEmptyMessage({ loading, error });
+
+  function handleOpenChange(nextOpen: boolean) {
+    setOpen(nextOpen);
+    if (!nextOpen) setLoading(false);
+  }
 
   function choose(candidate: PlatformServiceTrialAssigneeCandidate) {
     const employeeId = selectTrialAssigneeCandidate(candidate);
     if (!employeeId) return;
     setSelectedCandidate(candidate);
     onChange(employeeId);
-    setOpen(false);
+    handleOpenChange(false);
   }
 
   function clear() {
     setSelectedCandidate(null);
     onChange(null);
-    setOpen(false);
+    handleOpenChange(false);
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <Button
           id={id}
@@ -192,17 +209,15 @@ export function PlatformServiceTrialAssigneeCombobox({
         className="w-[var(--radix-popover-trigger-width)] p-0"
         align="start"
       >
-        <Command shouldFilter={false}>
+        <Command label={ariaLabel} shouldFilter={false}>
           <CommandInput
             value={keyword}
             onValueChange={setKeyword}
             maxLength={80}
             placeholder={searchPlaceholder}
           />
-          <CommandList>
-            <CommandEmpty>
-              {loading ? "加载中..." : error || "没有匹配的平台人员"}
-            </CommandEmpty>
+          <CommandList label={`${ariaLabel}候选列表`}>
+            {emptyMessage ? <CommandEmpty>{emptyMessage}</CommandEmpty> : null}
             <CommandGroup>
               {selectionActions.includes("clear") ? (
                 <CommandItem value="__clear_assignee__" onSelect={clear}>

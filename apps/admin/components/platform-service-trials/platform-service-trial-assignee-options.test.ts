@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 import {
   ASSIGNEE_SEARCH_DEBOUNCE_MS,
   buildTrialAssigneeCandidatesPath,
+  clampTrialAssigneeSearchPage,
   createHistoricalTrialAssigneeCandidate,
   formatTrialAssigneeCandidate,
   formatTrialAssigneeCandidateMeta,
+  getTrialAssigneeEmptyMessage,
   getTrialAssigneeSelectionActions,
   getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
@@ -64,6 +66,20 @@ describe("platform service trial assignee options", () => {
       .toEqual({ page: 3, keyword: "王" });
     const unchanged = { page: 3, keyword: "王" };
     expect(resetTrialAssigneeSearchPage(unchanged, "王")).toBe(unchanged);
+  });
+
+  test("clamps a stale page to the last available page so the request can recover", () => {
+    expect(clampTrialAssigneeSearchPage(2, 1)).toBe(1);
+    expect(clampTrialAssigneeSearchPage(4, 2)).toBe(2);
+    expect(clampTrialAssigneeSearchPage(2, 0)).toBe(1);
+    expect(clampTrialAssigneeSearchPage(2, 3)).toBe(2);
+  });
+
+  test("announces a request error only through the dedicated alert", () => {
+    expect(getTrialAssigneeEmptyMessage({ loading: true, error: "" })).toBe("加载中...");
+    expect(getTrialAssigneeEmptyMessage({ loading: false, error: "" }))
+      .toBe("没有匹配的平台人员");
+    expect(getTrialAssigneeEmptyMessage({ loading: false, error: "网络错误" })).toBeNull();
   });
 
   test("formats a readable name, masked phone and stable role label", () => {
@@ -184,10 +200,15 @@ describe("platform service trial assignee options", () => {
     expect(ASSIGNEE_SEARCH_DEBOUNCE_MS).toBe(250);
     expect(source).toContain("new AbortController()");
     expect(source).toContain("controller.abort()");
+    expect(source).toContain("<Command label={ariaLabel}");
+    expect(source).toContain('label={`${ariaLabel}候选列表`}');
+    expect(source).toContain("onOpenChange={handleOpenChange}");
+    expect(source).toContain("if (!nextOpen) setLoading(false)");
+    expect(source).toContain("clampTrialAssigneeSearchPage(");
+    expect(source).toContain("getTrialAssigneeEmptyMessage({ loading, error })");
+    expect(source).not.toContain('error || "没有匹配的平台人员"');
     expect(source).toContain("ASSIGNEE_SEARCH_DEBOUNCE_MS");
     expect(source).toContain("maxLength={80}");
-    expect(source).toContain('"加载中..."');
-    expect(source).toContain('"没有匹配的平台人员"');
     expect(source).toContain('"平台跟进人加载失败"');
     expect(source).toContain("上一页");
     expect(source).toContain("下一页");

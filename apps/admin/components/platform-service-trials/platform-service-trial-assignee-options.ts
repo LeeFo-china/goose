@@ -95,6 +95,24 @@ export function resetTrialAssigneeSearchPage(
   };
 }
 
+export function clampTrialAssigneeSearchPage(
+  currentPage: number,
+  totalPages: number,
+): number {
+  return Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
+}
+
+export function getTrialAssigneeEmptyMessage({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error: string;
+}): string | null {
+  if (error) return null;
+  return loading ? "加载中..." : "没有匹配的平台人员";
+}
+
 export function parseTrialAssigneeCandidatePage(
   input: unknown,
 ): PlatformServiceTrialAssigneeCandidatePage {
