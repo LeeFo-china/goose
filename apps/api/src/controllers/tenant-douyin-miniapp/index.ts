@@ -35,7 +35,12 @@ type AuthorizationServicePort = Pick<
 type AuthorizationServiceProvider = () => AuthorizationServicePort;
 type ReleaseServicePort = Pick<
   TenantDouyinMiniappReleasesService,
-  "list" | "getTestQr" | "submitAudit" | "syncStatus"
+  | "list"
+  | "createFromCurrentTemplate"
+  | "getTestQr"
+  | "submitAudit"
+  | "syncStatus"
+  | "publish"
 >;
 type ReleaseServiceProvider = () => Promise<ReleaseServicePort>;
 
@@ -99,6 +104,17 @@ export class TenantDouyinMiniappController extends TenantBaseController {
     );
   }
 
+  @Post("/tenant/douyin-miniapp/releases/from-current-template")
+  async createReleaseFromCurrentTemplate(request: FastifyRequest) {
+    this.parseEmptyPart(request.query);
+    this.parseEmptyPart(request.body);
+    const authContext = await this.getRequiredTenantContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.createFromCurrentTemplate(authContext),
+    );
+  }
+
   @Post("/tenant/douyin-miniapp/releases/:releaseId/test-qr")
   async getReleaseTestQr(request: FastifyRequest) {
     const { authContext, releaseId } = await this.releaseActionContext(request);
@@ -138,17 +154,29 @@ export class TenantDouyinMiniappController extends TenantBaseController {
     );
   }
 
+  @Post("/tenant/douyin-miniapp/releases/:releaseId/publish")
+  async publishRelease(request: FastifyRequest) {
+    const { authContext, releaseId } = await this.releaseActionContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.publish(authContext, releaseId),
+    );
+  }
+
   private async releaseActionContext(request: FastifyRequest) {
     const paramsResult = TenantDouyinReleaseParamsSchema.safeParse(
       request.params || {},
     );
     if (!paramsResult.success) throw Errors.fromZod(paramsResult.error);
-    const bodyResult = TenantDouyinReleaseEmptyObjectSchema.safeParse(
-      request.body || {},
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    this.parseEmptyPart(request.query);
+    this.parseEmptyPart(request.body);
     const authContext = await this.getRequiredTenantContext(request);
     return { authContext, releaseId: paramsResult.data.releaseId };
+  }
+
+  private parseEmptyPart(input: unknown): void {
+    const result = TenantDouyinReleaseEmptyObjectSchema.safeParse(input || {});
+    if (!result.success) throw Errors.fromZod(result.error);
   }
 }
 

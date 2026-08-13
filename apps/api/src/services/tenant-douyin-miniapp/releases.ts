@@ -10,6 +10,10 @@ import type {
   DouyinMiniappReleasesRepository,
 } from "@/repositories/douyin-miniapp-releases";
 import {
+  douyinDeployableTemplatesRepository,
+  type DouyinDeployableTemplatesRepository,
+} from "@/repositories/douyin-deployable-templates";
+import {
   tenantDouyinMiniappWorkspaceRepository,
   type TenantDouyinMiniappWorkspaceInstallation,
   type TenantDouyinMiniappWorkspaceProfile,
@@ -34,10 +38,11 @@ import {
 const READ_PERMISSION = "douyin_miniapp.read";
 const MANAGE_PERMISSION = "douyin_miniapp.manage";
 const AUDIT_PERMISSION = "douyin_miniapp.audit.submit";
+const PUBLISH_PERMISSION = "douyin_miniapp.publish";
 
 type WorkspacePort = Pick<
   typeof tenantDouyinMiniappWorkspaceRepository,
-  "findCurrentInstallation" | "findProfile"
+  "findCurrentInstallation" | "findProfile" | "findLatestRelease"
 >;
 type InstallationPort = {
   findReleaseTargetById(
@@ -48,13 +53,14 @@ type ReleasePort = Pick<
   DouyinMiniappReleasesRepository,
   "listByInstallation" | "findById"
 >;
+type TemplatePort = Pick<DouyinDeployableTemplatesRepository, "findCurrent">;
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
   "assertTenantContext" | "assertPermission"
 >;
 type OperationsPort = Pick<
   PlatformDouyinMiniappReleaseOperations,
-  "getTestQr" | "submitAudit" | "syncStatus"
+  "upload" | "getTestQr" | "submitAudit" | "syncStatus" | "publish"
 >;
 type ReleaseTarget = DouyinMiniappReleaseTarget & {
   readonly deployment_key: string;
@@ -66,6 +72,7 @@ export type TenantDouyinMiniappReleasesDependencies = {
   readonly releases: ReleasePort;
   readonly accessPolicy: AccessPolicyPort;
   readonly operations: OperationsPort;
+  readonly templates: TemplatePort;
 };
 
 export class TenantDouyinMiniappReleasesService {
@@ -100,6 +107,84 @@ export class TenantDouyinMiniappReleasesService {
           ? 0
           : Math.ceil(result.total / query.pageSize),
       },
+    };
+  }
+
+  async createFromCurrentTemplate(authContext: AuthContext) {
+    const context = await this.requireTenantTarget(
+      authContext,
+      MANAGE_PERMISSION,
+    );
+    const latestRelease = await this.dependencies.workspace.findLatestRelease(
+      context.installation.id,
+    );
+    let delivery;
+    if (latestRelease?.status === "created") {
+      const persistedRelease = await this.dependencies.releases.findById(
+        latestRelease.id,
+      );
+      if (
+        !persistedRelease
+        || persistedRelease.installation_id !== context.installation.id
+      ) {
+        throw releaseNotFound();
+      }
+      if (![
+        "created",
+        "uploaded",
+        "testing",
+      ].includes(persistedRelease.status)) {
+        throw tenantReleaseInProgress();
+      }
+      delivery = {
+        template_id: persistedRelease.template_id,
+        template_version: persistedRelease.template_version,
+        description: persistedRelease.description,
+        channel: persistedRelease.channel,
+      };
+    } else {
+      delivery = await this.currentTemplateDelivery(latestRelease);
+    }
+    const uploaded = await this.dependencies.operations.upload(
+      context.installation,
+      context.installation.id,
+      context.operatorId,
+      delivery,
+    );
+    const testing = await this.dependencies.operations.getTestQr(
+      context.installation,
+      uploaded,
+      context.operatorId,
+    );
+    return sanitizeRelease(testing);
+  }
+
+  private async currentTemplateDelivery(
+    latestRelease: {
+      readonly status: DouyinMiniappReleaseRecord["status"];
+    } | null,
+  ) {
+    if (latestRelease && [
+      "uploaded",
+      "testing",
+      "audit_pending",
+      "audit_approved",
+    ].includes(latestRelease.status)) {
+      throw tenantReleaseInProgress();
+    }
+    const template = await this.dependencies.templates.findCurrent("default");
+    if (!template) {
+      throw Errors.business(
+        409,
+        "平台尚未确认可发布的抖音模板",
+        "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
+      );
+    }
+    return {
+      template_id: template.template_id,
+      template_version: template.template_version,
+      description: template.description,
+      channel: template.channel,
     };
   }
 
@@ -149,6 +234,21 @@ export class TenantDouyinMiniappReleasesService {
       releaseId,
     );
     const result = await this.dependencies.operations.syncStatus(
+      context.installation,
+      context.installation.id,
+      context.release,
+      context.operatorId,
+    );
+    return sanitizeRelease(result);
+  }
+
+  async publish(authContext: AuthContext, releaseId: string) {
+    const context = await this.requireOwnedRelease(
+      authContext,
+      PUBLISH_PERMISSION,
+      releaseId,
+    );
+    const result = await this.dependencies.operations.publish(
       context.installation,
       context.installation.id,
       context.release,
@@ -210,6 +310,14 @@ export class TenantDouyinMiniappReleasesService {
       installation: { ...target, deployment_key: target.deployment_key },
     };
   }
+}
+
+function tenantReleaseInProgress() {
+  return Errors.business(
+    409,
+    "当前版本正在审核或等待发布，请完成后再生成新版体验版",
+    "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+  );
 }
 
 function requireOperator(authContext: AuthContext): string {
@@ -286,6 +394,7 @@ Promise<TenantDouyinMiniappReleasesService> {
       releases: dependencies.releaseRepository,
       accessPolicy: accessPolicyService,
       operations,
+      templates: douyinDeployableTemplatesRepository,
     });
   }).catch((error: unknown) => {
     defaultServicePromise = undefined;

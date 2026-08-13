@@ -50,7 +50,7 @@ describe("admin nav visibility", () => {
       (candidate) => candidate.href === "/platform/douyin-miniapps",
     );
 
-    expect(item?.label).toBe("抖音发布");
+    expect(item?.label).toBe("抖音模板");
     expect(item?.requiredPermissions).toEqual([{
       code: "platform.douyin_miniapp.manage",
       scope: "all",

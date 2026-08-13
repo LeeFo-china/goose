@@ -88,6 +88,13 @@ export type TenantDouyinWorkspace = {
     sites: number;
     active_service_areas: number;
   };
+  available_template: {
+    template_id: string;
+    version: string;
+    description: string;
+    confirmed_at: string;
+    state: "new_available" | "in_progress" | "up_to_date";
+  } | null;
   latest_release: {
     id: string;
     installation_id: string;

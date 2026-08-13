@@ -4,14 +4,14 @@ import { createDouyinTemplateManagementClient } from
   "@/gateways/douyin-open-platform/template-client";
 import { DouyinMiniappInstallationsRepository } from
   "@/repositories/douyin-miniapp-installations";
+import { DouyinDeployableTemplatesRepository } from
+  "@/repositories/douyin-deployable-templates";
 import { DouyinThirdPartyComponentsRepository } from
   "@/repositories/douyin-third-party-components";
 import { accessPolicyService } from "@/services/access-policy";
 import { DouyinMiniappAccessTokenService } from
   "@/services/douyin-miniapp/access-tokens";
 import { loadDouyinMiniappConfig } from "@/services/douyin-miniapp/config";
-import { getPlatformDouyinMiniappReleasesService } from
-  "../platform-douyin-miniapp-releases";
 import type { PlatformDouyinTemplatePromotionDependencies } from
   "../platform-douyin-template-promotion";
 
@@ -33,11 +33,6 @@ export function createDefaultTemplatePromotionDependencies():
     accessTokens,
     gateway: createDouyinTemplateManagementClient(),
     templateAppId: config.templateAppId,
-    releases: {
-      upload: async (...args) =>
-        (await getPlatformDouyinMiniappReleasesService()).upload(...args),
-      getTestQr: async (...args) =>
-        (await getPlatformDouyinMiniappReleasesService()).getTestQr(...args),
-    },
+    templates: new DouyinDeployableTemplatesRepository(),
   };
 }

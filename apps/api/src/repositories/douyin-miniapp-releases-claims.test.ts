@@ -215,6 +215,98 @@ describe("DouyinMiniappReleasesRepository operation claims", () => {
     expect(JSON.stringify(caught)).not.toContain("must-not-leak");
   });
 
+  test("maps unfinished release replacement to a stable safe conflict", async () => {
+    const { client } = createClient([{
+      data: null,
+      error: {
+        message: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+        details: "access_token=must-not-leak",
+      },
+    }]);
+    let caught: unknown;
+    try {
+      await new Repository(client).getOrCreateAndClaimUpload({
+        installationId: releaseRow.installation_id,
+        templateId: "9133504853504535289",
+        templateVersion: "1.2.4",
+        description: "next delivery",
+        channel: releaseRow.channel,
+        extJson: releaseRow.ext_json,
+        platformOperatorId: releaseRow.platform_operator_id,
+        claimToken: CLAIM_TOKEN,
+        claimExpiresAt: CLAIM_EXPIRES_AT,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+    });
+    expect(JSON.stringify(caught)).not.toContain("must-not-leak");
+  });
+
+  test("maps the one-unfinished-release unique index to the same safe conflict", async () => {
+    const { client } = createClient([{
+      data: null,
+      error: {
+        message: "duplicate key value violates unique constraint",
+        constraint: "douyin_miniapp_releases_one_unfinished_installation_idx",
+        details: "access_token=must-not-leak",
+      },
+    }]);
+    let caught: unknown;
+    try {
+      await new Repository(client).getOrCreateAndClaimUpload({
+        installationId: releaseRow.installation_id,
+        templateId: "9133504853504535289",
+        templateVersion: "1.2.4",
+        description: "next delivery",
+        channel: releaseRow.channel,
+        extJson: releaseRow.ext_json,
+        platformOperatorId: releaseRow.platform_operator_id,
+        claimToken: CLAIM_TOKEN,
+        claimExpiresAt: CLAIM_EXPIRES_AT,
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+    });
+    expect(JSON.stringify(caught)).not.toContain("must-not-leak");
+  });
+
+  test("maps reactivation index conflicts on claimed updates to the same safe conflict", async () => {
+    const { client } = createClient([{
+      data: null,
+      error: {
+        message:
+          'duplicate key value violates unique constraint "douyin_miniapp_releases_one_unfinished_installation_idx"',
+        details: "access_token=must-not-leak",
+      },
+    }]);
+    let caught: unknown;
+    try {
+      await new Repository(client).updateClaimed(
+        releaseRow.id,
+        CLAIM_TOKEN,
+        {
+          status: "uploaded",
+          platformOperatorId: releaseRow.platform_operator_id,
+        },
+      );
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+    });
+    expect(JSON.stringify(caught)).not.toContain("must-not-leak");
+  });
+
   test("updates only the matching claim and clears all internal lease fields", async () => {
     const updated = { ...releaseRow, status: "testing" as const };
     const { client, calls } = createClient([{ data: updated, error: null }]);

@@ -4,21 +4,17 @@ import type {
   TemplateAppListResult,
   TemplateListResult,
 } from "@/gateways/douyin-open-platform/template-client";
-import type { DouyinMiniappReleaseRecord } from
-  "@/repositories/douyin-miniapp-releases";
 import type { AuthContext } from "@/services/authorization";
-import type { PlatformDouyinMiniappReleaseUploadInput } from
-  "./platform-douyin-miniapp-releases";
 import { PlatformDouyinTemplatePromotionService } from
   "./platform-douyin-template-promotion";
 
-const INSTALLATION_ID = "22222222-2222-4222-8222-222222222222";
 const TEMPLATE_APP_ID = "tt0d647bd99301341b01";
+const OPERATOR_ID = "11111111-1111-4111-8111-111111111111";
 const authContext = {
   isPlatformAdmin: true,
   isPlatformStaff: false,
   tenantId: null,
-  employeeId: "11111111-1111-4111-8111-111111111111",
+  employeeId: OPERATOR_ID,
   permissions: [],
 };
 const draft = {
@@ -29,11 +25,24 @@ const draft = {
   createdAt: 1_786_608_000,
   draftId: "1024",
 };
-const template = {
+const providerTemplate = {
   templateId: "77596",
   version: draft.version,
   description: draft.description,
   createdAt: 1_786_608_100,
+};
+const currentTemplate = {
+  id: "22222222-2222-4222-8222-222222222222",
+  template_app_id: "tt0d647bd99301341b01" as const,
+  source_draft_id: draft.draftId,
+  template_id: providerTemplate.templateId,
+  template_version: providerTemplate.version,
+  description: providerTemplate.description,
+  channel: "default" as const,
+  is_current: true,
+  confirmed_by_employee_id: OPERATOR_ID,
+  confirmed_at: "2026-08-13T08:00:00.000Z",
+  created_at: "2026-08-13T08:00:00.000Z",
 };
 
 function createHarness() {
@@ -54,139 +63,159 @@ function createHarness() {
     })),
     addTemplate: mock(async () => ({ logId: "add-log" })),
   };
-  const release: DouyinMiniappReleaseRecord = {
-    id: "33333333-3333-4333-8333-333333333333",
-    installation_id: INSTALLATION_ID,
-    template_id: template.templateId,
-    template_version: template.version,
-    description: template.description,
-    channel: "default",
-    ext_json: {
-      extEnable: true,
-      extAppid: "ttd033a68e4e56ccd301",
-      ext: { deployment_key: "tenant-a" },
-    },
-    status: "uploaded",
-    douyin_log_id: "upload-log",
-    test_qr_url: null,
-    audit_host_names: [],
-    audit_note: null,
-    audit_result: null,
-    submitted_at: null,
-    audited_at: null,
-    released_at: null,
-    platform_operator_id: authContext.employeeId,
-    created_at: "2026-08-13T08:00:00.000Z",
-    updated_at: "2026-08-13T08:00:00.000Z",
-  };
-  const testing: DouyinMiniappReleaseRecord = {
-    ...release,
-    status: "testing",
-    test_qr_url: "https://p3.douyinpic.com/qr-code",
-  };
-  const releases = {
-    upload: mock(async (
-      _auth: AuthContext,
-      _installationId: string,
-      _input: PlatformDouyinMiniappReleaseUploadInput,
-    ): Promise<DouyinMiniappReleaseRecord> => release),
-    getTestQr: mock(async (
-      _auth: AuthContext,
-      _installationId: string,
-      _releaseId: string,
-    ): Promise<DouyinMiniappReleaseRecord> => testing),
+  const templates = {
+    findCurrent: mock(async () => null as typeof currentTemplate | null),
+    confirm: mock(async (_input: unknown) => currentTemplate),
   };
   const service = new PlatformDouyinTemplatePromotionService({
     accessPolicy,
     accessTokens,
     gateway,
-    releases,
+    templates,
     templateAppId: TEMPLATE_APP_ID,
   } as never);
-  return { service, accessPolicy, accessTokens, gateway, releases, release, testing };
+  return { service, accessPolicy, accessTokens, gateway, templates };
 }
 
 describe("PlatformDouyinTemplatePromotionService", () => {
-  test("promotes the exact latest template-app draft and returns a merchant test QR release", async () => {
+  test("reports the latest provider draft and current confirmed template", async () => {
+    const harness = createHarness();
+    harness.templates.findCurrent.mockResolvedValue(currentTemplate);
+
+    await expect(harness.service.getStatus(authContext as never, {
+      channel: "default",
+    })).resolves.toEqual({
+      template_app_id: TEMPLATE_APP_ID,
+      latest_draft: {
+        version: draft.version,
+        description: draft.description,
+        created_at: draft.createdAt,
+      },
+      current_template: currentTemplate,
+      is_latest_confirmed: true,
+    });
+  });
+
+  test("promotes and atomically confirms the exact latest template-app draft", async () => {
     const harness = createHarness();
     harness.gateway.listTemplates
       .mockResolvedValueOnce({ items: [], logId: "before-log" })
-      .mockResolvedValueOnce({ items: [template], logId: "after-log" });
+      .mockResolvedValueOnce({ items: [providerTemplate], logId: "after-log" });
 
-    await expect(harness.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    await expect(harness.service.confirmLatest(authContext as never, {
       channel: "default",
-    })).resolves.toEqual(harness.testing);
+    })).resolves.toEqual(currentTemplate);
 
     expect(harness.gateway.addTemplate).toHaveBeenCalledWith({
       componentAccessToken: "component-access-token",
       draftId: draft.draftId,
     });
-    expect(harness.releases.upload).toHaveBeenCalledWith(authContext, INSTALLATION_ID, {
-      template_id: template.templateId,
-      template_version: draft.version,
+    expect(harness.templates.confirm).toHaveBeenCalledWith({
+      templateAppId: TEMPLATE_APP_ID,
+      sourceDraftId: draft.draftId,
+      templateId: providerTemplate.templateId,
+      templateVersion: draft.version,
       description: draft.description,
       channel: "default",
+      actorEmployeeId: OPERATOR_ID,
     });
-    expect(harness.releases.getTestQr).toHaveBeenCalledWith(
-      authContext,
-      INSTALLATION_ID,
-      harness.release.id,
-    );
   });
 
-  test("reuses one exact existing template without adding the draft again", async () => {
+  test("returns the current template when the latest draft is already confirmed", async () => {
     const harness = createHarness();
-    harness.gateway.listTemplates.mockResolvedValue({
-      items: [template],
-      logId: "templates-log",
-    });
+    harness.templates.findCurrent.mockResolvedValue(currentTemplate);
 
-    await harness.service.promoteLatest(authContext as never, INSTALLATION_ID, {
-      channel: "1",
-    });
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).resolves.toEqual(currentTemplate);
 
     expect(harness.gateway.addTemplate).not.toHaveBeenCalled();
-    expect(harness.gateway.listTemplates).toHaveBeenCalledTimes(1);
-    expect(harness.releases.upload.mock.calls[0]?.[2]).toMatchObject({
-      template_id: template.templateId,
-      channel: "1",
+    expect(harness.gateway.listTemplates).not.toHaveBeenCalled();
+    expect(harness.templates.confirm).not.toHaveBeenCalled();
+  });
+
+  test("selects only the exact template added after the current draft confirmation", async () => {
+    const harness = createHarness();
+    const newlyAdded = { ...providerTemplate, templateId: "77597" };
+    harness.gateway.listTemplates
+      .mockResolvedValueOnce({ items: [providerTemplate], logId: "before-log" })
+      .mockResolvedValueOnce({
+        items: [providerTemplate, newlyAdded],
+        logId: "after-log",
+      });
+
+    await harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    });
+
+    expect(harness.gateway.addTemplate).toHaveBeenCalledTimes(1);
+    expect(harness.templates.confirm.mock.calls[0]?.[0]).toMatchObject({
+      templateId: newlyAdded.templateId,
     });
   });
 
-  test("does not reuse matching metadata from a template older than the latest draft", async () => {
+  test("does not reuse matching metadata from a template as old as the draft", async () => {
     const harness = createHarness();
     const staleTemplate = {
-      ...template,
+      ...providerTemplate,
       templateId: "77595",
       createdAt: draft.createdAt,
     };
     harness.gateway.listTemplates
       .mockResolvedValueOnce({ items: [staleTemplate], logId: "before-log" })
-      .mockResolvedValueOnce({ items: [staleTemplate, template], logId: "after-log" });
+      .mockResolvedValueOnce({
+        items: [staleTemplate, providerTemplate],
+        logId: "after-log",
+      });
 
-    await harness.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    await harness.service.confirmLatest(authContext as never, {
       channel: "default",
     });
 
     expect(harness.gateway.addTemplate).toHaveBeenCalledTimes(1);
-    expect(harness.releases.upload.mock.calls[0]?.[2]).toMatchObject({
-      template_id: template.templateId,
+    expect(harness.templates.confirm.mock.calls[0]?.[0]).toMatchObject({
+      templateId: providerTemplate.templateId,
     });
   });
 
   test("recovers a provider timeout when the exact template appears afterward", async () => {
     const harness = createHarness();
     harness.gateway.addTemplate.mockRejectedValue(
-      Errors.business(502, "抖音开放平台请求超时", "DOUYIN_OPEN_PLATFORM_TIMEOUT"),
+      Errors.business(
+        502,
+        "抖音开放平台请求超时",
+        "DOUYIN_OPEN_PLATFORM_TIMEOUT",
+      ),
     );
     harness.gateway.listTemplates
       .mockResolvedValueOnce({ items: [], logId: "before-log" })
-      .mockResolvedValueOnce({ items: [template], logId: "recovery-log" });
+      .mockResolvedValueOnce({
+        items: [providerTemplate],
+        logId: "recovery-log",
+      });
 
-    await expect(harness.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    await expect(harness.service.confirmLatest(authContext as never, {
       channel: "default",
-    })).resolves.toEqual(harness.testing);
-    expect(harness.releases.upload).toHaveBeenCalledTimes(1);
+    })).resolves.toEqual(currentTemplate);
+  });
+
+  test("does not confirm a preexisting exact template after provider failure", async () => {
+    const harness = createHarness();
+    harness.gateway.addTemplate.mockRejectedValue(
+      Errors.business(
+        502,
+        "抖音开放平台请求超时",
+        "DOUYIN_OPEN_PLATFORM_TIMEOUT",
+      ),
+    );
+    harness.gateway.listTemplates
+      .mockResolvedValueOnce({ items: [providerTemplate], logId: "before-log" })
+      .mockResolvedValueOnce({ items: [providerTemplate], logId: "after-log" });
+
+    await expect(harness.service.confirmLatest(authContext as never, {
+      channel: "default",
+    })).rejects.toMatchObject({ code: "DOUYIN_OPEN_PLATFORM_TIMEOUT" });
+    expect(harness.templates.confirm).not.toHaveBeenCalled();
   });
 
   test("rejects missing draft metadata and ambiguous matching templates", async () => {
@@ -195,30 +224,48 @@ describe("PlatformDouyinTemplatePromotionService", () => {
       items: [{ templateAppId: TEMPLATE_APP_ID, appName: "鹅班长装企管家" }],
       logId: "apps-log",
     });
-    await expect(missingDraft.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    await expect(missingDraft.service.confirmLatest(authContext as never, {
       channel: "default",
     })).rejects.toMatchObject({ code: "DOUYIN_TEMPLATE_DRAFT_NOT_READY" });
-    expect(missingDraft.releases.upload).not.toHaveBeenCalled();
+    expect(missingDraft.templates.confirm).not.toHaveBeenCalled();
 
     const ambiguous = createHarness();
-    ambiguous.gateway.listTemplates.mockResolvedValue({
-      items: [template, { ...template, templateId: "77597" }],
-      logId: "templates-log",
-    });
-    await expect(ambiguous.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    ambiguous.gateway.listTemplates
+      .mockResolvedValueOnce({ items: [], logId: "before-log" })
+      .mockResolvedValueOnce({
+        items: [providerTemplate, { ...providerTemplate, templateId: "77597" }],
+        logId: "after-log",
+      });
+    await expect(ambiguous.service.confirmLatest(authContext as never, {
       channel: "default",
     })).rejects.toMatchObject({ code: "DOUYIN_TEMPLATE_MATCH_AMBIGUOUS" });
-    expect(ambiguous.gateway.addTemplate).not.toHaveBeenCalled();
-    expect(ambiguous.releases.upload).not.toHaveBeenCalled();
+    expect(ambiguous.gateway.addTemplate).toHaveBeenCalledTimes(1);
+    expect(ambiguous.templates.confirm).not.toHaveBeenCalled();
   });
 
   test("requires a platform operator with the Douyin management permission", async () => {
     const harness = createHarness();
     harness.accessPolicy.assertPermission.mockReturnValue(null);
 
-    await expect(harness.service.promoteLatest(authContext as never, INSTALLATION_ID, {
+    await expect(harness.service.getStatus(authContext as never, {
       channel: "default",
     })).rejects.toMatchObject({ statusCode: 403 });
+    expect(harness.accessTokens.getComponentAccessToken).not.toHaveBeenCalled();
+  });
+
+  test("rejects any configured template AppID other than the fixed development app", async () => {
+    const harness = createHarness();
+    const service = new PlatformDouyinTemplatePromotionService({
+      accessPolicy: harness.accessPolicy,
+      accessTokens: harness.accessTokens,
+      gateway: harness.gateway,
+      templates: harness.templates,
+      templateAppId: "ttd033a68e4e56ccd301",
+    } as never);
+
+    await expect(service.getStatus(authContext as never, {
+      channel: "default",
+    })).rejects.toMatchObject({ statusCode: 400 });
     expect(harness.accessTokens.getComponentAccessToken).not.toHaveBeenCalled();
   });
 });

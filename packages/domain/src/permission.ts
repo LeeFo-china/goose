@@ -183,6 +183,7 @@ export const PERMISSION_CODE_VALUES = [
   'douyin_miniapp.read',
   'douyin_miniapp.manage',
   'douyin_miniapp.audit.submit',
+  'douyin_miniapp.publish',
   'douyin_lead.read',
   'douyin_lead.assign',
   'douyin_lead.follow_up',
@@ -890,6 +891,12 @@ export const PermissionCodeConfig: Record<
     module: 'douyin_miniapp',
     resource: 'douyin_miniapp',
     action: 'audit_submit',
+  },
+  'douyin_miniapp.publish': {
+    label: '发布抖音小程序',
+    module: 'douyin_miniapp',
+    resource: 'douyin_miniapp',
+    action: 'publish',
   },
   'douyin_lead.read': {
     label: '查看抖音线索',

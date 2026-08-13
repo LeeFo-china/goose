@@ -1,29 +1,43 @@
+import { z } from "zod";
+
 import { Errors } from "@/errors/error-factory";
 import type {
   DouyinCodeTemplate,
   DouyinTemplateManagementGateway,
 } from "@/gateways/douyin-open-platform/template-client";
-import type { DouyinMiniappReleaseRecord } from "@/repositories/douyin-miniapp-releases";
+import type {
+  DouyinDeployableTemplate,
+  DouyinDeployableTemplatesRepository,
+} from "@/repositories/douyin-deployable-templates";
 import type { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import type { DouyinMiniappAccessTokenService } from "@/services/douyin-miniapp/access-tokens";
-import type { PlatformDouyinMiniappReleasesService } from "./platform-douyin-miniapp-releases";
 import {
   parseRequest,
   UploadInputSchema,
 } from "./platform-douyin-miniapp-releases/support";
-import { z } from "zod";
 
 const MANAGE_PERMISSION = "platform.douyin_miniapp.manage";
+const FIXED_TEMPLATE_APP_ID = "tt0d647bd99301341b01";
 
 const PromotionInputSchema = z.strictObject({
   channel: z.enum(["default", "1"]),
 });
-const TemplateAppIdSchema = z.string().trim().regex(/^tt[A-Za-z0-9]{1,126}$/);
+const TemplateAppIdSchema = z.literal(FIXED_TEMPLATE_APP_ID);
 
 type AccessPolicyPort = Pick<typeof accessPolicyService, "assertPermission">;
 type AccessTokenPort = Pick<DouyinMiniappAccessTokenService, "getComponentAccessToken">;
-type ReleaseServicePort = Pick<PlatformDouyinMiniappReleasesService, "upload" | "getTestQr">;
+type TemplateRepositoryPort = Pick<
+  DouyinDeployableTemplatesRepository,
+  "findCurrent" | "confirm"
+>;
+
+type ReadyDraft = {
+  readonly draftId: string;
+  readonly version: string;
+  readonly description: string;
+  readonly createdAt: number;
+};
 
 export type PlatformDouyinTemplatePromotionInput = z.input<typeof PromotionInputSchema>;
 
@@ -31,7 +45,7 @@ export type PlatformDouyinTemplatePromotionDependencies = {
   readonly accessPolicy: AccessPolicyPort;
   readonly accessTokens: AccessTokenPort;
   readonly gateway: DouyinTemplateManagementGateway;
-  readonly releases: ReleaseServicePort;
+  readonly templates: TemplateRepositoryPort;
   readonly templateAppId: string;
 };
 
@@ -40,17 +54,91 @@ export class PlatformDouyinTemplatePromotionService {
     private readonly dependencies: PlatformDouyinTemplatePromotionDependencies,
   ) {}
 
-  async promoteLatest(
+  async getStatus(
     authContext: AuthContext,
-    installationId: string,
     input: PlatformDouyinTemplatePromotionInput,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  ) {
     this.assertCanManage(authContext);
     const parsed = parseRequest(PromotionInputSchema, input);
     const templateAppId = parseRequest(
       TemplateAppIdSchema,
       this.dependencies.templateAppId,
     );
+    const [draft, currentTemplate] = await Promise.all([
+      this.getLatestDraft(templateAppId, false),
+      this.dependencies.templates.findCurrent(parsed.channel),
+    ]);
+    return {
+      template_app_id: templateAppId,
+      latest_draft: draft
+        ? {
+          version: draft.version,
+          description: draft.description,
+          created_at: draft.createdAt,
+        }
+        : null,
+      current_template: currentTemplate,
+      is_latest_confirmed: Boolean(
+        draft && currentTemplate?.source_draft_id === draft.draftId,
+      ),
+    };
+  }
+
+  async confirmLatest(
+    authContext: AuthContext,
+    input: PlatformDouyinTemplatePromotionInput,
+  ): Promise<DouyinDeployableTemplate> {
+    const actorEmployeeId = this.assertCanManage(authContext);
+    const parsed = parseRequest(PromotionInputSchema, input);
+    const templateAppId = parseRequest(
+      TemplateAppIdSchema,
+      this.dependencies.templateAppId,
+    );
+    const draft = await this.getLatestDraft(templateAppId, true);
+    const currentTemplate = await this.dependencies.templates.findCurrent(
+      parsed.channel,
+    );
+    if (currentTemplate?.source_draft_id === draft.draftId) {
+      return currentTemplate;
+    }
+    const componentAccessToken = await this.dependencies.accessTokens
+      .getComponentAccessToken();
+    const uploadInput = parseRequest(UploadInputSchema, {
+      template_id: "1",
+      template_version: draft.version,
+      description: draft.description,
+      channel: parsed.channel,
+    });
+    const template = await this.requireTemplate(
+      componentAccessToken,
+      draft.draftId,
+      uploadInput.template_version,
+      uploadInput.description,
+      draft.createdAt,
+    );
+    return this.dependencies.templates.confirm({
+      templateAppId,
+      sourceDraftId: draft.draftId,
+      templateId: template.templateId,
+      templateVersion: uploadInput.template_version,
+      description: uploadInput.description,
+      channel: uploadInput.channel,
+      actorEmployeeId,
+    });
+  }
+
+  private async getLatestDraft(
+    templateAppId: string,
+    required: true,
+  ): Promise<ReadyDraft>;
+  private async getLatestDraft(
+    templateAppId: string,
+    required: false,
+  ): Promise<ReadyDraft | null>;
+  private async getLatestDraft(
+    templateAppId: string,
+    required: boolean,
+  ): Promise<ReadyDraft | null> {
     const componentAccessToken = await this.dependencies.accessTokens
       .getComponentAccessToken();
     const apps = await this.dependencies.gateway.listTemplateApps({
@@ -82,39 +170,19 @@ export class PlatformDouyinTemplatePromotionService {
       || draft.description === undefined
       || draft.createdAt === undefined
     ) {
+      if (!required) return null;
       throw Errors.business(
         409,
         "模板开发小程序暂无可用上传草稿",
         "DOUYIN_TEMPLATE_DRAFT_NOT_READY",
       );
     }
-
-    const uploadInput = parseRequest(UploadInputSchema, {
-      template_id: "1",
-      template_version: draft.version,
+    return {
+      draftId: draft.draftId,
+      version: draft.version,
       description: draft.description,
-      channel: parsed.channel,
-    });
-    const template = await this.requireTemplate(
-      componentAccessToken,
-      draft.draftId,
-      uploadInput.template_version,
-      uploadInput.description,
-      draft.createdAt,
-    );
-    const release = await this.dependencies.releases.upload(
-      authContext,
-      installationId,
-      {
-        ...uploadInput,
-        template_id: template.templateId,
-      },
-    );
-    return this.dependencies.releases.getTestQr(
-      authContext,
-      installationId,
-      release.id,
-    );
+      createdAt: draft.createdAt,
+    };
   }
 
   private async requireTemplate(
@@ -126,13 +194,9 @@ export class PlatformDouyinTemplatePromotionService {
   ): Promise<DouyinCodeTemplate> {
     const request = { componentAccessToken };
     const before = await this.dependencies.gateway.listTemplates(request);
-    const existing = this.requireUniqueExactTemplate(
-      before.items,
-      version,
-      description,
-      draftCreatedAt,
+    const templateIdsBefore = new Set(
+      before.items.map((template) => template.templateId),
     );
-    if (existing) return existing;
 
     let addError: unknown;
     try {
@@ -152,7 +216,9 @@ export class PlatformDouyinTemplatePromotionService {
       throw error;
     }
     const promoted = this.requireUniqueExactTemplate(
-      after.items,
+      after.items.filter(
+        (template) => !templateIdsBefore.has(template.templateId),
+      ),
       version,
       description,
       draftCreatedAt,
@@ -187,7 +253,7 @@ export class PlatformDouyinTemplatePromotionService {
     return matches[0];
   }
 
-  private assertCanManage(authContext: AuthContext): void {
+  private assertCanManage(authContext: AuthContext): string {
     const isPlatformIdentity =
       authContext.isPlatformStaff || authContext.isPlatformAdmin;
     if (
@@ -201,6 +267,7 @@ export class PlatformDouyinTemplatePromotionService {
     ) {
       throw Errors.forbidden();
     }
+    return authContext.employeeId;
   }
 }
 

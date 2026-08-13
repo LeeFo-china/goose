@@ -74,7 +74,7 @@ export const platformNavGroups: AdminMenuGroup[] = [
       },
       {
         href: "/platform/douyin-miniapps",
-        label: "抖音发布",
+        label: "抖音模板",
         icon: AppWindow,
         requiredPermissions: [{
           code: "platform.douyin_miniapp.manage",
