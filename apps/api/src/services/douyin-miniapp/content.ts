@@ -7,6 +7,7 @@ import {
   type DouyinContentInstallation,
   type DouyinContentLog,
   type DouyinContentProject,
+  type DouyinContentProjectImageLog,
 } from "@/repositories/douyin-miniapp-content";
 import {
   DouyinRuntimeConfigSchema,
@@ -17,11 +18,16 @@ import type {
   DouyinContentPageQuery,
 } from "@/schema/douyin-miniapp";
 import type { JwtPayload } from "@/utils/jwt";
+import { resolveStoredFileUrlList } from "@/services/files/file-url-resolver";
 
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
-  | "listCases" | "findCase" | "listSites" | "findSite" | "listSiteLogs">;
-type Dependencies = { readonly repository?: RepositoryPort };
+  | "listCases" | "findCase" | "listSites" | "findSite" | "listSiteLogs"
+  | "listProjectImageLogs">;
+type Dependencies = {
+  readonly repository?: RepositoryPort;
+  readonly resolveImageUrls?: (value: unknown) => string[];
+};
 type ContentContext = {
   tenantId: string;
   installation: DouyinContentInstallation;
@@ -30,9 +36,11 @@ type ContentContext = {
 
 export class DouyinMiniappContentService {
   private readonly repository: RepositoryPort;
+  private readonly resolveImageUrls: (value: unknown) => string[];
 
   constructor(dependencies: Dependencies = {}) {
     this.repository = dependencies.repository ?? douyinMiniappContentRepository;
+    this.resolveImageUrls = dependencies.resolveImageUrls ?? resolveStoredFileUrlList;
   }
 
   async bootstrap(user?: JwtPayload) {
@@ -49,6 +57,10 @@ export class DouyinMiniappContentService {
         : emptyProjects,
     ]);
     const company = this.mapCompany(context.runtime, requireCompany(profile), areas);
+    const projectImages = await this.loadProjectImages(
+      context.tenantId,
+      [...cases.rows, ...sites.rows],
+    );
     return {
       installation: {
         status: "active" as const,
@@ -60,8 +72,10 @@ export class DouyinMiniappContentService {
       content: {
         home_banners: context.runtime.home_banners,
         trust_metrics: context.runtime.trust_metrics,
-        featured_cases: cases.rows.map(mapProject),
-        active_sites: sites.rows.map(mapSiteProject),
+        featured_cases: cases.rows.map((project) =>
+          mapProject(project, projectImages.get(project.id))),
+        active_sites: sites.rows.map((project) =>
+          mapSiteProject(project, projectImages.get(project.id))),
       },
       privacy_policy_version: context.runtime.privacy_policy_version,
     };
@@ -80,30 +94,38 @@ export class DouyinMiniappContentService {
     const context = await this.loadContext(user);
     requireContentFeature(context, "cases");
     const result = await this.repository.listCases({ tenantId: context.tenantId, ...query });
-    return page(result.rows.map(mapProject), query, result.total);
+    const projectImages = await this.loadProjectImages(context.tenantId, result.rows);
+    return page(result.rows.map((project) =>
+      mapProject(project, projectImages.get(project.id))), query, result.total);
   }
 
   async getCase(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "cases");
-    return mapProject(requireProject(await this.repository.findCase({
+    const project = requireProject(await this.repository.findCase({
       tenantId: context.tenantId, id,
-    })));
+    }));
+    const projectImages = await this.loadProjectImages(context.tenantId, [project]);
+    return mapProject(project, projectImages.get(project.id));
   }
 
   async listSites(user: JwtPayload | undefined, query: DouyinContentPageQuery) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
     const result = await this.repository.listSites({ tenantId: context.tenantId, ...query });
-    return page(result.rows.map(mapSiteProject), query, result.total);
+    const projectImages = await this.loadProjectImages(context.tenantId, result.rows);
+    return page(result.rows.map((project) =>
+      mapSiteProject(project, projectImages.get(project.id))), query, result.total);
   }
 
   async getSite(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
-    return mapSiteProject(requireProject(await this.repository.findSite({
+    const project = requireProject(await this.repository.findSite({
       tenantId: context.tenantId, id,
-    })));
+    }));
+    const projectImages = await this.loadProjectImages(context.tenantId, [project]);
+    return mapSiteProject(project, projectImages.get(project.id));
   }
 
   async listSiteLogs(
@@ -117,7 +139,7 @@ export class DouyinMiniappContentService {
     const result = await this.repository.listSiteLogs({
       tenantId: context.tenantId, projectId, ...query,
     });
-    return page(result.rows.map(mapLog), query, result.total);
+    return page(result.rows.map((log) => mapLog(log, this.resolveImageUrls)), query, result.total);
   }
 
   private async loadContext(user?: JwtPayload): Promise<ContentContext> {
@@ -173,14 +195,24 @@ export class DouyinMiniappContentService {
       qualifications: runtime.brand.qualifications,
     };
   }
+
+  private async loadProjectImages(
+    tenantId: string,
+    projects: readonly DouyinContentProject[],
+  ): Promise<Map<string, string[]>> {
+    const projectIds = [...new Set(projects.map((project) => project.id))];
+    if (projectIds.length === 0) return new Map();
+    const logs = await this.repository.listProjectImageLogs({ tenantId, projectIds });
+    return projectImageMap(logs, this.resolveImageUrls);
+  }
 }
 
-function mapProject(project: DouyinContentProject) {
+function mapProject(project: DouyinContentProject, images: readonly string[] = []) {
   return {
     id: project.id,
     title: project.name?.trim() || "装修项目",
-    cover_image_url: null,
-    public_images: [] as string[],
+    cover_image_url: images[0] ?? null,
+    public_images: [...images],
     style_tags: stringArray(project.style_tags, 12, 40),
     layout: project.property.layout,
     area: finiteNumber(project.property.area),
@@ -195,8 +227,8 @@ function mapProject(project: DouyinContentProject) {
   };
 }
 
-function mapSiteProject(project: DouyinContentProject) {
-  const mapped = mapProject(project);
+function mapSiteProject(project: DouyinContentProject, images: readonly string[] = []) {
+  const mapped = mapProject(project, images);
   const community = project.property.community.trim();
   return {
     ...mapped,
@@ -205,14 +237,38 @@ function mapSiteProject(project: DouyinContentProject) {
   };
 }
 
-function mapLog(log: DouyinContentLog) {
+function mapLog(log: DouyinContentLog, resolveImageUrls: (value: unknown) => string[]) {
   return {
     id: log.id,
     stage_code: log.stage_code,
     node_name: log.node_name,
-    images: stringArray(log.images, 100, 2048).filter(isHttpsUrl).slice(0, 9),
+    images: resolvedHttpsImages(log.images, resolveImageUrls),
     created_at: log.created_at,
   };
+}
+
+function projectImageMap(
+  logs: readonly DouyinContentProjectImageLog[],
+  resolveImageUrls: (value: unknown) => string[],
+) {
+  const imagesByProject = new Map<string, string[]>();
+  for (const log of logs) {
+    const images = imagesByProject.get(log.project_id) ?? [];
+    for (const image of resolvedHttpsImages(log.images, resolveImageUrls)) {
+      if (!images.includes(image)) images.push(image);
+      if (images.length >= 9) break;
+    }
+    if (images.length > 0) imagesByProject.set(log.project_id, images);
+  }
+  return imagesByProject;
+}
+
+function resolvedHttpsImages(
+  value: unknown,
+  resolveImageUrls: (value: unknown) => string[],
+) {
+  return stringArray(resolveImageUrls(value), 100, 2048)
+    .filter(isHttpsUrl).slice(0, 9);
 }
 
 function stringArray(value: unknown, limit: number, maxLength: number): string[] {

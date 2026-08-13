@@ -19,6 +19,9 @@ const INSTALLATION_SELECT = [
   "runtime_config", "tenant:tenants(id,status)",
 ].join(",");
 const LOG_SELECT = "id,stage_code,node_name,images,created_at";
+const PROJECT_IMAGE_LOG_SELECT = "project_id,images,created_at";
+const PROJECT_IMAGE_LOGS_PER_PROJECT = 20;
+const MAX_PROJECT_IMAGE_LOGS = 2_000;
 const PUBLIC_STATUSES = [
   "signed", "design_finalized", "pending_start", "started", "constructing", "acceptance",
 ].join(",");
@@ -55,12 +58,16 @@ const LogSchema = z.object({
   id: z.uuid(), stage_code: NullableString, node_name: NullableString,
   images: z.unknown(), created_at: z.string(),
 }).strict();
+const ProjectImageLogSchema = z.object({
+  project_id: z.uuid(), images: z.unknown(), created_at: z.string(),
+}).strict();
 
 export type DouyinContentInstallation = z.infer<typeof InstallationSchema>;
 export type DouyinContentCompany = z.infer<typeof CompanySchema>;
 export type DouyinContentArea = z.infer<typeof AreaSchema>;
 export type DouyinContentProject = z.infer<typeof ProjectSchema>;
 export type DouyinContentLog = z.infer<typeof LogSchema>;
+export type DouyinContentProjectImageLog = z.infer<typeof ProjectImageLogSchema>;
 type PageInput = { tenantId: string; page: number; pageSize: number };
 type CaseListInput = PageInput & { style?: string; layout?: string };
 type DatabaseResult = { data: unknown; error: unknown; count?: number | null };
@@ -145,6 +152,22 @@ export class DouyinMiniappContentRepository {
         .eq("project_id", input.projectId).order("created_at", { ascending: false })
         .order("id", { ascending: false }).range(...pageRange(input));
       return { rows: parseRows(LogSchema, result), total: validCount(result.count) };
+    });
+  }
+
+  async listProjectImageLogs(input: { tenantId: string; projectIds: readonly string[] }) {
+    return execute("查询抖音公开项目图片失败", async () => {
+      const projectIds = [...new Set(input.projectIds)].slice(0, 100);
+      if (projectIds.length === 0) return [] as DouyinContentProjectImageLog[];
+      const limit = Math.min(
+        projectIds.length * PROJECT_IMAGE_LOGS_PER_PROJECT,
+        MAX_PROJECT_IMAGE_LOGS,
+      );
+      const result = await this.client.from("project_logs")
+        .select(PROJECT_IMAGE_LOG_SELECT).eq("tenant_id", input.tenantId)
+        .in("project_id", projectIds).order("created_at", { ascending: false })
+        .limit(limit);
+      return parseRows(ProjectImageLogSchema, result);
     });
   }
 
