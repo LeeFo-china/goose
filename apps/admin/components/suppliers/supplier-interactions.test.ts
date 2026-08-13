@@ -12,6 +12,12 @@ import {
   type TenantSupplierRelationship,
   type TenantSupplierSettings,
 } from "./supplier-types";
+import {
+  allocateTenantSupplierCode,
+  createTenantPrivateSupplier,
+  createTenantSharedRelationship,
+  manualSupplierCodeState,
+} from "./supplier-create-api";
 
 const originalFetch = globalThis.fetch;
 
@@ -52,6 +58,7 @@ function relationship(id: string): TenantSupplierRelationship {
     tenant_id: "tenant-1",
     supplier_id: `supplier-${id}`,
     relationship_status: "active",
+    internal_supplier_code: `INTERNAL-${id}`,
     settlement_term_days: 30,
     credit_limit_minor: 0,
     invoice_required_before_payment: true,
@@ -71,6 +78,8 @@ function relationship(id: string): TenantSupplierRelationship {
       name: `供应商 ${id}`,
       legal_name: `供应商 ${id}`,
       supplier_type: "manufacturer",
+      ownership_scope: "platform",
+      owner_tenant_id: null,
       onboarding_status: "approved",
       operational_status: "active",
       version: 1,
@@ -79,6 +88,68 @@ function relationship(id: string): TenantSupplierRelationship {
 }
 
 describe("供应商设置运行时交互", () => {
+  test("内部编码只在显式分配时请求，且分配与创建使用不同幂等键", async () => {
+    const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    globalThis.fetch = (async (input, init) => {
+      calls.push({ input, init });
+      if (String(input).endsWith("/suppliers/code-allocations")) {
+        return jsonResponse({
+          success: true,
+          data: { allocation_id: "allocation-1", code: "SUP-000001", idempotent: false },
+        });
+      }
+      return jsonResponse({ success: true, data: { id: "relationship-1" } });
+    }) as typeof fetch;
+
+    expect(calls).toHaveLength(0);
+    const allocation = await allocateTenantSupplierCode("allocation-key");
+    await createTenantSharedRelationship({
+      supplier_id: "supplier-1",
+      code_source: "generated",
+      internal_supplier_code: allocation.code,
+      allocation_id: allocation.allocation_id,
+    }, "create-key");
+
+    expect(calls.map(({ input }) => String(input))).toEqual([
+      "/api/backend/suppliers/code-allocations",
+      "/api/backend/suppliers",
+    ]);
+    expect(calls.map(({ init }) =>
+      new Headers(init?.headers).get("Idempotency-Key")
+    )).toEqual(["allocation-key", "create-key"]);
+  });
+
+  test("编辑已生成编码会立即转为手工编码并清除 allocation_id", () => {
+    expect(manualSupplierCodeState(" custom-01 ")).toEqual({
+      code_source: "manual",
+      internal_supplier_code: "CUSTOM-01",
+    });
+  });
+
+  test("私有供应商创建提交完整主档与显式编码来源", async () => {
+    let body: unknown;
+    globalThis.fetch = (async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return jsonResponse({ success: true, data: { id: "private-1" } });
+    }) as typeof fetch;
+
+    await createTenantPrivateSupplier({
+      name: "晴天建材",
+      legal_name: "晴天建材有限公司",
+      supplier_type: "manufacturer",
+      code_source: "manual",
+      internal_supplier_code: "SUNNY-01",
+    }, "private-create-key");
+
+    expect(body).toEqual({
+      name: "晴天建材",
+      legal_name: "晴天建材有限公司",
+      supplier_type: "manufacturer",
+      code_source: "manual",
+      internal_supplier_code: "SUNNY-01",
+    });
+  });
+
   test("首次启用使用 expected_version 0，并发送独立幂等键", async () => {
     const calls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
     globalThis.fetch = (async (input, init) => {

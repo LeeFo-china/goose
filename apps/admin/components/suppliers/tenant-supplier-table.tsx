@@ -39,6 +39,30 @@ export function TenantSupplierTable({
       ),
     },
     {
+      accessorKey: "internal_supplier_code",
+      header: "内部编码",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs">
+          {row.original.internal_supplier_code}
+        </span>
+      ),
+    },
+    {
+      id: "ownership_scope",
+      header: "资料来源",
+      cell: ({ row }) => (
+        <Badge variant={
+          row.original.supplier.ownership_scope === "tenant"
+            ? "secondary"
+            : "outline"
+        }>
+          {row.original.supplier.ownership_scope === "tenant"
+            ? "租户私有"
+            : "平台共享"}
+        </Badge>
+      ),
+    },
+    {
       accessorKey: "relationship_status",
       header: "合作状态",
       cell: ({ row }) => {
@@ -125,7 +149,7 @@ export function TenantSupplierTable({
       <DataTable
         columns={columns}
         data={relationships}
-        minWidth="min-w-[1080px]"
+        minWidth="min-w-[1240px]"
         emptyText="没有符合当前筛选条件的合作供应商"
         onRowClick={onOpen}
       />

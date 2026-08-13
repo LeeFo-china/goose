@@ -38,6 +38,8 @@ describe("租户合作供应商工作台", () => {
 
     for (const column of [
       "供应商",
+      "内部编码",
+      "资料来源",
       "合作状态",
       "新订单资格",
       "结算条款",
@@ -56,8 +58,12 @@ describe("租户合作供应商工作台", () => {
 
     expect(source).toContain("/suppliers/directory?");
     expect(source).toContain('pageSize: "10"');
-    expect(source).toContain("evaluating");
-    expect(source).toContain('"Idempotency-Key"');
+    expect(source).toContain("当前状态为评估中");
+    expect(readSource("./supplier-create-api.ts")).toContain('"Idempotency-Key"');
+    expect(source).toContain("添加平台共享供应商");
+    expect(source).toContain("新建私有供应商");
+    expect(source).toContain("自动生成");
+    expect(source).toContain("allocation_id");
     expect(source).not.toContain("成本价");
   });
 

@@ -40,6 +40,8 @@ export type SupplierDirectoryItem = {
   name: string;
   legal_name: string;
   supplier_type: SupplierType;
+  ownership_scope: "platform" | "tenant";
+  owner_tenant_id: string | null;
   onboarding_status: SupplierOnboardingStatus;
   operational_status: SupplierOperationalStatus;
   version: number;
@@ -59,6 +61,7 @@ export type TenantSupplierRelationship = {
   tenant_id: string;
   supplier_id: string;
   relationship_status: TenantSupplierRelationshipStatus;
+  internal_supplier_code: string;
   settlement_term_days: number;
   credit_limit_minor: number;
   invoice_required_before_payment: boolean;

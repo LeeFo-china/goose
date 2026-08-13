@@ -213,6 +213,7 @@ git commit -m "feat(api): 开放租户私有供应商路由"
 
 **Files:**
 - Modify: `apps/admin/components/suppliers/add-supplier-dialog.tsx`
+- Create: `apps/admin/components/suppliers/supplier-create-api.ts`
 - Modify: `apps/admin/components/suppliers/supplier-types.ts`
 - Modify: `apps/admin/components/suppliers/tenant-supplier-table.tsx`
 - Modify: `apps/admin/components/suppliers/supplier-interactions.test.ts`
