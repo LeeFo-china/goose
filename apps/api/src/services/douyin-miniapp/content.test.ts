@@ -38,6 +38,16 @@ const project = {
   property: { community: "示例花园", layout: "三室两厅", area: 120,
     city: "郑州市", district: "金水区" },
 };
+const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
+const resolvedCover = `https://assets.example.com/${storedCover}`;
+
+function resolveImageUrls(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string")
+    .map((item) => item.startsWith("https://")
+      ? item
+      : `https://assets.example.com/${item}`);
+}
 
 function dependencies(overrides: Record<string, unknown> = {}) {
   const repository = {
@@ -49,15 +59,20 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     findCase: mock(async () => project),
     listSites: mock(async () => ({ rows: [project], total: 1 })),
     findSite: mock(async () => project),
+    listProjectImageLogs: mock(async () => [{
+      project_id: PROJECT_ID,
+      images: [storedCover],
+      created_at: "2026-07-19T00:00:00.000Z",
+    }]),
     listSiteLogs: mock(async () => ({ rows: [{
       id: "44444444-4444-4444-8444-444444444444", stage_code: "water-electric",
-      node_name: "水电施工", images: ["http://unsafe.test/a.jpg",
+      node_name: "水电施工", images: [storedCover, "http://unsafe.test/a.jpg",
         ...Array.from({ length: 12 }, (_, index) => `https://cdn.example.com/${index}.jpg`)],
       created_at: "2026-07-20T00:00:00.000Z",
     }], total: 1 })),
     ...overrides,
   };
-  return { repository };
+  return { repository, resolveImageUrls };
 }
 
 describe("DouyinMiniappContentService", () => {
@@ -86,8 +101,13 @@ describe("DouyinMiniappContentService", () => {
       company: { name: "示例装饰", logo_url: runtime.brand.logo_url },
       theme: runtime.theme, features: runtime.features,
       content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics,
-        featured_cases: [{ id: PROJECT_ID, budget_band: "20-30万" }],
-        active_sites: [{ id: PROJECT_ID }] },
+        featured_cases: [{ id: PROJECT_ID, budget_band: "20-30万",
+          cover_image_url: resolvedCover }],
+        active_sites: [{ id: PROJECT_ID, cover_image_url: resolvedCover }] },
+    });
+    expect(deps.repository.listProjectImageLogs).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      projectIds: [PROJECT_ID],
     });
     expect(JSON.stringify(result)).not.toMatch(/260000|customer|signed_amount|latitude|longitude/i);
   });
@@ -104,7 +124,8 @@ describe("DouyinMiniappContentService", () => {
       page: 2, pageSize: 20, style: "现代", layout: "三室两厅" });
     expect(deps.repository.findCase).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       id: PROJECT_ID });
-    expect(cases).toMatchObject({ items: [{ cover_image_url: null, description: null }],
+    expect(cases).toMatchObject({ items: [{ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], description: null }],
       pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 } });
   });
 
@@ -180,6 +201,7 @@ describe("DouyinMiniappContentService", () => {
     expect(deps.repository.listSiteLogs).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       projectId: PROJECT_ID, page: 1, pageSize: 20 });
     expect(result.items[0]!.images).toHaveLength(9);
+    expect(result.items[0]!.images[0]).toBe(resolvedCover);
     expect(result.items[0]!.images.every((url) => url.startsWith("https://"))).toBe(true);
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
   });
