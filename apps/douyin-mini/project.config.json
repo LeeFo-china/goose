@@ -2,6 +2,7 @@
   "description": "Gooes 装修行业抖音原生小程序模板",
   "miniprogramRoot": "src/",
   "projectname": "gooes-douyin-decoration",
+  "appid": "tt0d647bd99301341b01",
   "setting": {
     "es6": true,
     "minified": true,
