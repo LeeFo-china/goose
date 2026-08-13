@@ -61,6 +61,13 @@ function approvedWorkspace(): TenantDouyinWorkspace {
       sites: 3,
       active_service_areas: 2,
     },
+    available_template: {
+      template_id: "77595",
+      version: "0.1.2",
+      description: "租户品牌、案例、工地与免费咨询联调版本",
+      confirmed_at: "2026-07-26T08:00:00.000Z",
+      state: "in_progress",
+    },
     latest_release: {
       id: "00000000-0000-4000-8000-000000000003",
       installation_id: "00000000-0000-4000-8000-000000000002",
@@ -85,10 +92,72 @@ function approvedWorkspace(): TenantDouyinWorkspace {
 }
 
 describe("tenant Douyin workspace actions", () => {
-  test("does not offer publish to tenant users", () => {
+  test("offers production publish after audit approval", () => {
     expect(availableWorkspaceActions(approvedWorkspace())).toEqual([
-      "sync_status",
+      "publish",
     ]);
+  });
+
+  test("offers current-template creation when a new version is available", () => {
+    const workspace = approvedWorkspace();
+    workspace.available_template = {
+      template_id: "77596",
+      version: "0.1.4",
+      description: "新版工地页面",
+      confirmed_at: "2026-08-13T08:00:00.000Z",
+      state: "new_available",
+    };
+    workspace.release_state = "released";
+    if (workspace.latest_release) {
+      workspace.latest_release.status = "released";
+      workspace.latest_release.released_at = "2026-07-26T10:00:00.000Z";
+    }
+
+    expect(availableWorkspaceActions(workspace)).toEqual([
+      "create_test_version",
+    ]);
+  });
+
+  test("continues an unfinished release before offering the newer template", () => {
+    const expectations = [
+      ["created", "create_test_version"],
+      ["uploaded", "get_test_qr"],
+      ["testing", "submit_audit"],
+      ["audit_pending", "sync_status"],
+      ["audit_approved", "publish"],
+    ] as const;
+
+    for (const [status, action] of expectations) {
+      const workspace = approvedWorkspace();
+      workspace.available_template = {
+        template_id: "77596",
+        version: "0.1.4",
+        description: "新版工地页面",
+        confirmed_at: "2026-08-13T08:00:00.000Z",
+        state: "new_available",
+      };
+      workspace.release_state = status;
+      if (workspace.latest_release) {
+        workspace.latest_release.status = status;
+      }
+
+      expect(availableWorkspaceActions(workspace)).toEqual([action]);
+    }
+  });
+
+  test("offers no invalid retry action for terminal rejected or failed releases", () => {
+    for (const [releaseState, status] of [
+      ["audit_rejected", "audit_rejected"],
+      ["sync_error", "failed"],
+    ] as const) {
+      const workspace = approvedWorkspace();
+      workspace.release_state = releaseState;
+      if (workspace.latest_release) {
+        workspace.latest_release.status = status;
+      }
+
+      expect(availableWorkspaceActions(workspace)).toEqual([]);
+    }
   });
 
   test("requires every audit checklist item", () => {

@@ -60,6 +60,35 @@ const installation = {
   updated_at: "2026-07-20T01:00:00+00:00",
 };
 const counts = { cases: 3, sites: 2, active_service_areas: 1 };
+const deployableTemplate = {
+  id: "55555555-5555-4555-8555-555555555555",
+  template_app_id: "tt0d647bd99301341b01",
+  source_draft_id: "1024",
+  template_id: "77596",
+  template_version: "0.1.4",
+  description: "租户发布闭环",
+  channel: "default" as const,
+  is_current: true,
+  confirmed_by_employee_id: "66666666-6666-4666-8666-666666666666",
+  confirmed_at: "2026-08-13T08:00:00.000Z",
+  created_at: "2026-08-13T08:00:00.000Z",
+};
+const tenantRelease = {
+  id: "77777777-7777-4777-8777-777777777777",
+  installation_id: INSTALLATION_ID,
+  template_id: deployableTemplate.template_id,
+  template_version: deployableTemplate.template_version,
+  description: deployableTemplate.description,
+  status: "testing" as const,
+  test_qr_url: "https://example.test/test-qr.png",
+  audit_note: null,
+  audit_result: null,
+  submitted_at: null,
+  audited_at: null,
+  released_at: null,
+  created_at: "2026-08-13T08:00:00.000Z",
+  updated_at: "2026-08-13T08:00:00.000Z",
+};
 
 function tenantContext(): AuthContext {
   return {
@@ -93,6 +122,10 @@ function createService(input: {
   currentProfile?: typeof profile | null;
   currentInstallation?: typeof installation | null;
   currentCounts?: typeof counts;
+  latestRelease?: (Omit<typeof tenantRelease, "status"> & {
+    status: "testing" | "released";
+  }) | null;
+  currentTemplate?: typeof deployableTemplate | null;
 } = {}) {
   const repository = {
     findTenantSummary: mock(
@@ -111,7 +144,12 @@ function createService(input: {
         : input.currentInstallation,
     ),
     getPublicContentCounts: mock(async () => input.currentCounts ?? counts),
-    findLatestRelease: mock(async () => null),
+    findLatestRelease: mock(async () => input.latestRelease ?? null),
+  };
+  const templates = {
+    findCurrent: mock(async () => input.currentTemplate === undefined
+      ? deployableTemplate
+      : input.currentTemplate),
   };
   const accessPolicy = {
     assertTenantContext: mock((authContext: AuthContext) => {
@@ -126,9 +164,11 @@ function createService(input: {
   return {
     service: new Service({
       repository: repository as never,
+      templates: templates as never,
       accessPolicy: accessPolicy as never,
     }),
     repository,
+    templates,
     accessPolicy,
   };
 }
@@ -183,6 +223,44 @@ describe("TenantDouyinMiniappWorkspaceService", () => {
     await expect(service.getWorkspace(tenantContext())).rejects.toMatchObject({
       statusCode: 404,
       code: "DOUYIN_TENANT_NOT_FOUND",
+    });
+  });
+
+  test("derives new, in-progress and up-to-date availability by template id", async () => {
+    const available = createService();
+    await expect(available.service.getWorkspace(tenantContext()))
+      .resolves.toMatchObject({
+        available_template: {
+          template_id: deployableTemplate.template_id,
+          state: "new_available",
+        },
+      });
+
+    const inProgress = createService({ latestRelease: tenantRelease });
+    await expect(inProgress.service.getWorkspace(tenantContext()))
+      .resolves.toMatchObject({
+        available_template: {
+          template_id: deployableTemplate.template_id,
+          state: "in_progress",
+        },
+      });
+
+    const upToDate = createService({
+      latestRelease: { ...tenantRelease, status: "released" },
+    });
+    await expect(upToDate.service.getWorkspace(tenantContext()))
+      .resolves.toMatchObject({
+        available_template: {
+          template_id: deployableTemplate.template_id,
+          state: "up_to_date",
+        },
+      });
+  });
+
+  test("does not expose a template prompt before platform confirmation", async () => {
+    const { service } = createService({ currentTemplate: null });
+    await expect(service.getWorkspace(tenantContext())).resolves.toMatchObject({
+      available_template: null,
     });
   });
 });

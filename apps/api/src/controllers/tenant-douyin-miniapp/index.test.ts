@@ -29,6 +29,7 @@ const workspaceData = {
     sites: 0,
     active_service_areas: 0,
   },
+  available_template: null,
   latest_release: null,
 };
 
@@ -50,12 +51,18 @@ function createController() {
     list: mock(async () => ({ list: [], pagination: {
       page: 1, pageSize: 20, total: 0, totalPages: 0,
     } })),
+    createFromCurrentTemplate: mock(async () => ({
+      id: "release-id", status: "testing",
+    })),
     getTestQr: mock(async () => ({ id: "release-id", status: "testing" })),
     submitAudit: mock(async () => ({
       id: "release-id", status: "audit_pending",
     })),
     syncStatus: mock(async () => ({
       id: "release-id", status: "audit_approved",
+    })),
+    publish: mock(async () => ({
+      id: "release-id", status: "released",
     })),
   };
   const controller = new Controller(
@@ -106,6 +113,10 @@ describe("TenantDouyinMiniappController", () => {
       { method: "GET", path: "/tenant/douyin-miniapp/releases" },
       {
         method: "POST",
+        path: "/tenant/douyin-miniapp/releases/from-current-template",
+      },
+      {
+        method: "POST",
         path: "/tenant/douyin-miniapp/releases/:releaseId/test-qr",
       },
       {
@@ -115,6 +126,10 @@ describe("TenantDouyinMiniappController", () => {
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/releases/:releaseId/sync-status",
+      },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/:releaseId/publish",
       },
     ]);
   });
@@ -183,10 +198,14 @@ describe("TenantDouyinMiniappController", () => {
     } as never)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  test("validates and delegates tenant release actions without publish", async () => {
+  test("validates and delegates the complete tenant release workflow", async () => {
     const { controller, releases } = createController();
     const params = { releaseId: "77777777-7777-4777-8777-777777777777" };
 
+    await controller.createReleaseFromCurrentTemplate({
+      query: {},
+      body: {},
+    } as never);
     await controller.getReleaseTestQr({ params, body: {} } as never);
     await controller.submitReleaseAudit({
       params,
@@ -196,7 +215,11 @@ describe("TenantDouyinMiniappController", () => {
       },
     } as never);
     await controller.syncReleaseStatus({ params, body: {} } as never);
+    await controller.publishRelease({ params, body: {} } as never);
 
+    expect(releases.createFromCurrentTemplate).toHaveBeenCalledWith(
+      authContext,
+    );
     expect(releases.getTestQr).toHaveBeenCalledWith(
       authContext,
       params.releaseId,
@@ -213,6 +236,24 @@ describe("TenantDouyinMiniappController", () => {
       authContext,
       params.releaseId,
     );
-    expect("publishRelease" in controller).toBe(false);
+    expect(releases.publish).toHaveBeenCalledWith(
+      authContext,
+      params.releaseId,
+    );
+  });
+
+  test("rejects client-controlled identifiers on tenant release creation", async () => {
+    const { controller, releases } = createController();
+    for (const body of [
+      { template_id: "77596" },
+      { appid: "tt-forged" },
+      { tenant_id: authContext.tenantId },
+    ]) {
+      await expect(controller.createReleaseFromCurrentTemplate({
+        query: {},
+        body,
+      } as never)).rejects.toMatchObject({ statusCode: 400 });
+    }
+    expect(releases.createFromCurrentTemplate).not.toHaveBeenCalled();
   });
 });

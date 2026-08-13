@@ -148,27 +148,47 @@ POST /platform/douyin-miniapps/template-development
 
 1. 在抖音开发者工具中打开 `apps/douyin-mini`。
 2. 执行 `bun run douyin-mini:check`，再完成 Android、iOS 真机检查。
-3. 经明确授权后，从 IDE 上传模板开发小程序代码。
-4. 在服务商平台把已验证版本加入模板库，记录返回的数字 `template_id`。
-5. 为本次交付分配严格 SemVer。相同商户安装不能重复使用同一 `template_version`；回滚也要使用新的交付版本号。
+3. 确认 `project.config.json` 使用固定模板开发 AppID
+   `tt0d647bd99301341b01`，经明确授权后从 IDE 上传代码。
+4. 平台运营进入 Gooes 平台后台「抖音模板」，核对最新草稿后点击「确认最新模板」。
+   服务端负责把该草稿加入模板库并记录唯一的新 `template_id`，不得手工选择商户安装。
+5. 同一最新草稿重复确认会返回当前记录，不会重复加入模板；如果加入后未出现唯一的新模板记录，流程失败关闭，不得绑定仅元数据相同的历史模板。
 
-### 6.2 单商户发布 API
+部署 `20260813200000_create_douyin_deployable_templates.sql` 前先执行只读预检：
 
-以下接口都要求平台管理员、员工和 `all` 权限；`:id` 是商户安装 UUID，`:releaseId` 是发布记录 UUID。
+```sql
+SELECT installation_id, count(*) AS unfinished_count
+FROM public.douyin_miniapp_releases
+WHERE status IN (
+  'created', 'uploaded', 'testing', 'audit_pending', 'audit_approved'
+)
+GROUP BY installation_id
+HAVING count(*) > 1;
+```
+
+结果必须为空。若存在记录，migration 会以
+`DOUYIN_UNFINISHED_RELEASE_DUPLICATES_EXIST` 失败关闭；不得手工修改数据库，必须核对抖音版本证据后提交单独评审的数据修复 migration。
+
+### 6.2 租户发布 API
+
+租户 Admin 在 `/douyin-miniapp/workspace` 完成自己已授权小程序的发布。客户端不得提交租户 ID、AppID、安装 ID 或模板 ID；服务端从登录租户和当前确认模板解析这些标识。`:releaseId` 是当前租户拥有的发布记录 UUID。
 
 | 顺序 | API | 关键输入/结果 |
 | --- | --- | --- |
-| 1 | `POST /platform/douyin-miniapps/:id/releases/upload` | `template_id`、`template_version`、`description`、`channel`；扩展配置由服务端生成 |
-| 2 | `POST /platform/douyin-miniapps/:id/releases/:releaseId/test-qr` | 无 body/query；保存安全的二维码结果 |
-| 3 | `POST /platform/douyin-miniapps/:id/releases/:releaseId/submit-audit` | 唯一 `host_names` 和非敏感 `audit_note` |
-| 4 | `POST /platform/douyin-miniapps/:id/releases/:releaseId/sync-status` | 无 body/query；仅接受抖音数值状态 0/1/2/3 |
-| 5 | `POST /platform/douyin-miniapps/:id/releases/:releaseId/publish` | 无 body/query；只发布刚同步为审核通过的精确版本 |
+| 1 | `POST /tenant/douyin-miniapp/releases/from-current-template` | 无 body/query；服务端使用当前确认模板生成体验版 |
+| 2 | `POST /tenant/douyin-miniapp/releases/:releaseId/test-qr` | 无 body/query；保存安全的二维码结果 |
+| 3 | `POST /tenant/douyin-miniapp/releases/:releaseId/submit-audit` | 唯一 `host_names` 和非敏感 `audit_note` |
+| 4 | `POST /tenant/douyin-miniapp/releases/:releaseId/sync-status` | 无 body/query；仅接受抖音数值状态 0/1/2/3 |
+| 5 | `POST /tenant/douyin-miniapp/releases/:releaseId/publish` | 无 body/query；要求 `douyin_miniapp.publish`，只发布刚同步为审核通过的精确版本 |
 
-发布记录可通过以下分页接口查询，默认 `page=1&pageSize=20`，`pageSize` 最大 100：
+租户发布记录通过以下分页接口查询，默认 `page=1&pageSize=20`，`pageSize` 最大 100：
 
 ```text
-GET /platform/douyin-miniapps/:id/releases?page=1&pageSize=20
+GET /tenant/douyin-miniapp/releases?page=1&pageSize=20
 ```
+
+平台支持人员仅可通过
+`GET /platform/douyin-miniapps/:id/releases?page=1&pageSize=20` 查看分页历史；平台代商户上传、提审和发布的写接口已移除。
 
 推荐状态序列：
 
@@ -176,7 +196,7 @@ GET /platform/douyin-miniapps/:id/releases?page=1&pageSize=20
 created -> uploaded -> testing -> audit_pending -> audit_approved -> released
 ```
 
-`audit_rejected` 或 `failed` 必须先查明安全错误码和抖音 `log_id`，修复后创建新的 SemVer 交付记录。并发请求会按商户安装串行化；遇到 `DOUYIN_RELEASE_OPERATION_IN_PROGRESS` 时等待当前操作结束后查询状态，不要循环快速重试。
+`audit_rejected` 或 `failed` 必须先查明安全错误码和抖音 `log_id`，修复后可从当前确认模板创建新的交付记录；终态本身不显示无效的重复提审或状态同步按钮。`created`、`uploaded`、`testing`、`audit_pending`、`audit_approved` 未结束时，数据库通过每个安装最多一个未完成版本的唯一约束拒绝覆盖；其他版本仍有未过期操作租约时同样不能创建新版。其中 `created` 通过「继续生成体验版」恢复原发布，不能改用新模板。并发请求会按商户安装串行化。遇到 `DOUYIN_RELEASE_OPERATION_IN_PROGRESS` 时等待当前操作结束后查询状态，不要循环快速重试。
 
 若抖音已受理但本地写入失败，服务端会用精确版本证据恢复。这里的“精确版本证据”是抖音版本列表中 `current`（当前线上）、`audit`（审核中/结果）或 `latest`（最新上传）的版本号与发布记录 `template_version` 完全相同；“claim”是服务端两分钟操作租约，不能由运营手工编辑。
 

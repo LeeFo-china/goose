@@ -39,10 +39,12 @@ describe("Douyin miniapp workspace page contract", () => {
     expect(pageSource).toContain('cache: "no-store"');
   });
 
-  test("passes tenant-scoped manage and audit permissions to workspace actions", () => {
+  test("passes tenant-scoped manage, audit and publish permissions to workspace actions", () => {
     expect(pageSource).toContain('"douyin_miniapp.manage"');
     expect(pageSource).toContain('"douyin_miniapp.audit.submit"');
+    expect(pageSource).toContain('"douyin_miniapp.publish"');
     expect(pageSource).toContain("canManage={canManage}");
     expect(pageSource).toContain("canSubmitAudit={canSubmitAudit}");
+    expect(pageSource).toContain("canPublish={canPublish}");
   });
 });

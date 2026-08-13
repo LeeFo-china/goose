@@ -56,6 +56,7 @@ const workspace: TenantDouyinWorkspace = {
     sites: 3,
     active_service_areas: 2,
   },
+  available_template: null,
   latest_release: {
     id: "00000000-0000-4000-8000-000000000003",
     installation_id: "00000000-0000-4000-8000-000000000002",
@@ -169,11 +170,12 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).not.toContain('disabled=""');
   });
 
-  test("never renders a tenant publish action after audit approval", () => {
+  test("renders a permission-gated tenant publish action after audit approval", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
         canRead
         canManage
+        canPublish
         canSubmitAudit
         loadError={null}
         workspace={{
@@ -186,8 +188,41 @@ describe("TenantDouyinMiniappWorkspace", () => {
       />,
     );
 
-    expect(html).toContain("同步审核状态");
-    expect(html).not.toContain("发布小程序");
+    expect(html).toContain("正式发布");
+    expect(html).not.toContain("缺少执行该操作的权限");
+  });
+
+  test("keeps a confirmed platform template visible until the tenant starts it", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        workspace={{
+          ...workspace,
+          available_template: {
+            template_id: "77612",
+            version: "0.1.4",
+            description: "优化工地卡片和图片展示",
+            confirmed_at: "2026-08-13T04:00:00.000Z",
+            state: "new_available",
+          },
+          release_state: "released",
+          latest_release: workspace.latest_release
+            ? {
+              ...workspace.latest_release,
+              status: "released",
+              released_at: "2026-08-13T03:00:00.000Z",
+            }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("发现可用新版 0.1.4");
+    expect(html).toContain("优化工地卡片和图片展示");
+    expect(html).toContain("生成新版体验版");
   });
 
   test("surfaces a pending public profile instead of implying it is live", () => {

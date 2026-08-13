@@ -4,45 +4,32 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 import { isDouyinTestQrUrlUsable } from "@gooes/domain";
 import {
-  CheckCircle2,
   ExternalLink,
   Loader2,
   QrCode,
   RefreshCw,
+  Rocket,
   Send,
   ShieldAlert,
-  XCircle,
+  UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 
+import { WorkspaceReleaseDialogs } from "./workspace-release-dialogs";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
 export type TenantDouyinWorkspaceAction =
   | "authorize"
+  | "create_test_version"
   | "get_test_qr"
   | "submit_audit"
-  | "sync_status";
+  | "sync_status"
+  | "publish";
 
 export type AuditChecklist = {
   authorizationActive: boolean;
@@ -94,6 +81,13 @@ export function availableWorkspaceActions(
   if (workspace.authorization_state !== "active") return ["authorize"];
 
   const release = workspace.latest_release;
+  const hasNewTemplate = workspace.available_template?.state === "new_available";
+  const blocksNewTemplate = release?.status === "created"
+    || release?.status === "uploaded"
+    || release?.status === "testing"
+    || release?.status === "audit_pending"
+    || release?.status === "audit_approved";
+  if (hasNewTemplate && !blocksNewTemplate) return ["create_test_version"];
   if (!release) return [];
 
   switch (workspace.release_state) {
@@ -104,12 +98,16 @@ export function availableWorkspaceActions(
         ? ["submit_audit"]
         : ["get_test_qr"];
     case "audit_pending":
-    case "audit_rejected":
-    case "audit_approved":
-    case "sync_error":
       return ["sync_status"];
-    case "not_uploaded":
+    case "audit_rejected":
+      return [];
+    case "audit_approved":
+      return ["publish"];
+    case "sync_error":
+      return [];
     case "created":
+      return ["create_test_version"];
+    case "not_uploaded":
     case "released":
       return [];
   }
@@ -130,6 +128,7 @@ export function parseAuditHostNames(value: string) {
 
 type WorkspaceActionsProps = {
   canManage: boolean;
+  canPublish: boolean;
   canSubmitAudit: boolean;
   workspace: TenantDouyinWorkspace;
 };
@@ -138,6 +137,7 @@ type Release = NonNullable<TenantDouyinWorkspace["latest_release"]>;
 
 export function TenantDouyinMiniappWorkspaceActions({
   canManage,
+  canPublish,
   canSubmitAudit: canSubmitAuditPermission,
   workspace,
 }: WorkspaceActionsProps) {
@@ -145,6 +145,7 @@ export function TenantDouyinMiniappWorkspaceActions({
   const [pending, setPending] = useState<TenantDouyinWorkspaceAction | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [auditOpen, setAuditOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [hostNamesInput, setHostNamesInput] = useState(
     workspace.latest_release?.audit_host_names?.join("\n") || "",
   );
@@ -211,7 +212,10 @@ export function TenantDouyinMiniappWorkspaceActions({
   }
 
   async function mutateRelease(
-    action: Exclude<TenantDouyinWorkspaceAction, "authorize">,
+    action: Exclude<
+      TenantDouyinWorkspaceAction,
+      "authorize" | "create_test_version"
+    >,
     path: string,
     body: string,
     successMessage: string,
@@ -233,6 +237,30 @@ export function TenantDouyinMiniappWorkspaceActions({
       setError(actionError instanceof Error
         ? actionError.message
         : `${successMessage}失败`);
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function createTestVersion() {
+    setError(null);
+    setPending("create_test_version");
+    try {
+      const nextRelease = await requestBackendJson<Release>(
+        "/tenant/douyin-miniapp/releases/from-current-template",
+        {
+          method: "POST",
+          body: "{}",
+          fallbackMessage: "生成体验版失败",
+        },
+      );
+      setRelease(nextRelease);
+      toast.success("体验版已生成");
+      window.setTimeout(() => window.location.reload(), 300);
+    } catch (actionError) {
+      setError(actionError instanceof Error
+        ? actionError.message
+        : "生成体验版失败");
     } finally {
       setPending(null);
     }
@@ -264,6 +292,18 @@ export function TenantDouyinMiniappWorkspaceActions({
                 ? <Loader2 className="animate-spin" data-icon="inline-start" />
                 : <ExternalLink data-icon="inline-start" />}
               授权抖音小程序
+            </Button>
+          ) : null}
+          {actions.includes("create_test_version") ? (
+            <Button
+              disabled={!canManage || pending !== null}
+              onClick={createTestVersion}
+              size="sm"
+            >
+              {pending === "create_test_version"
+                ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                : <UploadCloud data-icon="inline-start" />}
+              {release?.status === "created" ? "继续生成体验版" : "生成新版体验版"}
             </Button>
           ) : null}
           {actions.includes("get_test_qr") ? (
@@ -313,6 +353,16 @@ export function TenantDouyinMiniappWorkspaceActions({
               同步审核状态
             </Button>
           ) : null}
+          {actions.includes("publish") ? (
+            <Button
+              disabled={!canPublish || pending !== null}
+              onClick={() => setPublishOpen(true)}
+              size="sm"
+            >
+              <Rocket data-icon="inline-start" />
+              正式发布
+            </Button>
+          ) : null}
           {actions.length === 0 ? (
             <Badge variant="outline">当前无需租户操作</Badge>
           ) : null}
@@ -330,6 +380,7 @@ export function TenantDouyinMiniappWorkspaceActions({
           actions,
           canManage,
           canSubmitAuditPermission,
+          canPublish,
         ) ? (
           <p className="text-xs text-muted-foreground">
             当前账号缺少执行该操作的权限，请联系租户管理员。
@@ -363,129 +414,36 @@ export function TenantDouyinMiniappWorkspaceActions({
         </div>
       ) : null}
 
-      <Dialog open={auditOpen} onOpenChange={setAuditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>提交抖音小程序审核</DialogTitle>
-            <DialogDescription>
-              填写审核宿主名称和版本说明，提交后可在工作台同步审核结果。
-            </DialogDescription>
-          </DialogHeader>
-
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="douyin-audit-host-names">
-                宿主名称
-              </FieldLabel>
-              <Input
-                aria-invalid={hostNamesInput.length > 0 && hostNames.length === 0}
-                id="douyin-audit-host-names"
-                onChange={(event) => setHostNamesInput(event.target.value)}
-                placeholder="douyin，可使用逗号或换行分隔"
-                value={hostNamesInput}
-              />
-              <FieldDescription>
-                最多 20 个，仅支持字母、数字、点和连字符。
-              </FieldDescription>
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="douyin-audit-note">审核说明</FieldLabel>
-              <Textarea
-                id="douyin-audit-note"
-                maxLength={1000}
-                onChange={(event) => setAuditNote(event.target.value)}
-                placeholder="说明本版本的品牌、案例、工地和咨询能力"
-                value={auditNote}
-              />
-              <FieldDescription>
-                {auditNote.trim().length}/1000 字符
-              </FieldDescription>
-            </Field>
-          </FieldGroup>
-
-          <div className="flex flex-col gap-2 rounded-md border bg-muted/20 p-3">
-            <p className="text-sm font-semibold">提交前检查</p>
-            <ChecklistItem
-              complete={checklist.authorizationActive}
-              label="租户小程序授权有效"
-            />
-            <ChecklistItem
-              complete={checklist.profilePublished}
-              label="公开资料已发布"
-            />
-            <ChecklistItem
-              complete={checklist.testQrReady}
-              label="体验二维码已生成"
-            />
-            <ChecklistItem
-              complete={checklist.auditFieldsComplete}
-              label="审核信息填写完整"
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              onClick={() => setAuditOpen(false)}
-              type="button"
-              variant="outline"
-            >
-              取消
-            </Button>
-            <Button
-              disabled={
-                !canSubmitAuditPermission
-                || !auditReady
-                || pending !== null
-              }
-              onClick={() =>
-                mutateRelease(
-                  "submit_audit",
-                  `${releaseBasePath}/submit-audit`,
-                  JSON.stringify({
-                    host_names: hostNames,
-                    audit_note: auditNote.trim(),
-                  }),
-                  "审核已提交",
-                )}
-              type="button"
-            >
-              {pending === "submit_audit"
-                ? <Loader2 className="animate-spin" data-icon="inline-start" />
-                : <Send data-icon="inline-start" />}
-              确认提交
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function ChecklistItem({
-  complete,
-  label,
-}: {
-  complete: boolean;
-  label: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      {complete
-        ? <CheckCircle2 className="text-success" aria-hidden="true" />
-        : <XCircle className="text-muted-foreground" aria-hidden="true" />}
-      <span>{label}</span>
-      <Badge variant={complete ? "success" : "secondary"}>
-        {complete ? "已完成" : "待完成"}
-      </Badge>
+      <WorkspaceReleaseDialogs
+        auditNote={auditNote}
+        auditOpen={auditOpen}
+        auditReady={auditReady}
+        canPublish={canPublish}
+        canSubmitAudit={canSubmitAuditPermission}
+        checklist={checklist}
+        hostNames={hostNames}
+        hostNamesInput={hostNamesInput}
+        mutateRelease={mutateRelease}
+        onAuditNoteChange={setAuditNote}
+        onAuditOpenChange={setAuditOpen}
+        onHostNamesInputChange={setHostNamesInput}
+        onPublishOpenChange={setPublishOpen}
+        pending={pending}
+        publishOpen={publishOpen}
+        release={release}
+        releaseBasePath={releaseBasePath}
+      />
     </div>
   );
 }
 
 function actionSummary(actions: TenantDouyinWorkspaceAction[]) {
   if (actions.includes("authorize")) return "连接租户自有抖音小程序";
+  if (actions.includes("create_test_version")) return "生成体验版并完成验收";
   if (actions.includes("get_test_qr")) return "生成体验二维码并完成手机验收";
   if (actions.includes("submit_audit")) return "核对提审信息并提交平台审核";
   if (actions.includes("sync_status")) return "从抖音开放平台同步审核状态";
+  if (actions.includes("publish")) return "审核已通过，可以正式发布";
   return "平台侧正在准备版本或当前版本已经发布";
 }
 
@@ -493,7 +451,9 @@ function permissionForActions(
   actions: TenantDouyinWorkspaceAction[],
   canManage: boolean,
   canSubmitAuditPermission: boolean,
+  canPublish: boolean,
 ) {
   if (actions.includes("submit_audit")) return canSubmitAuditPermission;
+  if (actions.includes("publish")) return canPublish;
   return actions.length === 0 || canManage;
 }

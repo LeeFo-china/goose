@@ -400,17 +400,34 @@ async function execute<Result>(operation: () => Promise<Result>): Promise<Result
 }
 
 function assertSuccess(result: DouyinMiniappReleaseDatabaseResult): void {
-  if (result.error) throw repositoryError();
+  if (!result.error) return;
+  if (hasUnfinishedReleaseConstraint(result.error)) {
+    throw unfinishedReleaseError();
+  }
+  throw repositoryError();
 }
 
 function assertUploadClaimSuccess(result: DouyinMiniappReleaseDatabaseResult): void {
   if (!result.error) return;
-  if (databaseErrorMessage(result.error) === "DOUYIN_MINIAPP_RELEASE_DELIVERY_CONFLICT") {
+  const message = databaseErrorMessage(result.error);
+  if (message === "DOUYIN_MINIAPP_RELEASE_DELIVERY_CONFLICT") {
     throw Errors.business(
       409,
       "抖音小程序同版本发布参数冲突",
-      "DOUYIN_MINIAPP_RELEASE_DELIVERY_CONFLICT",
+      message,
     );
+  }
+  if (message === "DOUYIN_TENANT_RELEASE_IN_PROGRESS") {
+    throw Errors.business(
+      409,
+      "当前版本尚未结束，不能生成新版体验版",
+      message,
+    );
+  }
+  if (
+    hasUnfinishedReleaseConstraint(result.error)
+  ) {
+    throw unfinishedReleaseError();
   }
   throw repositoryError();
 }
@@ -418,6 +435,27 @@ function assertUploadClaimSuccess(result: DouyinMiniappReleaseDatabaseResult): v
 function databaseErrorMessage(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("message" in error)) return undefined;
   return typeof error.message === "string" ? error.message : undefined;
+}
+
+function databaseErrorConstraint(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("constraint" in error)) {
+    return undefined;
+  }
+  return typeof error.constraint === "string" ? error.constraint : undefined;
+}
+
+function hasUnfinishedReleaseConstraint(error: unknown): boolean {
+  const constraint = "douyin_miniapp_releases_one_unfinished_installation_idx";
+  return databaseErrorConstraint(error) === constraint
+    || databaseErrorMessage(error)?.includes(`\"${constraint}\"`) === true;
+}
+
+function unfinishedReleaseError(): AppError {
+  return Errors.business(
+    409,
+    "当前版本尚未结束，不能生成新版体验版",
+    "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+  );
 }
 
 function parseRelease(data: unknown): DouyinMiniappReleaseRecord {
