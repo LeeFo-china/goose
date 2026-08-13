@@ -74,3 +74,8 @@ export function isSupplierCodeConflict(error: unknown) {
       "SUPPLIER_CODE_ALLOCATION_CONFLICT",
     ].includes(String(error.code));
 }
+
+export function isSupplierIdentityConflict(error: unknown) {
+  return typeof error === "object" && error !== null &&
+    "code" in error && String(error.code) === "SUPPLIER_IDENTITY_CONFLICT";
+}

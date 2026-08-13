@@ -164,6 +164,7 @@ describe("SupplierOnboardingRepository", () => {
       "unified_social_credit_code",
       "91411525MA9G000000",
     );
+    expect(query.eq).toHaveBeenCalledWith("ownership_scope", "platform");
     expect(query.limit).toHaveBeenCalledWith(1);
   });
 });

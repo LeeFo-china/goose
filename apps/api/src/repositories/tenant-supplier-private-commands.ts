@@ -49,7 +49,7 @@ export async function createPrivateSupplier(
 ) {
   const result = parse(
     CreateRelationshipCommandEnvelopeSchema,
-    await commandRpc(client, "create_tenant_private_supplier", {
+    await commandRpc(client, "create_tenant_private_supplier_guarded", {
       p_tenant_id: input.tenant_id,
       p_name: input.name,
       p_legal_name: input.legal_name,
@@ -112,7 +112,7 @@ export async function updatePrivateSupplierMaster(
   );
   const result = parse(
     UpdatePrivateSupplierMasterEnvelopeSchema,
-    await commandRpc(client, "update_tenant_private_supplier_master", {
+    await commandRpc(client, "update_tenant_private_supplier_master_guarded", {
       p_tenant_id: input.tenant_id,
       p_tenant_supplier_id: input.tenant_supplier_id,
       p_expected_version: input.expected_version,

@@ -274,6 +274,16 @@ test.describe("租户私有供应商确定性交互", () => {
     expect(state.mutations[1].payload).not.toHaveProperty("allocation_id");
   });
 
+  test("切换资料来源后忽略旧的编码分配响应", async ({ page }) => {
+    await page.getByRole("button", { name: "添加合作供应商" }).click();
+    const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
+    await dialog.getByRole("button", { name: /新建私有供应商/ }).click();
+    await dialog.getByRole("button", { name: "自动生成" }).click();
+    await dialog.getByRole("button", { name: /添加平台共享供应商/ }).click();
+    await page.waitForTimeout(250);
+    await expect(dialog.getByLabel("供应商内部编码")).toHaveValue("");
+  });
+
   test("重复手工编码错误落在编码字段且保留表单", async ({ page }) => {
     await page.getByRole("button", { name: "添加合作供应商" }).click();
     const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
@@ -289,6 +299,28 @@ test.describe("租户私有供应商确定性交互", () => {
     await expect(dialog.getByLabel("供应商内部编码")).toHaveAttribute(
       "aria-invalid",
       "true",
+    );
+  });
+
+  test("重复主体错误落在统一社会信用代码字段", async ({ page }) => {
+    await page.getByRole("button", { name: "添加合作供应商" }).click();
+    const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
+    await dialog.getByRole("button", { name: /新建私有供应商/ }).click();
+    await dialog.getByLabel("供应商内部编码").fill("PRIVATE-UNIQUE-01");
+    await dialog.getByLabel("供应商名称").fill("重复主体供应商");
+    await dialog.getByLabel("法定名称").fill("重复主体供应商有限公司");
+    await dialog.getByLabel("统一社会信用代码").fill("duplicate-credit");
+    await dialog.getByRole("button", { name: "创建私有供应商" }).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("统一社会信用代码已存在")).toBeVisible();
+    await expect(dialog.getByLabel("统一社会信用代码")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+    await expect(dialog.getByLabel("供应商内部编码")).toHaveAttribute(
+      "aria-invalid",
+      "false",
     );
   });
 

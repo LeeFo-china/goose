@@ -2,7 +2,7 @@
 
 import type { SupplierType } from "@gooes/domain";
 import { Building2, Plus, Search, Store, WandSparkles } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
@@ -26,6 +26,7 @@ import {
   createTenantPrivateSupplier,
   createTenantSharedRelationship,
   isSupplierCodeConflict,
+  isSupplierIdentityConflict,
   manualSupplierCodeState,
   type SupplierCodeState,
 } from "./supplier-create-api";
@@ -57,11 +58,13 @@ export function AddSupplierDialog({
   disabled,
   sharedCreationEnabled,
   privateCreationEnabled,
+  codeAllocationEnabled,
   onCreated,
 }: {
   disabled?: boolean;
   sharedCreationEnabled: boolean;
   privateCreationEnabled: boolean;
+  codeAllocationEnabled: boolean;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -77,6 +80,8 @@ export function AddSupplierDialog({
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
+  const [creditCodeError, setCreditCodeError] = useState<string | null>(null);
+  const allocationRequestRef = useRef(0);
 
   const loadDirectory = useCallback(async (page: number, search: string) => {
     setLoading(true);
@@ -100,6 +105,8 @@ export function AddSupplierDialog({
   }, [loadDirectory, mode, open]);
 
   function reset() {
+    allocationRequestRef.current += 1;
+    setAllocating(false);
     setMode(null);
     setKeyword("");
     setDirectory(emptyDirectory);
@@ -107,6 +114,7 @@ export function AddSupplierDialog({
     setCodeState(manualSupplierCodeState(""));
     setError(null);
     setCodeError(null);
+    setCreditCodeError(null);
   }
 
   function changeOpen(nextOpen: boolean) {
@@ -115,9 +123,12 @@ export function AddSupplierDialog({
   }
 
   function selectMode(nextMode: CreateMode) {
+    allocationRequestRef.current += 1;
+    setAllocating(false);
     setMode(nextMode);
     setCodeState(manualSupplierCodeState(""));
     setCodeError(null);
+    setCreditCodeError(null);
     setError(null);
   }
 
@@ -127,21 +138,26 @@ export function AddSupplierDialog({
   }
 
   async function generateCode() {
+    if (!codeAllocationEnabled || allocating) return;
+    const requestId = allocationRequestRef.current + 1;
+    allocationRequestRef.current = requestId;
     setAllocating(true);
     setCodeError(null);
     try {
       const allocation = await allocateTenantSupplierCode(
         newIdempotencyKey("tenant-supplier-code-allocation"),
       );
+      if (allocationRequestRef.current !== requestId) return;
       setCodeState({
         code_source: "generated",
         internal_supplier_code: allocation.code,
         allocation_id: allocation.allocation_id,
       });
     } catch (caught) {
+      if (allocationRequestRef.current !== requestId) return;
       setCodeError(messageOf(caught, "生成供应商内部编码失败"));
     } finally {
-      setAllocating(false);
+      if (allocationRequestRef.current === requestId) setAllocating(false);
     }
   }
 
@@ -154,7 +170,7 @@ export function AddSupplierDialog({
   }
 
   async function createShared(supplier: SupplierDirectoryItem) {
-    if (!validCode()) return;
+    if (allocating || !validCode()) return;
     setCreatingId(supplier.id);
     setCodeError(null);
     try {
@@ -182,6 +198,7 @@ export function AddSupplierDialog({
     if (!validCode()) return;
     setCreatingId("private");
     setError(null);
+    setCreditCodeError(null);
     try {
       await createTenantPrivateSupplier({
         name: privateForm.name.trim(),
@@ -198,6 +215,8 @@ export function AddSupplierDialog({
     } catch (caught) {
       if (isSupplierCodeConflict(caught)) {
         setCodeError(messageOf(caught, "供应商内部编码已存在"));
+      } else if (isSupplierIdentityConflict(caught)) {
+        setCreditCodeError(messageOf(caught, "当前租户已存在相同主体的私有供应商"));
       } else setError(messageOf(caught, "新建租户私有供应商失败"));
     } finally {
       setCreatingId(null);
@@ -219,7 +238,8 @@ export function AddSupplierDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2" role="group"
+          aria-label="供应商资料来源">
           <ModeButton active={mode === "shared"}
             disabled={!sharedCreationEnabled}
             onClick={() => selectMode("shared")}
@@ -240,16 +260,22 @@ export function AddSupplierDialog({
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
             <SupplierCodeField value={codeState.internal_supplier_code}
               generated={codeState.code_source === "generated"}
-              allocating={allocating} error={codeError}
+              allocating={allocating} allocationEnabled={codeAllocationEnabled}
+              error={codeError}
               onChange={changeCode} onGenerate={() => void generateCode()} />
             {mode === "shared" ? (
               <SharedDirectory keyword={keyword} setKeyword={setKeyword}
                 directory={directory} loading={loading} error={error}
-                creatingId={creatingId} loadDirectory={loadDirectory}
+                creatingId={creatingId} allocating={allocating}
+                loadDirectory={loadDirectory}
                 createShared={createShared} />
             ) : (
               <PrivateSupplierFields form={privateForm} setForm={setPrivateForm}
-                error={error} />
+                error={error} creditCodeError={creditCodeError}
+                onCreditCodeChange={(value) => {
+                  setPrivateForm((current) => ({ ...current, creditCode: value }));
+                  setCreditCodeError(null);
+                }} />
             )}
           </div>
         ) : (
@@ -276,27 +302,33 @@ function ModeButton(props: {
   active: boolean; onClick: () => void; icon: React.ReactNode;
   title: string; description: string; disabled?: boolean;
 }) {
-  return <button type="button" onClick={props.onClick} disabled={props.disabled}
+  return <button type="button" aria-pressed={props.active}
+    aria-disabled={props.disabled}
+    onClick={() => !props.disabled && props.onClick()}
     className={`rounded-md border p-4 text-left transition-colors ${
       props.active ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-    } disabled:cursor-not-allowed disabled:opacity-50`}>
+    } aria-disabled:cursor-not-allowed aria-disabled:opacity-50`}>
     <span className="flex items-center gap-2 font-medium">{props.icon}{props.title}</span>
     <span className="mt-1 block text-xs leading-5 text-muted-foreground">{props.description}</span>
   </button>;
 }
 
 function SupplierCodeField(props: {
-  value: string; generated: boolean; allocating: boolean; error: string | null;
+  value: string; generated: boolean; allocating: boolean;
+  allocationEnabled: boolean; error: string | null;
   onChange: (value: string) => void; onGenerate: () => void;
 }) {
   return <Field data-invalid={Boolean(props.error)}>
     <FieldLabel htmlFor="tenant-supplier-internal-code">供应商内部编码</FieldLabel>
     <div className="flex gap-2">
       <Input id="tenant-supplier-internal-code" value={props.value}
-        aria-invalid={Boolean(props.error)} placeholder="例如 SUP-000001"
+        aria-invalid={Boolean(props.error)}
+        aria-describedby={props.error ? "tenant-supplier-code-error" : undefined}
+        placeholder="例如 SUP-000001"
         onChange={(event) => props.onChange(event.target.value)} />
-      <Button type="button" variant="outline" disabled={props.allocating}
-        onClick={props.onGenerate}>
+      <Button type="button" variant="outline"
+        disabled={!props.allocationEnabled || props.allocating}
+        onClick={() => props.allocationEnabled && props.onGenerate()}>
         <WandSparkles data-icon="inline-start" />
         {props.allocating ? "生成中" : "自动生成"}
       </Button>
@@ -304,16 +336,20 @@ function SupplierCodeField(props: {
     <FieldDescription>
       {props.generated
         ? "已自动生成；如手工修改，将改用手工编码提交。"
-        : "可自行填写，也可点击自动生成。系统不会因留空自动生成。"}
+        : props.allocationEnabled
+          ? "可自行填写，也可点击自动生成。系统不会因留空自动生成。"
+          : "可自行填写；自动生成需要私有供应商主档权限并启用私有写入。"}
     </FieldDescription>
-    <FieldError>{props.error}</FieldError>
+    <FieldError id="tenant-supplier-code-error" role="alert">
+      {props.error}
+    </FieldError>
   </Field>;
 }
 
 function SharedDirectory(props: {
   keyword: string; setKeyword: (value: string) => void;
   directory: PageData<SupplierDirectoryItem>; loading: boolean;
-  error: string | null; creatingId: string | null;
+  error: string | null; creatingId: string | null; allocating: boolean;
   loadDirectory: (page: number, search: string) => Promise<void>;
   createShared: (supplier: SupplierDirectoryItem) => Promise<void>;
 }) {
@@ -342,7 +378,7 @@ function SharedDirectory(props: {
               <div className="mt-1 flex gap-2 text-xs text-muted-foreground"><span>{supplier.code}</span>
                 <Badge variant="outline">{supplierTypeLabel[supplier.supplier_type]}</Badge></div></div>
             <Button type="button" size="sm" variant="outline"
-              disabled={props.creatingId !== null}
+              disabled={props.creatingId !== null || props.allocating}
               onClick={() => void props.createShared(supplier)}>
               {props.creatingId === supplier.id ? "正在添加" : "建立合作"}
             </Button>
@@ -364,7 +400,8 @@ function SharedDirectory(props: {
 
 function PrivateSupplierFields(props: {
   form: PrivateForm; setForm: React.Dispatch<React.SetStateAction<PrivateForm>>;
-  error: string | null;
+  error: string | null; creditCodeError: string | null;
+  onCreditCodeChange: (value: string) => void;
 }) {
   const set = (field: keyof PrivateForm, value: string) =>
     props.setForm((current) => ({ ...current, [field]: value }));
@@ -380,12 +417,24 @@ function PrivateSupplierFields(props: {
         <Select value={props.form.supplierType}
           onValueChange={(value) => set("supplierType", value)}>
           <SelectTrigger id="private-supplier-type"><SelectValue /></SelectTrigger>
-          <SelectContent>{Object.entries(supplierTypeLabel).map(([value, label]) =>
-            <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
+          <SelectContent><SelectGroup>
+            {Object.entries(supplierTypeLabel).map(([value, label]) =>
+              <SelectItem key={value} value={value}>{label}</SelectItem>)}
+          </SelectGroup></SelectContent>
         </Select></Field>
-      <Field><FieldLabel htmlFor="private-supplier-credit-code">统一社会信用代码</FieldLabel>
+      <Field data-invalid={Boolean(props.creditCodeError)}>
+        <FieldLabel htmlFor="private-supplier-credit-code">统一社会信用代码</FieldLabel>
         <Input id="private-supplier-credit-code" value={props.form.creditCode}
-          placeholder="选填" onChange={(event) => set("creditCode", event.target.value.toUpperCase())} /></Field>
+          aria-invalid={Boolean(props.creditCodeError)}
+          aria-describedby={props.creditCodeError
+            ? "private-supplier-credit-code-error" : undefined}
+          placeholder="选填"
+          onChange={(event) =>
+            props.onCreditCodeChange(event.target.value.toUpperCase())} />
+        <FieldError id="private-supplier-credit-code-error" role="alert">
+          {props.creditCodeError}
+        </FieldError>
+      </Field>
     </div>
     <FieldError>{props.error}</FieldError>
   </FieldGroup>;

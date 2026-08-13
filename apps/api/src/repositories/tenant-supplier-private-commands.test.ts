@@ -79,7 +79,9 @@ describe("TenantSuppliersRepository private supplier commands", () => {
     });
 
     expect(result).toEqual(privateRelationship);
-    expect(requests[0]!.url).toContain("/rpc/create_tenant_private_supplier");
+    expect(requests[0]!.url).toContain(
+      "/rpc/create_tenant_private_supplier_guarded",
+    );
     expect(await requests[0]!.clone().json()).toEqual({
       p_tenant_id: TENANT_ID,
       p_name: "晴天私有建材",
@@ -212,7 +214,7 @@ describe("TenantSuppliersRepository private supplier commands", () => {
     });
     expect(requests).toHaveLength(1);
     expect(requests[0]!.url).toContain(
-      "/rpc/update_tenant_private_supplier_master",
+      "/rpc/update_tenant_private_supplier_master_guarded",
     );
     expect(await requests[0]!.clone().json()).toEqual({
       p_tenant_id: TENANT_ID,

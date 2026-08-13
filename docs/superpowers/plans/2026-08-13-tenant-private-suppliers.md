@@ -19,6 +19,9 @@
 - `supabase/migrations/20260813160400_harden_tenant_supplier_read_visibility.sql`：关系列表仅暴露当前租户可见主档，共享目录仅返回平台供应商。
 - `supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql`：阻断创建键后置分配，并在不可变保护前安全规范化旧私有编码。
 - `supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql`：为创建键反向冲突查询增加最小部分索引。
+- `supabase/migrations/20260813160700_isolate_private_suppliers_from_platform.sql`：平台目录和平台写命令只接受平台归属供应商，并撤销旧无保护 RPC 权限。
+- `supabase/migrations/20260813160800_classify_private_supplier_identity_conflicts.sql` 至 `20260813161000_authorize_private_supplier_identity_check.sql`：并发串行化租户主体判重，保持原校验语义，并在授权及 rollout 校验后返回主体冲突。
+- `supabase/migrations/20260813161100_close_supplier_platform_boundaries.sql`：收紧平台准入主体查询、平台命令锁和目录 ACL，并统一私有供应商主体创建/更新锁。
 - `apps/api/src/schema/tenant-suppliers.ts`：分配、共享关系、私有创建和主档更新 schema。
 - `apps/api/src/repositories/tenant-suppliers.ts`：分页查询和 RPC gateway。
 - `apps/api/src/services/tenant-suppliers.ts`：权限、所有权和命令编排。

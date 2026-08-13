@@ -16,6 +16,7 @@ import {
   allocateTenantSupplierCode,
   createTenantPrivateSupplier,
   createTenantSharedRelationship,
+  isSupplierIdentityConflict,
   manualSupplierCodeState,
 } from "./supplier-create-api";
 
@@ -124,6 +125,15 @@ describe("供应商设置运行时交互", () => {
       code_source: "manual",
       internal_supplier_code: "CUSTOM-01",
     });
+  });
+
+  test("私有供应商主体重复错误与内部编码冲突分别定位", () => {
+    expect(isSupplierIdentityConflict({
+      code: "SUPPLIER_IDENTITY_CONFLICT",
+    })).toBe(true);
+    expect(isSupplierIdentityConflict({
+      code: "SUPPLIER_CODE_CONFLICT",
+    })).toBe(false);
   });
 
   test("私有供应商创建提交完整主档与显式编码来源", async () => {

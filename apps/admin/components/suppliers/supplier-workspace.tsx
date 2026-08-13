@@ -194,6 +194,7 @@ export function SupplierWorkspace({
             disabled={listLoading}
             sharedCreationEnabled={canManage}
             privateCreationEnabled={canCreatePrivate}
+            codeAllocationEnabled={canCreatePrivate}
             onCreated={loadRelationships}
           />
         ) : null}

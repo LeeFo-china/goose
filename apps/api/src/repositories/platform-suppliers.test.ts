@@ -10,11 +10,8 @@ const ACTOR_USER_ID = "00000000-0000-4000-8000-000000000401";
 const ACTOR_EMPLOYEE_ID = "00000000-0000-4000-8000-000000000402";
 const NOW = "2026-07-24T00:00:00.000Z";
 type StubResponse = {
-  body: unknown;
-  count?: number;
-  status?: number;
+  body: unknown; count?: number; status?: number;
 };
-
 async function createRepository(
   responder: (request: Request) => StubResponse,
 ) {
@@ -45,14 +42,12 @@ async function createRepository(
     requests,
   };
 }
-
 describe("PlatformSuppliersRepository", () => {
   test("filters database-side health before exact-count range in one request", async () => {
     const { repository, requests } = await createRepository(() => ({
       body: [{ ...supplierListRow, qualification_health: "expiring" }],
       count: 7,
     }));
-
     const result = await repository.listSuppliers({
       page: 2,
       pageSize: 500,
@@ -60,7 +55,6 @@ describe("PlatformSuppliersRepository", () => {
       supplier_type: "manufacturer",
       qualification_health: "expiring",
     });
-
     expect(result.pagination).toEqual({
       page: 2,
       pageSize: 100,
@@ -119,6 +113,8 @@ describe("PlatformSuppliersRepository", () => {
     const detailUrl = new URL(requests[0]?.url ?? "http://invalid");
     expect(detailUrl.searchParams.get("select")).not.toContain("*");
     expect(detailUrl.searchParams.get("select")).not.toContain("(");
+    expect(detailUrl.searchParams.get("ownership_scope")).toBe("eq.platform");
+    expect(detailUrl.searchParams.get("owner_tenant_id")).toBe("is.null");
 
     const qualifications = await repository.listQualifications({
       supplier_id: SUPPLIER_ID,
@@ -131,11 +127,13 @@ describe("PlatformSuppliersRepository", () => {
       total: 21,
       totalPages: 2,
     });
-    const childUrl = new URL(requests[1]?.url ?? "http://invalid");
+    expect(new URL(requests[1]?.url ?? "http://invalid").pathname)
+      .toEndWith("/rest/v1/suppliers");
+    const childUrl = new URL(requests[2]?.url ?? "http://invalid");
     expect(childUrl.searchParams.get("offset")).toBe("20");
     expect(childUrl.searchParams.get("limit")).toBe("20");
     expect(childUrl.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
-    expect(requests[1]?.headers.get("prefer")).toContain("count=exact");
+    expect(requests[2]?.headers.get("prefer")).toContain("count=exact");
   });
 
   test("includes universal types and targets every supplier-owned child by id", async () => {
@@ -148,6 +146,7 @@ describe("PlatformSuppliersRepository", () => {
       supplier_contacts: contactRow,
     };
     const { repository, requests } = await createRepository((request) => {
+      if (request.url.includes("/suppliers?")) return { body: supplierDetailRow };
       const table = Object.keys(rows).find((name) => request.url.includes(name));
       const row = rows[table as keyof typeof rows];
       return { body: request.headers.get("prefer")?.includes("count=exact") ? [row] : row };
@@ -168,7 +167,10 @@ describe("PlatformSuppliersRepository", () => {
     expect(typeListUrl.searchParams.has("applicable_supplier_types")).toBe(false);
     expect(new URL(requests[1]?.url ?? "http://invalid").searchParams.get("id"))
       .toBe(`eq.${TYPE_ID}`);
-    for (const request of requests.slice(2)) {
+    for (const request of requests.filter((item) =>
+      Object.keys(rows).some((table) => item.url.includes(table)) &&
+      !item.url.includes("supplier_qualification_types")
+    )) {
       const url = new URL(request.url);
       expect(url.searchParams.get("id")).toBe(`eq.${QUALIFICATION_ID}`);
       expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
@@ -184,6 +186,7 @@ describe("PlatformSuppliersRepository", () => {
       supplier_command_events: eventRow,
     };
     const { repository, requests } = await createRepository((request) => {
+      if (request.url.includes("/suppliers?")) return { body: supplierDetailRow };
       const table = Object.keys(rows).find((name) => request.url.includes(name));
       return { body: [rows[table as keyof typeof rows]], count: 35 };
     });
@@ -199,10 +202,13 @@ describe("PlatformSuppliersRepository", () => {
       expect(result.pagination).toEqual({
         page: 3, pageSize: 10, total: 35, totalPages: 4,
       });
-      const url = new URL(requests[index]?.url ?? "http://invalid");
+      const preflight = new URL(requests[index * 2]?.url ?? "http://invalid");
+      expect(preflight.pathname).toEndWith("/rest/v1/suppliers");
+      const url = new URL(requests[index * 2 + 1]?.url ?? "http://invalid");
       expect(url.searchParams.get("offset")).toBe("20");
       expect(url.searchParams.get("limit")).toBe("10");
-      expect(requests[index]?.headers.get("prefer")).toContain("count=exact");
+      expect(requests[index * 2 + 1]?.headers.get("prefer"))
+        .toContain("count=exact");
     }
   });
 
@@ -238,6 +244,8 @@ describe("PlatformSuppliersRepository", () => {
     const url = new URL(requests[0]?.url ?? "http://invalid");
     expect(url.searchParams.get("id")).toBe(`eq.${SUPPLIER_ID}`);
     expect(url.searchParams.get("version")).toBe("eq.2");
+    expect(url.searchParams.get("ownership_scope")).toBe("eq.platform");
+    expect(url.searchParams.get("owner_tenant_id")).toBe("is.null");
     expect(await requests[0]?.clone().json()).toEqual({
       name: "更新后的供应商",
       updated_by_employee_id: ACTOR_EMPLOYEE_ID,
@@ -304,8 +312,8 @@ describe("PlatformSuppliersRepository", () => {
 
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/create_platform_supplier",
-      "/rest/v1/rpc/mutate_platform_supplier",
-      "/rest/v1/rpc/review_supplier_qualification",
+      "/rest/v1/rpc/mutate_platform_supplier_guarded",
+      "/rest/v1/rpc/review_supplier_qualification_guarded",
     ]);
     expect(await requests[0]?.clone().json()).toEqual({
       p_supplier_id: SUPPLIER_ID,
@@ -348,6 +356,7 @@ describe("PlatformSuppliersRepository", () => {
       supplier_contacts: { ...contactRow, version: 2 },
     };
     const { repository, requests } = await createRepository((request) => {
+      if (request.url.includes("/suppliers?")) return { body: supplierDetailRow };
       const table = Object.keys(rows).find((name) => request.url.includes(name));
       return { body: rows[table as keyof typeof rows] };
     });
@@ -365,7 +374,9 @@ describe("PlatformSuppliersRepository", () => {
     await repository.upsertContact({
       ...audit, contact_id: QUALIFICATION_ID, name: "李四",
     });
-    for (const request of requests) {
+    const updates = requests.filter((request) => request.method === "PATCH");
+    expect(updates).toHaveLength(4);
+    for (const request of updates) {
       const url = new URL(request.url);
       expect(request.method).toBe("PATCH");
       expect(url.searchParams.get("id")).toBe(`eq.${QUALIFICATION_ID}`);
@@ -374,20 +385,45 @@ describe("PlatformSuppliersRepository", () => {
       expect(await request.clone().json()).not.toHaveProperty("supplier_id");
     }
   });
+
+  test("hides tenant-private suppliers from platform detail and children", async () => {
+    const { repository, requests } = await createRepository(() => ({
+      body: null,
+    }));
+
+    expect(await repository.findSupplierById(SUPPLIER_ID)).toBeNull();
+    await expect(repository.listQualifications({
+      supplier_id: SUPPLIER_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({
+      statusCode: 404,
+      code: "SUPPLIER_NOT_FOUND",
+    });
+    for (const request of requests) {
+      const url = new URL(request.url);
+      expect(url.pathname).toEndWith("/rest/v1/suppliers");
+      expect(url.searchParams.get("ownership_scope")).toBe("eq.platform");
+      expect(url.searchParams.get("owner_tenant_id")).toBe("is.null");
+    }
+  });
+
+  test("maps guarded private supplier commands to a stable not-found error", async () => {
+    const guarded = await createRepository(() => ({ status: 400,
+      body: { code: "P0001", message: "SUPPLIER_NOT_FOUND" } }));
+    await expect(guarded.repository.mutateSupplier({
+      supplier_id: SUPPLIER_ID, action: "submit", expected_version: 1,
+      actor_user_id: ACTOR_USER_ID, actor_employee_id: ACTOR_EMPLOYEE_ID,
+      idempotency_key: "private-platform-command",
+    })).rejects.toMatchObject({ statusCode: 404, code: "SUPPLIER_NOT_FOUND" });
+  });
 });
 
 const supplierListRow = {
-  id: SUPPLIER_ID,
-  code: "SUP-001",
-  name: "晴天建材",
-  legal_name: "晴天建材有限公司",
-  unified_social_credit_code: null,
-  supplier_type: "manufacturer",
-  onboarding_status: "approved",
-  operational_status: "active",
-  version: 2,
-  created_at: NOW,
-  updated_at: NOW,
+  id: SUPPLIER_ID, code: "SUP-001", name: "晴天建材",
+  legal_name: "晴天建材有限公司", unified_social_credit_code: null,
+  supplier_type: "manufacturer", onboarding_status: "approved",
+  operational_status: "active", version: 2, created_at: NOW, updated_at: NOW,
 };
 const supplierDetailRow = { ...supplierListRow,
   legal_representative_name: null, registered_address_text: null,

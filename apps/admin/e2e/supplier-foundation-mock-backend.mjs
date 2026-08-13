@@ -99,6 +99,14 @@ async function recordCreate(request, response, path) {
     });
     return;
   }
+  if (path === "/suppliers/private" &&
+    payload.unified_social_credit_code === "DUPLICATE-CREDIT") {
+    sendJson(response, 409, {
+      success: false, code: "SUPPLIER_IDENTITY_CONFLICT",
+      message: "统一社会信用代码已存在",
+    });
+    return;
+  }
   sendJson(response, 200, {
     success: true,
     data: relationship(crypto.randomUUID(),
@@ -147,6 +155,7 @@ const server = createServer(async (request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/suppliers/code-allocations") {
     await readBody(request);
+    await new Promise((resolve) => setTimeout(resolve, 150));
     const code = `SUP-${String(allocationSequence).padStart(6, "0")}`;
     allocationSequence += 1;
     const entry = { path: url.pathname, idempotencyKey: keyOf(request), payload: {} };

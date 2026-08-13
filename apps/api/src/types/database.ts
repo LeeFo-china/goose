@@ -21079,6 +21079,10 @@ export type Database = {
         Args: { p_actor_employee_id: string }
         Returns: undefined
       }
+      assert_platform_supplier: {
+        Args: { p_supplier_id: string }
+        Returns: undefined
+      }
       assert_supplier_proxy_scope: {
         Args: {
           p_actor_employee_id: string
@@ -23447,7 +23451,44 @@ export type Database = {
         }
         Returns: Json
       }
+      create_supplier_address_guarded: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address_detail: string
+          p_address_id: string
+          p_address_type: string
+          p_city: string
+          p_district: string
+          p_idempotency_key: string
+          p_is_default: boolean
+          p_latitude: number
+          p_longitude: number
+          p_province: string
+          p_region_code: string
+          p_status: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
       create_supplier_contact: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_contact_id: string
+          p_contact_type: string
+          p_email: string
+          p_idempotency_key: string
+          p_is_primary: boolean
+          p_is_public: boolean
+          p_name: string
+          p_phone: string
+          p_status: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      create_supplier_contact_guarded: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -23634,6 +23675,21 @@ export type Database = {
         }
         Returns: Json
       }
+      create_supplier_qualification_guarded: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_certificate_no: string
+          p_document_file_id: string
+          p_idempotency_key: string
+          p_qualification_id: string
+          p_qualification_type_id: string
+          p_supplier_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: Json
+      }
       create_supplier_qualification_type: {
         Args: {
           p_actor_employee_id: string
@@ -23652,6 +23708,21 @@ export type Database = {
         Returns: Json
       }
       create_supplier_service_region: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_region_code: string
+          p_region_id: string
+          p_region_level: string
+          p_status: string
+          p_supplier_id: string
+          p_valid_from: string
+          p_valid_until: string
+        }
+        Returns: Json
+      }
+      create_supplier_service_region_guarded: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -23718,6 +23789,24 @@ export type Database = {
         }
       }
       create_tenant_private_supplier: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_address: Json
+          p_allocation_id: string
+          p_code_source: string
+          p_idempotency_key: string
+          p_internal_supplier_code: string
+          p_legal_name: string
+          p_name: string
+          p_primary_contact: Json
+          p_supplier_type: string
+          p_tenant_id: string
+          p_unified_social_credit_code: string
+        }
+        Returns: Json
+      }
+      create_tenant_private_supplier_guarded: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
@@ -24597,6 +24686,18 @@ export type Database = {
         Returns: undefined
       }
       mutate_platform_supplier: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_reason?: string
+          p_supplier_id: string
+        }
+        Returns: Json
+      }
+      mutate_platform_supplier_guarded: {
         Args: {
           p_action: string
           p_actor_employee_id: string
@@ -25784,6 +25885,19 @@ export type Database = {
         }
         Returns: Json
       }
+      review_supplier_qualification_guarded: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_qualification_id: string
+          p_reason?: string
+          p_supplier_id: string
+          p_verification_status: string
+        }
+        Returns: Json
+      }
       revoke_platform_operator_sessions: {
         Args: {
           p_actor_employee_id: string
@@ -26292,6 +26406,21 @@ export type Database = {
         Returns: Json
       }
       update_tenant_private_supplier_master: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_legal_name: string
+          p_name: string
+          p_supplier_type: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+          p_unified_social_credit_code: string
+          p_unified_social_credit_code_provided: boolean
+        }
+        Returns: Json
+      }
+      update_tenant_private_supplier_master_guarded: {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
