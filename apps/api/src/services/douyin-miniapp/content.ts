@@ -267,8 +267,14 @@ function resolvedHttpsImages(
   value: unknown,
   resolveImageUrls: (value: unknown) => string[],
 ) {
-  return stringArray(resolveImageUrls(value), 100, 2048)
+  const publicReferences = stringArray(value, 100, 2048)
+    .filter(isPublicImageReference);
+  return stringArray(resolveImageUrls(publicReferences), 100, 2048)
     .filter(isHttpsUrl).slice(0, 9);
+}
+
+function isPublicImageReference(value: string) {
+  return isHttpsUrl(value) || /^(?:tenants|public|system)\//.test(value);
 }
 
 function stringArray(value: unknown, limit: number, maxLength: number): string[] {
