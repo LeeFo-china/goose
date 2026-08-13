@@ -22,6 +22,13 @@ const secondRepairMigrationPath = new URL(
 const secondRepairSql = existsSync(secondRepairMigrationPath)
   ? readFileSync(secondRepairMigrationPath, "utf8")
   : "";
+const indexRepairMigrationPath = new URL(
+  "../../../../supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql",
+  import.meta.url,
+);
+const indexRepairSql = existsSync(indexRepairMigrationPath)
+  ? readFileSync(indexRepairMigrationPath, "utf8")
+  : "";
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -227,6 +234,21 @@ describe("tenant private supplier migration contract", () => {
         "'supplier-code-allocation:' || NEW.tenant_id::text || ':' || NEW.idempotency_key",
       );
     }
+  });
+
+  test("indexes only reverse-conflict create events by tenant idempotency scope", () => {
+    const expectedIndex = /CREATE INDEX IF NOT EXISTS supplier_command_events_tenant_allocation_conflict_idx\s+ON public\.supplier_command_events\(tenant_id, idempotency_key\)\s+WHERE command IN \(\s*'create_tenant_private_supplier',\s*'create_tenant_shared_supplier_relationship',\s*'create_tenant_supplier'\s*\)/;
+
+    expect(sql).toMatch(expectedIndex);
+    expect(indexRepairSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(indexRepairSql).toContain("BEGIN;");
+    expect(indexRepairSql).toContain("SET LOCAL lock_timeout = '5s';");
+    expect(indexRepairSql).toContain("SET LOCAL statement_timeout = '5min';");
+    expect(indexRepairSql).toMatch(expectedIndex);
+    expect(indexRepairSql).not.toMatch(
+      /supplier_command_events_tenant_allocation_conflict_idx[\s\S]*ON public\.supplier_command_events\([^)]*command/,
+    );
+    expect(indexRepairSql).toMatch(/COMMIT;\s*$/);
   });
 
   test("creates private supplier, relationship, optional contact and address atomically", () => {

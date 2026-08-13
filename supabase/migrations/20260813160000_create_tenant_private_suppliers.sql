@@ -67,6 +67,14 @@ WHERE ownership_scope = 'tenant'
   AND unified_social_credit_code IS NOT NULL
   AND btrim(unified_social_credit_code) <> '';
 
+CREATE INDEX IF NOT EXISTS supplier_command_events_tenant_allocation_conflict_idx
+ON public.supplier_command_events(tenant_id, idempotency_key)
+WHERE command IN (
+  'create_tenant_private_supplier',
+  'create_tenant_shared_supplier_relationship',
+  'create_tenant_supplier'
+);
+
 CREATE TABLE public.tenant_supplier_code_counters (
   tenant_id uuid PRIMARY KEY
     REFERENCES public.tenants(id) ON DELETE RESTRICT,
