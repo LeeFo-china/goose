@@ -8,6 +8,20 @@ const migrationPath = new URL(
 const sql = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const foundationCommandsSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260723143000_create_supplier_foundation_commands.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const supplierOnboardingSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260724211000_create_supplier_onboarding_command.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 const OWNERSHIP_TABLES = [
   "suppliers",
@@ -48,6 +62,22 @@ function constraint(name: string) {
   )?.[0] ?? "";
 }
 
+function singleStatementContaining(source: string, fragment: string) {
+  const statements = source
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.includes(fragment));
+
+  expect(statements).toHaveLength(1);
+  return statements[0] ?? "";
+}
+
+function extractFunction(source: string, name: string) {
+  return source.match(
+    new RegExp(`CREATE FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`),
+  )?.[0] ?? "";
+}
+
 describe("supplier ownership foundation migration contract", () => {
   test("is transactional and documents the irreversible forward rollback", () => {
     expect(sql).toMatch(/^-- Rollback: forward-only\./);
@@ -56,6 +86,24 @@ describe("supplier ownership foundation migration contract", () => {
     );
     expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
     expect(sql).not.toContain("IF NOT EXISTS");
+  });
+
+  test("fails closed during the release-window backfill and index build", () => {
+    const lockTimeout = singleStatementContaining(sql, "SET LOCAL lock_timeout");
+    const statementTimeout = singleStatementContaining(
+      sql,
+      "SET LOCAL statement_timeout",
+    );
+
+    expect(lockTimeout).toBe("SET LOCAL lock_timeout = '5s'");
+    expect(statementTimeout).toBe("SET LOCAL statement_timeout = '5min'");
+    expect(sql.indexOf(`${lockTimeout};`)).toBeGreaterThan(sql.indexOf("BEGIN;"));
+    expect(sql.indexOf(`${statementTimeout};`)).toBeGreaterThan(
+      sql.indexOf(`${lockTimeout};`),
+    );
+    expect(sql).toMatch(
+      /^-- Rollback:[\s\S]*release window[\s\S]*three master-table backfills[\s\S]*five ownership indexes[\s\S]*timeout[\s\S]*entire transaction rolls back[\s\S]*never repair the database manually/i,
+    );
   });
 
   test("adds named tenant ownership columns and foreign keys to all five tables", () => {
@@ -86,7 +134,7 @@ describe("supplier ownership foundation migration contract", () => {
       );
 
       expect(backfill).toBe(
-        `UPDATE public.${table} SET ownership_scope = 'platform', owner_tenant_id = NULL;`,
+        `UPDATE public.${table} SET ownership_scope = 'platform', owner_tenant_id = NULL WHERE ownership_scope IS NULL;`,
       );
       expect(addScopeAt).toBeGreaterThanOrEqual(0);
       expect(backfillAt).toBeGreaterThan(addScopeAt);
@@ -97,9 +145,61 @@ describe("supplier ownership foundation migration contract", () => {
     }
   });
 
+  test("keeps legacy platform create paths compatible through strict-table defaults", () => {
+    for (const table of STRICT_OWNERSHIP_TABLES) {
+      const addColumns = compact(
+        singleStatementContaining(
+          sql,
+          `ALTER TABLE public.${table}\nADD COLUMN ownership_scope`,
+        ),
+      );
+
+      expect(addColumns).toContain(
+        "ADD COLUMN ownership_scope text NULL DEFAULT 'platform'",
+      );
+      expect(addColumns).toContain("ADD COLUMN owner_tenant_id uuid NULL");
+      expect(addColumns).not.toContain("owner_tenant_id uuid NULL DEFAULT");
+    }
+
+    const legacyCreateFunctions = [
+      {
+        sql: extractFunction(foundationCommandsSql, "create_platform_supplier"),
+        target: "INSERT INTO public.suppliers",
+      },
+      {
+        sql: extractFunction(supplierOnboardingSql, "create_supplier_onboarding"),
+        target: "INSERT INTO public.suppliers",
+      },
+      {
+        sql: extractFunction(foundationCommandsSql, "create_catalog_category"),
+        target: "INSERT INTO public.catalog_categories",
+      },
+      {
+        sql: extractFunction(foundationCommandsSql, "create_catalog_brand"),
+        target: "INSERT INTO public.catalog_brands",
+      },
+    ];
+
+    for (const legacyCreateFunction of legacyCreateFunctions) {
+      const insert = singleStatementContaining(
+        legacyCreateFunction.sql,
+        legacyCreateFunction.target,
+      );
+
+      expect(insert).not.toContain("ownership_scope");
+      expect(insert).not.toContain("owner_tenant_id");
+    }
+  });
+
   test("keeps product and SKU ownership nullable without inferring from acting tenant", () => {
     for (const table of COMPATIBLE_OWNERSHIP_TABLES) {
       const statements = compact(tableStatements(table).join("\n"));
+      const addColumns = compact(
+        singleStatementContaining(
+          sql,
+          `ALTER TABLE public.${table}\nADD COLUMN ownership_scope`,
+        ),
+      );
       const ownershipCheck = compact(constraint(`${table}_ownership_check`));
 
       expect(statements).not.toContain(
@@ -108,6 +208,7 @@ describe("supplier ownership foundation migration contract", () => {
       expect(statements).not.toContain(
         "ALTER COLUMN owner_tenant_id SET NOT NULL",
       );
+      expect(addColumns).not.toContain("DEFAULT");
       expect(ownershipCheck).toContain(
         "CHECK ( (ownership_scope IS NULL AND owner_tenant_id IS NULL) OR ( ownership_scope IS NOT NULL AND ( (ownership_scope = 'platform' AND owner_tenant_id IS NULL) OR (ownership_scope = 'tenant' AND owner_tenant_id IS NOT NULL) ) ) )",
       );

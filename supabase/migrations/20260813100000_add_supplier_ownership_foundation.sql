@@ -2,11 +2,18 @@
 -- in a forward migration and repair incompatible schema changes there. After new writes begin,
 -- only disable those flags and apply another forward migration; never delete generated
 -- ownership and tenant data or drop the columns, constraints, indexes, function, or triggers.
+-- Schedule a release window for the three master-table backfills and five ownership indexes.
+-- A timeout is fail-closed: the entire transaction rolls back; never repair the database manually.
+-- PostgreSQL may expose the platform default to existing rows without rewriting them, so each
+-- deterministic backfill intentionally updates only rows whose ownership_scope remains NULL.
 
 BEGIN;
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 ALTER TABLE public.suppliers
-ADD COLUMN ownership_scope text NULL,
+ADD COLUMN ownership_scope text NULL DEFAULT 'platform',
 ADD COLUMN owner_tenant_id uuid NULL;
 
 ALTER TABLE public.suppliers
@@ -15,7 +22,8 @@ ADD CONSTRAINT suppliers_owner_tenant_fkey
   REFERENCES public.tenants(id) ON DELETE RESTRICT;
 
 UPDATE public.suppliers
-SET ownership_scope = 'platform', owner_tenant_id = NULL;
+SET ownership_scope = 'platform', owner_tenant_id = NULL
+WHERE ownership_scope IS NULL;
 
 ALTER TABLE public.suppliers
 ALTER COLUMN ownership_scope SET NOT NULL;
@@ -27,7 +35,7 @@ ADD CONSTRAINT suppliers_ownership_check CHECK (
 );
 
 ALTER TABLE public.catalog_categories
-ADD COLUMN ownership_scope text NULL,
+ADD COLUMN ownership_scope text NULL DEFAULT 'platform',
 ADD COLUMN owner_tenant_id uuid NULL;
 
 ALTER TABLE public.catalog_categories
@@ -36,7 +44,8 @@ ADD CONSTRAINT catalog_categories_owner_tenant_fkey
   REFERENCES public.tenants(id) ON DELETE RESTRICT;
 
 UPDATE public.catalog_categories
-SET ownership_scope = 'platform', owner_tenant_id = NULL;
+SET ownership_scope = 'platform', owner_tenant_id = NULL
+WHERE ownership_scope IS NULL;
 
 ALTER TABLE public.catalog_categories
 ALTER COLUMN ownership_scope SET NOT NULL;
@@ -48,7 +57,7 @@ ADD CONSTRAINT catalog_categories_ownership_check CHECK (
 );
 
 ALTER TABLE public.catalog_brands
-ADD COLUMN ownership_scope text NULL,
+ADD COLUMN ownership_scope text NULL DEFAULT 'platform',
 ADD COLUMN owner_tenant_id uuid NULL;
 
 ALTER TABLE public.catalog_brands
@@ -57,7 +66,8 @@ ADD CONSTRAINT catalog_brands_owner_tenant_fkey
   REFERENCES public.tenants(id) ON DELETE RESTRICT;
 
 UPDATE public.catalog_brands
-SET ownership_scope = 'platform', owner_tenant_id = NULL;
+SET ownership_scope = 'platform', owner_tenant_id = NULL
+WHERE ownership_scope IS NULL;
 
 ALTER TABLE public.catalog_brands
 ALTER COLUMN ownership_scope SET NOT NULL;
