@@ -14,7 +14,7 @@
 
 ## File Map
 
-- `supabase/migrations/20260813110000_create_tenant_private_suppliers.sql`：内部编码登记、原子创建、历史关系补码和审计。
+- `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`：内部编码登记、原子创建、历史关系补码和审计。
 - `apps/api/src/schema/tenant-suppliers.ts`：分配、共享关系、私有创建和主档更新 schema。
 - `apps/api/src/repositories/tenant-suppliers.ts`：分页查询和 RPC gateway。
 - `apps/api/src/services/tenant-suppliers.ts`：权限、所有权和命令编排。
@@ -66,7 +66,7 @@ git commit -m "feat(api): 定义私有供应商接口契约"
 
 **Files:**
 - Create: `apps/api/src/services/tenant-private-supplier-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813110000_create_tenant_private_suppliers.sql`
+- Create: `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -98,7 +98,7 @@ cd ../.. && supabase migration new create_tenant_private_suppliers
 ```bash
 cd apps/api && bun test src/services/tenant-private-supplier-migration-contract.test.ts
 cd ../.. && git diff --check
-git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813110000_create_tenant_private_suppliers.sql
+git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813160000_create_tenant_private_suppliers.sql
 git commit -m "feat(db): 建立租户私有供应商命令"
 ```
 
@@ -232,4 +232,4 @@ pnpm exec playwright test --config=playwright.supplier-foundation.config.ts
 
 - [ ] **Step 4: 核对迁移与工作树**
 
-运行 `supabase migration list`、`git diff --check`、`git status --short`，确保 Local/Remote 对齐且不包含用户删除的 tgz 文件。
+运行 `supabase migration list --local`、`git diff --check`、`git status --short`，确保本地 migration 对齐且不包含用户删除的 tgz 文件；远端状态另行只读核对。

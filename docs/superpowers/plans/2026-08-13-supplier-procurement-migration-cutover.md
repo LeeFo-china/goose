@@ -15,10 +15,10 @@
 ## File Map
 
 - `scripts/supplier-product-ownership-preflight.ts`：只读证据和异常统计。
-- `supabase/migrations/20260813140000_create_supplier_product_migration_audit.sql`：永久 mapping/issue 表。
-- `supabase/migrations/20260813141000_backfill_supplier_product_ownership.sql`：确定性归属、克隆和引用重写。
-- `supabase/migrations/20260813142000_add_supplier_procurement_snapshots.sql`：采购完整快照和不可变守卫。
-- `supabase/migrations/20260813143000_enforce_supplier_ownership_cutover.sql`：异常归零检查、最终约束和开关。
+- `supabase/migrations/20260813190000_create_supplier_product_migration_audit.sql`：永久 mapping/issue 表。
+- `supabase/migrations/20260813191000_backfill_supplier_product_ownership.sql`：确定性归属、克隆和引用重写。
+- `supabase/migrations/20260813192000_add_supplier_procurement_snapshots.sql`：采购完整快照和不可变守卫。
+- `supabase/migrations/20260813193000_enforce_supplier_ownership_cutover.sql`：异常归零检查、最终约束和开关。
 - `apps/api/src/services/supplier-purchase-requisitions.ts`：申请提交快照编排。
 - `apps/api/src/services/supplier-purchase-orders.ts`：订单保存/提交快照编排。
 - `apps/admin/e2e/supplier-private-procurement-isolation.spec.ts`：两租户端到端隔离。
@@ -57,8 +57,8 @@ git commit -m "feat(tooling): 增加商品归属迁移预检"
 
 **Files:**
 - Create: `apps/api/src/services/supplier-product-backfill-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813140000_create_supplier_product_migration_audit.sql`
-- Create: `supabase/migrations/20260813141000_backfill_supplier_product_ownership.sql`
+- Create: `supabase/migrations/20260813190000_create_supplier_product_migration_audit.sql`
+- Create: `supabase/migrations/20260813191000_backfill_supplier_product_ownership.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -88,14 +88,14 @@ mapping 唯一键为 `(old_product_id,old_sku_id,tenant_id)`，保存 new IDs、
 
 ```bash
 cd apps/api && bun test src/services/supplier-product-backfill-migration-contract.test.ts
-cd ../.. && git add apps/api/src/services/supplier-product-backfill-migration-contract.test.ts supabase/migrations/20260813140000_create_supplier_product_migration_audit.sql supabase/migrations/20260813141000_backfill_supplier_product_ownership.sql
+cd ../.. && git add apps/api/src/services/supplier-product-backfill-migration-contract.test.ts supabase/migrations/20260813190000_create_supplier_product_migration_audit.sql supabase/migrations/20260813191000_backfill_supplier_product_ownership.sql
 git commit -m "feat(db): 迁移存量供应商商品归属"
 ```
 
 ### Task 3: 执行异常归零门禁
 
 **Files:**
-- Create only when preflight reports open issues: `supabase/migrations/20260813141500_resolve_supplier_product_ownership_issues.sql`
+- Create only when preflight reports open issues: `supabase/migrations/20260813191500_resolve_supplier_product_ownership_issues.sql`
 - Create: `apps/api/src/services/supplier-product-migration-gate.test.ts`
 
 - [ ] **Step 1: 在目标环境运行 preflight**
@@ -104,7 +104,7 @@ git commit -m "feat(db): 迁移存量供应商商品归属"
 
 - [ ] **Step 2: 处理条件分支**
 
-若 open issue 为 0，不创建 `20260813141500...`。若大于 0，逐项用原始单据和事件确定原始 tenant 与 clone tenant；创建该 migration，以明确的 resource UUID、evidence 摘要和 resolver employee UUID 更新 mapping/引用并将 issue 标记 resolved。禁止用当前 `acting_tenant_id`、员工现属 tenant 或当前主档值猜测。
+若 open issue 为 0，不创建 `20260813191500...`。若大于 0，逐项用原始单据和事件确定原始 tenant 与 clone tenant；创建该 migration，以明确的 resource UUID、evidence 摘要和 resolver employee UUID 更新 mapping/引用并将 issue 标记 resolved。禁止用当前 `acting_tenant_id`、员工现属 tenant 或当前主档值猜测。
 
 - [ ] **Step 3: 写并运行门禁测试**
 
@@ -115,7 +115,7 @@ git commit -m "feat(db): 迁移存量供应商商品归属"
 仅在确有异常时提交：
 
 ```bash
-git add supabase/migrations/20260813141500_resolve_supplier_product_ownership_issues.sql apps/api/src/services/supplier-product-migration-gate.test.ts
+git add supabase/migrations/20260813191500_resolve_supplier_product_ownership_issues.sql apps/api/src/services/supplier-product-migration-gate.test.ts
 git commit -m "fix(db): 解决商品归属迁移异常"
 ```
 
@@ -125,7 +125,7 @@ git commit -m "fix(db): 解决商品归属迁移异常"
 
 **Files:**
 - Create: `apps/api/src/services/supplier-procurement-snapshot-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813142000_add_supplier_procurement_snapshots.sql`
+- Create: `supabase/migrations/20260813192000_add_supplier_procurement_snapshots.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -150,7 +150,7 @@ cd ../.. && supabase migration new add_supplier_procurement_snapshots
 
 ```bash
 cd apps/api && bun test src/services/supplier-procurement-snapshot-migration-contract.test.ts src/services/supplier-purchase-requisition-command-migration-contract.test.ts src/services/supplier-purchase-order-migration-contract.test.ts src/services/supplier-purchase-order-hardening-migration-contract.test.ts
-cd ../.. && git add apps/api/src/services/supplier-procurement-snapshot-migration-contract.test.ts supabase/migrations/20260813142000_add_supplier_procurement_snapshots.sql
+cd ../.. && git add apps/api/src/services/supplier-procurement-snapshot-migration-contract.test.ts supabase/migrations/20260813192000_add_supplier_procurement_snapshots.sql
 git commit -m "feat(db): 冻结采购供应商完整快照"
 ```
 
@@ -186,7 +186,7 @@ git commit -m "feat(api): 接入采购所有权与快照契约"
 
 **Files:**
 - Create: `apps/api/src/services/supplier-ownership-cutover-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813143000_enforce_supplier_ownership_cutover.sql`
+- Create: `supabase/migrations/20260813193000_enforce_supplier_ownership_cutover.sql`
 
 - [ ] **Step 1: 写 RED 测试**
 
@@ -200,7 +200,7 @@ git commit -m "feat(api): 接入采购所有权与快照契约"
 
 ```bash
 cd apps/api && bun test src/services/supplier-ownership-cutover-migration-contract.test.ts
-cd ../.. && git add apps/api/src/services/supplier-ownership-cutover-migration-contract.test.ts supabase/migrations/20260813143000_enforce_supplier_ownership_cutover.sql
+cd ../.. && git add apps/api/src/services/supplier-ownership-cutover-migration-contract.test.ts supabase/migrations/20260813193000_enforce_supplier_ownership_cutover.sql
 git commit -m "feat(db): 启用供应商所有权切换门禁"
 ```
 

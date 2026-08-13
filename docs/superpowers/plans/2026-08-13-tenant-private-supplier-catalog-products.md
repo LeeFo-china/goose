@@ -16,8 +16,8 @@
 
 - `packages/domain/src/supplier-catalog.ts`：目录、规格、单位换算契约。
 - `packages/domain/src/supplier-product.ts`：商品所有权和结构化规格。
-- `supabase/migrations/20260813120000_create_tenant_private_catalog.sql`：私有分类、品牌、映射和规格定义。
-- `supabase/migrations/20260813130000_scope_supplier_products_and_prices.sql`：商品/SKU 所有权、换算和价格 tenant 约束。
+- `supabase/migrations/20260813170000_create_tenant_private_catalog.sql`：私有分类、品牌、映射和规格定义。
+- `supabase/migrations/20260813180000_scope_supplier_products_and_prices.sql`：商品/SKU 所有权、换算和价格 tenant 约束。
 - `apps/api/src/controllers/supplier-catalog/index.ts`：租户目录读写。
 - `apps/api/src/controllers/platform-supplier-products/index.ts`：平台商品维护。
 - `apps/api/src/services/supplier-products.ts`：租户私有商品编排。
@@ -69,7 +69,7 @@ git commit -m "feat(domain): 定义私有目录与商品契约"
 
 **Files:**
 - Create: `apps/api/src/services/tenant-supplier-catalog-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813120000_create_tenant_private_catalog.sql`
+- Create: `supabase/migrations/20260813170000_create_tenant_private_catalog.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -96,7 +96,7 @@ cd ../.. && supabase migration new create_tenant_private_catalog
 
 ```bash
 cd apps/api && bun test src/services/tenant-supplier-catalog-migration-contract.test.ts
-cd ../.. && git add apps/api/src/services/tenant-supplier-catalog-migration-contract.test.ts supabase/migrations/20260813120000_create_tenant_private_catalog.sql
+cd ../.. && git add apps/api/src/services/tenant-supplier-catalog-migration-contract.test.ts supabase/migrations/20260813170000_create_tenant_private_catalog.sql
 git commit -m "feat(db): 建立租户私有目录与规格"
 ```
 
@@ -159,7 +159,7 @@ git commit -m "feat(admin): 增加租户供应商目录管理"
 
 **Files:**
 - Create: `apps/api/src/services/supplier-product-ownership-migration-contract.test.ts`
-- Create: `supabase/migrations/20260813130000_scope_supplier_products_and_prices.sql`
+- Create: `supabase/migrations/20260813180000_scope_supplier_products_and_prices.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -181,7 +181,7 @@ git commit -m "feat(admin): 增加租户供应商目录管理"
 
 ```bash
 cd apps/api && bun test src/services/supplier-product-ownership-migration-contract.test.ts
-cd ../.. && git add apps/api/src/services/supplier-product-ownership-migration-contract.test.ts supabase/migrations/20260813130000_scope_supplier_products_and_prices.sql
+cd ../.. && git add apps/api/src/services/supplier-product-ownership-migration-contract.test.ts supabase/migrations/20260813180000_scope_supplier_products_and_prices.sql
 git commit -m "feat(db): 隔离供应商商品与采购价"
 ```
 
