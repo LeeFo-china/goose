@@ -39,6 +39,7 @@ type Props = {
   id?: string;
   value: string | null;
   onChange: (employeeId: string | null) => void;
+  onCandidateChange?: (candidate: PlatformServiceTrialAssigneeCandidate | null) => void;
   initialCandidate?: PlatformServiceTrialAssigneeCandidate | null;
   allowClear?: boolean;
   required?: boolean;
@@ -57,6 +58,7 @@ export function PlatformServiceTrialAssigneeCombobox({
   id,
   value,
   onChange,
+  onCandidateChange,
   initialCandidate = null,
   allowClear = false,
   required = false,
@@ -171,12 +173,14 @@ export function PlatformServiceTrialAssigneeCombobox({
     const employeeId = selectTrialAssigneeCandidate(candidate);
     if (!employeeId) return;
     setSelectedCandidate(candidate);
+    onCandidateChange?.(candidate);
     onChange(employeeId);
     handleOpenChange(false);
   }
 
   function clear() {
     setSelectedCandidate(null);
+    onCandidateChange?.(null);
     onChange(null);
     handleOpenChange(false);
   }

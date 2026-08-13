@@ -126,6 +126,8 @@ describe("平台技术服务试用管理页", () => {
       expect(filters).toContain(label);
     }
     expect(filters).toContain('name="trialPageSize"');
+    expect(filters).toContain('name="trialAssigneeEmployeeId"');
+    expect(filters).toContain("PlatformServiceTrialAssigneeCombobox");
   });
 
   test("表格支持空态、分页和键盘打开右侧详情", () => {

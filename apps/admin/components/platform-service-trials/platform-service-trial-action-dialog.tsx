@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog";
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -29,20 +28,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { runTrialMutationFlow } from "./platform-service-trial-action-execution";
+import {
+  buildPlatformServiceTrialActionBody,
+  describePlatformServiceTrialAssigneeChange,
+  type PlatformServiceTrialDialogKind,
+} from "./platform-service-trial-action-body";
+import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-assignee-combobox";
+import { createBoundTrialAssigneeCandidate } from "./platform-service-trial-assignee-options";
 import { createTrialIdempotencyIntent } from "./platform-service-trial-idempotency";
 import { PlatformServiceTrialApprovalFields } from "./platform-service-trial-approval-fields";
 import { trialCapabilityOptions } from "./platform-service-trial-rules";
 import type {
   PlatformServiceTrialAction,
+  PlatformServiceTrialAssigneeCandidate,
   PlatformServiceTrialCapability,
   PlatformServiceTrialDetailData,
   PlatformServiceTrialRecord,
   PlatformServiceTrialType,
 } from "./platform-service-trial-types";
 
-type TrialDialogKind = "approve" | "reject" | "extend" | "revoke" | "assign";
-
-const dialogMeta: Record<TrialDialogKind, {
+const dialogMeta: Record<PlatformServiceTrialDialogKind, {
   label: string;
   title: string;
   success: string;
@@ -69,7 +74,7 @@ export function PlatformServiceTrialActionDialog({
   action,
   onTrialUpdated,
 }: {
-  kind: TrialDialogKind;
+  kind: PlatformServiceTrialDialogKind;
   trial: PlatformServiceTrialRecord;
   action: PlatformServiceTrialAction;
   onTrialUpdated: (data: PlatformServiceTrialDetailData) => void;
@@ -79,9 +84,15 @@ export function PlatformServiceTrialActionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [reason, setReason] = useState("");
-  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState(
-    trial.assignee_employee_id || "",
+  const boundAssignee = trial.assignee
+    ? createBoundTrialAssigneeCandidate(trial.assignee)
+    : null;
+  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState<string | null>(
+    trial.assignee_employee_id,
   );
+  const [selectedAssignee, setSelectedAssignee] = useState<
+    PlatformServiceTrialAssigneeCandidate | null
+  >(boundAssignee);
   const [trialType, setTrialType] = useState<PlatformServiceTrialType>(trial.trial_type);
   const [startsAt, setStartsAt] = useState("");
   const [trialDays, setTrialDays] = useState("30");
@@ -109,6 +120,14 @@ export function PlatformServiceTrialActionDialog({
       setError("请至少选择一项试用范围");
       return;
     }
+    if (kind === "approve" && trialType === "guided" && !selectedAssignee?.selectable) {
+      setError("请选择有效的陪跑跟进人");
+      return;
+    }
+    if (kind === "approve" && assigneeEmployeeId && !selectedAssignee?.selectable) {
+      setError("请选择有效的平台跟进人或取消分配");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
@@ -117,7 +136,7 @@ export function PlatformServiceTrialActionDialog({
         mutate: async () => {
           await requestBackendJson(actionPath(trial.id, kind), {
             method: "POST",
-            body: JSON.stringify(buildActionBody({
+            body: JSON.stringify(buildPlatformServiceTrialActionBody({
               kind,
               trial,
               reason: normalizedReason,
@@ -157,7 +176,11 @@ export function PlatformServiceTrialActionDialog({
   }
 
   function handleOpenChange(nextOpen: boolean) {
-    if (nextOpen && !open) idempotencyIntent.beginNew();
+    if (nextOpen && !open) {
+      idempotencyIntent.beginNew();
+      setAssigneeEmployeeId(trial.assignee_employee_id);
+      setSelectedAssignee(boundAssignee);
+    }
     setOpen(nextOpen);
   }
 
@@ -197,6 +220,8 @@ export function PlatformServiceTrialActionDialog({
                 setGraceDays={setGraceDays}
                 assigneeEmployeeId={assigneeEmployeeId}
                 setAssigneeEmployeeId={setAssigneeEmployeeId}
+                assigneeCandidate={selectedAssignee}
+                setAssigneeCandidate={setSelectedAssignee}
                 scope={scope}
                 setScope={setScope}
                 scopeErrorId={scopeErrorId}
@@ -218,14 +243,19 @@ export function PlatformServiceTrialActionDialog({
             ) : null}
             {kind === "assign" ? (
               <Field>
-                <FieldLabel htmlFor={`trial-assignee-${trial.id}`}>跟进人员工 ID</FieldLabel>
-                <Input
+                <FieldLabel htmlFor={`trial-assignee-${trial.id}`}>平台跟进人</FieldLabel>
+                <PlatformServiceTrialAssigneeCombobox
                   id={`trial-assignee-${trial.id}`}
                   value={assigneeEmployeeId}
-                  onChange={(event) => setAssigneeEmployeeId(event.target.value)}
-                  placeholder="留空表示取消分配"
+                  onChange={setAssigneeEmployeeId}
+                  onCandidateChange={setSelectedAssignee}
+                  initialCandidate={boundAssignee}
+                  allowClear
                 />
-                <FieldDescription>填写平台人员 UUID，留空会取消当前分配。</FieldDescription>
+                <AssigneeChangeSummary
+                  currentCandidate={boundAssignee}
+                  nextCandidate={selectedAssignee}
+                />
               </Field>
             ) : null}
             {kind !== "assign" ? (
@@ -277,7 +307,10 @@ export function PlatformServiceTrialGrantDialog({
   const [startsAt, setStartsAt] = useState("");
   const [trialDays, setTrialDays] = useState("30");
   const [graceDays, setGraceDays] = useState("7");
-  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState("");
+  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState<string | null>(null);
+  const [selectedAssignee, setSelectedAssignee] = useState<
+    PlatformServiceTrialAssigneeCandidate | null
+  >(null);
   const [scope, setScope] = useState<PlatformServiceTrialCapability[]>(
     trialCapabilityOptions.map((option) => option.value),
   );
@@ -289,8 +322,8 @@ export function PlatformServiceTrialGrantDialog({
     const form = new FormData(event.currentTarget);
     const tenantId = String(form.get("tenant_id") || "").trim();
     const reason = String(form.get("reason") || "").trim();
-    const normalizedAssignee = assigneeEmployeeId.trim();
-    if (!tenantId || !reason || scope.length === 0 || trialType === "guided" && !normalizedAssignee) {
+    if (!tenantId || !reason || scope.length === 0
+      || trialType === "guided" && !selectedAssignee?.selectable) {
       setError("请完整填写租户、原因、范围和陪跑跟进人");
       return;
     }
@@ -306,7 +339,7 @@ export function PlatformServiceTrialGrantDialog({
           trial_days: Number(trialDays),
           grace_days: Number(graceDays),
           scope: { version: 1, capabilities: scope },
-          assignee_employee_id: normalizedAssignee || null,
+          assignee_employee_id: assigneeEmployeeId,
           reason,
           idempotency_key: idempotencyIntent.current(),
         }),
@@ -357,6 +390,8 @@ export function PlatformServiceTrialGrantDialog({
               setGraceDays={setGraceDays}
               assigneeEmployeeId={assigneeEmployeeId}
               setAssigneeEmployeeId={setAssigneeEmployeeId}
+              assigneeCandidate={selectedAssignee}
+              setAssigneeCandidate={setSelectedAssignee}
               scope={scope}
               setScope={setScope}
               scopeErrorId={error && scope.length === 0 ? errorId : undefined}
@@ -379,40 +414,31 @@ export function PlatformServiceTrialGrantDialog({
   );
 }
 
-function actionPath(trialId: string, kind: TrialDialogKind) {
+function actionPath(trialId: string, kind: PlatformServiceTrialDialogKind) {
   return `/platform/billing/service-trials/${trialId}/${kind === "approve" || kind === "reject" ? "review" : kind}`;
 }
 
-function buildActionBody(input: {
-  kind: TrialDialogKind;
-  trial: PlatformServiceTrialRecord;
-  reason: string;
-  assigneeEmployeeId: string;
-  trialType: PlatformServiceTrialType;
-  startsAt: string;
-  trialDays: string;
-  graceDays: string;
-  extensionDays: string;
-  scope: PlatformServiceTrialCapability[];
-  idempotencyKey: string;
+function AssigneeChangeSummary({
+  currentCandidate,
+  nextCandidate,
+}: {
+  currentCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  nextCandidate: PlatformServiceTrialAssigneeCandidate | null;
 }) {
-  const common = {
-    expected_version: input.trial.version,
-    idempotency_key: input.idempotencyKey,
-  };
-  if (input.kind === "assign") return { ...common, assignee_employee_id: input.assigneeEmployeeId.trim() || null };
-  if (input.kind === "extend") return { ...common, extension_days: Number(input.extensionDays), reason: input.reason };
-  if (input.kind === "revoke") return { ...common, reason: input.reason };
-  if (input.kind === "reject") return { ...common, decision: "rejected", reason: input.reason };
-  return {
-    ...common,
-    decision: "approved",
-    reason: input.reason,
-    trial_type: input.trialType,
-    starts_at: input.startsAt ? new Date(input.startsAt).toISOString() : undefined,
-    trial_days: Number(input.trialDays),
-    grace_days: Number(input.graceDays),
-    scope: { version: 1, capabilities: input.scope },
-    assignee_employee_id: input.assigneeEmployeeId.trim() || null,
-  };
+  const summary = describePlatformServiceTrialAssigneeChange(
+    currentCandidate,
+    nextCandidate,
+  );
+  return (
+    <dl className="grid gap-1 rounded-md bg-muted/50 px-3 py-2 text-xs">
+      <div className="flex min-w-0 justify-between gap-3">
+        <dt className="shrink-0 text-muted-foreground">当前负责人</dt>
+        <dd className="truncate text-right">{summary.current}</dd>
+      </div>
+      <div className="flex min-w-0 justify-between gap-3">
+        <dt className="shrink-0 text-muted-foreground">调整结果</dt>
+        <dd className="truncate text-right font-medium">{summary.next}</dd>
+      </div>
+    </dl>
+  );
 }

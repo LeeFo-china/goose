@@ -1,15 +1,21 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { FilterSelect } from "@/components/admin/filter-select";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
+import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-assignee-combobox";
+
 import {
   trialSourceOptions,
   trialStatusOptions,
   trialTypeOptions,
 } from "./platform-service-trial-rules";
+import type { PlatformServiceTrialAssigneeCandidate } from "./platform-service-trial-types";
 
 export type PlatformServiceTrialFilterValues = {
   keyword?: string;
@@ -26,10 +32,20 @@ export type PlatformServiceTrialFilterValues = {
 export function PlatformServiceTrialFilters({
   values,
   pageSize,
+  initialAssigneeCandidate,
 }: {
   values: PlatformServiceTrialFilterValues;
   pageSize: number;
+  initialAssigneeCandidate: PlatformServiceTrialAssigneeCandidate | null;
 }) {
+  const [assigneeEmployeeId, setAssigneeEmployeeId] = useState<string | null>(
+    values.assigneeEmployeeId ?? null,
+  );
+
+  useEffect(() => {
+    setAssigneeEmployeeId(values.assigneeEmployeeId ?? null);
+  }, [values.assigneeEmployeeId]);
+
   return (
     <form
       className="flex flex-col gap-2"
@@ -37,6 +53,11 @@ export function PlatformServiceTrialFilters({
     >
       <input type="hidden" name="tab" value="trials" />
       <input type="hidden" name="trialPageSize" value={pageSize} />
+      <input
+        type="hidden"
+        name="trialAssigneeEmployeeId"
+        value={assigneeEmployeeId ?? ""}
+      />
       <div className="flex flex-wrap items-end gap-2">
         <Field className="min-w-[240px] flex-1 gap-1">
           <FieldLabel htmlFor="trial-keyword" className="text-xs">
@@ -72,12 +93,14 @@ export function PlatformServiceTrialFilters({
           <FieldLabel htmlFor="trial-assignee" className="text-xs">
             跟进人
           </FieldLabel>
-          <Input
+          <PlatformServiceTrialAssigneeCombobox
             id="trial-assignee"
-            name="trialAssigneeEmployeeId"
-            defaultValue={values.assigneeEmployeeId}
-            placeholder="跟进人员工 ID"
-            className="h-9"
+            value={assigneeEmployeeId}
+            onChange={setAssigneeEmployeeId}
+            initialCandidate={initialAssigneeCandidate}
+            allowClear
+            placeholder="全部跟进人"
+            aria-label="按平台跟进人筛选"
           />
         </Field>
       </div>

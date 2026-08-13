@@ -199,6 +199,23 @@ export function createHistoricalTrialAssigneeCandidate(
   };
 }
 
+export function createBoundTrialAssigneeCandidate(
+  assignee: PlatformServiceTrialAssignee,
+): PlatformServiceTrialAssigneeCandidate {
+  if (assignee.status !== "active") {
+    return createHistoricalTrialAssigneeCandidate(assignee);
+  }
+  return {
+    id: assignee.id,
+    name: assignee.name,
+    phone_masked: assignee.phone,
+    status: "active",
+    roles: [],
+    selectable: true,
+    historical: false,
+  };
+}
+
 function normalizeKeyword(keyword: string | undefined): string {
   return keyword?.trim().replace(/\s+/g, " ") || "";
 }
