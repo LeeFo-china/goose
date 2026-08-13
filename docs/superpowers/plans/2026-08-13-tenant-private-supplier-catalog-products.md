@@ -278,7 +278,7 @@ cd ../admin && bun test components/tenant-supplier-catalog components/supplier-p
 
 - [ ] **Step 2: 验证数据库和查询计划**
 
-运行 `supabase db push --dry-run`、应用 migrations、重新生成类型、`supabase migration list`。对目录合并查询、supplier 商品分页、SKU 搜索和当前价格查询执行 `EXPLAIN ANALYZE`，确认使用 ownership/tenant/supplier 复合索引且无 N+1。
+运行 `supabase db push --local --dry-run`、应用本地 migrations、重新生成类型、`supabase migration list --local`。对目录合并查询、supplier 商品分页、SKU 搜索和当前价格查询执行 `EXPLAIN ANALYZE`，确认使用 ownership/tenant/supplier 复合索引且无 N+1；远端状态另行只读核对，不使用含糊的默认目标命令。
 
 - [ ] **Step 3: 检查工作树**
 

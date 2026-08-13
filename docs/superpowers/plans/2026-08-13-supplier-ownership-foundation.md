@@ -130,7 +130,7 @@ cd apps/api && bun test src/repositories/supplier-ownership.test.ts
 
 - [ ] **Step 3: 迁移并生成类型**
 
-先运行 `supabase db push --dry-run` 确认只有本阶段 migration，再应用到本地数据库并用仓库约定的 `supabase gen types typescript` 命令更新 `apps/api/src/types/database.ts`；不得手写生成字段。
+先运行 `supabase db push --local --dry-run` 确认只有本阶段 migration，再应用到本地数据库并用仓库约定的 `supabase gen types typescript --local` 命令更新 `apps/api/src/types/database.ts`；不得手写生成字段。
 
 - [ ] **Step 4: 实现集合接口**
 
@@ -235,8 +235,8 @@ cd apps/api && bun test src/repositories/supplier-ownership.test.ts src/services
 - [ ] **Step 2: 验证 migration 与性能**
 
 ```bash
-supabase db push --dry-run
-supabase migration list
+supabase db push --local --dry-run
+supabase migration list --local
 ```
 
 应用后核对 Local/Remote；对供应商和目录 ownership 过滤运行 `EXPLAIN ANALYZE`，确认使用新索引。若只能验证本地，PR 中明确远端未验证风险，禁止手工 SQL 修库。

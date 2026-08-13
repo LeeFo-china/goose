@@ -243,7 +243,7 @@ bun run admin:build
 
 - [ ] **Step 2: 验证数据库**
 
-按顺序运行 `supabase db push --dry-run`、在隔离空库完整应用所有 migration、在开发库应用、`supabase migration list`。核对 mapping 数、clone 数、issue open=0、所有 product/SKU ownership 非空、所有租户关系内部编码非空。
+按顺序运行 `supabase db push --local --dry-run`、在隔离空库完整应用所有 migration、经明确批准后在开发库应用、`supabase migration list --local`。核对 mapping 数、clone 数、issue open=0、所有 product/SKU ownership 非空、所有租户关系内部编码非空；远端状态另行只读核对，不使用含糊的默认目标命令。
 
 - [ ] **Step 3: 性能验证**
 
