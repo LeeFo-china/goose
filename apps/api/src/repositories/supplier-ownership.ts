@@ -10,7 +10,6 @@ const SUPPLIER_SELECT =
 const STANDARD_OWNERSHIP_SELECT =
   "id,ownership_scope,owner_tenant_id,status";
 
-type OwnershipScope = "platform" | "tenant" | null;
 type OwnershipClient = SupabaseClient<Database>;
 type SupplierOwnershipDatabaseRow = Pick<
   Database["public"]["Tables"]["suppliers"]["Row"],
@@ -24,13 +23,24 @@ type StandardOwnershipTable =
   | "supplier_products"
   | "catalog_categories"
   | "catalog_brands";
+type CatalogOwnershipTable = Exclude<
+  StandardOwnershipTable,
+  "supplier_products"
+>;
 
-export type SupplierOwnershipRow = {
+type OwnershipRowBase = {
   id: string;
-  ownership_scope: OwnershipScope;
-  owner_tenant_id: string | null;
   status: string;
 };
+
+export type SupplierOwnershipRow = OwnershipRowBase & (
+  | { ownership_scope: "platform"; owner_tenant_id: null }
+  | { ownership_scope: "tenant"; owner_tenant_id: string }
+);
+
+export type ProductOwnershipRow = SupplierOwnershipRow | (
+  OwnershipRowBase & { ownership_scope: null; owner_tenant_id: null }
+);
 
 export type CatalogOwnershipInput = {
   kind: "category" | "brand";
@@ -70,16 +80,18 @@ export class SupplierOwnershipRepository {
       })),
       uniqueIds,
       message,
+      false,
     );
   }
 
   async findProductOwnerships(
     ids: readonly string[],
-  ): Promise<Map<string, SupplierOwnershipRow>> {
+  ): Promise<Map<string, ProductOwnershipRow>> {
     return this.findStandardOwnerships(
       "supplier_products",
       ids,
       "查询供应商商品归属失败",
+      true,
     );
   }
 
@@ -93,14 +105,28 @@ export class SupplierOwnershipRepository {
       table,
       input.ids,
       "查询供应商目录归属失败",
+      false,
     );
   }
 
   private async findStandardOwnerships(
+    table: "supplier_products",
+    ids: readonly string[],
+    message: string,
+    allowLegacyNullOwnership: true,
+  ): Promise<Map<string, ProductOwnershipRow>>;
+  private async findStandardOwnerships(
+    table: CatalogOwnershipTable,
+    ids: readonly string[],
+    message: string,
+    allowLegacyNullOwnership: false,
+  ): Promise<Map<string, SupplierOwnershipRow>>;
+  private async findStandardOwnerships(
     table: StandardOwnershipTable,
     ids: readonly string[],
     message: string,
-  ): Promise<Map<string, SupplierOwnershipRow>> {
+    allowLegacyNullOwnership: boolean,
+  ): Promise<Map<string, ProductOwnershipRow>> {
     const uniqueIds = normalizeIds(ids);
     if (uniqueIds.length === 0) return new Map();
 
@@ -114,52 +140,97 @@ export class SupplierOwnershipRepository {
       (data ?? []) as StandardOwnershipDatabaseRow[],
       uniqueIds,
       message,
+      allowLegacyNullOwnership,
     );
   }
 }
 
 function normalizeIds(ids: readonly string[]): string[] {
-  const uniqueIds = [...new Set(ids)];
-  if (uniqueIds.length > MAX_OWNERSHIP_IDS) {
+  if (ids.length > MAX_OWNERSHIP_IDS) {
     throw Errors.badRequest("归属查询 ID 数量不能超过 100 个");
   }
-  return uniqueIds;
+  return [...new Set(ids)];
 }
 
 function toOwnershipMap(
   rows: readonly StandardOwnershipDatabaseRow[],
   requestedIds: readonly string[],
   message: string,
-): Map<string, SupplierOwnershipRow> {
+  allowLegacyNullOwnership: true,
+): Map<string, ProductOwnershipRow>;
+function toOwnershipMap(
+  rows: readonly StandardOwnershipDatabaseRow[],
+  requestedIds: readonly string[],
+  message: string,
+  allowLegacyNullOwnership: false,
+): Map<string, SupplierOwnershipRow>;
+function toOwnershipMap(
+  rows: readonly StandardOwnershipDatabaseRow[],
+  requestedIds: readonly string[],
+  message: string,
+  allowLegacyNullOwnership: boolean,
+): Map<string, ProductOwnershipRow>;
+function toOwnershipMap(
+  rows: readonly StandardOwnershipDatabaseRow[],
+  requestedIds: readonly string[],
+  message: string,
+  allowLegacyNullOwnership: boolean,
+): Map<string, ProductOwnershipRow> {
   const requestedIdSet = new Set(requestedIds);
-  const ownerships = new Map<string, SupplierOwnershipRow>();
+  const ownerships = new Map<string, ProductOwnershipRow>();
 
   for (const row of rows) {
     if (!requestedIdSet.has(row.id)) continue;
-    ownerships.set(row.id, {
-      id: row.id,
-      ownership_scope: parseOwnershipScope(
-        row.ownership_scope,
-        row.id,
-        message,
-      ),
-      owner_tenant_id: row.owner_tenant_id,
-      status: row.status,
-    });
+    ownerships.set(
+      row.id,
+      parseOwnershipRow(row, message, allowLegacyNullOwnership),
+    );
   }
 
   return ownerships;
 }
 
-function parseOwnershipScope(
-  scope: string | null,
-  id: string,
+function parseOwnershipRow(
+  row: StandardOwnershipDatabaseRow,
   message: string,
-): OwnershipScope {
-  if (scope === null || scope === "platform" || scope === "tenant") {
-    return scope;
+  allowLegacyNullOwnership: boolean,
+): ProductOwnershipRow {
+  const base = { id: row.id, status: row.status };
+
+  if (row.ownership_scope === "platform" && row.owner_tenant_id === null) {
+    return {
+      ...base,
+      ownership_scope: "platform",
+      owner_tenant_id: null,
+    };
   }
-  throw Errors.dbError(message, { id, ownership_scope: scope });
+  if (
+    row.ownership_scope === "tenant" &&
+    typeof row.owner_tenant_id === "string" &&
+    row.owner_tenant_id.length > 0
+  ) {
+    return {
+      ...base,
+      ownership_scope: "tenant",
+      owner_tenant_id: row.owner_tenant_id,
+    };
+  }
+  if (
+    allowLegacyNullOwnership &&
+    row.ownership_scope === null &&
+    row.owner_tenant_id === null
+  ) {
+    return {
+      ...base,
+      ownership_scope: null,
+      owner_tenant_id: null,
+    };
+  }
+  throw Errors.dbError(message, {
+    id: row.id,
+    ownership_scope: row.ownership_scope,
+    owner_tenant_id: row.owner_tenant_id,
+  });
 }
 
 const supplierOwnershipRepository = new SupplierOwnershipRepository();
@@ -172,7 +243,7 @@ export function findSupplierOwnerships(
 
 export function findProductOwnerships(
   ids: readonly string[],
-): Promise<Map<string, SupplierOwnershipRow>> {
+): Promise<Map<string, ProductOwnershipRow>> {
   return supplierOwnershipRepository.findProductOwnerships(ids);
 }
 

@@ -228,11 +228,99 @@ describe("SupplierOwnershipRepository", () => {
       .toEqual(new Map([[PRODUCT_ID, row]]));
   });
 
+  test.each([
+    {
+      name: "platform ownership with a tenant owner",
+      ownershipScope: "platform",
+      ownerTenantId: TENANT_ID,
+    },
+    {
+      name: "tenant ownership without a tenant owner",
+      ownershipScope: "tenant",
+      ownerTenantId: null,
+    },
+    {
+      name: "null ownership scope with a tenant owner",
+      ownershipScope: null,
+      ownerTenantId: TENANT_ID,
+    },
+  ])("rejects $name", async ({ ownershipScope, ownerTenantId }) => {
+    const { repository } = await createRepository(() => ({
+      body: [{
+        id: PRODUCT_ID,
+        ownership_scope: ownershipScope,
+        owner_tenant_id: ownerTenantId,
+        status: "active",
+      }],
+    }));
+
+    await expect(repository.findProductOwnerships([PRODUCT_ID]))
+      .rejects.toMatchObject({
+        statusCode: 500,
+        code: "DB_ERROR",
+        message: "查询供应商商品归属失败",
+      });
+  });
+
+  test.each([
+    {
+      name: "supplier",
+      id: SUPPLIER_ID,
+      find: async (repository: Awaited<ReturnType<typeof createRepository>>["repository"]) =>
+        repository.findSupplierOwnerships([SUPPLIER_ID]),
+      row: {
+        id: SUPPLIER_ID,
+        ownership_scope: null,
+        owner_tenant_id: null,
+        operational_status: "active",
+      },
+    },
+    {
+      name: "catalog",
+      id: CATEGORY_ID,
+      find: async (repository: Awaited<ReturnType<typeof createRepository>>["repository"]) =>
+        repository.findCatalogOwnerships({
+          kind: "category",
+          ids: [CATEGORY_ID],
+        }),
+      row: {
+        id: CATEGORY_ID,
+        ownership_scope: null,
+        owner_tenant_id: null,
+        status: "active",
+      },
+    },
+  ])("rejects legacy null ownership for strict $name rows", async ({
+    find,
+    row,
+  }) => {
+    const setup = await createRepository(() => ({ body: [row] }));
+
+    await expect(find(setup.repository)).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+    });
+  });
+
   test("rejects more than one hundred unique ids before accessing Supabase", async () => {
     const ids = Array.from(
       { length: 101 },
       (_, index) => `00000000-0000-4000-8000-${index.toString().padStart(12, "0")}`,
     );
+    const { repository, requests } = await createRepository(() => {
+      throw new Error("不应访问 Supabase");
+    });
+
+    await expect(repository.findProductOwnerships(ids)).rejects.toMatchObject({
+      statusCode: 400,
+      code: "VALIDATION_ERROR",
+      message: "归属查询 ID 数量不能超过 100 个",
+    });
+    expect(requests).toHaveLength(0);
+  });
+
+  test("rejects more than one hundred repeated ids before accessing Supabase", async () => {
+    const ids = Array.from({ length: 101 }, () => PRODUCT_ID);
     const { repository, requests } = await createRepository(() => {
       throw new Error("不应访问 Supabase");
     });
