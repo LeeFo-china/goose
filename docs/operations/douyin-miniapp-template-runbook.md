@@ -169,6 +169,12 @@ HAVING count(*) > 1;
 结果必须为空。若存在记录，migration 会以
 `DOUYIN_UNFINISHED_RELEASE_DUPLICATES_EXIST` 失败关闭；不得手工修改数据库，必须核对抖音版本证据后提交单独评审的数据修复 migration。
 
+开发库安装 `82061c96-29ac-4426-baff-5efc1061fbc8` 的历史 `0.1.1`、`0.1.2`
+体验版已由 `0.1.3` 替代，由
+`20260813190000_reconcile_dev_douyin_testing_releases.sql` 在严格匹配安装、AppID、
+release ID、模板版本，并确认二维码、抖音日志存在且操作租约为空后收敛。目标安装不存在时该 migration
+不修改数据；任一证据变化时失败关闭，不得把这条一次性规则扩展到其他安装。
+
 ### 6.2 租户发布 API
 
 租户 Admin 在 `/douyin-miniapp/workspace` 完成自己已授权小程序的发布。客户端不得提交租户 ID、AppID、安装 ID 或模板 ID；服务端从登录租户和当前确认模板解析这些标识。`:releaseId` 是当前租户拥有的发布记录 UUID。
