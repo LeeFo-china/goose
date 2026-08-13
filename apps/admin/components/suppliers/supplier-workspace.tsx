@@ -178,6 +178,8 @@ export function SupplierWorkspace({
   }
 
   const totalPages = Math.max(1, relationships.pagination.totalPages || 1);
+  const canCreatePrivate = canManagePrivate &&
+    settings.private_supplier_writes_enabled;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
@@ -187,12 +189,11 @@ export function SupplierWorkspace({
             核对合作状态、准入阻断、结算条款、合同健康和负责人。
           </p>
         </div>
-        {canManage ? (
+        {canManage || canCreatePrivate ? (
           <AddSupplierDialog
             disabled={listLoading}
-            privateCreationEnabled={
-              canManagePrivate && settings.private_supplier_writes_enabled
-            }
+            sharedCreationEnabled={canManage}
+            privateCreationEnabled={canCreatePrivate}
             onCreated={loadRelationships}
           />
         ) : null}

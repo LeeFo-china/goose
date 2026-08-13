@@ -55,10 +55,12 @@ const emptyPrivateForm: PrivateForm = {
 
 export function AddSupplierDialog({
   disabled,
+  sharedCreationEnabled,
   privateCreationEnabled,
   onCreated,
 }: {
   disabled?: boolean;
+  sharedCreationEnabled: boolean;
   privateCreationEnabled: boolean;
   onCreated: () => void;
 }) {
@@ -218,9 +220,13 @@ export function AddSupplierDialog({
         </DialogHeader>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <ModeButton active={mode === "shared"} onClick={() => selectMode("shared")}
+          <ModeButton active={mode === "shared"}
+            disabled={!sharedCreationEnabled}
+            onClick={() => selectMode("shared")}
             icon={<Building2 className="size-5" />} title="添加平台共享供应商"
-            description="从平台已准入目录建立合作关系" />
+            description={sharedCreationEnabled
+              ? "从平台已准入目录建立合作关系"
+              : "需要供应商合作关系管理权限"} />
           <ModeButton active={mode === "private"}
             disabled={!privateCreationEnabled}
             onClick={() => selectMode("private")}

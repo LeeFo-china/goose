@@ -65,6 +65,9 @@ describe("租户合作供应商工作台", () => {
     expect(source).toContain("自动生成");
     expect(source).toContain("allocation_id");
     expect(source).toContain("privateCreationEnabled");
+    expect(source).toContain("sharedCreationEnabled");
+    expect(readSource("./supplier-workspace.tsx"))
+      .toContain("canManage || canCreatePrivate");
     expect(readSource("../../app/(console)/suppliers/page.tsx"))
       .toContain('permissions.has("supplier.master.manage")');
     expect(source).not.toContain("成本价");
