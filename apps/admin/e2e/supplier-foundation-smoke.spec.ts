@@ -226,3 +226,89 @@ test.describe("供应商 Phase 0 租户工作台", () => {
     await expect(dialog.getByText(/成本价|展示价|结算价/)).toHaveCount(0);
   });
 });
+
+test.describe("租户私有供应商确定性交互", () => {
+  const mockBackend = "http://127.0.0.1:3994";
+
+  test.beforeEach(async ({ page, request }) => {
+    expect((await request.post(`${mockBackend}/__test/reset`)).ok()).toBe(true);
+    await loginAsTenantAdmin(page);
+    await page.goto("/suppliers", { waitUntil: "networkidle" });
+  });
+
+  test("列表标识平台共享、租户私有及内部编码", async ({ page }) => {
+    await expect(page.getByText("平台共享", { exact: true })).toBeVisible();
+    await expect(page.getByText("租户私有", { exact: true })).toBeVisible();
+    await expect(page.getByText("PLATFORM-INTERNAL", { exact: true })).toBeVisible();
+    await expect(page.getByText("PRIVATE-INTERNAL", { exact: true })).toBeVisible();
+  });
+
+  test("点击生成后改手工值，并以不同幂等键创建私有供应商", async ({ page, request }) => {
+    await page.getByRole("button", { name: "添加合作供应商" }).click();
+    const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
+    await dialog.getByRole("button", { name: /新建私有供应商/ }).click();
+
+    const codeInput = dialog.getByLabel("供应商内部编码");
+    await expect(codeInput).toHaveValue("");
+    await dialog.getByRole("button", { name: "自动生成" }).click();
+    await expect(codeInput).toHaveValue("SUP-000001");
+    await expect(dialog.getByText("已自动生成；如手工修改，将改用手工编码提交。"))
+      .toBeVisible();
+    await codeInput.fill("private-manual-01");
+    await expect(codeInput).toHaveValue("PRIVATE-MANUAL-01");
+    await dialog.getByLabel("供应商名称").fill("E2E 私有供应商");
+    await dialog.getByLabel("法定名称").fill("E2E 私有供应商有限公司");
+    await dialog.getByRole("button", { name: "创建私有供应商" }).click();
+    await expect(dialog).toBeHidden();
+
+    const state = await (await request.get(`${mockBackend}/__test/state`)).json();
+    expect(state.mutations).toHaveLength(2);
+    expect(state.mutations[0].path).toBe("/suppliers/code-allocations");
+    expect(state.mutations[1].path).toBe("/suppliers/private");
+    expect(state.mutations[0].idempotencyKey)
+      .not.toBe(state.mutations[1].idempotencyKey);
+    expect(state.mutations[1].payload).toMatchObject({
+      code_source: "manual",
+      internal_supplier_code: "PRIVATE-MANUAL-01",
+    });
+    expect(state.mutations[1].payload).not.toHaveProperty("allocation_id");
+  });
+
+  test("重复手工编码错误落在编码字段且保留表单", async ({ page }) => {
+    await page.getByRole("button", { name: "添加合作供应商" }).click();
+    const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
+    await dialog.getByRole("button", { name: /新建私有供应商/ }).click();
+    await dialog.getByLabel("供应商内部编码").fill("DUPLICATE");
+    await dialog.getByLabel("供应商名称").fill("冲突供应商");
+    await dialog.getByLabel("法定名称").fill("冲突供应商有限公司");
+    await dialog.getByRole("button", { name: "创建私有供应商" }).click();
+
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByText("供应商内部编码已存在")).toBeVisible();
+    await expect(dialog.getByLabel("供应商名称")).toHaveValue("冲突供应商");
+    await expect(dialog.getByLabel("供应商内部编码")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
+  test("平台共享入口也要求显式内部编码", async ({ page, request }) => {
+    await page.getByRole("button", { name: "添加合作供应商" }).click();
+    const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
+    await dialog.getByRole("button", { name: /添加平台共享供应商/ }).click();
+    await expect(dialog.getByLabel("供应商内部编码")).toBeVisible();
+    await dialog.getByLabel("供应商内部编码").fill("PLATFORM-MANUAL-01");
+    await dialog.getByRole("button", { name: "建立合作", exact: true }).click();
+    await expect(dialog).toBeHidden();
+
+    const state = await (await request.get(`${mockBackend}/__test/state`)).json();
+    expect(state.mutations).toHaveLength(1);
+    expect(state.mutations[0]).toMatchObject({
+      path: "/suppliers",
+      payload: {
+        code_source: "manual",
+        internal_supplier_code: "PLATFORM-MANUAL-01",
+      },
+    });
+  });
+});

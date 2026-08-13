@@ -240,6 +240,7 @@ git commit -m "feat(admin): 支持新建租户私有供应商"
 **Files:**
 - Modify: `apps/admin/e2e/supplier-foundation-smoke.spec.ts`
 - Create: `apps/admin/playwright.supplier-foundation.config.ts`
+- Create: `apps/admin/e2e/supplier-foundation-mock-backend.mjs`
 
 - [ ] **Step 1: 增加 E2E 场景**
 
