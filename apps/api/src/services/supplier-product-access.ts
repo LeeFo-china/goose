@@ -7,9 +7,9 @@ import {
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import {
-  resolveSupplierOwnershipAccess,
+  resolveSupplierRelationshipAccess,
   type SupplierAccessDecision,
-  type SupplierOwnershipAccessInput,
+  type SupplierRelationshipAccessInput,
 } from "@/services/supplier-ownership-access";
 
 type AccessPolicyPort = Pick<
@@ -26,8 +26,8 @@ type RelationshipRepositoryPort = {
     id: string;
   }): Promise<TenantSupplierDetail | null>;
 };
-type OwnershipAccessPort = (
-  input: SupplierOwnershipAccessInput,
+type RelationshipAccessPort = (
+  input: SupplierRelationshipAccessInput,
 ) => SupplierAccessDecision;
 
 export type SupplierProxyScope = {
@@ -41,19 +41,19 @@ export type SupplierProxyScope = {
 export type SupplierProductAccessDependencies = {
   accessPolicy?: AccessPolicyPort;
   repository?: RelationshipRepositoryPort;
-  ownershipAccess?: OwnershipAccessPort;
+  relationshipAccess?: RelationshipAccessPort;
 };
 
 export class SupplierProductAccessService {
   private readonly accessPolicy: AccessPolicyPort;
   private readonly repository: RelationshipRepositoryPort;
-  private readonly ownershipAccess: OwnershipAccessPort;
+  private readonly relationshipAccess: RelationshipAccessPort;
 
   constructor(dependencies: SupplierProductAccessDependencies = {}) {
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.repository = dependencies.repository ?? tenantSuppliersRepository;
-    this.ownershipAccess = dependencies.ownershipAccess ??
-      resolveSupplierOwnershipAccess;
+    this.relationshipAccess = dependencies.relationshipAccess ??
+      resolveSupplierRelationshipAccess;
   }
 
   requireProductRead(
@@ -138,14 +138,16 @@ export class SupplierProductAccessService {
       );
     }
 
+    if (relationship.tenant_id !== tenantId) {
+      throw Errors.business(
+        404,
+        "租户供应商合作关系不存在",
+        "TENANT_SUPPLIER_NOT_FOUND",
+      );
+    }
+
     const operation = write ? "write" : "read";
-    const decision = this.ownershipAccess({
-      actor: { kind: "tenant", tenantId },
-      resourceKind: "product",
-      ownership: {
-        ownershipScope: "tenant",
-        ownerTenantId: relationship.tenant_id,
-      },
+    const decision = this.relationshipAccess({
       relationshipStatus: relationship.relationship_status,
       operation,
       permissionGranted: true,

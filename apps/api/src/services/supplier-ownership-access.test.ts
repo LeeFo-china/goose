@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  resolveSupplierRelationshipAccess,
   resolveSupplierOwnershipAccess,
+  type SupplierRelationshipAccessInput,
   type SupplierOwnershipAccessInput,
 } from "./supplier-ownership-access";
 
@@ -218,6 +220,78 @@ describe("resolveSupplierOwnershipAccess", () => {
 
   test("rejects access when the required permission is missing", () => {
     expect(decide({ permissionGranted: false })).toEqual({
+      visible: false,
+      writable: false,
+      historicalOnly: false,
+      reason: "permission_denied",
+    });
+  });
+});
+
+function decideRelationship(
+  overrides: Partial<SupplierRelationshipAccessInput> = {},
+) {
+  return resolveSupplierRelationshipAccess({
+    relationshipStatus: "active",
+    operation: "read",
+    permissionGranted: true,
+    ...overrides,
+  });
+}
+
+describe("resolveSupplierRelationshipAccess", () => {
+  test("allows active relationship reads and writes", () => {
+    expect(decideRelationship()).toEqual({
+      visible: true,
+      writable: false,
+      historicalOnly: false,
+      reason: "allowed",
+    });
+    expect(decideRelationship({ operation: "write" })).toEqual({
+      visible: true,
+      writable: true,
+      historicalOnly: false,
+      reason: "allowed",
+    });
+  });
+
+  test.each([
+    "evaluating",
+    "suspended",
+    "terminated",
+    "blacklisted",
+  ] as const)(
+    "keeps a %s relationship historically readable but not writable",
+    (relationshipStatus) => {
+      expect(decideRelationship({ relationshipStatus })).toEqual({
+        visible: true,
+        writable: false,
+        historicalOnly: true,
+        reason: "inactive_relationship",
+      });
+      expect(decideRelationship({
+        relationshipStatus,
+        operation: "write",
+      })).toEqual({
+        visible: true,
+        writable: false,
+        historicalOnly: true,
+        reason: "inactive_relationship",
+      });
+    },
+  );
+
+  test("hides resources when no relationship exists", () => {
+    expect(decideRelationship({ relationshipStatus: null })).toEqual({
+      visible: false,
+      writable: false,
+      historicalOnly: false,
+      reason: "inactive_relationship",
+    });
+  });
+
+  test("rejects access when the required permission is missing", () => {
+    expect(decideRelationship({ permissionGranted: false })).toEqual({
       visible: false,
       writable: false,
       historicalOnly: false,

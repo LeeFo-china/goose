@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
-import { resolveSupplierOwnershipAccess } from "./supplier-ownership-access";
+import { resolveSupplierRelationshipAccess } from "./supplier-ownership-access";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -59,7 +59,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       })),
       findRelationship: mock(async () => relationship),
     },
-    ownershipAccess: mock(resolveSupplierOwnershipAccess),
+    relationshipAccess: mock(resolveSupplierRelationshipAccess),
     ...overrides,
   };
 }
@@ -110,13 +110,7 @@ describe("SupplierProductAccessService", () => {
       authUserId: USER_ID,
       employeeId: EMPLOYEE_ID,
     });
-    expect(deps.ownershipAccess).toHaveBeenCalledWith({
-      actor: { kind: "tenant", tenantId: TENANT_ID },
-      resourceKind: "product",
-      ownership: {
-        ownershipScope: "tenant",
-        ownerTenantId: TENANT_ID,
-      },
+    expect(deps.relationshipAccess).toHaveBeenCalledWith({
       relationshipStatus: "active",
       operation: "write",
       permissionGranted: true,
@@ -180,7 +174,7 @@ describe("SupplierProductAccessService", () => {
             relationship_status: relationshipStatus,
           })),
         },
-        ownershipAccess: mock(() => ({
+        relationshipAccess: mock(() => ({
           visible: true,
           writable: false,
           historicalOnly: true,
@@ -196,16 +190,17 @@ describe("SupplierProductAccessService", () => {
           auth("supplier.product.view"),
           TENANT_SUPPLIER_ID,
         )).resolves.toMatchObject({ supplierId: SUPPLIER_ID });
-      expect(deps.ownershipAccess).toHaveBeenCalledWith(expect.objectContaining({
+      expect(deps.relationshipAccess).toHaveBeenCalledWith({
         relationshipStatus,
         operation: "read",
-      }));
+        permissionGranted: true,
+      });
     },
   );
 
   test("maps pure-policy write denial to the existing eligibility error", async () => {
     const deps = dependencies({
-      ownershipAccess: mock(() => ({
+      relationshipAccess: mock(() => ({
         visible: true,
         writable: false,
         historicalOnly: true,

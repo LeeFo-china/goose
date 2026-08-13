@@ -30,6 +30,12 @@ export type SupplierOwnershipAccessInput = {
   permissionGranted: boolean;
 };
 
+export type SupplierRelationshipAccessInput = {
+  relationshipStatus: TenantSupplierRelationshipStatus | null;
+  operation: "read" | "write";
+  permissionGranted: boolean;
+};
+
 const denied = (
   reason: Exclude<SupplierAccessDecisionReason, "allowed">,
   options: { visible?: boolean; historicalOnly?: boolean } = {},
@@ -72,6 +78,28 @@ export function resolveSupplierOwnershipAccess(
     input.ownership.ownershipScope === "platform"
   ) {
     return denied("platform_read_only", { visible: true });
+  }
+
+  return {
+    visible: true,
+    writable: input.operation === "write",
+    historicalOnly: false,
+    reason: "allowed",
+  };
+}
+
+export function resolveSupplierRelationshipAccess(
+  input: SupplierRelationshipAccessInput,
+): SupplierAccessDecision {
+  if (!input.permissionGranted) return denied("permission_denied");
+  if (input.relationshipStatus === null) {
+    return denied("inactive_relationship");
+  }
+  if (input.relationshipStatus !== "active") {
+    return denied("inactive_relationship", {
+      visible: true,
+      historicalOnly: true,
+    });
   }
 
   return {
