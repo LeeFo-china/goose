@@ -17,6 +17,7 @@
 - `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`：内部编码登记、原子创建、历史关系补码和审计。
 - `supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql`：已应用环境的租户级分配幂等与私有供应商编码不可变收口。
 - `supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql`：阻断创建键后置分配，并在不可变保护前安全规范化旧私有编码。
+- `supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql`：为创建键反向冲突查询增加最小部分索引。
 - `apps/api/src/schema/tenant-suppliers.ts`：分配、共享关系、私有创建和主档更新 schema。
 - `apps/api/src/repositories/tenant-suppliers.ts`：分页查询和 RPC gateway。
 - `apps/api/src/services/tenant-suppliers.ts`：权限、所有权和命令编排。
@@ -71,6 +72,7 @@ git commit -m "feat(api): 定义私有供应商接口契约"
 - Create: `supabase/migrations/20260813160000_create_tenant_private_suppliers.sql`
 - Create: `supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql`
 - Create: `supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql`
+- Create: `supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql`
 
 - [ ] **Step 1: 写 migration RED 测试**
 
@@ -89,6 +91,8 @@ cd ../.. && supabase migration new create_tenant_private_suppliers
 
 同租户同幂等键若已被任一供应商创建命令使用，后续分配必须在写 registry 前稳定返回 `SUPPLIER_CODE_ALLOCATION_CONFLICT`；创建与分配共用租户键锁。分配本身仍允许不同员工重放并返回同一 allocation。
 
+反向冲突查询使用 `(tenant_id,idempotency_key)` 部分索引，只纳入 `create_tenant_private_supplier`、`create_tenant_shared_supplier_relationship` 和兼容命令 `create_tenant_supplier`；`command` 仅作为部分谓词，不重复进入索引键。
+
 - [ ] **Step 4: 实现私有创建与共享关系创建**
 
 `create_tenant_private_supplier` 在一个事务中验证 code registry、插入 `suppliers(ownership_scope='tenant',owner_tenant_id=tenant_id,code=normalized_code)`、联系人/地址、`tenant_suppliers(status='evaluating',internal_supplier_code=normalized_code)`、消费 allocation 或登记 manual code、写审计事件。共享关系命令只接受 platform supplier，拒绝其他租户私有 supplier。数据库 trigger 禁止修改已保存的 `internal_supplier_code`。
@@ -99,14 +103,14 @@ cd ../.. && supabase migration new create_tenant_private_suppliers
 
 - [ ] **Step 5: 补齐既有合作关系编码**
 
-在同一 migration 中为 `tenant_suppliers.internal_supplier_code` 先加 nullable 列；按租户、稳定 `created_at,id` 顺序分配 migration code 并登记 `source='migration',status='used'`；验证无空值和重复后设 NOT NULL、加 `(tenant_id,internal_supplier_code)` 唯一约束。不得改写 `suppliers.code`。
+在同一 migration 中为 `tenant_suppliers.internal_supplier_code` 先加 nullable 列；按租户、稳定 `created_at,id` 顺序分配 migration code 并登记 `source='migration',status='used'`；验证无空值和重复后设 NOT NULL、加 `(tenant_id,internal_supplier_code)` 唯一约束。平台 `suppliers.code` 不改写；租户私有编码仅允许在不可变门禁前安全规范化为与关系编码精确一致的值。
 
 - [ ] **Step 6: 运行 GREEN 并提交**
 
 ```bash
 cd apps/api && bun test src/services/tenant-private-supplier-migration-contract.test.ts
 cd ../.. && git diff --check
-git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813160000_create_tenant_private_suppliers.sql supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql
+git add apps/api/src/services/tenant-private-supplier-migration-contract.test.ts supabase/migrations/20260813160000_create_tenant_private_suppliers.sql supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql supabase/migrations/20260813160200_close_tenant_supplier_code_invariants.sql supabase/migrations/20260813160300_index_supplier_allocation_conflict_events.sql
 git commit -m "feat(db): 建立租户私有供应商命令"
 ```
 
