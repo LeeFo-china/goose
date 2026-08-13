@@ -9,6 +9,10 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商当前状态不允许该操作",
   },
+  SUPPLIER_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: "供应商版本已变化，请刷新后重试",
+  },
   SUPPLIER_IDEMPOTENCY_CONFLICT: {
     statusCode: 409,
     message: "幂等键已用于其他供应商操作",
@@ -25,9 +29,17 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商归属与当前操作不匹配",
   },
+  SUPPLIER_IDENTITY_CONFLICT: {
+    statusCode: 409,
+    message: "供应商身份信息已存在",
+  },
   TENANT_SUPPLIER_STATE_CONFLICT: {
     statusCode: 409,
     message: "租户供应商当前状态不允许该操作",
+  },
+  TENANT_SUPPLIER_NOT_FOUND: {
+    statusCode: 404,
+    message: "租户供应商合作关系不存在",
   },
   SUPPLIER_PRODUCT_NOT_FOUND: {
     statusCode: 404,

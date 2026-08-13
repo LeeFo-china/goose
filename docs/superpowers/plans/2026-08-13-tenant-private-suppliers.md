@@ -170,6 +170,7 @@ git commit -m "feat(api): 接入私有供应商数据库命令"
 - Modify: `apps/api/src/errors/error-codes.ts`
 - Modify: `apps/api/src/types/database.ts`
 - Create: `supabase/migrations/20260813160500_create_tenant_private_supplier_master_update.sql`
+- Create: `supabase/migrations/20260813160600_audit_tenant_private_supplier_master_updates.sql`
 
 - [ ] **Step 1: 写 RED 测试**
 
@@ -178,6 +179,7 @@ git commit -m "feat(api): 接入私有供应商数据库命令"
 - [ ] **Step 2: 实现 service**
 
 service 只生成 command DTO、调用 ownership access 与 repository；不直接 `.from()`。分配接口不因表单字段为空自动调用；私有创建必须由 schema 明确给出 `generated/manual`。私有主档更新通过单个 RPC 在同一事务中锁定租户关系和 supplier、复核归属与版本后更新，避免 service 预读与写入之间的竞态窗口。
+该 RPC 同事务写入 `supplier_command_events`，保留操作者、更新前后主档快照与结果版本；PATCH 不新增客户端幂等要求，数据库为审计事件生成独立关联键。
 
 - [ ] **Step 3: 运行 GREEN 并提交**
 

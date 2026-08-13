@@ -6,6 +6,10 @@ const migrationPath = new URL(
   import.meta.url,
 );
 const sql = readFileSync(migrationPath, "utf8");
+const auditMigrationPath = new URL(
+  "../../../../supabase/migrations/20260813160600_audit_tenant_private_supplier_master_updates.sql",
+  import.meta.url,
+);
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -42,5 +46,20 @@ describe("tenant private supplier master update migration contract", () => {
     expect(sql).toMatch(
       /GRANT EXECUTE ON FUNCTION public\.update_tenant_private_supplier_master\([\s\S]+?TO service_role;/,
     );
+  });
+
+  test("records actor and before-after snapshots in a forward audit migration", () => {
+    const auditSql = readFileSync(auditMigrationPath, "utf8");
+    const command = compact(auditSql);
+
+    expect(auditSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(command).toContain("CREATE OR REPLACE FUNCTION public.update_tenant_private_supplier_master");
+    expect(command).toContain("v_from_state := jsonb_build_object");
+    expect(command).toContain("INSERT INTO public.supplier_command_events");
+    expect(command).toContain("'update_tenant_private_supplier_master'");
+    expect(command).toContain("p_actor_user_id");
+    expect(command).toContain("p_actor_employee_id");
+    expect(command).toContain("v_from_state");
+    expect(command).toContain("v_to_state");
   });
 });

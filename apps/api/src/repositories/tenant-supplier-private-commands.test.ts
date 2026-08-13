@@ -250,4 +250,26 @@ describe("TenantSuppliersRepository private supplier commands", () => {
     });
     expect(requests).toHaveLength(1);
   });
+
+  test.each([
+    ["version_conflict", "SUPPLIER_VERSION_CONFLICT", 409],
+    ["tenant_supplier_not_found", "TENANT_SUPPLIER_NOT_FOUND", 404],
+  ])("maps private master %s envelopes to stable business errors", async (
+    status,
+    errorCode,
+    statusCode,
+  ) => {
+    const { repository } = await createRepository(() => ({
+      body: { status, error_code: errorCode, version: 2 },
+    }));
+
+    await expect(repository.updatePrivateSupplierMaster({
+      tenant_id: TENANT_ID,
+      tenant_supplier_id: relationship.id,
+      expected_version: 1,
+      name: "并发更新",
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+    })).rejects.toMatchObject({ code: errorCode, statusCode });
+  });
 });
