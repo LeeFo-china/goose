@@ -4,6 +4,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildPlatformServiceTrialActionBody,
   describePlatformServiceTrialAssigneeChange,
+  validatePlatformServiceTrialAssigneeSelection,
 } from "./platform-service-trial-action-body";
 import { createBoundTrialAssigneeCandidate } from "./platform-service-trial-assignee-options";
 import { buildTrialAssigneeFilterCandidatePath } from "./platform-service-trial-page-state";
@@ -63,9 +64,9 @@ describe("platform service trial assignee integration", () => {
       phone: "138****8000",
       status: "active",
     });
-    expect(current).toMatchObject({ selectable: true, historical: false });
+    expect(current).toMatchObject({ selectable: false, historical: true });
     expect(describePlatformServiceTrialAssigneeChange(current, null)).toEqual({
-      current: "王运营 · 138****8000",
+      current: "王运营 · 138****8000 · 历史负责人（历史记录）",
       next: "将取消当前分配",
     });
   });
@@ -135,5 +136,52 @@ describe("platform service trial assignee integration", () => {
       .toBe("李顾问 · 139****9000 · 历史负责人（已停用）");
     expect(describePlatformServiceTrialAssigneeChange(historical, historical).current)
       .not.toContain(ACTIVE_ASSIGNEE_ID);
+  });
+
+  test("blocks unchanged bound assignees until the candidate endpoint confirms eligibility", () => {
+    const suspended = createBoundTrialAssigneeCandidate({
+      id: ACTIVE_ASSIGNEE_ID,
+      name: "李顾问",
+      phone: "139****9000",
+      status: "suspended",
+    });
+    const activeWithoutRoleFacts = createBoundTrialAssigneeCandidate({
+      id: ACTIVE_ASSIGNEE_ID,
+      name: "王运营",
+      phone: "138****8000",
+      status: "active",
+    });
+    const confirmed = { ...activeWithoutRoleFacts, selectable: true, historical: false };
+
+    expect(validatePlatformServiceTrialAssigneeSelection({
+      kind: "assign",
+      trialType: "standard",
+      employeeId: ACTIVE_ASSIGNEE_ID,
+      candidate: suspended,
+    })).toBe("请选择有效的平台跟进人或取消分配");
+    expect(validatePlatformServiceTrialAssigneeSelection({
+      kind: "approve",
+      trialType: "guided",
+      employeeId: ACTIVE_ASSIGNEE_ID,
+      candidate: activeWithoutRoleFacts,
+    })).toBe("请选择有效的陪跑跟进人");
+    expect(validatePlatformServiceTrialAssigneeSelection({
+      kind: "assign",
+      trialType: "standard",
+      employeeId: ACTIVE_ASSIGNEE_ID,
+      candidate: activeWithoutRoleFacts,
+    })).toBe("请选择有效的平台跟进人或取消分配");
+    expect(validatePlatformServiceTrialAssigneeSelection({
+      kind: "assign",
+      trialType: "standard",
+      employeeId: ACTIVE_ASSIGNEE_ID,
+      candidate: confirmed,
+    })).toBeNull();
+    expect(validatePlatformServiceTrialAssigneeSelection({
+      kind: "assign",
+      trialType: "standard",
+      employeeId: null,
+      candidate: null,
+    })).toBeNull();
   });
 });

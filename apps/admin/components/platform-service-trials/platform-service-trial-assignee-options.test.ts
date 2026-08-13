@@ -159,6 +159,24 @@ describe("platform service trial assignee options", () => {
     expect(formatTrialAssigneeCandidate(historical)).not.toContain(INCLUDED_ID);
   });
 
+  test("treats even an active bound relation as historical until the candidate API confirms it", () => {
+    const boundActive = createHistoricalTrialAssigneeCandidate({
+      id: INCLUDED_ID,
+      name: "王运营",
+      phone: "138****8000",
+      status: "active",
+    });
+
+    expect(boundActive).toMatchObject({
+      status: "active",
+      selectable: false,
+      historical: true,
+    });
+    expect(formatTrialAssigneeCandidate(boundActive))
+      .toBe("王运营 · 138****8000 · 历史负责人（历史记录）");
+    expect(formatTrialAssigneeCandidate(boundActive)).not.toContain(INCLUDED_ID);
+  });
+
   test("strictly binds records and pagination from the response data", () => {
     expect(parseTrialAssigneeCandidatePage({
       list: [activeCandidate],
@@ -208,6 +226,7 @@ describe("platform service trial assignee options", () => {
     expect(source).toContain("getTrialAssigneeEmptyMessage({ loading, error })");
     expect(source).not.toContain('error || "没有匹配的平台人员"');
     expect(source).toContain("ASSIGNEE_SEARCH_DEBOUNCE_MS");
+    expect(source).toContain("onCandidateChange?.(selected)");
     expect(source).toContain("maxLength={80}");
     expect(source).toContain('"平台跟进人加载失败"');
     expect(source).toContain("上一页");

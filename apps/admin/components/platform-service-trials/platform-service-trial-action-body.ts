@@ -66,3 +66,25 @@ export function describePlatformServiceTrialAssigneeChange(
   }
   return { current, next: formatTrialAssigneeCandidate(nextCandidate) };
 }
+
+export function validatePlatformServiceTrialAssigneeSelection({
+  kind,
+  trialType,
+  employeeId,
+  candidate,
+}: {
+  kind: PlatformServiceTrialDialogKind;
+  trialType: PlatformServiceTrialType;
+  employeeId: string | null;
+  candidate: PlatformServiceTrialAssigneeCandidate | null;
+}): string | null {
+  if (kind === "approve" && trialType === "guided"
+    && (!employeeId || candidate?.id !== employeeId || !candidate.selectable)) {
+    return "请选择有效的陪跑跟进人";
+  }
+  if ((kind === "approve" || kind === "assign") && employeeId
+    && (candidate?.id !== employeeId || !candidate.selectable)) {
+    return "请选择有效的平台跟进人或取消分配";
+  }
+  return null;
+}

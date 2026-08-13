@@ -111,7 +111,10 @@ export function PlatformServiceTrialAssigneeCombobox({
         setResult(nextResult);
         setLoadedPath(path);
         const selected = nextResult.list.find((candidate) => candidate.id === value);
-        if (selected) setSelectedCandidate(selected);
+        if (selected) {
+          setSelectedCandidate(selected);
+          onCandidateChange?.(selected);
+        }
         if (nextPage !== search.page) {
           setSearch((current) => current.page === search.page
             ? { ...current, page: nextPage }
@@ -126,7 +129,7 @@ export function PlatformServiceTrialAssigneeCombobox({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [open, search.keyword, search.page, value]);
+  }, [onCandidateChange, open, search.keyword, search.page, value]);
 
   useEffect(() => {
     if (!value) {

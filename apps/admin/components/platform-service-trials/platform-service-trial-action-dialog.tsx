@@ -32,6 +32,7 @@ import {
   buildPlatformServiceTrialActionBody,
   describePlatformServiceTrialAssigneeChange,
   type PlatformServiceTrialDialogKind,
+  validatePlatformServiceTrialAssigneeSelection,
 } from "./platform-service-trial-action-body";
 import { PlatformServiceTrialAssigneeCombobox } from "./platform-service-trial-assignee-combobox";
 import { createBoundTrialAssigneeCandidate } from "./platform-service-trial-assignee-options";
@@ -120,12 +121,14 @@ export function PlatformServiceTrialActionDialog({
       setError("请至少选择一项试用范围");
       return;
     }
-    if (kind === "approve" && trialType === "guided" && !selectedAssignee?.selectable) {
-      setError("请选择有效的陪跑跟进人");
-      return;
-    }
-    if (kind === "approve" && assigneeEmployeeId && !selectedAssignee?.selectable) {
-      setError("请选择有效的平台跟进人或取消分配");
+    const assigneeError = validatePlatformServiceTrialAssigneeSelection({
+      kind,
+      trialType,
+      employeeId: assigneeEmployeeId,
+      candidate: selectedAssignee,
+    });
+    if (assigneeError) {
+      setError(assigneeError);
       return;
     }
 
