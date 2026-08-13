@@ -8,13 +8,20 @@ const migrationPath = new URL(
 const sql = existsSync(migrationPath)
   ? readFileSync(migrationPath, "utf8")
   : "";
+const repairMigrationPath = new URL(
+  "../../../../supabase/migrations/20260813160100_harden_tenant_private_supplier_codes.sql",
+  import.meta.url,
+);
+const repairSql = existsSync(repairMigrationPath)
+  ? readFileSync(repairMigrationPath, "utf8")
+  : "";
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function extractFunction(name: string) {
-  return sql.match(
+function extractFunction(name: string, source = sql) {
+  return source.match(
     new RegExp(
       `CREATE(?: OR REPLACE)? FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
     ),
@@ -137,6 +144,57 @@ describe("tenant private supplier migration contract", () => {
     expect(fn).toContain("'idempotent', false");
     expect(fn).toContain("allocate_tenant_supplier_code");
     expect(fn).toContain("public.supplier_command_events");
+  });
+
+  test("scopes allocation replay to tenant and key instead of the acting employee", () => {
+    const sourceFunction = compact(
+      extractFunction("allocate_tenant_supplier_code"),
+    );
+    const repairFunction = compact(
+      extractFunction("allocate_tenant_supplier_code", repairSql),
+    );
+
+    expect(repairSql).toContain("BEGIN;");
+    expect(repairSql).toContain(
+      "CREATE OR REPLACE FUNCTION public.allocate_tenant_supplier_code",
+    );
+
+    for (const source of [sql, repairSql]) {
+      const eventGuard = compact(
+        extractFunction("guard_tenant_supplier_allocation_event_key", source),
+      );
+      expect(eventGuard).toContain(
+        "NEW.command IN ( 'create_tenant_private_supplier', 'create_tenant_shared_supplier_relationship', 'create_tenant_supplier' )",
+      );
+      expect(eventGuard).toContain(
+        "registry.tenant_id = NEW.tenant_id",
+      );
+      expect(eventGuard).toContain(
+        "registry.idempotency_key = NEW.idempotency_key",
+      );
+      expect(eventGuard).toContain("SUPPLIER_CODE_ALLOCATION_CONFLICT");
+      expect(source).toContain(
+        "CREATE TRIGGER tr_supplier_command_events_guard_allocation_key",
+      );
+    }
+
+    for (const fn of [sourceFunction, repairFunction]) {
+      expect(fn).toContain(
+        "'supplier-code-allocation:' || p_tenant_id::text || ':' || p_idempotency_key",
+      );
+      expect(fn).not.toContain(
+        "'supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key",
+      );
+      expect(fn).toContain(
+        "WHERE registry.tenant_id = p_tenant_id AND registry.source = 'generated' AND registry.idempotency_key = p_idempotency_key",
+      );
+      expect(fn).toContain(
+        "RETURN jsonb_build_object( 'allocation_id', v_existing_registry.id, 'code', v_existing_registry.normalized_code, 'idempotent', true )",
+      );
+      expect(fn).not.toContain(
+        "WHERE event.actor_user_id = p_actor_user_id AND event.idempotency_key = p_idempotency_key",
+      );
+    }
   });
 
   test("creates private supplier, relationship, optional contact and address atomically", () => {

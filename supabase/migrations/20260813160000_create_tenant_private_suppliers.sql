@@ -336,6 +336,37 @@ BEFORE UPDATE ON public.tenant_supplier_code_registry
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_tenant_supplier_code_registry();
 
+CREATE FUNCTION public.guard_tenant_supplier_allocation_event_key()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.command IN (
+    'create_tenant_private_supplier',
+    'create_tenant_shared_supplier_relationship',
+    'create_tenant_supplier'
+  ) AND EXISTS (
+    SELECT 1
+    FROM public.tenant_supplier_code_registry AS registry
+    WHERE registry.tenant_id = NEW.tenant_id
+      AND registry.source = 'generated'
+      AND registry.idempotency_key = NEW.idempotency_key
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CODE_ALLOCATION_CONFLICT';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tr_supplier_command_events_guard_allocation_key
+BEFORE INSERT ON public.supplier_command_events
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_tenant_supplier_allocation_event_key();
+
 CREATE FUNCTION public.assert_tenant_supplier_actor(
   p_tenant_id uuid,
   p_actor_user_id uuid,
@@ -476,7 +507,6 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
-  v_event public.supplier_command_events%ROWTYPE;
   v_existing_registry public.tenant_supplier_code_registry%ROWTYPE;
   v_registry public.tenant_supplier_code_registry%ROWTYPE;
   v_counter public.tenant_supplier_code_counters%ROWTYPE;
@@ -515,38 +545,14 @@ BEGIN
       MESSAGE = 'SUPPLIER_MODULE_DISABLED';
   END IF;
 
-  v_request := jsonb_build_object(
-    'tenant_id', p_tenant_id,
-    'actor_user_id', p_actor_user_id,
-    'actor_employee_id', p_actor_employee_id
-  );
+  v_request := jsonb_build_object('tenant_id', p_tenant_id);
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
-      'supplier-command:' || p_actor_user_id::text || ':' || p_idempotency_key,
+      'supplier-code-allocation:' || p_tenant_id::text || ':' || p_idempotency_key,
       0
     )
   );
-
-  SELECT event.*
-  INTO v_event
-  FROM public.supplier_command_events AS event
-  WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
-  FOR UPDATE;
-
-  IF FOUND THEN
-    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
-      OR v_event.command <> 'allocate_tenant_supplier_code'
-      OR v_event.from_state -> '_request' IS DISTINCT FROM v_request
-    THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_CODE_ALLOCATION_CONFLICT';
-    END IF;
-
-    RETURN v_event.to_state || jsonb_build_object('idempotent', true);
-  END IF;
 
   SELECT registry.*
   INTO v_existing_registry
@@ -557,9 +563,11 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'SUPPLIER_CODE_ALLOCATION_CONFLICT';
+    RETURN jsonb_build_object(
+      'allocation_id', v_existing_registry.id,
+      'code', v_existing_registry.normalized_code,
+      'idempotent', true
+    );
   END IF;
 
   INSERT INTO public.tenant_supplier_code_counters (
@@ -1543,6 +1551,7 @@ GRANT SELECT ON TABLE public.tenant_supplier_code_registry TO service_role;
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_internal_code_immutable() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.validate_tenant_supplier_ownership() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_code_registry() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.guard_tenant_supplier_allocation_event_key() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.assert_tenant_supplier_actor(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.consume_tenant_supplier_code(uuid, uuid, text, text, uuid, uuid, uuid, text) FROM PUBLIC, anon, authenticated, service_role;
 
