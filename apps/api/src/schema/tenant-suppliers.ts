@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
   SupplierCommandSchema,
   SupplierRequiredReasonCommandSchema,
+  SupplierTypeSchema,
   type SupplierCommandContext,
   type SupplierCreateAuditContext,
   type SupplierUpdateAuditContext,
@@ -135,6 +136,105 @@ export const TenantSupplierContractPolicySchema = z.object({
 export const TenantSupplierCreateSchema = z.object({
   supplier_id: uuid("无效的供应商 ID"),
 }).strict();
+
+const internalSupplierCode = z.string()
+  .trim()
+  .toUpperCase()
+  .regex(
+    /^[A-Z0-9_-]{2,64}$/,
+    "租户内部供应商编码必须为 2 到 64 位大写字母、数字、下划线或连字符",
+  );
+const generatedInternalSupplierCodeFields = {
+  code_source: z.literal("generated"),
+  internal_supplier_code: internalSupplierCode,
+  allocation_id: uuid("无效的供应商编码分配 ID"),
+};
+const manualInternalSupplierCodeFields = {
+  code_source: z.literal("manual"),
+  internal_supplier_code: internalSupplierCode,
+};
+const privateSupplierMasterFields = {
+  name: requiredText(
+    120,
+    "供应商名称不能为空",
+    "供应商名称不能超过 120 个字符",
+  ),
+  legal_name: requiredText(
+    160,
+    "供应商法定名称不能为空",
+    "供应商法定名称不能超过 160 个字符",
+  ),
+  supplier_type: SupplierTypeSchema,
+};
+const primaryContact = z.object({
+  name: requiredText(
+    80,
+    "联系人姓名不能为空",
+    "联系人姓名不能超过 80 个字符",
+  ),
+  phone: optionalText(40, "联系电话不能超过 40 个字符"),
+  email: z.string().trim().email("联系人邮箱格式无效")
+    .max(160, "联系人邮箱不能超过 160 个字符").nullable().optional(),
+}).strict();
+const privateSupplierAddress = z.object({
+  province: optionalText(60, "省份名称不能超过 60 个字符"),
+  city: optionalText(60, "城市名称不能超过 60 个字符"),
+  district: optionalText(60, "区县名称不能超过 60 个字符"),
+  region_code: requiredText(
+    20,
+    "行政区划编码不能为空",
+    "行政区划编码不能超过 20 个字符",
+  ),
+  address_detail: requiredText(
+    300,
+    "详细地址不能为空",
+    "详细地址不能超过 300 个字符",
+  ),
+}).strict();
+const privateSupplierCreateFields = {
+  ...privateSupplierMasterFields,
+  primary_contact: primaryContact.optional(),
+  address: privateSupplierAddress.optional(),
+};
+
+export const TenantSupplierCodeAllocationSchema = z.object({}).strict();
+
+export const TenantSupplierSharedCreateSchema = z.discriminatedUnion(
+  "code_source",
+  [
+    z.object({
+      supplier_id: uuid("无效的供应商 ID"),
+      ...generatedInternalSupplierCodeFields,
+    }).strict(),
+    z.object({
+      supplier_id: uuid("无效的供应商 ID"),
+      ...manualInternalSupplierCodeFields,
+    }).strict(),
+  ],
+);
+
+export const TenantSupplierPrivateCreateSchema = z.discriminatedUnion(
+  "code_source",
+  [
+    z.object({
+      ...privateSupplierCreateFields,
+      ...generatedInternalSupplierCodeFields,
+    }).strict(),
+    z.object({
+      ...privateSupplierCreateFields,
+      ...manualInternalSupplierCodeFields,
+    }).strict(),
+  ],
+);
+
+export const TenantPrivateSupplierUpdateSchema = z.object({
+  expected_version: expectedVersion,
+  name: privateSupplierMasterFields.name.optional(),
+  legal_name: privateSupplierMasterFields.legal_name.optional(),
+  supplier_type: SupplierTypeSchema.optional(),
+}).strict().refine(hasUpdateField, {
+  message: "至少需要提交一个私有供应商主档更新字段",
+});
 
 const relationshipFields = {
   settlement_term_days: z.number().int()
@@ -300,6 +400,14 @@ export type TenantSupplierUpdateCommand =
   } & SupplierUpdateAuditContext;
 export type TenantSupplierCreateInput =
   z.infer<typeof TenantSupplierCreateSchema>;
+export type TenantSupplierCodeAllocationInput =
+  z.infer<typeof TenantSupplierCodeAllocationSchema>;
+export type TenantSupplierSharedCreateInput =
+  z.infer<typeof TenantSupplierSharedCreateSchema>;
+export type TenantSupplierPrivateCreateInput =
+  z.infer<typeof TenantSupplierPrivateCreateSchema>;
+export type TenantPrivateSupplierUpdateInput =
+  z.infer<typeof TenantPrivateSupplierUpdateSchema>;
 export type TenantSupplierUpdateInput =
   z.infer<typeof TenantSupplierUpdateSchema>;
 export type TenantSupplierLifecycleCommand =
