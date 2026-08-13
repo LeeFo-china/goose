@@ -52,10 +52,12 @@ const emptyPage: PageData<TenantSupplierRelationship> = {
 export function SupplierWorkspace({
   canView,
   canManage,
+  canManagePrivate,
   canManageContracts,
 }: {
   canView: boolean;
   canManage: boolean;
+  canManagePrivate: boolean;
   canManageContracts: boolean;
 }) {
   const [settings, setSettings] = useState<TenantSupplierSettings | null>(null);
@@ -186,7 +188,13 @@ export function SupplierWorkspace({
           </p>
         </div>
         {canManage ? (
-          <AddSupplierDialog disabled={listLoading} onCreated={loadRelationships} />
+          <AddSupplierDialog
+            disabled={listLoading}
+            privateCreationEnabled={
+              canManagePrivate && settings.private_supplier_writes_enabled
+            }
+            onCreated={loadRelationships}
+          />
         ) : null}
       </div>
       <SupplierContractPolicyCard

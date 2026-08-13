@@ -206,20 +206,20 @@ test.describe("供应商 Phase 0 租户工作台", () => {
       "租户测试账号缺少 supplier.manage",
     );
 
+    await addButton.click();
+    const dialog = page.getByRole("dialog").filter({
+      hasText: "添加合作供应商",
+    });
+    await expect(dialog).toBeVisible();
     const directoryResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return url.pathname.endsWith("/api/backend/suppliers/directory") &&
         url.searchParams.get("page") === "1" &&
         url.searchParams.get("pageSize") === "10";
     });
-    await addButton.click();
+    await dialog.getByRole("button", { name: /添加平台共享供应商/ }).click();
     expect((await directoryResponse).ok()).toBe(true);
-
-    const dialog = page.getByRole("dialog").filter({
-      hasText: "添加合作供应商",
-    });
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel("搜索供应商")).toBeVisible();
+    await expect(dialog.getByLabel("搜索平台共享供应商")).toBeVisible();
     await expect(dialog.getByText(/第 1 \/ \d+ 页，共 \d+ 个/)).toBeVisible();
     await expect(dialog.getByRole("button", { name: "上一页" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "下一页" })).toBeVisible();

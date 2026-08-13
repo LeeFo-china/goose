@@ -55,9 +55,11 @@ const emptyPrivateForm: PrivateForm = {
 
 export function AddSupplierDialog({
   disabled,
+  privateCreationEnabled,
   onCreated,
 }: {
   disabled?: boolean;
+  privateCreationEnabled: boolean;
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -219,9 +221,13 @@ export function AddSupplierDialog({
           <ModeButton active={mode === "shared"} onClick={() => selectMode("shared")}
             icon={<Building2 className="size-5" />} title="添加平台共享供应商"
             description="从平台已准入目录建立合作关系" />
-          <ModeButton active={mode === "private"} onClick={() => selectMode("private")}
+          <ModeButton active={mode === "private"}
+            disabled={!privateCreationEnabled}
+            onClick={() => selectMode("private")}
             icon={<Store className="size-5" />} title="新建私有供应商"
-            description="创建仅当前租户可见和维护的资料" />
+            description={privateCreationEnabled
+              ? "创建仅当前租户可见和维护的资料"
+              : "需要私有供应商主档权限并启用私有写入"} />
         </div>
 
         {mode ? (
@@ -262,12 +268,12 @@ export function AddSupplierDialog({
 
 function ModeButton(props: {
   active: boolean; onClick: () => void; icon: React.ReactNode;
-  title: string; description: string;
+  title: string; description: string; disabled?: boolean;
 }) {
-  return <button type="button" onClick={props.onClick}
+  return <button type="button" onClick={props.onClick} disabled={props.disabled}
     className={`rounded-md border p-4 text-left transition-colors ${
       props.active ? "border-primary bg-primary/5" : "hover:bg-muted/50"
-    }`}>
+    } disabled:cursor-not-allowed disabled:opacity-50`}>
     <span className="flex items-center gap-2 font-medium">{props.icon}{props.title}</span>
     <span className="mt-1 block text-xs leading-5 text-muted-foreground">{props.description}</span>
   </button>;
