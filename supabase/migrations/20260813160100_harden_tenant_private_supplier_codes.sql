@@ -8,6 +8,55 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '5min';
 
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.suppliers AS supplier
+    LEFT JOIN public.tenant_suppliers AS relationship
+      ON relationship.supplier_id = supplier.id
+    WHERE supplier.ownership_scope = 'tenant'
+      AND (
+        relationship.id IS NULL
+        OR relationship.tenant_id IS DISTINCT FROM supplier.owner_tenant_id
+        OR relationship.internal_supplier_code IS DISTINCT FROM
+          upper(btrim(supplier.code))
+      )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_PRIVATE_CODE_INCONSISTENT';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.guard_tenant_private_supplier_code_immutable()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.ownership_scope = 'tenant'
+    AND NEW.code IS DISTINCT FROM OLD.code
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CODE_IMMUTABLE';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS tr_suppliers_guard_private_code_immutable
+ON public.suppliers;
+
+CREATE TRIGGER tr_suppliers_guard_private_code_immutable
+BEFORE UPDATE OF code
+ON public.suppliers
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_tenant_private_supplier_code_immutable();
+
 CREATE OR REPLACE FUNCTION public.guard_tenant_supplier_allocation_event_key()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -243,6 +292,9 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_allocation_event_key()
+FROM PUBLIC, anon, authenticated, service_role;
+
+REVOKE ALL ON FUNCTION public.guard_tenant_private_supplier_code_immutable()
 FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.allocate_tenant_supplier_code(uuid, uuid, uuid, text)

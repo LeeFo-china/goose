@@ -258,6 +258,47 @@ describe("tenant private supplier migration contract", () => {
     );
   });
 
+  test("keeps private supplier master codes immutable and aligned with relationship codes", () => {
+    const sourceGuard = compact(
+      extractFunction("guard_tenant_private_supplier_code_immutable"),
+    );
+    const repairGuard = compact(
+      extractFunction(
+        "guard_tenant_private_supplier_code_immutable",
+        repairSql,
+      ),
+    );
+
+    for (const guard of [sourceGuard, repairGuard]) {
+      expect(guard).toContain(
+        "OLD.ownership_scope = 'tenant' AND NEW.code IS DISTINCT FROM OLD.code",
+      );
+      expect(guard).toContain("SUPPLIER_CODE_IMMUTABLE");
+      expect(guard).not.toContain("OLD.ownership_scope = 'platform'");
+    }
+
+    for (const source of [sql, repairSql]) {
+      expect(source).toMatch(
+        /CREATE TRIGGER tr_suppliers_guard_private_code_immutable\s+BEFORE UPDATE OF code\s+ON public\.suppliers/,
+      );
+    }
+
+    const ownershipValidator = compact(
+      extractFunction("validate_tenant_supplier_ownership"),
+    );
+    expect(ownershipValidator).toContain(
+      "v_supplier.ownership_scope = 'tenant'",
+    );
+    expect(ownershipValidator).toContain(
+      "upper(btrim(v_supplier.code)) IS DISTINCT FROM NEW.internal_supplier_code",
+    );
+
+    expect(compact(repairSql)).toContain(
+      "supplier.ownership_scope = 'tenant' AND ( relationship.id IS NULL OR relationship.tenant_id IS DISTINCT FROM supplier.owner_tenant_id OR relationship.internal_supplier_code IS DISTINCT FROM upper(btrim(supplier.code)) )",
+    );
+    expect(repairSql).toContain("SUPPLIER_PRIVATE_CODE_INCONSISTENT");
+  });
+
   test("replaces global supplier identity uniqueness with scoped partial indexes", () => {
     expect(sql).toContain(
       "ALTER TABLE public.suppliers DROP CONSTRAINT suppliers_code_key;",

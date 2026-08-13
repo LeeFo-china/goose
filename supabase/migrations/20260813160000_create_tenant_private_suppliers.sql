@@ -266,6 +266,30 @@ ON public.tenant_suppliers
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_tenant_supplier_internal_code_immutable();
 
+CREATE FUNCTION public.guard_tenant_private_supplier_code_immutable()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.ownership_scope = 'tenant'
+    AND NEW.code IS DISTINCT FROM OLD.code
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CODE_IMMUTABLE';
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER tr_suppliers_guard_private_code_immutable
+BEFORE UPDATE OF code
+ON public.suppliers
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_tenant_private_supplier_code_immutable();
+
 CREATE FUNCTION public.validate_tenant_supplier_ownership()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1549,6 +1573,7 @@ GRANT SELECT ON TABLE public.tenant_supplier_code_counters TO service_role;
 GRANT SELECT ON TABLE public.tenant_supplier_code_registry TO service_role;
 
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_internal_code_immutable() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.guard_tenant_private_supplier_code_immutable() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.validate_tenant_supplier_ownership() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_code_registry() FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_tenant_supplier_allocation_event_key() FROM PUBLIC, anon, authenticated, service_role;
