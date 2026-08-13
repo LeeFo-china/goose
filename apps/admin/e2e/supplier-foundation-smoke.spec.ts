@@ -278,9 +278,13 @@ test.describe("租户私有供应商确定性交互", () => {
     await page.getByRole("button", { name: "添加合作供应商" }).click();
     const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
     await dialog.getByRole("button", { name: /新建私有供应商/ }).click();
+    const allocationResponse = page.waitForResponse((response) =>
+      new URL(response.url()).pathname.endsWith(
+        "/api/backend/suppliers/code-allocations",
+      ));
     await dialog.getByRole("button", { name: "自动生成" }).click();
     await dialog.getByRole("button", { name: /添加平台共享供应商/ }).click();
-    await page.waitForTimeout(250);
+    expect((await allocationResponse).ok()).toBe(true);
     await expect(dialog.getByLabel("供应商内部编码")).toHaveValue("");
   });
 

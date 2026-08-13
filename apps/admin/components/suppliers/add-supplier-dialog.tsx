@@ -340,9 +340,9 @@ function SupplierCodeField(props: {
           ? "可自行填写，也可点击自动生成。系统不会因留空自动生成。"
           : "可自行填写；自动生成需要私有供应商主档权限并启用私有写入。"}
     </FieldDescription>
-    <FieldError id="tenant-supplier-code-error" role="alert">
-      {props.error}
-    </FieldError>
+    {props.error ? <div id="tenant-supplier-code-error" role="alert">
+      <FieldError>{props.error}</FieldError>
+    </div> : null}
   </Field>;
 }
 
@@ -431,9 +431,11 @@ function PrivateSupplierFields(props: {
           placeholder="选填"
           onChange={(event) =>
             props.onCreditCodeChange(event.target.value.toUpperCase())} />
-        <FieldError id="private-supplier-credit-code-error" role="alert">
-          {props.creditCodeError}
-        </FieldError>
+        {props.creditCodeError ? (
+          <div id="private-supplier-credit-code-error" role="alert">
+            <FieldError>{props.creditCodeError}</FieldError>
+          </div>
+        ) : null}
       </Field>
     </div>
     <FieldError>{props.error}</FieldError>
