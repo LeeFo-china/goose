@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   formatTrialAssigneeCandidate,
   formatTrialAssigneeCandidateMeta,
   getTrialAssigneeSelectionActions,
+  getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
   resetTrialAssigneeSearchPage,
   selectTrialAssigneeCandidate,
@@ -66,6 +67,7 @@ export function PlatformServiceTrialAssigneeCombobox({
   const [keyword, setKeyword] = useState("");
   const [search, setSearch] = useState({ page: 1, keyword: "" });
   const [result, setResult] = useState(EMPTY_PAGE);
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [selectedCandidate, setSelectedCandidate] = useState<
     PlatformServiceTrialAssigneeCandidate | null
   >(() => value && initialCandidate?.id === value ? initialCandidate : null);
@@ -99,6 +101,7 @@ export function PlatformServiceTrialAssigneeCombobox({
         if (controller.signal.aborted) return;
         const nextResult = parseTrialAssigneeCandidatePage(data);
         setResult(nextResult);
+        setLoadedPath(path);
         const selected = nextResult.list.find((candidate) => candidate.id === value);
         if (selected) setSelectedCandidate(selected);
       })
@@ -121,15 +124,20 @@ export function PlatformServiceTrialAssigneeCombobox({
     if (initialCandidate?.id === value) setSelectedCandidate(initialCandidate);
   }, [initialCandidate, selectedCandidate, value]);
 
-  const candidates = useMemo(() => {
-    const byId = new Map(
-      result.list.map((candidate) => [candidate.id, candidate] as const),
-    );
-    if (value && selectedCandidate?.id === value && !byId.has(value)) {
-      byId.set(value, selectedCandidate);
-    }
-    return Array.from(byId.values());
-  }, [result.list, selectedCandidate, value]);
+  const currentPath = buildTrialAssigneeCandidatesPath({
+    page: search.page,
+    pageSize: ASSIGNEE_CANDIDATE_PAGE_SIZE,
+    keyword: search.keyword,
+    includeEmployeeId: value || undefined,
+  });
+  const keywordIsCurrent = resetTrialAssigneeSearchPage(search, keyword) === search;
+  const resultIsCurrent = !loading && !error && keywordIsCurrent && loadedPath === currentPath;
+  const candidates = getVisibleTrialAssigneeCandidates({
+    candidates: result.list,
+    value,
+    selectedCandidate,
+    resultIsCurrent,
+  });
   const selectionActions = getTrialAssigneeSelectionActions({
     value,
     allowClear,
@@ -140,7 +148,7 @@ export function PlatformServiceTrialAssigneeCombobox({
     : value
       ? loading ? "正在加载负责人..." : "当前负责人信息暂不可用"
       : placeholder;
-  const totalPages = result.pagination.totalPages;
+  const totalPages = resultIsCurrent ? result.pagination.totalPages : 0;
 
   function choose(candidate: PlatformServiceTrialAssigneeCandidate) {
     const employeeId = selectTrialAssigneeCandidate(candidate);

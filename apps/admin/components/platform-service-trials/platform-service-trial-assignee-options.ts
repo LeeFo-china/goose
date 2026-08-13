@@ -146,6 +146,27 @@ export function getTrialAssigneeSelectionActions({
   return value && allowClear && !required ? ["clear"] : [];
 }
 
+export function getVisibleTrialAssigneeCandidates({
+  candidates,
+  value,
+  selectedCandidate,
+  resultIsCurrent,
+}: {
+  candidates: PlatformServiceTrialAssigneeCandidate[];
+  value: string | null;
+  selectedCandidate: PlatformServiceTrialAssigneeCandidate | null;
+  resultIsCurrent: boolean;
+}): PlatformServiceTrialAssigneeCandidate[] {
+  const selected = value && selectedCandidate?.id === value
+    ? selectedCandidate
+    : null;
+  if (!resultIsCurrent) return selected ? [selected] : [];
+
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  if (selected && !byId.has(selected.id)) byId.set(selected.id, selected);
+  return Array.from(byId.values());
+}
+
 export function createHistoricalTrialAssigneeCandidate(
   assignee: PlatformServiceTrialAssignee,
 ): PlatformServiceTrialAssigneeCandidate {

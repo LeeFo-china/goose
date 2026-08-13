@@ -9,6 +9,7 @@ import {
   formatTrialAssigneeCandidate,
   formatTrialAssigneeCandidateMeta,
   getTrialAssigneeSelectionActions,
+  getVisibleTrialAssigneeCandidates,
   parseTrialAssigneeCandidatePage,
   resetTrialAssigneeSearchPage,
   selectTrialAssigneeCandidate,
@@ -91,6 +92,30 @@ describe("platform service trial assignee options", () => {
       allowClear: false,
       required: false,
     })).toEqual([]);
+  });
+
+  test("hides stale non-selected candidates while the next result is pending or failed", () => {
+    const selected = { ...activeCandidate, id: INCLUDED_ID, name: "李顾问" };
+    const stale = [activeCandidate];
+
+    expect(getVisibleTrialAssigneeCandidates({
+      candidates: stale,
+      value: INCLUDED_ID,
+      selectedCandidate: selected,
+      resultIsCurrent: false,
+    })).toEqual([selected]);
+    expect(getVisibleTrialAssigneeCandidates({
+      candidates: stale,
+      value: null,
+      selectedCandidate: null,
+      resultIsCurrent: false,
+    })).toEqual([]);
+    expect(getVisibleTrialAssigneeCandidates({
+      candidates: stale,
+      value: INCLUDED_ID,
+      selectedCandidate: selected,
+      resultIsCurrent: true,
+    })).toEqual([activeCandidate, selected]);
   });
 
   test("creates a readable disabled historical value from a bound trial assignee", () => {
