@@ -72,6 +72,21 @@ export function releaseTone(
   return "secondary";
 }
 
+export function releaseAuditRejectionReason(release: {
+  status: string;
+  audit_result: {
+    status?: "pending" | "approved" | "rejected" | "failed";
+    reason?: string;
+  } | null;
+}): string | null {
+  const reason = release.audit_result?.reason?.trim();
+  if (!reason) return null;
+  if (release.status === "audit_rejected" || release.audit_result?.status === "rejected") {
+    return reason;
+  }
+  return null;
+}
+
 export function profileStatusLabel(state: DouyinPublicProfileStatus) {
   return profileStatusMeta[state].label;
 }

@@ -258,6 +258,8 @@ describe("TenantDouyinMiniappWorkspace", () => {
 
     expect(html).toContain("同步审核状态");
     expect(html).toContain("生成新版体验版");
+    expect(html).toContain("审核驳回原因");
+    expect(html).toContain("小程序功能不完整且可用性低");
   });
 
   test("surfaces a pending public profile instead of implying it is live", () => {

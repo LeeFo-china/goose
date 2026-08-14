@@ -34,6 +34,7 @@ import {
   authorizationTone,
   profileStatusLabel,
   profileStatusTone,
+  releaseAuditRejectionReason,
   releaseLabel,
   releaseTone,
 } from "./workspace-display";
@@ -390,6 +391,9 @@ function ReleaseSummary({
   workspace: TenantDouyinWorkspace;
 }) {
   const release = workspace.latest_release;
+  const rejectionReason = release
+    ? releaseAuditRejectionReason(release)
+    : null;
 
   return (
     <section
@@ -421,6 +425,15 @@ function ReleaseSummary({
           <p className="break-words text-sm text-muted-foreground sm:col-span-3 md:col-span-1">
             {release.description}
           </p>
+          {rejectionReason ? (
+            <Alert variant="destructive" className="sm:col-span-3 md:col-span-2">
+              <ShieldAlert aria-hidden="true" />
+              <AlertTitle>审核驳回原因</AlertTitle>
+              <AlertDescription className="whitespace-pre-wrap break-words">
+                {rejectionReason}
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </div>
       ) : (
         <div className="rounded-md border border-dashed px-4 py-5">
