@@ -87,7 +87,12 @@ export function availableWorkspaceActions(
     || release?.status === "testing"
     || release?.status === "audit_pending"
     || release?.status === "audit_approved";
-  if (hasNewTemplate && !blocksNewTemplate) return ["create_test_version"];
+  if (hasNewTemplate && !blocksNewTemplate) {
+    if (release?.status === "audit_rejected" || release?.status === "failed") {
+      return ["sync_status", "create_test_version"];
+    }
+    return ["create_test_version"];
+  }
   if (!release) return [];
 
   switch (workspace.release_state) {
@@ -100,11 +105,11 @@ export function availableWorkspaceActions(
     case "audit_pending":
       return ["sync_status"];
     case "audit_rejected":
-      return [];
+      return ["sync_status"];
     case "audit_approved":
       return ["publish"];
     case "sync_error":
-      return [];
+      return ["sync_status"];
     case "created":
       return ["create_test_version"];
     case "not_uploaded":
@@ -439,11 +444,11 @@ export function TenantDouyinMiniappWorkspaceActions({
 
 function actionSummary(actions: TenantDouyinWorkspaceAction[]) {
   if (actions.includes("authorize")) return "连接租户自有抖音小程序";
-  if (actions.includes("create_test_version")) return "生成体验版并完成验收";
   if (actions.includes("get_test_qr")) return "生成体验二维码并完成手机验收";
   if (actions.includes("submit_audit")) return "核对提审信息并提交平台审核";
   if (actions.includes("sync_status")) return "从抖音开放平台同步审核状态";
   if (actions.includes("publish")) return "审核已通过，可以正式发布";
+  if (actions.includes("create_test_version")) return "生成体验版并完成验收";
   return "平台侧正在准备版本或当前版本已经发布";
 }
 

@@ -225,6 +225,41 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("生成新版体验版");
   });
 
+  test("keeps status sync visible beside a rejected release with a newer template", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        workspace={{
+          ...workspace,
+          available_template: {
+            template_id: "77612",
+            version: "0.1.4",
+            description: "优化工地卡片和图片展示",
+            confirmed_at: "2026-08-13T04:00:00.000Z",
+            state: "new_available",
+          },
+          release_state: "audit_rejected",
+          latest_release: workspace.latest_release
+            ? {
+              ...workspace.latest_release,
+              status: "audit_rejected",
+              audit_result: {
+                status: "rejected",
+                reason: "小程序功能不完整且可用性低",
+              },
+            }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("同步审核状态");
+    expect(html).toContain("生成新版体验版");
+  });
+
   test("surfaces a pending public profile instead of implying it is live", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace
