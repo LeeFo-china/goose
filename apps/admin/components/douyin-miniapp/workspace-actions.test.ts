@@ -145,7 +145,7 @@ describe("tenant Douyin workspace actions", () => {
     }
   });
 
-  test("offers no invalid retry action for terminal rejected or failed releases", () => {
+  test("offers status sync for rejected or failed releases", () => {
     for (const [releaseState, status] of [
       ["audit_rejected", "audit_rejected"],
       ["sync_error", "failed"],
@@ -156,7 +156,32 @@ describe("tenant Douyin workspace actions", () => {
         workspace.latest_release.status = status;
       }
 
-      expect(availableWorkspaceActions(workspace)).toEqual([]);
+      expect(availableWorkspaceActions(workspace)).toEqual(["sync_status"]);
+    }
+  });
+
+  test("keeps status sync visible while a newer template is available", () => {
+    for (const [releaseState, status] of [
+      ["audit_rejected", "audit_rejected"],
+      ["sync_error", "failed"],
+    ] as const) {
+      const workspace = approvedWorkspace();
+      workspace.available_template = {
+        template_id: "77596",
+        version: "0.1.4",
+        description: "新版工地页面",
+        confirmed_at: "2026-08-13T08:00:00.000Z",
+        state: "new_available",
+      };
+      workspace.release_state = releaseState;
+      if (workspace.latest_release) {
+        workspace.latest_release.status = status;
+      }
+
+      expect(availableWorkspaceActions(workspace)).toEqual([
+        "sync_status",
+        "create_test_version",
+      ]);
     }
   });
 
