@@ -338,7 +338,7 @@ function SupplierCodeField(props: {
         ? "已自动生成；如手工修改，将改用手工编码提交。"
         : props.allocationEnabled
           ? "可自行填写，也可点击自动生成。系统不会因留空自动生成。"
-          : "可自行填写；自动生成需要私有供应商主档权限并启用私有写入。"}
+          : "可自行填写；自动生成需有合作关系管理权限，或具备供应商主档私有写入权限。"}
     </FieldDescription>
     {props.error ? <div id="tenant-supplier-code-error" role="alert">
       <FieldError>{props.error}</FieldError>

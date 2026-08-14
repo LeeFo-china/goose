@@ -328,23 +328,32 @@ test.describe("租户私有供应商确定性交互", () => {
     );
   });
 
-  test("平台共享入口也要求显式内部编码", async ({ page, request }) => {
+  test("平台共享入口支持自动生成内部编码并用于建立合作", async ({ page, request }) => {
     await page.getByRole("button", { name: "添加合作供应商" }).click();
     const dialog = page.getByRole("dialog", { name: "添加合作供应商" });
     await dialog.getByRole("button", { name: /添加平台共享供应商/ }).click();
+    const codeInput = dialog.getByLabel("供应商内部编码");
+    await expect(codeInput).toHaveValue("");
+    await dialog.getByRole("button", { name: "自动生成" }).click();
+    await expect(codeInput).toHaveValue("SUP-000001");
     await expect(dialog.getByLabel("供应商内部编码")).toBeVisible();
-    await dialog.getByLabel("供应商内部编码").fill("PLATFORM-MANUAL-01");
+    await expect(dialog.getByLabel("供应商内部编码")).toHaveValue("SUP-000001");
     await dialog.getByRole("button", { name: "建立合作", exact: true }).click();
     await expect(dialog).toBeHidden();
 
     const state = await (await request.get(`${mockBackend}/__test/state`)).json();
-    expect(state.mutations).toHaveLength(1);
+    expect(state.mutations).toHaveLength(2);
     expect(state.mutations[0]).toMatchObject({
+      path: "/suppliers/code-allocations",
+      payload: {},
+    });
+    expect(state.mutations[1]).toMatchObject({
       path: "/suppliers",
       payload: {
-        code_source: "manual",
-        internal_supplier_code: "PLATFORM-MANUAL-01",
+        code_source: "generated",
+        internal_supplier_code: "SUP-000001",
       },
     });
+    expect(state.mutations[1].payload).toHaveProperty("allocation_id");
   });
 });

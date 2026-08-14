@@ -36,6 +36,9 @@ async function createService(overrides: Record<string, unknown> = {}) {
       if (!context.tenantId) throw Object.assign(new Error(), { code: "TENANT_CONTEXT_REQUIRED" });
       return context.tenantId;
     }),
+    hasPermission: mock((context: AuthContext, permission: string) =>
+      context.permissions.some((item) => item.code === permission),
+    ),
     assertPermission: mock((context: AuthContext, permission: string) => {
       if (!context.permissions.some((item) => item.code === permission)) {
         throw Object.assign(new Error(), { code: "FORBIDDEN", statusCode: 403 });
@@ -52,7 +55,7 @@ async function createService(overrides: Record<string, unknown> = {}) {
 }
 
 describe("TenantSuppliersService private supplier commands", () => {
-  test("requires supplier.master.manage and private-write rollout for allocation", async () => {
+  test("共享关系与私有主档权限都可用于内部编码分配，但仅模块启用时可用", async () => {
     const denied = await createService();
     await expect(denied.service.allocateInternalCode(
       auth([]),
@@ -60,16 +63,25 @@ describe("TenantSuppliersService private supplier commands", () => {
     )).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(denied.repository.allocateInternalCode).not.toHaveBeenCalled();
 
+    await expect(denied.service.allocateInternalCode(
+      auth(["supplier.manage"]),
+      "allocate-2",
+    )).resolves.toMatchObject({ code: "SUP-000001" });
+    expect(denied.repository.allocateInternalCode).toHaveBeenCalledTimes(1);
+
+    await expect(denied.service.allocateInternalCode(
+      auth(["supplier.master.manage"]),
+      "allocate-3",
+    )).resolves.toMatchObject({ code: "SUP-000001" });
+    expect(denied.repository.allocateInternalCode).toHaveBeenCalledTimes(2);
+
     const disabled = await createService({
-      getSettings: mock(async () => ({
-        ...settings,
-        private_supplier_writes_enabled: false,
-      })),
+      getSettings: mock(async () => ({ ...settings, module_enabled: false })),
     });
     await expect(disabled.service.allocateInternalCode(
-      auth(["supplier.master.manage"]),
+      auth(["supplier.manage"]),
       "allocate-1",
-    )).rejects.toMatchObject({ code: "SUPPLIER_PRIVATE_WRITES_DISABLED" });
+    )).rejects.toMatchObject({ code: "SUPPLIER_MODULE_DISABLED" });
     expect(disabled.repository.allocateInternalCode).not.toHaveBeenCalled();
   });
 

@@ -180,6 +180,7 @@ export function SupplierWorkspace({
   const totalPages = Math.max(1, relationships.pagination.totalPages || 1);
   const canCreatePrivate = canManagePrivate &&
     settings.private_supplier_writes_enabled;
+  const canGenerateInternalCode = canCreatePrivate || canManage;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
@@ -194,7 +195,7 @@ export function SupplierWorkspace({
             disabled={listLoading}
             sharedCreationEnabled={canManage}
             privateCreationEnabled={canCreatePrivate}
-            codeAllocationEnabled={canCreatePrivate}
+            codeAllocationEnabled={canGenerateInternalCode}
             onCreated={loadRelationships}
           />
         ) : null}

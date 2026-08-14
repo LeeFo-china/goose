@@ -29,6 +29,7 @@ import {
   requirePrivateSupplierWrites,
   updatePrivateSupplierMaster as updateTenantPrivateSupplierMaster,
 } from "./tenant-supplier-private-commands";
+import { containsDatabaseCode, mutationErrorCode, omitTenantId } from "./tenant-suppliers-utils";
 
 const PERMISSION = {
   view: "supplier.view",
@@ -39,7 +40,7 @@ const PERMISSION = {
 
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
-  "assertTenantContext" | "assertPermission"
+  "assertTenantContext" | "assertPermission" | "hasPermission"
 >;
 export type TenantSuppliersServiceDependencies = {
   repository?: TenantSuppliersRepositoryPort;
@@ -141,8 +142,8 @@ export class TenantSuppliersService {
     authContext: AuthContext,
     idempotencyKey: string,
   ) {
-    const actor = this.requireActor(authContext, "master");
-    await requirePrivateSupplierWrites(this.repository, actor);
+    const actor = this.requireActorWithSupplierCodeAllocation(authContext);
+    await this.requireEnabled(actor.tenantId);
     return allocateTenantSupplierCode(this.repository, actor, idempotencyKey);
   }
 
@@ -391,6 +392,17 @@ export class TenantSuppliersService {
     return requireSupplierActor(authContext, tenantId);
   }
 
+  private requireActorWithSupplierCodeAllocation(authContext: AuthContext) {
+    const tenantId = this.accessPolicy.assertTenantContext(authContext);
+    if (
+      this.accessPolicy.hasPermission(authContext, PERMISSION.master) ||
+      this.accessPolicy.hasPermission(authContext, PERMISSION.manage)
+    ) {
+      return requireSupplierActor(authContext, tenantId);
+    }
+    throw Errors.forbidden();
+  }
+
   private async requireEnabled(tenantId: string) {
     const settings = await this.repository.getSettings(tenantId);
     if (settings?.module_enabled) return settings;
@@ -462,35 +474,6 @@ export class TenantSuppliersService {
       throw error;
     }
   }
-}
-
-function mutationErrorCode(status: TenantSupplierMutationResult["status"]) {
-  return {
-    supplier_not_found: "SUPPLIER_NOT_FOUND",
-    tenant_supplier_not_found: "TENANT_SUPPLIER_NOT_FOUND",
-    state_conflict: "TENANT_SUPPLIER_STATE_CONFLICT",
-    version_conflict: "SUPPLIER_VERSION_CONFLICT",
-    idempotency_conflict: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    created: "TENANT_SUPPLIER_STATE_CONFLICT",
-    updated: "TENANT_SUPPLIER_STATE_CONFLICT",
-  }[status];
-}
-
-function omitTenantId<T extends object>(input: T): Omit<T, "tenant_id"> {
-  const { tenant_id: _tenantId, ...rest } =
-    input as T & { tenant_id?: unknown };
-  return rest;
-}
-
-function containsDatabaseCode(error: unknown, code: string): boolean {
-  if (typeof error === "string") return error.includes(code);
-  if (Array.isArray(error)) {
-    return error.some((item) => containsDatabaseCode(item, code));
-  }
-  if (typeof error !== "object" || error === null) return false;
-  return Object.values(error).some((value) =>
-    containsDatabaseCode(value, code)
-  );
 }
 
 export const tenantSuppliersService = new TenantSuppliersService();

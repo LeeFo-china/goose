@@ -67,6 +67,11 @@ describe("租户合作供应商工作台", () => {
     expect(source).toContain("privateCreationEnabled");
     expect(source).toContain("sharedCreationEnabled");
     expect(source).toContain("codeAllocationEnabled");
+    expect(source).toContain("合作关系管理权限");
+    expect(readSource("./supplier-workspace.tsx")).toContain("canGenerateInternalCode");
+    expect(readSource("./supplier-workspace.tsx")).toContain(
+      "codeAllocationEnabled={canGenerateInternalCode}",
+    );
     expect(source).toContain("isSupplierIdentityConflict");
     expect(source).toContain('aria-pressed={props.active}');
     expect(source).toContain("allocationRequestRef");
