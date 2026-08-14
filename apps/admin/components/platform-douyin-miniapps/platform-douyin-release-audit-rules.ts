@@ -1,3 +1,5 @@
+import { getDouyinAuditRejectionReason } from "@/lib/douyin-audit-rejection-reason";
+
 export type PlatformDouyinInstallation = {
   id: string;
   authorizer_appid: string;
@@ -91,14 +93,6 @@ export function releaseAuditStatusTone(
 
 export function douyinAuditRejectionReason(
   release: PlatformDouyinReleaseAudit | null,
-) {
-  const reason = release?.audit_result?.reason?.trim();
-  if (
-    !reason
-    || (release?.audit_result?.status !== "rejected"
-      && release?.status !== "audit_rejected")
-  ) {
-    return null;
-  }
-  return reason;
+): string | null {
+  return getDouyinAuditRejectionReason(release);
 }
