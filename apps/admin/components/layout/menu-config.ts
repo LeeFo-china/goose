@@ -30,6 +30,7 @@ import {
   Shield,
   Sparkles,
   SlidersHorizontal,
+  Tags,
   TerminalSquare,
   Users,
   RefreshCw,
@@ -216,6 +217,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         label: "合作供应商",
         icon: PackageSearch,
         permission: "supplier.view",
+      },
+      {
+        href: "/supplier-catalog",
+        label: "供应商目录",
+        icon: Tags,
+        permission: "supplier.catalog.manage",
       },
       {
         href: "/supplier-products",
