@@ -1,15 +1,21 @@
 import { Errors } from "@/errors/error-factory";
 import {
-  copyPlatformSpecs,
-  createSpecDefinition,
   findCategoryOwnership,
-  findSpecDefinitionOwnership,
   getTenantSupplierSettings,
+} from "@/repositories/supplier-catalog-tenant";
+import {
+  copyPlatformSpecs,
+  createPlatformSpecDefinition,
+  createSpecDefinition,
+  findSpecDefinitionOwnership,
+  listPlatformSpecDefinitions,
   listSpecDefinitions,
   listUnitSuggestions,
+  processUnitSuggestion,
   submitUnitSuggestion,
+  updatePlatformSpecDefinition,
   updateSpecDefinition,
-} from "@/repositories/supplier-catalog-tenant";
+} from "@/repositories/supplier-catalog-spec-repository";
 import type {
   CatalogSpecDefinitionCreateInput,
   CatalogSpecDefinitionListQuery,
@@ -57,6 +63,13 @@ export type SupplierCatalogSpecRepositoryPort = {
     tenantId: string | null,
     query: CatalogUnitSuggestionListQuery,
   ): Promise<unknown>;
+  listPlatformSpecDefinitions(
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+  ): Promise<unknown>;
+  createPlatformSpecDefinition(input: unknown): Promise<unknown>;
+  updatePlatformSpecDefinition(input: unknown): Promise<unknown>;
+  processUnitSuggestion(input: unknown): Promise<unknown>;
 };
 
 export type SupplierCatalogSpecServiceDependencies = {
@@ -174,6 +187,76 @@ export class SupplierCatalogSpecService {
     return this.repository.listUnitSuggestions(tenantId, query);
   }
 
+  listPlatformSpecDefinitions(
+    authContext: AuthContext,
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+  ) {
+    this.requirePlatform(authContext);
+    return this.repository.listPlatformSpecDefinitions(categoryId, query);
+  }
+
+  async createPlatformSpecDefinition(
+    authContext: AuthContext,
+    categoryId: string,
+    input: CatalogSpecDefinitionCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
+    return this.repository.createPlatformSpecDefinition({
+      ...input,
+      spec_id: this.idFactory(),
+      category_id: categoryId,
+      actor_user_id: actor.authUserId,
+      actor_employee_id: actor.employeeId,
+      idempotency_key: idempotencyKey,
+    });
+  }
+
+  async updatePlatformSpecDefinition(
+    authContext: AuthContext,
+    specId: string,
+    input: CatalogSpecDefinitionUpdateInput,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
+    const ownership = await this.repository.findSpecDefinitionOwnership(specId);
+    if (!ownership || ownership.ownershipScope !== "platform") {
+      throw Errors.business(
+        404,
+        "平台规格定义不存在",
+        "SPEC_TEMPLATE_VALIDATION_ERROR",
+      );
+    }
+    return this.repository.updatePlatformSpecDefinition({
+      ...input,
+      spec_id: specId,
+      actor_user_id: actor.authUserId,
+      actor_employee_id: actor.employeeId,
+    });
+  }
+
+  listPlatformUnitSuggestions(
+    authContext: AuthContext,
+    query: CatalogUnitSuggestionListQuery,
+  ) {
+    this.requirePlatform(authContext);
+    return this.repository.listUnitSuggestions(null, query);
+  }
+
+  async processUnitSuggestion(
+    authContext: AuthContext,
+    suggestionId: string,
+    input: { status: "approved" | "rejected" },
+  ) {
+    const actor = this.requirePlatformActor(authContext);
+    return this.repository.processUnitSuggestion({
+      suggestion_id: suggestionId,
+      status: input.status,
+      actor_user_id: actor.authUserId,
+      actor_employee_id: actor.employeeId,
+    });
+  }
+
   private requireTenant(authContext: AuthContext): string {
     this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, TENANT_VIEW_PERMISSION);
@@ -198,6 +281,26 @@ export class SupplierCatalogSpecService {
     }
     return {
       tenantId,
+      authUserId: authContext.authUserId,
+      employeeId: authContext.employeeId,
+    };
+  }
+
+  private requirePlatform(authContext: AuthContext): void {
+    const isPlatformIdentity =
+      authContext.isPlatformStaff || authContext.isPlatformAdmin;
+    if (authContext.tenantId !== null || !isPlatformIdentity) {
+      throw Errors.forbidden();
+    }
+    this.accessPolicy.assertPermission(authContext, "platform.catalog.manage");
+  }
+
+  private requirePlatformActor(authContext: AuthContext) {
+    this.requirePlatform(authContext);
+    if (!authContext.employeeId || !authContext.authUserId) {
+      throw Errors.forbidden();
+    }
+    return {
       authUserId: authContext.authUserId,
       employeeId: authContext.employeeId,
     };
@@ -236,6 +339,14 @@ function createSupplierCatalogSpecRepository(): SupplierCatalogSpecRepositoryPor
       submitUnitSuggestion(client, input as never),
     listUnitSuggestions: (tenantId, query) =>
       listUnitSuggestions(client, tenantId, query),
+    listPlatformSpecDefinitions: (categoryId, query) =>
+      listPlatformSpecDefinitions(client, categoryId, query),
+    createPlatformSpecDefinition: (input) =>
+      createPlatformSpecDefinition(client, input as never),
+    updatePlatformSpecDefinition: (input) =>
+      updatePlatformSpecDefinition(client, input as never),
+    processUnitSuggestion: (input) =>
+      processUnitSuggestion(client, input as never),
   };
 }
 

@@ -464,6 +464,9 @@ export const CatalogUnitSuggestionListQuerySchema =
 export const CatalogUnitSuggestionParamSchema = z.object({
   id: uuid("无效的单位建议 ID"),
 }).strict();
+export const CatalogUnitSuggestionProcessSchema = z.object({
+  status: z.enum(["approved", "rejected"], { message: "无效的处理状态" }),
+}).strict();
 
 export type CatalogSpecDefinitionListQuery =
   z.infer<typeof CatalogSpecDefinitionListQuerySchema>;
