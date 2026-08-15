@@ -7,6 +7,10 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import { SupabaseDB } from "@/utils/supabase";
+import {
+  applyOwnership,
+  applySkuPostCreate,
+} from "./supplier-product-sku-postprocess";
 const PRODUCT_LIST_SELECT = [
   "id",
   "supplier_id",
@@ -185,8 +189,9 @@ export type SupplierProductCreateCommand = SupplierCommandContext & {
 type PageInput = { page: number; pageSize: number };
 type Result = { data: unknown; error: unknown; count: number | null };
 type SingleResult = { data: unknown; error: unknown };
-type Query = {
+export type Query = {
   select: (...args: unknown[]) => Query;
+  insert: (value: Record<string, unknown> | unknown[]) => Query;
   update: (value: Record<string, unknown>) => Query;
   eq: (column: string, value: unknown) => Query;
   or: (value: string) => Query;
@@ -195,7 +200,7 @@ type Query = {
   maybeSingle: () => Promise<SingleResult>;
   then: Promise<Result>["then"];
 };
-type Client = {
+export type Client = {
   from: (table: string) => Query;
   rpc: (
     name: string,
@@ -300,7 +305,8 @@ export class SupplierProductsRepository {
       p_description: input.description ?? null,
       ...commandParams(input),
     }, "创建供应商商品失败");
-    await this.applyOwnership(
+    await applyOwnership(
+      this.client,
       "supplier_products",
       input.product_id,
       input.ownership_scope,
@@ -314,18 +320,7 @@ export class SupplierProductsRepository {
       rpcParams(input),
       "创建供应商 SKU 失败",
     );
-    await this.applyOwnership(
-      "supplier_skus",
-      String(input.sku_id ?? ""),
-      input.ownership_scope as "platform" | "tenant" | undefined,
-      input.owner_tenant_id as string | null | undefined,
-    );
-    if (input.spec_values !== undefined) {
-      const { error } = await this.client.from("supplier_skus")
-        .update({ spec_values: input.spec_values })
-        .eq("id", String(input.sku_id ?? ""));
-      if (error) throw Errors.dbError("写入 SKU 规格值失败", error);
-    }
+    await applySkuPostCreate(this.client, input);
     return result;
   }
   mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
@@ -412,21 +407,6 @@ export class SupplierProductsRepository {
     if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(ProductCommandResultSchema, data, message);
   }
-  private async applyOwnership(
-    table: "supplier_products" | "supplier_skus",
-    id: string,
-    ownershipScope: "platform" | "tenant" | undefined,
-    ownerTenantId: string | null | undefined,
-  ) {
-    if (!id || ownershipScope === undefined) return;
-    const { error } = await this.client.from(table)
-      .update({
-        ownership_scope: ownershipScope,
-        owner_tenant_id: ownerTenantId ?? null,
-      })
-      .eq("id", id);
-    if (error) throw Errors.dbError("写入商品所有权失败", error);
-  }
 }
 function commandParams(input: SupplierCommandContext) {
   return {
@@ -443,6 +423,7 @@ function rpcParams(input: Record<string, unknown>) {
         key !== "ownership_scope"
         && key !== "owner_tenant_id"
         && key !== "spec_values"
+        && key !== "unit_conversions"
       )
       .map(([key, value]) => [
         key.startsWith("p_") ? key : `p_${key}`,

@@ -138,12 +138,23 @@ const skuSpecValue = z.union([
   z.array(z.string()),
 ]);
 
+const skuUnitConversion = z.object({
+  from_unit_id: uuid("无效的换算来源单位 ID"),
+  to_unit_id: uuid("无效的换算目标单位 ID"),
+  factor: z.string().trim().min(1, "换算系数不能为空")
+    .refine(
+      (value) => /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0,
+      "换算系数必须是不含指数的正十进制数",
+    ),
+}).strict();
+
 export const SupplierSkuCreateSchema = z.object({
   ...skuFields,
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),
   spec_values: z.record(z.string(), skuSpecValue).optional(),
+  unit_conversions: z.array(skuUnitConversion).optional(),
   proxy_reason: proxyReason.optional(),
 }).strict();
 

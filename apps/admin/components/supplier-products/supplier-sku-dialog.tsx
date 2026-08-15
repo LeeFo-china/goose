@@ -130,6 +130,11 @@ export function SupplierSkuDialog({
         color_managed: colorManaged,
         serial_managed: serialManaged,
         spec_values: collectSpecValues(specs, specInputs),
+        unit_conversions: conversions.map((edge) => ({
+          from_unit_id: edge.fromUnitId,
+          to_unit_id: edge.toUnitId,
+          factor: edge.factor,
+        })),
         proxy_reason: proxyReason.trim(),
       };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
