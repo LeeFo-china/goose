@@ -16,6 +16,7 @@ import {
   type PlatformSupplierOption,
 } from "./platform-supplier-products-api";
 import { PlatformSupplierProductDialog } from "./platform-supplier-product-dialog";
+import { PlatformSupplierSkuDialog } from "./platform-supplier-sku-dialog";
 
 export function PlatformSupplierProducts() {
   const [supplierId, setSupplierId] = useState("");
@@ -111,12 +112,22 @@ export function PlatformSupplierProducts() {
           ) : (
             <ul className="divide-y text-sm">
               {products.map((product) => (
-                <li key={product.id} className="p-3">
-                  <div className="font-medium">{product.name}</div>
-                  <div className="text-muted-foreground">
-                    {product.product_code} · {product.category.name} ·{" "}
-                    {product.brand.name}
+                <li
+                  key={product.id}
+                  className="flex items-center justify-between gap-3 p-3"
+                >
+                  <div>
+                    <div className="font-medium">{product.name}</div>
+                    <div className="text-muted-foreground">
+                      {product.product_code} · {product.category.name} ·{" "}
+                      {product.brand.name}
+                    </div>
                   </div>
+                  <PlatformSupplierSkuDialog
+                    supplierId={appliedSupplierId}
+                    productId={product.id}
+                    onCreated={() => setReload((current) => current + 1)}
+                  />
                 </li>
               ))}
             </ul>
