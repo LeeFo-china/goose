@@ -51,4 +51,31 @@ describe("租户供应商目录", () => {
       dimension: "面积",
     })).toBe("单位名称不能为空");
   });
+
+  test("租户目录分类品牌可新增编辑，平台行只读", () => {
+    const dialogs = readSource("./tenant-catalog-dialogs.tsx");
+    const api = readSource("./tenant-supplier-catalog-api.ts");
+    const workspace = readSource("./tenant-supplier-catalog.tsx");
+
+    expect(dialogs).toContain("createTenantCategory");
+    expect(dialogs).toContain("updateTenantCategory");
+    expect(dialogs).toContain("createTenantBrand");
+    expect(dialogs).toContain("updateTenantBrand");
+    expect(api).toContain('"/catalog/categories"');
+    expect(api).toContain('"/catalog/brands"');
+    expect(workspace).toContain("ownership_scope === \"tenant\"");
+    expect(workspace).toContain("只读");
+    expect(workspace).toContain("TenantCategoryDialog");
+    expect(workspace).toContain("TenantBrandDialog");
+  });
+
+  test("租户目录分类支持树层级浏览与分页", () => {
+    const workspace = readSource("./tenant-supplier-catalog.tsx");
+
+    expect(workspace).toContain("parent_id");
+    expect(workspace).toContain("breadcrumb");
+    expect(workspace).toContain("navigateInto");
+    expect(workspace).toContain("上一页");
+    expect(workspace).toContain("下一页");
+  });
 });

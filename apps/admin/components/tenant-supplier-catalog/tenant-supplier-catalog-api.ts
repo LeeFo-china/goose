@@ -46,3 +46,66 @@ export function loadCategorySpecDefinitions(categoryId: string) {
     fallbackMessage: "加载规格模板失败",
   });
 }
+
+export function createTenantCategory(
+  input: {
+    parent_id: string | null;
+    code: string;
+    name: string;
+    mapped_platform_category_id: string | null;
+  },
+  idempotencyKey: string,
+) {
+  return requestBackendJson<unknown>("/catalog/categories", {
+    method: "POST",
+    body: JSON.stringify(input),
+    headers: { "Idempotency-Key": idempotencyKey },
+    fallbackMessage: "新增目录分类失败",
+  });
+}
+
+export function updateTenantCategory(
+  id: string,
+  input: {
+    expected_version: number;
+    name?: string;
+    mapped_platform_category_id?: string | null;
+  },
+) {
+  return requestBackendJson<unknown>(`/catalog/categories/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+    fallbackMessage: "更新目录分类失败",
+  });
+}
+
+export function createTenantBrand(
+  input: {
+    code: string;
+    name: string;
+    mapped_platform_brand_id: string | null;
+  },
+  idempotencyKey: string,
+) {
+  return requestBackendJson<unknown>("/catalog/brands", {
+    method: "POST",
+    body: JSON.stringify(input),
+    headers: { "Idempotency-Key": idempotencyKey },
+    fallbackMessage: "新增目录品牌失败",
+  });
+}
+
+export function updateTenantBrand(
+  id: string,
+  input: {
+    expected_version: number;
+    name?: string;
+    mapped_platform_brand_id?: string | null;
+  },
+) {
+  return requestBackendJson<unknown>(`/catalog/brands/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+    fallbackMessage: "更新目录品牌失败",
+  });
+}

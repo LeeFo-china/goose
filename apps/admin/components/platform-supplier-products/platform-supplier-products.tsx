@@ -3,14 +3,20 @@
 import { useEffect, useState } from "react";
 import { PackageSearch } from "lucide-react";
 
+import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { SupplierProduct } from "@/components/supplier-products/supplier-product-types";
-import { loadPlatformSupplierProducts } from "./platform-supplier-products-api";
+import {
+  loadPlatformSupplierProducts,
+  loadPlatformSuppliers,
+  type PlatformSupplierOption,
+} from "./platform-supplier-products-api";
+import { PlatformSupplierProductDialog } from "./platform-supplier-product-dialog";
+import { PlatformSupplierSkuDialog } from "./platform-supplier-sku-dialog";
 
 export function PlatformSupplierProducts() {
   const [supplierId, setSupplierId] = useState("");
@@ -18,6 +24,22 @@ export function PlatformSupplierProducts() {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suppliers, setSuppliers] = useState<PlatformSupplierOption[]>([]);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    loadPlatformSuppliers().then((page) => {
+      if (active) setSuppliers(page.list);
+    }).catch((caught) => {
+      if (active) {
+        setError(caught instanceof Error ? caught.message : "供应商加载失败");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!appliedSupplierId) {
@@ -39,7 +61,7 @@ export function PlatformSupplierProducts() {
     return () => {
       active = false;
     };
-  }, [appliedSupplierId]);
+  }, [appliedSupplierId, reload]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -49,23 +71,31 @@ export function PlatformSupplierProducts() {
           按平台供应商查看平台共享商品资料，不维护租户成交价。
         </p>
       </div>
-      <div className="flex gap-2">
-        <Input
-          aria-label="平台供应商 ID"
-          placeholder="输入平台供应商 ID"
+      <div className="max-w-md">
+        <FormSelect
+          id="platform-supplier-select"
           value={supplierId}
-          onChange={(event) => setSupplierId(event.target.value)}
+          options={suppliers.map((supplier) => ({
+            value: supplier.id,
+            label: `${supplier.name} · ${supplier.code}`,
+          }))}
+          onChange={(value) => {
+            setSupplierId(value);
+            setAppliedSupplierId(value);
+          }}
         />
-        <Button
-          type="button"
-          onClick={() => setAppliedSupplierId(supplierId.trim())}
-        >
-          查询
-        </Button>
       </div>
       <Card className="min-h-80">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
-          <div className="text-sm font-medium">商品列表</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">商品列表</div>
+            {appliedSupplierId ? (
+              <PlatformSupplierProductDialog
+                supplierId={appliedSupplierId}
+                onCreated={() => setReload((current) => current + 1)}
+              />
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -82,12 +112,22 @@ export function PlatformSupplierProducts() {
           ) : (
             <ul className="divide-y text-sm">
               {products.map((product) => (
-                <li key={product.id} className="p-3">
-                  <div className="font-medium">{product.name}</div>
-                  <div className="text-muted-foreground">
-                    {product.product_code} · {product.category.name} ·{" "}
-                    {product.brand.name}
+                <li
+                  key={product.id}
+                  className="flex items-center justify-between gap-3 p-3"
+                >
+                  <div>
+                    <div className="font-medium">{product.name}</div>
+                    <div className="text-muted-foreground">
+                      {product.product_code} · {product.category.name} ·{" "}
+                      {product.brand.name}
+                    </div>
                   </div>
+                  <PlatformSupplierSkuDialog
+                    supplierId={appliedSupplierId}
+                    productId={product.id}
+                    onCreated={() => setReload((current) => current + 1)}
+                  />
                 </li>
               ))}
             </ul>

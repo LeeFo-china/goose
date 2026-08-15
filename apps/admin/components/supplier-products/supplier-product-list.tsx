@@ -231,6 +231,7 @@ export function SupplierProductList({
                 <SupplierSkuDialog
                   tenantSupplierId={tenantSupplierId}
                   productId={selected.id}
+                  categoryId={selected.category.id}
                   disabled={skuLoading || selected.status === "inactive"}
                   onCreated={() => loadSkus(selected)}
                 />

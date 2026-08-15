@@ -90,11 +90,13 @@ describe("SupplierCatalogService read boundaries", () => {
       page: 2,
       pageSize: 20,
       status: "active",
+      tenant_id: TENANT_ID,
     });
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
       status: "active",
+      tenant_id: TENANT_ID,
     });
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith({
       page: 1,
