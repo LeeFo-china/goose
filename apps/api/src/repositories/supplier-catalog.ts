@@ -36,7 +36,6 @@ import {
   type TenantCatalogBrand,
   type TenantCatalogCategory,
 } from "./supplier-catalog-tenant";
-
 const CATEGORY_SELECT =
   "id,parent_id,code,name,level,status,sort_order,version,created_at,updated_at";
 const BRAND_SELECT =
@@ -44,7 +43,6 @@ const BRAND_SELECT =
 const UNIT_SELECT =
   "id,code,name,symbol,base_unit_id,conversion_factor::text,status,sort_order,version,created_at,updated_at";
 const UNIT_BASE_SELECT = "id,code,name,symbol,status";
-
 const CatalogStatusSchema = z.enum(["active", "inactive"]);
 const CatalogConflictSnapshotSchema = z.object({
   version: z.number().int().positive(),
@@ -98,7 +96,6 @@ const CatalogUnitBaseSchema = z.object({
 const CatalogUnitListSchema = CatalogUnitSchema.extend({
   base_unit: CatalogUnitBaseSchema.nullable(),
 }).strict();
-
 export type CatalogCategory = z.infer<typeof CatalogCategorySchema>;
 export type CatalogBrand = z.infer<typeof CatalogBrandSchema>;
 export type CatalogUnit = z.infer<typeof CatalogUnitListSchema>;
@@ -118,12 +115,13 @@ export type CatalogBrandCreateResult =
   CreateCommandResult<"brand", CatalogBrand>;
 export type CatalogUnitCreateResult =
   CreateCommandResult<"unit", CatalogUnitRecord>;
-
 export interface SupplierCatalogRepositoryPort {
   listCategories(
-    query: CatalogCategoryListQuery,
+    query: CatalogCategoryListQuery & { tenant_id?: string },
   ): Promise<CatalogPage<CatalogCategory>>;
-  listBrands(query: CatalogBrandListQuery): Promise<CatalogPage<CatalogBrand>>;
+  listBrands(
+    query: CatalogBrandListQuery & { tenant_id?: string },
+  ): Promise<CatalogPage<CatalogBrand>>;
   listUnits(query: CatalogUnitListQuery): Promise<CatalogPage<CatalogUnit>>;
   createCategory(input: CatalogCategoryCreateCommand): Promise<CatalogCategoryCreateResult>;
   updateCategory(input: CatalogCategoryUpdateRecord): Promise<CatalogCategory>;
@@ -149,24 +147,25 @@ export interface SupplierCatalogRepositoryPort {
     input: TenantCatalogBrandUpdateRecord,
   ): Promise<TenantCatalogBrand>;
 }
-
 type CatalogClient = ReturnType<typeof SupabaseDB.getAdminClient>;
-
 export class SupplierCatalogRepository
   implements SupplierCatalogRepositoryPort {
   private readonly client: CatalogClient;
-
   constructor(clientFactory = () => SupabaseDB.getAdminClient()) {
     this.client = clientFactory();
   }
-
   async listCategories(
-    input: CatalogCategoryListQuery,
+    input: CatalogCategoryListQuery & { tenant_id?: string },
   ): Promise<CatalogPage<CatalogCategory>> {
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_categories")
       .select(CATEGORY_SELECT, { count: "exact" });
+    if (input.tenant_id) {
+      request = request.or(
+        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
+      );
+    }
     request = input.parent_id
       ? request.eq("parent_id", input.parent_id)
       : request.is("parent_id", null);
@@ -184,14 +183,18 @@ export class SupplierCatalogRepository
       count,
     );
   }
-
   async listBrands(
-    input: CatalogBrandListQuery,
+    input: CatalogBrandListQuery & { tenant_id?: string },
   ): Promise<CatalogPage<CatalogBrand>> {
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_brands")
       .select(BRAND_SELECT, { count: "exact" });
+    if (input.tenant_id) {
+      request = request.or(
+        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
+      );
+    }
     if (input.status) request = request.eq("status", input.status);
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
@@ -205,7 +208,6 @@ export class SupplierCatalogRepository
       count,
     );
   }
-
   async listUnits(
     input: CatalogUnitListQuery,
   ): Promise<CatalogPage<CatalogUnit>> {
@@ -240,7 +242,6 @@ export class SupplierCatalogRepository
       count,
     );
   }
-
   private async hydrateUnitBaseUnits(
     units: CatalogUnitRecord[],
   ): Promise<CatalogUnit[]> {
@@ -250,7 +251,6 @@ export class SupplierCatalogRepository
     if (baseUnitIds.length === 0) {
       return units.map((unit) => ({ ...unit, base_unit: null }));
     }
-
     const { data, error } = await this.client.from("catalog_units")
       .select(UNIT_BASE_SELECT)
       .in("id", baseUnitIds)

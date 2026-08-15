@@ -77,8 +77,11 @@ export class SupplierCatalogService {
     authContext: AuthContext,
     query: CatalogCategoryListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listCategories(activeOnly(query));
+    const tenantId = this.requireTenant(authContext);
+    return this.repository.listCategories({
+      ...activeOnly(query),
+      tenant_id: tenantId,
+    });
   }
 
   listPlatformBrands(
@@ -93,8 +96,11 @@ export class SupplierCatalogService {
     authContext: AuthContext,
     query: CatalogBrandListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listBrands(activeOnly(query));
+    const tenantId = this.requireTenant(authContext);
+    return this.repository.listBrands({
+      ...activeOnly(query),
+      tenant_id: tenantId,
+    });
   }
 
   listPlatformUnits(
@@ -324,9 +330,11 @@ export class SupplierCatalogService {
     };
   }
 
-  private requireTenant(authContext: AuthContext): void {
+  private requireTenant(authContext: AuthContext): string {
     this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, TENANT_PERMISSION);
+    if (!authContext.tenantId) throw Errors.forbidden();
+    return authContext.tenantId;
   }
 
   private async requireTenantCatalogWriteActor(authContext: AuthContext) {
