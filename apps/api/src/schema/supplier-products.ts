@@ -46,6 +46,19 @@ export const SupplierProductListQuerySchema =
     brand_id: uuid("无效的目录品牌 ID").optional(),
   }).strict();
 
+export const PlatformSupplierProductListQuerySchema =
+  PaginationQuerySchema.extend({
+    supplier_id: uuid("无效的供应商 ID"),
+    keyword: keyword.optional(),
+    status: SupplierProductStatusSchema.optional(),
+    category_id: uuid("无效的目录分类 ID").optional(),
+    brand_id: uuid("无效的目录品牌 ID").optional(),
+  }).strict();
+
+export const PlatformSupplierProductScopeQuerySchema = z.object({
+  supplierId: uuid("无效的供应商 ID"),
+}).strict();
+
 export const SupplierSkuListQuerySchema = PaginationQuerySchema.extend({
   keyword: keyword.optional(),
   status: SupplierSkuStatusSchema.optional(),
@@ -143,6 +156,8 @@ export const SupplierSkuUpdateSchema = z.object({
 
 export type SupplierProductListQuery =
   z.infer<typeof SupplierProductListQuerySchema>;
+export type PlatformSupplierProductListQuery =
+  z.infer<typeof PlatformSupplierProductListQuerySchema>;
 export type SupplierSkuListQuery =
   z.infer<typeof SupplierSkuListQuerySchema>;
 export type SupplierProductCreateInput =

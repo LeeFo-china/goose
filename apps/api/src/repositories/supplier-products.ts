@@ -150,7 +150,6 @@ export type Page<T> = {
     totalPages: number;
   };
 };
-
 export type SupplierProductListInput = PageInput & {
   supplier_id: string;
   tenant_id: string;
@@ -183,7 +182,6 @@ export type SupplierProductCreateCommand = SupplierCommandContext & {
   brand_id: string;
   description?: string | null;
 };
-
 type PageInput = { page: number; pageSize: number };
 type Result = { data: unknown; error: unknown; count: number | null };
 type SingleResult = { data: unknown; error: unknown };
@@ -204,7 +202,6 @@ type Client = {
     params: Record<string, unknown>,
   ) => PromiseLike<SingleResult>;
 };
-
 export class SupplierProductsRepository {
   constructor(
     private readonly clientProvider: () => Client = () =>
@@ -240,7 +237,29 @@ export class SupplierProductsRepository {
       count,
     );
   }
-
+  async listPlatformProducts(input: SupplierProductListInput) {
+    const pagination = normalizePage(input);
+    let request = this.client.from("supplier_products")
+      .select(PRODUCT_LIST_SELECT, { count: "exact" })
+      .eq("supplier_id", input.supplier_id)
+      .eq("ownership_scope", "platform");
+    if (input.status) request = request.eq("status", input.status);
+    if (input.category_id) {
+      request = request.eq("category_id", input.category_id);
+    }
+    if (input.brand_id) request = request.eq("brand_id", input.brand_id);
+    request = applyKeyword(request, input.keyword);
+    const { data, error, count } = await request
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(...pageRange(pagination));
+    if (error) throw Errors.dbError("查询平台供应商商品失败", error);
+    return toPage(
+      parseRows(ProductSchema, data, "查询平台供应商商品失败"),
+      pagination,
+      count,
+    );
+  }
   async findProduct(supplierId: string, productId: string) {
     const { data, error } = await this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT)
@@ -252,7 +271,6 @@ export class SupplierProductsRepository {
       ? null
       : parse(ProductSchema, data, "查询供应商商品失败");
   }
-
   async listSkus(input: SupplierSkuListInput) {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_skus")
@@ -272,7 +290,6 @@ export class SupplierProductsRepository {
       count,
     );
   }
-
   async createProduct(input: SupplierProductCreateCommand) {
     const result = await this.command("create_supplier_product", {
       p_product_id: input.product_id,
@@ -285,28 +302,28 @@ export class SupplierProductsRepository {
       p_description: input.description ?? null,
       ...commandParams(input),
     }, "创建供应商商品失败");
-    await this.applyTenantOwnership(
+    await this.applyOwnership(
       "supplier_products",
       input.product_id,
+      input.ownership_scope,
       input.owner_tenant_id,
     );
     return result;
   }
-
   async createSku(input: SupplierCommandContext & Record<string, unknown>) {
     const result = await this.command(
       "create_supplier_sku",
       rpcParams(input),
       "创建供应商 SKU 失败",
     );
-    await this.applyTenantOwnership(
+    await this.applyOwnership(
       "supplier_skus",
       String(input.sku_id ?? ""),
+      input.ownership_scope as "platform" | "tenant" | undefined,
       input.owner_tenant_id as string | null | undefined,
     );
     return result;
   }
-
   mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
     return this.command(
       "mutate_supplier_product",
@@ -314,7 +331,6 @@ export class SupplierProductsRepository {
       "变更供应商商品状态失败",
     );
   }
-
   mutateSku(input: SupplierCommandContext & Record<string, unknown>) {
     return this.command(
       "mutate_supplier_sku_for_product",
@@ -322,7 +338,6 @@ export class SupplierProductsRepository {
       "变更供应商 SKU 状态失败",
     );
   }
-
   async updateProduct(input: Record<string, unknown> & {
     supplier_id: string;
     product_id: string;
@@ -352,7 +367,6 @@ export class SupplierProductsRepository {
     }
     return parse(ProductRecordSchema, data, "更新供应商商品失败");
   }
-
   async updateSku(input: Record<string, unknown> & {
     supplier_id: string;
     supplier_product_id: string;
@@ -385,7 +399,6 @@ export class SupplierProductsRepository {
     }
     return parse(SkuRecordSchema, data, "更新供应商 SKU 失败");
   }
-
   private async command(
     name: string,
     params: Record<string, unknown>,
@@ -395,15 +408,18 @@ export class SupplierProductsRepository {
     if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(ProductCommandResultSchema, data, message);
   }
-
-  private async applyTenantOwnership(
+  private async applyOwnership(
     table: "supplier_products" | "supplier_skus",
     id: string,
+    ownershipScope: "platform" | "tenant" | undefined,
     ownerTenantId: string | null | undefined,
   ) {
-    if (!id || ownerTenantId === undefined || ownerTenantId === null) return;
+    if (!id || ownershipScope === undefined) return;
     const { error } = await this.client.from(table)
-      .update({ ownership_scope: "tenant", owner_tenant_id: ownerTenantId })
+      .update({
+        ownership_scope: ownershipScope,
+        owner_tenant_id: ownerTenantId ?? null,
+      })
       .eq("id", id);
     if (error) throw Errors.dbError("写入商品所有权失败", error);
   }
@@ -430,19 +446,16 @@ function rpcParams(input: Record<string, unknown>) {
       ]),
   );
 }
-
 function normalizePage(input: PageInput) {
   return {
     page: input.page > 0 ? input.page : 1,
     pageSize: Math.min(Math.max(input.pageSize, 1), 100),
   };
 }
-
 function pageRange(input: PageInput): [number, number] {
   const start = (input.page - 1) * input.pageSize;
   return [start, start + input.pageSize - 1];
 }
-
 function applyKeyword(request: Query, keyword?: string) {
   const safe = keyword?.trim().replace(/[%_,().]/g, "");
   return safe
@@ -469,7 +482,6 @@ function toPage<T>(
 function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
   return parse(z.array(schema), data ?? [], message);
 }
-
 function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
   const result = schema.safeParse(data);
   if (result.success) return result.data;
