@@ -7,15 +7,17 @@ import {
   PlatformDouyinMiniappListQuerySchema,
   PlatformDouyinMiniappReleaseEmptyObjectSchema,
   PlatformDouyinMiniappReleaseListQuerySchema,
-  PlatformDouyinMiniappReleaseParamsSchema,
-  SubmitPlatformDouyinMiniappReleaseAuditSchema,
+  PromoteLatestPlatformDouyinTemplateSchema,
   UpdatePlatformDouyinMiniappConfigSchema,
-  UploadPlatformDouyinMiniappReleaseSchema,
 } from "@/schema/platform-douyin-miniapps";
 import { getPlatformDouyinMiniappReleasesService } from
   "@/services/platform-douyin-miniapp-releases";
 import type { PlatformDouyinMiniappReleasesService } from
   "@/services/platform-douyin-miniapp-releases";
+import {
+  getPlatformDouyinTemplatePromotionService,
+  type PlatformDouyinTemplatePromotionService,
+} from "@/services/platform-douyin-template-promotion";
 import {
   PlatformDouyinMiniappsService,
   platformDouyinMiniappsService,
@@ -28,6 +30,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 type ControllerService = Pick<
   PlatformDouyinMiniappsService,
   | "list"
+  | "getTemplateSource"
   | "get"
   | "bind"
   | "createTemplateDevelopment"
@@ -39,16 +42,23 @@ type ControllerService = Pick<
 
 type ReleaseControllerService = Pick<
   PlatformDouyinMiniappReleasesService,
-  "list" | "upload" | "getTestQr" | "submitAudit" | "syncStatus" | "publish"
+  "list"
 >;
 
 type ReleaseServiceProvider = () => Promise<ReleaseControllerService>;
+type PromotionControllerService = Pick<
+  PlatformDouyinTemplatePromotionService,
+  "getStatus" | "confirmLatest"
+>;
+type PromotionServiceProvider = () => Promise<PromotionControllerService>;
 
 export class PlatformDouyinMiniappsController extends PlatformBaseController {
   constructor(
     private readonly service: ControllerService = platformDouyinMiniappsService,
     private readonly releaseServiceProvider: ReleaseServiceProvider =
       getPlatformDouyinMiniappReleasesService,
+    private readonly promotionServiceProvider: PromotionServiceProvider =
+      getPlatformDouyinTemplatePromotionService,
   ) {
     super("platform-douyin-miniapps");
   }
@@ -60,6 +70,43 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     if (!queryResult.success) throw Errors.fromZod(queryResult.error);
     const data = await this.service.list(authContext, queryResult.data);
     return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/douyin-miniapps/template-source")
+  async getTemplateSource(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    const data = await this.service.getTemplateSource(authContext);
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/platform/douyin-miniapps/deployable-template")
+  async getDeployableTemplateStatus(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    const queryResult = PromoteLatestPlatformDouyinTemplateSchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+    const promotionService = await this.promotionServiceProvider();
+    return ResponseHandler.success(
+      await promotionService.getStatus(authContext, queryResult.data),
+    );
+  }
+
+  @Post("/platform/douyin-miniapps/deployable-template/confirm-latest")
+  async confirmLatestTemplate(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getDouyinMiniappManageContext(request);
+    this.parseEmptyRequestPart(request.query);
+    const bodyResult = PromoteLatestPlatformDouyinTemplateSchema.safeParse(
+      request.body || {},
+    );
+    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
+    const promotionService = await this.promotionServiceProvider();
+    return ResponseHandler.success(
+      await promotionService.confirmLatest(authContext, bodyResult.data),
+    );
   }
 
   @Get("/platform/douyin-miniapps/:id")
@@ -132,55 +179,6 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     return ResponseHandler.success(data);
   }
 
-  @Post("/platform/douyin-miniapps/:id/releases/upload")
-  async uploadRelease(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getDouyinMiniappManageContext(request);
-    const installationId = this.parseInstallationId(request);
-    this.parseEmptyRequestPart(request.query);
-    const bodyResult = UploadPlatformDouyinMiniappReleaseSchema.safeParse(request.body || {});
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-    const releaseService = await this.releaseServiceProvider();
-    const data = await releaseService.upload(authContext, installationId, bodyResult.data);
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/platform/douyin-miniapps/:id/releases/:releaseId/test-qr")
-  async getReleaseTestQr(request: FastifyRequest, reply: FastifyReply) {
-    return this.runReleaseAction(request, (service, authContext, installationId, releaseId) =>
-      service.getTestQr(authContext, installationId, releaseId));
-  }
-
-  @Post("/platform/douyin-miniapps/:id/releases/:releaseId/submit-audit")
-  async submitReleaseAudit(request: FastifyRequest, reply: FastifyReply) {
-    const authContext = await this.getDouyinMiniappManageContext(request);
-    const { id, releaseId } = this.parseReleaseIds(request);
-    this.parseEmptyRequestPart(request.query);
-    const bodyResult = SubmitPlatformDouyinMiniappReleaseAuditSchema.safeParse(
-      request.body || {},
-    );
-    if (!bodyResult.success) throw Errors.fromZod(bodyResult.error);
-    const releaseService = await this.releaseServiceProvider();
-    const data = await releaseService.submitAudit(
-      authContext,
-      id,
-      releaseId,
-      bodyResult.data,
-    );
-    return ResponseHandler.success(data);
-  }
-
-  @Post("/platform/douyin-miniapps/:id/releases/:releaseId/sync-status")
-  async syncReleaseStatus(request: FastifyRequest, reply: FastifyReply) {
-    return this.runReleaseAction(request, (service, authContext, installationId, releaseId) =>
-      service.syncStatus(authContext, installationId, releaseId));
-  }
-
-  @Post("/platform/douyin-miniapps/:id/releases/:releaseId/publish")
-  async publishRelease(request: FastifyRequest, reply: FastifyReply) {
-    return this.runReleaseAction(request, (service, authContext, installationId, releaseId) =>
-      service.publish(authContext, installationId, releaseId));
-  }
-
   private async runIdAction(
     request: FastifyRequest,
     action: (
@@ -193,35 +191,10 @@ export class PlatformDouyinMiniappsController extends PlatformBaseController {
     return ResponseHandler.success(await action(authContext, installationId));
   }
 
-  private async runReleaseAction(
-    request: FastifyRequest,
-    action: (
-      service: ReleaseControllerService,
-      authContext: AuthContext,
-      installationId: string,
-      releaseId: string,
-    ) => Promise<unknown>,
-  ) {
-    const authContext = await this.getDouyinMiniappManageContext(request);
-    const { id, releaseId } = this.parseReleaseIds(request);
-    this.parseEmptyRequestPart(request.query);
-    this.parseEmptyRequestPart(request.body);
-    const releaseService = await this.releaseServiceProvider();
-    return ResponseHandler.success(
-      await action(releaseService, authContext, id, releaseId),
-    );
-  }
-
   private parseInstallationId(request: FastifyRequest): string {
     const result = PlatformDouyinMiniappIdParamsSchema.safeParse(request.params || {});
     if (!result.success) throw Errors.fromZod(result.error);
     return result.data.id;
-  }
-
-  private parseReleaseIds(request: FastifyRequest) {
-    const result = PlatformDouyinMiniappReleaseParamsSchema.safeParse(request.params || {});
-    if (!result.success) throw Errors.fromZod(result.error);
-    return result.data;
   }
 
   private parseEmptyRequestPart(input: unknown): void {

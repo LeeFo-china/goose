@@ -124,6 +124,12 @@ describe("domain permissions", () => {
         resource: "douyin_miniapp",
         action: "audit_submit",
       },
+      "douyin_miniapp.publish": {
+        label: "发布抖音小程序",
+        module: "douyin_miniapp",
+        resource: "douyin_miniapp",
+        action: "publish",
+      },
       "douyin_lead.read": {
         label: "查看抖音线索",
         module: "douyin_miniapp",

@@ -4,6 +4,11 @@ import type {
   DouyinReleaseState,
 } from "./workspace-types";
 
+import {
+  getDouyinAuditRejectionReason,
+  type DouyinAuditRejectionReasonInput,
+} from "@/lib/douyin-audit-rejection-reason";
+
 export type WorkspaceStatusTone =
   | "outline"
   | "secondary"
@@ -70,6 +75,12 @@ export function releaseTone(
   }
   if (state === "audit_rejected" || state === "sync_error") return "danger";
   return "secondary";
+}
+
+export function releaseAuditRejectionReason(
+  release: DouyinAuditRejectionReasonInput,
+): string | null {
+  return getDouyinAuditRejectionReason(release);
 }
 
 export function profileStatusLabel(state: DouyinPublicProfileStatus) {

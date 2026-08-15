@@ -94,6 +94,13 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
     sites: z.number().int().nonnegative(),
     active_service_areas: z.number().int().nonnegative(),
   }),
+  available_template: z.strictObject({
+    template_id: z.string().regex(/^[1-9][0-9]{0,18}$/),
+    version: z.string().trim().min(1).max(64),
+    description: z.string().trim().min(1).max(200),
+    confirmed_at: DateTimeSchema,
+    state: z.enum(["new_available", "in_progress", "up_to_date"]),
+  }).nullable(),
   latest_release: z.strictObject({
     id: z.string().uuid(),
     installation_id: z.string().uuid(),

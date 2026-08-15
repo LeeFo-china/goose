@@ -1,5 +1,10 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  douyinDeployableTemplatesRepository,
+  type DouyinDeployableTemplate,
+  type DouyinDeployableTemplatesRepository,
+} from "@/repositories/douyin-deployable-templates";
+import {
   tenantDouyinMiniappWorkspaceRepository,
   type TenantDouyinMiniappWorkspaceInstallation,
   type TenantDouyinMiniappWorkspaceProfile,
@@ -28,10 +33,15 @@ type AccessPolicyPort = Pick<
   typeof accessPolicyService,
   "assertTenantContext" | "assertPermission"
 >;
+type TemplateRepositoryPort = Pick<
+  DouyinDeployableTemplatesRepository,
+  "findCurrent"
+>;
 
 type WorkspaceDependencies = {
   readonly repository?: WorkspaceRepositoryPort;
   readonly accessPolicy?: AccessPolicyPort;
+  readonly templates?: TemplateRepositoryPort;
 };
 
 type WorkspaceBuildInput = {
@@ -44,16 +54,20 @@ type WorkspaceBuildInput = {
     readonly active_service_areas: number;
   };
   readonly latestRelease: TenantDouyinMiniappWorkspaceRelease | null;
+  readonly currentTemplate: DouyinDeployableTemplate | null;
 };
 
 export class TenantDouyinMiniappWorkspaceService {
   private readonly repository: WorkspaceRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
+  private readonly templates: TemplateRepositoryPort;
 
   constructor(dependencies: WorkspaceDependencies = {}) {
     this.repository = dependencies.repository
       ?? tenantDouyinMiniappWorkspaceRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
+    this.templates = dependencies.templates
+      ?? douyinDeployableTemplatesRepository;
   }
 
   async getWorkspace(authContext: AuthContext) {
@@ -63,13 +77,15 @@ export class TenantDouyinMiniappWorkspaceService {
     const installation = await this.repository.findCurrentInstallation(
       tenantId,
     );
-    const [tenant, profile, counts, latestRelease] = await Promise.all([
+    const [tenant, profile, counts, latestRelease, currentTemplate] =
+      await Promise.all([
       this.repository.findTenantSummary(tenantId),
       this.repository.findProfile(tenantId),
       this.repository.getPublicContentCounts(tenantId),
       installation
         ? this.repository.findLatestRelease(installation.id)
         : Promise.resolve(null),
+      this.templates.findCurrent("default"),
     ]);
 
     if (!tenant) {
@@ -86,6 +102,7 @@ export class TenantDouyinMiniappWorkspaceService {
       profile,
       counts,
       latestRelease,
+      currentTemplate,
     });
   }
 }
@@ -98,8 +115,31 @@ export function buildWorkspace(input: WorkspaceBuildInput) {
     installation: input.installation,
     public_profile: input.profile,
     public_content: input.counts,
+    available_template: availableTemplate(
+      input.currentTemplate,
+      input.latestRelease,
+    ),
     latest_release: input.latestRelease,
   });
+}
+
+function availableTemplate(
+  template: DouyinDeployableTemplate | null,
+  release: TenantDouyinMiniappWorkspaceRelease | null,
+) {
+  if (!template) return null;
+  const sameTemplate = release?.template_id === template.template_id;
+  return {
+    template_id: template.template_id,
+    version: template.template_version,
+    description: template.description,
+    confirmed_at: template.confirmed_at,
+    state: !sameTemplate
+      ? "new_available" as const
+      : release.status === "released"
+      ? "up_to_date" as const
+      : "in_progress" as const,
+  };
 }
 
 function authorizationState(

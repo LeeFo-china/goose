@@ -80,6 +80,11 @@ function dependencies(overrides: Record<string, unknown> = {}) {
   const repository = {
     list: mock(async (_query: unknown) => ({ list: [installation], total: 1 })),
     findById: mock(async (_id: string) => installation),
+    findByAuthorizerAppId: mock(async (_appId: string) => ({
+      ...installation,
+      authorizer_appid: "template-appid",
+      installation_kind: "template_development" as const,
+    })),
     findTenantStatusById: mock(async (id: string) => ({ id, status: "active" })),
     createTemplateDevelopmentAtomically: mock(async (_input: unknown) => ({ ...installation,
       authorizer_appid: "template-appid", installation_kind: "template_development",
@@ -108,6 +113,7 @@ describe("PlatformDouyinMiniappsService", () => {
 
     await Promise.allSettled([
       service.list(authContext, { page: 1, pageSize: 20 }),
+      service.getTemplateSource(authContext),
       service.get(authContext, INSTALLATION_ID),
       service.bind(authContext, INSTALLATION_ID, {
         tenant_id: TENANT_ID,
@@ -123,7 +129,7 @@ describe("PlatformDouyinMiniappsService", () => {
       service.enable(authContext, INSTALLATION_ID),
     ]);
 
-    expect(deps.accessPolicy.assertPermission).toHaveBeenCalledTimes(8);
+    expect(deps.accessPolicy.assertPermission).toHaveBeenCalledTimes(9);
     for (const call of deps.accessPolicy.assertPermission.mock.calls) {
       expect(call).toEqual([authContext, "platform.douyin_miniapp.manage"]);
     }
@@ -168,6 +174,32 @@ describe("PlatformDouyinMiniappsService", () => {
     expect(deps.repository.list).toHaveBeenCalledWith({ page: 2, pageSize: 100 });
     expect(result.pagination).toEqual({ page: 2, pageSize: 100, total: 151, totalPages: 2 });
     expect(JSON.stringify(result)).not.toMatch(/deployment_key|ciphertext|refresh_claim|must-not-leak/);
+  });
+
+  test("resolves the template source from server configuration", async () => {
+    const template = {
+      ...installation,
+      authorizer_appid: "tt0d647bd99301341b01",
+      installation_kind: "template_development" as const,
+    };
+    const deps = dependencies({
+      findByAuthorizerAppId: mock(async () => template),
+    });
+    const service = new PlatformDouyinMiniappsService({
+      ...deps,
+      configProvider: () => ({
+        componentAppId: "component-appid",
+        templateAppId: template.authorizer_appid,
+      }),
+    } as never);
+
+    await expect(service.getTemplateSource(authContext)).resolves.toEqual({
+      template_app_id: template.authorizer_appid,
+      installation: template,
+    });
+    expect(deps.repository.findByAuthorizerAppId).toHaveBeenCalledWith(
+      template.authorizer_appid,
+    );
   });
 
   test("bind validates an active tenant and only binds authorized_unbound merchant once", async () => {

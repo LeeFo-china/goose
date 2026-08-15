@@ -20,12 +20,19 @@ const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
 const INSTALLATION_ID = "33333333-3333-4333-8333-333333333333";
 const OTHER_INSTALLATION_ID = "44444444-4444-4444-8444-444444444444";
 const RELEASE_ID = "55555555-5555-4555-8555-555555555555";
+const deployableTemplate = {
+  template_id: "77596",
+  template_version: "0.1.4",
+  description: "租户发布闭环",
+  channel: "default" as const,
+};
 
 function tenantContext(
   permissions: string[] = [
     "douyin_miniapp.read",
     "douyin_miniapp.manage",
     "douyin_miniapp.audit.submit",
+    "douyin_miniapp.publish",
   ],
 ): AuthContext {
   return {
@@ -85,6 +92,7 @@ function fixture(options: {
   readonly target?: object | null;
   readonly profile?: object | null;
   readonly foundRelease?: object | null;
+  readonly latestRelease?: object | null;
 } = {}) {
   const currentInstallation = options.currentInstallation ?? {
     id: INSTALLATION_ID,
@@ -105,6 +113,10 @@ function fixture(options: {
       currentInstallation),
     findProfile: mock(async (_tenantId: string) =>
       options.profile ?? { status: "published" }),
+    findLatestRelease: mock(async (_installationId: string) =>
+      options.latestRelease === undefined
+        ? null
+        : options.latestRelease),
   };
   const installations = {
     findReleaseTargetById: mock(async (_id: string) => target),
@@ -119,6 +131,10 @@ function fixture(options: {
         ? release()
         : options.foundRelease),
   };
+  const templates = {
+    findCurrent: mock(async (): Promise<typeof deployableTemplate | null> =>
+      deployableTemplate),
+  };
   const accessPolicy = {
     assertTenantContext: mock((context: AuthContext) => {
       if (!context.tenantId) throw new TypeError("missing tenant");
@@ -132,9 +148,17 @@ function fixture(options: {
     }),
   };
   const operations = {
+    upload: mock(async () => release({
+      id: "77777777-7777-4777-8777-777777777777",
+      template_id: deployableTemplate.template_id,
+      template_version: deployableTemplate.template_version,
+      description: deployableTemplate.description,
+      status: "uploaded",
+    })),
     getTestQr: mock(async () => release()),
     submitAudit: mock(async () => release({ status: "audit_pending" })),
     syncStatus: mock(async () => release({ status: "audit_approved" })),
+    publish: mock(async () => release({ status: "released" })),
   };
   const service = new Service({
     workspace: workspace as never,
@@ -142,6 +166,7 @@ function fixture(options: {
     releases: releases as never,
     accessPolicy: accessPolicy as never,
     operations: operations as never,
+    templates: templates as never,
   });
   return {
     service,
@@ -150,6 +175,7 @@ function fixture(options: {
     releases,
     accessPolicy,
     operations,
+    templates,
   };
 }
 
@@ -193,7 +219,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
     expect(context.operations.getTestQr).not.toHaveBeenCalled();
   });
 
-  test("allows tenant audit submit but exposes no publish method", async () => {
+  test("allows tenant audit submit with its dedicated permission", async () => {
     const context = fixture();
     const input = {
       host_names: ["douyin.com"],
@@ -213,7 +239,114 @@ describe("TenantDouyinMiniappReleasesService", () => {
       EMPLOYEE_ID,
       input,
     );
-    expect("publish" in context.service).toBe(false);
+  });
+
+  test("creates a test version from the server-owned current template", async () => {
+    const context = fixture();
+
+    const result = await context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+    );
+
+    expect(context.templates.findCurrent).toHaveBeenCalledWith("default");
+    expect(context.operations.upload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: INSTALLATION_ID }),
+      INSTALLATION_ID,
+      EMPLOYEE_ID,
+      {
+        template_id: deployableTemplate.template_id,
+        template_version: deployableTemplate.template_version,
+        description: deployableTemplate.description,
+        channel: "default",
+      },
+    );
+    expect(context.operations.getTestQr).toHaveBeenCalledWith(
+      expect.objectContaining({ id: INSTALLATION_ID }),
+      expect.objectContaining({
+        id: "77777777-7777-4777-8777-777777777777",
+      }),
+      EMPLOYEE_ID,
+    );
+    expect(result).not.toHaveProperty("ext_json");
+  });
+
+  test("publishes only an owned release with the production permission", async () => {
+    const context = fixture({
+      foundRelease: release({ status: "audit_approved" }),
+    });
+
+    await context.service.publish(
+      tenantContext(["douyin_miniapp.publish"]),
+      RELEASE_ID,
+    );
+
+    expect(context.accessPolicy.assertPermission).toHaveBeenCalledWith(
+      expect.anything(),
+      "douyin_miniapp.publish",
+    );
+    expect(context.operations.publish).toHaveBeenCalledWith(
+      expect.objectContaining({ id: INSTALLATION_ID }),
+      INSTALLATION_ID,
+      expect.objectContaining({ id: RELEASE_ID, status: "audit_approved" }),
+      EMPLOYEE_ID,
+    );
+  });
+
+  test("rejects creating a test version before platform confirms a template", async () => {
+    const context = fixture();
+    context.templates.findCurrent.mockResolvedValue(null);
+
+    await expect(context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+    )).rejects.toMatchObject({
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
+  test("recovers the tenant's created release before starting a newer template", async () => {
+    const createdRelease = release({ status: "created" });
+    const context = fixture({
+      latestRelease: createdRelease,
+      foundRelease: createdRelease,
+    });
+
+    await context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+    );
+
+    expect(context.operations.upload).toHaveBeenCalledWith(
+      expect.objectContaining({ id: INSTALLATION_ID }),
+      INSTALLATION_ID,
+      EMPLOYEE_ID,
+      {
+        template_id: createdRelease.template_id,
+        template_version: createdRelease.template_version,
+        description: createdRelease.description,
+        channel: createdRelease.channel,
+      },
+    );
+    expect(context.releases.findById).toHaveBeenCalledWith(createdRelease.id);
+    expect(context.templates.findCurrent).not.toHaveBeenCalled();
+  });
+
+  test("does not replace any unfinished release with a newer template", async () => {
+    for (const status of [
+      "uploaded",
+      "testing",
+      "audit_pending",
+      "audit_approved",
+    ] as const) {
+      const context = fixture({ latestRelease: release({ status }) });
+
+      await expect(context.service.createFromCurrentTemplate(
+        tenantContext(["douyin_miniapp.manage"]),
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "DOUYIN_TENANT_RELEASE_IN_PROGRESS",
+      });
+      expect(context.operations.upload).not.toHaveBeenCalled();
+    }
   });
 
   test("requires published profile and a test QR before audit submit", async () => {

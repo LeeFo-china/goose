@@ -34,6 +34,7 @@ import {
   authorizationTone,
   profileStatusLabel,
   profileStatusTone,
+  releaseAuditRejectionReason,
   releaseLabel,
   releaseTone,
 } from "./workspace-display";
@@ -45,6 +46,7 @@ import type { TenantDouyinWorkspace } from "./workspace-types";
 type TenantDouyinMiniappWorkspaceProps = {
   canRead: boolean;
   canManage?: boolean;
+  canPublish?: boolean;
   canSubmitAudit?: boolean;
   loadError: string | null;
   workspace: TenantDouyinWorkspace | null;
@@ -53,6 +55,7 @@ type TenantDouyinMiniappWorkspaceProps = {
 export function TenantDouyinMiniappWorkspace({
   canRead,
   canManage = false,
+  canPublish = false,
   canSubmitAudit = false,
   loadError,
   workspace,
@@ -72,6 +75,7 @@ export function TenantDouyinMiniappWorkspace({
       {canRead && !loadError && workspace ? (
         <WorkspaceOverview
           canManage={canManage}
+          canPublish={canPublish}
           canSubmitAudit={canSubmitAudit}
           workspace={workspace}
         />
@@ -132,15 +136,19 @@ function MissingWorkspace() {
 
 function WorkspaceOverview({
   canManage,
+  canPublish,
   canSubmitAudit,
   workspace,
 }: {
   canManage: boolean;
+  canPublish: boolean;
   canSubmitAudit: boolean;
   workspace: TenantDouyinWorkspace;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <div className="flex flex-col gap-4">
+      <TemplateAvailabilityNotice workspace={workspace} />
+      <Card className="overflow-hidden">
       <CardHeader className="gap-4 border-b bg-muted/20">
         <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
           <div className="flex min-w-0 flex-col gap-1.5">
@@ -165,6 +173,7 @@ function WorkspaceOverview({
         <div className="rounded-md border bg-background p-4">
           <TenantDouyinMiniappWorkspaceActions
             canManage={canManage}
+            canPublish={canPublish}
             canSubmitAudit={canSubmitAudit}
             workspace={workspace}
           />
@@ -283,7 +292,50 @@ function WorkspaceOverview({
 
         <ReleaseSummary workspace={workspace} />
       </CardContent>
-    </Card>
+      </Card>
+    </div>
+  );
+}
+
+function TemplateAvailabilityNotice({
+  workspace,
+}: {
+  workspace: TenantDouyinWorkspace;
+}) {
+  const template = workspace.available_template;
+  if (!template) return null;
+  const auditInProgress = template.state === "new_available"
+    && (workspace.latest_release?.status === "audit_pending"
+      || workspace.latest_release?.status === "audit_approved");
+  const content = template.state === "up_to_date"
+    ? {
+      title: `当前已是最新版本 ${template.version}`,
+      description: "该租户线上版本与平台当前可发布模板一致。",
+      variant: "default" as const,
+    }
+    : template.state === "in_progress"
+    ? {
+      title: `版本 ${template.version} 正在发布流程中`,
+      description: "请按当前状态完成体验验收、审核和正式发布。",
+      variant: "default" as const,
+    }
+    : auditInProgress
+    ? {
+      title: `另有可用新版 ${template.version}`,
+      description: "当前版本正在审核或等待发布，完成后即可生成新版体验版。",
+      variant: "default" as const,
+    }
+    : {
+      title: `发现可用新版 ${template.version}`,
+      description: `${template.description}。可生成体验版进行验收。`,
+      variant: "default" as const,
+    };
+  return (
+    <Alert variant={content.variant}>
+      <AppWindow aria-hidden="true" />
+      <AlertTitle>{content.title}</AlertTitle>
+      <AlertDescription>{content.description}</AlertDescription>
+    </Alert>
   );
 }
 
@@ -339,6 +391,9 @@ function ReleaseSummary({
   workspace: TenantDouyinWorkspace;
 }) {
   const release = workspace.latest_release;
+  const rejectionReason = release
+    ? releaseAuditRejectionReason(release)
+    : null;
 
   return (
     <section
@@ -370,6 +425,15 @@ function ReleaseSummary({
           <p className="break-words text-sm text-muted-foreground sm:col-span-3 md:col-span-1">
             {release.description}
           </p>
+          {rejectionReason ? (
+            <Alert variant="destructive" className="sm:col-span-3 md:col-span-2">
+              <ShieldAlert aria-hidden="true" />
+              <AlertTitle>审核驳回原因</AlertTitle>
+              <AlertDescription className="whitespace-pre-wrap break-words">
+                {rejectionReason}
+              </AlertDescription>
+            </Alert>
+          ) : null}
         </div>
       ) : (
         <div className="rounded-md border border-dashed px-4 py-5">

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   authorizationLabel,
   profileStatusLabel,
+  releaseAuditRejectionReason,
   releaseLabel,
   workspaceNextAction,
 } from "./workspace-display";
@@ -50,6 +51,21 @@ describe("Douyin miniapp workspace display", () => {
         releaseState: "audit_rejected",
       }),
     ).toBe("处理审核反馈");
+  });
+
+  test("returns the official rejection reason only for rejected releases", () => {
+    expect(releaseAuditRejectionReason({
+      status: "audit_rejected",
+      audit_result: {
+        status: "rejected",
+        reason: "小程序功能不完整且可用性低",
+      },
+    })).toBe("小程序功能不完整且可用性低");
+
+    expect(releaseAuditRejectionReason({
+      status: "audit_pending",
+      audit_result: { status: "pending", reason: "不应展示" },
+    })).toBeNull();
   });
 
   test("uses concise Chinese copy without dash separators", () => {
