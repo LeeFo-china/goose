@@ -397,6 +397,9 @@ export const CatalogSpecDefinitionListQuerySchema =
 export const CatalogSpecDefinitionParamSchema = z.object({
   id: uuid("无效的规格定义 ID"),
 }).strict();
+export const CatalogSpecDefinitionIdParamSchema = z.object({
+  specId: uuid("无效的规格定义 ID"),
+}).strict();
 
 const specEnumOptions = z.array(
   z.string().trim().min(1, "枚举选项不能为空"),
