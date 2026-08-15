@@ -35,6 +35,10 @@ import {
 } from "./tenant-supplier-catalog-api";
 import { specValueTypeLabel } from "./tenant-supplier-catalog-rules";
 import { UnitSuggestionForm } from "./unit-suggestion-form";
+import {
+  TenantBrandDialog,
+  TenantCategoryDialog,
+} from "./tenant-catalog-dialogs";
 
 export function TenantCatalogWorkspace({
   canManage,
@@ -56,6 +60,13 @@ export function TenantCatalogWorkspace({
   const [specCategoryId, setSpecCategoryId] = useState<string | null>(null);
   const [specs, setSpecs] = useState<TenantCatalogSpecDefinition[]>([]);
   const [specsLoading, setSpecsLoading] = useState(false);
+  const [categoryDialog, setCategoryDialog] = useState<
+    { category?: TenantCatalogCategory; parentId?: string | null } | null
+  >(null);
+  const [brandDialog, setBrandDialog] = useState<
+    { brand?: TenantCatalogBrand } | null
+  >(null);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     if (!specCategoryId) {
@@ -108,7 +119,7 @@ export function TenantCatalogWorkspace({
     return () => {
       active = false;
     };
-  }, []);
+  }, [reload]);
 
   if (loading) {
     return (
@@ -149,8 +160,23 @@ export function TenantCatalogWorkspace({
         </TabsList>
         <Card className="min-h-80">
           <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
-            <div className="text-sm font-medium">
-              共 {current.pagination.total} 条记录
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">
+                共 {current.pagination.total} 条记录
+              </div>
+              {canManage && view !== "units" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() =>
+                    view === "categories"
+                      ? setCategoryDialog({ parentId: null })
+                      : setBrandDialog({})
+                  }
+                >
+                  新增{view === "categories" ? "分类" : "品牌"}
+                </Button>
+              ) : null}
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -175,6 +201,7 @@ export function TenantCatalogWorkspace({
                       <th className="p-3 font-medium">编码</th>
                       <th className="p-3 font-medium">来源</th>
                       <th className="p-3 font-medium">平台映射</th>
+                      <th className="p-3 font-medium">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -189,11 +216,18 @@ export function TenantCatalogWorkspace({
                                 current === category.id ? null : category.id
                               )
                             }
+                            onEdit={() =>
+                              setCategoryDialog({ category })
+                            }
                           />
                         ))
                       : view === "brands"
                         ? brands.list.map((brand) => (
-                            <BrandRow key={brand.id} brand={brand} />
+                            <BrandRow
+                              key={brand.id}
+                              brand={brand}
+                              onEdit={() => setBrandDialog({ brand })}
+                            />
                           ))
                         : units.list.map((unit) => (
                             <UnitRow key={unit.id} unit={unit} />
@@ -238,6 +272,21 @@ export function TenantCatalogWorkspace({
             </CardContent>
           </Card>
         ) : null}
+        {categoryDialog ? (
+          <TenantCategoryDialog
+            category={categoryDialog.category}
+            parentId={categoryDialog.parentId}
+            onClose={() => setCategoryDialog(null)}
+            onSaved={() => setReload((current) => current + 1)}
+          />
+        ) : null}
+        {brandDialog ? (
+          <TenantBrandDialog
+            brand={brandDialog.brand}
+            onClose={() => setBrandDialog(null)}
+            onSaved={() => setReload((current) => current + 1)}
+          />
+        ) : null}
       </Tabs>
     </div>
   );
@@ -247,10 +296,12 @@ function CategoryRow({
   category,
   selected,
   onSelect,
+  onEdit,
 }: {
   category: TenantCatalogCategory;
   selected: boolean;
   onSelect: () => void;
+  onEdit: () => void;
 }) {
   return (
     <tr
@@ -263,11 +314,34 @@ function CategoryRow({
         <SourceBadge source={category.ownership_scope} />
       </td>
       <td className="p-3">{category.mapped_platform_category_id ?? "-"}</td>
+      <td className="p-3">
+        {category.ownership_scope === "tenant" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onEdit();
+            }}
+          >
+            编辑
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">只读</span>
+        )}
+      </td>
     </tr>
   );
 }
 
-function BrandRow({ brand }: { brand: TenantCatalogBrand }) {
+function BrandRow({
+  brand,
+  onEdit,
+}: {
+  brand: TenantCatalogBrand;
+  onEdit: () => void;
+}) {
   return (
     <tr className="border-b">
       <td className="p-3">{brand.name}</td>
@@ -276,6 +350,20 @@ function BrandRow({ brand }: { brand: TenantCatalogBrand }) {
         <SourceBadge source={brand.ownership_scope} />
       </td>
       <td className="p-3">{brand.mapped_platform_brand_id ?? "-"}</td>
+      <td className="p-3">
+        {brand.ownership_scope === "tenant" ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={onEdit}
+          >
+            编辑
+          </Button>
+        ) : (
+          <span className="text-xs text-muted-foreground">只读</span>
+        )}
+      </td>
     </tr>
   );
 }
