@@ -7,7 +7,6 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import { SupabaseDB } from "@/utils/supabase";
-
 const PRODUCT_LIST_SELECT = [
   "id",
   "supplier_id",
@@ -18,6 +17,8 @@ const PRODUCT_LIST_SELECT = [
   "version",
   "category:catalog_categories!category_id(id,code,name,status)",
   "brand:catalog_brands!brand_id(id,code,name,status)",
+  "ownership_scope",
+  "owner_tenant_id",
   "updated_at",
 ].join(",");
 const PRODUCT_RECORD_SELECT = [
@@ -70,7 +71,6 @@ const SKU_RECORD_SELECT = [
   "version",
   "updated_at",
 ].join(",");
-
 const CatalogReferenceSchema = z.object({
   id: z.uuid(),
   code: z.string(),
@@ -90,6 +90,8 @@ const ProductSchema = z.object({
   version: z.number().int().positive(),
   category: CatalogReferenceSchema,
   brand: CatalogReferenceSchema,
+  ownership_scope: z.enum(["platform", "tenant"]).nullable().optional(),
+  owner_tenant_id: z.uuid().nullable().optional(),
   updated_at: z.string(),
 }).strict();
 const ProductRecordSchema = ProductSchema.omit({
@@ -133,14 +135,12 @@ const ProductCommandResultSchema = z.object({
   error_code: z.string().optional(),
   reason: z.string().optional(),
 }).passthrough();
-
 export type SupplierProduct = z.infer<typeof ProductSchema>;
 export type SupplierSku = z.infer<typeof SkuSchema>;
 export type SupplierProductCommandResult =
   z.infer<typeof ProductCommandResultSchema>;
 export type SupplierProductPage = Page<SupplierProduct>;
 export type SupplierSkuPage = Page<SupplierSku>;
-
 export type Page<T> = {
   list: T[];
   pagination: {

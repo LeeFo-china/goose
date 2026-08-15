@@ -1,6 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
+import { supplierProductSourceLabel } from "./supplier-product-types";
+
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
   expect(existsSync(url), path).toBe(true);
@@ -55,5 +57,14 @@ describe("供应商品与供货价工作区", () => {
     expect(rules.shouldLoadPriceLists(false, "relationship-1")).toBe(false);
     expect(rules.shouldLoadPriceLists(true, null)).toBe(false);
     expect(rules.shouldLoadPriceLists(true, "relationship-1")).toBe(true);
+  });
+
+  test("商品列表标记平台共享与租户私有来源", () => {
+    const list = readSource("./supplier-product-list.tsx");
+
+    expect(list).toContain("ownership_scope");
+    expect(list).toContain("supplierProductSourceLabel");
+    expect(supplierProductSourceLabel("platform")).toBe("平台共享");
+    expect(supplierProductSourceLabel("tenant")).toBe("租户私有");
   });
 });

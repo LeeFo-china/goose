@@ -43,6 +43,7 @@ import type {
   SupplierProductPage,
   SupplierSku,
 } from "./supplier-product-types";
+import { supplierProductSourceLabel } from "./supplier-product-types";
 
 type MutationTarget = ({
   id: string;
@@ -125,6 +126,20 @@ export function SupplierProductList({
           </span>
         </div>
       ),
+    },
+    {
+      id: "source",
+      header: "来源",
+      cell: ({ row }) => {
+        const source = row.original.ownership_scope === "platform"
+          ? "platform"
+          : "tenant";
+        return (
+          <Badge variant={source === "platform" ? "secondary" : "success"}>
+            {supplierProductSourceLabel(source)}
+          </Badge>
+        );
+      },
     },
     {
       accessorKey: "status",
