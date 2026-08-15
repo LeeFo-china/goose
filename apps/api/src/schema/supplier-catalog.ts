@@ -384,3 +384,91 @@ export type TenantCatalogBrandUpdateRecord =
     actor_user_id: string;
     actor_employee_id: string;
   };
+
+export const CatalogSpecValueTypeSchema = z.enum(
+  ["text", "number", "boolean", "single_enum", "multi_enum", "date"],
+  { message: "无效的规格值类型" },
+);
+export const CatalogSpecDefinitionListQuerySchema =
+  PaginationQuerySchema.extend({
+    keyword: keyword.optional(),
+    status: CatalogStatusSchema.optional(),
+  }).strict();
+export const CatalogSpecDefinitionParamSchema = z.object({
+  id: uuid("无效的规格定义 ID"),
+}).strict();
+
+const specEnumOptions = z.array(
+  z.string().trim().min(1, "枚举选项不能为空"),
+).max(50, "枚举选项不能超过 50 个");
+
+export const CatalogSpecDefinitionCreateSchema = z.object({
+  code: requiredText(64, "规格编码不能为空", "规格编码不能超过 64 个字符"),
+  name: requiredText(120, "规格名称不能为空", "规格名称不能超过 120 个字符"),
+  value_type: CatalogSpecValueTypeSchema,
+  required: z.boolean().default(false),
+  enum_options: specEnumOptions.default([]),
+  unit_dimension: optionalText(64, "计量维度不能超过 64 个字符"),
+  participates_in_sku_name: z.boolean().default(false),
+  filterable: z.boolean().default(false),
+  sort_order: optionalNumber(z.number().int()).default(100),
+}).strict().superRefine((input, context) => {
+  const isEnum = input.value_type === "single_enum"
+    || input.value_type === "multi_enum";
+  if (isEnum && input.enum_options.length === 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["enum_options"],
+      message: "枚举类型必须提供至少一个选项",
+    });
+  } else if (!isEnum && input.enum_options.length > 0) {
+    context.addIssue({
+      code: "custom",
+      path: ["enum_options"],
+      message: "非枚举类型不能提供枚举选项",
+    });
+  }
+});
+
+export const CatalogSpecDefinitionUpdateSchema = z.object({
+  expected_version: expectedVersion,
+  name: requiredText(120, "规格名称不能为空", "规格名称不能超过 120 个字符")
+    .optional(),
+  required: z.boolean().optional(),
+  enum_options: specEnumOptions.optional(),
+  unit_dimension: optionalText(64, "计量维度不能超过 64 个字符"),
+  participates_in_sku_name: z.boolean().optional(),
+  filterable: z.boolean().optional(),
+  sort_order: optionalNumber(z.number().int()),
+}).strict().refine(hasUpdateField, {
+  message: "至少需要提交一个规格更新字段",
+});
+
+export const CatalogUnitSuggestionCreateSchema = z.object({
+  name: requiredText(80, "单位名称不能为空", "单位名称不能超过 80 个字符"),
+  symbol: requiredText(32, "单位符号不能为空", "单位符号不能超过 32 个字符"),
+  dimension: requiredText(64, "计量维度不能为空", "计量维度不能超过 64 个字符"),
+  note: optionalText(300, "建议说明不能超过 300 个字符"),
+}).strict();
+export const CatalogUnitSuggestionStatusSchema = z.enum(
+  ["pending", "approved", "rejected"],
+  { message: "无效的单位建议状态" },
+);
+export const CatalogUnitSuggestionListQuerySchema =
+  PaginationQuerySchema.extend({
+    status: CatalogUnitSuggestionStatusSchema.optional(),
+  }).strict();
+export const CatalogUnitSuggestionParamSchema = z.object({
+  id: uuid("无效的单位建议 ID"),
+}).strict();
+
+export type CatalogSpecDefinitionListQuery =
+  z.infer<typeof CatalogSpecDefinitionListQuerySchema>;
+export type CatalogSpecDefinitionCreateInput =
+  z.infer<typeof CatalogSpecDefinitionCreateSchema>;
+export type CatalogSpecDefinitionUpdateInput =
+  z.infer<typeof CatalogSpecDefinitionUpdateSchema>;
+export type CatalogUnitSuggestionCreateInput =
+  z.infer<typeof CatalogUnitSuggestionCreateSchema>;
+export type CatalogUnitSuggestionListQuery =
+  z.infer<typeof CatalogUnitSuggestionListQuerySchema>;

@@ -79,6 +79,18 @@ export function createDependencies(overrides: Record<string, unknown>) {
       ...input,
       version: 2,
     })),
+    listSpecDefinitions: mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    })),
+    createSpecDefinition: mock(async (input) => ({ ...input, version: 1 })),
+    updateSpecDefinition: mock(async (input) => ({ ...input, version: 2 })),
+    copyPlatformSpecs: mock(async () => ({ copied_count: 0 })),
+    submitUnitSuggestion: mock(async (input) => ({ ...input })),
+    listUnitSuggestions: mock(async () => ({
+      list: [],
+      pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+    })),
     ...overrides,
   };
   return {
