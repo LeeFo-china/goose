@@ -153,6 +153,7 @@ export type Page<T> = {
 
 export type SupplierProductListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   keyword?: string;
   status?: string;
   category_id?: string;
@@ -218,7 +219,10 @@ export class SupplierProductsRepository {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id);
+      .eq("supplier_id", input.supplier_id)
+      .or(
+        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
+      );
     if (input.status) request = request.eq("status", input.status);
     if (input.category_id) {
       request = request.eq("category_id", input.category_id);

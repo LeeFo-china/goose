@@ -58,6 +58,7 @@ export class SupplierProductsService {
     return this.repository.listProducts({
       ...filters,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
     });
   }
 

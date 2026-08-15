@@ -47,6 +47,7 @@ describe("SupplierProductsService", () => {
 
     expect(deps.repository.listProducts).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       page: 1,
       pageSize: 20,
     });
