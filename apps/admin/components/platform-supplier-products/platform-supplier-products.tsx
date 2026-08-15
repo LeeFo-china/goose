@@ -3,14 +3,18 @@
 import { useEffect, useState } from "react";
 import { PackageSearch } from "lucide-react";
 
+import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { SupplierProduct } from "@/components/supplier-products/supplier-product-types";
-import { loadPlatformSupplierProducts } from "./platform-supplier-products-api";
+import {
+  loadPlatformSupplierProducts,
+  loadPlatformSuppliers,
+  type PlatformSupplierOption,
+} from "./platform-supplier-products-api";
 
 export function PlatformSupplierProducts() {
   const [supplierId, setSupplierId] = useState("");
@@ -18,6 +22,21 @@ export function PlatformSupplierProducts() {
   const [products, setProducts] = useState<SupplierProduct[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [suppliers, setSuppliers] = useState<PlatformSupplierOption[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    loadPlatformSuppliers().then((page) => {
+      if (active) setSuppliers(page.list);
+    }).catch((caught) => {
+      if (active) {
+        setError(caught instanceof Error ? caught.message : "供应商加载失败");
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!appliedSupplierId) {
@@ -49,19 +68,19 @@ export function PlatformSupplierProducts() {
           按平台供应商查看平台共享商品资料，不维护租户成交价。
         </p>
       </div>
-      <div className="flex gap-2">
-        <Input
-          aria-label="平台供应商 ID"
-          placeholder="输入平台供应商 ID"
+      <div className="max-w-md">
+        <FormSelect
+          id="platform-supplier-select"
           value={supplierId}
-          onChange={(event) => setSupplierId(event.target.value)}
+          options={suppliers.map((supplier) => ({
+            value: supplier.id,
+            label: `${supplier.name} · ${supplier.code}`,
+          }))}
+          onChange={(value) => {
+            setSupplierId(value);
+            setAppliedSupplierId(value);
+          }}
         />
-        <Button
-          type="button"
-          onClick={() => setAppliedSupplierId(supplierId.trim())}
-        >
-          查询
-        </Button>
       </div>
       <Card className="min-h-80">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-3">

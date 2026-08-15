@@ -20,3 +20,20 @@ export function loadPlatformSupplierProducts(
     { fallbackMessage: "加载平台供应商商品失败" },
   );
 }
+
+export type PlatformSupplierOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
+export function loadPlatformSuppliers(page = 1, pageSize = 100) {
+  const query = new URLSearchParams({
+    page: String(page),
+    pageSize: String(pageSize),
+  });
+  return requestBackendJson<{
+    list: PlatformSupplierOption[];
+    pagination: { page: number; pageSize: number; total: number; totalPages: number };
+  }>(`/platform/suppliers?${query}`, { fallbackMessage: "加载平台供应商失败" });
+}
