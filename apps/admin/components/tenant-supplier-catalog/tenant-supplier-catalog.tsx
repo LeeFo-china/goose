@@ -57,7 +57,6 @@ export function TenantCatalogWorkspace({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [specCategoryId, setSpecCategoryId] = useState<string | null>(null);
   const [specs, setSpecs] = useState<TenantCatalogSpecDefinition[]>([]);
   const [specsLoading, setSpecsLoading] = useState(false);
   const [categoryDialog, setCategoryDialog] = useState<
@@ -67,15 +66,37 @@ export function TenantCatalogWorkspace({
     { brand?: TenantCatalogBrand } | null
   >(null);
   const [reload, setReload] = useState(0);
+  const [categoryParentId, setCategoryParentId] = useState<string | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  function navigateInto(category: TenantCatalogCategory) {
+    setCategoryParentId(category.id);
+    setBreadcrumb((current) => [
+      ...current,
+      { id: category.id, name: category.full_name ?? category.name },
+    ]);
+    setPage(1);
+  }
+
+  function navigateBack(index: number) {
+    const nextParentId = index >= 0 ? breadcrumb[index]?.id ?? null : null;
+    setCategoryParentId(nextParentId);
+    setBreadcrumb((current) => current.slice(0, index + 1));
+    setPage(1);
+  }
 
   useEffect(() => {
-    if (!specCategoryId) {
+    if (!categoryParentId) {
       setSpecs([]);
       return;
     }
     let active = true;
     setSpecsLoading(true);
-    loadCategorySpecDefinitions(specCategoryId).then((page) => {
+    loadCategorySpecDefinitions(categoryParentId).then((page) => {
       if (active) setSpecs(page.list);
     }).catch(() => {
       if (active) setSpecs([]);
@@ -85,23 +106,28 @@ export function TenantCatalogWorkspace({
     return () => {
       active = false;
     };
-  }, [specCategoryId]);
+  }, [categoryParentId]);
 
   useEffect(() => {
     let active = true;
     setLoading(true);
     setError(null);
+    const categoryQuery = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+    });
+    if (categoryParentId) categoryQuery.set("parent_id", categoryParentId);
     Promise.all([
       requestBackendJson<TenantCatalogPage<TenantCatalogCategory>>(
-        "/catalog/categories?page=1&pageSize=100",
+        `/catalog/categories?${categoryQuery}`,
         { fallbackMessage: "目录分类加载失败" },
       ),
       requestBackendJson<TenantCatalogPage<TenantCatalogBrand>>(
-        "/catalog/brands?page=1&pageSize=100",
+        `/catalog/brands?page=${page}&pageSize=${pageSize}`,
         { fallbackMessage: "目录品牌加载失败" },
       ),
       requestBackendJson<TenantCatalogPage<TenantCatalogUnit>>(
-        "/catalog/units?page=1&pageSize=100",
+        `/catalog/units?page=${page}&pageSize=${pageSize}`,
         { fallbackMessage: "目录单位加载失败" },
       ),
     ]).then(([categoryPage, brandPage, unitPage]) => {
@@ -119,7 +145,7 @@ export function TenantCatalogWorkspace({
     return () => {
       active = false;
     };
-  }, [reload]);
+  }, [reload, categoryParentId, page, pageSize]);
 
   if (loading) {
     return (
@@ -158,6 +184,31 @@ export function TenantCatalogWorkspace({
           <TabsTrigger value="brands">品牌</TabsTrigger>
           <TabsTrigger value="units">单位</TabsTrigger>
         </TabsList>
+        {view === "categories" && breadcrumb.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1 text-sm">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => navigateBack(-1)}
+            >
+              根级
+            </Button>
+            {breadcrumb.map((item, index) => (
+              <span key={item.id} className="flex items-center gap-1">
+                <span className="text-muted-foreground">/</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => navigateBack(index)}
+                >
+                  {item.name}
+                </Button>
+              </span>
+            ))}
+          </div>
+        ) : null}
         <Card className="min-h-80">
           <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
             <div className="flex items-center justify-between">
@@ -170,7 +221,7 @@ export function TenantCatalogWorkspace({
                   size="sm"
                   onClick={() =>
                     view === "categories"
-                      ? setCategoryDialog({ parentId: null })
+                      ? setCategoryDialog({ parentId: categoryParentId })
                       : setBrandDialog({})
                   }
                 >
@@ -210,12 +261,7 @@ export function TenantCatalogWorkspace({
                           <CategoryRow
                             key={category.id}
                             category={category}
-                            selected={specCategoryId === category.id}
-                            onSelect={() =>
-                              setSpecCategoryId((current) =>
-                                current === category.id ? null : category.id
-                              )
-                            }
+                            onOpen={() => navigateInto(category)}
                             onEdit={() =>
                               setCategoryDialog({ category })
                             }
@@ -238,6 +284,31 @@ export function TenantCatalogWorkspace({
             )}
           </CardContent>
         </Card>
+        {current.pagination.totalPages > 1 ? (
+          <div className="flex items-center justify-between text-sm">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page <= 1}
+              onClick={() => setPage((currentPage) => currentPage - 1)}
+            >
+              上一页
+            </Button>
+            <span className="text-muted-foreground">
+              第 {page} / {current.pagination.totalPages} 页
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={page >= current.pagination.totalPages}
+              onClick={() => setPage((currentPage) => currentPage + 1)}
+            >
+              下一页
+            </Button>
+          </div>
+        ) : null}
         {canManage ? (
           <div className="text-xs text-muted-foreground">
             目录维护请使用平台共享或租户私有目录管理能力。
@@ -246,7 +317,7 @@ export function TenantCatalogWorkspace({
         {view === "units" && canManage ? (
           <UnitSuggestionForm onSubmitted={() => undefined} />
         ) : null}
-        {view === "categories" && specCategoryId ? (
+        {view === "categories" && categoryParentId ? (
           <Card>
             <CardHeader className="p-4 text-sm font-medium">规格模板</CardHeader>
             <CardContent className="p-0">
@@ -294,21 +365,24 @@ export function TenantCatalogWorkspace({
 
 function CategoryRow({
   category,
-  selected,
-  onSelect,
+  onOpen,
   onEdit,
 }: {
   category: TenantCatalogCategory;
-  selected: boolean;
-  onSelect: () => void;
+  onOpen: () => void;
   onEdit: () => void;
 }) {
   return (
     <tr
-      className={`cursor-pointer border-b ${selected ? "bg-muted/40" : ""}`}
-      onClick={onSelect}
+      className="cursor-pointer border-b hover:bg-muted/30"
+      onClick={onOpen}
     >
-      <td className="p-3">{category.full_name ?? category.name}</td>
+      <td className="p-3">
+        <span className="font-medium">{category.full_name ?? category.name}</span>
+        {!category.is_leaf ? (
+          <span className="ml-2 text-xs text-muted-foreground">含子分类</span>
+        ) : null}
+      </td>
       <td className="p-3">{category.code}</td>
       <td className="p-3">
         <SourceBadge source={category.ownership_scope} />

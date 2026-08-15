@@ -68,4 +68,14 @@ describe("租户供应商目录", () => {
     expect(workspace).toContain("TenantCategoryDialog");
     expect(workspace).toContain("TenantBrandDialog");
   });
+
+  test("租户目录分类支持树层级浏览与分页", () => {
+    const workspace = readSource("./tenant-supplier-catalog.tsx");
+
+    expect(workspace).toContain("parent_id");
+    expect(workspace).toContain("breadcrumb");
+    expect(workspace).toContain("navigateInto");
+    expect(workspace).toContain("上一页");
+    expect(workspace).toContain("下一页");
+  });
 });
