@@ -170,7 +170,7 @@ export type SupplierCommandContext = {
   actor_user_id: string;
   actor_employee_id: string;
   idempotency_key: string;
-  proxy_reason: string;
+  proxy_reason: string | null;
 };
 export type SupplierProductCreateCommand = SupplierCommandContext & {
   product_id: string;
