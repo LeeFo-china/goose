@@ -528,12 +528,24 @@ describe("domain permissions", () => {
         label: "管理供应标准目录",
         module: "platform_supplier_catalog",
       },
+      "platform.supplier-product.manage": {
+        label: "管理平台共享商品",
+        module: "platform_supplier",
+      },
       "supplier.view": {
         label: "查看合作供应商",
         module: "supplier",
       },
       "supplier.manage": {
         label: "管理合作供应商",
+        module: "supplier",
+      },
+      "supplier.master.manage": {
+        label: "管理本租户私有供应商主档",
+        module: "supplier",
+      },
+      "supplier.catalog.manage": {
+        label: "管理本租户分类、品牌和规格模板",
         module: "supplier",
       },
       "supplier.contract.manage": {

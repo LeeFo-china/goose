@@ -4,6 +4,10 @@ import type { TenantSupplierSettings } from "./supplier-types";
 
 export type PlatformModuleIntent = {
   moduleEnabled: boolean;
+  ownershipReadsEnabled?: boolean;
+  privateSupplierWritesEnabled?: boolean;
+  privateCatalogWritesEnabled?: boolean;
+  procurementSnapshotV1Enabled?: boolean;
   reason?: string;
 };
 
@@ -34,6 +38,15 @@ export async function updatePlatformTenantSupplierModule({
         module_enabled: intent.moduleEnabled,
         require_active_contract_for_new_order:
           current.require_active_contract_for_new_order,
+        ownership_reads_enabled: intent.ownershipReadsEnabled ??
+          current.ownership_reads_enabled,
+        private_supplier_writes_enabled: intent.privateSupplierWritesEnabled ??
+          current.private_supplier_writes_enabled,
+        private_catalog_writes_enabled: intent.privateCatalogWritesEnabled ??
+          current.private_catalog_writes_enabled,
+        procurement_snapshot_v1_enabled:
+          intent.procurementSnapshotV1Enabled ??
+          current.procurement_snapshot_v1_enabled,
         expected_version: current.version,
         ...(intent.reason ? { reason: intent.reason } : {}),
       }),

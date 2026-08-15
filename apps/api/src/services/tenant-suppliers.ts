@@ -10,41 +10,47 @@ import type {
   SupplierContractUpdateInput,
   TenantSupplierContractPolicyInput,
   TenantSupplierCreateInput,
+  TenantSupplierPrivateCreateInput,
+  TenantSupplierSharedCreateInput,
+  TenantPrivateSupplierUpdateInput,
   TenantSupplierDirectoryQuery,
   TenantSupplierListQuery,
   TenantSupplierUpdateInput,
 } from "@/schema/tenant-suppliers";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
+import {
+  allocateInternalCode as allocateTenantSupplierCode,
+  assertPrivateSupplierMasterWritable,
+  createPrivateSupplier as createTenantPrivateSupplier,
+  createSharedRelationship as createTenantSharedRelationship,
+  requireActor as requireSupplierActor,
+  requirePrivateSupplierWrites,
+  updatePrivateSupplierMaster as updateTenantPrivateSupplierMaster,
+} from "./tenant-supplier-private-commands";
+import { containsDatabaseCode, mutationErrorCode, omitTenantId } from "./tenant-suppliers-utils";
 
 const PERMISSION = {
   view: "supplier.view",
   manage: "supplier.manage",
+  master: "supplier.master.manage",
   contract: "supplier.contract.manage",
 } as const;
 
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
-  "assertTenantContext" | "assertPermission"
+  "assertTenantContext" | "assertPermission" | "hasPermission"
 >;
 export type TenantSuppliersServiceDependencies = {
   repository?: TenantSuppliersRepositoryPort;
   accessPolicy?: AccessPolicyPort;
 };
 export type RelationshipAction =
-  | "activate"
-  | "suspend"
-  | "terminate"
-  | "blacklist";
+  | "activate" | "suspend" | "terminate" | "blacklist";
 export type ContractAction = "activate" | "terminate";
-type LifecycleInput = {
-  expected_version: number;
-  reason?: string;
-};
-type ChildPageQuery = {
-  page: number;
-  pageSize: number;
-};
+type LifecycleInput = { expected_version: number; reason?: string };
+type ChildPageQuery = { page: number; pageSize: number };
 
 export class TenantSuppliersService {
   private readonly repository: TenantSuppliersRepositoryPort;
@@ -57,7 +63,13 @@ export class TenantSuppliersService {
 
   async getSettings(authContext: AuthContext) {
     const tenantId = this.requireTenant(authContext, "view");
-    return this.requireEnabled(tenantId);
+    const settings = await this.repository.getSettings(tenantId);
+    if (settings) return effectiveSupplierRolloutSettings(settings);
+    throw Errors.business(
+      403,
+      "当前租户尚未启用供应商模块",
+      "SUPPLIER_MODULE_DISABLED",
+    );
   }
 
   async updateContractPolicy(
@@ -124,6 +136,65 @@ export class TenantSuppliersService {
         actor_employee_id: actor.employeeId,
         idempotency_key: idempotencyKey,
       })));
+  }
+
+  async allocateInternalCode(
+    authContext: AuthContext,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActorWithSupplierCodeAllocation(authContext);
+    await this.requireEnabled(actor.tenantId);
+    return allocateTenantSupplierCode(this.repository, actor, idempotencyKey);
+  }
+
+  async createPrivateSupplier(
+    authContext: AuthContext,
+    input: TenantSupplierPrivateCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActor(authContext, "master");
+    await requirePrivateSupplierWrites(this.repository, actor);
+    return createTenantPrivateSupplier(
+      this.repository,
+      actor,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  async createSharedRelationship(
+    authContext: AuthContext,
+    input: TenantSupplierSharedCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = this.requireActor(authContext, "manage");
+    await this.requireEnabled(actor.tenantId);
+    return createTenantSharedRelationship(
+      this.repository,
+      actor,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  async updatePrivateSupplierMaster(
+    authContext: AuthContext,
+    tenantSupplierId: string,
+    input: TenantPrivateSupplierUpdateInput,
+  ) {
+    const actor = this.requireActor(authContext, "master");
+    await requirePrivateSupplierWrites(this.repository, actor);
+    const relationship = await this.requireRelationship(
+      actor.tenantId,
+      tenantSupplierId,
+    );
+    assertPrivateSupplierMasterWritable(relationship, actor.tenantId);
+    return updateTenantPrivateSupplierMaster(
+      this.repository,
+      actor,
+      tenantSupplierId,
+      input,
+    );
   }
 
   async updateRelationship(
@@ -318,14 +389,18 @@ export class TenantSuppliersService {
     permission: keyof typeof PERMISSION,
   ) {
     const tenantId = this.requireTenant(authContext, permission);
-    if (!authContext.employeeId || !authContext.authUserId) {
-      throw Errors.forbidden();
+    return requireSupplierActor(authContext, tenantId);
+  }
+
+  private requireActorWithSupplierCodeAllocation(authContext: AuthContext) {
+    const tenantId = this.accessPolicy.assertTenantContext(authContext);
+    if (
+      this.accessPolicy.hasPermission(authContext, PERMISSION.master) ||
+      this.accessPolicy.hasPermission(authContext, PERMISSION.manage)
+    ) {
+      return requireSupplierActor(authContext, tenantId);
     }
-    return {
-      tenantId,
-      authUserId: authContext.authUserId,
-      employeeId: authContext.employeeId,
-    };
+    throw Errors.forbidden();
   }
 
   private async requireEnabled(tenantId: string) {
@@ -399,35 +474,6 @@ export class TenantSuppliersService {
       throw error;
     }
   }
-}
-
-function mutationErrorCode(status: TenantSupplierMutationResult["status"]) {
-  return {
-    supplier_not_found: "SUPPLIER_NOT_FOUND",
-    tenant_supplier_not_found: "TENANT_SUPPLIER_NOT_FOUND",
-    state_conflict: "TENANT_SUPPLIER_STATE_CONFLICT",
-    version_conflict: "SUPPLIER_VERSION_CONFLICT",
-    idempotency_conflict: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    created: "TENANT_SUPPLIER_STATE_CONFLICT",
-    updated: "TENANT_SUPPLIER_STATE_CONFLICT",
-  }[status];
-}
-
-function omitTenantId<T extends object>(input: T): Omit<T, "tenant_id"> {
-  const { tenant_id: _tenantId, ...rest } =
-    input as T & { tenant_id?: unknown };
-  return rest;
-}
-
-function containsDatabaseCode(error: unknown, code: string): boolean {
-  if (typeof error === "string") return error.includes(code);
-  if (Array.isArray(error)) {
-    return error.some((item) => containsDatabaseCode(item, code));
-  }
-  if (typeof error !== "object" || error === null) return false;
-  return Object.values(error).some((value) =>
-    containsDatabaseCode(value, code)
-  );
 }
 
 export const tenantSuppliersService = new TenantSuppliersService();

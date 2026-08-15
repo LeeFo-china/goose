@@ -376,6 +376,10 @@ export const SupplierContactUpdateSchema = z.object({
 export const PlatformTenantSupplierSettingsCommandSchema = z.object({
   module_enabled: z.boolean(),
   require_active_contract_for_new_order: z.boolean(),
+  ownership_reads_enabled: z.boolean(),
+  private_supplier_writes_enabled: z.boolean(),
+  private_catalog_writes_enabled: z.boolean(),
+  procurement_snapshot_v1_enabled: z.boolean(),
   expected_version: initializableExpectedVersion,
   reason: SupplierCommandSchema.shape.reason,
 }).strict().superRefine((input, context) => {

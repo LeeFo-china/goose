@@ -424,7 +424,7 @@ describe("PlatformSuppliersService domain boundaries", () => {
     });
   });
 
-  test("skips audit and avoidable state reads for idempotent RPC replays", async () => {
+  test("skips audit and unrelated state reads for idempotent RPC replays", async () => {
     for (const kind of ["create", "lifecycle", "review", "module"] as const) {
       const deps = dependencies();
       const replay = { status: "updated" as const, idempotent: true,
@@ -453,7 +453,8 @@ describe("PlatformSuppliersService domain boundaries", () => {
       expect(deps.audit.recordBestEffort).not.toHaveBeenCalled();
       if (kind === "lifecycle") expect(deps.repository.findSupplierById).not.toHaveBeenCalled();
       if (kind === "review") expect(deps.repository.findSupplierById).not.toHaveBeenCalled();
-      if (kind === "module") expect(deps.repository.getTenantSupplierSettings).not.toHaveBeenCalled();
+      if (kind === "module") expect(deps.repository.getTenantSupplierSettings)
+        .toHaveBeenCalledTimes(1);
     }
   });
 });

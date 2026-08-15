@@ -23,6 +23,10 @@ export type TenantSupplierSettings = {
   tenant_id: string;
   module_enabled: boolean;
   require_active_contract_for_new_order: boolean;
+  ownership_reads_enabled: boolean;
+  private_supplier_writes_enabled: boolean;
+  private_catalog_writes_enabled: boolean;
+  procurement_snapshot_v1_enabled: boolean;
   enabled_by_employee_id: string | null;
   enabled_at: string | null;
   version: number;
@@ -36,6 +40,8 @@ export type SupplierDirectoryItem = {
   name: string;
   legal_name: string;
   supplier_type: SupplierType;
+  ownership_scope: "platform" | "tenant";
+  owner_tenant_id: string | null;
   onboarding_status: SupplierOnboardingStatus;
   operational_status: SupplierOperationalStatus;
   version: number;
@@ -55,6 +61,7 @@ export type TenantSupplierRelationship = {
   tenant_id: string;
   supplier_id: string;
   relationship_status: TenantSupplierRelationshipStatus;
+  internal_supplier_code: string;
   settlement_term_days: number;
   credit_limit_minor: number;
   invoice_required_before_payment: boolean;

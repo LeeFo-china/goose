@@ -9,15 +9,18 @@ import {
   SupplierContractUpdateSchema,
   TenantSupplierBlacklistCommandSchema,
   TenantSupplierChildListQuerySchema,
+  TenantSupplierCodeAllocationSchema,
   TenantSupplierContractPolicySchema,
-  TenantSupplierCreateSchema,
   TenantSupplierDirectoryQuerySchema,
   TenantSupplierEventListQuerySchema,
   TenantSupplierIdParamSchema,
   TenantSupplierListQuerySchema,
+  TenantSupplierPrivateCreateSchema,
+  TenantSupplierSharedCreateSchema,
   TenantSupplierSuspendCommandSchema,
   TenantSupplierTerminateCommandSchema,
   TenantSupplierUpdateSchema,
+  TenantPrivateSupplierUpdateSchema,
 } from "@/schema/tenant-suppliers";
 import { tenantSuppliersService } from "@/services/tenant-suppliers";
 import { Get, Patch, Post } from "@/utils/decorators/route";
@@ -84,14 +87,29 @@ class TenantSuppliersController extends TenantBaseController {
   async createRelationship(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const key = requireIdempotencyKey(request);
-    const input = this.parse(TenantSupplierCreateSchema, request.body);
+    const input = this.parse(TenantSupplierSharedCreateSchema, request.body);
     return ResponseHandler.success(
-      await tenantSuppliersService.createRelationship(
-        auth,
-        crypto.randomUUID(),
-        input,
-        key,
-      ),
+      await tenantSuppliersService.createSharedRelationship(auth, input, key),
+    );
+  }
+
+  @Post("/suppliers/code-allocations")
+  async allocateInternalCode(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireIdempotencyKey(request);
+    this.parse(TenantSupplierCodeAllocationSchema, request.body);
+    return ResponseHandler.success(
+      await tenantSuppliersService.allocateInternalCode(auth, key),
+    );
+  }
+
+  @Post("/suppliers/private")
+  async createPrivateSupplier(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireIdempotencyKey(request);
+    const input = this.parse(TenantSupplierPrivateCreateSchema, request.body);
+    return ResponseHandler.success(
+      await tenantSuppliersService.createPrivateSupplier(auth, input, key),
     );
   }
 
@@ -101,6 +119,16 @@ class TenantSuppliersController extends TenantBaseController {
     const { id } = this.parse(TenantSupplierIdParamSchema, request.params);
     return ResponseHandler.success(
       await tenantSuppliersService.getRelationship(auth, id),
+    );
+  }
+
+  @Patch("/suppliers/:id/master")
+  async updatePrivateSupplierMaster(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id } = this.parse(TenantSupplierIdParamSchema, request.params);
+    const input = this.parse(TenantPrivateSupplierUpdateSchema, request.body);
+    return ResponseHandler.success(
+      await tenantSuppliersService.updatePrivateSupplierMaster(auth, id, input),
     );
   }
 

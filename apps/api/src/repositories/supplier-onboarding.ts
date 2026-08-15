@@ -113,6 +113,7 @@ export class SupplierOnboardingRepository {
     const { data, error } = await this.clientProvider().from("suppliers")
       .select("id,code,name,legal_name,unified_social_credit_code")
       .eq("unified_social_credit_code", normalized)
+      .eq("ownership_scope", "platform")
       .limit(1)
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商信用代码失败", error);

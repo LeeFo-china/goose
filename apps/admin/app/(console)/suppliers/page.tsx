@@ -14,6 +14,7 @@ export default async function SuppliersPage() {
     <SupplierWorkspace
       canView={canView}
       canManage={permissions.has("supplier.manage")}
+      canManagePrivate={permissions.has("supplier.master.manage")}
       canManageContracts={permissions.has("supplier.contract.manage")}
     />
   );

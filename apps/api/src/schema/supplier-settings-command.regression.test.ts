@@ -9,6 +9,10 @@ import {
 const initialSettings = {
   module_enabled: true,
   require_active_contract_for_new_order: false,
+  ownership_reads_enabled: false,
+  private_supplier_writes_enabled: false,
+  private_catalog_writes_enabled: false,
+  procurement_snapshot_v1_enabled: false,
   expected_version: 0,
 };
 
@@ -48,6 +52,19 @@ describe("platform tenant supplier settings command", () => {
         module_enabled: false,
         reason,
       }).success).toBe(false);
+    }
+  });
+
+  test("requires all four rollout flags in every settings command", () => {
+    for (const field of [
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+    ] as const) {
+      const { [field]: _omitted, ...input } = initialSettings;
+      expect(PlatformTenantSupplierSettingsCommandSchema.safeParse(input).success)
+        .toBe(false);
     }
   });
 });

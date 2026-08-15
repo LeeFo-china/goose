@@ -34,6 +34,10 @@ const disabledModule: TenantSupplierSettings = {
   tenant_id: "",
   module_enabled: false,
   require_active_contract_for_new_order: false,
+  ownership_reads_enabled: false,
+  private_supplier_writes_enabled: false,
+  private_catalog_writes_enabled: false,
+  procurement_snapshot_v1_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 0,
@@ -48,10 +52,12 @@ const emptyPage: PageData<TenantSupplierRelationship> = {
 export function SupplierWorkspace({
   canView,
   canManage,
+  canManagePrivate,
   canManageContracts,
 }: {
   canView: boolean;
   canManage: boolean;
+  canManagePrivate: boolean;
   canManageContracts: boolean;
 }) {
   const [settings, setSettings] = useState<TenantSupplierSettings | null>(null);
@@ -172,6 +178,9 @@ export function SupplierWorkspace({
   }
 
   const totalPages = Math.max(1, relationships.pagination.totalPages || 1);
+  const canCreatePrivate = canManagePrivate &&
+    settings.private_supplier_writes_enabled;
+  const canGenerateInternalCode = canCreatePrivate || canManage;
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
       <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
@@ -181,8 +190,14 @@ export function SupplierWorkspace({
             核对合作状态、准入阻断、结算条款、合同健康和负责人。
           </p>
         </div>
-        {canManage ? (
-          <AddSupplierDialog disabled={listLoading} onCreated={loadRelationships} />
+        {canManage || canCreatePrivate ? (
+          <AddSupplierDialog
+            disabled={listLoading}
+            sharedCreationEnabled={canManage}
+            privateCreationEnabled={canCreatePrivate}
+            codeAllocationEnabled={canGenerateInternalCode}
+            onCreated={loadRelationships}
+          />
         ) : null}
       </div>
       <SupplierContractPolicyCard

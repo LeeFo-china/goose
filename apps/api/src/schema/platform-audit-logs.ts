@@ -70,6 +70,7 @@ export const PlatformAuditLogActionSchema = z.enum([
   "supplier_qualification_reject",
   "tenant_supplier_module_enable",
   "tenant_supplier_module_disable",
+  "tenant_supplier_rollout_update",
   "tenant_supplier_contract_policy_update",
   "tenant_supplier_create",
   "tenant_supplier_activate",

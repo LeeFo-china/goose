@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { Errors } from "@/errors/error-factory";
+import { throwSupplierCommandDatabaseError } from "./supplier-command-errors";
 
 export type CreateCommandResult<
   ResourceKey extends string,
@@ -67,7 +68,7 @@ export async function executeCreateCommand<
         "SUPPLIER_IDEMPOTENCY_CONFLICT",
       );
     }
-    throw Errors.dbError(input.message, error);
+    throwSupplierCommandDatabaseError(error, input.message);
   }
 
   const envelope = envelopeSchema.safeParse(data);

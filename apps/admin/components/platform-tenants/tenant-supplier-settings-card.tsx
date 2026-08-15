@@ -13,7 +13,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -26,15 +34,61 @@ import {
   type PlatformModuleIntent,
   updatePlatformTenantSupplierModule,
 } from "../suppliers/supplier-settings-api";
+import {
+  canToggleSupplierRolloutFlag,
+  hasEnabledSupplierRolloutFlags,
+  type SupplierRolloutFlag,
+} from "./tenant-supplier-settings-rules";
 
 type PendingModuleIntent = PlatformModuleIntent & {
   idempotencyKey: string;
+  successMessage: string;
 };
+
+const rolloutFields: ReadonlyArray<{
+  flag: SupplierRolloutFlag;
+  label: string;
+  description: string;
+  intentKey:
+    | "ownershipReadsEnabled"
+    | "privateSupplierWritesEnabled"
+    | "privateCatalogWritesEnabled"
+    | "procurementSnapshotV1Enabled";
+}> = [
+  {
+    flag: "ownership_reads_enabled",
+    label: "所有权读取",
+    description: "先启用归属读取，为平台共享和租户私有数据提供识别基础。",
+    intentKey: "ownershipReadsEnabled",
+  },
+  {
+    flag: "private_supplier_writes_enabled",
+    label: "私有供应商写入",
+    description: "需先启用所有权读取，再允许租户维护私有供应商主档。",
+    intentKey: "privateSupplierWritesEnabled",
+  },
+  {
+    flag: "private_catalog_writes_enabled",
+    label: "私有目录写入",
+    description: "需先启用私有供应商写入，再开放私有分类、品牌和商品目录。",
+    intentKey: "privateCatalogWritesEnabled",
+  },
+  {
+    flag: "procurement_snapshot_v1_enabled",
+    label: "采购单快照 V1",
+    description: "需先启用私有目录写入，再固化供应商、商品、规格和单位快照。",
+    intentKey: "procurementSnapshotV1Enabled",
+  },
+];
 
 const defaultSettings = (tenantId: string): TenantSupplierSettings => ({
   tenant_id: tenantId,
   module_enabled: false,
   require_active_contract_for_new_order: false,
+  ownership_reads_enabled: false,
+  private_supplier_writes_enabled: false,
+  private_catalog_writes_enabled: false,
+  procurement_snapshot_v1_enabled: false,
   enabled_by_employee_id: null,
   enabled_at: null,
   version: 0,
@@ -99,7 +153,7 @@ export function TenantSupplierSettingsCard({
       setReasonError(false);
       setPendingIntent(null);
       setError(null);
-      toast.success(intent.moduleEnabled ? "供应商模块已启用" : "供应商模块已停用");
+      toast.success(intent.successMessage);
     } catch (requestError) {
       if ((requestError as { status?: number }).status === 409) {
         setConflict(true);
@@ -127,6 +181,21 @@ export function TenantSupplierSettingsCard({
       moduleEnabled,
       ...(reason ? { reason } : {}),
       idempotencyKey: newIdempotencyKey("tenant-supplier-settings"),
+      successMessage: moduleEnabled ? "供应商模块已启用" : "供应商模块已停用",
+    });
+  }
+
+  function startRolloutMutation(
+    flag: SupplierRolloutFlag,
+    checked: boolean,
+  ) {
+    const field = rolloutFields.find((candidate) => candidate.flag === flag);
+    if (!field || !canToggleSupplierRolloutFlag(settings, flag)) return;
+    void save({
+      moduleEnabled: settings.module_enabled,
+      [field.intentKey]: checked,
+      idempotencyKey: newIdempotencyKey(`tenant-supplier-${flag}`),
+      successMessage: `${field.label}已${checked ? "启用" : "停用"}`,
     });
   }
 
@@ -135,6 +204,16 @@ export function TenantSupplierSettingsCard({
     const latest = await loadLatest();
     if (latest) await save(pendingIntent, latest);
   }
+
+  async function refreshAfterConflict() {
+    const latest = await loadLatest();
+    if (!latest) return;
+    setConflict(false);
+    setPendingIntent(null);
+  }
+
+  const hasEnabledChildFlags = hasEnabledSupplierRolloutFlags(settings);
+  const controlsLocked = pending || Boolean(error) || conflict || !canManage;
 
   return (
     <Card className="shadow-none">
@@ -155,11 +234,15 @@ export function TenantSupplierSettingsCard({
             <Button
               type="button"
               variant={settings.module_enabled ? "destructive" : "default"}
-              disabled={pending || Boolean(error)}
+              disabled={controlsLocked || hasEnabledChildFlags}
               onClick={startModuleMutation}
             >
-              {pending
-                ? "正在保存"
+              {pending ? (
+                <>
+                  <Spinner data-icon="inline-start" />
+                  正在保存
+                </>
+              )
                 : settings.module_enabled
                   ? "停用供应商模块"
                   : "启用供应商模块"}
@@ -197,8 +280,50 @@ export function TenantSupplierSettingsCard({
             }
           />
         </div>
-        <FieldGroup>
-          {settings.module_enabled && canManage ? (
+        {settings.module_enabled && hasEnabledChildFlags ? (
+          <Alert>
+            <AlertTitle>请先逆序关闭子开关</AlertTitle>
+            <AlertDescription>
+              必须依次关闭采购单快照、私有目录、私有供应商和所有权读取，
+              才能停用供应商模块。
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <Alert>
+          <AlertTitle>分阶段能力预配置</AlertTitle>
+          <AlertDescription>
+            以下开关仅用于预配置；对应后续阶段交付后才会生效。
+            启用开关不会让尚未交付的租户端能力提前上线。
+          </AlertDescription>
+        </Alert>
+        <FieldGroup className="gap-3">
+          {rolloutFields.map((field) => {
+            const disabled = controlsLocked ||
+              !canToggleSupplierRolloutFlag(settings, field.flag);
+            const id = `tenant-supplier-${field.flag}`;
+            return (
+              <Field
+                key={field.flag}
+                orientation="horizontal"
+                data-disabled={disabled || undefined}
+                className="justify-between gap-4 px-1 py-2"
+              >
+                <div className="flex flex-col gap-1">
+                  <FieldLabel htmlFor={id}>{field.label}</FieldLabel>
+                  <FieldDescription>{field.description}</FieldDescription>
+                </div>
+                <Switch
+                  id={id}
+                  aria-label={field.label}
+                  checked={settings[field.flag]}
+                  disabled={disabled}
+                  onCheckedChange={(checked) =>
+                    startRolloutMutation(field.flag, checked)}
+                />
+              </Field>
+            );
+          })}
+          {settings.module_enabled && canManage && !hasEnabledChildFlags ? (
             <Field data-invalid={reasonError}>
               <FieldLabel htmlFor="tenant-supplier-disable-reason">
                 停用原因
@@ -230,7 +355,7 @@ export function TenantSupplierSettingsCard({
             <AlertDescription className="flex flex-col gap-3">
               <p>其他管理员已修改供应商模块配置，请刷新后重试。</p>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" size="sm" variant="outline" onClick={() => void loadLatest()}>
+                <Button type="button" size="sm" variant="outline" onClick={() => void refreshAfterConflict()}>
                   刷新最新数据
                 </Button>
                 <Button type="button" size="sm" disabled={pending} onClick={() => void retry()}>

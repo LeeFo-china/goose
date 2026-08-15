@@ -1,58 +1,50 @@
 import { describe, expect, test } from "bun:test";
-import { createClient } from "@supabase/supabase-js";
-
-process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
-process.env.SUPABASE_PUBLISH ??= "test-publish-key";
-process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
-const TENANT_ID = "00000000-0000-4000-8000-000000000101";
-const OTHER_TENANT_ID = "00000000-0000-4000-8000-000000000102";
-const TENANT_SUPPLIER_ID = "00000000-0000-4000-8000-000000000201";
-const SUPPLIER_ID = "00000000-0000-4000-8000-000000000301";
-const CONTRACT_ID = "00000000-0000-4000-8000-000000000401";
-const USER_ID = "00000000-0000-4000-8000-000000000501";
-const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000601";
-const FILE_ID = "00000000-0000-4000-8000-000000000701";
-const NOW = "2026-07-24T00:00:00.000Z";
-
-type StubResponse = {
-  body: unknown;
-  count?: number;
-  status?: number;
-};
-
-async function createRepository(
-  responder: (request: Request) => StubResponse,
-) {
-  const requests: Request[] = [];
-  const fetchStub = (async (input: string | URL | Request, init?: RequestInit) => {
-    const request = input instanceof Request
-      ? input
-      : new Request(input.toString(), init);
-    requests.push(request);
-    const response = responder(request);
-    const rowCount = Array.isArray(response.body) ? response.body.length : 1;
-    return new Response(JSON.stringify(response.body), {
-      status: response.status ?? 200,
-      headers: {
-        "content-type": "application/json",
-        ...(response.count === undefined
-          ? {}
-          : { "content-range": `0-${Math.max(0, rowCount - 1)}/${response.count}` }),
-      },
-    });
-  }) as typeof fetch;
-  const client = createClient("http://127.0.0.1:54321", "test-key", {
-    global: { fetch: fetchStub },
-  });
-  const { TenantSuppliersRepository } = await import("./tenant-suppliers");
-  return {
-    repository: new TenantSuppliersRepository(() => client as never),
-    requests,
-  };
-}
+import {
+  ALLOCATION_ID,
+  CONTRACT_ID,
+  EMPLOYEE_ID,
+  FILE_ID,
+  OTHER_TENANT_ID,
+  NOW,
+  SUPPLIER_ID,
+  TENANT_ID,
+  TENANT_SUPPLIER_ID,
+  USER_ID,
+  contract,
+  createRepository,
+  directorySupplier,
+  eligibility,
+  event,
+  privateRelationship,
+  relationship,
+  settings,
+} from "./tenant-suppliers-test-support";
 
 describe("TenantSuppliersRepository queries", () => {
+  test("returns all rollout flags for tenant-side effective mapping", async () => {
+    const { repository, requests } = await createRepository(() => ({
+      body: settings,
+    }));
+
+    const result = await repository.getSettings(TENANT_ID);
+
+    expect(result).toMatchObject({
+      ownership_reads_enabled: false,
+      private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
+    });
+    const url = new URL(requests[0]?.url ?? "http://invalid");
+    for (const flag of [
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+    ]) {
+      expect(url.searchParams.get("select")).toContain(flag);
+    }
+  });
+
   test("uses one tenant-scoped RPC for exact eligibility-filtered pagination", async () => {
     const { repository, requests } = await createRepository(() => ({
       body: {
@@ -133,6 +125,53 @@ describe("TenantSuppliersRepository queries", () => {
       p_page: 3,
       p_page_size: 20,
     });
+  });
+
+  test("rejects directory snapshots that are not platform-owned", async () => {
+    const { repository } = await createRepository(() => ({
+      body: {
+        items: [{
+          ...directorySupplier,
+          ownership_scope: "tenant",
+          owner_tenant_id: OTHER_TENANT_ID,
+        }],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    }));
+
+    await expect(repository.listDirectory({
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
+  });
+
+  test("rejects relationship snapshots owned by another tenant", async () => {
+    const { repository } = await createRepository(() => ({
+      body: {
+        items: [{
+          ...relationship,
+          supplier: {
+            ...relationship.supplier,
+            ownership_scope: "tenant",
+            owner_tenant_id: OTHER_TENANT_ID,
+          },
+          eligibility,
+          contract_health: "valid",
+        }],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    }));
+
+    await expect(repository.listRelationships({
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({ code: "DB_ERROR" });
   });
 
   test("filters detail and child pages by both tenant and parent ownership", async () => {
@@ -383,89 +422,3 @@ describe("TenantSuppliersRepository writes", () => {
       .toBe(`eq.${TENANT_ID}`);
   });
 });
-
-const supplier = {
-  id: SUPPLIER_ID,
-  code: "SUP-001",
-  name: "晴天建材",
-  legal_name: "晴天建材有限公司",
-  supplier_type: "manufacturer",
-  onboarding_status: "approved",
-  operational_status: "active",
-  version: 4,
-} as const;
-const directorySupplier = supplier;
-const relationship = {
-  id: TENANT_SUPPLIER_ID,
-  tenant_id: TENANT_ID,
-  supplier_id: SUPPLIER_ID,
-  relationship_status: "active",
-  settlement_term_days: 30,
-  credit_limit_minor: 100000,
-  invoice_required_before_payment: true,
-  default_currency: "CNY",
-  default_tax_inclusive: true,
-  tenant_owner_employee_id: EMPLOYEE_ID,
-  started_at: "2026-07-01",
-  ended_at: null,
-  remark: null,
-  version: 1,
-  created_by_employee_id: EMPLOYEE_ID,
-  updated_by_employee_id: EMPLOYEE_ID,
-  created_at: NOW,
-  updated_at: NOW,
-  supplier,
-};
-const contract = {
-  id: CONTRACT_ID,
-  tenant_id: TENANT_ID,
-  tenant_supplier_id: TENANT_SUPPLIER_ID,
-  contract_no: "HT-001",
-  name: "年度采购合同",
-  lifecycle_status: "active",
-  valid_from: "2026-01-01",
-  valid_until: "2026-12-31",
-  settlement_term_days: 30,
-  invoice_required_before_payment: true,
-  document_file_id: FILE_ID,
-  version: 1,
-  created_by_employee_id: EMPLOYEE_ID,
-  updated_by_employee_id: EMPLOYEE_ID,
-  created_at: NOW,
-  updated_at: NOW,
-} as const;
-const event = {
-  id: "00000000-0000-4000-8000-000000000801",
-  tenant_id: TENANT_ID,
-  resource_type: "tenant_supplier",
-  resource_id: TENANT_SUPPLIER_ID,
-  command: "mutate_tenant_supplier:activate",
-  from_state: {},
-  to_state: {},
-  reason: null,
-  actor_user_id: USER_ID,
-  actor_employee_id: EMPLOYEE_ID,
-  idempotency_key: "activate-1",
-  result_version: 1,
-  created_at: NOW,
-};
-const settings = {
-  tenant_id: TENANT_ID,
-  module_enabled: true,
-  require_active_contract_for_new_order: false,
-  enabled_by_employee_id: EMPLOYEE_ID,
-  enabled_at: NOW,
-  version: 1,
-  created_at: NOW,
-  updated_at: NOW,
-};
-const eligibility = {
-  eligible: true,
-  blocking_reasons: [],
-  checked_at: NOW,
-  tenant_id: TENANT_ID,
-  tenant_supplier_id: TENANT_SUPPLIER_ID,
-  supplier_id: SUPPLIER_ID,
-  supplier_version: 4,
-  tenant_supplier_version: 1,
-};

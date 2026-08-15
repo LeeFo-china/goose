@@ -179,6 +179,7 @@ export const PERMISSION_CODE_VALUES = [
   'platform.supplier.manage',
   'platform.supplier.blacklist',
   'platform.catalog.manage',
+  'platform.supplier-product.manage',
   'platform.douyin_miniapp.manage',
   'douyin_miniapp.read',
   'douyin_miniapp.manage',
@@ -192,6 +193,8 @@ export const PERMISSION_CODE_VALUES = [
   'service_provider.profile.manage',
   'supplier.view',
   'supplier.manage',
+  'supplier.master.manage',
+  'supplier.catalog.manage',
   'supplier.contract.manage',
   'supplier.product.view',
   'supplier.product.manage',
@@ -868,6 +871,10 @@ export const PermissionCodeConfig: Record<
     label: '管理供应标准目录',
     module: 'platform_supplier_catalog',
   },
+  'platform.supplier-product.manage': {
+    label: '管理平台共享商品',
+    module: 'platform_supplier',
+  },
   'platform.douyin_miniapp.manage': {
     label: '管理抖音小程序',
     module: 'platform',
@@ -936,6 +943,14 @@ export const PermissionCodeConfig: Record<
   },
   'supplier.manage': {
     label: '管理合作供应商',
+    module: 'supplier',
+  },
+  'supplier.master.manage': {
+    label: '管理本租户私有供应商主档',
+    module: 'supplier',
+  },
+  'supplier.catalog.manage': {
+    label: '管理本租户分类、品牌和规格模板',
     module: 'supplier',
   },
   'supplier.contract.manage': {

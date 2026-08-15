@@ -12,10 +12,8 @@ import {
   type SupplierServiceRegionWrite,
 } from "@/schema/platform-suppliers";
 import type {
-  SupplierAddressCreateCommand,
-  SupplierContactCreateCommand,
-  SupplierQualificationCreateCommand,
-  SupplierQualificationTypeCreateCommand,
+  SupplierAddressCreateCommand, SupplierContactCreateCommand,
+  SupplierQualificationCreateCommand, SupplierQualificationTypeCreateCommand,
   SupplierServiceRegionCreateCommand,
 } from "@/schema/supplier-create-commands";
 import { SupabaseDB } from "@/utils/supabase";
@@ -44,11 +42,8 @@ import {
   rpcCommandContext as commandContext,
 } from "./supplier-create-command-rpc";
 import type {
-  AddressCreateResult,
-  ContactCreateResult,
-  QualificationCreateResult,
-  QualificationTypeCreateResult,
-  ServiceRegionCreateResult,
+  AddressCreateResult, ContactCreateResult, QualificationCreateResult,
+  QualificationTypeCreateResult, ServiceRegionCreateResult,
 } from "./platform-supplier-create-results";
 import {
   compactRecord as compact,
@@ -58,6 +53,7 @@ import {
   sanitizeKeyword,
   toPage,
 } from "./supplier-repository-utils";
+import { throwSupplierCommandDatabaseError } from "./supplier-command-errors";
 const CORE_SELECT = "id,code,name,legal_name,unified_social_credit_code,supplier_type,onboarding_status,operational_status,version,created_at,updated_at";
 const LIST_SELECT = `${CORE_SELECT},qualification_health`;
 const DETAIL_SELECT = `${CORE_SELECT},legal_representative_name,registered_address_text,review_remark,reviewed_by_employee_id,reviewed_at,blacklisted_by_employee_id,blacklisted_at,blacklist_reason,created_by_employee_id,updated_by_employee_id`;
@@ -67,7 +63,7 @@ const REGION_SELECT = "id,supplier_id,region_code,region_level,status,valid_from
 const ADDRESS_SELECT = "id,supplier_id,address_type,province,city,district,region_code,address_detail,longitude,latitude,is_default,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const CONTACT_SELECT = "id,supplier_id,contact_type,name,phone,email,is_public,is_primary,status,version,created_by_employee_id,updated_by_employee_id,created_at,updated_at";
 const EVENT_SELECT = "id,tenant_id,resource_type,resource_id,command,from_state,to_state,reason,actor_user_id,actor_employee_id,idempotency_key,result_version,created_at";
-const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
+const SETTINGS_SELECT = "tenant_id,module_enabled,require_active_contract_for_new_order,ownership_reads_enabled,private_supplier_writes_enabled,private_catalog_writes_enabled,procurement_snapshot_v1_enabled,enabled_by_employee_id,enabled_at,version,created_at,updated_at";
 const mutationStatus = z.object({
   status: z.enum([
     "created", "updated", "supplier_not_found", "state_conflict",
@@ -77,15 +73,9 @@ const mutationStatus = z.object({
   version: z.number().int().nonnegative().optional(),
 }).passthrough();
 export type {
-  PlatformSupplierDetail,
-  PlatformSupplierListItem,
-  SupplierAddress,
-  SupplierContact,
-  SupplierEvent,
-  SupplierQualification,
-  SupplierQualificationType,
-  SupplierServiceRegion,
-  TenantSupplierSettings,
+  PlatformSupplierDetail, PlatformSupplierListItem, SupplierAddress,
+  SupplierContact, SupplierEvent, SupplierQualification,
+  SupplierQualificationType, SupplierServiceRegion, TenantSupplierSettings,
 } from "./platform-supplier-records";
 export type TenantSupplierSettingsMutation = {
   status: "updated"; idempotent: boolean; setting: TenantSupplierSettings;
@@ -123,8 +113,8 @@ type Result = { data: unknown; error: unknown; count: number | null };
 type Query = {
   select: (...args: unknown[]) => Query; insert: (value: Record<string, unknown>) => Query;
   update: (value: Record<string, unknown>) => Query; eq: (column: string, value: unknown) => Query;
-  or: (filter: string) => Query; order: (column: string, options: { ascending: boolean }) => Query;
-  range: (start: number, end: number) => Query;
+  is: (column: string, value: null) => Query; or: (filter: string) => Query;
+  order: (column: string, options: { ascending: boolean }) => Query; range: (start: number, end: number) => Query;
   maybeSingle: () => Promise<{ data: unknown; error: unknown }>; then: Promise<Result>["then"];
 };
 type Client = { from: (table: string) => Query; rpc: (name: string, params: Record<string, unknown>) => Query };
@@ -160,7 +150,8 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   async findSupplierById(id: string) {
     const { data, error } = await this.client.from("suppliers")
-      .select(DETAIL_SELECT).eq("id", id).maybeSingle();
+      .select(DETAIL_SELECT).eq("id", id).eq("ownership_scope", "platform")
+      .is("owner_tenant_id", null).maybeSingle();
     if (error) throw Errors.dbError("查询平台供应商详情失败", error);
     return data === null ? null : parse(SupplierDetailSchema, data, "查询平台供应商详情失败");
   }
@@ -227,6 +218,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
       version: expected_version + 1 });
     const { data, error } = await this.client.from("suppliers").update(patch)
       .eq("id", supplier_id).eq("version", expected_version)
+      .eq("ownership_scope", "platform").is("owner_tenant_id", null)
       .select(DETAIL_SELECT).maybeSingle();
     if (error) throw Errors.dbError("更新平台供应商失败", error);
     if (data === null) {
@@ -238,7 +230,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return { status: "updated", idempotent: false, supplier, version: supplier.version };
   }
   mutateSupplier(input: PlatformSupplierLifecycleCommand) {
-    return this.supplierRpc("mutate_platform_supplier", {
+    return this.supplierRpc("mutate_platform_supplier_guarded", {
       p_supplier_id: input.supplier_id, p_action: input.action,
       p_expected_version: input.expected_version, p_actor_user_id: input.actor_user_id,
       p_actor_employee_id: input.actor_employee_id, p_reason: input.reason ?? null,
@@ -258,7 +250,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   createQualification(input: SupplierQualificationCreateCommand) {
     return executeCreateCommand({
-      client: this.client, functionName: "create_supplier_qualification",
+      client: this.client, functionName: "create_supplier_qualification_guarded",
       resourceKey: "qualification", resourceSchema: QualificationSchema,
       message: "新增供应商资质失败",
       params: {
@@ -279,7 +271,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
       "更新供应商资质失败", supplier_id);
   }
   reviewQualification(input: SupplierQualificationReviewCommand) {
-    return this.supplierRpc("review_supplier_qualification", {
+    return this.supplierRpc("review_supplier_qualification_guarded", {
       p_supplier_id: input.supplier_id, p_qualification_id: input.qualification_id,
       p_verification_status: input.verification_status,
       p_expected_version: input.expected_version, p_actor_user_id: input.actor_user_id,
@@ -297,7 +289,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   createServiceRegion(input: SupplierServiceRegionCreateCommand) {
     return executeCreateCommand({
-      client: this.client, functionName: "create_supplier_service_region",
+      client: this.client, functionName: "create_supplier_service_region_guarded",
       resourceKey: "service_region", resourceSchema: RegionSchema,
       message: "新增供应商服务区域失败",
       params: {
@@ -327,7 +319,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   createAddress(input: SupplierAddressCreateCommand) {
     return executeCreateCommand({
-      client: this.client, functionName: "create_supplier_address",
+      client: this.client, functionName: "create_supplier_address_guarded",
       resourceKey: "address", resourceSchema: AddressSchema,
       message: "新增供应商地址失败",
       params: {
@@ -360,7 +352,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   createContact(input: SupplierContactCreateCommand) {
     return executeCreateCommand({
-      client: this.client, functionName: "create_supplier_contact",
+      client: this.client, functionName: "create_supplier_contact_guarded",
       resourceKey: "contact", resourceSchema: ContactSchema,
       message: "新增供应商联系人失败",
       params: {
@@ -381,6 +373,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
       expected_version, patch, ContactSchema, "更新供应商联系人失败", supplier_id);
   }
   async listEvents(input: SupplierEventPageQuery) {
+    await this.assertPlatformSupplier(input.supplier_id);
     const pagination = normalizePage(input);
     const { start, end } = range(pagination);
     let request = this.client.from("supplier_command_events")
@@ -401,9 +394,13 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     return data === null ? null : parse(SettingsSchema, data, "查询租户供应商设置失败");
   }
   async setTenantSupplierSettings(input: PlatformTenantSupplierSettingsCommand) {
-    const data = await this.rpc("set_tenant_supplier_module", {
+    const data = await this.rpc("set_tenant_supplier_rollout_settings", {
       p_tenant_id: input.tenant_id, p_module_enabled: input.module_enabled,
       p_require_active_contract_for_new_order: input.require_active_contract_for_new_order,
+      p_ownership_reads_enabled: input.ownership_reads_enabled,
+      p_private_supplier_writes_enabled: input.private_supplier_writes_enabled,
+      p_private_catalog_writes_enabled: input.private_catalog_writes_enabled,
+      p_procurement_snapshot_v1_enabled: input.procurement_snapshot_v1_enabled,
       p_expected_version: input.expected_version, p_actor_user_id: input.actor_user_id,
       p_actor_employee_id: input.actor_employee_id,
       p_idempotency_key: input.idempotency_key,
@@ -426,6 +423,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     input: SupplierChildPageQuery,
     orders: ReadonlyArray<readonly [string, boolean]>, message: string,
   ): Promise<Page<T>> {
+    await this.assertPlatformSupplier(input.supplier_id);
     const pagination = normalizePage(input);
     const { start, end } = range(pagination);
     let request = this.client.from(table).select(select, { count: "exact" })
@@ -437,6 +435,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   private async findChild<T>(table: string, select: string, schema: z.ZodType<T>,
     supplierId: string, id: string, message: string): Promise<T | null> {
+    await this.assertPlatformSupplier(supplierId);
     const { data, error } = await this.client.from(table).select(select)
       .eq("supplier_id", supplierId).eq("id", id).maybeSingle();
     if (error) throw Errors.dbError(message, error);
@@ -446,6 +445,7 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
     table: string, select: string, id: string, expectedVersion: number,
     patch: object, schema: z.ZodType<T>, message: string, supplierId?: string,
   ): Promise<T> {
+    if (supplierId) await this.assertPlatformSupplier(supplierId);
     let request = this.client.from(table)
       .update(compact({ ...patch, version: expectedVersion + 1 })).eq("id", id);
     if (supplierId) request = request.eq("supplier_id", supplierId);
@@ -480,8 +480,12 @@ export class PlatformSuppliersRepository implements PlatformSuppliersRepositoryP
   }
   private async rpc(name: string, params: Record<string, unknown>, message: string) {
     const { data, error } = await this.client.rpc(name, params);
-    if (error) throw Errors.dbError(message, error);
+    if (error) throwSupplierCommandDatabaseError(error, message);
     return data;
+  }
+  private async assertPlatformSupplier(supplierId: string) {
+    if (await this.findSupplierById(supplierId)) return;
+    throw Errors.business(404, "平台供应商不存在", "SUPPLIER_NOT_FOUND");
   }
 }
 function mutationError(input: z.infer<typeof mutationStatus>) {

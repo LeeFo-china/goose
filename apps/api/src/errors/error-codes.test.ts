@@ -134,3 +134,23 @@ describe('platform service sales error codes', () => {
     ]);
   });
 });
+
+describe('tenant private supplier error codes', () => {
+  test('exports the stable ownership, code, state, and access contract', () => {
+    expect([
+      ErrorCodes.SUPPLIER_OWNERSHIP_CONFLICT,
+      ErrorCodes.SUPPLIER_CODE_CONFLICT,
+      ErrorCodes.SUPPLIER_CODE_ALLOCATION_CONFLICT,
+      ErrorCodes.TENANT_SUPPLIER_NOT_FOUND,
+      ErrorCodes.TENANT_SUPPLIER_STATE_CONFLICT,
+      ErrorCodes.PRIVATE_RESOURCE_FORBIDDEN,
+    ]).toEqual([
+      'SUPPLIER_OWNERSHIP_CONFLICT',
+      'SUPPLIER_CODE_CONFLICT',
+      'SUPPLIER_CODE_ALLOCATION_CONFLICT',
+      'TENANT_SUPPLIER_NOT_FOUND',
+      'TENANT_SUPPLIER_STATE_CONFLICT',
+      'PRIVATE_RESOURCE_FORBIDDEN',
+    ]);
+  });
+});

@@ -1,9 +1,45 @@
 import { Errors } from "@/errors/error-factory";
 
 const BUSINESS_ERRORS = {
+  SUPPLIER_NOT_FOUND: {
+    statusCode: 404,
+    message: "供应商不存在",
+  },
+  SUPPLIER_STATE_CONFLICT: {
+    statusCode: 409,
+    message: "供应商当前状态不允许该操作",
+  },
+  SUPPLIER_VERSION_CONFLICT: {
+    statusCode: 409,
+    message: "供应商版本已变化，请刷新后重试",
+  },
   SUPPLIER_IDEMPOTENCY_CONFLICT: {
     statusCode: 409,
     message: "幂等键已用于其他供应商操作",
+  },
+  SUPPLIER_CODE_ALLOCATION_CONFLICT: {
+    statusCode: 409,
+    message: "供应商内部编码分配冲突，请重新生成",
+  },
+  SUPPLIER_CODE_CONFLICT: {
+    statusCode: 409,
+    message: "供应商内部编码已存在",
+  },
+  SUPPLIER_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "供应商归属与当前操作不匹配",
+  },
+  SUPPLIER_IDENTITY_CONFLICT: {
+    statusCode: 409,
+    message: "供应商身份信息已存在",
+  },
+  TENANT_SUPPLIER_STATE_CONFLICT: {
+    statusCode: 409,
+    message: "租户供应商当前状态不允许该操作",
+  },
+  TENANT_SUPPLIER_NOT_FOUND: {
+    statusCode: 404,
+    message: "租户供应商合作关系不存在",
   },
   SUPPLIER_PRODUCT_NOT_FOUND: {
     statusCode: 404,

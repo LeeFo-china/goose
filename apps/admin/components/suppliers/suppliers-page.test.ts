@@ -38,6 +38,8 @@ describe("租户合作供应商工作台", () => {
 
     for (const column of [
       "供应商",
+      "内部编码",
+      "资料来源",
       "合作状态",
       "新订单资格",
       "结算条款",
@@ -56,8 +58,29 @@ describe("租户合作供应商工作台", () => {
 
     expect(source).toContain("/suppliers/directory?");
     expect(source).toContain('pageSize: "10"');
-    expect(source).toContain("evaluating");
-    expect(source).toContain('"Idempotency-Key"');
+    expect(source).toContain("当前状态为评估中");
+    expect(readSource("./supplier-create-api.ts")).toContain('"Idempotency-Key"');
+    expect(source).toContain("添加平台共享供应商");
+    expect(source).toContain("新建私有供应商");
+    expect(source).toContain("自动生成");
+    expect(source).toContain("allocation_id");
+    expect(source).toContain("privateCreationEnabled");
+    expect(source).toContain("sharedCreationEnabled");
+    expect(source).toContain("codeAllocationEnabled");
+    expect(source).toContain("合作关系管理权限");
+    expect(readSource("./supplier-workspace.tsx")).toContain("canGenerateInternalCode");
+    expect(readSource("./supplier-workspace.tsx")).toContain(
+      "codeAllocationEnabled={canGenerateInternalCode}",
+    );
+    expect(source).toContain("isSupplierIdentityConflict");
+    expect(source).toContain('aria-pressed={props.active}');
+    expect(source).toContain("allocationRequestRef");
+    expect(source).toContain('role="alert"');
+    expect(source).toContain("aria-describedby");
+    expect(readSource("./supplier-workspace.tsx"))
+      .toContain("canManage || canCreatePrivate");
+    expect(readSource("../../app/(console)/suppliers/page.tsx"))
+      .toContain('permissions.has("supplier.master.manage")');
     expect(source).not.toContain("成本价");
   });
 
@@ -115,7 +138,23 @@ describe("平台租户供应商模块开关", () => {
     expect(card).toContain("const reason = disableReason.trim()");
     expect(card).toContain("pendingIntent");
     expect(card).toContain("重新加载");
-    expect(card).not.toContain("<Switch");
+    expect(card).toContain("<Switch");
+    for (const flag of [
+      "ownership_reads_enabled",
+      "private_supplier_writes_enabled",
+      "private_catalog_writes_enabled",
+      "procurement_snapshot_v1_enabled",
+    ]) {
+      expect(card).toContain(flag);
+    }
+    expect(card).toContain('orientation="horizontal"');
+    expect(card).toContain("FieldDescription");
+    expect(card).toContain("canToggleSupplierRolloutFlag");
+    expect(card).toContain("hasEnabledChildFlags");
+    expect(card).toContain("controlsLocked");
+    expect(card).toContain("请先逆序关闭子开关");
+    expect(card).toContain("以下开关仅用于预配置");
+    expect(card).toContain("对应后续阶段交付后才会生效");
     expect(settingsApi).toContain("expected_version: current.version");
     expect(settingsApi).toContain('"Idempotency-Key"');
     expect(card).toContain("模块启用时间");

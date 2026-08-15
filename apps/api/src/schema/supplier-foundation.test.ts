@@ -240,6 +240,9 @@ describe("supplier foundation identity and strict updates", () => {
       { contact_type: "sales", name: "张三", unexpected: true }, false);
     expectValid(PlatformTenantSupplierSettingsCommandSchema, {
       module_enabled: true, require_active_contract_for_new_order: false,
+      ownership_reads_enabled: false, private_supplier_writes_enabled: false,
+      private_catalog_writes_enabled: false,
+      procurement_snapshot_v1_enabled: false,
       expected_version: 1, tenant_id: uuid,
     }, false);
   });
