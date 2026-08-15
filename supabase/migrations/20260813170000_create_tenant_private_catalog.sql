@@ -326,7 +326,6 @@ CREATE FUNCTION public.create_tenant_catalog_category(
   p_code text,
   p_name text,
   p_mapped_platform_category_id uuid,
-  p_expected_parent_version integer,
   p_actor_user_id uuid,
   p_actor_employee_id uuid,
   p_idempotency_key text
@@ -366,7 +365,6 @@ BEGIN
     END IF;
     IF v_parent.ownership_scope IS DISTINCT FROM 'tenant'
       OR v_parent.owner_tenant_id IS DISTINCT FROM p_tenant_id
-      OR v_parent.version IS DISTINCT FROM p_expected_parent_version
     THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001', MESSAGE = 'CATEGORY_OWNERSHIP_CONFLICT';
@@ -417,7 +415,7 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.create_tenant_catalog_category(
-  uuid, uuid, uuid, text, text, uuid, integer, uuid, uuid, text
+  uuid, uuid, uuid, text, text, uuid, uuid, uuid, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
 CREATE FUNCTION public.update_tenant_catalog_category(

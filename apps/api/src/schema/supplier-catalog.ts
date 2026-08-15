@@ -289,3 +289,98 @@ export type CatalogUnitCreateInput =
   z.infer<typeof CatalogUnitCreateSchema>;
 export type CatalogUnitUpdateInput =
   z.infer<typeof CatalogUnitUpdateSchema>;
+
+const tenantCategoryWriteFields = {
+  parent_id: uuid("无效的父目录分类 ID").nullable(),
+  code: requiredText(64, "目录分类编码不能为空", "目录分类编码不能超过 64 个字符"),
+  name: requiredText(120, "目录分类名称不能为空", "目录分类名称不能超过 120 个字符"),
+  mapped_platform_category_id: uuid("无效的平台分类 ID")
+    .nullable()
+    .optional(),
+};
+
+export const TenantCatalogCategoryCreateSchema = z.object({
+  parent_id: tenantCategoryWriteFields.parent_id.default(null),
+  code: tenantCategoryWriteFields.code,
+  name: tenantCategoryWriteFields.name,
+  mapped_platform_category_id:
+    tenantCategoryWriteFields.mapped_platform_category_id.default(null),
+}).strict();
+
+export const TenantCatalogCategoryUpdateSchema = z.object({
+  expected_version: expectedVersion,
+  name: tenantCategoryWriteFields.name.optional(),
+  mapped_platform_category_id:
+    tenantCategoryWriteFields.mapped_platform_category_id,
+}).strict().refine(hasUpdateField, {
+  message: "至少需要提交一个目录分类更新字段",
+});
+
+const tenantBrandWriteFields = {
+  code: requiredText(64, "目录品牌编码不能为空", "目录品牌编码不能超过 64 个字符"),
+  name: requiredText(120, "目录品牌名称不能为空", "目录品牌名称不能超过 120 个字符"),
+  mapped_platform_brand_id: uuid("无效的平台品牌 ID").nullable().optional(),
+};
+
+export const TenantCatalogBrandCreateSchema = z.object({
+  code: tenantBrandWriteFields.code,
+  name: tenantBrandWriteFields.name,
+  mapped_platform_brand_id:
+    tenantBrandWriteFields.mapped_platform_brand_id.default(null),
+}).strict();
+
+export const TenantCatalogBrandUpdateSchema = z.object({
+  expected_version: expectedVersion,
+  name: tenantBrandWriteFields.name.optional(),
+  mapped_platform_brand_id: tenantBrandWriteFields.mapped_platform_brand_id,
+}).strict().refine(hasUpdateField, {
+  message: "至少需要提交一个目录品牌更新字段",
+});
+
+export type TenantCatalogCategoryCreateInput =
+  z.infer<typeof TenantCatalogCategoryCreateSchema>;
+export type TenantCatalogCategoryUpdateInput =
+  z.infer<typeof TenantCatalogCategoryUpdateSchema>;
+export type TenantCatalogBrandCreateInput =
+  z.infer<typeof TenantCatalogBrandCreateSchema>;
+export type TenantCatalogBrandUpdateInput =
+  z.infer<typeof TenantCatalogBrandUpdateSchema>;
+
+export type CatalogOwnership = {
+  ownershipScope: "platform" | "tenant";
+  ownerTenantId: string | null;
+};
+
+export type TenantCatalogCategoryCreateRecord =
+  TenantCatalogCategoryCreateInput & {
+    category_id: string;
+    tenant_id: string;
+    actor_user_id: string;
+    actor_employee_id: string;
+    idempotency_key: string;
+  };
+
+export type TenantCatalogCategoryUpdateRecord =
+  TenantCatalogCategoryUpdateInput & {
+    category_id: string;
+    tenant_id: string;
+    actor_user_id: string;
+    actor_employee_id: string;
+  };
+
+export type TenantCatalogBrandCreateRecord =
+  TenantCatalogBrandCreateInput & {
+    brand_id: string;
+    tenant_id: string;
+    actor_user_id: string;
+    actor_employee_id: string;
+    idempotency_key: string;
+  };
+
+export type TenantCatalogBrandUpdateRecord =
+  TenantCatalogBrandUpdateInput & {
+    brand_id: string;
+    tenant_id: string;
+    actor_user_id: string;
+    actor_employee_id: string;
+  };

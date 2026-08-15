@@ -16,12 +16,17 @@ import type {
   CatalogUnitCreateInput,
   CatalogUnitListQuery,
   CatalogUnitUpdateInput,
+  TenantCatalogBrandCreateInput,
+  TenantCatalogBrandUpdateInput,
+  TenantCatalogCategoryCreateInput,
+  TenantCatalogCategoryUpdateInput,
 } from "@/schema/supplier-catalog";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 
 const PLATFORM_PERMISSION = "platform.catalog.manage";
 const TENANT_PERMISSION = "supplier.view";
+const TENANT_CATALOG_PERMISSION = "supplier.catalog.manage";
 const CATALOG_CONFLICT_MESSAGES = [
   "只能移动叶子目录分类",
   "目录分类不能将自身设为父分类",
@@ -198,6 +203,106 @@ export class SupplierCatalogService {
     );
   }
 
+  async createTenantCategory(
+    authContext: AuthContext,
+    input: TenantCatalogCategoryCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = await this.requireTenantCatalogWriteActor(authContext);
+    return this.mapCatalogConflict(() =>
+      this.repository.createTenantCategory({
+        ...input,
+        category_id: this.idFactory(),
+        tenant_id: actor.tenantId,
+        actor_user_id: actor.authUserId,
+        actor_employee_id: actor.employeeId,
+        idempotency_key: idempotencyKey,
+      })
+    );
+  }
+
+  async updateTenantCategory(
+    authContext: AuthContext,
+    categoryId: string,
+    input: TenantCatalogCategoryUpdateInput,
+  ) {
+    const actor = await this.requireTenantCatalogWriteActor(authContext);
+    const ownership = await this.repository.findCategoryOwnership(categoryId);
+    if (!ownership || ownership.ownershipScope === "platform") {
+      throw Errors.business(
+        403,
+        "平台共享目录记录为只读",
+        "SHARED_RESOURCE_READ_ONLY",
+      );
+    }
+    if (ownership.ownerTenantId !== actor.tenantId) {
+      throw Errors.business(
+        404,
+        "目录分类不存在",
+        "CATEGORY_OWNERSHIP_CONFLICT",
+      );
+    }
+    return this.mapCatalogConflict(() =>
+      this.repository.updateTenantCategory({
+        ...input,
+        category_id: categoryId,
+        tenant_id: actor.tenantId,
+        actor_user_id: actor.authUserId,
+        actor_employee_id: actor.employeeId,
+      })
+    );
+  }
+
+  async createTenantBrand(
+    authContext: AuthContext,
+    input: TenantCatalogBrandCreateInput,
+    idempotencyKey: string,
+  ) {
+    const actor = await this.requireTenantCatalogWriteActor(authContext);
+    return this.mapCatalogConflict(() =>
+      this.repository.createTenantBrand({
+        ...input,
+        brand_id: this.idFactory(),
+        tenant_id: actor.tenantId,
+        actor_user_id: actor.authUserId,
+        actor_employee_id: actor.employeeId,
+        idempotency_key: idempotencyKey,
+      })
+    );
+  }
+
+  async updateTenantBrand(
+    authContext: AuthContext,
+    brandId: string,
+    input: TenantCatalogBrandUpdateInput,
+  ) {
+    const actor = await this.requireTenantCatalogWriteActor(authContext);
+    const ownership = await this.repository.findBrandOwnership(brandId);
+    if (!ownership || ownership.ownershipScope === "platform") {
+      throw Errors.business(
+        403,
+        "平台共享目录记录为只读",
+        "SHARED_RESOURCE_READ_ONLY",
+      );
+    }
+    if (ownership.ownerTenantId !== actor.tenantId) {
+      throw Errors.business(
+        404,
+        "目录品牌不存在",
+        "BRAND_OWNERSHIP_CONFLICT",
+      );
+    }
+    return this.mapCatalogConflict(() =>
+      this.repository.updateTenantBrand({
+        ...input,
+        brand_id: brandId,
+        tenant_id: actor.tenantId,
+        actor_user_id: actor.authUserId,
+        actor_employee_id: actor.employeeId,
+      })
+    );
+  }
+
   private requirePlatform(authContext: AuthContext): void {
     const isPlatformIdentity =
       authContext.isPlatformStaff || authContext.isPlatformAdmin;
@@ -222,6 +327,28 @@ export class SupplierCatalogService {
   private requireTenant(authContext: AuthContext): void {
     this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, TENANT_PERMISSION);
+  }
+
+  private async requireTenantCatalogWriteActor(authContext: AuthContext) {
+    this.accessPolicy.assertTenantContext(authContext);
+    this.accessPolicy.assertPermission(authContext, TENANT_CATALOG_PERMISSION);
+    const tenantId = authContext.tenantId;
+    if (!tenantId || !authContext.employeeId || !authContext.authUserId) {
+      throw Errors.forbidden();
+    }
+    const settings = await this.repository.getTenantSupplierSettings(tenantId);
+    if (!settings?.private_catalog_writes_enabled) {
+      throw Errors.business(
+        403,
+        "当前租户尚未启用私有目录写入",
+        "SUPPLIER_PRIVATE_WRITES_DISABLED",
+      );
+    }
+    return {
+      tenantId,
+      authUserId: authContext.authUserId,
+      employeeId: authContext.employeeId,
+    };
   }
 
   private async mapCatalogConflict<T>(
