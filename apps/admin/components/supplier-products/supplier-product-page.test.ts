@@ -74,4 +74,13 @@ describe("供应商品与供货价工作区", () => {
     expect(canMutateProduct({ ownership_scope: "tenant" }, true)).toBe(true);
     expect(canMutateProduct({ ownership_scope: "tenant" }, false)).toBe(false);
   });
+
+  test("非合作中关系显示历史只读说明并禁用写入", () => {
+    const workspace = readSource("./supplier-product-workspace.tsx");
+
+    expect(workspace).toContain("relationship_status");
+    expect(workspace).toContain("isActive");
+    expect(workspace).toContain("仅供历史查看");
+    expect(workspace).toContain("canWrite");
+  });
 });

@@ -5,6 +5,7 @@ import { PackageSearch, Search } from "lucide-react";
 
 import { FormSelect } from "@/components/admin/form-select";
 import { StatusAlert } from "@/components/admin/status-alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -22,6 +23,7 @@ import {
   loadSupplierProducts,
   loadSupplierRelationships,
 } from "./supplier-product-api";
+import { relationshipStatusMeta } from "@/components/suppliers/supplier-types";
 import { SupplierProductDialog } from "./supplier-product-dialog";
 import { SupplierProductList } from "./supplier-product-list";
 import { shouldLoadPriceLists } from "./supplier-product-rules";
@@ -69,11 +71,8 @@ export function SupplierProductWorkspace({
     let active = true;
     void loadSupplierRelationships().then((data) => {
       if (!active) return;
-      const allowed = data.list.filter(
-        ({ relationship_status }) => relationship_status === "active",
-      );
-      setRelationships(allowed);
-      setTenantSupplierId((current) => current ?? allowed[0]?.id ?? null);
+      setRelationships(data.list);
+      setTenantSupplierId((current) => current ?? data.list[0]?.id ?? null);
     }).catch((caught) => {
       if (active) {
         setError(caught instanceof Error ? caught.message : "合作供应商加载失败");
@@ -108,10 +107,16 @@ export function SupplierProductWorkspace({
   const relationshipOptions = useMemo(
     () => relationships.map((relationship) => ({
       value: relationship.id,
-      label: `${relationship.supplier.name} · ${relationship.supplier.code}`,
+      label: `${relationship.supplier.name} · ${relationship.supplier.code} · ${relationshipStatusMeta[relationship.relationship_status].label}`,
     })),
     [relationships],
   );
+
+  const selectedRelationship = relationships.find(
+    (relationship) => relationship.id === tenantSupplierId,
+  ) ?? null;
+  const isActive = selectedRelationship?.relationship_status === "active";
+  const canWrite = canManageProducts && isActive;
 
   if (!canViewProducts) {
     return (
@@ -174,6 +179,15 @@ export function SupplierProductWorkspace({
         </div>
       </div>
       {error ? <StatusAlert>{error}</StatusAlert> : null}
+      {selectedRelationship && !isActive ? (
+        <Alert>
+          <AlertTitle>当前合作关系已非合作中</AlertTitle>
+          <AlertDescription>
+            状态：{relationshipStatusMeta[selectedRelationship.relationship_status].label}。
+            商品与基础供货价仅供历史查看，不能新增或编辑。
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Tabs defaultValue="products" className="flex min-h-0 flex-1 flex-col gap-4">
         <TabsList className="w-fit">
           <TabsTrigger value="products">商品与 SKU</TabsTrigger>
@@ -212,7 +226,7 @@ export function SupplierProductWorkspace({
                     搜索
                   </Button>
                 </div>
-                {canManageProducts ? (
+                {canWrite ? (
                   <SupplierProductDialog
                     tenantSupplierId={tenantSupplierId}
                     disabled={loadingProducts}
@@ -226,7 +240,7 @@ export function SupplierProductWorkspace({
                 tenantSupplierId={tenantSupplierId}
                 products={products}
                 loading={loadingProducts}
-                canManage={canManageProducts}
+                canManage={canWrite}
                 onRefresh={loadProducts}
                 onAvailableSkusChange={setAvailableSkus}
               />
@@ -263,7 +277,7 @@ export function SupplierProductWorkspace({
               <CardContent className="p-5">
                 <SupplierPriceListPanel
                   tenantSupplierId={tenantSupplierId}
-                  canManage={canManageCostPrice}
+                  canManage={canManageCostPrice && isActive}
                   availableSkus={availableSkus}
                 />
               </CardContent>
