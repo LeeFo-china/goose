@@ -52,6 +52,10 @@ import {
   type SupplierSkuSpecDefinition,
   type SupplierSkuSpecValue,
 } from "./supplier-sku-spec-rules";
+import {
+  SupplierUnitConversionEditor,
+  type SupplierUnitConversionEdge,
+} from "./supplier-unit-conversion-editor";
 
 export function SupplierSkuDialog({
   tenantSupplierId,
@@ -80,6 +84,9 @@ export function SupplierSkuDialog({
   const [proxyReason, setProxyReason] = useState("");
   const [specs, setSpecs] = useState<SupplierSkuSpecDefinition[]>([]);
   const [specInputs, setSpecInputs] = useState<Record<string, string>>({});
+  const [conversions, setConversions] = useState<SupplierUnitConversionEdge[]>(
+    [],
+  );
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   useEffect(() => {
@@ -287,6 +294,12 @@ export function SupplierSkuDialog({
               />
             </FieldGroup>
           </FieldSet>
+          <SupplierUnitConversionEditor
+            units={units}
+            purchaseUnitId={purchaseUnitId}
+            edges={conversions}
+            onChange={setConversions}
+          />
           <Field>
             <FieldLabel htmlFor="supplier-sku-proxy-reason">
               代录原因
