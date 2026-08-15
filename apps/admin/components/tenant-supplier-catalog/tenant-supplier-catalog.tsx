@@ -29,6 +29,12 @@ import {
   type TenantCatalogUnit,
   type TenantCatalogView,
 } from "./tenant-supplier-catalog-types";
+import {
+  loadCategorySpecDefinitions,
+  type TenantCatalogSpecDefinition,
+} from "./tenant-supplier-catalog-api";
+import { specValueTypeLabel } from "./tenant-supplier-catalog-rules";
+import { UnitSuggestionForm } from "./unit-suggestion-form";
 
 export function TenantCatalogWorkspace({
   canManage,
@@ -47,6 +53,28 @@ export function TenantCatalogWorkspace({
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [specCategoryId, setSpecCategoryId] = useState<string | null>(null);
+  const [specs, setSpecs] = useState<TenantCatalogSpecDefinition[]>([]);
+  const [specsLoading, setSpecsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!specCategoryId) {
+      setSpecs([]);
+      return;
+    }
+    let active = true;
+    setSpecsLoading(true);
+    loadCategorySpecDefinitions(specCategoryId).then((page) => {
+      if (active) setSpecs(page.list);
+    }).catch(() => {
+      if (active) setSpecs([]);
+    }).finally(() => {
+      if (active) setSpecsLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, [specCategoryId]);
 
   useEffect(() => {
     let active = true;
@@ -152,7 +180,16 @@ export function TenantCatalogWorkspace({
                   <tbody>
                     {view === "categories"
                       ? categories.list.map((category) => (
-                          <CategoryRow key={category.id} category={category} />
+                          <CategoryRow
+                            key={category.id}
+                            category={category}
+                            selected={specCategoryId === category.id}
+                            onSelect={() =>
+                              setSpecCategoryId((current) =>
+                                current === category.id ? null : category.id
+                              )
+                            }
+                          />
                         ))
                       : view === "brands"
                         ? brands.list.map((brand) => (
@@ -172,14 +209,54 @@ export function TenantCatalogWorkspace({
             目录维护请使用平台共享或租户私有目录管理能力。
           </div>
         ) : null}
+        {view === "units" && canManage ? (
+          <UnitSuggestionForm onSubmitted={() => undefined} />
+        ) : null}
+        {view === "categories" && specCategoryId ? (
+          <Card>
+            <CardHeader className="p-4 text-sm font-medium">规格模板</CardHeader>
+            <CardContent className="p-0">
+              {specsLoading ? (
+                <div className="p-4 text-sm text-muted-foreground">加载中...</div>
+              ) : specs.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">
+                  该分类暂无规格模板
+                </div>
+              ) : (
+                <ul className="divide-y text-sm">
+                  {specs.map((spec) => (
+                    <li key={spec.id} className="flex items-center gap-3 p-3">
+                      <span>{spec.name}</span>
+                      <span className="text-muted-foreground">
+                        {specValueTypeLabel(spec.value_type)}
+                      </span>
+                      {spec.required ? <span>必填</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
       </Tabs>
     </div>
   );
 }
 
-function CategoryRow({ category }: { category: TenantCatalogCategory }) {
+function CategoryRow({
+  category,
+  selected,
+  onSelect,
+}: {
+  category: TenantCatalogCategory;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <tr className="border-b">
+    <tr
+      className={`cursor-pointer border-b ${selected ? "bg-muted/40" : ""}`}
+      onClick={onSelect}
+    >
       <td className="p-3">{category.full_name ?? category.name}</td>
       <td className="p-3">{category.code}</td>
       <td className="p-3">

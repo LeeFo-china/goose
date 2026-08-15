@@ -2,6 +2,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import { catalogSourceLabel } from "./tenant-supplier-catalog-types";
+import {
+  specValueTypeLabel,
+  validateUnitSuggestion,
+} from "./tenant-supplier-catalog-rules";
 
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
@@ -31,5 +35,20 @@ describe("租户供应商目录", () => {
     expect(source).toContain("ownership_scope");
     expect(source).toContain("mapped_platform_category_id");
     expect(source).toContain("mapped_platform_brand_id");
+  });
+
+  test("规格值类型与单位建议校验", () => {
+    expect(specValueTypeLabel("single_enum")).toBe("单选枚举");
+    expect(specValueTypeLabel("multi_enum")).toBe("多选枚举");
+    expect(validateUnitSuggestion({
+      name: "平方英尺",
+      symbol: "ft²",
+      dimension: "面积",
+    })).toBeNull();
+    expect(validateUnitSuggestion({
+      name: "",
+      symbol: "ft²",
+      dimension: "面积",
+    })).toBe("单位名称不能为空");
   });
 });
