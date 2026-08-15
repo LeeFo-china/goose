@@ -1,4 +1,15 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  copyPlatformSpecs,
+  createSpecDefinition,
+  findCategoryOwnership,
+  findSpecDefinitionOwnership,
+  getTenantSupplierSettings,
+  listSpecDefinitions,
+  listUnitSuggestions,
+  submitUnitSuggestion,
+  updateSpecDefinition,
+} from "@/repositories/supplier-catalog-tenant";
 import type {
   CatalogSpecDefinitionCreateInput,
   CatalogSpecDefinitionListQuery,
@@ -8,6 +19,7 @@ import type {
 } from "@/schema/supplier-catalog";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { SupabaseDB } from "@/utils/supabase";
 
 const TENANT_CATALOG_PERMISSION = "supplier.catalog.manage";
 const TENANT_VIEW_PERMISSION = "supplier.view";
@@ -34,6 +46,7 @@ export type SupplierCatalogSpecRepositoryPort = {
   ): Promise<CatalogOwnershipSnapshot | null>;
   listSpecDefinitions(
     categoryId: string,
+    tenantId: string,
     query: CatalogSpecDefinitionListQuery,
   ): Promise<unknown>;
   createSpecDefinition(input: unknown): Promise<unknown>;
@@ -58,7 +71,8 @@ export class SupplierCatalogSpecService {
   private readonly idFactory: () => string;
 
   constructor(dependencies: SupplierCatalogSpecServiceDependencies = {}) {
-    this.repository = dependencies.repository as SupplierCatalogSpecRepositoryPort;
+    this.repository = dependencies.repository ??
+      createSupplierCatalogSpecRepository();
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
   }
@@ -68,8 +82,8 @@ export class SupplierCatalogSpecService {
     categoryId: string,
     query: CatalogSpecDefinitionListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listSpecDefinitions(categoryId, query);
+    const tenantId = this.requireTenant(authContext);
+    return this.repository.listSpecDefinitions(categoryId, tenantId, query);
   }
 
   async createTenantSpecDefinition(
@@ -156,13 +170,15 @@ export class SupplierCatalogSpecService {
     authContext: AuthContext,
     query: CatalogUnitSuggestionListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listUnitSuggestions(authContext.tenantId, query);
+    const tenantId = this.requireTenant(authContext);
+    return this.repository.listUnitSuggestions(tenantId, query);
   }
 
-  private requireTenant(authContext: AuthContext): void {
+  private requireTenant(authContext: AuthContext): string {
     this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, TENANT_VIEW_PERMISSION);
+    if (!authContext.tenantId) throw Errors.forbidden();
+    return authContext.tenantId;
   }
 
   private async requireTenantCatalogWriteActor(authContext: AuthContext) {
@@ -197,6 +213,30 @@ export class SupplierCatalogSpecService {
       );
     }
   }
+}
+
+function createSupplierCatalogSpecRepository(): SupplierCatalogSpecRepositoryPort {
+  const client = SupabaseDB.getAdminClient();
+  return {
+    getTenantSupplierSettings: (tenantId) =>
+      getTenantSupplierSettings(client, tenantId),
+    findCategoryOwnership: (categoryId) =>
+      findCategoryOwnership(client, categoryId),
+    findSpecDefinitionOwnership: (specId) =>
+      findSpecDefinitionOwnership(client, specId),
+    listSpecDefinitions: (categoryId, tenantId, query) =>
+      listSpecDefinitions(client, categoryId, tenantId, query),
+    createSpecDefinition: (input) =>
+      createSpecDefinition(client, input as never),
+    updateSpecDefinition: (input) =>
+      updateSpecDefinition(client, input as never),
+    copyPlatformSpecs: (input) =>
+      copyPlatformSpecs(client, input as never),
+    submitUnitSuggestion: (input) =>
+      submitUnitSuggestion(client, input as never),
+    listUnitSuggestions: (tenantId, query) =>
+      listUnitSuggestions(client, tenantId, query),
+  };
 }
 
 export const supplierCatalogSpecService = new SupplierCatalogSpecService();
