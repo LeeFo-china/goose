@@ -15,6 +15,7 @@ import {
   loadPlatformSuppliers,
   type PlatformSupplierOption,
 } from "./platform-supplier-products-api";
+import { PlatformSupplierProductDialog } from "./platform-supplier-product-dialog";
 
 export function PlatformSupplierProducts() {
   const [supplierId, setSupplierId] = useState("");
@@ -23,6 +24,7 @@ export function PlatformSupplierProducts() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suppliers, setSuppliers] = useState<PlatformSupplierOption[]>([]);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -58,7 +60,7 @@ export function PlatformSupplierProducts() {
     return () => {
       active = false;
     };
-  }, [appliedSupplierId]);
+  }, [appliedSupplierId, reload]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5">
@@ -84,7 +86,15 @@ export function PlatformSupplierProducts() {
       </div>
       <Card className="min-h-80">
         <CardHeader className="shrink-0 border-b bg-muted/20 p-3">
-          <div className="text-sm font-medium">商品列表</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium">商品列表</div>
+            {appliedSupplierId ? (
+              <PlatformSupplierProductDialog
+                supplierId={appliedSupplierId}
+                onCreated={() => setReload((current) => current + 1)}
+              />
+            ) : null}
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (

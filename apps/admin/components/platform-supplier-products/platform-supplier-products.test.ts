@@ -21,5 +21,9 @@ describe("平台共享商品维护页", () => {
     expect(component).toContain("不维护租户成交价");
     expect(component).toContain("loadPlatformSuppliers");
     expect(component).toContain("FormSelect");
+    expect(component).toContain("PlatformSupplierProductDialog");
+    expect(readSource("./platform-supplier-product-dialog.tsx")).toContain(
+      "createPlatformSupplierProduct",
+    );
   });
 });
