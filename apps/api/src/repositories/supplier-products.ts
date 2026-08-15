@@ -171,6 +171,8 @@ export type SupplierCommandContext = {
   actor_employee_id: string;
   idempotency_key: string;
   proxy_reason: string | null;
+  ownership_scope?: "platform" | "tenant";
+  owner_tenant_id?: string | null;
 };
 export type SupplierProductCreateCommand = SupplierCommandContext & {
   product_id: string;
@@ -267,8 +269,8 @@ export class SupplierProductsRepository {
     );
   }
 
-  createProduct(input: SupplierProductCreateCommand) {
-    return this.command("create_supplier_product", {
+  async createProduct(input: SupplierProductCreateCommand) {
+    const result = await this.command("create_supplier_product", {
       p_product_id: input.product_id,
       p_tenant_id: input.tenant_id,
       p_supplier_id: input.supplier_id,
@@ -279,10 +281,26 @@ export class SupplierProductsRepository {
       p_description: input.description ?? null,
       ...commandParams(input),
     }, "创建供应商商品失败");
+    await this.applyTenantOwnership(
+      "supplier_products",
+      input.product_id,
+      input.owner_tenant_id,
+    );
+    return result;
   }
 
-  createSku(input: SupplierCommandContext & Record<string, unknown>) {
-    return this.command("create_supplier_sku", rpcParams(input), "创建供应商 SKU 失败");
+  async createSku(input: SupplierCommandContext & Record<string, unknown>) {
+    const result = await this.command(
+      "create_supplier_sku",
+      rpcParams(input),
+      "创建供应商 SKU 失败",
+    );
+    await this.applyTenantOwnership(
+      "supplier_skus",
+      String(input.sku_id ?? ""),
+      input.owner_tenant_id as string | null | undefined,
+    );
+    return result;
   }
 
   mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
@@ -373,6 +391,18 @@ export class SupplierProductsRepository {
     if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(ProductCommandResultSchema, data, message);
   }
+
+  private async applyTenantOwnership(
+    table: "supplier_products" | "supplier_skus",
+    id: string,
+    ownerTenantId: string | null | undefined,
+  ) {
+    if (!id || ownerTenantId === undefined || ownerTenantId === null) return;
+    const { error } = await this.client.from(table)
+      .update({ ownership_scope: "tenant", owner_tenant_id: ownerTenantId })
+      .eq("id", id);
+    if (error) throw Errors.dbError("写入商品所有权失败", error);
+  }
 }
 
 function commandParams(input: SupplierCommandContext) {
@@ -386,10 +416,14 @@ function commandParams(input: SupplierCommandContext) {
 
 function rpcParams(input: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [
-      key.startsWith("p_") ? key : `p_${key}`,
-      value,
-    ]),
+    Object.entries(input)
+      .filter(([key]) =>
+        key !== "ownership_scope" && key !== "owner_tenant_id"
+      )
+      .map(([key, value]) => [
+        key.startsWith("p_") ? key : `p_${key}`,
+        value,
+      ]),
   );
 }
 

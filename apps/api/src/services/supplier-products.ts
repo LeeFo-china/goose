@@ -234,6 +234,8 @@ function commandContext(
   return {
     supplier_id: scope.supplierId,
     tenant_id: scope.tenantId,
+    ownership_scope: "tenant" as const,
+    owner_tenant_id: scope.tenantId,
     actor_user_id: scope.authUserId,
     actor_employee_id: scope.employeeId,
     idempotency_key: idempotencyKey,

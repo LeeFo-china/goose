@@ -76,6 +76,8 @@ describe("SupplierProductsService", () => {
       product_id: PRODUCT_ID,
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID,
       product_code: "P-1",
       name: "瓷砖",
       category_id: CATEGORY_ID,
@@ -86,6 +88,33 @@ describe("SupplierProductsService", () => {
       idempotency_key: "product:create",
       proxy_reason: "供应商资料代录",
     });
+  });
+
+  test("writes tenant ownership for product creates", async () => {
+    const deps = dependencies();
+    const { SupplierProductsService } = await import("./supplier-products");
+    const service = new SupplierProductsService(deps as never);
+
+    await service.createProduct(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      {
+        product_code: "P-1",
+        name: "瓷砖",
+        category_id: CATEGORY_ID,
+        brand_id: BRAND_ID,
+        description: null,
+      },
+      "product:create",
+    );
+
+    expect(deps.repository.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownership_scope: "tenant",
+        owner_tenant_id: TENANT_ID,
+      }),
+    );
   });
 
   test("never forwards tenant or auth fields from ordinary updates", async () => {
@@ -157,6 +186,8 @@ describe("SupplierProductsService", () => {
     expect(deps.repository.mutateSku).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID,
       product_id: PRODUCT_ID,
       sku_id: SKU_ID,
       action: "activate",

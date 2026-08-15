@@ -123,8 +123,16 @@ BEGIN
     SELECT * INTO v_supplier
     FROM public.suppliers
     WHERE id = NEW.supplier_id;
-    IF v_supplier.ownership_scope IS DISTINCT FROM NEW.ownership_scope
-      OR v_supplier.owner_tenant_id IS DISTINCT FROM NEW.owner_tenant_id
+    IF NEW.ownership_scope = 'platform' THEN
+      IF v_supplier.ownership_scope IS DISTINCT FROM 'platform'
+        OR v_supplier.owner_tenant_id IS NOT NULL
+      THEN
+        RAISE EXCEPTION USING
+          ERRCODE = 'P0001',
+          MESSAGE = 'PRODUCT_OWNERSHIP_CONFLICT';
+      END IF;
+    ELSIF v_supplier.ownership_scope = 'tenant'
+      AND v_supplier.owner_tenant_id IS DISTINCT FROM NEW.owner_tenant_id
     THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001',
