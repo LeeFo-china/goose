@@ -63,8 +63,8 @@ ALTER TABLE public.supplier_price_list_items
   ADD COLUMN tenant_id uuid NULL
     REFERENCES public.tenants(id) ON DELETE RESTRICT;
 
-ALTER TABLE public.supplier_price_lists DISABLE TRIGGER ALL;
-ALTER TABLE public.supplier_price_list_items DISABLE TRIGGER ALL;
+ALTER TABLE public.supplier_price_lists DISABLE TRIGGER USER;
+ALTER TABLE public.supplier_price_list_items DISABLE TRIGGER USER;
 
 UPDATE public.supplier_price_lists
 SET tenant_id = acting_tenant_id
@@ -82,8 +82,8 @@ ALTER TABLE public.supplier_price_lists
 ALTER TABLE public.supplier_price_list_items
   ALTER COLUMN tenant_id SET NOT NULL;
 
-ALTER TABLE public.supplier_price_lists ENABLE TRIGGER ALL;
-ALTER TABLE public.supplier_price_list_items ENABLE TRIGGER ALL;
+ALTER TABLE public.supplier_price_lists ENABLE TRIGGER USER;
+ALTER TABLE public.supplier_price_list_items ENABLE TRIGGER USER;
 
 -- ---------------------------------------------------------------------------
 -- 4. Scope-aware product and SKU code uniqueness
