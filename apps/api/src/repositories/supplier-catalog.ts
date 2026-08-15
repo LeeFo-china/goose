@@ -6,8 +6,13 @@ import type {
   CatalogBrandUpdateRecord,
   CatalogCategoryListQuery,
   CatalogCategoryUpdateRecord,
+  CatalogOwnership,
   CatalogUnitListQuery,
   CatalogUnitUpdateRecord,
+  TenantCatalogBrandCreateRecord,
+  TenantCatalogBrandUpdateRecord,
+  TenantCatalogCategoryCreateRecord,
+  TenantCatalogCategoryUpdateRecord,
 } from "@/schema/supplier-catalog";
 import type {
   CatalogBrandCreateCommand,
@@ -20,6 +25,17 @@ import {
   rpcCommandContext as commandContext,
   type CreateCommandResult,
 } from "./supplier-create-command-rpc";
+import {
+  createTenantBrand,
+  createTenantCategory,
+  findBrandOwnership,
+  findCategoryOwnership,
+  getTenantSupplierSettings,
+  updateTenantBrand,
+  updateTenantCategory,
+  type TenantCatalogBrand,
+  type TenantCatalogCategory,
+} from "./supplier-catalog-tenant";
 
 const CATEGORY_SELECT =
   "id,parent_id,code,name,level,status,sort_order,version,created_at,updated_at";
@@ -115,6 +131,23 @@ export interface SupplierCatalogRepositoryPort {
   updateBrand(input: CatalogBrandUpdateRecord): Promise<CatalogBrand>;
   createUnit(input: CatalogUnitCreateCommand): Promise<CatalogUnitCreateResult>;
   updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnitRecord>;
+  getTenantSupplierSettings(
+    tenantId: string,
+  ): Promise<{ private_catalog_writes_enabled: boolean } | null>;
+  findCategoryOwnership(categoryId: string): Promise<CatalogOwnership | null>;
+  findBrandOwnership(brandId: string): Promise<CatalogOwnership | null>;
+  createTenantCategory(
+    input: TenantCatalogCategoryCreateRecord,
+  ): Promise<TenantCatalogCategory>;
+  updateTenantCategory(
+    input: TenantCatalogCategoryUpdateRecord,
+  ): Promise<TenantCatalogCategory>;
+  createTenantBrand(
+    input: TenantCatalogBrandCreateRecord,
+  ): Promise<TenantCatalogBrand>;
+  updateTenantBrand(
+    input: TenantCatalogBrandUpdateRecord,
+  ): Promise<TenantCatalogBrand>;
 }
 
 type CatalogClient = ReturnType<typeof SupabaseDB.getAdminClient>;
@@ -268,7 +301,6 @@ export class SupplierCatalogRepository
       "更新标准目录分类失败",
     );
   }
-
   createBrand(input: CatalogBrandCreateCommand) {
     return executeCreateCommand({
       client: this.client, functionName: "create_catalog_brand",
@@ -286,7 +318,6 @@ export class SupplierCatalogRepository
       },
     });
   }
-
   updateBrand(input: CatalogBrandUpdateRecord) {
     const { brand_id, expected_version, ...patch } = input;
     return this.updateRow(
@@ -299,7 +330,6 @@ export class SupplierCatalogRepository
       "更新标准品牌失败",
     );
   }
-
   createUnit(input: CatalogUnitCreateCommand) {
     return executeCreateCommand({
       client: this.client, functionName: "create_catalog_unit",
@@ -318,7 +348,6 @@ export class SupplierCatalogRepository
       },
     });
   }
-
   updateUnit(input: CatalogUnitUpdateRecord) {
     const { unit_id, expected_version, ...patch } = input;
     return this.updateRow(
@@ -330,6 +359,27 @@ export class SupplierCatalogRepository
       CatalogUnitSchema,
       "更新标准单位失败",
     );
+  }
+  getTenantSupplierSettings(tenantId: string) {
+    return getTenantSupplierSettings(this.client, tenantId);
+  }
+  findCategoryOwnership(categoryId: string) {
+    return findCategoryOwnership(this.client, categoryId);
+  }
+  findBrandOwnership(brandId: string) {
+    return findBrandOwnership(this.client, brandId);
+  }
+  createTenantCategory(input: TenantCatalogCategoryCreateRecord) {
+    return createTenantCategory(this.client, input);
+  }
+  updateTenantCategory(input: TenantCatalogCategoryUpdateRecord) {
+    return updateTenantCategory(this.client, input);
+  }
+  createTenantBrand(input: TenantCatalogBrandCreateRecord) {
+    return createTenantBrand(this.client, input);
+  }
+  updateTenantBrand(input: TenantCatalogBrandUpdateRecord) {
+    return updateTenantBrand(this.client, input);
   }
 
   private async updateRow<T>(
@@ -409,7 +459,6 @@ function toPage<T>(
     },
   };
 }
-
 function applyKeyword<RequestBuilder extends {
   or(filters: string): RequestBuilder;
 }>(request: RequestBuilder, keyword?: string): RequestBuilder {

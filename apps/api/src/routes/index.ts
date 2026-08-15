@@ -110,6 +110,7 @@ import TenantSuppliersController from "@/controllers/tenant-suppliers";
 import PlatformSupplierCatalogController from "@/controllers/platform-supplier-catalog";
 import SupplierCatalogController from "@/controllers/supplier-catalog";
 import SupplierProductsController from "@/controllers/supplier-products";
+import PlatformSupplierProductsController from "@/controllers/platform-supplier-products";
 import SupplierPriceListsController from "@/controllers/supplier-price-lists";
 import SupplierPurchaseOrdersController from "@/controllers/supplier-purchase-orders";
 import SupplierPurchaseRequisitionsController from "@/controllers/supplier-purchase-requisitions";
@@ -228,6 +229,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   PlatformSupplierCatalogController.registerExtraRoutes(app);
   SupplierCatalogController.registerExtraRoutes(app);
   SupplierProductsController.registerExtraRoutes(app);
+  PlatformSupplierProductsController.registerExtraRoutes(app);
   SupplierPriceListsController.registerExtraRoutes(app);
   SupplierPurchaseOrdersController.registerExtraRoutes(app);
   SupplierPurchaseRequisitionsController.registerExtraRoutes(app);

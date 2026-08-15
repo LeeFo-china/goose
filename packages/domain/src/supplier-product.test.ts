@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  SUPPLIER_PRODUCT_SOURCE_VALUES,
   SUPPLIER_PRICE_LIST_STATUS_VALUES,
   SUPPLIER_PRODUCT_STATUS_VALUES,
   SUPPLIER_SKU_STATUS_VALUES,
@@ -31,5 +32,12 @@ describe("supplier product domain", () => {
     expect(isSupplierPriceListAction("new-version")).toBe(true);
     expect(isSupplierPriceListAction("retire")).toBe(true);
     expect(isSupplierPriceListAction("delete")).toBe(false);
+  });
+
+  test("keeps stable product source values", () => {
+    expect(SUPPLIER_PRODUCT_SOURCE_VALUES).toEqual([
+      "platform_shared",
+      "tenant_private",
+    ]);
   });
 });

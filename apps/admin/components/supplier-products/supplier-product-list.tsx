@@ -34,6 +34,7 @@ import {
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import {
+  canMutateProduct,
   nextProductAction,
   nextSkuAction,
 } from "./supplier-product-rules";
@@ -43,6 +44,7 @@ import type {
   SupplierProductPage,
   SupplierSku,
 } from "./supplier-product-types";
+import { supplierProductSourceLabel } from "./supplier-product-types";
 
 type MutationTarget = ({
   id: string;
@@ -127,6 +129,20 @@ export function SupplierProductList({
       ),
     },
     {
+      id: "source",
+      header: "来源",
+      cell: ({ row }) => {
+        const source = row.original.ownership_scope === "platform"
+          ? "platform"
+          : "tenant";
+        return (
+          <Badge variant={source === "platform" ? "secondary" : "success"}>
+            {supplierProductSourceLabel(source)}
+          </Badge>
+        );
+      },
+    },
+    {
       accessorKey: "status",
       header: "状态",
       cell: ({ row }) => <StatusBadge value={row.original.status} />,
@@ -152,7 +168,7 @@ export function SupplierProductList({
           >
             查看 SKU
           </Button>
-          {canManage ? (
+          {canMutateProduct(row.original, canManage) ? (
             <Button
               type="button"
               size="sm"

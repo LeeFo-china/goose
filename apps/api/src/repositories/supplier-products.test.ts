@@ -54,6 +54,7 @@ describe("SupplierProductsRepository", () => {
 
     const result = await repository.listProducts({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       page: 2,
       pageSize: 20,
     });

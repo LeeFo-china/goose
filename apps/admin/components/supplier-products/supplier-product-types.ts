@@ -32,8 +32,18 @@ export type SupplierProduct = {
   version: number;
   category: CatalogReference;
   brand: CatalogReference;
+  ownership_scope?: "platform" | "tenant" | null;
+  owner_tenant_id?: string | null;
   updated_at: string;
 };
+
+export type SupplierProductSource = "platform" | "tenant";
+
+export function supplierProductSourceLabel(
+  source: SupplierProductSource,
+): string {
+  return source === "platform" ? "平台共享" : "租户私有";
+}
 
 export type SupplierSku = {
   id: string;

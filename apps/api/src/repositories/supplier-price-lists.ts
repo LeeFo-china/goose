@@ -116,6 +116,7 @@ type Page<T> = {
 type PageInput = { page: number; pageSize: number };
 export type SupplierPriceListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   keyword?: string;
   lifecycle_status?: string;
 };
@@ -129,7 +130,7 @@ export type PriceCommandContext = {
   actor_user_id: string;
   actor_employee_id: string;
   idempotency_key: string;
-  proxy_reason: string;
+  proxy_reason: string | null;
 };
 
 type Result = { data: unknown; error: unknown; count: number | null };
@@ -166,7 +167,8 @@ export class SupplierPriceListsRepository {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_price_lists")
       .select(PRICE_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id);
+      .eq("supplier_id", input.supplier_id)
+      .eq("tenant_id", input.tenant_id);
     if (input.lifecycle_status) {
       request = request.eq("lifecycle_status", input.lifecycle_status);
     }

@@ -46,6 +46,19 @@ export const SupplierProductListQuerySchema =
     brand_id: uuid("无效的目录品牌 ID").optional(),
   }).strict();
 
+export const PlatformSupplierProductListQuerySchema =
+  PaginationQuerySchema.extend({
+    supplier_id: uuid("无效的供应商 ID"),
+    keyword: keyword.optional(),
+    status: SupplierProductStatusSchema.optional(),
+    category_id: uuid("无效的目录分类 ID").optional(),
+    brand_id: uuid("无效的目录品牌 ID").optional(),
+  }).strict();
+
+export const PlatformSupplierProductScopeQuerySchema = z.object({
+  supplierId: uuid("无效的供应商 ID"),
+}).strict();
+
 export const SupplierSkuListQuerySchema = PaginationQuerySchema.extend({
   keyword: keyword.optional(),
   status: SupplierSkuStatusSchema.optional(),
@@ -83,7 +96,7 @@ const productFields = {
 
 export const SupplierProductCreateSchema = z.object({
   ...productFields,
-  proxy_reason: proxyReason,
+  proxy_reason: proxyReason.optional(),
 }).strict();
 
 export const SupplierProductUpdateSchema = z.object({
@@ -93,14 +106,14 @@ export const SupplierProductUpdateSchema = z.object({
   category_id: productFields.category_id.optional(),
   brand_id: productFields.brand_id.optional(),
   description: productFields.description,
-  proxy_reason: proxyReason,
+  proxy_reason: proxyReason.optional(),
 }).strict().refine(hasBusinessUpdate, {
   message: "至少需要提交一个商品更新字段",
 });
 
 export const SupplierProductCommandSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason,
+  proxy_reason: proxyReason.optional(),
 }).strict();
 
 const skuFields = {
@@ -123,7 +136,7 @@ export const SupplierSkuCreateSchema = z.object({
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),
-  proxy_reason: proxyReason,
+  proxy_reason: proxyReason.optional(),
 }).strict();
 
 export const SupplierSkuUpdateSchema = z.object({
@@ -136,13 +149,15 @@ export const SupplierSkuUpdateSchema = z.object({
   batch_managed: skuFields.batch_managed.optional(),
   color_managed: skuFields.color_managed.optional(),
   serial_managed: skuFields.serial_managed.optional(),
-  proxy_reason: proxyReason,
+  proxy_reason: proxyReason.optional(),
 }).strict().refine(hasBusinessUpdate, {
   message: "至少需要提交一个 SKU 更新字段",
 });
 
 export type SupplierProductListQuery =
   z.infer<typeof SupplierProductListQuerySchema>;
+export type PlatformSupplierProductListQuery =
+  z.infer<typeof PlatformSupplierProductListQuerySchema>;
 export type SupplierSkuListQuery =
   z.infer<typeof SupplierSkuListQuerySchema>;
 export type SupplierProductCreateInput =
