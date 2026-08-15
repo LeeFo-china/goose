@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import { supplierProductSourceLabel } from "./supplier-product-types";
+import { canMutateProduct } from "./supplier-product-rules";
 
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
@@ -66,5 +67,11 @@ describe("供应商品与供货价工作区", () => {
     expect(list).toContain("supplierProductSourceLabel");
     expect(supplierProductSourceLabel("platform")).toBe("平台共享");
     expect(supplierProductSourceLabel("tenant")).toBe("租户私有");
+  });
+
+  test("平台共享商品为只读，租户商品可写", () => {
+    expect(canMutateProduct({ ownership_scope: "platform" }, true)).toBe(false);
+    expect(canMutateProduct({ ownership_scope: "tenant" }, true)).toBe(true);
+    expect(canMutateProduct({ ownership_scope: "tenant" }, false)).toBe(false);
   });
 });

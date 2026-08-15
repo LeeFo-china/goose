@@ -34,6 +34,7 @@ import {
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import {
+  canMutateProduct,
   nextProductAction,
   nextSkuAction,
 } from "./supplier-product-rules";
@@ -167,7 +168,7 @@ export function SupplierProductList({
           >
             查看 SKU
           </Button>
-          {canManage ? (
+          {canMutateProduct(row.original, canManage) ? (
             <Button
               type="button"
               size="sm"
