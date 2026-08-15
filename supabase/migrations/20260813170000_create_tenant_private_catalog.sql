@@ -130,14 +130,14 @@ EXECUTE FUNCTION public.guard_catalog_brand_scope();
 -- 3. Category spec definitions
 -- ---------------------------------------------------------------------------
 
-CREATE FUNCTION public.catalog_enum_options_are_distinct(values text[])
+CREATE FUNCTION public.catalog_enum_options_are_distinct(options text[])
 RETURNS boolean
 LANGUAGE sql
 IMMUTABLE
 SET search_path = pg_catalog, public
 AS $$
-  SELECT cardinality(values) = (
-    SELECT count(DISTINCT item) FROM unnest(values) AS item
+  SELECT cardinality(options) = (
+    SELECT count(DISTINCT item) FROM unnest(options) AS item
   );
 $$;
 
