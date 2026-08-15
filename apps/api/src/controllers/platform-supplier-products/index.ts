@@ -5,6 +5,8 @@ import {
   PlatformSupplierProductScopeQuerySchema,
   SupplierProductCreateSchema,
   SupplierProductParamSchema,
+  SupplierSkuCreateSchema,
+  SupplierSkuParamSchema,
 } from "@/schema/supplier-products";
 import { platformSupplierProductsService } from "@/services/platform-supplier-products";
 import { Get, Post } from "@/utils/decorators/route";
@@ -86,6 +88,31 @@ class PlatformSupplierProductsController extends PlatformBaseController {
         auth,
         supplierId,
         id,
+        input,
+        key,
+      ),
+    );
+  }
+
+  @Post("/platform/supplier-products/:id/skus/:skuId")
+  async createSku(request: FastifyRequest) {
+    const auth = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.supplier-product.manage",
+    );
+    const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
+    const { supplierId } = this.parse(
+      PlatformSupplierProductScopeQuerySchema,
+      request.query,
+    );
+    const key = requireIdempotencyKey(request);
+    const input = this.parse(SupplierSkuCreateSchema, request.body);
+    return ResponseHandler.success(
+      await platformSupplierProductsService.createSku(
+        auth,
+        supplierId,
+        id,
+        skuId,
         input,
         key,
       ),

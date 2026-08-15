@@ -98,6 +98,44 @@ export class PlatformSupplierProductsService {
     return data;
   }
 
+  async createSku(
+    authContext: AuthContext,
+    supplierId: string,
+    productId: string,
+    skuId: string,
+    input: {
+      sku_code: string;
+      name: string;
+      specification?: string | null;
+      model?: string | null;
+      purchase_unit_id: string;
+      batch_managed?: boolean;
+      color_managed?: boolean;
+      serial_managed?: boolean;
+    },
+    idempotencyKey: string,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "create_platform_supplier_sku",
+      {
+        p_sku_id: skuId,
+        p_supplier_id: supplierId,
+        p_supplier_product_id: productId,
+        p_sku_code: input.sku_code,
+        p_name: input.name,
+        p_specification: input.specification ?? null,
+        p_model: input.model ?? null,
+        p_purchase_unit_id: input.purchase_unit_id,
+        p_actor_user_id: actor.authUserId,
+        p_actor_employee_id: actor.employeeId,
+        p_idempotency_key: idempotencyKey,
+      },
+    );
+    if (error) throw Errors.dbError("创建平台供应商 SKU 失败", error);
+    return data;
+  }
+
   private requirePlatform(authContext: AuthContext): void {
     const isPlatformIdentity =
       authContext.isPlatformStaff || authContext.isPlatformAdmin;
