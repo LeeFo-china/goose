@@ -207,11 +207,9 @@ export class SupplierProductsRepository {
     private readonly clientProvider: () => Client = () =>
       SupabaseDB.getAdminClient() as unknown as Client,
   ) {}
-
   private get client() {
     return this.clientProvider();
   }
-
   async listProducts(input: SupplierProductListInput) {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_products")
@@ -322,6 +320,12 @@ export class SupplierProductsRepository {
       input.ownership_scope as "platform" | "tenant" | undefined,
       input.owner_tenant_id as string | null | undefined,
     );
+    if (input.spec_values !== undefined) {
+      const { error } = await this.client.from("supplier_skus")
+        .update({ spec_values: input.spec_values })
+        .eq("id", String(input.sku_id ?? ""));
+      if (error) throw Errors.dbError("写入 SKU 规格值失败", error);
+    }
     return result;
   }
   mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
@@ -424,7 +428,6 @@ export class SupplierProductsRepository {
     if (error) throw Errors.dbError("写入商品所有权失败", error);
   }
 }
-
 function commandParams(input: SupplierCommandContext) {
   return {
     p_actor_user_id: input.actor_user_id,
@@ -433,12 +436,13 @@ function commandParams(input: SupplierCommandContext) {
     p_proxy_reason: input.proxy_reason,
   };
 }
-
 function rpcParams(input: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(input)
       .filter(([key]) =>
-        key !== "ownership_scope" && key !== "owner_tenant_id"
+        key !== "ownership_scope"
+        && key !== "owner_tenant_id"
+        && key !== "spec_values"
       )
       .map(([key, value]) => [
         key.startsWith("p_") ? key : `p_${key}`,
@@ -462,7 +466,6 @@ function applyKeyword(request: Query, keyword?: string) {
     ? request.or(`product_code.ilike.%${safe}%,name.ilike.%${safe}%`)
     : request;
 }
-
 function toPage<T>(
   list: T[],
   pagination: PageInput,
@@ -478,7 +481,6 @@ function toPage<T>(
     },
   };
 }
-
 function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
   return parse(z.array(schema), data ?? [], message);
 }
@@ -487,7 +489,6 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
   if (result.success) return result.data;
   throw Errors.dbError(message, result.error.issues);
 }
-
 function versionConflict(message: string, code: string) {
   return Errors.business(
     409,
@@ -495,5 +496,4 @@ function versionConflict(message: string, code: string) {
     code,
   );
 }
-
 export const supplierProductsRepository = new SupplierProductsRepository();

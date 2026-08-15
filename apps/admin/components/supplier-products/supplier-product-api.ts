@@ -10,6 +10,7 @@ import type {
   SupplierSkuPage,
   TenantSupplierRelationship,
 } from "./supplier-product-types";
+import type { SupplierSkuSpecDefinition } from "./supplier-sku-spec-rules";
 
 export function loadSupplierRelationships(keyword = "") {
   const query = new URLSearchParams({ page: "1", pageSize: "20" });
@@ -111,6 +112,13 @@ export function loadCatalogOptions(
   return requestBackendJson<PageData<CatalogOption>>(
     `/catalog/${kind}?${query}`,
     { fallbackMessage: "供应标准目录加载失败" },
+  );
+}
+
+export function loadCategorySpecDefinitions(categoryId: string) {
+  return requestBackendJson<PageData<SupplierSkuSpecDefinition>>(
+    `/catalog/categories/${categoryId}/spec-definitions`,
+    { fallbackMessage: "加载规格模板失败" },
   );
 }
 

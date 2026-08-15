@@ -25,27 +25,44 @@ import {
   FieldLegend,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
   createSupplierResource,
   loadCatalogOptions,
+  loadCategorySpecDefinitions,
 } from "./supplier-product-api";
 import {
   resolveSupplierCommandAttempt,
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import type { CatalogOption } from "./supplier-product-types";
+import {
+  collectSpecValues,
+  suggestedSkuName,
+  type SupplierSkuSpecDefinition,
+  type SupplierSkuSpecValue,
+} from "./supplier-sku-spec-rules";
 
 export function SupplierSkuDialog({
   tenantSupplierId,
   productId,
+  categoryId,
   disabled,
   onCreated,
 }: {
   tenantSupplierId: string;
   productId: string;
+  categoryId?: string;
   disabled?: boolean;
   onCreated: () => void | Promise<void>;
 }) {
@@ -61,6 +78,8 @@ export function SupplierSkuDialog({
   const [colorManaged, setColorManaged] = useState(false);
   const [serialManaged, setSerialManaged] = useState(false);
   const [proxyReason, setProxyReason] = useState("");
+  const [specs, setSpecs] = useState<SupplierSkuSpecDefinition[]>([]);
+  const [specInputs, setSpecInputs] = useState<Record<string, string>>({});
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   useEffect(() => {
@@ -73,10 +92,19 @@ export function SupplierSkuDialog({
         toast.error(error instanceof Error ? error.message : "单位加载失败");
       }
     });
+    if (categoryId) {
+      void loadCategorySpecDefinitions(categoryId).then((page) => {
+        if (active) setSpecs(page.list);
+      }).catch((error) => {
+        if (active) {
+          toast.error(error instanceof Error ? error.message : "规格模板加载失败");
+        }
+      });
+    }
     return () => {
       active = false;
     };
-  }, [open]);
+  }, [open, categoryId]);
 
   const invalid = !skuCode.trim() || !name.trim() || !purchaseUnitId ||
     proxyReason.trim().length < 2;
@@ -94,6 +122,7 @@ export function SupplierSkuDialog({
         batch_managed: batchManaged,
         color_managed: colorManaged,
         serial_managed: serialManaged,
+        spec_values: collectSpecValues(specs, specInputs),
         proxy_reason: proxyReason.trim(),
       };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
@@ -118,6 +147,15 @@ export function SupplierSkuDialog({
     } finally {
       setSaving(false);
     }
+  }
+
+  function applySuggestedName() {
+    const nextName = suggestedSkuName(
+      specs,
+      collectSpecValues(specs, specInputs),
+      "",
+    );
+    if (nextName) setName(nextName);
   }
 
   return (
@@ -154,6 +192,16 @@ export function SupplierSkuDialog({
                 maxLength={160}
                 onChange={(event) => setName(event.target.value)}
               />
+              {specs.some((spec) => spec.participates_in_sku_name) ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={applySuggestedName}
+                >
+                  按规格生成名称
+                </Button>
+              ) : null}
             </Field>
             <Field>
               <FieldLabel htmlFor="supplier-sku-specification">
@@ -190,6 +238,29 @@ export function SupplierSkuDialog({
               onChange={setPurchaseUnitId}
             />
           </Field>
+          {specs.length > 0 ? (
+            <FieldSet>
+              <FieldLegend variant="label">结构化规格</FieldLegend>
+              <FieldDescription>
+                规格值独立于展示名称，参与命名的规格会进入建议名称。
+              </FieldDescription>
+              <FieldGroup className="grid gap-4 md:grid-cols-2">
+                {specs.map((spec) => (
+                  <SpecField
+                    key={spec.id}
+                    spec={spec}
+                    value={specInputs[spec.name] ?? ""}
+                    onChange={(value) =>
+                      setSpecInputs((current) => ({
+                        ...current,
+                        [spec.name]: value,
+                      }))
+                    }
+                  />
+                ))}
+              </FieldGroup>
+            </FieldSet>
+          ) : null}
           <FieldSet>
             <FieldLegend variant="label">管理属性</FieldLegend>
             <FieldDescription>
@@ -275,6 +346,83 @@ function BooleanField({
       <FieldLabel htmlFor={id} className="font-normal">
         {label}
       </FieldLabel>
+    </Field>
+  );
+}
+
+function SpecField({
+  spec,
+  value,
+  onChange,
+}: {
+  spec: SupplierSkuSpecDefinition;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  if (spec.value_type === "boolean") {
+    return (
+      <Field orientation="horizontal">
+        <Switch
+          id={`spec-${spec.id}`}
+          checked={value === "true"}
+          onCheckedChange={(checked) => onChange(checked ? "true" : "false")}
+        />
+        <FieldLabel htmlFor={`spec-${spec.id}`} className="font-normal">
+          {spec.name}
+          {spec.required ? "（必填）" : ""}
+        </FieldLabel>
+      </Field>
+    );
+  }
+
+  if (spec.value_type === "single_enum") {
+    return (
+      <Field>
+        <FieldLabel htmlFor={`spec-${spec.id}`}>
+          {spec.name}
+          {spec.required ? "（必填）" : ""}
+        </FieldLabel>
+        <Select
+          value={value || undefined}
+          onValueChange={onChange}
+        >
+          <SelectTrigger id={`spec-${spec.id}`}>
+            <SelectValue placeholder="请选择" />
+          </SelectTrigger>
+          <SelectContent>
+            {spec.enum_options.map((option) => (
+              <SelectItem key={option} value={option}>
+                {option}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={`spec-${spec.id}`}>
+        {spec.name}
+        {spec.required ? "（必填）" : ""}
+        {spec.unit_dimension ? `（${spec.unit_dimension}）` : ""}
+      </FieldLabel>
+      <Input
+        id={`spec-${spec.id}`}
+        type={
+          spec.value_type === "number"
+            ? "number"
+            : spec.value_type === "date"
+              ? "date"
+              : "text"
+        }
+        value={value}
+        placeholder={
+          spec.value_type === "multi_enum" ? "多个选项用逗号分隔" : undefined
+        }
+        onChange={(event) => onChange(event.target.value)}
+      />
     </Field>
   );
 }

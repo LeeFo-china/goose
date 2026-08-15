@@ -131,11 +131,19 @@ const skuFields = {
   serial_managed: z.boolean(),
 };
 
+const skuSpecValue = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.array(z.string()),
+]);
+
 export const SupplierSkuCreateSchema = z.object({
   ...skuFields,
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),
+  spec_values: z.record(z.string(), skuSpecValue).optional(),
   proxy_reason: proxyReason.optional(),
 }).strict();
 
