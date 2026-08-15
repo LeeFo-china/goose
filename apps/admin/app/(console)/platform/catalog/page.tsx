@@ -23,6 +23,7 @@ import {
   normalizeCatalogPage,
 } from "@/components/supplier-catalog/supplier-catalog-rules";
 import { SupplierCatalogTable } from "@/components/supplier-catalog/supplier-catalog-table";
+import { PlatformUnitSuggestions } from "@/components/platform-catalog/platform-unit-suggestions";
 import type {
   CatalogBrand,
   CatalogCategory,
@@ -196,6 +197,7 @@ export default async function PlatformCatalogPage({
           )}
         </PlatformListPageShell>
       </Tabs>
+      {canManage ? <PlatformUnitSuggestions /> : null}
     </div>
   );
 }
