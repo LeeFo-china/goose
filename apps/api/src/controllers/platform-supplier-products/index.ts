@@ -3,13 +3,29 @@ import { Errors } from "@/errors/error-factory";
 import {
   PlatformSupplierProductListQuerySchema,
   PlatformSupplierProductScopeQuerySchema,
+  SupplierProductCreateSchema,
   SupplierProductParamSchema,
 } from "@/schema/supplier-products";
 import { platformSupplierProductsService } from "@/services/platform-supplier-products";
-import { Get } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
 import type { z } from "zod";
+
+const MAX_IDEMPOTENCY_KEY_LENGTH = 120;
+
+function requireIdempotencyKey(request: FastifyRequest): string {
+  const value = request.headers["idempotency-key"];
+  const key = Array.isArray(value) ? value[0]?.trim() : value?.trim();
+  if (!key || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    throw Errors.business(
+      400,
+      "缺少有效的 Idempotency-Key",
+      "VALIDATION_ERROR",
+    );
+  }
+  return key;
+}
 
 class PlatformSupplierProductsController extends PlatformBaseController {
   constructor() {
@@ -49,6 +65,30 @@ class PlatformSupplierProductsController extends PlatformBaseController {
     );
     return ResponseHandler.success(
       await platformSupplierProductsService.getProduct(auth, supplierId, id),
+    );
+  }
+
+  @Post("/platform/supplier-products/:id")
+  async createProduct(request: FastifyRequest) {
+    const auth = await this.getRequiredPlatformPermissionContext(
+      request,
+      "platform.supplier-product.manage",
+    );
+    const { id } = this.parse(SupplierProductParamSchema, request.params);
+    const { supplierId } = this.parse(
+      PlatformSupplierProductScopeQuerySchema,
+      request.query,
+    );
+    const key = requireIdempotencyKey(request);
+    const input = this.parse(SupplierProductCreateSchema, request.body);
+    return ResponseHandler.success(
+      await platformSupplierProductsService.createProduct(
+        auth,
+        supplierId,
+        id,
+        input,
+        key,
+      ),
     );
   }
 

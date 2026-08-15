@@ -5,6 +5,7 @@ import {
 } from "@/repositories/supplier-products";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { SupabaseDB } from "@/utils/supabase";
 
 const PLATFORM_PERMISSION = "platform.supplier-product.manage";
 
@@ -64,6 +65,39 @@ export class PlatformSupplierProductsService {
     return product;
   }
 
+  async createProduct(
+    authContext: AuthContext,
+    supplierId: string,
+    productId: string,
+    input: {
+      product_code: string;
+      name: string;
+      category_id: string;
+      brand_id: string;
+      description?: string | null;
+    },
+    idempotencyKey: string,
+  ) {
+    const actor = this.requirePlatformActor(authContext);
+    const { data, error } = await SupabaseDB.getAdminClient().rpc(
+      "create_platform_supplier_product",
+      {
+        p_product_id: productId,
+        p_supplier_id: supplierId,
+        p_product_code: input.product_code,
+        p_name: input.name,
+        p_category_id: input.category_id,
+        p_brand_id: input.brand_id,
+        p_description: input.description ?? null,
+        p_actor_user_id: actor.authUserId,
+        p_actor_employee_id: actor.employeeId,
+        p_idempotency_key: idempotencyKey,
+      },
+    );
+    if (error) throw Errors.dbError("创建平台供应商商品失败", error);
+    return data;
+  }
+
   private requirePlatform(authContext: AuthContext): void {
     const isPlatformIdentity =
       authContext.isPlatformStaff || authContext.isPlatformAdmin;
@@ -71,6 +105,17 @@ export class PlatformSupplierProductsService {
       throw Errors.forbidden();
     }
     this.accessPolicy.assertPermission(authContext, PLATFORM_PERMISSION);
+  }
+
+  private requirePlatformActor(authContext: AuthContext) {
+    this.requirePlatform(authContext);
+    if (!authContext.employeeId || !authContext.authUserId) {
+      throw Errors.forbidden();
+    }
+    return {
+      authUserId: authContext.authUserId,
+      employeeId: authContext.employeeId,
+    };
   }
 }
 
