@@ -19,6 +19,10 @@ DO $$
 DECLARE
   v_is_repository_chain boolean;
   v_is_granular_v2 boolean;
+  v_state text;
+  v_trigger_fingerprint text[];
+  v_function_fingerprint text[];
+  v_constraint_fingerprint text[];
 BEGIN
   IF to_regclass('public.catalog_categories') IS NULL
     OR to_regclass('public.catalog_brands') IS NULL
@@ -191,13 +195,198 @@ BEGIN
       DETAIL = 'catalog schema is mixed, incomplete, or already diverged';
   END IF;
 
+  v_state := CASE
+    WHEN v_is_repository_chain THEN 'repository_chain'
+    ELSE 'granular_v2'
+  END;
+
+  SELECT array_agg(
+    table_definition.relname || '|' || trigger_definition.tgname || '|' ||
+      procedure_definition.proname
+    ORDER BY table_definition.relname, trigger_definition.tgname
+  )
+  INTO v_trigger_fingerprint
+  FROM pg_trigger AS trigger_definition
+  JOIN pg_class AS table_definition
+    ON table_definition.oid = trigger_definition.tgrelid
+  JOIN pg_namespace AS namespace_definition
+    ON namespace_definition.oid = table_definition.relnamespace
+  JOIN pg_proc AS procedure_definition
+    ON procedure_definition.oid = trigger_definition.tgfoid
+  WHERE namespace_definition.nspname = 'public'
+    AND NOT trigger_definition.tgisinternal
+    AND table_definition.relname IN (
+      'catalog_categories',
+      'catalog_brands',
+      'catalog_units',
+      'catalog_spec_definitions',
+      'catalog_unit_suggestions'
+    );
+
+  SELECT array_agg(procedure_definition.proname ORDER BY procedure_definition.proname)
+  INTO v_function_fingerprint
+  FROM pg_proc AS procedure_definition
+  JOIN pg_namespace AS namespace_definition
+    ON namespace_definition.oid = procedure_definition.pronamespace
+  WHERE namespace_definition.nspname = 'public'
+    AND procedure_definition.pronargs = 0
+    AND procedure_definition.proname IN (
+      'guard_catalog_brand_scope',
+      'guard_catalog_category_scope',
+      'guard_supplier_ownership_immutable',
+      'lock_catalog_category_hierarchy',
+      'lock_catalog_unit_hierarchy',
+      'protect_active_supplier_catalog_reference',
+      'protect_platform_no_brand_identity',
+      'refresh_catalog_category_descendants',
+      'set_catalog_category_level',
+      'sync_catalog_base_unit_dimension_to_derived',
+      'update_updated_at_column',
+      'validate_catalog_brand_mapping',
+      'validate_catalog_category_hierarchy',
+      'validate_catalog_spec_definition_ownership',
+      'validate_catalog_unit_base',
+      'validate_catalog_unit_dimension',
+      'validate_catalog_unit_suggestion_state',
+      'validate_supplier_product_catalog'
+    );
+
+  SELECT array_agg(
+    table_definition.relname || '|' || constraint_definition.conname
+    ORDER BY table_definition.relname, constraint_definition.conname
+  )
+  INTO v_constraint_fingerprint
+  FROM pg_constraint AS constraint_definition
+  JOIN pg_class AS table_definition
+    ON table_definition.oid = constraint_definition.conrelid
+  JOIN pg_namespace AS namespace_definition
+    ON namespace_definition.oid = table_definition.relnamespace
+  WHERE namespace_definition.nspname = 'public'
+    AND constraint_definition.conname IN (
+      'catalog_categories_full_name_trimmed_check',
+      'catalog_categories_level_check',
+      'catalog_categories_mapping_scope_check',
+      'catalog_brands_mapping_scope_check',
+      'catalog_spec_definitions_enum_options_check',
+      'catalog_spec_definitions_ownership_check',
+      'catalog_spec_definitions_unit_dimension_check',
+      'catalog_unit_suggestions_dimension_trimmed_check',
+      'catalog_unit_suggestions_name_trimmed_check',
+      'catalog_unit_suggestions_review_state_check',
+      'catalog_unit_suggestions_status_check',
+      'catalog_unit_suggestions_symbol_trimmed_check',
+      'catalog_unit_suggestions_version_check',
+      'catalog_units_dimension_check'
+    );
+
+  IF (
+    v_state = 'repository_chain'
+    AND (
+      v_trigger_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_brands|tr_catalog_brands_guard_ownership_immutable|guard_supplier_ownership_immutable',
+        'catalog_brands|tr_catalog_brands_guard_scope|guard_catalog_brand_scope',
+        'catalog_brands|tr_catalog_brands_protect_supplier_products|protect_active_supplier_catalog_reference',
+        'catalog_brands|tr_catalog_brands_updated_at|update_updated_at_column',
+        'catalog_categories|tr_catalog_categories_guard_ownership_immutable|guard_supplier_ownership_immutable',
+        'catalog_categories|tr_catalog_categories_guard_scope|guard_catalog_category_scope',
+        'catalog_categories|tr_catalog_categories_lock_hierarchy|lock_catalog_category_hierarchy',
+        'catalog_categories|tr_catalog_categories_protect_supplier_products|protect_active_supplier_catalog_reference',
+        'catalog_categories|tr_catalog_categories_set_level|set_catalog_category_level',
+        'catalog_categories|tr_catalog_categories_updated_at|update_updated_at_column',
+        'catalog_units|tr_catalog_units_lock_hierarchy|lock_catalog_unit_hierarchy',
+        'catalog_units|tr_catalog_units_updated_at|update_updated_at_column',
+        'catalog_units|tr_catalog_units_validate_base|validate_catalog_unit_base'
+      ]::text[]
+      OR v_function_fingerprint IS DISTINCT FROM ARRAY[
+        'guard_catalog_brand_scope',
+        'guard_catalog_category_scope',
+        'guard_supplier_ownership_immutable',
+        'lock_catalog_category_hierarchy',
+        'lock_catalog_unit_hierarchy',
+        'protect_active_supplier_catalog_reference',
+        'set_catalog_category_level',
+        'update_updated_at_column',
+        'validate_catalog_unit_base',
+        'validate_supplier_product_catalog'
+      ]::text[]
+      OR v_constraint_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_categories|catalog_categories_full_name_trimmed_check',
+        'catalog_categories|catalog_categories_level_check',
+        'catalog_spec_definitions|catalog_spec_definitions_enum_options_check',
+        'catalog_spec_definitions|catalog_spec_definitions_ownership_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_dimension_trimmed_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_name_trimmed_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_status_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_symbol_trimmed_check'
+      ]::text[]
+    )
+  ) OR (
+    v_state = 'granular_v2'
+    AND (
+      v_trigger_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_brands|tr_catalog_brands_guard_ownership_immutable|guard_supplier_ownership_immutable',
+        'catalog_brands|tr_catalog_brands_protect_platform_no_brand|protect_platform_no_brand_identity',
+        'catalog_brands|tr_catalog_brands_protect_supplier_products|protect_active_supplier_catalog_reference',
+        'catalog_brands|tr_catalog_brands_updated_at|update_updated_at_column',
+        'catalog_brands|tr_catalog_brands_validate_mapping|validate_catalog_brand_mapping',
+        'catalog_categories|tr_catalog_categories_guard_ownership_immutable|guard_supplier_ownership_immutable',
+        'catalog_categories|tr_catalog_categories_lock_hierarchy|lock_catalog_category_hierarchy',
+        'catalog_categories|tr_catalog_categories_protect_supplier_products|protect_active_supplier_catalog_reference',
+        'catalog_categories|tr_catalog_categories_refresh_after_delete|refresh_catalog_category_descendants',
+        'catalog_categories|tr_catalog_categories_refresh_descendants|refresh_catalog_category_descendants',
+        'catalog_categories|tr_catalog_categories_updated_at|update_updated_at_column',
+        'catalog_categories|tr_catalog_categories_validate_hierarchy|validate_catalog_category_hierarchy',
+        'catalog_spec_definitions|tr_catalog_spec_definitions_guard_ownership_immutable|guard_supplier_ownership_immutable',
+        'catalog_spec_definitions|tr_catalog_spec_definitions_updated_at|update_updated_at_column',
+        'catalog_spec_definitions|tr_catalog_spec_definitions_validate_ownership|validate_catalog_spec_definition_ownership',
+        'catalog_unit_suggestions|tr_catalog_unit_suggestions_updated_at|update_updated_at_column',
+        'catalog_unit_suggestions|tr_catalog_unit_suggestions_validate_state|validate_catalog_unit_suggestion_state',
+        'catalog_units|tr_catalog_units_lock_hierarchy|lock_catalog_unit_hierarchy',
+        'catalog_units|tr_catalog_units_sync_base_dimension|sync_catalog_base_unit_dimension_to_derived',
+        'catalog_units|tr_catalog_units_updated_at|update_updated_at_column',
+        'catalog_units|tr_catalog_units_validate_base|validate_catalog_unit_base',
+        'catalog_units|tr_catalog_units_validate_dimension|validate_catalog_unit_dimension'
+      ]::text[]
+      OR v_function_fingerprint IS DISTINCT FROM ARRAY[
+        'guard_supplier_ownership_immutable',
+        'lock_catalog_category_hierarchy',
+        'lock_catalog_unit_hierarchy',
+        'protect_active_supplier_catalog_reference',
+        'protect_platform_no_brand_identity',
+        'refresh_catalog_category_descendants',
+        'sync_catalog_base_unit_dimension_to_derived',
+        'update_updated_at_column',
+        'validate_catalog_brand_mapping',
+        'validate_catalog_category_hierarchy',
+        'validate_catalog_spec_definition_ownership',
+        'validate_catalog_unit_base',
+        'validate_catalog_unit_dimension',
+        'validate_catalog_unit_suggestion_state',
+        'validate_supplier_product_catalog'
+      ]::text[]
+      OR v_constraint_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_brands|catalog_brands_mapping_scope_check',
+        'catalog_categories|catalog_categories_full_name_trimmed_check',
+        'catalog_categories|catalog_categories_level_check',
+        'catalog_categories|catalog_categories_mapping_scope_check',
+        'catalog_spec_definitions|catalog_spec_definitions_enum_options_check',
+        'catalog_spec_definitions|catalog_spec_definitions_ownership_check',
+        'catalog_spec_definitions|catalog_spec_definitions_unit_dimension_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_review_state_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_status_check',
+        'catalog_unit_suggestions|catalog_unit_suggestions_version_check',
+        'catalog_units|catalog_units_dimension_check'
+      ]::text[]
+    )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED',
+      DETAIL = 'catalog object fingerprint does not match the recognized schema state';
+  END IF;
+
   INSERT INTO catalog_schema_materialization_state(state)
-  VALUES (
-    CASE
-      WHEN v_is_repository_chain THEN 'repository_chain'
-      ELSE 'granular_v2'
-    END
-  );
+  VALUES (v_state);
 END;
 $$;
 
@@ -372,6 +561,33 @@ BEGIN
       MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED',
       DETAIL = 'catalog brand mapping is not tenant to active platform';
   END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.catalog_categories AS category
+    WHERE EXISTS (
+      SELECT 1
+      FROM public.catalog_categories AS child
+      WHERE child.parent_id = category.id
+    )
+      AND (
+        EXISTS (
+          SELECT 1
+          FROM public.supplier_products AS product
+          WHERE product.category_id = category.id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.catalog_spec_definitions AS definition
+          WHERE definition.category_id = category.id
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE',
+      DETAIL = 'an existing product or specification references an actual non-leaf category';
+  END IF;
 END;
 $$;
 
@@ -398,6 +614,7 @@ BEGIN
     EXECUTE 'DROP TRIGGER tr_catalog_categories_refresh_descendants ON public.catalog_categories';
     EXECUTE 'DROP TRIGGER tr_catalog_categories_refresh_after_delete ON public.catalog_categories';
     EXECUTE 'DROP TRIGGER tr_catalog_brands_validate_mapping ON public.catalog_brands';
+    EXECUTE 'DROP TRIGGER tr_catalog_brands_protect_platform_no_brand ON public.catalog_brands';
     EXECUTE 'DROP TRIGGER tr_catalog_spec_definitions_validate_ownership ON public.catalog_spec_definitions';
     EXECUTE 'DROP TRIGGER tr_catalog_spec_definitions_guard_ownership_immutable ON public.catalog_spec_definitions';
     EXECUTE 'DROP TRIGGER tr_catalog_spec_definitions_updated_at ON public.catalog_spec_definitions';
@@ -424,6 +641,9 @@ BEGIN
     EXECUTE 'ALTER TABLE public.catalog_unit_suggestions DROP CONSTRAINT catalog_unit_suggestions_review_state_check';
     EXECUTE 'ALTER TABLE public.catalog_units DROP CONSTRAINT catalog_units_dimension_check';
   END IF;
+
+  EXECUTE 'DROP TRIGGER tr_catalog_categories_protect_supplier_products ON public.catalog_categories';
+  EXECUTE 'DROP TRIGGER tr_catalog_brands_protect_supplier_products ON public.catalog_brands';
 END;
 $$;
 
@@ -1026,6 +1246,93 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.protect_active_supplier_catalog_reference()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.status = 'active'
+    AND NEW.status = 'inactive'
+    AND (
+      (
+        TG_TABLE_NAME = 'catalog_categories'
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM public.supplier_products AS product
+            WHERE product.category_id = OLD.id
+              AND product.status = 'active'
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.catalog_categories AS tenant_category
+            WHERE tenant_category.mapped_platform_category_id = OLD.id
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.catalog_spec_definitions AS definition
+            WHERE definition.category_id = OLD.id
+          )
+        )
+      )
+      OR (
+        TG_TABLE_NAME = 'catalog_brands'
+        AND (
+          EXISTS (
+            SELECT 1
+            FROM public.supplier_products AS product
+            WHERE product.brand_id = OLD.id
+              AND product.status = 'active'
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.catalog_brands AS tenant_brand
+            WHERE tenant_brand.mapped_platform_brand_id = OLD.id
+          )
+        )
+      )
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.protect_platform_no_brand_identity()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.ownership_scope = 'platform'
+    AND OLD.owner_tenant_id IS NULL
+    AND OLD.code = 'NO_BRAND'
+    AND OLD.name = '无品牌'
+    AND OLD.status = 'active'
+    AND (
+      TG_OP = 'DELETE'
+      OR NEW.ownership_scope IS DISTINCT FROM 'platform'
+      OR NEW.owner_tenant_id IS NOT NULL
+      OR NEW.code IS DISTINCT FROM 'NO_BRAND'
+      OR NEW.name IS DISTINCT FROM '无品牌'
+      OR NEW.legal_name IS NOT NULL
+      OR NEW.status IS DISTINCT FROM 'active'
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SHARED_RESOURCE_READ_ONLY';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
 -- Add low-blocking CHECK constraints first, validate them separately, then
 -- promote the two materialized columns to NOT NULL without a second table scan.
 ALTER TABLE public.catalog_categories
@@ -1252,12 +1559,27 @@ AFTER DELETE ON public.catalog_categories
 FOR EACH ROW
 EXECUTE FUNCTION public.refresh_catalog_category_descendants();
 
+CREATE TRIGGER tr_catalog_categories_v2_protect_references
+BEFORE UPDATE OF status ON public.catalog_categories
+FOR EACH ROW
+EXECUTE FUNCTION public.protect_active_supplier_catalog_reference();
+
 CREATE TRIGGER tr_catalog_brands_v2_validate_mapping
 BEFORE INSERT OR UPDATE OF
   mapped_platform_brand_id, ownership_scope, owner_tenant_id, status
 ON public.catalog_brands
 FOR EACH ROW
 EXECUTE FUNCTION public.validate_catalog_brand_mapping();
+
+CREATE TRIGGER tr_catalog_brands_v2_protect_references
+BEFORE UPDATE OF status ON public.catalog_brands
+FOR EACH ROW
+EXECUTE FUNCTION public.protect_active_supplier_catalog_reference();
+
+CREATE TRIGGER tr_catalog_brands_v2_protect_platform_no_brand
+BEFORE UPDATE OR DELETE ON public.catalog_brands
+FOR EACH ROW
+EXECUTE FUNCTION public.protect_platform_no_brand_identity();
 
 CREATE TRIGGER tr_catalog_spec_definitions_v2_validate_ownership
 BEFORE INSERT OR UPDATE ON public.catalog_spec_definitions
@@ -1313,8 +1635,20 @@ $$;
 
 REVOKE ALL ON FUNCTION public.catalog_enum_options_are_valid(jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.catalog_enum_options_are_valid(jsonb)
-  TO service_role;
+REVOKE ALL ON FUNCTION public.guard_supplier_ownership_immutable()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.lock_catalog_category_hierarchy()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.lock_catalog_unit_hierarchy()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.protect_active_supplier_catalog_reference()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.protect_platform_no_brand_identity()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.update_updated_at_column()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.validate_catalog_unit_base()
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.validate_catalog_category_hierarchy()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.refresh_catalog_category_descendants()

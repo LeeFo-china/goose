@@ -157,6 +157,82 @@ describe("tenant private supplier catalog migration contract", () => {
     expect(schemaMaterializationSql).not.toMatch(/\bIF NOT EXISTS\b/i);
   });
 
+  test("fingerprints triggers, functions, and constraints before choosing A or B", () => {
+    for (const catalog of ["pg_trigger", "pg_proc", "pg_constraint"]) {
+      expect(schemaMaterializationSql).toContain(catalog);
+    }
+    expect(schemaMaterializationSql).toContain("v_trigger_fingerprint");
+    expect(schemaMaterializationSql).toContain("v_function_fingerprint");
+    expect(schemaMaterializationSql).toContain("v_constraint_fingerprint");
+    expect(schemaMaterializationSql).toContain(
+      "catalog object fingerprint does not match the recognized schema state",
+    );
+  });
+
+  test("rejects existing product or spec references to actual non-leaf categories", () => {
+    const preflightEnd = schemaMaterializationSql.indexOf(
+      "-- Remove only the trigger/constraint set",
+    );
+    const preflight = schemaMaterializationSql.slice(0, preflightEnd);
+
+    expect(preflight).toContain("public.supplier_products AS product");
+    expect(preflight).toContain("public.catalog_spec_definitions AS definition");
+    expect(preflight).toContain("public.catalog_categories AS child");
+    expect(preflight).toContain("SUPPLIER_CATALOG_REFERENCE_IN_USE");
+  });
+
+  test("materializes one reference protector for platform targets", () => {
+    expect(schemaMaterializationSql).toContain(
+      "CREATE OR REPLACE FUNCTION public.protect_active_supplier_catalog_reference()",
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /tenant_category\.mapped_platform_category_id = OLD\.id/,
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /tenant_brand\.mapped_platform_brand_id = OLD\.id/,
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /product\.category_id = OLD\.id[\s\S]*product\.status = 'active'/,
+    );
+    expect(schemaMaterializationSql).toContain(
+      "CREATE TRIGGER tr_catalog_categories_v2_protect_references",
+    );
+    expect(schemaMaterializationSql).toContain(
+      "CREATE TRIGGER tr_catalog_brands_v2_protect_references",
+    );
+  });
+
+  test("revokes every inherited and materialized non-command helper", () => {
+    for (const [helper, signature] of [
+      ["catalog_enum_options_are_valid", "jsonb"],
+      ["guard_supplier_ownership_immutable", ""],
+      ["lock_catalog_category_hierarchy", ""],
+      ["lock_catalog_unit_hierarchy", ""],
+      ["protect_active_supplier_catalog_reference", ""],
+      ["update_updated_at_column", ""],
+      ["protect_platform_no_brand_identity", ""],
+      ["validate_catalog_category_hierarchy", ""],
+      ["refresh_catalog_category_descendants", ""],
+      ["validate_catalog_brand_mapping", ""],
+      ["validate_catalog_spec_definition_ownership", ""],
+      ["validate_catalog_unit_suggestion_state", ""],
+      ["validate_catalog_unit_base", ""],
+      ["validate_catalog_unit_dimension", ""],
+      ["sync_catalog_base_unit_dimension_to_derived", ""],
+      ["validate_supplier_product_catalog", ""],
+    ] as const) {
+      expect(schemaMaterializationSql).toMatch(
+        new RegExp(
+          `REVOKE ALL ON FUNCTION public\\.${helper}\\(${signature}\\)` +
+            "\\s*FROM PUBLIC, anon, authenticated, service_role;",
+        ),
+      );
+      expect(schemaMaterializationSql).not.toMatch(
+        new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${helper}\\(`),
+      );
+    }
+  });
+
   test("keeps the four applied 20260813 migrations byte-for-byte immutable", () => {
     for (const [name, expectedHash] of Object.entries(expectedHistoricalHashes)) {
       const content = read(migrations[name as keyof typeof migrations]);
