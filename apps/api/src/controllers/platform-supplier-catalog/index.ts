@@ -10,20 +10,12 @@ import {
   CatalogCategoryListQuerySchema,
   CatalogCategoryParamSchema,
   CatalogCategoryUpdateSchema,
-  CatalogSpecDefinitionCreateSchema,
-  CatalogSpecDefinitionIdParamSchema,
-  CatalogSpecDefinitionListQuerySchema,
-  CatalogSpecDefinitionUpdateSchema,
   CatalogUnitCreateSchema,
   CatalogUnitListQuerySchema,
   CatalogUnitParamSchema,
-  CatalogUnitSuggestionListQuerySchema,
-  CatalogUnitSuggestionParamSchema,
-  CatalogUnitSuggestionProcessSchema,
   CatalogUnitUpdateSchema,
 } from "@/schema/supplier-catalog";
 import { supplierCatalogService } from "@/services/supplier-catalog";
-import { supplierCatalogSpecService } from "@/services/supplier-catalog-spec";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
@@ -133,90 +125,6 @@ class PlatformSupplierCatalogController extends PlatformBaseController {
     const input = this.parse(CatalogUnitUpdateSchema, request.body);
     return ResponseHandler.success(
       await supplierCatalogService.updateUnit(auth, id, input),
-    );
-  }
-
-  @Get("/platform/catalog/categories/:id/spec-definitions")
-  async listSpecDefinitions(request: FastifyRequest) {
-    const auth = await this.getCatalogManageContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
-    const query = this.parse(
-      CatalogSpecDefinitionListQuerySchema,
-      request.query,
-    );
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.listPlatformSpecDefinitions(
-        auth,
-        id,
-        query,
-      ),
-    );
-  }
-
-  @Post("/platform/catalog/categories/:id/spec-definitions")
-  async createSpecDefinition(request: FastifyRequest) {
-    const auth = await this.getCatalogManageContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
-    const key = requireIdempotencyKey(request);
-    const input = this.parse(
-      CatalogSpecDefinitionCreateSchema,
-      request.body,
-    );
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.createPlatformSpecDefinition(
-        auth,
-        id,
-        input,
-        key,
-      ),
-    );
-  }
-
-  @Patch("/platform/catalog/categories/:id/spec-definitions/:specId")
-  async updateSpecDefinition(request: FastifyRequest) {
-    const auth = await this.getCatalogManageContext(request);
-    const { specId } = this.parse(
-      CatalogSpecDefinitionIdParamSchema,
-      request.params,
-    );
-    const input = this.parse(
-      CatalogSpecDefinitionUpdateSchema,
-      request.body,
-    );
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.updatePlatformSpecDefinition(
-        auth,
-        specId,
-        input,
-      ),
-    );
-  }
-
-  @Get("/platform/catalog/unit-suggestions")
-  async listUnitSuggestions(request: FastifyRequest) {
-    const auth = await this.getCatalogManageContext(request);
-    const query = this.parse(
-      CatalogUnitSuggestionListQuerySchema,
-      request.query,
-    );
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.listPlatformUnitSuggestions(auth, query),
-    );
-  }
-
-  @Patch("/platform/catalog/unit-suggestions/:id")
-  async processUnitSuggestion(request: FastifyRequest) {
-    const auth = await this.getCatalogManageContext(request);
-    const { id } = this.parse(
-      CatalogUnitSuggestionParamSchema,
-      request.params,
-    );
-    const input = this.parse(
-      CatalogUnitSuggestionProcessSchema,
-      request.body,
-    );
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.processUnitSuggestion(auth, id, input),
     );
   }
 

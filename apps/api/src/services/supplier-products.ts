@@ -58,7 +58,6 @@ export class SupplierProductsService {
     return this.repository.listProducts({
       ...filters,
       supplier_id: scope.supplierId,
-      tenant_id: scope.tenantId,
     });
   }
 
@@ -229,30 +228,25 @@ export class SupplierProductsService {
 
 function commandContext(
   scope: SupplierProxyScope,
-  proxyReason: string | undefined,
+  proxyReason: string,
   idempotencyKey: string,
 ) {
   return {
     supplier_id: scope.supplierId,
     tenant_id: scope.tenantId,
-    ownership_scope: "tenant" as const,
-    owner_tenant_id: scope.tenantId,
     actor_user_id: scope.authUserId,
     actor_employee_id: scope.employeeId,
     idempotency_key: idempotencyKey,
-    proxy_reason: proxyReason ?? null,
+    proxy_reason: proxyReason,
   };
 }
 
-function updateAudit(
-  scope: SupplierProxyScope,
-  proxyReason: string | undefined,
-) {
+function updateAudit(scope: SupplierProxyScope, proxyReason: string) {
   return {
     acting_tenant_id: scope.tenantId,
     acting_employee_id: scope.employeeId,
     operation_source: "tenant_proxy",
-    proxy_reason: proxyReason ?? null,
+    proxy_reason: proxyReason,
     updated_by_employee_id: scope.employeeId,
     updated_at: new Date().toISOString(),
   };

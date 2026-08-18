@@ -6,13 +6,8 @@ import type {
   CatalogBrandUpdateRecord,
   CatalogCategoryListQuery,
   CatalogCategoryUpdateRecord,
-  CatalogOwnership,
   CatalogUnitListQuery,
   CatalogUnitUpdateRecord,
-  TenantCatalogBrandCreateRecord,
-  TenantCatalogBrandUpdateRecord,
-  TenantCatalogCategoryCreateRecord,
-  TenantCatalogCategoryUpdateRecord,
 } from "@/schema/supplier-catalog";
 import type {
   CatalogBrandCreateCommand,
@@ -25,17 +20,7 @@ import {
   rpcCommandContext as commandContext,
   type CreateCommandResult,
 } from "./supplier-create-command-rpc";
-import {
-  createTenantBrand,
-  createTenantCategory,
-  findBrandOwnership,
-  findCategoryOwnership,
-  getTenantSupplierSettings,
-  updateTenantBrand,
-  updateTenantCategory,
-  type TenantCatalogBrand,
-  type TenantCatalogCategory,
-} from "./supplier-catalog-tenant";
+
 const CATEGORY_SELECT =
   "id,parent_id,code,name,level,status,sort_order,version,created_at,updated_at";
 const BRAND_SELECT =
@@ -43,6 +28,7 @@ const BRAND_SELECT =
 const UNIT_SELECT =
   "id,code,name,symbol,base_unit_id,conversion_factor::text,status,sort_order,version,created_at,updated_at";
 const UNIT_BASE_SELECT = "id,code,name,symbol,status";
+
 const CatalogStatusSchema = z.enum(["active", "inactive"]);
 const CatalogConflictSnapshotSchema = z.object({
   version: z.number().int().positive(),
@@ -96,6 +82,7 @@ const CatalogUnitBaseSchema = z.object({
 const CatalogUnitListSchema = CatalogUnitSchema.extend({
   base_unit: CatalogUnitBaseSchema.nullable(),
 }).strict();
+
 export type CatalogCategory = z.infer<typeof CatalogCategorySchema>;
 export type CatalogBrand = z.infer<typeof CatalogBrandSchema>;
 export type CatalogUnit = z.infer<typeof CatalogUnitListSchema>;
@@ -115,13 +102,12 @@ export type CatalogBrandCreateResult =
   CreateCommandResult<"brand", CatalogBrand>;
 export type CatalogUnitCreateResult =
   CreateCommandResult<"unit", CatalogUnitRecord>;
+
 export interface SupplierCatalogRepositoryPort {
   listCategories(
-    query: CatalogCategoryListQuery & { tenant_id?: string },
+    query: CatalogCategoryListQuery,
   ): Promise<CatalogPage<CatalogCategory>>;
-  listBrands(
-    query: CatalogBrandListQuery & { tenant_id?: string },
-  ): Promise<CatalogPage<CatalogBrand>>;
+  listBrands(query: CatalogBrandListQuery): Promise<CatalogPage<CatalogBrand>>;
   listUnits(query: CatalogUnitListQuery): Promise<CatalogPage<CatalogUnit>>;
   createCategory(input: CatalogCategoryCreateCommand): Promise<CatalogCategoryCreateResult>;
   updateCategory(input: CatalogCategoryUpdateRecord): Promise<CatalogCategory>;
@@ -129,43 +115,25 @@ export interface SupplierCatalogRepositoryPort {
   updateBrand(input: CatalogBrandUpdateRecord): Promise<CatalogBrand>;
   createUnit(input: CatalogUnitCreateCommand): Promise<CatalogUnitCreateResult>;
   updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnitRecord>;
-  getTenantSupplierSettings(
-    tenantId: string,
-  ): Promise<{ private_catalog_writes_enabled: boolean } | null>;
-  findCategoryOwnership(categoryId: string): Promise<CatalogOwnership | null>;
-  findBrandOwnership(brandId: string): Promise<CatalogOwnership | null>;
-  createTenantCategory(
-    input: TenantCatalogCategoryCreateRecord,
-  ): Promise<TenantCatalogCategory>;
-  updateTenantCategory(
-    input: TenantCatalogCategoryUpdateRecord,
-  ): Promise<TenantCatalogCategory>;
-  createTenantBrand(
-    input: TenantCatalogBrandCreateRecord,
-  ): Promise<TenantCatalogBrand>;
-  updateTenantBrand(
-    input: TenantCatalogBrandUpdateRecord,
-  ): Promise<TenantCatalogBrand>;
 }
+
 type CatalogClient = ReturnType<typeof SupabaseDB.getAdminClient>;
+
 export class SupplierCatalogRepository
   implements SupplierCatalogRepositoryPort {
   private readonly client: CatalogClient;
+
   constructor(clientFactory = () => SupabaseDB.getAdminClient()) {
     this.client = clientFactory();
   }
+
   async listCategories(
-    input: CatalogCategoryListQuery & { tenant_id?: string },
+    input: CatalogCategoryListQuery,
   ): Promise<CatalogPage<CatalogCategory>> {
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_categories")
       .select(CATEGORY_SELECT, { count: "exact" });
-    if (input.tenant_id) {
-      request = request.or(
-        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
-      );
-    }
     request = input.parent_id
       ? request.eq("parent_id", input.parent_id)
       : request.is("parent_id", null);
@@ -183,18 +151,14 @@ export class SupplierCatalogRepository
       count,
     );
   }
+
   async listBrands(
-    input: CatalogBrandListQuery & { tenant_id?: string },
+    input: CatalogBrandListQuery,
   ): Promise<CatalogPage<CatalogBrand>> {
     const pagination = normalizePage(input);
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_brands")
       .select(BRAND_SELECT, { count: "exact" });
-    if (input.tenant_id) {
-      request = request.or(
-        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
-      );
-    }
     if (input.status) request = request.eq("status", input.status);
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
@@ -208,6 +172,7 @@ export class SupplierCatalogRepository
       count,
     );
   }
+
   async listUnits(
     input: CatalogUnitListQuery,
   ): Promise<CatalogPage<CatalogUnit>> {
@@ -242,6 +207,7 @@ export class SupplierCatalogRepository
       count,
     );
   }
+
   private async hydrateUnitBaseUnits(
     units: CatalogUnitRecord[],
   ): Promise<CatalogUnit[]> {
@@ -251,6 +217,7 @@ export class SupplierCatalogRepository
     if (baseUnitIds.length === 0) {
       return units.map((unit) => ({ ...unit, base_unit: null }));
     }
+
     const { data, error } = await this.client.from("catalog_units")
       .select(UNIT_BASE_SELECT)
       .in("id", baseUnitIds)
@@ -301,6 +268,7 @@ export class SupplierCatalogRepository
       "更新标准目录分类失败",
     );
   }
+
   createBrand(input: CatalogBrandCreateCommand) {
     return executeCreateCommand({
       client: this.client, functionName: "create_catalog_brand",
@@ -318,6 +286,7 @@ export class SupplierCatalogRepository
       },
     });
   }
+
   updateBrand(input: CatalogBrandUpdateRecord) {
     const { brand_id, expected_version, ...patch } = input;
     return this.updateRow(
@@ -330,6 +299,7 @@ export class SupplierCatalogRepository
       "更新标准品牌失败",
     );
   }
+
   createUnit(input: CatalogUnitCreateCommand) {
     return executeCreateCommand({
       client: this.client, functionName: "create_catalog_unit",
@@ -348,6 +318,7 @@ export class SupplierCatalogRepository
       },
     });
   }
+
   updateUnit(input: CatalogUnitUpdateRecord) {
     const { unit_id, expected_version, ...patch } = input;
     return this.updateRow(
@@ -359,27 +330,6 @@ export class SupplierCatalogRepository
       CatalogUnitSchema,
       "更新标准单位失败",
     );
-  }
-  getTenantSupplierSettings(tenantId: string) {
-    return getTenantSupplierSettings(this.client, tenantId);
-  }
-  findCategoryOwnership(categoryId: string) {
-    return findCategoryOwnership(this.client, categoryId);
-  }
-  findBrandOwnership(brandId: string) {
-    return findBrandOwnership(this.client, brandId);
-  }
-  createTenantCategory(input: TenantCatalogCategoryCreateRecord) {
-    return createTenantCategory(this.client, input);
-  }
-  updateTenantCategory(input: TenantCatalogCategoryUpdateRecord) {
-    return updateTenantCategory(this.client, input);
-  }
-  createTenantBrand(input: TenantCatalogBrandCreateRecord) {
-    return createTenantBrand(this.client, input);
-  }
-  updateTenantBrand(input: TenantCatalogBrandUpdateRecord) {
-    return updateTenantBrand(this.client, input);
   }
 
   private async updateRow<T>(
@@ -459,6 +409,7 @@ function toPage<T>(
     },
   };
 }
+
 function applyKeyword<RequestBuilder extends {
   or(filters: string): RequestBuilder;
 }>(request: RequestBuilder, keyword?: string): RequestBuilder {

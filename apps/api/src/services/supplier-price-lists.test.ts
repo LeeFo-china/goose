@@ -119,7 +119,6 @@ describe("SupplierPriceListsService", () => {
     expect(deps.access.requirePriceRead).toHaveBeenCalledTimes(1);
     expect(deps.repository.listPriceLists).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
-      tenant_id: TENANT_ID,
       page: 1,
       pageSize: 20,
     });

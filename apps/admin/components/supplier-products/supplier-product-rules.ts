@@ -15,13 +15,6 @@ export function nextProductAction(product: SupplierProduct) {
   return product.status === "active" ? "deactivate" : "activate";
 }
 
-export function canMutateProduct(
-  product: Pick<SupplierProduct, "ownership_scope">,
-  canManageProducts: boolean,
-): boolean {
-  return canManageProducts && product.ownership_scope !== "platform";
-}
-
 export function nextSkuAction(sku: SupplierSku) {
   return sku.status === "active" ? "deactivate" : "activate";
 }

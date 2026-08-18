@@ -7,10 +7,7 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import { SupabaseDB } from "@/utils/supabase";
-import {
-  applyOwnership,
-  applySkuPostCreate,
-} from "./supplier-product-sku-postprocess";
+
 const PRODUCT_LIST_SELECT = [
   "id",
   "supplier_id",
@@ -21,8 +18,6 @@ const PRODUCT_LIST_SELECT = [
   "version",
   "category:catalog_categories!category_id(id,code,name,status)",
   "brand:catalog_brands!brand_id(id,code,name,status)",
-  "ownership_scope",
-  "owner_tenant_id",
   "updated_at",
 ].join(",");
 const PRODUCT_RECORD_SELECT = [
@@ -75,6 +70,7 @@ const SKU_RECORD_SELECT = [
   "version",
   "updated_at",
 ].join(",");
+
 const CatalogReferenceSchema = z.object({
   id: z.uuid(),
   code: z.string(),
@@ -94,8 +90,6 @@ const ProductSchema = z.object({
   version: z.number().int().positive(),
   category: CatalogReferenceSchema,
   brand: CatalogReferenceSchema,
-  ownership_scope: z.enum(["platform", "tenant"]).nullable().optional(),
-  owner_tenant_id: z.uuid().nullable().optional(),
   updated_at: z.string(),
 }).strict();
 const ProductRecordSchema = ProductSchema.omit({
@@ -139,12 +133,14 @@ const ProductCommandResultSchema = z.object({
   error_code: z.string().optional(),
   reason: z.string().optional(),
 }).passthrough();
+
 export type SupplierProduct = z.infer<typeof ProductSchema>;
 export type SupplierSku = z.infer<typeof SkuSchema>;
 export type SupplierProductCommandResult =
   z.infer<typeof ProductCommandResultSchema>;
 export type SupplierProductPage = Page<SupplierProduct>;
 export type SupplierSkuPage = Page<SupplierSku>;
+
 export type Page<T> = {
   list: T[];
   pagination: {
@@ -154,9 +150,9 @@ export type Page<T> = {
     totalPages: number;
   };
 };
+
 export type SupplierProductListInput = PageInput & {
   supplier_id: string;
-  tenant_id: string;
   keyword?: string;
   status?: string;
   category_id?: string;
@@ -174,9 +170,7 @@ export type SupplierCommandContext = {
   actor_user_id: string;
   actor_employee_id: string;
   idempotency_key: string;
-  proxy_reason: string | null;
-  ownership_scope?: "platform" | "tenant";
-  owner_tenant_id?: string | null;
+  proxy_reason: string;
 };
 export type SupplierProductCreateCommand = SupplierCommandContext & {
   product_id: string;
@@ -186,12 +180,12 @@ export type SupplierProductCreateCommand = SupplierCommandContext & {
   brand_id: string;
   description?: string | null;
 };
+
 type PageInput = { page: number; pageSize: number };
 type Result = { data: unknown; error: unknown; count: number | null };
 type SingleResult = { data: unknown; error: unknown };
-export type Query = {
+type Query = {
   select: (...args: unknown[]) => Query;
-  insert: (value: Record<string, unknown> | unknown[]) => Query;
   update: (value: Record<string, unknown>) => Query;
   eq: (column: string, value: unknown) => Query;
   or: (value: string) => Query;
@@ -200,29 +194,29 @@ export type Query = {
   maybeSingle: () => Promise<SingleResult>;
   then: Promise<Result>["then"];
 };
-export type Client = {
+type Client = {
   from: (table: string) => Query;
   rpc: (
     name: string,
     params: Record<string, unknown>,
   ) => PromiseLike<SingleResult>;
 };
+
 export class SupplierProductsRepository {
   constructor(
     private readonly clientProvider: () => Client = () =>
       SupabaseDB.getAdminClient() as unknown as Client,
   ) {}
+
   private get client() {
     return this.clientProvider();
   }
+
   async listProducts(input: SupplierProductListInput) {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
-      .or(
-        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
-      );
+      .eq("supplier_id", input.supplier_id);
     if (input.status) request = request.eq("status", input.status);
     if (input.category_id) {
       request = request.eq("category_id", input.category_id);
@@ -240,29 +234,7 @@ export class SupplierProductsRepository {
       count,
     );
   }
-  async listPlatformProducts(input: SupplierProductListInput) {
-    const pagination = normalizePage(input);
-    let request = this.client.from("supplier_products")
-      .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
-      .eq("ownership_scope", "platform");
-    if (input.status) request = request.eq("status", input.status);
-    if (input.category_id) {
-      request = request.eq("category_id", input.category_id);
-    }
-    if (input.brand_id) request = request.eq("brand_id", input.brand_id);
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(...pageRange(pagination));
-    if (error) throw Errors.dbError("查询平台供应商商品失败", error);
-    return toPage(
-      parseRows(ProductSchema, data, "查询平台供应商商品失败"),
-      pagination,
-      count,
-    );
-  }
+
   async findProduct(supplierId: string, productId: string) {
     const { data, error } = await this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT)
@@ -274,6 +246,7 @@ export class SupplierProductsRepository {
       ? null
       : parse(ProductSchema, data, "查询供应商商品失败");
   }
+
   async listSkus(input: SupplierSkuListInput) {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_skus")
@@ -293,8 +266,9 @@ export class SupplierProductsRepository {
       count,
     );
   }
-  async createProduct(input: SupplierProductCreateCommand) {
-    const result = await this.command("create_supplier_product", {
+
+  createProduct(input: SupplierProductCreateCommand) {
+    return this.command("create_supplier_product", {
       p_product_id: input.product_id,
       p_tenant_id: input.tenant_id,
       p_supplier_id: input.supplier_id,
@@ -305,24 +279,12 @@ export class SupplierProductsRepository {
       p_description: input.description ?? null,
       ...commandParams(input),
     }, "创建供应商商品失败");
-    await applyOwnership(
-      this.client,
-      "supplier_products",
-      input.product_id,
-      input.ownership_scope,
-      input.owner_tenant_id,
-    );
-    return result;
   }
-  async createSku(input: SupplierCommandContext & Record<string, unknown>) {
-    const result = await this.command(
-      "create_supplier_sku",
-      rpcParams(input),
-      "创建供应商 SKU 失败",
-    );
-    await applySkuPostCreate(this.client, input);
-    return result;
+
+  createSku(input: SupplierCommandContext & Record<string, unknown>) {
+    return this.command("create_supplier_sku", rpcParams(input), "创建供应商 SKU 失败");
   }
+
   mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
     return this.command(
       "mutate_supplier_product",
@@ -330,6 +292,7 @@ export class SupplierProductsRepository {
       "变更供应商商品状态失败",
     );
   }
+
   mutateSku(input: SupplierCommandContext & Record<string, unknown>) {
     return this.command(
       "mutate_supplier_sku_for_product",
@@ -337,6 +300,7 @@ export class SupplierProductsRepository {
       "变更供应商 SKU 状态失败",
     );
   }
+
   async updateProduct(input: Record<string, unknown> & {
     supplier_id: string;
     product_id: string;
@@ -366,6 +330,7 @@ export class SupplierProductsRepository {
     }
     return parse(ProductRecordSchema, data, "更新供应商商品失败");
   }
+
   async updateSku(input: Record<string, unknown> & {
     supplier_id: string;
     supplier_product_id: string;
@@ -398,6 +363,7 @@ export class SupplierProductsRepository {
     }
     return parse(SkuRecordSchema, data, "更新供应商 SKU 失败");
   }
+
   private async command(
     name: string,
     params: Record<string, unknown>,
@@ -408,6 +374,7 @@ export class SupplierProductsRepository {
     return parse(ProductCommandResultSchema, data, message);
   }
 }
+
 function commandParams(input: SupplierCommandContext) {
   return {
     p_actor_user_id: input.actor_user_id,
@@ -416,37 +383,35 @@ function commandParams(input: SupplierCommandContext) {
     p_proxy_reason: input.proxy_reason,
   };
 }
+
 function rpcParams(input: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(input)
-      .filter(([key]) =>
-        key !== "ownership_scope"
-        && key !== "owner_tenant_id"
-        && key !== "spec_values"
-        && key !== "unit_conversions"
-      )
-      .map(([key, value]) => [
-        key.startsWith("p_") ? key : `p_${key}`,
-        value,
-      ]),
+    Object.entries(input).map(([key, value]) => [
+      key.startsWith("p_") ? key : `p_${key}`,
+      value,
+    ]),
   );
 }
+
 function normalizePage(input: PageInput) {
   return {
     page: input.page > 0 ? input.page : 1,
     pageSize: Math.min(Math.max(input.pageSize, 1), 100),
   };
 }
+
 function pageRange(input: PageInput): [number, number] {
   const start = (input.page - 1) * input.pageSize;
   return [start, start + input.pageSize - 1];
 }
+
 function applyKeyword(request: Query, keyword?: string) {
   const safe = keyword?.trim().replace(/[%_,().]/g, "");
   return safe
     ? request.or(`product_code.ilike.%${safe}%,name.ilike.%${safe}%`)
     : request;
 }
+
 function toPage<T>(
   list: T[],
   pagination: PageInput,
@@ -462,14 +427,17 @@ function toPage<T>(
     },
   };
 }
+
 function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
   return parse(z.array(schema), data ?? [], message);
 }
+
 function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
   const result = schema.safeParse(data);
   if (result.success) return result.data;
   throw Errors.dbError(message, result.error.issues);
 }
+
 function versionConflict(message: string, code: string) {
   return Errors.business(
     409,
@@ -477,4 +445,5 @@ function versionConflict(message: string, code: string) {
     code,
   );
 }
+
 export const supplierProductsRepository = new SupplierProductsRepository();

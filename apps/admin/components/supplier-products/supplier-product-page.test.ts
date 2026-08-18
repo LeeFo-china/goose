@@ -1,9 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-import { supplierProductSourceLabel } from "./supplier-product-types";
-import { canMutateProduct } from "./supplier-product-rules";
-
 function readSource(path: string) {
   const url = new URL(path, import.meta.url);
   expect(existsSync(url), path).toBe(true);
@@ -58,29 +55,5 @@ describe("供应商品与供货价工作区", () => {
     expect(rules.shouldLoadPriceLists(false, "relationship-1")).toBe(false);
     expect(rules.shouldLoadPriceLists(true, null)).toBe(false);
     expect(rules.shouldLoadPriceLists(true, "relationship-1")).toBe(true);
-  });
-
-  test("商品列表标记平台共享与租户私有来源", () => {
-    const list = readSource("./supplier-product-list.tsx");
-
-    expect(list).toContain("ownership_scope");
-    expect(list).toContain("supplierProductSourceLabel");
-    expect(supplierProductSourceLabel("platform")).toBe("平台共享");
-    expect(supplierProductSourceLabel("tenant")).toBe("租户私有");
-  });
-
-  test("平台共享商品为只读，租户商品可写", () => {
-    expect(canMutateProduct({ ownership_scope: "platform" }, true)).toBe(false);
-    expect(canMutateProduct({ ownership_scope: "tenant" }, true)).toBe(true);
-    expect(canMutateProduct({ ownership_scope: "tenant" }, false)).toBe(false);
-  });
-
-  test("非合作中关系显示历史只读说明并禁用写入", () => {
-    const workspace = readSource("./supplier-product-workspace.tsx");
-
-    expect(workspace).toContain("relationship_status");
-    expect(workspace).toContain("isActive");
-    expect(workspace).toContain("仅供历史查看");
-    expect(workspace).toContain("canWrite");
   });
 });

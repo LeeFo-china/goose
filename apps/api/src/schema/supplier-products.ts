@@ -46,19 +46,6 @@ export const SupplierProductListQuerySchema =
     brand_id: uuid("无效的目录品牌 ID").optional(),
   }).strict();
 
-export const PlatformSupplierProductListQuerySchema =
-  PaginationQuerySchema.extend({
-    supplier_id: uuid("无效的供应商 ID"),
-    keyword: keyword.optional(),
-    status: SupplierProductStatusSchema.optional(),
-    category_id: uuid("无效的目录分类 ID").optional(),
-    brand_id: uuid("无效的目录品牌 ID").optional(),
-  }).strict();
-
-export const PlatformSupplierProductScopeQuerySchema = z.object({
-  supplierId: uuid("无效的供应商 ID"),
-}).strict();
-
 export const SupplierSkuListQuerySchema = PaginationQuerySchema.extend({
   keyword: keyword.optional(),
   status: SupplierSkuStatusSchema.optional(),
@@ -96,7 +83,7 @@ const productFields = {
 
 export const SupplierProductCreateSchema = z.object({
   ...productFields,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 export const SupplierProductUpdateSchema = z.object({
@@ -106,14 +93,14 @@ export const SupplierProductUpdateSchema = z.object({
   category_id: productFields.category_id.optional(),
   brand_id: productFields.brand_id.optional(),
   description: productFields.description,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict().refine(hasBusinessUpdate, {
   message: "至少需要提交一个商品更新字段",
 });
 
 export const SupplierProductCommandSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 const skuFields = {
@@ -131,31 +118,12 @@ const skuFields = {
   serial_managed: z.boolean(),
 };
 
-const skuSpecValue = z.union([
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.array(z.string()),
-]);
-
-const skuUnitConversion = z.object({
-  from_unit_id: uuid("无效的换算来源单位 ID"),
-  to_unit_id: uuid("无效的换算目标单位 ID"),
-  factor: z.string().trim().min(1, "换算系数不能为空")
-    .refine(
-      (value) => /^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0,
-      "换算系数必须是不含指数的正十进制数",
-    ),
-}).strict();
-
 export const SupplierSkuCreateSchema = z.object({
   ...skuFields,
   batch_managed: skuFields.batch_managed.default(false),
   color_managed: skuFields.color_managed.default(false),
   serial_managed: skuFields.serial_managed.default(false),
-  spec_values: z.record(z.string(), skuSpecValue).optional(),
-  unit_conversions: z.array(skuUnitConversion).optional(),
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 export const SupplierSkuUpdateSchema = z.object({
@@ -168,15 +136,13 @@ export const SupplierSkuUpdateSchema = z.object({
   batch_managed: skuFields.batch_managed.optional(),
   color_managed: skuFields.color_managed.optional(),
   serial_managed: skuFields.serial_managed.optional(),
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict().refine(hasBusinessUpdate, {
   message: "至少需要提交一个 SKU 更新字段",
 });
 
 export type SupplierProductListQuery =
   z.infer<typeof SupplierProductListQuerySchema>;
-export type PlatformSupplierProductListQuery =
-  z.infer<typeof PlatformSupplierProductListQuerySchema>;
 export type SupplierSkuListQuery =
   z.infer<typeof SupplierSkuListQuerySchema>;
 export type SupplierProductCreateInput =

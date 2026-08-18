@@ -111,7 +111,7 @@ export const SupplierPriceListCreateSchema = z.object({
   ...priceListFields,
   currency: priceListFields.currency.default("CNY"),
   effective_until: priceListFields.effective_until.default(null),
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict().superRefine(validPeriod);
 
 export const SupplierPriceListUpdateSchema = z.object({
@@ -120,14 +120,14 @@ export const SupplierPriceListUpdateSchema = z.object({
   currency: priceListFields.currency.optional(),
   effective_from: priceListFields.effective_from.optional(),
   effective_until: priceListFields.effective_until.optional(),
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict().superRefine(validPeriod).refine(hasBusinessUpdate, {
   message: "至少需要提交一个价格簿更新字段",
 });
 
 export const SupplierPriceListCommandSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 export const SupplierPriceListNewVersionSchema =
@@ -143,12 +143,12 @@ export const SupplierPriceItemUpsertSchema = z.object({
   tax_rate: taxRate,
   tax_inclusive: z.boolean(),
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 export const SupplierPriceItemDeleteSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
+  proxy_reason: proxyReason,
 }).strict();
 
 export type SupplierPriceListListQuery =

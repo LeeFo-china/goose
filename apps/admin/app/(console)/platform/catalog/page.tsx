@@ -23,8 +23,6 @@ import {
   normalizeCatalogPage,
 } from "@/components/supplier-catalog/supplier-catalog-rules";
 import { SupplierCatalogTable } from "@/components/supplier-catalog/supplier-catalog-table";
-import { PlatformUnitSuggestions } from "@/components/platform-catalog/platform-unit-suggestions";
-import { PlatformSpecDefinitions } from "@/components/platform-catalog/platform-spec-definitions";
 import type {
   CatalogBrand,
   CatalogCategory,
@@ -100,7 +98,6 @@ export default async function PlatformCatalogPage({
     : [];
   const parentId = currentCategoryParent(categoryTrail);
   const parentName = categoryTrail.at(-1)?.name ?? "根级";
-  const currentCategoryId = categoryTrail.at(-1)?.id ?? null;
   const listPath = buildCatalogListPath({
     view,
     page,
@@ -199,10 +196,6 @@ export default async function PlatformCatalogPage({
           )}
         </PlatformListPageShell>
       </Tabs>
-      {canManage ? <PlatformUnitSuggestions /> : null}
-      {canManage && view === "categories" && currentCategoryId ? (
-        <PlatformSpecDefinitions categoryId={currentCategoryId} />
-      ) : null}
     </div>
   );
 }
