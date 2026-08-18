@@ -3,6 +3,7 @@ import type { APIRequestContext, Locator, Page } from "@playwright/test";
 
 const mockBackendBaseUrl = "http://127.0.0.1:3997";
 const platformAdminPhone = "18637605353";
+const tenantAdminPhone = "18637605354";
 
 type MutationJournalEntry = {
   method: "POST" | "PATCH";
@@ -19,6 +20,13 @@ async function resetMock(request: APIRequestContext) {
 async function loginAsPlatformAdmin(page: Page) {
   const response = await page.request.post("/api/auth/login", {
     data: { phone: platformAdminPhone, code: "" },
+  });
+  expect(response.ok()).toBe(true);
+}
+
+async function loginAsTenantAdmin(page: Page) {
+  const response = await page.request.post("/api/auth/login", {
+    data: { phone: tenantAdminPhone, code: "" },
   });
   expect(response.ok()).toBe(true);
 }
@@ -313,6 +321,7 @@ test.describe("供应标准目录确定性工作流", () => {
         code: "E2E-UNIT",
         name: "E2E 新单位",
         symbol: "E2EU",
+        unit_dimension: "quantity",
         base_unit_id: null,
         conversion_factor: "1",
         sort_order: 100,
@@ -329,6 +338,7 @@ test.describe("供应标准目录确定性工作流", () => {
           code: "E2E-UNIT",
           name: "E2E 编辑单位",
           symbol: "E2UE",
+          unit_dimension: "quantity",
           base_unit_id: null,
           conversion_factor: "1",
           sort_order: 100,
@@ -343,5 +353,110 @@ test.describe("供应标准目录确定性工作流", () => {
         payload: { expected_version: 3, status: "active" },
       },
     ]);
+  });
+
+  test("平台可维护规格模板并审核单位建议", async ({ page }) => {
+    await page.goto("/platform/catalog", { waitUntil: "networkidle" });
+    await expect.poll(() => new URL(page.url()).searchParams.has("pageSize"))
+      .toBe(true);
+    const categoryRow = page.getByRole("row").filter({ hasText: "基础建材" });
+    await categoryRow.getByRole("button", { name: "规格模板" }).click();
+    const specs = page.getByRole("dialog", { name: "基础建材规格模板" });
+    await specs.getByRole("button", { name: "新建规格" }).click();
+    const editor = page.getByRole("dialog", { name: "新建规格" });
+    await editor.getByLabel("规格编码").fill("MATERIAL");
+    await editor.getByLabel("规格名称").fill("材质");
+    await editor.getByRole("button", { name: "保存规格" }).click();
+    await expect(editor).toBeHidden();
+    await expect(specs.getByRole("row").filter({ hasText: "材质" }))
+      .toBeVisible();
+    await specs.getByRole("button", { name: "Close" }).click();
+    await expect(specs).toBeHidden();
+
+    await page.getByRole("tab", { name: "单位建议" }).click();
+    const suggestionRow = page.getByRole("row").filter({ hasText: "BAG" });
+    await suggestionRow.getByRole("button", { name: "审核" }).click();
+    const review = page.getByRole("dialog", { name: "审核单位建议" });
+    await review.getByRole("combobox", { name: "审核动作" }).click();
+    await page.getByRole("option", { name: "拒绝" }).click();
+    await review.getByLabel("审核备注").fill("与标准包装单位重复");
+    await review.getByRole("button", { name: "提交审核" }).click();
+    await expect(suggestionRow).toContainText("已拒绝");
+  });
+});
+
+test.describe("租户私有供应商目录", () => {
+  test.beforeEach(async ({ request }) => {
+    await resetMock(request);
+  });
+
+  test("共享目录保持只读且租户可创建私有分类", async ({ page, request }) => {
+    await loginAsTenantAdmin(page);
+    await page.goto("/supplier-catalog", { waitUntil: "networkidle" });
+
+    await expect(
+      page.getByRole("heading", { name: "供应商目录", level: 1 }),
+    ).toBeVisible();
+    const sharedRow = page.getByRole("row").filter({
+      has: page.getByRole("cell", { name: "PLATFORM-MATERIAL", exact: true }),
+    });
+    await expect(sharedRow.getByText("平台共享", { exact: true })).toBeVisible();
+    await expect(sharedRow.getByRole("button", { name: "编辑", exact: true }))
+      .toHaveCount(0);
+
+    await page.getByRole("button", { name: "新建私有类目" }).click();
+    const dialog = page.getByRole("dialog", { name: "新建私有类目" });
+    await dialog.getByLabel("编码").fill("TENANT-TILE");
+    await dialog.getByLabel("名称").fill("租户瓷砖");
+    await dialog.getByRole("button", { name: "保存类目" }).click();
+
+    await expect(page.getByText("私有类目已创建")).toBeVisible();
+    const privateRow = page.getByRole("row").filter({ hasText: "租户瓷砖" });
+    await expect(privateRow.getByText("租户私有", { exact: true })).toBeVisible();
+    await expect(privateRow.getByRole("button", { name: "编辑" })).toBeVisible();
+
+    const mutations = await readMutations(request);
+    expect(mutations.at(-1)).toMatchObject({
+      method: "POST",
+      path: "/catalog/categories",
+      idempotencyKey: expect.stringMatching(/^tenant-category:/),
+      payload: {
+        parent_id: null,
+        mapped_platform_category_id: null,
+        status: "active",
+        code: "TENANT-TILE",
+        name: "租户瓷砖",
+        sort_order: 100,
+      },
+    });
+  });
+
+  test("可查看计量维度、提交单位建议并维护私有分类规格", async ({ page }) => {
+    await loginAsTenantAdmin(page);
+    await page.goto("/supplier-catalog?view=units", { waitUntil: "networkidle" });
+    await expect(page.getByText("数量", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "编辑" })).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "单位建议" }).click();
+    await page.getByRole("button", { name: "提交单位建议" }).click();
+    const suggestion = page.getByRole("dialog", { name: "提交单位建议" });
+    await suggestion.getByLabel("建议编码").fill("ROLL");
+    await suggestion.getByLabel("建议名称").fill("卷");
+    await suggestion.getByLabel("建议符号").fill("卷");
+    await suggestion.getByLabel("计量维度").fill("quantity");
+    await suggestion.getByLabel("建议原因").fill("装修辅料常用包装单位");
+    await suggestion.getByRole("button", { name: "提交建议" }).click();
+    await expect(page.getByText("单位建议已提交")).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "ROLL" }))
+      .toContainText("待审核");
+
+    await page.getByRole("tab", { name: "分类" }).click();
+    const privateRow = page.getByRole("row").filter({ hasText: "租户标准辅料" });
+    await privateRow.getByRole("button", { name: "规格模板" }).click();
+    const specs = page.getByRole("dialog", { name: "租户标准辅料规格模板" });
+    await specs.getByRole("button", { name: "复制平台模板" }).click();
+    await expect(page.getByText("平台规格模板已复制")).toBeVisible();
+    await expect(specs.getByRole("row").filter({ hasText: "材质" }))
+      .toContainText("租户私有");
   });
 });

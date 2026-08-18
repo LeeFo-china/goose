@@ -39,6 +39,7 @@ export type CatalogUnit = CatalogRecord & {
   base_unit_id: string | null;
   base_unit: CatalogBaseUnit | null;
   conversion_factor: string;
+  unit_dimension: string;
 };
 
 export type CatalogBaseUnit = {
@@ -46,7 +47,46 @@ export type CatalogBaseUnit = {
   code: string;
   name: string;
   symbol: string;
+  unit_dimension?: string;
   status: CatalogStatus;
+};
+
+export type CatalogSpecValueType =
+  | "text"
+  | "number"
+  | "boolean"
+  | "single_enum"
+  | "multi_enum"
+  | "date";
+
+export type CatalogSpecDefinition = CatalogRecord & {
+  category_id: string;
+  value_type: CatalogSpecValueType;
+  enum_options: string[];
+  unit_dimension: string | null;
+  is_required: boolean;
+  participates_in_sku_name: boolean;
+  is_filterable: boolean;
+  ownership_scope: "platform" | "tenant";
+  owner_tenant_id: string | null;
+  source_platform_spec_id: string | null;
+};
+
+export type CatalogUnitSuggestion = {
+  id: string;
+  tenant_id: string;
+  suggested_code: string;
+  suggested_name: string;
+  suggested_symbol: string;
+  unit_dimension: string;
+  reason: string | null;
+  status: "submitted" | "approved" | "rejected";
+  version: number;
+  reviewed_at: string | null;
+  review_remark: string | null;
+  approved_catalog_unit_id: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type CategoryReturnState = {

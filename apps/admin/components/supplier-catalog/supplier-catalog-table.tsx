@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { SupplierCatalogStatusAction } from "./supplier-catalog-actions";
+import { CatalogSpecDefinitionsDialogButton } from "./catalog-spec-definitions-dialog";
+import { CatalogUnitDimension } from "../tenant-supplier-catalog/tenant-catalog-display";
 import {
   CatalogBrandDialogButton,
   CatalogCategoryDialogButton,
@@ -122,6 +124,10 @@ function CategoryTable({
       header: "操作",
       cell: ({ row }) => (
         <div className="flex justify-end gap-1">
+          <CatalogSpecDefinitionsDialogButton
+            scope="platform"
+            category={{ ...row.original, ownership_scope: "platform" }}
+          />
           <CatalogCategoryDialogButton
             record={row.original}
             parentId={row.original.parent_id}
@@ -232,6 +238,14 @@ function UnitTable({ records }: { records: CatalogUnit[] }) {
         </div>
       ),
       meta: { cellClassName: "min-w-[160px]" },
+    },
+    {
+      accessorKey: "unit_dimension",
+      header: "计量维度",
+      cell: ({ row }) => (
+        <CatalogUnitDimension value={row.original.unit_dimension} />
+      ),
+      meta: { cellClassName: "whitespace-nowrap" },
     },
     {
       accessorKey: "base_unit_id",

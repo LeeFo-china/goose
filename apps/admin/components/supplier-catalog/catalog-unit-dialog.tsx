@@ -65,6 +65,9 @@ export function CatalogUnitDialogButton({
   const [code, setCode] = useState(record?.code ?? "");
   const [name, setName] = useState(record?.name ?? "");
   const [symbol, setSymbol] = useState(record?.symbol ?? "");
+  const [unitDimension, setUnitDimension] = useState(
+    record?.unit_dimension ?? "quantity",
+  );
   const [mode, setMode] = useState<"base" | "derived">(initialMode);
   const [baseUnitId, setBaseUnitId] = useState(record?.base_unit_id ?? "");
   const [conversionFactor, setConversionFactor] = useState(
@@ -77,6 +80,7 @@ export function CatalogUnitDialogButton({
     setCode(record?.code ?? "");
     setName(record?.name ?? "");
     setSymbol(record?.symbol ?? "");
+    setUnitDimension(record?.unit_dimension ?? "quantity");
     setMode(initialMode);
     setBaseUnitId(record?.base_unit_id ?? "");
     setConversionFactor(record?.conversion_factor ?? "1");
@@ -103,6 +107,7 @@ export function CatalogUnitDialogButton({
       code: code.trim(),
       name: name.trim(),
       symbol: symbol.trim(),
+      unit_dimension: unitDimension.trim(),
       ...buildUnitRelationshipPayload({
         mode,
         baseUnitId,
@@ -220,6 +225,18 @@ export function CatalogUnitDialogButton({
                 />
               </Field>
             </div>
+            <Field>
+              <FieldLabel htmlFor={`unit-dimension-${record?.id ?? "new"}`}>
+                计量维度
+              </FieldLabel>
+              <Input
+                id={`unit-dimension-${record?.id ?? "new"}`}
+                required
+                maxLength={64}
+                value={unitDimension}
+                onChange={(event) => setUnitDimension(event.target.value)}
+              />
+            </Field>
             <Field>
               <FieldLabel htmlFor={`unit-mode-${record?.id ?? "new"}`}>
                 单位类型

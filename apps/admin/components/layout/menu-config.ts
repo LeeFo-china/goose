@@ -218,6 +218,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         permission: "supplier.view",
       },
       {
+        href: "/supplier-catalog",
+        label: "供应商目录",
+        icon: PackageSearch,
+        permission: "supplier.catalog.manage",
+      },
+      {
         href: "/supplier-products",
         label: "商品与价格",
         icon: PackageOpen,
