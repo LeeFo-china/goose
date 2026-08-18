@@ -21,7 +21,10 @@ import {
   PriceItemDialog,
   PublishPriceDialog,
 } from "./supplier-price-list-dialogs";
-import { createLatestRequestGate } from "./supplier-request-gate";
+import {
+  createLatestRequestGate,
+  isLatestResourceRequest,
+} from "./supplier-request-gate";
 import type {
   SupplierPriceList,
   SupplierPriceListItem,
@@ -60,21 +63,23 @@ export function SupplierPriceListPanel({
   const [error, setError] = useState<string | null>(null);
   const priceListRequests = useRef(createLatestRequestGate());
   const itemRequests = useRef(createLatestRequestGate());
+  const selectedPriceListId = useRef<string | null>(null);
 
   const loadPriceLists = useCallback(async () => {
     const request = priceListRequests.current.begin();
-    itemRequests.current.invalidate();
     setLoading(true);
     setError(null);
     try {
       const data = await loadSupplierPriceLists(scope, page);
       if (!priceListRequests.current.isCurrent(request)) return null;
       setPriceLists(data);
-      setSelected((current) =>
-        current
+      setSelected((current) => {
+        const next = current
           ? data.list.find(({ id }) => id === current.id) ?? null
-          : null
-      );
+          : null;
+        selectedPriceListId.current = next?.id ?? null;
+        return next;
+      });
       return data;
     } catch (caught) {
       if (priceListRequests.current.isCurrent(request)) {
@@ -87,7 +92,14 @@ export function SupplierPriceListPanel({
   }, [page, scope]);
 
   const loadItems = useCallback(async (priceList: SupplierPriceList, nextPage = itemPage) => {
+    if (selectedPriceListId.current !== priceList.id) return;
     const request = itemRequests.current.begin();
+    const isCurrent = () => isLatestResourceRequest(
+      itemRequests.current,
+      request,
+      priceList.id,
+      selectedPriceListId.current,
+    );
     setItemsLoading(true);
     try {
       const data = await loadSupplierPriceItems(
@@ -95,24 +107,26 @@ export function SupplierPriceListPanel({
         priceList.id,
         nextPage,
       );
-      if (itemRequests.current.isCurrent(request)) setItems(data);
+      if (isCurrent()) setItems(data);
     } catch (caught) {
-      if (itemRequests.current.isCurrent(request)) {
+      if (isCurrent()) {
         toast.error(caught instanceof Error ? caught.message : "价格条目加载失败");
       }
     } finally {
-      if (itemRequests.current.isCurrent(request)) setItemsLoading(false);
+      if (isCurrent()) setItemsLoading(false);
     }
   }, [itemPage, scope]);
 
   const reloadSelected = useCallback(async () => {
+    const targetId = selectedPriceListId.current;
     const data = await loadPriceLists();
-    if (!selected || !data) return;
-    const latest = data.list.find(({ id }) => id === selected.id);
+    if (!targetId || selectedPriceListId.current !== targetId || !data) return;
+    const latest = data.list.find(({ id }) => id === targetId);
     if (latest) await loadItems(latest);
-  }, [loadItems, loadPriceLists, selected]);
+  }, [loadItems, loadPriceLists]);
 
   useEffect(() => {
+    setItemsLoading(false);
     void loadPriceLists();
     return () => {
       priceListRequests.current.invalidate();
@@ -166,6 +180,7 @@ export function SupplierPriceListPanel({
           size="sm"
           variant="outline"
           onClick={() => {
+            selectedPriceListId.current = row.original.id;
             setSelected(row.original);
             setItemPage(1);
             setItems(emptyItemPage);

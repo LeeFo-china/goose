@@ -16,3 +16,13 @@ export function createLatestRequestGate() {
     },
   };
 }
+
+export function isLatestResourceRequest(
+  gate: LatestRequestGate,
+  request: number,
+  requestedResourceId: string,
+  selectedResourceId: string | null,
+) {
+  return gate.isCurrent(request) &&
+    requestedResourceId === selectedResourceId;
+}

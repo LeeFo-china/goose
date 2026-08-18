@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { SupplierProductSourceBadge } from "./supplier-product-source-badge";
-import { createLatestRequestGate } from "./supplier-request-gate";
+import {
+  createLatestRequestGate,
+  isLatestResourceRequest,
+} from "./supplier-request-gate";
 import {
   buildCatalogOptionListPath,
   buildRelationshipListPath,
@@ -58,6 +61,16 @@ describe("供应商品与供货价行为", () => {
     expect(gate.isCurrent(second)).toBe(true);
     gate.invalidate();
     expect(gate.isCurrent(second)).toBe(false);
+  });
+
+  test("资源请求还必须匹配当前选择，旧价格簿不能抢占新选择", () => {
+    const gate = createLatestRequestGate();
+    const request = gate.begin();
+
+    expect(isLatestResourceRequest(gate, request, "price-a", "price-b"))
+      .toBe(false);
+    expect(isLatestResourceRequest(gate, request, "price-b", "price-b"))
+      .toBe(true);
   });
 
   test("合作供应商选择器使用有界服务端关键词检索", () => {
