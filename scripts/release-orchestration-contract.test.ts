@@ -48,6 +48,10 @@ const migrateProductionWorkflow = readFileSync(
   new URL("../.github/workflows/migrate-production-database.yml", import.meta.url),
   "utf8",
 );
+const migrateDevWorkflow = readFileSync(
+  new URL("../.github/workflows/migrate-dev-database.yml", import.meta.url),
+  "utf8",
+);
 const workflowTaskAccessibleRpcMigration = readFileSync(
   new URL(
     "../supabase/migrations/20260709103000_workflow_task_accessible_rpc.sql",
@@ -258,9 +262,11 @@ function extractShellFunction(script: string, functionName: string): string {
 function runExplicitTransactionMigrationHelper(
   migrationSql: string,
   historyStatement: string,
+  workflow = migrateProductionWorkflow,
+  stepName = "Plan and apply migrations",
 ): { exitCode: number; stderr: string; stdout: string } {
   const planAndApplyScript = extractWorkflowRunScript(
-    sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    sliceWorkflowStep(workflow, stepName),
   );
   const scanner = extractShellFunction(
     planAndApplyScript,
@@ -1341,6 +1347,82 @@ describe("production migration precheck workflow", () => {
       "insert into supabase_migrations.schema_migrations(version) values ('20260718120000');",
     );
 
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("explicit_transaction_shape_invalid");
+  });
+});
+
+describe("development migration transaction orchestration", () => {
+  const runScript = extractWorkflowRunScript(
+    sliceWorkflowStep(migrateDevWorkflow, "Run dev migration"),
+  );
+
+  test("routes explicit and ordinary migrations through separate atomic branches", () => {
+    expect(runScript).toContain("scan_top_level_transaction_controls() {");
+    expect(runScript).toContain("emit_explicit_transaction_migration() {");
+    expect(runScript).toContain(
+      'export PGOPTIONS="-c standard_conforming_strings=on"',
+    );
+    expect(runScript).toContain(
+      'if [ "${top_level_start_count}" -ne 0 ] || [ "${top_level_end_count}" -ne 0 ]; then',
+    );
+    expect(runScript).toContain(
+      'emit_explicit_transaction_migration "${file}" "${history_statement}" | psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1',
+    );
+    expect(runScript).toContain('echo "begin;"');
+    expect(runScript).toContain('cat "${file}"');
+    expect(runScript).not.toContain("printf '\\\\i %s\\n'");
+  });
+
+  test("renders current 122000, 123000, and 130000 history before final commit", () => {
+    for (const fileName of [
+      "20260818122000_materialize_tenant_supplier_catalog_schema.sql",
+      "20260818123000_materialize_tenant_supplier_catalog_commands.sql",
+      "20260818130000_harden_tenant_private_catalog_contracts.sql",
+    ]) {
+      const sql = readFileSync(
+        new URL(`../supabase/migrations/${fileName}`, import.meta.url),
+        "utf8",
+      );
+      const version = fileName.slice(0, 14);
+      const history =
+        `insert into supabase_migrations.schema_migrations(version) values ('${version}');`;
+      const result = runExplicitTransactionMigrationHelper(
+        sql,
+        history,
+        migrateDevWorkflow,
+        "Run dev migration",
+      );
+      const outputLines = result.stdout.trimEnd().split(/\r?\n/);
+      const commitIndex = outputLines
+        .map((line) => line.trim().toLowerCase())
+        .lastIndexOf("commit;");
+
+      expect({ fileName, exitCode: result.exitCode }).toEqual({
+        fileName,
+        exitCode: 0,
+      });
+      expect(result.stdout.split(history)).toHaveLength(2);
+      expect(commitIndex).toBeGreaterThan(0);
+      expect(outputLines[commitIndex - 1]).toBe(history);
+    }
+  });
+
+  test.each([
+    ["multiple begin", ["BEGIN;", "BEGIN;", "COMMIT;"].join("\n")],
+    ["multiple commit", ["BEGIN;", "select 1;", "COMMIT;", "COMMIT;"].join("\n")],
+    ["rollback", ["BEGIN;", "ROLLBACK;", "COMMIT;"].join("\n")],
+    ["end", ["BEGIN;", "END;", "COMMIT;"].join("\n")],
+    ["SQL before begin", ["select 0;", "BEGIN;", "COMMIT;"].join("\n")],
+    ["SQL after commit", ["BEGIN;", "COMMIT;", "select 1;"].join("\n")],
+    ["psql meta-command", ["BEGIN;", "select 1", "\\gexec", "COMMIT;"].join("\n")],
+  ])("rejects unsafe explicit shape in development: %s", (_shape, sql) => {
+    const result = runExplicitTransactionMigrationHelper(
+      sql,
+      "insert into supabase_migrations.schema_migrations(version) values ('1');",
+      migrateDevWorkflow,
+      "Run dev migration",
+    );
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain("explicit_transaction_shape_invalid");
   });

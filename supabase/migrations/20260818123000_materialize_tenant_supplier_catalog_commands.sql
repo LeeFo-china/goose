@@ -47,6 +47,20 @@ DECLARE
     'update_tenant_catalog_brand(uuid, text, text, text, uuid, text, integer, uuid, integer, uuid, uuid, uuid, text)',
     'update_tenant_catalog_category(uuid, uuid, text, text, text, integer, uuid, integer, uuid, uuid, uuid, text)'
   ]::text[];
+  v_rollout_v2 constant text[] := ARRAY[
+    'copy_platform_category_specs(uuid, uuid, integer, uuid, uuid, uuid, text)',
+    'create_catalog_spec_definition(uuid, uuid, text, text, text, jsonb, text, boolean, boolean, boolean, integer, text, uuid, uuid, uuid, text)',
+    'create_catalog_unit(uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text)',
+    'create_catalog_unit(uuid, text, text, text, uuid, text, text, text, integer, uuid, uuid, text)',
+    'create_tenant_catalog_brand(uuid, text, text, text, uuid, text, integer, uuid, uuid, uuid, uuid, text)',
+    'create_tenant_catalog_category(uuid, uuid, text, text, text, integer, uuid, uuid, uuid, uuid, text)',
+    'list_catalog_unit_suggestions(uuid, uuid, text, uuid, integer, integer)',
+    'review_catalog_unit_suggestion(uuid, text, uuid, text, integer, uuid, uuid, text)',
+    'submit_tenant_catalog_unit_suggestion(uuid, text, text, text, text, text, uuid, uuid, uuid, text)',
+    'update_catalog_spec_definition(uuid, uuid, text, text, text, jsonb, text, boolean, boolean, boolean, integer, text, integer, uuid, uuid, uuid, text)',
+    'update_tenant_catalog_brand(uuid, text, text, text, uuid, text, integer, uuid, integer, uuid, uuid, uuid, text)',
+    'update_tenant_catalog_category(uuid, uuid, text, text, text, integer, uuid, integer, uuid, uuid, uuid, text)'
+  ]::text[];
 BEGIN
   IF to_regclass('public.catalog_categories') IS NULL
     OR to_regclass('public.catalog_brands') IS NULL
@@ -116,6 +130,8 @@ BEGIN
     RAISE NOTICE 'recognized command state: granular_v2';
   ELSIF v_actual = v_canonical_v2 THEN
     RAISE NOTICE 'recognized command state: canonical_v2';
+  ELSIF v_actual = v_rollout_v2 THEN
+    RAISE NOTICE 'recognized command state: rollout_v2';
   ELSE
     RAISE EXCEPTION USING
       ERRCODE = 'P0001',
@@ -608,6 +624,232 @@ BEGIN
 END;
 $$;
 
+-- Task 3 API rollout cleanup gate: this eleven-argument overload exists only
+-- while the deployed API omits p_unit_dimension. After Task 3 sends the
+-- canonical twelve-argument payload, a later forward cleanup migration must
+-- remove this compatibility overload. It is not a long-term command standard.
+CREATE FUNCTION public.create_catalog_unit(
+  p_unit_id uuid,
+  p_code text,
+  p_name text,
+  p_symbol text,
+  p_base_unit_id uuid,
+  p_conversion_factor text,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_unit public.catalog_units%ROWTYPE;
+  v_conversion_factor numeric(18, 6);
+  v_conversion_factor_text text;
+  v_unit_dimension text;
+  v_request jsonb;
+  v_snapshot jsonb;
+BEGIN
+  IF p_unit_id IS NULL
+    OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL
+    OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+    OR p_code IS NULL
+    OR btrim(p_code) = ''
+    OR p_name IS NULL
+    OR btrim(p_name) = ''
+    OR p_symbol IS NULL
+    OR btrim(p_symbol) = ''
+    OR p_conversion_factor IS NULL
+    OR btrim(p_conversion_factor) !~ '^[0-9]+([.][0-9]+)?$'
+    OR char_length(
+      ltrim(split_part(btrim(p_conversion_factor), '.', 1), '0')
+    ) > 12
+    OR char_length(
+      split_part(btrim(p_conversion_factor), '.', 2)
+    ) > 6
+    OR p_status NOT IN ('active', 'inactive')
+    OR p_sort_order IS NULL
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'UNIT_CONVERSION_INVALID';
+  END IF;
+
+  PERFORM public.assert_platform_catalog_actor(
+    p_actor_user_id,
+    p_actor_employee_id
+  );
+
+  BEGIN
+    v_conversion_factor := btrim(p_conversion_factor)::numeric(18, 6);
+  EXCEPTION
+    WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'UNIT_CONVERSION_INVALID';
+  END;
+
+  IF v_conversion_factor <= 0 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'UNIT_CONVERSION_INVALID';
+  END IF;
+
+  v_conversion_factor_text := rtrim(
+    rtrim(v_conversion_factor::text, '0'),
+    '.'
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  IF p_base_unit_id IS NULL THEN
+    v_unit_dimension := 'legacy_unclassified';
+  ELSE
+    SELECT base_unit.unit_dimension
+    INTO v_unit_dimension
+    FROM public.catalog_units AS base_unit
+    WHERE base_unit.id = p_base_unit_id
+      AND base_unit.status = 'active'
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_CATALOG_CONFLICT';
+    END IF;
+  END IF;
+
+  v_request := jsonb_build_object(
+    'unit_id', p_unit_id,
+    'tenant_id', NULL,
+    'code', btrim(p_code),
+    'name', btrim(p_name),
+    'symbol', btrim(p_symbol),
+    'base_unit_id', p_base_unit_id,
+    'conversion_factor', v_conversion_factor_text,
+    'unit_dimension', v_unit_dimension,
+    'status', p_status,
+    'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_unit'
+      OR v_event.command <> 'create_catalog_unit'
+      OR v_event.resource_id IS DISTINCT FROM p_unit_id
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN jsonb_build_object(
+      'status', 'created',
+      'idempotent', true,
+      'unit', v_event.to_state,
+      'version', v_event.result_version
+    );
+  END IF;
+
+  BEGIN
+    INSERT INTO public.catalog_units (
+      id,
+      code,
+      name,
+      symbol,
+      base_unit_id,
+      conversion_factor,
+      unit_dimension,
+      status,
+      sort_order,
+      version,
+      created_by_employee_id,
+      updated_by_employee_id
+    )
+    VALUES (
+      p_unit_id,
+      btrim(p_code),
+      btrim(p_name),
+      btrim(p_symbol),
+      p_base_unit_id,
+      v_conversion_factor,
+      v_unit_dimension,
+      p_status,
+      p_sort_order,
+      1,
+      p_actor_employee_id,
+      p_actor_employee_id
+    )
+    RETURNING * INTO v_unit;
+  EXCEPTION
+    WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'UNIT_CONVERSION_INVALID';
+    WHEN unique_violation OR check_violation OR not_null_violation
+      OR foreign_key_violation THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_CATALOG_CONFLICT';
+  END;
+
+  v_snapshot := to_jsonb(v_unit) || jsonb_build_object(
+    'conversion_factor', v_unit.conversion_factor::text
+  );
+
+  INSERT INTO public.supplier_command_events (
+    resource_type,
+    resource_id,
+    command,
+    from_state,
+    to_state,
+    actor_user_id,
+    actor_employee_id,
+    idempotency_key,
+    result_version
+  )
+  VALUES (
+    'catalog_unit',
+    v_unit.id,
+    'create_catalog_unit',
+    jsonb_build_object('_request', v_request),
+    v_snapshot,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    v_unit.version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'created',
+    'idempotent', false,
+    'unit', v_snapshot,
+    'version', v_unit.version
+  );
+END;
+$$;
+
 CREATE FUNCTION public.create_tenant_catalog_category(
   p_category_id uuid,
   p_parent_id uuid,
@@ -719,6 +961,9 @@ BEGIN
       'version', v_event.result_version
     );
   END IF;
+
+  -- Match the 122000 statement trigger lock before touching any hierarchy row.
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint);
 
   IF p_parent_id IS NOT NULL THEN
     SELECT category.*
@@ -952,6 +1197,9 @@ BEGIN
       'version', v_event.result_version
     );
   END IF;
+
+  -- Match the 122000 statement trigger lock before touching any hierarchy row.
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint);
 
   SELECT category.*
   INTO v_category
@@ -2595,7 +2843,21 @@ BEGIN
         OR suggestion.tenant_id = v_effective_tenant_id
       )
   ), page_rows AS (
-    SELECT suggestion.*
+    SELECT
+      suggestion.id,
+      suggestion.tenant_id,
+      suggestion.suggested_code,
+      suggestion.suggested_name,
+      suggestion.suggested_symbol,
+      suggestion.unit_dimension,
+      suggestion.reason,
+      suggestion.status,
+      suggestion.version,
+      suggestion.reviewed_at,
+      suggestion.review_remark,
+      suggestion.approved_catalog_unit_id,
+      suggestion.created_at,
+      suggestion.updated_at
     FROM public.catalog_unit_suggestions AS suggestion
     WHERE (p_status IS NULL OR suggestion.status = p_status)
       AND (
@@ -2609,7 +2871,25 @@ BEGIN
   SELECT
     filtered_total.total,
     COALESCE(
-      jsonb_agg(to_jsonb(page_rows) ORDER BY page_rows.created_at DESC, page_rows.id DESC)
+      jsonb_agg(
+        jsonb_build_object(
+          'id', page_rows.id,
+          'tenant_id', page_rows.tenant_id,
+          'suggested_code', page_rows.suggested_code,
+          'suggested_name', page_rows.suggested_name,
+          'suggested_symbol', page_rows.suggested_symbol,
+          'unit_dimension', page_rows.unit_dimension,
+          'reason', page_rows.reason,
+          'status', page_rows.status,
+          'version', page_rows.version,
+          'reviewed_at', page_rows.reviewed_at,
+          'review_remark', page_rows.review_remark,
+          'approved_catalog_unit_id', page_rows.approved_catalog_unit_id,
+          'created_at', page_rows.created_at,
+          'updated_at', page_rows.updated_at
+        )
+        ORDER BY page_rows.created_at DESC, page_rows.id DESC
+      )
         FILTER (WHERE page_rows.id IS NOT NULL),
       '[]'::jsonb
     )
@@ -2834,6 +3114,16 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.create_catalog_unit(
+  uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text
+)
+FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION public.create_catalog_unit(
+  uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text
+)
+TO service_role;
+
+REVOKE ALL ON FUNCTION public.create_catalog_unit(
   uuid, text, text, text, uuid, text, text, text, integer, uuid, uuid, text
 )
 FROM PUBLIC, anon, authenticated, service_role;
@@ -2969,6 +3259,7 @@ BEGIN
       'list_catalog_unit_suggestions', 'review_catalog_unit_suggestion'
     ]::text[])
     AND procedure.oid <> ALL (ARRAY[
+      'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,integer,uuid,uuid,text)'::regprocedure,
       'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,text,integer,uuid,uuid,text)'::regprocedure,
       'public.create_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,uuid,uuid,uuid,text)'::regprocedure,
       'public.update_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,integer,uuid,uuid,uuid,text)'::regprocedure,

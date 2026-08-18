@@ -6,12 +6,26 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
+const schemaSql = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260818122000_materialize_tenant_supplier_catalog_schema.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function functionBody(name: string): string {
   const start = sql.indexOf(`CREATE FUNCTION public.${name}(`);
   if (start < 0) return "";
   const end = sql.indexOf("\n$$;", start);
   return end < 0 ? sql.slice(start) : sql.slice(start, end + 4);
+}
+
+function schemaFunctionBody(name: string): string {
+  const start = schemaSql.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`);
+  if (start < 0) return "";
+  const end = schemaSql.indexOf("\n$$;", start);
+  return end < 0 ? schemaSql.slice(start) : schemaSql.slice(start, end + 4);
 }
 
 describe("tenant supplier catalog command domain boundaries", () => {
@@ -39,15 +53,41 @@ describe("tenant supplier catalog command domain boundaries", () => {
     expect(sql).not.toMatch(/SET[\s\S]{0,180}(?:ownership_scope|owner_tenant_id)\s*=/i);
   });
 
-  test("validates category hierarchy and active platform mappings", () => {
+  test("takes the hierarchy advisory lock before category row locks", () => {
+    for (const command of [
+      "create_tenant_catalog_category",
+      "update_tenant_catalog_category",
+    ]) {
+      const body = functionBody(command);
+      const replayReturn = body.indexOf(
+        "RETURN jsonb_build_object(",
+        body.indexOf("IF FOUND THEN"),
+      );
+      const hierarchyLock = body.indexOf(
+        "pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint)",
+      );
+      const categoryRowLock = body.indexOf("FROM public.catalog_categories");
+      expect(replayReturn).toBeGreaterThan(0);
+      expect(hierarchyLock).toBeGreaterThan(replayReturn);
+      expect(categoryRowLock).toBeGreaterThan(hierarchyLock);
+    }
+  });
+
+  test("validates mappings in commands and delegates cycle/depth to the 122000 trigger", () => {
     const categorySql =
       functionBody("create_tenant_catalog_category") +
       functionBody("update_tenant_catalog_category");
+    const hierarchyGuard = schemaFunctionBody(
+      "validate_catalog_category_hierarchy",
+    );
     expect(categorySql).toContain("v_parent.owner_tenant_id IS DISTINCT FROM p_tenant_id");
     expect(categorySql).toContain("v_mapped.ownership_scope <> 'platform'");
     expect(categorySql).toContain("v_mapped.status <> 'active'");
-    expect(categorySql).toContain("SUPPLIER_CATALOG_CYCLE");
-    expect(categorySql).toContain("SUPPLIER_CATALOG_DEPTH_EXCEEDED");
+    expect(hierarchyGuard).toContain("MESSAGE = 'SUPPLIER_CATALOG_CYCLE'");
+    expect(hierarchyGuard).toContain("MESSAGE = 'SUPPLIER_CATALOG_DEPTH_EXCEEDED'");
+    expect(schemaSql).toMatch(
+      /CREATE TRIGGER tr_catalog_categories_v2_validate_hierarchy[\s\S]*?EXECUTE FUNCTION public\.validate_catalog_category_hierarchy\(\)/,
+    );
   });
 
   test("validates specs and copies only active platform leaf specs", () => {

@@ -6,6 +6,13 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
+const behaviorSql = readFileSync(
+  new URL(
+    "../../../../scripts/fixtures/verify-tenant-supplier-catalog-command-behavior.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function functionBody(name: string): string {
   const start = sql.indexOf(`CREATE FUNCTION public.${name}(`);
@@ -48,6 +55,33 @@ describe("tenant supplier catalog unit suggestions", () => {
     expect(body).toContain("'pageSize'");
   });
 
+  test("returns an explicit suggestion DTO without actor employee identifiers", () => {
+    const body = functionBody("list_catalog_unit_suggestions");
+    for (const field of [
+      "id",
+      "tenant_id",
+      "suggested_code",
+      "suggested_name",
+      "suggested_symbol",
+      "unit_dimension",
+      "reason",
+      "status",
+      "version",
+      "reviewed_at",
+      "review_remark",
+      "approved_catalog_unit_id",
+      "created_at",
+      "updated_at",
+    ]) {
+      expect(body).toContain(`'${field}', page_rows.${field}`);
+    }
+    expect(body).not.toContain("SELECT suggestion.*");
+    expect(body).not.toContain("to_jsonb(page_rows)");
+    expect(body).not.toContain("submitted_by_employee_id");
+    expect(body).not.toContain("reviewed_by_employee_id");
+    expect(behaviorSql).toContain("suggestion DTO exposed unexpected fields");
+  });
+
   test("reviews without ever creating a catalog unit", () => {
     const body = functionBody("review_catalog_unit_suggestion");
     expect(body).toContain("public.assert_platform_catalog_actor(");
@@ -65,6 +99,12 @@ describe("tenant supplier catalog unit suggestions", () => {
     expect(sql).toContain("pg_total_relation_size");
     expect(sql).toContain("reltuples");
     expect(sql).toContain("SUPPLIER_CATALOG_SUGGESTION_INDEX_TOO_LARGE");
-    expect(sql).toContain("CREATE INDEX CONCURRENTLY");
+    expect(sql).toMatch(
+      /CREATE INDEX catalog_unit_suggestions_v2_tenant_status_page_idx\s+ON public\.catalog_unit_suggestions\(\s*tenant_id, status, created_at DESC, id DESC\s*\)/,
+    );
+    expect(behaviorSql).toContain("EXPLAIN (COSTS OFF)");
+    expect(behaviorSql).toContain(
+      "catalog_unit_suggestions_v2_tenant_status_page_idx' IN v_plan",
+    );
   });
 });

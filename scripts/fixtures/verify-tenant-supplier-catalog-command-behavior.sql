@@ -135,6 +135,34 @@ SELECT public.create_catalog_unit(
   'verify-platform-unit-create'
 );
 
+-- Deprecated eleven-argument RPC remains executable only for the old API
+-- during the Task 3 rollout window.
+SELECT public.create_catalog_unit(
+  '96000000-0000-0000-0000-000000000002',
+  'VERIFY_LEGACY_EACH', 'Verifier legacy each', 'vea', NULL, '1',
+  'active', 11,
+  '91000000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000001',
+  'verify-platform-unit-compat-base'
+);
+SELECT public.create_catalog_unit(
+  '96000000-0000-0000-0000-000000000002',
+  'VERIFY_LEGACY_EACH', 'Verifier legacy each', 'vea', NULL, '1',
+  'active', 11,
+  '91000000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000001',
+  'verify-platform-unit-compat-base'
+);
+SELECT public.create_catalog_unit(
+  '96000000-0000-0000-0000-000000000003',
+  'VERIFY_LEGACY_GRAM', 'Verifier legacy gram', 'veg',
+  '96000000-0000-0000-0000-000000000001', '0.001',
+  'active', 12,
+  '91000000-0000-0000-0000-000000000001',
+  '92000000-0000-0000-0000-000000000001',
+  'verify-platform-unit-compat-derived'
+);
+
 DO $unit_factor_validation$
 DECLARE
   v_factor text;
@@ -152,6 +180,24 @@ BEGIN
         'verify-platform-unit-invalid-factor'
       );
       RAISE EXCEPTION 'noncanonical unit factor accepted: %', v_factor;
+    EXCEPTION WHEN SQLSTATE '22023' OR SQLSTATE 'P0001' THEN
+      IF SQLERRM <> 'UNIT_CONVERSION_INVALID' THEN RAISE; END IF;
+    END;
+  END LOOP;
+
+  FOREACH v_factor IN ARRAY ARRAY[
+    '1e3', '+1', '-1', '1.1234567', '0', '1000000000000'
+  ]::text[] LOOP
+    BEGIN
+      PERFORM public.create_catalog_unit(
+        '96000000-0000-0000-0000-000000000098',
+        'VERIFY_BAD_COMPAT_FACTOR', 'Verifier bad compat factor', 'vbcf',
+        NULL, v_factor, 'active', 98,
+        '91000000-0000-0000-0000-000000000001',
+        '92000000-0000-0000-0000-000000000001',
+        'verify-platform-unit-invalid-compat-factor'
+      );
+      RAISE EXCEPTION 'noncanonical compatibility factor accepted: %', v_factor;
     EXCEPTION WHEN SQLSTATE '22023' OR SQLSTATE 'P0001' THEN
       IF SQLERRM <> 'UNIT_CONVERSION_INVALID' THEN RAISE; END IF;
     END;
@@ -302,6 +348,30 @@ BEGIN
     RAISE EXCEPTION 'unit factor request was not normalized';
   END IF;
 
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.catalog_units AS unit
+    WHERE unit.id = '96000000-0000-0000-0000-000000000002'
+      AND unit.unit_dimension = 'legacy_unclassified'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM public.catalog_units AS unit
+    WHERE unit.id = '96000000-0000-0000-0000-000000000003'
+      AND unit.unit_dimension = 'mass'
+  ) OR (
+    SELECT count(*)
+    FROM public.supplier_command_events AS event
+    WHERE event.idempotency_key = 'verify-platform-unit-compat-base'
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM public.supplier_command_events AS event
+    WHERE event.idempotency_key = 'verify-platform-unit-compat-derived'
+      AND event.from_state #>> '{_request,unit_dimension}' = 'mass'
+      AND event.from_state #>> '{_request,conversion_factor}' = '0.001'
+  ) THEN
+    RAISE EXCEPTION 'eleven-argument unit rollout behavior invalid';
+  END IF;
+
   v_result := public.create_tenant_catalog_category(
     '93000000-0000-0000-0000-000000000011',
     NULL, 'TENANT_A_ROOT', 'Tenant A root', 'active', 10, NULL,
@@ -412,6 +482,21 @@ BEGIN
   THEN
     RAISE EXCEPTION 'tenant pagination or isolation failed: %', v_result;
   END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_result -> 'list') AS item
+    WHERE (
+      SELECT array_agg(field_name ORDER BY field_name)
+      FROM jsonb_object_keys(item) AS field_name
+    ) IS DISTINCT FROM ARRAY[
+      'approved_catalog_unit_id', 'created_at', 'id', 'reason',
+      'review_remark', 'reviewed_at', 'status', 'suggested_code',
+      'suggested_name', 'suggested_symbol', 'tenant_id', 'unit_dimension',
+      'updated_at', 'version'
+    ]::text[]
+  ) THEN
+    RAISE EXCEPTION 'suggestion DTO exposed unexpected fields: %', v_result;
+  END IF;
 
   v_result := public.list_catalog_unit_suggestions(
     '91000000-0000-0000-0000-000000000001',
@@ -420,6 +505,21 @@ BEGIN
   );
   IF v_result #>> '{pagination,total}' <> '3' THEN
     RAISE EXCEPTION 'platform queue total failed: %', v_result;
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements(v_result -> 'list') AS item
+    WHERE (
+      SELECT array_agg(field_name ORDER BY field_name)
+      FROM jsonb_object_keys(item) AS field_name
+    ) IS DISTINCT FROM ARRAY[
+      'approved_catalog_unit_id', 'created_at', 'id', 'reason',
+      'review_remark', 'reviewed_at', 'status', 'suggested_code',
+      'suggested_name', 'suggested_symbol', 'tenant_id', 'unit_dimension',
+      'updated_at', 'version'
+    ]::text[]
+  ) THEN
+    RAISE EXCEPTION 'suggestion DTO exposed unexpected fields: %', v_result;
   END IF;
 
   UPDATE public.tenant_supplier_settings
@@ -638,7 +738,7 @@ BEGIN
     )
     AND procedure.proacl IS NOT NULL;
 
-  IF v_command_count <> 11 THEN
+  IF v_command_count <> 12 THEN
     RAISE EXCEPTION 'pg_proc/proacl/proowner canonical count=%', v_command_count;
   END IF;
 
@@ -677,6 +777,7 @@ BEGIN
         'list_catalog_unit_suggestions', 'review_catalog_unit_suggestion'
       ]::text[])
       AND procedure.oid <> ALL (ARRAY[
+        'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,integer,uuid,uuid,text)'::regprocedure,
         'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,text,integer,uuid,uuid,text)'::regprocedure,
         'public.create_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,uuid,uuid,uuid,text)'::regprocedure,
         'public.update_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,integer,uuid,uuid,uuid,text)'::regprocedure,

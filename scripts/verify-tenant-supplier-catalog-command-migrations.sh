@@ -116,7 +116,7 @@ run_database() {
     exit 1
   fi
 
-  echo "command_behavior_ok database=${database} migration_replay=canonical canonical_signatures=11 acl=pg_proc,proacl,proowner idempotency=replay,conflict version_conflict=no_write actor_filter=platform_and_tenant unit_factor=canonical_decimal pagination=max100 review=no_unit_insert rollback_residue=0"
+  echo "command_behavior_ok database=${database} migration_replay=rollout_v2 command_signatures=12 compatibility_unit=service_role_replay,derived_dimension acl=pg_proc,proacl,proowner idempotency=replay,conflict version_conflict=no_write actor_filter=platform_and_tenant unit_factor=canonical_decimal pagination=max100 review=no_unit_insert rollback_residue=0"
 }
 
 for database in "${databases[@]}"; do
