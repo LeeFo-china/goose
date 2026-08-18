@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
+import { deriveSupplierCatalogCommandId } from "./supplier-catalog-command-id";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -135,16 +136,16 @@ describe("supplier create command services", () => {
     expect(regions.list).not.toHaveBeenCalled();
   });
 
-  test("builds three catalog command contexts and keeps precise unit text", async () => {
-    const ids = [FIRST_ID, FIRST_ID, FIRST_ID];
+  test("builds deterministic catalog command contexts and keeps precise unit text", async () => {
     const repository = catalogRepository();
     const { SupplierCatalogService } = await import("./supplier-catalog");
     const service = new SupplierCatalogService({
       repository,
       accessPolicy: accessPolicy(),
-      idFactory: () => ids.shift() ?? FIRST_ID,
     } as never);
     const context = platformAuth("platform.catalog.manage");
+    const commandId = (namespace: string, key: string) =>
+      deriveSupplierCatalogCommandId(namespace, USER_ID, key);
 
     await service.createCategory(context, {
       parent_id: null,
@@ -173,17 +174,26 @@ describe("supplier create command services", () => {
 
     expect(repository.createCategory).toHaveBeenCalledWith(
       expect.objectContaining(commandContext("category-create-1", {
-        category_id: FIRST_ID,
+        category_id: commandId(
+          "platform.catalog.category.create",
+          "category-create-1",
+        ),
       })),
     );
     expect(repository.createBrand).toHaveBeenCalledWith(
       expect.objectContaining(commandContext("brand-create-1", {
-        brand_id: FIRST_ID,
+        brand_id: commandId(
+          "platform.catalog.brand.create",
+          "brand-create-1",
+        ),
       })),
     );
     expect(repository.createUnit).toHaveBeenCalledWith(
       expect.objectContaining(commandContext("unit-create-1", {
-        unit_id: FIRST_ID,
+        unit_id: commandId(
+          "platform.catalog.unit.create",
+          "unit-create-1",
+        ),
         conversion_factor: "999999999999.123456",
         unit_dimension: "quantity",
       })),
