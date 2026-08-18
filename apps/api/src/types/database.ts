@@ -11727,7 +11727,7 @@ export type Database = {
           maximum_quantity: number | null
           minimum_quantity: number
           operation_source: string
-          proxy_reason: string
+          proxy_reason: string | null
           purchase_unit_id: string
           supplier_id: string
           supplier_price_list_id: string
@@ -11751,7 +11751,7 @@ export type Database = {
           maximum_quantity?: number | null
           minimum_quantity?: number
           operation_source?: string
-          proxy_reason: string
+          proxy_reason?: string | null
           purchase_unit_id: string
           supplier_id: string
           supplier_price_list_id: string
@@ -11775,7 +11775,7 @@ export type Database = {
           maximum_quantity?: number | null
           minimum_quantity?: number
           operation_source?: string
-          proxy_reason?: string
+          proxy_reason?: string | null
           purchase_unit_id?: string
           supplier_id?: string
           supplier_price_list_id?: string
@@ -11910,7 +11910,7 @@ export type Database = {
           name: string
           operation_source: string
           price_list_code: string
-          proxy_reason: string
+          proxy_reason: string | null
           published_at: string | null
           row_version: number
           scope_type: string
@@ -11935,7 +11935,7 @@ export type Database = {
           name: string
           operation_source?: string
           price_list_code: string
-          proxy_reason: string
+          proxy_reason?: string | null
           published_at?: string | null
           row_version?: number
           scope_type?: string
@@ -11960,7 +11960,7 @@ export type Database = {
           name?: string
           operation_source?: string
           price_list_code?: string
-          proxy_reason?: string
+          proxy_reason?: string | null
           published_at?: string | null
           row_version?: number
           scope_type?: string
@@ -21537,6 +21537,16 @@ export type Database = {
         }
         Returns: string
       }
+      assert_supplier_price_v2_context: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: undefined
+      }
       assert_supplier_product_v2_context: {
         Args: {
           p_actor_employee_id: string
@@ -23532,6 +23542,38 @@ export type Database = {
           p_payment_request_id: string
           p_reason: string
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      command_supplier_price_item_v2: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_item_id: string
+          p_payload: Json
+          p_price_list_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
+      command_supplier_price_list_v2: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_new_price_list_id: string
+          p_payload: Json
+          p_price_list_id: string
+          p_supplier_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
         }
         Returns: Json
       }

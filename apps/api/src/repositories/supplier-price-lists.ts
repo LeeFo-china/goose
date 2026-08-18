@@ -34,7 +34,8 @@ const PRICE_ITEM_SELECT = [
   "unit_price::text",
   "tax_rate::text",
   "tax_inclusive",
-  "sku:supplier_skus!supplier_sku_id(id,sku_code,name,status)",
+  "price_list:supplier_price_lists!supplier_price_items_list_tenant_supplier_fkey!inner(id)",
+  "sku:supplier_skus!supplier_price_items_sku_supplier_fkey(id,sku_code,name,status)",
   "purchase_unit:catalog_units!purchase_unit_id(id,code,name,symbol,status)",
   "base_unit:catalog_units!base_unit_id(id,code,name,symbol,status)",
   "updated_at",
@@ -76,6 +77,7 @@ const PriceItemSchema = z.object({
   unit_price: z.string(),
   tax_rate: z.string(),
   tax_inclusive: z.boolean(),
+  price_list: z.object({ id: z.uuid() }).strict(),
   sku: z.object({
     id: z.uuid(),
     sku_code: z.string(),
@@ -85,7 +87,7 @@ const PriceItemSchema = z.object({
   purchase_unit: ResourceReferenceSchema,
   base_unit: ResourceReferenceSchema,
   updated_at: z.string(),
-}).strict();
+}).strict().transform(({ price_list: _priceList, ...item }) => item);
 const PriceCommandResultSchema = z.object({
   status: z.string(),
   idempotent: z.boolean().optional(),
@@ -117,28 +119,35 @@ type PageInput = { page: number; pageSize: number };
 export type SupplierPriceListInput = PageInput & {
   supplier_id: string;
   tenant_id: string;
+  tenant_supplier_id: string;
   keyword?: string;
   lifecycle_status?: string;
 };
 export type SupplierPriceItemInput = PageInput & {
   supplier_id: string;
   tenant_id: string;
+  tenant_supplier_id: string;
+  price_list_id: string;
+};
+export type SupplierPriceListScopeInput = {
+  supplier_id: string;
+  tenant_id: string;
+  tenant_supplier_id: string;
   price_list_id: string;
 };
 export type PriceCommandContext = {
   supplier_id: string;
   tenant_id: string;
+  tenant_supplier_id: string;
   actor_user_id: string;
   actor_employee_id: string;
   idempotency_key: string;
-  proxy_reason: string;
 };
 
 type Result = { data: unknown; error: unknown; count: number | null };
 type SingleResult = { data: unknown; error: unknown };
 type Query = {
   select: (...args: unknown[]) => Query;
-  update: (value: Record<string, unknown>) => Query;
   eq: (column: string, value: unknown) => Query;
   or: (value: string) => Query;
   order: (column: string, options: { ascending: boolean }) => Query;
@@ -168,8 +177,9 @@ export class SupplierPriceListsRepository {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_price_lists")
       .select(PRICE_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
-      .eq("tenant_id", input.tenant_id);
+      .eq("tenant_id", input.tenant_id)
+      .eq("tenant_supplier_id", input.tenant_supplier_id)
+      .eq("supplier_id", input.supplier_id);
     if (input.lifecycle_status) {
       request = request.eq("lifecycle_status", input.lifecycle_status);
     }
@@ -186,12 +196,13 @@ export class SupplierPriceListsRepository {
     );
   }
 
-  async findPriceList(supplierId: string, priceListId: string, tenantId: string) {
+  async findPriceList(input: SupplierPriceListScopeInput) {
     const { data, error } = await this.client.from("supplier_price_lists")
       .select(PRICE_LIST_SELECT)
-      .eq("supplier_id", supplierId)
-      .eq("tenant_id", tenantId)
-      .eq("id", priceListId)
+      .eq("tenant_id", input.tenant_id)
+      .eq("tenant_supplier_id", input.tenant_supplier_id)
+      .eq("supplier_id", input.supplier_id)
+      .eq("id", input.price_list_id)
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商价格簿失败", error);
     return data === null
@@ -204,8 +215,9 @@ export class SupplierPriceListsRepository {
     const { data, error, count } = await this.client
       .from("supplier_price_list_items")
       .select(PRICE_ITEM_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
       .eq("tenant_id", input.tenant_id)
+      .eq("price_list.tenant_supplier_id", input.tenant_supplier_id)
+      .eq("supplier_id", input.supplier_id)
       .eq("supplier_price_list_id", input.price_list_id)
       .order("supplier_sku_id", { ascending: true })
       .order("id", { ascending: true })
@@ -219,35 +231,25 @@ export class SupplierPriceListsRepository {
   }
 
   create(input: PriceCommandContext & Record<string, unknown>) {
-    return this.command(
-      "create_supplier_price_list",
-      rpcParams(input),
-      "创建供应商价格簿失败",
-    );
+    return this.priceListCommand("create", input, null, commandPayload(input));
   }
 
   publish(input: PriceCommandContext & Record<string, unknown>) {
-    return this.command(
-      "publish_supplier_price_list",
-      rpcParams(input),
-      "发布供应商价格簿失败",
-    );
+    return this.priceListCommand("publish", input, input.expected_version, {});
   }
 
   createVersion(input: PriceCommandContext & Record<string, unknown>) {
-    return this.command(
-      "create_supplier_price_list_version",
-      rpcParams(input),
-      "创建供应商价格簿新版本失败",
+    return this.priceListCommand(
+      "new_version",
+      { ...input, price_list_id: input.source_price_list_id },
+      input.expected_version,
+      {},
+      input.new_price_list_id,
     );
   }
 
   retire(input: PriceCommandContext & Record<string, unknown>) {
-    return this.command(
-      "retire_supplier_price_list",
-      rpcParams(input),
-      "退役供应商价格簿失败",
-    );
+    return this.priceListCommand("retire", input, input.expected_version, {});
   }
 
   upsertItem(input: PriceCommandContext & {
@@ -259,11 +261,12 @@ export class SupplierPriceListsRepository {
     tax_inclusive: boolean;
     expected_version: number;
   }) {
-    return this.command(
-      "upsert_supplier_price_list_item",
-      rpcParams(input),
-      "保存供应商价格条目失败",
-    );
+    return this.priceItemCommand("upsert", input, {
+      sku_id: input.sku_id,
+      unit_price: input.unit_price,
+      tax_rate: input.tax_rate,
+      tax_inclusive: input.tax_inclusive,
+    });
   }
 
   deleteItem(input: PriceCommandContext & {
@@ -271,46 +274,48 @@ export class SupplierPriceListsRepository {
     price_list_id: string;
     expected_version: number;
   }) {
-    return this.command(
-      "delete_supplier_price_list_item",
-      rpcParams(input),
-      "删除供应商价格条目失败",
+    return this.priceItemCommand("delete", input, {});
+  }
+
+  updateDraft(input: PriceCommandContext & Record<string, unknown>) {
+    return this.priceListCommand(
+      "update",
+      input,
+      input.expected_version,
+      commandPayload(input),
     );
   }
 
-  async updateDraft(input: Record<string, unknown> & {
-    supplier_id: string;
-    tenant_id: string;
-    price_list_id: string;
-    expected_version: number;
-  }) {
-    const {
-      supplier_id,
-      tenant_id,
-      price_list_id,
-      expected_version,
-      ...fields
-    } = input;
-    const { data, error } = await this.client.from("supplier_price_lists")
-      .update({ ...fields, row_version: expected_version + 1 })
-      .eq("supplier_id", supplier_id)
-      .eq("tenant_id", tenant_id)
-      .eq("id", price_list_id)
-      .eq("lifecycle_status", "draft")
-      .eq("row_version", expected_version)
-      .select(PRICE_LIST_SELECT)
-      .maybeSingle();
-    if (error) {
-      throwSupplierCommandDatabaseError(error, "更新供应商价格簿失败");
-    }
-    if (data === null) {
-      throw Errors.business(
-        409,
-        "供应商价格簿版本已变化",
-        "SUPPLIER_PRICE_LIST_VERSION_CONFLICT",
-      );
-    }
-    return parse(PriceListSchema, data, "更新供应商价格簿失败");
+  private priceListCommand(
+    action: string,
+    input: PriceCommandContext & Record<string, unknown>,
+    expectedVersion: unknown,
+    payload: Record<string, unknown>,
+    newPriceListId: unknown = null,
+  ) {
+    return this.command("command_supplier_price_list_v2", {
+      ...commandContextParams(input),
+      p_action: action,
+      p_price_list_id: input.price_list_id,
+      p_new_price_list_id: newPriceListId,
+      p_expected_version: expectedVersion,
+      p_payload: payload,
+    }, "写入供应商价格簿失败");
+  }
+
+  private priceItemCommand(
+    action: string,
+    input: PriceCommandContext & Record<string, unknown>,
+    payload: Record<string, unknown>,
+  ) {
+    return this.command("command_supplier_price_item_v2", {
+      ...commandContextParams(input),
+      p_action: action,
+      p_item_id: input.item_id,
+      p_price_list_id: input.price_list_id,
+      p_expected_version: input.expected_version,
+      p_payload: payload,
+    }, "写入供应商价格条目失败");
   }
 
   private async command(
@@ -324,12 +329,33 @@ export class SupplierPriceListsRepository {
   }
 }
 
-function rpcParams(input: Record<string, unknown>) {
+function commandContextParams(input: PriceCommandContext) {
+  return {
+    p_tenant_id: input.tenant_id,
+    p_tenant_supplier_id: input.tenant_supplier_id,
+    p_supplier_id: input.supplier_id,
+    p_actor_user_id: input.actor_user_id,
+    p_actor_employee_id: input.actor_employee_id,
+    p_idempotency_key: input.idempotency_key,
+  };
+}
+
+const COMMAND_KEYS = new Set([
+  "tenant_id",
+  "tenant_supplier_id",
+  "supplier_id",
+  "actor_user_id",
+  "actor_employee_id",
+  "idempotency_key",
+  "price_list_id",
+  "source_price_list_id",
+  "new_price_list_id",
+  "expected_version",
+]);
+
+function commandPayload(input: Record<string, unknown>) {
   return Object.fromEntries(
-    Object.entries(input).map(([key, value]) => [
-      key.startsWith("p_") ? key : `p_${key}`,
-      value,
-    ]),
+    Object.entries(input).filter(([key]) => !COMMAND_KEYS.has(key)),
   );
 }
 

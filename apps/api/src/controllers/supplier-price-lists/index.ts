@@ -84,6 +84,7 @@ class SupplierPriceListsController extends TenantBaseController {
   @Patch("/supplier-price-lists/:id")
   async updatePriceList(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
     const { id } = this.parse(SupplierPriceListParamSchema, request.params);
     const { tenantSupplierId } = this.parse(
       SupplierPriceScopeQuerySchema,
@@ -96,6 +97,7 @@ class SupplierPriceListsController extends TenantBaseController {
         tenantSupplierId,
         id,
         input,
+        key,
       ),
     );
   }
