@@ -23,7 +23,6 @@ export * from './project';
 export * from './referral';
 export * from './site-content';
 export * from './supplier';
-export * from './supplier-catalog';
 export * from './supplier-ownership';
 export * from './supplier-payment';
 export * from './supplier-product';

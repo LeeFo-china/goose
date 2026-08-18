@@ -40,21 +40,6 @@ describe("supplier product schemas", () => {
     expect(result.success).toBe(false);
   });
 
-  test("allows tenant product writes without a proxy reason", () => {
-    expect(SupplierProductCreateSchema.safeParse({
-      product_code: "P-1",
-      name: "瓷砖",
-      category_id: categoryId,
-      brand_id: brandId,
-    }).success).toBe(true);
-
-    expect(SupplierSkuCreateSchema.safeParse({
-      sku_code: "SKU-1",
-      name: "瓷砖 800×800",
-      purchase_unit_id: unitId,
-    }).success).toBe(true);
-  });
-
   test("accepts a bounded product update and rejects empty updates", () => {
     expect(SupplierProductUpdateSchema.parse({
       expected_version: 2,

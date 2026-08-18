@@ -34,7 +34,6 @@ import {
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import {
-  canMutateProduct,
   nextProductAction,
   nextSkuAction,
 } from "./supplier-product-rules";
@@ -44,7 +43,6 @@ import type {
   SupplierProductPage,
   SupplierSku,
 } from "./supplier-product-types";
-import { supplierProductSourceLabel } from "./supplier-product-types";
 
 type MutationTarget = ({
   id: string;
@@ -129,20 +127,6 @@ export function SupplierProductList({
       ),
     },
     {
-      id: "source",
-      header: "来源",
-      cell: ({ row }) => {
-        const source = row.original.ownership_scope === "platform"
-          ? "platform"
-          : "tenant";
-        return (
-          <Badge variant={source === "platform" ? "secondary" : "success"}>
-            {supplierProductSourceLabel(source)}
-          </Badge>
-        );
-      },
-    },
-    {
       accessorKey: "status",
       header: "状态",
       cell: ({ row }) => <StatusBadge value={row.original.status} />,
@@ -168,7 +152,7 @@ export function SupplierProductList({
           >
             查看 SKU
           </Button>
-          {canMutateProduct(row.original, canManage) ? (
+          {canManage ? (
             <Button
               type="button"
               size="sm"
@@ -231,7 +215,6 @@ export function SupplierProductList({
                 <SupplierSkuDialog
                   tenantSupplierId={tenantSupplierId}
                   productId={selected.id}
-                  categoryId={selected.category.id}
                   disabled={skuLoading || selected.status === "inactive"}
                   onCreated={() => loadSkus(selected)}
                 />

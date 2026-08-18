@@ -124,6 +124,56 @@ describe("SupplierPriceListsService", () => {
       pageSize: 20,
     });
   });
+
+  test("passes the trusted tenant to price details, items, and draft updates", async () => {
+    const deps = dependencies();
+    const { SupplierPriceListsService } = await import(
+      "./supplier-price-lists"
+    );
+    const service = new SupplierPriceListsService(deps as never);
+
+    await service.getPriceList(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRICE_LIST_ID,
+    );
+    await service.listItems(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRICE_LIST_ID,
+      { page: 1, pageSize: 20 },
+    );
+    await service.updateDraft(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRICE_LIST_ID,
+      {
+        expected_version: 1,
+        name: "租户报价",
+        proxy_reason: "供应商确认更新",
+      },
+    );
+
+    expect(deps.repository.findPriceList).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      PRICE_LIST_ID,
+      TENANT_ID,
+    );
+    expect(deps.repository.listItems).toHaveBeenCalledWith({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      price_list_id: PRICE_LIST_ID,
+      page: 1,
+      pageSize: 20,
+    });
+    expect(deps.repository.updateDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supplier_id: SUPPLIER_ID,
+        tenant_id: TENANT_ID,
+        price_list_id: PRICE_LIST_ID,
+      }),
+    );
+  });
 });
 
 const scope = {
