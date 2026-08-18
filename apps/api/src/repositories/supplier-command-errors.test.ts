@@ -10,6 +10,9 @@ import {
 describe("mapSupplierCommandDatabaseError", () => {
   test.each([
     ["SUPPLIER_IDEMPOTENCY_CONFLICT", 409],
+    ["PRODUCT_OWNERSHIP_CONFLICT", 409],
+    ["SPEC_TEMPLATE_VALIDATION_ERROR", 409],
+    ["UNIT_CONVERSION_INVALID", 400],
     ["SUPPLIER_PRODUCT_NOT_FOUND", 404],
     ["SUPPLIER_PROXY_ACTOR_INVALID", 403],
     ["SUPPLIER_ORDER_NOT_ELIGIBLE", 409],
@@ -21,6 +24,11 @@ describe("mapSupplierCommandDatabaseError", () => {
       message: code,
       details: null,
     })).toMatchObject({ code, statusCode });
+  });
+
+  test("normalizes immutable product ownership to the public conflict code", () => {
+    expect(mapSupplierCommandDatabaseError("SUPPLIER_OWNERSHIP_IMMUTABLE"))
+      .toMatchObject({ code: "PRODUCT_OWNERSHIP_CONFLICT", statusCode: 409 });
   });
 
   test.each([

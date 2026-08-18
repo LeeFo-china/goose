@@ -45,6 +45,10 @@ const BUSINESS_ERRORS = {
     statusCode: 404,
     message: "供应商商品不存在",
   },
+  PRODUCT_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "供应商商品归属与当前操作不匹配",
+  },
   SUPPLIER_SKU_NOT_FOUND: {
     statusCode: 404,
     message: "供应商 SKU 不存在",
@@ -273,6 +277,7 @@ const BUSINESS_ERRORS = {
 
 type SupplierBusinessCode = keyof typeof BUSINESS_ERRORS;
 const TOKEN_ALIASES = {
+  SUPPLIER_OWNERSHIP_IMMUTABLE: "PRODUCT_OWNERSHIP_CONFLICT",
   FULFILLMENT_NOT_CONFIRMED:
     "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
   FULFILLMENT_VERSION_CONFLICT:
