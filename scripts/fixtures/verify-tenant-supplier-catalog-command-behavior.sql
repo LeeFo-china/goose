@@ -1,4 +1,214 @@
 -- All fixtures and assertions run inside the verifier's outer transaction.
+SET LOCAL ROLE service_role;
+
+DO $legacy_platform_create_rollout$
+DECLARE
+  v_result jsonb;
+  v_unit_keys constant text[] := ARRAY[
+    'base_unit_id', 'code', 'conversion_factor', 'created_at',
+    'created_by_employee_id', 'id', 'name', 'sort_order', 'status', 'symbol',
+    'updated_at', 'updated_by_employee_id', 'version'
+  ]::text[];
+  v_category_keys constant text[] := ARRAY[
+    'code', 'created_at', 'created_by_employee_id', 'id', 'level', 'name',
+    'parent_id', 'sort_order', 'status', 'updated_at',
+    'updated_by_employee_id', 'version'
+  ]::text[];
+  v_brand_keys constant text[] := ARRAY[
+    'code', 'created_at', 'created_by_employee_id', 'id', 'legal_name',
+    'logo_file_id', 'name', 'sort_order', 'status', 'updated_at',
+    'updated_by_employee_id', 'version'
+  ]::text[];
+BEGIN
+  -- Replay events genuinely written by the pre-123 functions. The deployed
+  -- API regenerates ids, so all three replacement ids must be ignored.
+  v_result := public.create_catalog_unit(
+    '96200000-0000-0000-0000-000000000002',
+    'PRE123_UNIT', 'Pre-123 unit', 'p12u', NULL, '1.000000',
+    'active', 120,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-pre-123-unit-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{unit,id}' <>
+      '96200000-0000-0000-0000-000000000001'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'unit') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_unit_keys
+  THEN
+    RAISE EXCEPTION 'legacy unit DTO keys invalid: %', v_result;
+  END IF;
+  v_result := public.create_catalog_category(
+    '93200000-0000-0000-0000-000000000002', NULL,
+    'PRE123_CATEGORY', 'Pre-123 category', 1, 'active', 120,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-pre-123-category-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{category,id}' <>
+      '93200000-0000-0000-0000-000000000001'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'category') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_category_keys
+  THEN
+    RAISE EXCEPTION 'legacy category DTO keys invalid: %', v_result;
+  END IF;
+  v_result := public.create_catalog_brand(
+    '94200000-0000-0000-0000-000000000002',
+    'PRE123_BRAND', 'Pre-123 brand', 'Pre-123 brand legal name', NULL,
+    'active', 120,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-pre-123-brand-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{brand,id}' <>
+      '94200000-0000-0000-0000-000000000001'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'brand') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_brand_keys
+  THEN
+    RAISE EXCEPTION 'legacy brand DTO keys invalid: %', v_result;
+  END IF;
+  -- New calls and their regenerated-id replays must expose the same DTOs.
+  v_result := public.create_catalog_unit(
+    '96200000-0000-0000-0000-000000000011',
+    'ROLLOUT_UNIT', 'Rollout unit', 'rou', NULL, '1', 'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-unit-create'
+  );
+  IF v_result ->> 'idempotent' <> 'false'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'unit') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_unit_keys
+  THEN
+    RAISE EXCEPTION 'legacy unit DTO keys invalid: %', v_result;
+  END IF;
+  v_result := public.create_catalog_unit(
+    '96200000-0000-0000-0000-000000000012',
+    'ROLLOUT_UNIT', 'Rollout unit', 'rou', NULL, '1', 'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-unit-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{unit,id}' <>
+      '96200000-0000-0000-0000-000000000011'
+  THEN
+    RAISE EXCEPTION 'legacy unit regenerated-id replay invalid: %', v_result;
+  END IF;
+
+  v_result := public.create_catalog_category(
+    '93200000-0000-0000-0000-000000000011', NULL,
+    'ROLLOUT_CATEGORY', 'Rollout category', 1, 'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-category-create'
+  );
+  IF v_result ->> 'idempotent' <> 'false'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'category') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_category_keys
+  THEN
+    RAISE EXCEPTION 'legacy category DTO keys invalid: %', v_result;
+  END IF;
+  v_result := public.create_catalog_category(
+    '93200000-0000-0000-0000-000000000012', NULL,
+    'ROLLOUT_CATEGORY', 'Rollout category', 1, 'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-category-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{category,id}' <>
+      '93200000-0000-0000-0000-000000000011'
+  THEN
+    RAISE EXCEPTION 'legacy category replay created another row or event';
+  END IF;
+
+  v_result := public.create_catalog_brand(
+    '94200000-0000-0000-0000-000000000011',
+    'ROLLOUT_BRAND', 'Rollout brand', 'Rollout brand legal name', NULL,
+    'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-brand-create'
+  );
+  IF v_result ->> 'idempotent' <> 'false'
+    OR ARRAY(
+      SELECT key_name
+      FROM jsonb_object_keys(v_result -> 'brand') AS keys(key_name)
+      ORDER BY key_name
+    ) IS DISTINCT FROM v_brand_keys
+  THEN
+    RAISE EXCEPTION 'legacy brand DTO keys invalid: %', v_result;
+  END IF;
+  v_result := public.create_catalog_brand(
+    '94200000-0000-0000-0000-000000000012',
+    'ROLLOUT_BRAND', 'Rollout brand', 'Rollout brand legal name', NULL,
+    'active', 121,
+    '91200000-0000-0000-0000-000000000001',
+    '92200000-0000-0000-0000-000000000001',
+    'verify-rollout-brand-create'
+  );
+  IF v_result ->> 'idempotent' <> 'true'
+    OR v_result #>> '{brand,id}' <>
+      '94200000-0000-0000-0000-000000000011'
+  THEN
+    RAISE EXCEPTION 'legacy brand replay created another row or event';
+  END IF;
+
+END
+$legacy_platform_create_rollout$;
+
+RESET ROLE;
+
+DO $legacy_platform_create_counts$
+BEGIN
+  IF (SELECT count(*) FROM public.catalog_units
+      WHERE code IN ('PRE123_UNIT', 'ROLLOUT_UNIT')) <> 2
+    OR (SELECT count(*) FROM public.supplier_command_events
+        WHERE idempotency_key IN (
+          'verify-pre-123-unit-create', 'verify-rollout-unit-create'
+        )) <> 2
+  THEN
+    RAISE EXCEPTION 'legacy unit replay created another row or event';
+  END IF;
+  IF (SELECT count(*) FROM public.catalog_categories
+      WHERE code IN ('PRE123_CATEGORY', 'ROLLOUT_CATEGORY')) <> 2
+    OR (SELECT count(*) FROM public.supplier_command_events
+        WHERE idempotency_key IN (
+          'verify-pre-123-category-create',
+          'verify-rollout-category-create'
+        )) <> 2
+  THEN
+    RAISE EXCEPTION 'legacy category replay created another row or event';
+  END IF;
+  IF (SELECT count(*) FROM public.catalog_brands
+      WHERE code IN ('PRE123_BRAND', 'ROLLOUT_BRAND')) <> 2
+    OR (SELECT count(*) FROM public.supplier_command_events
+        WHERE idempotency_key IN (
+          'verify-pre-123-brand-create', 'verify-rollout-brand-create'
+        )) <> 2
+  THEN
+    RAISE EXCEPTION 'legacy brand replay created another row or event';
+  END IF;
+END
+$legacy_platform_create_counts$;
+
 SELECT set_config(
   'supplier_catalog_command_verifier.tenant_a',
   (SELECT id::text FROM public.tenants ORDER BY id LIMIT 1),
@@ -503,8 +713,16 @@ BEGIN
     SELECT 1
     FROM public.supplier_command_events AS event
     WHERE event.idempotency_key = 'verify-platform-unit-compat-derived'
-      AND event.from_state #>> '{_request,unit_dimension}' = 'mass'
       AND event.from_state #>> '{_request,conversion_factor}' = '0.001'
+      AND ARRAY(
+        SELECT key_name
+        FROM jsonb_object_keys(event.from_state -> '_request')
+          AS keys(key_name)
+        ORDER BY key_name
+      ) = ARRAY[
+        'actor_employee_id', 'base_unit_id', 'code', 'conversion_factor',
+        'name', 'sort_order', 'status', 'symbol'
+      ]::text[]
   ) THEN
     RAISE EXCEPTION 'eleven-argument unit rollout behavior invalid';
   END IF;
@@ -861,6 +1079,7 @@ BEGIN
   JOIN pg_roles AS owner_role ON owner_role.oid = procedure.proowner
   WHERE namespace.nspname = 'public'
     AND procedure.proname = ANY (ARRAY[
+      'create_catalog_category', 'create_catalog_brand',
       'create_catalog_unit', 'create_tenant_catalog_category',
       'update_tenant_catalog_category', 'create_tenant_catalog_brand',
       'update_tenant_catalog_brand', 'create_catalog_spec_definition',
@@ -875,7 +1094,7 @@ BEGIN
     )
     AND procedure.proacl IS NOT NULL;
 
-  IF v_command_count <> 12 THEN
+  IF v_command_count <> 14 THEN
     RAISE EXCEPTION 'pg_proc/proacl/proowner canonical count=%', v_command_count;
   END IF;
 
@@ -905,7 +1124,8 @@ BEGIN
     JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'public'
       AND procedure.proname = ANY (ARRAY[
-        'submit_catalog_unit_suggestion', 'create_catalog_unit',
+        'submit_catalog_unit_suggestion', 'create_catalog_category',
+        'create_catalog_brand', 'create_catalog_unit',
         'create_tenant_catalog_category', 'update_tenant_catalog_category',
         'create_tenant_catalog_brand', 'update_tenant_catalog_brand',
         'create_catalog_spec_definition', 'update_catalog_spec_definition',
@@ -914,6 +1134,8 @@ BEGIN
         'list_catalog_unit_suggestions', 'review_catalog_unit_suggestion'
       ]::text[])
       AND procedure.oid <> ALL (ARRAY[
+        'public.create_catalog_category(uuid,uuid,text,text,integer,text,integer,uuid,uuid,text)'::regprocedure,
+        'public.create_catalog_brand(uuid,text,text,text,uuid,text,integer,uuid,uuid,text)'::regprocedure,
         'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,integer,uuid,uuid,text)'::regprocedure,
         'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,text,integer,uuid,uuid,text)'::regprocedure,
         'public.create_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,uuid,uuid,uuid,text)'::regprocedure,
@@ -937,6 +1159,7 @@ BEGIN
     JOIN pg_namespace AS namespace ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'public'
       AND procedure.proname = ANY (ARRAY[
+        'create_catalog_category', 'create_catalog_brand',
         'create_catalog_unit', 'create_tenant_catalog_category',
         'update_tenant_catalog_category', 'create_tenant_catalog_brand',
         'update_tenant_catalog_brand', 'create_catalog_spec_definition',

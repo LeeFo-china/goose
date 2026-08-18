@@ -654,6 +654,7 @@ DECLARE
   v_unit_dimension text;
   v_request jsonb;
   v_snapshot jsonb;
+  v_legacy_unit jsonb;
 BEGIN
   IF p_unit_id IS NULL
     OR p_actor_user_id IS NULL
@@ -708,6 +709,19 @@ BEGIN
     '.'
   );
 
+  -- Preserve the pre-v2 request identity. The API-generated unit id is not
+  -- part of the idempotency identity for this rollout-only overload.
+  v_request := jsonb_build_object(
+    'code', p_code,
+    'name', p_name,
+    'symbol', p_symbol,
+    'base_unit_id', p_base_unit_id,
+    'conversion_factor', p_conversion_factor,
+    'status', p_status,
+    'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(
       'supplier-command:' || p_actor_user_id::text || ':' ||
@@ -715,6 +729,52 @@ BEGIN
       0
     )
   );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_unit'
+      OR v_event.command <> 'create_catalog_unit'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    v_legacy_unit := jsonb_build_object(
+      'id', v_event.to_state -> 'id',
+      'code', v_event.to_state -> 'code',
+      'name', v_event.to_state -> 'name',
+      'symbol', v_event.to_state -> 'symbol',
+      'base_unit_id', v_event.to_state -> 'base_unit_id',
+      'conversion_factor', v_event.to_state -> 'conversion_factor',
+      'status', v_event.to_state -> 'status',
+      'sort_order', v_event.to_state -> 'sort_order',
+      'version', v_event.to_state -> 'version',
+      'created_by_employee_id',
+        v_event.to_state -> 'created_by_employee_id',
+      'updated_by_employee_id',
+        v_event.to_state -> 'updated_by_employee_id',
+      'created_at', v_event.to_state -> 'created_at',
+      'updated_at', v_event.to_state -> 'updated_at'
+    );
+
+    RETURN jsonb_build_object(
+      'status', 'created',
+      'idempotent', true,
+      'unit', v_legacy_unit,
+      'version', v_event.result_version
+    );
+  END IF;
+
+  -- Match the catalog_units hierarchy trigger before locking a base row.
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142001::bigint);
 
   IF p_base_unit_id IS NULL THEN
     v_unit_dimension := 'legacy_unclassified';
@@ -731,45 +791,6 @@ BEGIN
         ERRCODE = 'P0001',
         MESSAGE = 'SUPPLIER_CATALOG_CONFLICT';
     END IF;
-  END IF;
-
-  v_request := jsonb_build_object(
-    'unit_id', p_unit_id,
-    'tenant_id', NULL,
-    'code', btrim(p_code),
-    'name', btrim(p_name),
-    'symbol', btrim(p_symbol),
-    'base_unit_id', p_base_unit_id,
-    'conversion_factor', v_conversion_factor_text,
-    'unit_dimension', v_unit_dimension,
-    'status', p_status,
-    'sort_order', p_sort_order,
-    'actor_employee_id', p_actor_employee_id
-  );
-
-  SELECT event.*
-  INTO v_event
-  FROM public.supplier_command_events AS event
-  WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = p_idempotency_key
-  FOR UPDATE;
-
-  IF FOUND THEN
-    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
-      OR v_event.resource_type <> 'catalog_unit'
-      OR v_event.command <> 'create_catalog_unit'
-      OR v_event.resource_id IS DISTINCT FROM p_unit_id
-    THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
-    END IF;
-    RETURN jsonb_build_object(
-      'status', 'created',
-      'idempotent', true,
-      'unit', v_event.to_state,
-      'version', v_event.result_version
-    );
   END IF;
 
   BEGIN
@@ -818,6 +839,22 @@ BEGIN
     'conversion_factor', v_unit.conversion_factor::text
   );
 
+  v_legacy_unit := jsonb_build_object(
+    'id', v_snapshot -> 'id',
+    'code', v_snapshot -> 'code',
+    'name', v_snapshot -> 'name',
+    'symbol', v_snapshot -> 'symbol',
+    'base_unit_id', v_snapshot -> 'base_unit_id',
+    'conversion_factor', v_snapshot -> 'conversion_factor',
+    'status', v_snapshot -> 'status',
+    'sort_order', v_snapshot -> 'sort_order',
+    'version', v_snapshot -> 'version',
+    'created_by_employee_id', v_snapshot -> 'created_by_employee_id',
+    'updated_by_employee_id', v_snapshot -> 'updated_by_employee_id',
+    'created_at', v_snapshot -> 'created_at',
+    'updated_at', v_snapshot -> 'updated_at'
+  );
+
   INSERT INTO public.supplier_command_events (
     resource_type,
     resource_id,
@@ -844,8 +881,392 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'created',
     'idempotent', false,
-    'unit', v_snapshot,
+    'unit', v_legacy_unit,
     'version', v_unit.version
+  );
+END;
+$$;
+
+-- Rollout compatibility for the currently deployed platform catalog API.
+-- These signatures keep their pre-v2 request identity and response DTO while
+-- the append-only event retains the complete v2 row snapshot.
+CREATE OR REPLACE FUNCTION public.create_catalog_category(
+  p_category_id uuid,
+  p_parent_id uuid,
+  p_code text,
+  p_name text,
+  p_level integer,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_category public.catalog_categories%ROWTYPE;
+  v_request jsonb;
+  v_snapshot jsonb;
+  v_legacy_category jsonb;
+BEGIN
+  IF p_category_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+
+  PERFORM public.assert_platform_catalog_actor(
+    p_actor_user_id,
+    p_actor_employee_id
+  );
+
+  v_request := jsonb_build_object(
+    'parent_id', p_parent_id,
+    'code', p_code,
+    'name', p_name,
+    'level', p_level,
+    'status', p_status,
+    'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_category'
+      OR v_event.command <> 'create_catalog_category'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    v_legacy_category := jsonb_build_object(
+      'id', v_event.to_state -> 'id',
+      'parent_id', v_event.to_state -> 'parent_id',
+      'code', v_event.to_state -> 'code',
+      'name', v_event.to_state -> 'name',
+      'level', v_event.to_state -> 'level',
+      'status', v_event.to_state -> 'status',
+      'sort_order', v_event.to_state -> 'sort_order',
+      'version', v_event.to_state -> 'version',
+      'created_by_employee_id',
+        v_event.to_state -> 'created_by_employee_id',
+      'updated_by_employee_id',
+        v_event.to_state -> 'updated_by_employee_id',
+      'created_at', v_event.to_state -> 'created_at',
+      'updated_at', v_event.to_state -> 'updated_at'
+    );
+
+    RETURN jsonb_build_object(
+      'status', 'created',
+      'idempotent', true,
+      'category', v_legacy_category,
+      'version', v_event.result_version
+    );
+  END IF;
+
+  -- Match the catalog_categories hierarchy trigger before a parent row lock.
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint);
+
+  IF p_parent_id IS NOT NULL THEN
+    PERFORM parent.id
+    FROM public.catalog_categories AS parent
+    WHERE parent.id = p_parent_id
+      AND parent.owner_tenant_id IS NULL
+      AND parent.ownership_scope = 'platform'
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_CATALOG_CONFLICT'
+      );
+    END IF;
+  END IF;
+
+  BEGIN
+    INSERT INTO public.catalog_categories (
+      id,
+      parent_id,
+      code,
+      name,
+      level,
+      status,
+      sort_order,
+      version,
+      created_by_employee_id,
+      updated_by_employee_id
+    )
+    VALUES (
+      p_category_id,
+      p_parent_id,
+      p_code,
+      p_name,
+      p_level,
+      p_status,
+      p_sort_order,
+      1,
+      p_actor_employee_id,
+      p_actor_employee_id
+    )
+    RETURNING * INTO v_category;
+  EXCEPTION
+    WHEN unique_violation THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_CATALOG_CONFLICT'
+      );
+  END;
+
+  v_snapshot := to_jsonb(v_category);
+  v_legacy_category := jsonb_build_object(
+    'id', v_snapshot -> 'id',
+    'parent_id', v_snapshot -> 'parent_id',
+    'code', v_snapshot -> 'code',
+    'name', v_snapshot -> 'name',
+    'level', v_snapshot -> 'level',
+    'status', v_snapshot -> 'status',
+    'sort_order', v_snapshot -> 'sort_order',
+    'version', v_snapshot -> 'version',
+    'created_by_employee_id', v_snapshot -> 'created_by_employee_id',
+    'updated_by_employee_id', v_snapshot -> 'updated_by_employee_id',
+    'created_at', v_snapshot -> 'created_at',
+    'updated_at', v_snapshot -> 'updated_at'
+  );
+
+  INSERT INTO public.supplier_command_events (
+    resource_type,
+    resource_id,
+    command,
+    from_state,
+    to_state,
+    actor_user_id,
+    actor_employee_id,
+    idempotency_key,
+    result_version
+  )
+  VALUES (
+    'catalog_category',
+    v_category.id,
+    'create_catalog_category',
+    jsonb_build_object('_request', v_request),
+    v_snapshot,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    v_category.version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'created',
+    'idempotent', false,
+    'category', v_legacy_category,
+    'version', v_category.version
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.create_catalog_brand(
+  p_brand_id uuid,
+  p_code text,
+  p_name text,
+  p_legal_name text,
+  p_logo_file_id uuid,
+  p_status text,
+  p_sort_order integer,
+  p_actor_user_id uuid,
+  p_actor_employee_id uuid,
+  p_idempotency_key text
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_event public.supplier_command_events%ROWTYPE;
+  v_brand public.catalog_brands%ROWTYPE;
+  v_request jsonb;
+  v_snapshot jsonb;
+  v_legacy_brand jsonb;
+BEGIN
+  IF p_brand_id IS NULL OR p_actor_user_id IS NULL
+    OR p_actor_employee_id IS NULL OR p_idempotency_key IS NULL
+    OR btrim(p_idempotency_key) = ''
+    OR char_length(p_idempotency_key) > 120
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22023',
+      MESSAGE = 'SUPPLIER_STATE_CONFLICT';
+  END IF;
+
+  PERFORM public.assert_platform_catalog_actor(
+    p_actor_user_id,
+    p_actor_employee_id
+  );
+
+  v_request := jsonb_build_object(
+    'code', p_code,
+    'name', p_name,
+    'legal_name', p_legal_name,
+    'logo_file_id', p_logo_file_id,
+    'status', p_status,
+    'sort_order', p_sort_order,
+    'actor_employee_id', p_actor_employee_id
+  );
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'supplier-command:' || p_actor_user_id::text || ':' ||
+        p_idempotency_key,
+      0
+    )
+  );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = p_idempotency_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.from_state -> '_request' IS DISTINCT FROM v_request
+      OR v_event.resource_type <> 'catalog_brand'
+      OR v_event.command <> 'create_catalog_brand'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    v_legacy_brand := jsonb_build_object(
+      'id', v_event.to_state -> 'id',
+      'code', v_event.to_state -> 'code',
+      'name', v_event.to_state -> 'name',
+      'legal_name', v_event.to_state -> 'legal_name',
+      'logo_file_id', v_event.to_state -> 'logo_file_id',
+      'status', v_event.to_state -> 'status',
+      'sort_order', v_event.to_state -> 'sort_order',
+      'version', v_event.to_state -> 'version',
+      'created_by_employee_id',
+        v_event.to_state -> 'created_by_employee_id',
+      'updated_by_employee_id',
+        v_event.to_state -> 'updated_by_employee_id',
+      'created_at', v_event.to_state -> 'created_at',
+      'updated_at', v_event.to_state -> 'updated_at'
+    );
+
+    RETURN jsonb_build_object(
+      'status', 'created',
+      'idempotent', true,
+      'brand', v_legacy_brand,
+      'version', v_event.result_version
+    );
+  END IF;
+
+  BEGIN
+    INSERT INTO public.catalog_brands (
+      id,
+      code,
+      name,
+      legal_name,
+      logo_file_id,
+      status,
+      sort_order,
+      version,
+      created_by_employee_id,
+      updated_by_employee_id
+    )
+    VALUES (
+      p_brand_id,
+      p_code,
+      p_name,
+      p_legal_name,
+      p_logo_file_id,
+      p_status,
+      p_sort_order,
+      1,
+      p_actor_employee_id,
+      p_actor_employee_id
+    )
+    RETURNING * INTO v_brand;
+  EXCEPTION
+    WHEN unique_violation THEN
+      RETURN jsonb_build_object(
+        'status', 'state_conflict',
+        'error_code', 'SUPPLIER_CATALOG_CONFLICT'
+      );
+  END;
+
+  v_snapshot := to_jsonb(v_brand);
+  v_legacy_brand := jsonb_build_object(
+    'id', v_snapshot -> 'id',
+    'code', v_snapshot -> 'code',
+    'name', v_snapshot -> 'name',
+    'legal_name', v_snapshot -> 'legal_name',
+    'logo_file_id', v_snapshot -> 'logo_file_id',
+    'status', v_snapshot -> 'status',
+    'sort_order', v_snapshot -> 'sort_order',
+    'version', v_snapshot -> 'version',
+    'created_by_employee_id', v_snapshot -> 'created_by_employee_id',
+    'updated_by_employee_id', v_snapshot -> 'updated_by_employee_id',
+    'created_at', v_snapshot -> 'created_at',
+    'updated_at', v_snapshot -> 'updated_at'
+  );
+
+  INSERT INTO public.supplier_command_events (
+    resource_type,
+    resource_id,
+    command,
+    from_state,
+    to_state,
+    actor_user_id,
+    actor_employee_id,
+    idempotency_key,
+    result_version
+  )
+  VALUES (
+    'catalog_brand',
+    v_brand.id,
+    'create_catalog_brand',
+    jsonb_build_object('_request', v_request),
+    v_snapshot,
+    p_actor_user_id,
+    p_actor_employee_id,
+    p_idempotency_key,
+    v_brand.version
+  );
+
+  RETURN jsonb_build_object(
+    'status', 'created',
+    'idempotent', false,
+    'brand', v_legacy_brand,
+    'version', v_brand.version
   );
 END;
 $$;
@@ -3113,6 +3534,26 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.create_catalog_category(
+  uuid, uuid, text, text, integer, text, integer, uuid, uuid, text
+)
+FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION public.create_catalog_category(
+  uuid, uuid, text, text, integer, text, integer, uuid, uuid, text
+)
+TO service_role;
+
+REVOKE ALL ON FUNCTION public.create_catalog_brand(
+  uuid, text, text, text, uuid, text, integer, uuid, uuid, text
+)
+FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION public.create_catalog_brand(
+  uuid, text, text, text, uuid, text, integer, uuid, uuid, text
+)
+TO service_role;
+
 REVOKE ALL ON FUNCTION public.create_catalog_unit(
   uuid, text, text, text, uuid, text, text, integer, uuid, uuid, text
 )
@@ -3250,6 +3691,7 @@ BEGIN
     ON namespace.oid = procedure.pronamespace
   WHERE namespace.nspname = 'public'
     AND procedure.proname = ANY (ARRAY[
+      'create_catalog_category', 'create_catalog_brand',
       'create_catalog_unit', 'create_tenant_catalog_category',
       'update_tenant_catalog_category', 'create_tenant_catalog_brand',
       'update_tenant_catalog_brand', 'create_catalog_spec_definition',
@@ -3259,6 +3701,8 @@ BEGIN
       'list_catalog_unit_suggestions', 'review_catalog_unit_suggestion'
     ]::text[])
     AND procedure.oid <> ALL (ARRAY[
+      'public.create_catalog_category(uuid,uuid,text,text,integer,text,integer,uuid,uuid,text)'::regprocedure,
+      'public.create_catalog_brand(uuid,text,text,text,uuid,text,integer,uuid,uuid,text)'::regprocedure,
       'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,integer,uuid,uuid,text)'::regprocedure,
       'public.create_catalog_unit(uuid,text,text,text,uuid,text,text,text,integer,uuid,uuid,text)'::regprocedure,
       'public.create_tenant_catalog_category(uuid,uuid,text,text,text,integer,uuid,uuid,uuid,uuid,text)'::regprocedure,
@@ -3291,6 +3735,7 @@ BEGIN
   WHERE namespace.nspname = 'public'
     AND procedure.proname = ANY (ARRAY[
       'assert_tenant_supplier_actor', 'assert_platform_catalog_actor',
+      'create_catalog_category', 'create_catalog_brand',
       'create_catalog_unit', 'create_tenant_catalog_category',
       'update_tenant_catalog_category', 'create_tenant_catalog_brand',
       'update_tenant_catalog_brand', 'create_catalog_spec_definition',

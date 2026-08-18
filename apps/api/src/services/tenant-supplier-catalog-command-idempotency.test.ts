@@ -84,7 +84,12 @@ describe("tenant supplier catalog command idempotency", () => {
   });
 
   test("does not swallow write exceptions into false success", () => {
-    expect(sql).not.toMatch(/WHEN unique_violation[\s\S]{0,500}RETURN jsonb_build_object/i);
-    expect(sql).not.toMatch(/WHEN foreign_key_violation[\s\S]{0,500}RETURN jsonb_build_object/i);
+    const canonicalCommands = writeCommands.map(functionBody).join("\n");
+    expect(canonicalCommands).not.toMatch(
+      /WHEN unique_violation[\s\S]{0,500}RETURN jsonb_build_object/i,
+    );
+    expect(canonicalCommands).not.toMatch(
+      /WHEN foreign_key_violation[\s\S]{0,500}RETURN jsonb_build_object/i,
+    );
   });
 });

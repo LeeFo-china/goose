@@ -7,10 +7,16 @@ databases=("postgres" "gooes_catalog_v2_b_baseline")
 schema_file="${repository_root}/supabase/migrations/20260818122000_materialize_tenant_supplier_catalog_schema.sql"
 command_file="${repository_root}/supabase/migrations/20260818123000_materialize_tenant_supplier_catalog_commands.sql"
 hardening_file="${repository_root}/supabase/migrations/20260818130000_harden_tenant_private_catalog_contracts.sql"
+pre123_seed_file="${repository_root}/scripts/fixtures/seed-tenant-supplier-catalog-command-pre-123.sql"
 fixture_file="${repository_root}/scripts/fixtures/verify-tenant-supplier-catalog-command-behavior.sql"
 
 docker inspect "${container_name}" >/dev/null
-for file in "${schema_file}" "${command_file}" "${hardening_file}" "${fixture_file}"; do
+for file in \
+  "${schema_file}" \
+  "${command_file}" \
+  "${hardening_file}" \
+  "${pre123_seed_file}" \
+  "${fixture_file}"; do
   test -f "${file}"
 done
 
@@ -72,7 +78,8 @@ WITH facts AS (
   JOIN pg_roles AS owner_role ON owner_role.oid = procedure.proowner
   WHERE namespace.nspname = 'public'
     AND procedure.proname = ANY (ARRAY[
-      'assert_platform_catalog_actor', 'create_catalog_unit',
+      'assert_platform_catalog_actor', 'create_catalog_category',
+      'create_catalog_brand', 'create_catalog_unit',
       'create_tenant_catalog_category', 'update_tenant_catalog_category',
       'create_tenant_catalog_brand', 'update_tenant_catalog_brand',
       'create_catalog_spec_definition', 'update_catalog_spec_definition',
@@ -102,6 +109,7 @@ run_database() {
   {
     echo 'BEGIN;'
     render_migration_body "${schema_file}"
+    cat "${pre123_seed_file}"
     render_migration_body "${command_file}"
     # Re-enter through the canonical_v2 preflight before the validation gate.
     render_migration_body "${command_file}"
@@ -116,7 +124,7 @@ run_database() {
     exit 1
   fi
 
-  echo "command_behavior_ok database=${database} migration_replay=rollout_v2 command_signatures=12 compatibility_unit=service_role_replay,derived_dimension acl=pg_proc,proacl,proowner idempotency=replay,conflict version_conflict=no_write actor_filter=platform_and_tenant unit_factor=canonical_decimal pagination=max100 review=no_unit_insert rollback_residue=0"
+  echo "command_behavior_ok database=${database} migration_replay=rollout_v2 command_signatures=12 legacy_platform_creates=2 compatibility_unit=service_role_replay,derived_dimension acl=pg_proc,proacl,proowner idempotency=replay,conflict version_conflict=no_write actor_filter=platform_and_tenant unit_factor=canonical_decimal pagination=max100 review=no_unit_insert rollback_residue=0"
 }
 
 for database in "${databases[@]}"; do

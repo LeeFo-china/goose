@@ -10,6 +10,7 @@ const TENANT_ID = "00000000-0000-4000-8000-000000000101";
 const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
 const BRAND_ID = "00000000-0000-4000-8000-000000000301";
 const UNIT_ID = "00000000-0000-4000-8000-000000000401";
+const RETRY_UNIT_ID = "00000000-0000-4000-8000-000000000402";
 const USER_ID = "00000000-0000-4000-8000-000000000501";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000601";
 const NOW = "2026-07-24T00:00:00.000Z";
@@ -171,6 +172,37 @@ describe("SupplierCatalogService write boundary", () => {
         actor_employee_id: EMPLOYEE_ID,
       }));
     }
+  });
+
+  test("generates a new unit id when the same idempotency key is retried", async () => {
+    const createUnit = mock(async (input) => ({ ...unit, ...input }));
+    const dependencies = createDependencies({ createUnit });
+    const generatedIds = [UNIT_ID, RETRY_UNIT_ID];
+    const { SupplierCatalogService } = await import("./supplier-catalog");
+    const service = new SupplierCatalogService({
+      ...dependencies,
+      idFactory: () => generatedIds.shift() ?? "",
+    } as never);
+    const context = auth(["platform.catalog.manage"], null, true);
+    const input = {
+      code: "UNIT-BOX",
+      name: "箱",
+      symbol: "箱",
+      base_unit_id: null,
+      conversion_factor: "1",
+      status: "active" as const,
+      sort_order: 100,
+    };
+
+    await service.createUnit(context, input, "same-unit-key");
+    await service.createUnit(context, input, "same-unit-key");
+
+    expect(createUnit.mock.calls.map(([call]) => call.unit_id)).toEqual([
+      UNIT_ID,
+      RETRY_UNIT_ID,
+    ]);
+    expect(createUnit.mock.calls.map(([call]) => call.idempotency_key))
+      .toEqual(["same-unit-key", "same-unit-key"]);
   });
 
   test("updates every resource with route id and authenticated employee", async () => {
