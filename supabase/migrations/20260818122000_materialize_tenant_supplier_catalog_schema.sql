@@ -1118,7 +1118,29 @@ $$;
 DO $$
 DECLARE
   v_state text := (SELECT state FROM catalog_schema_materialization_state);
+  v_trigger_name text;
 BEGIN
+  FOR v_trigger_name IN
+    SELECT trigger_definition.tgname
+    FROM pg_trigger AS trigger_definition
+    WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+      AND NOT trigger_definition.tgisinternal
+      AND (
+        trigger_definition.tgname IN (
+          'tr_supplier_products_validate_catalog',
+          'tr_supplier_products_v2_validate_catalog'
+        )
+        OR trigger_definition.tgfoid =
+          'public.validate_supplier_product_catalog()'::regprocedure
+      )
+    ORDER BY trigger_definition.tgname
+  LOOP
+    EXECUTE format(
+      'DROP TRIGGER %I ON public.supplier_products',
+      v_trigger_name
+    );
+  END LOOP;
+
   IF v_state = 'repository_chain' THEN
     EXECUTE 'DROP TRIGGER tr_catalog_categories_set_level ON public.catalog_categories';
     EXECUTE 'DROP TRIGGER tr_catalog_categories_guard_scope ON public.catalog_categories';
@@ -2199,6 +2221,13 @@ BEFORE INSERT OR UPDATE OF
 ON public.supplier_products
 FOR EACH ROW
 EXECUTE FUNCTION public.guard_supplier_product_ownership();
+
+CREATE TRIGGER tr_supplier_products_v2_validate_catalog
+BEFORE INSERT OR UPDATE OF
+  category_id, brand_id, status
+ON public.supplier_products
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_supplier_product_catalog();
 
 CREATE TRIGGER tr_supplier_products_v2_guard_tenant_write
 BEFORE UPDATE ON public.supplier_products

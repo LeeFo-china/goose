@@ -50,6 +50,27 @@ describe("tenant supplier catalog hardening migration contract", () => {
     expect(hardeningSql).toContain("pg_get_indexdef");
   });
 
+  test("validates the supplier product catalog trigger definition", () => {
+    expect(hardeningSql).toContain("v_catalog_trigger_count <> 1");
+    expect(hardeningSql).toContain(
+      "tr_supplier_products_v2_validate_catalog",
+    );
+    expect(hardeningSql).toContain(
+      "'public.validate_supplier_product_catalog()'::regprocedure",
+    );
+    expect(hardeningSql).toContain(
+      "trigger_definition.tgrelid = 'public.supplier_products'::regclass",
+    );
+    expect(hardeningSql).toContain("trigger_definition.tgenabled = 'O'");
+    expect(hardeningSql).toContain("pg_get_triggerdef(trigger_definition.oid)");
+    expect(hardeningSql).toContain(
+      "BEFORE INSERT OR UPDATE OF category_id, brand_id, status ON public.supplier_products",
+    );
+    expect(hardeningSql).toContain(
+      "EXECUTE FUNCTION validate_supplier_product_catalog()",
+    );
+  });
+
   test("validates browser denial and column-level service reads", () => {
     expect(hardeningSql).toContain("ARRAY['anon', 'authenticated']");
     expect(hardeningSql).toContain("permission.grantee = 0");

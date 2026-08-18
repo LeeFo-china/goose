@@ -159,6 +159,37 @@ describe("tenant supplier catalog schema materialization contract", () => {
     );
   });
 
+  test("normalizes one deterministic supplier product catalog trigger", () => {
+    const triggerCleanup = materializationSql.slice(
+      materializationSql.indexOf(
+        "-- Remove only the trigger/constraint set belonging to the recognized state.",
+      ),
+      materializationSql.indexOf("-- Materialize the repository-chain columns."),
+    );
+
+    expect(triggerCleanup).toContain("FROM pg_trigger AS trigger_definition");
+    expect(triggerCleanup).toContain(
+      "trigger_definition.tgrelid = 'public.supplier_products'::regclass",
+    );
+    expect(triggerCleanup).toContain("tr_supplier_products_validate_catalog");
+    expect(triggerCleanup).toContain("tr_supplier_products_v2_validate_catalog");
+    expect(triggerCleanup).toContain(
+      "'public.validate_supplier_product_catalog()'::regprocedure",
+    );
+    expect(triggerCleanup).toContain(
+      "DROP TRIGGER %I ON public.supplier_products",
+    );
+    expect(triggerCleanup).not.toContain(
+      "tr_supplier_products_validate_proxy_actor",
+    );
+    expect(triggerCleanup).not.toContain(
+      "supplier_products_price_publication_lock",
+    );
+    expect(materializationSql).toMatch(
+      /CREATE TRIGGER tr_supplier_products_v2_validate_catalog\s+BEFORE INSERT OR UPDATE OF\s+category_id, brand_id, status\s+ON public\.supplier_products\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.validate_supplier_product_catalog\(\);/,
+    );
+  });
+
   test("reuses indexes and grants only trigger reference columns", () => {
     expect(materializationSql).toContain("ALTER INDEX");
     expect(materializationSql).toContain(

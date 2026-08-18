@@ -14,6 +14,7 @@ DECLARE
   v_missing_constraints text[];
   v_missing_indexes text[];
   v_missing_triggers text[];
+  v_catalog_trigger_count integer;
   v_duplicate_index_groups integer;
   v_no_brand_count integer;
   v_no_brand_identity_count integer;
@@ -148,7 +149,8 @@ BEGIN
     'tr_catalog_units_v2_validate_base',
     'tr_catalog_units_v2_validate_dimension',
     'tr_supplier_products_v2_guard_ownership',
-    'tr_supplier_products_v2_guard_tenant_write'
+    'tr_supplier_products_v2_guard_tenant_write',
+    'tr_supplier_products_v2_validate_catalog'
   ]::text[]) AS required_trigger
   WHERE NOT EXISTS (
     SELECT 1
@@ -168,6 +170,42 @@ BEGIN
       MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_PRECONDITION_FAILED',
       DETAIL = 'missing deterministic v2 triggers: ' ||
         array_to_string(v_missing_triggers, ', ');
+  END IF;
+
+  SELECT count(*)
+  INTO v_catalog_trigger_count
+  FROM pg_trigger AS trigger_definition
+  WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+    AND NOT trigger_definition.tgisinternal
+    AND (
+      trigger_definition.tgname IN (
+        'tr_supplier_products_validate_catalog',
+        'tr_supplier_products_v2_validate_catalog'
+      )
+      OR trigger_definition.tgfoid =
+        'public.validate_supplier_product_catalog()'::regprocedure
+    );
+
+  IF v_catalog_trigger_count <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger AS trigger_definition
+    WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+      AND NOT trigger_definition.tgisinternal
+      AND trigger_definition.tgenabled = 'O'
+      AND trigger_definition.tgname =
+        'tr_supplier_products_v2_validate_catalog'
+      AND trigger_definition.tgfoid =
+        'public.validate_supplier_product_catalog()'::regprocedure
+      AND pg_get_triggerdef(trigger_definition.oid) =
+        'CREATE TRIGGER tr_supplier_products_v2_validate_catalog BEFORE INSERT OR UPDATE OF category_id, brand_id, status ON public.supplier_products FOR EACH ROW EXECUTE FUNCTION validate_supplier_product_catalog()'
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_PRECONDITION_FAILED',
+      DETAIL = format(
+        'supplier product catalog trigger count=%s or definition is invalid',
+        v_catalog_trigger_count
+      );
   END IF;
 
   SELECT count(*)

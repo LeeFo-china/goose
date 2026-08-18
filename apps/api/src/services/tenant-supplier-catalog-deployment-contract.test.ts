@@ -93,6 +93,12 @@ describe("tenant supplier catalog deployment contract", () => {
     expect(behaviorVerifier).toContain("SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED");
     expect(behaviorVerifier).toContain("duplicate_index_groups");
     expect(behaviorVerifier).toContain("EXPLAIN (COSTS OFF)");
+    expect(behaviorVerifier).toContain("missing_catalog_trigger");
+    expect(behaviorVerifier).toContain("tampered_catalog_trigger");
+    expect(behaviorVerifier).toContain("non_leaf_category");
+    expect(behaviorVerifier).toContain("inactive_category");
+    expect(behaviorVerifier).toContain("inactive_brand");
+    expect(behaviorVerifier).toContain("SUPPLIER_CATALOG_REFERENCE_INVALID");
     expect(behaviorVerifier).not.toMatch(/\b(?:db reset|supabase link)\b/);
   });
 });

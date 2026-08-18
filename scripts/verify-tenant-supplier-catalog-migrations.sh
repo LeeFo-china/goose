@@ -95,10 +95,42 @@ SELECT md5(string_agg(value, E'\n' ORDER BY value)) FROM facts;
 SQL
 }
 
+drop_catalog_triggers_sql() {
+  cat <<'SQL'
+DO $drop_catalog_triggers$
+DECLARE
+  v_trigger_name text;
+BEGIN
+  FOR v_trigger_name IN
+    SELECT trigger_definition.tgname
+    FROM pg_trigger AS trigger_definition
+    WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+      AND NOT trigger_definition.tgisinternal
+      AND (
+        trigger_definition.tgname IN (
+          'tr_supplier_products_validate_catalog',
+          'tr_supplier_products_v2_validate_catalog'
+        )
+        OR trigger_definition.tgfoid =
+          'public.validate_supplier_product_catalog()'::regprocedure
+      )
+    ORDER BY trigger_definition.tgname
+  LOOP
+    EXECUTE format(
+      'DROP TRIGGER %I ON public.supplier_products',
+      v_trigger_name
+    );
+  END LOOP;
+END
+$drop_catalog_triggers$;
+SQL
+}
+
 assert_final_schema_sql() {
   cat <<'SQL'
 DO $verify$
 DECLARE
+  v_catalog_trigger_count integer;
   v_duplicate_index_groups integer;
   v_plan text := '';
   v_plan_line text;
@@ -137,6 +169,36 @@ BEGIN
     OR to_regclass('public.supplier_products_active_brand_ref_idx') IS NULL
   THEN
     RAISE EXCEPTION 'active supplier product reference indexes are missing';
+  END IF;
+
+  SELECT count(*)
+  INTO v_catalog_trigger_count
+  FROM pg_trigger AS trigger_definition
+  WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+    AND NOT trigger_definition.tgisinternal
+    AND (
+      trigger_definition.tgname IN (
+        'tr_supplier_products_validate_catalog',
+        'tr_supplier_products_v2_validate_catalog'
+      )
+      OR trigger_definition.tgfoid =
+        'public.validate_supplier_product_catalog()'::regprocedure
+    );
+
+  IF v_catalog_trigger_count <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger AS trigger_definition
+    WHERE trigger_definition.tgrelid = 'public.supplier_products'::regclass
+      AND NOT trigger_definition.tgisinternal
+      AND trigger_definition.tgenabled = 'O'
+      AND trigger_definition.tgname =
+        'tr_supplier_products_v2_validate_catalog'
+      AND trigger_definition.tgfoid =
+        'public.validate_supplier_product_catalog()'::regprocedure
+      AND pg_get_triggerdef(trigger_definition.oid) =
+        'CREATE TRIGGER tr_supplier_products_v2_validate_catalog BEFORE INSERT OR UPDATE OF category_id, brand_id, status ON public.supplier_products FOR EACH ROW EXECUTE FUNCTION validate_supplier_product_catalog()'
+  ) THEN
+    RAISE EXCEPTION 'supplier product catalog trigger is not canonical';
   END IF;
 
   WITH normalized_indexes AS (
@@ -252,6 +314,223 @@ RESET ROLE;
 SQL
 }
 
+assert_catalog_product_writes_sql() {
+  cat <<'SQL'
+INSERT INTO public.catalog_categories(
+  code, name, level, status, created_by_employee_id,
+  updated_by_employee_id, ownership_scope, owner_tenant_id
+)
+VALUES (
+  'VERIFY_PRODUCT_ROOT', 'Verify product root', 1, 'active',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS product_root_category_id
+\gset fixture_
+
+INSERT INTO public.catalog_categories(
+  code, name, parent_id, level, status, created_by_employee_id,
+  updated_by_employee_id, ownership_scope, owner_tenant_id
+)
+VALUES (
+  'VERIFY_LEAF', 'Verify leaf', :'fixture_product_root_category_id', 2, 'active',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS leaf_category_id
+\gset fixture_
+
+INSERT INTO public.catalog_categories(
+  code, name, level, status, created_by_employee_id,
+  updated_by_employee_id, ownership_scope, owner_tenant_id
+)
+VALUES (
+  'VERIFY_INACTIVE', 'Verify inactive category', 1, 'inactive',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS inactive_category_id
+\gset fixture_
+
+INSERT INTO public.catalog_brands(
+  code, name, status, created_by_employee_id,
+  updated_by_employee_id, ownership_scope, owner_tenant_id
+)
+VALUES (
+  'VERIFY_ACTIVE_BRAND', 'Verify active brand', 'active',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS active_brand_id
+\gset fixture_
+
+INSERT INTO public.catalog_brands(
+  code, name, status, created_by_employee_id,
+  updated_by_employee_id, ownership_scope, owner_tenant_id
+)
+VALUES (
+  'VERIFY_INACTIVE_BRAND', 'Verify inactive brand', 'inactive',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS inactive_brand_id
+\gset fixture_
+
+INSERT INTO public.catalog_units(
+  code, name, symbol, unit_dimension, status,
+  created_by_employee_id, updated_by_employee_id
+)
+VALUES (
+  'VERIFY_PRODUCT_UNIT', 'Verify product unit', 'vpu',
+  'verify_product', 'active', :'fixture_employee_id', :'fixture_employee_id'
+)
+RETURNING id AS unit_id
+\gset fixture_
+
+INSERT INTO public.suppliers(
+  code, name, legal_name, supplier_type, onboarding_status,
+  operational_status, ownership_scope, owner_tenant_id,
+  created_by_employee_id, updated_by_employee_id
+)
+VALUES (
+  'VERIFY_CATALOG_V2_SUPPLIER', 'Verify catalog v2 supplier',
+  'Verify catalog v2 supplier', 'other', 'approved', 'active',
+  'tenant', :'fixture_tenant_id', :'fixture_employee_id',
+  :'fixture_employee_id'
+)
+RETURNING id AS supplier_id
+\gset fixture_
+
+INSERT INTO public.supplier_products(
+  supplier_id, product_code, name, category_id, brand_id, status,
+  acting_tenant_id, acting_employee_id, operation_source, proxy_reason,
+  created_by_employee_id, updated_by_employee_id,
+  ownership_scope, owner_tenant_id
+)
+VALUES (
+  :'fixture_supplier_id', 'VERIFY_CATALOG_V2_PRODUCT',
+  'Verify catalog v2 product', :'fixture_leaf_category_id',
+  :'fixture_active_brand_id', 'draft', :'fixture_tenant_id',
+  :'fixture_employee_id', 'tenant_proxy', 'migration verifier',
+  :'fixture_employee_id', :'fixture_employee_id', 'tenant',
+  :'fixture_tenant_id'
+)
+RETURNING id AS product_id
+\gset fixture_
+
+INSERT INTO public.supplier_skus(
+  supplier_id, supplier_product_id, sku_code, name, purchase_unit_id,
+  base_unit_id, base_unit_conversion, status, acting_tenant_id,
+  acting_employee_id, operation_source, proxy_reason,
+  created_by_employee_id, updated_by_employee_id,
+  ownership_scope, owner_tenant_id
+)
+VALUES (
+  :'fixture_supplier_id', :'fixture_product_id', 'VERIFY_CATALOG_V2_SKU',
+  'Verify catalog v2 SKU', :'fixture_unit_id', :'fixture_unit_id', 1,
+  'active', :'fixture_tenant_id', :'fixture_employee_id', 'tenant_proxy',
+  'migration verifier', :'fixture_employee_id', :'fixture_employee_id',
+  'tenant', :'fixture_tenant_id'
+);
+
+UPDATE public.supplier_products
+SET status = 'active'
+WHERE id = :'fixture_product_id';
+
+SELECT set_config(
+  'supplier_catalog_verifier.product_id',
+  :'fixture_product_id',
+  true
+);
+SELECT set_config(
+  'supplier_catalog_verifier.non_leaf_category_id',
+  :'fixture_product_root_category_id',
+  true
+);
+SELECT set_config(
+  'supplier_catalog_verifier.inactive_category_id',
+  :'fixture_inactive_category_id',
+  true
+);
+SELECT set_config(
+  'supplier_catalog_verifier.inactive_brand_id',
+  :'fixture_inactive_brand_id',
+  true
+);
+
+DO $legal_active_product$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.supplier_products AS product
+    WHERE product.id =
+      current_setting('supplier_catalog_verifier.product_id')::uuid
+      AND product.status = 'active'
+  ) THEN
+    RAISE EXCEPTION 'legal_active_product was not written';
+  END IF;
+END
+$legal_active_product$;
+
+DO $non_leaf_category$
+BEGIN
+  BEGIN
+    UPDATE public.supplier_products
+    SET category_id = current_setting(
+      'supplier_catalog_verifier.non_leaf_category_id'
+    )::uuid
+    WHERE id = current_setting(
+      'supplier_catalog_verifier.product_id'
+    )::uuid;
+    RAISE EXCEPTION 'non_leaf_category accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_CATALOG_REFERENCE_INVALID' THEN
+      RAISE;
+    END IF;
+  END;
+END
+$non_leaf_category$;
+
+DO $inactive_category$
+BEGIN
+  BEGIN
+    UPDATE public.supplier_products
+    SET category_id = current_setting(
+      'supplier_catalog_verifier.inactive_category_id'
+    )::uuid
+    WHERE id = current_setting(
+      'supplier_catalog_verifier.product_id'
+    )::uuid;
+    RAISE EXCEPTION 'inactive_category accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_CATALOG_REFERENCE_INVALID' THEN
+      RAISE;
+    END IF;
+  END;
+END
+$inactive_category$;
+
+DO $inactive_brand$
+BEGIN
+  BEGIN
+    UPDATE public.supplier_products
+    SET brand_id = current_setting(
+      'supplier_catalog_verifier.inactive_brand_id'
+    )::uuid
+    WHERE id = current_setting(
+      'supplier_catalog_verifier.product_id'
+    )::uuid;
+    RAISE EXCEPTION 'inactive_brand accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_CATALOG_REFERENCE_INVALID' THEN
+      RAISE;
+    END IF;
+  END;
+END
+$inactive_brand$;
+SQL
+}
+
 run_sequence() {
   local database="$1"
   local before_snapshot
@@ -260,10 +539,12 @@ run_sequence() {
   before_snapshot="$(snapshot_database "${database}")"
   {
     echo 'BEGIN;'
+    drop_catalog_triggers_sql
     render_migration_body "${materialization_file}"
     render_migration_body "${hardening_file}"
     assert_final_schema_sql
     assert_service_role_writes_sql
+    assert_catalog_product_writes_sql
     echo 'ROLLBACK;'
   } | psql_admin "${database}" >/dev/null
   after_snapshot="$(snapshot_database "${database}")"
@@ -272,7 +553,7 @@ run_sequence() {
     echo "error=rollback_residue database=${database}" >&2
     exit 1
   fi
-  echo "sequence_ok database=${database} rollback_residue=0"
+  echo "sequence_ok database=${database} missing_catalog_trigger=repaired catalog_writes=legal_active_product,non_leaf_category_rejected,inactive_category_rejected,inactive_brand_rejected rollback_residue=0"
 }
 
 assert_b_missing_index_fails_closed() {
@@ -297,6 +578,40 @@ assert_b_missing_index_fails_closed() {
   echo "fingerprint_ok database=${granular_database} missing_index=rejected"
 }
 
+assert_b_tampered_trigger_is_normalized() {
+  local before_snapshot
+  local after_snapshot
+
+  before_snapshot="$(snapshot_database "${granular_database}")"
+  {
+    echo 'BEGIN;'
+    drop_catalog_triggers_sql
+    cat <<'SQL'
+CREATE TRIGGER tr_supplier_products_v2_validate_catalog
+BEFORE INSERT ON public.supplier_products
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_supplier_product_catalog();
+
+CREATE TRIGGER tr_supplier_products_duplicate_validate_catalog
+BEFORE UPDATE OF brand_id ON public.supplier_products
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_supplier_product_catalog();
+SQL
+    render_migration_body "${materialization_file}"
+    render_migration_body "${hardening_file}"
+    assert_final_schema_sql
+    echo 'ROLLBACK;'
+  } | psql_admin "${granular_database}" >/dev/null
+  after_snapshot="$(snapshot_database "${granular_database}")"
+
+  if [ "${before_snapshot}" != "${after_snapshot}" ]; then
+    echo "error=tampered_trigger_rollback_residue database=${granular_database}" >&2
+    exit 1
+  fi
+  echo "normalization_ok database=${granular_database} tampered_catalog_trigger=repaired duplicate_catalog_trigger=removed rollback_residue=0"
+}
+
 assert_b_missing_index_fails_closed
+assert_b_tampered_trigger_is_normalized
 run_sequence "${repository_database}"
 run_sequence "${granular_database}"
