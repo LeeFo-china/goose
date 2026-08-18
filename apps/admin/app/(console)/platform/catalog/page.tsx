@@ -13,6 +13,7 @@ import {
   CatalogCategoryDialogButton,
   CatalogUnitDialogButton,
 } from "@/components/supplier-catalog/supplier-catalog-dialogs";
+import { CATALOG_CATEGORY_MAX_DEPTH } from "@/components/supplier-catalog/catalog-category-depth";
 import { SupplierCatalogFilters } from "@/components/supplier-catalog/supplier-catalog-filters";
 import { SupplierCatalogLoadError } from "@/components/supplier-catalog/supplier-catalog-error";
 import { PlatformSuggestionFilters } from "@/components/supplier-catalog/platform-suggestion-filters";
@@ -178,7 +179,8 @@ export default async function PlatformCatalogPage({
             </span>
           }
           action={canManage
-            ? view === "categories"
+            ? view === "categories" &&
+                categoryTrail.length < CATALOG_CATEGORY_MAX_DEPTH
               ? (
                   <CatalogCategoryDialogButton
                     parentId={parentId}

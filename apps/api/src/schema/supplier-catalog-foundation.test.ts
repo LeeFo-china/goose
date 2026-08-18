@@ -10,7 +10,7 @@ import {
 const uuid = "11111111-1111-4111-8111-111111111111";
 
 describe("supplier catalog foundation fields", () => {
-  test("validates category level between 1 and 6", () => {
+  test("validates category level between 1 and 8", () => {
     const input = {
       parent_id: null,
       code: "material",
@@ -25,7 +25,13 @@ describe("supplier catalog foundation fields", () => {
     expect(
       CatalogCategoryUpdateSchema.safeParse({
         expected_version: 1,
-        level: 7,
+        level: 8,
+      }).success,
+    ).toBe(true);
+    expect(
+      CatalogCategoryUpdateSchema.safeParse({
+        expected_version: 1,
+        level: 9,
       }).success,
     ).toBe(false);
   });

@@ -139,6 +139,25 @@ describe("租户供应商目录", () => {
     })).toContain(`parent_id=${TENANT_CATEGORY_ID}`);
   });
 
+  test("supports levels seven and eight and stops at the eighth level", () => {
+    const trail = Array.from({ length: 8 }, (_, index) => ({
+      id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      name: `第 ${index + 1} 层`,
+      ownershipScope: "tenant" as const,
+      level: index + 1,
+    }));
+
+    expect(rules.TENANT_CATEGORY_MAX_DEPTH).toBe(8);
+    expect(rules.decodeTenantCategoryTrail(
+      rules.encodeTenantCategoryTrail(trail),
+    )).toHaveLength(8);
+    expect(rules.canBrowseTenantCategoryChildren(6)).toBe(true);
+    expect(rules.canCreateTenantCategoryAtTrail(trail.slice(0, 7))).toBe(true);
+    expect(rules.canBrowseTenantCategoryChildren(7)).toBe(true);
+    expect(rules.canCreateTenantCategoryAtTrail(trail)).toBe(false);
+    expect(rules.canBrowseTenantCategoryChildren(8)).toBe(false);
+  });
+
   test("builds independent tenant-only mapping option pages and pins selections", () => {
     expect(requests.buildTenantPlatformCategoryOptionsPath({
       page: 2,

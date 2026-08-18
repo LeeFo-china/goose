@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { SupplierCatalogStatusAction } from "./supplier-catalog-actions";
+import { canBrowseCatalogCategoryChildren } from "./catalog-category-depth";
 import { CatalogSpecDefinitionsDialogButton } from "./catalog-spec-definitions-dialog";
 import { CatalogUnitDimension } from "../tenant-supplier-catalog/tenant-catalog-display";
 import {
@@ -82,7 +83,7 @@ function CategoryTable({
       cell: ({ row }) => (
         <div className="flex min-w-[180px] items-center gap-2">
           <span className="truncate font-semibold">{row.original.name}</span>
-          {row.original.level < 6 ? (
+          {canBrowseCatalogCategoryChildren(row.original.level) ? (
             <Button type="button" size="sm" variant="ghost" asChild>
               <Link
                 href={categoryTrailHref([

@@ -18,6 +18,7 @@ import {
   TenantCategoryIdentity,
 } from "./tenant-catalog-display";
 import {
+  canBrowseTenantCategoryChildren,
   getTenantCatalogCapabilities,
   tenantCategoryTrailHref,
 } from "./tenant-catalog-rules";
@@ -51,7 +52,7 @@ export function TenantCategoryTable({
             fullName={row.original.full_name}
             mappedPlatformName={row.original.mapped_platform_category?.full_name ?? null}
           />
-          {row.original.level < 6 ? (
+          {canBrowseTenantCategoryChildren(row.original.level) ? (
             <Button type="button" size="sm" variant="ghost" asChild>
               <Link
                 href={tenantCategoryTrailHref([

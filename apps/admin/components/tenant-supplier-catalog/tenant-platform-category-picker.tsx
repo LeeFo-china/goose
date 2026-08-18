@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { buildTenantPlatformCategoryOptionsPath } from "./tenant-catalog-requests";
-import { TENANT_CATEGORY_MAX_DEPTH } from "./tenant-catalog-rules";
+import { canBrowseTenantCategoryChildren } from "./tenant-catalog-rules";
 import type { TenantCatalogCategory } from "./tenant-catalog-types";
 
 const PAGE_SIZE = 20;
@@ -143,7 +143,7 @@ export function TenantPlatformCategoryPicker({
                 <span className="block truncate font-medium">{category.name}</span>
                 <span className="block truncate text-xs text-muted-foreground">{category.full_name} · {category.code}</span>
               </button>
-              {category.level < TENANT_CATEGORY_MAX_DEPTH ? <Button type="button" size="sm" variant="ghost" onClick={() => { setTrail([...trail, category]); setPage(1); setKeyword(""); setSearchText(""); }}>查看下级<ChevronRight data-icon="inline-end" /></Button> : null}
+              {canBrowseTenantCategoryChildren(category.level) ? <Button type="button" size="sm" variant="ghost" onClick={() => { setTrail([...trail, category]); setPage(1); setKeyword(""); setSearchText(""); }}>查看下级<ChevronRight data-icon="inline-end" /></Button> : null}
             </div>
           ))}
         </div>

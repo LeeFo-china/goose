@@ -46,7 +46,7 @@ export const CatalogStatusSchema = z.enum(["active", "inactive"], {
 });
 const catalogCategoryLevel = z.number().int()
   .min(1, "目录分类层级不能小于 1")
-  .max(6, "目录分类层级不能超过 6");
+  .max(8, "目录分类层级不能超过 8");
 export const CatalogCategoryLevelSchema =
   requiredNumber(catalogCategoryLevel);
 

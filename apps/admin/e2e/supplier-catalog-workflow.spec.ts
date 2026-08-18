@@ -1,58 +1,11 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Locator, Page } from "@playwright/test";
-
-const mockBackendBaseUrl = "http://127.0.0.1:3997";
-const platformAdminPhone = "18637605353";
-const tenantAdminPhone = "18637605354";
-
-type MutationJournalEntry = {
-  method: "POST" | "PATCH";
-  path: string;
-  idempotencyKey: string | null;
-  payload: Record<string, unknown>;
-};
-
-async function resetMock(request: APIRequestContext) {
-  const response = await request.post(`${mockBackendBaseUrl}/__test/reset`);
-  expect(response.ok()).toBe(true);
-}
-
-async function loginAsPlatformAdmin(page: Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: { phone: platformAdminPhone, code: "" },
-  });
-  expect(response.ok()).toBe(true);
-}
-
-async function loginAsTenantAdmin(page: Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: { phone: tenantAdminPhone, code: "" },
-  });
-  expect(response.ok()).toBe(true);
-}
-
-async function readMutations(
-  request: APIRequestContext,
-): Promise<MutationJournalEntry[]> {
-  const response = await request.get(
-    `${mockBackendBaseUrl}/__test/mutations`,
-  );
-  expect(response.ok()).toBe(true);
-  return (await response.json() as { mutations: MutationJournalEntry[] })
-    .mutations;
-}
-
-async function submitStatus(row: Locator, page: Page, action: "停用" | "启用") {
-  await row.getByRole("button", { name: action, exact: true }).click();
-  const dialog = page.getByRole("dialog", {
-    name: new RegExp(`^${action}`),
-  });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", {
-    name: `${action}目录数据`,
-    exact: true,
-  }).click();
-}
+import {
+  loginAsPlatformAdmin,
+  mockBackendBaseUrl,
+  readMutations,
+  resetMock,
+  submitStatus,
+} from "./supplier-catalog-test-helpers";
 
 test.describe("供应标准目录确定性工作流", () => {
   test.beforeEach(async ({ page, request }) => {
@@ -393,106 +346,5 @@ test.describe("供应标准目录确定性工作流", () => {
         approved_catalog_unit_id: "13000000-0000-4000-8000-000000000101",
       },
     });
-  });
-});
-
-test.describe("租户私有供应商目录", () => {
-  test.beforeEach(async ({ request }) => {
-    await resetMock(request);
-  });
-
-  test("共享树保持只读且租户可建立二级私有分类", async ({ page, request }) => {
-    await loginAsTenantAdmin(page);
-    await page.goto("/supplier-catalog", { waitUntil: "networkidle" });
-
-    await expect(
-      page.getByRole("heading", { name: "供应商目录", level: 1 }),
-    ).toBeVisible();
-    const sharedRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "PLATFORM-MATERIAL", exact: true }),
-    });
-    await expect(sharedRow.getByText("平台共享", { exact: true })).toBeVisible();
-    await expect(sharedRow.getByRole("button", { name: "编辑", exact: true }))
-      .toHaveCount(0);
-    await sharedRow.getByRole("link", {
-      name: "查看平台标准建材的下级分类",
-    }).click();
-    await expect(page.getByRole("button", { name: "新建私有类目" }))
-      .toHaveCount(0);
-    await page.getByRole("link", { name: "返回上级" }).click();
-
-    await page.getByRole("button", { name: "新建私有类目" }).click();
-    const dialog = page.getByRole("dialog", { name: "新建私有类目" });
-    await dialog.getByLabel("编码").fill("TENANT-TILE");
-    await dialog.getByLabel("名称").fill("租户瓷砖");
-    await dialog.getByRole("button", { name: /平台标准建材.*PLATFORM-MATERIAL/ }).click();
-    await expect(dialog.getByText(/当前映射：平台标准建材/)).toBeVisible();
-    await dialog.getByRole("button", { name: "保存类目" }).click();
-
-    await expect(page.getByText("私有类目已创建")).toBeVisible();
-    const privateRow = page.getByRole("row").filter({ hasText: "租户瓷砖" });
-    await expect(privateRow.getByText("租户私有", { exact: true })).toBeVisible();
-    await expect(privateRow.getByRole("button", { name: "编辑" })).toBeVisible();
-    await privateRow.getByRole("link", {
-      name: "查看租户瓷砖的下级分类",
-    }).click();
-    await expect.poll(() => new URL(page.url()).searchParams.has("categoryPath"))
-      .toBe(true);
-    await page.getByRole("button", { name: "新建私有类目" }).click();
-    const childDialog = page.getByRole("dialog", { name: "新建私有类目" });
-    await childDialog.getByLabel("编码").fill("TENANT-TILE-GLUE");
-    await childDialog.getByLabel("名称").fill("瓷砖胶");
-    await childDialog.getByRole("button", { name: "保存类目" }).click();
-    await expect(page.getByRole("row").filter({ hasText: "租户瓷砖 / 瓷砖胶" }))
-      .toBeVisible();
-
-    const mutations = await readMutations(request);
-    expect(mutations.slice(-2).map(({ path, payload }) => ({ path, payload })))
-      .toEqual([
-        {
-          path: "/catalog/categories",
-          payload: expect.objectContaining({
-            parent_id: null,
-            code: "TENANT-TILE",
-            mapped_platform_category_id: "11000000-0000-4000-8000-000000000010",
-          }),
-        },
-        {
-          path: "/catalog/categories",
-          payload: expect.objectContaining({
-            parent_id: "21000000-0000-4000-8000-000000000003",
-            code: "TENANT-TILE-GLUE",
-          }),
-        },
-      ]);
-  });
-
-  test("可查看计量维度、提交单位建议并维护私有分类规格", async ({ page }) => {
-    await loginAsTenantAdmin(page);
-    await page.goto("/supplier-catalog?view=units", { waitUntil: "networkidle" });
-    await expect(page.getByText("数量", { exact: true }).first()).toBeVisible();
-    await expect(page.getByRole("button", { name: "编辑" })).toHaveCount(0);
-
-    await page.getByRole("tab", { name: "单位建议" }).click();
-    await page.getByRole("button", { name: "提交单位建议" }).click();
-    const suggestion = page.getByRole("dialog", { name: "提交单位建议" });
-    await suggestion.getByLabel("建议编码").fill("ROLL");
-    await suggestion.getByLabel("建议名称").fill("卷");
-    await suggestion.getByLabel("建议符号").fill("卷");
-    await suggestion.getByLabel("计量维度").fill("quantity");
-    await suggestion.getByLabel("建议原因").fill("装修辅料常用包装单位");
-    await suggestion.getByRole("button", { name: "提交建议" }).click();
-    await expect(page.getByText("单位建议已提交")).toBeVisible();
-    await expect(page.getByRole("row").filter({ hasText: "ROLL" }))
-      .toContainText("待审核");
-
-    await page.getByRole("tab", { name: "分类" }).click();
-    const privateRow = page.getByRole("row").filter({ hasText: "租户标准辅料" });
-    await privateRow.getByRole("button", { name: "规格模板" }).click();
-    const specs = page.getByRole("dialog", { name: "租户标准辅料规格模板" });
-    await specs.getByRole("button", { name: "复制平台模板" }).click();
-    await expect(page.getByText("平台规格模板已复制")).toBeVisible();
-    await expect(specs.getByRole("row").filter({ hasText: "材质" }))
-      .toContainText("租户私有");
   });
 });

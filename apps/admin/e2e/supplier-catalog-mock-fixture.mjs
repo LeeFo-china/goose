@@ -112,7 +112,7 @@ const initialTenantPrivateCategory = {
   parent_id: null,
   level: 1,
   full_name: "租户标准辅料",
-  is_leaf: true,
+  is_leaf: false,
   mapped_platform_category_id: initialTenantSharedCategory.id,
   mapped_platform_category: {
     id: initialTenantSharedCategory.id,
@@ -129,6 +129,31 @@ const initialTenantPrivateCategory = {
   created_at: now,
   updated_at: now,
 };
+
+const initialTenantDeepCategories = [];
+let deepCategoryParent = initialTenantPrivateCategory;
+for (let level = 2; level <= 7; level += 1) {
+  const category = {
+    id: `22000000-0000-4000-8000-${String(level).padStart(12, "0")}`,
+    code: `TENANT-DEEP-${level}`,
+    name: `深层第${level}层`,
+    parent_id: deepCategoryParent.id,
+    level,
+    full_name: `${deepCategoryParent.full_name} / 深层第${level}层`,
+    is_leaf: level === 7,
+    mapped_platform_category_id: null,
+    mapped_platform_category: null,
+    ownership_scope: "tenant",
+    owner_tenant_id: mockTenantCatalogSession.tenant.id,
+    status: "active",
+    sort_order: 10,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+  initialTenantDeepCategories.push(category);
+  deepCategoryParent = category;
+}
 
 const initialPlatformSpec = {
   id: "31000000-0000-4000-8000-000000000001",
@@ -185,6 +210,7 @@ export function createInitialCatalogState() {
     tenantCategories: [
       structuredClone(initialTenantSharedCategory),
       structuredClone(initialTenantPrivateCategory),
+      ...structuredClone(initialTenantDeepCategories),
     ],
     brands: [structuredClone(initialBrand)],
     units: [
@@ -195,6 +221,7 @@ export function createInitialCatalogState() {
       [initialCategory.id]: [],
       [initialTenantSharedCategory.id]: [structuredClone(initialPlatformSpec)],
       [initialTenantPrivateCategory.id]: [],
+      ...Object.fromEntries(initialTenantDeepCategories.map(({ id }) => [id, []])),
     },
     unitSuggestions: [structuredClone(initialUnitSuggestion)],
   };

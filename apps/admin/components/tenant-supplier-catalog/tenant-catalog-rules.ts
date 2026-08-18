@@ -1,4 +1,8 @@
 import type { CategoryReturnState } from "@/components/supplier-catalog/supplier-catalog-types";
+import {
+  CATALOG_CATEGORY_MAX_DEPTH,
+  canBrowseCatalogCategoryChildren,
+} from "@/components/supplier-catalog/catalog-category-depth";
 
 import type {
   CatalogMappingOption,
@@ -8,7 +12,11 @@ import type {
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export const TENANT_CATEGORY_MAX_DEPTH = 6;
+export const TENANT_CATEGORY_MAX_DEPTH = CATALOG_CATEGORY_MAX_DEPTH;
+
+export function canBrowseTenantCategoryChildren(level: number) {
+  return canBrowseCatalogCategoryChildren(level);
+}
 
 export function getTenantCatalogCapabilities(record: {
   ownership_scope: CatalogOwnershipScope;
