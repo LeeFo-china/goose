@@ -23,6 +23,10 @@ const migrations = {
     "../../../../supabase/migrations/20260818120000_preserve_pre_v2_supplier_catalog_boundaries.sql",
     import.meta.url,
   ),
+  schemaMaterialization: new URL(
+    "../../../../supabase/migrations/20260818122000_materialize_tenant_supplier_catalog_schema.sql",
+    import.meta.url,
+  ),
   hardening: new URL(
     "../../../../supabase/migrations/20260818130000_harden_tenant_private_catalog_contracts.sql",
     import.meta.url,
@@ -49,7 +53,13 @@ const productScopeSql = read(migrations.productScope);
 const catalogCodesSql = read(migrations.catalogCodes);
 const platformProductSql = read(migrations.platformProduct);
 const compatibilitySql = read(migrations.compatibility);
-const effectiveSchemaSql = [catalogSql, compatibilitySql, hardeningSql].join("\n");
+const schemaMaterializationSql = read(migrations.schemaMaterialization);
+const effectiveSchemaSql = [
+  catalogSql,
+  compatibilitySql,
+  schemaMaterializationSql,
+  hardeningSql,
+].join("\n");
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -86,6 +96,67 @@ function expectServiceRoleCommand(name: string, signature: string) {
 }
 
 describe("tenant private supplier catalog migration contract", () => {
+  test("materializes both known catalog schema states before hardening", () => {
+    expect(schemaMaterializationSql).not.toBe("");
+    expect(schemaMaterializationSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(schemaMaterializationSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expect(schemaMaterializationSql).toContain("SET LOCAL lock_timeout = '5s';");
+    expect(schemaMaterializationSql).toContain("SET LOCAL statement_timeout = '5min';");
+
+    expect(schemaMaterializationSql).toContain(
+      "SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED",
+    );
+    expect(schemaMaterializationSql).toContain(
+      "SUPPLIER_CATALOG_UNIT_SUGGESTION_MAPPING_REQUIRED",
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /ALTER TABLE public\.catalog_spec_definitions[\s\S]*RENAME COLUMN required TO is_required[\s\S]*RENAME COLUMN filterable TO is_filterable/,
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /ALTER COLUMN enum_options TYPE jsonb[\s\S]*to_jsonb\(enum_options\)/,
+    );
+    expect(schemaMaterializationSql).toContain("legacy_unclassified");
+
+    for (const guard of [
+      "catalog_enum_options_are_valid",
+      "validate_catalog_category_hierarchy",
+      "refresh_catalog_category_descendants",
+      "validate_catalog_brand_mapping",
+      "validate_catalog_spec_definition_ownership",
+      "validate_catalog_unit_suggestion_state",
+      "validate_catalog_unit_dimension",
+      "sync_catalog_base_unit_dimension_to_derived",
+      "validate_supplier_product_catalog",
+    ]) {
+      expect(schemaMaterializationSql).toContain(`public.${guard}`);
+    }
+
+    for (const index of [
+      "catalog_categories_v2_platform_code_uidx",
+      "catalog_categories_v2_tenant_code_uidx",
+      "catalog_categories_v2_scope_path_idx",
+      "catalog_brands_v2_platform_code_uidx",
+      "catalog_brands_v2_tenant_code_uidx",
+      "catalog_spec_definitions_v2_source_copy_uidx",
+      "catalog_units_v2_dimension_status_idx",
+      "catalog_unit_suggestions_v2_queue_idx",
+    ]) {
+      expect(schemaMaterializationSql).toContain(index);
+    }
+
+    expect(schemaMaterializationSql).toContain("NOT VALID");
+    expect(schemaMaterializationSql).toContain("VALIDATE CONSTRAINT");
+    expect(schemaMaterializationSql).toContain("ENABLE ROW LEVEL SECURITY");
+    expect(schemaMaterializationSql).toContain("FORCE ROW LEVEL SECURITY");
+    expect(schemaMaterializationSql).toMatch(
+      /REVOKE ALL ON TABLE public\.catalog_categories[\s\S]*FROM PUBLIC, anon, authenticated, service_role/,
+    );
+    expect(schemaMaterializationSql).toMatch(
+      /GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public\.catalog_categories[\s\S]*TO service_role/,
+    );
+    expect(schemaMaterializationSql).not.toMatch(/\bIF NOT EXISTS\b/i);
+  });
+
   test("keeps the four applied 20260813 migrations byte-for-byte immutable", () => {
     for (const [name, expectedHash] of Object.entries(expectedHistoricalHashes)) {
       const content = read(migrations[name as keyof typeof migrations]);
