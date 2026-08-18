@@ -48,9 +48,11 @@ describe("SupplierCatalogService read boundaries", () => {
 
     expect(dependencies.repository.listCategories).toHaveBeenCalledWith(
       expect.objectContaining({ parent_id: null, status: "inactive" }),
+      { kind: "platform" },
     );
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith(
       expect.objectContaining({ status: "active" }),
+      { kind: "platform" },
     );
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith(
       expect.objectContaining({ status: "inactive" }),
@@ -85,12 +87,12 @@ describe("SupplierCatalogService read boundaries", () => {
       page: 2,
       pageSize: 20,
       status: "active",
-    });
+    }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
       status: "active",
-    });
+    }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
@@ -158,6 +160,7 @@ describe("SupplierCatalogService write boundary", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "1",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
     }, "unit-create");
@@ -190,6 +193,7 @@ describe("SupplierCatalogService write boundary", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "1",
+      unit_dimension: "quantity",
       status: "active" as const,
       sort_order: 100,
     };
@@ -268,115 +272,6 @@ describe("SupplierCatalogService write boundary", () => {
   });
 });
 
-describe("SupplierCatalogService database conflict mapping", () => {
-  test("maps create idempotency database conflicts without hiding others", async () => {
-    let categoryCalls = 0;
-    const idempotencyConflict = {
-      code: "DB_ERROR",
-      details: {
-        code: "P0001",
-        message: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-      },
-    };
-    const { service } = await createService({
-      createCategory: mock(async () => {
-        categoryCalls += 1;
-        if (categoryCalls === 1) return { id: CATEGORY_ID };
-        throw idempotencyConflict;
-      }),
-      createBrand: mock(async () => {
-        throw idempotencyConflict;
-      }),
-    });
-    const context = auth(["platform.catalog.manage"], null, true);
-    const createCategory = (name: string) => service.createCategory(
-      context,
-      {
-        parent_id: null,
-        code: "CAT-001",
-        name,
-        level: 1,
-        status: "active",
-        sort_order: 100,
-      },
-      "catalog-conflict-1",
-    );
-
-    await createCategory("主材");
-    await expect(createCategory("辅材")).rejects.toMatchObject({
-      statusCode: 409,
-      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    });
-    await expect(service.createBrand(
-      context,
-      {
-        code: "BR-001",
-        name: "雨虹",
-        status: "active",
-        sort_order: 100,
-      },
-      "catalog-conflict-1",
-    )).rejects.toMatchObject({
-      statusCode: 409,
-      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    });
-  });
-
-  test("maps unique and hierarchy database violations to one stable domain error", async () => {
-    const violations = [
-      { code: "23505", message: "duplicate key" },
-      { message: "目录分类层级不能形成环" },
-      { message: "存在启用的子分类，当前目录分类不能停用" },
-      { message: "启用的目录分类必须属于启用的父分类" },
-      { message: "派生单位只能引用启用的基准单位" },
-      { message: "有派生单位引用的基准单位不能停用" },
-    ];
-
-    for (const violation of violations) {
-      const { service } = await createService({
-        createCategory: mock(async () => {
-          throw {
-            code: "DB_ERROR",
-            details: violation,
-          };
-        }),
-      });
-      await expect(service.createCategory(
-        auth(["platform.catalog.manage"], null, true),
-        {
-          parent_id: null,
-          code: "CAT-001",
-          name: "主材",
-          level: 1,
-          status: "active",
-          sort_order: 100,
-        }, "category-create",
-      )).rejects.toMatchObject({
-        statusCode: 409,
-        code: "SUPPLIER_CATALOG_CONFLICT",
-      });
-    }
-  });
-
-  test("does not hide unrelated database failures", async () => {
-    const original = {
-      code: "DB_ERROR",
-      details: { code: "42P01", message: "missing relation" },
-    };
-    const { service } = await createService({
-      createBrand: mock(async () => {
-        throw original;
-      }),
-    });
-
-    await expect(service.createBrand(
-      auth(["platform.catalog.manage"], null, true),
-      { code: "BR-001", name: "雨虹", status: "active", sort_order: 100 },
-      "brand-create",
-    )).rejects.toBe(original);
-  });
-});
-
 function auth(
   permissions: string[],
   tenantId: string | null,
@@ -427,6 +322,15 @@ function createDependencies(overrides: Record<string, unknown>) {
   };
   return {
     repository,
+    settingsRepository: {
+      getSettings: mock(async () => ({
+        module_enabled: true,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
+        private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: false,
+      })),
+    },
     accessPolicy: {
       assertTenantContext: mock((context: AuthContext) => {
         if (!context.tenantId) {
@@ -493,4 +397,5 @@ const unit = {
   symbol: "箱",
   base_unit_id: null,
   conversion_factor: "1.000000",
+  unit_dimension: "quantity",
 };

@@ -65,6 +65,38 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商模块未启用",
   },
+  SUPPLIER_OWNERSHIP_READS_DISABLED: {
+    statusCode: 403,
+    message: "供应商所有权读取尚未启用",
+  },
+  PRIVATE_CATALOG_WRITES_DISABLED: {
+    statusCode: 403,
+    message: "租户私有目录维护尚未启用",
+  },
+  SHARED_RESOURCE_READ_ONLY: {
+    statusCode: 403,
+    message: "平台共享目录资源只读",
+  },
+  CATEGORY_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "目录分类归属与当前操作不匹配",
+  },
+  BRAND_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "目录品牌归属与当前操作不匹配",
+  },
+  SPEC_TEMPLATE_VALIDATION_ERROR: {
+    statusCode: 409,
+    message: "目录规格模板校验失败",
+  },
+  SUPPLIER_CATALOG_CONFLICT: {
+    statusCode: 409,
+    message: "供应商目录数据冲突",
+  },
+  UNIT_CONVERSION_INVALID: {
+    statusCode: 400,
+    message: "单位换算参数无效",
+  },
   SUPPLIER_ORDER_NOT_ELIGIBLE: {
     statusCode: 409,
     message: "当前供应商关系不允许继续该操作",

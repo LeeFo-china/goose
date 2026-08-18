@@ -5,20 +5,9 @@ function read(relativePath: string): string {
   return readFileSync(new URL(relativePath, import.meta.url), "utf8");
 }
 
-function slice(content: string, startMarker: string, endMarker: string): string {
-  const start = content.indexOf(startMarker);
-  const end = content.indexOf(endMarker, start + startMarker.length);
-  expect(start).toBeGreaterThanOrEqual(0);
-  expect(end).toBeGreaterThan(start);
-  return content.slice(start, end);
-}
-
 const migration = read(
   "../../../../supabase/migrations/20260818123000_materialize_tenant_supplier_catalog_commands.sql",
 );
-const repository = read("../repositories/supplier-catalog.ts");
-const schema = read("../schema/supplier-catalog.ts");
-const databaseTypes = read("../types/database.ts");
 const verifier = read(
   "../../../../scripts/verify-tenant-supplier-catalog-command-migrations.sh",
 );
@@ -31,29 +20,6 @@ const pre123Seed = existsSync(pre123SeedUrl)
   : "";
 
 describe("tenant supplier catalog unit rollout compatibility", () => {
-  test("proves the deployed API still calls the eleven-argument unit RPC", () => {
-    const createSchema = slice(
-      schema,
-      "export const CatalogUnitCreateSchema",
-      "export const CatalogUnitUpdateSchema",
-    );
-    const createRepositoryMethod = slice(
-      repository,
-      "  createUnit(input: CatalogUnitCreateCommand) {",
-      "  updateUnit(input: CatalogUnitUpdateRecord) {",
-    );
-    const generatedRpc = slice(
-      databaseTypes,
-      "      create_catalog_unit: {",
-      "      create_douyin_template_development_installation:",
-    );
-
-    expect(createSchema).not.toContain("unit_dimension");
-    expect(createRepositoryMethod).not.toContain("p_unit_dimension");
-    expect(generatedRpc).not.toContain("p_unit_dimension");
-    expect(createRepositoryMethod).toContain("p_conversion_factor");
-  });
-
   test("keeps one deprecated eleven-argument overload beside the canonical RPC", () => {
     const normalized = migration.replace(/\s+/g, " ");
     expect(migration.match(/^CREATE FUNCTION public\.create_catalog_unit\(/gm))

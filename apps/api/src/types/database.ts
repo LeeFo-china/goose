@@ -559,6 +559,7 @@ export type Database = {
           id: string
           legal_name: string | null
           logo_file_id: string | null
+          mapped_platform_brand_id: string | null
           name: string
           owner_tenant_id: string | null
           ownership_scope: string
@@ -575,6 +576,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           logo_file_id?: string | null
+          mapped_platform_brand_id?: string | null
           name: string
           owner_tenant_id?: string | null
           ownership_scope?: string
@@ -591,6 +593,7 @@ export type Database = {
           id?: string
           legal_name?: string | null
           logo_file_id?: string | null
+          mapped_platform_brand_id?: string | null
           name?: string
           owner_tenant_id?: string | null
           ownership_scope?: string
@@ -643,8 +646,11 @@ export type Database = {
           code: string
           created_at: string
           created_by_employee_id: string
+          full_name: string
           id: string
+          is_leaf: boolean
           level: number
+          mapped_platform_category_id: string | null
           name: string
           owner_tenant_id: string | null
           ownership_scope: string
@@ -659,8 +665,11 @@ export type Database = {
           code: string
           created_at?: string
           created_by_employee_id: string
+          full_name: string
           id?: string
+          is_leaf?: boolean
           level: number
+          mapped_platform_category_id?: string | null
           name: string
           owner_tenant_id?: string | null
           ownership_scope?: string
@@ -675,8 +684,11 @@ export type Database = {
           code?: string
           created_at?: string
           created_by_employee_id?: string
+          full_name?: string
           id?: string
+          is_leaf?: boolean
           level?: number
+          mapped_platform_category_id?: string | null
           name?: string
           owner_tenant_id?: string | null
           ownership_scope?: string
@@ -725,6 +737,132 @@ export type Database = {
           },
         ]
       }
+      catalog_spec_definitions: {
+        Row: {
+          category_id: string
+          code: string
+          created_at: string
+          created_by_employee_id: string
+          enum_options: Json
+          id: string
+          is_filterable: boolean
+          is_required: boolean
+          name: string
+          owner_tenant_id: string | null
+          ownership_scope: string
+          participates_in_sku_name: boolean
+          sort_order: number
+          source_platform_spec_id: string | null
+          status: string
+          unit_dimension: string | null
+          updated_at: string
+          updated_by_employee_id: string
+          value_type: string
+          version: number
+        }
+        Insert: {
+          category_id: string
+          code: string
+          created_at?: string
+          created_by_employee_id: string
+          enum_options?: Json
+          id?: string
+          is_filterable?: boolean
+          is_required?: boolean
+          name: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
+          participates_in_sku_name?: boolean
+          sort_order?: number
+          source_platform_spec_id?: string | null
+          status?: string
+          unit_dimension?: string | null
+          updated_at?: string
+          updated_by_employee_id: string
+          value_type: string
+          version?: number
+        }
+        Update: {
+          category_id?: string
+          code?: string
+          created_at?: string
+          created_by_employee_id?: string
+          enum_options?: Json
+          id?: string
+          is_filterable?: boolean
+          is_required?: boolean
+          name?: string
+          owner_tenant_id?: string | null
+          ownership_scope?: string
+          participates_in_sku_name?: boolean
+          sort_order?: number
+          source_platform_spec_id?: string | null
+          status?: string
+          unit_dimension?: string | null
+          updated_at?: string
+          updated_by_employee_id?: string
+          value_type?: string
+          version?: number
+        }
+        Relationships: []
+      }
+      catalog_unit_suggestions: {
+        Row: {
+          approved_catalog_unit_id: string | null
+          created_at: string
+          id: string
+          reason: string | null
+          review_remark: string | null
+          reviewed_at: string | null
+          reviewed_by_employee_id: string | null
+          status: string
+          submitted_by_employee_id: string
+          suggested_code: string
+          suggested_name: string
+          suggested_symbol: string
+          tenant_id: string
+          unit_dimension: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          approved_catalog_unit_id?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_by_employee_id: string
+          suggested_code: string
+          suggested_name: string
+          suggested_symbol: string
+          tenant_id: string
+          unit_dimension: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          approved_catalog_unit_id?: string | null
+          created_at?: string
+          id?: string
+          reason?: string | null
+          review_remark?: string | null
+          reviewed_at?: string | null
+          reviewed_by_employee_id?: string | null
+          status?: string
+          submitted_by_employee_id?: string
+          suggested_code?: string
+          suggested_name?: string
+          suggested_symbol?: string
+          tenant_id?: string
+          unit_dimension?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       catalog_units: {
         Row: {
           base_unit_id: string | null
@@ -737,6 +875,7 @@ export type Database = {
           sort_order: number
           status: string
           symbol: string
+          unit_dimension: string
           updated_at: string
           updated_by_employee_id: string
           version: number
@@ -752,6 +891,7 @@ export type Database = {
           sort_order?: number
           status?: string
           symbol: string
+          unit_dimension?: string
           updated_at?: string
           updated_by_employee_id: string
           version?: number
@@ -767,6 +907,7 @@ export type Database = {
           sort_order?: number
           status?: string
           symbol?: string
+          unit_dimension?: string
           updated_at?: string
           updated_by_employee_id?: string
           version?: number
@@ -23269,6 +23410,18 @@ export type Database = {
         }
         Returns: Json
       }
+      copy_platform_category_specs: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_platform_category_id: string
+          p_tenant_category_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_catalog_brand: {
         Args: {
           p_actor_employee_id: string
@@ -23299,6 +23452,27 @@ export type Database = {
         }
         Returns: Json
       }
+      create_catalog_spec_definition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_category_id: string
+          p_code: string
+          p_enum_options: Json
+          p_idempotency_key: string
+          p_is_filterable: boolean
+          p_is_required: boolean
+          p_name: string
+          p_participates_in_sku_name: boolean
+          p_sort_order: number
+          p_spec_definition_id: string
+          p_status: string
+          p_tenant_id: string | null
+          p_unit_dimension: string | null
+          p_value_type: string
+        }
+        Returns: Json
+      }
       create_catalog_unit: {
         Args: {
           p_actor_employee_id: string
@@ -23311,7 +23485,137 @@ export type Database = {
           p_sort_order: number
           p_status: string
           p_symbol: string
+          p_unit_dimension: string
           p_unit_id: string
+        }
+        Returns: Json
+      }
+      create_tenant_catalog_brand: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_brand_id: string
+          p_code: string
+          p_idempotency_key: string
+          p_legal_name: string | null
+          p_logo_file_id: string | null
+          p_mapped_platform_brand_id: string | null
+          p_name: string
+          p_sort_order: number
+          p_status: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      create_tenant_catalog_category: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_category_id: string
+          p_code: string
+          p_idempotency_key: string
+          p_mapped_platform_category_id: string | null
+          p_name: string
+          p_parent_id: string | null
+          p_sort_order: number
+          p_status: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      list_catalog_unit_suggestions: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_page?: number
+          p_page_size?: number
+          p_status?: string | null
+          p_tenant_id?: string | null
+        }
+        Returns: Json
+      }
+      review_catalog_unit_suggestion: {
+        Args: {
+          p_action: string
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_approved_catalog_unit_id: string | null
+          p_expected_version: number
+          p_idempotency_key: string
+          p_review_remark: string | null
+          p_suggestion_id: string
+        }
+        Returns: Json
+      }
+      submit_tenant_catalog_unit_suggestion: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_idempotency_key: string
+          p_reason: string | null
+          p_suggested_code: string
+          p_suggested_name: string
+          p_suggested_symbol: string
+          p_suggestion_id: string
+          p_tenant_id: string
+          p_unit_dimension: string
+        }
+        Returns: Json
+      }
+      update_catalog_spec_definition: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_category_id: string
+          p_code: string
+          p_enum_options: Json
+          p_expected_version: number
+          p_idempotency_key: string
+          p_is_filterable: boolean
+          p_is_required: boolean
+          p_name: string
+          p_participates_in_sku_name: boolean
+          p_sort_order: number
+          p_spec_definition_id: string
+          p_status: string
+          p_tenant_id: string | null
+          p_unit_dimension: string | null
+          p_value_type: string
+        }
+        Returns: Json
+      }
+      update_tenant_catalog_brand: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_brand_id: string
+          p_code: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_legal_name: string | null
+          p_logo_file_id: string | null
+          p_mapped_platform_brand_id: string | null
+          p_name: string
+          p_sort_order: number
+          p_status: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      update_tenant_catalog_category: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_category_id: string
+          p_code: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_mapped_platform_category_id: string | null
+          p_name: string
+          p_parent_id: string | null
+          p_sort_order: number
+          p_status: string
+          p_tenant_id: string
         }
         Returns: Json
       }

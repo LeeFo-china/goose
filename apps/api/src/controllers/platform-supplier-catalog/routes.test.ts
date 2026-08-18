@@ -27,10 +27,24 @@ describe("PlatformSupplierCatalogController routes", () => {
       { method: "GET", path: "/platform/catalog/units" },
       { method: "POST", path: "/platform/catalog/units" },
       { method: "PATCH", path: "/platform/catalog/units/:id" },
+      {
+        method: "GET",
+        path: "/platform/catalog/categories/:id/spec-definitions",
+      },
+      {
+        method: "POST",
+        path: "/platform/catalog/categories/:id/spec-definitions",
+      },
+      {
+        method: "PATCH",
+        path: "/platform/catalog/categories/:id/spec-definitions/:definitionId",
+      },
+      { method: "GET", path: "/platform/catalog/unit-suggestions" },
+      { method: "PATCH", path: "/platform/catalog/unit-suggestions/:id" },
     ]);
   });
 
-  test("rejects every create route without an idempotency key", async () => {
+  test("rejects every RPC command route without an idempotency key", async () => {
     const { default: controller } = await import(".");
     Object.defineProperty(controller, "getRequiredPlatformPermissionContext", {
       configurable: true,
@@ -46,6 +60,9 @@ describe("PlatformSupplierCatalogController routes", () => {
       () => controller.createCategory(request),
       () => controller.createBrand(request),
       () => controller.createUnit(request),
+      () => controller.createSpecDefinition(request),
+      () => controller.updateSpecDefinition(request),
+      () => controller.reviewUnitSuggestion(request),
     ];
 
     try {
@@ -129,6 +146,7 @@ describe("PlatformSupplierCatalogController routes", () => {
           symbol: "箱",
           base_unit_id: null,
           conversion_factor: "1",
+          unit_dimension: "quantity",
           status: "active",
           sort_order: 100,
         },

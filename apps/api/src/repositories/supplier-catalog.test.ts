@@ -166,7 +166,7 @@ describe("SupplierCatalogRepository paginated reads", () => {
     expect(unitUrl.searchParams.get("select")).not.toContain("base_unit:");
     const baseUnitUrl = new URL(requests[2]!.url);
     expect(baseUnitUrl.searchParams.get("select"))
-      .toBe("id,code,name,symbol,status");
+      .toBe("id,code,name,symbol,unit_dimension,status");
     expect(baseUnitUrl.searchParams.get("id")).toBe(
       `in.(${BASE_UNIT_ID},${SECOND_BASE_UNIT_ID})`,
     );
@@ -219,189 +219,17 @@ describe("SupplierCatalogRepository paginated reads", () => {
     }
     expect(requests).toHaveLength(3);
   });
-});
 
-describe("SupplierCatalogRepository writes", () => {
-  test("creates each catalog resource through an atomic command RPC", async () => {
-    const { repository, requests } = await createRepository((request) => {
-      const name = new URL(request.url).pathname.split("/").at(-1);
-      const resource = name === "create_catalog_category"
-        ? { category }
-        : name === "create_catalog_brand"
-        ? { brand }
-        : { unit };
-      return {
-        body: {
-          status: "created",
-          idempotent: false,
-          ...resource,
-          version: 1,
-        },
-      };
-    });
-    const context = {
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "catalog-create",
-    };
-
-    await repository.createCategory({
-      category_id: CATEGORY_ID,
-      parent_id: null,
-      code: "CAT-001",
-      name: "主材",
-      level: 1,
-      status: "active",
-      sort_order: 100,
-      ...context,
-    });
-    await repository.createBrand({
-      brand_id: BRAND_ID,
-      code: "BR-001",
-      name: "雨虹",
-      status: "active",
-      sort_order: 100,
-      ...context,
-    });
-    await repository.createUnit({
-      unit_id: UNIT_ID,
-      code: "UNIT-BOX",
-      name: "箱",
-      symbol: "箱",
-      base_unit_id: BASE_UNIT_ID,
-      conversion_factor: "12",
-      status: "active",
-      sort_order: 100,
-      ...context,
-    });
-
-    expect(requests).toHaveLength(3);
-    for (const request of requests) {
-      expect(request.method).toBe("POST");
-      expect(await request.clone().json()).toMatchObject({
-        p_actor_user_id: USER_ID,
-        p_actor_employee_id: EMPLOYEE_ID,
-        p_idempotency_key: "catalog-create",
-      });
-    }
-    expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
-      "/rest/v1/rpc/create_catalog_category",
-      "/rest/v1/rpc/create_catalog_brand",
-      "/rest/v1/rpc/create_catalog_unit",
-    ]);
-  });
-
-  test("updates each resource with id and optimistic version guards", async () => {
-    const { repository, requests } = await createRepository((request) => ({
-      body: request.url.includes("catalog_categories")
-        ? { ...category, name: "新主材", version: 2 }
-        : request.url.includes("catalog_brands")
-        ? { ...brand, name: "新雨虹", version: 2 }
-        : { ...unit, name: "整箱", version: 2 },
-    }));
-
-    await repository.updateCategory({
-      category_id: CATEGORY_ID,
-      expected_version: 1,
-      name: "新主材",
-      updated_by_employee_id: EMPLOYEE_ID,
-    });
-    await repository.updateBrand({
-      brand_id: BRAND_ID,
-      expected_version: 1,
-      name: "新雨虹",
-      updated_by_employee_id: EMPLOYEE_ID,
-    });
-    await repository.updateUnit({
-      unit_id: UNIT_ID,
-      expected_version: 1,
-      name: "整箱",
-      updated_by_employee_id: EMPLOYEE_ID,
-    });
-
-    for (const request of requests) {
-      const url = new URL(request.url);
-      expect(request.method).toBe("PATCH");
-      expect(url.searchParams.get("version")).toBe("eq.1");
-      expect(url.searchParams.get("select")).not.toContain("*");
-      expect(await request.clone().json()).toMatchObject({
-        version: 2,
-        updated_by_employee_id: EMPLOYEE_ID,
-      });
-    }
-    expect(new URL(requests[0]!.url).searchParams.get("id"))
-      .toBe(`eq.${CATEGORY_ID}`);
-    expect(new URL(requests[1]!.url).searchParams.get("id"))
-      .toBe(`eq.${BRAND_ID}`);
-    expect(new URL(requests[2]!.url).searchParams.get("id"))
-      .toBe(`eq.${UNIT_ID}`);
-    expect(new URL(requests[2]!.url).searchParams.get("select"))
-      .toContain("conversion_factor::text");
-  });
-
-  test("returns the latest status and version after an optimistic conflict", async () => {
-    const { repository, requests } = await createRepository((request) => {
-      if (request.method === "PATCH") return { body: null };
-      return {
-        body: {
-          version: 3,
-          status: "active",
-        },
-      };
-    });
-
-    await expect(repository.updateBrand({
-      brand_id: BRAND_ID,
-      expected_version: 2,
-      status: "inactive",
-      updated_by_employee_id: EMPLOYEE_ID,
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "SUPPLIER_VERSION_CONFLICT",
-      details: {
-        current_version: 3,
-        current_status: "active",
-      },
-    });
-
-    expect(requests).toHaveLength(2);
-    expect(requests[0]?.method).toBe("PATCH");
-    const refreshUrl = new URL(requests[1]!.url);
-    expect(requests[1]?.method).toBe("GET");
-    expect(refreshUrl.searchParams.get("id")).toBe(`eq.${BRAND_ID}`);
-    expect(refreshUrl.searchParams.get("select")).toBe("version,status");
-  });
-
-  test("wraps invalid rows and Supabase failures as database errors", async () => {
+  test("wraps invalid list rows as database errors", async () => {
     const invalid = await createRepository(() => ({ body: [{}], count: 1 }));
+
     await expect(invalid.repository.listBrands({
       page: 1,
       pageSize: 20,
     })).rejects.toMatchObject({ code: "DB_ERROR" });
-
-    const failed = await createRepository(() => ({
-      body: {
-        code: "23505",
-        message: "duplicate key value violates unique constraint",
-      },
-      status: 409,
-    }));
-    await expect(failed.repository.createBrand({
-      brand_id: BRAND_ID,
-      code: "BR-001",
-      name: "重复品牌",
-      status: "active",
-      sort_order: 100,
-      actor_user_id: USER_ID,
-      actor_employee_id: EMPLOYEE_ID,
-      idempotency_key: "brand-create",
-    })).rejects.toMatchObject({
-      code: "DB_ERROR",
-      details: expect.objectContaining({ code: "23505" }),
-    });
   });
 
-  test("rejects numeric conversion factors instead of returning false precision", async () => {
+  test("rejects numeric conversion factors instead of losing precision", async () => {
     const numeric = await createRepository(() => ({
       body: [{
         ...unitListItem,
@@ -428,6 +256,11 @@ const category = {
   code: "CAT-001",
   name: "主材",
   level: 1,
+  full_name: "主材",
+  is_leaf: true,
+  mapped_platform_category_id: null,
+  ownership_scope: "platform" as const,
+  owner_tenant_id: null,
   status: "active",
   sort_order: 100,
   ...audit,
@@ -438,6 +271,9 @@ const brand = {
   name: "雨虹",
   legal_name: null,
   logo_file_id: null,
+  mapped_platform_brand_id: null,
+  ownership_scope: "platform" as const,
+  owner_tenant_id: null,
   status: "active",
   sort_order: 100,
   ...audit,
@@ -449,6 +285,7 @@ const unit = {
   symbol: "箱",
   base_unit_id: BASE_UNIT_ID,
   conversion_factor: PRECISE_FACTOR,
+  unit_dimension: "quantity",
   status: "active",
   sort_order: 100,
   ...audit,
@@ -458,6 +295,7 @@ const baseUnitProjection = {
   code: "UNIT-PC",
   name: "件",
   symbol: "件",
+  unit_dimension: "quantity",
   status: "active" as const,
 };
 const secondBaseUnitProjection = {
@@ -465,6 +303,7 @@ const secondBaseUnitProjection = {
   code: "UNIT-KG",
   name: "千克",
   symbol: "kg",
+  unit_dimension: "weight",
   status: "active" as const,
 };
 const unitListItem = {

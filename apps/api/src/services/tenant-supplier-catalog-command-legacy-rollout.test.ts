@@ -16,14 +16,14 @@ function functionBody(name: string): string {
 const migration = read(
   "../../../../supabase/migrations/20260818123000_materialize_tenant_supplier_catalog_commands.sql",
 );
-const repository = read("../repositories/supplier-catalog.ts");
+const repository = read("../repositories/supplier-catalog-models.ts");
 const behavior = read(
   "../../../../scripts/fixtures/verify-tenant-supplier-catalog-command-behavior.sql",
 );
 
 const resources = {
   create_catalog_category: {
-    schema: "CatalogCategorySchema",
+    schema: "PlatformCategorySchema",
     key: "category",
     fields: [
       "id", "parent_id", "code", "name", "level", "status", "sort_order",
@@ -32,7 +32,7 @@ const resources = {
     ],
   },
   create_catalog_brand: {
-    schema: "CatalogBrandSchema",
+    schema: "PlatformBrandSchema",
     key: "brand",
     fields: [
       "id", "code", "name", "legal_name", "logo_file_id", "status",
@@ -44,7 +44,7 @@ const resources = {
 
 describe("legacy platform catalog create rollout", () => {
   test("keeps responses aligned with the current strict API schemas", () => {
-    const auditStart = repository.indexOf("const catalogAudit = {");
+    const auditStart = repository.indexOf("const audit = {");
     const auditEnd = repository.indexOf("};", auditStart);
     const auditSchema = repository.slice(auditStart, auditEnd);
     for (const definition of Object.values(resources)) {

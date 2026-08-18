@@ -4,6 +4,10 @@ import {
   type SupplierCatalogRepositoryPort,
 } from "@/repositories/supplier-catalog";
 import {
+  tenantSuppliersRepository,
+  type TenantSupplierSettings,
+} from "@/repositories/tenant-suppliers";
+import {
   isSupplierIdempotencyConflict,
 } from "@/repositories/supplier-create-command-rpc";
 import type {
@@ -13,15 +17,28 @@ import type {
   CatalogCategoryCreateInput,
   CatalogCategoryListQuery,
   CatalogCategoryUpdateInput,
+  CatalogSpecDefinitionCreateInput,
+  CatalogSpecDefinitionListQuery,
+  CatalogSpecDefinitionUpdateInput,
   CatalogUnitCreateInput,
   CatalogUnitListQuery,
+  CatalogUnitSuggestionReviewInput,
   CatalogUnitUpdateInput,
+  PlatformCatalogUnitSuggestionListQuery,
+  TenantCatalogBrandCreateInput,
+  TenantCatalogBrandUpdateInput,
+  TenantCatalogCategoryCreateInput,
+  TenantCatalogCategoryUpdateInput,
+  CopyPlatformSpecDefinitionsInput,
+  CatalogUnitSuggestionCreateInput,
+  CatalogUnitSuggestionListQuery,
 } from "@/schema/supplier-catalog";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { SupplierCatalogPlatformWorkflows } from "./supplier-catalog-platform-workflows";
+import { SupplierCatalogTenantService } from "./supplier-catalog-tenant";
 
 const PLATFORM_PERMISSION = "platform.catalog.manage";
-const TENANT_PERMISSION = "supplier.view";
 const CATALOG_CONFLICT_MESSAGES = [
   "只能移动叶子目录分类",
   "目录分类不能将自身设为父分类",
@@ -42,10 +59,14 @@ type AccessPolicyPort = Pick<
   typeof accessPolicyService,
   "assertPermission" | "assertTenantContext"
 >;
+type SettingsRepositoryPort = {
+  getSettings(tenantId: string): Promise<TenantSupplierSettings | null>;
+};
 
 export type SupplierCatalogServiceDependencies = {
   repository?: SupplierCatalogRepositoryPort;
   accessPolicy?: AccessPolicyPort;
+  settingsRepository?: SettingsRepositoryPort;
   idFactory?: () => string;
 };
 
@@ -53,11 +74,27 @@ export class SupplierCatalogService {
   private readonly repository: SupplierCatalogRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly idFactory: () => string;
+  private readonly tenantService: SupplierCatalogTenantService;
+  private readonly platformWorkflows: SupplierCatalogPlatformWorkflows;
 
   constructor(dependencies: SupplierCatalogServiceDependencies = {}) {
     this.repository = dependencies.repository ?? supplierCatalogRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
+    this.tenantService = new SupplierCatalogTenantService(
+      this.repository,
+      dependencies.settingsRepository ?? tenantSuppliersRepository,
+      this.accessPolicy,
+      this.idFactory,
+    );
+    this.platformWorkflows = new SupplierCatalogPlatformWorkflows({
+      repository: this.repository,
+      idFactory: this.idFactory,
+      requirePlatform: (authContext) => this.requirePlatform(authContext),
+      requirePlatformActor: (authContext) =>
+        this.requirePlatformActor(authContext),
+      mapCatalogConflict: (operation) => this.mapCatalogConflict(operation),
+    });
   }
 
   listPlatformCategories(
@@ -65,15 +102,14 @@ export class SupplierCatalogService {
     query: CatalogCategoryListQuery,
   ) {
     this.requirePlatform(authContext);
-    return this.repository.listCategories(query);
+    return this.repository.listCategories(query, { kind: "platform" });
   }
 
   listTenantCategories(
     authContext: AuthContext,
     query: CatalogCategoryListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listCategories(activeOnly(query));
+    return this.tenantService.listCategories(authContext, query);
   }
 
   listPlatformBrands(
@@ -81,15 +117,14 @@ export class SupplierCatalogService {
     query: CatalogBrandListQuery,
   ) {
     this.requirePlatform(authContext);
-    return this.repository.listBrands(query);
+    return this.repository.listBrands(query, { kind: "platform" });
   }
 
   listTenantBrands(
     authContext: AuthContext,
     query: CatalogBrandListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listBrands(activeOnly(query));
+    return this.tenantService.listBrands(authContext, query);
   }
 
   listPlatformUnits(
@@ -104,8 +139,130 @@ export class SupplierCatalogService {
     authContext: AuthContext,
     query: CatalogUnitListQuery,
   ) {
-    this.requireTenant(authContext);
-    return this.repository.listUnits(activeOnly(query));
+    return this.tenantService.listUnits(authContext, query);
+  }
+
+  createTenantCategory(
+    authContext: AuthContext,
+    input: TenantCatalogCategoryCreateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.createCategory(
+      authContext,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  updateTenantCategory(
+    authContext: AuthContext,
+    categoryId: string,
+    input: TenantCatalogCategoryUpdateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.updateCategory(
+      authContext,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  createTenantBrand(
+    authContext: AuthContext,
+    input: TenantCatalogBrandCreateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.createBrand(authContext, input, idempotencyKey);
+  }
+
+  updateTenantBrand(
+    authContext: AuthContext,
+    brandId: string,
+    input: TenantCatalogBrandUpdateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.updateBrand(
+      authContext,
+      brandId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  listTenantSpecDefinitions(
+    authContext: AuthContext,
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+  ) {
+    return this.tenantService.listSpecDefinitions(
+      authContext,
+      categoryId,
+      query,
+    );
+  }
+
+  createTenantSpecDefinition(
+    authContext: AuthContext,
+    categoryId: string,
+    input: CatalogSpecDefinitionCreateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.createSpecDefinition(
+      authContext,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  updateTenantSpecDefinition(
+    authContext: AuthContext,
+    categoryId: string,
+    definitionId: string,
+    input: CatalogSpecDefinitionUpdateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.updateSpecDefinition(
+      authContext,
+      categoryId,
+      definitionId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  copyPlatformSpecDefinitions(
+    authContext: AuthContext,
+    categoryId: string,
+    input: CopyPlatformSpecDefinitionsInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.copyPlatformSpecDefinitions(
+      authContext,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  listTenantUnitSuggestions(
+    authContext: AuthContext,
+    query: CatalogUnitSuggestionListQuery,
+  ) {
+    return this.tenantService.listUnitSuggestions(authContext, query);
+  }
+
+  submitTenantUnitSuggestion(
+    authContext: AuthContext,
+    input: CatalogUnitSuggestionCreateInput,
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.submitUnitSuggestion(
+      authContext,
+      input,
+      idempotencyKey,
+    );
   }
 
   createCategory(
@@ -198,6 +355,69 @@ export class SupplierCatalogService {
     );
   }
 
+  listPlatformSpecDefinitions(
+    authContext: AuthContext,
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+  ) {
+    return this.platformWorkflows.listSpecDefinitions(
+      authContext,
+      categoryId,
+      query,
+    );
+  }
+
+  createPlatformSpecDefinition(
+    authContext: AuthContext,
+    categoryId: string,
+    input: CatalogSpecDefinitionCreateInput,
+    idempotencyKey: string,
+  ) {
+    return this.platformWorkflows.createSpecDefinition(
+      authContext,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  async updatePlatformSpecDefinition(
+    authContext: AuthContext,
+    categoryId: string,
+    definitionId: string,
+    input: CatalogSpecDefinitionUpdateInput,
+    idempotencyKey: string,
+  ) {
+    return this.platformWorkflows.updateSpecDefinition(
+      authContext,
+      categoryId,
+      definitionId,
+      input,
+      idempotencyKey,
+    );
+  }
+
+  listPlatformUnitSuggestions(
+    authContext: AuthContext,
+    query: PlatformCatalogUnitSuggestionListQuery,
+  ) {
+    return this.platformWorkflows.listUnitSuggestions(authContext, query);
+  }
+
+  reviewPlatformUnitSuggestion(
+    authContext: AuthContext,
+    suggestionId: string,
+    input: CatalogUnitSuggestionReviewInput,
+    idempotencyKey: string,
+  ) {
+    return this.platformWorkflows.reviewUnitSuggestion(
+      authContext,
+      suggestionId,
+      input,
+      idempotencyKey,
+    );
+  }
+
   private requirePlatform(authContext: AuthContext): void {
     const isPlatformIdentity =
       authContext.isPlatformStaff || authContext.isPlatformAdmin;
@@ -217,11 +437,6 @@ export class SupplierCatalogService {
       employeeId: authContext.employeeId,
       authUserId: authContext.authUserId,
     };
-  }
-
-  private requireTenant(authContext: AuthContext): void {
-    this.accessPolicy.assertTenantContext(authContext);
-    this.accessPolicy.assertPermission(authContext, TENANT_PERMISSION);
   }
 
   private async mapCatalogConflict<T>(
@@ -245,13 +460,6 @@ export class SupplierCatalogService {
       );
     }
   }
-}
-
-function activeOnly<T extends { status?: "active" | "inactive" }>(
-  input: T,
-): Omit<T, "status"> & { status: "active" } {
-  const { status: _status, ...query } = input;
-  return { ...query, status: "active" };
 }
 
 function createContext(

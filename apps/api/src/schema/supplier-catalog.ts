@@ -229,6 +229,14 @@ const unitFields = {
   symbol: requiredText(32, "目录单位符号不能为空", "目录单位符号不能超过 32 个字符"),
   base_unit_id: uuid("无效的基准单位 ID").nullable(),
   conversion_factor: conversionFactor,
+  unit_dimension: requiredText(
+    64,
+    "单位计量维度不能为空",
+    "单位计量维度不能超过 64 个字符",
+  ).refine(
+    (value) => value !== "legacy_unclassified",
+    "新单位必须使用明确的计量维度",
+  ),
   status: CatalogStatusSchema,
   sort_order: z.number().int(),
 };
@@ -247,6 +255,7 @@ export const CatalogUnitUpdateSchema = z.object({
   symbol: unitFields.symbol.optional(),
   base_unit_id: unitFields.base_unit_id.optional(),
   conversion_factor: optionalConversionFactor,
+  unit_dimension: unitFields.unit_dimension.optional(),
   status: unitFields.status.optional(),
   sort_order: optionalNumber(unitFields.sort_order),
 }).strict().superRefine(addUnitBaseIssue).refine(hasUpdateField, {
@@ -289,3 +298,5 @@ export type CatalogUnitCreateInput =
   z.infer<typeof CatalogUnitCreateSchema>;
 export type CatalogUnitUpdateInput =
   z.infer<typeof CatalogUnitUpdateSchema>;
+
+export * from "./supplier-catalog-extensions";

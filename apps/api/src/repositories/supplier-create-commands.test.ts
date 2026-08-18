@@ -221,6 +221,7 @@ describe("supplier create command repositories", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "999999999999.123456",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
       ...command,
@@ -236,6 +237,7 @@ describe("supplier create command repositories", () => {
     });
     expect(await requests[2]?.clone().json()).toMatchObject({
       p_conversion_factor: "999999999999.123456",
+      p_unit_dimension: "quantity",
       p_actor_user_id: USER_ID,
       p_idempotency_key: "catalog-create-1",
     });
@@ -463,6 +465,7 @@ function catalogRows() {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "999999999999.123456",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
       ...audit,

@@ -166,6 +166,7 @@ describe("supplier create command services", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "999999999999.123456",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
     }, "unit-create-1");
@@ -184,6 +185,7 @@ describe("supplier create command services", () => {
       expect.objectContaining(commandContext("unit-create-1", {
         unit_id: FIRST_ID,
         conversion_factor: "999999999999.123456",
+        unit_dimension: "quantity",
       })),
     );
   });
