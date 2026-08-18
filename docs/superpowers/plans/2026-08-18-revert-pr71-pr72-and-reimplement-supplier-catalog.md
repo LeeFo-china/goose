@@ -4,7 +4,7 @@
 
 **Goal:** 在保留 Git 与数据库审计历史的前提下，撤销 PR #71/#72 的应用行为，并重新严格执行已批准的租户私有目录、商品与价格实施计划。
 
-**Architecture:** Git 使用反向 revert，不改写 `main` 历史；开发库中已执行的 migration 文件永久保留，并增加一个由 RED contract 驱动的最小前向兼容 migration，保证旧价格写路径继续显式写入租户归属。重实施继续保留 PR #66 的所有权、私有供应商和内部编码基础，重新执行计划 3，完成审查后再进入计划 4。
+**Architecture:** Git 使用反向 revert，不改写 `main` 历史；开发库中已执行的 migration 文件永久保留，并增加由 RED tests 驱动的最小应用查询边界和前向兼容 migration，保证旧商品/SKU/价格路径不跨租户读写且原子写入归属。重实施继续保留 PR #66 的所有权、私有供应商和内部编码基础，重新执行计划 3，完成审查后再进入计划 4。
 
 **Tech Stack:** Git、Bun、TypeScript、Fastify、Supabase/PostgreSQL migration、Next.js 15、React 19、Playwright、GitHub Actions。
 
@@ -210,27 +210,64 @@ git diff --cached --stat
 git commit -m "revert(supplier): 回退目录商品阶段实现"
 ```
 
-### Task 4: 建立旧应用写路径的前向兼容门禁
+Task 3 的回退提交只是本地原子历史节点；在 Task 4 全部 GREEN 前禁止推送、部署或创建 PR。
+
+### Task 4: 建立旧应用读写路径的前向兼容门禁
 
 **Files:**
+- Modify: `apps/api/src/repositories/supplier-products.ts`
+- Modify: `apps/api/src/repositories/supplier-products.test.ts`
+- Modify: `apps/api/src/services/supplier-products.ts`
+- Modify: `apps/api/src/services/supplier-products.test.ts`
+- Modify: `apps/api/src/repositories/supplier-price-lists.ts`
+- Modify: `apps/api/src/repositories/supplier-price-lists.test.ts`
+- Modify: `apps/api/src/services/supplier-price-lists.ts`
+- Modify: `apps/api/src/services/supplier-price-lists.test.ts`
 - Create: `apps/api/src/services/supplier-catalog-revert-compatibility-migration-contract.test.ts`
-- Create: `supabase/migrations/20260818120000_preserve_pre_v2_supplier_pricing_writes.sql`
+- Create: `supabase/migrations/20260818120000_preserve_pre_v2_supplier_catalog_boundaries.sql`
 - Create: `scripts/smoke-supplier-catalog-revert-compatibility.sql`
 
 - [ ] **Step 1: 在回退分支运行供应商基础测试**
 
 ```bash
-bun test apps/api/src/services/tenant-suppliers.test.ts \
-  apps/api/src/services/tenant-supplier-private-commands.test.ts
+cd apps/api
+bun test src/services/tenant-suppliers.test.ts \
+  src/services/tenant-supplier-private-commands.test.ts
+cd ../..
 pnpm --dir apps/admin test:e2e:supplier-catalog
 pnpm --dir apps/admin test:e2e:supplier-product-pricing
 ```
 
-期望：私有供应商和内部编码基础仍可用。
+期望：私有供应商和内部编码基础仍可用。API 测试必须从 `apps/api` 执行，否则 `@/` 路径别名不会按 API tsconfig 解析。
 
-- [ ] **Step 2: 写 RED migration contract**
+- [ ] **Step 2: 写 RED repository/service 隔离测试**
 
-测试必须证明旧价格 RPC 在 `supplier_price_lists` 和价格条目写入时显式派生并持久化 `tenant_id`，保留幂等键、版本、合作关系校验和审计，同时禁止 DROP 四个历史 migration 创建的表或字段。
+测试必须先证明回退后的旧代码存在以下缺口：
+
+- 商品列表、详情、SKU 列表和直接更新没有限制为 platform、历史 NULL 或当前 tenant；
+- 价格列表、详情、条目列表和直接更新没有限定当前 `tenant_id`；
+- service 没有把认证范围中的 `tenantId` 传入这些 repository 方法。
+
+```bash
+cd apps/api
+bun test \
+  src/repositories/supplier-products.test.ts \
+  src/services/supplier-products.test.ts \
+  src/repositories/supplier-price-lists.test.ts \
+  src/services/supplier-price-lists.test.ts
+```
+
+期望：新增边界断言 FAIL，且失败原因是缺少目标过滤条件。
+
+- [ ] **Step 3: 写 RED migration contract**
+
+测试必须证明：
+
+- 商品/SKU 创建 RPC 在单个事务内写入 `ownership_scope='tenant'` 和 `owner_tenant_id=p_tenant_id`；
+- 商品/SKU 更新、启停及子资源命令只能命中当前租户所有的数据，不能修改 platform、历史 NULL 或其他租户数据；
+- 价格 RPC 在价格簿和条目 INSERT 时显式写入 `tenant_id`，所有目标行读取/更新都限定 `tenant_id=p_tenant_id`；
+- 保留幂等键、乐观版本、合作关系校验和审计；
+- 禁止 DROP 四个历史 migration 创建的表、字段、触发器或索引。
 
 ```bash
 cd apps/api
@@ -239,9 +276,19 @@ bun test src/services/supplier-catalog-revert-compatibility-migration-contract.t
 
 期望：因前向兼容 migration 尚不存在而 FAIL。
 
-- [ ] **Step 3: 实现最小前向兼容 migration 并运行 GREEN**
+- [ ] **Step 4: 实现最小应用读边界并运行 GREEN**
 
-只修改旧价格写 RPC 的租户归属写入，不删除四个历史 migration 的 schema，不引入新业务行为。
+Service 只从 `SupplierProxyScope` 传递可信 `tenantId`。Repository：
+
+- 商品读取允许 platform、历史 NULL 和当前 tenant；写操作只允许当前 tenant；
+- 价格所有读写同时限定 `supplier_id` 和当前 `tenant_id`；
+- 列表保持 `.range()` 分页和必要字段选择；不新增依赖或跨层访问 Supabase。
+
+重复运行 Step 2 命令，期望 PASS。
+
+- [ ] **Step 5: 实现最小前向兼容 migration 并运行 GREEN**
+
+只重定义受影响的旧商品、SKU 和价格 RPC：原子写入所有权/租户归属，并对目标行执行 fail-closed 租户校验。不删除四个历史 migration 的 schema，不恢复目录、规格、平台商品或 Admin 功能。
 
 ```bash
 cd apps/api
@@ -250,9 +297,9 @@ bun test src/services/supplier-catalog-revert-compatibility-migration-contract.t
 
 期望：PASS。
 
-- [ ] **Step 4: 本地应用 migration 并执行事务回滚 smoke**
+- [ ] **Step 6: 本地应用 migration 并执行事务回滚 smoke**
 
-`scripts/smoke-supplier-catalog-revert-compatibility.sql` 必须使用 `BEGIN`/`ROLLBACK`，在事务内创建 active 合作关系测试夹具，调用旧价格写 RPC，并断言价格表和条目的 `tenant_id` 等于合作租户；脚本不得留下业务记录。
+`scripts/smoke-supplier-catalog-revert-compatibility.sql` 必须使用 `BEGIN`/`ROLLBACK`，在事务内创建两个租户及 active 合作关系测试夹具，调用旧商品、SKU 和价格写 RPC，并断言：新增商品/SKU 属于调用租户；价格表和条目的 `tenant_id` 等于调用租户；另一租户无法修改这些数据。脚本不得留下业务记录。
 
 smoke 必须在事务内自建固定 UUID 的 tenant、employee、supplier、active `tenant_supplier`、product、SKU 和单位夹具，不依赖 `supabase/seed.sql`。只允许连接固定本地端口：
 
@@ -273,19 +320,27 @@ psql "${CATALOG_LOCAL_DB_URL}" \
 
 期望：脚本输出兼容断言通过，最后执行 `ROLLBACK`；重新查询固定 UUID 返回 0 行。
 
-- [ ] **Step 5: 提交并推送前向兼容变更**
+- [ ] **Step 7: 提交并推送前向兼容变更**
 
 ```bash
 git add \
   apps/api/src/services/supplier-catalog-revert-compatibility-migration-contract.test.ts \
-  supabase/migrations/20260818120000_preserve_pre_v2_supplier_pricing_writes.sql \
+  apps/api/src/repositories/supplier-products.ts \
+  apps/api/src/repositories/supplier-products.test.ts \
+  apps/api/src/services/supplier-products.ts \
+  apps/api/src/services/supplier-products.test.ts \
+  apps/api/src/repositories/supplier-price-lists.ts \
+  apps/api/src/repositories/supplier-price-lists.test.ts \
+  apps/api/src/services/supplier-price-lists.ts \
+  apps/api/src/services/supplier-price-lists.test.ts \
+  supabase/migrations/20260818120000_preserve_pre_v2_supplier_catalog_boundaries.sql \
   scripts/smoke-supplier-catalog-revert-compatibility.sql
 git diff --cached --check
-git commit -m "fix(db): 保持目录回退价格写入兼容"
+git commit -m "fix(supplier): 保持目录回退租户边界"
 git push -u origin revert/supplier-catalog-pr71-pr72
 ```
 
-- [ ] **Step 6: 在开发环境先 plan、后 apply，再核对历史**
+- [ ] **Step 8: 在开发环境先 plan、后 apply，再核对历史**
 
 通过 `Migrate Dev Database` workflow 先运行 `mode=plan`，确认唯一 pending migration 为 `20260818120000`；审查后运行 `mode=apply`：
 
@@ -382,11 +437,11 @@ node scripts/verify-migration-history.mjs \
 
 期望：五个版本的 Local/Remote 均存在且对齐。
 
-- [ ] **Step 7: 对开发环境执行只读 schema 和 API smoke**
+- [ ] **Step 9: 对开发环境执行只读 schema 和 API smoke**
 
-通过受保护 runner 的只读查询核对目标 RPC 定义包含显式 `tenant_id` 派生和写入；再通过 development API 读取供应商、合作关系、商品和价格列表。禁止直接对 development DB 调用写 RPC；真实写兼容性由本地数据库事务回滚 smoke 证明。
+通过受保护 runner 的只读查询核对目标 RPC 定义包含显式商品所有权和价格 `tenant_id` 写入及目标行校验；再通过 development API 读取供应商、合作关系、商品和价格列表。禁止直接对 development DB 调用写 RPC；真实写兼容性由本地数据库事务回滚 smoke 证明。
 
-- [ ] **Step 8: 固化数据库处理决策**
+- [ ] **Step 10: 固化数据库处理决策**
 
 固定决策规则：
 
