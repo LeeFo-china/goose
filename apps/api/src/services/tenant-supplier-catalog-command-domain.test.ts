@@ -13,6 +13,13 @@ const schemaSql = readFileSync(
   ),
   "utf8",
 );
+const behaviorSql = readFileSync(
+  new URL(
+    "../../../../scripts/fixtures/verify-tenant-supplier-catalog-command-behavior.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function functionBody(name: string): string {
   const start = sql.indexOf(`CREATE FUNCTION public.${name}(`);
@@ -26,6 +33,15 @@ function schemaFunctionBody(name: string): string {
   if (start < 0) return "";
   const end = schemaSql.indexOf("\n$$;", start);
   return end < 0 ? schemaSql.slice(start) : schemaSql.slice(start, end + 4);
+}
+
+function behaviorBlock(tag: string): string {
+  const startMarker = `DO $${tag}$`;
+  const endMarker = `\n$${tag}$;`;
+  const start = behaviorSql.indexOf(startMarker);
+  if (start < 0) return "";
+  const end = behaviorSql.indexOf(endMarker, start);
+  return end < 0 ? behaviorSql.slice(start) : behaviorSql.slice(start, end);
 }
 
 describe("tenant supplier catalog command domain boundaries", () => {
@@ -87,6 +103,36 @@ describe("tenant supplier catalog command domain boundaries", () => {
     expect(hierarchyGuard).toContain("MESSAGE = 'SUPPLIER_CATALOG_DEPTH_EXCEEDED'");
     expect(schemaSql).toMatch(
       /CREATE TRIGGER tr_catalog_categories_v2_validate_hierarchy[\s\S]*?EXECUTE FUNCTION public\.validate_catalog_category_hierarchy\(\)/,
+    );
+  });
+
+  test("executes eight legal levels and rejects an unaudited ninth level", () => {
+    const depthBehavior =
+      behaviorBlock("category_depth") + behaviorBlock("category_depth_audit");
+    expect(depthBehavior.match(
+      /PERFORM public\.create_tenant_catalog_category\(/g,
+    )).toHaveLength(9);
+    expect(depthBehavior).toContain(
+      "IF SQLERRM <> 'SUPPLIER_CATALOG_DEPTH_EXCEEDED'",
+    );
+    expect(depthBehavior).toContain(
+      "RAISE EXCEPTION 'legal eight-level category chain incomplete'",
+    );
+    expect(depthBehavior).toContain("category.level = 8");
+    expect(depthBehavior).toContain(
+      "RAISE EXCEPTION 'ninth depth category persisted'",
+    );
+    expect(depthBehavior).toContain(
+      "category.id = '93100000-0000-0000-0000-000000000009'",
+    );
+    expect(depthBehavior).toContain(
+      "RAISE EXCEPTION 'ninth depth audit event persisted'",
+    );
+    expect(depthBehavior).toContain(
+      "FROM public.supplier_command_events AS event",
+    );
+    expect(depthBehavior).toContain(
+      "event.idempotency_key = 'verify-depth-level-9'",
     );
   });
 

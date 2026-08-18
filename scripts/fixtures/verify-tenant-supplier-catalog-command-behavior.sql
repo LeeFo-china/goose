@@ -234,6 +234,143 @@ SELECT public.create_tenant_catalog_category(
   'verify-tenant-a-leaf'
 );
 
+DO $category_depth$
+BEGIN
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000001',
+    NULL, 'VERIFY_DEPTH_1', 'Verifier depth 1', 'active', 101, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-1'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000002',
+    '93100000-0000-0000-0000-000000000001',
+    'VERIFY_DEPTH_2', 'Verifier depth 2', 'active', 102, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-2'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000003',
+    '93100000-0000-0000-0000-000000000002',
+    'VERIFY_DEPTH_3', 'Verifier depth 3', 'active', 103, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-3'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000004',
+    '93100000-0000-0000-0000-000000000003',
+    'VERIFY_DEPTH_4', 'Verifier depth 4', 'active', 104, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-4'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000005',
+    '93100000-0000-0000-0000-000000000004',
+    'VERIFY_DEPTH_5', 'Verifier depth 5', 'active', 105, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-5'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000006',
+    '93100000-0000-0000-0000-000000000005',
+    'VERIFY_DEPTH_6', 'Verifier depth 6', 'active', 106, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-6'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000007',
+    '93100000-0000-0000-0000-000000000006',
+    'VERIFY_DEPTH_7', 'Verifier depth 7', 'active', 107, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-7'
+  );
+  PERFORM public.create_tenant_catalog_category(
+    '93100000-0000-0000-0000-000000000008',
+    '93100000-0000-0000-0000-000000000007',
+    'VERIFY_DEPTH_8', 'Verifier depth 8', 'active', 108, NULL,
+    current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+    '91000000-0000-0000-0000-000000000002',
+    '92000000-0000-0000-0000-000000000002',
+    'verify-depth-level-8'
+  );
+
+  BEGIN
+    PERFORM public.create_tenant_catalog_category(
+      '93100000-0000-0000-0000-000000000009',
+      '93100000-0000-0000-0000-000000000008',
+      'VERIFY_DEPTH_9', 'Verifier depth 9', 'active', 109, NULL,
+      current_setting('supplier_catalog_command_verifier.tenant_a')::uuid,
+      '91000000-0000-0000-0000-000000000002',
+      '92000000-0000-0000-0000-000000000002',
+      'verify-depth-level-9'
+    );
+    RAISE EXCEPTION 'ninth depth category accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_CATALOG_DEPTH_EXCEEDED' THEN RAISE; END IF;
+  END;
+
+  IF (
+    SELECT count(*)
+    FROM public.catalog_categories AS category
+    WHERE category.id = ANY (ARRAY[
+      '93100000-0000-0000-0000-000000000001'::uuid,
+      '93100000-0000-0000-0000-000000000002'::uuid,
+      '93100000-0000-0000-0000-000000000003'::uuid,
+      '93100000-0000-0000-0000-000000000004'::uuid,
+      '93100000-0000-0000-0000-000000000005'::uuid,
+      '93100000-0000-0000-0000-000000000006'::uuid,
+      '93100000-0000-0000-0000-000000000007'::uuid,
+      '93100000-0000-0000-0000-000000000008'::uuid
+    ])
+  ) <> 8 OR NOT EXISTS (
+    SELECT 1
+    FROM public.catalog_categories AS category
+    WHERE category.id = '93100000-0000-0000-0000-000000000008'
+      AND category.level = 8
+  ) THEN
+    RAISE EXCEPTION 'legal eight-level category chain incomplete';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.catalog_categories AS category
+    WHERE category.id = '93100000-0000-0000-0000-000000000009'
+  ) THEN
+    RAISE EXCEPTION 'ninth depth category persisted';
+  END IF;
+
+END
+$category_depth$;
+
+RESET ROLE;
+DO $category_depth_audit$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.supplier_command_events AS event
+    WHERE event.resource_id = '93100000-0000-0000-0000-000000000009'
+      OR event.idempotency_key = 'verify-depth-level-9'
+  ) THEN
+    RAISE EXCEPTION 'ninth depth audit event persisted';
+  END IF;
+END
+$category_depth_audit$;
+SET LOCAL ROLE service_role;
+
 SELECT public.update_tenant_catalog_category(
   '93000000-0000-0000-0000-000000000012',
   '93000000-0000-0000-0000-000000000011',
