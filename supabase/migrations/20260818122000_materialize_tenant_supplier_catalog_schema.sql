@@ -248,6 +248,7 @@ BEGIN
       'validate_catalog_unit_base',
       'validate_catalog_unit_dimension',
       'validate_catalog_unit_suggestion_state',
+      'validate_supplier_proxy_actor',
       'validate_supplier_product_catalog'
     );
 
@@ -307,7 +308,8 @@ BEGIN
         'set_catalog_category_level',
         'update_updated_at_column',
         'validate_catalog_unit_base',
-        'validate_supplier_product_catalog'
+        'validate_supplier_product_catalog',
+        'validate_supplier_proxy_actor'
       ]::text[]
       OR v_constraint_fingerprint IS DISTINCT FROM ARRAY[
         'catalog_categories|catalog_categories_full_name_trimmed_check',
@@ -362,7 +364,8 @@ BEGIN
         'validate_catalog_unit_base',
         'validate_catalog_unit_dimension',
         'validate_catalog_unit_suggestion_state',
-        'validate_supplier_product_catalog'
+        'validate_supplier_product_catalog',
+        'validate_supplier_proxy_actor'
       ]::text[]
       OR v_constraint_fingerprint IS DISTINCT FROM ARRAY[
         'catalog_brands|catalog_brands_mapping_scope_check',
@@ -387,6 +390,339 @@ BEGIN
 
   INSERT INTO catalog_schema_materialization_state(state)
   VALUES (v_state);
+END;
+$$;
+
+-- Replace inherited trigger helpers before any data mutation. Object names are
+-- part of state recognition, but their previous bodies and ACLs are not trusted.
+CREATE OR REPLACE FUNCTION public.guard_supplier_ownership_immutable()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.ownership_scope IS DISTINCT FROM OLD.ownership_scope
+    OR NEW.owner_tenant_id IS DISTINCT FROM OLD.owner_tenant_id
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_OWNERSHIP_IMMUTABLE';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.lock_catalog_category_hierarchy()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint);
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.lock_catalog_unit_hierarchy()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142001::bigint);
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  NEW.updated_at := pg_catalog.now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_supplier_proxy_actor()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM employee.id
+  FROM public.employees AS employee
+  WHERE employee.id = NEW.acting_employee_id
+    AND employee.tenant_id = NEW.acting_tenant_id
+    AND employee.status = 'active'
+  FOR SHARE;
+
+  IF NOT FOUND
+    OR (TG_OP = 'INSERT' AND NEW.created_by_employee_id <> NEW.acting_employee_id)
+    OR NEW.updated_by_employee_id <> NEW.acting_employee_id
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_PROXY_ACTOR_INVALID';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.guard_supplier_product_ownership()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_supplier_scope text;
+  v_supplier_tenant_id uuid;
+  v_category_scope text;
+  v_category_tenant_id uuid;
+  v_brand_scope text;
+  v_brand_tenant_id uuid;
+BEGIN
+  IF TG_OP = 'INSERT'
+    AND NEW.ownership_scope IS NULL
+    AND NEW.owner_tenant_id IS NULL
+  THEN
+    NEW.ownership_scope := 'tenant';
+    NEW.owner_tenant_id := NEW.acting_tenant_id;
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+    AND (
+      NEW.ownership_scope IS DISTINCT FROM OLD.ownership_scope
+      OR NEW.owner_tenant_id IS DISTINCT FROM OLD.owner_tenant_id
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_OWNERSHIP_IMMUTABLE';
+  END IF;
+
+  SELECT supplier.ownership_scope, supplier.owner_tenant_id
+  INTO v_supplier_scope, v_supplier_tenant_id
+  FROM public.suppliers AS supplier
+  WHERE supplier.id = NEW.supplier_id
+  FOR SHARE;
+
+  IF NOT FOUND
+    OR (
+      NEW.ownership_scope = 'platform'
+      AND (v_supplier_scope <> 'platform' OR v_supplier_tenant_id IS NOT NULL)
+    )
+    OR (
+      NEW.ownership_scope = 'tenant'
+      AND (
+        NEW.owner_tenant_id IS DISTINCT FROM NEW.acting_tenant_id
+        OR (
+          v_supplier_scope = 'tenant'
+          AND v_supplier_tenant_id IS DISTINCT FROM NEW.owner_tenant_id
+        )
+      )
+    )
+    OR NEW.ownership_scope NOT IN ('platform', 'tenant')
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'PRODUCT_OWNERSHIP_CONFLICT';
+  END IF;
+
+  SELECT category.ownership_scope, category.owner_tenant_id
+  INTO v_category_scope, v_category_tenant_id
+  FROM public.catalog_categories AS category
+  WHERE category.id = NEW.category_id
+  FOR SHARE;
+
+  SELECT brand.ownership_scope, brand.owner_tenant_id
+  INTO v_brand_scope, v_brand_tenant_id
+  FROM public.catalog_brands AS brand
+  WHERE brand.id = NEW.brand_id
+  FOR SHARE;
+
+  IF v_category_scope IS NULL
+    OR v_brand_scope IS NULL
+    OR (
+      NEW.ownership_scope = 'platform'
+      AND (v_category_scope <> 'platform' OR v_brand_scope <> 'platform')
+    )
+    OR (
+      NEW.ownership_scope = 'tenant'
+      AND (
+        (v_category_scope = 'tenant' AND v_category_tenant_id IS DISTINCT FROM NEW.owner_tenant_id)
+        OR (v_brand_scope = 'tenant' AND v_brand_tenant_id IS DISTINCT FROM NEW.owner_tenant_id)
+      )
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'PRODUCT_OWNERSHIP_CONFLICT';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.guard_supplier_product_tenant_write()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.ownership_scope IS DISTINCT FROM 'tenant'
+    OR OLD.owner_tenant_id IS DISTINCT FROM NEW.acting_tenant_id
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'PRODUCT_OWNERSHIP_CONFLICT';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.validate_catalog_unit_base()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_base_unit_id uuid;
+  v_base_status text;
+BEGIN
+  IF TG_OP = 'UPDATE'
+    AND OLD.base_unit_id IS NULL
+    AND OLD.status = 'active'
+    AND NEW.status = 'inactive'
+    AND EXISTS (
+      SELECT 1 FROM public.catalog_units AS derived_unit
+      WHERE derived_unit.base_unit_id = OLD.id
+        AND derived_unit.id <> NEW.id
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE';
+  END IF;
+
+  IF NEW.base_unit_id IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.base_unit_id = NEW.id THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'UNIT_CONVERSION_INVALID';
+  END IF;
+
+  IF TG_OP = 'UPDATE'
+    AND NEW.base_unit_id IS DISTINCT FROM OLD.base_unit_id
+    AND EXISTS (
+      SELECT 1 FROM public.catalog_units AS derived_unit
+      WHERE derived_unit.base_unit_id = OLD.id
+        AND derived_unit.id <> NEW.id
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE';
+  END IF;
+
+  SELECT base_unit.base_unit_id, base_unit.status
+  INTO v_base_unit_id, v_base_status
+  FROM public.catalog_units AS base_unit
+  WHERE base_unit.id = NEW.base_unit_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+    OR v_base_unit_id IS NOT NULL
+    OR v_base_status IS DISTINCT FROM 'active'
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'UNIT_CONVERSION_INVALID';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.protect_active_supplier_catalog_reference()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.status = 'active'
+    AND NEW.status = 'inactive'
+    AND (
+      (
+        TG_TABLE_NAME = 'catalog_categories'
+        AND (
+          EXISTS (
+            SELECT 1 FROM public.supplier_products AS product
+            WHERE product.category_id = OLD.id AND product.status = 'active'
+          )
+          OR EXISTS (
+            SELECT 1 FROM public.catalog_categories AS tenant_category
+            WHERE tenant_category.mapped_platform_category_id = OLD.id
+          )
+          OR EXISTS (
+            SELECT 1 FROM public.catalog_spec_definitions AS definition
+            WHERE definition.category_id = OLD.id
+          )
+        )
+      )
+      OR (
+        TG_TABLE_NAME = 'catalog_brands'
+        AND (
+          EXISTS (
+            SELECT 1 FROM public.supplier_products AS product
+            WHERE product.brand_id = OLD.id AND product.status = 'active'
+          )
+          OR EXISTS (
+            SELECT 1 FROM public.catalog_brands AS tenant_brand
+            WHERE tenant_brand.mapped_platform_brand_id = OLD.id
+          )
+        )
+      )
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.protect_platform_no_brand_identity()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF OLD.ownership_scope = 'platform'
+    AND OLD.owner_tenant_id IS NULL
+    AND OLD.code = 'NO_BRAND'
+    AND OLD.name = '无品牌'
+    AND OLD.status = 'active'
+    AND (
+      TG_OP = 'DELETE'
+      OR NEW.ownership_scope IS DISTINCT FROM 'platform'
+      OR NEW.owner_tenant_id IS NOT NULL
+      OR NEW.code IS DISTINCT FROM 'NO_BRAND'
+      OR NEW.name IS DISTINCT FROM '无品牌'
+      OR NEW.legal_name IS NOT NULL
+      OR NEW.status IS DISTINCT FROM 'active'
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SHARED_RESOURCE_READ_ONLY';
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
 END;
 $$;
 
@@ -509,6 +845,27 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
+    FROM public.catalog_categories AS category
+    WHERE NOT (
+      (category.ownership_scope = 'platform' AND category.owner_tenant_id IS NULL)
+      OR (category.ownership_scope = 'tenant' AND category.owner_tenant_id IS NOT NULL)
+    )
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.catalog_brands AS brand
+    WHERE NOT (
+      (brand.ownership_scope = 'platform' AND brand.owner_tenant_id IS NULL)
+      OR (brand.ownership_scope = 'tenant' AND brand.owner_tenant_id IS NOT NULL)
+    )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED',
+      DETAIL = 'catalog ownership rows are inconsistent';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
     FROM public.catalog_categories AS child
     JOIN public.catalog_categories AS parent ON parent.id = child.parent_id
     WHERE child.ownership_scope IS DISTINCT FROM parent.ownership_scope
@@ -588,6 +945,36 @@ BEGIN
       MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE',
       DETAIL = 'an existing product or specification references an actual non-leaf category';
   END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.catalog_spec_definitions AS definition
+    LEFT JOIN public.catalog_categories AS category
+      ON category.id = definition.category_id
+    LEFT JOIN public.catalog_spec_definitions AS source
+      ON source.id = definition.source_platform_spec_id
+    WHERE category.id IS NULL
+      OR category.status <> 'active'
+      OR category.ownership_scope IS DISTINCT FROM definition.ownership_scope
+      OR category.owner_tenant_id IS DISTINCT FROM definition.owner_tenant_id
+      OR (
+        definition.source_platform_spec_id IS NOT NULL
+        AND (
+          source.id IS NULL
+          OR source.ownership_scope <> 'platform'
+          OR source.owner_tenant_id IS NOT NULL
+          OR source.status <> 'active'
+          OR definition.ownership_scope <> 'tenant'
+          OR source.id = definition.id
+          OR category.mapped_platform_category_id IS DISTINCT FROM source.category_id
+        )
+      )
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_SCHEMA_STATE_UNSUPPORTED',
+      DETAIL = 'catalog specification ownership or source mapping is inconsistent';
+  END IF;
 END;
 $$;
 
@@ -600,6 +987,8 @@ BEGIN
     EXECUTE 'DROP TRIGGER tr_catalog_categories_set_level ON public.catalog_categories';
     EXECUTE 'DROP TRIGGER tr_catalog_categories_guard_scope ON public.catalog_categories';
     EXECUTE 'DROP TRIGGER tr_catalog_brands_guard_scope ON public.catalog_brands';
+    EXECUTE 'DROP TRIGGER tr_supplier_products_guard_ownership ON public.supplier_products';
+    EXECUTE 'DROP TRIGGER tr_supplier_products_guard_tenant_write ON public.supplier_products';
 
     EXECUTE 'ALTER TABLE public.catalog_categories DROP CONSTRAINT catalog_categories_level_check';
     EXECUTE 'ALTER TABLE public.catalog_categories DROP CONSTRAINT catalog_categories_full_name_trimmed_check';
@@ -642,8 +1031,16 @@ BEGIN
     EXECUTE 'ALTER TABLE public.catalog_units DROP CONSTRAINT catalog_units_dimension_check';
   END IF;
 
+  EXECUTE 'DROP TRIGGER tr_catalog_categories_guard_ownership_immutable ON public.catalog_categories';
+  EXECUTE 'DROP TRIGGER tr_catalog_categories_lock_hierarchy ON public.catalog_categories';
+  EXECUTE 'DROP TRIGGER tr_catalog_categories_updated_at ON public.catalog_categories';
   EXECUTE 'DROP TRIGGER tr_catalog_categories_protect_supplier_products ON public.catalog_categories';
+  EXECUTE 'DROP TRIGGER tr_catalog_brands_guard_ownership_immutable ON public.catalog_brands';
+  EXECUTE 'DROP TRIGGER tr_catalog_brands_updated_at ON public.catalog_brands';
   EXECUTE 'DROP TRIGGER tr_catalog_brands_protect_supplier_products ON public.catalog_brands';
+  EXECUTE 'DROP TRIGGER tr_catalog_units_lock_hierarchy ON public.catalog_units';
+  EXECUTE 'DROP TRIGGER tr_catalog_units_updated_at ON public.catalog_units';
+  EXECUTE 'DROP TRIGGER tr_catalog_units_validate_base ON public.catalog_units';
 END;
 $$;
 
@@ -777,37 +1174,10 @@ ALTER TABLE public.catalog_units
   ALTER COLUMN unit_dimension SET DEFAULT 'legacy_unclassified';
 
 -- Guard functions are schema invariants, not business command entry points.
-CREATE OR REPLACE FUNCTION public.catalog_enum_options_are_valid(
-  p_options jsonb
-)
-RETURNS boolean
-LANGUAGE sql
-IMMUTABLE
-STRICT
-SET search_path = pg_catalog, public
-AS $$
-  SELECT CASE
-    WHEN jsonb_typeof(p_options) <> 'array' THEN false
-    ELSE
-      jsonb_array_length(p_options) > 0
-      AND NOT EXISTS (
-        SELECT 1
-        FROM jsonb_array_elements(p_options) AS option(value)
-        WHERE jsonb_typeof(option.value) <> 'string'
-          OR btrim(option.value #>> '{}') = ''
-      )
-      AND (
-        SELECT count(*) FROM jsonb_array_elements(p_options)
-      ) = (
-        SELECT count(DISTINCT btrim(option.value #>> '{}'))
-        FROM jsonb_array_elements(p_options) AS option(value)
-      )
-  END;
-$$;
-
 CREATE OR REPLACE FUNCTION public.validate_catalog_category_hierarchy()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -965,6 +1335,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.refresh_catalog_category_descendants()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1033,6 +1404,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_brand_mapping()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1064,6 +1436,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_spec_definition_ownership()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1081,6 +1454,30 @@ BEGIN
     OR category.ownership_scope IS DISTINCT FROM NEW.ownership_scope
     OR category.owner_tenant_id IS DISTINCT FROM NEW.owner_tenant_id
   THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001', MESSAGE = 'SPEC_TEMPLATE_VALIDATION_ERROR';
+  END IF;
+
+  IF NEW.value_type IN ('single_enum', 'multi_enum') THEN
+    IF jsonb_typeof(NEW.enum_options) IS DISTINCT FROM 'array'
+      OR jsonb_array_length(NEW.enum_options) = 0
+      OR EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(NEW.enum_options) AS option(value)
+        WHERE jsonb_typeof(option.value) IS DISTINCT FROM 'string'
+          OR btrim(option.value #>> '{}') = ''
+      )
+      OR (
+        SELECT count(*) FROM jsonb_array_elements(NEW.enum_options)
+      ) <> (
+        SELECT count(DISTINCT btrim(option.value #>> '{}'))
+        FROM jsonb_array_elements(NEW.enum_options) AS option(value)
+      )
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001', MESSAGE = 'SPEC_TEMPLATE_VALIDATION_ERROR';
+    END IF;
+  ELSIF NEW.enum_options IS DISTINCT FROM '[]'::jsonb THEN
     RAISE EXCEPTION USING
       ERRCODE = 'P0001', MESSAGE = 'SPEC_TEMPLATE_VALIDATION_ERROR';
   END IF;
@@ -1120,6 +1517,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_unit_suggestion_state()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1163,6 +1561,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_unit_dimension()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1188,6 +1587,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.sync_catalog_base_unit_dimension_to_derived()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1206,6 +1606,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_supplier_product_catalog()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1246,93 +1647,6 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.protect_active_supplier_catalog_reference()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
-AS $$
-BEGIN
-  IF OLD.status = 'active'
-    AND NEW.status = 'inactive'
-    AND (
-      (
-        TG_TABLE_NAME = 'catalog_categories'
-        AND (
-          EXISTS (
-            SELECT 1
-            FROM public.supplier_products AS product
-            WHERE product.category_id = OLD.id
-              AND product.status = 'active'
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM public.catalog_categories AS tenant_category
-            WHERE tenant_category.mapped_platform_category_id = OLD.id
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM public.catalog_spec_definitions AS definition
-            WHERE definition.category_id = OLD.id
-          )
-        )
-      )
-      OR (
-        TG_TABLE_NAME = 'catalog_brands'
-        AND (
-          EXISTS (
-            SELECT 1
-            FROM public.supplier_products AS product
-            WHERE product.brand_id = OLD.id
-              AND product.status = 'active'
-          )
-          OR EXISTS (
-            SELECT 1
-            FROM public.catalog_brands AS tenant_brand
-            WHERE tenant_brand.mapped_platform_brand_id = OLD.id
-          )
-        )
-      )
-    )
-  THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_REFERENCE_IN_USE';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.protect_platform_no_brand_identity()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
-AS $$
-BEGIN
-  IF OLD.ownership_scope = 'platform'
-    AND OLD.owner_tenant_id IS NULL
-    AND OLD.code = 'NO_BRAND'
-    AND OLD.name = '无品牌'
-    AND OLD.status = 'active'
-    AND (
-      TG_OP = 'DELETE'
-      OR NEW.ownership_scope IS DISTINCT FROM 'platform'
-      OR NEW.owner_tenant_id IS NOT NULL
-      OR NEW.code IS DISTINCT FROM 'NO_BRAND'
-      OR NEW.name IS DISTINCT FROM '无品牌'
-      OR NEW.legal_name IS NOT NULL
-      OR NEW.status IS DISTINCT FROM 'active'
-    )
-  THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001', MESSAGE = 'SHARED_RESOURCE_READ_ONLY';
-  END IF;
-
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
 -- Add low-blocking CHECK constraints first, validate them separately, then
 -- promote the two materialized columns to NOT NULL without a second table scan.
 ALTER TABLE public.catalog_categories
@@ -1360,7 +1674,8 @@ ALTER TABLE public.catalog_spec_definitions
     CHECK (
       (
         value_type IN ('single_enum', 'multi_enum')
-        AND public.catalog_enum_options_are_valid(enum_options)
+        AND jsonb_typeof(enum_options) = 'array'
+        AND jsonb_array_length(enum_options) > 0
       )
       OR (
         value_type NOT IN ('single_enum', 'multi_enum')
@@ -1543,7 +1858,38 @@ ON public.catalog_unit_suggestions(status, created_at, id);
 CREATE INDEX catalog_unit_suggestions_v2_tenant_page_idx
 ON public.catalog_unit_suggestions(tenant_id, created_at DESC, id DESC);
 
+-- Trigger execution uses the table-owning migration role while every direct
+-- helper call remains denied, including calls made with service_role.
+ALTER FUNCTION public.guard_supplier_ownership_immutable() OWNER TO supabase_admin;
+ALTER FUNCTION public.lock_catalog_category_hierarchy() OWNER TO supabase_admin;
+ALTER FUNCTION public.lock_catalog_unit_hierarchy() OWNER TO supabase_admin;
+ALTER FUNCTION public.protect_active_supplier_catalog_reference() OWNER TO supabase_admin;
+ALTER FUNCTION public.protect_platform_no_brand_identity() OWNER TO supabase_admin;
+ALTER FUNCTION public.update_updated_at_column() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_supplier_proxy_actor() OWNER TO supabase_admin;
+ALTER FUNCTION public.guard_supplier_product_ownership() OWNER TO supabase_admin;
+ALTER FUNCTION public.guard_supplier_product_tenant_write() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_unit_base() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_category_hierarchy() OWNER TO supabase_admin;
+ALTER FUNCTION public.refresh_catalog_category_descendants() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_brand_mapping() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_spec_definition_ownership() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_unit_suggestion_state() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_catalog_unit_dimension() OWNER TO supabase_admin;
+ALTER FUNCTION public.sync_catalog_base_unit_dimension_to_derived() OWNER TO supabase_admin;
+ALTER FUNCTION public.validate_supplier_product_catalog() OWNER TO supabase_admin;
+
 -- Install one deterministic trigger set after both schemas have converged.
+CREATE TRIGGER tr_catalog_categories_v2_lock_hierarchy
+BEFORE INSERT OR UPDATE ON public.catalog_categories
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.lock_catalog_category_hierarchy();
+
+CREATE TRIGGER tr_catalog_categories_v2_guard_ownership_immutable
+BEFORE UPDATE OF ownership_scope, owner_tenant_id ON public.catalog_categories
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_supplier_ownership_immutable();
+
 CREATE TRIGGER tr_catalog_categories_v2_validate_hierarchy
 BEFORE INSERT OR UPDATE ON public.catalog_categories
 FOR EACH ROW
@@ -1564,6 +1910,16 @@ BEFORE UPDATE OF status ON public.catalog_categories
 FOR EACH ROW
 EXECUTE FUNCTION public.protect_active_supplier_catalog_reference();
 
+CREATE TRIGGER tr_catalog_categories_v2_updated_at
+BEFORE UPDATE ON public.catalog_categories
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER tr_catalog_brands_v2_guard_ownership_immutable
+BEFORE UPDATE OF ownership_scope, owner_tenant_id ON public.catalog_brands
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_supplier_ownership_immutable();
+
 CREATE TRIGGER tr_catalog_brands_v2_validate_mapping
 BEFORE INSERT OR UPDATE OF
   mapped_platform_brand_id, ownership_scope, owner_tenant_id, status
@@ -1580,6 +1936,11 @@ CREATE TRIGGER tr_catalog_brands_v2_protect_platform_no_brand
 BEFORE UPDATE OR DELETE ON public.catalog_brands
 FOR EACH ROW
 EXECUTE FUNCTION public.protect_platform_no_brand_identity();
+
+CREATE TRIGGER tr_catalog_brands_v2_updated_at
+BEFORE UPDATE ON public.catalog_brands
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
 
 CREATE TRIGGER tr_catalog_spec_definitions_v2_validate_ownership
 BEFORE INSERT OR UPDATE ON public.catalog_spec_definitions
@@ -1613,13 +1974,39 @@ ON public.catalog_units
 FOR EACH ROW
 EXECUTE FUNCTION public.validate_catalog_unit_dimension();
 
+CREATE TRIGGER tr_catalog_units_v2_validate_base
+BEFORE INSERT OR UPDATE ON public.catalog_units
+FOR EACH ROW
+EXECUTE FUNCTION public.validate_catalog_unit_base();
+
+CREATE TRIGGER tr_catalog_units_v2_lock_hierarchy
+BEFORE INSERT OR UPDATE ON public.catalog_units
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.lock_catalog_unit_hierarchy();
+
 CREATE TRIGGER tr_catalog_units_v2_sync_base_dimension
 AFTER UPDATE OF unit_dimension ON public.catalog_units
 FOR EACH ROW
 EXECUTE FUNCTION public.sync_catalog_base_unit_dimension_to_derived();
 
--- Remove obsolete helpers only after their recognized triggers and checks are
--- gone. B never contained these objects; A always did.
+CREATE TRIGGER tr_catalog_units_v2_updated_at
+BEFORE UPDATE ON public.catalog_units
+FOR EACH ROW
+EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER tr_supplier_products_v2_guard_ownership
+BEFORE INSERT OR UPDATE OF
+  supplier_id, category_id, brand_id, ownership_scope, owner_tenant_id
+ON public.supplier_products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_supplier_product_ownership();
+
+CREATE TRIGGER tr_supplier_products_v2_guard_tenant_write
+BEFORE UPDATE ON public.supplier_products
+FOR EACH ROW
+EXECUTE FUNCTION public.guard_supplier_product_tenant_write();
+
+-- Remove obsolete enum helpers only after their recognized checks are gone.
 DO $$
 BEGIN
   IF (SELECT state FROM catalog_schema_materialization_state) =
@@ -1629,12 +2016,12 @@ BEGIN
     EXECUTE 'DROP FUNCTION public.guard_catalog_category_scope()';
     EXECUTE 'DROP FUNCTION public.guard_catalog_brand_scope()';
     EXECUTE 'DROP FUNCTION public.catalog_enum_options_are_distinct(text[])';
+  ELSE
+    EXECUTE 'DROP FUNCTION public.catalog_enum_options_are_valid(jsonb)';
   END IF;
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.catalog_enum_options_are_valid(jsonb)
-  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.guard_supplier_ownership_immutable()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.lock_catalog_category_hierarchy()
@@ -1646,6 +2033,12 @@ REVOKE ALL ON FUNCTION public.protect_active_supplier_catalog_reference()
 REVOKE ALL ON FUNCTION public.protect_platform_no_brand_identity()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.update_updated_at_column()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.validate_supplier_proxy_actor()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.guard_supplier_product_ownership()
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.guard_supplier_product_tenant_write()
   FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.validate_catalog_unit_base()
   FROM PUBLIC, anon, authenticated, service_role;

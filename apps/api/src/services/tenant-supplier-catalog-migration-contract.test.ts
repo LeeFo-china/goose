@@ -118,7 +118,6 @@ describe("tenant private supplier catalog migration contract", () => {
     expect(schemaMaterializationSql).toContain("legacy_unclassified");
 
     for (const guard of [
-      "catalog_enum_options_are_valid",
       "validate_catalog_category_hierarchy",
       "refresh_catalog_category_descendants",
       "validate_catalog_brand_mapping",
@@ -204,13 +203,15 @@ describe("tenant private supplier catalog migration contract", () => {
 
   test("revokes every inherited and materialized non-command helper", () => {
     for (const [helper, signature] of [
-      ["catalog_enum_options_are_valid", "jsonb"],
       ["guard_supplier_ownership_immutable", ""],
       ["lock_catalog_category_hierarchy", ""],
       ["lock_catalog_unit_hierarchy", ""],
       ["protect_active_supplier_catalog_reference", ""],
       ["update_updated_at_column", ""],
       ["protect_platform_no_brand_identity", ""],
+      ["guard_supplier_product_ownership", ""],
+      ["guard_supplier_product_tenant_write", ""],
+      ["validate_supplier_proxy_actor", ""],
       ["validate_catalog_category_hierarchy", ""],
       ["refresh_catalog_category_descendants", ""],
       ["validate_catalog_brand_mapping", ""],
@@ -231,6 +232,38 @@ describe("tenant private supplier catalog migration contract", () => {
         new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${helper}\\(`),
       );
     }
+  });
+
+  test("keeps table writes independent from directly callable helper privileges", () => {
+    const deterministicGuards = schemaMaterializationSql.split(
+      "-- A repository-chain suggestion",
+    )[0];
+    const crossTableGuards = `validate_catalog_category_hierarchy refresh_catalog_category_descendants
+      validate_catalog_brand_mapping validate_catalog_spec_definition_ownership validate_catalog_unit_suggestion_state
+      validate_catalog_unit_dimension sync_catalog_base_unit_dimension_to_derived validate_supplier_proxy_actor
+      validate_supplier_product_catalog guard_supplier_product_ownership protect_active_supplier_catalog_reference`.split(/\s+/);
+
+    expect(schemaMaterializationSql).not.toContain(
+      "AND public.catalog_enum_options_are_valid(enum_options)",
+    );
+    expect(schemaMaterializationSql).toContain(
+      "DROP FUNCTION public.catalog_enum_options_are_valid(jsonb)",
+    );
+    for (const guard of crossTableGuards) {
+      expect(schemaMaterializationSql).toMatch(new RegExp(
+        `CREATE OR REPLACE FUNCTION public\\.${guard}\\(\\)[\\s\\S]*?SECURITY DEFINER[\\s\\S]*?SET search_path = pg_catalog, public`,
+      ));
+      expect(schemaMaterializationSql).toContain(
+        `ALTER FUNCTION public.${guard}() OWNER TO supabase_admin;`,
+      );
+    }
+    for (const guard of ["guard_supplier_ownership_immutable", "lock_catalog_category_hierarchy", "update_updated_at_column", "protect_active_supplier_catalog_reference", "protect_platform_no_brand_identity"]) {
+      expect(deterministicGuards).toContain(`CREATE OR REPLACE FUNCTION public.${guard}()`);
+    }
+    for (const invariant of [
+      "NEW.ownership_scope IS DISTINCT FROM OLD.ownership_scope", "pg_advisory_xact_lock(6720240723142000::bigint)",
+      "NEW.updated_at := pg_catalog.now()", "tenant_category.mapped_platform_category_id = OLD.id", "OLD.code = 'NO_BRAND'",
+    ]) expect(deterministicGuards).toContain(invariant);
   });
 
   test("keeps the four applied 20260813 migrations byte-for-byte immutable", () => {
