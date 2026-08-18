@@ -116,6 +116,8 @@ describe("tenant private supplier catalog migration contract", () => {
       /ALTER COLUMN enum_options TYPE jsonb[\s\S]*to_jsonb\(enum_options\)/,
     );
     expect(schemaMaterializationSql).toContain("legacy_unclassified");
+    expect(schemaMaterializationSql).toContain("lower(btrim(option.value))");
+    expect(schemaMaterializationSql).toContain("SUPPLIER_CATALOG_NO_BRAND_IMMUTABLE");
 
     for (const guard of [
       "validate_catalog_category_hierarchy",
@@ -234,7 +236,7 @@ describe("tenant private supplier catalog migration contract", () => {
     }
   });
 
-  test("keeps table writes independent from directly callable helper privileges", () => {
+  test("uses invoker trigger guards with minimum reference grants", () => {
     const deterministicGuards = schemaMaterializationSql.split(
       "-- A repository-chain suggestion",
     )[0];
@@ -242,7 +244,6 @@ describe("tenant private supplier catalog migration contract", () => {
       validate_catalog_brand_mapping validate_catalog_spec_definition_ownership validate_catalog_unit_suggestion_state
       validate_catalog_unit_dimension sync_catalog_base_unit_dimension_to_derived validate_supplier_proxy_actor
       validate_supplier_product_catalog guard_supplier_product_ownership protect_active_supplier_catalog_reference`.split(/\s+/);
-
     expect(schemaMaterializationSql).not.toContain(
       "AND public.catalog_enum_options_are_valid(enum_options)",
     );
@@ -251,7 +252,7 @@ describe("tenant private supplier catalog migration contract", () => {
     );
     for (const guard of crossTableGuards) {
       expect(schemaMaterializationSql).toMatch(new RegExp(
-        `CREATE OR REPLACE FUNCTION public\\.${guard}\\(\\)[\\s\\S]*?SECURITY DEFINER[\\s\\S]*?SET search_path = pg_catalog, public`,
+        `CREATE OR REPLACE FUNCTION public\\.${guard}\\(\\)[\\s\\S]*?SECURITY INVOKER[\\s\\S]*?SET search_path = pg_catalog, public`,
       ));
       expect(schemaMaterializationSql).toContain(
         `ALTER FUNCTION public.${guard}() OWNER TO supabase_admin;`,
@@ -262,10 +263,10 @@ describe("tenant private supplier catalog migration contract", () => {
     }
     for (const invariant of [
       "NEW.ownership_scope IS DISTINCT FROM OLD.ownership_scope", "pg_advisory_xact_lock(6720240723142000::bigint)",
-      "NEW.updated_at := pg_catalog.now()", "tenant_category.mapped_platform_category_id = OLD.id", "OLD.code = 'NO_BRAND'",
+      "NEW.updated_at := pg_catalog.now()", "tenant_category.mapped_platform_category_id = OLD.id", "lower(btrim(OLD.code)) = 'no_brand'",
     ]) expect(deterministicGuards).toContain(invariant);
+    for (const table of ["employees", "supplier_products"]) expect(schemaMaterializationSql).toContain(`GRANT SELECT ON TABLE public.${table} TO service_role;`);
   });
-
   test("keeps the four applied 20260813 migrations byte-for-byte immutable", () => {
     for (const [name, expectedHash] of Object.entries(expectedHistoricalHashes)) {
       const content = read(migrations[name as keyof typeof migrations]);

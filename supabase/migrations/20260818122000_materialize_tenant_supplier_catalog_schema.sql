@@ -393,12 +393,58 @@ BEGIN
 END;
 $$;
 
+-- Both recognized histories contain one platform no-brand row with the same
+-- identity but different code casing. Preserve its id and every reference;
+-- refuse ambiguous or business-bearing aliases instead of merging rows.
+DO $$
+DECLARE
+  v_no_brand_id uuid;
+  v_candidate_count bigint;
+BEGIN
+  SELECT count(*)
+  INTO v_candidate_count
+  FROM public.catalog_brands AS brand
+  WHERE lower(btrim(brand.code)) = 'no_brand'
+    OR btrim(brand.name) = '无品牌';
+
+  SELECT brand.id
+  INTO v_no_brand_id
+  FROM public.catalog_brands AS brand
+  WHERE lower(btrim(brand.code)) = 'no_brand'
+    OR btrim(brand.name) = '无品牌'
+  ORDER BY brand.id
+  LIMIT 1;
+
+  IF v_candidate_count IS DISTINCT FROM 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.catalog_brands AS brand
+      WHERE brand.id = v_no_brand_id
+        AND lower(btrim(brand.code)) = 'no_brand'
+        AND btrim(brand.name) = '无品牌'
+        AND brand.legal_name IS NULL
+        AND brand.ownership_scope = 'platform'
+        AND brand.owner_tenant_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_NO_BRAND_MAPPING_REQUIRED',
+      DETAIL = 'no-brand identity is missing, ambiguous, tenant-owned, or contains business data';
+  END IF;
+
+  UPDATE public.catalog_brands
+  SET code = 'NO_BRAND', name = '无品牌', status = 'active'
+  WHERE id = v_no_brand_id;
+END;
+$$;
+
 -- Replace inherited trigger helpers before any data mutation. Object names are
 -- part of state recognition, but their previous bodies and ACLs are not trusted.
 CREATE OR REPLACE FUNCTION public.guard_supplier_ownership_immutable()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -415,7 +461,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.lock_catalog_category_hierarchy()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -427,7 +473,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.lock_catalog_unit_hierarchy()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -439,7 +485,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.update_updated_at_column()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -451,7 +497,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_supplier_proxy_actor()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -459,8 +505,7 @@ BEGIN
   FROM public.employees AS employee
   WHERE employee.id = NEW.acting_employee_id
     AND employee.tenant_id = NEW.acting_tenant_id
-    AND employee.status = 'active'
-  FOR SHARE;
+    AND employee.status = 'active';
 
   IF NOT FOUND
     OR (TG_OP = 'INSERT' AND NEW.created_by_employee_id <> NEW.acting_employee_id)
@@ -476,7 +521,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.guard_supplier_product_ownership()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -568,7 +613,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.guard_supplier_product_tenant_write()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -585,7 +630,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_unit_base()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -647,7 +692,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.protect_active_supplier_catalog_reference()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -696,13 +741,13 @@ $$;
 CREATE OR REPLACE FUNCTION public.protect_platform_no_brand_identity()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
   IF OLD.ownership_scope = 'platform'
     AND OLD.owner_tenant_id IS NULL
-    AND OLD.code = 'NO_BRAND'
+    AND lower(btrim(OLD.code)) = 'no_brand'
     AND OLD.name = '无品牌'
     AND OLD.status = 'active'
     AND (
@@ -716,7 +761,7 @@ BEGIN
     )
   THEN
     RAISE EXCEPTION USING
-      ERRCODE = 'P0001', MESSAGE = 'SHARED_RESOURCE_READ_ONLY';
+      ERRCODE = 'P0001', MESSAGE = 'SUPPLIER_CATALOG_NO_BRAND_IMMUTABLE';
   END IF;
 
   IF TG_OP = 'DELETE' THEN
@@ -770,7 +815,7 @@ BEGIN
               SELECT count(*)
               FROM unnest(definition.enum_options) AS option(value)
             ) <> (
-              SELECT count(DISTINCT btrim(option.value))
+              SELECT count(DISTINCT lower(btrim(option.value)))
               FROM unnest(definition.enum_options) AS option(value)
             )
           )
@@ -778,6 +823,37 @@ BEGIN
         OR (
           definition.value_type NOT IN ('single_enum', 'multi_enum')
           AND cardinality(definition.enum_options) <> 0
+        )
+      )
+    $query$ INTO v_invalid_legacy_enum;
+  ELSE
+    EXECUTE $query$
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.catalog_spec_definitions AS definition
+        WHERE (
+          definition.value_type IN ('single_enum', 'multi_enum')
+          AND (
+            jsonb_typeof(definition.enum_options) <> 'array'
+            OR jsonb_array_length(definition.enum_options) = 0
+            OR EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements(definition.enum_options) AS option(value)
+              WHERE jsonb_typeof(option.value) <> 'string'
+                OR btrim(option.value #>> '{}') = ''
+            )
+            OR (
+              SELECT count(*)
+              FROM jsonb_array_elements(definition.enum_options)
+            ) <> (
+              SELECT count(DISTINCT lower(btrim(option.value #>> '{}')))
+              FROM jsonb_array_elements(definition.enum_options) AS option(value)
+            )
+          )
+        )
+        OR (
+          definition.value_type NOT IN ('single_enum', 'multi_enum')
+          AND definition.enum_options <> '[]'::jsonb
         )
       )
     $query$ INTO v_invalid_legacy_enum;
@@ -1177,7 +1253,7 @@ ALTER TABLE public.catalog_units
 CREATE OR REPLACE FUNCTION public.validate_catalog_category_hierarchy()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1335,7 +1411,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.refresh_catalog_category_descendants()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1404,7 +1480,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_brand_mapping()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1436,7 +1512,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_spec_definition_ownership()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1470,7 +1546,7 @@ BEGIN
       OR (
         SELECT count(*) FROM jsonb_array_elements(NEW.enum_options)
       ) <> (
-        SELECT count(DISTINCT btrim(option.value #>> '{}'))
+        SELECT count(DISTINCT lower(btrim(option.value #>> '{}')))
         FROM jsonb_array_elements(NEW.enum_options) AS option(value)
       )
     THEN
@@ -1517,7 +1593,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_unit_suggestion_state()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1526,8 +1602,7 @@ BEGIN
     FROM public.employees AS employee
     WHERE employee.id = NEW.submitted_by_employee_id
       AND employee.tenant_id = NEW.tenant_id
-      AND employee.status = 'active'
-    FOR SHARE;
+      AND employee.status = 'active';
 
     IF NOT FOUND OR NEW.status <> 'submitted' THEN
       RAISE EXCEPTION USING
@@ -1561,7 +1636,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_catalog_unit_dimension()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 DECLARE
@@ -1587,7 +1662,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.sync_catalog_base_unit_dimension_to_derived()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1606,7 +1681,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_supplier_product_catalog()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
@@ -1858,8 +1933,9 @@ ON public.catalog_unit_suggestions(status, created_at, id);
 CREATE INDEX catalog_unit_suggestions_v2_tenant_page_idx
 ON public.catalog_unit_suggestions(tenant_id, created_at DESC, id DESC);
 
--- Trigger execution uses the table-owning migration role while every direct
--- helper call remains denied, including calls made with service_role.
+-- Trigger execution keeps the caller identity. Direct helper calls remain
+-- denied; service_role receives only the reference reads needed by catalog
+-- table triggers below.
 ALTER FUNCTION public.guard_supplier_ownership_immutable() OWNER TO supabase_admin;
 ALTER FUNCTION public.lock_catalog_category_hierarchy() OWNER TO supabase_admin;
 ALTER FUNCTION public.lock_catalog_unit_hierarchy() OWNER TO supabase_admin;
@@ -2091,6 +2167,8 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.catalog_spec_definitions
   TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.catalog_unit_suggestions
   TO service_role;
+GRANT SELECT ON TABLE public.employees TO service_role;
+GRANT SELECT ON TABLE public.supplier_products TO service_role;
 
 DO $$
 BEGIN
