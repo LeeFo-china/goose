@@ -47,6 +47,16 @@ function extractLastFunction(name: string): string {
   return matches.at(-1)?.[0] ?? "";
 }
 
+function extractComposedCommand(name: string): string {
+  const matches = [...migrationChain.matchAll(new RegExp(
+    `CREATE(?: OR REPLACE)? FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
+    "g",
+  ))];
+  return [matches.at(-1)?.[0], matches.at(-2)?.[0]]
+    .filter((value): value is string => Boolean(value))
+    .join("\n");
+}
+
 function statementContaining(fragment: string): string {
   return sql
     .split(";")
@@ -204,7 +214,7 @@ describe("supplier price tenant ownership migration contract", () => {
     expect(guard).toContain("SUPPLIER_PRICE_LIST_INVALID_ACTION");
   });
 
-  test("keeps every public price command tenant-aware and self-contained", () => {
+  test("keeps every public price command tenant-aware through its private delegate", () => {
     const signatures = new Map([
       [
         "create_supplier_price_list",
@@ -233,9 +243,12 @@ describe("supplier price tenant ownership migration contract", () => {
     ]);
     const normalizedSql = compact(sql);
     for (const [name, signature] of signatures) {
-      const command = compact(extractLastFunction(name));
-      expect(command).toContain("SECURITY DEFINER");
-      expect(command).toContain("SET search_path = pg_catalog, public");
+      const wrapper = compact(extractLastFunction(name));
+      const command = compact(extractComposedCommand(name));
+      expect(wrapper).toContain("SECURITY DEFINER");
+      expect(wrapper).toContain("SET search_path = pg_catalog, public");
+      expect(wrapper).toContain("assert_supplier_price_runtime_actor");
+      expect(wrapper).toContain(`${name}_pre_actor_binding_unsafe`);
       expect(command).toContain("supplier_command_events");
       expect(command).toContain("p_tenant_id");
       expect(command).not.toContain(`${name}_pre_v2_unsafe`);
@@ -261,13 +274,15 @@ describe("supplier price tenant ownership migration contract", () => {
       "create_supplier_price_list_version",
       "retire_supplier_price_list",
     ]) {
-      const command = compact(extractLastFunction(name));
+      const command = compact(extractComposedCommand(name));
       expect(command).toMatch(
         /supplier-price-(?:series|publish):' \|\| p_tenant_id::text/,
       );
     }
 
-    const publish = compact(extractLastFunction("publish_supplier_price_list"));
+    const publish = compact(
+      extractComposedCommand("publish_supplier_price_list"),
+    );
     expect(publish).toContain("published.tenant_id = v_draft.tenant_id");
     expect(publish).toContain("published.supplier_id = v_draft.supplier_id");
     expect(publish).toContain("draft_item.tenant_id = v_draft.tenant_id");
@@ -275,7 +290,7 @@ describe("supplier price tenant ownership migration contract", () => {
     expect(publish).toContain("SUPPLIER_PRICE_PERIOD_CONFLICT");
 
     const createVersion = compact(
-      extractLastFunction("create_supplier_price_list_version"),
+      extractComposedCommand("create_supplier_price_list_version"),
     );
     expect(createVersion).toContain("source.tenant_id = p_tenant_id");
     expect(createVersion).toContain("supersedes_price_list_id");
@@ -290,7 +305,7 @@ describe("supplier price tenant ownership migration contract", () => {
       "upsert_supplier_price_list_item",
       "delete_supplier_price_list_item",
     ]) {
-      const command = extractLastFunction(name);
+      const command = extractComposedCommand(name);
       const tenantFilterAt = command.indexOf("tenant_id = p_tenant_id");
       const notFoundAt = command.indexOf("SUPPLIER_PRICE_LIST_NOT_FOUND");
       const versionAt = command.indexOf("SUPPLIER_PRICE_LIST_VERSION_CONFLICT");
