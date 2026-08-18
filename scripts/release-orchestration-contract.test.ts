@@ -301,15 +301,21 @@ function runExplicitTransactionMigrationHelper(
   }
 }
 
-const pinnedPsqlProdCommand =
-  "  docker exec -i --env 'PGOPTIONS=-c standard_conforming_strings=on' supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 \"$@\"";
+const pinnedPsqlProdCommand = [
+  "  docker exec -i \\",
+  "    --env 'PGOPTIONS=-c standard_conforming_strings=on' \\",
+  "    supabase-db \\",
+  "    sh -ceu \\",
+  "    'export PGPASSWORD=\"${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}\"; exec psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 \"$@\"' \\",
+  '    sh "$@"',
+].join("\n");
 const pinnedPsqlProdFunction = [
   "psql_prod() {",
   pinnedPsqlProdCommand,
   "}",
 ].join("\n");
 const unpinnedPsqlProdCommand =
-  '  docker exec -i supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"';
+  '  docker exec -i supabase-db psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 "$@"';
 const migrationVersionValidation = [
   '    if [[ ! "${version}" =~ ^[0-9]{14}$ ]]; then',
   '      echo "error=invalid_migration_version file=${file} version=${version}" >&2',
@@ -990,6 +996,19 @@ describe("production migration precheck workflow", () => {
     const psqlProd = extractShellFunction(planAndApplyScript, "psql_prod");
 
     expect(psqlProd).toBe(pinnedPsqlProdFunction);
+  });
+
+  test("fails closed unless the migration runner is the supabase_admin superuser", () => {
+    const planAndApplyScript = extractWorkflowRunScript(
+      sliceWorkflowStep(migrateProductionWorkflow, "Plan and apply migrations"),
+    );
+
+    expect(planAndApplyScript).toContain("runner_identity");
+    expect(planAndApplyScript).toContain("supabase_admin|true|true");
+    expect(planAndApplyScript).toContain("error=migration_runner_invalid");
+    expect(planAndApplyScript).toContain(
+      'PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"',
+    );
   });
 
   test("locks the actual migration apply branch and rejects unsafe mutations", () => {

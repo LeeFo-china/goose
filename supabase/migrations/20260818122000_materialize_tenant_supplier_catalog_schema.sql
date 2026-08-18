@@ -23,6 +23,7 @@ DECLARE
   v_trigger_fingerprint text[];
   v_function_fingerprint text[];
   v_constraint_fingerprint text[];
+  v_index_fingerprint text[];
 BEGIN
   IF to_regclass('public.catalog_categories') IS NULL
     OR to_regclass('public.catalog_brands') IS NULL
@@ -280,6 +281,36 @@ BEGIN
       'catalog_units_dimension_check'
     );
 
+  SELECT array_agg(
+    index_definition.relname || '|' || pg_get_indexdef(index_definition.oid)
+    ORDER BY index_definition.relname
+  )
+  INTO v_index_fingerprint
+  FROM pg_index AS index_catalog
+  JOIN pg_class AS index_definition
+    ON index_definition.oid = index_catalog.indexrelid
+  JOIN pg_namespace AS namespace_definition
+    ON namespace_definition.oid = index_definition.relnamespace
+  WHERE namespace_definition.nspname = 'public'
+    AND index_definition.relname IN (
+      'catalog_brands_active_platform_no_brand_idx',
+      'catalog_brands_mapping_lookup_idx',
+      'catalog_brands_platform_code_unique_idx',
+      'catalog_brands_platform_no_brand_identity_idx',
+      'catalog_brands_tenant_code_unique_idx',
+      'catalog_categories_mapping_lookup_idx',
+      'catalog_categories_platform_code_unique_idx',
+      'catalog_categories_scope_path_idx',
+      'catalog_categories_tenant_code_unique_idx',
+      'catalog_spec_definitions_category_status_sort_idx',
+      'catalog_spec_definitions_ownership_lookup_idx',
+      'catalog_spec_definitions_ownership_tenant_idx',
+      'catalog_spec_definitions_source_copy_idx',
+      'catalog_unit_suggestions_queue_idx',
+      'catalog_unit_suggestions_tenant_page_idx',
+      'catalog_units_dimension_status_idx'
+    );
+
   IF (
     v_state = 'repository_chain'
     AND (
@@ -320,6 +351,14 @@ BEGIN
         'catalog_unit_suggestions|catalog_unit_suggestions_name_trimmed_check',
         'catalog_unit_suggestions|catalog_unit_suggestions_status_check',
         'catalog_unit_suggestions|catalog_unit_suggestions_symbol_trimmed_check'
+      ]::text[]
+      OR v_index_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_brands_platform_code_unique_idx|CREATE UNIQUE INDEX catalog_brands_platform_code_unique_idx ON public.catalog_brands USING btree (upper(btrim(code))) WHERE (ownership_scope = ''platform''::text)',
+        'catalog_brands_tenant_code_unique_idx|CREATE UNIQUE INDEX catalog_brands_tenant_code_unique_idx ON public.catalog_brands USING btree (owner_tenant_id, upper(btrim(code))) WHERE (ownership_scope = ''tenant''::text)',
+        'catalog_categories_platform_code_unique_idx|CREATE UNIQUE INDEX catalog_categories_platform_code_unique_idx ON public.catalog_categories USING btree (upper(btrim(code))) WHERE (ownership_scope = ''platform''::text)',
+        'catalog_categories_tenant_code_unique_idx|CREATE UNIQUE INDEX catalog_categories_tenant_code_unique_idx ON public.catalog_categories USING btree (owner_tenant_id, upper(btrim(code))) WHERE (ownership_scope = ''tenant''::text)',
+        'catalog_spec_definitions_category_status_sort_idx|CREATE INDEX catalog_spec_definitions_category_status_sort_idx ON public.catalog_spec_definitions USING btree (category_id, status, sort_order, id)',
+        'catalog_spec_definitions_ownership_tenant_idx|CREATE INDEX catalog_spec_definitions_ownership_tenant_idx ON public.catalog_spec_definitions USING btree (ownership_scope, owner_tenant_id)'
       ]::text[]
     )
   ) OR (
@@ -379,6 +418,23 @@ BEGIN
         'catalog_unit_suggestions|catalog_unit_suggestions_status_check',
         'catalog_unit_suggestions|catalog_unit_suggestions_version_check',
         'catalog_units|catalog_units_dimension_check'
+      ]::text[]
+      OR v_index_fingerprint IS DISTINCT FROM ARRAY[
+        'catalog_brands_active_platform_no_brand_idx|CREATE UNIQUE INDEX catalog_brands_active_platform_no_brand_idx ON public.catalog_brands USING btree ((1)) WHERE ((ownership_scope = ''platform''::text) AND (owner_tenant_id IS NULL) AND (status = ''active''::text) AND (upper(btrim(code)) = ''NO_BRAND''::text))',
+        'catalog_brands_mapping_lookup_idx|CREATE INDEX catalog_brands_mapping_lookup_idx ON public.catalog_brands USING btree (mapped_platform_brand_id, owner_tenant_id, id) WHERE (mapped_platform_brand_id IS NOT NULL)',
+        'catalog_brands_platform_code_unique_idx|CREATE UNIQUE INDEX catalog_brands_platform_code_unique_idx ON public.catalog_brands USING btree (code) WHERE (ownership_scope = ''platform''::text)',
+        'catalog_brands_platform_no_brand_identity_idx|CREATE UNIQUE INDEX catalog_brands_platform_no_brand_identity_idx ON public.catalog_brands USING btree ((1)) WHERE ((ownership_scope = ''platform''::text) AND (owner_tenant_id IS NULL) AND ((upper(btrim(code)) = ''NO_BRAND''::text) OR (btrim(name) = ''无品牌''::text)))',
+        'catalog_brands_tenant_code_unique_idx|CREATE UNIQUE INDEX catalog_brands_tenant_code_unique_idx ON public.catalog_brands USING btree (owner_tenant_id, code) WHERE (ownership_scope = ''tenant''::text)',
+        'catalog_categories_mapping_lookup_idx|CREATE INDEX catalog_categories_mapping_lookup_idx ON public.catalog_categories USING btree (mapped_platform_category_id, owner_tenant_id, id) WHERE (mapped_platform_category_id IS NOT NULL)',
+        'catalog_categories_platform_code_unique_idx|CREATE UNIQUE INDEX catalog_categories_platform_code_unique_idx ON public.catalog_categories USING btree (code) WHERE (ownership_scope = ''platform''::text)',
+        'catalog_categories_scope_path_idx|CREATE INDEX catalog_categories_scope_path_idx ON public.catalog_categories USING btree (ownership_scope, owner_tenant_id, full_name, id)',
+        'catalog_categories_tenant_code_unique_idx|CREATE UNIQUE INDEX catalog_categories_tenant_code_unique_idx ON public.catalog_categories USING btree (owner_tenant_id, code) WHERE (ownership_scope = ''tenant''::text)',
+        'catalog_spec_definitions_category_status_sort_idx|CREATE INDEX catalog_spec_definitions_category_status_sort_idx ON public.catalog_spec_definitions USING btree (category_id, status, sort_order, id)',
+        'catalog_spec_definitions_ownership_lookup_idx|CREATE INDEX catalog_spec_definitions_ownership_lookup_idx ON public.catalog_spec_definitions USING btree (ownership_scope, owner_tenant_id, category_id, status, id)',
+        'catalog_spec_definitions_source_copy_idx|CREATE UNIQUE INDEX catalog_spec_definitions_source_copy_idx ON public.catalog_spec_definitions USING btree (category_id, source_platform_spec_id) WHERE (source_platform_spec_id IS NOT NULL)',
+        'catalog_unit_suggestions_queue_idx|CREATE INDEX catalog_unit_suggestions_queue_idx ON public.catalog_unit_suggestions USING btree (status, created_at, id)',
+        'catalog_unit_suggestions_tenant_page_idx|CREATE INDEX catalog_unit_suggestions_tenant_page_idx ON public.catalog_unit_suggestions USING btree (tenant_id, created_at DESC, id DESC)',
+        'catalog_units_dimension_status_idx|CREATE INDEX catalog_units_dimension_status_idx ON public.catalog_units USING btree (unit_dimension, status, sort_order, id)'
       ]::text[]
     )
   ) THEN
@@ -465,6 +521,8 @@ SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
+  -- Low-frequency catalog configuration writes are intentionally serialized
+  -- across tenants so parent moves and descendant refreshes use one lock order.
   PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142000::bigint);
   RETURN NULL;
 END;
@@ -477,6 +535,8 @@ SECURITY INVOKER
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
+  -- Low-frequency unit configuration writes use one global lock because base
+  -- unit chains may be shared by platform and tenant catalog definitions.
   PERFORM pg_catalog.pg_advisory_xact_lock(6720240723142001::bigint);
   RETURN NULL;
 END;
@@ -1880,80 +1940,143 @@ ALTER TABLE public.catalog_units
 ALTER TABLE public.catalog_categories ALTER COLUMN full_name SET NOT NULL;
 ALTER TABLE public.catalog_units ALTER COLUMN unit_dimension SET NOT NULL;
 
--- Existing indexes are intentionally retained. New v2 names guarantee the
--- same normalized semantics on both starting states without a DROP/rebuild.
-CREATE UNIQUE INDEX catalog_categories_v2_platform_code_uidx
-ON public.catalog_categories(upper(btrim(code)))
-WHERE ownership_scope = 'platform';
+-- Rename byte-for-byte equivalent indexes and preserve non-equivalent legacy
+-- indexes. This avoids both write amplification and a DROP/rebuild window.
+DO $$
+BEGIN
+  IF (SELECT state FROM catalog_schema_materialization_state) =
+      'repository_chain'
+  THEN
+    ALTER INDEX public.catalog_categories_platform_code_unique_idx
+      RENAME TO catalog_categories_v2_platform_code_uidx;
+    ALTER INDEX public.catalog_categories_tenant_code_unique_idx
+      RENAME TO catalog_categories_v2_tenant_code_uidx;
+    ALTER INDEX public.catalog_brands_platform_code_unique_idx
+      RENAME TO catalog_brands_v2_platform_code_uidx;
+    ALTER INDEX public.catalog_brands_tenant_code_unique_idx
+      RENAME TO catalog_brands_v2_tenant_code_uidx;
+    ALTER INDEX public.catalog_spec_definitions_category_status_sort_idx
+      RENAME TO catalog_spec_definitions_v2_category_page_idx;
 
-CREATE UNIQUE INDEX catalog_categories_v2_tenant_code_uidx
-ON public.catalog_categories(owner_tenant_id, upper(btrim(code)))
-WHERE ownership_scope = 'tenant';
+    CREATE INDEX catalog_categories_v2_mapping_lookup_idx
+    ON public.catalog_categories(
+      mapped_platform_category_id, owner_tenant_id, id
+    ) WHERE mapped_platform_category_id IS NOT NULL;
+    CREATE INDEX catalog_categories_v2_scope_path_idx
+    ON public.catalog_categories(
+      ownership_scope, owner_tenant_id, full_name, id
+    );
+    CREATE INDEX catalog_brands_v2_mapping_lookup_idx
+    ON public.catalog_brands(
+      mapped_platform_brand_id, owner_tenant_id, id
+    ) WHERE mapped_platform_brand_id IS NOT NULL;
+    CREATE UNIQUE INDEX catalog_brands_active_platform_no_brand_idx
+    ON public.catalog_brands((1))
+    WHERE ownership_scope = 'platform'
+      AND owner_tenant_id IS NULL
+      AND status = 'active'
+      AND upper(btrim(code)) = 'NO_BRAND';
+    CREATE UNIQUE INDEX catalog_brands_platform_no_brand_identity_idx
+    ON public.catalog_brands((1))
+    WHERE ownership_scope = 'platform'
+      AND owner_tenant_id IS NULL
+      AND (
+        upper(btrim(code)) = 'NO_BRAND'
+        OR btrim(name) = '无品牌'
+      );
+    CREATE UNIQUE INDEX catalog_spec_definitions_v2_category_code_uidx
+    ON public.catalog_spec_definitions(category_id, upper(btrim(code)));
+    CREATE UNIQUE INDEX catalog_spec_definitions_v2_source_copy_uidx
+    ON public.catalog_spec_definitions(category_id, source_platform_spec_id)
+    WHERE source_platform_spec_id IS NOT NULL;
+    CREATE INDEX catalog_spec_definitions_v2_ownership_lookup_idx
+    ON public.catalog_spec_definitions(
+      ownership_scope, owner_tenant_id, category_id, status, id
+    );
+    CREATE INDEX catalog_units_v2_dimension_status_idx
+    ON public.catalog_units(unit_dimension, status, sort_order, id);
+    CREATE INDEX catalog_unit_suggestions_v2_queue_idx
+    ON public.catalog_unit_suggestions(status, created_at, id);
+    CREATE INDEX catalog_unit_suggestions_v2_tenant_page_idx
+    ON public.catalog_unit_suggestions(tenant_id, created_at DESC, id DESC);
+  ELSE
+    ALTER INDEX public.catalog_categories_mapping_lookup_idx
+      RENAME TO catalog_categories_v2_mapping_lookup_idx;
+    ALTER INDEX public.catalog_categories_scope_path_idx
+      RENAME TO catalog_categories_v2_scope_path_idx;
+    ALTER INDEX public.catalog_brands_mapping_lookup_idx
+      RENAME TO catalog_brands_v2_mapping_lookup_idx;
+    ALTER INDEX public.catalog_spec_definitions_category_status_sort_idx
+      RENAME TO catalog_spec_definitions_v2_category_page_idx;
+    ALTER INDEX public.catalog_spec_definitions_source_copy_idx
+      RENAME TO catalog_spec_definitions_v2_source_copy_uidx;
+    ALTER INDEX public.catalog_spec_definitions_ownership_lookup_idx
+      RENAME TO catalog_spec_definitions_v2_ownership_lookup_idx;
+    ALTER INDEX public.catalog_units_dimension_status_idx
+      RENAME TO catalog_units_v2_dimension_status_idx;
+    ALTER INDEX public.catalog_unit_suggestions_queue_idx
+      RENAME TO catalog_unit_suggestions_v2_queue_idx;
+    ALTER INDEX public.catalog_unit_suggestions_tenant_page_idx
+      RENAME TO catalog_unit_suggestions_v2_tenant_page_idx;
 
-CREATE INDEX catalog_categories_v2_mapping_lookup_idx
-ON public.catalog_categories(mapped_platform_category_id, owner_tenant_id, id)
-WHERE mapped_platform_category_id IS NOT NULL;
+    CREATE UNIQUE INDEX catalog_categories_v2_platform_code_uidx
+    ON public.catalog_categories(upper(btrim(code)))
+    WHERE ownership_scope = 'platform';
+    CREATE UNIQUE INDEX catalog_categories_v2_tenant_code_uidx
+    ON public.catalog_categories(owner_tenant_id, upper(btrim(code)))
+    WHERE ownership_scope = 'tenant';
+    CREATE UNIQUE INDEX catalog_brands_v2_platform_code_uidx
+    ON public.catalog_brands(upper(btrim(code)))
+    WHERE ownership_scope = 'platform';
+    CREATE UNIQUE INDEX catalog_brands_v2_tenant_code_uidx
+    ON public.catalog_brands(owner_tenant_id, upper(btrim(code)))
+    WHERE ownership_scope = 'tenant';
+    CREATE UNIQUE INDEX catalog_spec_definitions_v2_category_code_uidx
+    ON public.catalog_spec_definitions(category_id, upper(btrim(code)));
+  END IF;
+END;
+$$;
 
-CREATE INDEX catalog_categories_v2_scope_path_idx
-ON public.catalog_categories(ownership_scope, owner_tenant_id, full_name, id);
+-- The active-reference guards run on low-frequency catalog configuration
+-- writes. A large product table must use a separately reviewed concurrent-index
+-- migration instead of holding a normal CREATE INDEX lock in this transaction.
+DO $$
+DECLARE
+  v_table_bytes bigint;
+  v_estimated_rows double precision;
+BEGIN
+  SELECT pg_relation_size('public.supplier_products'::regclass),
+         greatest(table_definition.reltuples, 0)
+  INTO v_table_bytes, v_estimated_rows
+  FROM pg_class AS table_definition
+  WHERE table_definition.oid = 'public.supplier_products'::regclass;
 
-CREATE UNIQUE INDEX catalog_brands_v2_platform_code_uidx
-ON public.catalog_brands(upper(btrim(code)))
-WHERE ownership_scope = 'platform';
+  IF v_table_bytes > 536870912 OR v_estimated_rows > 5000000 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = 'P0001',
+      MESSAGE = 'SUPPLIER_CATALOG_INDEX_BUILD_TOO_LARGE',
+      DETAIL = format(
+        'supplier_products bytes=%s estimated_rows=%s; use a concurrent index migration',
+        v_table_bytes,
+        v_estimated_rows
+      );
+  END IF;
+END;
+$$;
 
-CREATE UNIQUE INDEX catalog_brands_v2_tenant_code_uidx
-ON public.catalog_brands(owner_tenant_id, upper(btrim(code)))
-WHERE ownership_scope = 'tenant';
+CREATE INDEX supplier_products_active_category_ref_idx
+ON public.supplier_products(category_id)
+WHERE status = 'active' AND category_id IS NOT NULL;
 
-CREATE INDEX catalog_brands_v2_mapping_lookup_idx
-ON public.catalog_brands(mapped_platform_brand_id, owner_tenant_id, id)
-WHERE mapped_platform_brand_id IS NOT NULL;
-
-CREATE UNIQUE INDEX catalog_spec_definitions_v2_category_code_uidx
-ON public.catalog_spec_definitions(category_id, upper(btrim(code)));
-
-CREATE UNIQUE INDEX catalog_spec_definitions_v2_source_copy_uidx
-ON public.catalog_spec_definitions(category_id, source_platform_spec_id)
-WHERE source_platform_spec_id IS NOT NULL;
-
-CREATE INDEX catalog_spec_definitions_v2_category_page_idx
-ON public.catalog_spec_definitions(category_id, status, sort_order, id);
-
-CREATE INDEX catalog_spec_definitions_v2_ownership_lookup_idx
-ON public.catalog_spec_definitions(
-  ownership_scope, owner_tenant_id, category_id, status, id
-);
-
-CREATE INDEX catalog_units_v2_dimension_status_idx
-ON public.catalog_units(unit_dimension, status, sort_order, id);
-
-CREATE INDEX catalog_unit_suggestions_v2_queue_idx
-ON public.catalog_unit_suggestions(status, created_at, id);
-
-CREATE INDEX catalog_unit_suggestions_v2_tenant_page_idx
-ON public.catalog_unit_suggestions(tenant_id, created_at DESC, id DESC);
+CREATE INDEX supplier_products_active_brand_ref_idx
+ON public.supplier_products(brand_id)
+WHERE status = 'active' AND brand_id IS NOT NULL;
 
 -- Trigger execution keeps the caller identity. Direct helper calls remain
 -- denied; service_role receives only the reference reads needed by catalog
--- table triggers below.
-ALTER FUNCTION public.guard_supplier_ownership_immutable() OWNER TO supabase_admin;
-ALTER FUNCTION public.lock_catalog_category_hierarchy() OWNER TO supabase_admin;
-ALTER FUNCTION public.lock_catalog_unit_hierarchy() OWNER TO supabase_admin;
-ALTER FUNCTION public.protect_active_supplier_catalog_reference() OWNER TO supabase_admin;
-ALTER FUNCTION public.protect_platform_no_brand_identity() OWNER TO supabase_admin;
-ALTER FUNCTION public.update_updated_at_column() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_supplier_proxy_actor() OWNER TO supabase_admin;
-ALTER FUNCTION public.guard_supplier_product_ownership() OWNER TO supabase_admin;
-ALTER FUNCTION public.guard_supplier_product_tenant_write() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_unit_base() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_category_hierarchy() OWNER TO supabase_admin;
-ALTER FUNCTION public.refresh_catalog_category_descendants() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_brand_mapping() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_spec_definition_ownership() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_unit_suggestion_state() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_catalog_unit_dimension() OWNER TO supabase_admin;
-ALTER FUNCTION public.sync_catalog_base_unit_dimension_to_derived() OWNER TO supabase_admin;
-ALTER FUNCTION public.validate_supplier_product_catalog() OWNER TO supabase_admin;
+-- table triggers below. The production workflow runs as supabase_admin, so
+-- CREATE OR REPLACE preserves that owner without an incompatible SET ROLE in
+-- Supabase CLI shadow databases.
 
 -- Install one deterministic trigger set after both schemas have converged.
 CREATE TRIGGER tr_catalog_categories_v2_lock_hierarchy
@@ -2167,8 +2290,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.catalog_spec_definitions
   TO service_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.catalog_unit_suggestions
   TO service_role;
-GRANT SELECT ON TABLE public.employees TO service_role;
-GRANT SELECT ON TABLE public.supplier_products TO service_role;
+
+REVOKE SELECT ON TABLE public.employees, public.supplier_products
+  FROM service_role;
+GRANT SELECT (id, tenant_id, status) ON public.employees
+  TO service_role;
+GRANT SELECT (category_id, brand_id, status) ON public.supplier_products
+  TO service_role;
 
 DO $$
 BEGIN
