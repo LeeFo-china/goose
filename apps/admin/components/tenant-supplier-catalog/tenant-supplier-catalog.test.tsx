@@ -7,6 +7,7 @@ import * as rules from "./tenant-catalog-rules";
 
 const PLATFORM_CATEGORY_ID = "11111111-1111-4111-8111-111111111111";
 const TENANT_CATEGORY_ID = "22222222-2222-4222-8222-222222222222";
+const TENANT_CHILD_ID = "33333333-3333-4333-8333-333333333333";
 
 describe("租户供应商目录", () => {
   test("builds bounded tenant list requests without platform write paths", () => {
@@ -89,6 +90,78 @@ describe("租户供应商目录", () => {
       path: `/catalog/categories/${TENANT_CATEGORY_ID}/spec-definitions:copy-platform`,
       init: { method: "POST" },
     });
+  });
+
+  test("navigates tenant category trails and restores parent list state", () => {
+    const rootState = {
+      page: 3,
+      pageSize: 20,
+      keyword: "辅料",
+      status: "active" as const,
+    };
+    const trail = [{
+      id: TENANT_CATEGORY_ID,
+      name: "租户辅料",
+      ownershipScope: "tenant" as const,
+      level: 1,
+      returnState: rootState,
+    }];
+    const childHref = rules.tenantCategoryTrailHref([
+      ...trail,
+      {
+        id: TENANT_CHILD_ID,
+        name: "胶粘剂",
+        ownershipScope: "tenant",
+        level: 2,
+        returnState: { page: 1, pageSize: 20, keyword: "", status: "" },
+      },
+    ]);
+
+    expect(rules.decodeTenantCategoryTrail(
+      new URL(childHref, "http://admin.local").searchParams.get("categoryPath") ?? "",
+    )).toHaveLength(2);
+    expect(rules.currentTenantCategoryParent(trail)).toBe(TENANT_CATEGORY_ID);
+    expect(rules.tenantParentCategoryHref(trail)).toBe(
+      "/supplier-catalog?page=3&pageSize=20&keyword=%E8%BE%85%E6%96%99&status=active",
+    );
+    expect(rules.canCreateTenantCategoryAtTrail(trail)).toBe(true);
+    expect(rules.canCreateTenantCategoryAtTrail([{
+      ...trail[0],
+      ownershipScope: "platform",
+    }])).toBe(false);
+    expect(requests.buildTenantCatalogListPath({
+      view: "categories",
+      page: 1,
+      pageSize: 20,
+      keyword: "",
+      status: "active",
+      parentId: TENANT_CATEGORY_ID,
+    })).toContain(`parent_id=${TENANT_CATEGORY_ID}`);
+  });
+
+  test("builds independent tenant-only mapping option pages and pins selections", () => {
+    expect(requests.buildTenantPlatformCategoryOptionsPath({
+      page: 2,
+      pageSize: 20,
+      keyword: "瓷砖",
+      parentId: PLATFORM_CATEGORY_ID,
+    })).toBe(
+      `/catalog/categories?page=2&pageSize=20&status=active&scope=platform&keyword=${encodeURIComponent("瓷砖")}&parent_id=${PLATFORM_CATEGORY_ID}`,
+    );
+    expect(requests.buildTenantPlatformBrandOptionsPath({
+      page: 3,
+      pageSize: 20,
+      keyword: "品牌",
+    })).toBe(
+      `/catalog/brands?page=3&pageSize=20&status=active&scope=platform&keyword=${encodeURIComponent("品牌")}`,
+    );
+    const pinned = { id: PLATFORM_CATEGORY_ID, code: "TILE", name: "地砖" };
+    const candidate = { id: TENANT_CHILD_ID, code: "WOOD", name: "木地板" };
+    expect(rules.mergePinnedCatalogOption([candidate], pinned)).toEqual([
+      pinned,
+      candidate,
+    ]);
+    expect(JSON.stringify(requests)).not.toContain("/platform/catalog");
   });
 
   test("renders source badges, full category path and platform mapping", () => {

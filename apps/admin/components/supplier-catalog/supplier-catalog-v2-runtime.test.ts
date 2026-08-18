@@ -70,4 +70,18 @@ describe("平台供应目录 v2 请求", () => {
       idempotencyKey: "unit-suggestion:review-1",
     }).path).toBe(`/platform/catalog/unit-suggestions/${SUGGESTION_ID}`);
   });
+
+  test("loads searchable active unit pages beyond the first hundred", async () => {
+    const requests = await loadV2Requests();
+    expect(requests).not.toBeNull();
+    if (!requests) return;
+
+    expect(requests.buildPlatformActiveUnitOptionsPath({
+      page: 2,
+      pageSize: 100,
+      keyword: "第101单位",
+    })).toBe(
+      "/platform/catalog/units?page=2&pageSize=100&status=active&keyword=%E7%AC%AC101%E5%8D%95%E4%BD%8D",
+    );
+  });
 });

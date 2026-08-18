@@ -22,30 +22,19 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { buildTenantCategoryCommand } from "./tenant-catalog-requests";
 import { newTenantCatalogCommandKey } from "./tenant-catalog-rules";
 import type { TenantCatalogCategory } from "./tenant-catalog-types";
-
-const NO_MAPPING = "none";
+import { TenantPlatformCategoryPicker } from "./tenant-platform-category-picker";
 
 export function TenantCategoryDialogButton({
   record,
   parentId = null,
-  platformCategories,
 }: {
   record?: TenantCatalogCategory;
   parentId?: string | null;
-  platformCategories: TenantCatalogCategory[];
 }) {
   const router = useRouter();
   const intentRef = useRef<CatalogCreateIntent | null>(null);
@@ -56,7 +45,7 @@ export function TenantCategoryDialogButton({
   const [name, setName] = useState(record?.name ?? "");
   const [sortOrder, setSortOrder] = useState(String(record?.sort_order ?? 100));
   const [mappingId, setMappingId] = useState(
-    record?.mapped_platform_category_id ?? NO_MAPPING,
+    record?.mapped_platform_category_id ?? "",
   );
 
   const editing = Boolean(record);
@@ -65,7 +54,7 @@ export function TenantCategoryDialogButton({
     setCode(record?.code ?? "");
     setName(record?.name ?? "");
     setSortOrder(String(record?.sort_order ?? 100));
-    setMappingId(record?.mapped_platform_category_id ?? NO_MAPPING);
+    setMappingId(record?.mapped_platform_category_id ?? "");
     setConflict(false);
   }
 
@@ -82,7 +71,7 @@ export function TenantCategoryDialogButton({
         : { parent_id: parentId, status: "active" }),
       code: code.trim(),
       name: name.trim(),
-      mapped_platform_category_id: mappingId === NO_MAPPING ? null : mappingId,
+      mapped_platform_category_id: mappingId || null,
       sort_order: Number(sortOrder),
     };
     const intent = resolveCatalogCreateIntent(
@@ -170,21 +159,11 @@ export function TenantCategoryDialogButton({
             </Field>
             <Field>
               <FieldLabel>平台分类映射</FieldLabel>
-              <Select value={mappingId} onValueChange={setMappingId}>
-                <SelectTrigger aria-label="平台分类映射">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem value={NO_MAPPING}>暂不映射</SelectItem>
-                    {platformCategories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.full_name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
+              <TenantPlatformCategoryPicker
+                value={mappingId}
+                pinned={record?.mapped_platform_category ?? null}
+                onChange={setMappingId}
+              />
             </Field>
             <Field>
               <FieldLabel htmlFor={`tenant-category-sort-${record?.id ?? "new"}`}>

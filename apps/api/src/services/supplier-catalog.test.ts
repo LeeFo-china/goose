@@ -98,7 +98,7 @@ describe("SupplierCatalogService read boundaries", () => {
       status: "active",
     });
     expect(dependencies.accessPolicy.assertTenantContext).toHaveBeenCalledTimes(3);
-    expect(dependencies.accessPolicy.assertPermission).toHaveBeenCalledWith(
+    expect(dependencies.accessPolicy.hasPermission).toHaveBeenCalledWith(
       context,
       "supplier.view",
     );
@@ -346,6 +346,9 @@ function createDependencies(overrides: Record<string, unknown>) {
         }
         return "all";
       }),
+      hasPermission: mock((context: AuthContext, permission: string) =>
+        context.permissions.some((item) => item.code === permission)
+      ),
     },
   };
 }

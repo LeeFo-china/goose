@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -9,17 +10,38 @@ const USER_ID = "00000000-0000-4000-8000-000000000102";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000103";
 const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
 
-const auth = {
+const auth: AuthContext = {
   tenantId: TENANT_ID,
+  tenantName: "测试租户",
+  tenantSlug: "test-tenant",
+  tenantStatus: "active",
   authUserId: USER_ID,
   employeeId: EMPLOYEE_ID,
+  employeeName: "目录管理员",
+  employeeStatus: "active",
+  departmentId: null,
+  tenantDepartmentId: null,
+  departmentCode: null,
+  departmentName: null,
+  postId: null,
+  postName: null,
+  avatar: null,
+  roleCodes: [],
+  roles: [],
   isPlatformAdmin: false,
   isPlatformStaff: false,
   permissions: [
     { code: "supplier.view", scope: "all" },
     { code: "supplier.catalog.manage", scope: "all" },
   ],
-} as never;
+};
+
+function authWithPermissions(...codes: string[]): AuthContext {
+  return {
+    ...auth,
+    permissions: codes.map((code) => ({ code, scope: "all" as const })),
+  };
+}
 
 const enabledSettings = {
   module_enabled: true,
@@ -57,7 +79,18 @@ async function setup(settings = enabledSettings) {
   };
   const accessPolicy = {
     assertTenantContext: mock(() => TENANT_ID),
-    assertPermission: mock(() => "all"),
+    hasPermission: mock((context: typeof auth, permission: string) =>
+      context.permissions.some(({ code }) => code === permission)
+    ),
+    assertPermission: mock((context: typeof auth, permission: string) => {
+      if (context.permissions.some(({ code }) => code === permission)) {
+        return "all";
+      }
+      throw Object.assign(new Error("Forbidden"), {
+        statusCode: 403,
+        code: "FORBIDDEN",
+      });
+    }),
   };
   return {
     repository,
@@ -72,6 +105,58 @@ async function setup(settings = enabledSettings) {
 }
 
 describe("SupplierCatalogService tenant rollout and ownership", () => {
+  test("allows every tenant catalog read with manage permission only", async () => {
+    const { service } = await setup();
+    const manageOnly = authWithPermissions("supplier.catalog.manage");
+    const query = { page: 1, pageSize: 20 };
+
+    await service.listTenantCategories(manageOnly, query);
+    await service.listTenantBrands(manageOnly, query);
+    await service.listTenantUnits(manageOnly, query);
+    await service.listTenantSpecDefinitions(manageOnly, CATEGORY_ID, query);
+    await service.listTenantUnitSuggestions(manageOnly, query);
+  });
+
+  test("allows every tenant catalog read with supplier view permission only", async () => {
+    const { service } = await setup();
+    const viewOnly = authWithPermissions("supplier.view");
+    const query = { page: 1, pageSize: 20 };
+
+    await service.listTenantCategories(viewOnly, query);
+    await service.listTenantBrands(viewOnly, query);
+    await service.listTenantUnits(viewOnly, query);
+    await service.listTenantSpecDefinitions(viewOnly, CATEGORY_ID, query);
+    await service.listTenantUnitSuggestions(viewOnly, query);
+  });
+
+  test("denies tenant catalog reads without either read permission", async () => {
+    const { service, repository } = await setup();
+
+    await expect(service.listTenantCategories(
+      authWithPermissions(),
+      { page: 1, pageSize: 20 },
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(repository.listCategories).not.toHaveBeenCalled();
+  });
+
+  test("keeps tenant catalog writes restricted to manage permission", async () => {
+    const { service, repository } = await setup();
+
+    await expect(service.createTenantCategory(
+      authWithPermissions("supplier.view"),
+      {
+        parent_id: null,
+        code: "CAT-VIEW",
+        name: "只读账号分类",
+        status: "active",
+        sort_order: 100,
+        mapped_platform_category_id: null,
+      },
+      "category-view-only",
+    )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
+    expect(repository.createTenantCategory).not.toHaveBeenCalled();
+  });
+
   test("blocks tenant reads when ownership reads are disabled", async () => {
     const { service, repository } = await setup({
       ...enabledSettings,
@@ -109,6 +194,32 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
       CATEGORY_ID,
       query,
       { kind: "tenant", tenantId: TENANT_ID },
+    );
+  });
+
+  test("uses server-side platform-only visibility for mapping option pages", async () => {
+    const { service, repository } = await setup();
+
+    await service.listTenantCategories(auth, {
+      page: 2,
+      pageSize: 20,
+      status: "inactive",
+      scope: "platform",
+    } as never);
+    await service.listTenantBrands(auth, {
+      page: 3,
+      pageSize: 20,
+      status: "inactive",
+      scope: "platform",
+    } as never);
+
+    expect(repository.listCategories).toHaveBeenCalledWith(
+      { page: 2, pageSize: 20, status: "active" },
+      { kind: "platform" },
+    );
+    expect(repository.listBrands).toHaveBeenCalledWith(
+      { page: 3, pageSize: 20, status: "active" },
+      { kind: "platform" },
     );
   });
 

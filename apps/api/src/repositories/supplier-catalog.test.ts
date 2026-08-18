@@ -8,6 +8,8 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const CATEGORY_ID = "00000000-0000-4000-8000-000000000101";
 const PARENT_ID = "00000000-0000-4000-8000-000000000102";
 const BRAND_ID = "00000000-0000-4000-8000-000000000201";
+const MAPPED_CATEGORY_ID = "00000000-0000-4000-8000-000000000202";
+const MAPPED_BRAND_ID = "00000000-0000-4000-8000-000000000203";
 const UNIT_ID = "00000000-0000-4000-8000-000000000301";
 const BASE_UNIT_ID = "00000000-0000-4000-8000-000000000302";
 const SECOND_UNIT_ID = "00000000-0000-4000-8000-000000000303";
@@ -172,6 +174,56 @@ describe("SupplierCatalogRepository paginated reads", () => {
     );
     expect(baseUnitUrl.searchParams.get("limit")).toBe("2");
     expect(requests).toHaveLength(3);
+  });
+
+  test("embeds stable mapped platform summaries with explicit selects", async () => {
+    const tenantCategory = {
+      ...category,
+      ownership_scope: "tenant" as const,
+      owner_tenant_id: USER_ID,
+      mapped_platform_category_id: MAPPED_CATEGORY_ID,
+      mapped_platform_category: {
+        id: MAPPED_CATEGORY_ID,
+        code: "PLATFORM-TILE",
+        name: "地砖",
+        full_name: "主材 / 瓷砖 / 地砖",
+        status: "active" as const,
+      },
+    };
+    const tenantBrand = {
+      ...brand,
+      ownership_scope: "tenant" as const,
+      owner_tenant_id: USER_ID,
+      mapped_platform_brand_id: MAPPED_BRAND_ID,
+      mapped_platform_brand: {
+        id: MAPPED_BRAND_ID,
+        code: "PLATFORM-BRAND",
+        name: "平台品牌",
+        status: "active" as const,
+      },
+    };
+    const { repository, requests } = await createRepository((request) => ({
+      body: request.url.includes("catalog_categories")
+        ? [tenantCategory]
+        : [tenantBrand],
+      count: 1,
+    }));
+
+    const categories = await repository.listCategories({ page: 1, pageSize: 20 });
+    const brands = await repository.listBrands({ page: 1, pageSize: 20 });
+
+    expect(categories.list[0]?.mapped_platform_category).toEqual(
+      tenantCategory.mapped_platform_category,
+    );
+    expect(brands.list[0]?.mapped_platform_brand).toEqual(
+      tenantBrand.mapped_platform_brand,
+    );
+    expect(new URL(requests[0]!.url).searchParams.get("select")).toContain(
+      "mapped_platform_category:catalog_categories!catalog_categories_mapped_platform_category_id_fkey(id,code,name,full_name,status)",
+    );
+    expect(new URL(requests[1]!.url).searchParams.get("select")).toContain(
+      "mapped_platform_brand:catalog_brands!catalog_brands_mapped_platform_brand_id_fkey(id,code,name,status)",
+    );
   });
 
   test("filters base and derived unit pages without losing exact counts", async () => {

@@ -7,8 +7,10 @@ import type {
   CatalogUnitSuggestionListQuery,
   CopyPlatformSpecDefinitionsInput,
   TenantCatalogBrandCreateInput,
+  TenantCatalogBrandListQuery,
   TenantCatalogBrandUpdateInput,
   TenantCatalogCategoryCreateInput,
+  TenantCatalogCategoryListQuery,
   TenantCatalogCategoryUpdateInput,
 } from "@/schema/supplier-catalog";
 import type { SupplierCatalogRepositoryPort } from "@/repositories/supplier-catalog";
@@ -29,6 +31,7 @@ type TenantSettingsPort = {
 type TenantAccessPolicyPort = {
   assertTenantContext(auth: AuthContext): string;
   assertPermission(auth: AuthContext, permission: string): unknown;
+  hasPermission(auth: AuthContext, permission: string): boolean;
 };
 type CatalogActor = {
   tenantId: string;
@@ -44,30 +47,28 @@ export class SupplierCatalogTenantService {
     private readonly commandIdFactory: SupplierCatalogCommandIdFactory,
   ) {}
 
-  async listCategories(auth: AuthContext, query: Parameters<
-    SupplierCatalogRepositoryPort["listCategories"]
-  >[0]) {
-    const tenantId = await this.requireRead(auth, "supplier.view");
+  async listCategories(auth: AuthContext, query: TenantCatalogCategoryListQuery) {
+    const tenantId = await this.requireRead(auth);
+    const { scope, ...listQuery } = query;
     return this.repository.listCategories(
-      tenantOwnedStatus(query),
-      { kind: "tenant", tenantId },
+      scope === "platform" ? activeOnly(listQuery) : tenantOwnedStatus(listQuery),
+      scope === "platform" ? { kind: "platform" } : { kind: "tenant", tenantId },
     );
   }
 
-  async listBrands(auth: AuthContext, query: Parameters<
-    SupplierCatalogRepositoryPort["listBrands"]
-  >[0]) {
-    const tenantId = await this.requireRead(auth, "supplier.view");
+  async listBrands(auth: AuthContext, query: TenantCatalogBrandListQuery) {
+    const tenantId = await this.requireRead(auth);
+    const { scope, ...listQuery } = query;
     return this.repository.listBrands(
-      tenantOwnedStatus(query),
-      { kind: "tenant", tenantId },
+      scope === "platform" ? activeOnly(listQuery) : tenantOwnedStatus(listQuery),
+      scope === "platform" ? { kind: "platform" } : { kind: "tenant", tenantId },
     );
   }
 
   async listUnits(auth: AuthContext, query: Parameters<
     SupplierCatalogRepositoryPort["listUnits"]
   >[0]) {
-    await this.requireRead(auth, "supplier.view");
+    await this.requireRead(auth);
     return this.repository.listUnits(activeOnly(query));
   }
 
@@ -177,7 +178,7 @@ export class SupplierCatalogTenantService {
     categoryId: string,
     query: CatalogSpecDefinitionListQuery,
   ) {
-    const tenantId = await this.requireRead(auth, "supplier.view");
+    const tenantId = await this.requireRead(auth);
     return this.repository.listSpecDefinitions(
       categoryId,
       tenantOwnedStatus(query),
@@ -276,7 +277,7 @@ export class SupplierCatalogTenantService {
     auth: AuthContext,
     query: CatalogUnitSuggestionListQuery,
   ) {
-    const actor = await this.requireReadActor(auth, "supplier.catalog.manage");
+    const actor = await this.requireReadActor(auth);
     return this.repository.listUnitSuggestions({
       ...query,
       tenant_id: actor.tenantId,
@@ -302,15 +303,20 @@ export class SupplierCatalogTenantService {
     });
   }
 
-  private async requireRead(auth: AuthContext, permission: string) {
+  private async requireRead(auth: AuthContext) {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    this.accessPolicy.assertPermission(auth, permission);
+    if (
+      !this.accessPolicy.hasPermission(auth, "supplier.view") &&
+      !this.accessPolicy.hasPermission(auth, "supplier.catalog.manage")
+    ) {
+      throw Errors.forbidden();
+    }
     await this.assertRollout(tenantId, false);
     return tenantId;
   }
 
-  private async requireReadActor(auth: AuthContext, permission: string) {
-    const tenantId = await this.requireRead(auth, permission);
+  private async requireReadActor(auth: AuthContext) {
+    const tenantId = await this.requireRead(auth);
     return requireActor(auth, tenantId);
   }
 

@@ -26,8 +26,10 @@ import type {
   CatalogUnitUpdateInput,
   PlatformCatalogUnitSuggestionListQuery,
   TenantCatalogBrandCreateInput,
+  TenantCatalogBrandListQuery,
   TenantCatalogBrandUpdateInput,
   TenantCatalogCategoryCreateInput,
+  TenantCatalogCategoryListQuery,
   TenantCatalogCategoryUpdateInput,
   CopyPlatformSpecDefinitionsInput,
   CatalogUnitSuggestionCreateInput,
@@ -46,7 +48,7 @@ import { isCatalogConflict } from "./supplier-catalog-conflict-detection";
 const PLATFORM_PERMISSION = "platform.catalog.manage";
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
-  "assertPermission" | "assertTenantContext"
+  "assertPermission" | "assertTenantContext" | "hasPermission"
 >;
 type SettingsRepositoryPort = {
   getSettings(tenantId: string): Promise<TenantSupplierSettings | null>;
@@ -97,7 +99,7 @@ export class SupplierCatalogService {
 
   listTenantCategories(
     authContext: AuthContext,
-    query: CatalogCategoryListQuery,
+    query: TenantCatalogCategoryListQuery,
   ) {
     return this.tenantService.listCategories(authContext, query);
   }
@@ -112,7 +114,7 @@ export class SupplierCatalogService {
 
   listTenantBrands(
     authContext: AuthContext,
-    query: CatalogBrandListQuery,
+    query: TenantCatalogBrandListQuery,
   ) {
     return this.tenantService.listBrands(authContext, query);
   }

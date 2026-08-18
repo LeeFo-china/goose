@@ -8,12 +8,14 @@ export const CATEGORY_SELECT = [
   "mapped_platform_category_id", "ownership_scope", "owner_tenant_id",
   "status", "sort_order", "version", "created_by_employee_id",
   "updated_by_employee_id", "created_at", "updated_at",
+  "mapped_platform_category:catalog_categories!catalog_categories_mapped_platform_category_id_fkey(id,code,name,full_name,status)",
 ].join(",");
 export const BRAND_SELECT = [
   "id", "code", "name", "legal_name", "logo_file_id",
   "mapped_platform_brand_id", "ownership_scope", "owner_tenant_id",
   "status", "sort_order", "version", "created_by_employee_id",
   "updated_by_employee_id", "created_at", "updated_at",
+  "mapped_platform_brand:catalog_brands!catalog_brands_mapped_platform_brand_id_fkey(id,code,name,status)",
 ].join(",");
 export const UNIT_SELECT = [
   "id", "code", "name", "symbol", "base_unit_id",
@@ -58,6 +60,13 @@ export const CatalogCategorySchema = PlatformCategorySchema.extend({
   full_name: z.string(),
   is_leaf: z.boolean(),
   mapped_platform_category_id: z.uuid().nullable(),
+  mapped_platform_category: z.object({
+    id: z.uuid(),
+    code: z.string(),
+    name: z.string(),
+    full_name: z.string(),
+    status: CatalogStatusSchema,
+  }).strict().nullable().optional(),
   ...ownership,
 }).strict();
 
@@ -73,6 +82,12 @@ export const PlatformBrandSchema = z.object({
 }).strict();
 export const CatalogBrandSchema = PlatformBrandSchema.extend({
   mapped_platform_brand_id: z.uuid().nullable(),
+  mapped_platform_brand: z.object({
+    id: z.uuid(),
+    code: z.string(),
+    name: z.string(),
+    status: CatalogStatusSchema,
+  }).strict().nullable().optional(),
   ...ownership,
 }).strict();
 

@@ -39,34 +39,30 @@ import {
 } from "./supplier-catalog-rules";
 import type {
   CatalogCreateIntent,
-  CatalogUnit,
   CatalogUnitSuggestion,
 } from "./supplier-catalog-types";
+import { PlatformActiveUnitPicker } from "./platform-active-unit-picker";
 import {
   buildPlatformSuggestionReviewCommand,
   validateSuggestionReview,
 } from "./supplier-catalog-v2-requests";
 
-const NO_UNIT = "none";
-
 function PlatformUnitSuggestionReview({
   suggestion,
-  units,
 }: {
   suggestion: CatalogUnitSuggestion;
-  units: CatalogUnit[];
 }) {
   const router = useRouter();
   const intentRef = useRef<CatalogCreateIntent | null>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [action, setAction] = useState<"approved" | "rejected">("approved");
-  const [unitId, setUnitId] = useState(NO_UNIT);
+  const [unitId, setUnitId] = useState("");
   const [remark, setRemark] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    const approvedCatalogUnitId = unitId === NO_UNIT ? "" : unitId;
+    const approvedCatalogUnitId = unitId;
     const nextError = validateSuggestionReview({
       action,
       approvedCatalogUnitId,
@@ -117,7 +113,7 @@ function PlatformUnitSuggestionReview({
     <Dialog open={open} onOpenChange={(value) => {
       if (pending) return;
       if (value) {
-        setAction("approved"); setUnitId(NO_UNIT); setRemark(""); setError(null);
+        setAction("approved"); setUnitId(""); setRemark(""); setError(null);
         intentRef.current = initializeCatalogCreateIntent(
           () => `platform-unit-suggestion:${crypto.randomUUID()}`,
         );
@@ -138,10 +134,11 @@ function PlatformUnitSuggestionReview({
           {action === "approved" ? (
             <Field data-invalid={Boolean(error)}>
               <FieldLabel>对应标准单位</FieldLabel>
-              <Select value={unitId} onValueChange={(value) => { setUnitId(value); setError(null); }}>
-                <SelectTrigger aria-label="对应标准单位"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup><SelectItem value={NO_UNIT}>请选择</SelectItem>{units.map((unit) => <SelectItem key={unit.id} value={unit.id}>{unit.name}（{unit.symbol}）</SelectItem>)}</SelectGroup></SelectContent>
-              </Select>
+              <PlatformActiveUnitPicker
+                value={unitId}
+                pinned={null}
+                onChange={(unit) => { setUnitId(unit.id); setError(null); }}
+              />
               <FieldError>{error}</FieldError>
             </Field>
           ) : null}
@@ -157,7 +154,7 @@ function PlatformUnitSuggestionReview({
   );
 }
 
-export function PlatformUnitSuggestionTable({ records, units }: { records: CatalogUnitSuggestion[]; units: CatalogUnit[] }) {
+export function PlatformUnitSuggestionTable({ records }: { records: CatalogUnitSuggestion[] }) {
   const columns: ColumnDef<CatalogUnitSuggestion>[] = [
     { accessorKey: "tenant_id", header: "租户", cell: ({ row }) => <span className="font-mono text-xs">{row.original.tenant_id}</span> },
     { accessorKey: "suggested_code", header: "建议编码" },
@@ -165,7 +162,7 @@ export function PlatformUnitSuggestionTable({ records, units }: { records: Catal
     { accessorKey: "unit_dimension", header: "计量维度", cell: ({ row }) => <CatalogUnitDimension value={row.original.unit_dimension} /> },
     { accessorKey: "status", header: "状态", cell: ({ row }) => <UnitSuggestionStatusBadge status={row.original.status} /> },
     { accessorKey: "review_remark", header: "审核说明", cell: ({ row }) => row.original.review_remark || "-" },
-    { id: "actions", header: "操作", cell: ({ row }) => <PlatformUnitSuggestionReview suggestion={row.original} units={units} />, meta: { headerClassName: "text-right", cellClassName: "text-right" } },
+    { id: "actions", header: "操作", cell: ({ row }) => <PlatformUnitSuggestionReview suggestion={row.original} />, meta: { headerClassName: "text-right", cellClassName: "text-right" } },
   ];
   return <DataTable columns={columns} data={records} emptyText="当前筛选条件下没有单位建议" minWidth="min-w-[980px]" tableClassName="border-t-0" rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME} />;
 }

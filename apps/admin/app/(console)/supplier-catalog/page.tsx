@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { PackageSearch } from "lucide-react";
+import { ChevronLeft, ChevronRight, PackageSearch } from "lucide-react";
 
 import { PlatformListPageShell } from "@/components/platform/platform-list-shell";
 import { normalizePlatformListPageSize } from "@/components/platform/platform-list-page-size";
@@ -17,6 +17,13 @@ import { TenantBrandTable } from "@/components/tenant-supplier-catalog/tenant-br
 import { TenantCategoryDialogButton } from "@/components/tenant-supplier-catalog/tenant-category-dialog";
 import { TenantCategoryTable } from "@/components/tenant-supplier-catalog/tenant-category-table";
 import { buildTenantCatalogListPath } from "@/components/tenant-supplier-catalog/tenant-catalog-requests";
+import {
+  canCreateTenantCategoryAtTrail,
+  currentTenantCategoryParent,
+  decodeTenantCategoryTrail,
+  tenantCategoryTrailHref,
+  tenantParentCategoryHref,
+} from "@/components/tenant-supplier-catalog/tenant-catalog-rules";
 import type {
   TenantCatalogBrand,
   TenantCatalogCategory,
@@ -31,6 +38,7 @@ import {
 import { TenantUnitTable } from "@/components/tenant-supplier-catalog/tenant-unit-table";
 import { UnitSuggestionFilters } from "@/components/tenant-supplier-catalog/unit-suggestion-filters";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
 
@@ -40,6 +48,7 @@ type SearchParams = Promise<{
   pageSize?: string;
   keyword?: string;
   status?: string;
+  categoryPath?: string;
 }>;
 
 function readView(value: string | undefined): TenantCatalogView {
@@ -92,6 +101,10 @@ export default async function TenantSupplierCatalogPage({
   const keyword = (params.keyword ?? "").trim().slice(0, 80);
   const catalogStatus = readCatalogStatus(params.status);
   const suggestionStatus = readSuggestionStatus(params.status);
+  const categoryTrail = view === "categories"
+    ? decodeTenantCategoryTrail(params.categoryPath)
+    : [];
+  const parentId = currentTenantCategoryParent(categoryTrail);
   let categories = emptyPage<TenantCatalogCategory>(page, pageSize);
   let brands = emptyPage<TenantCatalogBrand>(page, pageSize);
   let units = emptyPage<TenantCatalogUnit>(page, pageSize);
@@ -106,7 +119,7 @@ export default async function TenantSupplierCatalogPage({
         pageSize,
         keyword,
         status: view === "unit-suggestions" ? suggestionStatus : catalogStatus,
-        parentId: null,
+        parentId,
       });
       if (view === "categories") categories = await getCatalogPage(path);
       else if (view === "brands") brands = await getCatalogPage(path);
@@ -124,8 +137,8 @@ export default async function TenantSupplierCatalogPage({
       : view === "units"
         ? units
         : suggestions;
-  const platformCategories = categories.list.filter((record) => record.ownership_scope === "platform");
-  const platformBrands = brands.list.filter((record) => record.ownership_scope === "platform");
+  const categoryReturnState = { page, pageSize, keyword, status: catalogStatus };
+  const canCreateCategory = canCreateTenantCategoryAtTrail(categoryTrail);
 
   return (
     <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col gap-5 overflow-hidden">
@@ -136,9 +149,11 @@ export default async function TenantSupplierCatalogPage({
           leading={<span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground"><PackageSearch aria-hidden="true" /></span>}
           action={canManage
             ? view === "categories"
-              ? <TenantCategoryDialogButton platformCategories={platformCategories} />
+              ? canCreateCategory
+                ? <TenantCategoryDialogButton parentId={parentId} />
+                : null
               : view === "brands"
-                ? <TenantBrandDialogButton platformBrands={platformBrands} />
+                ? <TenantBrandDialogButton />
                 : view === "unit-suggestions"
                   ? <TenantUnitSuggestionDialogButton />
                   : null
@@ -154,13 +169,35 @@ export default async function TenantSupplierCatalogPage({
           filters={view === "unit-suggestions"
             ? <UnitSuggestionFilters status={suggestionStatus} />
             : <SupplierCatalogFilters keyword={keyword} status={catalogStatus} />}
+          listHeader={view === "categories" && categoryTrail.length ? (
+            <nav aria-label="分类路径" className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">
+              <Button type="button" size="sm" variant="ghost" asChild>
+                <Link href={tenantParentCategoryHref(categoryTrail)}><ChevronLeft data-icon="inline-start" />返回上级</Link>
+              </Button>
+              <Button type="button" size="sm" variant="ghost" asChild>
+                <Link href="/supplier-catalog">根级</Link>
+              </Button>
+              {categoryTrail.map((item, index) => (
+                <span key={item.id} className="flex items-center gap-1">
+                  <ChevronRight className="size-3.5" aria-hidden="true" />
+                  <Button type="button" size="sm" variant={index === categoryTrail.length - 1 ? "secondary" : "ghost"} asChild>
+                    <Link href={tenantCategoryTrailHref(categoryTrail.slice(0, index + 1))}>{item.name}</Link>
+                  </Button>
+                </span>
+              ))}
+            </nav>
+          ) : null}
           pagination={currentPage.pagination}
           currentCount={currentPage.list.length}
           tableViewportTestId="tenant-supplier-catalog-table-viewport"
           unit={view === "categories" ? "个分类" : view === "brands" ? "个品牌" : view === "units" ? "个单位" : "条建议"}
         >
           {error ? <SupplierCatalogLoadError message={error} canRetry={canManage} /> : view === "categories"
-            ? <TenantCategoryTable records={categories.list} />
+            ? <TenantCategoryTable
+                records={categories.list}
+                categoryTrail={categoryTrail}
+                categoryReturnState={categoryReturnState}
+              />
             : view === "brands"
               ? <TenantBrandTable records={brands.list} />
               : view === "units"

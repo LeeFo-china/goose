@@ -128,6 +128,22 @@ describe("SupplierCatalogRepository ownership visibility", () => {
     }
   });
 
+  test("platform mapping option pagination is filtered before range", async () => {
+    const { repository, requests } = await setup();
+
+    await repository.listCategories(
+      { page: 2, pageSize: 20, keyword: "建材", status: "active" },
+      { kind: "platform" },
+    );
+
+    const url = new URL(requests[0]!.url);
+    expect(url.searchParams.get("ownership_scope")).toBe("eq.platform");
+    expect(url.searchParams.get("owner_tenant_id")).toBe("is.null");
+    expect(url.searchParams.get("offset")).toBe("20");
+    expect(url.searchParams.get("limit")).toBe("20");
+    expect(url.searchParams.get("or")).toContain("code.ilike");
+  });
+
   test("tenant brand pages cannot include another tenant", async () => {
     const { repository, requests } = await setup();
 

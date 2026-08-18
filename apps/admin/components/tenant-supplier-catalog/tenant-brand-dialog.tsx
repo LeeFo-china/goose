@@ -21,28 +21,17 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { buildTenantBrandCommand } from "./tenant-catalog-requests";
 import { newTenantCatalogCommandKey } from "./tenant-catalog-rules";
 import type { TenantCatalogBrand } from "./tenant-catalog-types";
-
-const NO_MAPPING = "none";
+import { TenantPlatformBrandPicker } from "./tenant-platform-brand-picker";
 
 export function TenantBrandDialogButton({
   record,
-  platformBrands,
 }: {
   record?: TenantCatalogBrand;
-  platformBrands: TenantCatalogBrand[];
 }) {
   const router = useRouter();
   const intentRef = useRef<CatalogCreateIntent | null>(null);
@@ -52,7 +41,7 @@ export function TenantBrandDialogButton({
   const [name, setName] = useState(record?.name ?? "");
   const [legalName, setLegalName] = useState(record?.legal_name ?? "");
   const [mappingId, setMappingId] = useState(
-    record?.mapped_platform_brand_id ?? NO_MAPPING,
+    record?.mapped_platform_brand_id ?? "",
   );
   const [sortOrder, setSortOrder] = useState(String(record?.sort_order ?? 100));
   const editing = Boolean(record);
@@ -61,7 +50,7 @@ export function TenantBrandDialogButton({
     setCode(record?.code ?? "");
     setName(record?.name ?? "");
     setLegalName(record?.legal_name ?? "");
-    setMappingId(record?.mapped_platform_brand_id ?? NO_MAPPING);
+    setMappingId(record?.mapped_platform_brand_id ?? "");
     setSortOrder(String(record?.sort_order ?? 100));
   }
 
@@ -72,7 +61,7 @@ export function TenantBrandDialogButton({
       code: code.trim(),
       name: name.trim(),
       legal_name: legalName.trim() || null,
-      mapped_platform_brand_id: mappingId === NO_MAPPING ? null : mappingId,
+      mapped_platform_brand_id: mappingId || null,
       sort_order: Number(sortOrder),
     };
     const intent = resolveCatalogCreateIntent(
@@ -133,13 +122,11 @@ export function TenantBrandDialogButton({
             <Field><FieldLabel htmlFor="tenant-brand-legal">法定名称</FieldLabel><Input id="tenant-brand-legal" maxLength={160} value={legalName} onChange={(event) => setLegalName(event.target.value)} /></Field>
             <Field>
               <FieldLabel>平台品牌映射</FieldLabel>
-              <Select value={mappingId} onValueChange={setMappingId}>
-                <SelectTrigger aria-label="平台品牌映射"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectGroup>
-                  <SelectItem value={NO_MAPPING}>暂不映射</SelectItem>
-                  {platformBrands.map((brand) => <SelectItem key={brand.id} value={brand.id}>{brand.name}</SelectItem>)}
-                </SelectGroup></SelectContent>
-              </Select>
+              <TenantPlatformBrandPicker
+                value={mappingId}
+                pinned={record?.mapped_platform_brand ?? null}
+                onChange={setMappingId}
+              />
             </Field>
             <Field><FieldLabel htmlFor="tenant-brand-sort">排序</FieldLabel><Input id="tenant-brand-sort" type="number" required value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></Field>
           </FieldGroup>

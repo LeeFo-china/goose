@@ -132,7 +132,6 @@ export default async function PlatformCatalogPage({
   let brands = emptyPage<CatalogBrand>(page, pageSize);
   let units = emptyPage<CatalogUnit>(page, pageSize);
   let suggestions = emptyPage<CatalogUnitSuggestion>(page, pageSize);
-  let reviewUnits: CatalogUnit[] = [];
   let error: string | null = null;
 
   if (!canManage) {
@@ -146,14 +145,7 @@ export default async function PlatformCatalogPage({
       } else {
         if (view === "units") {
           units = await getCatalogPage<CatalogUnit>(listPath);
-        } else {
-          [suggestions, reviewUnits] = await Promise.all([
-            getCatalogPage<CatalogUnitSuggestion>(listPath),
-            getCatalogPage<CatalogUnit>(
-              "/platform/catalog/units?page=1&pageSize=100&status=active",
-            ).then((result) => result.list),
-          ]);
-        }
+        } else suggestions = await getCatalogPage<CatalogUnitSuggestion>(listPath);
       }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "供应标准目录加载失败";
@@ -225,7 +217,7 @@ export default async function PlatformCatalogPage({
             />
           ) : (
             view === "unit-suggestions" ? (
-              <PlatformUnitSuggestionTable records={suggestions.list} units={reviewUnits} />
+              <PlatformUnitSuggestionTable records={suggestions.list} />
             ) : (
               <SupplierCatalogTable
                 view={view}

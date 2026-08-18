@@ -1,12 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import type { ColumnDef } from "@tanstack/react-table";
+import { ChevronRight } from "lucide-react";
 
 import { DataTable } from "@/components/admin/data-table";
 import { PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME } from "@/components/platform/platform-list-page-size";
 import { catalogStatusMeta } from "@/components/supplier-catalog/supplier-catalog-types";
 import { CatalogSpecDefinitionsDialogButton } from "@/components/supplier-catalog/catalog-spec-definitions-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 import { TenantCategoryDialogButton } from "./tenant-category-dialog";
 import { TenantCatalogStatusAction } from "./tenant-catalog-status-action";
@@ -14,20 +17,25 @@ import {
   TenantCatalogSourceBadge,
   TenantCategoryIdentity,
 } from "./tenant-catalog-display";
-import { getTenantCatalogCapabilities } from "./tenant-catalog-rules";
-import type { TenantCatalogCategory } from "./tenant-catalog-types";
+import {
+  getTenantCatalogCapabilities,
+  tenantCategoryTrailHref,
+} from "./tenant-catalog-rules";
+import type {
+  TenantCatalogCategory,
+  TenantCategoryTrailItem,
+} from "./tenant-catalog-types";
+import type { CategoryReturnState } from "@/components/supplier-catalog/supplier-catalog-types";
 
 export function TenantCategoryTable({
   records,
+  categoryTrail,
+  categoryReturnState,
 }: {
   records: TenantCatalogCategory[];
+  categoryTrail: TenantCategoryTrailItem[];
+  categoryReturnState: CategoryReturnState;
 }) {
-  const platformCategories = records.filter((record) =>
-    record.ownership_scope === "platform"
-  );
-  const platformNames = new Map(
-    platformCategories.map((record) => [record.id, record.full_name]),
-  );
   const columns: ColumnDef<TenantCatalogCategory>[] = [
     {
       accessorKey: "code",
@@ -38,13 +46,32 @@ export function TenantCategoryTable({
       accessorKey: "full_name",
       header: "完整分类名 / 平台映射",
       cell: ({ row }) => (
-        <TenantCategoryIdentity
-          fullName={row.original.full_name}
-          mappedPlatformName={row.original.mapped_platform_category_id
-            ? platformNames.get(row.original.mapped_platform_category_id) ??
-              `平台分类 ${row.original.mapped_platform_category_id}`
-            : null}
-        />
+        <div className="flex min-w-[260px] items-center gap-2">
+          <TenantCategoryIdentity
+            fullName={row.original.full_name}
+            mappedPlatformName={row.original.mapped_platform_category?.full_name ?? null}
+          />
+          {row.original.level < 6 ? (
+            <Button type="button" size="sm" variant="ghost" asChild>
+              <Link
+                href={tenantCategoryTrailHref([
+                  ...categoryTrail,
+                  {
+                    id: row.original.id,
+                    name: row.original.name,
+                    ownershipScope: row.original.ownership_scope,
+                    level: row.original.level,
+                    returnState: categoryReturnState,
+                  },
+                ])}
+                aria-label={`查看${row.original.name}的下级分类`}
+              >
+                查看下级
+                <ChevronRight data-icon="inline-end" />
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       ),
     },
     {
@@ -75,10 +102,7 @@ export function TenantCategoryTable({
             />
             {capabilities.canEdit ? (
               <>
-            <TenantCategoryDialogButton
-              record={row.original}
-              platformCategories={platformCategories}
-            />
+                <TenantCategoryDialogButton record={row.original} />
                 <TenantCatalogStatusAction kind="category" record={row.original} />
               </>
             ) : <span className="self-center text-sm text-muted-foreground">只读</span>}
@@ -93,7 +117,9 @@ export function TenantCategoryTable({
     <DataTable
       columns={columns}
       data={records}
-      emptyText="当前筛选条件下没有可见分类"
+      emptyText={categoryTrail.length
+        ? "当前分类下没有可见下级分类"
+        : "当前筛选条件下没有可见分类"}
       minWidth="min-w-[900px]"
       tableClassName="border-t-0"
       rowClassName={() => PLATFORM_LIST_TABLE_ROW_HEIGHT_CLASS_NAME}

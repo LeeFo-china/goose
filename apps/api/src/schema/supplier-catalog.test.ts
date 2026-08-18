@@ -22,6 +22,20 @@ describe("supplier catalog tenant schemas", () => {
     }
   });
 
+  test("tenant mapping lists accept only the controlled platform scope", () => {
+    for (const name of [
+      "TenantCatalogCategoryListQuerySchema",
+      "TenantCatalogBrandListQuerySchema",
+    ]) {
+      expect(schema(name).parse({ scope: "platform" })).toMatchObject({
+        page: 1,
+        pageSize: 20,
+        scope: "platform",
+      });
+      expect(schema(name).safeParse({ scope: "tenant" }).success).toBe(false);
+    }
+  });
+
   test("tenant category and brand payloads cannot provide ownership", () => {
     const category = schema("TenantCatalogCategoryCreateSchema");
     const brand = schema("TenantCatalogBrandCreateSchema");

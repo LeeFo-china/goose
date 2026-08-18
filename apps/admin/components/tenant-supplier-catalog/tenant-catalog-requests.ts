@@ -118,3 +118,46 @@ export function buildTenantUnitSuggestionCommand(
 ) {
   return command("/catalog/unit-suggestions", "POST", payload, idempotencyKey);
 }
+
+export function buildTenantPlatformCategoryOptionsPath(input: {
+  page: number;
+  pageSize: number;
+  keyword: string;
+  parentId: string | null;
+}) {
+  return buildTenantMappingOptionsPath("categories", input);
+}
+
+export function buildTenantPlatformBrandOptionsPath(input: {
+  page: number;
+  pageSize: number;
+  keyword: string;
+}) {
+  return buildTenantMappingOptionsPath("brands", {
+    ...input,
+    parentId: null,
+  });
+}
+
+function buildTenantMappingOptionsPath(
+  kind: "categories" | "brands",
+  input: {
+    page: number;
+    pageSize: number;
+    keyword: string;
+    parentId: string | null;
+  },
+) {
+  const query = new URLSearchParams({
+    page: String(Math.max(1, input.page)),
+    pageSize: String(Math.min(100, Math.max(1, input.pageSize))),
+    status: "active",
+    scope: "platform",
+  });
+  const keyword = input.keyword.trim().slice(0, 80);
+  if (keyword) query.set("keyword", keyword);
+  if (kind === "categories" && input.parentId) {
+    query.set("parent_id", input.parentId);
+  }
+  return `/catalog/${kind}?${query}`;
+}

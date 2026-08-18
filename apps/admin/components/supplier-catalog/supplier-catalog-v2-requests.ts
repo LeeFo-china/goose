@@ -43,6 +43,21 @@ export function buildPlatformSuggestionListPath(input: {
   return `/platform/catalog/unit-suggestions?${query}`;
 }
 
+export function buildPlatformActiveUnitOptionsPath(input: {
+  page: number;
+  pageSize: number;
+  keyword: string;
+}) {
+  const query = new URLSearchParams({
+    page: String(Math.max(1, input.page)),
+    pageSize: String(Math.min(100, Math.max(1, input.pageSize))),
+    status: "active",
+  });
+  const keyword = input.keyword.trim().slice(0, 80);
+  if (keyword) query.set("keyword", keyword);
+  return `/platform/catalog/units?${query}`;
+}
+
 export function buildPlatformSpecCommand(input: {
   categoryId: string;
   definitionId?: string;

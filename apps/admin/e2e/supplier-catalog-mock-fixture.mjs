@@ -114,6 +114,13 @@ const initialTenantPrivateCategory = {
   full_name: "租户标准辅料",
   is_leaf: true,
   mapped_platform_category_id: initialTenantSharedCategory.id,
+  mapped_platform_category: {
+    id: initialTenantSharedCategory.id,
+    code: initialTenantSharedCategory.code,
+    name: initialTenantSharedCategory.name,
+    full_name: initialTenantSharedCategory.full_name,
+    status: initialTenantSharedCategory.status,
+  },
   ownership_scope: "tenant",
   owner_tenant_id: mockTenantCatalogSession.tenant.id,
   status: "active",
@@ -161,6 +168,17 @@ const initialUnitSuggestion = {
   updated_at: now,
 };
 
+function createUnitCandidate(index) {
+  return {
+    ...structuredClone(initialUnit),
+    id: `13000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+    code: `UNIT-${index}`,
+    name: `第 ${index} 单位`,
+    symbol: `U${index}`,
+    sort_order: 1_000 + index,
+  };
+}
+
 export function createInitialCatalogState() {
   return {
     categories: [structuredClone(initialCategory)],
@@ -169,7 +187,10 @@ export function createInitialCatalogState() {
       structuredClone(initialTenantPrivateCategory),
     ],
     brands: [structuredClone(initialBrand)],
-    units: [structuredClone(initialUnit)],
+    units: [
+      structuredClone(initialUnit),
+      ...Array.from({ length: 100 }, (_, index) => createUnitCandidate(index + 2)),
+    ],
     specs: {
       [initialCategory.id]: [],
       [initialTenantSharedCategory.id]: [structuredClone(initialPlatformSpec)],

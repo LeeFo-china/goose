@@ -2,9 +2,7 @@ import type { FastifyRequest } from "fastify";
 
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import {
-  CatalogBrandListQuerySchema,
   CatalogBrandParamSchema,
-  CatalogCategoryListQuerySchema,
   CatalogCategoryParamSchema,
   CatalogSpecDefinitionCreateSchema,
   CatalogSpecDefinitionListQuerySchema,
@@ -15,8 +13,10 @@ import {
   CatalogUnitSuggestionListQuerySchema,
   CopyPlatformSpecDefinitionsSchema,
   TenantCatalogBrandCreateSchema,
+  TenantCatalogBrandListQuerySchema,
   TenantCatalogBrandUpdateSchema,
   TenantCatalogCategoryCreateSchema,
+  TenantCatalogCategoryListQuerySchema,
   TenantCatalogCategoryUpdateSchema,
 } from "@/schema/supplier-catalog";
 import { supplierCatalogService } from "@/services/supplier-catalog";
@@ -33,7 +33,7 @@ class SupplierCatalogController extends TenantBaseController {
   async listCategories(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const query = parseCatalogRequest(
-      CatalogCategoryListQuerySchema,
+      TenantCatalogCategoryListQuerySchema,
       request.query,
     );
     return ResponseHandler.success(
@@ -71,7 +71,10 @@ class SupplierCatalogController extends TenantBaseController {
   @Get("/catalog/brands")
   async listBrands(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const query = parseCatalogRequest(CatalogBrandListQuerySchema, request.query);
+    const query = parseCatalogRequest(
+      TenantCatalogBrandListQuerySchema,
+      request.query,
+    );
     return ResponseHandler.success(
       await supplierCatalogService.listTenantBrands(auth, query),
     );

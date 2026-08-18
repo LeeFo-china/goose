@@ -64,6 +64,17 @@ export const CatalogCategoryListQuerySchema =
 export const CatalogBrandListQuerySchema = PaginationQuerySchema.extend(
   catalogListFields,
 ).strict();
+const TenantCatalogPlatformScopeSchema = z.literal("platform", {
+  message: "无效的租户目录读取范围",
+});
+export const TenantCatalogCategoryListQuerySchema =
+  CatalogCategoryListQuerySchema.extend({
+    scope: TenantCatalogPlatformScopeSchema.optional(),
+  }).strict();
+export const TenantCatalogBrandListQuerySchema =
+  CatalogBrandListQuerySchema.extend({
+    scope: TenantCatalogPlatformScopeSchema.optional(),
+  }).strict();
 export const CatalogUnitKindSchema = z.enum(["base", "derived"], {
   message: "无效的单位类型",
 });
@@ -266,6 +277,10 @@ export type CatalogCategoryListQuery =
   z.infer<typeof CatalogCategoryListQuerySchema>;
 export type CatalogBrandListQuery =
   z.infer<typeof CatalogBrandListQuerySchema>;
+export type TenantCatalogCategoryListQuery =
+  z.infer<typeof TenantCatalogCategoryListQuerySchema>;
+export type TenantCatalogBrandListQuery =
+  z.infer<typeof TenantCatalogBrandListQuerySchema>;
 export type CatalogUnitListQuery =
   z.infer<typeof CatalogUnitListQuerySchema>;
 export type CatalogCategoryCreateRecord =
