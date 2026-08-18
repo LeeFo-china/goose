@@ -340,9 +340,11 @@ export class SupplierProductsRepository {
     product_id: string;
     sku_id: string;
     expected_version: number;
+    purchase_unit_id: string;
+    base_unit_id: string;
     conversions: unknown[];
   }) {
-    return this.command("replace_supplier_sku_unit_conversions_v2", {
+    return this.command("replace_supplier_sku_unit_conversions_v3", {
       p_ownership_scope: input.ownership_scope,
       p_tenant_id: input.tenant_id,
       p_tenant_supplier_id: input.tenant_supplier_id,
@@ -350,6 +352,8 @@ export class SupplierProductsRepository {
       p_supplier_product_id: input.product_id,
       p_supplier_sku_id: input.sku_id,
       p_expected_sku_version: input.expected_version,
+      p_purchase_unit_id: input.purchase_unit_id,
+      p_base_unit_id: input.base_unit_id,
       p_edges: input.conversions,
       p_actor_user_id: input.actor_user_id,
       p_actor_employee_id: input.actor_employee_id,

@@ -118,6 +118,23 @@ describe("SupplierCatalogRepository paginated reads", () => {
     }
   });
 
+  test("lists leaf categories across the complete hierarchy", async () => {
+    const { repository, requests } = await createRepository(() => ({
+      body: [category],
+      count: 1,
+    }));
+
+    await repository.listCategories({
+      is_leaf: true,
+      page: 1,
+      pageSize: 20,
+    });
+
+    const url = new URL(requests[0]!.url);
+    expect(url.searchParams.get("is_leaf")).toBe("eq.true");
+    expect(url.searchParams.has("parent_id")).toBe(false);
+  });
+
   test("paginates brand and unit rows with explicit filters", async () => {
     const { repository, requests } = await createRepository((request) => {
       const url = new URL(request.url);

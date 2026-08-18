@@ -278,6 +278,8 @@ export class SupplierProductsService {
       product_id: productId,
       sku_id: skuId,
       expected_version: input.expected_version,
+      purchase_unit_id: input.purchase_unit_id,
+      base_unit_id: input.base_unit_id,
       conversions: input.conversions,
       ...actorContext(scope, idempotencyKey),
     }));

@@ -175,7 +175,6 @@ export const SupplierSkuUpdateSchema = z.object({
   name: skuFields.name.optional(),
   specification: skuFields.specification,
   model: skuFields.model,
-  purchase_unit_id: skuFields.purchase_unit_id.optional(),
   batch_managed: skuFields.batch_managed.optional(),
   color_managed: skuFields.color_managed.optional(),
   serial_managed: skuFields.serial_managed.optional(),
@@ -204,6 +203,8 @@ const SupplierSkuUnitConversionSchema = z.object({
 
 export const SupplierSkuUnitConversionsReplaceSchema = z.object({
   expected_version: expectedVersion,
+  purchase_unit_id: uuid("无效的采购单位 ID"),
+  base_unit_id: uuid("无效的库存基础单位 ID"),
   conversions: z.array(SupplierSkuUnitConversionSchema).max(
     100,
     "单位换算不能超过 100 条",

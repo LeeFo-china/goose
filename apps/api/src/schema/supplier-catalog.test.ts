@@ -36,6 +36,18 @@ describe("supplier catalog tenant schemas", () => {
     }
   });
 
+  test("category lists parse the optional leaf-only query flag", () => {
+    const categoryList = schema("CatalogCategoryListQuerySchema");
+
+    expect(categoryList.parse({ is_leaf: "true" })).toMatchObject({
+      is_leaf: true,
+    });
+    expect(categoryList.parse({ is_leaf: "false" })).toMatchObject({
+      is_leaf: false,
+    });
+    expect(categoryList.safeParse({ is_leaf: "1" }).success).toBe(false);
+  });
+
   test("tenant category and brand payloads cannot provide ownership", () => {
     const category = schema("TenantCatalogCategoryCreateSchema");
     const brand = schema("TenantCatalogBrandCreateSchema");

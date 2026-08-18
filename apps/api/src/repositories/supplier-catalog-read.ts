@@ -49,10 +49,15 @@ export class SupplierCatalogReadRepository {
     let request = this.client.from("catalog_categories")
       .select(CATEGORY_SELECT, { count: "exact" });
     request = applyListVisibility(request, visibility, input.status);
-    request = input.parent_id
-      ? request.eq("parent_id", input.parent_id)
-      : request.is("parent_id", null);
+    if (input.parent_id) {
+      request = request.eq("parent_id", input.parent_id);
+    } else if (input.parent_id === null || input.is_leaf !== true) {
+      request = request.is("parent_id", null);
+    }
     if (input.level) request = request.eq("level", input.level);
+    if (input.is_leaf !== undefined) {
+      request = request.eq("is_leaf", input.is_leaf);
+    }
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
       .order("sort_order", { ascending: true })

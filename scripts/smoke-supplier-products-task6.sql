@@ -29,14 +29,27 @@ BEGIN
   FOREACH v_signature IN ARRAY ARRAY[
     'public.command_supplier_product_v2(text,text,uuid,uuid,uuid,uuid,integer,jsonb,uuid,uuid,text)'::regprocedure,
     'public.command_supplier_sku_v2(text,text,uuid,uuid,uuid,uuid,uuid,integer,jsonb,uuid,uuid,text)'::regprocedure,
-    'public.replace_supplier_sku_unit_conversions_v2(text,uuid,uuid,uuid,uuid,uuid,integer,jsonb,uuid,uuid,text)'::regprocedure
+    'public.replace_supplier_sku_unit_conversions_v3(text,uuid,uuid,uuid,uuid,uuid,integer,uuid,uuid,jsonb,uuid,uuid,text)'::regprocedure
   ]
   LOOP
     IF NOT has_function_privilege('service_role', v_signature, 'EXECUTE')
       OR has_function_privilege('authenticated', v_signature, 'EXECUTE')
       OR has_function_privilege('anon', v_signature, 'EXECUTE')
     THEN
-      RAISE EXCEPTION 'Task 6 v2 function ACL invalid: %', v_signature;
+      RAISE EXCEPTION 'Task 6 write function ACL invalid: %', v_signature;
+    END IF;
+  END LOOP;
+
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.replace_supplier_sku_unit_conversions(uuid,integer,jsonb,uuid,uuid,uuid,text)'::regprocedure,
+    'public.replace_supplier_sku_unit_conversions_v2(text,uuid,uuid,uuid,uuid,uuid,integer,jsonb,uuid,uuid,text)'::regprocedure
+  ]
+  LOOP
+    IF has_function_privilege('service_role', v_signature, 'EXECUTE')
+      OR has_function_privilege('authenticated', v_signature, 'EXECUTE')
+      OR has_function_privilege('anon', v_signature, 'EXECUTE')
+    THEN
+      RAISE EXCEPTION 'Task 6 unsafe conversion ACL is open: %', v_signature;
     END IF;
   END LOOP;
 END
@@ -220,12 +233,37 @@ INSERT INTO public.catalog_units (
   id, code, name, symbol, unit_dimension, status,
   created_by_employee_id, updated_by_employee_id
 )
-VALUES (
-  'a6000000-0000-4000-8000-000000000054',
-  'TASK6-EACH', 'Task 6 each', '件', 'count', 'active',
-  'a6000000-0000-4000-8000-000000000021',
-  'a6000000-0000-4000-8000-000000000021'
-);
+VALUES
+  (
+    'a6000000-0000-4000-8000-000000000054',
+    'TASK6-EACH', 'Task 6 each', '片', 'count', 'active',
+    'a6000000-0000-4000-8000-000000000021',
+    'a6000000-0000-4000-8000-000000000021'
+  ),
+  (
+    'a6000000-0000-4000-8000-000000000055',
+    'TASK6-BOX', 'Task 6 box', '箱', 'count', 'active',
+    'a6000000-0000-4000-8000-000000000021',
+    'a6000000-0000-4000-8000-000000000021'
+  ),
+  (
+    'a6000000-0000-4000-8000-000000000056',
+    'TASK6-SQM', 'Task 6 square metre', '㎡', 'area', 'active',
+    'a6000000-0000-4000-8000-000000000021',
+    'a6000000-0000-4000-8000-000000000021'
+  ),
+  (
+    'a6000000-0000-4000-8000-000000000057',
+    'TASK6-PALLET', 'Task 6 pallet', '托', 'count', 'active',
+    'a6000000-0000-4000-8000-000000000021',
+    'a6000000-0000-4000-8000-000000000021'
+  ),
+  (
+    'a6000000-0000-4000-8000-000000000058',
+    'TASK6-INACTIVE', 'Task 6 inactive unit', '停', 'count', 'inactive',
+    'a6000000-0000-4000-8000-000000000021',
+    'a6000000-0000-4000-8000-000000000021'
+  );
 
 DO $task6_behavior$
 DECLARE
@@ -583,6 +621,8 @@ $task6_platform_replay_revalidation$;
 DO $task6_sku_and_category_guard$
 DECLARE
   v_result jsonb;
+  v_sku_snapshot jsonb;
+  v_conversion_count bigint;
 BEGIN
   v_result := public.command_supplier_sku_v2(
     'create', 'tenant',
@@ -606,6 +646,63 @@ BEGIN
   );
   IF v_result ->> 'status' <> 'created' THEN
     RAISE EXCEPTION 'task6 SKU create failed: %', v_result;
+  END IF;
+
+  v_result := public.replace_supplier_sku_unit_conversions_v3(
+    'tenant',
+    'a6000000-0000-4000-8000-000000000001',
+    'a6000000-0000-4000-8000-000000000041',
+    'a6000000-0000-4000-8000-000000000031',
+    'a6000000-0000-4000-8000-000000000064',
+    'a6000000-0000-4000-8000-000000000071', 1,
+    'a6000000-0000-4000-8000-000000000055',
+    'a6000000-0000-4000-8000-000000000054',
+    jsonb_build_array(
+      jsonb_build_object(
+        'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+        'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+        'factor', '12'
+      ),
+      jsonb_build_object(
+        'from_unit_id', 'a6000000-0000-4000-8000-000000000054',
+        'to_unit_id', 'a6000000-0000-4000-8000-000000000056',
+        'factor', '0.18'
+      )
+    ),
+    'a6000000-0000-4000-8000-000000000012',
+    'a6000000-0000-4000-8000-000000000022',
+    'task6-sku-conversion-v3'
+  );
+  IF v_result ->> 'status' <> 'updated'
+    OR v_result ->> 'version' <> '2'
+    OR v_result ->> 'base_unit_conversion' <> '12.00000000'
+  THEN
+    RAISE EXCEPTION 'task6 SKU conversion v3 failed: %', v_result;
+  END IF;
+
+  SELECT to_jsonb(sku) INTO v_sku_snapshot
+  FROM public.supplier_skus AS sku
+  WHERE sku.id = 'a6000000-0000-4000-8000-000000000071';
+
+  SELECT count(*) INTO v_conversion_count
+  FROM public.supplier_sku_unit_conversions AS conversion
+  WHERE conversion.supplier_sku_id =
+    'a6000000-0000-4000-8000-000000000071';
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.supplier_skus AS sku
+    WHERE sku.id = 'a6000000-0000-4000-8000-000000000071'
+      AND sku.purchase_unit_id =
+        'a6000000-0000-4000-8000-000000000055'
+      AND sku.base_unit_id = 'a6000000-0000-4000-8000-000000000054'
+      AND sku.base_unit_conversion = 12
+      AND sku.version = 2
+  ) OR v_conversion_count <> 2
+  THEN
+    RAISE EXCEPTION
+      'task6 SKU conversion v3 did not persist atomically: sku=%, edges=%',
+      v_sku_snapshot, v_conversion_count;
   END IF;
 
   -- The API repository emits this bounded sku_code ILIKE/name query.
@@ -648,5 +745,182 @@ BEGIN
   END;
 END
 $task6_sku_and_category_guard$;
+
+DO $task6_conversion_negative_graphs$
+DECLARE
+  v_case jsonb;
+  v_cases jsonb := jsonb_build_array(
+    jsonb_build_object(
+      'marker', 'task6 conversion branch',
+      'base_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'edges', jsonb_build_array(
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'factor', '12'
+        ),
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000056',
+          'factor', '1'
+        )
+      )
+    ),
+    jsonb_build_object(
+      'marker', 'task6 conversion merge',
+      'base_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'edges', jsonb_build_array(
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'factor', '12'
+        ),
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000056',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'factor', '1'
+        )
+      )
+    ),
+    jsonb_build_object(
+      'marker', 'task6 conversion cycle',
+      'base_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'edges', jsonb_build_array(
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'factor', '12'
+        ),
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'factor', '0.083333'
+        )
+      )
+    ),
+    jsonb_build_object(
+      'marker', 'task6 conversion disconnected',
+      'base_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'edges', jsonb_build_array(
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+          'factor', '12'
+        ),
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000056',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000057',
+          'factor', '1'
+        )
+      )
+    ),
+    jsonb_build_object(
+      'marker', 'task6 conversion inactive unit',
+      'base_unit_id', 'a6000000-0000-4000-8000-000000000058',
+      'edges', jsonb_build_array(
+        jsonb_build_object(
+          'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+          'to_unit_id', 'a6000000-0000-4000-8000-000000000058',
+          'factor', '1'
+        )
+      )
+    )
+  );
+BEGIN
+  FOR v_case IN
+    SELECT test_case.value
+    FROM jsonb_array_elements(v_cases) AS test_case(value)
+  LOOP
+    BEGIN
+      PERFORM public.validate_supplier_sku_unit_conversion_graph_v2(
+        'a6000000-0000-4000-8000-000000000055',
+        (v_case ->> 'base_unit_id')::uuid,
+        v_case -> 'edges'
+      );
+      RAISE EXCEPTION '% was accepted', v_case ->> 'marker';
+    EXCEPTION WHEN SQLSTATE 'P0001' THEN
+      IF SQLERRM <> 'UNIT_CONVERSION_INVALID' THEN RAISE; END IF;
+    END;
+  END LOOP;
+END
+$task6_conversion_negative_graphs$;
+
+DO $task6_conversion_replay_guards$
+DECLARE
+  v_edges jsonb := jsonb_build_array(
+    jsonb_build_object(
+      'from_unit_id', 'a6000000-0000-4000-8000-000000000055',
+      'to_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'factor', '12'
+    ),
+    jsonb_build_object(
+      'from_unit_id', 'a6000000-0000-4000-8000-000000000054',
+      'to_unit_id', 'a6000000-0000-4000-8000-000000000056',
+      'factor', '0.18'
+    )
+  );
+  v_result jsonb;
+BEGIN
+  v_result := public.replace_supplier_sku_unit_conversions_v3(
+    'tenant',
+    'a6000000-0000-4000-8000-000000000001',
+    'a6000000-0000-4000-8000-000000000041',
+    'a6000000-0000-4000-8000-000000000031',
+    'a6000000-0000-4000-8000-000000000064',
+    'a6000000-0000-4000-8000-000000000071', 1,
+    'a6000000-0000-4000-8000-000000000055',
+    'a6000000-0000-4000-8000-000000000054',
+    v_edges,
+    'a6000000-0000-4000-8000-000000000012',
+    'a6000000-0000-4000-8000-000000000022',
+    'task6-sku-conversion-v3'
+  );
+  IF v_result ->> 'idempotent' <> 'true' THEN
+    RAISE EXCEPTION 'task6 conversion replay failed: %', v_result;
+  END IF;
+
+  -- task6 conversion version conflict
+  v_result := public.replace_supplier_sku_unit_conversions_v3(
+    'tenant',
+    'a6000000-0000-4000-8000-000000000001',
+    'a6000000-0000-4000-8000-000000000041',
+    'a6000000-0000-4000-8000-000000000031',
+    'a6000000-0000-4000-8000-000000000064',
+    'a6000000-0000-4000-8000-000000000071', 1,
+    'a6000000-0000-4000-8000-000000000055',
+    'a6000000-0000-4000-8000-000000000054',
+    v_edges,
+    'a6000000-0000-4000-8000-000000000012',
+    'a6000000-0000-4000-8000-000000000022',
+    'task6-conversion-version-conflict'
+  );
+  IF v_result ->> 'error_code' <> 'SUPPLIER_SKU_VERSION_CONFLICT'
+    OR v_result ->> 'version' <> '2'
+  THEN
+    RAISE EXCEPTION 'task6 conversion version conflict failed: %', v_result;
+  END IF;
+
+  -- task6 conversion idempotency conflict
+  BEGIN
+    PERFORM public.replace_supplier_sku_unit_conversions_v3(
+      'tenant',
+      'a6000000-0000-4000-8000-000000000001',
+      'a6000000-0000-4000-8000-000000000041',
+      'a6000000-0000-4000-8000-000000000031',
+      'a6000000-0000-4000-8000-000000000064',
+      'a6000000-0000-4000-8000-000000000071', 2,
+      'a6000000-0000-4000-8000-000000000055',
+      'a6000000-0000-4000-8000-000000000054',
+      jsonb_set(v_edges, '{0,factor}', '"13"'::jsonb),
+      'a6000000-0000-4000-8000-000000000012',
+      'a6000000-0000-4000-8000-000000000022',
+      'task6-sku-conversion-v3'
+    );
+    RAISE EXCEPTION 'task6 conversion idempotency conflict was accepted';
+  EXCEPTION WHEN SQLSTATE 'P0001' THEN
+    IF SQLERRM <> 'SUPPLIER_IDEMPOTENCY_CONFLICT' THEN RAISE; END IF;
+  END;
+END
+$task6_conversion_replay_guards$;
 
 ROLLBACK;

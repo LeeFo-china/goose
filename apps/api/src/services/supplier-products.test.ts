@@ -290,6 +290,8 @@ describe("SupplierProductsService", () => {
       SKU_ID,
       {
         expected_version: 3,
+        purchase_unit_id: CATEGORY_ID,
+        base_unit_id: BRAND_ID,
         conversions: [{
           from_unit_id: CATEGORY_ID,
           to_unit_id: BRAND_ID,
@@ -307,6 +309,8 @@ describe("SupplierProductsService", () => {
       product_id: PRODUCT_ID,
       sku_id: SKU_ID,
       expected_version: 3,
+      purchase_unit_id: CATEGORY_ID,
+      base_unit_id: BRAND_ID,
       conversions: [{
         from_unit_id: CATEGORY_ID,
         to_unit_id: BRAND_ID,

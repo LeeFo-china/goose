@@ -14,6 +14,7 @@ const categoryId = "10000000-0000-4000-8000-000000000001";
 const brandId = "10000000-0000-4000-8000-000000000002";
 const unitId = "10000000-0000-4000-8000-000000000003";
 const tenantSupplierId = "10000000-0000-4000-8000-000000000004";
+const baseUnitId = "10000000-0000-4000-8000-000000000005";
 
 describe("supplier product schemas", () => {
   test("defaults and caps every product list", () => {
@@ -140,22 +141,28 @@ describe("supplier product schemas", () => {
       supplierProductSchemas.SupplierSkuUnitConversionsReplaceSchema;
     expect(SupplierSkuUnitConversionsReplaceSchema.parse({
       expected_version: 3,
+      purchase_unit_id: unitId,
+      base_unit_id: baseUnitId,
       conversions: [{
         from_unit_id: unitId,
-        to_unit_id: categoryId,
+        to_unit_id: baseUnitId,
         factor: "8.000",
       }],
     })).toEqual({
       expected_version: 3,
+      purchase_unit_id: unitId,
+      base_unit_id: baseUnitId,
       conversions: [{
         from_unit_id: unitId,
-        to_unit_id: categoryId,
+        to_unit_id: baseUnitId,
         factor: "8.000",
       }],
     });
 
     expect(SupplierSkuUnitConversionsReplaceSchema.safeParse({
       expected_version: 3,
+      purchase_unit_id: unitId,
+      base_unit_id: baseUnitId,
       conversions: [{
         from_unit_id: unitId,
         to_unit_id: unitId,
@@ -165,6 +172,8 @@ describe("supplier product schemas", () => {
 
     expect(SupplierSkuUnitConversionsReplaceSchema.safeParse({
       expected_version: 3,
+      purchase_unit_id: unitId,
+      base_unit_id: baseUnitId,
       conversions: [{
         from_unit_id: unitId,
         to_unit_id: categoryId,
@@ -173,11 +182,20 @@ describe("supplier product schemas", () => {
     }).success).toBe(false);
     expect(SupplierSkuUnitConversionsReplaceSchema.safeParse({
       expected_version: 3,
+      purchase_unit_id: unitId,
+      base_unit_id: baseUnitId,
       conversions: [{
         from_unit_id: unitId,
         to_unit_id: categoryId,
         factor: "8.0000001",
       }],
+    }).success).toBe(false);
+  });
+
+  test("routes unit identity changes through the atomic conversion command", () => {
+    expect(supplierProductSchemas.SupplierSkuUpdateSchema.safeParse({
+      expected_version: 2,
+      purchase_unit_id: unitId,
     }).success).toBe(false);
   });
 

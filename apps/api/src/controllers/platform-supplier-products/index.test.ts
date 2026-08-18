@@ -143,6 +143,8 @@ describe("PlatformSupplierProductsController", () => {
       query: { supplierId: SUPPLIER_ID },
       body: {
         expected_version: 3,
+        purchase_unit_id: UNIT_ID,
+        base_unit_id: TARGET_UNIT_ID,
         conversions: [{
           from_unit_id: UNIT_ID,
           to_unit_id: TARGET_UNIT_ID,
@@ -159,6 +161,8 @@ describe("PlatformSupplierProductsController", () => {
       SKU_ID,
       {
         expected_version: 3,
+        purchase_unit_id: UNIT_ID,
+        base_unit_id: TARGET_UNIT_ID,
         conversions: [{
           from_unit_id: UNIT_ID,
           to_unit_id: TARGET_UNIT_ID,

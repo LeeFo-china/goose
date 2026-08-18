@@ -25,6 +25,13 @@ const requiredNumber = (schema: z.ZodNumber) =>
   z.preprocess(parseRequiredNumber, schema);
 const optionalNumber = (schema: z.ZodNumber) =>
   z.preprocess(parseOptionalNumber, schema.optional());
+const optionalBooleanQuery = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return value;
+}, z.boolean().optional());
 const expectedVersion = requiredNumber(
   z.number().int().positive("版本号必须是正整数"),
 );
@@ -60,6 +67,7 @@ export const CatalogCategoryListQuerySchema =
     ...catalogListFields,
     parent_id: uuid("无效的父目录分类 ID").nullable().optional(),
     level: optionalNumber(catalogCategoryLevel),
+    is_leaf: optionalBooleanQuery,
   }).strict();
 export const CatalogBrandListQuerySchema = PaginationQuerySchema.extend(
   catalogListFields,

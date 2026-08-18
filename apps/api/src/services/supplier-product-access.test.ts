@@ -65,7 +65,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("SupplierProductAccessService", () => {
-  test("uses distinct product and cost-price read permissions", async () => {
+  test("allows cost-price readers to load the product and SKU references needed for pricing", async () => {
     const deps = dependencies();
     const { SupplierProductAccessService } = await import(
       "./supplier-product-access"
@@ -76,8 +76,20 @@ describe("SupplierProductAccessService", () => {
       auth("supplier.product.view"),
       TENANT_SUPPLIER_ID,
     );
+    await service.requireProductRead(
+      auth("supplier.cost-price.view"),
+      TENANT_SUPPLIER_ID,
+    );
+    await service.requireProductRead(
+      auth("supplier.product.manage"),
+      TENANT_SUPPLIER_ID,
+    );
     await service.requirePriceRead(
       auth("supplier.cost-price.view"),
+      TENANT_SUPPLIER_ID,
+    );
+    await service.requirePriceRead(
+      auth("supplier.cost-price.manage"),
       TENANT_SUPPLIER_ID,
     );
 
@@ -90,6 +102,21 @@ describe("SupplierProductAccessService", () => {
       2,
       expect.anything(),
       "supplier.cost-price.view",
+    );
+    expect(deps.accessPolicy.assertPermission).toHaveBeenNthCalledWith(
+      3,
+      expect.anything(),
+      "supplier.product.manage",
+    );
+    expect(deps.accessPolicy.assertPermission).toHaveBeenNthCalledWith(
+      4,
+      expect.anything(),
+      "supplier.cost-price.view",
+    );
+    expect(deps.accessPolicy.assertPermission).toHaveBeenNthCalledWith(
+      5,
+      expect.anything(),
+      "supplier.cost-price.manage",
     );
   });
 

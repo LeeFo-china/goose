@@ -26545,6 +26545,24 @@ export type Database = {
         }
         Returns: Json
       }
+      replace_supplier_sku_unit_conversions_v3: {
+        Args: {
+          p_actor_employee_id: string
+          p_actor_user_id: string
+          p_base_unit_id: string
+          p_edges: Json
+          p_expected_sku_version: number
+          p_idempotency_key: string
+          p_ownership_scope: string
+          p_purchase_unit_id: string
+          p_supplier_id: string
+          p_supplier_product_id: string
+          p_supplier_sku_id: string
+          p_tenant_id: string
+          p_tenant_supplier_id: string
+        }
+        Returns: Json
+      }
       replace_workflow_draft_graph: {
         Args: {
           p_definition_id: string
@@ -27547,6 +27565,14 @@ export type Database = {
       }
       validate_supplier_sku_unit_conversion_graph_pre_precision_unsaf: {
         Args: { p_edges: Json; p_supplier_sku_id: string }
+        Returns: number
+      }
+      validate_supplier_sku_unit_conversion_graph_v2: {
+        Args: {
+          p_base_unit_id: string
+          p_edges: Json
+          p_purchase_unit_id: string
+        }
         Returns: number
       }
       verify_wechat_customer_bootstrap: {

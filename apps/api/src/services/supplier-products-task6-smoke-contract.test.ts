@@ -40,4 +40,18 @@ describe("Task 6 supplier product database smoke", () => {
     expect(sql).not.toMatch(/SET ROLE service_role/);
     expect(sql).toContain("has_function_privilege('service_role'");
   });
+
+  test("covers conversion graph and replay failure paths in the real database", () => {
+    for (const marker of [
+      "task6 conversion branch",
+      "task6 conversion merge",
+      "task6 conversion cycle",
+      "task6 conversion disconnected",
+      "task6 conversion inactive unit",
+      "task6 conversion version conflict",
+      "task6 conversion idempotency conflict",
+    ]) {
+      expect(sql, marker).toContain(marker);
+    }
+  });
 });

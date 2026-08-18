@@ -342,7 +342,7 @@ describe("SupplierProductsRepository", () => {
     }
   });
 
-  test("replaces SKU conversions through the replay-safe v2 command", async () => {
+  test("replaces SKU conversions through the replay-safe v3 command", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: { status: "updated", idempotent: false, version: 4 },
     }));
@@ -361,6 +361,8 @@ describe("SupplierProductsRepository", () => {
       product_id: PRODUCT_ID,
       sku_id: SKU_ID,
       expected_version: 3,
+      purchase_unit_id: CATEGORY_ID,
+      base_unit_id: BRAND_ID,
       conversions: [{
         from_unit_id: CATEGORY_ID,
         to_unit_id: BRAND_ID,
@@ -373,7 +375,7 @@ describe("SupplierProductsRepository", () => {
 
     const request = requests[0]!;
     expect(new URL(request.url).pathname).toEndWith(
-      "/rpc/replace_supplier_sku_unit_conversions_v2",
+      "/rpc/replace_supplier_sku_unit_conversions_v3",
     );
     expect(await request.clone().json()).toMatchObject({
       p_ownership_scope: "tenant",
@@ -381,6 +383,8 @@ describe("SupplierProductsRepository", () => {
       p_supplier_product_id: PRODUCT_ID,
       p_supplier_sku_id: SKU_ID,
       p_expected_sku_version: 3,
+      p_purchase_unit_id: CATEGORY_ID,
+      p_base_unit_id: BRAND_ID,
     });
   });
 });
