@@ -117,19 +117,31 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
     await service.listTenantUnitSuggestions(manageOnly, query);
   });
 
-  test("allows every tenant catalog read with supplier view permission only", async () => {
-    const { service } = await setup();
+  test("denies every tenant catalog read with supplier view permission only", async () => {
+    const { service, repository } = await setup();
     const viewOnly = authWithPermissions("supplier.view");
     const query = { page: 1, pageSize: 20 };
 
-    await service.listTenantCategories(viewOnly, query);
-    await service.listTenantBrands(viewOnly, query);
-    await service.listTenantUnits(viewOnly, query);
-    await service.listTenantSpecDefinitions(viewOnly, CATEGORY_ID, query);
-    await service.listTenantUnitSuggestions(viewOnly, query);
+    for (const operation of [
+      () => service.listTenantCategories(viewOnly, query),
+      () => service.listTenantBrands(viewOnly, query),
+      () => service.listTenantUnits(viewOnly, query),
+      () => service.listTenantSpecDefinitions(viewOnly, CATEGORY_ID, query),
+      () => service.listTenantUnitSuggestions(viewOnly, query),
+    ]) {
+      await expect(operation()).rejects.toMatchObject({
+        statusCode: 403,
+        code: "FORBIDDEN",
+      });
+    }
+    expect(repository.listCategories).not.toHaveBeenCalled();
+    expect(repository.listBrands).not.toHaveBeenCalled();
+    expect(repository.listUnits).not.toHaveBeenCalled();
+    expect(repository.listSpecDefinitions).not.toHaveBeenCalled();
+    expect(repository.listUnitSuggestions).not.toHaveBeenCalled();
   });
 
-  test("denies tenant catalog reads without either read permission", async () => {
+  test("denies tenant catalog reads without management permission", async () => {
     const { service, repository } = await setup();
 
     await expect(service.listTenantCategories(

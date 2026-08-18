@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 
@@ -31,6 +32,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { CatalogSpecEditorDialog, type CatalogSpecScope } from "./catalog-spec-editor-dialog";
+import {
+  completeCatalogSpecCopy,
+  createLatestCatalogSpecRequestSequence,
+} from "./catalog-spec-copy-runtime";
 import {
   initializeCatalogCreateIntent,
   resolveCatalogCreateIntent,
@@ -65,6 +70,7 @@ export function CatalogSpecDefinitionsDialogButton({
     mapped_platform_category_id?: string | null;
   };
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<CatalogStatus | "">("active");
@@ -77,36 +83,45 @@ export function CatalogSpecDefinitionsDialogButton({
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogSpecDefinition | null>(null);
   const copyIntentRef = useRef<CatalogCreateIntent | null>(null);
+  const loadRequestsRef = useRef(createLatestCatalogSpecRequestSequence());
+  const [expectedVersion, setExpectedVersion] = useState(category.version);
   const isTenantOwned = scope === "tenant" &&
     category.ownership_scope === "tenant";
   const canManage = scope === "platform" || isTenantOwned;
 
   const load = useCallback(async () => {
+    const request = loadRequestsRef.current.begin();
     setLoading(true);
     setError(null);
     const path = scope === "platform"
       ? buildPlatformSpecListPath(category.id, page, 20, status)
       : buildTenantSpecListPath(category.id, page, 20, status);
     try {
-      setResult(await requestBackendJson<CatalogPage<CatalogSpecDefinition>>(path, {
+      const nextResult = await requestBackendJson<CatalogPage<CatalogSpecDefinition>>(path, {
         fallbackMessage: "规格模板加载失败",
-      }));
+        signal: request.signal,
+      });
+      if (request.isCurrent()) setResult(nextResult);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "规格模板加载失败");
+      if (request.isCurrent()) {
+        setError(caught instanceof Error ? caught.message : "规格模板加载失败");
+      }
     } finally {
-      setLoading(false);
+      if (request.isCurrent()) setLoading(false);
+      request.finish();
     }
   }, [category.id, page, scope, status]);
 
   useEffect(() => {
     if (open) void load();
+    return () => loadRequestsRef.current.cancel();
   }, [load, open]);
 
   async function copyPlatformSpecs() {
     if (!category.mapped_platform_category_id) return;
     const payload = {
       platform_category_id: category.mapped_platform_category_id,
-      expected_version: category.version,
+      expected_version: expectedVersion,
     };
     const intent = resolveCatalogCreateIntent(
       copyIntentRef.current,
@@ -117,16 +132,23 @@ export function CatalogSpecDefinitionsDialogButton({
     const request = buildTenantCopySpecsCommand({
       categoryId: category.id,
       platformCategoryId: category.mapped_platform_category_id,
-      expectedVersion: category.version,
+      expectedVersion,
       idempotencyKey: intent.key,
     });
     setLoading(true);
     try {
-      await requestBackendJson(request.path, {
+      const result = await requestBackendJson<unknown>(request.path, {
         ...request.init,
         fallbackMessage: "复制平台规格模板失败",
       });
+      const completed = completeCatalogSpecCopy(
+        result,
+        () => newTenantCatalogCommandKey("spec-copy"),
+      );
+      setExpectedVersion(completed.expectedVersion);
+      copyIntentRef.current = completed.intent;
       toast.success("平台规格模板已复制");
+      router.refresh();
       await load();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : "复制平台规格模板失败");
@@ -157,10 +179,14 @@ export function CatalogSpecDefinitionsDialogButton({
         setOpen(value);
         if (value) {
           setPage(1);
+          setExpectedVersion(category.version);
           copyIntentRef.current = initializeCatalogCreateIntent(
             () => newTenantCatalogCommandKey("spec-copy"),
           );
-        } else copyIntentRef.current = null;
+        } else {
+          loadRequestsRef.current.cancel();
+          copyIntentRef.current = null;
+        }
       }}>
         <DialogTrigger asChild>
           <Button type="button" size="sm" variant="ghost">规格模板</Button>

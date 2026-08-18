@@ -43,6 +43,20 @@ export const mockTenantCatalogSession = {
   token: "tenant-supplier-catalog-mock-token",
 };
 
+export const mockTenantCatalogViewerSession = {
+  ...structuredClone(mockTenantCatalogSession),
+  user_id: "tenant-catalog-viewer-user",
+  employee: {
+    ...structuredClone(mockTenantCatalogSession.employee),
+    id: "10000000-0000-4000-8000-000000000003",
+    name: "供应商查看员",
+    phone: "18637605355",
+    post_name: "采购查看员",
+  },
+  permissions: [{ code: "supplier.view", scope: "all" }],
+  token: "tenant-supplier-viewer-mock-token",
+};
+
 const now = "2026-07-29T10:00:00+08:00";
 
 const initialCategory = {
@@ -69,6 +83,15 @@ const initialBrand = {
   version: 1,
   created_at: now,
   updated_at: now,
+};
+
+const secondBrand = {
+  ...structuredClone(initialBrand),
+  id: "12000000-0000-4000-8000-000000000099",
+  code: "BRAND-SECOND",
+  name: "备选标准品牌",
+  legal_name: "备选标准品牌有限公司",
+  sort_order: 20,
 };
 
 const initialUnit = {
@@ -103,6 +126,15 @@ const initialTenantSharedCategory = {
   version: 1,
   created_at: now,
   updated_at: now,
+};
+
+const secondTenantSharedCategory = {
+  ...structuredClone(initialTenantSharedCategory),
+  id: "11000000-0000-4000-8000-000000000011",
+  code: "PLATFORM-FINISH",
+  name: "平台饰面材料",
+  full_name: "平台饰面材料",
+  sort_order: 6,
 };
 
 const initialTenantPrivateCategory = {
@@ -176,6 +208,29 @@ const initialPlatformSpec = {
   updated_at: now,
 };
 
+const secondPlatformSpec = {
+  ...structuredClone(initialPlatformSpec),
+  id: "31000000-0000-4000-8000-000000000002",
+  category_id: secondTenantSharedCategory.id,
+};
+
+const initialTenantPrivateBrand = {
+  ...structuredClone(initialBrand),
+  id: "23000000-0000-4000-8000-000000000001",
+  code: "TENANT-BRAND",
+  name: "租户合作品牌",
+  legal_name: "租户合作品牌有限公司",
+  mapped_platform_brand_id: initialBrand.id,
+  mapped_platform_brand: {
+    id: initialBrand.id,
+    code: initialBrand.code,
+    name: initialBrand.name,
+    status: initialBrand.status,
+  },
+  ownership_scope: "tenant",
+  owner_tenant_id: mockTenantCatalogSession.tenant.id,
+};
+
 const initialUnitSuggestion = {
   id: "32000000-0000-4000-8000-000000000001",
   tenant_id: mockTenantCatalogSession.tenant.id,
@@ -209,10 +264,12 @@ export function createInitialCatalogState() {
     categories: [structuredClone(initialCategory)],
     tenantCategories: [
       structuredClone(initialTenantSharedCategory),
+      structuredClone(secondTenantSharedCategory),
       structuredClone(initialTenantPrivateCategory),
       ...structuredClone(initialTenantDeepCategories),
     ],
-    brands: [structuredClone(initialBrand)],
+    brands: [structuredClone(initialBrand), structuredClone(secondBrand)],
+    tenantBrands: [structuredClone(initialTenantPrivateBrand)],
     units: [
       structuredClone(initialUnit),
       ...Array.from({ length: 100 }, (_, index) => createUnitCandidate(index + 2)),
@@ -220,6 +277,7 @@ export function createInitialCatalogState() {
     specs: {
       [initialCategory.id]: [],
       [initialTenantSharedCategory.id]: [structuredClone(initialPlatformSpec)],
+      [secondTenantSharedCategory.id]: [structuredClone(secondPlatformSpec)],
       [initialTenantPrivateCategory.id]: [],
       ...Object.fromEntries(initialTenantDeepCategories.map(({ id }) => [id, []])),
     },

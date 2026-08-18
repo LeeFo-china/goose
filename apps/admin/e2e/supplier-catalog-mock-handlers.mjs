@@ -7,6 +7,7 @@ import { paginate, readBody, sendJson } from "./supplier-catalog-mock-support.mj
 export function createCatalogMockRuntime() {
   let state = createInitialCatalogState();
   let mutations = [];
+  let catalogRequests = [];
   let conflictNext = null;
 
   function recordMutation(request, url, payload) {
@@ -36,6 +37,12 @@ export function createCatalogMockRuntime() {
     return `${prefix}-0000-4000-8000-${String(count + 1).padStart(12, "0")}`;
   }
 
+  function nextAvailableId(prefix, records) {
+    let count = 0;
+    while (records.some(({ id }) => id === nextId(prefix, count))) count += 1;
+    return nextId(prefix, count);
+  }
+
   function nextSpecId() {
     const count = Object.values(state.specs)
       .reduce((total, records) => total + records.length, 0);
@@ -49,9 +56,19 @@ export function createCatalogMockRuntime() {
     ), url);
   }
 
+  function filterCatalogRecords(records, url) {
+    const keyword = (url.searchParams.get("keyword") || "").toLowerCase();
+    const status = url.searchParams.get("status");
+    return records.filter((record) =>
+      (!status || record.status === status) &&
+      (!keyword || record.code.toLowerCase().includes(keyword) ||
+        record.name.toLowerCase().includes(keyword))
+    );
+  }
+
   function listTenantCategories(url) {
     const parentId = url.searchParams.get("parent_id");
-    return paginate(state.tenantCategories.filter((record) =>
+    return paginate(filterCatalogRecords(state.tenantCategories, url).filter((record) =>
       (parentId ? record.parent_id === parentId : record.parent_id === null) &&
       (url.searchParams.get("scope") !== "platform" ||
         record.ownership_scope === "platform")
@@ -66,7 +83,10 @@ export function createCatalogMockRuntime() {
       ownership_scope: "platform",
       owner_tenant_id: null,
     }));
-    return paginate(platformRecords, url);
+    const records = url.searchParams.get("scope") === "platform"
+      ? platformRecords
+      : [...platformRecords, ...state.tenantBrands];
+    return paginate(filterCatalogRecords(records, url), url);
   }
 
   function listUnits(url) {
@@ -89,6 +109,7 @@ export function createCatalogMockRuntime() {
   function reset() {
     state = createInitialCatalogState();
     mutations = [];
+    catalogRequests = [];
     conflictNext = null;
   }
 
@@ -156,6 +177,66 @@ export function createCatalogMockRuntime() {
     sendJson(response, 201, { success: true, data: record });
   }
 
+  async function updateTenantCategory(request, response, url, id) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    if (!requireIdempotencyKey(request, response)) return;
+    const record = state.tenantCategories.find((item) => item.id === id);
+    if (!record) return recordNotFound(response, "category");
+    if (payload.expected_version !== record.version) {
+      return versionConflict(response, record);
+    }
+    for (const field of ["code", "name", "sort_order", "status"]) {
+      if (field in payload) record[field] = payload[field];
+    }
+    if ("mapped_platform_category_id" in payload) {
+      record.mapped_platform_category_id = payload.mapped_platform_category_id;
+      const mapped = state.tenantCategories.find((candidate) =>
+        candidate.id === payload.mapped_platform_category_id &&
+        candidate.ownership_scope === "platform"
+      );
+      record.mapped_platform_category = mapped ? {
+        id: mapped.id,
+        code: mapped.code,
+        name: mapped.name,
+        full_name: mapped.full_name,
+        status: mapped.status,
+      } : null;
+    }
+    record.version += 1;
+    record.updated_at = new Date().toISOString();
+    recordMutation(request, url, payload);
+    sendJson(response, 200, { success: true, data: record });
+  }
+
+  async function updateTenantBrand(request, response, url, id) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    if (!requireIdempotencyKey(request, response)) return;
+    const record = state.tenantBrands.find((item) => item.id === id);
+    if (!record) return recordNotFound(response, "brand");
+    if (payload.expected_version !== record.version) {
+      return versionConflict(response, record);
+    }
+    for (const field of ["code", "name", "legal_name", "sort_order", "status"]) {
+      if (field in payload) record[field] = payload[field];
+    }
+    if ("mapped_platform_brand_id" in payload) {
+      record.mapped_platform_brand_id = payload.mapped_platform_brand_id;
+      const mapped = state.brands.find(({ id: candidateId }) =>
+        candidateId === payload.mapped_platform_brand_id
+      );
+      record.mapped_platform_brand = mapped ? {
+        id: mapped.id,
+        code: mapped.code,
+        name: mapped.name,
+        status: mapped.status,
+      } : null;
+    }
+    record.version += 1;
+    record.updated_at = new Date().toISOString();
+    recordMutation(request, url, payload);
+    sendJson(response, 200, { success: true, data: record });
+  }
+
   async function createSpec(request, response, url, categoryId, scope) {
     const payload = JSON.parse(await readBody(request) || "{}");
     if (!requireIdempotencyKey(request, response)) return;
@@ -195,6 +276,11 @@ export function createCatalogMockRuntime() {
   async function copyPlatformSpecs(request, response, url, categoryId) {
     const payload = JSON.parse(await readBody(request) || "{}");
     if (!requireIdempotencyKey(request, response)) return;
+    const category = state.tenantCategories.find(({ id }) => id === categoryId);
+    if (!category) return recordNotFound(response, "category");
+    if (payload.expected_version !== category.version) {
+      return versionConflict(response, category);
+    }
     const now = new Date().toISOString();
     const copies = (state.specs[payload.platform_category_id] || []).map((spec) => ({
       ...structuredClone(spec),
@@ -208,8 +294,19 @@ export function createCatalogMockRuntime() {
       updated_at: now,
     }));
     state.specs[categoryId] = copies;
+    category.version += 1;
+    category.updated_at = now;
     recordMutation(request, url, payload);
-    sendJson(response, 200, { success: true, data: copies });
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        status: "copied",
+        copied_count: copies.length,
+        ids: copies.map(({ id }) => id),
+        idempotent: false,
+        version: category.version,
+      },
+    });
   }
 
   async function createUnitSuggestion(request, response, url) {
@@ -282,7 +379,7 @@ export function createCatalogMockRuntime() {
     if (!requireIdempotencyKey(request, response)) return;
     const now = new Date().toISOString();
     const record = {
-      id: nextId("12000000", state.brands.length),
+      id: nextAvailableId("12000000", state.brands),
       code: payload.code,
       name: payload.name,
       legal_name: payload.legal_name ?? null,
@@ -364,6 +461,10 @@ export function createCatalogMockRuntime() {
   return {
     reset,
     mutations: () => structuredClone(mutations),
+    catalogRequests: () => structuredClone(catalogRequests),
+    recordCatalogRequest: (url) => {
+      catalogRequests.push(`${url.pathname}${url.search}`);
+    },
     setConflictNext: (value) => { conflictNext = value; },
     listCategories,
     listTenantCategories,
@@ -374,6 +475,8 @@ export function createCatalogMockRuntime() {
     listSpecs,
     createCategory,
     createTenantCategory,
+    updateTenantCategory,
+    updateTenantBrand,
     createBrand,
     createUnit,
     createSpec,

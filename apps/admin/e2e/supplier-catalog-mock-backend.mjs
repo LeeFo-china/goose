@@ -3,6 +3,7 @@ import { createServer } from "node:http";
 import {
   mockCatalogSession,
   mockTenantCatalogSession,
+  mockTenantCatalogViewerSession,
 } from "./supplier-catalog-mock-fixture.mjs";
 import { createCatalogMockRuntime } from "./supplier-catalog-mock-handlers.mjs";
 import { readBody, sendJson } from "./supplier-catalog-mock-support.mjs";
@@ -33,6 +34,10 @@ const server = createServer(async (request, response) => {
     sendJson(response, 200, { mutations: runtime.mutations() });
     return;
   }
+  if (request.method === "GET" && url.pathname === "/__test/catalog-requests") {
+    sendJson(response, 200, { requests: runtime.catalogRequests() });
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/__test/conflict-next") {
     runtime.setConflictNext(JSON.parse(await readBody(request) || "{}"));
     sendJson(response, 200, { success: true });
@@ -42,18 +47,24 @@ const server = createServer(async (request, response) => {
     const payload = JSON.parse(await readBody(request) || "{}");
     const session = payload.phone === mockTenantCatalogSession.employee.phone
       ? mockTenantCatalogSession
-      : mockCatalogSession;
+      : payload.phone === mockTenantCatalogViewerSession.employee.phone
+        ? mockTenantCatalogViewerSession
+        : mockCatalogSession;
     sendJson(response, 200, { success: true, data: session });
     return;
   }
   if (request.method === "GET" && url.pathname === "/admin/auth/me") {
-    const session = request.headers.authorization?.includes(
-        mockTenantCatalogSession.token,
-      )
+    const authorization = request.headers.authorization || "";
+    const session = authorization.includes(mockTenantCatalogSession.token)
       ? mockTenantCatalogSession
-      : mockCatalogSession;
+      : authorization.includes(mockTenantCatalogViewerSession.token)
+        ? mockTenantCatalogViewerSession
+        : mockCatalogSession;
     sendJson(response, 200, { success: true, data: session });
     return;
+  }
+  if (request.method === "GET" && url.pathname.startsWith("/catalog/")) {
+    runtime.recordCatalogRequest(url);
   }
   if (request.method === "GET" && url.pathname === "/catalog/categories") {
     sendJson(response, 200, {
@@ -66,11 +77,31 @@ const server = createServer(async (request, response) => {
     await runtime.createTenantCategory(request, response, url);
     return;
   }
+  const tenantCategory = url.pathname.match(/^\/catalog\/categories\/([^/]+)$/);
+  if (request.method === "PATCH" && tenantCategory) {
+    await runtime.updateTenantCategory(
+      request,
+      response,
+      url,
+      decodeURIComponent(tenantCategory[1]),
+    );
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/catalog/brands") {
     sendJson(response, 200, {
       success: true,
       data: runtime.listTenantBrands(url),
     });
+    return;
+  }
+  const tenantBrand = url.pathname.match(/^\/catalog\/brands\/([^/]+)$/);
+  if (request.method === "PATCH" && tenantBrand) {
+    await runtime.updateTenantBrand(
+      request,
+      response,
+      url,
+      decodeURIComponent(tenantBrand[1]),
+    );
     return;
   }
   if (request.method === "GET" && url.pathname === "/catalog/units") {

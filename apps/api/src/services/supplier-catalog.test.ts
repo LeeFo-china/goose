@@ -62,7 +62,7 @@ describe("SupplierCatalogService read boundaries", () => {
 
   test("tenant reads preserve owned status while canonical units stay active", async () => {
     const { service, dependencies } = await createService();
-    const context = auth(["supplier.view"], TENANT_ID, false);
+    const context = auth(["supplier.catalog.manage"], TENANT_ID, false);
 
     await service.listTenantCategories(context, {
       parent_id: CATEGORY_ID,
@@ -98,9 +98,9 @@ describe("SupplierCatalogService read boundaries", () => {
       status: "active",
     });
     expect(dependencies.accessPolicy.assertTenantContext).toHaveBeenCalledTimes(3);
-    expect(dependencies.accessPolicy.hasPermission).toHaveBeenCalledWith(
+    expect(dependencies.accessPolicy.assertPermission).toHaveBeenCalledWith(
       context,
-      "supplier.view",
+      "supplier.catalog.manage",
     );
   });
 

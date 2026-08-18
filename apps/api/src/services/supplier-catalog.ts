@@ -48,7 +48,7 @@ import { isCatalogConflict } from "./supplier-catalog-conflict-detection";
 const PLATFORM_PERMISSION = "platform.catalog.manage";
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
-  "assertPermission" | "assertTenantContext" | "hasPermission"
+  "assertPermission" | "assertTenantContext"
 >;
 type SettingsRepositoryPort = {
   getSettings(tenantId: string): Promise<TenantSupplierSettings | null>;

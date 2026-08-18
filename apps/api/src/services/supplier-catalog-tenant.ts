@@ -31,7 +31,6 @@ type TenantSettingsPort = {
 type TenantAccessPolicyPort = {
   assertTenantContext(auth: AuthContext): string;
   assertPermission(auth: AuthContext, permission: string): unknown;
-  hasPermission(auth: AuthContext, permission: string): boolean;
 };
 type CatalogActor = {
   tenantId: string;
@@ -305,12 +304,7 @@ export class SupplierCatalogTenantService {
 
   private async requireRead(auth: AuthContext) {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    if (
-      !this.accessPolicy.hasPermission(auth, "supplier.view") &&
-      !this.accessPolicy.hasPermission(auth, "supplier.catalog.manage")
-    ) {
-      throw Errors.forbidden();
-    }
+    this.accessPolicy.assertPermission(auth, "supplier.catalog.manage");
     await this.assertRollout(tenantId, false);
     return tenantId;
   }
