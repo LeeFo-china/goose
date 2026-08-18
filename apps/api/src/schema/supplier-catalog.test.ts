@@ -84,6 +84,19 @@ describe("supplier catalog tenant schemas", () => {
     }).success).toBe(false);
   });
 
+  test("accepts spec patches whose validity depends on the persisted state", () => {
+    const update = schema("CatalogSpecDefinitionUpdateSchema");
+
+    expect(update.safeParse({
+      expected_version: 2,
+      enum_options: ["红", "蓝", "绿"],
+    }).success).toBe(true);
+    expect(update.safeParse({
+      expected_version: 2,
+      unit_dimension: "length",
+    }).success).toBe(true);
+  });
+
   test("enforces suggestion review action fields", () => {
     const review = schema("CatalogUnitSuggestionReviewSchema");
     expect(review.safeParse({

@@ -24,7 +24,7 @@ async function createService(overrides: Record<string, unknown>) {
       assertTenantContext: mock(() => ""),
       assertPermission: mock(() => "all"),
     },
-    idFactory: () => CATEGORY_ID,
+    commandIdFactory: () => CATEGORY_ID,
   } as never);
 }
 

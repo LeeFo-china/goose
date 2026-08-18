@@ -619,6 +619,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "catalog_brands_mapped_platform_brand_id_fkey"
+            columns: ["mapped_platform_brand_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_brands"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "catalog_brands_owner_tenant_fkey"
             columns: ["owner_tenant_id"]
             isOneToOne: false
@@ -705,6 +712,13 @@ export type Database = {
             columns: ["created_by_employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_categories_mapped_platform_category_id_fkey"
+            columns: ["mapped_platform_category_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
             referencedColumns: ["id"]
           },
           {
@@ -804,7 +818,50 @@ export type Database = {
           value_type?: string
           version?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "catalog_spec_definitions_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_spec_definitions_created_by_employee_id_fkey"
+            columns: ["created_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_spec_definitions_owner_tenant_id_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "catalog_spec_definitions_owner_tenant_id_fkey"
+            columns: ["owner_tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_spec_definitions_source_platform_spec_id_fkey"
+            columns: ["source_platform_spec_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_spec_definitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_spec_definitions_updated_by_employee_id_fkey"
+            columns: ["updated_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       catalog_unit_suggestions: {
         Row: {
@@ -861,7 +918,43 @@ export type Database = {
           updated_at?: string
           version?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "catalog_unit_suggestions_approved_catalog_unit_id_fkey"
+            columns: ["approved_catalog_unit_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_unit_suggestions_created_by_employee_id_fkey"
+            columns: ["submitted_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_unit_suggestions_processed_by_employee_id_fkey"
+            columns: ["reviewed_by_employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catalog_unit_suggestions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "catalog_unit_suggestions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       catalog_units: {
         Row: {

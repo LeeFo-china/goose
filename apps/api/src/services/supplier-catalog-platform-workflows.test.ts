@@ -16,6 +16,7 @@ const IDs = {
 async function setup() {
   const { SupplierCatalogService } = await import("./supplier-catalog");
   const repository = {
+    findCatalogUpdateReplay: mock(async () => null),
     listSpecDefinitions: mock(async () => ({ list: [], pagination: {} })),
     createSpecDefinition: mock(async (input: unknown) => input),
     findVisibleSpecDefinition: mock(async () => specDefinition),
@@ -33,7 +34,7 @@ async function setup() {
       repository,
       accessPolicy,
       settingsRepository: { getSettings: mock(async () => null) },
-      idFactory: () => IDs.spec,
+      commandIdFactory: () => IDs.spec,
     } as never),
   };
 }

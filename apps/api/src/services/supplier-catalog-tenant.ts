@@ -15,6 +15,13 @@ import type { SupplierCatalogRepositoryPort } from "@/repositories/supplier-cata
 import type { TenantSupplierSettings } from "@/repositories/tenant-suppliers";
 import { effectiveSupplierRolloutSettings } from "@/services/supplier-rollout-settings";
 import type { AuthContext } from "@/services/authorization";
+import type { SupplierCatalogCommandIdFactory } from "./supplier-catalog-command-id";
+import { validateCatalogSpecFinalState } from "./supplier-catalog-spec-state";
+import {
+  resolveBrandUpdateReplay,
+  resolveCategoryUpdateReplay,
+  resolveSpecUpdateReplay,
+} from "./supplier-catalog-update-replay";
 
 type TenantSettingsPort = {
   getSettings(tenantId: string): Promise<TenantSupplierSettings | null>;
@@ -34,7 +41,7 @@ export class SupplierCatalogTenantService {
     private readonly repository: SupplierCatalogRepositoryPort,
     private readonly settingsRepository: TenantSettingsPort,
     private readonly accessPolicy: TenantAccessPolicyPort,
-    private readonly idFactory: () => string,
+    private readonly commandIdFactory: SupplierCatalogCommandIdFactory,
   ) {}
 
   async listCategories(auth: AuthContext, query: Parameters<
@@ -72,7 +79,11 @@ export class SupplierCatalogTenantService {
     const actor = await this.requireWrite(auth);
     return this.repository.createTenantCategory({
       ...input,
-      category_id: this.idFactory(),
+      category_id: this.commandIdFactory(
+        "tenant.catalog.category.create",
+        actor.authUserId,
+        idempotencyKey,
+      ),
       ...tenantCommandContext(actor, idempotencyKey),
     });
   }
@@ -84,6 +95,14 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    const replay = await resolveCategoryUpdateReplay(
+      this.repository,
+      actor,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+    if (replay) return this.repository.updateTenantCategory(replay);
     const current = await this.requireWritableCategory(actor.tenantId, categoryId);
     return this.repository.updateTenantCategory({
       category_id: categoryId,
@@ -108,7 +127,11 @@ export class SupplierCatalogTenantService {
     const actor = await this.requireWrite(auth);
     return this.repository.createTenantBrand({
       ...input,
-      brand_id: this.idFactory(),
+      brand_id: this.commandIdFactory(
+        "tenant.catalog.brand.create",
+        actor.authUserId,
+        idempotencyKey,
+      ),
       ...tenantCommandContext(actor, idempotencyKey),
     });
   }
@@ -120,6 +143,14 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    const replay = await resolveBrandUpdateReplay(
+      this.repository,
+      actor,
+      brandId,
+      input,
+      idempotencyKey,
+    );
+    if (replay) return this.repository.updateTenantBrand(replay);
     const current = await this.requireWritableBrand(actor.tenantId, brandId);
     return this.repository.updateTenantBrand({
       brand_id: brandId,
@@ -164,7 +195,11 @@ export class SupplierCatalogTenantService {
     await this.requireWritableCategory(actor.tenantId, categoryId);
     return this.repository.createSpecDefinition({
       ...input,
-      spec_definition_id: this.idFactory(),
+      spec_definition_id: this.commandIdFactory(
+        "tenant.catalog.spec-definition.create",
+        actor.authUserId,
+        idempotencyKey,
+      ),
       category_id: categoryId,
       tenant_id: actor.tenantId,
       ...actorCommandContext(actor, idempotencyKey),
@@ -179,13 +214,25 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    const replay = await resolveSpecUpdateReplay(
+      this.repository,
+      actor,
+      categoryId,
+      definitionId,
+      input,
+      idempotencyKey,
+    );
+    if (replay) {
+      validateCatalogSpecFinalState(replay);
+      return this.repository.updateSpecDefinition(replay);
+    }
     await this.requireWritableCategory(actor.tenantId, categoryId);
     const current = await this.requireWritableSpec(
       actor.tenantId,
       categoryId,
       definitionId,
     );
-    return this.repository.updateSpecDefinition({
+    const command = {
       spec_definition_id: definitionId,
       category_id: categoryId,
       code: input.code ?? current.code,
@@ -204,7 +251,9 @@ export class SupplierCatalogTenantService {
       expected_version: input.expected_version,
       tenant_id: actor.tenantId,
       ...actorCommandContext(actor, idempotencyKey),
-    });
+    };
+    validateCatalogSpecFinalState(command);
+    return this.repository.updateSpecDefinition(command);
   }
 
   async copyPlatformSpecDefinitions(
@@ -244,7 +293,11 @@ export class SupplierCatalogTenantService {
     const actor = await this.requireWrite(auth);
     return this.repository.submitUnitSuggestion({
       ...input,
-      suggestion_id: this.idFactory(),
+      suggestion_id: this.commandIdFactory(
+        "tenant.catalog.unit-suggestion.submit",
+        actor.authUserId,
+        idempotencyKey,
+      ),
       ...tenantCommandContext(actor, idempotencyKey),
     });
   }

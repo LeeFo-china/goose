@@ -37,24 +37,13 @@ import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
 import { SupplierCatalogPlatformWorkflows } from "./supplier-catalog-platform-workflows";
 import { SupplierCatalogTenantService } from "./supplier-catalog-tenant";
+import {
+  deriveSupplierCatalogCommandId,
+  type SupplierCatalogCommandIdFactory,
+} from "./supplier-catalog-command-id";
+import { isCatalogConflict } from "./supplier-catalog-conflict-detection";
 
 const PLATFORM_PERMISSION = "platform.catalog.manage";
-const CATALOG_CONFLICT_MESSAGES = [
-  "只能移动叶子目录分类",
-  "目录分类不能将自身设为父分类",
-  "目录分类层级不能形成环",
-  "父目录分类不存在",
-  "目录分类层级不能超过 6 级",
-  "存在启用的子分类，当前目录分类不能停用",
-  "启用的目录分类必须属于启用的父分类",
-  "目录单位不能将自身设为基准单位",
-  "已有派生单位引用的基准单位不能改为派生单位",
-  "基准单位不存在",
-  "派生单位只能引用基准单位",
-  "派生单位只能引用启用的基准单位",
-  "有派生单位引用的基准单位不能停用",
-] as const;
-
 type AccessPolicyPort = Pick<
   typeof accessPolicyService,
   "assertPermission" | "assertTenantContext"
@@ -67,29 +56,30 @@ export type SupplierCatalogServiceDependencies = {
   repository?: SupplierCatalogRepositoryPort;
   accessPolicy?: AccessPolicyPort;
   settingsRepository?: SettingsRepositoryPort;
-  idFactory?: () => string;
+  commandIdFactory?: SupplierCatalogCommandIdFactory;
 };
 
 export class SupplierCatalogService {
   private readonly repository: SupplierCatalogRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
-  private readonly idFactory: () => string;
+  private readonly commandIdFactory: SupplierCatalogCommandIdFactory;
   private readonly tenantService: SupplierCatalogTenantService;
   private readonly platformWorkflows: SupplierCatalogPlatformWorkflows;
 
   constructor(dependencies: SupplierCatalogServiceDependencies = {}) {
     this.repository = dependencies.repository ?? supplierCatalogRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
-    this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
+    this.commandIdFactory = dependencies.commandIdFactory ??
+      deriveSupplierCatalogCommandId;
     this.tenantService = new SupplierCatalogTenantService(
       this.repository,
       dependencies.settingsRepository ?? tenantSuppliersRepository,
       this.accessPolicy,
-      this.idFactory,
+      this.commandIdFactory,
     );
     this.platformWorkflows = new SupplierCatalogPlatformWorkflows({
       repository: this.repository,
-      idFactory: this.idFactory,
+      commandIdFactory: this.commandIdFactory,
       requirePlatform: (authContext) => this.requirePlatform(authContext),
       requirePlatformActor: (authContext) =>
         this.requirePlatformActor(authContext),
@@ -274,7 +264,11 @@ export class SupplierCatalogService {
     return this.mapCatalogConflict(() =>
       this.repository.createCategory({
         ...input,
-        category_id: this.idFactory(),
+        category_id: this.commandIdFactory(
+          "platform.catalog.category.create",
+          actor.authUserId,
+          idempotencyKey,
+        ),
         ...createContext(actor, idempotencyKey),
       })
     );
@@ -304,7 +298,11 @@ export class SupplierCatalogService {
     return this.mapCatalogConflict(() =>
       this.repository.createBrand({
         ...input,
-        brand_id: this.idFactory(),
+        brand_id: this.commandIdFactory(
+          "platform.catalog.brand.create",
+          actor.authUserId,
+          idempotencyKey,
+        ),
         ...createContext(actor, idempotencyKey),
       })
     );
@@ -334,7 +332,11 @@ export class SupplierCatalogService {
     return this.mapCatalogConflict(() =>
       this.repository.createUnit({
         ...input,
-        unit_id: this.idFactory(),
+        unit_id: this.commandIdFactory(
+          "platform.catalog.unit.create",
+          actor.authUserId,
+          idempotencyKey,
+        ),
         ...createContext(actor, idempotencyKey),
       })
     );
@@ -471,20 +473,6 @@ function createContext(
     actor_employee_id: actor.employeeId,
     idempotency_key: idempotencyKey,
   };
-}
-
-function isCatalogConflict(error: unknown): boolean {
-  if (typeof error === "string") {
-    return error === "23505" ||
-      CATALOG_CONFLICT_MESSAGES.some((message) => error.includes(message));
-  }
-  if (Array.isArray(error)) {
-    return error.some((value) => isCatalogConflict(value));
-  }
-  if (typeof error !== "object" || error === null) return false;
-  return Object.entries(error).some(([key, value]) =>
-    (key === "code" && value === "23505") || isCatalogConflict(value)
-  );
 }
 
 export const supplierCatalogService = new SupplierCatalogService();

@@ -8,6 +8,9 @@ import type {
   PlatformCatalogUnitSuggestionListQuery,
 } from "@/schema/supplier-catalog";
 import type { AuthContext } from "@/services/authorization";
+import type { SupplierCatalogCommandIdFactory } from "./supplier-catalog-command-id";
+import { validateCatalogSpecFinalState } from "./supplier-catalog-spec-state";
+import { resolveSpecUpdateReplay } from "./supplier-catalog-update-replay";
 
 type PlatformActor = {
   authUserId: string;
@@ -16,7 +19,7 @@ type PlatformActor = {
 
 type PlatformWorkflowDependencies = {
   repository: SupplierCatalogRepositoryPort;
-  idFactory: () => string;
+  commandIdFactory: SupplierCatalogCommandIdFactory;
   requirePlatform: (authContext: AuthContext) => void;
   requirePlatformActor: (authContext: AuthContext) => PlatformActor;
   mapCatalogConflict: <T>(operation: () => Promise<T>) => Promise<T>;
@@ -48,7 +51,11 @@ export class SupplierCatalogPlatformWorkflows {
     return this.dependencies.mapCatalogConflict(() =>
       this.dependencies.repository.createSpecDefinition({
         ...input,
-        spec_definition_id: this.dependencies.idFactory(),
+        spec_definition_id: this.dependencies.commandIdFactory(
+          "platform.catalog.spec-definition.create",
+          actor.authUserId,
+          idempotencyKey,
+        ),
         category_id: categoryId,
         tenant_id: null,
         ...createContext(actor, idempotencyKey),
@@ -64,6 +71,20 @@ export class SupplierCatalogPlatformWorkflows {
     idempotencyKey: string,
   ) {
     const actor = this.dependencies.requirePlatformActor(authContext);
+    const replay = await resolveSpecUpdateReplay(
+      this.dependencies.repository,
+      { ...actor, tenantId: null },
+      categoryId,
+      definitionId,
+      input,
+      idempotencyKey,
+    );
+    if (replay) {
+      validateCatalogSpecFinalState(replay);
+      return this.dependencies.mapCatalogConflict(() =>
+        this.dependencies.repository.updateSpecDefinition(replay)
+      );
+    }
     const current = await this.dependencies.repository.findVisibleSpecDefinition(
       categoryId,
       definitionId,
@@ -76,27 +97,29 @@ export class SupplierCatalogPlatformWorkflows {
         "SUPPLIER_CATALOG_NOT_FOUND",
       );
     }
+    const command = {
+      spec_definition_id: definitionId,
+      category_id: categoryId,
+      code: input.code ?? current.code,
+      name: input.name ?? current.name,
+      value_type: input.value_type ?? current.value_type,
+      enum_options: input.enum_options ?? current.enum_options,
+      unit_dimension: input.unit_dimension === undefined
+        ? current.unit_dimension
+        : input.unit_dimension,
+      is_required: input.is_required ?? current.is_required,
+      participates_in_sku_name: input.participates_in_sku_name ??
+        current.participates_in_sku_name,
+      is_filterable: input.is_filterable ?? current.is_filterable,
+      sort_order: input.sort_order ?? current.sort_order,
+      status: input.status ?? current.status,
+      expected_version: input.expected_version,
+      tenant_id: null,
+      ...createContext(actor, idempotencyKey),
+    };
+    validateCatalogSpecFinalState(command);
     return this.dependencies.mapCatalogConflict(() =>
-      this.dependencies.repository.updateSpecDefinition({
-        spec_definition_id: definitionId,
-        category_id: categoryId,
-        code: input.code ?? current.code,
-        name: input.name ?? current.name,
-        value_type: input.value_type ?? current.value_type,
-        enum_options: input.enum_options ?? current.enum_options,
-        unit_dimension: input.unit_dimension === undefined
-          ? current.unit_dimension
-          : input.unit_dimension,
-        is_required: input.is_required ?? current.is_required,
-        participates_in_sku_name: input.participates_in_sku_name ??
-          current.participates_in_sku_name,
-        is_filterable: input.is_filterable ?? current.is_filterable,
-        sort_order: input.sort_order ?? current.sort_order,
-        status: input.status ?? current.status,
-        expected_version: input.expected_version,
-        tenant_id: null,
-        ...createContext(actor, idempotencyKey),
-      })
+      this.dependencies.repository.updateSpecDefinition(command)
     );
   }
 

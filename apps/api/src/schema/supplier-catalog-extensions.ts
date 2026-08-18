@@ -84,6 +84,8 @@ export const CatalogSpecDefinitionListQuerySchema =
   PaginationQuerySchema.extend({ status: status.optional() }).strict();
 
 const enumOption = text(120, "枚举选项不能为空", "枚举选项不能超过 120 个字符");
+const specUnitDimension = z.string().trim().min(1, "字段不能为空")
+  .max(64, "规格计量维度不能超过 64 个字符").nullable();
 const specFields = {
   code: text(64, "规格编码不能为空", "规格编码不能超过 64 个字符"),
   name: text(120, "规格名称不能为空", "规格名称不能超过 120 个字符"),
@@ -91,7 +93,7 @@ const specFields = {
     message: "无效的规格值类型",
   }),
   enum_options: z.array(enumOption).max(100, "枚举选项不能超过 100 个"),
-  unit_dimension: nullableText(64, "规格计量维度不能超过 64 个字符"),
+  unit_dimension: specUnitDimension.optional(),
   is_required: z.boolean(),
   participates_in_sku_name: z.boolean(),
   is_filterable: z.boolean(),
@@ -147,6 +149,11 @@ export const CatalogSpecDefinitionCreateSchema = z.object({
   status: status.default("active"),
 }).strict().superRefine(validateSpec);
 
+export const CatalogSpecDefinitionFinalSchema = z.object({
+  ...specFields,
+  unit_dimension: specUnitDimension,
+}).strict().superRefine(validateSpec);
+
 export const CatalogSpecDefinitionUpdateSchema = z.object({
   expected_version: expectedVersion,
   code: specFields.code.optional(),
@@ -159,7 +166,7 @@ export const CatalogSpecDefinitionUpdateSchema = z.object({
   is_filterable: specFields.is_filterable.optional(),
   sort_order: specFields.sort_order.optional(),
   status: status.optional(),
-}).strict().superRefine(validateSpec).refine(hasPatch, {
+}).strict().refine(hasPatch, {
   message: "至少需要提交一个规格定义更新字段",
 });
 

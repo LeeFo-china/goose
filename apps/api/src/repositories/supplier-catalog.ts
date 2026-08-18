@@ -31,6 +31,10 @@ import type {
 } from "./supplier-catalog-models";
 import { SupplierCatalogReadRepository } from "./supplier-catalog-read";
 import {
+  type CatalogUpdateReplay,
+  SupplierCatalogReplayRepository,
+} from "./supplier-catalog-replay";
+import {
   SupplierCatalogWorkflowRepository,
   type CopyPlatformSpecDefinitionsCommand,
   type ListUnitSuggestionsCommand,
@@ -66,6 +70,7 @@ export type {
   TenantCategoryCreateCommand,
   TenantCategoryUpdateCommand,
 } from "./supplier-catalog-commands";
+export type { CatalogUpdateReplay } from "./supplier-catalog-replay";
 
 export interface SupplierCatalogRepositoryPort {
   listCategories(
@@ -105,18 +110,24 @@ export interface SupplierCatalogRepositoryPort {
   listUnitSuggestions(input: ListUnitSuggestionsCommand): Promise<unknown>;
   submitUnitSuggestion(input: SubmitUnitSuggestionCommand): Promise<unknown>;
   reviewUnitSuggestion(input: ReviewUnitSuggestionCommand): Promise<unknown>;
+  findCatalogUpdateReplay(
+    actorUserId: string,
+    idempotencyKey: string,
+  ): Promise<CatalogUpdateReplay | null>;
 }
 
 export class SupplierCatalogRepository implements SupplierCatalogRepositoryPort {
   private readonly reads: SupplierCatalogReadRepository;
   private readonly commands: SupplierCatalogCommandRepository;
   private readonly workflows: SupplierCatalogWorkflowRepository;
+  private readonly replay: SupplierCatalogReplayRepository;
 
   constructor(clientFactory = () => SupabaseDB.getAdminClient()) {
     const client = clientFactory();
     this.reads = new SupplierCatalogReadRepository(client);
     this.commands = new SupplierCatalogCommandRepository(client);
     this.workflows = new SupplierCatalogWorkflowRepository(client);
+    this.replay = new SupplierCatalogReplayRepository(client);
   }
 
   listCategories(
@@ -224,6 +235,10 @@ export class SupplierCatalogRepository implements SupplierCatalogRepositoryPort 
 
   reviewUnitSuggestion(input: ReviewUnitSuggestionCommand) {
     return this.workflows.reviewUnitSuggestion(input);
+  }
+
+  findCatalogUpdateReplay(actorUserId: string, idempotencyKey: string) {
+    return this.replay.find(actorUserId, idempotencyKey);
   }
 }
 

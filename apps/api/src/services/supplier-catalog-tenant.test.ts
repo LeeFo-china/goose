@@ -31,6 +31,7 @@ const enabledSettings = {
 async function setup(settings = enabledSettings) {
   const { SupplierCatalogService } = await import("./supplier-catalog");
   const repository = {
+    findCatalogUpdateReplay: mock(async () => null),
     listCategories: mock(async () => ({ list: [], pagination: {} })),
     createTenantCategory: mock(async (input: unknown) => input),
     updateTenantCategory: mock(async (input: unknown) => input),
@@ -61,7 +62,7 @@ async function setup(settings = enabledSettings) {
       repository: repository as never,
       settingsRepository: settingsRepository as never,
       accessPolicy: accessPolicy as never,
-      idFactory: () => "00000000-0000-4000-8000-000000000301",
+      commandIdFactory: () => "00000000-0000-4000-8000-000000000301",
     } as never),
   };
 }

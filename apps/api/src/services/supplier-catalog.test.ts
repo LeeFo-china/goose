@@ -10,7 +10,6 @@ const TENANT_ID = "00000000-0000-4000-8000-000000000101";
 const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
 const BRAND_ID = "00000000-0000-4000-8000-000000000301";
 const UNIT_ID = "00000000-0000-4000-8000-000000000401";
-const RETRY_UNIT_ID = "00000000-0000-4000-8000-000000000402";
 const USER_ID = "00000000-0000-4000-8000-000000000501";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000601";
 const NOW = "2026-07-24T00:00:00.000Z";
@@ -177,15 +176,11 @@ describe("SupplierCatalogService write boundary", () => {
     }
   });
 
-  test("generates a new unit id when the same idempotency key is retried", async () => {
+  test("derives a stable unit id from command actor and idempotency key", async () => {
     const createUnit = mock(async (input) => ({ ...unit, ...input }));
     const dependencies = createDependencies({ createUnit });
-    const generatedIds = [UNIT_ID, RETRY_UNIT_ID];
     const { SupplierCatalogService } = await import("./supplier-catalog");
-    const service = new SupplierCatalogService({
-      ...dependencies,
-      idFactory: () => generatedIds.shift() ?? "",
-    } as never);
+    const service = new SupplierCatalogService(dependencies as never);
     const context = auth(["platform.catalog.manage"], null, true);
     const input = {
       code: "UNIT-BOX",
@@ -200,13 +195,14 @@ describe("SupplierCatalogService write boundary", () => {
 
     await service.createUnit(context, input, "same-unit-key");
     await service.createUnit(context, input, "same-unit-key");
+    await service.createUnit(context, input, "different-unit-key");
 
-    expect(createUnit.mock.calls.map(([call]) => call.unit_id)).toEqual([
-      UNIT_ID,
-      RETRY_UNIT_ID,
-    ]);
-    expect(createUnit.mock.calls.map(([call]) => call.idempotency_key))
-      .toEqual(["same-unit-key", "same-unit-key"]);
+    const ids = createUnit.mock.calls.map(([call]) => call.unit_id);
+    expect(ids[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
   });
 
   test("updates every resource with route id and authenticated employee", async () => {
