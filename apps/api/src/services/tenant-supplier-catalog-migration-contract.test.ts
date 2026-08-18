@@ -43,13 +43,13 @@ function read(path: URL) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+const hardeningSql = read(migrations.hardening);
 const catalogSql = read(migrations.catalog);
 const productScopeSql = read(migrations.productScope);
 const catalogCodesSql = read(migrations.catalogCodes);
 const platformProductSql = read(migrations.platformProduct);
 const compatibilitySql = read(migrations.compatibility);
-const hardeningSql = read(migrations.hardening);
-const effectiveSql = [catalogSql, compatibilitySql, hardeningSql].join("\n");
+const effectiveSchemaSql = [catalogSql, compatibilitySql, hardeningSql].join("\n");
 
 function compact(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -57,7 +57,7 @@ function compact(value: string) {
 
 function latestFunction(name: string) {
   const matches = Array.from(
-    effectiveSql.matchAll(
+    hardeningSql.matchAll(
       new RegExp(
         `CREATE(?: OR REPLACE)? FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
         "g",
@@ -67,16 +67,22 @@ function latestFunction(name: string) {
   return compact(matches.at(-1)?.[0] ?? "");
 }
 
-function expectTenantCommand(name: string, expectedVersion = false) {
-  const command = latestFunction(name);
-  expect(command).not.toBe("");
-  expect(command).toContain("public.assert_tenant_supplier_actor(");
-  expect(command).toContain("public.get_supplier_catalog_command_event(");
-  expect(command).toContain("public.record_supplier_catalog_command(");
-  if (expectedVersion) {
-    expect(command).toContain("p_expected_version integer");
-    expect(command).toMatch(/version IS DISTINCT FROM p_expected_version/);
-  }
+function expectServiceRoleCommand(name: string, signature: string) {
+  const escapedSignature = signature
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s*");
+  expect(hardeningSql).toMatch(
+    new RegExp(
+      `REVOKE ALL ON FUNCTION public\\.${name}\\(\\s*${escapedSignature}\\s*\\)` +
+        "\\s*FROM PUBLIC, anon, authenticated, service_role;",
+    ),
+  );
+  expect(hardeningSql).toMatch(
+    new RegExp(
+      `GRANT EXECUTE ON FUNCTION public\\.${name}\\(\\s*${escapedSignature}\\s*\\)` +
+        "\\s*TO service_role;",
+    ),
+  );
 }
 
 describe("tenant private supplier catalog migration contract", () => {
@@ -87,153 +93,186 @@ describe("tenant private supplier catalog migration contract", () => {
     }
   });
 
-  test("repairs gaps only through a transactional forward migration", () => {
+  test("is a transactional forward-only correction with explicit timeouts", () => {
     expect(hardeningSql).toMatch(/^-- Rollback: forward-only\./);
     expect(hardeningSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
     expect(hardeningSql).toContain("SET LOCAL lock_timeout = '5s';");
     expect(hardeningSql).toContain("SET LOCAL statement_timeout = '5min';");
+    expect(hardeningSql).not.toMatch(/\bIF NOT EXISTS\b/i);
     expect(hardeningSql).not.toMatch(/DROP\s+(?:TABLE|COLUMN|TYPE)\b/i);
   });
 
-  test("defines category paths, leaf state, platform mapping, brands, specs, and suggestions", () => {
+  test("targets the real applied jsonb and versioned catalog schema", () => {
+    expect(hardeningSql).toContain("catalog_unit_suggestions");
+    expect(hardeningSql).toContain("column_name = 'version'");
+    expect(hardeningSql).toContain("catalog_spec_definitions");
+    expect(hardeningSql).toContain("column_name = 'enum_options'");
+    expect(hardeningSql).toContain("udt_name = 'jsonb'");
+    expect(hardeningSql).toContain("column_name = 'is_required'");
+    expect(hardeningSql).toContain("column_name = 'is_filterable'");
+    expect(hardeningSql).toContain("column_name = 'suggested_code'");
+    expect(hardeningSql).toContain("column_name = 'reviewed_by_employee_id'");
+    expect(hardeningSql).toContain("SUPPLIER_CATALOG_SCHEMA_PRECONDITION_FAILED");
+
+    expect(hardeningSql).not.toMatch(
+      /ALTER TABLE public\.catalog_unit_suggestions[\s\S]*ADD COLUMN version/,
+    );
+    expect(hardeningSql).not.toMatch(/\bunnest\s*\(/i);
+    expect(hardeningSql).not.toMatch(/\brequired\s*=/);
+    expect(hardeningSql).not.toMatch(/\bfilterable\s*=/);
+  });
+
+  test("retains the complete category, brand, spec, and suggestion structure contract", () => {
     expect(catalogSql).toMatch(
       /ALTER TABLE public\.catalog_categories[\s\S]*ADD COLUMN full_name text[\s\S]*ADD COLUMN is_leaf boolean[\s\S]*ADD COLUMN mapped_platform_category_id uuid/,
     );
     expect(catalogSql).toMatch(
       /ALTER TABLE public\.catalog_brands[\s\S]*ADD COLUMN mapped_platform_brand_id uuid/,
     );
+    expect(hardeningSql).toContain("catalog_spec_definitions_category_code_key");
+    expect(hardeningSql).toContain("catalog_spec_definitions_enum_options_check");
+    expect(hardeningSql).toContain("catalog_spec_definitions_unit_dimension_check");
+    expect(hardeningSql).toContain("catalog_spec_definitions_ownership_check");
+    expect(hardeningSql).toContain("catalog_unit_suggestions_review_state_check");
+    expect(hardeningSql).toContain("catalog_unit_suggestions_version_check");
+  });
 
-    const specs = compact(
-      catalogSql.match(
-        /CREATE TABLE public\.catalog_spec_definitions \([\s\S]*?\n\);/,
-      )?.[0] ?? "",
-    );
-    expect(specs).toContain("category_id uuid NOT NULL");
-    expect(specs).toContain("source_platform_spec_id uuid NULL");
-    expect(specs).toContain("UNIQUE (category_id, code)");
-    expect(specs).toContain("catalog_spec_definitions_enum_options_check");
-    expect(specs).toContain("catalog_spec_definitions_ownership_check");
+  test("verifies the applied guard and command bodies before relying on them", () => {
+    for (const guard of [
+      "validate_catalog_brand_mapping",
+      "validate_catalog_spec_definition_ownership",
+      "validate_catalog_unit_suggestion_state",
+      "validate_supplier_product_catalog",
+    ]) {
+      expect(hardeningSql).toContain(`public.${guard}()`);
+    }
+    expect(hardeningSql).toContain("pg_get_functiondef");
+    expect(hardeningSql).toContain("SUPPLIER_CATALOG_COMMAND_CONTRACT_MISMATCH");
+    expect(hardeningSql).toContain("supplier_command_events");
+    expect(hardeningSql).toContain("p_idempotency_key");
+    expect(hardeningSql).toContain("p_expected_version");
+    expect(hardeningSql).toContain("source_platform_spec_id");
+    expect(hardeningSql).toContain("INSERT INTO public.catalog_units");
+  });
 
-    const suggestions = compact(
-      effectiveSql.match(
-        /CREATE TABLE public\.catalog_unit_suggestions \([\s\S]*?\n\);/,
-      )?.[0] ?? "",
-    );
-    expect(suggestions).toContain("tenant_id uuid NOT NULL");
-    expect(suggestions).toContain("processed_by_employee_id uuid NULL");
+  test("replaces both legacy and applied hierarchy guards with an eight-level limit", () => {
     expect(hardeningSql).toMatch(
-      /ALTER TABLE public\.catalog_unit_suggestions[\s\S]*ADD COLUMN version integer NOT NULL DEFAULT 1/,
+      /ALTER TABLE public\.catalog_categories\s+DROP CONSTRAINT catalog_categories_level_check,[\s\S]*CHECK \(level BETWEEN 1 AND 8\)/,
     );
+
+    const legacyLevelGuard = latestFunction("set_catalog_category_level");
+    expect(legacyLevelGuard).not.toBe("");
+    expect(legacyLevelGuard).toContain("NEW.level > 8");
+    expect(legacyLevelGuard).toContain("目录分类层级不能超过 8 级");
+    expect(legacyLevelGuard).not.toContain("NEW.level > 6");
+
+    const hierarchyGuard = latestFunction("validate_catalog_category_hierarchy");
+    expect(hierarchyGuard).not.toBe("");
+    expect(hierarchyGuard).toContain("NEW.level > 8");
+    expect(hierarchyGuard).toContain("NEW.level + v_subtree_depth > 8");
+    expect(hierarchyGuard).toContain("SUPPLIER_CATALOG_DEPTH_EXCEEDED");
   });
 
-  test("keeps category trees inside one owner and maps tenants only to active platform nodes", () => {
-    const guard = latestFunction("guard_catalog_category_scope");
-    expect(guard).toContain("v_parent.ownership_scope IS DISTINCT FROM NEW.ownership_scope");
-    expect(guard).toContain("v_parent.owner_tenant_id IS DISTINCT FROM NEW.owner_tenant_id");
-    expect(guard).toContain("NEW.ownership_scope IS DISTINCT FROM 'tenant'");
-    expect(guard).toContain("v_mapping.ownership_scope IS DISTINCT FROM 'platform'");
-    expect(guard).toContain("v_mapping.status IS DISTINCT FROM 'active'");
-    expect(guard).toContain("WITH RECURSIVE ancestors");
-    expect(guard).toContain("NEW.id = ANY(ancestors.path_ids)");
-    expect(guard).toContain("WITH RECURSIVE descendants");
-    expect(guard).toContain("v_level + v_subtree_depth > 8");
-    expect(guard).toContain("v_level > 8");
-    expect(guard).toContain("NEW.full_name :=");
-
-    const brandGuard = latestFunction("guard_catalog_brand_scope");
-    expect(brandGuard).toContain("NEW.ownership_scope IS DISTINCT FROM 'tenant'");
-    expect(brandGuard).toContain("v_mapping.ownership_scope IS DISTINCT FROM 'platform'");
-    expect(brandGuard).toContain("v_mapping.status IS DISTINCT FROM 'active'");
-    expect(catalogSql).toMatch(
-      /'no_brand',\s*'无品牌',[\s\S]*?'platform',\s*NULL/,
+  test("rejects child attachment to product-bearing parents before leaf state changes", () => {
+    const guard = latestFunction("validate_catalog_category_hierarchy");
+    const parentReferenceCheck = guard.indexOf(
+      "FROM public.supplier_products AS product WHERE product.category_id = parent.id",
     );
+    const leafDerivation = guard.indexOf("NEW.is_leaf := NOT EXISTS");
+
+    expect(guard).toContain("TG_OP = 'INSERT' OR NEW.parent_id IS DISTINCT FROM OLD.parent_id");
+    expect(parentReferenceCheck).toBeGreaterThan(-1);
+    expect(guard).toContain("SUPPLIER_CATALOG_REFERENCE_IN_USE");
+    expect(leafDerivation).toBeGreaterThan(parentReferenceCheck);
   });
 
-  test("uses tenant-verified, idempotent, versioned, and audited category and brand commands", () => {
-    expectTenantCommand("create_tenant_catalog_category");
-    expectTenantCommand("update_tenant_catalog_category", true);
-    expectTenantCommand("create_tenant_catalog_brand");
-    expectTenantCommand("update_tenant_catalog_brand", true);
-
-    const createCategory = latestFunction("create_tenant_catalog_category");
-    expect(createCategory).toContain("v_full_name := v_parent.full_name || ' / ' || btrim(p_name)");
-    expect(createCategory).toContain("v_level > 8");
-    const updateCategory = latestFunction("update_tenant_catalog_category");
-    expect(updateCategory).toContain("public.refresh_tenant_catalog_descendant_paths(");
+  test("fails closed on direct writes to derived category fields", () => {
+    const guard = latestFunction("validate_catalog_category_hierarchy");
+    expect(guard).toContain("pg_trigger_depth() = 1");
+    expect(guard).toContain("NEW.level IS DISTINCT FROM OLD.level");
+    expect(guard).toContain("NEW.full_name IS DISTINCT FROM OLD.full_name");
+    expect(guard).toContain("NEW.is_leaf IS DISTINCT FROM OLD.is_leaf");
+    expect(guard).toContain("SUPPLIER_CATALOG_DERIVED_FIELD_IMMUTABLE");
+    expect(guard).toContain("NEW.level := parent.level + 1");
+    expect(guard).toContain("NEW.full_name := parent.full_name || ' / ' || btrim(NEW.name)");
+    expect(guard).toContain("NEW.is_leaf := NOT EXISTS");
   });
 
-  test("allows products only on active leaf categories", () => {
-    const productGuard = latestFunction("guard_supplier_product_ownership");
-    expect(productGuard).toContain("v_category.status IS DISTINCT FROM 'active'");
-    expect(productGuard).toContain("v_category.is_leaf IS DISTINCT FROM true");
-  });
-
-  test("validates spec ownership, enum options, number dimensions, and copy provenance", () => {
-    expect(hardeningSql).toContain("catalog_spec_definitions_options_shape_check");
-    const optionsValidator = latestFunction("catalog_enum_options_are_valid");
-    expect(optionsValidator).toContain("cardinality(options) > 0");
-    expect(optionsValidator).toContain("btrim(option_value) = ''");
-    expect(optionsValidator).toContain("count(DISTINCT btrim(option_value))");
+  test("normalizes exactly one active platform no-brand or fails on a missing actor", () => {
+    expect(hardeningSql).toContain("SUPPLIER_CATALOG_NO_BRAND_ACTOR_MISSING");
+    expect(hardeningSql).toContain("employee.tenant_id IS NULL");
+    expect(hardeningSql).toContain("employee.status = 'active'");
+    expect(hardeningSql).toContain("'NO_BRAND'");
+    expect(hardeningSql).toContain("'无品牌'");
+    expect(hardeningSql).toContain("'active'");
     expect(hardeningSql).toMatch(
-      /value_type IN \('single_enum', 'multi_enum'\)[\s\S]*catalog_enum_options_are_valid\(enum_options\)/,
+      /UPDATE public\.supplier_products AS product[\s\S]*SET brand_id = v_canonical_id/,
     );
     expect(hardeningSql).toMatch(
-      /value_type = 'number'[\s\S]*unit_dimension = btrim\(unit_dimension\)/,
+      /UPDATE public\.catalog_brands AS tenant_brand[\s\S]*SET mapped_platform_brand_id = v_canonical_id/,
     );
-
-    const guard = latestFunction("guard_catalog_spec_definition_scope");
-    expect(guard).toContain("v_category.ownership_scope IS DISTINCT FROM NEW.ownership_scope");
-    expect(guard).toContain("v_category.owner_tenant_id IS DISTINCT FROM NEW.owner_tenant_id");
-    expect(guard).toContain("v_source.ownership_scope IS DISTINCT FROM 'platform'");
-    expect(guard).toContain("NEW.ownership_scope IS DISTINCT FROM 'tenant'");
-
-    expectTenantCommand("create_tenant_catalog_spec_definition");
-    expectTenantCommand("update_tenant_catalog_spec_definition", true);
-    expectTenantCommand("copy_platform_category_specs", true);
-    const copy = latestFunction("copy_platform_category_specs");
-    expect(copy).toContain("'tenant', p_tenant_id, source.id");
-    expect(copy).not.toContain("owner_tenant_id = source.owner_tenant_id");
+    expect(hardeningSql).toContain("NO_BRAND_LEGACY_");
+    expect(hardeningSql).toContain("v_canonical_count IS DISTINCT FROM 1");
+    expect(hardeningSql).toContain("SUPPLIER_CATALOG_NO_BRAND_INVARIANT_FAILED");
+    expect(hardeningSql).toContain("catalog_brands_active_platform_no_brand_idx");
+    expect(hardeningSql).toContain("catalog_brands_platform_no_brand_identity_idx");
   });
 
-  test("keeps unit suggestions tenant-submitted and platform-processed without creating units", () => {
-    expectTenantCommand("submit_catalog_unit_suggestion");
-    const submit = latestFunction("submit_catalog_unit_suggestion");
-    expect(submit).toContain("'pending'");
-
-    const process = latestFunction("process_catalog_unit_suggestion");
-    expect(process).toContain("public.assert_platform_operator_actor(");
-    expect(process).toContain("public.get_supplier_catalog_command_event(");
-    expect(process).toContain("public.record_supplier_catalog_command(");
-    expect(process).toContain("p_expected_version integer");
-    expect(process).toMatch(/version IS DISTINCT FROM p_expected_version/);
-    expect(process).toMatch(/p_status NOT IN \('approved', 'rejected'\)/);
-    expect(process).not.toMatch(/INSERT INTO public\.catalog_units\b/);
-
-    const guard = latestFunction("guard_catalog_unit_suggestion_scope");
-    expect(guard).toContain("NEW.tenant_id IS DISTINCT FROM OLD.tenant_id");
-    expect(guard).toContain("NEW.version IS DISTINCT FROM OLD.version + 1");
-    expect(guard).toContain("public.assert_platform_operator_actor(");
-    expect(guard).toContain("NEW.status NOT IN ('approved', 'rejected')");
+  test("keeps actual catalog commands fail-closed and service-role only", () => {
+    expectServiceRoleCommand(
+      "create_tenant_catalog_category",
+      "uuid, uuid, text, text, text, integer, uuid, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "update_tenant_catalog_category",
+      "uuid, uuid, text, text, text, integer, uuid, integer, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "create_tenant_catalog_brand",
+      "uuid, text, text, text, uuid, text, integer, uuid, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "update_tenant_catalog_brand",
+      "uuid, text, text, text, uuid, text, integer, uuid, integer, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "create_catalog_spec_definition",
+      "uuid, uuid, text, text, text, jsonb, text, boolean, boolean, boolean, integer, text, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "update_catalog_spec_definition",
+      "uuid, uuid, text, text, text, jsonb, text, boolean, boolean, boolean, integer, text, integer, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "copy_platform_category_specs",
+      "uuid, uuid, integer, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "submit_tenant_catalog_unit_suggestion",
+      "uuid, text, text, text, text, text, uuid, uuid, uuid, text",
+    );
+    expectServiceRoleCommand(
+      "review_catalog_unit_suggestion",
+      "uuid, text, uuid, text, integer, uuid, uuid, text",
+    );
   });
 
-  test("provides scoped indexes, forced RLS, and fail-closed ACLs", () => {
+  test("retains scoped indexes, forced RLS, and product leaf enforcement", () => {
     for (const indexName of [
       "catalog_categories_platform_code_unique_idx",
       "catalog_categories_tenant_code_unique_idx",
+      "catalog_categories_mapping_lookup_idx",
       "catalog_brands_platform_code_unique_idx",
       "catalog_brands_tenant_code_unique_idx",
+      "catalog_brands_mapping_lookup_idx",
       "catalog_spec_definitions_category_status_sort_idx",
-      "catalog_spec_definitions_ownership_tenant_idx",
+      "catalog_spec_definitions_ownership_lookup_idx",
+      "catalog_spec_definitions_source_copy_idx",
       "catalog_unit_suggestions_tenant_status_idx",
     ]) {
-      expect([catalogSql, catalogCodesSql].join("\n")).toContain(indexName);
-    }
-    for (const indexName of [
-      "catalog_categories_tenant_mapping_idx",
-      "catalog_brands_tenant_mapping_idx",
-      "catalog_spec_definitions_source_platform_idx",
-    ]) {
-      expect(hardeningSql).toContain(indexName);
+      expect([catalogSql, catalogCodesSql, hardeningSql].join("\n")).toContain(
+        indexName,
+      );
     }
 
     for (const table of [
@@ -242,64 +281,36 @@ describe("tenant private supplier catalog migration contract", () => {
       "catalog_spec_definitions",
       "catalog_unit_suggestions",
     ]) {
-      expect(effectiveSql).toContain(
+      expect(effectiveSchemaSql).toContain(
         `ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY;`,
       );
-      expect(effectiveSql).toContain(
+      expect(effectiveSchemaSql).toContain(
         `ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY;`,
       );
-      expect(effectiveSql).toMatch(
-        new RegExp(
-          `REVOKE ALL ON TABLE public\\.${table}[\\s\\S]*?FROM PUBLIC, anon, authenticated`,
-        ),
-      );
     }
 
-    for (const command of [
-      "create_tenant_catalog_category",
-      "update_tenant_catalog_category",
-      "create_tenant_catalog_brand",
-      "update_tenant_catalog_brand",
-      "create_tenant_catalog_spec_definition",
-      "update_tenant_catalog_spec_definition",
-      "copy_platform_category_specs",
-      "submit_catalog_unit_suggestion",
-      "process_catalog_unit_suggestion",
-    ]) {
-      expect(hardeningSql).toMatch(
-        new RegExp(
-          `REVOKE ALL ON FUNCTION public\\.${command}\\([\\s\\S]*?FROM PUBLIC, anon, authenticated, service_role;`,
-        ),
-      );
-      expect(hardeningSql).toMatch(
-        new RegExp(
-          `GRANT EXECUTE ON FUNCTION public\\.${command}\\([\\s\\S]*?TO service_role;`,
-        ),
-      );
-    }
-
+    expect(hardeningSql).toContain("tr_supplier_products_validate_catalog");
+    expect(hardeningSql).toContain("category.is_leaf");
     expect(productScopeSql).toContain(
       "ALTER TABLE public.supplier_products FORCE ROW LEVEL SECURITY;",
     );
     expect(platformProductSql).toContain("create_platform_supplier_product");
+  });
 
+  test("keeps hierarchy and identity helpers non-callable", () => {
     for (const helper of [
-      "get_supplier_catalog_command_event",
-      "record_supplier_catalog_command",
-      "guard_catalog_category_scope",
-      "guard_catalog_brand_scope",
-      "guard_catalog_spec_definition_scope",
-      "guard_catalog_unit_suggestion_scope",
+      "set_catalog_category_level",
+      "validate_catalog_category_hierarchy",
+      "protect_platform_no_brand_identity",
     ]) {
       expect(hardeningSql).toMatch(
         new RegExp(
-          `REVOKE ALL ON FUNCTION public\\.${helper}\\([\\s\\S]*?FROM PUBLIC, anon, authenticated, service_role;`,
+          `REVOKE ALL ON FUNCTION public\\.${helper}\\(\\)` +
+            "\\s*FROM PUBLIC, anon, authenticated, service_role;",
         ),
       );
       expect(hardeningSql).not.toMatch(
-        new RegExp(
-          `GRANT EXECUTE ON FUNCTION public\\.${helper}\\(`,
-        ),
+        new RegExp(`GRANT EXECUTE ON FUNCTION public\\.${helper}\\(`),
       );
     }
   });
