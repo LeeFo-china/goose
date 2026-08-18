@@ -153,6 +153,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
         permission: "platform.catalog.manage",
       },
       {
+        href: "/platform/supplier-products",
+        label: "平台共享商品",
+        icon: PackageOpen,
+        permission: "platform.supplier-product.manage",
+      },
+      {
         href: "/platform/operators",
         label: "平台人员",
         icon: Shield,

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,226 +14,167 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
+  buildProductResourcePath,
   createSupplierResource,
-  loadCatalogOptions,
+  mutateSupplierResource,
 } from "./supplier-product-api";
+import { CatalogSearchSelect } from "./catalog-search-select";
 import {
   resolveSupplierCommandAttempt,
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
-import type { CatalogOption } from "./supplier-product-types";
+import type { ProductApiScope, SupplierProduct } from "./supplier-product-types";
 
 export function SupplierProductDialog({
-  tenantSupplierId,
+  scope,
+  product,
   disabled,
-  onCreated,
+  onSaved,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
+  product?: SupplierProduct;
   disabled?: boolean;
-  onCreated: () => void | Promise<void>;
+  onSaved: () => void | Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [optionsLoading, setOptionsLoading] = useState(false);
-  const [categories, setCategories] = useState<CatalogOption[]>([]);
-  const [brands, setBrands] = useState<CatalogOption[]>([]);
-  const [productCode, setProductCode] = useState("");
-  const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState("");
-  const [brandId, setBrandId] = useState("");
-  const [description, setDescription] = useState("");
-  const [proxyReason, setProxyReason] = useState("");
+  const [productCode, setProductCode] = useState(product?.product_code ?? "");
+  const [name, setName] = useState(product?.name ?? "");
+  const [categoryId, setCategoryId] = useState(product?.category.id ?? "");
+  const [brandId, setBrandId] = useState(product?.brand.id ?? "");
+  const [description, setDescription] = useState(product?.description ?? "");
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
+  const isPlatform = scope.kind === "platform";
+  const isEditing = Boolean(product);
 
   useEffect(() => {
     if (!open) return;
-    let active = true;
-    setOptionsLoading(true);
-    void Promise.all([
-      loadCatalogOptions("categories"),
-      loadCatalogOptions("brands"),
-    ]).then(([categoryPage, brandPage]) => {
-      if (!active) return;
-      setCategories(categoryPage.list);
-      setBrands(brandPage.list);
-    }).catch((error) => {
-      if (active) {
-        toast.error(
-          error instanceof Error ? error.message : "供应标准目录加载失败",
-        );
-      }
-    }).finally(() => {
-      if (active) setOptionsLoading(false);
-    });
-    return () => {
-      active = false;
-    };
-  }, [open]);
+    setProductCode(product?.product_code ?? "");
+    setName(product?.name ?? "");
+    setCategoryId(product?.category.id ?? "");
+    setBrandId(product?.brand.id ?? "");
+    setDescription(product?.description ?? "");
+  }, [open, product, scope]);
 
-  const invalid = !productCode.trim() || !name.trim() || !categoryId ||
-    !brandId || proxyReason.trim().length < 2;
+  const invalid = !productCode.trim() || !name.trim() || !categoryId || !brandId;
 
   async function submit() {
     if (invalid) return;
     setSaving(true);
+    const fields = {
+      product_code: productCode.trim(),
+      name: name.trim(),
+      category_id: categoryId,
+      brand_id: brandId,
+      description: description.trim() || null,
+    };
+    const payload = product
+      ? { ...fields, expected_version: product.version }
+      : fields;
+    const resourcePath = product
+      ? buildProductResourcePath(scope, product.id)
+      : `${scope.kind === "platform" ? "/platform" : ""}/supplier-products/:productId`;
     try {
-      const payload = {
-        product_code: productCode.trim(),
-        name: name.trim(),
-        category_id: categoryId,
-        brand_id: brandId,
-        description: description.trim() || null,
-        proxy_reason: proxyReason.trim(),
-      };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
-        scope: "supplier-product-create",
-        resourcePath: "/supplier-products/:productId",
+        scope: `${scope.kind}-supplier-product-${product ? "update" : "create"}`,
+        resourcePath,
         payload,
-        allocateResourceId: true,
+        allocateResourceId: !product,
       });
       attemptRef.current = attempt;
-      await createSupplierResource(
-        `/supplier-products/${attempt.resourceId}`,
-        tenantSupplierId,
-        payload,
-        attempt.idempotencyKey,
-      );
+      if (product) {
+        await mutateSupplierResource(
+          buildProductResourcePath(scope, product.id),
+          scope,
+          payload,
+          attempt.idempotencyKey,
+          "PATCH",
+        );
+      } else {
+        await createSupplierResource(
+          buildProductResourcePath(scope, attempt.resourceId!),
+          scope,
+          payload,
+          attempt.idempotencyKey,
+        );
+      }
       attemptRef.current = null;
-      toast.success("供应商商品已创建");
+      toast.success(product ? "供应商商品已更新" : "供应商商品已创建");
       setOpen(false);
-      reset();
-      await onCreated();
+      await onSaved();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "创建商品失败");
+      toast.error(error instanceof Error ? error.message : "保存商品失败");
     } finally {
       setSaving(false);
     }
   }
 
-  function reset() {
-    setProductCode("");
-    setName("");
-    setCategoryId("");
-    setBrandId("");
-    setDescription("");
-    setProxyReason("");
-  }
-
+  const title = product
+    ? `编辑${isPlatform ? "平台共享" : "租户私有"}商品`
+    : `新增${isPlatform ? "平台共享" : "租户私有"}商品`;
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button disabled={disabled}>
-          <Plus data-icon="inline-start" />
-          新增商品
+        <Button
+          type="button"
+          size={product ? "sm" : "default"}
+          variant={product ? "ghost" : "default"}
+          disabled={disabled}
+        >
+          {product ? <Pencil data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
+          {product ? "编辑商品" : isPlatform ? "新增平台商品" : "新增商品"}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>新增供应商商品</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
-            商品引用平台标准分类和品牌；启用前至少需要一个已启用 SKU。
+            {isPlatform
+              ? "平台商品对所有租户共享，只能在此平台入口维护。"
+              : "商品永久归当前租户私有，不会共享给其他租户。"}
           </DialogDescription>
         </DialogHeader>
         <FieldGroup>
           <div className="grid gap-4 md:grid-cols-2">
             <Field>
-              <FieldLabel htmlFor="supplier-product-code">商品编码</FieldLabel>
-              <Input
-                id="supplier-product-code"
-                value={productCode}
-                maxLength={80}
-                onChange={(event) => setProductCode(event.target.value)}
-              />
+              <FieldLabel htmlFor={`supplier-product-code-${product?.id ?? "new"}`}>商品编码</FieldLabel>
+              <Input id={`supplier-product-code-${product?.id ?? "new"}`} value={productCode} maxLength={80} onChange={(event) => setProductCode(event.target.value)} />
             </Field>
             <Field>
-              <FieldLabel htmlFor="supplier-product-name">商品名称</FieldLabel>
-              <Input
-                id="supplier-product-name"
-                value={name}
-                maxLength={160}
-                onChange={(event) => setName(event.target.value)}
-              />
+              <FieldLabel htmlFor={`supplier-product-name-${product?.id ?? "new"}`}>商品名称</FieldLabel>
+              <Input id={`supplier-product-name-${product?.id ?? "new"}`} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field data-disabled={optionsLoading}>
-              <FieldLabel htmlFor="supplier-product-category">
-                标准分类
-              </FieldLabel>
-              <FormSelect
-                id="supplier-product-category"
-                value={categoryId}
-                disabled={optionsLoading}
-                options={categories.map((item) => ({
-                  value: item.id,
-                  label: `${item.name} · ${item.code}`,
-                }))}
-                onChange={setCategoryId}
-              />
-            </Field>
-            <Field data-disabled={optionsLoading}>
-              <FieldLabel htmlFor="supplier-product-brand">品牌</FieldLabel>
-              <FormSelect
-                id="supplier-product-brand"
-                value={brandId}
-                disabled={optionsLoading}
-                options={brands.map((item) => ({
-                  value: item.id,
-                  label: `${item.name} · ${item.code}`,
-                }))}
-                onChange={setBrandId}
-              />
-            </Field>
+            <CatalogSearchSelect
+              id={`supplier-product-category-${product?.id ?? "new"}`}
+              kind="categories"
+              scope={scope}
+              value={categoryId}
+              selectedOption={product?.category}
+              onChange={setCategoryId}
+            />
+            <CatalogSearchSelect
+              id={`supplier-product-brand-${product?.id ?? "new"}`}
+              kind="brands"
+              scope={scope}
+              value={brandId}
+              selectedOption={product?.brand}
+              onChange={setBrandId}
+            />
           </div>
           <Field>
-            <FieldLabel htmlFor="supplier-product-description">
-              商品说明
-            </FieldLabel>
-            <Textarea
-              id="supplier-product-description"
-              value={description}
-              maxLength={1000}
-              onChange={(event) => setDescription(event.target.value)}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="supplier-product-proxy-reason">
-              代录原因
-            </FieldLabel>
-            <Textarea
-              id="supplier-product-proxy-reason"
-              value={proxyReason}
-              maxLength={500}
-              placeholder="例如：依据供应商盖章商品资料代录"
-              onChange={(event) => setProxyReason(event.target.value)}
-            />
-            <FieldDescription>
-              proxy_reason 会写入不可变审计事件，至少 2 个字符。
-            </FieldDescription>
+            <FieldLabel htmlFor={`supplier-product-description-${product?.id ?? "new"}`}>商品说明</FieldLabel>
+            <Textarea id={`supplier-product-description-${product?.id ?? "new"}`} value={description} maxLength={1000} onChange={(event) => setDescription(event.target.value)} />
           </Field>
         </FieldGroup>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setOpen(false)}
-          >
-            取消
-          </Button>
-          <Button
-            type="button"
-            disabled={saving || invalid}
-            onClick={() => void submit()}
-          >
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button>
+          <Button type="button" disabled={saving || invalid} onClick={() => void submit()}>
             {saving ? <Spinner data-icon="inline-start" /> : null}
             保存商品
           </Button>

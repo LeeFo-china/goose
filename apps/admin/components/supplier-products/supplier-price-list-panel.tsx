@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -21,11 +21,14 @@ import {
   PriceItemDialog,
   PublishPriceDialog,
 } from "./supplier-price-list-dialogs";
+import { createLatestRequestGate } from "./supplier-request-gate";
 import type {
   SupplierPriceList,
   SupplierPriceListItem,
+  SupplierPriceItemPage,
   SupplierPriceListPage,
   SupplierSku,
+  ProductApiScope,
 } from "./supplier-product-types";
 
 const emptyPage: SupplierPriceListPage = {
@@ -33,28 +36,39 @@ const emptyPage: SupplierPriceListPage = {
   pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
 };
 
+const emptyItemPage: SupplierPriceItemPage = {
+  list: [],
+  pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
+};
+
 export function SupplierPriceListPanel({
-  tenantSupplierId,
+  scope,
   canManage,
   availableSkus,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
   canManage: boolean;
   availableSkus: SupplierSku[];
 }) {
   const [page, setPage] = useState(1);
   const [priceLists, setPriceLists] = useState(emptyPage);
   const [selected, setSelected] = useState<SupplierPriceList | null>(null);
-  const [items, setItems] = useState<SupplierPriceListItem[]>([]);
+  const [items, setItems] = useState(emptyItemPage);
+  const [itemPage, setItemPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const priceListRequests = useRef(createLatestRequestGate());
+  const itemRequests = useRef(createLatestRequestGate());
 
   const loadPriceLists = useCallback(async () => {
+    const request = priceListRequests.current.begin();
+    itemRequests.current.invalidate();
     setLoading(true);
     setError(null);
     try {
-      const data = await loadSupplierPriceLists(tenantSupplierId, page);
+      const data = await loadSupplierPriceLists(scope, page);
+      if (!priceListRequests.current.isCurrent(request)) return null;
       setPriceLists(data);
       setSelected((current) =>
         current
@@ -63,27 +77,33 @@ export function SupplierPriceListPanel({
       );
       return data;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "基础供货价加载失败");
+      if (priceListRequests.current.isCurrent(request)) {
+        setError(caught instanceof Error ? caught.message : "基础供货价加载失败");
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (priceListRequests.current.isCurrent(request)) setLoading(false);
     }
-  }, [page, tenantSupplierId]);
+  }, [page, scope]);
 
-  const loadItems = useCallback(async (priceList: SupplierPriceList) => {
+  const loadItems = useCallback(async (priceList: SupplierPriceList, nextPage = itemPage) => {
+    const request = itemRequests.current.begin();
     setItemsLoading(true);
     try {
       const data = await loadSupplierPriceItems(
-        tenantSupplierId,
+        scope,
         priceList.id,
+        nextPage,
       );
-      setItems(data.list);
+      if (itemRequests.current.isCurrent(request)) setItems(data);
     } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "价格条目加载失败");
+      if (itemRequests.current.isCurrent(request)) {
+        toast.error(caught instanceof Error ? caught.message : "价格条目加载失败");
+      }
     } finally {
-      setItemsLoading(false);
+      if (itemRequests.current.isCurrent(request)) setItemsLoading(false);
     }
-  }, [tenantSupplierId]);
+  }, [itemPage, scope]);
 
   const reloadSelected = useCallback(async () => {
     const data = await loadPriceLists();
@@ -94,6 +114,10 @@ export function SupplierPriceListPanel({
 
   useEffect(() => {
     void loadPriceLists();
+    return () => {
+      priceListRequests.current.invalidate();
+      itemRequests.current.invalidate();
+    };
   }, [loadPriceLists]);
 
   const columns = useMemo<ColumnDef<SupplierPriceList>[]>(() => [
@@ -143,7 +167,9 @@ export function SupplierPriceListPanel({
           variant="outline"
           onClick={() => {
             setSelected(row.original);
-            void loadItems(row.original);
+            setItemPage(1);
+            setItems(emptyItemPage);
+            void loadItems(row.original, 1);
           }}
         >
           查看条目
@@ -175,7 +201,7 @@ export function SupplierPriceListPanel({
           </Button>
           {canManage ? (
             <CreatePriceListDialog
-              tenantSupplierId={tenantSupplierId}
+              scope={scope}
               onCreated={async () => {
                 await loadPriceLists();
               }}
@@ -226,13 +252,19 @@ export function SupplierPriceListPanel({
       </div>
       {selected ? (
         <PriceItems
-          tenantSupplierId={tenantSupplierId}
+          scope={scope}
           priceList={selected}
-          items={items}
+          items={items.list}
+          page={itemPage}
+          pageData={items}
           loading={itemsLoading}
           canManage={canManage}
           availableSkus={availableSkus}
           onChanged={reloadSelected}
+          onPageChange={(nextPage) => {
+            setItemPage(nextPage);
+            void loadItems(selected, nextPage);
+          }}
         />
       ) : null}
     </div>
@@ -240,21 +272,27 @@ export function SupplierPriceListPanel({
 }
 
 function PriceItems({
-  tenantSupplierId,
+  scope,
   priceList,
   items,
+  page,
+  pageData,
   loading,
   canManage,
   availableSkus,
   onChanged,
+  onPageChange,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
   priceList: SupplierPriceList;
   items: SupplierPriceListItem[];
+  page: number;
+  pageData: SupplierPriceItemPage;
   loading: boolean;
   canManage: boolean;
   availableSkus: SupplierSku[];
   onChanged: () => void | Promise<void>;
+  onPageChange: (page: number) => void;
 }) {
   const columns = useMemo<ColumnDef<SupplierPriceListItem>[]>(() => [
     {
@@ -309,15 +347,15 @@ function PriceItems({
         {canManage && canEditPriceList(priceList) ? (
           <div className="flex gap-2">
             <PriceItemDialog
-              tenantSupplierId={tenantSupplierId}
+              scope={scope}
               priceList={priceList}
               availableSkus={availableSkus}
               onChanged={onChanged}
             />
             <PublishPriceDialog
-              tenantSupplierId={tenantSupplierId}
+              scope={scope}
               priceList={priceList}
-              itemCount={items.length}
+              itemCount={pageData.pagination.total}
               onChanged={onChanged}
             />
           </div>
@@ -333,6 +371,15 @@ function PriceItems({
           minWidth="min-w-[680px]"
         />
       )}
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm text-muted-foreground">
+          第 {pageData.pagination.page} / {Math.max(1, pageData.pagination.totalPages || 1)} 页，共 {pageData.pagination.total} 个条目
+        </span>
+        <div className="flex gap-2">
+          <Button type="button" size="sm" variant="outline" disabled={loading || page <= 1} onClick={() => onPageChange(Math.max(1, page - 1))}>上一页</Button>
+          <Button type="button" size="sm" variant="outline" disabled={loading || page >= Math.max(1, pageData.pagination.totalPages || 1)} onClick={() => onPageChange(page + 1)}>下一页</Button>
+        </div>
+      </div>
     </div>
   );
 }
