@@ -195,8 +195,16 @@ BEGIN
         'tr_supplier_products_v2_validate_catalog'
       AND trigger_definition.tgfoid =
         'public.validate_supplier_product_catalog()'::regprocedure
-      AND pg_get_triggerdef(trigger_definition.oid) =
-        'CREATE TRIGGER tr_supplier_products_v2_validate_catalog BEFORE INSERT OR UPDATE OF category_id, brand_id, status ON public.supplier_products FOR EACH ROW EXECUTE FUNCTION validate_supplier_product_catalog()'
+      AND trigger_definition.tgtype = 23
+      AND ARRAY(
+        SELECT attribute_definition.attname::text
+        FROM unnest(trigger_definition.tgattr::smallint[])
+          WITH ORDINALITY AS trigger_attribute(attnum, ordinality)
+        JOIN pg_attribute AS attribute_definition
+          ON attribute_definition.attrelid = trigger_definition.tgrelid
+          AND attribute_definition.attnum = trigger_attribute.attnum
+        ORDER BY trigger_attribute.ordinality
+      ) = ARRAY['category_id', 'brand_id', 'status']::text[]
   ) THEN
     RAISE EXCEPTION 'supplier product catalog trigger is not canonical';
   END IF;
@@ -611,7 +619,118 @@ SQL
   echo "normalization_ok database=${granular_database} tampered_catalog_trigger=repaired duplicate_catalog_trigger=removed rollback_residue=0"
 }
 
+assert_b_disabled_category_trigger_fails_closed() {
+  local before_snapshot
+  local after_snapshot
+  local output
+  local status
+
+  before_snapshot="$(snapshot_database "${granular_database}")"
+  set +e
+  output="$({
+    echo 'BEGIN;'
+    render_migration_body "${materialization_file}"
+    echo 'ALTER TABLE public.catalog_categories DISABLE TRIGGER tr_catalog_categories_v2_validate_hierarchy;'
+    echo '\set ON_ERROR_STOP off'
+    render_migration_body "${hardening_file}"
+    echo 'ROLLBACK;'
+  } | psql_admin "${granular_database}" 2>&1)"
+  status=$?
+  set -e
+  after_snapshot="$(snapshot_database "${granular_database}")"
+
+  if [ "${status}" -ne 0 ] ||
+    [[ "${output}" != *"SUPPLIER_CATALOG_SCHEMA_PRECONDITION_FAILED"* ]] ||
+    [[ "${output}" != *"ROLLBACK"* ]]; then
+    echo "error=disabled_category_hierarchy_trigger_not_rejected" >&2
+    echo "${output}" >&2
+    exit 1
+  fi
+  if [ "${before_snapshot}" != "${after_snapshot}" ]; then
+    echo "error=disabled_trigger_rollback_residue database=${granular_database}" >&2
+    exit 1
+  fi
+  echo "hardening_ok database=${granular_database} disabled_category_hierarchy_trigger=rejected rollback_residue=0"
+}
+
+assert_b_wrong_category_trigger_fails_closed() {
+  local before_snapshot
+  local after_snapshot
+  local output
+  local status
+
+  before_snapshot="$(snapshot_database "${granular_database}")"
+  set +e
+  output="$({
+    echo 'BEGIN;'
+    render_migration_body "${materialization_file}"
+    cat <<'SQL'
+DROP TRIGGER tr_catalog_categories_v2_validate_hierarchy
+ON public.catalog_categories;
+CREATE TRIGGER tr_catalog_categories_v2_validate_hierarchy
+AFTER UPDATE ON public.catalog_categories
+FOR EACH STATEMENT
+EXECUTE FUNCTION public.lock_catalog_category_hierarchy();
+\set ON_ERROR_STOP off
+SQL
+    render_migration_body "${hardening_file}"
+    echo 'ROLLBACK;'
+  } | psql_admin "${granular_database}" 2>&1)"
+  status=$?
+  set -e
+  after_snapshot="$(snapshot_database "${granular_database}")"
+
+  if [ "${status}" -ne 0 ] ||
+    [[ "${output}" != *"SUPPLIER_CATALOG_SCHEMA_PRECONDITION_FAILED"* ]] ||
+    [[ "${output}" != *"ROLLBACK"* ]]; then
+    echo "error=wrong_category_hierarchy_trigger_not_rejected" >&2
+    echo "${output}" >&2
+    exit 1
+  fi
+  if [ "${before_snapshot}" != "${after_snapshot}" ]; then
+    echo "error=wrong_trigger_rollback_residue database=${granular_database}" >&2
+    exit 1
+  fi
+  echo "hardening_ok database=${granular_database} wrong_category_hierarchy_trigger=rejected rollback_residue=0"
+}
+
+assert_b_pg_catalog_search_path_succeeds() {
+  local before_snapshot
+  local after_snapshot
+  local output
+  local status
+
+  before_snapshot="$(snapshot_database "${granular_database}")"
+  set +e
+  output="$({
+    echo 'BEGIN;'
+    render_migration_body "${materialization_file}"
+    echo 'SET LOCAL search_path = pg_catalog;'
+    echo '\set ON_ERROR_STOP off'
+    render_migration_body "${hardening_file}"
+    echo 'ROLLBACK;'
+  } | psql_admin "${granular_database}" 2>&1)"
+  status=$?
+  set -e
+  after_snapshot="$(snapshot_database "${granular_database}")"
+
+  if [ "${status}" -ne 0 ] || [[ "${output}" == *"ERROR:"* ]] ||
+    [[ "${output}" != *"ROLLBACK"* ]]; then
+    echo "error=search_path_pg_catalog_rejected_valid_schema" >&2
+    echo "${output}" >&2
+    exit 1
+  fi
+  if [ "${before_snapshot}" != "${after_snapshot}" ]; then
+    echo "error=search_path_rollback_residue database=${granular_database}" >&2
+    exit 1
+  fi
+  echo "hardening_ok database=${granular_database} search_path_pg_catalog=accepted rollback_residue=0"
+}
+
 assert_b_missing_index_fails_closed
 assert_b_tampered_trigger_is_normalized
+assert_b_disabled_category_trigger_fails_closed
+assert_b_wrong_category_trigger_fails_closed
+assert_b_pg_catalog_search_path_succeeds
 run_sequence "${repository_database}"
 run_sequence "${granular_database}"
