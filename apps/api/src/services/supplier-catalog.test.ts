@@ -60,7 +60,7 @@ describe("SupplierCatalogService read boundaries", () => {
     expect(dependencies.accessPolicy.assertTenantContext).not.toHaveBeenCalled();
   });
 
-  test("tenant reads require tenant context and always force active rows", async () => {
+  test("tenant reads preserve owned status while canonical units stay active", async () => {
     const { service, dependencies } = await createService();
     const context = auth(["supplier.view"], TENANT_ID, false);
 
@@ -85,12 +85,12 @@ describe("SupplierCatalogService read boundaries", () => {
       parent_id: CATEGORY_ID,
       page: 2,
       pageSize: 20,
-      status: "active",
+      status: "inactive",
     }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
-      status: "active",
+      status: "inactive",
     }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith({
       page: 1,

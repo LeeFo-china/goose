@@ -12,6 +12,8 @@ describe("supplier catalog command resource ids", () => {
       "same-key",
     );
 
+    expect(first).toBe("c7c04a41-ed0a-59b7-8d1d-f6dc1c660dff");
+
     expect(deriveSupplierCatalogCommandId(
       "catalog.unit.create",
       USER_ID,

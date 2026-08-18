@@ -7,6 +7,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 const TENANT_ID = "00000000-0000-4000-8000-000000000101";
 const USER_ID = "00000000-0000-4000-8000-000000000102";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000103";
+const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
 
 const auth = {
   tenantId: TENANT_ID,
@@ -33,6 +34,9 @@ async function setup(settings = enabledSettings) {
   const repository = {
     findCatalogUpdateReplay: mock(async () => null),
     listCategories: mock(async () => ({ list: [], pagination: {} })),
+    listBrands: mock(async () => ({ list: [], pagination: {} })),
+    listUnits: mock(async () => ({ list: [], pagination: {} })),
+    listSpecDefinitions: mock(async () => ({ list: [], pagination: {} })),
     createTenantCategory: mock(async (input: unknown) => input),
     updateTenantCategory: mock(async (input: unknown) => input),
     listUnitSuggestions: mock(async (input: unknown) => input),
@@ -83,6 +87,45 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
       code: "SUPPLIER_OWNERSHIP_READS_DISABLED",
     });
     expect(repository.listCategories).not.toHaveBeenCalled();
+  });
+
+  test("preserves inactive status for tenant-owned category brand and spec reads", async () => {
+    const { service, repository } = await setup();
+    const query = { status: "inactive" as const, page: 2, pageSize: 10 };
+
+    await service.listTenantCategories(auth, query);
+    await service.listTenantBrands(auth, query);
+    await service.listTenantSpecDefinitions(auth, CATEGORY_ID, query);
+
+    expect(repository.listCategories).toHaveBeenCalledWith(
+      query,
+      { kind: "tenant", tenantId: TENANT_ID },
+    );
+    expect(repository.listBrands).toHaveBeenCalledWith(
+      query,
+      { kind: "tenant", tenantId: TENANT_ID },
+    );
+    expect(repository.listSpecDefinitions).toHaveBeenCalledWith(
+      CATEGORY_ID,
+      query,
+      { kind: "tenant", tenantId: TENANT_ID },
+    );
+  });
+
+  test("keeps tenant unit reads active-only", async () => {
+    const { service, repository } = await setup();
+
+    await service.listTenantUnits(auth, {
+      status: "inactive",
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(repository.listUnits).toHaveBeenCalledWith({
+      status: "active",
+      page: 1,
+      pageSize: 20,
+    });
   });
 
   test("injects authenticated tenant ownership into tenant category creates", async () => {

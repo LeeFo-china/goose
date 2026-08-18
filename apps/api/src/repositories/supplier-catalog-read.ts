@@ -19,6 +19,7 @@ import {
   UNIT_BASE_SELECT,
   UNIT_SELECT,
   applyKeyword,
+  applyListVisibility,
   applyVisibility,
   normalizePage,
   pageRange,
@@ -47,11 +48,10 @@ export class SupplierCatalogReadRepository {
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_categories")
       .select(CATEGORY_SELECT, { count: "exact" });
-    request = applyVisibility(request, visibility);
+    request = applyListVisibility(request, visibility, input.status);
     request = input.parent_id
       ? request.eq("parent_id", input.parent_id)
       : request.is("parent_id", null);
-    if (input.status) request = request.eq("status", input.status);
     if (input.level) request = request.eq("level", input.level);
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
@@ -74,8 +74,7 @@ export class SupplierCatalogReadRepository {
     const { start, end } = pageRange(pagination);
     let request = this.client.from("catalog_brands")
       .select(BRAND_SELECT, { count: "exact" });
-    request = applyVisibility(request, visibility);
-    if (input.status) request = request.eq("status", input.status);
+    request = applyListVisibility(request, visibility, input.status);
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
       .order("sort_order", { ascending: true })
@@ -124,8 +123,7 @@ export class SupplierCatalogReadRepository {
     let request = this.client.from("catalog_spec_definitions")
       .select(SPEC_SELECT, { count: "exact" })
       .eq("category_id", categoryId);
-    request = applyVisibility(request, visibility);
-    if (input.status) request = request.eq("status", input.status);
+    request = applyListVisibility(request, visibility, input.status);
     const { data, error, count } = await request
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true })

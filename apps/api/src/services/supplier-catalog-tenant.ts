@@ -49,7 +49,7 @@ export class SupplierCatalogTenantService {
   >[0]) {
     const tenantId = await this.requireRead(auth, "supplier.view");
     return this.repository.listCategories(
-      activeOnly(query),
+      tenantOwnedStatus(query),
       { kind: "tenant", tenantId },
     );
   }
@@ -59,7 +59,7 @@ export class SupplierCatalogTenantService {
   >[0]) {
     const tenantId = await this.requireRead(auth, "supplier.view");
     return this.repository.listBrands(
-      activeOnly(query),
+      tenantOwnedStatus(query),
       { kind: "tenant", tenantId },
     );
   }
@@ -180,7 +180,7 @@ export class SupplierCatalogTenantService {
     const tenantId = await this.requireRead(auth, "supplier.view");
     return this.repository.listSpecDefinitions(
       categoryId,
-      activeOnly(query),
+      tenantOwnedStatus(query),
       { kind: "tenant", tenantId },
     );
   }
@@ -410,6 +410,12 @@ function requireTenantOwned<Output extends {
 function activeOnly<T extends { status?: "active" | "inactive" }>(input: T) {
   const { status: _status, ...query } = input;
   return { ...query, status: "active" as const };
+}
+
+function tenantOwnedStatus<T extends { status?: "active" | "inactive" }>(
+  input: T,
+) {
+  return { ...input, status: input.status ?? "active" as const };
 }
 
 function actorCommandContext(actor: CatalogActor, idempotencyKey: string) {

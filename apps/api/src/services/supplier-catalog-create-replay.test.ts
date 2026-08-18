@@ -1,5 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
+import { deriveSupplierCatalogCommandId } from "./supplier-catalog-command-id";
+
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -14,26 +16,33 @@ const IDs = {
 describe("SupplierCatalogService create replay identity", () => {
   test("keeps every command resource id stable and separates namespaces", async () => {
     const { service, repository } = await setup();
+    const keys = {
+      category: "category-key",
+      brand: "brand-key",
+      tenantSpec: "tenant-spec-key",
+      suggestion: "suggestion-key",
+      platformSpec: "platform-spec-key",
+    } as const;
 
     for (let retry = 0; retry < 2; retry += 1) {
-      await service.createTenantCategory(tenantAuth, categoryInput, "same-key");
-      await service.createTenantBrand(tenantAuth, brandInput, "same-key");
+      await service.createTenantCategory(tenantAuth, categoryInput, keys.category);
+      await service.createTenantBrand(tenantAuth, brandInput, keys.brand);
       await service.createTenantSpecDefinition(
         tenantAuth,
         IDs.category,
         specInput,
-        "same-key",
+        keys.tenantSpec,
       );
       await service.submitTenantUnitSuggestion(
         tenantAuth,
         suggestionInput,
-        "same-key",
+        keys.suggestion,
       );
       await service.createPlatformSpecDefinition(
         platformAuth,
         IDs.category,
         specInput,
-        "same-key",
+        keys.platformSpec,
       );
     }
 
@@ -52,9 +61,19 @@ describe("SupplierCatalogService create replay identity", () => {
       );
     }
     expect(new Set(ids.map(([first]) => first)).size).toBe(ids.length);
-
+    expect(ids.map(([first]) => first)).toEqual([
+      expectedId("tenant.catalog.category.create", keys.category),
+      expectedId("tenant.catalog.brand.create", keys.brand),
+      expectedId("tenant.catalog.unit-suggestion.submit", keys.suggestion),
+      expectedId("tenant.catalog.spec-definition.create", keys.tenantSpec),
+      expectedId("platform.catalog.spec-definition.create", keys.platformSpec),
+    ]);
   });
 });
+
+function expectedId(namespace: string, key: string) {
+  return deriveSupplierCatalogCommandId(namespace, IDs.user, key);
+}
 
 async function setup() {
   const repository = {

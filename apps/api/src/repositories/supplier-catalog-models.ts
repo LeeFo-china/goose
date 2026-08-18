@@ -225,6 +225,27 @@ export function applyVisibility<RequestBuilder extends {
   );
 }
 
+export function applyListVisibility<RequestBuilder extends {
+  eq(column: string, value: unknown): RequestBuilder;
+  is(column: string, value: null): RequestBuilder;
+  or(filters: string): RequestBuilder;
+}>(
+  request: RequestBuilder,
+  visibility: CatalogVisibility,
+  status?: "active" | "inactive",
+): RequestBuilder {
+  const effectiveStatus = visibility.kind === "tenant"
+    ? status ?? "active"
+    : status;
+  if (visibility.kind === "tenant" && effectiveStatus === "inactive") {
+    return request.eq("ownership_scope", "tenant")
+      .eq("owner_tenant_id", visibility.tenantId)
+      .eq("status", "inactive");
+  }
+  const scoped = applyVisibility(request, visibility);
+  return effectiveStatus ? scoped.eq("status", effectiveStatus) : scoped;
+}
+
 export function parseRows<T>(
   schema: z.ZodType<T>,
   data: unknown,
