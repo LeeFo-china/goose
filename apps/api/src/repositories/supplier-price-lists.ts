@@ -116,11 +116,13 @@ type Page<T> = {
 type PageInput = { page: number; pageSize: number };
 export type SupplierPriceListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   keyword?: string;
   lifecycle_status?: string;
 };
 export type SupplierPriceItemInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   price_list_id: string;
 };
 export type PriceCommandContext = {
@@ -166,7 +168,8 @@ export class SupplierPriceListsRepository {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_price_lists")
       .select(PRICE_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id);
+      .eq("supplier_id", input.supplier_id)
+      .eq("tenant_id", input.tenant_id);
     if (input.lifecycle_status) {
       request = request.eq("lifecycle_status", input.lifecycle_status);
     }
@@ -183,10 +186,11 @@ export class SupplierPriceListsRepository {
     );
   }
 
-  async findPriceList(supplierId: string, priceListId: string) {
+  async findPriceList(supplierId: string, priceListId: string, tenantId: string) {
     const { data, error } = await this.client.from("supplier_price_lists")
       .select(PRICE_LIST_SELECT)
       .eq("supplier_id", supplierId)
+      .eq("tenant_id", tenantId)
       .eq("id", priceListId)
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商价格簿失败", error);
@@ -201,6 +205,7 @@ export class SupplierPriceListsRepository {
       .from("supplier_price_list_items")
       .select(PRICE_ITEM_SELECT, { count: "exact" })
       .eq("supplier_id", input.supplier_id)
+      .eq("tenant_id", input.tenant_id)
       .eq("supplier_price_list_id", input.price_list_id)
       .order("supplier_sku_id", { ascending: true })
       .order("id", { ascending: true })
@@ -275,11 +280,13 @@ export class SupplierPriceListsRepository {
 
   async updateDraft(input: Record<string, unknown> & {
     supplier_id: string;
+    tenant_id: string;
     price_list_id: string;
     expected_version: number;
   }) {
     const {
       supplier_id,
+      tenant_id,
       price_list_id,
       expected_version,
       ...fields
@@ -287,6 +294,7 @@ export class SupplierPriceListsRepository {
     const { data, error } = await this.client.from("supplier_price_lists")
       .update({ ...fields, row_version: expected_version + 1 })
       .eq("supplier_id", supplier_id)
+      .eq("tenant_id", tenant_id)
       .eq("id", price_list_id)
       .eq("lifecycle_status", "draft")
       .eq("row_version", expected_version)

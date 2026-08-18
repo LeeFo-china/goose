@@ -153,6 +153,7 @@ export type Page<T> = {
 
 export type SupplierProductListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   keyword?: string;
   status?: string;
   category_id?: string;
@@ -160,6 +161,7 @@ export type SupplierProductListInput = PageInput & {
 };
 export type SupplierSkuListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   supplier_product_id: string;
   keyword?: string;
   status?: string;
@@ -216,7 +218,8 @@ export class SupplierProductsRepository {
     const pagination = normalizePage(input);
     let request = this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id);
+      .eq("supplier_id", input.supplier_id)
+      .or(readScopeFilter(input.tenant_id));
     if (input.status) request = request.eq("status", input.status);
     if (input.category_id) {
       request = request.eq("category_id", input.category_id);
@@ -235,11 +238,12 @@ export class SupplierProductsRepository {
     );
   }
 
-  async findProduct(supplierId: string, productId: string) {
+  async findProduct(supplierId: string, productId: string, tenantId: string) {
     const { data, error } = await this.client.from("supplier_products")
       .select(PRODUCT_LIST_SELECT)
       .eq("supplier_id", supplierId)
       .eq("id", productId)
+      .or(readScopeFilter(tenantId))
       .maybeSingle();
     if (error) throw Errors.dbError("查询供应商商品失败", error);
     return data === null
@@ -252,7 +256,8 @@ export class SupplierProductsRepository {
     let request = this.client.from("supplier_skus")
       .select(SKU_LIST_SELECT, { count: "exact" })
       .eq("supplier_id", input.supplier_id)
-      .eq("supplier_product_id", input.supplier_product_id);
+      .eq("supplier_product_id", input.supplier_product_id)
+      .or(readScopeFilter(input.tenant_id));
     if (input.status) request = request.eq("status", input.status);
     request = applyKeyword(request, input.keyword);
     const { data, error, count } = await request
@@ -303,11 +308,13 @@ export class SupplierProductsRepository {
 
   async updateProduct(input: Record<string, unknown> & {
     supplier_id: string;
+    tenant_id: string;
     product_id: string;
     expected_version: number;
   }) {
     const {
       supplier_id,
+      tenant_id,
       product_id,
       expected_version,
       ...fields
@@ -315,6 +322,8 @@ export class SupplierProductsRepository {
     const { data, error } = await this.client.from("supplier_products")
       .update({ ...fields, version: expected_version + 1 })
       .eq("supplier_id", supplier_id)
+      .eq("owner_tenant_id", tenant_id)
+      .eq("ownership_scope", "tenant")
       .eq("id", product_id)
       .eq("version", expected_version)
       .select(PRODUCT_RECORD_SELECT)
@@ -333,12 +342,14 @@ export class SupplierProductsRepository {
 
   async updateSku(input: Record<string, unknown> & {
     supplier_id: string;
+    tenant_id: string;
     supplier_product_id: string;
     sku_id: string;
     expected_version: number;
   }) {
     const {
       supplier_id,
+      tenant_id,
       supplier_product_id,
       sku_id,
       expected_version,
@@ -347,6 +358,8 @@ export class SupplierProductsRepository {
     const { data, error } = await this.client.from("supplier_skus")
       .update({ ...fields, version: expected_version + 1 })
       .eq("supplier_id", supplier_id)
+      .eq("owner_tenant_id", tenant_id)
+      .eq("ownership_scope", "tenant")
       .eq("supplier_product_id", supplier_product_id)
       .eq("id", sku_id)
       .eq("version", expected_version)
@@ -410,6 +423,14 @@ function applyKeyword(request: Query, keyword?: string) {
   return safe
     ? request.or(`product_code.ilike.%${safe}%,name.ilike.%${safe}%`)
     : request;
+}
+
+function readScopeFilter(tenantId: string) {
+  return [
+    "ownership_scope.eq.platform",
+    `and(ownership_scope.eq.tenant,owner_tenant_id.eq.${tenantId})`,
+    "and(ownership_scope.is.null,owner_tenant_id.is.null)",
+  ].join(",");
 }
 
 function toPage<T>(

@@ -11,6 +11,8 @@ const SKU_ID = "40000000-0000-4000-8000-000000000012";
 const USER_ID = "40000000-0000-4000-8000-000000000003";
 const EMPLOYEE_ID = "40000000-0000-4000-8000-000000000004";
 const TENANT_ID = "40000000-0000-4000-8000-000000000005";
+const PRODUCT_READ_SCOPE_FILTER =
+  `(ownership_scope.eq.platform,and(ownership_scope.eq.tenant,owner_tenant_id.eq.${TENANT_ID}),and(ownership_scope.is.null,owner_tenant_id.is.null))`;
 
 async function repositoryFor(
   responder: (request: Request) => { body: unknown; count?: number },
@@ -54,6 +56,7 @@ describe("SupplierProductsRepository", () => {
 
     const result = await repository.listProducts({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       page: 2,
       pageSize: 20,
     });
@@ -61,10 +64,52 @@ describe("SupplierProductsRepository", () => {
     expect(result.pagination.totalPages).toBe(2);
     const url = new URL(requests[0]!.url);
     expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
+    expect(url.searchParams.get("or")).toBe(PRODUCT_READ_SCOPE_FILTER);
     expect(url.searchParams.get("offset")).toBe("20");
     expect(url.searchParams.get("limit")).toBe("20");
     expect(url.searchParams.get("select")).not.toContain("unit_price");
     expect(requests[0]!.headers.get("prefer")).toContain("count=exact");
+  });
+
+  test("tenant scopes product details and SKU lists in the generated query", async () => {
+    const { repository, requests } = await repositoryFor((request) => ({
+      body: request.url.includes("supplier_skus") ? [] : product,
+      count: 0,
+    }));
+
+    await repository.findProduct(SUPPLIER_ID, PRODUCT_ID, TENANT_ID);
+    await repository.listSkus({
+      supplier_id: SUPPLIER_ID,
+      supplier_product_id: PRODUCT_ID,
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    });
+
+    for (const request of requests) {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
+      expect(url.searchParams.get("or")).toBe(PRODUCT_READ_SCOPE_FILTER);
+    }
+  });
+
+  test("direct product updates only target tenant-owned rows", async () => {
+    const { repository, requests } = await repositoryFor(() => ({
+      body: productRecord,
+    }));
+
+    await repository.updateProduct({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      product_id: PRODUCT_ID,
+      expected_version: 1,
+      name: "防滑瓷砖",
+    });
+
+    const url = new URL(requests[0]!.url);
+    expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
+    expect(url.searchParams.get("owner_tenant_id")).toBe(`eq.${TENANT_ID}`);
+    expect(url.searchParams.get("ownership_scope")).toBe("eq.tenant");
   });
 
   test("creates products only through the idempotent RPC", async () => {
@@ -108,6 +153,7 @@ describe("SupplierProductsRepository", () => {
 
     await expect(repository.updateSku({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       supplier_product_id: PRODUCT_ID,
       sku_id: SKU_ID,
       expected_version: 2,
@@ -119,6 +165,12 @@ describe("SupplierProductsRepository", () => {
     expect(
       new URL(requests[0]!.url).searchParams.get("supplier_product_id"),
     ).toBe(`eq.${PRODUCT_ID}`);
+    expect(
+      new URL(requests[0]!.url).searchParams.get("owner_tenant_id"),
+    ).toBe(`eq.${TENANT_ID}`);
+    expect(
+      new URL(requests[0]!.url).searchParams.get("ownership_scope"),
+    ).toBe("eq.tenant");
   });
 
   test("mutates a SKU through the parent-validating command", async () => {
@@ -171,4 +223,13 @@ const product = {
     status: "active",
   },
   updated_at: "2026-07-29T00:00:00.000Z",
+};
+
+const productRecord = {
+  ...product,
+  category_id: product.category.id,
+  brand_id: product.brand.id,
+  category: undefined,
+  brand: undefined,
+  version: 2,
 };

@@ -63,6 +63,7 @@ export class SupplierPriceListsService {
     return this.repository.listPriceLists({
       ...filters,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
     });
   }
 
@@ -75,6 +76,7 @@ export class SupplierPriceListsService {
     const priceList = await this.repository.findPriceList(
       scope.supplierId,
       priceListId,
+      scope.tenantId,
     );
     if (!priceList) {
       throw Errors.business(
@@ -117,6 +119,7 @@ export class SupplierPriceListsService {
       ...fields,
       price_list_id: priceListId,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       expected_version,
       ...updateAudit(scope, proxy_reason),
     });
@@ -132,6 +135,7 @@ export class SupplierPriceListsService {
     return this.repository.listItems({
       ...query,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       price_list_id: priceListId,
     });
   }

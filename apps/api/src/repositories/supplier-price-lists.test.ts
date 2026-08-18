@@ -57,14 +57,53 @@ describe("SupplierPriceListsRepository", () => {
 
     await repository.listPriceLists({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       page: 1,
       pageSize: 20,
     });
 
     const url = new URL(requests[0]!.url);
     expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
+    expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
     expect(url.searchParams.get("limit")).toBe("20");
     expect(url.searchParams.get("select")).not.toContain("*");
+  });
+
+  test("tenant scopes price details, items, and direct draft updates", async () => {
+    const { repository, requests } = await repositoryFor((request) => ({
+      body: request.url.includes("supplier_price_list_items")
+        ? []
+        : priceList,
+      count: 0,
+    }));
+
+    await repository.findPriceList(SUPPLIER_ID, PRICE_LIST_ID, TENANT_ID);
+    await repository.listItems({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      price_list_id: PRICE_LIST_ID,
+      page: 1,
+      pageSize: 20,
+    });
+    await repository.updateDraft({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      price_list_id: PRICE_LIST_ID,
+      expected_version: 1,
+      name: "租户报价",
+    });
+
+    for (const request of requests) {
+      const url = new URL(request.url);
+      expect(url.searchParams.get("supplier_id")).toBe(`eq.${SUPPLIER_ID}`);
+      expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
+    }
+    expect(new URL(requests[1]!.url).searchParams.get(
+      "supplier_price_list_id",
+    )).toBe(`eq.${PRICE_LIST_ID}`);
+    expect(new URL(requests[2]!.url).searchParams.get("id")).toBe(
+      `eq.${PRICE_LIST_ID}`,
+    );
   });
 
   test("publishes through the guarded idempotent command", async () => {

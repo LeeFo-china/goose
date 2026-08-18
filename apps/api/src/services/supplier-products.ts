@@ -58,6 +58,7 @@ export class SupplierProductsService {
     return this.repository.listProducts({
       ...filters,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
     });
   }
 
@@ -70,6 +71,7 @@ export class SupplierProductsService {
     const product = await this.repository.findProduct(
       scope.supplierId,
       productId,
+      scope.tenantId,
     );
     if (!product) {
       throw Errors.business(
@@ -117,6 +119,7 @@ export class SupplierProductsService {
     return this.repository.updateProduct({
       ...fields,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       product_id: productId,
       expected_version,
       ...updateAudit(scope, proxy_reason),
@@ -153,6 +156,7 @@ export class SupplierProductsService {
     return this.repository.listSkus({
       ...query,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       supplier_product_id: productId,
     });
   }
@@ -196,6 +200,7 @@ export class SupplierProductsService {
     return this.repository.updateSku({
       ...fields,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       supplier_product_id: productId,
       sku_id: skuId,
       expected_version,

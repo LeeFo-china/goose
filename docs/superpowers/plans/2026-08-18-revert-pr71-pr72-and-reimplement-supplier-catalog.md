@@ -263,9 +263,10 @@ bun test \
 
 测试必须证明：
 
-- 商品/SKU 创建 RPC 在单个事务内写入 `ownership_scope='tenant'` 和 `owner_tenant_id=p_tenant_id`；
-- 商品/SKU 更新、启停及子资源命令只能命中当前租户所有的数据，不能修改 platform、历史 NULL 或其他租户数据；
-- 价格 RPC 在价格簿和条目 INSERT 时显式写入 `tenant_id`，所有目标行读取/更新都限定 `tenant_id=p_tenant_id`；
+- 商品/SKU 创建 RPC 所经过的 `BEFORE` guard 在单个事务内写入 `ownership_scope='tenant'` 和 `owner_tenant_id=acting_tenant_id`；
+- 商品/SKU 更新、启停及子资源命令由兼容期写 guard 阻断 platform、历史 NULL 或其他租户数据；
+- 价格 RPC 所经过的 `BEFORE` guard 在价格簿和条目 INSERT 时显式派生 `tenant_id`，并校验新版本来源、价格簿父项和 SKU 租户范围；
+- 会在写入前返回版本/状态的 lifecycle RPC 必须先按 tenant/ownership 校验目标，不得向其他租户暴露 `version`、`current_status` 或冲突原因；
 - 保留幂等键、乐观版本、合作关系校验和审计；
 - 禁止 DROP 四个历史 migration 创建的表、字段、触发器或索引。
 
@@ -288,7 +289,7 @@ Service 只从 `SupplierProxyScope` 传递可信 `tenantId`。Repository：
 
 - [ ] **Step 5: 实现最小前向兼容 migration 并运行 GREEN**
 
-只重定义受影响的旧商品、SKU 和价格 RPC：原子写入所有权/租户归属，并对目标行执行 fail-closed 租户校验。不删除四个历史 migration 的 schema，不恢复目录、规格、平台商品或 Admin 功能。
+替换既有归属 guard function 并新增兼容期写 guard，使旧商品、SKU 和价格 RPC 在原事务内原子写入归属；将旧 lifecycle 函数重命名为撤销 `service_role` 权限的内部实现，再用同签名 wrapper 先做 fail-closed 租户预检并保留同租户幂等 replay。兼容期复用已有查询索引，不在本次显式事务 migration 中增加可能阻塞生产写入的普通索引；确需新索引时依据开发库执行计划另建前向 migration。不删除四个历史 migration 的 schema，不恢复目录、规格、平台商品或 Admin 功能。
 
 ```bash
 cd apps/api
@@ -299,7 +300,7 @@ bun test src/services/supplier-catalog-revert-compatibility-migration-contract.t
 
 - [ ] **Step 6: 本地应用 migration 并执行事务回滚 smoke**
 
-`scripts/smoke-supplier-catalog-revert-compatibility.sql` 必须使用 `BEGIN`/`ROLLBACK`，在事务内创建两个租户及 active 合作关系测试夹具，调用旧商品、SKU 和价格写 RPC，并断言：新增商品/SKU 属于调用租户；价格表和条目的 `tenant_id` 等于调用租户；另一租户无法修改这些数据。脚本不得留下业务记录。
+`scripts/smoke-supplier-catalog-revert-compatibility.sql` 必须使用 `BEGIN`/`ROLLBACK`，在事务内创建两个租户及 active 合作关系测试夹具，以真实 `service_role` 调用旧商品、SKU 和价格写 RPC，并断言：wrapper 为 `SECURITY DEFINER`、固定 `search_path` 且仅 `service_role` 可执行；新增商品/SKU 属于调用租户；价格表和条目的 `tenant_id` 等于调用租户；另一租户无法修改这些数据；平台及历史 NULL 商品/SKU 即使 `acting_tenant_id=NULL` 也不可写。脚本不得留下业务记录。
 
 smoke 必须在事务内自建固定 UUID 的 tenant、employee、supplier、active `tenant_supplier`、product、SKU 和单位夹具，不依赖 `supabase/seed.sql`。只允许连接固定本地端口：
 

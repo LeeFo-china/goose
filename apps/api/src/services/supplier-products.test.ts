@@ -47,6 +47,38 @@ describe("SupplierProductsService", () => {
 
     expect(deps.repository.listProducts).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+    });
+  });
+
+  test("passes the trusted tenant to product details and SKU lists", async () => {
+    const deps = dependencies();
+    const { SupplierProductsService } = await import("./supplier-products");
+    const service = new SupplierProductsService(deps as never);
+
+    await service.getProduct(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+    );
+    await service.listSkus(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      { page: 1, pageSize: 20 },
+    );
+
+    expect(deps.repository.findProduct).toHaveBeenCalledWith(
+      SUPPLIER_ID,
+      PRODUCT_ID,
+      TENANT_ID,
+    );
+    expect(deps.repository.listSkus).toHaveBeenCalledWith({
+      supplier_id: SUPPLIER_ID,
+      supplier_product_id: PRODUCT_ID,
+      tenant_id: TENANT_ID,
       page: 1,
       pageSize: 20,
     });
@@ -106,6 +138,7 @@ describe("SupplierProductsService", () => {
 
     expect(deps.repository.updateProduct).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
       product_id: PRODUCT_ID,
       expected_version: 2,
       name: "防滑瓷砖",
@@ -150,6 +183,7 @@ describe("SupplierProductsService", () => {
     expect(deps.repository.updateSku).toHaveBeenCalledWith(
       expect.objectContaining({
         supplier_id: SUPPLIER_ID,
+        tenant_id: TENANT_ID,
         supplier_product_id: PRODUCT_ID,
         sku_id: SKU_ID,
       }),
