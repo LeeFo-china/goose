@@ -107,6 +107,14 @@ describe("classifyAdminServiceAccessError", () => {
     }
   });
 
+  test("does not treat an encoded raw proxy prefix as a recovery path", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api%2fbackend/billing",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
   test("does not exempt unknown employee service access descendants", () => {
     expect(classifyAdminServiceAccessError({
       path: "/employee/service-access/internal",
@@ -139,7 +147,7 @@ describe("classifyAdminServiceAccessError", () => {
     })).toBe("redirect");
   });
 
-  test("resolves clear dot segments before stripping the backend prefix", () => {
+  test("resolves clear dot segments in browser proxy paths", () => {
     expect(classifyAdminServiceAccessError({
       path: "/api/backend/billing/../projects",
       status: 402,
@@ -147,7 +155,7 @@ describe("classifyAdminServiceAccessError", () => {
     })).toBe("redirect");
   });
 
-  test("resolves encoded dot segments before stripping the backend prefix", () => {
+  test("resolves encoded dot segments in browser proxy paths", () => {
     expect(classifyAdminServiceAccessError({
       path: "/api/backend/billing/%2e%2e/projects",
       status: 402,

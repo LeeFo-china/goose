@@ -1,4 +1,5 @@
 const BACKEND_PROXY_PREFIX = "/api/backend";
+const BACKEND_PROXY_ROUTE_PREFIX = `${BACKEND_PROXY_PREFIX}/`;
 const PATH_NORMALIZATION_ORIGIN = "http://admin.invalid";
 const SERVICE_ACCESS_PATH = "/service-access";
 
@@ -46,25 +47,33 @@ function decodeRoutePathParameters(pathname: string): string | null {
   }
 }
 
+function buildBackendProxyPath(path: string): string {
+  if (path.startsWith(BACKEND_PROXY_PREFIX)) return path;
+  return `${BACKEND_PROXY_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 function parseBackendUrl(path: string): URL | null {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return parseInternalUrl(`${PATH_NORMALIZATION_ORIGIN}${normalizedPath}`);
 }
 
 function normalizeBackendPath(path: string): string | null {
-  const sourceUrl = parseInternalUrl(path);
-  if (!sourceUrl) return null;
-  const decodedPathname = decodeRoutePathParameters(sourceUrl.pathname);
-  if (!decodedPathname) return null;
-  const backendUrl = parseBackendUrl(decodedPathname);
-  if (!backendUrl) return null;
+  const proxyPath = buildBackendProxyPath(path);
+  const browserUrl = parseInternalUrl(proxyPath);
+  if (!browserUrl?.pathname.startsWith(BACKEND_PROXY_ROUTE_PREFIX)) return null;
 
-  const { pathname } = backendUrl;
-  if (pathname === BACKEND_PROXY_PREFIX) return "/";
-  if (pathname.startsWith(`${BACKEND_PROXY_PREFIX}/`)) {
-    return pathname.slice(BACKEND_PROXY_PREFIX.length);
-  }
-  return pathname;
+  const routePathname = browserUrl.pathname.slice(
+    BACKEND_PROXY_ROUTE_PREFIX.length,
+  );
+  if (!routePathname) return null;
+
+  const decodedRoutePathname = decodeRoutePathParameters(routePathname);
+  if (decodedRoutePathname === null) return null;
+
+  const backendUrl = parseBackendUrl(
+    `/${decodedRoutePathname}${browserUrl.search}`,
+  );
+  return backendUrl?.pathname ?? null;
 }
 
 function isRecoveryApiPath(path: string): boolean {
