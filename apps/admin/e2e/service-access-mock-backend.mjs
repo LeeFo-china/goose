@@ -30,6 +30,7 @@ function createState(input = {}) {
     requestCounts: {},
     requestQueries: {},
     forbiddenRequests: [],
+    hardBlockedRequests: [],
     unexpectedRequests: [],
     trialApplications: 0,
     purchaseHandoffs: 0,
@@ -163,6 +164,19 @@ function authorizeCapabilityRequest(request, response, pathname, persona) {
   return false;
 }
 
+function authorizeHardBlockedRequest(request, response, pathname, persona) {
+  if (persona !== personaNames.hardBlocked
+    || !pathname.startsWith("/billing")) return true;
+
+  state.hardBlockedRequests.push(`${request.method} ${pathname}`);
+  sendJson(response, 403, {
+    success: false,
+    code: "TENANT_SERVICE_HARD_BLOCKED",
+    message: "租户状态不可用",
+  });
+  return false;
+}
+
 function billingFeatureEstimates() {
   return {
     sms: {
@@ -259,6 +273,12 @@ async function handleRequest(request, response) {
   }
   const identity = authenticateRequest(request, response);
   if (!identity) return;
+  if (!authorizeHardBlockedRequest(
+    request,
+    response,
+    pathname,
+    identity.persona,
+  )) return;
   if (!authorizeCapabilityRequest(
     request,
     response,

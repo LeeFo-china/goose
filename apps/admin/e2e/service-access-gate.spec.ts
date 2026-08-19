@@ -4,7 +4,6 @@ import {
   blockedTitle, createBrowserActivityMonitor, expectBlockedPage,
   expectMonitorWaitsForActiveRequest, personaNames as personas, purchaseUrl,
 } from "./service-access-mock-fixture.mjs";
-
 const mockBackendBaseUrl = "http://127.0.0.1:3992";
 const expiredCopy = "租户服务访问已到期";
 type Persona = typeof personas[keyof typeof personas];
@@ -12,6 +11,7 @@ type MockState = {
   requestCounts: Record<string, number>;
   requestQueries: Record<string, string[]>;
   forbiddenRequests: string[];
+  hardBlockedRequests: string[];
   unexpectedRequests: string[];
   trialApplications: number;
   purchaseHandoffs: number;
@@ -22,7 +22,6 @@ type MockState = {
 };
 type SessionData = { expires_at: string; token: string; user_id: string };
 type PaginationMetadata = { page: number; pageSize: number; total: number; totalPages: number };
-
 let browserMonitor: ReturnType<typeof createBrowserActivityMonitor>;
 let browserToken: string;
 async function resetMock(request: APIRequestContext, persona: Persona, options: {
@@ -143,7 +142,6 @@ async function expectInvalidPaginationRejected(
     });
     expect(response.status()).toBe(400);
   }
-
   const state = await readState(request);
   expect(state.unexpectedRequests).toEqual(
     invalidUrls.map((path) => `GET ${path}`),
@@ -211,17 +209,14 @@ test.beforeEach(async ({ page, request }) => {
   browserMonitor = createBrowserActivityMonitor(page);
   browserToken = await setupPersona(page, request, personas.blockedAdmin);
 });
-
 test.afterEach(async () => {
   await browserMonitor.settle();
   expect(browserMonitor.errors.page).toEqual([]);
   expect(browserMonitor.errors.console).toEqual([]);
 });
-
 test("阻断管理员访问项目后收敛到唯一权威标题", async ({ page, request }) => {
   await page.goto("/projects");
   await expectBlockedPage(page);
-
   const state = await expectCleanMockState(request, {
     "GET /admin/auth/me": 3,
     "GET /employee/service-access": 3,
@@ -230,7 +225,6 @@ test("阻断管理员访问项目后收敛到唯一权威标题", async ({ page,
   expect(requestCount(state, "GET", "/employee/service-access"))
     .toBeGreaterThanOrEqual(1);
 });
-
 test("阻断页不显示通用到期文案", async ({ page, request }) => {
   await page.goto("/service-access");
   await expectBlockedPage(page);
@@ -240,7 +234,6 @@ test("阻断页不显示通用到期文案", async ({ page, request }) => {
     "GET /employee/service-access": 2,
   });
 });
-
 test("有权限管理员可提交试用并发起受控购买跳转", async ({ page, request }) => {
   browserToken = await expectAuthorizationIsolation(request);
   await resetMock(request, personas.blockedAdmin);
@@ -263,7 +256,6 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   browserToken = await setupPersona(page, request, personas.blockedAdmin);
   await expectPaginationMetadata(request, browserToken,
     "/billing/service-trials?page=1&pageSize=20", 0);
-
   let interceptedHandoffs = 0;
   await page.route(purchaseUrl, async (route) => {
     interceptedHandoffs += 1;
@@ -275,7 +267,6 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   });
   await page.goto("/service-access");
   await expectBlockedPage(page);
-
   await page.getByLabel("试用目的").fill("E2E 服务门禁回归");
   await page.getByLabel("预计使用人数").fill("8");
   await page.getByLabel("预计项目数量").fill("20");
@@ -335,7 +326,14 @@ test("普通员工只有联系管理员提示且不请求恢复能力", async ({
   )).toBe(0);
 });
 
-test("强阻断状态隔离计费页且只保留平台恢复指引", async ({ page, request }) => {
+test("计费恢复页区分可恢复阻断与强阻断", async ({ page, request }) => {
+  await page.goto("/billing");
+  await expect(page).toHaveURL(/\/billing$/);
+  await expect(page.getByRole("heading", { name: "计费账户", level: 1 }))
+    .toBeVisible();
+  let state = await expectCleanMockState(request);
+  expectOnlyFirstPageQueries(state, "GET", "/billing/ledger");
+
   await setupPersona(page, request, personas.hardBlocked);
   await page.goto("/billing");
   await expect(page).toHaveURL(/\/service-access$/);
@@ -350,10 +348,12 @@ test("强阻断状态隔离计费页且只保留平台恢复指引", async ({ pa
     .toHaveCount(0);
   await expect(page.getByRole("button", { name: "打开微信小程序购买" }))
     .toHaveCount(0);
-  const state = await expectCleanMockState(request);
-  for (const path of ["/billing/summary", "/billing/service-products"]) {
-    expect(requestCount(state, "GET", path)).toBe(0);
-  }
+  state = await expectCleanMockState(request);
+  expect([...new Set(state.hardBlockedRequests)].sort()).toEqual([
+    "GET /billing/feature-estimates",
+    "GET /billing/ledger",
+    "GET /billing/summary",
+  ]);
 });
 
 test("宽限期从唯一横幅发现并完成受控购买跳转", async ({ page, request }) => {
