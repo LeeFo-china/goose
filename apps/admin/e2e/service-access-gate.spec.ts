@@ -1,11 +1,10 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Page } from "@playwright/test";
+import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 
 const mockBackendBaseUrl = "http://127.0.0.1:3992";
 const purchaseUrl = "https://wxaurl.cn/mockServiceAccessPurchase";
 const blockedTitle = "尚未开通平台技术服务";
 const expiredCopy = "租户服务访问已到期";
-
 const personas = {
   blockedAdmin: "blocked_admin",
   blockedEmployee: "blocked_employee",
@@ -13,9 +12,7 @@ const personas = {
   normalTenant: "normal_tenant",
   platformAdmin: "platform_admin",
 } as const;
-
 type Persona = typeof personas[keyof typeof personas];
-
 type MockState = {
   requestCounts: Record<string, number>;
   requestQueries: Record<string, string[]>;
@@ -28,14 +25,12 @@ type MockState = {
   runtime402Remaining: number;
   runtimeBlocked: boolean;
 };
-
-type BrowserErrors = {
-  page: string[];
-  console: string[];
-};
+type BrowserErrors = { page: string[]; console: string[] };
+type SessionData = { expires_at: string; token: string; user_id: string };
+type PaginationMetadata = { page: number; pageSize: number; total: number; totalPages: number };
 
 let browserErrors: BrowserErrors;
-
+let browserToken: string;
 function captureBrowserErrors(page: Page): BrowserErrors {
   const captured: BrowserErrors = { page: [], console: [] };
   page.on("pageerror", (error) => captured.page.push(error.message));
@@ -44,60 +39,61 @@ function captureBrowserErrors(page: Page): BrowserErrors {
   });
   return captured;
 }
-
-async function resetMock(
-  request: APIRequestContext,
-  persona: Persona,
-  options: { serviceAccess503?: boolean; runtime402?: boolean } = {},
-): Promise<void> {
+async function settlePage(page: Page): Promise<void> {
+  if (page.isClosed()) return;
+  await page.waitForLoadState(page.url() === "about:blank" ? "load" : "networkidle");
+}
+async function resetMock(request: APIRequestContext, persona: Persona, options: {
+  serviceAccess503?: boolean; runtime402?: boolean;
+} = {}): Promise<void> {
   const response = await request.post(`${mockBackendBaseUrl}/__test/reset`, {
     data: { persona, ...options },
   });
   expect(response.ok()).toBe(true);
 }
-
-async function login(page: Page): Promise<void> {
+async function readSession(response: APIResponse): Promise<SessionData> {
+  expect(response.ok()).toBe(true);
+  const payload = await response.json() as { data: SessionData };
+  return payload.data;
+}
+async function login(page: Page): Promise<SessionData> {
   const response = await page.request.post("/api/auth/login", {
     data: { phone: "18800000001", code: "" },
   });
-  expect(response.ok()).toBe(true);
+  return readSession(response);
 }
-
+async function issueMockSession(
+  request: APIRequestContext, persona: Persona,
+): Promise<SessionData> {
+  await resetMock(request, persona);
+  const response = await request.post(`${mockBackendBaseUrl}/admin/auth/login`);
+  return readSession(response);
+}
 async function setupPersona(
-  page: Page,
-  request: APIRequestContext,
-  persona: Persona,
+  page: Page, request: APIRequestContext, persona: Persona,
   options: { serviceAccess503?: boolean; runtime402?: boolean } = {},
-): Promise<void> {
+): Promise<string> {
   await resetMock(request, persona, options);
-  await login(page);
+  return (await login(page)).token;
 }
-
+function bearer(token: string): { authorization: string } {
+  return { authorization: `Bearer ${token}` };
+}
 async function readState(request: APIRequestContext): Promise<MockState> {
   const response = await request.get(`${mockBackendBaseUrl}/__test/state`);
   expect(response.ok()).toBe(true);
   return await response.json() as MockState;
 }
-
 function requestCount(state: MockState, method: string, path: string): number {
   return state.requestCounts[`${method} ${path}`] ?? 0;
 }
-
-function expectOnlyFirstPageQueries(
-  state: MockState,
-  method: string,
-  path: string,
-): void {
+function expectOnlyFirstPageQueries(state: MockState, method: string, path: string): void {
   const queries = state.requestQueries[`${method} ${path}`] ?? [];
   expect(queries.length).toBeGreaterThan(0);
   expect([...new Set(queries)]).toEqual(["?page=1&pageSize=20"]);
 }
-
 function expectObservedPagination(
-  state: MockState,
-  path: string,
-  page: number,
-  pageSize: number,
+  state: MockState, path: string, page: number, pageSize: number,
 ): void {
   const queries = state.requestQueries[`GET ${path}`] ?? [];
   expect(queries.length).toBeGreaterThan(0);
@@ -107,7 +103,6 @@ function expectObservedPagination(
     expect(parameters.getAll("pageSize")).toEqual([String(pageSize)]);
   }
 }
-
 function expectBoundedProjectQueries(state: MockState): void {
   const queries = state.requestQueries["GET /projects"] ?? [];
   expect(queries.length).toBeGreaterThan(0);
@@ -128,23 +123,26 @@ function expectBoundedProjectQueries(state: MockState): void {
   }
   expect(observedInitialPage).toBe(true);
 }
-
 async function expectPaginationMetadata(
-  request: APIRequestContext,
-  path: string,
-  page: number,
-  pageSize: number,
+  request: APIRequestContext, token: string, path: string, total: number,
 ): Promise<void> {
-  const response = await request.get(`${mockBackendBaseUrl}${path}`);
+  const response = await request.get(`${mockBackendBaseUrl}${path}`, {
+    headers: bearer(token),
+  });
   expect(response.ok()).toBe(true);
-  const payload = await response.json() as {
-    data?: { pagination?: unknown };
-  };
-  expect(payload.data?.pagination).toMatchObject({ page, pageSize });
+  const payload = await response.json() as { data?: { pagination?: PaginationMetadata } };
+  const parameters = new URL(path, mockBackendBaseUrl).searchParams;
+  const page = Number(parameters.get("page"));
+  const pageSize = Number(parameters.get("pageSize"));
+  expect(payload.data?.pagination).toEqual({
+    page,
+    pageSize,
+    total,
+    totalPages: total === 0 ? 0 : Math.ceil(total / pageSize),
+  });
 }
-
 async function expectInvalidPaginationRejected(
-  request: APIRequestContext,
+  request: APIRequestContext, token: string,
 ): Promise<void> {
   const invalidUrls = [
     "/billing/service-trials",
@@ -157,7 +155,9 @@ async function expectInvalidPaginationRejected(
     "/projects/create/customers?page=1&pageSize=101",
   ];
   for (const path of invalidUrls) {
-    const response = await request.get(`${mockBackendBaseUrl}${path}`);
+    const response = await request.get(`${mockBackendBaseUrl}${path}`, {
+      headers: bearer(token),
+    });
     expect(response.status()).toBe(400);
   }
 
@@ -166,11 +166,54 @@ async function expectInvalidPaginationRejected(
     invalidUrls.map((path) => `GET ${path}`),
   );
 }
-
+async function expectAuthorizationIsolation(request: APIRequestContext): Promise<string> {
+  const issued: Array<readonly [Persona, SessionData]> = [];
+  for (const persona of Object.values(personas)) {
+    issued.push([persona, await issueMockSession(request, persona)]);
+  }
+  const sessionsByPersona = Object.fromEntries(issued) as Record<Persona, SessionData>;
+  expect(new Set(issued.map(([, session]) => session.token)).size).toBe(5);
+  for (const [, session] of issued) {
+    expect(session.expires_at).toBe("2099-12-31T23:59:59.000+08:00");
+  }
+  await resetMock(request, personas.blockedEmployee);
+  const admin = sessionsByPersona[personas.blockedAdmin];
+  const employee = sessionsByPersona[personas.blockedEmployee];
+  const stale = await request.get(`${mockBackendBaseUrl}/admin/auth/me`, {
+    headers: bearer(admin.token),
+  });
+  expect((await stale.json() as { data: SessionData }).data.user_id)
+    .toBe(admin.user_id);
+  const access = await request.get(`${mockBackendBaseUrl}/employee/service-access`, {
+    headers: bearer(admin.token),
+  });
+  expect((await access.json() as { data: { primaryAction: { key: string } } })
+    .data.primaryAction.key).toBe("apply_trial");
+  for (const path of ["/admin/auth/me", "/projects?page=1&pageSize=7"]) {
+    for (const headers of [{}, bearer("unknown-token")]) {
+      const response = await request.get(`${mockBackendBaseUrl}${path}`, { headers });
+      expect(response.status()).toBe(401);
+      expect(await response.json()).toMatchObject({
+        success: false,
+        code: "UNAUTHORIZED",
+        message: "登录状态无效",
+      });
+    }
+  }
+  const productsPath = "/billing/service-products?page=1&pageSize=20";
+  expect((await request.get(`${mockBackendBaseUrl}${productsPath}`, {
+    headers: bearer(admin.token),
+  })).status()).toBe(200);
+  expect((await request.get(`${mockBackendBaseUrl}${productsPath}`, {
+    headers: bearer(employee.token),
+  })).status()).toBe(403);
+  return admin.token;
+}
 async function expectCleanMockState(
-  request: APIRequestContext,
+  page: Page, request: APIRequestContext,
   requestBounds: Record<string, number> = {},
 ): Promise<MockState> {
+  await settlePage(page);
   const state = await readState(request);
   expect(state.forbiddenRequests).toEqual([]);
   expect(state.unexpectedRequests).toEqual([]);
@@ -181,7 +224,6 @@ async function expectCleanMockState(
   }
   return state;
 }
-
 async function expectBlockedPage(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/service-access$/);
   await expect(
@@ -192,10 +234,11 @@ async function expectBlockedPage(page: Page): Promise<void> {
 
 test.beforeEach(async ({ page, request }) => {
   browserErrors = captureBrowserErrors(page);
-  await setupPersona(page, request, personas.blockedAdmin);
+  browserToken = await setupPersona(page, request, personas.blockedAdmin);
 });
 
-test.afterEach(async () => {
+test.afterEach(async ({ page }) => {
+  await settlePage(page);
   expect(browserErrors.page).toEqual([]);
   expect(browserErrors.console).toEqual([]);
 });
@@ -204,7 +247,7 @@ test("阻断管理员访问项目后收敛到唯一权威标题", async ({ page,
   await page.goto("/projects");
   await expectBlockedPage(page);
 
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "GET /admin/auth/me": 3,
     "GET /employee/service-access": 3,
     "GET /projects": 2,
@@ -217,52 +260,33 @@ test("阻断页不显示通用到期文案", async ({ page, request }) => {
   await page.goto("/service-access");
   await expectBlockedPage(page);
   await expect(page.getByText(expiredCopy, { exact: true })).toHaveCount(0);
-  await expectCleanMockState(request, {
+  await expectCleanMockState(page, request, {
     "GET /employee/service-access": 2,
   });
 });
 
 test("有权限管理员可提交试用并发起受控购买跳转", async ({ page, request }) => {
-  await expectInvalidPaginationRejected(request);
+  browserToken = await expectAuthorizationIsolation(request);
   await resetMock(request, personas.blockedAdmin);
-  await expectPaginationMetadata(
-    request,
-    "/projects?page=2&pageSize=7&workflow_summary=list&ownership=all",
-    2,
-    7,
-  );
-  await expectPaginationMetadata(
-    request,
-    "/projects/create/employees?scene=project_designer&page=1&pageSize=80",
-    1,
-    80,
-  );
-  await expectPaginationMetadata(
-    request,
-    "/projects/create/properties?customer_id=a1000000-0000-4000-8000-000000000001&page=1&pageSize=80",
-    1,
-    80,
-  );
+  await expectInvalidPaginationRejected(request, browserToken);
+  await expectPaginationMetadata(request, browserToken,
+    "/projects?page=2&pageSize=7&workflow_summary=list&ownership=all", 0);
+  await expectPaginationMetadata(request, browserToken,
+    "/projects/create/employees?scene=project_designer&page=1&pageSize=80", 0);
+  await expectPaginationMetadata(request, browserToken,
+    "/projects/create/properties?customer_id=a1000000-0000-4000-8000-000000000001&page=1&pageSize=80", 0);
   for (const path of [
     "/billing/service-trials",
     "/billing/service-products",
     "/billing/service-orders",
     "/billing/ledger",
   ]) {
-    await expectPaginationMetadata(
-      request,
-      `${path}?page=1&pageSize=20`,
-      1,
-      20,
-    );
+    await expectPaginationMetadata(request, browserToken,
+      `${path}?page=1&pageSize=20`, path === "/billing/service-products" ? 1 : 0);
   }
-  await setupPersona(page, request, personas.blockedAdmin);
-  await expectPaginationMetadata(
-    request,
-    "/billing/service-trials?page=1&pageSize=20",
-    1,
-    20,
-  );
+  browserToken = await setupPersona(page, request, personas.blockedAdmin);
+  await expectPaginationMetadata(request, browserToken,
+    "/billing/service-trials?page=1&pageSize=20", 0);
 
   let interceptedHandoffs = 0;
   await page.route(purchaseUrl, async (route) => {
@@ -282,17 +306,15 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   await page.getByLabel("联系人").fill("测试联系人");
   await page.getByLabel("中国大陆手机号").fill("13800138000");
   await page.getByRole("button", { name: "提交试用申请" }).click();
-  await expect(page.getByText("试用申请已提交，请等待平台审核。"))
-    .toBeVisible();
+  await expect(page.getByText("试用申请已提交，请等待平台审核。")).toBeVisible();
 
   await expect(page.getByText("平台技术服务一年版")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "最近服务订单" }))
-    .toBeVisible();
+  await expect(page.getByRole("heading", { name: "最近服务订单" })).toBeVisible();
   await page.getByRole("button", { name: "打开微信小程序购买" }).click();
   await expect(page).toHaveURL(purchaseUrl);
   expect(interceptedHandoffs).toBe(1);
 
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "GET /billing/service-trials": 1,
     "GET /billing/service-products": 2,
     "GET /billing/service-orders": 2,
@@ -321,7 +343,7 @@ test("普通员工只有联系管理员提示且不请求恢复能力", async ({
   await expect(page.getByRole("button", { name: "打开微信小程序购买" }))
     .toHaveCount(0);
 
-  const state = await expectCleanMockState(request);
+  const state = await expectCleanMockState(page, request);
   for (const path of [
     "/billing/service-trials/current",
     "/billing/service-trials",
@@ -344,7 +366,7 @@ test("阻断状态仍可访问计费恢复页", async ({ page, request }) => {
     .toBeVisible();
   await expect(page.getByRole("heading", { name: blockedTitle }))
     .toHaveCount(0);
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "GET /billing/summary": 2,
     "GET /billing/feature-estimates": 2,
     "GET /billing/ledger": 2,
@@ -359,7 +381,7 @@ test("宽限期停留在项目页且只显示一个只读横幅", async ({ page,
   await expect(page.getByText("只读宽限期", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
   });
@@ -372,7 +394,7 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
-  let state = await expectCleanMockState(request, {
+  let state = await expectCleanMockState(page, request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
   });
@@ -385,7 +407,7 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByRole("heading", { name: "当前为平台管理模式" }))
     .toHaveCount(1);
-  state = await expectCleanMockState(request, { "GET /projects": 3 });
+  state = await expectCleanMockState(page, request, { "GET /projects": 3 });
   expect(requestCount(state, "GET", "/employee/service-access")).toBe(0);
 });
 
@@ -397,25 +419,17 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
       input: Parameters<typeof window.fetch>[0],
       init?: Parameters<typeof window.fetch>[1],
     ): Promise<Response> => {
-      const requestUrl = typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.href
-          : input.url;
-      const method = (
-        init?.method
-        ?? (input instanceof Request ? input.method : "GET")
-      ).toUpperCase();
+      const requestUrl = typeof input === "string" ? input
+        : input instanceof URL ? input.href : input.url;
+      const method = (init?.method
+        ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
       const url = new URL(requestUrl, window.location.origin);
-      if (method !== "POST" || url.pathname !== "/api/backend/projects") {
+      if (method !== "POST" || url.pathname !== "/api/backend/projects")
         return nativeFetch(input, init);
-      }
 
       url.searchParams.set("__e2eSynthetic402", "1");
       const response = await nativeFetch(url, init);
-      const payload = await response.clone().json().catch(() => null) as {
-        code?: unknown;
-      } | null;
+      const payload = await response.clone().json().catch(() => null) as { code?: unknown } | null;
       if (payload?.code !== "TENANT_SERVICE_ACCESS_EXPIRED") return response;
       return new Response(response.body, {
         status: 402,
@@ -423,16 +437,11 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
         headers: response.headers,
       });
     };
-    window.fetch = Object.assign(interceptedFetch, {
-      preconnect: nativeFetch.preconnect,
-    });
+    window.fetch = Object.assign(interceptedFetch, { preconnect: nativeFetch.preconnect });
   });
   await page.goto("/projects");
-  await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
-    .toHaveCount(1);
-  const protectedEntryHistoryLength = await page.evaluate(
-    () => window.history.length,
-  );
+  await expect(page.getByRole("heading", { name: "项目管理", level: 1 })).toHaveCount(1);
+  const protectedEntryHistoryLength = await page.evaluate(() => window.history.length);
 
   const runtimeNavigationPaths: string[] = [];
   page.on("request", (browserRequest) => {
@@ -443,14 +452,11 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   await page.getByLabel("项目名称").fill("运行时 402 回归项目");
   await page.getByRole("button", { name: "创建项目" }).click();
   await expectBlockedPage(page);
-  await page.waitForLoadState("networkidle");
-  expect(await page.evaluate(() => window.history.length))
-    .toBe(protectedEntryHistoryLength);
-
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "POST /projects": 1,
     "GET /employee/service-access": 3,
   });
+  expect(await page.evaluate(() => window.history.length)).toBe(protectedEntryHistoryLength);
   expect(requestCount(state, "POST", "/projects")).toBe(1);
   expect(state.runtime402Remaining).toBe(0);
   expect(state.runtimeBlocked).toBe(true);
@@ -462,13 +468,11 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   ]) {
     expectObservedPagination(state, path, 1, 80);
   }
-  expect(runtimeNavigationPaths.filter((path) => path === "/service-access"))
-    .toHaveLength(1);
+  expect(runtimeNavigationPaths.filter((path) => path === "/service-access")).toHaveLength(1);
 
   const navigationCountBeforeBack = runtimeNavigationPaths.length;
   await page.goBack({ waitUntil: "domcontentloaded" });
-  expect(runtimeNavigationPaths.slice(navigationCountBeforeBack))
-    .not.toContain("/projects");
+  expect(runtimeNavigationPaths.slice(navigationCountBeforeBack)).not.toContain("/projects");
   expect(new URL(page.url()).pathname).not.toBe("/projects");
 });
 
@@ -486,7 +490,7 @@ test("服务状态 503 显示可重试系统错误而非到期结论", async ({ 
   await expect(page.getByText(expiredCopy, { exact: true })).toHaveCount(0);
   await expect(page.getByText(blockedTitle, { exact: true })).toHaveCount(0);
 
-  const state = await expectCleanMockState(request, {
+  const state = await expectCleanMockState(page, request, {
     "GET /employee/service-access": 2,
   });
   expect(requestCount(state, "GET", "/employee/service-access"))

@@ -15,6 +15,9 @@ const port = Number.parseInt(
   process.env.SERVICE_ACCESS_MOCK_BACKEND_PORT || "3992",
   10,
 );
+const identitiesByToken = new Map(Object.entries(sessions).map(
+  ([persona, session]) => [session.token, { persona, session }],
+));
 
 let state = createState();
 
@@ -44,6 +47,23 @@ function sendJson(response, statusCode, payload) {
 
 function sendData(response, data) {
   sendJson(response, 200, { success: true, data });
+}
+
+function authenticateRequest(request, response) {
+  const authorization = request.headers.authorization;
+  const token = typeof authorization === "string"
+    && authorization.startsWith("Bearer ")
+    ? authorization.slice("Bearer ".length)
+    : "";
+  const identity = identitiesByToken.get(token);
+  if (identity) return identity;
+
+  sendJson(response, 401, {
+    success: false,
+    code: "UNAUTHORIZED",
+    message: "登录状态无效",
+  });
+  return null;
 }
 
 function readBody(request) {
@@ -127,9 +147,9 @@ function isRecoveryCapabilityPath(pathname) {
     || pathname === "/employee/service-access/purchase-link";
 }
 
-function authorizeCapabilityRequest(request, response, pathname) {
+function authorizeCapabilityRequest(request, response, pathname, persona) {
   if (
-    state.persona !== personaNames.blockedEmployee
+    persona !== personaNames.blockedEmployee
     || !isRecoveryCapabilityPath(pathname)
   ) return true;
 
@@ -231,15 +251,22 @@ async function handleRequest(request, response) {
   }
 
   countRequest(request.method, url);
-  if (!authorizeCapabilityRequest(request, response, pathname)) return;
-
   if (request.method === "POST" && pathname === "/admin/auth/login") {
     await readBody(request);
     sendData(response, sessions[state.persona]);
     return;
   }
+  const identity = authenticateRequest(request, response);
+  if (!identity) return;
+  if (!authorizeCapabilityRequest(
+    request,
+    response,
+    pathname,
+    identity.persona,
+  )) return;
+
   if (request.method === "GET" && pathname === "/admin/auth/me") {
-    sendData(response, sessions[state.persona]);
+    sendData(response, identity.session);
     return;
   }
   if (request.method === "GET" && pathname === "/notifications/summary") {
@@ -257,7 +284,7 @@ async function handleRequest(request, response) {
       return;
     }
     sendData(response, serviceAccessSummary(
-      state.persona,
+      identity.persona,
       state.runtimeBlocked,
     ));
     return;

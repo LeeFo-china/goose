@@ -46,7 +46,7 @@ function tenantSession({ key, name, role, permissions }) {
     roles: [role],
     permissions: permissions.map(permission),
     token: `service-access-${key}-token`,
-    expires_at: "2026-12-31T23:59:59.000+08:00",
+    expires_at: "2099-12-31T23:59:59.000+08:00",
   };
 }
 
@@ -95,7 +95,7 @@ export const sessions = {
     is_platform_staff: true,
     is_platform_super_admin: true,
     token: "service-access-platform-token",
-    expires_at: "2026-12-31T23:59:59.000+08:00",
+    expires_at: "2099-12-31T23:59:59.000+08:00",
   },
 };
 
