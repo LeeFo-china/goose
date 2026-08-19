@@ -1,10 +1,12 @@
 const BACKEND_PROXY_PREFIX = "/api/backend";
 const SERVICE_ACCESS_PATH = "/service-access";
 
-const RECOVERY_API_SCOPES = [
+const RECOVERY_API_EXACT_PATHS = [
   "/employee/service-access",
-  "/billing",
+  "/employee/service-access/purchase-link",
 ] as const;
+
+const RECOVERY_API_SCOPES = ["/billing"] as const;
 
 const RECOVERY_PAGE_SCOPES = [SERVICE_ACCESS_PATH, "/billing"] as const;
 
@@ -35,7 +37,9 @@ function normalizeBackendPath(path: string): string {
 
 function isRecoveryApiPath(path: string): boolean {
   const pathname = normalizeBackendPath(path);
-  return RECOVERY_API_SCOPES.some((scope) => isPathInScope(pathname, scope));
+  return RECOVERY_API_EXACT_PATHS.some((recoveryPath) => (
+    pathname === recoveryPath
+  )) || RECOVERY_API_SCOPES.some((scope) => isPathInScope(pathname, scope));
 }
 
 function isRecoveryPage(pathname: string): boolean {

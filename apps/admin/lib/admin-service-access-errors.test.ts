@@ -107,6 +107,22 @@ describe("classifyAdminServiceAccessError", () => {
     }
   });
 
+  test("does not exempt unknown employee service access descendants", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/employee/service-access/internal",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("does not exempt proxied unknown employee service access descendants", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api/backend/employee/service-access/internal",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
   test("ignores network, server, and unrelated failures", () => {
     expect(classifyAdminServiceAccessError({
       path: "/projects",
