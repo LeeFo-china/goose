@@ -26,10 +26,19 @@ describe("admin session guard", () => {
     })).toBe("unavailable");
   });
 
-  test("is mounted once inside the admin session scope", () => {
+  test("is mounted once inside the session and service access providers", () => {
     const source = readFileSync(new URL("./admin-shell.tsx", import.meta.url), "utf8");
+    const sessionProviderStart = source.indexOf("<AdminSessionScopeProvider");
+    const serviceAccessProviderStart = source.indexOf("<ServiceAccessProvider");
+    const guard = source.indexOf("<AdminSessionGuard />");
+    const serviceAccessProviderEnd = source.indexOf("</ServiceAccessProvider>");
+    const sessionProviderEnd = source.indexOf("</AdminSessionScopeProvider>");
+
     expect(source.match(/<AdminSessionGuard\s*\/>/g)?.length).toBe(1);
-    expect(source.indexOf("<AdminSessionGuard />"))
-      .toBeGreaterThan(source.indexOf("<AdminSessionScopeProvider"));
+    expect(source.match(/<ServiceAccessProvider\b/g)?.length).toBe(1);
+    expect(serviceAccessProviderStart).toBeGreaterThan(sessionProviderStart);
+    expect(guard).toBeGreaterThan(serviceAccessProviderStart);
+    expect(serviceAccessProviderEnd).toBeGreaterThan(guard);
+    expect(sessionProviderEnd).toBeGreaterThan(serviceAccessProviderEnd);
   });
 });

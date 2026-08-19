@@ -8,6 +8,8 @@ import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
+import { ServiceAccessProvider } from "@/components/service-access/service-access-context";
+import { ServiceAccessGate } from "@/components/service-access/service-access-gate";
 import {
   AdminPreferencesMenu,
   applyThemeTone,
@@ -29,8 +31,6 @@ export function AdminShell({
   serviceAccess: TenantServiceAccessLoadResult;
   children: React.ReactNode;
 }) {
-  // Task 5 consumes this preloaded result in the shell gate.
-  void serviceAccess;
   const [preferences, setPreferences] = useState(defaultPreferences);
   const isPlatformMode = isPlatformOnlySession(session);
   const headerTenantLabel = isPlatformMode
@@ -84,6 +84,10 @@ export function AdminShell({
       tenantId={session.tenant?.id ?? null}
       userId={session.user_id}
     >
+      <ServiceAccessProvider
+        session={session}
+        initialLoadResult={serviceAccess}
+      >
       <AdminSessionGuard />
       <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
@@ -162,10 +166,11 @@ export function AdminShell({
           mainWidthClassName,
           preferences.compact ? "py-3" : "py-5",
         )}>
-          {children}
+          <ServiceAccessGate>{children}</ServiceAccessGate>
         </main>
       </div>
       </div>
+      </ServiceAccessProvider>
     </AdminSessionScopeProvider>
   );
 }

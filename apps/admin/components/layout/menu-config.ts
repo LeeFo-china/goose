@@ -176,6 +176,16 @@ export const platformNavGroups: AdminMenuGroup[] = [
   },
 ];
 
+export const tenantServiceRecoveryNavGroups: AdminMenuGroup[] = [
+  {
+    label: "服务恢复",
+    items: [
+      { href: "/service-access", label: "服务状态", icon: Shield },
+      { href: "/billing", label: "计费账户", icon: CircleDollarSign },
+    ],
+  },
+];
+
 export const tenantNavGroups: AdminMenuGroup[] = [
   {
     label: "业务",

@@ -5,9 +5,12 @@ import { usePathname } from "next/navigation";
 import {
   platformNavGroups,
   tenantNavGroups,
+  tenantServiceRecoveryNavGroups,
 } from "@/components/layout/menu-config";
 import { getVisibleGroups } from "@/components/layout/admin-nav-visibility";
 import { isActivePath } from "@/components/layout/admin-nav-utils";
+import { useServiceAccess } from "@/components/service-access/service-access-context";
+import { decideServiceAccessView } from "@/components/service-access/service-access-routes";
 import type { AdminSession } from "@/lib/backend";
 import { isPlatformOnlySession } from "@/lib/session-mode";
 import { cn } from "@/lib/utils";
@@ -20,9 +23,16 @@ export function AdminNav({
   collapsed?: boolean;
 }) {
   const pathname = usePathname();
-  const rawGroups = isPlatformOnlySession(session)
+  const { loadResult } = useServiceAccess();
+  const isPlatformMode = isPlatformOnlySession(session);
+  const serviceAccessView = decideServiceAccessView(loadResult, pathname);
+  const isTenantBlocked = serviceAccessView === "recovery"
+    || serviceAccessView === "replace";
+  const rawGroups = isPlatformMode
     ? platformNavGroups
-    : tenantNavGroups;
+    : isTenantBlocked
+      ? tenantServiceRecoveryNavGroups
+      : tenantNavGroups;
   const visibleGroups = getVisibleGroups(session, rawGroups);
 
   return (
