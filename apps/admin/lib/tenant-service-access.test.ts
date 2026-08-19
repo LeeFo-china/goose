@@ -91,9 +91,8 @@ describe("loadTenantServiceAccess", () => {
 
   test("loads a valid tenant service access summary without caching", async () => {
     const fetchImpl = mock(async () => Response.json({
-      success: true,
       data: validSummary,
-      requestId: "req-service-access",
+      message: "success",
     })) as unknown as typeof fetch;
 
     const result = await loadTenantServiceAccess({
@@ -204,14 +203,6 @@ describe("loadTenantServiceAccess", () => {
         success: "yes",
         data: validSummary,
         requestId: "req-invalid-envelope",
-      }),
-    },
-    {
-      name: "BackendResponse envelope missing success",
-      createResponse: () => Response.json({
-        data: validSummary,
-        message: "success",
-        requestId: "req-missing-success",
       }),
     },
   ];

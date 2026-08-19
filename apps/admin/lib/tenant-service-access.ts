@@ -25,8 +25,8 @@ type LoadTenantServiceAccessInput = {
 const UNAVAILABLE_MESSAGE = "服务状态暂时无法加载，请稍后重试";
 
 const BackendResponseEnvelopeSchema = z.object({
-  success: z.literal(true),
-  data: z.unknown().optional(),
+  success: z.literal(true).optional(),
+  data: z.unknown().nonoptional(),
   message: z.string().optional(),
   code: z.string().optional(),
   requestId: z.string().optional(),
