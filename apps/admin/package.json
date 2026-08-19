@@ -11,6 +11,7 @@
     "typecheck": "next typegen && tsc -p tsconfig.typecheck.json --noEmit",
     "check": "pnpm run check:file-size && pnpm run typecheck",
     "test:e2e": "env -u NO_COLOR playwright test",
+    "test:e2e:service-access": "env -u NO_COLOR playwright test --config=playwright.service-access.config.ts",
     "test:e2e:supplier-catalog": "env -u NO_COLOR playwright test --config=playwright.supplier-catalog.config.ts",
     "test:e2e:supplier-purchase-order": "env -u NO_COLOR playwright test --config=playwright.supplier-purchase-order.config.ts",
     "test:e2e:supplier-payment": "env -u NO_COLOR playwright test --config=playwright.supplier-payment.config.ts",
