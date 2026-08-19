@@ -171,6 +171,26 @@ type AdminServiceAccessAction = {
 不使用完整 `/employee/bootstrap`，避免每次 Console 导航触发无关查询和预热。
 服务访问查询保持单次、有限字段访问，不新增列表或无上限查询。
 
+### 6.5 Admin 购买跳转接口
+
+实施核查发现，现有 `/billing/service-orders` 是微信小程序 JSAPI 支付接口，要求当前
+JWT 携带微信 `openid`；Admin Web 的 `admin_web` JWT 不包含该支付身份，不能直接复用
+该 POST 接口完成网页支付。为避免把必然返回 `PAYER_OPENID_REQUIRED` 的按钮交付给用户，
+新增：
+
+```http
+POST /employee/service-access/purchase-link
+```
+
+路由标记为 `tenantServiceAccess: "recovery"`，并校验
+`billing.service_order.create`。接口使用现有 `wechatOpenLinkService` 生成短时效小程序
+URL Link，目标为既有正式技术服务选购页；试用转正式时，由后端权威摘要注入
+`source_trial_id`，不接受客户端传入租户或试用归因。
+
+Admin 可直接分页查看技术服务商品和本租户订单，但真实下单与 JSAPI 支付在小程序内
+完成。本期不新增 Native/H5 支付渠道，不放宽 `payer_openid` 数据库约束，也不修改既有
+订单、回调和履约模型。
+
 ## 7. Admin 路由与门禁
 
 ### 7.1 Console Layout 预检
@@ -258,8 +278,9 @@ Next.js 可能在父级客户端 Shell 决策前构建服务端 page tree，因�
 
 1. 申请试用：调用现有 `/billing/service-trials` recovery 接口。
 2. 查看试用：读取当前或历史试用状态。
-3. 购买正式服务：分页读取现有 `/billing/service-products`，选择商品后调用
-   `/billing/service-orders` 创建订单，并沿用现有支付流程。
+3. 购买正式服务：分页读取现有 `/billing/service-products` 展示套餐，通过
+   `/employee/service-access/purchase-link` 打开既有小程序正式选购页，在小程序内创建
+   `/billing/service-orders` 订单并完成 JSAPI 支付。
 4. 查看订单：分页读取当前租户技术服务订单。
 5. 刷新状态：重新请求 `/employee/service-access`，不依赖前端倒计时猜测。
 
@@ -368,7 +389,7 @@ API 新增只读接口可暂时保留，不影响旧客户端。后端原有服�
 
 - 阻断租户不再在每个业务页面分别看到“租户服务访问已到期”。
 - `19000005001` 登录后看到准确的统一状态和与权限匹配的动作。
-- 试用、购买、计费、刷新和退出等恢复通道可达，普通业务通道不可达。
+- 试用、购买跳转、计费、刷新和退出等恢复通道可达，普通业务通道不可达。
 - 宽限期租户可读不可写，且状态在整个 Console 中一致可见。
 - 普通员工不能看到或调用无权限的恢复动作。
 - 平台身份、正常租户和登录失效流程无回归。
