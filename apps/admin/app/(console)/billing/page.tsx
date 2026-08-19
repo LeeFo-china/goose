@@ -42,6 +42,8 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { isPlatformOnlySession } from "@/lib/session-mode";
+import { loadTenantServiceAccess } from "@/lib/tenant-service-access";
 import { cn } from "@/lib/utils";
 
 const emptySummary: TenantBillingSummary = {
@@ -174,8 +176,15 @@ export default async function TenantBillingPage() {
     redirect("/login");
   }
 
-  if (session.roles.includes("platform_admin")) {
+  if (isPlatformOnlySession(session)) {
     redirect("/platform/billing");
+  }
+
+  const token = await getAdminToken();
+  const serviceAccess = await loadTenantServiceAccess({ session, token });
+  if (serviceAccess.kind === "ready"
+    && serviceAccess.summary.accessStatus === "hard_blocked") {
+    redirect("/service-access");
   }
 
   const [summaryResult, estimateResult, ledgerResult] = await Promise.all([

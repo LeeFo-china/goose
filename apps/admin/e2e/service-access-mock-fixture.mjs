@@ -1,9 +1,11 @@
 export const personaNames = {
   blockedAdmin: "blocked_admin",
   blockedEmployee: "blocked_employee",
+  hardBlocked: "hard_blocked",
   graceTenant: "grace_tenant",
   normalTenant: "normal_tenant",
   platformAdmin: "platform_admin",
+  platformStaff: "platform_staff",
 };
 
 export const purchaseUrl = "https://wxaurl.cn/mockServiceAccessPurchase";
@@ -70,6 +72,12 @@ export const sessions = {
     role: "employee",
     permissions: [],
   }),
+  [personaNames.hardBlocked]: tenantSession({
+    key: "hard-blocked",
+    name: "冻结租户管理员",
+    role: "tenant_admin",
+    permissions: recoveryPermissions,
+  }),
   [personaNames.graceTenant]: tenantSession({
     key: "grace",
     name: "宽限期租户管理员",
@@ -96,6 +104,28 @@ export const sessions = {
     is_platform_staff: true,
     is_platform_super_admin: true,
     token: "service-access-platform-token",
+    expires_at: "2099-12-31T23:59:59.000+08:00",
+  },
+  [personaNames.platformStaff]: {
+    user_id: "service-access-platform-staff",
+    login_channel: "admin_web",
+    employee: {
+      id: "a2000000-0000-4000-8000-000000000008",
+      name: "平台员工",
+      phone: "18800000008",
+      status: "active",
+      tenant_department_id: null,
+      department_name: "平台运营",
+      post_id: null,
+      post_name: "平台员工",
+      avatar: null,
+    },
+    tenant: null,
+    roles: ["platform_staff"],
+    permissions: [permission("platform.tenant.read")],
+    is_platform_staff: true,
+    is_platform_super_admin: false,
+    token: "service-access-platform-staff-token",
     expires_at: "2099-12-31T23:59:59.000+08:00",
   },
 };
@@ -157,6 +187,17 @@ export function serviceAccessSummary(persona, forceBlocked = false) {
     return {
       ...structuredClone(baseSummary),
       primaryAction: { key: "contact_tenant_admin", label: "联系企业管理员" },
+      secondaryAction: { key: "refresh", label: "刷新状态" },
+    };
+  }
+  if (persona === personaNames.hardBlocked) {
+    return {
+      ...structuredClone(baseSummary),
+      accessMode: "hard_blocked",
+      accessStatus: "hard_blocked",
+      title: "企业账号暂不可用",
+      message: "企业账号当前不可用，请联系平台客服处理。",
+      primaryAction: { key: "contact_platform", label: "联系平台" },
       secondaryAction: { key: "refresh", label: "刷新状态" },
     };
   }

@@ -1,5 +1,6 @@
 import type {
   AdminServiceAccessAction,
+  AdminTenantServiceAccess,
   PlatformServiceTrialStatus,
 } from "@gooes/domain";
 
@@ -154,6 +155,22 @@ export function getServiceTrialRecoveryCapabilities(
     canView: actions.has("view_trial")
       && permissions.has("billing.service_trial.read"),
   };
+}
+
+export function shouldRenderServiceTrialSection({
+  accessStatus,
+  hasEnteredRecovery,
+  unavailable,
+}: {
+  accessStatus: AdminTenantServiceAccess["accessStatus"] | null;
+  hasEnteredRecovery: boolean;
+  unavailable: boolean;
+}): boolean {
+  if (accessStatus === "hard_blocked") return false;
+  if (unavailable) return hasEnteredRecovery;
+  return accessStatus !== null
+    && accessStatus !== "workspace_available"
+    && accessStatus !== "grace_period";
 }
 
 export function getServiceTrialSectionVisibility({

@@ -18,6 +18,11 @@ export function isServiceRecoveryRoute(pathname: string): boolean {
   );
 }
 
+function isServiceStatusRoute(pathname: string): boolean {
+  return pathname === "/service-access"
+    || pathname.startsWith("/service-access/");
+}
+
 export function decideServiceAccessView(
   loadResult: TenantServiceAccessLoadResult,
   pathname: string,
@@ -28,5 +33,8 @@ export function decideServiceAccessView(
     return "workspace";
   }
   if (loadResult.summary.accessStatus === "grace_period") return "readonly";
+  if (loadResult.summary.accessStatus === "hard_blocked") {
+    return isServiceStatusRoute(pathname) ? "recovery" : "replace";
+  }
   return isServiceRecoveryRoute(pathname) ? "recovery" : "replace";
 }

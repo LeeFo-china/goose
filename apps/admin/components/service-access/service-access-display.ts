@@ -72,6 +72,20 @@ export function formatServiceAccessDateTime(
   ].join(" ");
 }
 
+export function buildServiceReadonlyBannerContent(
+  summary: AdminTenantServiceAccess,
+): { endsAtLabel: string | null; linkLabel: string } {
+  const formattedEndsAt = formatServiceAccessDateTime(summary.endsAt);
+  const actions = [summary.primaryAction, summary.secondaryAction];
+
+  return {
+    endsAtLabel: formattedEndsAt === "—" ? null : formattedEndsAt,
+    linkLabel: actions.some((action) => action?.key === "purchase_service")
+      ? "购买正式服务"
+      : "查看服务状态",
+  };
+}
+
 export function buildServiceAccessDisplay(
   loadResult: TenantServiceAccessLoadResult,
 ): ServiceAccessDisplay {

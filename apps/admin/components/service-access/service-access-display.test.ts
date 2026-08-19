@@ -9,6 +9,7 @@ import type { TenantServiceAccessLoadResult } from "@/lib/tenant-service-access"
 
 import {
   buildServiceAccessDisplay,
+  buildServiceReadonlyBannerContent,
   formatServiceAccessDateTime,
 } from "./service-access-display";
 
@@ -189,5 +190,25 @@ describe("formatServiceAccessDateTime", () => {
     expect(formatServiceAccessDateTime(null)).toBe("—");
     expect(formatServiceAccessDateTime("")).toBe("—");
     expect(formatServiceAccessDateTime("not-a-date")).toBe("—");
+  });
+});
+
+describe("buildServiceReadonlyBannerContent", () => {
+  test("shows the grace end time and authoritative purchase action", () => {
+    expect(buildServiceReadonlyBannerContent(summaryFor("grace_period")))
+      .toEqual({
+        endsAtLabel: "2026年08月26日 17:30",
+        linkLabel: "购买正式服务",
+      });
+  });
+
+  test("falls back to a status link without a purchase action", () => {
+    expect(buildServiceReadonlyBannerContent({
+      ...summaryFor("grace_period"),
+      secondaryAction: { key: "refresh", label: "刷新状态" },
+    })).toEqual({
+      endsAtLabel: "2026年08月26日 17:30",
+      linkLabel: "查看服务状态",
+    });
   });
 });

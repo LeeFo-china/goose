@@ -150,6 +150,7 @@ function isRecoveryCapabilityPath(pathname) {
 function authorizeCapabilityRequest(request, response, pathname, persona) {
   if (
     persona !== personaNames.blockedEmployee
+    && persona !== personaNames.hardBlocked
     || !isRecoveryCapabilityPath(pathname)
   ) return true;
 

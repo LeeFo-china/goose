@@ -30,9 +30,11 @@ const validSummary: AdminTenantServiceAccess = {
 
 function createSession({
   platformOnly = false,
+  platformStaff = false,
   tenantId = "tenant-a",
 }: {
   platformOnly?: boolean;
+  platformStaff?: boolean;
   tenantId?: string | null;
 } = {}): AdminSession {
   return {
@@ -56,8 +58,13 @@ function createSession({
           slug: "tenant-a",
           status: "active",
         },
-    roles: platformOnly ? ["platform_admin"] : ["tenant_admin"],
+    roles: platformOnly
+      ? ["platform_admin"]
+      : platformStaff
+        ? ["platform_staff"]
+        : ["tenant_admin"],
     permissions: [],
+    is_platform_staff: platformOnly || platformStaff,
   };
 }
 
@@ -81,6 +88,21 @@ describe("loadTenantServiceAccess", () => {
 
     const result = await loadTenantServiceAccess({
       session: createSession({ platformOnly: true, tenantId: null }),
+      token: null,
+      fetchImpl,
+    });
+
+    expect(result).toEqual({ kind: "bypass" });
+    expect(fetchImpl).toHaveBeenCalledTimes(0);
+  });
+
+  test("bypasses platform staff sessions without a tenant", async () => {
+    const fetchImpl = mock(async () => {
+      throw new Error("fetch should not be called");
+    }) as unknown as typeof fetch;
+
+    const result = await loadTenantServiceAccess({
+      session: createSession({ platformStaff: true, tenantId: null }),
       token: null,
       fetchImpl,
     });

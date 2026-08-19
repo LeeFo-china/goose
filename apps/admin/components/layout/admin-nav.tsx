@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   platformNavGroups,
+  tenantHardBlockedNavGroups,
   tenantNavGroups,
   tenantServiceRecoveryNavGroups,
 } from "@/components/layout/menu-config";
@@ -28,9 +29,13 @@ export function AdminNav({
   const serviceAccessView = decideServiceAccessView(loadResult, pathname);
   const isTenantBlocked = serviceAccessView === "recovery"
     || serviceAccessView === "replace";
+  const isHardBlocked = loadResult.kind === "ready"
+    && loadResult.summary.accessStatus === "hard_blocked";
   const rawGroups = isPlatformMode
     ? platformNavGroups
-    : isTenantBlocked
+    : isHardBlocked
+      ? tenantHardBlockedNavGroups
+      : isTenantBlocked
       ? tenantServiceRecoveryNavGroups
       : tenantNavGroups;
   const visibleGroups = getVisibleGroups(session, rawGroups);

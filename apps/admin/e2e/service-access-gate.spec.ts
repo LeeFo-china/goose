@@ -155,7 +155,8 @@ async function expectAuthorizationIsolation(request: APIRequestContext): Promise
     issued.push([persona, await issueMockSession(request, persona)]);
   }
   const sessionsByPersona = Object.fromEntries(issued) as Record<Persona, SessionData>;
-  expect(new Set(issued.map(([, session]) => session.token)).size).toBe(5);
+  expect(new Set(issued.map(([, session]) => session.token)).size)
+    .toBe(Object.values(personas).length);
   for (const [, session] of issued) {
     expect(session.expires_at).toBe("2099-12-31T23:59:59.000+08:00");
   }
@@ -334,36 +335,59 @@ test("普通员工只有联系管理员提示且不请求恢复能力", async ({
   )).toBe(0);
 });
 
-test("阻断状态仍可访问计费恢复页", async ({ page, request }) => {
+test("强阻断状态隔离计费页且只保留平台恢复指引", async ({ page, request }) => {
+  await setupPersona(page, request, personas.hardBlocked);
   await page.goto("/billing");
-  await expect(page).toHaveURL(/\/billing$/);
-  await expect(page.getByRole("heading", { name: "计费账户", level: 1 }))
+  await expect(page).toHaveURL(/\/service-access$/);
+  await expect(page.getByRole("heading", { name: "企业账号暂不可用", level: 1 }))
     .toBeVisible();
-  await expect(page.getByRole("heading", { name: blockedTitle }))
+  await expect(page.getByText("请联系平台客服处理", { exact: true }))
+    .toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新状态" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "计费账户" }))
     .toHaveCount(0);
-  const state = await expectCleanMockState(request, {
-    "GET /billing/summary": 2,
-    "GET /billing/feature-estimates": 2,
-    "GET /billing/ledger": 2,
-  });
-  expectOnlyFirstPageQueries(state, "GET", "/billing/ledger");
+  await expect(page.getByRole("button", { name: /申请试用|提交试用申请/ }))
+    .toHaveCount(0);
+  await expect(page.getByRole("button", { name: "打开微信小程序购买" }))
+    .toHaveCount(0);
+  const state = await expectCleanMockState(request);
+  for (const path of ["/billing/summary", "/billing/service-products"]) {
+    expect(requestCount(state, "GET", path)).toBe(0);
+  }
 });
 
-test("宽限期停留在项目页且只显示一个只读横幅", async ({ page, request }) => {
+test("宽限期从唯一横幅发现并完成受控购买跳转", async ({ page, request }) => {
   await setupPersona(page, request, personas.graceTenant);
+  let interceptedHandoffs = 0;
+  await page.route(purchaseUrl, async (route) => {
+    interceptedHandoffs += 1;
+    await route.fulfill({ status: 200, body: "grace purchase handoff" });
+  });
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByText("只读宽限期", { exact: true })).toHaveCount(1);
+  await expect(page.getByText(/宽限期截止：2026年08月31日 23:59/))
+    .toBeVisible();
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
+  await page.getByRole("link", { name: "购买正式服务" }).click();
+  await expect(page).toHaveURL(/\/service-access$/);
+  await expect(page.getByText("平台技术服务一年版")).toBeVisible();
+  await page.getByRole("button", { name: "打开微信小程序购买" }).click();
+  await expect(page).toHaveURL(purchaseUrl);
+  expect(interceptedHandoffs).toBe(1);
   const state = await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
+    "GET /billing/service-products": 2,
+    "GET /billing/service-orders": 2,
+    "POST /employee/service-access/purchase-link": 1,
   });
   expectBoundedProjectQueries(state);
+  expect(state.purchaseHandoffs).toBe(1);
 });
 
-test("正常租户与平台管理员都留在项目页", async ({ page, request }) => {
+test("正常租户与平台员工都留在项目页", async ({ page, request }) => {
   await setupPersona(page, request, personas.normalTenant);
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
@@ -377,11 +401,13 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
     .toBeGreaterThanOrEqual(1);
   expectBoundedProjectQueries(state);
 
-  await setupPersona(page, request, personas.platformAdmin);
+  await setupPersona(page, request, personas.platformStaff);
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByRole("heading", { name: "当前为平台管理模式" }))
     .toHaveCount(1);
+  await expect(page.getByRole("link", { name: "平台概览" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "平台人员" })).toHaveCount(0);
   state = await expectCleanMockState(request, { "GET /projects": 3 });
   expect(requestCount(state, "GET", "/employee/service-access")).toBe(0);
 });

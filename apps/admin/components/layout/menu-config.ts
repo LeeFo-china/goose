@@ -186,6 +186,15 @@ export const tenantServiceRecoveryNavGroups: AdminMenuGroup[] = [
   },
 ];
 
+export const tenantHardBlockedNavGroups: AdminMenuGroup[] = [
+  {
+    label: "服务恢复",
+    items: [
+      { href: "/service-access", label: "服务状态", icon: Shield },
+    ],
+  },
+];
+
 export const tenantNavGroups: AdminMenuGroup[] = [
   {
     label: "业务",

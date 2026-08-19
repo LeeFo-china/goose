@@ -16,7 +16,10 @@ import {
   shouldRenderServicePurchaseSection,
 } from "./service-purchase-api";
 import { ServicePurchaseSection } from "./service-purchase-section";
-import { getServiceTrialRecoveryCapabilities } from "./service-trial-api";
+import {
+  getServiceTrialRecoveryCapabilities,
+  shouldRenderServiceTrialSection,
+} from "./service-trial-api";
 import { ServiceTrialSection } from "./service-trial-section";
 
 export function ServiceAccessWorkspace() {
@@ -78,14 +81,26 @@ export function ServiceAccessWorkspace() {
     actionKeys,
     permissionCodes,
   ), [actionKeys, permissionCodes]);
-  const hasRecoverySummary = loadResult.kind === "ready"
-    && loadResult.summary.accessStatus !== "workspace_available"
-    && loadResult.summary.accessStatus !== "grace_period";
+  const accessStatus = loadResult.kind === "ready"
+    ? loadResult.summary.accessStatus
+    : null;
+  const hasRecoverySummary = shouldRenderServiceTrialSection({
+    accessStatus,
+    hasEnteredRecovery: false,
+    unavailable: false,
+  });
   useEffect(() => {
-    if (hasRecoverySummary) setHasEnteredRecovery(true);
-  }, [hasRecoverySummary]);
-  const showRecovery = hasRecoverySummary
-    || (hasEnteredRecovery && loadResult.kind === "unavailable");
+    if (hasRecoverySummary) {
+      setHasEnteredRecovery(true);
+    } else if (accessStatus !== null) {
+      setHasEnteredRecovery(false);
+    }
+  }, [accessStatus, hasRecoverySummary]);
+  const showRecovery = shouldRenderServiceTrialSection({
+    accessStatus,
+    hasEnteredRecovery,
+    unavailable: loadResult.kind === "unavailable",
+  });
   const showPurchase = shouldRenderServicePurchaseSection({
     accessStatus: loadResult.kind === "ready"
       ? loadResult.summary.accessStatus

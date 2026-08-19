@@ -111,13 +111,12 @@ describe("decideServiceAccessView", () => {
       .toBe("readonly");
   });
 
-  test("keeps every blocked state on recovery routes", () => {
+  test("keeps recoverable blocked states on service and billing routes", () => {
     const blockedStatuses = [
       "pending_review",
       "scheduled",
       "expired",
       "service_blocked",
-      "hard_blocked",
     ] as const;
 
     for (const status of blockedStatuses) {
@@ -126,6 +125,15 @@ describe("decideServiceAccessView", () => {
       expect(decideServiceAccessView(ready(status), "/billing/orders"))
         .toBe("recovery");
     }
+  });
+
+  test("keeps hard-blocked sessions only on the service status page", () => {
+    expect(decideServiceAccessView(ready("hard_blocked"), "/service-access"))
+      .toBe("recovery");
+    expect(decideServiceAccessView(ready("hard_blocked"), "/billing"))
+      .toBe("replace");
+    expect(decideServiceAccessView(ready("hard_blocked"), "/projects"))
+      .toBe("replace");
   });
 
   test("replaces ordinary routes for every blocked state", () => {

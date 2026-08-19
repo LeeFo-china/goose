@@ -405,8 +405,10 @@ describe("service trial recovery rules", () => {
     expect(sectionSource).not.toContain("await loadTrial()");
     expect(sectionSource).toContain("[canView, summaryTrialId]");
     expect(sectionSource).toContain("[loadTrial, summaryTrialStatus]");
+    expect(workspaceSource).toContain("shouldRenderServiceTrialSection({");
+    expect(workspaceSource).toContain("hasEnteredRecovery,");
     expect(workspaceSource).toContain(
-      "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
+      'unavailable: loadResult.kind === "unavailable"',
     );
     expect(workspaceSource).toContain("summaryTrialId={summary?.trialId ?? null}");
     expect(workspaceSource).toContain("onSummaryRefresh={refreshAfterMutation}");
