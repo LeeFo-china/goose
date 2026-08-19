@@ -26,6 +26,7 @@ export type ServiceAccessContextValue = {
   summary: AdminTenantServiceAccess | null;
   permissionCodes: readonly string[];
   refresh: () => Promise<ServiceAccessRefreshResult>;
+  refreshAfterMutation: () => Promise<ServiceAccessRefreshResult>;
   refreshing: boolean;
 };
 
@@ -42,11 +43,20 @@ export type ServiceAccessRefreshOutcome = {
   result: ServiceAccessRefreshResult;
 };
 
+export type ServiceAccessRefreshCoordinator = {
+  refresh: () => Promise<ServiceAccessRefreshResult>;
+  refreshAfterMutation: () => Promise<ServiceAccessRefreshResult>;
+};
+
 const ServiceAccessContext = createContext<ServiceAccessContextValue>({
   loadResult: { kind: "unavailable", message: UNAVAILABLE_MESSAGE },
   summary: null,
   permissionCodes: [],
   refresh: async () => ({
+    success: false,
+    message: UNAVAILABLE_MESSAGE,
+  }),
+  refreshAfterMutation: async () => ({
     success: false,
     message: UNAVAILABLE_MESSAGE,
   }),
@@ -99,6 +109,33 @@ function getRequestId(error: unknown): string | undefined {
     : undefined;
 }
 
+export function createServiceAccessRefreshCoordinator(
+  executeRefresh: () => Promise<ServiceAccessRefreshResult>,
+): ServiceAccessRefreshCoordinator {
+  let inFlight: {
+    token: object;
+    promise: Promise<ServiceAccessRefreshResult>;
+  } | null = null;
+
+  function startRefresh(): Promise<ServiceAccessRefreshResult> {
+    const token = {};
+    const promise = executeRefresh().finally(() => {
+      if (inFlight?.token === token) inFlight = null;
+    });
+    inFlight = { token, promise };
+    return promise;
+  }
+
+  return {
+    refresh: () => inFlight?.promise ?? startRefresh(),
+    refreshAfterMutation: async () => {
+      const olderRefresh = inFlight?.promise;
+      if (olderRefresh) await olderRefresh;
+      return startRefresh();
+    },
+  };
+}
+
 export function getServiceAccessProviderKey(
   initialLoadResult: TenantServiceAccessLoadResult,
 ): string {
@@ -125,7 +162,7 @@ export function ServiceAccessProvider({
   }, [initialLoadResult]);
 
   const [refreshing, setRefreshing] = useState(false);
-  const refreshInFlightRef = useRef<Promise<ServiceAccessRefreshResult> | null>(
+  const refreshCoordinatorRef = useRef<ServiceAccessRefreshCoordinator | null>(
     null,
   );
   const permissionCodes = useMemo(
@@ -133,34 +170,54 @@ export function ServiceAccessProvider({
     [session.permissions],
   );
 
+  if (!refreshCoordinatorRef.current) {
+    refreshCoordinatorRef.current = createServiceAccessRefreshCoordinator(
+      async () => {
+        setRefreshing(true);
+        try {
+          const outcome = await requestServiceAccessRefresh();
+          setLoadResult(outcome.loadResult);
+          return outcome.result;
+        } finally {
+          setRefreshing(false);
+        }
+      },
+    );
+  }
+
   const refresh = useCallback((): Promise<ServiceAccessRefreshResult> => {
     if (loadResult.kind === "bypass") {
       return Promise.resolve({ success: true });
     }
-    if (refreshInFlightRef.current) return refreshInFlightRef.current;
-
-    setRefreshing(true);
-    const refreshPromise = (async () => {
-      try {
-        const outcome = await requestServiceAccessRefresh();
-        setLoadResult(outcome.loadResult);
-        return outcome.result;
-      } finally {
-        refreshInFlightRef.current = null;
-        setRefreshing(false);
-      }
-    })();
-    refreshInFlightRef.current = refreshPromise;
-    return refreshPromise;
+    return refreshCoordinatorRef.current?.refresh()
+      ?? Promise.resolve({ success: false, message: UNAVAILABLE_MESSAGE });
   }, [loadResult.kind]);
+
+  const refreshAfterMutation = useCallback(
+    (): Promise<ServiceAccessRefreshResult> => {
+      if (loadResult.kind === "bypass") {
+        return Promise.resolve({ success: true });
+      }
+      return refreshCoordinatorRef.current?.refreshAfterMutation()
+        ?? Promise.resolve({ success: false, message: UNAVAILABLE_MESSAGE });
+    },
+    [loadResult.kind],
+  );
 
   const value = useMemo<ServiceAccessContextValue>(() => ({
     loadResult,
     summary: loadResult.kind === "ready" ? loadResult.summary : null,
     permissionCodes,
     refresh,
+    refreshAfterMutation,
     refreshing,
-  }), [loadResult, permissionCodes, refresh, refreshing]);
+  }), [
+    loadResult,
+    permissionCodes,
+    refresh,
+    refreshAfterMutation,
+    refreshing,
+  ]);
 
   return (
     <ServiceAccessContext.Provider value={value}>

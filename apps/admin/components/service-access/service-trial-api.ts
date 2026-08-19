@@ -11,6 +11,7 @@ const RECENT_TRIALS_PATH = "/billing/service-trials?page=1&pageSize=20";
 const TRIAL_APPLICATION_PATH = "/billing/service-trials/applications";
 
 export type ServiceTrial = {
+  id: string;
   status: PlatformServiceTrialStatus;
   application_reason: string | null;
   expected_user_count: number | null;
@@ -183,31 +184,39 @@ export function canShowServiceTrialApplication(
 }
 
 export function shouldClearSubmittedServiceTrial({
-  summaryStatusAtSubmit,
-  summaryTrialStatus,
+  submittedTrialId,
+  summaryTrialIdAtSubmit,
+  summaryTrialId,
 }: {
-  summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
-  summaryTrialStatus: PlatformServiceTrialStatus | null;
+  submittedTrialId: string;
+  summaryTrialIdAtSubmit: string | null;
+  summaryTrialId: string | null;
 }): boolean {
-  return summaryTrialStatus !== null
-    && summaryTrialStatus !== summaryStatusAtSubmit;
+  return summaryTrialId !== null
+    && (summaryTrialId === submittedTrialId
+      || summaryTrialId !== summaryTrialIdAtSubmit);
 }
 
 export function resolveServiceTrialEffectiveStatus({
   loadedTrialStatus,
   submittedTrialStatus,
-  summaryStatusAtSubmit,
+  submittedTrialId,
+  summaryTrialIdAtSubmit,
+  summaryTrialId,
   summaryTrialStatus,
 }: {
   loadedTrialStatus: PlatformServiceTrialStatus | null;
   submittedTrialStatus: PlatformServiceTrialStatus | null;
-  summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
+  submittedTrialId: string | null;
+  summaryTrialIdAtSubmit: string | null;
+  summaryTrialId: string | null;
   summaryTrialStatus: PlatformServiceTrialStatus | null;
 }): PlatformServiceTrialStatus | null {
-  if (submittedTrialStatus !== null) {
+  if (submittedTrialId !== null && submittedTrialStatus !== null) {
     return shouldClearSubmittedServiceTrial({
-      summaryStatusAtSubmit,
-      summaryTrialStatus,
+      submittedTrialId,
+      summaryTrialIdAtSubmit,
+      summaryTrialId,
     })
       ? summaryTrialStatus ?? loadedTrialStatus
       : submittedTrialStatus;

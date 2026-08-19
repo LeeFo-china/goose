@@ -19,12 +19,16 @@ import {
   type ServiceTrialRequester,
 } from "./service-trial-api";
 import {
+  createServiceAccessRefreshCoordinator,
   requestServiceAccessRefresh,
   type ServiceAccessRefreshRequester,
+  type ServiceAccessRefreshResult,
 } from "./service-access-context";
 
 const FIRST_KEY = "550e8400-e29b-41d4-a716-446655440000";
 const SECOND_KEY = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
+const OLD_TRIAL_ID = "44d69d77-0ccd-41bd-9f75-4d01974e0320";
+const NEW_TRIAL_ID = "f77db756-32c1-4b9f-a443-d2597587401b";
 
 function readSource(relativePath: string): string {
   return readFileSync(
@@ -54,7 +58,7 @@ function createRequester(responses: unknown[]): {
 }
 
 const trial = {
-  id: "f77db756-32c1-4b9f-a443-d2597587401b",
+  id: NEW_TRIAL_ID,
   status: "pending_review" as const,
   application_reason: "体验项目协作",
   expected_user_count: 10,
@@ -67,6 +71,20 @@ const trial = {
   trial_ends_at: null,
   grace_ends_at: null,
 };
+
+function createDeferred<Value>() {
+  let resolvePromise: ((value: Value) => void) | null = null;
+  const promise = new Promise<Value>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return {
+    promise,
+    resolve(value: Value) {
+      if (!resolvePromise) throw new Error("deferred promise 未初始化");
+      resolvePromise(value);
+    },
+  };
+}
 
 const request: ServiceTrialRequest = {
   applicationReason: "体验项目协作",
@@ -353,6 +371,37 @@ describe("service trial recovery rules", () => {
     expect(feedbackMessages.join(" ")).not.toContain("13800138000");
   });
 
+  test("starts a causally fresh refresh after an older request settles", async () => {
+    const first = createDeferred<ServiceAccessRefreshResult>();
+    const second = createDeferred<ServiceAccessRefreshResult>();
+    const requests = [first.promise, second.promise];
+    let requestCount = 0;
+    const coordinator = createServiceAccessRefreshCoordinator(() => {
+      requestCount += 1;
+      const request = requests.shift();
+      if (!request) throw new Error("测试刷新请求不足");
+      return request;
+    });
+
+    const manualRefresh = coordinator.refresh();
+    expect(coordinator.refresh()).toBe(manualRefresh);
+    const postMutationRefresh = coordinator.refreshAfterMutation();
+    expect(requestCount).toBe(1);
+
+    first.resolve({ success: true });
+    expect(await manualRefresh).toEqual({ success: true });
+    await Promise.resolve();
+    expect(requestCount).toBe(2);
+
+    const freshFailure = {
+      success: false as const,
+      message: "fresh refresh failed",
+      requestId: "fresh-request-id",
+    };
+    second.resolve(freshFailure);
+    expect(await postMutationRefresh).toEqual(freshFailure);
+  });
+
   test("keeps post-submit feedback in the section when the form hides", () => {
     const formSource = readSource("./service-trial-form.tsx");
     const sectionSource = readSource("./service-trial-section.tsx");
@@ -370,29 +419,41 @@ describe("service trial recovery rules", () => {
     expect(workspaceSource).toContain(
       "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
     );
+    expect(workspaceSource).toContain("summaryTrialId={summary?.trialId ?? null}");
+    expect(workspaceSource).toContain("onSummaryRefresh={refreshAfterMutation}");
     expect(canShowServiceTrialApplication(true, "pending_review")).toBe(false);
     expect(formSource).not.toContain("finally {\n      setSubmitting(false)");
   });
 
-  test("lets a later authoritative rejection supersede local pending state", () => {
+  test("uses trial identity when the old and new summaries share a status", () => {
     const localPending = resolveServiceTrialEffectiveStatus({
       loadedTrialStatus: null,
       submittedTrialStatus: "pending_review",
-      summaryStatusAtSubmit: "expired",
-      summaryTrialStatus: "expired",
+      submittedTrialId: NEW_TRIAL_ID,
+      summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+      summaryTrialId: OLD_TRIAL_ID,
+      summaryTrialStatus: "rejected",
     });
     const authoritativeRejected = resolveServiceTrialEffectiveStatus({
       loadedTrialStatus: null,
       submittedTrialStatus: "pending_review",
-      summaryStatusAtSubmit: "expired",
+      submittedTrialId: NEW_TRIAL_ID,
+      summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+      summaryTrialId: NEW_TRIAL_ID,
       summaryTrialStatus: "rejected",
     });
 
     expect(localPending).toBe("pending_review");
     expect(authoritativeRejected).toBe("rejected");
     expect(shouldClearSubmittedServiceTrial({
-      summaryStatusAtSubmit: "expired",
-      summaryTrialStatus: "rejected",
+      submittedTrialId: NEW_TRIAL_ID,
+      summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+      summaryTrialId: OLD_TRIAL_ID,
+    })).toBe(false);
+    expect(shouldClearSubmittedServiceTrial({
+      submittedTrialId: NEW_TRIAL_ID,
+      summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+      summaryTrialId: NEW_TRIAL_ID,
     })).toBe(true);
     expect(canShowServiceTrialApplication(true, authoritativeRejected)).toBe(true);
   });

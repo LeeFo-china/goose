@@ -19,6 +19,7 @@ export function ServiceAccessWorkspace() {
     loadResult,
     permissionCodes,
     refresh,
+    refreshAfterMutation,
     refreshing,
     summary,
   } = useServiceAccess();
@@ -86,8 +87,9 @@ export function ServiceAccessWorkspace() {
           <ServiceTrialSection
             canApply={trialCapabilities.canApply}
             canView={trialCapabilities.canView}
+            summaryTrialId={summary?.trialId ?? null}
             summaryTrialStatus={summary?.trialStatus ?? null}
-            onSummaryRefresh={refresh}
+            onSummaryRefresh={refreshAfterMutation}
           />
         ) : null}
       </div>

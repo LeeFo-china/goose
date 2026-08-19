@@ -45,18 +45,20 @@ const STATUS_META = {
 export function ServiceTrialSection({
   canApply,
   canView,
+  summaryTrialId,
   summaryTrialStatus,
   onSummaryRefresh,
 }: {
   canApply: boolean;
   canView: boolean;
+  summaryTrialId: string | null;
   summaryTrialStatus: PlatformServiceTrialStatus | null;
   onSummaryRefresh: () => Promise<ServiceAccessRefreshResult>;
 }) {
   const [trial, setTrial] = useState<ServiceTrial | null>(null);
   const [submittedTrial, setSubmittedTrial] = useState<{
     trial: ServiceTrial;
-    summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
+    summaryTrialIdAtSubmit: string | null;
   } | null>(null);
   const [loading, setLoading] = useState(canView);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -100,12 +102,13 @@ export function ServiceTrialSection({
   useEffect(() => {
     setSubmittedTrial((current) => current
       && shouldClearSubmittedServiceTrial({
-        summaryStatusAtSubmit: current.summaryStatusAtSubmit,
-        summaryTrialStatus,
+        submittedTrialId: current.trial.id,
+        summaryTrialIdAtSubmit: current.summaryTrialIdAtSubmit,
+        summaryTrialId,
       })
       ? null
       : current);
-  }, [summaryTrialStatus]);
+  }, [summaryTrialId]);
 
   const handleSubmitted = useCallback(async (
     submittedTrial: ServiceTrial,
@@ -116,7 +119,7 @@ export function ServiceTrialSection({
         requestSequenceRef.current += 1;
         setSubmittedTrial({
           trial: nextTrial,
-          summaryStatusAtSubmit: summaryTrialStatus,
+          summaryTrialIdAtSubmit: summaryTrialId,
         });
         setLoadError(null);
         setLoading(false);
@@ -124,12 +127,25 @@ export function ServiceTrialSection({
       showFeedback: (feedback) => setSubmitFeedback(feedback.message),
       refreshSummary: onSummaryRefresh,
     });
-  }, [onSummaryRefresh, summaryTrialStatus]);
+  }, [onSummaryRefresh, summaryTrialId]);
+
+  const submittedTrialIsSuperseded = submittedTrial
+    ? shouldClearSubmittedServiceTrial({
+      submittedTrialId: submittedTrial.trial.id,
+      summaryTrialIdAtSubmit: submittedTrial.summaryTrialIdAtSubmit,
+      summaryTrialId,
+    })
+    : false;
+  const temporarySubmittedTrial = submittedTrialIsSuperseded
+    ? null
+    : submittedTrial;
 
   const effectiveStatus = resolveServiceTrialEffectiveStatus({
     loadedTrialStatus: trial?.status ?? null,
     submittedTrialStatus: submittedTrial?.trial.status ?? null,
-    summaryStatusAtSubmit: submittedTrial?.summaryStatusAtSubmit ?? null,
+    submittedTrialId: submittedTrial?.trial.id ?? null,
+    summaryTrialIdAtSubmit: submittedTrial?.summaryTrialIdAtSubmit ?? null,
+    summaryTrialId,
     summaryTrialStatus,
   });
   const showApplication = canShowServiceTrialApplication(
@@ -172,7 +188,7 @@ export function ServiceTrialSection({
 
       {visibility.showTrialDetails ? (
         <TrialStatusContent
-          trial={submittedTrial?.trial ?? trial}
+          trial={temporarySubmittedTrial?.trial ?? trial}
           loading={loading}
           loadError={loadError}
           onRetry={loadTrial}
