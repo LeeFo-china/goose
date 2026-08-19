@@ -1,4 +1,7 @@
 import { handleBrowserAdminSessionExpiry } from "@/lib/admin-session-expiry";
+import { handleBrowserAdminServiceAccessError } from "@/lib/admin-service-access-errors";
+
+const READONLY_SERVICE_ACCESS_MESSAGE = "当前处于只读宽限期";
 
 export type BackendClientPayload<T> = {
   success?: boolean;
@@ -54,8 +57,19 @@ export async function requestBackendJson<T = unknown>(
       status: response.status,
       code: payload.code,
     });
+    const serviceAccessErrorKind = handleBrowserAdminServiceAccessError({
+      path,
+      status: response.status,
+      code: payload.code,
+    });
+    const message = serviceAccessErrorKind === "readonly"
+      ? READONLY_SERVICE_ACCESS_MESSAGE
+      : getPayloadMessage(
+        payload,
+        fallbackMessage || `请求失败(${response.status})`,
+      );
     throw Object.assign(
-      new Error(getPayloadMessage(payload, fallbackMessage || `请求失败(${response.status})`)),
+      new Error(message),
       {
         status: response.status,
         code: payload.code,
