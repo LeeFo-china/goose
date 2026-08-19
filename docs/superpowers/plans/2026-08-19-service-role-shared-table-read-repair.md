@@ -145,7 +145,7 @@ cd apps/api
 bun test src/services/service-role-shared-table-read-repair-migration-contract.test.ts
 ```
 
-Expected: 4 tests pass, 0 fail.
+Expected: all focused tests pass with 0 failures.
 
 - [ ] **Step 3: Run API static verification**
 
