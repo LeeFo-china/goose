@@ -166,6 +166,15 @@ describe("loadTenantServiceAccess", () => {
       }, { status: 402 }),
     },
     {
+      name: "403 response",
+      createResponse: () => Response.json({
+        success: false,
+        message: "无权访问租户服务状态",
+        code: "FORBIDDEN",
+        requestId: "req-forbidden",
+      }, { status: 403 }),
+    },
+    {
       name: "503 response",
       createResponse: () => Response.json({
         success: false,
@@ -187,6 +196,14 @@ describe("loadTenantServiceAccess", () => {
         success: true,
         data: { ...validSummary, readonly: true },
         requestId: "req-invalid-schema",
+      }),
+    },
+    {
+      name: "invalid BackendResponse envelope",
+      createResponse: () => Response.json({
+        success: "yes",
+        data: validSummary,
+        requestId: "req-invalid-envelope",
       }),
     },
   ];
