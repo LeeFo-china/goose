@@ -206,6 +206,14 @@ describe("loadTenantServiceAccess", () => {
         requestId: "req-invalid-envelope",
       }),
     },
+    {
+      name: "BackendResponse envelope missing success",
+      createResponse: () => Response.json({
+        data: validSummary,
+        message: "success",
+        requestId: "req-missing-success",
+      }),
+    },
   ];
 
   for (const { name, createResponse } of responseFailures) {
