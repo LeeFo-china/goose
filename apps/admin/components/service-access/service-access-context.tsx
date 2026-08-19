@@ -40,6 +40,17 @@ function unavailable(): TenantServiceAccessLoadResult {
   return { kind: "unavailable", message: UNAVAILABLE_MESSAGE };
 }
 
+export function getServiceAccessProviderKey(
+  initialLoadResult: TenantServiceAccessLoadResult,
+): string {
+  if (initialLoadResult.kind !== "ready") return initialLoadResult.kind;
+  return [
+    initialLoadResult.kind,
+    initialLoadResult.summary.accessStatus,
+    initialLoadResult.summary.evaluatedAt,
+  ].join(":");
+}
+
 export function ServiceAccessProvider({
   session,
   initialLoadResult,

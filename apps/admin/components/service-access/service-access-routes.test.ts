@@ -4,6 +4,7 @@ import type { AdminTenantServiceAccess } from "@gooes/domain";
 
 import type { TenantServiceAccessLoadResult } from "@/lib/tenant-service-access";
 
+import { getServiceAccessProviderKey } from "./service-access-context";
 import {
   decideServiceAccessView,
   isServiceRecoveryRoute,
@@ -11,6 +12,7 @@ import {
 
 function ready(
   accessStatus: AdminTenantServiceAccess["accessStatus"],
+  evaluatedAt = "2026-08-19T00:00:00.000Z",
 ): TenantServiceAccessLoadResult {
   const isWorkspace = accessStatus === "workspace_available";
   const isReadonly = accessStatus === "grace_period";
@@ -27,7 +29,7 @@ function ready(
       trialStatus: null,
       startsAt: null,
       endsAt: null,
-      evaluatedAt: "2026-08-19T00:00:00.000Z",
+      evaluatedAt,
       title: "服务状态",
       message: "服务状态说明",
       primaryAction: null,
@@ -35,6 +37,51 @@ function ready(
     },
   };
 }
+
+describe("getServiceAccessProviderKey", () => {
+  test("changes provider identity from workspace to blocked", () => {
+    const workspaceKey = getServiceAccessProviderKey(
+      ready("workspace_available"),
+    );
+
+    expect(getServiceAccessProviderKey(ready("service_blocked")))
+      .not.toBe(workspaceKey);
+  });
+
+  test("changes provider identity from workspace to bypass", () => {
+    const workspaceKey = getServiceAccessProviderKey(
+      ready("workspace_available"),
+    );
+
+    expect(getServiceAccessProviderKey({ kind: "bypass" }))
+      .not.toBe(workspaceKey);
+  });
+
+  test("changes provider identity when a ready result is reevaluated", () => {
+    const initial = ready(
+      "workspace_available",
+      "2026-08-19T00:00:00.000Z",
+    );
+    const reevaluated = ready(
+      "workspace_available",
+      "2026-08-19T00:01:00.000Z",
+    );
+
+    expect(getServiceAccessProviderKey(reevaluated))
+      .not.toBe(getServiceAccessProviderKey(initial));
+  });
+
+  test("keeps provider identity stable for the same authority result", () => {
+    expect(getServiceAccessProviderKey(ready(
+      "workspace_available",
+      "2026-08-19T00:00:00.000Z",
+    )))
+      .toBe(getServiceAccessProviderKey(ready(
+        "workspace_available",
+        "2026-08-19T00:00:00.000Z",
+      )));
+  });
+});
 
 describe("isServiceRecoveryRoute", () => {
   test("allows only service access and billing route scopes", () => {

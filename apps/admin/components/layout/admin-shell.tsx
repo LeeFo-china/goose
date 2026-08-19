@@ -8,7 +8,10 @@ import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
-import { ServiceAccessProvider } from "@/components/service-access/service-access-context";
+import {
+  getServiceAccessProviderKey,
+  ServiceAccessProvider,
+} from "@/components/service-access/service-access-context";
 import { ServiceAccessGate } from "@/components/service-access/service-access-gate";
 import {
   AdminPreferencesMenu,
@@ -85,6 +88,7 @@ export function AdminShell({
       userId={session.user_id}
     >
       <ServiceAccessProvider
+        key={getServiceAccessProviderKey(serviceAccess)}
         session={session}
         initialLoadResult={serviceAccess}
       >

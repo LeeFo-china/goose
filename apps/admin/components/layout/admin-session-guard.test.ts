@@ -36,6 +36,9 @@ describe("admin session guard", () => {
 
     expect(source.match(/<AdminSessionGuard\s*\/>/g)?.length).toBe(1);
     expect(source.match(/<ServiceAccessProvider\b/g)?.length).toBe(1);
+    expect(source).toContain(
+      "key={getServiceAccessProviderKey(serviceAccess)}",
+    );
     expect(serviceAccessProviderStart).toBeGreaterThan(sessionProviderStart);
     expect(guard).toBeGreaterThan(serviceAccessProviderStart);
     expect(serviceAccessProviderEnd).toBeGreaterThan(guard);
