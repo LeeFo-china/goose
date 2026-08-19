@@ -1,4 +1,5 @@
 const BACKEND_PROXY_PREFIX = "/api/backend";
+const NEXT_PATH_DELIMITER_PATTERN = /[/#?]|%(?:2f|23|3f|5c)/gi;
 const PATH_NORMALIZATION_ORIGIN = "http://admin.invalid";
 const SERVICE_ACCESS_PATH = "/service-access";
 
@@ -27,16 +28,37 @@ function isPathInScope(pathname: string, scope: string): boolean {
   return pathname === scope || pathname.startsWith(`${scope}/`);
 }
 
-function normalizeBackendPath(path: string): string | null {
-  let normalizedUrl: URL;
+function parseInternalUrl(path: string): URL | null {
   try {
-    normalizedUrl = new URL(path, PATH_NORMALIZATION_ORIGIN);
+    const url = new URL(path, PATH_NORMALIZATION_ORIGIN);
+    return url.origin === PATH_NORMALIZATION_ORIGIN ? url : null;
   } catch {
     return null;
   }
-  if (normalizedUrl.origin !== PATH_NORMALIZATION_ORIGIN) return null;
+}
 
-  const { pathname } = normalizedUrl;
+function decodeNextPathParameters(pathname: string): string | null {
+  try {
+    return pathname.split("/").map((segment) => (
+      decodeURIComponent(segment).replace(
+        NEXT_PATH_DELIMITER_PATTERN,
+        (delimiter) => encodeURIComponent(delimiter),
+      )
+    )).join("/");
+  } catch {
+    return null;
+  }
+}
+
+function normalizeBackendPath(path: string): string | null {
+  const sourceUrl = parseInternalUrl(path);
+  if (!sourceUrl) return null;
+  const decodedPathname = decodeNextPathParameters(sourceUrl.pathname);
+  if (!decodedPathname) return null;
+  const backendUrl = parseInternalUrl(decodedPathname);
+  if (!backendUrl) return null;
+
+  const { pathname } = backendUrl;
   if (pathname === BACKEND_PROXY_PREFIX) return "/";
   if (pathname.startsWith(`${BACKEND_PROXY_PREFIX}/`)) {
     return pathname.slice(BACKEND_PROXY_PREFIX.length);

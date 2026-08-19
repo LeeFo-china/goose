@@ -155,6 +155,45 @@ describe("classifyAdminServiceAccessError", () => {
     })).toBe("redirect");
   });
 
+  test("resolves double-encoded dot segments after Next decodes raw paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/billing/%252e%252e/projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves double-encoded dot segments after Next decodes proxy paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api/backend/billing/%252e%252e/projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("does not treat encoded slashes as route delimiters", () => {
+    for (const path of [
+      "/employee/service-access%2fpurchase-link",
+      "/employee/service-access%252fpurchase-link",
+      "/api/backend/employee/service-access%2fpurchase-link",
+      "/api/backend/employee/service-access%252fpurchase-link",
+    ]) {
+      expect(classifyAdminServiceAccessError({
+        path,
+        status: 402,
+        code: "TENANT_SERVICE_ACCESS_EXPIRED",
+      })).toBe("redirect");
+    }
+  });
+
+  test("fails closed when a Next path parameter cannot be decoded", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/billing/%E0%A4%A",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
   test("does not treat external hosts as internal recovery paths", () => {
     for (const path of [
       "https://external.example/billing",
