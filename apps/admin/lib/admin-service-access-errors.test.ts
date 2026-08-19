@@ -171,12 +171,52 @@ describe("classifyAdminServiceAccessError", () => {
     })).toBe("redirect");
   });
 
-  test("does not treat encoded slashes as route delimiters", () => {
+  test("classifies single-encoded slashes by their final route pathname", () => {
     for (const path of [
       "/employee/service-access%2fpurchase-link",
-      "/employee/service-access%252fpurchase-link",
       "/api/backend/employee/service-access%2fpurchase-link",
+    ]) {
+      expect(classifyAdminServiceAccessError({
+        path,
+        status: 402,
+        code: "TENANT_SERVICE_ACCESS_EXPIRED",
+      })).toBe("none");
+    }
+  });
+
+  test("keeps double-encoded slashes encoded after route parameter decoding", () => {
+    for (const path of [
+      "/employee/service-access%252fpurchase-link",
       "/api/backend/employee/service-access%252fpurchase-link",
+    ]) {
+      expect(classifyAdminServiceAccessError({
+        path,
+        status: 402,
+        code: "TENANT_SERVICE_ACCESS_EXPIRED",
+      })).toBe("redirect");
+    }
+  });
+
+  test("resolves decoded slash traversal in raw paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/billing/x%2f..%2f..%2fprojects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves decoded slash traversal in proxy paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api/backend/billing/x%2f..%2f..%2fprojects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves decoded backslash traversal by the final URL pathname", () => {
+    for (const path of [
+      "/billing/x%5c..%5c..%5cprojects",
+      "/api/backend/billing/x%5c..%5c..%5cprojects",
     ]) {
       expect(classifyAdminServiceAccessError({
         path,
