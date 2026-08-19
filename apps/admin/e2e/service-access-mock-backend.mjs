@@ -61,28 +61,63 @@ function countRequest(method, url) {
   state.requestQueries[key] = [...(state.requestQueries[key] ?? []), search];
 }
 
-function list(data = []) {
-  return { list: data, pagination: pagination(data.length) };
+function list(data = [], requestedPagination) {
+  return {
+    list: data,
+    pagination: pagination(
+      data.length,
+      requestedPagination.page,
+      requestedPagination.pageSize,
+    ),
+  };
 }
 
-function validateListPagination(request, response, url) {
+function validatePagination(request, response, url, rule = {}) {
   const pages = url.searchParams.getAll("page");
   const pageSizes = url.searchParams.getAll("pageSize");
-  const valid = [...url.searchParams].length === 2
-    && pages.length === 1
-    && pages[0] === "1"
-    && pageSizes.length === 1
-    && pageSizes[0] === "20";
-  if (valid) return true;
+  const integerPattern = /^[1-9]\d*$/;
+  const page = pages.length === 1 && integerPattern.test(pages[0])
+    ? Number.parseInt(pages[0], 10)
+    : null;
+  const pageSize = pageSizes.length === 1 && integerPattern.test(pageSizes[0])
+    ? Number.parseInt(pageSizes[0], 10)
+    : null;
+  const onlyAllowedParameters = !rule.allowedParameters
+    || [...url.searchParams.keys()].every(
+      (name) => rule.allowedParameters.has(name),
+    );
+  const valid = page !== null
+    && pageSize !== null
+    && pageSize <= (rule.maxPageSize ?? 100)
+    && (rule.page === undefined || page === rule.page)
+    && (rule.pageSize === undefined || pageSize === rule.pageSize)
+    && onlyAllowedParameters;
+  if (valid) return { page, pageSize };
 
   const requestTarget = `${request.method} ${url.pathname}${url.search}`;
   state.unexpectedRequests.push(requestTarget);
   sendJson(response, 400, {
     success: false,
     code: "MOCK_PAGINATION_INVALID",
-    message: "列表请求必须使用 page=1&pageSize=20",
+    message: "列表请求分页参数无效",
   });
-  return false;
+  return null;
+}
+
+const exactListParameters = new Set(["page", "pageSize"]);
+const createListParameters = new Set([
+  "page",
+  "pageSize",
+  "scene",
+  "customer_id",
+]);
+
+function validateExactPagination(request, response, url, pageSize) {
+  return validatePagination(request, response, url, {
+    page: 1,
+    pageSize,
+    allowedParameters: exactListParameters,
+  });
 }
 
 function isRecoveryCapabilityPath(pathname) {
@@ -132,7 +167,9 @@ function billingFeatureEstimates() {
 function handleProjectRequest(request, response, url) {
   const { pathname } = url;
   if (request.method === "GET" && pathname === "/projects") {
-    sendData(response, list());
+    const requestedPagination = validatePagination(request, response, url);
+    if (!requestedPagination) return true;
+    sendData(response, list([], requestedPagination));
     return true;
   }
   if (request.method === "GET" && pathname === "/projects/workflow-filters") {
@@ -140,7 +177,13 @@ function handleProjectRequest(request, response, url) {
     return true;
   }
   if (request.method === "GET" && pathname.startsWith("/projects/create/")) {
-    sendData(response, list());
+    const requestedPagination = validatePagination(request, response, url, {
+      page: 1,
+      pageSize: 80,
+      allowedParameters: createListParameters,
+    });
+    if (!requestedPagination) return true;
+    sendData(response, list([], requestedPagination));
     return true;
   }
   if (request.method === "POST" && pathname === "/projects") {
@@ -227,8 +270,14 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-trials") {
-    if (!validateListPagination(request, response, url)) return;
-    sendData(response, list());
+    const requestedPagination = validateExactPagination(
+      request,
+      response,
+      url,
+      20,
+    );
+    if (!requestedPagination) return;
+    sendData(response, list([], requestedPagination));
     return;
   }
   if (
@@ -241,14 +290,26 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-products") {
-    if (!validateListPagination(request, response, url)) return;
-    sendData(response, list([serviceProduct]));
+    const requestedPagination = validateExactPagination(
+      request,
+      response,
+      url,
+      20,
+    );
+    if (!requestedPagination) return;
+    sendData(response, list([serviceProduct], requestedPagination));
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-orders") {
-    if (!validateListPagination(request, response, url)) return;
+    const requestedPagination = validateExactPagination(
+      request,
+      response,
+      url,
+      20,
+    );
+    if (!requestedPagination) return;
     sendData(response, {
-      ...list(),
+      ...list([], requestedPagination),
       server_time: "2026-08-20T10:00:00.000+08:00",
     });
     return;
@@ -275,7 +336,14 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/billing/ledger") {
-    sendData(response, list());
+    const requestedPagination = validateExactPagination(
+      request,
+      response,
+      url,
+      20,
+    );
+    if (!requestedPagination) return;
+    sendData(response, list([], requestedPagination));
     return;
   }
   if (pathname.includes("payment") && request.method === "POST") {

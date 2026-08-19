@@ -195,8 +195,13 @@ export function trialApplication() {
   };
 }
 
-export function pagination(total = 0) {
-  return { page: 1, pageSize: 20, total, totalPages: total > 0 ? 1 : 0 };
+export function pagination(total = 0, page = 1, pageSize = 20) {
+  return {
+    page,
+    pageSize,
+    total,
+    totalPages: total > 0 ? Math.ceil(total / pageSize) : 0,
+  };
 }
 
 export const tenantBillingSummary = {

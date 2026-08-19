@@ -93,13 +93,68 @@ function expectOnlyFirstPageQueries(
   expect([...new Set(queries)]).toEqual(["?page=1&pageSize=20"]);
 }
 
+function expectObservedPagination(
+  state: MockState,
+  path: string,
+  page: number,
+  pageSize: number,
+): void {
+  const queries = state.requestQueries[`GET ${path}`] ?? [];
+  expect(queries.length).toBeGreaterThan(0);
+  for (const query of queries) {
+    const parameters = new URLSearchParams(query);
+    expect(parameters.getAll("page")).toEqual([String(page)]);
+    expect(parameters.getAll("pageSize")).toEqual([String(pageSize)]);
+  }
+}
+
+function expectBoundedProjectQueries(state: MockState): void {
+  const queries = state.requestQueries["GET /projects"] ?? [];
+  expect(queries.length).toBeGreaterThan(0);
+  let observedInitialPage = false;
+  for (const query of queries) {
+    const parameters = new URLSearchParams(query);
+    const pages = parameters.getAll("page");
+    const pageSizes = parameters.getAll("pageSize");
+    const page = Number(pages[0]);
+    const pageSize = Number(pageSizes[0]);
+    expect(pages).toHaveLength(1);
+    expect(pageSizes).toHaveLength(1);
+    expect(Number.isInteger(page) && page > 0).toBe(true);
+    expect(Number.isInteger(pageSize) && pageSize > 0 && pageSize <= 100)
+      .toBe(true);
+    expect(parameters.getAll("workflow_summary")).toEqual(["list"]);
+    observedInitialPage ||= page === 1 && pageSize === 7;
+  }
+  expect(observedInitialPage).toBe(true);
+}
+
+async function expectPaginationMetadata(
+  request: APIRequestContext,
+  path: string,
+  page: number,
+  pageSize: number,
+): Promise<void> {
+  const response = await request.get(`${mockBackendBaseUrl}${path}`);
+  expect(response.ok()).toBe(true);
+  const payload = await response.json() as {
+    data?: { pagination?: unknown };
+  };
+  expect(payload.data?.pagination).toMatchObject({ page, pageSize });
+}
+
 async function expectInvalidPaginationRejected(
   request: APIRequestContext,
 ): Promise<void> {
   const invalidUrls = [
     "/billing/service-trials",
     "/billing/service-products?page=2&pageSize=20",
-    "/billing/service-orders?page=1",
+    "/billing/service-orders?page=1&pageSize=100",
+    "/billing/ledger?page=1",
+    "/projects?pageSize=7&workflow_summary=list",
+    "/projects?page=1&pageSize=101&workflow_summary=list",
+    "/projects/create/customers?pageSize=80",
+    "/projects/create/customers?page=1&pageSize=101",
   ];
   for (const path of invalidUrls) {
     const response = await request.get(`${mockBackendBaseUrl}${path}`);
@@ -169,11 +224,45 @@ test("阻断页不显示通用到期文案", async ({ page, request }) => {
 
 test("有权限管理员可提交试用并发起受控购买跳转", async ({ page, request }) => {
   await expectInvalidPaginationRejected(request);
-  await setupPersona(page, request, personas.blockedAdmin);
-  const trialList = await request.get(
-    `${mockBackendBaseUrl}/billing/service-trials?page=1&pageSize=20`,
+  await resetMock(request, personas.blockedAdmin);
+  await expectPaginationMetadata(
+    request,
+    "/projects?page=2&pageSize=7&workflow_summary=list&ownership=all",
+    2,
+    7,
   );
-  expect(trialList.ok()).toBe(true);
+  await expectPaginationMetadata(
+    request,
+    "/projects/create/employees?scene=project_designer&page=1&pageSize=80",
+    1,
+    80,
+  );
+  await expectPaginationMetadata(
+    request,
+    "/projects/create/properties?customer_id=a1000000-0000-4000-8000-000000000001&page=1&pageSize=80",
+    1,
+    80,
+  );
+  for (const path of [
+    "/billing/service-trials",
+    "/billing/service-products",
+    "/billing/service-orders",
+    "/billing/ledger",
+  ]) {
+    await expectPaginationMetadata(
+      request,
+      `${path}?page=1&pageSize=20`,
+      1,
+      20,
+    );
+  }
+  await setupPersona(page, request, personas.blockedAdmin);
+  await expectPaginationMetadata(
+    request,
+    "/billing/service-trials?page=1&pageSize=20",
+    1,
+    20,
+  );
 
   let interceptedHandoffs = 0;
   await page.route(purchaseUrl, async (route) => {
@@ -255,11 +344,12 @@ test("阻断状态仍可访问计费恢复页", async ({ page, request }) => {
     .toBeVisible();
   await expect(page.getByRole("heading", { name: blockedTitle }))
     .toHaveCount(0);
-  await expectCleanMockState(request, {
+  const state = await expectCleanMockState(request, {
     "GET /billing/summary": 2,
     "GET /billing/feature-estimates": 2,
     "GET /billing/ledger": 2,
   });
+  expectOnlyFirstPageQueries(state, "GET", "/billing/ledger");
 });
 
 test("宽限期停留在项目页且只显示一个只读横幅", async ({ page, request }) => {
@@ -269,10 +359,11 @@ test("宽限期停留在项目页且只显示一个只读横幅", async ({ page,
   await expect(page.getByText("只读宽限期", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
-  await expectCleanMockState(request, {
+  const state = await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
   });
+  expectBoundedProjectQueries(state);
 });
 
 test("正常租户与平台管理员都留在项目页", async ({ page, request }) => {
@@ -287,6 +378,7 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
   });
   expect(requestCount(state, "GET", "/employee/service-access"))
     .toBeGreaterThanOrEqual(1);
+  expectBoundedProjectQueries(state);
 
   await setupPersona(page, request, personas.platformAdmin);
   await page.goto("/projects");
@@ -362,6 +454,14 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   expect(requestCount(state, "POST", "/projects")).toBe(1);
   expect(state.runtime402Remaining).toBe(0);
   expect(state.runtimeBlocked).toBe(true);
+  expectBoundedProjectQueries(state);
+  for (const path of [
+    "/projects/create/customers",
+    "/projects/create/employees",
+    "/projects/create/construction-workflows",
+  ]) {
+    expectObservedPagination(state, path, 1, 80);
+  }
   expect(runtimeNavigationPaths.filter((path) => path === "/service-access"))
     .toHaveLength(1);
 
