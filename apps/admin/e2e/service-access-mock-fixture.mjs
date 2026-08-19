@@ -7,6 +7,7 @@ export const personaNames = {
 };
 
 export const purchaseUrl = "https://wxaurl.cn/mockServiceAccessPurchase";
+export const blockedTitle = "尚未开通平台技术服务";
 
 const tenantId = "a1000000-0000-4000-8000-000000000001";
 const trialId = "a1000000-0000-4000-8000-000000000002";
@@ -232,3 +233,94 @@ export const tenantBillingSummary = {
     last_invoice_id: null,
   },
 };
+
+export function createBrowserActivityMonitor(page) {
+  const errors = { page: [], console: [] };
+  const activeRequests = new Set();
+  let lastActivityAt = Date.now();
+  let settleChecks = 0;
+
+  page.on("request", (request) => {
+    activeRequests.add(request);
+    lastActivityAt = Date.now();
+  });
+  const finishRequest = (request) => {
+    activeRequests.delete(request);
+    lastActivityAt = Date.now();
+  };
+  page.on("requestfinished", finishRequest);
+  page.on("requestfailed", finishRequest);
+  page.on("pageerror", (error) => errors.page.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") errors.console.push(message.text());
+  });
+
+  return {
+    errors,
+    snapshot() {
+      return {
+        activeRequests: activeRequests.size,
+        lastActivityAt,
+        settleChecks,
+      };
+    },
+    async settle() {
+      if (page.isClosed() || page.url() === "about:blank") return;
+      const { expect } = await import("@playwright/test");
+      await expect.poll(() => {
+        settleChecks += 1;
+        if (page.isClosed() || page.url() === "about:blank") return true;
+        return activeRequests.size === 0
+          && Date.now() - lastActivityAt >= 500;
+      }, { timeout: 15_000 }).toBe(true);
+    },
+  };
+}
+
+export async function expectBlockedPage(page) {
+  const { expect } = await import("@playwright/test");
+  await expect(page).toHaveURL(/\/service-access$/);
+  await expect(
+    page.getByRole("heading", { level: 1, name: blockedTitle }),
+  ).toHaveCount(1);
+  await expect(page.locator("h1")).toHaveCount(1);
+}
+
+export async function expectMonitorWaitsForActiveRequest(page, monitor) {
+  const { expect } = await import("@playwright/test");
+  const probePath = "/__service-access-settle-probe";
+  let releaseRequest = () => {};
+  let routeEntered = false;
+  const requestGate = new Promise((resolve) => {
+    releaseRequest = resolve;
+  });
+  await page.route(`**${probePath}`, async (route) => {
+    routeEntered = true;
+    await requestGate;
+    await route.fulfill({ status: 204 });
+  });
+  const requestPromise = page.evaluate(async (path) => {
+    await fetch(path);
+  }, probePath);
+
+  try {
+    await expect.poll(() => routeEntered).toBe(true);
+    await expect.poll(() => monitor.snapshot().activeRequests)
+      .toBeGreaterThan(0);
+    const checksBeforeSettle = monitor.snapshot().settleChecks;
+    let settled = false;
+    const settlePromise = monitor.settle().then(() => {
+      settled = true;
+    });
+    await expect.poll(() => monitor.snapshot().settleChecks)
+      .toBeGreaterThan(checksBeforeSettle);
+    expect(settled).toBe(false);
+    releaseRequest();
+    await requestPromise;
+    await settlePromise;
+  } finally {
+    releaseRequest();
+    await requestPromise.catch(() => undefined);
+    if (!page.isClosed()) await page.unroute(`**${probePath}`);
+  }
+}

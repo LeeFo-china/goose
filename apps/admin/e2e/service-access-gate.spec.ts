@@ -1,17 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
+import {
+  blockedTitle, createBrowserActivityMonitor, expectBlockedPage,
+  expectMonitorWaitsForActiveRequest, personaNames as personas, purchaseUrl,
+} from "./service-access-mock-fixture.mjs";
 
 const mockBackendBaseUrl = "http://127.0.0.1:3992";
-const purchaseUrl = "https://wxaurl.cn/mockServiceAccessPurchase";
-const blockedTitle = "尚未开通平台技术服务";
 const expiredCopy = "租户服务访问已到期";
-const personas = {
-  blockedAdmin: "blocked_admin",
-  blockedEmployee: "blocked_employee",
-  graceTenant: "grace_tenant",
-  normalTenant: "normal_tenant",
-  platformAdmin: "platform_admin",
-} as const;
 type Persona = typeof personas[keyof typeof personas];
 type MockState = {
   requestCounts: Record<string, number>;
@@ -25,24 +20,11 @@ type MockState = {
   runtime402Remaining: number;
   runtimeBlocked: boolean;
 };
-type BrowserErrors = { page: string[]; console: string[] };
 type SessionData = { expires_at: string; token: string; user_id: string };
 type PaginationMetadata = { page: number; pageSize: number; total: number; totalPages: number };
 
-let browserErrors: BrowserErrors;
+let browserMonitor: ReturnType<typeof createBrowserActivityMonitor>;
 let browserToken: string;
-function captureBrowserErrors(page: Page): BrowserErrors {
-  const captured: BrowserErrors = { page: [], console: [] };
-  page.on("pageerror", (error) => captured.page.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") captured.console.push(message.text());
-  });
-  return captured;
-}
-async function settlePage(page: Page): Promise<void> {
-  if (page.isClosed()) return;
-  await page.waitForLoadState(page.url() === "about:blank" ? "load" : "networkidle");
-}
 async function resetMock(request: APIRequestContext, persona: Persona, options: {
   serviceAccess503?: boolean; runtime402?: boolean;
 } = {}): Promise<void> {
@@ -80,6 +62,7 @@ function bearer(token: string): { authorization: string } {
   return { authorization: `Bearer ${token}` };
 }
 async function readState(request: APIRequestContext): Promise<MockState> {
+  await browserMonitor.settle();
   const response = await request.get(`${mockBackendBaseUrl}/__test/state`);
   expect(response.ok()).toBe(true);
   return await response.json() as MockState;
@@ -210,10 +193,9 @@ async function expectAuthorizationIsolation(request: APIRequestContext): Promise
   return admin.token;
 }
 async function expectCleanMockState(
-  page: Page, request: APIRequestContext,
+  request: APIRequestContext,
   requestBounds: Record<string, number> = {},
 ): Promise<MockState> {
-  await settlePage(page);
   const state = await readState(request);
   expect(state.forbiddenRequests).toEqual([]);
   expect(state.unexpectedRequests).toEqual([]);
@@ -224,30 +206,22 @@ async function expectCleanMockState(
   }
   return state;
 }
-async function expectBlockedPage(page: Page): Promise<void> {
-  await expect(page).toHaveURL(/\/service-access$/);
-  await expect(
-    page.getByRole("heading", { level: 1, name: blockedTitle }),
-  ).toHaveCount(1);
-  await expect(page.locator("h1")).toHaveCount(1);
-}
-
 test.beforeEach(async ({ page, request }) => {
-  browserErrors = captureBrowserErrors(page);
+  browserMonitor = createBrowserActivityMonitor(page);
   browserToken = await setupPersona(page, request, personas.blockedAdmin);
 });
 
-test.afterEach(async ({ page }) => {
-  await settlePage(page);
-  expect(browserErrors.page).toEqual([]);
-  expect(browserErrors.console).toEqual([]);
+test.afterEach(async () => {
+  await browserMonitor.settle();
+  expect(browserMonitor.errors.page).toEqual([]);
+  expect(browserMonitor.errors.console).toEqual([]);
 });
 
 test("阻断管理员访问项目后收敛到唯一权威标题", async ({ page, request }) => {
   await page.goto("/projects");
   await expectBlockedPage(page);
 
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "GET /admin/auth/me": 3,
     "GET /employee/service-access": 3,
     "GET /projects": 2,
@@ -259,8 +233,9 @@ test("阻断管理员访问项目后收敛到唯一权威标题", async ({ page,
 test("阻断页不显示通用到期文案", async ({ page, request }) => {
   await page.goto("/service-access");
   await expectBlockedPage(page);
+  await expectMonitorWaitsForActiveRequest(page, browserMonitor);
   await expect(page.getByText(expiredCopy, { exact: true })).toHaveCount(0);
-  await expectCleanMockState(page, request, {
+  await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
   });
 });
@@ -314,7 +289,7 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   await expect(page).toHaveURL(purchaseUrl);
   expect(interceptedHandoffs).toBe(1);
 
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "GET /billing/service-trials": 1,
     "GET /billing/service-products": 2,
     "GET /billing/service-orders": 2,
@@ -343,7 +318,7 @@ test("普通员工只有联系管理员提示且不请求恢复能力", async ({
   await expect(page.getByRole("button", { name: "打开微信小程序购买" }))
     .toHaveCount(0);
 
-  const state = await expectCleanMockState(page, request);
+  const state = await expectCleanMockState(request);
   for (const path of [
     "/billing/service-trials/current",
     "/billing/service-trials",
@@ -366,7 +341,7 @@ test("阻断状态仍可访问计费恢复页", async ({ page, request }) => {
     .toBeVisible();
   await expect(page.getByRole("heading", { name: blockedTitle }))
     .toHaveCount(0);
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "GET /billing/summary": 2,
     "GET /billing/feature-estimates": 2,
     "GET /billing/ledger": 2,
@@ -381,7 +356,7 @@ test("宽限期停留在项目页且只显示一个只读横幅", async ({ page,
   await expect(page.getByText("只读宽限期", { exact: true })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
   });
@@ -394,7 +369,7 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
-  let state = await expectCleanMockState(page, request, {
+  let state = await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
     "GET /projects": 3,
   });
@@ -407,7 +382,7 @@ test("正常租户与平台管理员都留在项目页", async ({ page, request 
   await expect(page).toHaveURL(/\/projects(?:\?.*)?$/);
   await expect(page.getByRole("heading", { name: "当前为平台管理模式" }))
     .toHaveCount(1);
-  state = await expectCleanMockState(page, request, { "GET /projects": 3 });
+  state = await expectCleanMockState(request, { "GET /projects": 3 });
   expect(requestCount(state, "GET", "/employee/service-access")).toBe(0);
 });
 
@@ -452,7 +427,7 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   await page.getByLabel("项目名称").fill("运行时 402 回归项目");
   await page.getByRole("button", { name: "创建项目" }).click();
   await expectBlockedPage(page);
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "POST /projects": 1,
     "GET /employee/service-access": 3,
   });
@@ -490,7 +465,7 @@ test("服务状态 503 显示可重试系统错误而非到期结论", async ({ 
   await expect(page.getByText(expiredCopy, { exact: true })).toHaveCount(0);
   await expect(page.getByText(blockedTitle, { exact: true })).toHaveCount(0);
 
-  const state = await expectCleanMockState(page, request, {
+  const state = await expectCleanMockState(request, {
     "GET /employee/service-access": 2,
   });
   expect(requestCount(state, "GET", "/employee/service-access"))
