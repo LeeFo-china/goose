@@ -1,6 +1,5 @@
 import type { AdminTenantServiceAccess } from "@gooes/domain";
 
-import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import { adminTenantServiceAccessService } from "@/services/admin-tenant-service-access";
 import { systemSettingsService } from "@/services/system-settings";
@@ -87,17 +86,18 @@ export class AdminServicePurchaseLinkService {
       );
     }
 
-    const configuredEnvVersion = await this.getString(
-      "WECHAT_MINIPROGRAM_ENV_VERSION",
-      "release",
-    );
-    const envVersion = this.normalizeEnvVersion(configuredEnvVersion);
-    const expireAt = new Date(this.now().getTime() + PURCHASE_LINK_TTL_MS);
     const query = summary.trialId
       ? new URLSearchParams({ source_trial_id: summary.trialId }).toString()
       : "";
 
     try {
+      const configuredEnvVersion = await this.getString(
+        "WECHAT_MINIPROGRAM_ENV_VERSION",
+        "release",
+      );
+      const envVersion = this.normalizeEnvVersion(configuredEnvVersion);
+      const expiresAtMs = this.now().getTime() + PURCHASE_LINK_TTL_MS;
+      const expireAt = new Date(Math.floor(expiresAtMs / 1000) * 1000);
       const url = await this.generateUrlLink({
         path: PURCHASE_PATH,
         query,
@@ -105,8 +105,7 @@ export class AdminServicePurchaseLinkService {
         expireAt,
       });
       return { url, expires_at: expireAt.toISOString() };
-    } catch (error) {
-      if (error instanceof AppError) throw error;
+    } catch {
       throw Errors.business(
         502,
         "生成小程序购买链接失败，请稍后重试",
@@ -120,7 +119,13 @@ export const adminServicePurchaseLinkService =
   new AdminServicePurchaseLinkService();
 
 function isPurchaseAvailable(summary: AdminTenantServiceAccess): boolean {
-  if (summary.accessStatus === "hard_blocked") return false;
-  return [summary.primaryAction, summary.secondaryAction]
-    .some((action) => action?.key === "purchase_service");
+  switch (summary.accessStatus) {
+    case "service_blocked":
+    case "expired":
+    case "grace_period":
+      return [summary.primaryAction, summary.secondaryAction]
+        .some((action) => action?.key === "purchase_service");
+    default:
+      return false;
+  }
 }

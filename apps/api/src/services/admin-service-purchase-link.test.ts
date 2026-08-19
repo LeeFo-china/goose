@@ -9,7 +9,7 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 const TENANT_ID = "10000000-0000-4000-8000-000000000001";
 const TRIAL_ID = "20000000-0000-4000-8000-000000000001";
-const NOW = new Date("2026-08-19T02:30:00.000Z");
+const NOW = new Date("2026-08-19T02:30:00.789Z");
 const PURCHASE_PERMISSION = "billing.service_order.create";
 const PURCHASE_PATH =
   "packageEmployees/pages/platformServicePaymentSmoke/index";
@@ -46,20 +46,22 @@ describe("AdminServicePurchaseLinkService", () => {
     expect(subject.generateUrlLink).not.toHaveBeenCalled();
   });
 
-  test("rejects pending review access without a purchase action", async () => {
-    const subject = await createSubject(summary({
-      accessStatus: "pending_review",
-      trialStatus: "pending_review",
-      primaryAction: { key: "view_trial", label: "查看申请" },
-      secondaryAction: { key: "refresh", label: "刷新状态" },
-    }));
+  test.each(["pending_review", "scheduled", "workspace_available"] as const)(
+    "rejects %s access even when a purchase action is injected",
+    async (accessStatus) => {
+      const subject = await createSubject(summary({
+        accessStatus,
+        primaryAction: purchaseAction(),
+      }));
 
-    await expect(subject.service.create(authorizedInput()))
-      .rejects.toMatchObject(unavailableError());
+      await expect(subject.service.create(authorizedInput()))
+        .rejects.toMatchObject(unavailableError());
 
-    expect(subject.resolveServiceAccess).toHaveBeenCalledTimes(1);
-    expect(subject.generateUrlLink).not.toHaveBeenCalled();
-  });
+      expect(subject.resolveServiceAccess).toHaveBeenCalledTimes(1);
+      expect(subject.getString).not.toHaveBeenCalled();
+      expect(subject.generateUrlLink).not.toHaveBeenCalled();
+    },
+  );
 
   test("generates a service blocked link with trusted path and exact expiry", async () => {
     const subject = await createSubject(summary({
@@ -131,54 +133,73 @@ describe("AdminServicePurchaseLinkService", () => {
     },
   );
 
-  test("wraps an ordinary generator error with a stable business error", async () => {
+  test("maps a generator AppError without leaking provider details", async () => {
     const subject = await createSubject(summary({
       primaryAction: purchaseAction(),
     }));
+    const providerError = Errors.badRequest("微信原始 errmsg");
     subject.generateUrlLink.mockImplementation(async () => {
-      throw new Error("wechat unavailable");
+      throw providerError;
     });
 
-    await expect(subject.service.create(authorizedInput())).rejects.toMatchObject({
-      statusCode: 502,
-      code: "SERVICE_PURCHASE_LINK_FAILED",
-      message: "生成小程序购买链接失败，请稍后重试",
-    });
+    const error = await captureError(() =>
+      subject.service.create(authorizedInput())
+    );
+
+    expectStableProviderError(error);
+    expect(error).not.toBe(providerError);
+    expect(JSON.stringify(error)).not.toContain("微信原始 errmsg");
     expect(subject.resolveServiceAccess).toHaveBeenCalledTimes(1);
     expect(subject.generateUrlLink).toHaveBeenCalledTimes(1);
   });
 
-  test("wraps an unknown generator failure with the same stable error", async () => {
-    const subject = await createSubject(summary({
-      primaryAction: purchaseAction(),
-    }));
-    subject.generateUrlLink.mockImplementation(async () => {
-      throw { reason: "unknown failure" };
+  test.each([
+    Errors.badRequest("设置读取失败"),
+    new Error("settings unavailable"),
+  ])("maps getString provider failures to the stable error", async (failure) => {
+    const subject = await createSubject(summary({ primaryAction: purchaseAction() }));
+    subject.getString.mockImplementation(async () => {
+      throw failure;
     });
 
-    await expect(subject.service.create(authorizedInput())).rejects.toMatchObject({
-      statusCode: 502,
-      code: "SERVICE_PURCHASE_LINK_FAILED",
-    });
+    const error = await captureError(() =>
+      subject.service.create(authorizedInput())
+    );
+
+    expectStableProviderError(error);
+    expect(subject.normalizeEnvVersion).not.toHaveBeenCalled();
+    expect(subject.generateUrlLink).not.toHaveBeenCalled();
   });
 
-  test("preserves AppError thrown by the URL Link generator", async () => {
+  test("maps normalizeEnvVersion failures to the stable error", async () => {
     const subject = await createSubject(summary({
       primaryAction: purchaseAction(),
     }));
-    const generatorError = Errors.badRequest("微信参数无效");
-    subject.generateUrlLink.mockImplementation(async () => {
-      throw generatorError;
+    subject.normalizeEnvVersion.mockImplementation(() => {
+      throw { reason: "invalid env" };
     });
 
-    try {
-      await subject.service.create(authorizedInput());
-      throw new TypeError("expected create to reject");
-    } catch (error) {
-      expect(error).toBe(generatorError);
-    }
-    expect(subject.resolveServiceAccess).toHaveBeenCalledTimes(1);
-    expect(subject.generateUrlLink).toHaveBeenCalledTimes(1);
+    const error = await captureError(() =>
+      subject.service.create(authorizedInput())
+    );
+
+    expectStableProviderError(error);
+    expect(subject.generateUrlLink).not.toHaveBeenCalled();
+  });
+
+  test("keeps authoritative resolver AppError unchanged", async () => {
+    const subject = await createSubject();
+    const resolverError = Errors.dbError("权威状态不一致");
+    subject.resolveServiceAccess.mockImplementation(async () => {
+      throw resolverError;
+    });
+
+    const error = await captureError(() =>
+      subject.service.create(authorizedInput())
+    );
+
+    expect(error).toBe(resolverError);
+    expect(subject.getString).not.toHaveBeenCalled();
   });
 });
 
@@ -220,6 +241,24 @@ function unavailableError() {
     code: "SERVICE_PURCHASE_UNAVAILABLE",
     message: "当前服务状态不可发起购买",
   };
+}
+
+async function captureError(operation: () => Promise<unknown>) {
+  try {
+    await operation();
+  } catch (error) {
+    return error;
+  }
+  throw new TypeError("expected operation to reject");
+}
+
+function expectStableProviderError(error: unknown) {
+  expect(error).toMatchObject({
+    statusCode: 502,
+    code: "SERVICE_PURCHASE_LINK_FAILED",
+    message: "生成小程序购买链接失败，请稍后重试",
+  });
+  expect((error as { details?: unknown }).details).toBeUndefined();
 }
 
 function purchaseAction() {
