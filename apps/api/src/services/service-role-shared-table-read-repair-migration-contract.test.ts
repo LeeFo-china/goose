@@ -9,7 +9,8 @@ const migrationsDirectory = new URL(
 );
 const migrationUrl = new URL(migrationName, migrationsDirectory);
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
-const normalizedSql = sql
+const sqlWithoutComments = stripSqlComments(sql);
+const normalizedSql = sqlWithoutComments
   .replace(/\s+/g, " ")
   .replace(/\(\s+/g, "(")
   .replace(/\s+\)/g, ")")
@@ -22,12 +23,126 @@ const laterMigrations = readdirSync(migrationsDirectory)
   .sort()
   .map((name) => ({
     name,
-    sql: readFileSync(new URL(name, migrationsDirectory), "utf8"),
+    sql: stripSqlComments(
+      readFileSync(new URL(name, migrationsDirectory), "utf8"),
+    ),
   }));
 const SHARED_TABLES = ["employees", "supplier_products"] as const;
 
+type SqlLexState =
+  | "normal"
+  | "single_quote"
+  | "double_quote"
+  | "dollar_quote"
+  | "line_comment"
+  | "block_comment";
+
+function dollarQuoteDelimiterAt(source: string, index: number): string | null {
+  return source.slice(index).match(/^\$(?:[a-z_][a-z0-9_]*)?\$/i)?.[0] ?? null;
+}
+
+function stripSqlComments(source: string): string {
+  let result = "";
+  let state: SqlLexState = "normal";
+  let blockDepth = 0;
+  let dollarDelimiter = "";
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index] ?? "";
+    const next = source[index + 1] ?? "";
+
+    if (state === "line_comment") {
+      result += character === "\n" ? "\n" : " ";
+      if (character === "\n") state = "normal";
+      continue;
+    }
+    if (state === "block_comment") {
+      if (character === "/" && next === "*") {
+        blockDepth += 1;
+        result += "  ";
+        index += 1;
+      } else if (character === "*" && next === "/") {
+        blockDepth -= 1;
+        result += "  ";
+        index += 1;
+        if (blockDepth === 0) state = "normal";
+      } else {
+        result += character === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+    if (state === "dollar_quote") {
+      if (source.startsWith(dollarDelimiter, index)) {
+        result += dollarDelimiter;
+        index += dollarDelimiter.length - 1;
+        state = "normal";
+      } else {
+        result += character;
+      }
+      continue;
+    }
+    if (state === "single_quote" || state === "double_quote") {
+      const quote = state === "single_quote" ? "'" : '"';
+      result += character;
+      if (state === "single_quote" && character === "\\" && next) {
+        result += next;
+        index += 1;
+      } else if (character === quote && next === quote) {
+        result += next;
+        index += 1;
+      } else if (character === quote) {
+        state = "normal";
+      }
+      continue;
+    }
+
+    const delimiter = character === "$"
+      ? dollarQuoteDelimiterAt(source, index)
+      : null;
+    if (delimiter) {
+      dollarDelimiter = delimiter;
+      result += delimiter;
+      index += delimiter.length - 1;
+      state = "dollar_quote";
+    } else if (character === "'") {
+      result += character;
+      state = "single_quote";
+    } else if (character === '"') {
+      result += character;
+      state = "double_quote";
+    } else if (character === "-" && next === "-") {
+      result += "  ";
+      index += 1;
+      state = "line_comment";
+    } else if (character === "/" && next === "*") {
+      result += "  ";
+      index += 1;
+      blockDepth = 1;
+      state = "block_comment";
+    } else {
+      result += character;
+    }
+  }
+
+  return result;
+}
+
 function splitSqlList(value: string): string[] {
   return value.split(",").map((item) => item.trim().toLowerCase());
+}
+
+function normalizeSqlIdentifier(value: string): string {
+  return value.split(".").map((part) => {
+    const identifier = part.trim();
+    if (identifier.startsWith('"') && identifier.endsWith('"')) {
+      return identifier.slice(1, -1).replace(/""/g, '"');
+    }
+    return identifier.toLowerCase();
+  }).join(".");
+}
+
+function splitSqlIdentifiers(value: string): string[] {
+  return value.split(",").map(normalizeSqlIdentifier);
 }
 
 function parseGrantees(value: string): string[] {
@@ -35,8 +150,8 @@ function parseGrantees(value: string): string[] {
     .replace(/\s+(?:CASCADE|RESTRICT)\s*$/i, "")
     .replace(/\s+GRANTED\s+BY\s+.+$/i, "");
 
-  return splitSqlList(granteeList).map((grantee) =>
-    grantee.replace(/^group\s+/, "").trim()
+  return granteeList.split(",").map((grantee) =>
+    normalizeSqlIdentifier(grantee.replace(/^\s*GROUP\s+/i, ""))
   );
 }
 
@@ -44,7 +159,7 @@ function revokesServiceRoleSharedTableRead(
   source: string,
   table: (typeof SHARED_TABLES)[number],
 ): boolean {
-  for (const rawStatement of source.split(";")) {
+  for (const rawStatement of stripSqlComments(source).split(";")) {
     const statement = rawStatement.replace(/\s+/g, " ").trim();
     const revoke = statement.match(
       /\bREVOKE\s+(.+?)\s+ON\s+(.+?)\s+FROM\s+(.+)$/i,
@@ -67,13 +182,13 @@ function revokesServiceRoleSharedTableRead(
 
     const schemaTarget = target.match(/^ALL TABLES IN SCHEMA\s+(.+)$/i);
     if (schemaTarget) {
-      if (splitSqlList(schemaTarget[1] ?? "").includes("public")) {
+      if (splitSqlIdentifiers(schemaTarget[1] ?? "").includes("public")) {
         return true;
       }
       continue;
     }
 
-    const tables = splitSqlList(target.replace(/^TABLE\s+/i, ""));
+    const tables = splitSqlIdentifiers(target.replace(/^TABLE\s+/i, ""));
     if (tables.includes(`public.${table}`)) {
       return true;
     }
@@ -100,7 +215,7 @@ describe("service role shared table read repair migration", () => {
       const privilegeCheck =
         `has_table_privilege('service_role', 'public.${table}', 'SELECT')`;
 
-      expect(sql).toContain(grant);
+      expect(sqlWithoutComments).toContain(grant);
       expect(normalizedSql.indexOf(privilegeCheck)).toBeGreaterThan(
         normalizedSql.indexOf(grant),
       );
@@ -150,11 +265,23 @@ describe("service role shared table read repair migration", () => {
           "FROM service_role GRANTED BY CURRENT_USER;",
         table: "supplier_products",
       },
+      {
+        sql: 'REVOKE SELECT ON TABLE public."employees" FROM service_role;',
+        table: "employees",
+      },
+      {
+        sql: 'REVOKE SELECT ON TABLE public.supplier_products ' +
+          'FROM "service_role";',
+        table: "supplier_products",
+      },
     ] as const;
 
     expect(forbiddenRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([true, true, true, true, true, true, true, true]);
+    )).toEqual([
+      true, true, true, true, true,
+      true, true, true, true, true,
+    ]);
   });
 
   test("does not flag shared-table revocations from other roles", () => {
@@ -194,15 +321,50 @@ describe("service role shared table read repair migration", () => {
           "FROM GROUP service_role_reader GRANTED BY CURRENT_USER;",
         table: "employees",
       },
+      {
+        sql: 'REVOKE SELECT ON TABLE public.employees FROM "Service_Role";',
+        table: "employees",
+      },
+      {
+        sql: "-- REVOKE SELECT ON TABLE public.employees FROM service_role;",
+        table: "employees",
+      },
+      {
+        sql: "/* REVOKE SELECT ON TABLE public.supplier_products " +
+          "FROM service_role; */",
+        table: "supplier_products",
+      },
     ] as const;
 
     expect(allowedRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([false, false, false, false, false, false, false, false]);
+    )).toEqual([
+      false, false, false, false, false, false,
+      false, false, false, false, false,
+    ]);
+  });
+
+  test("strips SQL comments without changing quoted content", () => {
+    const source = [
+      "-- GRANT INSERT ON TABLE public.employees TO authenticated;",
+      "SELECT '-- not a comment', '/* not a comment */';",
+      'SELECT "employee--name", "supplier/*name*/";',
+      "/* REVOKE SELECT ON TABLE public.supplier_products " +
+        "FROM service_role; */",
+    ].join("\n");
+    const stripped = stripSqlComments(source);
+
+    expect(stripped).not.toContain("GRANT INSERT");
+    expect(stripped).not.toContain("REVOKE SELECT");
+    expect(stripped).toContain("'-- not a comment'");
+    expect(stripped).toContain("'/* not a comment */'");
+    expect(stripped).toContain('"employee--name"');
+    expect(stripped).toContain('"supplier/*name*/"');
   });
 
   test("does not widen browser or direct write privileges", () => {
-    const grantStatements = (sql.match(/\bGRANT\b[^;]*;/gi) ?? []).join("\n");
+    const grantStatements =
+      (sqlWithoutComments.match(/\bGRANT\b[^;]*;/gi) ?? []).join("\n");
 
     expect(grantStatements).not.toMatch(
       /\bTO\s+[^;]*\b(?:PUBLIC|anon|authenticated)\b/i,
