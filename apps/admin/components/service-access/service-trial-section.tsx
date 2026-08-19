@@ -18,6 +18,7 @@ import {
   canShowServiceTrialApplication,
   completeServiceTrialSubmission,
   formatServiceTrialError,
+  getDisplayableServiceTrial,
   getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
   resolveServiceTrialEffectiveStatus,
@@ -75,11 +76,21 @@ export function ServiceTrialSection({
       return;
     }
 
+    setTrial(null);
     setLoading(true);
     setLoadError(null);
     try {
       const nextTrial = await loadCurrentOrRecentServiceTrial();
-      if (requestSequenceRef.current === requestSequence) setTrial(nextTrial);
+      if (requestSequenceRef.current === requestSequence) {
+        const displayableTrial = getDisplayableServiceTrial(
+          nextTrial,
+          summaryTrialId,
+        );
+        setTrial(displayableTrial);
+        if (nextTrial && !displayableTrial) {
+          setLoadError("试用状态正在同步，请稍后重试");
+        }
+      }
     } catch (error) {
       if (requestSequenceRef.current === requestSequence) {
         setLoadError(formatServiceTrialError(
@@ -90,14 +101,14 @@ export function ServiceTrialSection({
     } finally {
       if (requestSequenceRef.current === requestSequence) setLoading(false);
     }
-  }, [canView]);
+  }, [canView, summaryTrialId]);
 
   useEffect(() => {
     void loadTrial();
     return () => {
       requestSequenceRef.current += 1;
     };
-  }, [loadTrial]);
+  }, [loadTrial, summaryTrialStatus]);
 
   useEffect(() => {
     setSubmittedTrial((current) => current
@@ -139,9 +150,10 @@ export function ServiceTrialSection({
   const temporarySubmittedTrial = submittedTrialIsSuperseded
     ? null
     : submittedTrial;
+  const loadedTrial = getDisplayableServiceTrial(trial, summaryTrialId);
 
   const effectiveStatus = resolveServiceTrialEffectiveStatus({
-    loadedTrialStatus: trial?.status ?? null,
+    loadedTrialStatus: loadedTrial?.status ?? null,
     submittedTrialStatus: submittedTrial?.trial.status ?? null,
     submittedTrialId: submittedTrial?.trial.id ?? null,
     summaryTrialIdAtSubmit: submittedTrial?.summaryTrialIdAtSubmit ?? null,
@@ -188,7 +200,8 @@ export function ServiceTrialSection({
 
       {visibility.showTrialDetails ? (
         <TrialStatusContent
-          trial={temporarySubmittedTrial?.trial ?? trial}
+          trial={temporarySubmittedTrial?.trial ?? loadedTrial}
+          status={effectiveStatus}
           loading={loading}
           loadError={loadError}
           onRetry={loadTrial}
@@ -240,11 +253,13 @@ function SubmitFeedback({ message }: { message: string | null }) {
 
 function TrialStatusContent({
   trial,
+  status,
   loading,
   loadError,
   onRetry,
 }: {
   trial: ServiceTrial | null;
+  status: PlatformServiceTrialStatus | null;
   loading: boolean;
   loadError: string | null;
   onRetry: () => Promise<void>;
@@ -282,7 +297,7 @@ function TrialStatusContent({
     );
   }
 
-  const statusMeta = STATUS_META[trial.status];
+  const statusMeta = STATUS_META[status ?? trial.status];
   const rows = trialRows(trial);
   return (
     <div className="space-y-3">

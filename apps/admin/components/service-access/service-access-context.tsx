@@ -111,27 +111,57 @@ function getRequestId(error: unknown): string | undefined {
 
 export function createServiceAccessRefreshCoordinator(
   executeRefresh: () => Promise<ServiceAccessRefreshResult>,
+  onActivityChange: (active: boolean) => void = () => undefined,
 ): ServiceAccessRefreshCoordinator {
   let inFlight: {
     token: object;
     promise: Promise<ServiceAccessRefreshResult>;
   } | null = null;
+  let queuedMutationRefresh: {
+    token: object;
+    promise: Promise<ServiceAccessRefreshResult>;
+  } | null = null;
+  let active = false;
+
+  function updateActivity(): void {
+    const nextActive = inFlight !== null || queuedMutationRefresh !== null;
+    if (nextActive === active) return;
+    active = nextActive;
+    onActivityChange(active);
+  }
 
   function startRefresh(): Promise<ServiceAccessRefreshResult> {
     const token = {};
     const promise = executeRefresh().finally(() => {
       if (inFlight?.token === token) inFlight = null;
+      updateActivity();
     });
     inFlight = { token, promise };
+    updateActivity();
     return promise;
   }
 
   return {
-    refresh: () => inFlight?.promise ?? startRefresh(),
-    refreshAfterMutation: async () => {
+    refresh: () => inFlight?.promise
+      ?? queuedMutationRefresh?.promise
+      ?? startRefresh(),
+    refreshAfterMutation: () => {
+      if (queuedMutationRefresh) return queuedMutationRefresh.promise;
+
       const olderRefresh = inFlight?.promise;
-      if (olderRefresh) await olderRefresh;
-      return startRefresh();
+      const token = {};
+      const promise = (async () => {
+        if (olderRefresh) await olderRefresh;
+        return startRefresh();
+      })().finally(() => {
+        if (queuedMutationRefresh?.token === token) {
+          queuedMutationRefresh = null;
+        }
+        updateActivity();
+      });
+      queuedMutationRefresh = { token, promise };
+      updateActivity();
+      return promise;
     },
   };
 }
@@ -173,15 +203,11 @@ export function ServiceAccessProvider({
   if (!refreshCoordinatorRef.current) {
     refreshCoordinatorRef.current = createServiceAccessRefreshCoordinator(
       async () => {
-        setRefreshing(true);
-        try {
-          const outcome = await requestServiceAccessRefresh();
-          setLoadResult(outcome.loadResult);
-          return outcome.result;
-        } finally {
-          setRefreshing(false);
-        }
+        const outcome = await requestServiceAccessRefresh();
+        setLoadResult(outcome.loadResult);
+        return outcome.result;
       },
+      setRefreshing,
     );
   }
 

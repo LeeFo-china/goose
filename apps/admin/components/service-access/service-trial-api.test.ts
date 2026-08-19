@@ -9,6 +9,7 @@ import {
   createServiceTrialSubmissionIntent,
   formatServiceTrialError,
   getCurrentServiceTrial,
+  getDisplayableServiceTrial,
   getServiceTrialRecoveryCapabilities,
   getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
@@ -100,9 +101,7 @@ describe("service trial API adapter", () => {
       trial,
       server_time: "2026-08-19T08:00:00.000Z",
     }]);
-
     const result = await getCurrentServiceTrial(requester);
-
     expect(result.trial).toEqual(trial);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.path).toBe("/billing/service-trials/current");
@@ -118,9 +117,7 @@ describe("service trial API adapter", () => {
         server_time: "2026-08-19T08:00:00.000Z",
       },
     ]);
-
     const result = await loadCurrentOrRecentServiceTrial(requester);
-
     expect(result).toEqual(trial);
     expect(calls.map(({ path }) => path)).toEqual([
       "/billing/service-trials/current",
@@ -133,9 +130,7 @@ describe("service trial API adapter", () => {
       trial,
       server_time: "2026-08-19T08:00:00.000Z",
     }]);
-
     const result = await loadCurrentOrRecentServiceTrial(requester);
-
     expect(result).toEqual(trial);
     expect(calls.map(({ path }) => path)).toEqual([
       "/billing/service-trials/current",
@@ -148,9 +143,7 @@ describe("service trial API adapter", () => {
       idempotent: false,
       server_time: "2026-08-19T08:00:00.000Z",
     }]);
-
     await applyForServiceTrial(request, FIRST_KEY, requester);
-
     expect(calls).toHaveLength(1);
     expect(calls[0]?.path).toBe("/billing/service-trials/applications");
     expect(calls[0]?.init?.method).toBe("POST");
@@ -175,9 +168,7 @@ describe("service trial API adapter", () => {
       requestId: "request-trace-id",
     });
     const requester: ServiceTrialRequester = () => Promise.reject(backendError);
-
     const caught = getCurrentServiceTrial(requester).catch((error: unknown) => error);
-
     expect(await caught).toBe(backendError);
   });
 });
@@ -190,7 +181,6 @@ describe("service trial submission intent", () => {
       if (!key) throw new Error("测试幂等键不足");
       return key;
     });
-
     expect(intent.keyFor(request)).toBe(FIRST_KEY);
     expect(intent.keyFor(request)).toBe(FIRST_KEY);
     expect(intent.keyFor({ ...request, expectedProjectCount: 4 })).toBe(SECOND_KEY);
@@ -203,7 +193,6 @@ describe("service trial submission intent", () => {
       if (!key) throw new Error("测试幂等键不足");
       return key;
     });
-
     expect(intent.keyFor(request)).toBe(FIRST_KEY);
     intent.clearAfterSuccess();
     expect(intent.keyFor(request)).toBe(SECOND_KEY);
@@ -216,7 +205,6 @@ describe("service trial submission intent", () => {
       if (!key) throw new Error("测试幂等键不足");
       return key;
     });
-
     expect(intent.keyFor(request)).toBe(FIRST_KEY);
     intent.clearAfterChange();
     expect(intent.keyFor(request)).toBe(SECOND_KEY);
@@ -224,7 +212,6 @@ describe("service trial submission intent", () => {
 
   test("uses crypto.randomUUID to create a real UUID v4 by default", () => {
     const key = createServiceTrialSubmissionIntent().keyFor(request);
-
     expect(key).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
     );
@@ -279,7 +266,6 @@ describe("service trial recovery rules", () => {
       { field: "contactName", value: "张".repeat(61), message: "联系人不能超过 60 个字符" },
       { field: "contactPhone", value: "12345678901", message: "请输入正确的中国大陆手机号" },
     ] as const;
-
     for (const invalid of invalidCases) {
       const result = parseServiceTrialRequest({
         applicationReason: "体验项目协作",
@@ -298,7 +284,6 @@ describe("service trial recovery rules", () => {
       requestId: "request-trace-id",
       payload: { contact_phone: "13800138000" },
     });
-
     expect(formatServiceTrialError(error, "操作失败")).toBe(
       "申请记录已存在（Request-ID：request-trace-id）",
     );
@@ -309,7 +294,6 @@ describe("service trial recovery rules", () => {
 
   test("installs the command trial and parent feedback before summary refresh", async () => {
     const events: string[] = [];
-
     await completeServiceTrialSubmission({
       trial,
       installTrial: (submittedTrial) => {
@@ -324,7 +308,6 @@ describe("service trial recovery rules", () => {
         return { success: true };
       },
     });
-
     expect(events).toEqual([
       "trial:pending_review",
       "feedback:试用申请已提交，请等待平台审核。",
@@ -344,7 +327,6 @@ describe("service trial recovery rules", () => {
       return Promise.reject(refreshError) as Promise<Response>;
     };
     const outcome = await requestServiceAccessRefresh(requester);
-
     expect(paths).toEqual(["/employee/service-access"]);
     expect(outcome.loadResult).toEqual({
       kind: "unavailable",
@@ -375,38 +357,43 @@ describe("service trial recovery rules", () => {
     const first = createDeferred<ServiceAccessRefreshResult>();
     const second = createDeferred<ServiceAccessRefreshResult>();
     const requests = [first.promise, second.promise];
+    const activityChanges: boolean[] = [];
     let requestCount = 0;
     const coordinator = createServiceAccessRefreshCoordinator(() => {
       requestCount += 1;
       const request = requests.shift();
       if (!request) throw new Error("测试刷新请求不足");
       return request;
-    });
-
+    }, (active) => activityChanges.push(active));
     const manualRefresh = coordinator.refresh();
     expect(coordinator.refresh()).toBe(manualRefresh);
     const postMutationRefresh = coordinator.refreshAfterMutation();
+    const secondMutationWaiter = coordinator.refreshAfterMutation();
+    expect(secondMutationWaiter).toBe(postMutationRefresh);
     expect(requestCount).toBe(1);
-
+    expect(activityChanges).toEqual([true]);
     first.resolve({ success: true });
     expect(await manualRefresh).toEqual({ success: true });
     await Promise.resolve();
     expect(requestCount).toBe(2);
-
+    expect(activityChanges).toEqual([true]);
     const freshFailure = {
       success: false as const,
       message: "fresh refresh failed",
       requestId: "fresh-request-id",
     };
     second.resolve(freshFailure);
-    expect(await postMutationRefresh).toEqual(freshFailure);
+    expect(await Promise.all([
+      postMutationRefresh,
+      secondMutationWaiter,
+    ])).toEqual([freshFailure, freshFailure]);
+    expect(activityChanges).toEqual([true, false]);
   });
 
   test("keeps post-submit feedback in the section when the form hides", () => {
     const formSource = readSource("./service-trial-form.tsx");
     const sectionSource = readSource("./service-trial-section.tsx");
     const workspaceSource = readSource("./service-access-workspace.tsx");
-
     expect(formSource).toContain("submittedTrial = response.trial");
     expect(formSource).toContain("await onSubmitted(submittedTrial)");
     expect(formSource).not.toContain("试用申请已提交，请等待平台审核。");
@@ -416,6 +403,8 @@ describe("service trial recovery rules", () => {
     expect(sectionSource).toContain("visibility.showTrialDetails");
     expect(sectionSource).toContain("visibility.showContactAdministrator");
     expect(sectionSource).not.toContain("await loadTrial()");
+    expect(sectionSource).toContain("[canView, summaryTrialId]");
+    expect(sectionSource).toContain("[loadTrial, summaryTrialStatus]");
     expect(workspaceSource).toContain(
       "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
     );
@@ -425,26 +414,36 @@ describe("service trial recovery rules", () => {
     expect(formSource).not.toContain("finally {\n      setSubmitting(false)");
   });
 
-  test("uses trial identity when the old and new summaries share a status", () => {
-    const localPending = resolveServiceTrialEffectiveStatus({
+  test("uses authoritative trial identity and status for read state", () => {
+    const submittedState = {
       loadedTrialStatus: null,
       submittedTrialStatus: "pending_review",
       submittedTrialId: NEW_TRIAL_ID,
       summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+    } as const;
+    const localPending = resolveServiceTrialEffectiveStatus({
+      ...submittedState,
       summaryTrialId: OLD_TRIAL_ID,
       summaryTrialStatus: "rejected",
     });
     const authoritativeRejected = resolveServiceTrialEffectiveStatus({
-      loadedTrialStatus: null,
-      submittedTrialStatus: "pending_review",
-      submittedTrialId: NEW_TRIAL_ID,
-      summaryTrialIdAtSubmit: OLD_TRIAL_ID,
+      ...submittedState,
       summaryTrialId: NEW_TRIAL_ID,
       summaryTrialStatus: "rejected",
     });
-
+    const authoritativeScheduled = resolveServiceTrialEffectiveStatus({
+      loadedTrialStatus: "pending_review",
+      submittedTrialStatus: null,
+      submittedTrialId: null,
+      summaryTrialIdAtSubmit: null,
+      summaryTrialId: NEW_TRIAL_ID,
+      summaryTrialStatus: "scheduled",
+    });
     expect(localPending).toBe("pending_review");
     expect(authoritativeRejected).toBe("rejected");
+    expect(authoritativeScheduled).toBe("scheduled");
+    expect(getDisplayableServiceTrial(trial, NEW_TRIAL_ID)).toBe(trial);
+    expect(getDisplayableServiceTrial(trial, OLD_TRIAL_ID)).toBeNull();
     expect(shouldClearSubmittedServiceTrial({
       submittedTrialId: NEW_TRIAL_ID,
       summaryTrialIdAtSubmit: OLD_TRIAL_ID,
@@ -492,7 +491,6 @@ describe("service trial recovery rules", () => {
     const formSource = readSource("./service-trial-form.tsx");
     const pattern = formSource.match(/pattern="([^"]+)"/)?.[1];
     if (!pattern) throw new Error("未找到手机号 pattern");
-
     expect(pattern).toBe("^1[3-9][0-9]{9}$");
     expect(new RegExp(pattern).test("13800138000")).toBe(true);
   });

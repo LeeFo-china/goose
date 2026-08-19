@@ -183,6 +183,14 @@ export function canShowServiceTrialApplication(
   return canApply && status !== "pending_review" && status !== "scheduled";
 }
 
+export function getDisplayableServiceTrial(
+  trial: ServiceTrial | null,
+  summaryTrialId: string | null,
+): ServiceTrial | null {
+  if (!trial || (summaryTrialId && trial.id !== summaryTrialId)) return null;
+  return trial;
+}
+
 export function shouldClearSubmittedServiceTrial({
   submittedTrialId,
   summaryTrialIdAtSubmit,
@@ -222,7 +230,7 @@ export function resolveServiceTrialEffectiveStatus({
       : submittedTrialStatus;
   }
 
-  return loadedTrialStatus ?? summaryTrialStatus;
+  return summaryTrialStatus ?? loadedTrialStatus;
 }
 
 export function parseServiceTrialRequest(
