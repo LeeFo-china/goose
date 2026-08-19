@@ -123,6 +123,51 @@ describe("classifyAdminServiceAccessError", () => {
     })).toBe("redirect");
   });
 
+  test("resolves clear dot segments before matching raw recovery paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/billing/../projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves encoded dot segments before matching raw recovery paths", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/billing/%2e%2e/projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves clear dot segments before stripping the backend prefix", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api/backend/billing/../projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("resolves encoded dot segments before stripping the backend prefix", () => {
+    expect(classifyAdminServiceAccessError({
+      path: "/api/backend/billing/%2e%2e/projects",
+      status: 402,
+      code: "TENANT_SERVICE_ACCESS_EXPIRED",
+    })).toBe("redirect");
+  });
+
+  test("does not treat external hosts as internal recovery paths", () => {
+    for (const path of [
+      "https://external.example/billing",
+      "//external.example/billing/service-orders",
+    ]) {
+      expect(classifyAdminServiceAccessError({
+        path,
+        status: 402,
+        code: "TENANT_SERVICE_ACCESS_EXPIRED",
+      })).toBe("redirect");
+    }
+  });
+
   test("ignores network, server, and unrelated failures", () => {
     expect(classifyAdminServiceAccessError({
       path: "/projects",

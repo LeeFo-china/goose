@@ -1,4 +1,5 @@
 const BACKEND_PROXY_PREFIX = "/api/backend";
+const PATH_NORMALIZATION_ORIGIN = "http://admin.invalid";
 const SERVICE_ACCESS_PATH = "/service-access";
 
 const RECOVERY_API_EXACT_PATHS = [
@@ -26,17 +27,26 @@ function isPathInScope(pathname: string, scope: string): boolean {
   return pathname === scope || pathname.startsWith(`${scope}/`);
 }
 
-function normalizeBackendPath(path: string): string {
-  const pathname = path.split(/[?#]/, 1)[0] || "/";
+function normalizeBackendPath(path: string): string | null {
+  let normalizedUrl: URL;
+  try {
+    normalizedUrl = new URL(path, PATH_NORMALIZATION_ORIGIN);
+  } catch {
+    return null;
+  }
+  if (normalizedUrl.origin !== PATH_NORMALIZATION_ORIGIN) return null;
+
+  const { pathname } = normalizedUrl;
   if (pathname === BACKEND_PROXY_PREFIX) return "/";
   if (pathname.startsWith(`${BACKEND_PROXY_PREFIX}/`)) {
     return pathname.slice(BACKEND_PROXY_PREFIX.length);
   }
-  return pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return pathname;
 }
 
 function isRecoveryApiPath(path: string): boolean {
   const pathname = normalizeBackendPath(path);
+  if (!pathname) return false;
   return RECOVERY_API_EXACT_PATHS.some((recoveryPath) => (
     pathname === recoveryPath
   )) || RECOVERY_API_SCOPES.some((scope) => isPathInScope(pathname, scope));
