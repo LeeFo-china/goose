@@ -6,6 +6,8 @@ import {
   type EmployeeServiceAccessSummary,
 } from "@gooes/domain";
 
+import type { TenantServiceAccessFacts } from "@/repositories/tenant-service-access";
+
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -45,6 +47,35 @@ describe("AdminTenantServiceAccessService", () => {
     ]);
 
     expect(actionKeys(result)).toEqual(["apply_trial", "purchase_service"]);
+  });
+
+  test("deduplicates blocked recovery actions by key in source order", async () => {
+    const result = await resolve(duplicatePurchaseSummary(), [
+      "billing.service_order.create",
+    ]);
+
+    expect(actionKeys(result)).toEqual([
+      "purchase_service",
+      "contact_tenant_admin",
+    ]);
+  });
+
+  test("rejects workspace access without the required entry action", async () => {
+    const invalidSummary = { ...workspaceSummary(), primary_action: null };
+
+    expect(resolve(invalidSummary, [])).rejects.toMatchObject({
+      code: "DB_ERROR",
+      message: "Admin 服务访问事实不一致",
+    });
+  });
+
+  test("rejects grace access without the required readonly entry action", async () => {
+    const invalidSummary = { ...graceSummary(), primary_action: null };
+
+    expect(resolve(invalidSummary, [])).rejects.toMatchObject({
+      code: "DB_ERROR",
+      message: "Admin 服务访问事实不一致",
+    });
   });
 
   test("uses trial view plus tenant admin when expired user can only read", async () => {
@@ -101,6 +132,43 @@ describe("AdminTenantServiceAccessService", () => {
       tenantId: TENANT_ID,
       permissionCodes,
     });
+  });
+
+  test("projects a real employee service summary from a fake repository", async () => {
+    const { AdminTenantServiceAccessService } = await import(
+      "./admin-tenant-service-access"
+    );
+    const { EmployeeServiceAccessService } = await import(
+      "./employee-service-access"
+    );
+    const facts: TenantServiceAccessFacts = {
+      evaluatedAt: NOW,
+      tenantStatus: "active",
+      contract: null,
+      paidOnboardingOrder: null,
+      legacySubscriptionStatus: "locked",
+      currentTrial: null,
+      latestTrial: null,
+    };
+    const employeeService = new EmployeeServiceAccessService({
+      repository: { getAccessFacts: async () => facts },
+      trialAccessEnabled: async () => true,
+      trialApplicationEnabled: async () => true,
+    });
+    const service = new AdminTenantServiceAccessService({
+      resolveEmployeeAccess: (input) => employeeService.resolve(input),
+    });
+
+    const result = await service.resolve({
+      tenantId: TENANT_ID,
+      permissionCodes: [
+        "billing.service_trial.apply",
+        "billing.service_order.create",
+      ],
+    });
+
+    expect(result.accessStatus).toBe("service_blocked");
+    expect(actionKeys(result)).toEqual(["apply_trial", "purchase_service"]);
   });
 
   test("maps every fact, satisfies schema, and strips mini-program paths", async () => {
@@ -225,6 +293,21 @@ function serviceBlockedWithRefreshSummary(): EmployeeServiceAccessSummary {
       "/packageEmployees/pages/platformServicePaymentSmoke/index",
     ),
     secondary_action: action("refresh", "刷新状态", null),
+  });
+}
+
+function duplicatePurchaseSummary(): EmployeeServiceAccessSummary {
+  return summary({
+    primary_action: action(
+      "purchase_service",
+      "购买正式服务",
+      "/packageEmployees/pages/platformServicePaymentSmoke/index",
+    ),
+    secondary_action: action(
+      "purchase_service",
+      "购买正式服务",
+      "/packageEmployees/pages/platformServicePaymentSmoke/index",
+    ),
   });
 }
 

@@ -97,41 +97,51 @@ function projectActions(
   const sourceActions = [summary.primary_action, summary.secondary_action]
     .filter((item): item is EmployeeServiceAccessAction => item !== null);
 
-  if (summary.access_status === "hard_blocked") {
-    return [
-      findAction(sourceActions, "contact_platform") ?? CONTACT_PLATFORM_ACTION,
-      findAction(sourceActions, "refresh") ?? REFRESH_ACTION,
-    ];
+  switch (summary.access_status) {
+    case "workspace_available":
+      return [
+        requireAction(sourceActions, "enter_workspace"),
+        hasPermission(permissionCodes, ACTION_PERMISSIONS.view_trial)
+          ? findAction(sourceActions, "view_trial")
+          : null,
+      ];
+    case "grace_period":
+      return [
+        requireAction(sourceActions, "enter_readonly_workspace"),
+        hasPermission(permissionCodes, ACTION_PERMISSIONS.purchase_service)
+          ? findAction(sourceActions, "purchase_service")
+          : null,
+      ];
+    case "hard_blocked":
+      return [
+        findAction(sourceActions, "contact_platform")
+          ?? CONTACT_PLATFORM_ACTION,
+        findAction(sourceActions, "refresh") ?? REFRESH_ACTION,
+      ];
+    case "pending_review":
+    case "scheduled":
+    case "expired":
+    case "service_blocked":
+      return projectBlockedActions(sourceActions, permissionCodes);
+    default:
+      return assertNever(summary.access_status);
   }
-
-  if (summary.access_status === "workspace_available") {
-    return [
-      findAction(sourceActions, "enter_workspace"),
-      hasPermission(permissionCodes, ACTION_PERMISSIONS.view_trial)
-        ? findAction(sourceActions, "view_trial")
-        : null,
-    ];
-  }
-
-  if (summary.access_status === "grace_period") {
-    return [
-      findAction(sourceActions, "enter_readonly_workspace"),
-      hasPermission(permissionCodes, ACTION_PERMISSIONS.purchase_service)
-        ? findAction(sourceActions, "purchase_service")
-        : null,
-    ];
-  }
-
-  return projectBlockedActions(sourceActions, permissionCodes);
 }
 
 function projectBlockedActions(
   sourceActions: readonly EmployeeServiceAccessAction[],
   permissionCodes: readonly string[],
 ): readonly [AdminServiceAccessAction, AdminServiceAccessAction] {
+  const recoveryActionKeys = new Set<EmployeeServiceAccessAction["key"]>();
   const recoveryActions = sourceActions
     .filter((source) => isPermittedRecoveryAction(source, permissionCodes))
-    .map(projectAction);
+    .filter((source) => {
+      if (recoveryActionKeys.has(source.key)) return false;
+      recoveryActionKeys.add(source.key);
+      return true;
+    })
+    .map(projectAction)
+    .slice(0, 2);
   const refreshAction = findAction(sourceActions, "refresh");
 
   if (recoveryActions.length === 0) {
@@ -174,6 +184,21 @@ function findAction(
 ) {
   const source = actions.find((item) => item.key === key);
   return source ? projectAction(source) : null;
+}
+
+function requireAction(
+  actions: readonly EmployeeServiceAccessAction[],
+  key: EmployeeServiceAccessAction["key"],
+): AdminServiceAccessAction {
+  const projected = findAction(actions, key);
+  if (!projected) {
+    throw Errors.dbError("Admin 服务访问事实不一致");
+  }
+  return projected;
+}
+
+function assertNever(value: never): never {
+  throw Errors.dbError("Admin 服务访问事实不一致", value);
 }
 
 function projectAction(
