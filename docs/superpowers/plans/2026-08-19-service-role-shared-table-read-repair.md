@@ -30,6 +30,7 @@ const migrationUrl = new URL(
 const migrationSql = existsSync(migrationUrl)
   ? readFileSync(migrationUrl, "utf8")
   : "";
+const normalizedSql = migrationSql.replace(/\s+/g, " ").trim();
 
 describe("service role shared table read repair migration", () => {
   test("is a bounded forward-only migration", () => {
@@ -44,7 +45,7 @@ describe("service role shared table read repair migration", () => {
       expect(migrationSql).toContain(
         `GRANT SELECT ON TABLE public.${table} TO service_role;`,
       );
-      expect(migrationSql).toContain(
+      expect(normalizedSql).toContain(
         `has_table_privilege('service_role', 'public.${table}', 'SELECT')`,
       );
     }
@@ -177,7 +178,7 @@ Expected: every migration through `20260819125000` applies successfully.
 Run:
 
 ```bash
-psql postgresql://postgres:postgres@127.0.0.1:54322/postgres \
+docker exec supabase_db_gooes psql -U postgres -d postgres \
   -v ON_ERROR_STOP=1 \
   -c "BEGIN; SET LOCAL ROLE service_role; SELECT id, tenant_id, user_id, phone, status FROM public.employees LIMIT 0; SELECT id, supplier_id, product_code, name, category_id, brand_id, status, ownership_scope, owner_tenant_id FROM public.supplier_products LIMIT 0; ROLLBACK;"
 ```
