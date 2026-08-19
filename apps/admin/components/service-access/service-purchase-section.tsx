@@ -15,7 +15,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Spinner } from "@/components/ui/spinner";
@@ -25,9 +24,10 @@ import { ServiceOrderList } from "./service-order-list";
 import { ServiceProductList } from "./service-product-list";
 import {
   copyServicePurchaseLink,
-  createServicePurchaseHandoffCoordinator,
+  createServicePurchaseHandoffLifecycle,
   formatServicePurchaseError,
-  handoffServicePurchase,
+  getServicePurchaseLink,
+  getServicePurchaseLinkRemainingMs,
   listServiceOrdersIfPermitted,
   listServiceProductsIfPermitted,
   type ServiceOrder,
@@ -54,9 +54,13 @@ export function ServicePurchaseSection({
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const productRequestRef = useRef(0);
   const orderRequestRef = useRef(0);
-  const handoffCoordinatorRef = useRef<{
-    run: () => Promise<ServicePurchaseLink>;
+  const canPurchaseRef = useRef(canPurchase);
+  const purchaseLinkRef = useRef<ServicePurchaseLink | null>(null);
+  const handoffLifecycleRef = useRef<{
+    run: () => Promise<ServicePurchaseLink | null>;
+    invalidate: () => void;
   } | null>(null);
+  canPurchaseRef.current = canPurchase;
 
   const loadProducts = useCallback(async (): Promise<void> => {
     const requestId = productRequestRef.current + 1;
@@ -132,33 +136,80 @@ export function ServicePurchaseSection({
     };
   }, [loadOrders]);
 
-  if (!handoffCoordinatorRef.current) {
-    handoffCoordinatorRef.current = createServicePurchaseHandoffCoordinator(
-      () => handoffServicePurchase({
-        retainResult: setPurchaseLink,
-        navigate: (url) => window.location.assign(url),
-      }),
-    );
+  if (!handoffLifecycleRef.current) {
+    handoffLifecycleRef.current = createServicePurchaseHandoffLifecycle({
+      requestLink: getServicePurchaseLink,
+      isAuthorized: () => canPurchaseRef.current,
+      retainResult: (result) => {
+        purchaseLinkRef.current = result;
+        setPurchaseLink(result);
+      },
+      navigate: (url) => window.location.assign(url),
+      reportError: (error) => setPurchaseError(formatServicePurchaseError(
+        error,
+        "购买链接生成失败，请稍后重试",
+      )),
+    });
   }
+
+  const clearPurchaseState = useCallback((): void => {
+    purchaseLinkRef.current = null;
+    setPurchaseLink(null);
+    setPurchaseError(null);
+    setCopyFeedback(null);
+    setGenerating(false);
+  }, []);
+
+  useEffect(() => {
+    const lifecycle = handoffLifecycleRef.current;
+    canPurchaseRef.current = canPurchase;
+    if (!canPurchase) {
+      lifecycle?.invalidate();
+      clearPurchaseState();
+    }
+    return () => {
+      canPurchaseRef.current = false;
+      lifecycle?.invalidate();
+      purchaseLinkRef.current = null;
+    };
+  }, [canPurchase, clearPurchaseState]);
+
+  useEffect(() => {
+    if (!purchaseLink) return;
+    const remainingMs = getServicePurchaseLinkRemainingMs(purchaseLink);
+    const expireLink = () => {
+      if (purchaseLinkRef.current !== purchaseLink) return;
+      purchaseLinkRef.current = null;
+      setPurchaseLink(null);
+      setCopyFeedback("购买链接已过期，请重新生成");
+    };
+    if (remainingMs === 0) {
+      expireLink();
+      return;
+    }
+    const timer = window.setTimeout(expireLink, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [purchaseLink]);
 
   const handlePurchase = useCallback(async (): Promise<void> => {
     setGenerating(true);
     setPurchaseError(null);
     setCopyFeedback(null);
     try {
-      await handoffCoordinatorRef.current?.run();
-    } catch (error) {
-      setPurchaseError(formatServicePurchaseError(
-        error,
-        "购买链接生成失败，请稍后重试",
-      ));
+      await handoffLifecycleRef.current?.run();
     } finally {
-      setGenerating(false);
+      if (canPurchaseRef.current) setGenerating(false);
     }
   }, []);
 
   const handleCopy = useCallback(async (): Promise<void> => {
     if (!purchaseLink) return;
+    if (getServicePurchaseLinkRemainingMs(purchaseLink) === 0) {
+      purchaseLinkRef.current = null;
+      setPurchaseLink(null);
+      setCopyFeedback("购买链接已过期，请重新生成");
+      return;
+    }
     try {
       await copyServicePurchaseLink(
         purchaseLink,
@@ -166,7 +217,13 @@ export function ServicePurchaseSection({
       );
       setCopyFeedback("购买链接已复制");
     } catch {
-      setCopyFeedback("复制失败，请使用打开按钮重新进入小程序");
+      if (getServicePurchaseLinkRemainingMs(purchaseLink) === 0) {
+        purchaseLinkRef.current = null;
+        setPurchaseLink(null);
+        setCopyFeedback("购买链接已过期，请重新生成");
+      } else {
+        setCopyFeedback("复制失败，请使用打开按钮重新进入小程序");
+      }
     }
   }, [purchaseLink]);
 
@@ -179,7 +236,9 @@ export function ServicePurchaseSection({
   return (
     <Card className="w-full shadow-none">
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <h2 className="text-base font-semibold leading-none tracking-normal">
+          {title}
+        </h2>
         <CardDescription>
           {canPurchase
             ? "查看当前可售套餐，并前往微信小程序完成购买。"
@@ -228,14 +287,14 @@ export function ServicePurchaseSection({
           </section>
         ) : null}
 
-        {purchaseError ? (
+        {canPurchase && purchaseError ? (
           <Alert variant="destructive">
             <AlertTitle>购买入口打开失败</AlertTitle>
             <AlertDescription>{purchaseError}</AlertDescription>
           </Alert>
         ) : null}
 
-        {purchaseLink ? (
+        {canPurchase && purchaseLink ? (
           <Alert>
             <CheckCircle2 aria-hidden="true" />
             <AlertTitle>小程序购买链接已生成</AlertTitle>
@@ -248,6 +307,15 @@ export function ServicePurchaseSection({
                 复制链接
               </Button>
               {copyFeedback ? <p aria-live="polite">{copyFeedback}</p> : null}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {canPurchase && copyFeedback && !purchaseLink ? (
+          <Alert>
+            <AlertTitle>购买链接状态</AlertTitle>
+            <AlertDescription aria-live="polite">
+              {copyFeedback}
             </AlertDescription>
           </Alert>
         ) : null}

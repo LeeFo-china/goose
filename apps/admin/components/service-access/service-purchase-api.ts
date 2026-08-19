@@ -192,38 +192,81 @@ export function formatServicePurchaseError(
   return requestId ? `${message}（Request-ID：${requestId}）` : message;
 }
 
-export async function handoffServicePurchase(input: {
-  requester?: ServicePurchaseRequester;
-  retainResult: (result: ServicePurchaseLink) => void;
-  navigate: (url: string) => void;
-}): Promise<ServicePurchaseLink> {
-  const result = await getServicePurchaseLink(input.requester);
-  input.retainResult(result);
-  input.navigate(result.url);
-  return result;
-}
-
 export function copyServicePurchaseLink(
   link: ServicePurchaseLink,
   writeText: (value: string) => Promise<void>,
+  nowMs: number = Date.now(),
 ): Promise<void> {
+  if (getServicePurchaseLinkRemainingMs(link, nowMs) === 0) {
+    return Promise.reject(new Error("购买链接已过期，请重新生成"));
+  }
   return writeText(link.url);
 }
 
-export function createServicePurchaseHandoffCoordinator<Result>(
-  execute: () => Promise<Result>,
-): { run: () => Promise<Result> } {
-  let inFlight: Promise<Result> | null = null;
+export function getServicePurchaseLinkRemainingMs(
+  link: ServicePurchaseLink,
+  nowMs: number = Date.now(),
+): number {
+  const remainingMs = Date.parse(link.expires_at) - nowMs;
+  return Number.isFinite(remainingMs) && remainingMs > 0 ? remainingMs : 0;
+}
+
+export function createServicePurchaseHandoffLifecycle(input: {
+  requestLink: () => Promise<ServicePurchaseLink>;
+  isAuthorized: () => boolean;
+  retainResult: (result: ServicePurchaseLink) => void;
+  navigate: (url: string) => void;
+  reportError: (error: unknown) => void;
+}): {
+  run: () => Promise<ServicePurchaseLink | null>;
+  invalidate: () => void;
+} {
+  let generation = 0;
+  let inFlight: Promise<ServicePurchaseLink | null> | null = null;
+
+  function isCurrent(runGeneration: number): boolean {
+    return generation === runGeneration && input.isAuthorized();
+  }
+
   return {
-    run(): Promise<Result> {
+    run(): Promise<ServicePurchaseLink | null> {
+      if (!input.isAuthorized()) return Promise.resolve(null);
       if (inFlight) return inFlight;
-      const current = execute().finally(() => {
-        if (inFlight === current) inFlight = null;
-      });
+      const runGeneration = generation;
+      const request = callPurchaseLinkRequester(input.requestLink);
+      const current = request
+        .then((result) => {
+          if (!isCurrent(runGeneration)) return null;
+          input.retainResult(result);
+          if (!isCurrent(runGeneration)) return null;
+          input.navigate(result.url);
+          return result;
+        })
+        .catch((error: unknown) => {
+          if (isCurrent(runGeneration)) input.reportError(error);
+          return null;
+        })
+        .finally(() => {
+          if (inFlight === current) inFlight = null;
+        });
       inFlight = current;
       return current;
     },
+    invalidate(): void {
+      generation += 1;
+      inFlight = null;
+    },
   };
+}
+
+function callPurchaseLinkRequester(
+  requester: () => Promise<ServicePurchaseLink>,
+): Promise<ServicePurchaseLink> {
+  try {
+    return requester();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 function parseResponse<Output>(

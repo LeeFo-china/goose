@@ -4,12 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   copyServicePurchaseLink,
-  createServicePurchaseHandoffCoordinator,
+  createServicePurchaseHandoffLifecycle,
   formatServiceAmountFen,
   formatServicePurchaseError,
+  getServicePurchaseLinkRemainingMs,
   getServicePurchaseCapabilities,
   getServicePurchaseLink,
-  handoffServicePurchase,
   listServiceOrdersIfPermitted,
   listServiceProductsIfPermitted,
   shouldAutomaticallyReturnFromServiceAccess,
@@ -100,14 +100,20 @@ function createRequester(responses: unknown[]): {
 
 function createDeferred<Value>() {
   let resolvePromise: ((value: Value) => void) | null = null;
-  const promise = new Promise<Value>((resolve) => {
+  let rejectPromise: ((reason: unknown) => void) | null = null;
+  const promise = new Promise<Value>((resolve, reject) => {
     resolvePromise = resolve;
+    rejectPromise = reject;
   });
   return {
     promise,
     resolve(value: Value) {
       if (!resolvePromise) throw new Error("deferred promise 未初始化");
       resolvePromise(value);
+    },
+    reject(reason: unknown) {
+      if (!rejectPromise) throw new Error("deferred promise 未初始化");
+      rejectPromise(reason);
     },
   };
 }
@@ -300,52 +306,89 @@ describe("service purchase capabilities and presentation", () => {
 });
 
 describe("service purchase browser handoff", () => {
-  test("retains the validated link before assigning browser location", async () => {
-    const { requester } = createRequester([{
-      url: PURCHASE_URL,
-      expires_at: EXPIRES_AT,
-    }]);
+  test("coalesces clicks and retains before navigating while authorized", async () => {
+    const pendingLink = createDeferred<{
+      url: string;
+      expires_at: string;
+    }>();
+    let requests = 0;
     const events: string[] = [];
-
-    const result = await handoffServicePurchase({
-      requester,
+    const lifecycle = createServicePurchaseHandoffLifecycle({
+      requestLink: () => {
+        requests += 1;
+        return pendingLink.promise;
+      },
+      isAuthorized: () => true,
       retainResult: (link) => events.push(`retain:${link.expires_at}`),
       navigate: (url) => events.push(`assign:${url}`),
+      reportError: () => events.push("error"),
     });
 
-    expect(result).toEqual({ url: PURCHASE_URL, expires_at: EXPIRES_AT });
+    const first = lifecycle.run();
+    expect(lifecycle.run()).toBe(first);
+    expect(requests).toBe(1);
+    pendingLink.resolve({ url: PURCHASE_URL, expires_at: EXPIRES_AT });
+    expect(await first).toEqual({ url: PURCHASE_URL, expires_at: EXPIRES_AT });
     expect(events).toEqual([
       `retain:${EXPIRES_AT}`,
       `assign:${PURCHASE_URL}`,
     ]);
   });
 
-  test("copies only the in-memory URL through an injected clipboard writer", async () => {
-    const copied: string[] = [];
-    await copyServicePurchaseLink(
-      { url: PURCHASE_URL, expires_at: EXPIRES_AT },
-      async (value) => {
-        copied.push(value);
-      },
-    );
-    expect(copied).toEqual([PURCHASE_URL]);
-  });
-
-  test("coalesces duplicate clicks while a purchase link is being generated", async () => {
-    let executions = 0;
-    const pendingLink = createDeferred<string>();
-    const coordinator = createServicePurchaseHandoffCoordinator(async () => {
-      executions += 1;
-      return pendingLink.promise;
+  test("drops deferred success after true-to-false authorization invalidation", async () => {
+    const pendingLink = createDeferred<{ url: string; expires_at: string }>();
+    let canPurchase = true;
+    const events: string[] = [];
+    const lifecycle = createServicePurchaseHandoffLifecycle({
+      requestLink: () => pendingLink.promise,
+      isAuthorized: () => canPurchase,
+      retainResult: () => events.push("retain"),
+      navigate: () => events.push("navigate"),
+      reportError: () => events.push("error"),
     });
 
-    const first = coordinator.run();
-    const second = coordinator.run();
-    expect(executions).toBe(1);
-    expect(second).toBe(first);
+    const result = lifecycle.run();
+    canPurchase = false;
+    lifecycle.invalidate();
+    pendingLink.resolve({ url: PURCHASE_URL, expires_at: EXPIRES_AT });
+    expect(await result).toBeNull();
+    expect(events).toEqual([]);
+  });
 
-    pendingLink.resolve(PURCHASE_URL);
-    expect(await first).toBe(PURCHASE_URL);
+  test("drops deferred failure after authorization invalidation", async () => {
+    const pendingLink = createDeferred<{ url: string; expires_at: string }>();
+    let canPurchase = true;
+    const errors: unknown[] = [];
+    const lifecycle = createServicePurchaseHandoffLifecycle({
+      requestLink: () => pendingLink.promise,
+      isAuthorized: () => canPurchase,
+      retainResult: () => undefined,
+      navigate: () => undefined,
+      reportError: (error) => errors.push(error),
+    });
+    const result = lifecycle.run();
+    canPurchase = false;
+    lifecycle.invalidate();
+    pendingLink.reject(new Error("生成失败"));
+    expect(await result).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  test("prevents copying at expiry and reports deterministic remaining time", async () => {
+    const link = { url: PURCHASE_URL, expires_at: EXPIRES_AT };
+    const expiresAt = Date.parse(EXPIRES_AT);
+    const copied: string[] = [];
+    expect(getServicePurchaseLinkRemainingMs(link, expiresAt - 1)).toBe(1);
+    expect(getServicePurchaseLinkRemainingMs(link, expiresAt)).toBe(0);
+    expect(getServicePurchaseLinkRemainingMs(link, expiresAt + 1)).toBe(0);
+    await copyServicePurchaseLink(
+      link,
+      async (value) => { copied.push(value); },
+      expiresAt - 1,
+    );
+    expect(copied).toEqual([PURCHASE_URL]);
+    await expect(copyServicePurchaseLink(link, async () => undefined, expiresAt))
+      .rejects.toThrow("购买链接已过期，请重新生成");
   });
 });
 
@@ -447,6 +490,7 @@ describe("service purchase UI states", () => {
     expect(purchase).toContain(
       "套餐选择、条款确认和微信支付将在小程序内完成",
     );
+    expect(purchase).toMatch(/<h2[^>]*>购买正式服务<\/h2>/);
     expect(ordersOnly).not.toContain("打开微信小程序购买");
     expect(ordersOnly).not.toContain("套餐选择、条款确认");
   });
