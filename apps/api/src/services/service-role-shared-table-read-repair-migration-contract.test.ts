@@ -26,23 +26,47 @@ const laterMigrations = readdirSync(migrationsDirectory)
   }));
 const SHARED_TABLES = ["employees", "supplier_products"] as const;
 
+function splitSqlList(value: string): string[] {
+  return value.split(",").map((item) => item.trim().toLowerCase());
+}
+
 function revokesServiceRoleSharedTableRead(
   source: string,
   table: (typeof SHARED_TABLES)[number],
 ): boolean {
-  const revokePattern =
-    /\bREVOKE\s+(?:SELECT|ALL(?:\s+PRIVILEGES)?)\s+ON\s+(?:TABLE\s+)?([^;]+?)\s+FROM\s+([^;]+);/gi;
+  for (const rawStatement of source.split(";")) {
+    const statement = rawStatement.replace(/\s+/g, " ").trim();
+    const revoke = statement.match(
+      /\bREVOKE\s+(.+?)\s+ON\s+(.+?)\s+FROM\s+(.+)$/i,
+    );
+    if (!revoke) {
+      continue;
+    }
 
-  for (const match of source.matchAll(revokePattern)) {
-    const tables = (match[1] ?? "")
-      .split(",")
-      .map((name) => name.trim().toLowerCase());
-    const roles = (match[2] ?? "")
-      .replace(/\s+(?:CASCADE|RESTRICT)\s*$/i, "")
-      .split(",")
-      .map((name) => name.trim().toLowerCase());
+    const privileges = splitSqlList(revoke[1] ?? "");
+    const target = (revoke[2] ?? "").trim();
+    const roles = splitSqlList(
+      (revoke[3] ?? "").replace(/\s+(?:CASCADE|RESTRICT)\s*$/i, ""),
+    );
+    const revokesSelect = privileges.some((privilege) =>
+      privilege === "select" ||
+      privilege === "all" ||
+      privilege === "all privileges"
+    );
+    if (!revokesSelect || !roles.includes("service_role")) {
+      continue;
+    }
 
-    if (tables.includes(`public.${table}`) && roles.includes("service_role")) {
+    const schemaTarget = target.match(/^ALL TABLES IN SCHEMA\s+(.+)$/i);
+    if (schemaTarget) {
+      if (splitSqlList(schemaTarget[1] ?? "").includes("public")) {
+        return true;
+      }
+      continue;
+    }
+
+    const tables = splitSqlList(target.replace(/^TABLE\s+/i, ""));
+    if (tables.includes(`public.${table}`)) {
       return true;
     }
   }
@@ -96,11 +120,24 @@ describe("service role shared table read repair migration", () => {
           "FROM anon, service_role;",
         table: "employees",
       },
+      {
+        sql: "REVOKE SELECT, UPDATE ON TABLE public.employees " +
+          "FROM service_role;",
+        table: "employees",
+      },
+      {
+        sql: "REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM service_role;",
+        table: "employees",
+      },
+      {
+        sql: "REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM service_role;",
+        table: "supplier_products",
+      },
     ] as const;
 
     expect(forbiddenRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([true, true, true]);
+    )).toEqual([true, true, true, true, true, true]);
   });
 
   test("does not flag shared-table revocations from other roles", () => {
@@ -117,11 +154,20 @@ describe("service role shared table read repair migration", () => {
         sql: "REVOKE SELECT ON TABLE public.employees FROM service_role_reader;",
         table: "employees",
       },
+      {
+        sql: "REVOKE SELECT, UPDATE ON TABLE public.supplier_products " +
+          "FROM authenticated;",
+        table: "supplier_products",
+      },
+      {
+        sql: "REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM anon;",
+        table: "employees",
+      },
     ] as const;
 
     expect(allowedRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([false, false, false]);
+    )).toEqual([false, false, false, false, false]);
   });
 
   test("does not widen browser or direct write privileges", () => {
