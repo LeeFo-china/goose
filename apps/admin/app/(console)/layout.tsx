@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { getAdminSession } from "@/lib/auth";
+import { getAdminSession, getAdminToken } from "@/lib/auth";
+import { loadTenantServiceAccess } from "@/lib/tenant-service-access";
 
 export default async function ConsoleLayout({
   children,
@@ -12,5 +13,12 @@ export default async function ConsoleLayout({
     redirect("/login");
   }
 
-  return <AdminShell session={session}>{children}</AdminShell>;
+  const token = await getAdminToken();
+  const serviceAccess = await loadTenantServiceAccess({ session, token });
+
+  return (
+    <AdminShell session={session} serviceAccess={serviceAccess}>
+      {children}
+    </AdminShell>
+  );
 }

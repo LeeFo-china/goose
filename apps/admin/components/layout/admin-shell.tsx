@@ -17,15 +17,20 @@ import {
 } from "@/components/layout/admin-shell-preferences";
 import { NotificationMenu } from "@/components/layout/notification-menu";
 import { isPlatformOnlySession } from "@/lib/session-mode";
+import type { TenantServiceAccessLoadResult } from "@/lib/tenant-service-access";
 import { cn } from "@/lib/utils";
 
 export function AdminShell({
   session,
+  serviceAccess,
   children,
 }: {
   session: AdminSession;
+  serviceAccess: TenantServiceAccessLoadResult;
   children: React.ReactNode;
 }) {
+  // Task 5 consumes this preloaded result in the shell gate.
+  void serviceAccess;
   const [preferences, setPreferences] = useState(defaultPreferences);
   const isPlatformMode = isPlatformOnlySession(session);
   const headerTenantLabel = isPlatformMode
