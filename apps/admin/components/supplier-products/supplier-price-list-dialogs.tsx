@@ -16,16 +16,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
+import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 
 import {
   createSupplierResource,
@@ -36,6 +30,7 @@ import {
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
 import type {
+  ProductApiScope,
   SupplierPriceList,
   SupplierSku,
 } from "./supplier-product-types";
@@ -43,10 +38,10 @@ import type {
 type Changed = () => void | Promise<void>;
 
 export function CreatePriceListDialog({
-  tenantSupplierId,
+  scope,
   onCreated,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
   onCreated: Changed;
 }) {
   const [open, setOpen] = useState(false);
@@ -54,10 +49,18 @@ export function CreatePriceListDialog({
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [effectiveFrom, setEffectiveFrom] = useState("");
-  const [reason, setReason] = useState("");
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
-  const invalid = !code.trim() || !name.trim() || !effectiveFrom ||
-    reason.trim().length < 2;
+  const invalid = !code.trim() || !name.trim() || !effectiveFrom;
+
+  function changeOpen(nextOpen: boolean) {
+    if (!nextOpen) {
+      setCode("");
+      setName("");
+      setEffectiveFrom("");
+      attemptRef.current = null;
+    }
+    setOpen(nextOpen);
+  }
 
   async function submit() {
     if (invalid) return;
@@ -69,7 +72,6 @@ export function CreatePriceListDialog({
         currency: "CNY",
         effective_from: new Date(effectiveFrom).toISOString(),
         effective_until: null,
-        proxy_reason: reason.trim(),
       };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
         scope: "supplier-price-create",
@@ -80,13 +82,13 @@ export function CreatePriceListDialog({
       attemptRef.current = attempt;
       await createSupplierResource(
         `/supplier-price-lists/${attempt.resourceId}`,
-        tenantSupplierId,
+        scope,
         payload,
         attempt.idempotencyKey,
       );
       attemptRef.current = null;
       toast.success("基础供货价草稿已创建");
-      setOpen(false);
+      changeOpen(false);
       await onCreated();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "创建价格草稿失败");
@@ -96,7 +98,7 @@ export function CreatePriceListDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
         <Button>
           <Plus data-icon="inline-start" />
@@ -128,13 +130,12 @@ export function CreatePriceListDialog({
               onChange={(event) => setEffectiveFrom(event.target.value)}
             />
           </Field>
-          <ReasonField id="supplier-price-create-reason" value={reason} onChange={setReason} />
         </FieldGroup>
         <DialogActions
           saving={saving}
           invalid={invalid}
           submitLabel="保存价格草稿"
-          onCancel={() => setOpen(false)}
+          onCancel={() => changeOpen(false)}
           onSubmit={submit}
         />
       </DialogContent>
@@ -143,12 +144,12 @@ export function CreatePriceListDialog({
 }
 
 export function PriceItemDialog({
-  tenantSupplierId,
+  scope,
   priceList,
   availableSkus,
   onChanged,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
   priceList: SupplierPriceList;
   availableSkus: SupplierSku[];
   onChanged: Changed;
@@ -159,11 +160,20 @@ export function PriceItemDialog({
   const [unitPrice, setUnitPrice] = useState("");
   const [taxRate, setTaxRate] = useState("0.13");
   const [taxInclusive, setTaxInclusive] = useState(true);
-  const [reason, setReason] = useState("");
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const invalid = !skuId || !unitPrice ||
-    Number(unitPrice) < 0 || Number(taxRate) < 0 ||
-    Number(taxRate) > 1 || reason.trim().length < 2;
+    Number(unitPrice) < 0 || Number(taxRate) < 0 || Number(taxRate) > 1;
+
+  function changeOpen(nextOpen: boolean) {
+    if (!nextOpen) {
+      setSkuId("");
+      setUnitPrice("");
+      setTaxRate("0.13");
+      setTaxInclusive(true);
+      attemptRef.current = null;
+    }
+    setOpen(nextOpen);
+  }
 
   async function submit() {
     if (invalid) return;
@@ -177,7 +187,6 @@ export function PriceItemDialog({
         tax_rate: Number(taxRate),
         tax_inclusive: taxInclusive,
         expected_version: priceList.row_version,
-        proxy_reason: reason.trim(),
       };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
         scope: "supplier-price-item-upsert",
@@ -188,14 +197,14 @@ export function PriceItemDialog({
       attemptRef.current = attempt;
       await mutateSupplierResource(
         `/supplier-price-lists/${priceList.id}/items/${attempt.resourceId}`,
-        tenantSupplierId,
+        scope,
         payload,
         attempt.idempotencyKey,
         "PUT",
       );
       attemptRef.current = null;
       toast.success("基础供货价条目已保存");
-      setOpen(false);
+      changeOpen(false);
       await onChanged();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "保存价格条目失败");
@@ -205,7 +214,7 @@ export function PriceItemDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={changeOpen}>
       <DialogTrigger asChild>
         <Button type="button" size="sm" variant="outline">
           <Plus data-icon="inline-start" />
@@ -268,13 +277,12 @@ export function PriceItemDialog({
               onCheckedChange={setTaxInclusive}
             />
           </Field>
-          <ReasonField id="supplier-price-item-reason" value={reason} onChange={setReason} />
         </FieldGroup>
         <DialogActions
           saving={saving}
           invalid={invalid}
           submitLabel="保存价格条目"
-          onCancel={() => setOpen(false)}
+          onCancel={() => changeOpen(false)}
           onSubmit={submit}
         />
       </DialogContent>
@@ -283,30 +291,25 @@ export function PriceItemDialog({
 }
 
 export function PublishPriceDialog({
-  tenantSupplierId,
+  scope,
   priceList,
   itemCount,
   onChanged,
 }: {
-  tenantSupplierId: string;
+  scope: ProductApiScope;
   priceList: SupplierPriceList;
   itemCount: number;
   onChanged: Changed;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [reason, setReason] = useState("");
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
 
   async function submit() {
-    if (reason.trim().length < 2) return;
     setSaving(true);
     try {
       const path = `/supplier-price-lists/${priceList.id}/publish`;
-      const payload = {
-        expected_version: priceList.row_version,
-        proxy_reason: reason.trim(),
-      };
+      const payload = { expected_version: priceList.row_version };
       const attempt = resolveSupplierCommandAttempt(attemptRef.current, {
         scope: "supplier-price-publish",
         resourcePath: path,
@@ -315,7 +318,7 @@ export function PublishPriceDialog({
       attemptRef.current = attempt;
       await mutateSupplierResource(
         path,
-        tenantSupplierId,
+        scope,
         payload,
         attempt.idempotencyKey,
       );
@@ -351,41 +354,15 @@ export function PublishPriceDialog({
             服务端会校验所有商品、SKU、目录引用和生效区间，并使用事务锁防止并发重叠。
           </AlertDescription>
         </Alert>
-        <FieldGroup>
-          <ReasonField id="supplier-price-publish-reason" value={reason} onChange={setReason} />
-        </FieldGroup>
         <DialogActions
           saving={saving}
-          invalid={reason.trim().length < 2}
+          invalid={false}
           submitLabel="确认发布"
           onCancel={() => setOpen(false)}
           onSubmit={submit}
         />
       </DialogContent>
     </Dialog>
-  );
-}
-
-function ReasonField({
-  id,
-  value,
-  onChange,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <Field>
-      <FieldLabel htmlFor={id}>代录原因</FieldLabel>
-      <Textarea
-        id={id}
-        value={value}
-        maxLength={500}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      <FieldDescription>记录供应商报价单、邮件或书面授权来源。</FieldDescription>
-    </Field>
   );
 }
 

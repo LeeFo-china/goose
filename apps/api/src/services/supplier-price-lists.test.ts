@@ -1,5 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 
+process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
+process.env.SUPABASE_PUBLISH ??= "test-publish-key";
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
 const TENANT_SUPPLIER_ID = "70000000-0000-4000-8000-000000000001";
 const TENANT_ID = "70000000-0000-4000-8000-000000000002";
 const SUPPLIER_ID = "70000000-0000-4000-8000-000000000003";
@@ -8,6 +12,7 @@ const EMPLOYEE_ID = "70000000-0000-4000-8000-000000000005";
 const PRICE_LIST_ID = "70000000-0000-4000-8000-000000000006";
 const ITEM_ID = "70000000-0000-4000-8000-000000000007";
 const SKU_ID = "70000000-0000-4000-8000-000000000008";
+const TENANT_SKU_ID = "70000000-0000-4000-8000-000000000009";
 
 function dependencies() {
   return {
@@ -31,7 +36,7 @@ function dependencies() {
 }
 
 describe("SupplierPriceListsService", () => {
-  test("publishes with a server-derived proxy scope", async () => {
+  test("publishes with a server-derived tenant price scope", async () => {
     const deps = dependencies();
     const { SupplierPriceListsService } = await import(
       "./supplier-price-lists"
@@ -44,7 +49,6 @@ describe("SupplierPriceListsService", () => {
       PRICE_LIST_ID,
       {
         expected_version: 2,
-        proxy_reason: "确认供应商盖章报价单",
       },
       "price:publish",
     );
@@ -53,15 +57,15 @@ describe("SupplierPriceListsService", () => {
       price_list_id: PRICE_LIST_ID,
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       expected_version: 2,
       actor_user_id: USER_ID,
       actor_employee_id: EMPLOYEE_ID,
       idempotency_key: "price:publish",
-      proxy_reason: "确认供应商盖章报价单",
     });
   });
 
-  test("maps price items to the atomic list-version command", async () => {
+  test("maps platform and tenant SKUs to the same tenant price context", async () => {
     const deps = dependencies();
     const { SupplierPriceListsService } = await import(
       "./supplier-price-lists"
@@ -81,16 +85,32 @@ describe("SupplierPriceListsService", () => {
         tax_rate: 0.13,
         tax_inclusive: true,
         expected_version: 3,
-        proxy_reason: "供应商报价单代录",
       },
       "price:item:upsert",
     );
+    await service.upsertItem(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRICE_LIST_ID,
+      ITEM_ID,
+      {
+        supplier_sku_id: TENANT_SKU_ID,
+        minimum_quantity: 1,
+        maximum_quantity: null,
+        unit_price: 99,
+        tax_rate: 0.13,
+        tax_inclusive: true,
+        expected_version: 4,
+      },
+      "price:item:tenant-sku",
+    );
 
-    expect(deps.repository.upsertItem).toHaveBeenCalledWith({
+    expect(deps.repository.upsertItem).toHaveBeenNthCalledWith(1, {
       item_id: ITEM_ID,
       price_list_id: PRICE_LIST_ID,
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       sku_id: SKU_ID,
       unit_price: 88,
       tax_rate: 0.13,
@@ -99,7 +119,21 @@ describe("SupplierPriceListsService", () => {
       actor_user_id: USER_ID,
       actor_employee_id: EMPLOYEE_ID,
       idempotency_key: "price:item:upsert",
-      proxy_reason: "供应商报价单代录",
+    });
+    expect(deps.repository.upsertItem).toHaveBeenNthCalledWith(2, {
+      item_id: ITEM_ID,
+      price_list_id: PRICE_LIST_ID,
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
+      sku_id: TENANT_SKU_ID,
+      unit_price: 99,
+      tax_rate: 0.13,
+      tax_inclusive: true,
+      expected_version: 4,
+      actor_user_id: USER_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "price:item:tenant-sku",
     });
   });
 
@@ -120,6 +154,7 @@ describe("SupplierPriceListsService", () => {
     expect(deps.repository.listPriceLists).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       page: 1,
       pageSize: 20,
     });
@@ -150,18 +185,20 @@ describe("SupplierPriceListsService", () => {
       {
         expected_version: 1,
         name: "租户报价",
-        proxy_reason: "供应商确认更新",
       },
+      "price:update",
     );
 
-    expect(deps.repository.findPriceList).toHaveBeenCalledWith(
-      SUPPLIER_ID,
-      PRICE_LIST_ID,
-      TENANT_ID,
-    );
+    expect(deps.repository.findPriceList).toHaveBeenCalledWith({
+      supplier_id: SUPPLIER_ID,
+      tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
+      price_list_id: PRICE_LIST_ID,
+    });
     expect(deps.repository.listItems).toHaveBeenCalledWith({
       supplier_id: SUPPLIER_ID,
       tenant_id: TENANT_ID,
+      tenant_supplier_id: TENANT_SUPPLIER_ID,
       price_list_id: PRICE_LIST_ID,
       page: 1,
       pageSize: 20,
@@ -170,9 +207,16 @@ describe("SupplierPriceListsService", () => {
       expect.objectContaining({
         supplier_id: SUPPLIER_ID,
         tenant_id: TENANT_ID,
+        tenant_supplier_id: TENANT_SUPPLIER_ID,
         price_list_id: PRICE_LIST_ID,
+        actor_user_id: USER_ID,
+        actor_employee_id: EMPLOYEE_ID,
+        idempotency_key: "price:update",
       }),
     );
+    const updateCommand = deps.repository.updateDraft.mock.calls[0]![0];
+    expect(updateCommand).not.toHaveProperty("operation_source");
+    expect(updateCommand).not.toHaveProperty("proxy_reason");
   });
 });
 

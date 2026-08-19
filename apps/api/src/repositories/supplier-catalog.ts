@@ -1,12 +1,11 @@
-import { z } from "zod";
-
-import { Errors } from "@/errors/error-factory";
 import type {
   CatalogBrandListQuery,
   CatalogBrandUpdateRecord,
   CatalogCategoryListQuery,
   CatalogCategoryUpdateRecord,
+  CatalogSpecDefinitionListQuery,
   CatalogUnitListQuery,
+  CatalogUnitSuggestionListQuery,
   CatalogUnitUpdateRecord,
 } from "@/schema/supplier-catalog";
 import type {
@@ -16,435 +15,231 @@ import type {
 } from "@/schema/supplier-create-commands";
 import { SupabaseDB } from "@/utils/supabase";
 import {
-  executeCreateCommand,
-  rpcCommandContext as commandContext,
-  type CreateCommandResult,
-} from "./supplier-create-command-rpc";
+  SupplierCatalogCommandRepository,
+  type TenantBrandCreateCommand,
+  type TenantBrandUpdateCommand,
+  type TenantCategoryCreateCommand,
+  type TenantCategoryUpdateCommand,
+} from "./supplier-catalog-commands";
+import type {
+  CatalogBrand,
+  CatalogCategory,
+  CatalogPage,
+  CatalogSpecDefinition,
+  CatalogUnit,
+  CatalogVisibility,
+} from "./supplier-catalog-models";
+import { SupplierCatalogReadRepository } from "./supplier-catalog-read";
+import {
+  type CatalogUpdateReplay,
+  SupplierCatalogReplayRepository,
+} from "./supplier-catalog-replay";
+import {
+  SupplierCatalogWorkflowRepository,
+  type CopyPlatformSpecDefinitionsCommand,
+  type ListUnitSuggestionsCommand,
+  type ReviewUnitSuggestionCommand,
+  type SpecDefinitionCreateCommand,
+  type SpecDefinitionUpdateCommand,
+  type SubmitUnitSuggestionCommand,
+} from "./supplier-catalog-workflows";
 
-const CATEGORY_SELECT =
-  "id,parent_id,code,name,level,status,sort_order,version,created_at,updated_at";
-const BRAND_SELECT =
-  "id,code,name,legal_name,logo_file_id,status,sort_order,version,created_at,updated_at";
-const UNIT_SELECT =
-  "id,code,name,symbol,base_unit_id,conversion_factor::text,status,sort_order,version,created_at,updated_at";
-const UNIT_BASE_SELECT = "id,code,name,symbol,status";
-
-const CatalogStatusSchema = z.enum(["active", "inactive"]);
-const CatalogConflictSnapshotSchema = z.object({
-  version: z.number().int().positive(),
-  status: CatalogStatusSchema,
-}).strict();
-const catalogAudit = {
-  version: z.number().int().positive(),
-  created_by_employee_id: z.uuid().optional(),
-  updated_by_employee_id: z.uuid().optional(),
-  created_at: z.string(),
-  updated_at: z.string(),
-};
-const CatalogCategorySchema = z.object({
-  id: z.uuid(),
-  parent_id: z.uuid().nullable(),
-  code: z.string(),
-  name: z.string(),
-  level: z.number().int().min(1).max(6),
-  status: CatalogStatusSchema,
-  sort_order: z.number().int(),
-  ...catalogAudit,
-}).strict();
-const CatalogBrandSchema = z.object({
-  id: z.uuid(),
-  code: z.string(),
-  name: z.string(),
-  legal_name: z.string().nullable(),
-  logo_file_id: z.uuid().nullable(),
-  status: CatalogStatusSchema,
-  sort_order: z.number().int(),
-  ...catalogAudit,
-}).strict();
-const CatalogUnitSchema = z.object({
-  id: z.uuid(),
-  code: z.string(),
-  name: z.string(),
-  symbol: z.string(),
-  base_unit_id: z.uuid().nullable(),
-  conversion_factor: z.string(),
-  status: CatalogStatusSchema,
-  sort_order: z.number().int(),
-  ...catalogAudit,
-}).strict();
-const CatalogUnitBaseSchema = z.object({
-  id: z.uuid(),
-  code: z.string(),
-  name: z.string(),
-  symbol: z.string(),
-  status: CatalogStatusSchema,
-}).strict();
-const CatalogUnitListSchema = CatalogUnitSchema.extend({
-  base_unit: CatalogUnitBaseSchema.nullable(),
-}).strict();
-
-export type CatalogCategory = z.infer<typeof CatalogCategorySchema>;
-export type CatalogBrand = z.infer<typeof CatalogBrandSchema>;
-export type CatalogUnit = z.infer<typeof CatalogUnitListSchema>;
-export type CatalogUnitRecord = z.infer<typeof CatalogUnitSchema>;
-export type CatalogPage<T> = {
-  list: T[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
-export type CatalogCategoryCreateResult =
-  CreateCommandResult<"category", CatalogCategory>;
-export type CatalogBrandCreateResult =
-  CreateCommandResult<"brand", CatalogBrand>;
-export type CatalogUnitCreateResult =
-  CreateCommandResult<"unit", CatalogUnitRecord>;
+export type {
+  CatalogBrand,
+  CatalogCategory,
+  CatalogPage,
+  CatalogSpecDefinition,
+  CatalogUnit,
+  CatalogUnitRecord,
+  CatalogUnitSuggestion,
+  CatalogVisibility,
+  PlatformBrand,
+  PlatformCategory,
+} from "./supplier-catalog-models";
+export type {
+  CopyPlatformSpecDefinitionsCommand,
+  ListUnitSuggestionsCommand,
+  ReviewUnitSuggestionCommand,
+  SpecDefinitionCreateCommand,
+  SpecDefinitionUpdateCommand,
+  SubmitUnitSuggestionCommand,
+} from "./supplier-catalog-workflows";
+export type {
+  TenantBrandCreateCommand,
+  TenantBrandUpdateCommand,
+  TenantCategoryCreateCommand,
+  TenantCategoryUpdateCommand,
+} from "./supplier-catalog-commands";
+export type { CatalogUpdateReplay } from "./supplier-catalog-replay";
 
 export interface SupplierCatalogRepositoryPort {
   listCategories(
     query: CatalogCategoryListQuery,
+    visibility?: CatalogVisibility,
   ): Promise<CatalogPage<CatalogCategory>>;
-  listBrands(query: CatalogBrandListQuery): Promise<CatalogPage<CatalogBrand>>;
+  listBrands(
+    query: CatalogBrandListQuery,
+    visibility?: CatalogVisibility,
+  ): Promise<CatalogPage<CatalogBrand>>;
   listUnits(query: CatalogUnitListQuery): Promise<CatalogPage<CatalogUnit>>;
-  createCategory(input: CatalogCategoryCreateCommand): Promise<CatalogCategoryCreateResult>;
-  updateCategory(input: CatalogCategoryUpdateRecord): Promise<CatalogCategory>;
-  createBrand(input: CatalogBrandCreateCommand): Promise<CatalogBrandCreateResult>;
-  updateBrand(input: CatalogBrandUpdateRecord): Promise<CatalogBrand>;
-  createUnit(input: CatalogUnitCreateCommand): Promise<CatalogUnitCreateResult>;
-  updateUnit(input: CatalogUnitUpdateRecord): Promise<CatalogUnitRecord>;
+  listSpecDefinitions(
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+    visibility: CatalogVisibility,
+  ): Promise<CatalogPage<CatalogSpecDefinition>>;
+  findVisibleCategory(id: string, visibility: CatalogVisibility): Promise<CatalogCategory | null>;
+  findVisibleBrand(id: string, visibility: CatalogVisibility): Promise<CatalogBrand | null>;
+  findVisibleSpecDefinition(
+    categoryId: string,
+    definitionId: string,
+    visibility: CatalogVisibility,
+  ): Promise<CatalogSpecDefinition | null>;
+  createCategory(input: CatalogCategoryCreateCommand): Promise<unknown>;
+  updateCategory(input: CatalogCategoryUpdateRecord): Promise<unknown>;
+  createBrand(input: CatalogBrandCreateCommand): Promise<unknown>;
+  updateBrand(input: CatalogBrandUpdateRecord): Promise<unknown>;
+  createUnit(input: CatalogUnitCreateCommand): Promise<unknown>;
+  updateUnit(input: CatalogUnitUpdateRecord): Promise<unknown>;
+  createTenantCategory(input: TenantCategoryCreateCommand): Promise<unknown>;
+  updateTenantCategory(input: TenantCategoryUpdateCommand): Promise<unknown>;
+  createTenantBrand(input: TenantBrandCreateCommand): Promise<unknown>;
+  updateTenantBrand(input: TenantBrandUpdateCommand): Promise<unknown>;
+  createSpecDefinition(input: SpecDefinitionCreateCommand): Promise<unknown>;
+  updateSpecDefinition(input: SpecDefinitionUpdateCommand): Promise<unknown>;
+  copyPlatformSpecDefinitions(input: CopyPlatformSpecDefinitionsCommand): Promise<unknown>;
+  listUnitSuggestions(input: ListUnitSuggestionsCommand): Promise<unknown>;
+  submitUnitSuggestion(input: SubmitUnitSuggestionCommand): Promise<unknown>;
+  reviewUnitSuggestion(input: ReviewUnitSuggestionCommand): Promise<unknown>;
+  findCatalogUpdateReplay(
+    actorUserId: string,
+    idempotencyKey: string,
+  ): Promise<CatalogUpdateReplay | null>;
 }
 
-type CatalogClient = ReturnType<typeof SupabaseDB.getAdminClient>;
-
-export class SupplierCatalogRepository
-  implements SupplierCatalogRepositoryPort {
-  private readonly client: CatalogClient;
+export class SupplierCatalogRepository implements SupplierCatalogRepositoryPort {
+  private readonly reads: SupplierCatalogReadRepository;
+  private readonly commands: SupplierCatalogCommandRepository;
+  private readonly workflows: SupplierCatalogWorkflowRepository;
+  private readonly replay: SupplierCatalogReplayRepository;
 
   constructor(clientFactory = () => SupabaseDB.getAdminClient()) {
-    this.client = clientFactory();
+    const client = clientFactory();
+    this.reads = new SupplierCatalogReadRepository(client);
+    this.commands = new SupplierCatalogCommandRepository(client);
+    this.workflows = new SupplierCatalogWorkflowRepository(client);
+    this.replay = new SupplierCatalogReplayRepository(client);
   }
 
-  async listCategories(
-    input: CatalogCategoryListQuery,
-  ): Promise<CatalogPage<CatalogCategory>> {
-    const pagination = normalizePage(input);
-    const { start, end } = pageRange(pagination);
-    let request = this.client.from("catalog_categories")
-      .select(CATEGORY_SELECT, { count: "exact" });
-    request = input.parent_id
-      ? request.eq("parent_id", input.parent_id)
-      : request.is("parent_id", null);
-    if (input.status) request = request.eq("status", input.status);
-    if (input.level) request = request.eq("level", input.level);
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true })
-      .range(start, end);
-    if (error) throw Errors.dbError("查询标准目录分类失败", error);
-    return toPage(
-      parseRows(CatalogCategorySchema, data, "查询标准目录分类失败"),
-      pagination,
-      count,
-    );
+  listCategories(
+    query: CatalogCategoryListQuery,
+    visibility?: CatalogVisibility,
+  ) {
+    return this.reads.listCategories(query, visibility);
   }
 
-  async listBrands(
-    input: CatalogBrandListQuery,
-  ): Promise<CatalogPage<CatalogBrand>> {
-    const pagination = normalizePage(input);
-    const { start, end } = pageRange(pagination);
-    let request = this.client.from("catalog_brands")
-      .select(BRAND_SELECT, { count: "exact" });
-    if (input.status) request = request.eq("status", input.status);
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true })
-      .range(start, end);
-    if (error) throw Errors.dbError("查询标准品牌失败", error);
-    return toPage(
-      parseRows(CatalogBrandSchema, data, "查询标准品牌失败"),
-      pagination,
-      count,
-    );
+  listBrands(query: CatalogBrandListQuery, visibility?: CatalogVisibility) {
+    return this.reads.listBrands(query, visibility);
   }
 
-  async listUnits(
-    input: CatalogUnitListQuery,
-  ): Promise<CatalogPage<CatalogUnit>> {
-    const pagination = normalizePage(input);
-    const { start, end } = pageRange(pagination);
-    let request = this.client.from("catalog_units")
-      .select(UNIT_SELECT, { count: "exact" });
-    if (input.status) request = request.eq("status", input.status);
-    if (input.base_unit_id === null) {
-      request = request.is("base_unit_id", null);
-    } else if (input.base_unit_id) {
-      request = request.eq("base_unit_id", input.base_unit_id);
-    } else if (input.unit_kind === "base") {
-      request = request.is("base_unit_id", null);
-    } else if (input.unit_kind === "derived") {
-      request = request.not("base_unit_id", "is", null);
-    }
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true })
-      .range(start, end);
-    if (error) throw Errors.dbError("查询标准单位失败", error);
-    const units = parseRows(
-      CatalogUnitSchema,
-      data,
-      "查询标准单位失败",
-    );
-    return toPage(
-      await this.hydrateUnitBaseUnits(units),
-      pagination,
-      count,
-    );
+  listUnits(query: CatalogUnitListQuery) {
+    return this.reads.listUnits(query);
   }
 
-  private async hydrateUnitBaseUnits(
-    units: CatalogUnitRecord[],
-  ): Promise<CatalogUnit[]> {
-    const baseUnitIds = Array.from(new Set(
-      units.flatMap((unit) => unit.base_unit_id ? [unit.base_unit_id] : []),
-    ));
-    if (baseUnitIds.length === 0) {
-      return units.map((unit) => ({ ...unit, base_unit: null }));
-    }
+  listSpecDefinitions(
+    categoryId: string,
+    query: CatalogSpecDefinitionListQuery,
+    visibility: CatalogVisibility,
+  ) {
+    return this.reads.listSpecDefinitions(categoryId, query, visibility);
+  }
 
-    const { data, error } = await this.client.from("catalog_units")
-      .select(UNIT_BASE_SELECT)
-      .in("id", baseUnitIds)
-      .limit(baseUnitIds.length);
-    if (error) throw Errors.dbError("查询标准单位失败", error);
-    const baseUnits = parseRows(
-      CatalogUnitBaseSchema,
-      data,
-      "查询标准单位失败",
+  findVisibleCategory(id: string, visibility: CatalogVisibility) {
+    return this.reads.findVisibleCategory(id, visibility);
+  }
+
+  findVisibleBrand(id: string, visibility: CatalogVisibility) {
+    return this.reads.findVisibleBrand(id, visibility);
+  }
+
+  findVisibleSpecDefinition(
+    categoryId: string,
+    definitionId: string,
+    visibility: CatalogVisibility,
+  ) {
+    return this.reads.findVisibleSpecDefinition(
+      categoryId,
+      definitionId,
+      visibility,
     );
-    const baseUnitById = new Map(baseUnits.map((unit) => [unit.id, unit]));
-
-    return units.map((unit) => ({
-      ...unit,
-      base_unit: unit.base_unit_id
-        ? baseUnitById.get(unit.base_unit_id) ?? null
-        : null,
-    }));
   }
 
   createCategory(input: CatalogCategoryCreateCommand) {
-    return executeCreateCommand({
-      client: this.client, functionName: "create_catalog_category",
-      resourceKey: "category", resourceSchema: CatalogCategorySchema,
-      message: "新增标准目录分类失败",
-      params: {
-        p_category_id: input.category_id,
-        p_parent_id: input.parent_id,
-        p_code: input.code,
-        p_name: input.name,
-        p_level: input.level,
-        p_status: input.status,
-        p_sort_order: input.sort_order,
-        ...commandContext(input),
-      },
-    });
+    return this.commands.createCategory(input);
   }
 
   updateCategory(input: CatalogCategoryUpdateRecord) {
-    const { category_id, expected_version, ...patch } = input;
-    return this.updateRow(
-      "catalog_categories",
-      CATEGORY_SELECT,
-      category_id,
-      expected_version,
-      patch,
-      CatalogCategorySchema,
-      "更新标准目录分类失败",
-    );
+    return this.commands.updateCategory(input);
   }
 
   createBrand(input: CatalogBrandCreateCommand) {
-    return executeCreateCommand({
-      client: this.client, functionName: "create_catalog_brand",
-      resourceKey: "brand", resourceSchema: CatalogBrandSchema,
-      message: "新增标准品牌失败",
-      params: {
-        p_brand_id: input.brand_id,
-        p_code: input.code,
-        p_name: input.name,
-        p_legal_name: input.legal_name ?? null,
-        p_logo_file_id: input.logo_file_id ?? null,
-        p_status: input.status,
-        p_sort_order: input.sort_order,
-        ...commandContext(input),
-      },
-    });
+    return this.commands.createBrand(input);
   }
 
   updateBrand(input: CatalogBrandUpdateRecord) {
-    const { brand_id, expected_version, ...patch } = input;
-    return this.updateRow(
-      "catalog_brands",
-      BRAND_SELECT,
-      brand_id,
-      expected_version,
-      patch,
-      CatalogBrandSchema,
-      "更新标准品牌失败",
-    );
+    return this.commands.updateBrand(input);
   }
 
   createUnit(input: CatalogUnitCreateCommand) {
-    return executeCreateCommand({
-      client: this.client, functionName: "create_catalog_unit",
-      resourceKey: "unit", resourceSchema: CatalogUnitSchema,
-      message: "新增标准单位失败",
-      params: {
-        p_unit_id: input.unit_id,
-        p_code: input.code,
-        p_name: input.name,
-        p_symbol: input.symbol,
-        p_base_unit_id: input.base_unit_id,
-        p_conversion_factor: input.conversion_factor,
-        p_status: input.status,
-        p_sort_order: input.sort_order,
-        ...commandContext(input),
-      },
-    });
+    return this.commands.createUnit(input);
   }
 
   updateUnit(input: CatalogUnitUpdateRecord) {
-    const { unit_id, expected_version, ...patch } = input;
-    return this.updateRow(
-      "catalog_units",
-      UNIT_SELECT,
-      unit_id,
-      expected_version,
-      patch,
-      CatalogUnitSchema,
-      "更新标准单位失败",
-    );
+    return this.commands.updateUnit(input);
   }
 
-  private async updateRow<T>(
-    table: string,
-    select: string,
-    id: string,
-    expectedVersion: number,
-    patch: object,
-    schema: z.ZodType<T>,
-    message: string,
-  ): Promise<T> {
-    const { data, error } = await this.client.from(table)
-      .update(compact({ ...patch, version: expectedVersion + 1 }))
-      .eq("id", id)
-      .eq("version", expectedVersion)
-      .select(select)
-      .maybeSingle();
-    if (error) throw Errors.dbError(message, error);
-    if (data === null) {
-      const conflictSnapshot = await this.readConflictSnapshot(table, id);
-      throw Errors.business(
-        409,
-        "目录数据版本已变化，请刷新后重试",
-        "SUPPLIER_VERSION_CONFLICT",
-        conflictSnapshot
-          ? {
-              current_version: conflictSnapshot.version,
-              current_status: conflictSnapshot.status,
-            }
-          : undefined,
-      );
-    }
-    return parseRow(schema, data, message);
+  createTenantCategory(input: TenantCategoryCreateCommand) {
+    return this.commands.createTenantCategory(input);
   }
 
-  private async readConflictSnapshot(table: string, id: string) {
-    const { data, error } = await this.client.from(table)
-      .select("version,status")
-      .eq("id", id)
-      .maybeSingle();
-    if (error) throw Errors.dbError("刷新目录数据版本失败", error);
-    if (data === null) return null;
-    return parseRow(
-      CatalogConflictSnapshotSchema,
-      data,
-      "刷新目录数据版本失败",
-    );
+  updateTenantCategory(input: TenantCategoryUpdateCommand) {
+    return this.commands.updateTenantCategory(input);
   }
-}
 
-function normalizePage(input: { page: number; pageSize: number }) {
-  return {
-    page: Number.isInteger(input.page) && input.page > 0 ? input.page : 1,
-    pageSize: Number.isInteger(input.pageSize) && input.pageSize > 0
-      ? Math.min(100, input.pageSize)
-      : 20,
-  };
-}
+  createTenantBrand(input: TenantBrandCreateCommand) {
+    return this.commands.createTenantBrand(input);
+  }
 
-function pageRange(input: { page: number; pageSize: number }) {
-  const start = (input.page - 1) * input.pageSize;
-  return { start, end: start + input.pageSize - 1 };
-}
+  updateTenantBrand(input: TenantBrandUpdateCommand) {
+    return this.commands.updateTenantBrand(input);
+  }
 
-function toPage<T>(
-  list: T[],
-  input: { page: number; pageSize: number },
-  count: number | null,
-): CatalogPage<T> {
-  const total = count ?? 0;
-  return {
-    list,
-    pagination: {
-      ...input,
-      total,
-      totalPages: total === 0 ? 0 : Math.ceil(total / input.pageSize),
-    },
-  };
-}
+  createSpecDefinition(input: SpecDefinitionCreateCommand) {
+    return this.workflows.createSpecDefinition(input);
+  }
 
-function applyKeyword<RequestBuilder extends {
-  or(filters: string): RequestBuilder;
-}>(request: RequestBuilder, keyword?: string): RequestBuilder {
-  const value = keyword?.replace(/[^\p{L}\p{N}\s-]+/gu, " ")
-    .replace(/\s+/gu, " ")
-    .trim();
-  return value
-    ? request.or(`code.ilike.%${value}%,name.ilike.%${value}%`)
-    : request;
-}
+  updateSpecDefinition(input: SpecDefinitionUpdateCommand) {
+    return this.workflows.updateSpecDefinition(input);
+  }
 
-function parseRows<T>(
-  schema: z.ZodType<T>,
-  data: unknown,
-  message: string,
-): T[] {
-  const result = z.array(schema).safeParse(data ?? []);
-  if (result.success) return result.data;
-  throw Errors.dbError(message, result.error.issues);
-}
+  copyPlatformSpecDefinitions(input: CopyPlatformSpecDefinitionsCommand) {
+    return this.workflows.copyPlatformSpecDefinitions(input);
+  }
 
-function parseRow<T>(
-  schema: z.ZodType<T>,
-  data: unknown,
-  message: string,
-): T {
-  const result = schema.safeParse(data);
-  if (result.success) return result.data;
-  throw Errors.dbError(message, result.error.issues);
-}
+  listUnitSuggestions(input: ListUnitSuggestionsCommand) {
+    return this.workflows.listUnitSuggestions(input);
+  }
 
-function compact(input: object): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(input).filter(([, value]) => value !== undefined),
-  );
+  submitUnitSuggestion(input: SubmitUnitSuggestionCommand) {
+    return this.workflows.submitUnitSuggestion(input);
+  }
+
+  reviewUnitSuggestion(input: ReviewUnitSuggestionCommand) {
+    return this.workflows.reviewUnitSuggestion(input);
+  }
+
+  findCatalogUpdateReplay(actorUserId: string, idempotencyKey: string) {
+    return this.replay.find(actorUserId, idempotencyKey);
+  }
 }
 
 export const supplierCatalogRepository = new SupplierCatalogRepository();

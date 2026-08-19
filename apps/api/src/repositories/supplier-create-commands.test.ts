@@ -161,10 +161,10 @@ describe("supplier create command repositories", () => {
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/create_supplier_qualification_type",
       "/rest/v1/rpc/create_supplier_qualification_type",
-      "/rest/v1/rpc/create_supplier_qualification",
-      "/rest/v1/rpc/create_supplier_service_region",
-      "/rest/v1/rpc/create_supplier_address",
-      "/rest/v1/rpc/create_supplier_contact",
+      "/rest/v1/rpc/create_supplier_qualification_guarded",
+      "/rest/v1/rpc/create_supplier_service_region_guarded",
+      "/rest/v1/rpc/create_supplier_address_guarded",
+      "/rest/v1/rpc/create_supplier_contact_guarded",
     ]);
     for (const request of requests) {
       const payload = await request.clone().json();
@@ -221,6 +221,7 @@ describe("supplier create command repositories", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "999999999999.123456",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
       ...command,
@@ -236,6 +237,7 @@ describe("supplier create command repositories", () => {
     });
     expect(await requests[2]?.clone().json()).toMatchObject({
       p_conversion_factor: "999999999999.123456",
+      p_unit_dimension: "quantity",
       p_actor_user_id: USER_ID,
       p_idempotency_key: "catalog-create-1",
     });
@@ -325,10 +327,10 @@ describe("supplier create command repositories", () => {
 
 const platformRpcKeys = {
   create_supplier_qualification_type: "qualification_type",
-  create_supplier_qualification: "qualification",
-  create_supplier_service_region: "service_region",
-  create_supplier_address: "address",
-  create_supplier_contact: "contact",
+  create_supplier_qualification_guarded: "qualification",
+  create_supplier_service_region_guarded: "service_region",
+  create_supplier_address_guarded: "address",
+  create_supplier_contact_guarded: "contact",
 } as const;
 
 const catalogRpcKeys = {
@@ -463,6 +465,7 @@ function catalogRows() {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "999999999999.123456",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
       ...audit,

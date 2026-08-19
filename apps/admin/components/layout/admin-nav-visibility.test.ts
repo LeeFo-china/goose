@@ -45,6 +45,23 @@ function createPlatformSuperAdminSession(): AdminSession {
 }
 
 describe("admin nav visibility", () => {
+  test("shows tenant supplier catalog only with catalog management permission", () => {
+    const purchasing = tenantNavGroups.find((group) =>
+      group.label === "采购供应"
+    );
+    const item = purchasing?.items.find((candidate) =>
+      candidate.href === "/supplier-catalog"
+    );
+
+    expect(item?.label).toBe("供应商目录");
+    expect(item?.permission).toBe("supplier.catalog.manage");
+    expect(hasMenuItemAccess(createSession([]), item!)).toBe(false);
+    expect(hasMenuItemAccess(createSession([{
+      code: "supplier.catalog.manage",
+      scope: "all",
+    }]), item!)).toBe(true);
+  });
+
   test("registers Douyin publishing with the platform management permission", () => {
     const item = platformNavGroups.flatMap((group) => group.items).find(
       (candidate) => candidate.href === "/platform/douyin-miniapps",

@@ -25,6 +25,13 @@ const requiredNumber = (schema: z.ZodNumber) =>
   z.preprocess(parseRequiredNumber, schema);
 const optionalNumber = (schema: z.ZodNumber) =>
   z.preprocess(parseOptionalNumber, schema.optional());
+const optionalBooleanQuery = z.preprocess((value) => {
+  if (typeof value !== "string") return value;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return value;
+}, z.boolean().optional());
 const expectedVersion = requiredNumber(
   z.number().int().positive("版本号必须是正整数"),
 );
@@ -46,7 +53,7 @@ export const CatalogStatusSchema = z.enum(["active", "inactive"], {
 });
 const catalogCategoryLevel = z.number().int()
   .min(1, "目录分类层级不能小于 1")
-  .max(6, "目录分类层级不能超过 6");
+  .max(8, "目录分类层级不能超过 8");
 export const CatalogCategoryLevelSchema =
   requiredNumber(catalogCategoryLevel);
 
@@ -60,10 +67,22 @@ export const CatalogCategoryListQuerySchema =
     ...catalogListFields,
     parent_id: uuid("无效的父目录分类 ID").nullable().optional(),
     level: optionalNumber(catalogCategoryLevel),
+    is_leaf: optionalBooleanQuery,
   }).strict();
 export const CatalogBrandListQuerySchema = PaginationQuerySchema.extend(
   catalogListFields,
 ).strict();
+const TenantCatalogPlatformScopeSchema = z.literal("platform", {
+  message: "无效的租户目录读取范围",
+});
+export const TenantCatalogCategoryListQuerySchema =
+  CatalogCategoryListQuerySchema.extend({
+    scope: TenantCatalogPlatformScopeSchema.optional(),
+  }).strict();
+export const TenantCatalogBrandListQuerySchema =
+  CatalogBrandListQuerySchema.extend({
+    scope: TenantCatalogPlatformScopeSchema.optional(),
+  }).strict();
 export const CatalogUnitKindSchema = z.enum(["base", "derived"], {
   message: "无效的单位类型",
 });
@@ -229,6 +248,14 @@ const unitFields = {
   symbol: requiredText(32, "目录单位符号不能为空", "目录单位符号不能超过 32 个字符"),
   base_unit_id: uuid("无效的基准单位 ID").nullable(),
   conversion_factor: conversionFactor,
+  unit_dimension: requiredText(
+    64,
+    "单位计量维度不能为空",
+    "单位计量维度不能超过 64 个字符",
+  ).refine(
+    (value) => value !== "legacy_unclassified",
+    "新单位必须使用明确的计量维度",
+  ),
   status: CatalogStatusSchema,
   sort_order: z.number().int(),
 };
@@ -247,6 +274,7 @@ export const CatalogUnitUpdateSchema = z.object({
   symbol: unitFields.symbol.optional(),
   base_unit_id: unitFields.base_unit_id.optional(),
   conversion_factor: optionalConversionFactor,
+  unit_dimension: unitFields.unit_dimension.optional(),
   status: unitFields.status.optional(),
   sort_order: optionalNumber(unitFields.sort_order),
 }).strict().superRefine(addUnitBaseIssue).refine(hasUpdateField, {
@@ -257,6 +285,10 @@ export type CatalogCategoryListQuery =
   z.infer<typeof CatalogCategoryListQuerySchema>;
 export type CatalogBrandListQuery =
   z.infer<typeof CatalogBrandListQuerySchema>;
+export type TenantCatalogCategoryListQuery =
+  z.infer<typeof TenantCatalogCategoryListQuerySchema>;
+export type TenantCatalogBrandListQuery =
+  z.infer<typeof TenantCatalogBrandListQuerySchema>;
 export type CatalogUnitListQuery =
   z.infer<typeof CatalogUnitListQuerySchema>;
 export type CatalogCategoryCreateRecord =
@@ -289,3 +321,5 @@ export type CatalogUnitCreateInput =
   z.infer<typeof CatalogUnitCreateSchema>;
 export type CatalogUnitUpdateInput =
   z.infer<typeof CatalogUnitUpdateSchema>;
+
+export * from "./supplier-catalog-extensions";

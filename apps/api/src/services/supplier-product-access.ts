@@ -60,10 +60,18 @@ export class SupplierProductAccessService {
     auth: AuthContext,
     tenantSupplierId: string,
   ) {
+    const permission = [
+      "supplier.product.view",
+      "supplier.product.manage",
+      "supplier.cost-price.view",
+      "supplier.cost-price.manage",
+    ].find((candidate) =>
+      auth.permissions.some(({ code }) => code === candidate)
+    ) ?? "supplier.product.view";
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.product.view",
+      permission,
       false,
     );
   }
@@ -84,10 +92,16 @@ export class SupplierProductAccessService {
     auth: AuthContext,
     tenantSupplierId: string,
   ) {
+    const permission = [
+      "supplier.cost-price.view",
+      "supplier.cost-price.manage",
+    ].find((candidate) =>
+      auth.permissions.some(({ code }) => code === candidate)
+    ) ?? "supplier.cost-price.view";
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.cost-price.view",
+      permission,
       false,
     );
   }

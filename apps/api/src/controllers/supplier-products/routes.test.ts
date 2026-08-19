@@ -15,6 +15,7 @@ describe("SupplierProductsController routes", () => {
       get: register("GET"),
       post: register("POST"),
       patch: register("PATCH"),
+      put: register("PUT"),
     } as never);
 
     expect(routes).toEqual([
@@ -27,6 +28,8 @@ describe("SupplierProductsController routes", () => {
       "GET /supplier-products/:id/skus",
       "POST /supplier-products/:id/skus/:skuId",
       "PATCH /supplier-products/:id/skus/:skuId",
+      "PUT /supplier-products/:id/skus/:skuId/unit-conversions",
+      "GET /supplier-products/:id/skus/:skuId/unit-conversions",
       "POST /supplier-products/:id/skus/:skuId/activate",
       "POST /supplier-products/:id/skus/:skuId/deactivate",
     ]);

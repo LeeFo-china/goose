@@ -7,6 +7,14 @@ export const SUPPLIER_PRODUCT_STATUS_VALUES = [
 export type SupplierProductStatus =
   (typeof SUPPLIER_PRODUCT_STATUS_VALUES)[number];
 
+export const SUPPLIER_PRODUCT_SOURCE_VALUES = [
+  "platform_shared",
+  "tenant_private",
+] as const;
+
+export type SupplierProductSource =
+  (typeof SUPPLIER_PRODUCT_SOURCE_VALUES)[number];
+
 export const SUPPLIER_SKU_STATUS_VALUES = [
   "draft",
   "active",

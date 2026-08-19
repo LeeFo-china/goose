@@ -45,9 +45,33 @@ const BUSINESS_ERRORS = {
     statusCode: 404,
     message: "供应商商品不存在",
   },
+  SUPPLIER_PRODUCT_CODE_CONFLICT: {
+    statusCode: 409,
+    message: "供应商商品编码已存在",
+  },
+  SUPPLIER_PRODUCT_ID_CONFLICT: {
+    statusCode: 409,
+    message: "商品编号已存在",
+  },
+  PRODUCT_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "供应商商品归属与当前操作不匹配",
+  },
   SUPPLIER_SKU_NOT_FOUND: {
     statusCode: 404,
     message: "供应商 SKU 不存在",
+  },
+  SUPPLIER_SKU_CODE_CONFLICT: {
+    statusCode: 409,
+    message: "供应商 SKU 编码已存在",
+  },
+  SUPPLIER_SKU_ID_CONFLICT: {
+    statusCode: 409,
+    message: "供应商 SKU 编号已存在",
+  },
+  PLATFORM_PERMISSION_REQUIRED: {
+    statusCode: 403,
+    message: "缺少平台供应商商品管理权限",
   },
   SUPPLIER_PRICE_LIST_NOT_FOUND: {
     statusCode: 404,
@@ -65,6 +89,38 @@ const BUSINESS_ERRORS = {
     statusCode: 409,
     message: "供应商模块未启用",
   },
+  SUPPLIER_OWNERSHIP_READS_DISABLED: {
+    statusCode: 403,
+    message: "供应商所有权读取尚未启用",
+  },
+  PRIVATE_CATALOG_WRITES_DISABLED: {
+    statusCode: 403,
+    message: "租户私有目录维护尚未启用",
+  },
+  SHARED_RESOURCE_READ_ONLY: {
+    statusCode: 403,
+    message: "平台共享目录资源只读",
+  },
+  CATEGORY_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "目录分类归属与当前操作不匹配",
+  },
+  BRAND_OWNERSHIP_CONFLICT: {
+    statusCode: 409,
+    message: "目录品牌归属与当前操作不匹配",
+  },
+  SPEC_TEMPLATE_VALIDATION_ERROR: {
+    statusCode: 409,
+    message: "目录规格模板校验失败",
+  },
+  SUPPLIER_CATALOG_CONFLICT: {
+    statusCode: 409,
+    message: "供应商目录数据冲突",
+  },
+  UNIT_CONVERSION_INVALID: {
+    statusCode: 400,
+    message: "单位换算参数无效",
+  },
   SUPPLIER_ORDER_NOT_ELIGIBLE: {
     statusCode: 409,
     message: "当前供应商关系不允许继续该操作",
@@ -80,6 +136,10 @@ const BUSINESS_ERRORS = {
   SUPPLIER_PRODUCT_STATE_CONFLICT: {
     statusCode: 409,
     message: "供应商商品当前状态不允许该操作",
+  },
+  PRODUCT_CATEGORY_CHANGE_REQUIRES_SKU_MIGRATION: {
+    statusCode: 409,
+    message: "商品已有 SKU，变更分类前必须先迁移 SKU 规格",
   },
   SUPPLIER_SKU_STATE_CONFLICT: {
     statusCode: 409,
@@ -241,6 +301,7 @@ const BUSINESS_ERRORS = {
 
 type SupplierBusinessCode = keyof typeof BUSINESS_ERRORS;
 const TOKEN_ALIASES = {
+  SUPPLIER_OWNERSHIP_IMMUTABLE: "PRODUCT_OWNERSHIP_CONFLICT",
   FULFILLMENT_NOT_CONFIRMED:
     "SUPPLIER_PURCHASE_ORDER_FULFILLMENT_NOT_CONFIRMED",
   FULFILLMENT_VERSION_CONFLICT:
@@ -252,6 +313,16 @@ const TOKEN_ALIASES = {
 } as const satisfies Record<string, SupplierBusinessCode>;
 type SupplierCommandToken =
   SupplierBusinessCode | keyof typeof TOKEN_ALIASES;
+const DATABASE_CONSTRAINT_CODES = {
+  supplier_products_pkey: "SUPPLIER_PRODUCT_ID_CONFLICT",
+  supplier_products_platform_code_unique_idx:
+    "SUPPLIER_PRODUCT_CODE_CONFLICT",
+  supplier_products_tenant_code_unique_idx:
+    "SUPPLIER_PRODUCT_CODE_CONFLICT",
+  supplier_skus_pkey: "SUPPLIER_SKU_ID_CONFLICT",
+  supplier_skus_platform_code_unique_idx: "SUPPLIER_SKU_CODE_CONFLICT",
+  supplier_skus_tenant_code_unique_idx: "SUPPLIER_SKU_CODE_CONFLICT",
+} as const satisfies Record<string, SupplierBusinessCode>;
 const FULFILLMENT_ENVELOPE_CODES: Readonly<
   Record<string, readonly SupplierCommandToken[]>
 > = {
@@ -326,7 +397,9 @@ const REQUISITION_ENVELOPE_CODES: Readonly<
 };
 
 export function mapSupplierCommandDatabaseError(error: unknown) {
-  const token = [
+  const constraintCode = Object.entries(DATABASE_CONSTRAINT_CODES)
+    .find(([constraint]) => containsToken(error, constraint))?.[1];
+  const token = constraintCode ?? [
     ...Object.keys(BUSINESS_ERRORS) as SupplierBusinessCode[],
     ...Object.keys(TOKEN_ALIASES) as Array<keyof typeof TOKEN_ALIASES>,
   ]
@@ -376,7 +449,8 @@ export function throwSupplierCommandDatabaseError(
 
 function containsToken(value: unknown, token: string): boolean {
   if (typeof value === "string") {
-    return new RegExp(`(^|[^A-Z0-9_])${token}($|[^A-Z0-9_])`).test(value);
+    return new RegExp(`(^|[^A-Za-z0-9_])${token}($|[^A-Za-z0-9_])`)
+      .test(value);
   }
   if (Array.isArray(value)) {
     return value.some((item) => containsToken(item, token));

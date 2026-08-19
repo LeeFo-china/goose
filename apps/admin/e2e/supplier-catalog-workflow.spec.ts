@@ -1,50 +1,11 @@
 import { expect, test } from "@playwright/test";
-import type { APIRequestContext, Locator, Page } from "@playwright/test";
-
-const mockBackendBaseUrl = "http://127.0.0.1:3997";
-const platformAdminPhone = "18637605353";
-
-type MutationJournalEntry = {
-  method: "POST" | "PATCH";
-  path: string;
-  idempotencyKey: string | null;
-  payload: Record<string, unknown>;
-};
-
-async function resetMock(request: APIRequestContext) {
-  const response = await request.post(`${mockBackendBaseUrl}/__test/reset`);
-  expect(response.ok()).toBe(true);
-}
-
-async function loginAsPlatformAdmin(page: Page) {
-  const response = await page.request.post("/api/auth/login", {
-    data: { phone: platformAdminPhone, code: "" },
-  });
-  expect(response.ok()).toBe(true);
-}
-
-async function readMutations(
-  request: APIRequestContext,
-): Promise<MutationJournalEntry[]> {
-  const response = await request.get(
-    `${mockBackendBaseUrl}/__test/mutations`,
-  );
-  expect(response.ok()).toBe(true);
-  return (await response.json() as { mutations: MutationJournalEntry[] })
-    .mutations;
-}
-
-async function submitStatus(row: Locator, page: Page, action: "停用" | "启用") {
-  await row.getByRole("button", { name: action, exact: true }).click();
-  const dialog = page.getByRole("dialog", {
-    name: new RegExp(`^${action}`),
-  });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", {
-    name: `${action}目录数据`,
-    exact: true,
-  }).click();
-}
+import {
+  loginAsPlatformAdmin,
+  mockBackendBaseUrl,
+  readMutations,
+  resetMock,
+  submitStatus,
+} from "./supplier-catalog-test-helpers";
 
 test.describe("供应标准目录确定性工作流", () => {
   test.beforeEach(async ({ page, request }) => {
@@ -313,6 +274,7 @@ test.describe("供应标准目录确定性工作流", () => {
         code: "E2E-UNIT",
         name: "E2E 新单位",
         symbol: "E2EU",
+        unit_dimension: "quantity",
         base_unit_id: null,
         conversion_factor: "1",
         sort_order: 100,
@@ -323,25 +285,66 @@ test.describe("供应标准目录确定性工作流", () => {
       payload,
     }))).toEqual([
       {
-        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000102",
         payload: {
           expected_version: 1,
           code: "E2E-UNIT",
           name: "E2E 编辑单位",
           symbol: "E2UE",
+          unit_dimension: "quantity",
           base_unit_id: null,
           conversion_factor: "1",
           sort_order: 100,
         },
       },
       {
-        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000102",
         payload: { expected_version: 2, status: "inactive" },
       },
       {
-        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000002",
+        path: "/platform/catalog/units/13000000-0000-4000-8000-000000000102",
         payload: { expected_version: 3, status: "active" },
       },
     ]);
+  });
+
+  test("平台可维护规格模板并从第二页选择第 101 单位审核建议", async ({ page, request }) => {
+    await page.goto("/platform/catalog", { waitUntil: "networkidle" });
+    await expect.poll(() => new URL(page.url()).searchParams.has("pageSize"))
+      .toBe(true);
+    const categoryRow = page.getByRole("row").filter({ hasText: "基础建材" });
+    await categoryRow.getByRole("button", { name: "规格模板" }).click();
+    const specs = page.getByRole("dialog", { name: "基础建材规格模板" });
+    await specs.getByRole("button", { name: "新建规格" }).click();
+    const editor = page.getByRole("dialog", { name: "新建规格" });
+    await editor.getByLabel("规格编码").fill("MATERIAL");
+    await editor.getByLabel("规格名称").fill("材质");
+    await editor.getByRole("button", { name: "保存规格" }).click();
+    await expect(editor).toBeHidden();
+    await expect(specs.getByRole("row").filter({ hasText: "材质" }))
+      .toBeVisible();
+    await specs.getByRole("button", { name: "Close" }).click();
+    await expect(specs).toBeHidden();
+
+    await page.getByRole("tab", { name: "单位建议" }).click();
+    const suggestionRow = page.getByRole("row").filter({ hasText: "BAG" });
+    await suggestionRow.getByRole("button", { name: "审核" }).click();
+    const review = page.getByRole("dialog", { name: "审核单位建议" });
+    await expect(review.getByText("第 1 / 2 页", { exact: true })).toBeVisible();
+    await review.getByRole("button", { name: "下一页" }).click();
+    await expect(review.getByText("第 2 / 2 页", { exact: true })).toBeVisible();
+    await review.getByRole("combobox", { name: "选择标准单位" }).click();
+    await page.getByRole("option", {
+      name: "第 101 单位（U101） · UNIT-101",
+    }).click();
+    await review.getByRole("button", { name: "提交审核" }).click();
+    await expect(suggestionRow).toContainText("已通过");
+    expect((await readMutations(request)).at(-1)).toMatchObject({
+      path: "/platform/catalog/unit-suggestions/32000000-0000-4000-8000-000000000001",
+      payload: {
+        action: "approved",
+        approved_catalog_unit_id: "13000000-0000-4000-8000-000000000101",
+      },
+    });
   });
 });

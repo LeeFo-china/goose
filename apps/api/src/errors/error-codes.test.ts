@@ -154,3 +154,23 @@ describe('tenant private supplier error codes', () => {
     ]);
   });
 });
+
+describe('supplier catalog error codes', () => {
+  test('exports the stable ownership, specification, and conversion contract', () => {
+    expect([
+      ErrorCodes.SHARED_RESOURCE_READ_ONLY,
+      ErrorCodes.PRODUCT_OWNERSHIP_CONFLICT,
+      ErrorCodes.CATEGORY_OWNERSHIP_CONFLICT,
+      ErrorCodes.BRAND_OWNERSHIP_CONFLICT,
+      ErrorCodes.SPEC_TEMPLATE_VALIDATION_ERROR,
+      ErrorCodes.UNIT_CONVERSION_INVALID,
+    ]).toEqual([
+      'SHARED_RESOURCE_READ_ONLY',
+      'PRODUCT_OWNERSHIP_CONFLICT',
+      'CATEGORY_OWNERSHIP_CONFLICT',
+      'BRAND_OWNERSHIP_CONFLICT',
+      'SPEC_TEMPLATE_VALIDATION_ERROR',
+      'UNIT_CONVERSION_INVALID',
+    ]);
+  });
+});

@@ -11,15 +11,68 @@ describe("SupplierCatalogController routes", () => {
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
       get: (path: string) => routes.push({ method: "GET", path }),
+      post: (path: string) => routes.push({ method: "POST", path }),
+      patch: (path: string) => routes.push({ method: "PATCH", path }),
     };
 
     controller.registerExtraRoutes(fastify as never);
 
     expect(routes).toEqual([
       { method: "GET", path: "/catalog/categories" },
+      { method: "POST", path: "/catalog/categories" },
+      { method: "PATCH", path: "/catalog/categories/:id" },
       { method: "GET", path: "/catalog/brands" },
+      { method: "POST", path: "/catalog/brands" },
+      { method: "PATCH", path: "/catalog/brands/:id" },
       { method: "GET", path: "/catalog/units" },
+      { method: "GET", path: "/catalog/categories/:id/spec-definitions" },
+      { method: "POST", path: "/catalog/categories/:id/spec-definitions" },
+      {
+        method: "PATCH",
+        path: "/catalog/categories/:id/spec-definitions/:definitionId",
+      },
+      {
+        method: "POST",
+        path: "/catalog/categories/:id/spec-definitions:copy-platform",
+      },
+      { method: "GET", path: "/catalog/unit-suggestions" },
+      { method: "POST", path: "/catalog/unit-suggestions" },
     ]);
+  });
+
+  test("rejects every tenant command route without an idempotency key", async () => {
+    const { default: controller } = await import(".");
+    Object.defineProperty(controller, "getRequiredTenantContext", {
+      configurable: true,
+      value: async () => ({ tenantId: crypto.randomUUID() }),
+    });
+    const request = {
+      body: {},
+      headers: {},
+      params: {},
+      query: {},
+    } as FastifyRequest;
+    const commands = [
+      () => controller.createCategory(request),
+      () => controller.updateCategory(request),
+      () => controller.createBrand(request),
+      () => controller.updateBrand(request),
+      () => controller.createSpecDefinition(request),
+      () => controller.updateSpecDefinition(request),
+      () => controller.copyPlatformSpecDefinitions(request),
+      () => controller.submitUnitSuggestion(request),
+    ];
+
+    try {
+      for (const command of commands) {
+        await expect(command()).rejects.toMatchObject({
+          statusCode: 400,
+          code: "VALIDATION_ERROR",
+        });
+      }
+    } finally {
+      Reflect.deleteProperty(controller, "getRequiredTenantContext");
+    }
   });
 
   test("passes tenant auth and a validated paginated query once", async () => {
@@ -108,6 +161,10 @@ function registeredHandlers(controller: {
       }
       routes.set(`${method} ${path}`, routeHandler as RouteHandler);
     };
-  controller.registerExtraRoutes({ get: register("GET") });
+  controller.registerExtraRoutes({
+    get: register("GET"),
+    post: register("POST"),
+    patch: register("PATCH"),
+  });
   return routes;
 }
