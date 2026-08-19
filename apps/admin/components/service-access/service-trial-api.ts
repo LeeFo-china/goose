@@ -4,6 +4,7 @@ import type {
 } from "@gooes/domain";
 
 import { requestBackendJson } from "@/lib/backend-client";
+import type { ServiceAccessRefreshResult } from "./service-access-context";
 
 const CURRENT_TRIAL_PATH = "/billing/service-trials/current";
 const RECENT_TRIALS_PATH = "/billing/service-trials?page=1&pageSize=20";
@@ -181,6 +182,40 @@ export function canShowServiceTrialApplication(
   return canApply && status !== "pending_review" && status !== "scheduled";
 }
 
+export function shouldClearSubmittedServiceTrial({
+  summaryStatusAtSubmit,
+  summaryTrialStatus,
+}: {
+  summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
+  summaryTrialStatus: PlatformServiceTrialStatus | null;
+}): boolean {
+  return summaryTrialStatus !== null
+    && summaryTrialStatus !== summaryStatusAtSubmit;
+}
+
+export function resolveServiceTrialEffectiveStatus({
+  loadedTrialStatus,
+  submittedTrialStatus,
+  summaryStatusAtSubmit,
+  summaryTrialStatus,
+}: {
+  loadedTrialStatus: PlatformServiceTrialStatus | null;
+  submittedTrialStatus: PlatformServiceTrialStatus | null;
+  summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
+  summaryTrialStatus: PlatformServiceTrialStatus | null;
+}): PlatformServiceTrialStatus | null {
+  if (submittedTrialStatus !== null) {
+    return shouldClearSubmittedServiceTrial({
+      summaryStatusAtSubmit,
+      summaryTrialStatus,
+    })
+      ? summaryTrialStatus ?? loadedTrialStatus
+      : submittedTrialStatus;
+  }
+
+  return loadedTrialStatus ?? summaryTrialStatus;
+}
+
 export function parseServiceTrialRequest(
   values: ServiceTrialFormValues,
 ): ServiceTrialRequestParseResult {
@@ -253,18 +288,17 @@ export async function completeServiceTrialSubmission({
   trial: ServiceTrial;
   installTrial: (trial: ServiceTrial) => void;
   showFeedback: (feedback: ServiceTrialSubmitFeedback) => void;
-  refreshSummary: () => Promise<void>;
+  refreshSummary: () => Promise<ServiceAccessRefreshResult>;
 }): Promise<void> {
   installTrial(trial);
   showFeedback({ message: "试用申请已提交，请等待平台审核。" });
-  try {
-    await refreshSummary();
-  } catch (error) {
+  const refreshResult = await refreshSummary();
+  if (!refreshResult.success) {
+    const requestId = refreshResult.requestId
+      ? `（Request-ID：${refreshResult.requestId}）`
+      : "";
     showFeedback({
-      message: `试用申请已提交。${formatServiceTrialError(
-        error,
-        "服务状态刷新失败，请稍后手动刷新",
-      )}`,
+      message: `试用申请已提交。${refreshResult.message}${requestId}`,
     });
   }
 }

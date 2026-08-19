@@ -13,9 +13,15 @@ import {
   getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
   parseServiceTrialRequest,
+  resolveServiceTrialEffectiveStatus,
+  shouldClearSubmittedServiceTrial,
   type ServiceTrialRequest,
   type ServiceTrialRequester,
 } from "./service-trial-api";
+import {
+  requestServiceAccessRefresh,
+  type ServiceAccessRefreshRequester,
+} from "./service-access-context";
 
 const FIRST_KEY = "550e8400-e29b-41d4-a716-446655440000";
 const SECOND_KEY = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
@@ -297,6 +303,7 @@ describe("service trial recovery rules", () => {
       },
       refreshSummary: async () => {
         events.push("summary:refresh");
+        return { success: true };
       },
     });
 
@@ -307,18 +314,36 @@ describe("service trial recovery rules", () => {
     ]);
   });
 
-  test("keeps success feedback with safe requestId when summary refresh fails", async () => {
+  test("uses the real context refresh result to preserve safe failure feedback", async () => {
     const feedbackMessages: string[] = [];
     const refreshError = Object.assign(new Error("服务状态刷新失败"), {
       requestId: "summary-request-id",
       payload: { contact_phone: "13800138000" },
     });
+    const paths: string[] = [];
+    const requester: ServiceAccessRefreshRequester = <Response>(path: string) => {
+      paths.push(path);
+      return Promise.reject(refreshError) as Promise<Response>;
+    };
+    const outcome = await requestServiceAccessRefresh(requester);
+
+    expect(paths).toEqual(["/employee/service-access"]);
+    expect(outcome.loadResult).toEqual({
+      kind: "unavailable",
+      message: "服务状态暂时无法加载，请稍后重试",
+    });
+    expect(outcome.result).toEqual({
+      success: false,
+      message: "服务状态刷新失败",
+      requestId: "summary-request-id",
+    });
+    expect(JSON.stringify(outcome)).not.toContain("13800138000");
 
     await completeServiceTrialSubmission({
       trial,
       installTrial: () => undefined,
       showFeedback: (feedback) => feedbackMessages.push(feedback.message),
-      refreshSummary: () => Promise.reject(refreshError),
+      refreshSummary: async () => outcome.result,
     });
 
     expect(feedbackMessages).toEqual([
@@ -346,6 +371,30 @@ describe("service trial recovery rules", () => {
       "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
     );
     expect(canShowServiceTrialApplication(true, "pending_review")).toBe(false);
+    expect(formSource).not.toContain("finally {\n      setSubmitting(false)");
+  });
+
+  test("lets a later authoritative rejection supersede local pending state", () => {
+    const localPending = resolveServiceTrialEffectiveStatus({
+      loadedTrialStatus: null,
+      submittedTrialStatus: "pending_review",
+      summaryStatusAtSubmit: "expired",
+      summaryTrialStatus: "expired",
+    });
+    const authoritativeRejected = resolveServiceTrialEffectiveStatus({
+      loadedTrialStatus: null,
+      submittedTrialStatus: "pending_review",
+      summaryStatusAtSubmit: "expired",
+      summaryTrialStatus: "rejected",
+    });
+
+    expect(localPending).toBe("pending_review");
+    expect(authoritativeRejected).toBe("rejected");
+    expect(shouldClearSubmittedServiceTrial({
+      summaryStatusAtSubmit: "expired",
+      summaryTrialStatus: "rejected",
+    })).toBe(true);
+    expect(canShowServiceTrialApplication(true, authoritativeRejected)).toBe(true);
   });
 
   test("never treats submit feedback as trial read authorization", () => {

@@ -78,11 +78,7 @@ export function ServiceTrialForm({
 
     submissionIntentRef.current.clearAfterSuccess();
     setValues({ ...EMPTY_VALUES });
-    try {
-      await onSubmitted(submittedTrial);
-    } finally {
-      setSubmitting(false);
-    }
+    await onSubmitted(submittedTrial);
   }
 
   return (

@@ -20,8 +20,11 @@ import {
   formatServiceTrialError,
   getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
+  resolveServiceTrialEffectiveStatus,
+  shouldClearSubmittedServiceTrial,
   type ServiceTrial,
 } from "./service-trial-api";
+import type { ServiceAccessRefreshResult } from "./service-access-context";
 import { ServiceTrialForm } from "./service-trial-form";
 
 const STATUS_META = {
@@ -48,9 +51,13 @@ export function ServiceTrialSection({
   canApply: boolean;
   canView: boolean;
   summaryTrialStatus: PlatformServiceTrialStatus | null;
-  onSummaryRefresh: () => Promise<void>;
+  onSummaryRefresh: () => Promise<ServiceAccessRefreshResult>;
 }) {
   const [trial, setTrial] = useState<ServiceTrial | null>(null);
+  const [submittedTrial, setSubmittedTrial] = useState<{
+    trial: ServiceTrial;
+    summaryStatusAtSubmit: PlatformServiceTrialStatus | null;
+  } | null>(null);
   const [loading, setLoading] = useState(canView);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitFeedback, setSubmitFeedback] = useState<string | null>(null);
@@ -90,6 +97,16 @@ export function ServiceTrialSection({
     };
   }, [loadTrial]);
 
+  useEffect(() => {
+    setSubmittedTrial((current) => current
+      && shouldClearSubmittedServiceTrial({
+        summaryStatusAtSubmit: current.summaryStatusAtSubmit,
+        summaryTrialStatus,
+      })
+      ? null
+      : current);
+  }, [summaryTrialStatus]);
+
   const handleSubmitted = useCallback(async (
     submittedTrial: ServiceTrial,
   ): Promise<void> => {
@@ -97,16 +114,24 @@ export function ServiceTrialSection({
       trial: submittedTrial,
       installTrial: (nextTrial) => {
         requestSequenceRef.current += 1;
-        setTrial(nextTrial);
+        setSubmittedTrial({
+          trial: nextTrial,
+          summaryStatusAtSubmit: summaryTrialStatus,
+        });
         setLoadError(null);
         setLoading(false);
       },
       showFeedback: (feedback) => setSubmitFeedback(feedback.message),
       refreshSummary: onSummaryRefresh,
     });
-  }, [onSummaryRefresh]);
+  }, [onSummaryRefresh, summaryTrialStatus]);
 
-  const effectiveStatus = trial?.status ?? summaryTrialStatus;
+  const effectiveStatus = resolveServiceTrialEffectiveStatus({
+    loadedTrialStatus: trial?.status ?? null,
+    submittedTrialStatus: submittedTrial?.trial.status ?? null,
+    summaryStatusAtSubmit: submittedTrial?.summaryStatusAtSubmit ?? null,
+    summaryTrialStatus,
+  });
   const showApplication = canShowServiceTrialApplication(
     canApply,
     effectiveStatus,
@@ -147,7 +172,7 @@ export function ServiceTrialSection({
 
       {visibility.showTrialDetails ? (
         <TrialStatusContent
-          trial={trial}
+          trial={submittedTrial?.trial ?? trial}
           loading={loading}
           loadError={loadError}
           onRetry={loadTrial}
