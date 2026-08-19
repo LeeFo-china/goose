@@ -18,6 +18,7 @@ import {
   canShowServiceTrialApplication,
   completeServiceTrialSubmission,
   formatServiceTrialError,
+  getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
   type ServiceTrial,
 } from "./service-trial-api";
@@ -110,13 +111,19 @@ export function ServiceTrialSection({
     canApply,
     effectiveStatus,
   );
-  const canDisplayTrial = canView || submitFeedback !== null;
+  const visibility = getServiceTrialSectionVisibility({
+    canApply,
+    canView,
+    hasSubmitFeedback: submitFeedback !== null,
+  });
 
-  if (!canApply && !canDisplayTrial) {
+  if (visibility.showContactAdministrator) {
     return (
       <section className="w-full rounded-md border bg-background p-5 md:p-6">
         <h2 className="text-base font-semibold">试用服务</h2>
-        <SubmitFeedback message={submitFeedback} />
+        {visibility.showSubmitFeedback ? (
+          <SubmitFeedback message={submitFeedback} />
+        ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
           请联系企业管理员处理。
         </p>
@@ -138,7 +145,7 @@ export function ServiceTrialSection({
         </p>
       </div>
 
-      {canDisplayTrial ? (
+      {visibility.showTrialDetails ? (
         <TrialStatusContent
           trial={trial}
           loading={loading}
@@ -147,7 +154,9 @@ export function ServiceTrialSection({
         />
       ) : null}
 
-      <SubmitFeedback message={submitFeedback} />
+      {visibility.showSubmitFeedback ? (
+        <SubmitFeedback message={submitFeedback} />
+      ) : null}
 
       {effectiveStatus === "pending_review" || effectiveStatus === "scheduled" ? (
         <Alert>

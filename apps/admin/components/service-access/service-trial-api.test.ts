@@ -10,6 +10,7 @@ import {
   formatServiceTrialError,
   getCurrentServiceTrial,
   getServiceTrialRecoveryCapabilities,
+  getServiceTrialSectionVisibility,
   loadCurrentOrRecentServiceTrial,
   parseServiceTrialRequest,
   type ServiceTrialRequest,
@@ -337,14 +338,44 @@ describe("service trial recovery rules", () => {
     expect(formSource).not.toContain("试用申请已提交，请等待平台审核。");
     expect(sectionSource).toContain("const [submitFeedback, setSubmitFeedback]");
     expect(sectionSource).toContain("<SubmitFeedback message={submitFeedback}");
-    expect(sectionSource).toContain(
-      "const canDisplayTrial = canView || submitFeedback !== null",
-    );
+    expect(sectionSource).not.toContain("canDisplayTrial");
+    expect(sectionSource).toContain("visibility.showTrialDetails");
+    expect(sectionSource).toContain("visibility.showContactAdministrator");
     expect(sectionSource).not.toContain("await loadTrial()");
     expect(workspaceSource).toContain(
       "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
     );
     expect(canShowServiceTrialApplication(true, "pending_review")).toBe(false);
+  });
+
+  test("never treats submit feedback as trial read authorization", () => {
+    expect(getServiceTrialSectionVisibility({
+      canApply: false,
+      canView: false,
+      hasSubmitFeedback: true,
+    })).toEqual({
+      showTrialDetails: false,
+      showSubmitFeedback: true,
+      showContactAdministrator: true,
+    });
+    expect(getServiceTrialSectionVisibility({
+      canApply: true,
+      canView: false,
+      hasSubmitFeedback: true,
+    })).toEqual({
+      showTrialDetails: false,
+      showSubmitFeedback: true,
+      showContactAdministrator: false,
+    });
+    expect(getServiceTrialSectionVisibility({
+      canApply: false,
+      canView: true,
+      hasSubmitFeedback: true,
+    })).toEqual({
+      showTrialDetails: true,
+      showSubmitFeedback: true,
+      showContactAdministrator: false,
+    });
   });
 
   test("uses an HTML phone pattern that accepts a mainland mobile number", () => {

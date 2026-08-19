@@ -154,6 +154,26 @@ export function getServiceTrialRecoveryCapabilities(
   };
 }
 
+export function getServiceTrialSectionVisibility({
+  canApply,
+  canView,
+  hasSubmitFeedback,
+}: {
+  canApply: boolean;
+  canView: boolean;
+  hasSubmitFeedback: boolean;
+}): {
+  showTrialDetails: boolean;
+  showSubmitFeedback: boolean;
+  showContactAdministrator: boolean;
+} {
+  return {
+    showTrialDetails: canView,
+    showSubmitFeedback: hasSubmitFeedback,
+    showContactAdministrator: !canApply && !canView,
+  };
+}
+
 export function canShowServiceTrialApplication(
   canApply: boolean,
   status: PlatformServiceTrialStatus | null,
