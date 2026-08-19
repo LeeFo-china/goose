@@ -57,7 +57,7 @@ describe("getServiceAccessProviderKey", () => {
       .not.toBe(workspaceKey);
   });
 
-  test("changes provider identity when a ready result is reevaluated", () => {
+  test("keeps provider identity when the same access status is reevaluated", () => {
     const initial = ready(
       "workspace_available",
       "2026-08-19T00:00:00.000Z",
@@ -68,7 +68,7 @@ describe("getServiceAccessProviderKey", () => {
     );
 
     expect(getServiceAccessProviderKey(reevaluated))
-      .not.toBe(getServiceAccessProviderKey(initial));
+      .toBe(getServiceAccessProviderKey(initial));
   });
 
   test("keeps provider identity stable for the same authority result", () => {

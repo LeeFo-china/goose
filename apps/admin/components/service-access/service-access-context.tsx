@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -47,7 +48,6 @@ export function getServiceAccessProviderKey(
   return [
     initialLoadResult.kind,
     initialLoadResult.summary.accessStatus,
-    initialLoadResult.summary.evaluatedAt,
   ].join(":");
 }
 
@@ -61,6 +61,11 @@ export function ServiceAccessProvider({
   children: ReactNode;
 }) {
   const [loadResult, setLoadResult] = useState(initialLoadResult);
+
+  useEffect(() => {
+    setLoadResult(initialLoadResult);
+  }, [initialLoadResult]);
+
   const [refreshing, setRefreshing] = useState(false);
   const refreshInFlightRef = useRef(false);
   const permissionCodes = useMemo(

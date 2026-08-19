@@ -44,4 +44,28 @@ describe("admin session guard", () => {
     expect(serviceAccessProviderEnd).toBeGreaterThan(guard);
     expect(sessionProviderEnd).toBeGreaterThan(serviceAccessProviderEnd);
   });
+
+  test("syncs new authority summaries inside the mounted provider", () => {
+    const source = readFileSync(
+      new URL("../service-access/service-access-context.tsx", import.meta.url),
+      "utf8",
+    );
+    const providerStart = source.indexOf("export function ServiceAccessProvider");
+    const syncAssignment = source.indexOf(
+      "setLoadResult(initialLoadResult);",
+      providerStart,
+    );
+    const syncDependency = source.indexOf(
+      "[initialLoadResult]",
+      syncAssignment,
+    );
+    const providerEnd = source.indexOf(
+      "export function useServiceAccess",
+      providerStart,
+    );
+
+    expect(syncAssignment).toBeGreaterThan(providerStart);
+    expect(syncDependency).toBeGreaterThan(syncAssignment);
+    expect(providerEnd).toBeGreaterThan(syncDependency);
+  });
 });
