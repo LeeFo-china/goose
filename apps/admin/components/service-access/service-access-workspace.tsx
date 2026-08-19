@@ -10,6 +10,12 @@ import {
   ServiceAccessStatusPanel,
   type ServiceAccessActionHandlers,
 } from "./service-access-status-panel";
+import {
+  getServicePurchaseCapabilities,
+  shouldAutomaticallyReturnFromServiceAccess,
+  shouldRenderServicePurchaseSection,
+} from "./service-purchase-api";
+import { ServicePurchaseSection } from "./service-purchase-section";
 import { getServiceTrialRecoveryCapabilities } from "./service-trial-api";
 import { ServiceTrialSection } from "./service-trial-section";
 
@@ -39,13 +45,15 @@ export function ServiceAccessWorkspace() {
   }, [router]);
 
   useEffect(() => {
-    const canEnterWorkspace = loadResult.kind === "bypass"
-      || (loadResult.kind === "ready" && (
-        loadResult.summary.accessStatus === "workspace_available"
-        || loadResult.summary.accessStatus === "grace_period"
-      ));
+    const accessStatus = loadResult.kind === "bypass"
+      ? "bypass"
+      : loadResult.kind === "ready"
+        ? loadResult.summary.accessStatus
+        : null;
 
-    if (canEnterWorkspace) returnToDashboard();
+    if (shouldAutomaticallyReturnFromServiceAccess(accessStatus)) {
+      returnToDashboard();
+    }
   }, [loadResult, returnToDashboard]);
 
   const handleRefresh = useCallback(() => {
@@ -57,12 +65,19 @@ export function ServiceAccessWorkspace() {
     enter_readonly_workspace: returnToDashboard,
     refresh: handleRefresh,
   }), [handleRefresh, returnToDashboard]);
-  const trialCapabilities = useMemo(() => getServiceTrialRecoveryCapabilities(
+  const actionKeys = useMemo(() => (
     [summary?.primaryAction?.key, summary?.secondaryAction?.key].filter(
       (key): key is NonNullable<typeof key> => key !== undefined,
-    ),
+    )
+  ), [summary?.primaryAction?.key, summary?.secondaryAction?.key]);
+  const trialCapabilities = useMemo(() => getServiceTrialRecoveryCapabilities(
+    actionKeys,
     permissionCodes,
-  ), [permissionCodes, summary?.primaryAction?.key, summary?.secondaryAction?.key]);
+  ), [actionKeys, permissionCodes]);
+  const purchaseCapabilities = useMemo(() => getServicePurchaseCapabilities(
+    actionKeys,
+    permissionCodes,
+  ), [actionKeys, permissionCodes]);
   const hasRecoverySummary = loadResult.kind === "ready"
     && loadResult.summary.accessStatus !== "workspace_available"
     && loadResult.summary.accessStatus !== "grace_period";
@@ -71,6 +86,12 @@ export function ServiceAccessWorkspace() {
   }, [hasRecoverySummary]);
   const showRecovery = hasRecoverySummary
     || (hasEnteredRecovery && loadResult.kind === "unavailable");
+  const showPurchase = shouldRenderServicePurchaseSection({
+    accessStatus: loadResult.kind === "ready"
+      ? loadResult.summary.accessStatus
+      : null,
+    ...purchaseCapabilities,
+  });
 
   return (
     <section
@@ -90,6 +111,12 @@ export function ServiceAccessWorkspace() {
             summaryTrialId={summary?.trialId ?? null}
             summaryTrialStatus={summary?.trialStatus ?? null}
             onSummaryRefresh={refreshAfterMutation}
+          />
+        ) : null}
+        {showPurchase ? (
+          <ServicePurchaseSection
+            canPurchase={purchaseCapabilities.canPurchase}
+            canReadOrders={purchaseCapabilities.canReadOrders}
           />
         ) : null}
       </div>
