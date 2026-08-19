@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import {
   applyForServiceTrial,
   canShowServiceTrialApplication,
+  completeServiceTrialSubmission,
   createServiceTrialSubmissionIntent,
   formatServiceTrialError,
   getCurrentServiceTrial,
@@ -15,6 +18,13 @@ import {
 
 const FIRST_KEY = "550e8400-e29b-41d4-a716-446655440000";
 const SECOND_KEY = "6ba7b810-9dad-41d1-80b4-00c04fd430c8";
+
+function readSource(relativePath: string): string {
+  return readFileSync(
+    fileURLToPath(new URL(relativePath, import.meta.url)),
+    "utf8",
+  );
+}
 
 type RequestCall = {
   path: string;
@@ -270,5 +280,79 @@ describe("service trial recovery rules", () => {
     expect(formatServiceTrialError({ requestId: 123 }, "操作失败")).toBe(
       "操作失败",
     );
+  });
+
+  test("installs the command trial and parent feedback before summary refresh", async () => {
+    const events: string[] = [];
+
+    await completeServiceTrialSubmission({
+      trial,
+      installTrial: (submittedTrial) => {
+        expect(submittedTrial).toBe(trial);
+        events.push(`trial:${submittedTrial.status}`);
+      },
+      showFeedback: (feedback) => {
+        events.push(`feedback:${feedback.message}`);
+      },
+      refreshSummary: async () => {
+        events.push("summary:refresh");
+      },
+    });
+
+    expect(events).toEqual([
+      "trial:pending_review",
+      "feedback:试用申请已提交，请等待平台审核。",
+      "summary:refresh",
+    ]);
+  });
+
+  test("keeps success feedback with safe requestId when summary refresh fails", async () => {
+    const feedbackMessages: string[] = [];
+    const refreshError = Object.assign(new Error("服务状态刷新失败"), {
+      requestId: "summary-request-id",
+      payload: { contact_phone: "13800138000" },
+    });
+
+    await completeServiceTrialSubmission({
+      trial,
+      installTrial: () => undefined,
+      showFeedback: (feedback) => feedbackMessages.push(feedback.message),
+      refreshSummary: () => Promise.reject(refreshError),
+    });
+
+    expect(feedbackMessages).toEqual([
+      "试用申请已提交，请等待平台审核。",
+      "试用申请已提交。服务状态刷新失败（Request-ID：summary-request-id）",
+    ]);
+    expect(feedbackMessages.join(" ")).not.toContain("13800138000");
+  });
+
+  test("keeps post-submit feedback in the section when the form hides", () => {
+    const formSource = readSource("./service-trial-form.tsx");
+    const sectionSource = readSource("./service-trial-section.tsx");
+    const workspaceSource = readSource("./service-access-workspace.tsx");
+
+    expect(formSource).toContain("submittedTrial = response.trial");
+    expect(formSource).toContain("await onSubmitted(submittedTrial)");
+    expect(formSource).not.toContain("试用申请已提交，请等待平台审核。");
+    expect(sectionSource).toContain("const [submitFeedback, setSubmitFeedback]");
+    expect(sectionSource).toContain("<SubmitFeedback message={submitFeedback}");
+    expect(sectionSource).toContain(
+      "const canDisplayTrial = canView || submitFeedback !== null",
+    );
+    expect(sectionSource).not.toContain("await loadTrial()");
+    expect(workspaceSource).toContain(
+      "hasEnteredRecovery && loadResult.kind === \"unavailable\"",
+    );
+    expect(canShowServiceTrialApplication(true, "pending_review")).toBe(false);
+  });
+
+  test("uses an HTML phone pattern that accepts a mainland mobile number", () => {
+    const formSource = readSource("./service-trial-form.tsx");
+    const pattern = formSource.match(/pattern="([^"]+)"/)?.[1];
+    if (!pattern) throw new Error("未找到手机号 pattern");
+
+    expect(pattern).toBe("^1[3-9][0-9]{9}$");
+    expect(new RegExp(pattern).test("13800138000")).toBe(true);
   });
 });

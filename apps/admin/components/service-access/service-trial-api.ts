@@ -56,6 +56,10 @@ export type ServiceTrialRequestParseResult =
   | { success: true; data: ServiceTrialRequest }
   | { success: false; message: string };
 
+export type ServiceTrialSubmitFeedback = {
+  message: string;
+};
+
 export type ServiceTrialRequester = <Response = unknown>(
   path: string,
   init?: Parameters<typeof requestBackendJson>[1],
@@ -218,6 +222,31 @@ export function formatServiceTrialError(
   return typeof requestId === "string" && requestId.trim()
     ? `${message}（Request-ID：${requestId.trim()}）`
     : message;
+}
+
+export async function completeServiceTrialSubmission({
+  trial,
+  installTrial,
+  showFeedback,
+  refreshSummary,
+}: {
+  trial: ServiceTrial;
+  installTrial: (trial: ServiceTrial) => void;
+  showFeedback: (feedback: ServiceTrialSubmitFeedback) => void;
+  refreshSummary: () => Promise<void>;
+}): Promise<void> {
+  installTrial(trial);
+  showFeedback({ message: "试用申请已提交，请等待平台审核。" });
+  try {
+    await refreshSummary();
+  } catch (error) {
+    showFeedback({
+      message: `试用申请已提交。${formatServiceTrialError(
+        error,
+        "服务状态刷新失败，请稍后手动刷新",
+      )}`,
+    });
+  }
 }
 
 function requestFingerprint(request: ServiceTrialRequest): string {

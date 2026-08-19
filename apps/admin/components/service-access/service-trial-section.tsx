@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PlatformServiceTrialStatus } from "@gooes/domain";
-import { CircleAlert, Clock3 } from "lucide-react";
+import { CircleAlert, CircleCheck, Clock3 } from "lucide-react";
 
 import {
   Alert,
@@ -16,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { formatServiceAccessDateTime } from "./service-access-display";
 import {
   canShowServiceTrialApplication,
+  completeServiceTrialSubmission,
   formatServiceTrialError,
   loadCurrentOrRecentServiceTrial,
   type ServiceTrial,
@@ -51,6 +52,7 @@ export function ServiceTrialSection({
   const [trial, setTrial] = useState<ServiceTrial | null>(null);
   const [loading, setLoading] = useState(canView);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitFeedback, setSubmitFeedback] = useState<string | null>(null);
   const requestSequenceRef = useRef(0);
 
   const loadTrial = useCallback(async (): Promise<void> => {
@@ -87,21 +89,34 @@ export function ServiceTrialSection({
     };
   }, [loadTrial]);
 
-  const handleSubmitted = useCallback(async (): Promise<void> => {
-    await loadTrial();
-    await onSummaryRefresh();
-  }, [loadTrial, onSummaryRefresh]);
+  const handleSubmitted = useCallback(async (
+    submittedTrial: ServiceTrial,
+  ): Promise<void> => {
+    await completeServiceTrialSubmission({
+      trial: submittedTrial,
+      installTrial: (nextTrial) => {
+        requestSequenceRef.current += 1;
+        setTrial(nextTrial);
+        setLoadError(null);
+        setLoading(false);
+      },
+      showFeedback: (feedback) => setSubmitFeedback(feedback.message),
+      refreshSummary: onSummaryRefresh,
+    });
+  }, [onSummaryRefresh]);
 
   const effectiveStatus = trial?.status ?? summaryTrialStatus;
   const showApplication = canShowServiceTrialApplication(
     canApply,
     effectiveStatus,
   );
+  const canDisplayTrial = canView || submitFeedback !== null;
 
-  if (!canApply && !canView) {
+  if (!canApply && !canDisplayTrial) {
     return (
       <section className="w-full rounded-md border bg-background p-5 md:p-6">
         <h2 className="text-base font-semibold">试用服务</h2>
+        <SubmitFeedback message={submitFeedback} />
         <p className="mt-2 text-sm text-muted-foreground">
           请联系企业管理员处理。
         </p>
@@ -123,7 +138,7 @@ export function ServiceTrialSection({
         </p>
       </div>
 
-      {canView ? (
+      {canDisplayTrial ? (
         <TrialStatusContent
           trial={trial}
           loading={loading}
@@ -131,6 +146,8 @@ export function ServiceTrialSection({
           onRetry={loadTrial}
         />
       ) : null}
+
+      <SubmitFeedback message={submitFeedback} />
 
       {effectiveStatus === "pending_review" || effectiveStatus === "scheduled" ? (
         <Alert>
@@ -156,6 +173,18 @@ export function ServiceTrialSection({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SubmitFeedback({ message }: { message: string | null }) {
+  if (!message) return null;
+
+  return (
+    <Alert className="mt-3 border-success/30 bg-success/5">
+      <CircleCheck aria-hidden="true" />
+      <AlertTitle>提交成功</AlertTitle>
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
   );
 }
 

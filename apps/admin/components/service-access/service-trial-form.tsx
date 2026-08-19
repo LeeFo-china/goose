@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { CircleAlert, CircleCheck } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 
 import {
   Alert,
@@ -19,6 +19,7 @@ import {
   createServiceTrialSubmissionIntent,
   formatServiceTrialError,
   parseServiceTrialRequest,
+  type ServiceTrial,
   type ServiceTrialFormValues,
 } from "./service-trial-api";
 
@@ -30,19 +31,14 @@ const EMPTY_VALUES: ServiceTrialFormValues = {
   contactPhone: "",
 };
 
-type FormFeedback = {
-  tone: "success" | "error";
-  message: string;
-};
-
 export function ServiceTrialForm({
   onSubmitted,
 }: {
-  onSubmitted: () => Promise<void>;
+  onSubmitted: (trial: ServiceTrial) => Promise<void>;
 }) {
   const [values, setValues] = useState<ServiceTrialFormValues>(EMPTY_VALUES);
   const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<FormFeedback | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const submissionIntentRef = useRef(createServiceTrialSubmissionIntent());
 
   function updateField(
@@ -51,7 +47,7 @@ export function ServiceTrialForm({
   ): void {
     submissionIntentRef.current.clearAfterChange();
     setValues((current) => ({ ...current, [field]: value }));
-    setFeedback(null);
+    setErrorMessage(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -60,39 +56,33 @@ export function ServiceTrialForm({
 
     const parsed = parseServiceTrialRequest(values);
     if (!parsed.success) {
-      setFeedback({ tone: "error", message: parsed.message });
+      setErrorMessage(parsed.message);
       return;
     }
 
     setSubmitting(true);
-    setFeedback(null);
+    setErrorMessage(null);
+    let submittedTrial: ServiceTrial;
     try {
       const key = submissionIntentRef.current.keyFor(parsed.data);
-      await applyForServiceTrial(parsed.data, key);
+      const response = await applyForServiceTrial(parsed.data, key);
+      submittedTrial = response.trial;
     } catch (error) {
-      setFeedback({
-        tone: "error",
-        message: formatServiceTrialError(error, "试用申请提交失败，请稍后重试"),
-      });
+      setErrorMessage(formatServiceTrialError(
+        error,
+        "试用申请提交失败，请稍后重试",
+      ));
       setSubmitting(false);
       return;
     }
 
     submissionIntentRef.current.clearAfterSuccess();
     setValues({ ...EMPTY_VALUES });
-    setFeedback({ tone: "success", message: "试用申请已提交，请等待平台审核。" });
     try {
-      await onSubmitted();
-    } catch (error) {
-      setFeedback({
-        tone: "success",
-        message: `试用申请已提交。${formatServiceTrialError(
-          error,
-          "状态刷新失败，请稍后手动刷新",
-        )}`,
-      });
+      await onSubmitted(submittedTrial);
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   }
 
   return (
@@ -162,7 +152,7 @@ export function ServiceTrialForm({
           id="service-trial-contact-phone"
           type="tel"
           value={values.contactPhone}
-          pattern="^1[3-9]\\d{9}$"
+          pattern="^1[3-9][0-9]{9}$"
           inputMode="numeric"
           autoComplete="tel"
           maxLength={11}
@@ -172,15 +162,11 @@ export function ServiceTrialForm({
         />
       </div>
 
-      {feedback ? (
-        <Alert variant={feedback.tone === "error" ? "destructive" : "default"}>
-          {feedback.tone === "error" ? (
-            <CircleAlert aria-hidden="true" />
-          ) : (
-            <CircleCheck aria-hidden="true" />
-          )}
-          <AlertTitle>{feedback.tone === "error" ? "提交失败" : "提交成功"}</AlertTitle>
-          <AlertDescription>{feedback.message}</AlertDescription>
+      {errorMessage ? (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>提交失败</AlertTitle>
+          <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       ) : null}
 

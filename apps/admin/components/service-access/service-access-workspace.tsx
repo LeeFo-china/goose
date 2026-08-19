@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useServiceAccess } from "@/components/service-access/service-access-context";
@@ -23,6 +23,7 @@ export function ServiceAccessWorkspace() {
     summary,
   } = useServiceAccess();
   const hasRedirectedRef = useRef(false);
+  const [hasEnteredRecovery, setHasEnteredRecovery] = useState(false);
   const display = useMemo(
     () => buildServiceAccessDisplay(loadResult),
     [loadResult],
@@ -61,9 +62,14 @@ export function ServiceAccessWorkspace() {
     ),
     permissionCodes,
   ), [permissionCodes, summary?.primaryAction?.key, summary?.secondaryAction?.key]);
-  const showRecovery = loadResult.kind === "ready"
+  const hasRecoverySummary = loadResult.kind === "ready"
     && loadResult.summary.accessStatus !== "workspace_available"
     && loadResult.summary.accessStatus !== "grace_period";
+  useEffect(() => {
+    if (hasRecoverySummary) setHasEnteredRecovery(true);
+  }, [hasRecoverySummary]);
+  const showRecovery = hasRecoverySummary
+    || (hasEnteredRecovery && loadResult.kind === "unavailable");
 
   return (
     <section
