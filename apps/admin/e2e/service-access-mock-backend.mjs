@@ -25,6 +25,7 @@ function createState(input = {}) {
     runtime402Remaining: input.runtime402 === true ? 1 : 0,
     runtimeBlocked: false,
     requestCounts: {},
+    requestQueries: {},
     forbiddenRequests: [],
     unexpectedRequests: [],
     trialApplications: 0,
@@ -53,13 +54,35 @@ function readBody(request) {
   });
 }
 
-function countRequest(method, pathname) {
+function countRequest(method, url) {
+  const { pathname, search } = url;
   const key = `${method} ${pathname}`;
   state.requestCounts[key] = (state.requestCounts[key] ?? 0) + 1;
+  state.requestQueries[key] = [...(state.requestQueries[key] ?? []), search];
 }
 
 function list(data = []) {
   return { list: data, pagination: pagination(data.length) };
+}
+
+function validateListPagination(request, response, url) {
+  const pages = url.searchParams.getAll("page");
+  const pageSizes = url.searchParams.getAll("pageSize");
+  const valid = [...url.searchParams].length === 2
+    && pages.length === 1
+    && pages[0] === "1"
+    && pageSizes.length === 1
+    && pageSizes[0] === "20";
+  if (valid) return true;
+
+  const requestTarget = `${request.method} ${url.pathname}${url.search}`;
+  state.unexpectedRequests.push(requestTarget);
+  sendJson(response, 400, {
+    success: false,
+    code: "MOCK_PAGINATION_INVALID",
+    message: "列表请求必须使用 page=1&pageSize=20",
+  });
+  return false;
 }
 
 function isRecoveryCapabilityPath(pathname) {
@@ -164,7 +187,7 @@ async function handleRequest(request, response) {
     return;
   }
 
-  countRequest(request.method, pathname);
+  countRequest(request.method, url);
   if (!authorizeCapabilityRequest(request, response, pathname)) return;
 
   if (request.method === "POST" && pathname === "/admin/auth/login") {
@@ -177,6 +200,7 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/notifications/summary") {
+    // Transitive Admin shell dependency for every allowed browser scenario.
     sendData(response, { unread_count: 0 });
     return;
   }
@@ -203,6 +227,7 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-trials") {
+    if (!validateListPagination(request, response, url)) return;
     sendData(response, list());
     return;
   }
@@ -216,10 +241,12 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-products") {
+    if (!validateListPagination(request, response, url)) return;
     sendData(response, list([serviceProduct]));
     return;
   }
   if (request.method === "GET" && pathname === "/billing/service-orders") {
+    if (!validateListPagination(request, response, url)) return;
     sendData(response, {
       ...list(),
       server_time: "2026-08-20T10:00:00.000+08:00",
@@ -238,6 +265,7 @@ async function handleRequest(request, response) {
     });
     return;
   }
+  // Transitive reads required to render the explicitly allowed /billing page.
   if (request.method === "GET" && pathname === "/billing/summary") {
     sendData(response, tenantBillingSummary);
     return;

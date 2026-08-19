@@ -27,7 +27,6 @@ import {
   CardDescription,
   CardFooter,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -133,13 +132,12 @@ export function ServiceAccessStatusPanel({
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle
+              <h1
                 id="service-access-status-title"
-                role="heading"
-                aria-level={1}
+                className="text-base font-semibold leading-none tracking-normal"
               >
                 {display.title}
-              </CardTitle>
+              </h1>
               <Badge variant={badgeVariantByTone[display.tone]}>
                 {display.statusLabel}
               </Badge>

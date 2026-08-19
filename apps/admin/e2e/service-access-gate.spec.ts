@@ -18,6 +18,7 @@ type Persona = typeof personas[keyof typeof personas];
 
 type MockState = {
   requestCounts: Record<string, number>;
+  requestQueries: Record<string, string[]>;
   forbiddenRequests: string[];
   unexpectedRequests: string[];
   trialApplications: number;
@@ -82,6 +83,35 @@ function requestCount(state: MockState, method: string, path: string): number {
   return state.requestCounts[`${method} ${path}`] ?? 0;
 }
 
+function expectOnlyFirstPageQueries(
+  state: MockState,
+  method: string,
+  path: string,
+): void {
+  const queries = state.requestQueries[`${method} ${path}`] ?? [];
+  expect(queries.length).toBeGreaterThan(0);
+  expect([...new Set(queries)]).toEqual(["?page=1&pageSize=20"]);
+}
+
+async function expectInvalidPaginationRejected(
+  request: APIRequestContext,
+): Promise<void> {
+  const invalidUrls = [
+    "/billing/service-trials",
+    "/billing/service-products?page=2&pageSize=20",
+    "/billing/service-orders?page=1",
+  ];
+  for (const path of invalidUrls) {
+    const response = await request.get(`${mockBackendBaseUrl}${path}`);
+    expect(response.status()).toBe(400);
+  }
+
+  const state = await readState(request);
+  expect(state.unexpectedRequests).toEqual(
+    invalidUrls.map((path) => `GET ${path}`),
+  );
+}
+
 async function expectCleanMockState(
   request: APIRequestContext,
   requestBounds: Record<string, number> = {},
@@ -100,8 +130,9 @@ async function expectCleanMockState(
 async function expectBlockedPage(page: Page): Promise<void> {
   await expect(page).toHaveURL(/\/service-access$/);
   await expect(
-    page.getByRole("heading", { name: blockedTitle }),
+    page.getByRole("heading", { level: 1, name: blockedTitle }),
   ).toHaveCount(1);
+  await expect(page.locator("h1")).toHaveCount(1);
 }
 
 test.beforeEach(async ({ page, request }) => {
@@ -137,6 +168,13 @@ test("阻断页不显示通用到期文案", async ({ page, request }) => {
 });
 
 test("有权限管理员可提交试用并发起受控购买跳转", async ({ page, request }) => {
+  await expectInvalidPaginationRejected(request);
+  await setupPersona(page, request, personas.blockedAdmin);
+  const trialList = await request.get(
+    `${mockBackendBaseUrl}/billing/service-trials?page=1&pageSize=20`,
+  );
+  expect(trialList.ok()).toBe(true);
+
   let interceptedHandoffs = 0;
   await page.route(purchaseUrl, async (route) => {
     interceptedHandoffs += 1;
@@ -166,6 +204,7 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   expect(interceptedHandoffs).toBe(1);
 
   const state = await expectCleanMockState(request, {
+    "GET /billing/service-trials": 1,
     "GET /billing/service-products": 2,
     "GET /billing/service-orders": 2,
     "POST /billing/service-trials/applications": 1,
@@ -173,14 +212,19 @@ test("有权限管理员可提交试用并发起受控购买跳转", async ({ pa
   });
   expect(state.trialApplications).toBe(1);
   expect(state.purchaseHandoffs).toBe(1);
+  for (const path of [
+    "/billing/service-trials",
+    "/billing/service-products",
+    "/billing/service-orders",
+  ]) {
+    expectOnlyFirstPageQueries(state, "GET", path);
+  }
 });
 
 test("普通员工只有联系管理员提示且不请求恢复能力", async ({ page, request }) => {
   await setupPersona(page, request, personas.blockedEmployee);
   await page.goto("/service-access");
-  await expect(
-    page.getByRole("heading", { name: blockedTitle }),
-  ).toHaveCount(1);
+  await expectBlockedPage(page);
   await expect(page.getByText("请联系企业管理员处理。").first())
     .toBeVisible();
   await expect(page.getByRole("button", { name: /申请试用|提交试用申请/ }))
@@ -294,21 +338,22 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   await page.goto("/projects");
   await expect(page.getByRole("heading", { name: "项目管理", level: 1 }))
     .toHaveCount(1);
+  const protectedEntryHistoryLength = await page.evaluate(
+    () => window.history.length,
+  );
 
-  let serviceAccessDocumentRequests = 0;
+  const runtimeNavigationPaths: string[] = [];
   page.on("request", (browserRequest) => {
-    if (
-      browserRequest.isNavigationRequest()
-      && new URL(browserRequest.url()).pathname === "/service-access"
-    ) {
-      serviceAccessDocumentRequests += 1;
-    }
+    if (!browserRequest.isNavigationRequest()) return;
+    runtimeNavigationPaths.push(new URL(browserRequest.url()).pathname);
   });
   await page.getByRole("button", { name: "新增项目" }).click();
   await page.getByLabel("项目名称").fill("运行时 402 回归项目");
   await page.getByRole("button", { name: "创建项目" }).click();
   await expectBlockedPage(page);
   await page.waitForLoadState("networkidle");
+  expect(await page.evaluate(() => window.history.length))
+    .toBe(protectedEntryHistoryLength);
 
   const state = await expectCleanMockState(request, {
     "POST /projects": 1,
@@ -317,7 +362,14 @@ test("运行时一次性 402 只触发一次替换并稳定收敛", async ({ pag
   expect(requestCount(state, "POST", "/projects")).toBe(1);
   expect(state.runtime402Remaining).toBe(0);
   expect(state.runtimeBlocked).toBe(true);
-  expect(serviceAccessDocumentRequests).toBe(1);
+  expect(runtimeNavigationPaths.filter((path) => path === "/service-access"))
+    .toHaveLength(1);
+
+  const navigationCountBeforeBack = runtimeNavigationPaths.length;
+  await page.goBack({ waitUntil: "domcontentloaded" });
+  expect(runtimeNavigationPaths.slice(navigationCountBeforeBack))
+    .not.toContain("/projects");
+  expect(new URL(page.url()).pathname).not.toBe("/projects");
 });
 
 test("服务状态 503 显示可重试系统错误而非到期结论", async ({ page, request }) => {
