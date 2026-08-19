@@ -30,6 +30,16 @@ function splitSqlList(value: string): string[] {
   return value.split(",").map((item) => item.trim().toLowerCase());
 }
 
+function parseGrantees(value: string): string[] {
+  const granteeList = value
+    .replace(/\s+(?:CASCADE|RESTRICT)\s*$/i, "")
+    .replace(/\s+GRANTED\s+BY\s+.+$/i, "");
+
+  return splitSqlList(granteeList).map((grantee) =>
+    grantee.replace(/^group\s+/, "").trim()
+  );
+}
+
 function revokesServiceRoleSharedTableRead(
   source: string,
   table: (typeof SHARED_TABLES)[number],
@@ -45,9 +55,7 @@ function revokesServiceRoleSharedTableRead(
 
     const privileges = splitSqlList(revoke[1] ?? "");
     const target = (revoke[2] ?? "").trim();
-    const roles = splitSqlList(
-      (revoke[3] ?? "").replace(/\s+(?:CASCADE|RESTRICT)\s*$/i, ""),
-    );
+    const roles = parseGrantees(revoke[3] ?? "");
     const revokesSelect = privileges.some((privilege) =>
       privilege === "select" ||
       privilege === "all" ||
@@ -133,11 +141,20 @@ describe("service role shared table read repair migration", () => {
         sql: "REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM service_role;",
         table: "supplier_products",
       },
+      {
+        sql: "REVOKE SELECT ON TABLE public.employees FROM GROUP service_role;",
+        table: "employees",
+      },
+      {
+        sql: "REVOKE SELECT ON TABLE public.supplier_products " +
+          "FROM service_role GRANTED BY CURRENT_USER;",
+        table: "supplier_products",
+      },
     ] as const;
 
     expect(forbiddenRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([true, true, true, true, true, true]);
+    )).toEqual([true, true, true, true, true, true, true, true]);
   });
 
   test("does not flag shared-table revocations from other roles", () => {
@@ -163,11 +180,25 @@ describe("service role shared table read repair migration", () => {
         sql: "REVOKE SELECT ON ALL TABLES IN SCHEMA public FROM anon;",
         table: "employees",
       },
+      {
+        sql: "REVOKE SELECT ON TABLE public.employees FROM GROUP authenticated;",
+        table: "employees",
+      },
+      {
+        sql: "REVOKE SELECT ON TABLE public.supplier_products " +
+          "FROM anon GRANTED BY CURRENT_USER;",
+        table: "supplier_products",
+      },
+      {
+        sql: "REVOKE SELECT ON TABLE public.employees " +
+          "FROM GROUP service_role_reader GRANTED BY CURRENT_USER;",
+        table: "employees",
+      },
     ] as const;
 
     expect(allowedRevokes.map((revoke) =>
       revokesServiceRoleSharedTableRead(revoke.sql, revoke.table)
-    )).toEqual([false, false, false, false, false]);
+    )).toEqual([false, false, false, false, false, false, false, false]);
   });
 
   test("does not widen browser or direct write privileges", () => {
