@@ -42,7 +42,7 @@ export const DOUYIN_BUDGET_AI_STATUS_VALUES = [
 const MoneyYuanSchema = z.int().nonnegative();
 const ResultItemTextSchema = z.string().trim().min(1).max(300);
 const AiListItemSchema = z.string().trim().min(1).max(300);
-const PublicPricingDateTimeSchema = z.union([
+export const DouyinBudgetPublicDateTimeSchema = z.union([
   z.iso.datetime({ offset: true, precision: 0 }),
   z.iso.datetime({ offset: true, precision: 1 }),
   z.iso.datetime({ offset: true, precision: 2 }),
@@ -52,6 +52,54 @@ const OptionCodeSchema = z
   .string()
   .trim()
   .pipe(z.enum(DOUYIN_BUDGET_OPTION_CODE_VALUES));
+const PublicLabelSchema = z.string().trim().min(1).max(40);
+const PublicOptionSchema = z.strictObject({
+  code: z.enum(DOUYIN_BUDGET_OPTION_CODE_VALUES),
+  label: PublicLabelSchema,
+});
+
+export const DouyinBudgetPublicConfigSchema = z.strictObject({
+  property_conditions: z.tuple([
+    z.strictObject({ value: z.literal('rough'), label: PublicLabelSchema }),
+    z.strictObject({ value: z.literal('old_house'), label: PublicLabelSchema }),
+  ]),
+  decoration_tiers: z.tuple([
+    z.strictObject({ value: z.literal('economy'), label: PublicLabelSchema }),
+    z.strictObject({ value: z.literal('comfortable'), label: PublicLabelSchema }),
+    z.strictObject({ value: z.literal('quality'), label: PublicLabelSchema }),
+  ]),
+  decoration_scopes: z.tuple([
+    z.strictObject({ value: z.literal('whole_house'), label: PublicLabelSchema }),
+    z.strictObject({ value: z.literal('partial'), label: PublicLabelSchema }),
+  ]),
+  options: z
+    .array(PublicOptionSchema)
+    .max(20)
+    .refine(
+      (options) =>
+        options.every(
+          (option, index) =>
+            index === 0 ||
+            DOUYIN_BUDGET_OPTION_CODE_VALUES.indexOf(option.code) >
+              DOUYIN_BUDGET_OPTION_CODE_VALUES.indexOf(
+                options[index - 1]?.code ?? option.code,
+              ),
+        ),
+      '选配项必须按固定顺序且不能重复',
+    ),
+  pricing_version: z.string().trim().min(1).max(40),
+  effective_from: DouyinBudgetPublicDateTimeSchema,
+  effective_to: DouyinBudgetPublicDateTimeSchema.nullable(),
+  disclaimer: z.string().trim().min(1).max(500),
+}).refine(
+  (config) =>
+    config.effective_to === null ||
+    Date.parse(config.effective_to) > Date.parse(config.effective_from),
+  {
+    message: '报价失效时间必须晚于生效时间',
+    path: ['effective_to'],
+  },
+);
 
 export const DouyinBudgetEstimateRequestSchema = z.strictObject({
   area: z.number().min(10).max(1_000),
@@ -104,8 +152,8 @@ export const DouyinBudgetEstimateResultSchema = z
     included_items: z.array(ResultItemTextSchema).max(50),
     excluded_items: z.array(ResultItemTextSchema).max(50),
     pricing_version: z.string().trim().min(1).max(40),
-    pricing_effective_from: PublicPricingDateTimeSchema,
-    pricing_effective_to: PublicPricingDateTimeSchema.nullable(),
+    pricing_effective_from: DouyinBudgetPublicDateTimeSchema,
+    pricing_effective_to: DouyinBudgetPublicDateTimeSchema.nullable(),
     disclaimer: z.string().trim().min(1).max(500),
     ai_status: z.enum(DOUYIN_BUDGET_AI_STATUS_VALUES),
   })
@@ -145,6 +193,9 @@ export type DouyinBudgetAiStatus =
   (typeof DOUYIN_BUDGET_AI_STATUS_VALUES)[number];
 export type DouyinBudgetEstimateRequest = z.infer<
   typeof DouyinBudgetEstimateRequestSchema
+>;
+export type DouyinBudgetPublicConfig = z.infer<
+  typeof DouyinBudgetPublicConfigSchema
 >;
 export type DouyinBudgetEstimateCategory = z.infer<
   typeof DouyinBudgetEstimateCategorySchema

@@ -12,8 +12,10 @@ import {
   DouyinBudgetAiAnalysisSchema,
   DouyinBudgetEstimateRequestSchema,
   DouyinBudgetEstimateResultSchema,
+  DouyinBudgetPublicConfigSchema,
   type DouyinBudgetAiAnalysis,
   type DouyinBudgetEstimateResult,
+  type DouyinBudgetPublicConfig,
 } from './douyin-budget';
 
 const validRequest = {
@@ -61,6 +63,30 @@ const validAiAnalysis: DouyinBudgetAiAnalysis = {
   allocation_advice: ['优先保留基础施工和水电改造。'],
   risk_factors: ['定制柜体的材料选择可能影响预算。'],
   onsite_questions: ['量房时需要确认墙体和水电现状。'],
+};
+
+const validPublicConfig: DouyinBudgetPublicConfig = {
+  property_conditions: [
+    { value: 'rough', label: '毛坯' },
+    { value: 'old_house', label: '旧房翻新' },
+  ],
+  decoration_tiers: [
+    { value: 'economy', label: '经济' },
+    { value: 'comfortable', label: '舒适' },
+    { value: 'quality', label: '品质' },
+  ],
+  decoration_scopes: [
+    { value: 'whole_house', label: '全屋' },
+    { value: 'partial', label: '局部' },
+  ],
+  options: [
+    { code: 'demolition', label: '拆除' },
+    { code: 'custom_cabinet', label: '定制柜体' },
+  ],
+  pricing_version: '1',
+  effective_from: '2026-08-20T00:00:00.123Z',
+  effective_to: null,
+  disclaimer: '初步估算，不构成最终报价',
 };
 
 describe('douyin budget contracts', () => {
@@ -281,6 +307,67 @@ describe('douyin budget contracts', () => {
     }
   });
 
+  test('accepts only canonical complete public enums and canonical enabled options', () => {
+    expect(DouyinBudgetPublicConfigSchema.parse(validPublicConfig)).toEqual(
+      validPublicConfig,
+    );
+
+    const invalidConfigs = [
+      {
+        ...validPublicConfig,
+        property_conditions: validPublicConfig.property_conditions.slice(0, 1),
+      },
+      {
+        ...validPublicConfig,
+        decoration_tiers: [...validPublicConfig.decoration_tiers].reverse(),
+      },
+      {
+        ...validPublicConfig,
+        decoration_scopes: [
+          validPublicConfig.decoration_scopes[0],
+          validPublicConfig.decoration_scopes[0],
+        ],
+      },
+      {
+        ...validPublicConfig,
+        options: [...validPublicConfig.options].reverse(),
+      },
+      {
+        ...validPublicConfig,
+        options: [{ code: 'unknown_option', label: '未知' }],
+      },
+      {
+        ...validPublicConfig,
+        effective_from: '2026-08-20T00:00:00.123Z',
+        effective_to: '2026-08-20T00:00:00.122Z',
+      },
+      {
+        ...validPublicConfig,
+        effective_from: '2026-08-20T00:00:00.1234Z',
+      },
+    ];
+    for (const config of invalidConfigs) {
+      expect(DouyinBudgetPublicConfigSchema.safeParse(config).success).toBe(
+        false,
+      );
+    }
+  });
+
+  test('does not expose pricing internals in public config', () => {
+    for (const extra of [
+      { minimum_amount: 10_000 },
+      { condition_payload: {} },
+      { tenant_id: '11111111-1111-4111-8111-111111111111' },
+      { pricing_version_id: '22222222-2222-4222-8222-222222222222' },
+      { unit: 'sqm' },
+    ]) {
+      expect(DouyinBudgetPublicConfigSchema.safeParse({
+        ...validPublicConfig,
+        ...extra,
+      }).success).toBe(false);
+    }
+  });
+
   const aiListFields = [
     'allocation_advice',
     'risk_factors',
@@ -326,6 +413,12 @@ describe('douyin budget contracts', () => {
     );
     expect(domain.DouyinBudgetAiAnalysisSchema).toBe(
       DouyinBudgetAiAnalysisSchema,
+    );
+    expect(shared.DouyinBudgetPublicConfigSchema).toBe(
+      DouyinBudgetPublicConfigSchema,
+    );
+    expect(domain.DouyinBudgetPublicConfigSchema).toBe(
+      DouyinBudgetPublicConfigSchema,
     );
   });
 });

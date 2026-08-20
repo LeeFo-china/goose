@@ -43,6 +43,7 @@ export {
   DouyinBudgetEstimateCategorySchema,
   DouyinBudgetEstimateRequestSchema,
   DouyinBudgetEstimateResultSchema,
+  DouyinBudgetPublicConfigSchema,
 } from './douyin-budget';
 export type {
   DouyinBudgetAiAnalysis,
@@ -51,6 +52,7 @@ export type {
   DouyinBudgetEstimateCategory,
   DouyinBudgetEstimateRequest,
   DouyinBudgetEstimateResult,
+  DouyinBudgetPublicConfig,
   DouyinBudgetOptionCode,
   DouyinDecorationScope,
   DouyinDecorationTier,
