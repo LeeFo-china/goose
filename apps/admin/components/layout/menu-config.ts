@@ -332,6 +332,12 @@ export const tenantNavGroups: AdminMenuGroup[] = [
         icon: AppWindow,
         permission: "douyin_miniapp.read",
       },
+      {
+        href: "/douyin-miniapp/projects",
+        label: "项目实景内容",
+        icon: Images,
+        permission: "douyin_miniapp.manage",
+      },
     ],
   },
   {

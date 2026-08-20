@@ -240,13 +240,24 @@ describe("admin nav visibility", () => {
     ]);
   });
 
-  test("shows the Douyin miniapp group only with tenant read permission", () => {
+  test("shows each Douyin miniapp entry only with its tenant permission", () => {
     const withoutPermission = getVisibleGroups(
       createSession([]),
       tenantNavGroups,
     );
     const withPermission = getVisibleGroups(
       createSession([{ code: "douyin_miniapp.read", scope: "all" }]),
+      tenantNavGroups,
+    );
+    const withManagePermission = getVisibleGroups(
+      createSession([{ code: "douyin_miniapp.manage", scope: "all" }]),
+      tenantNavGroups,
+    );
+    const withBothPermissions = getVisibleGroups(
+      createSession([
+        { code: "douyin_miniapp.read", scope: "all" },
+        { code: "douyin_miniapp.manage", scope: "all" },
+      ]),
       tenantNavGroups,
     );
 
@@ -257,5 +268,13 @@ describe("admin nav visibility", () => {
       withPermission.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
     ).toEqual(["小程序工作台"]);
+    expect(
+      withManagePermission.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["项目实景内容"]);
+    expect(
+      withBothPermissions.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["小程序工作台", "项目实景内容"]);
   });
 });
