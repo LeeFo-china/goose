@@ -48,7 +48,7 @@ function articleDetail(overrides: Record<string, unknown> = {}) {
     publishedAt,
     metadata: {
       category: "指南",
-      author: "鹅班长",
+      author: "好店智装云",
       displayPublishedAt: publishedAt,
     },
     seoTitle: null,

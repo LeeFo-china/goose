@@ -8,14 +8,14 @@ import { PartnerRevenue } from "@/components/official-site/partner-revenue";
 export const metadata: Metadata = {
   title: "城市合伙人招募",
   description:
-    "了解鹅班长城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
+    "了解好店智装云城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
   alternates: {
     canonical: "/partners",
   },
   openGraph: {
     title: "城市合伙人招募",
     description:
-      "了解鹅班长城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
+      "了解好店智装云城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
     url: "/partners",
   },
 };

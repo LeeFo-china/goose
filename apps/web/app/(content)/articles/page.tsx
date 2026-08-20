@@ -9,7 +9,7 @@ import {
 
 const PAGE_METADATA = {
   title: "装修经营文章",
-  description: "阅读鹅班长整理的装修经营、项目交付与客户服务文章。",
+  description: "阅读好店智装云整理的装修经营、项目交付与客户服务文章。",
 } as const;
 
 interface ArticlesPageProps {

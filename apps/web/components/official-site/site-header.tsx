@@ -13,8 +13,8 @@ export function SiteHeader(): React.JSX.Element {
           className="flex shrink-0 items-center gap-2 rounded-md font-semibold tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
           href="/"
         >
-          <Image alt="" height={32} priority src="/logo.png" width={32} />
-          鹅班长
+          <Image alt="好店智装云" height={32} priority src="/logo.png" width={32} />
+          <span aria-hidden="true">好店智装云</span>
         </Link>
 
         <DesktopNavigation />

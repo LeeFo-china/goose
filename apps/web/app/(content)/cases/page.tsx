@@ -9,7 +9,7 @@ import {
 
 const PAGE_METADATA = {
   title: "装修案例",
-  description: "查看鹅班长公开的真实装修项目案例与交付记录。",
+  description: "查看好店智装云公开的真实装修项目案例与交付记录。",
 } as const;
 
 interface CasesPageProps {

@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 import {
@@ -30,6 +31,44 @@ const partnerPageFiles = [
 ].map(readWebFile).join("\n");
 
 describe("city partner public site", () => {
+  test("publishes the Haodian brand through shell, metadata, and social artwork", () => {
+    const brandSource = [
+      "app/layout.tsx",
+      "app/opengraph-image.tsx",
+      "app/page.tsx",
+      "app/(content)/articles/page.tsx",
+      "app/(content)/cases/page.tsx",
+      "app/(marketing)/about/page.tsx",
+      "app/(marketing)/partners/page.tsx",
+      "app/(marketing)/products/page.tsx",
+      "components/content/content-structured-data.tsx",
+      "components/official-site/about-sections.tsx",
+      "components/official-site/mobile-navigation.tsx",
+      "components/official-site/partner-hero.tsx",
+      "components/official-site/site-footer.tsx",
+      "components/official-site/site-header.tsx",
+    ].map(readWebFile).join("\n");
+    const layout = readWebFile("app/layout.tsx");
+    const openGraphImage = readWebFile("app/opengraph-image.tsx");
+    const header = readWebFile("components/official-site/site-header.tsx");
+
+    expect(brandSource).toContain("好店智装云");
+    expect(brandSource).not.toContain("鹅班长");
+    expect(layout).toContain('applicationName: "好店智装云"');
+    expect(layout).toContain('siteName: "好店智装云"');
+    expect(layout).toContain('alt: "好店智装云官网"');
+    expect(openGraphImage).toContain('export const alt = "好店智装云官网"');
+    expect(openGraphImage).toContain('background: "#095488"');
+    expect(openGraphImage).toContain('background: "#ff6b2b"');
+    expect(openGraphImage).not.toMatch(/gradient/i);
+    expect(header).toContain('src="/logo.png"');
+    expect(header).toContain('alt="好店智装云"');
+    expect(header).toContain('<span aria-hidden="true">好店智装云</span>');
+    expect(header).toContain("height={32}");
+    expect(header).toContain("width={32}");
+    expect(header).toContain("<Image");
+  });
+
   test("publishes accurate recruitment metadata and commercial boundaries", () => {
     expect(partnerPageFiles).toContain("export const metadata");
     expect(partnerPageFiles).toContain("城市合伙人招募");
@@ -551,6 +590,18 @@ describe("city partner public site", () => {
     );
 
     expect(existsSync(new URL("public/logo.png", webRoot))).toBe(true);
+    const appIcon = new URL("app/icon.png", webRoot);
+    expect(existsSync(appIcon)).toBe(true);
+    expect(statSync(appIcon).size).toBeLessThanOrEqual(32 * 1024);
+    const appIconPng = readFileSync(appIcon);
+    expect(appIconPng.subarray(0, 8)).toEqual(
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    );
+    expect(appIconPng.readUInt32BE(16)).toBe(128);
+    expect(appIconPng.readUInt32BE(20)).toBe(128);
+    expect(createHash("sha256").update(appIconPng).digest("hex")).toBe(
+      "d9c127c3a5b4fe637533d485f747343213b96d616fde5c454e9f47712ce3e9ed",
+    );
     expect(
       existsSync(new URL("public/partner-hero-construction-team.png", webRoot)),
     ).toBe(true);

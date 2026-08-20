@@ -15,7 +15,7 @@ export function PartnerHero(): React.JSX.Element {
           className="max-w-xl text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-6xl"
           id="partner-hero-heading"
         >
-          鹅班长城市合伙人招募
+          好店智装云城市合伙人招募
         </h1>
         <p className="max-w-xl text-base leading-7 text-muted-foreground sm:text-lg sm:leading-8">
           拓展本地装修公司，平台记录绑定、收入与结算依据。合作边界清楚后，再决定是否申请。

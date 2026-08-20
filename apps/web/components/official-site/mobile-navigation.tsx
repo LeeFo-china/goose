@@ -32,7 +32,7 @@ export function MobileNavigation(): React.JSX.Element {
       <DialogContent className="max-w-[calc(100%-2rem)] rounded-lg">
         <DialogHeader>
           <DialogTitle>网站导航</DialogTitle>
-          <DialogDescription>访问鹅班长官网公开页面。</DialogDescription>
+          <DialogDescription>访问好店智装云官网公开页面。</DialogDescription>
         </DialogHeader>
         <nav aria-label="移动端导航" className="flex flex-col gap-2">
           {SITE_NAVIGATION.map((item) => {

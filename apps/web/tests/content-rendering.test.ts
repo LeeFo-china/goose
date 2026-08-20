@@ -87,7 +87,7 @@ describe("public content rendering behavior", () => {
       datePublished: "2026-07-12T08:00:00+08:00",
       author: { "@type": "Person", name: "内容编辑" },
       mainEntityOfPage: "https://www.goodcms.cn/articles/safe-json",
-      publisher: { "@type": "Organization", name: "鹅班长" },
+      publisher: { "@type": "Organization", name: "好店智装云" },
     });
 
     expect(json).not.toContain("<");
