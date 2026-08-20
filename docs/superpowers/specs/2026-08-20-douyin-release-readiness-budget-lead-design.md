@@ -119,6 +119,7 @@ douyin_project_public_profiles
 - project_id
 - public_title
 - public_description
+- public_image_urls
 - style_tags
 - budget_band
 - publication_status: draft | published | hidden
@@ -127,7 +128,7 @@ douyin_project_public_profiles
 - updated_at
 ```
 
-项目阶段、面积和户型继续以现有项目与房产数据为事实来源；公开标题、说明、风格和预算区间来自公开资料。服务层负责生成脱敏 DTO，并且只有 `published` 且项目处于允许阶段的记录可以返回。
+项目阶段、面积和户型继续以现有项目与房产数据为事实来源；公开标题、说明、图片选择、风格和预算区间来自公开资料。`public_image_urls` 只能选择当前项目已有的 HTTPS 图片，发布时至少 3 张、最多 30 张。服务层负责生成脱敏 DTO，并且只有 `published` 且项目处于允许阶段的记录可以返回。
 
 公开列表必须分页，默认 `page=1&pageSize=20`，`pageSize` 最大 100。查询限定必要字段、使用 `.range()`，批量读取封面和日志摘要，禁止 N+1。
 
@@ -400,7 +401,7 @@ GET /douyin-mini/projects/:id/logs?page=1&pageSize=20
 }
 ```
 
-响应包含公开预算编号、分类区间、总区间、计算依据、版本和免责声明，不返回内部定价规则表达式。
+响应包含预算 UUID（仅供后续 API 关联）、公开预算编号、分类区间、总区间、计算依据、版本和免责声明，不返回内部定价规则表达式。页面只展示公开预算编号。
 
 ### 8.5 AI 预算建议
 
@@ -430,7 +431,7 @@ POST /douyin-mini/leads
   "community": "示例小区",
   "preferred_visit_date": "2026-08-25",
   "preferred_visit_period": "afternoon",
-  "budget_estimate_id": "公开预算编号",
+  "budget_estimate_id": "22222222-2222-4222-8222-222222222222",
   "demand": "希望确认柜体和水电范围",
   "privacy_policy_version": "v1",
   "consented_at": "2026-08-20T10:00:00+08:00",
