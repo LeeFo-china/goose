@@ -1,5 +1,5 @@
 export const CUSTOM_SUPPORT_BRANDING = "custom_support_branding" as const;
-export const PLATFORM_FALLBACK_DISPLAY_NAME = "字节跳动";
+export const PLATFORM_FALLBACK_DISPLAY_NAME = "好店智装云";
 
 export type EntitlementStatus =
   | "active"

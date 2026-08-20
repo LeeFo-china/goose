@@ -17,7 +17,7 @@ export function SiteFooter(): React.JSX.Element {
       <Separator />
       <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-8 sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
         <div className="flex flex-col gap-1">
-          <p className="font-semibold">鹅班长</p>
+          <p className="font-semibold">好店智装云</p>
           <p className="text-sm text-muted-foreground">
             为装修经营者和城市合作伙伴提供清晰、可靠的业务支持。
           </p>

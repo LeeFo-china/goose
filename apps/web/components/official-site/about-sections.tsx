@@ -16,7 +16,7 @@ export function AboutSections(): React.JSX.Element {
     <>
       <section className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[minmax(20rem,0.82fr)_minmax(0,1.18fr)] lg:px-8 lg:py-20">
         <div className="flex flex-col justify-center gap-7">
-          <p className="font-medium text-muted-foreground">关于鹅班长</p>
+          <p className="font-medium text-muted-foreground">关于好店智装云</p>
           <h1 className="max-w-xl text-4xl font-semibold leading-[1.08] tracking-[-0.03em] sm:text-5xl lg:text-6xl">让装修业务过程<br className="hidden sm:block" />更清楚、更可靠</h1>
           <p className="max-w-xl text-base leading-8 text-muted-foreground">我们把分散在客户沟通、项目现场和经营核对中的记录，组织成可追踪的业务链路。</p>
           <Button asChild className="self-start" size="lg"><Link href={MARKETING_CTA.products.href}>{MARKETING_CTA.products.label}<ArrowRight data-icon="inline-end" /></Link></Button>

@@ -1,28 +1,35 @@
 ---
-name: Gooes Admin
-description: Tenant-side装修 operations workbench for project, construction, acceptance, and customer workflows.
+name: 好店智装云 Admin
+description: Tenant-side renovation operations workbench for project, construction, acceptance, and customer workflows.
 colors:
-  background: "#fffdf5"
-  foreground: "#141414"
+  background: "#f8fafc"
+  foreground: "#0c2f45"
   card: "#ffffff"
-  primary: "#121212"
-  primary-foreground: "#ffd449"
-  secondary: "#fff5cf"
-  secondary-foreground: "#4d3b00"
-  muted: "#fff7df"
+  primary: "#09598b"
+  primary-foreground: "#ffffff"
+  secondary: "#e6eef5"
+  secondary-foreground: "#0f3a57"
+  muted: "#eef3f6"
   muted-foreground: "#616161"
-  accent: "#ffd449"
-  accent-foreground: "#141414"
-  destructive: "#d82020"
-  success: "#3e6f4d"
-  warning: "#f3b400"
-  border: "#e7dfd0"
-  input: "#ded3c4"
-  goose-yellow: "#f3b400"
-  goose-yellow-soft: "#ffd449"
-  goose-cream: "#fffdf6"
-  goose-ink: "#141414"
-  goose-brown: "#4d3b00"
+  accent: "#ff7029"
+  accent-foreground: "#0c2f45"
+  destructive: "hsl(0 74% 48%)"
+  destructive-foreground: "#ffffff"
+  success: "hsl(139 28% 34%)"
+  success-foreground: "#ffffff"
+  warning: "hsl(44 100% 48%)"
+  warning-foreground: "hsl(46 100% 15%)"
+  disabled-surface: "#eef3f6"
+  disabled-foreground: "#616161"
+  border: "#d3dce4"
+  input: "#c6d2dc"
+  ring: "#09598b"
+  haodian-blue: "#095488"
+  haodian-blue-soft: "#d7e7f1"
+  haodian-orange: "#ff7029"
+  haodian-neutral: "#f8fafc"
+  haodian-ink: "#0c2f45"
+  legacy-shell-deep-blue: "#0b2f46"
 typography:
   title:
     fontFamily: "Avenir Next, PingFang SC, Microsoft YaHei, sans-serif"
@@ -79,47 +86,69 @@ components:
     padding: "20px"
 ---
 
-# Design System: Gooes Admin
+# Design System: 好店智装云 Admin
 
 ## 1. Overview
 
-**Creative North Star: "The Yellow Site Ledger"**
+**Creative North Star: "The Blue Project Ledger"**
 
-Gooes Admin is a product workbench for装修 operations. It should feel like a clear site ledger: concrete, task-first, and readable under daily pressure. The yellow and black identity is recognizable, but the interface remains quiet enough for dense project, customer, stage, and acceptance data.
+好店智装云 Admin is a product workbench for renovation operations. It should feel like a clear project ledger: concrete, task-first, and readable under daily pressure. Deep blue establishes a trustworthy platform identity, orange provides limited emphasis, and neutral surfaces keep dense project, customer, stage, and acceptance data easy to scan.
 
-The system rejects oversized SaaS landing-page composition, dark control-room dashboards, decorative card stacks, generic glass effects, AI-purple gradients, and sparse layouts that hide operational density. Familiar admin conventions are an asset here: users should trust buttons, tabs, dialogs, badges, and list panels without pausing to decode them.
+The system rejects oversized SaaS landing-page composition, dark control-room dashboards, decorative card stacks, generic glass effects, decorative gradients, glow orbs, and sparse layouts that hide operational density. Familiar admin conventions are an asset here: users should trust buttons, tabs, dialogs, badges, and list panels without pausing to decode them.
+
+The solid-color rule in this document applies to the tenant Admin and platform super-admin only. The independent website adds no new gradients in this brand refresh. Existing H5 and Douyin mini-program gradients used as image-readability overlays are intentionally unchanged and are not governed by the Admin rule.
 
 **Key Characteristics:**
 - Compact shadcn/Radix components with 8px maximum default radius.
-- Warm workbench background with white operational surfaces.
-- Black primary actions with yellow foreground for brand recognition.
-- Yellow accent reserved for current state, focus, and primary attention.
+- Cool neutral workbench background with white operational surfaces.
+- Deep-blue primary actions with white foreground for clear hierarchy.
+- Orange reserved for small brand accents; current selection and focus use deep blue.
 - Semantic badges for success, warning, danger, and disabled states.
+- Solid-color Admin surfaces without decorative gradients or simulated glow.
 
 ## 2. Colors
 
-The palette is a restrained product palette: warm near-white surfaces, black ink, Gooes yellow as the brand accent, and standard semantic states for operations.
+The palette is restrained and operational: Haodian deep blue for platform identity and primary interaction, orange for limited emphasis, cool neutral surfaces for information density, and independent semantic colors for business status.
 
 ### Primary
-- **Workbench Ink** (`#141414` / `#121212`): primary text, default button background, shell identity, and high-confidence actions.
-- **Gooes Yellow** (`#f3b400` / `#ffd449`): brand marker, selection, ring, primary foreground, and focused attention. Use it sparingly so it keeps meaning.
+- **Haodian Blue** (`hsl(203 88% 29%)`, rendered approximately `#09598b`; brand asset reference `#095488`): shell identity, primary actions, focus ring, and current selection.
+- **Haodian Ink** (`hsl(204 70% 16%)`, approximately `#0c2f45`): the canonical foreground and accent foreground for primary text and text on orange accent surfaces.
 
 ### Secondary
-- **Warm Permission Surface** (`#fff5cf`): secondary buttons, tabs list backgrounds, light brand panels, and quiet selected states.
-- **Operational Brown** (`#4d3b00`): sidebar meta text and text on warm yellow surfaces.
+- **Haodian Orange** (`hsl(20 100% 58%)`, `#ff7029`): small identity marks and scarce emphasis. It is not a primary action or status color.
+- **Blue Secondary Surface** (`hsl(205 42% 93%)`, `#e6eef5`): secondary buttons, quiet selected states, and low-emphasis brand panels.
+- **Secondary Ink** (`hsl(204 70% 20%)`, `#0f3a57`): readable text on the blue secondary surface.
 
 ### Neutral
-- **Workbench Cream** (`#fffdf5` / `#fffdf6`): page and console background.
+- **Workbench Neutral** (`hsl(210 33% 98%)`, `#f8fafc`): page and console background.
 - **Card White** (`#ffffff`): dialogs, panels, repeated cards, and focused work areas.
-- **Muted Warm Surface** (`#fff7df`): low-emphasis backgrounds and hover areas.
+- **Muted Neutral Surface** (`hsl(207 33% 95%)`, `#eef3f6`): low-emphasis backgrounds and hover areas.
 - **Muted Text** (`#616161`): secondary descriptions, timestamps, hints, and inactive labels.
-- **Warm Border** (`#e7dfd0`): dividers, card borders, tabs, and form control outlines.
+- **Cool Border** (`hsl(207 24% 86%)`, `#d3dce4`): dividers, card borders, tabs, and form control outlines.
+
+### Status
+- **Destructive:** `hsl(0 74% 48%)` with white foreground.
+- **Success:** `hsl(139 28% 34%)` with white foreground.
+- **Warning:** `hsl(44 100% 48%)` with `hsl(46 100% 15%)` foreground. Brand orange must not replace this warning pair.
+- **Disabled:** use the muted surface and muted foreground tokens, plus disabled state, cursor, label, or icon treatment. Never communicate disabled state through color alone.
+
+Status text and meaning-bearing icons at normal UI sizes must keep at least a 4.5:1 contrast ratio and must not rely on color as the only status signal.
+
+### Legacy Compatibility Identifiers
+
+`--goose-yellow`, `--goose-yellow-soft`, `--goose-cream`, `--goose-cream-deep`, `--goose-ink`, `--goose-brown`, `--goose-surface-warm`, `themeTokens.goose`, and `goose-workbench-bg` are all internal compatibility-layer identifiers retained to avoid breaking existing theme storage, CSS selectors, and component references. None of their names defines current color semantics, and new code must not depend on their literal meaning. New code should prefer semantic tokens such as `primary`, `accent`, `foreground`, and `background`; this brand refresh does not rename the compatibility identifiers.
+
+The canonical Haodian Ink is `hsl(204 70% 16%)` (approximately `#0c2f45`). The existing `--goose-ink: #0b2f46` value is only a compatible shell/deep-blue alias and does not define a second canonical foreground.
 
 ### Named Rules
 
-**The Yellow Earns Its Place Rule.** Yellow marks brand identity, active selection, focus, and primary attention. Do not use it as ambient decoration across every panel.
+**The Blue Leads Rule.** Deep blue owns platform identity, primary actions, focus, and current selection. Do not spread brand color across every panel; neutral surfaces should carry most operational content.
 
-**The Semantic Status Rule.** Completion uses success green, pending/risk uses warning yellow, destructive/failure uses red. Do not encode operational status with arbitrary accent colors.
+**The Orange Stays Legible Rule.** Orange is a scarce accent, never a substitute for the primary action or a business status. Orange surfaces use Haodian Ink (`hsl(204 70% 16%)`), not white text; the implemented pair has a 5.068:1 contrast ratio and meets WCAG AA for normal text.
+
+**The Semantic Status Rule.** Completion uses success green with white foreground, pending/risk uses the warning token with its dark warning foreground, and destructive/failure uses red with white foreground. Disabled controls use muted surface/foreground plus a non-color state cue. Do not use brand orange or arbitrary brand colors to encode operational status.
+
+**The Solid Admin Rule.** Tenant Admin and platform super-admin surfaces must not use `linear-gradient`, `radial-gradient`, `conic-gradient`, or `bg-gradient-*` for decoration. Do not add glow orbs or imitate a gradient with layered shadows. The independent website adds no new gradient in this refresh; existing H5 and Douyin mini-program image-readability gradients remain outside this Admin-only rule.
 
 ## 3. Typography
 
@@ -141,12 +170,12 @@ The palette is a restrained product palette: warm near-white surfaces, black ink
 
 ## 4. Elevation
 
-Depth is mostly conveyed through borders, tonal layering, sticky headers, and small shadows. Shadows are allowed for the app shell, dialogs, and brand logo treatment; normal cards stay light and structural, not decorative.
+Depth is mostly conveyed through borders, solid tonal layering, sticky headers, and small shadows. Shadows are allowed for the app shell, dialogs, and brand logo treatment; normal cards stay light and structural, not decorative. Shadows must describe physical overlap, not simulate gradients or ambient glow.
 
 ### Shadow Vocabulary
 - **Card Rest** (`shadow-sm`): standard card and contained surface, paired with a subtle border.
-- **Header Lift** (`0 8px 24px rgba(17,17,17,0.06)`): sticky top header separation.
-- **Logo Lift** (`0 8px 18px rgba(17,17,17,0.08)`): small identity mark only.
+- **Header Lift** (`0 8px 24px rgba(12,47,69,0.06)`): sticky top header separation.
+- **Logo Lift** (`0 8px 18px rgba(12,47,69,0.08)`): small identity mark only.
 - **Dialog Lift** (`shadow-lg`): modal content over a `bg-foreground/35` overlay.
 
 ### Named Rules
@@ -157,27 +186,27 @@ Depth is mostly conveyed through borders, tonal layering, sticky headers, and sm
 
 ### Buttons
 - **Shape:** compact rounded rectangle, 6px radius by default.
-- **Primary:** black background with yellow text, 36px height, 14px medium label, icon gap of 8px.
-- **Hover / Focus:** opacity or token background shift; focus uses the yellow ring token with visible 2px ring.
-- **Secondary / Ghost / Outline:** secondary uses warm yellow surface; outline uses border plus background hover; ghost is for row/sidebar actions and icon controls.
+- **Primary:** deep-blue background with white text, 36px height, 14px medium label, icon gap of 8px.
+- **Hover / Focus:** opacity or token background shift; focus uses the deep-blue ring token with a visible 2px ring.
+- **Secondary / Ghost / Outline:** secondary uses the light-blue secondary surface; outline uses border plus neutral background hover; ghost is for row/sidebar actions and icon controls.
 
 ### Chips
 - **Style:** `Badge` uses 12px text, 2px x-padding, 4-6px rounded corners, and semantic fill.
-- **State:** success, warning, danger, secondary, and outline variants must carry status meaning. Avoid plain text statuses in dense panels.
+- **State:** success, warning, danger, secondary, and outline variants must carry status meaning with the defined status foreground. Pair color with text or an icon, and keep normal-size status content at 4.5:1 or better. Avoid plain text statuses in dense panels.
 
 ### Cards / Containers
 - **Corner Style:** 8px maximum default radius.
-- **Background:** white card surfaces on warm workbench background.
+- **Background:** white card surfaces on the cool neutral workbench background.
 - **Shadow Strategy:** card rest is subtle; dense sidebars and inner panels may use only border and background.
-- **Border:** warm low-contrast border is the default grouping tool.
+- **Border:** cool low-contrast border is the default grouping tool.
 - **Internal Padding:** 20px for cards and dialog sections; 12px for compact nested operational rows.
 
 ### Grouped Tabs
 - **Placement:** grouped tabs for peer work areas should sit directly on the
   parent card edge, usually in the card header row. Do not wrap them in a
   separate pill, segmented-control shell, tinted panel, or nested card.
-- **Active State:** use text weight plus a 2px bottom border in `primary` or
-  Gooes yellow. Avoid full filled backgrounds for active tabs unless the tab
+- **Active State:** use text weight plus a 2px bottom border in `primary`.
+  Avoid full filled backgrounds for active tabs unless the tab
   controls a compact form field rather than a page/workspace area.
 - **Inactive State:** inactive tabs use muted text on the card background with
   no border box. They should read as navigation, not as secondary buttons.
@@ -289,9 +318,9 @@ is the reference implementation.
   loading badges between header and footer.
 
 ### Inputs / Fields
-- **Style:** 40px height, 6px radius, warm border, page-background fill, 14px text.
+- **Style:** 40px height, 6px radius, cool neutral border, page-background fill, 14px text.
 - **Focus:** no outline reset without replacement; use 2px ring with ring token.
-- **Error / Disabled:** disabled opacity and cursor state are required; field errors should appear near the field.
+- **Error / Disabled:** disabled controls use muted surface/foreground plus disabled semantics and cursor treatment; never communicate the state through color alone. Field errors should appear near the field.
 
 ### Navigation
 - **Style:** fixed left sidebar and sticky top header. Active navigation uses clear contrast, not decorative gradients.
@@ -305,9 +334,11 @@ Dialogs use fixed viewport-aware height when they contain tabs or workflow panel
 ## 6. Do's and Don'ts
 
 ### Do:
-- **Do** use existing shadcn/Radix primitives and local Gooes tokens before adding custom component vocabulary.
+- **Do** use existing shadcn/Radix primitives and local semantic tokens before adding custom component vocabulary.
 - **Do** keep admin screens operational, scannable, and dense enough for repeated use.
-- **Do** use Gooes yellow for active state, focus, and primary attention only.
+- **Do** use deep blue for platform identity, primary actions, focus, and current selection.
+- **Do** use orange only for small brand accents and pair orange surfaces with the deep-blue accent foreground token.
+- **Do** keep business status on success, warning, and destructive semantic tokens.
 - **Do** show loading, empty, disabled, permission-blocked, and error states near the control or panel they affect.
 - **Do** keep icon buttons stable at 32-40px and use lucide-react icons consistently.
 - **Do** preserve readable Chinese text at 12-14px in dense metadata and 14-16px in primary content.
@@ -316,7 +347,8 @@ Dialogs use fixed viewport-aware height when they contain tabs or workflow panel
 - **Don't** use oversized SaaS landing-page composition in authenticated admin surfaces.
 - **Don't** use dark control-room dashboards as the default admin direction.
 - **Don't** build decorative card stacks or cards inside cards for ordinary page sections.
-- **Don't** use generic glass effects, AI-purple gradients, or decorative background orbs.
+- **Don't** use generic glass effects, decorative `linear`/`radial`/`conic` gradients, `bg-gradient-*`, glow orbs, or layered shadows that imitate gradients.
 - **Don't** hide operational density behind excessive whitespace or marketing copy.
-- **Don't** use yellow as a blanket background for every panel.
+- **Don't** use orange as a blanket background, primary action color, or replacement for semantic status.
+- **Don't** place white text on the orange accent token.
 - **Don't** let long project names, stage labels, buttons, tabs, or badges overflow their containers.

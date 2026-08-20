@@ -88,14 +88,14 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
   }
 
   return (
-    <Card className="w-full max-w-[420px] border-black/10 bg-white shadow-[0_18px_42px_rgba(33,24,0,0.16)]">
+    <Card className="w-full max-w-[420px] border-border bg-card shadow-sm">
       <CardHeader className="gap-4">
-        <div className="flex size-11 items-center justify-center rounded-lg bg-[#141414] text-[#ffd449] shadow-[0_12px_30px_rgba(17,17,17,0.18)]">
+        <div className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
           <ShieldCheck className="size-5" />
         </div>
         <div className="flex flex-col gap-1">
-          <CardTitle className="text-xl font-extrabold text-[#141414]">员工后台登录</CardTitle>
-          <CardDescription className="text-[#4d3b00]">
+          <CardTitle className="text-xl font-extrabold text-foreground">员工后台登录</CardTitle>
+          <CardDescription className="text-muted-foreground">
             使用已绑定员工档案的手机号进入管理后台。
           </CardDescription>
         </div>
@@ -109,7 +109,7 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
             <Field>
               <FieldLabel htmlFor="phone">手机号</FieldLabel>
               <Input
-                className="border-black/10 bg-[#fffdf6] focus-visible:ring-[#f3b400]"
+                className="border-input bg-background focus-visible:ring-ring"
                 id="phone"
                 inputMode="tel"
                 maxLength={11}
@@ -123,7 +123,7 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
               <FieldLabel htmlFor="code">验证码</FieldLabel>
               <div className="grid grid-cols-[1fr_112px] gap-2">
                 <Input
-                  className="border-black/10 bg-[#fffdf6] focus-visible:ring-[#f3b400]"
+                  className="border-input bg-background focus-visible:ring-ring"
                   id="code"
                   inputMode="numeric"
                   maxLength={6}
@@ -134,7 +134,7 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-black/10 bg-white text-[#4d3b00] hover:bg-[#fff5cf] hover:text-[#141414]"
+                  className="border-border bg-card text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground"
                   disabled={sending || countdown > 0 || phone.length !== 11}
                   onClick={sendCode}
                 >
@@ -156,7 +156,7 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
             <StatusAlert tone="success">{message}</StatusAlert>
           ) : null}
           <Button
-            className="h-11 w-full rounded-full bg-gradient-to-r from-[#111111] to-[#2a240f] font-bold text-[#ffd449] shadow-[0_12px_30px_rgba(17,17,17,0.22)] hover:from-[#111111] hover:to-[#111111]"
+            className="h-11 w-full rounded-md bg-primary font-bold text-primary-foreground hover:bg-primary/90"
             type="submit"
             disabled={loggingIn}
           >

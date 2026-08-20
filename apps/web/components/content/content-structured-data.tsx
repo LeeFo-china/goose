@@ -15,7 +15,7 @@ interface ArticleJsonLd {
   readonly author: { readonly "@type": "Person"; readonly name: string };
   readonly image?: string;
   readonly mainEntityOfPage: string;
-  readonly publisher: { readonly "@type": "Organization"; readonly name: "鹅班长" };
+  readonly publisher: { readonly "@type": "Organization"; readonly name: "好店智装云" };
 }
 
 interface CreativeWorkJsonLd {
@@ -27,7 +27,7 @@ interface CreativeWorkJsonLd {
   readonly image?: string;
   readonly contentLocation: { readonly "@type": "Place"; readonly name: string };
   readonly about: string;
-  readonly provider: { readonly "@type": "Organization"; readonly name: "鹅班长" };
+  readonly provider: { readonly "@type": "Organization"; readonly name: "好店智装云" };
 }
 
 interface CityJsonLd {
@@ -55,7 +55,7 @@ interface CityJsonLd {
       readonly name: string;
       readonly description: string;
       readonly areaServed: { readonly "@type": "City"; readonly name: string };
-      readonly provider: { readonly "@type": "Organization"; readonly name: "鹅班长" };
+      readonly provider: { readonly "@type": "Organization"; readonly name: "好店智装云" };
       readonly url: string;
     },
   ];
@@ -78,7 +78,7 @@ export function ArticleStructuredData({ content }: { readonly content: ArticleDe
     author: { "@type": "Person", name: content.metadata.author },
     ...(content.cover ? { image: content.cover.src } : {}),
     mainEntityOfPage: url,
-    publisher: { "@type": "Organization", name: "鹅班长" },
+    publisher: { "@type": "Organization", name: "好店智装云" },
   };
 
   return <JsonLdScript data={data} />;
@@ -94,7 +94,7 @@ export function CaseStructuredData({ content }: { readonly content: CaseDetail }
     ...(content.cover ? { image: content.cover.src } : {}),
     contentLocation: { "@type": "Place", name: content.metadata.city },
     about: `${content.metadata.areaSquareMeters} 平方米${content.metadata.decorationType}装修案例`,
-    provider: { "@type": "Organization", name: "鹅班长" },
+    provider: { "@type": "Organization", name: "好店智装云" },
   };
 
   return <JsonLdScript data={data} />;
@@ -117,7 +117,7 @@ export function CityStructuredData({ content }: { readonly content: CityDetail }
         name: `${content.metadata.cityName}装修协作服务`,
         description: content.metadata.localServiceIntroduction,
         areaServed: { "@type": "City", name: content.metadata.cityName },
-        provider: { "@type": "Organization", name: "鹅班长" },
+        provider: { "@type": "Organization", name: "好店智装云" },
         url,
       },
     ],
