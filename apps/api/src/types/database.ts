@@ -2841,10 +2841,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "douyin_project_public_profiles_project_tenant_fkey"
-            columns: ["project_id", "tenant_id"]
-            isOneToOne: false
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: true
             referencedRelation: "projects"
-            referencedColumns: ["id", "tenant_id"]
+            referencedColumns: ["tenant_id", "id"]
           },
           {
             foreignKeyName: "douyin_project_public_profiles_tenant_id_fkey"
