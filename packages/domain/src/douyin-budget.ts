@@ -98,13 +98,25 @@ export const DouyinBudgetEstimateResultSchema = z
     included_items: z.array(ResultItemTextSchema).max(50),
     excluded_items: z.array(ResultItemTextSchema).max(50),
     pricing_version: z.string().trim().min(1).max(40),
+    pricing_effective_from: z.iso.datetime({ offset: true }),
+    pricing_effective_to: z.iso.datetime({ offset: true }).nullable(),
     disclaimer: z.string().trim().min(1).max(500),
     ai_status: z.enum(DOUYIN_BUDGET_AI_STATUS_VALUES),
   })
   .refine((result) => result.minimum_total <= result.maximum_total, {
     message: '总预算下限不能大于上限',
     path: ['maximum_total'],
-  });
+  })
+  .refine(
+    (result) =>
+      result.pricing_effective_to === null ||
+      Date.parse(result.pricing_effective_to) >
+        Date.parse(result.pricing_effective_from),
+    {
+      message: '报价失效时间必须晚于生效时间',
+      path: ['pricing_effective_to'],
+    },
+  );
 
 export const DouyinBudgetAiAnalysisSchema = z.strictObject({
   summary: z.string().trim().min(1).max(1_000),

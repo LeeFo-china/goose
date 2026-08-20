@@ -50,6 +50,8 @@ const validResult: DouyinBudgetEstimateResult = {
   included_items: ['基础施工', '定制柜体'],
   excluded_items: ['家电', '软装'],
   pricing_version: '1',
+  pricing_effective_from: '2026-08-20T00:00:00Z',
+  pricing_effective_to: '2026-09-20T08:00:00+08:00',
   disclaimer: '初步估算，不构成最终报价',
   ai_status: 'pending',
 };
@@ -163,6 +165,40 @@ describe('douyin budget contracts', () => {
         ],
       },
       { ...validResult, ai_status: 'completed' },
+    ];
+
+    for (const result of invalidResults) {
+      expect(DouyinBudgetEstimateResultSchema.safeParse(result).success).toBe(
+        false,
+      );
+    }
+  });
+
+  test('accepts UTC and offset pricing validity with an optional end time', () => {
+    expect(DouyinBudgetEstimateResultSchema.parse(validResult)).toEqual(
+      validResult,
+    );
+    expect(DouyinBudgetEstimateResultSchema.parse({
+      ...validResult,
+      pricing_effective_from: '2026-08-20T08:00:00+08:00',
+      pricing_effective_to: null,
+    }).pricing_effective_to).toBeNull();
+  });
+
+  test('rejects invalid or non-increasing pricing validity', () => {
+    const invalidResults = [
+      { ...validResult, pricing_effective_from: '2026-08-20' },
+      { ...validResult, pricing_effective_to: 'not-a-datetime' },
+      {
+        ...validResult,
+        pricing_effective_from: '2026-08-20T00:00:00Z',
+        pricing_effective_to: '2026-08-20T08:00:00+08:00',
+      },
+      {
+        ...validResult,
+        pricing_effective_from: '2026-08-20T00:00:01Z',
+        pricing_effective_to: '2026-08-20T00:00:00Z',
+      },
     ];
 
     for (const result of invalidResults) {
