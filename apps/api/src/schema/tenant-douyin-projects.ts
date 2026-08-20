@@ -4,9 +4,9 @@ const PUBLICATION_STATUS_VALUES = ["draft", "published", "hidden"] as const;
 const TENANT_PROJECT_LOG_IMAGE_REFERENCE_PATTERN =
   /^tenants\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/project-log\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/[0-9]{4}\/(?:0[1-9]|1[0-2])\/(?:0[1-9]|[12][0-9]|3[01])\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:jpg|jpeg|png|webp|heic|heif)$/;
 
-const HttpsImageReferenceSchema = z.string().trim().min(1).max(2048)
+const HttpsImageReferenceSchema = z.string().min(1).max(2048)
   .refine((value) => {
-    if (/\s|[?#]/.test(value)) return false;
+    if (!value.startsWith("https://") || /\s|[?#]/.test(value)) return false;
     try {
       const url = new URL(value);
       return url.protocol === "https:" && !url.search && !url.hash;

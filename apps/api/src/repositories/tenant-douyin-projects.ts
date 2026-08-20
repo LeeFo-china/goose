@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import type {
   TenantDouyinProjectListQuery,
@@ -125,26 +126,28 @@ export class TenantDouyinProjectsRepository {
   async listProjects(
     input: TenantDouyinProjectListQuery & { tenantId: string },
   ) {
-    const profileRelation = input.publicationStatus
-      ? `public_profile:douyin_project_public_profiles!inner(${PROFILE_FIELDS})`
-      : `public_profile:douyin_project_public_profiles(${PROFILE_FIELDS})`;
-    let query = this.client.from("projects")
-      .select(`${PROJECT_FIELDS},${profileRelation}`, { count: "exact" })
-      .eq("tenant_id", input.tenantId);
-    if (input.publicationStatus) {
-      query = query.eq(
-        "public_profile.publication_status",
-        input.publicationStatus,
-      );
-    }
-    const from = (input.page - 1) * input.pageSize;
-    const result = await query
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(from, from + input.pageSize - 1);
+    const result = await executeDatabase(async () => {
+      const profileRelation = input.publicationStatus
+        ? `public_profile:douyin_project_public_profiles!inner(${PROFILE_FIELDS})`
+        : `public_profile:douyin_project_public_profiles(${PROFILE_FIELDS})`;
+      let query = this.client.from("projects")
+        .select(`${PROJECT_FIELDS},${profileRelation}`, { count: "exact" })
+        .eq("tenant_id", input.tenantId);
+      if (input.publicationStatus) {
+        query = query.eq(
+          "public_profile.publication_status",
+          input.publicationStatus,
+        );
+      }
+      const from = (input.page - 1) * input.pageSize;
+      return await query
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: false })
+        .range(from, from + input.pageSize - 1);
+    }, "查询租户抖音项目失败");
     assertDatabaseSuccess(result, "查询租户抖音项目失败");
     if (!Number.isInteger(result.count) || result.count! < 0) {
-      throw Errors.dbError("查询租户抖音项目总数失败", result.count);
+      throw Errors.dbError("查询租户抖音项目总数失败");
     }
     return {
       rows: parseData(z.array(ProjectListRowSchema), result.data,
@@ -154,11 +157,14 @@ export class TenantDouyinProjectsRepository {
   }
 
   async findProject(input: { tenantId: string; projectId: string }) {
-    const result = await this.client.from("projects")
-      .select("id,tenant_id")
-      .eq("id", input.projectId)
-      .eq("tenant_id", input.tenantId)
-      .maybeSingle();
+    const result = await executeDatabase(
+      () => this.client.from("projects")
+        .select("id,tenant_id")
+        .eq("id", input.projectId)
+        .eq("tenant_id", input.tenantId)
+        .maybeSingle(),
+      "查询租户项目失败",
+    );
     assertDatabaseSuccess(result, "查询租户项目失败");
     if (result.data === null) return null;
     return parseData(ProjectOwnershipSchema, result.data, "解析租户项目失败");
@@ -173,13 +179,16 @@ export class TenantDouyinProjectsRepository {
       ATTACHED_IMAGE_LOG_LIMIT,
       Math.max(1, Math.trunc(input.limit)),
     );
-    const result = await this.client.from("project_logs")
-      .select("images")
-      .eq("tenant_id", input.tenantId)
-      .eq("project_id", input.projectId)
-      .order("created_at", { ascending: false })
-      .order("id", { ascending: false })
-      .limit(limit);
+    const result = await executeDatabase(
+      () => this.client.from("project_logs")
+        .select("images")
+        .eq("tenant_id", input.tenantId)
+        .eq("project_id", input.projectId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(limit),
+      "查询项目图片失败",
+    );
     assertDatabaseSuccess(result, "查询项目图片失败");
     return parseData(
       z.array(AttachedImageRowSchema),
@@ -195,16 +204,19 @@ export class TenantDouyinProjectsRepository {
   }): Promise<TenantDouyinProfileCommandResult> {
     // The SQL function accepts nullable text even though the checked-in generated
     // declaration currently narrows p_budget_band to string.
-    const result = await this.client.rpc(PUBLICATION_RPC_NAME, {
-      p_tenant_id: input.tenantId,
-      p_project_id: input.projectId,
-      p_public_title: input.profile.public_title,
-      p_public_description: input.profile.public_description,
-      p_public_image_urls: input.profile.public_image_urls,
-      p_style_tags: input.profile.style_tags,
-      p_budget_band: input.profile.budget_band ?? null,
-      p_publication_status: input.profile.publication_status,
-    });
+    const result = await executeDatabase(
+      () => this.client.rpc(PUBLICATION_RPC_NAME, {
+        p_tenant_id: input.tenantId,
+        p_project_id: input.projectId,
+        p_public_title: input.profile.public_title,
+        p_public_description: input.profile.public_description,
+        p_public_image_urls: input.profile.public_image_urls,
+        p_style_tags: input.profile.style_tags,
+        p_budget_band: input.profile.budget_band ?? null,
+        p_publication_status: input.profile.publication_status,
+      }),
+      "原子保存抖音项目公开资料失败",
+    );
     assertDatabaseSuccess(result, "原子保存抖音项目公开资料失败");
     const envelope = parseData(
       PublicationRpcEnvelopeSchema,
@@ -218,13 +230,25 @@ export class TenantDouyinProjectsRepository {
 }
 
 function assertDatabaseSuccess(result: DatabaseResult, message: string): void {
-  if (result.error) throw Errors.dbError(message, result.error);
+  if (result.error) throw Errors.dbError(message);
 }
 
 function parseData<T>(schema: z.ZodType<T>, value: unknown, message: string): T {
   const parsed = schema.safeParse(value);
-  if (!parsed.success) throw Errors.dbError(message, parsed.error.issues);
+  if (!parsed.success) throw Errors.dbError(message);
   return parsed.data;
+}
+
+async function executeDatabase<T>(
+  operation: () => T | PromiseLike<T>,
+  message: string,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw Errors.dbError(message);
+  }
 }
 
 export const tenantDouyinProjectsRepository =

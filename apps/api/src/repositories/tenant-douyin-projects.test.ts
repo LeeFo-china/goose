@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { AppError } from "@/errors/app-error";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -61,6 +62,45 @@ function clientWith(results: Result[]) {
   return { client, calls };
 }
 
+function rejectingQueryClient(failure: unknown) {
+  class RejectingQuery implements PromiseLike<Result> {
+    select() { return this; }
+    eq() { return this; }
+    order() { return this; }
+    range() { return this; }
+    limit() { return this; }
+    maybeSingle() { return Promise.reject(failure); }
+    then<TResult1 = Result, TResult2 = never>(
+      onfulfilled?: ((value: Result) => TResult1 | PromiseLike<TResult1>) | null,
+      onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ) {
+      return Promise.reject(failure).then(onfulfilled, onrejected);
+    }
+  }
+  return {
+    from: mock(() => new RejectingQuery()),
+    rpc: mock(() => Promise.reject(failure)),
+  };
+}
+
+async function expectSanitizedDbError(
+  operation: () => Promise<unknown>,
+  expectedMessage: string,
+) {
+  try {
+    await operation();
+    throw new TypeError("expected operation to reject");
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppError);
+    expect(error).toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+      message: expectedMessage,
+      details: undefined,
+    });
+  }
+}
+
 const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const profile = {
@@ -79,6 +119,18 @@ const project = {
   updated_at: "2026-08-21T00:00:00.000Z",
   property: { community: "示例花园", layout: "三室两厅", area: 120 },
   public_profile: profile,
+};
+const publicationInput = {
+  tenantId: TENANT_ID,
+  projectId: PROJECT_ID,
+  profile: {
+    public_title: profile.public_title,
+    public_description: profile.public_description,
+    public_image_urls: profile.public_image_urls,
+    style_tags: profile.style_tags,
+    budget_band: profile.budget_band,
+    publication_status: "published" as const,
+  },
 };
 
 describe("TenantDouyinProjectsRepository", () => {
@@ -246,24 +298,14 @@ describe("TenantDouyinProjectsRepository", () => {
   });
 
   test("wraps RPC transport failures and rejects unknown envelopes", async () => {
-    const input = {
-      tenantId: TENANT_ID,
-      projectId: PROJECT_ID,
-      profile: {
-        public_title: profile.public_title,
-        public_description: profile.public_description,
-        public_image_urls: profile.public_image_urls,
-        style_tags: profile.style_tags,
-        budget_band: profile.budget_band,
-        publication_status: "published" as const,
-      },
-    };
     const transportFailure = new Repository(clientWith([{
       data: null,
       error: { message: "database unavailable" },
     }]).client as never);
-    await expect(transportFailure.publishProfileAtomic(input))
-      .rejects.toMatchObject({ code: "DB_ERROR" });
+    await expectSanitizedDbError(
+      () => transportFailure.publishProfileAtomic(publicationInput),
+      "原子保存抖音项目公开资料失败",
+    );
 
     for (const data of [
       null,
@@ -280,21 +322,178 @@ describe("TenantDouyinProjectsRepository", () => {
       { data: {}, error: {} },
     ]) {
       const invalid = new Repository(clientWith([{ data, error: null }]).client as never);
-      await expect(invalid.publishProfileAtomic(input))
-        .rejects.toMatchObject({ code: "DB_ERROR" });
+      await expectSanitizedDbError(
+        () => invalid.publishProfileAtomic(publicationInput),
+        "解析抖音项目公开资料命令结果失败",
+      );
     }
   });
 
-  test("wraps ordinary database failures", async () => {
+  test("sanitizes resolved database errors and invalid result shapes", async () => {
+    const rawError = { message: "database unavailable", hint: "private schema" };
+    const operations = [
+      {
+        message: "查询租户抖音项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listProjects({ tenantId: TENANT_ID, page: 1, pageSize: 20 }),
+      },
+      {
+        message: "查询租户项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.findProject({ tenantId: TENANT_ID, projectId: PROJECT_ID }),
+      },
+      {
+        message: "查询项目图片失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listAttachedImageRows({
+            tenantId: TENANT_ID,
+            projectId: PROJECT_ID,
+            limit: 100,
+          }),
+      },
+      {
+        message: "原子保存抖音项目公开资料失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.publishProfileAtomic(publicationInput),
+      },
+    ];
+    for (const operation of operations) {
+      const repository = new Repository(clientWith([{
+        data: null,
+        error: rawError,
+      }]).client as never);
+      await expectSanitizedDbError(
+        () => operation.invoke(repository),
+        operation.message,
+      );
+    }
 
-    const failure = new Repository(clientWith([{
-      data: null,
-      error: { message: "database unavailable" },
-    }]).client as never);
-    await expect(failure.listProjects({
+    const invalidShapes = [
+      {
+        message: "查询租户抖音项目总数失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listProjects({ tenantId: TENANT_ID, page: 1, pageSize: 20 }),
+        result: { data: [], error: null, count: null },
+      },
+      {
+        message: "解析租户抖音项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listProjects({ tenantId: TENANT_ID, page: 1, pageSize: 20 }),
+        result: { data: {}, error: null, count: 1 },
+      },
+      {
+        message: "解析租户项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.findProject({ tenantId: TENANT_ID, projectId: PROJECT_ID }),
+        result: { data: { id: "bad", tenant_id: TENANT_ID }, error: null },
+      },
+      {
+        message: "解析项目图片失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listAttachedImageRows({
+            tenantId: TENANT_ID,
+            projectId: PROJECT_ID,
+            limit: 100,
+          }),
+        result: { data: {}, error: null },
+      },
+    ];
+    for (const invalid of invalidShapes) {
+      const repository = new Repository(clientWith([invalid.result]).client as never);
+      await expectSanitizedDbError(
+        () => invalid.invoke(repository),
+        invalid.message,
+      );
+    }
+  });
+
+  test("sanitizes query and RPC rejections across every repository operation", async () => {
+    const rawFailure = { message: "connection refused", cause: "secret" };
+    const rejectedClient = rejectingQueryClient(rawFailure);
+    const repository = new Repository(rejectedClient as never);
+
+    await expectSanitizedDbError(
+      () => repository.listProjects({ tenantId: TENANT_ID, page: 1, pageSize: 20 }),
+      "查询租户抖音项目失败",
+    );
+    await expectSanitizedDbError(
+      () => repository.findProject({ tenantId: TENANT_ID, projectId: PROJECT_ID }),
+      "查询租户项目失败",
+    );
+    await expectSanitizedDbError(
+      () => repository.listAttachedImageRows({
+        tenantId: TENANT_ID,
+        projectId: PROJECT_ID,
+        limit: 100,
+      }),
+      "查询项目图片失败",
+    );
+    await expectSanitizedDbError(
+      () => repository.publishProfileAtomic(publicationInput),
+      "原子保存抖音项目公开资料失败",
+    );
+  });
+
+  test("sanitizes synchronous database throws but preserves AppError", async () => {
+    const rawFailure = { message: "sync client failure", cause: "secret" };
+    const operations = [
+      {
+        message: "查询租户抖音项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listProjects({ tenantId: TENANT_ID, page: 1, pageSize: 20 }),
+      },
+      {
+        message: "查询租户项目失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.findProject({ tenantId: TENANT_ID, projectId: PROJECT_ID }),
+      },
+      {
+        message: "查询项目图片失败",
+        invoke: (repository: InstanceType<typeof Repository>) =>
+          repository.listAttachedImageRows({
+            tenantId: TENANT_ID,
+            projectId: PROJECT_ID,
+            limit: 100,
+          }),
+      },
+    ];
+    for (const operation of operations) {
+      const repository = new Repository({
+        from: mock(() => { throw rawFailure; }),
+        rpc: mock(() => Promise.resolve({ data: null, error: null })),
+      } as never);
+      await expectSanitizedDbError(
+        () => operation.invoke(repository),
+        operation.message,
+      );
+    }
+
+    const rpcRepository = new Repository({
+      from: mock(() => { throw new TypeError("unexpected query"); }),
+      rpc: mock(() => { throw rawFailure; }),
+    } as never);
+    await expectSanitizedDbError(
+      () => rpcRepository.publishProfileAtomic(publicationInput),
+      "原子保存抖音项目公开资料失败",
+    );
+
+    const businessError = new AppError(409, "业务冲突", "BUSINESS_CONFLICT");
+    const appErrorClient = new Repository({
+      from: mock(() => { throw businessError; }),
+      rpc: mock(() => Promise.resolve({ data: null, error: null })),
+    } as never);
+    await expect(appErrorClient.listProjects({
       tenantId: TENANT_ID,
       page: 1,
       pageSize: 20,
-    })).rejects.toMatchObject({ code: "DB_ERROR" });
+    })).rejects.toBe(businessError);
+
+    const rejectedAppErrorClient = new Repository(
+      rejectingQueryClient(businessError) as never,
+    );
+    await expect(rejectedAppErrorClient.findProject({
+      tenantId: TENANT_ID,
+      projectId: PROJECT_ID,
+    })).rejects.toBe(businessError);
   });
 });

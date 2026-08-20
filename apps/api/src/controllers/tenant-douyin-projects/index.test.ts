@@ -118,13 +118,17 @@ describe("TenantDouyinProjectsController", () => {
       params: { projectId: "bad" },
       body,
     } as never)).rejects.toMatchObject({ statusCode: 400 });
-    await expect(context.controller.updatePublication({
-      params: { projectId: PROJECT_ID },
-      body: {
-        ...body,
-        public_image_urls: ["https://cdn.example.test/image.jpg?q-signature=x"],
-      },
-    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    for (const reference of [
+      "https://cdn.example.test/image.jpg?q-signature=x",
+      "https:/cdn.example.test/image.jpg",
+      "https:cdn.example.test/image.jpg",
+      "HTTPS://cdn.example.test/image.jpg",
+    ]) {
+      await expect(context.controller.updatePublication({
+        params: { projectId: PROJECT_ID },
+        body: { ...body, public_image_urls: [reference] },
+      } as never)).rejects.toMatchObject({ statusCode: 400 });
+    }
     expect(context.getRequiredTenantContext).not.toHaveBeenCalled();
     expect(context.service.updatePublication).not.toHaveBeenCalled();
   });
