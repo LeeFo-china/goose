@@ -22,6 +22,16 @@ export type { CustomerOrigin, CustomerSource, CustomerStatus } from './customer'
 export { DEPARTMENT_CODE_VALUES } from './department';
 export type { DepartmentCode } from './department';
 
+export {
+  DOUYIN_PROJECT_PHASE_VALUES,
+  DOUYIN_PROJECT_PUBLICATION_STATUS_VALUES,
+  toDouyinProjectPhase,
+} from './douyin-public-project';
+export type {
+  DouyinProjectPhase,
+  DouyinProjectPublicationStatus,
+} from './douyin-public-project';
+
 export { EMPLOYEE_ROLE_VALUES, EMPLOYEE_STATUS_VALUES } from './employee';
 export type { EmployeeRole, EmployeeStatus } from './employee';
 
