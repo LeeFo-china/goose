@@ -50,12 +50,15 @@ describe("city partner public site", () => {
     ].map(readWebFile).join("\n");
     const layout = readWebFile("app/layout.tsx");
     const openGraphImage = readWebFile("app/opengraph-image.tsx");
+    const sharedOpenGraph = readWebFile("lib/site-open-graph.ts");
     const header = readWebFile("components/official-site/site-header.tsx");
 
     expect(brandSource).toContain("好店智装云");
     expect(brandSource).not.toContain("鹅班长");
     expect(layout).toContain('applicationName: "好店智装云"');
-    expect(layout).toContain('siteName: "好店智装云"');
+    expect(layout).toContain("...sharedOpenGraphMetadata");
+    expect(sharedOpenGraph).toContain('siteName: "好店智装云"');
+    expect(sharedOpenGraph).toContain('alt: "好店智装云官网"');
     expect(layout).toContain('alt: "好店智装云官网"');
     expect(openGraphImage).toContain('export const alt = "好店智装云官网"');
     expect(openGraphImage).toContain('background: "#095488"');

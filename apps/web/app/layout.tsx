@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { SiteShell } from "@/components/official-site/site-shell";
 import { ThemeProvider } from "@/components/theme-provider";
+import { sharedOpenGraphMetadata } from "@/lib/site-open-graph";
 
 import "./globals.css";
 
@@ -17,13 +18,10 @@ export const metadata: Metadata = {
     canonical: "/",
   },
   openGraph: {
+    ...sharedOpenGraphMetadata,
     title: "好店智装云",
     description: "连接装修经营、项目交付与城市合作。",
-    siteName: "好店智装云",
-    type: "website",
-    locale: "zh_CN",
     url: "/",
-    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: "好店智装云官网" }],
   },
   twitter: {
     card: "summary_large_image",

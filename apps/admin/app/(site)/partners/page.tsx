@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowDownRight,
@@ -177,7 +178,14 @@ function HeroSection() {
         <header className="flex items-center justify-between gap-4">
           <Link href="/partners" className="flex items-center gap-3 text-background">
             <span className="flex size-11 items-center justify-center rounded-lg border border-background/30 bg-background/95">
-              <img src="/icon.png" alt="好店智装云" className="size-9 object-contain" />
+              <Image
+                src="/icon.png"
+                alt="好店智装云"
+                className="size-9 object-contain"
+                height={36}
+                sizes="36px"
+                width={36}
+              />
             </span>
             <span className="text-base font-semibold">好店智装云</span>
           </Link>

@@ -1,10 +1,10 @@
 {
-  "generatedAt": "2026-08-20T08:40:02.882Z",
+  "generatedAt": "2026-08-20T10:47:07.190Z",
   "baseUrl": "http://127.0.0.1:3020",
-  "sourceDigest": "73b0d3a629453cb7494c656575b43036a289fa7e45591372aa6b79248621c8ec",
+  "sourceDigest": "8205ab6fb395a527aa387ea06d456d8ce3ccdf8ed2abd47fb1eaa48c56a4af35",
   "fixtureDigest": "0caad991a14f93d1f3a10930d04f2bba0b8a43b6a6eee8b49f531d89ba5b460e",
-  "buildId": "-9hTxNmFn2H-j2a3iQn3P",
-  "revision": "73b0d3a629453cb7494c656575b43036a289fa7e45591372aa6b79248621c8ec",
+  "buildId": "k64x27YBJR4fZpJN5mfGe",
+  "revision": "8205ab6fb395a527aa387ea06d456d8ce3ccdf8ed2abd47fb1eaa48c56a4af35",
   "lighthouseVersion": "12.8.2",
   "profile": "mobile",
   "thresholds": {
@@ -22,8 +22,8 @@
       "performance": 97,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2486,
-      "tbtMs": 44,
+      "lcpMs": 2475,
+      "tbtMs": 34,
       "cls": 0
     },
     {
@@ -32,8 +32,8 @@
       "performance": 98,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2359,
-      "tbtMs": 19,
+      "lcpMs": 2361,
+      "tbtMs": 20,
       "cls": 0
     },
     {
@@ -42,8 +42,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2047,
-      "tbtMs": 42,
+      "lcpMs": 2050,
+      "tbtMs": 44,
       "cls": 0
     },
     {
@@ -52,8 +52,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2045,
-      "tbtMs": 40,
+      "lcpMs": 2046,
+      "tbtMs": 41,
       "cls": 0
     },
     {
@@ -62,8 +62,8 @@
       "performance": 99,
       "accessibility": 100,
       "seo": 100,
-      "lcpMs": 2081,
-      "tbtMs": 75,
+      "lcpMs": 2048,
+      "tbtMs": 43,
       "cls": 0
     }
   ]

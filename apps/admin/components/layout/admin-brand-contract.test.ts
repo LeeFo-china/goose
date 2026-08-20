@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 
@@ -172,6 +172,7 @@ describe("Admin 好店智装云品牌合同", () => {
     loginForm: readAdminSource("components/login-form.tsx"),
     adminShell: readAdminSource("components/layout/admin-shell.tsx"),
     adminSmoke: readAdminSource("e2e/admin-smoke.spec.ts"),
+    publicPartners: readAdminSource("app/(site)/partners/page.tsx"),
     themeStore: readAdminSource("components/layout/admin-shell-preferences-store.ts"),
     globals: readAdminSource("app/globals.css"),
   };
@@ -242,6 +243,16 @@ describe("Admin 好店智装云品牌合同", () => {
       expect(source).toContain("height={");
       expect(source).toContain("sizes=");
     }
+  });
+
+  test("公开合伙人页使用优化图片组件且应用图标保持轻量", () => {
+    const icon = statSync(new URL("app/icon.png", adminRoot));
+
+    expect(icon.size).toBeLessThanOrEqual(100 * 1024);
+    expect(sources.publicPartners).toContain('import Image from "next/image"');
+    expect(sources.publicPartners).toContain('src="/icon.png"');
+    expect(sources.publicPartners).toContain("<Image");
+    expect(sources.publicPartners).not.toContain('<img src="/icon.png"');
   });
 
   test("H5 和抖音小程序保留各自渐变", () => {

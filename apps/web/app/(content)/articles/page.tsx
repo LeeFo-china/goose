@@ -6,6 +6,7 @@ import {
   getSiteContentListForPage,
   resolveContentListPage,
 } from "@/lib/site-content-page";
+import { sharedOpenGraphMetadata } from "@/lib/site-open-graph";
 
 const PAGE_METADATA = {
   title: "装修经营文章",
@@ -27,7 +28,7 @@ export async function generateMetadata({ searchParams }: ArticlesPageProps): Pro
     title,
     description,
     alternates: { canonical },
-    openGraph: { title, description, url: canonical },
+    openGraph: { ...sharedOpenGraphMetadata, title, description, url: canonical },
   };
 }
 
