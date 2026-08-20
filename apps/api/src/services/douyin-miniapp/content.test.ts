@@ -1,6 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { JwtPayload } from "@/utils/jwt";
-import { parseBootstrap } from "../../../../douyin-mini/src/api/content-validation";
+import {
+  parseBootstrap,
+  parseProject,
+  parseProjectPage,
+} from "../../../../douyin-mini/src/api/content-validation";
 import { DouyinMiniappContentService } from "./content";
 
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
@@ -34,6 +38,8 @@ const company = {
 };
 const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
 const resolvedCover = `https://assets.example.com/${storedCover}`;
+const logOnlyCover = `tenants/${TENANT_ID}/project_log/internal-log-only.jpg`;
+const resolvedLogOnlyCover = `https://assets.example.com/${logOnlyCover}`;
 const project = {
   id: PROJECT_ID, name: "张先生 1号楼101室装修", status: "constructing", budget: 260000,
   start_date: "2026-07-01", created_at: "2026-06-01T00:00:00.000Z",
@@ -45,7 +51,7 @@ const project = {
     public_description: "明亮通透的现代简约空间",
     public_image_urls: [storedCover],
     style_tags: ["现代", "简约"],
-    budget_band: "20-30万",
+    budget_band: "30-50万",
     publication_status: "published" as const,
     updated_at: "2026-07-20T00:00:00.000Z",
   },
@@ -80,12 +86,12 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     findProject: mock(async () => project),
     listProjectImageLogs: mock(async () => [{
       project_id: PROJECT_ID,
-      images: [storedCover],
+      images: [logOnlyCover],
       created_at: "2026-07-19T00:00:00.000Z",
     }]),
     listSiteLogs: mock(async () => ({ rows: [{
       id: "44444444-4444-4444-8444-444444444444", stage_code: "water-electric",
-      node_name: "水电施工", images: [storedCover,
+      node_name: "水电施工", images: [logOnlyCover,
         "project-log/e2e/broken-legacy-image.jpg", "http://unsafe.test/a.jpg",
         ...Array.from({ length: 12 }, (_, index) => `https://cdn.example.com/${index}.jpg`)],
       created_at: "2026-07-20T00:00:00.000Z",
@@ -149,11 +155,11 @@ describe("DouyinMiniappContentService", () => {
     });
     expect(result.content.featured_projects[0]).toMatchObject({
       id: completedProjects[0]!.id, phase: "completed", title: "现代简约实景",
-      description: "明亮通透的现代简约空间", budget_band: "20-30万",
+      description: "明亮通透的现代简约空间", budget_band: "30-50万",
       cover_image_url: resolvedCover,
     });
     expect(result.content.featured_cases[0]).toMatchObject({
-      id: completedProjects[0]!.id, status: "acceptance", budget_band: "20-30万",
+      id: completedProjects[0]!.id, status: "acceptance", budget_band: "30-50万",
       cover_image_url: resolvedCover,
     });
     expect(result.content.active_sites[0]).toMatchObject({
@@ -216,7 +222,7 @@ describe("DouyinMiniappContentService", () => {
       style_tags: ["现代", "简约"],
       layout: "三室两厅",
       area: 120,
-      budget_band: "20-30万",
+      budget_band: "30-50万",
       community: "示例花园",
       city: "郑州市",
       district: "金水区",
@@ -253,6 +259,12 @@ describe("DouyinMiniappContentService", () => {
       page: 1, pageSize: 20,
     })).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
     expect(hidden.repository.listSiteLogs).not.toHaveBeenCalled();
+
+    const missing = dependencies({ findProject: mock(async () => null) });
+    await expect(new DouyinMiniappContentService(missing as never).getProject(
+      user,
+      PROJECT_ID,
+    )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
   });
 
   test("only lists paginated logs for a public in-progress project", async () => {
@@ -279,20 +291,31 @@ describe("DouyinMiniappContentService", () => {
   });
 
   test("always scopes list and detail reads to the signed session tenant", async () => {
-    const deps = dependencies();
+    const deps = dependencies({
+      listCases: mock(async () => ({ rows: [project], total: 21 })),
+    });
     const service = new DouyinMiniappContentService(deps as never);
 
     const cases = await service.listCases(user, { page: 2, pageSize: 20,
       style: "现代", layout: "三室两厅" });
-    await service.getCase(user, PROJECT_ID);
+    const detail = await service.getCase(user, PROJECT_ID);
 
     expect(deps.repository.listCases).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       page: 2, pageSize: 20, style: "现代", layout: "三室两厅" });
     expect(deps.repository.findCase).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       id: PROJECT_ID });
     expect(cases).toMatchObject({ items: [{ cover_image_url: resolvedCover,
-      public_images: [resolvedCover], description: null }],
-      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 } });
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" }],
+      pagination: { page: 2, pageSize: 20, total: 21, totalPages: 2 } });
+    expect(detail).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(parseProjectPage(cases)).not.toBeNull();
+    expect(parseProject(detail)).not.toBeNull();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(deps.prepareImageUrls).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify({ cases, detail })).not.toMatch(/张先生|1号楼101室|260000/);
   });
 
   test("fails closed for invalid stored runtime config and cross-tenant ids", async () => {
@@ -367,7 +390,7 @@ describe("DouyinMiniappContentService", () => {
     expect(deps.repository.listSiteLogs).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       projectId: PROJECT_ID, page: 1, pageSize: 20 });
     expect(result.items[0]!.images).toHaveLength(9);
-    expect(result.items[0]!.images[0]).toBe(resolvedCover);
+    expect(result.items[0]!.images[0]).toBe(resolvedLogOnlyCover);
     expect(result.items[0]!.images.every((url) => url.startsWith("https://"))).toBe(true);
     expect(result.items[0]!.images.join(",")).not.toContain("broken-legacy-image");
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
@@ -389,6 +412,16 @@ describe("DouyinMiniappContentService", () => {
     expect(bootstrap.content.active_sites[0]!.title).toBe("示例花园");
     expect(list.items[0]!.title).toBe("示例花园");
     expect(detail.title).toBe("示例花园");
+    expect(list.items[0]).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(detail).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(parseProjectPage(list)).not.toBeNull();
+    expect(parseProject(detail)).not.toBeNull();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(deps.prepareImageUrls).toHaveBeenCalledTimes(3);
     expect(JSON.stringify({ bootstrap, list, detail })).not.toContain(privateName);
   });
 });

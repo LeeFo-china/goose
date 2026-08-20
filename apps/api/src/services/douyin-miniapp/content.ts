@@ -8,7 +8,6 @@ import {
   type DouyinContentInstallation,
   type DouyinContentLog,
   type DouyinContentProject,
-  type DouyinContentProjectImageLog,
 } from "@/repositories/douyin-miniapp-content";
 import {
   DouyinRuntimeConfigSchema,
@@ -28,7 +27,7 @@ import {
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
   | "listCases" | "findCase" | "listSites" | "findSite" | "listSiteLogs"
-  | "listProjectImageLogs" | "listProjects" | "findProject">;
+  | "listProjects" | "findProject">;
 type Dependencies = {
   readonly repository?: RepositoryPort;
   readonly prepareImageUrls?: () => Promise<void>;
@@ -114,9 +113,8 @@ export class DouyinMiniappContentService {
     const context = await this.loadContext(user);
     requireContentFeature(context, "cases");
     const result = await this.repository.listCases({ tenantId: context.tenantId, ...query });
-    const projectImages = await this.loadProjectImages(context.tenantId, result.rows);
-    return page(result.rows.map((project) =>
-      mapProject(project, projectImages.get(project.id))), query, result.total);
+    const projects = await this.mapCompatibilityProjects(result.rows, false);
+    return page(projects, query, result.total);
   }
 
   async getCase(user: JwtPayload | undefined, id: string) {
@@ -125,17 +123,15 @@ export class DouyinMiniappContentService {
     const project = requireProject(await this.repository.findCase({
       tenantId: context.tenantId, id,
     }));
-    const projectImages = await this.loadProjectImages(context.tenantId, [project]);
-    return mapProject(project, projectImages.get(project.id));
+    return this.mapCompatibilityProject(project, false);
   }
 
   async listSites(user: JwtPayload | undefined, query: DouyinContentPageQuery) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
     const result = await this.repository.listSites({ tenantId: context.tenantId, ...query });
-    const projectImages = await this.loadProjectImages(context.tenantId, result.rows);
-    return page(result.rows.map((project) =>
-      mapSiteProject(project, projectImages.get(project.id))), query, result.total);
+    const projects = await this.mapCompatibilityProjects(result.rows, true);
+    return page(projects, query, result.total);
   }
 
   async getSite(user: JwtPayload | undefined, id: string) {
@@ -144,8 +140,7 @@ export class DouyinMiniappContentService {
     const project = requireProject(await this.repository.findSite({
       tenantId: context.tenantId, id,
     }));
-    const projectImages = await this.loadProjectImages(context.tenantId, [project]);
-    return mapSiteProject(project, projectImages.get(project.id));
+    return this.mapCompatibilityProject(project, true);
   }
 
   async listProjects(user: JwtPayload | undefined, query: DouyinProjectListQuery) {
@@ -159,13 +154,12 @@ export class DouyinMiniappContentService {
 
   async getProject(user: JwtPayload | undefined, id: string) {
     const context = await this.loadContext(user);
-    const project = requirePublicProject(await this.repository.findProject({
+    const project = await this.repository.findProject({
       tenantId: context.tenantId,
       id,
-    }));
-    const [mapped] = await this.mapPublicProjects([project]);
-    if (!mapped) throw publicProjectNotFound();
-    return mapped;
+    });
+    if (!project) throw publicProjectNotFound();
+    return this.mapOnePublicProject(project);
   }
 
   async listProjectLogs(
@@ -174,11 +168,11 @@ export class DouyinMiniappContentService {
     query: DouyinContentPageQuery,
   ) {
     const context = await this.loadContext(user);
-    const project = requirePublicProject(await this.repository.findProject({
+    const project = await this.repository.findProject({
       tenantId: context.tenantId,
       id: projectId,
-    }));
-    if (toDouyinProjectPhase(project.status) !== "in_progress") {
+    });
+    if (!project || toDouyinProjectPhase(project.status) !== "in_progress") {
       throw publicProjectNotFound();
     }
     const result = await this.repository.listSiteLogs({
@@ -259,25 +253,36 @@ export class DouyinMiniappContentService {
     };
   }
 
-  private async loadProjectImages(
-    tenantId: string,
-    projects: readonly DouyinContentProject[],
-  ): Promise<Map<string, string[]>> {
-    const projectIds = [...new Set(projects.map((project) => project.id))];
-    if (projectIds.length === 0) return new Map();
-    const [logs] = await Promise.all([
-      this.repository.listProjectImageLogs({ tenantId, projectIds }),
-      this.prepareImageUrls(),
-    ]);
-    return projectImageMap(logs, this.resolveImageUrls);
-  }
-
   private async mapPublicProjects(projects: readonly DouyinContentProject[]) {
     const uniqueProjects = [...new Map(projects.map((project) => [project.id, project])).values()];
     if (uniqueProjects.some((project) => project.public_profile.public_image_urls.length > 0)) {
       await this.prepareImageUrls();
     }
     return uniqueProjects.map((project) => mapPublicProject(project, this.resolveImageUrls));
+  }
+
+  private async mapOnePublicProject(project: DouyinContentProject) {
+    if (project.public_profile.public_image_urls.length > 0) {
+      await this.prepareImageUrls();
+    }
+    return mapPublicProject(project, this.resolveImageUrls);
+  }
+
+  private async mapCompatibilityProjects(
+    projects: readonly DouyinContentProject[],
+    useSiteTitle: boolean,
+  ) {
+    const mapped = await this.mapPublicProjects(projects);
+    const mappedById = new Map(mapped.map((project) => [project.id, project]));
+    return compatibilityProjects(projects, mappedById, useSiteTitle);
+  }
+
+  private async mapCompatibilityProject(
+    project: DouyinContentProject,
+    useSiteTitle: boolean,
+  ) {
+    const mapped = await this.mapOnePublicProject(project);
+    return compatibilityProject(project, mapped, useSiteTitle);
   }
 }
 
@@ -336,54 +341,33 @@ function compatibilityProjects(
   return selectPublicProjects(projects, mappedById).flatMap((project) => {
     const source = sourceById.get(project.id);
     if (!source) return [];
-    const community = project.community.trim();
-    return [{
-      id: project.id,
-      title: useSiteTitle ? community || "公开在建工地" : project.title,
-      cover_image_url: project.cover_image_url,
-      public_images: project.public_images.slice(0, 9),
-      style_tags: stringArray(project.style_tags, 12, 40),
-      layout: project.layout,
-      area: project.area,
-      budget_band: project.budget_band,
-      community,
-      city: project.city,
-      district: project.district,
-      status: source.status,
-      start_date: project.start_date,
-      updated_at: project.updated_at,
-      description: null,
-    }];
+    return [compatibilityProject(source, project, useSiteTitle)];
   });
 }
 
-function mapProject(project: DouyinContentProject, images: readonly string[] = []) {
+function compatibilityProject(
+  source: DouyinContentProject,
+  project: PublicProjectDto,
+  useSiteTitle: boolean,
+) {
+  const community = project.community.trim().slice(0, 120);
+  const title = useSiteTitle ? community || "公开在建工地" : project.title;
   return {
     id: project.id,
-    title: project.name?.trim() || "装修项目",
-    cover_image_url: images[0] ?? null,
-    public_images: [...images],
+    title: title.slice(0, 120),
+    cover_image_url: project.cover_image_url,
+    public_images: project.public_images.slice(0, 9),
     style_tags: stringArray(project.style_tags, 12, 40),
-    layout: project.property.layout,
-    area: finiteNumber(project.property.area),
-    budget_band: budgetBand(project.budget),
-    community: project.property.community,
-    city: project.property.city,
-    district: project.property.district,
-    status: project.status,
+    layout: project.layout?.slice(0, 80) ?? null,
+    area: project.area,
+    budget_band: project.budget_band?.slice(0, 40) ?? null,
+    community,
+    city: project.city?.slice(0, 80) ?? null,
+    district: project.district?.slice(0, 80) ?? null,
+    status: source.status?.slice(0, 80) ?? null,
     start_date: project.start_date,
     updated_at: project.updated_at,
-    description: null,
-  };
-}
-
-function mapSiteProject(project: DouyinContentProject, images: readonly string[] = []) {
-  const mapped = mapProject(project, images);
-  const community = project.property.community.trim();
-  return {
-    ...mapped,
-    title: community || "公开在建工地",
-    community,
+    description: project.description.slice(0, 2_000),
   };
 }
 
@@ -395,22 +379,6 @@ function mapLog(log: DouyinContentLog, resolveImageUrls: (value: unknown) => str
     images: resolvedHttpsImages(log.images, resolveImageUrls),
     created_at: log.created_at,
   };
-}
-
-function projectImageMap(
-  logs: readonly DouyinContentProjectImageLog[],
-  resolveImageUrls: (value: unknown) => string[],
-) {
-  const imagesByProject = new Map<string, string[]>();
-  for (const log of logs) {
-    const images = imagesByProject.get(log.project_id) ?? [];
-    for (const image of resolvedHttpsImages(log.images, resolveImageUrls)) {
-      if (!images.includes(image)) images.push(image);
-      if (images.length >= 9) break;
-    }
-    if (images.length > 0) imagesByProject.set(log.project_id, images);
-  }
-  return imagesByProject;
 }
 
 function resolvedHttpsImages(
@@ -451,15 +419,6 @@ function finiteNumber(value: number | string | null) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
-function budgetBand(value: number | string | null) {
-  const budget = finiteNumber(value);
-  if (budget === null) return null;
-  if (budget < 100_000) return "10万以内";
-  if (budget < 200_000) return "10-20万";
-  if (budget < 300_000) return "20-30万";
-  if (budget < 500_000) return "30-50万";
-  return "50万以上";
-}
 function page<T>(items: T[], query: DouyinContentPageQuery, total: number) {
   return { items, pagination: {
     page: query.page, pageSize: query.pageSize, total,
@@ -472,10 +431,6 @@ function requireCompany(value: DouyinContentCompany | null) {
 }
 function requireProject(value: DouyinContentProject | null) {
   if (!value) throw Errors.business(404, "公开内容不存在", "DOUYIN_CONTENT_NOT_FOUND");
-  return value;
-}
-function requirePublicProject(value: DouyinContentProject | null) {
-  if (!value || !toDouyinProjectPhase(value.status)) throw publicProjectNotFound();
   return value;
 }
 function publicProjectNotFound() {
