@@ -20,17 +20,16 @@ export type FenConversionResult =
 export function decimalNumberToFraction(
   value: number,
 ): DecimalFraction | null {
-  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(
-    value.toString(),
-  );
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.toString());
   if (!match?.[1]) return null;
   const fractionalDigits = match[2] ?? '';
-  const exponent = Number(match[3] ?? '0');
   const digits = BigInt(`${match[1]}${fractionalDigits}`);
-  const scale = fractionalDigits.length - exponent;
-  return scale <= 0
-    ? { numerator: digits * powerOfTen(-scale), denominator: BIGINT_ONE }
-    : { numerator: digits, denominator: powerOfTen(scale) };
+  return {
+    numerator: digits,
+    denominator: fractionalDigits.length === 0
+      ? BIGINT_ONE
+      : powerOfTen(fractionalDigits.length),
+  };
 }
 
 export function calculateFenRange(input: {

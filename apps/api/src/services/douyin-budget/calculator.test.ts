@@ -3,9 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   calculateDouyinBudget,
   DouyinBudgetCalculationError,
-  projectDouyinBudgetToPublicYuan,
   type DouyinBudgetCalculatorInput,
-  type DouyinBudgetCalculationResult,
   type DouyinBudgetPricingRules,
 } from './calculator';
 
@@ -143,7 +141,7 @@ describe('calculateDouyinBudget', () => {
       ...rules,
       items: [{
         ...rules.items[0],
-        code: 'base.comfortable.old-house-partial',
+        code: 'base.comfortable.old_house',
         minimumAmountFen: 1,
         maximumAmountFen: 3,
         propertyConditionCoefficientBps: 15_001,
@@ -225,7 +223,7 @@ describe('calculateDouyinBudget', () => {
     expect(result.maximum_total_fen).toBe(1_100_800);
   });
 
-  test('uses the canonical decimal area as an exact fraction before rounding fen', () => {
+  test('rounds a canonical decimal area exactly', () => {
     const result = calculateDouyinBudget({
       ...rules,
       items: [{
@@ -233,7 +231,7 @@ describe('calculateDouyinBudget', () => {
         minimumAmountFen: 101,
         maximumAmountFen: 101,
       }],
-    }, budgetInput({ area: Number('1.0125e1') }));
+    }, budgetInput({ area: 10.125 }));
     expect(result.minimum_total_fen).toBe(1_023);
     expect(result.maximum_total_fen).toBe(1_023);
   });
@@ -260,14 +258,6 @@ describe('calculateDouyinBudget', () => {
     [
       'DOUYIN_BUDGET_BASE_MISSING',
       { ...rules, items: [rules.items[1]] },
-      {},
-    ],
-    [
-      'DOUYIN_BUDGET_BASE_AMBIGUOUS',
-      { ...rules, items: [
-        rules.items[0],
-        { ...rules.items[0], code: 'base.alternate' },
-      ] },
       {},
     ],
     [
@@ -362,7 +352,65 @@ describe('calculateDouyinBudget', () => {
     );
   });
 
-  test.each([9, 1_001, Number.NaN, Number.POSITIVE_INFINITY])(
+  test.each([
+    [
+      'option-style base code',
+      { code: 'custom_cabinet' },
+      'DOUYIN_BUDGET_RULE_INVALID',
+    ],
+    [
+      'base code suffix not matching its property condition',
+      { code: 'base.comfortable.old_house' },
+      'DOUYIN_BUDGET_RULE_CONDITION_INVALID',
+    ],
+    [
+      'multiple base property conditions',
+      { condition: {
+        propertyConditions: ['rough', 'old_house'],
+        decorationTiers: ['comfortable'],
+      } },
+      'DOUYIN_BUDGET_RULE_CONDITION_INVALID',
+    ],
+    [
+      'partial-only base scope condition',
+      { condition: {
+        propertyConditions: ['rough'],
+        decorationTiers: ['comfortable'],
+        decorationScopes: ['partial'],
+      } },
+      'DOUYIN_BUDGET_RULE_CONDITION_INVALID',
+    ],
+  ])('rejects %s', (_name, itemPatch, code) => {
+    const candidate = {
+      ...rules,
+      items: [{ ...rules.items[0], ...itemPatch }],
+    } as unknown as DouyinBudgetPricingRules;
+    expectCalculationFailure(code, () =>
+      calculateDouyinBudget(candidate, budgetInput())
+    );
+  });
+
+  test('rejects duplicate visible labels after trimming', () => {
+    const candidate = {
+      ...rules,
+      items: [rules.items[0], {
+        ...rules.items[1],
+        label: ` ${rules.items[0].label} `,
+      }],
+    } as const;
+    expectCalculationFailure('DOUYIN_BUDGET_RULE_INVALID', () =>
+      calculateDouyinBudget(candidate, budgetInput())
+    );
+  });
+
+  test.each([
+    -0,
+    9,
+    1_001,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ])(
     'rejects invalid area %s',
     (area) => {
       expectCalculationFailure('DOUYIN_BUDGET_INPUT_INVALID', () =>
@@ -405,61 +453,6 @@ describe('calculateDouyinBudget', () => {
   });
 });
 
-describe('projectDouyinBudgetToPublicYuan', () => {
-  test.each([
-    [99, 1],
-    [100, 1],
-    [149, 1],
-    [150, 2],
-  ])('rounds %s fen to %s yuan for totals and categories', (fen, yuan) => {
-    const raw = rawResult(fen);
-    const result = projectDouyinBudgetToPublicYuan(raw);
-    expect(result).toMatchObject({
-      minimum_total: yuan,
-      maximum_total: yuan,
-      categories: [{
-        category_code: 'base',
-        minimum_amount: yuan,
-        maximum_amount: yuan,
-      }],
-    });
-  });
-
-  test.each([
-    [-1, 'DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID'],
-    [1.5, 'DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID'],
-    [Number.MAX_SAFE_INTEGER + 1, 'DOUYIN_BUDGET_AMOUNT_OVERFLOW'],
-  ])('rejects invalid fen %s with a typed failure', (fen, code) => {
-    expectCalculationFailure(code, () =>
-      projectDouyinBudgetToPublicYuan(rawResult(fen))
-    );
-  });
-
-  test('uses the same validation for category amounts and does not mutate input', () => {
-    const raw = rawResult(150);
-    const before = structuredClone(raw);
-    const invalidCategory = {
-      ...raw,
-      categories: [{
-        ...raw.categories[0],
-        minimum_amount_fen: -1,
-      }],
-    } as DouyinBudgetCalculationResult;
-    const projected = projectDouyinBudgetToPublicYuan(raw);
-    expect(raw).toEqual(before);
-    expect(projected.calculation_basis).toEqual(raw.calculation_basis);
-    expect(projected.included_items).toEqual(raw.included_items);
-    expect(projected.excluded_items).toEqual(raw.excluded_items);
-    expectCalculationFailure('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', () =>
-      projectDouyinBudgetToPublicYuan(invalidCategory)
-    );
-    expectCalculationFailure('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', () =>
-      projectDouyinBudgetToPublicYuan({ ...raw,
-        minimum_total_fen: 151, maximum_total_fen: 150 })
-    );
-  });
-});
-
 function budgetInput(
   patch: Partial<DouyinBudgetCalculatorInput> = {},
 ): DouyinBudgetCalculatorInput {
@@ -483,17 +476,4 @@ function captureCalculationFailure(action: () => unknown): unknown {
     return error;
   }
   return null;
-}
-function rawResult(amountFen: number): DouyinBudgetCalculationResult {
-  const calculated = calculateDouyinBudget(rules, budgetInput());
-  return {
-    ...calculated,
-    minimum_total_fen: amountFen,
-    maximum_total_fen: amountFen,
-    categories: [{
-      category_code: 'base',
-      minimum_amount_fen: amountFen,
-      maximum_amount_fen: amountFen,
-    }],
-  };
 }

@@ -1,9 +1,5 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
-  DOUYIN_BUDGET_OPTION_CODE_VALUES,
-  DOUYIN_DECORATION_SCOPE_VALUES,
-  DOUYIN_DECORATION_TIER_VALUES,
-  DOUYIN_PROPERTY_CONDITION_VALUES,
   type DouyinBudgetCategoryCode,
   type DouyinBudgetOptionCode,
   type DouyinDecorationScope,
@@ -14,22 +10,20 @@ import {
 import {
   addFenRangeToMap,
   calculateFenRange,
-  decimalNumberToFraction,
   fenToIntegerYuan,
   safeBigIntToNumber,
-  type DecimalFraction,
   type FenRange,
 } from './calculator-money';
+import {
+  matchesCondition,
+  MAX_DOUYIN_BUDGET_COEFFICIENT_BPS,
+  validateInput,
+  validateRawCalculationResult,
+  validateRules,
+  validateSelectedOptions,
+} from './calculator-validation';
 
-const MAX_PRICING_ITEMS = 100;
-const MAX_SELECTED_OPTIONS = 20;
-export const MAX_DOUYIN_BUDGET_COEFFICIENT_BPS = 100_000;
-
-const CATEGORY_CODES = new Set<string>(DOUYIN_BUDGET_CATEGORY_CODE_VALUES);
-const OPTION_CODES = new Set<string>(DOUYIN_BUDGET_OPTION_CODE_VALUES);
-const PROPERTY_CONDITIONS = new Set<string>(DOUYIN_PROPERTY_CONDITION_VALUES);
-const DECORATION_TIERS = new Set<string>(DOUYIN_DECORATION_TIER_VALUES);
-const DECORATION_SCOPES = new Set<string>(DOUYIN_DECORATION_SCOPE_VALUES);
+export { MAX_DOUYIN_BUDGET_COEFFICIENT_BPS };
 
 export interface DouyinBudgetRuleCondition {
   readonly propertyConditions?: readonly DouyinPropertyCondition[];
@@ -48,6 +42,7 @@ interface DouyinBudgetPricingItemBase {
 
 export interface DouyinBudgetBasePricingItem extends DouyinBudgetPricingItemBase {
   readonly role: 'base';
+  readonly code: `base.${DouyinDecorationTier}.${DouyinPropertyCondition}`;
   readonly category: 'base';
   readonly unit: 'sqm';
   readonly propertyConditionCoefficientBps: number;
@@ -93,7 +88,6 @@ export type DouyinBudgetCalculationErrorCode =
   | 'DOUYIN_BUDGET_OPTION_DUPLICATE'
   | 'DOUYIN_BUDGET_OPTION_UNKNOWN'
   | 'DOUYIN_BUDGET_OPTION_NOT_APPLICABLE'
-  | 'DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID'
   | 'DOUYIN_BUDGET_AMOUNT_OVERFLOW';
 
 export class DouyinBudgetCalculationError extends Error {
@@ -145,8 +139,8 @@ export function calculateDouyinBudget(
   rules: DouyinBudgetPricingRules,
   input: DouyinBudgetCalculatorInput,
 ): DouyinBudgetCalculationResult {
-  const area = validateInput(input);
-  validateRules(rules);
+  const area = validateInput(input, fail);
+  validateRules(rules, fail);
 
   const matchingBases = rules.items.filter(
     (item): item is DouyinBudgetBasePricingItem =>
@@ -169,7 +163,7 @@ export function calculateDouyinBudget(
         item.role === 'option')
       .map((item) => [item.code, item]),
   );
-  const selectedCodes = validateSelectedOptions(input.option_codes);
+  const selectedCodes = validateSelectedOptions(input.option_codes, fail);
   const options = selectedCodes.map((code) => {
     const option = optionByCode.get(code as DouyinBudgetOptionCode);
     if (!option) {
@@ -250,15 +244,8 @@ export function calculateDouyinBudget(
 export function projectDouyinBudgetToPublicYuan(
   result: DouyinBudgetCalculationResult,
 ): DouyinBudgetPublicYuanProjection {
-  if (result.minimum_total_fen > result.maximum_total_fen) {
-    fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算总额区间无效');
-  }
-  const minimumTotal = fenToSafeIntegerYuan(result.minimum_total_fen);
-  const maximumTotal = fenToSafeIntegerYuan(result.maximum_total_fen);
+  validateRawCalculationResult(result, fail);
   const categories = result.categories.map((category) => {
-    if (category.minimum_amount_fen > category.maximum_amount_fen) {
-      fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算分类区间无效');
-    }
     const minimumAmount = fenToSafeIntegerYuan(category.minimum_amount_fen);
     const maximumAmount = fenToSafeIntegerYuan(category.maximum_amount_fen);
     return {
@@ -268,8 +255,14 @@ export function projectDouyinBudgetToPublicYuan(
     };
   });
   return {
-    minimum_total: minimumTotal,
-    maximum_total: maximumTotal,
+    minimum_total: categories.reduce(
+      (sum, category) => sum + category.minimum_amount,
+      0,
+    ),
+    maximum_total: categories.reduce(
+      (sum, category) => sum + category.maximum_amount,
+      0,
+    ),
     categories,
     calculation_basis: {
       ...result.calculation_basis,
@@ -282,152 +275,6 @@ export function projectDouyinBudgetToPublicYuan(
   };
 }
 
-function validateInput(input: DouyinBudgetCalculatorInput): DecimalFraction {
-  if (
-    !Number.isFinite(input.area) ||
-    input.area < 10 ||
-    input.area > 1_000 ||
-    !PROPERTY_CONDITIONS.has(input.property_condition) ||
-    !DECORATION_TIERS.has(input.decoration_tier) ||
-    !DECORATION_SCOPES.has(input.decoration_scope) ||
-    !Array.isArray(input.option_codes) ||
-    input.option_codes.length > MAX_SELECTED_OPTIONS
-  ) {
-    fail('DOUYIN_BUDGET_INPUT_INVALID', '预算计算输入无效');
-  }
-  const area = decimalNumberToFraction(input.area);
-  if (!area) fail('DOUYIN_BUDGET_INPUT_INVALID', '面积格式无效');
-  return area;
-}
-
-function validateRules(rules: DouyinBudgetPricingRules): void {
-  if (
-    typeof rules.versionId !== 'string' ||
-    rules.versionId.trim() === '' ||
-    !Number.isSafeInteger(rules.versionNo) ||
-    rules.versionNo < 1 ||
-    typeof rules.disclaimer !== 'string' ||
-    rules.disclaimer.trim() === '' ||
-    !Array.isArray(rules.items) ||
-    rules.items.length === 0 ||
-    rules.items.length > MAX_PRICING_ITEMS
-  ) {
-    fail('DOUYIN_BUDGET_RULE_INVALID', '报价规则无效');
-  }
-  const codes = new Set<string>();
-  for (const item of rules.items) {
-    validatePricingItem(item);
-    if (codes.has(item.code)) {
-      fail('DOUYIN_BUDGET_RULE_CODE_DUPLICATE', '报价规则编码不能重复');
-    }
-    codes.add(item.code);
-  }
-}
-
-function validateCoefficientMap(
-  map: Readonly<Record<string, number>>,
-  expectedKeys: readonly string[],
-): void {
-  if (!isRecord(map) || !hasExactlyKeys(map, expectedKeys)) {
-    fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
-  }
-  for (const key of expectedKeys) {
-    const coefficient = map[key];
-    if (!isValidCoefficient(coefficient)) {
-      fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
-    }
-  }
-}
-
-function isValidCoefficient(value: unknown): value is number {
-  return Number.isSafeInteger(value) &&
-    (value as number) >= 1 &&
-    (value as number) <= MAX_DOUYIN_BUDGET_COEFFICIENT_BPS;
-}
-
-function validatePricingItem(item: DouyinBudgetPricingItem): void {
-  if (
-    !isRecord(item) ||
-    typeof item.code !== 'string' ||
-    item.code.trim() === '' ||
-    typeof item.label !== 'string' ||
-    item.label.trim() === '' ||
-    !CATEGORY_CODES.has(item.category) ||
-    !isRecord(item.condition)
-  ) {
-    fail('DOUYIN_BUDGET_RULE_INVALID', '报价项目无效');
-  }
-  if (
-    !isSafeFen(item.minimumAmountFen) ||
-    !isSafeFen(item.maximumAmountFen) ||
-    item.minimumAmountFen > item.maximumAmountFen
-  ) {
-    fail('DOUYIN_BUDGET_RULE_AMOUNT_INVALID', '报价金额必须是有效的整数分');
-  }
-  if (
-    (item.role === 'base' &&
-      (item.category !== 'base' || item.unit !== 'sqm')) ||
-    (item.role === 'option' &&
-      (!OPTION_CODES.has(item.code) ||
-        (item.unit !== 'sqm' && item.unit !== 'fixed') ||
-        'propertyConditionCoefficientBps' in item ||
-        'decorationScopeCoefficientBps' in item)) ||
-    (item.role !== 'base' && item.role !== 'option')
-  ) {
-    fail('DOUYIN_BUDGET_RULE_INVALID', '报价项目类型无效');
-  }
-  if (item.role === 'base') {
-    if (!isValidCoefficient(item.propertyConditionCoefficientBps)) {
-      fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
-    }
-    validateCoefficientMap(
-      item.decorationScopeCoefficientBps,
-      DOUYIN_DECORATION_SCOPE_VALUES,
-    );
-  }
-  validateCondition(item.condition);
-}
-
-function validateCondition(condition: DouyinBudgetRuleCondition): void {
-  if (
-    !hasOnlyKeys(condition, [
-      'propertyConditions',
-      'decorationTiers',
-      'decorationScopes',
-    ]) ||
-    !isOptionalKnownArray(condition.propertyConditions, PROPERTY_CONDITIONS) ||
-    !isOptionalKnownArray(condition.decorationTiers, DECORATION_TIERS) ||
-    !isOptionalKnownArray(condition.decorationScopes, DECORATION_SCOPES)
-  ) {
-    fail('DOUYIN_BUDGET_RULE_CONDITION_INVALID', '报价条件配置无效');
-  }
-}
-
-function validateSelectedOptions(optionCodes: readonly string[]): string[] {
-  const unique = new Set(optionCodes);
-  if (unique.size !== optionCodes.length) {
-    fail('DOUYIN_BUDGET_OPTION_DUPLICATE', '选配项目不能重复');
-  }
-  if (optionCodes.some((code) => !OPTION_CODES.has(code))) {
-    fail('DOUYIN_BUDGET_OPTION_UNKNOWN', '选配项目不存在');
-  }
-  return [...optionCodes];
-}
-
-function matchesCondition(
-  condition: DouyinBudgetRuleCondition,
-  input: DouyinBudgetCalculatorInput,
-): boolean {
-  return (
-    (!condition.propertyConditions ||
-      condition.propertyConditions.includes(input.property_condition)) &&
-    (!condition.decorationTiers ||
-      condition.decorationTiers.includes(input.decoration_tier)) &&
-    (!condition.decorationScopes ||
-      condition.decorationScopes.includes(input.decoration_scope))
-  );
-}
-
 function toSafeFen(value: bigint): number {
   const safeValue = safeBigIntToNumber(value);
   if (safeValue === null) {
@@ -438,48 +285,10 @@ function toSafeFen(value: bigint): number {
 
 function fenToSafeIntegerYuan(value: unknown): number {
   const conversion = fenToIntegerYuan(value);
-  if (!conversion.ok && conversion.reason === 'overflow') {
-    fail('DOUYIN_BUDGET_AMOUNT_OVERFLOW', '预算金额超出安全整数范围');
-  }
   if (!conversion.ok) {
-    fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算金额分值无效');
+    fail('DOUYIN_BUDGET_RULE_AMOUNT_INVALID', '预算金额分值无效');
   }
   return conversion.value;
-}
-
-function isSafeFen(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function hasExactlyKeys(
-  value: Record<string, unknown>,
-  expectedKeys: readonly string[],
-): boolean {
-  const actualKeys = Object.keys(value);
-  return actualKeys.length === expectedKeys.length &&
-    expectedKeys.every((key) => Object.hasOwn(value, key));
-}
-
-function hasOnlyKeys(
-  value: object,
-  allowedKeys: readonly string[],
-): boolean {
-  const allowed = new Set(allowedKeys);
-  return Object.keys(value).every((key) => allowed.has(key));
-}
-
-function isOptionalKnownArray(
-  value: unknown,
-  knownValues: ReadonlySet<string>,
-): boolean {
-  if (value === undefined) return true;
-  if (!Array.isArray(value) || value.length === 0) return false;
-  return new Set(value).size === value.length &&
-    value.every((item) => typeof item === 'string' && knownValues.has(item));
 }
 
 function fail(
