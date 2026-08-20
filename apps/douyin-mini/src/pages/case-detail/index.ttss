@@ -1,16 +1,16 @@
 .detail-page { padding-bottom: 224rpx; }
 .detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
-.detail-title { min-width: 0; flex: 1; color: #25211e; font-size: 42rpx; font-weight: 600; line-height: 1.35; }
+.detail-title { min-width: 0; max-height: 170rpx; flex: 1; overflow: hidden; color: #25211e; font-size: 42rpx; font-weight: 600; line-height: 1.35; }
 .phase-badge { flex: none; margin-top: 6rpx; padding: 7rpx 14rpx; border: 1rpx solid; border-radius: 999rpx; background: #fff; color: #191817; font-size: 22rpx; font-weight: 650; line-height: 1.4; }
-.detail-location { margin-top: 14rpx; color: #665f5a; font-size: 25rpx; }
+.detail-location { margin-top: 14rpx; overflow: hidden; color: #665f5a; font-size: 25rpx; text-overflow: ellipsis; white-space: nowrap; }
 .gallery-block { margin-top: 34rpx; }
 .fact-grid { display: flex; flex-wrap: wrap; margin-top: 44rpx; border-top: 1rpx solid #dfdad5; border-left: 1rpx solid #dfdad5; }
 .fact { box-sizing: border-box; width: 50%; min-height: 144rpx; padding: 26rpx; border-right: 1rpx solid #dfdad5; border-bottom: 1rpx solid #dfdad5; background: #fff; }
 .fact-label { color: #756d67; font-size: 22rpx; }
-.fact-value { margin-top: 10rpx; color: #25211e; font-size: 28rpx; font-weight: 600; line-height: 1.4; }
+.fact-value { max-height: 82rpx; margin-top: 10rpx; overflow: hidden; color: #25211e; font-size: 28rpx; font-weight: 600; line-height: 1.4; }
 .description-section { margin-top: 54rpx; }
 .section-title { color: #25211e; font-size: 32rpx; font-weight: 600; }
-.description-copy { margin-top: 18rpx; color: #5f5853; font-size: 26rpx; line-height: 1.8; }
+.description-copy { margin-top: 18rpx; overflow: hidden; color: #5f5853; font-size: 26rpx; line-height: 1.8; }
 .progress-section { margin-top: 54rpx; }
 .progress-note { margin-top: 18rpx; color: #716963; font-size: 23rpx; line-height: 1.6; }
 .timeline { margin-top: 34rpx; }
@@ -21,7 +21,7 @@
 .timeline-dot { position: relative; z-index: 1; width: 22rpx; height: 22rpx; margin-top: 6rpx; border: 6rpx solid #eceae6; border-radius: 50%; }
 .timeline-content { min-width: 0; flex: 1; padding-bottom: 48rpx; }
 .progress-date { color: #827a74; font-size: 22rpx; }
-.progress-title { margin-top: 8rpx; color: #25211e; font-size: 30rpx; font-weight: 600; }
+.progress-title { max-height: 84rpx; margin-top: 8rpx; overflow: hidden; color: #25211e; font-size: 30rpx; font-weight: 600; line-height: 1.4; }
 .progress-images { margin-top: 22rpx; }
 .progress-loading { margin-top: 32rpx; }
 .progress-loading-bar { height: 160rpx; margin-top: 18rpx; border-radius: 16rpx; background: #e8e4df; animation: progress-pulse 1.4s ease-in-out infinite; }

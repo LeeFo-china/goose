@@ -95,7 +95,7 @@ export function parseProject(value: unknown): PublicProject | null {
   if (!isRecord(value) || typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
     || !isBoundedString(value.title, 1, 120) || !isHttpsOrNull(value.cover_image_url)
     || !isNullableBoundedString(value.layout, 80) || !isNonNegativeNumberOrNull(value.area)
-    || !isNullableBoundedString(value.budget_band, 40)
+    || !isNullableBoundedString(value.budget_band, 80)
     || !isBoundedString(value.community, 0, 120)
     || !isNullableBoundedString(value.city, 80)
     || !isNullableBoundedString(value.district, 80)

@@ -44,6 +44,51 @@ describe("Douyin public content API clients", () => {
     expect(parseProject({ ...project, phase: "unknown" })).toBeNull();
   });
 
+  test("accepts public budget bands through eighty characters", () => {
+    for (const length of [40, 41, 80]) {
+      expect(parseProject({
+        ...project,
+        phase: "completed",
+        budget_band: "预".repeat(length),
+      })?.budget_band).toHaveLength(length);
+    }
+    expect(parseProject({
+      ...project,
+      phase: "completed",
+      budget_band: "预".repeat(81),
+    })).toBeNull();
+
+    const base = {
+      installation: { status: "active", template_version: "1.0.0" },
+      company: {
+        name: "示例装饰", logo_url: null, summary: null, service_phone: "4000000000",
+        public_address: null,
+        address_region: { province: null, city: "郑州市", district: null },
+        service_regions: [], qualifications: [],
+      },
+      theme: { primary_color: "#191817", navigation_text_color: "black" },
+      features: {
+        cases: true, sites: true, sms_lead: true, douyin_phone: false,
+        phone_capture_mode: "sms",
+      },
+      content: { home_banners: [], trust_metrics: [] },
+      privacy_policy_version: "2026-07-19",
+    };
+    for (const length of [41, 80]) {
+      expect(parseBootstrap({
+        ...base,
+        content: {
+          ...base.content,
+          featured_projects: [{
+            ...project,
+            phase: "completed",
+            budget_band: "预".repeat(length),
+          }],
+        },
+      })?.content.featured_projects[0]?.budget_band).toHaveLength(length);
+    }
+  });
+
   test("normalizes featured projects while tolerating legacy bootstrap fields", () => {
     const base = {
       installation: { status: "active", template_version: "1.0.0" },

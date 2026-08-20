@@ -7,7 +7,7 @@ import {
   navigateToPage,
   switchToTab,
 } from "../../platform/navigation";
-import { projectPhaseLabel } from "../cases/project-phase";
+import { projectPhaseLabel, uniqueProjectsById } from "../cases/project-phase";
 
 const SERVICE_PROCESS = [
   { id: "consult", index: "01", title: "沟通需求", description: "了解户型、预算和装修计划" },
@@ -56,7 +56,7 @@ Page({
         primaryColor: theme.primaryColor,
         primaryTextColor: theme.primaryTextColor,
         metrics: buildTrustMetrics(bootstrap.content.trust_metrics),
-        featuredProjects: uniqueProjects(bootstrap.content.featured_projects)
+        featuredProjects: uniqueProjectsById(bootstrap.content.featured_projects)
           .slice(0, 2)
           .map((project) => ({
             ...project,
@@ -80,10 +80,6 @@ Page({
     if (event.detail.id) navigateWithFeedback(navigateToEntityDetail("case", event.detail.id));
   },
 });
-
-function uniqueProjects(projects: PublicProject[]): PublicProject[] {
-  return [...new Map(projects.map((project) => [project.id, project])).values()];
-}
 
 function formatRegions(regions: Array<{ province: string | null; city: string; district: string | null }>) {
   return [...new Set(regions.map((region) =>

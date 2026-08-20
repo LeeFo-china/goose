@@ -8,7 +8,7 @@ import {
   rejectPaginationRequest,
   resolvePaginationRequest,
 } from "../../utils/pagination";
-import { projectPhaseLabel } from "../cases/project-phase";
+import { projectPhaseLabel, shouldLoadProjectLogs } from "../cases/project-phase";
 import { buildSiteProgress, type SiteProgressItem } from "../site-detail/site-progress";
 
 Page({
@@ -56,7 +56,7 @@ Page({
         images,
         styleText: project.style_tags.join(" · "),
         phaseLabel: projectPhaseLabel(project.phase),
-        isInProgress: project.phase === "in_progress",
+        isInProgress: shouldLoadProjectLogs(project.phase),
         updatedDate: project.updated_at.slice(0, 10),
         primaryColor: bootstrap.theme.primary_color,
         progress: [],
@@ -66,7 +66,7 @@ Page({
       });
       this.logPagination = createPaginationState<PublicSiteLog>(20);
       app.recordAnalytics("case_view", project.id);
-      if (project.phase === "in_progress") await this.loadLogs("loadMore");
+      if (shouldLoadProjectLogs(project.phase)) await this.loadLogs("loadMore");
     } catch {
       this.setData({ loading: false, error: true, project: null });
     } finally {

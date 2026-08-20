@@ -65,12 +65,49 @@ test("hero collapses the reserved media column when no image is visible", async 
   expect(style).toMatch(/\.hero--without-image \.hero-action\s*\{[^}]*width:\s*100%/);
 });
 
-test("cases exposes a compact header and one-step filter reset", async () => {
-  const template = await readSource("pages/cases/index.ttml");
+test("unified projects bind authoritative phase and paginated detail actions", async () => {
+  const [template, pageSource, pageConfig, detailTemplate, detailConfig, homeTemplate] = await Promise.all([
+    readSource("pages/cases/index.ttml"),
+    readSource("pages/cases/index.ts"),
+    readSource("pages/cases/index.json"),
+    readSource("pages/case-detail/index.ttml"),
+    readSource("pages/case-detail/index.json"),
+    readSource("pages/home/index.ttml"),
+  ]);
   expect(template).not.toContain("page-kicker");
-  expect(template).toContain('bindtap="onClearFilters"');
-  expect(template).toContain('bindaction="onClearFilters"');
+  expect(template).toContain('bindtap="onSelectPhase"');
+  expect(template).not.toContain("更多筛选");
+  expect(template).not.toContain("onSelectStyle");
+  expect(template).not.toContain("onSelectLayout");
+  expect(template).not.toContain("onClearFilters");
   expect(template).toContain('primary-color="{{primaryColor}}"');
+  expect(pageSource).toContain('onPullDownRefresh()');
+  expect(pageSource).toContain('void this.load("refresh")');
+  expect(pageSource).toContain('onRetry() { void this.load("retry"); }');
+  expect(pageConfig).toContain('"pagination-loader"');
+  expect(pageConfig).toContain('"empty-state"');
+  expect(pageConfig).toContain('"error-state"');
+  expect(detailTemplate).toContain('bindloadmore="onLoadMoreProgress"');
+  expect(detailTemplate).toContain('bindretry="onRetryProgress"');
+  expect(detailConfig).toContain('"pagination-loader"');
+  expect(homeTemplate.match(/<case-card/g)).toHaveLength(1);
+  expect(homeTemplate).not.toContain("<site-card");
+});
+
+test("project detail bounds long public copy with existing overflow patterns", async () => {
+  const style = await readSource("pages/case-detail/index.ttss");
+  for (const className of [
+    "detail-title",
+    "fact-value",
+    "progress-title",
+  ]) {
+    expect(style).toMatch(new RegExp(`\\.${className}\\s*\\{[^}]*max-height:[^}]*overflow:\\s*hidden`));
+  }
+  expect(style).toMatch(/\.description-copy\s*\{[^}]*overflow:\s*hidden/);
+  expect(style).not.toMatch(/\.description-copy\s*\{[^}]*max-height:/);
+  expect(style).toMatch(
+    /\.detail-location\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/,
+  );
 });
 
 test("sites uses a compact public-boundary notice without an alert stripe", async () => {
