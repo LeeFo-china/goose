@@ -17,8 +17,8 @@ const COMPANY_SELECT = [
 ].join(",");
 const AREA_SELECT = "province,city,district,priority";
 const INSTALLATION_SELECT = [
-  "id", "tenant_id", "authorizer_appid", "authorization_status", "template_version",
-  "runtime_config", "tenant:tenants(id,status)",
+  "id", "tenant_id", "authorizer_appid", "authorization_status", "installation_kind",
+  "template_version", "runtime_config", "tenant:tenants(id,status)",
 ].join(",");
 const LOG_SELECT = "id,stage_code,node_name,images,created_at";
 const PROJECT_IMAGE_LOG_SELECT = "project_id,images,created_at";
@@ -31,6 +31,7 @@ const NullableString = z.string().nullable();
 const InstallationSchema = z.object({
   id: z.uuid(), tenant_id: z.uuid(), authorizer_appid: z.string().min(1),
   authorization_status: z.literal("active"), template_version: NullableString,
+  installation_kind: z.enum(["merchant", "template_development"]),
   runtime_config: z.unknown(),
   tenant: z.object({ id: z.uuid(), status: z.enum(TENANT_STATUS_VALUES) }),
 }).strict();

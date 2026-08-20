@@ -1,4 +1,4 @@
-import { createHash, randomInt as cryptoRandomInt, randomUUID } from "node:crypto";
+import { createHash, randomInt as cryptoRandomInt } from "node:crypto";
 import { isIP } from "node:net";
 
 import {
@@ -43,13 +43,12 @@ type ContextRepository = Pick<
 >;
 type BudgetRepository = Pick<
   DouyinBudgetRepository,
-  "loadActivePricing" | "countRecentEstimates" | "insertEstimate"
+  "loadActivePricing" | "createEstimateAtomic"
 >;
 type Dependencies = {
   readonly contextRepository?: ContextRepository;
   readonly budgetRepository?: BudgetRepository;
   readonly now?: () => Date;
-  readonly createId?: () => string;
   readonly randomInt?: (maxExclusive: number) => number;
 };
 type BudgetContext = {
@@ -57,8 +56,6 @@ type BudgetContext = {
   readonly installationId: string;
   readonly subjectHash: string;
 };
-const RATE_WINDOW_MS = 10 * 60 * 1_000;
-const RATE_LIMIT = 20;
 const ESTIMATE_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const ESTIMATE_NUMBER_ATTEMPTS = 5;
 const ESTIMATE_NUMBER_SPACE = 1_000_000;
@@ -67,7 +64,6 @@ export class DouyinBudgetEstimatesService {
   private readonly contextRepository: ContextRepository;
   private readonly budgetRepository: BudgetRepository;
   private readonly now: () => Date;
-  private readonly createId: () => string;
   private readonly randomInt: (maxExclusive: number) => number;
 
   constructor(dependencies: Dependencies = {}) {
@@ -76,7 +72,6 @@ export class DouyinBudgetEstimatesService {
     this.budgetRepository = dependencies.budgetRepository
       ?? douyinBudgetRepository;
     this.now = dependencies.now ?? (() => new Date());
-    this.createId = dependencies.createId ?? randomUUID;
     this.randomInt = dependencies.randomInt ?? cryptoRandomInt;
   }
 
@@ -101,30 +96,14 @@ export class DouyinBudgetEstimatesService {
     const currentTime = this.now();
     const createdAt = currentTime.toISOString();
     const requestIpHash = hashRequestIp(context.tenantId, requestIp);
-    const since = new Date(currentTime.getTime() - RATE_WINDOW_MS).toISOString();
-    const [activePricing, counts] = await Promise.all([
-      this.budgetRepository.loadActivePricing({
+    const pricing = requireActivePricing(
+      await this.budgetRepository.loadActivePricing({
         tenantId: context.tenantId,
         now: createdAt,
       }),
-      this.budgetRepository.countRecentEstimates({
-        tenantId: context.tenantId,
-        subjectHash: context.subjectHash,
-        requestIpHash,
-        since,
-      }),
-    ]);
-    if (counts.subjectCount >= RATE_LIMIT || counts.ipCount >= RATE_LIMIT) {
-      throw Errors.business(
-        429,
-        "预算试算过于频繁，请稍后再试",
-        "DOUYIN_BUDGET_RATE_LIMITED",
-      );
-    }
-    const pricing = requireActivePricing(activePricing);
+    );
     const rules = mapRuleErrors(() => toDouyinBudgetCalculatorRules(pricing));
     const projected = calculatePublicProjection(rules, input);
-    const id = this.createId();
     const requestPayload = strictRequestSnapshot(input);
     const expiresAt = new Date(
       currentTime.getTime() + ESTIMATE_RETENTION_MS,
@@ -132,9 +111,7 @@ export class DouyinBudgetEstimatesService {
 
     for (let attempt = 0; attempt < ESTIMATE_NUMBER_ATTEMPTS; attempt += 1) {
       const estimateNo = createEstimateNumber(currentTime, this.randomInt);
-      const resultPayload = parsePublicResult({
-        id,
-        estimate_no: estimateNo,
+      const resultPayload = strictResultSnapshot(estimateNo, {
         minimum_total: projected.minimum_total,
         maximum_total: projected.maximum_total,
         categories: projected.categories.map((category) => ({
@@ -142,14 +119,13 @@ export class DouyinBudgetEstimatesService {
           label: douyinBudgetCategoryLabel(category.category_code),
         })),
         calculation_basis: buildDouyinBudgetCalculationBasis(input, rules),
-        included_items: projected.included_items,
-        excluded_items: projected.excluded_items,
+        included_items: [...projected.included_items],
+        excluded_items: [...projected.excluded_items],
         ...mapRuleErrors(() => douyinBudgetPublicPricingMetadata(pricing.version)),
         ai_status: "pending",
       });
       try {
-        const inserted = await this.budgetRepository.insertEstimate({
-          id,
+        const inserted = await this.budgetRepository.createEstimateAtomic({
           tenantId: context.tenantId,
           installationId: context.installationId,
           subjectHash: context.subjectHash,
@@ -159,16 +135,18 @@ export class DouyinBudgetEstimatesService {
           requestPayload,
           resultPayload,
           expiresAt,
-          createdAt,
         });
         assertInsertedEstimate(inserted, {
-          id,
           estimateNo,
           tenantId: context.tenantId,
           installationId: context.installationId,
           pricingVersionId: pricing.version.id,
         });
-        return resultPayload;
+        return parsePublicResult({
+          id: inserted.id,
+          estimate_no: inserted.estimate_no,
+          ...resultPayload,
+        });
       } catch (error) {
         if (
           error instanceof AppError &&
@@ -214,6 +192,13 @@ export class DouyinBudgetEstimatesService {
         409,
         "抖音小程序服务已暂停",
         "DOUYIN_INSTALLATION_DISABLED",
+      );
+    }
+    if (installation.installation_kind !== "merchant") {
+      throw Errors.business(
+        409,
+        "当前小程序不支持预算试算",
+        "DOUYIN_BUDGET_INSTALLATION_UNSUPPORTED",
       );
     }
     if (installation.tenant.status !== "active") {
@@ -276,6 +261,27 @@ function parsePublicResult(input: unknown): DouyinBudgetEstimateResult {
   return parsed.data;
 }
 
+function strictResultSnapshot(
+  estimateNo: string,
+  input: Omit<DouyinBudgetEstimateResult, "id" | "estimate_no">,
+): Omit<DouyinBudgetEstimateResult, "id" | "estimate_no"> {
+  const validationId = "00000000-0000-4000-8000-000000000000";
+  const parsed = parsePublicResult({
+    id: validationId,
+    estimate_no: estimateNo,
+    ...input,
+  });
+  const { id, estimate_no: parsedEstimateNo, ...snapshot } = parsed;
+  if (id !== validationId || parsedEstimateNo !== estimateNo) {
+    throw Errors.business(
+      500,
+      "预算结果无效",
+      "DOUYIN_BUDGET_PUBLIC_RESULT_INVALID",
+    );
+  }
+  return snapshot;
+}
+
 function hashRequestIp(tenantId: string, requestIp: string | null): string {
   const normalized = normalizeIp(requestIp);
   if (!normalized) {
@@ -315,7 +321,6 @@ function createEstimateNumber(
 function assertInsertedEstimate(
   inserted: DouyinBudgetInsertedEstimate,
   expected: {
-    readonly id: string;
     readonly estimateNo: string;
     readonly tenantId: string;
     readonly installationId: string;
@@ -323,7 +328,6 @@ function assertInsertedEstimate(
   },
 ): void {
   if (
-    inserted.id !== expected.id ||
     inserted.estimate_no !== expected.estimateNo ||
     inserted.tenant_id !== expected.tenantId ||
     inserted.douyin_miniapp_installation_id !== expected.installationId ||

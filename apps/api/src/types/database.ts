@@ -24215,6 +24215,20 @@ export type Database = {
             }
             Returns: Json
           }
+      create_douyin_budget_estimate: {
+        Args: {
+          p_douyin_miniapp_installation_id: string
+          p_estimate_no: string
+          p_expires_at: string
+          p_pricing_version_id: string
+          p_request_ip_hash: string
+          p_request_payload: Json
+          p_result_payload: Json
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_douyin_template_development_installation: {
         Args: {
           p_authorizer_appid: string

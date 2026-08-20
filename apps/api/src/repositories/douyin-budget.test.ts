@@ -23,24 +23,16 @@ function clientWith(results: Result[]) {
 
   class Query implements PromiseLike<Result> {
     private readonly result = results[resultIndex++] ?? { data: null, error: null };
-
     private chain(method: string, args: readonly unknown[]) {
       calls.push({ method, args });
       return this;
     }
-
     select(...args: unknown[]) { return this.chain("select", args); }
     eq(...args: unknown[]) { return this.chain("eq", args); }
-    gte(...args: unknown[]) { return this.chain("gte", args); }
     lte(...args: unknown[]) { return this.chain("lte", args); }
     or(...args: unknown[]) { return this.chain("or", args); }
     order(...args: unknown[]) { return this.chain("order", args); }
     limit(...args: unknown[]) { return this.chain("limit", args); }
-    insert(...args: unknown[]) { return this.chain("insert", args); }
-    single() {
-      calls.push({ method: "single", args: [] });
-      return Promise.resolve(this.result);
-    }
     then<TResult1 = Result, TResult2 = never>(
       onfulfilled?: ((value: Result) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
@@ -53,6 +45,10 @@ function clientWith(results: Result[]) {
     from: mock((table: string) => {
       calls.push({ method: "from", args: [table] });
       return new Query();
+    }),
+    rpc: mock((name: string, args: Record<string, unknown>) => {
+      calls.push({ method: "rpc", args: [name, args] });
+      return Promise.resolve(results[resultIndex++] ?? { data: null, error: null });
     }),
   };
   return { client, calls };
@@ -87,10 +83,7 @@ const baseItem = {
     decoration_tiers: ["comfortable"],
     decoration_scopes: ["whole_house", "partial"],
     property_condition_coefficient_bps: 10_000,
-    decoration_scope_coefficient_bps: {
-      whole_house: 10_000,
-      partial: 6_000,
-    },
+    decoration_scope_coefficient_bps: { whole_house: 10_000, partial: 6_000 },
   },
   sort_order: 0,
 };
@@ -101,13 +94,8 @@ describe("DouyinBudgetRepository active pricing", () => {
       { data: [version], error: null },
       { data: [baseItem], error: null },
     ]);
-    const repository = new Repository(client as never);
-
-    await expect(repository.loadActivePricing({ tenantId, now })).resolves.toEqual({
-      version,
-      items: [baseItem],
-    });
-
+    await expect(new Repository(client as never).loadActivePricing({ tenantId, now }))
+      .resolves.toEqual({ version, items: [baseItem] });
     expect(calls.filter((call) => call.method === "from")).toEqual([
       { method: "from", args: ["douyin_budget_pricing_versions"] },
       { method: "from", args: ["douyin_budget_pricing_items"] },
@@ -128,7 +116,6 @@ describe("DouyinBudgetRepository active pricing", () => {
       args: ["id", { ascending: true }],
     });
     expect(calls).toContainEqual({ method: "limit", args: [101] });
-
     const selects = calls.filter((call) => call.method === "select")
       .map((call) => String(call.args[0]));
     expect(selects[0]).toBe(
@@ -156,7 +143,6 @@ describe("DouyinBudgetRepository active pricing", () => {
       statusCode: 500,
       code: "DOUYIN_BUDGET_REPOSITORY_RESPONSE_INVALID",
     });
-
     const oversized = clientWith([
       { data: [version], error: null },
       { data: Array.from({ length: 101 }, (_, index) => ({
@@ -175,153 +161,91 @@ describe("DouyinBudgetRepository active pricing", () => {
   });
 });
 
-describe("DouyinBudgetRepository estimate rate and persistence", () => {
-  test("counts subject and IP independently with tenant-scoped indexed filters", async () => {
-    const subjectHash = "a".repeat(64);
-    const requestIpHash = "b".repeat(64);
-    const since = "2026-08-21T02:54:05.000Z";
-    const { client, calls } = clientWith([
-      { data: null, error: null, count: 20 },
-      { data: null, error: null, count: 19 },
-    ]);
+const atomicInput = {
+  tenantId,
+  installationId,
+  subjectHash: "a".repeat(64),
+  requestIpHash: "b".repeat(64),
+  pricingVersionId,
+  estimateNo: "DYYS-20260821-000042",
+  requestPayload: { area: 120 },
+  resultPayload: { minimum_total: 96_000, ai_status: "pending" },
+  expiresAt: "2026-09-20T03:04:05.000Z",
+};
+const atomicData = {
+  id: estimateId,
+  estimate_no: atomicInput.estimateNo,
+  tenant_id: tenantId,
+  douyin_miniapp_installation_id: installationId,
+  pricing_version_id: pricingVersionId,
+  ai_status: "pending" as const,
+};
 
-    await expect(new Repository(client as never).countRecentEstimates({
-      tenantId,
-      subjectHash,
-      requestIpHash,
-      since,
-    })).resolves.toEqual({ subjectCount: 20, ipCount: 19 });
-
-    const selects = calls.filter((call) => call.method === "select");
-    expect(selects).toEqual([
-      { method: "select", args: ["id", { count: "exact", head: true }] },
-      { method: "select", args: ["id", { count: "exact", head: true }] },
-    ]);
-    expect(calls.filter((call) => call.method === "eq" && call.args[0] === "tenant_id"))
-      .toHaveLength(2);
-    expect(calls).toContainEqual({ method: "eq", args: ["subject_hash", subjectHash] });
-    expect(calls).toContainEqual({ method: "eq", args: ["request_ip_hash", requestIpHash] });
-    expect(calls.filter((call) => call.method === "gte"))
-      .toEqual([
-        { method: "gte", args: ["created_at", since] },
-        { method: "gte", args: ["created_at", since] },
-      ]);
+describe("DouyinBudgetRepository atomic estimate command", () => {
+  test("calls the exact RPC and accepts only its strict scoped success envelope", async () => {
+    const { client, calls } = clientWith([{
+      data: { data: atomicData },
+      error: null,
+    }]);
+    await expect(new Repository(client as never).createEstimateAtomic(atomicInput))
+      .resolves.toEqual(atomicData);
+    expect(calls).toEqual([{
+      method: "rpc",
+      args: ["create_douyin_budget_estimate", {
+        p_tenant_id: tenantId,
+        p_douyin_miniapp_installation_id: installationId,
+        p_subject_hash: atomicInput.subjectHash,
+        p_request_ip_hash: atomicInput.requestIpHash,
+        p_pricing_version_id: pricingVersionId,
+        p_estimate_no: atomicInput.estimateNo,
+        p_request_payload: atomicInput.requestPayload,
+        p_result_payload: atomicInput.resultPayload,
+        p_expires_at: atomicInput.expiresAt,
+      }],
+    }]);
   });
 
-  test("persists strict snapshots and validates returned scope and identifiers", async () => {
-    const estimateNo = "DYYS-20260821-000042";
-    const requestPayload = {
-      area: 120,
-      property_condition: "rough",
-      decoration_tier: "comfortable",
-      decoration_scope: "whole_house",
-      option_codes: [],
-    };
-    const resultPayload = {
-      id: estimateId,
-      estimate_no: estimateNo,
-      minimum_total: 96_000,
-      maximum_total: 120_000,
-      categories: [],
-      calculation_basis: ["120㎡、舒适档、毛坯房、全屋装修"],
-      included_items: ["基础施工"],
-      excluded_items: [],
-      pricing_version: "7",
-      pricing_effective_from: version.effective_from,
-      pricing_effective_to: null,
-      disclaimer: version.disclaimer,
-      ai_status: "pending" as const,
-    };
-    const row = {
-      id: estimateId,
-      estimate_no: estimateNo,
-      tenant_id: tenantId,
-      douyin_miniapp_installation_id: installationId,
-      pricing_version_id: pricingVersionId,
-      ai_status: "pending" as const,
-    };
-    const { client, calls } = clientWith([{ data: row, error: null }]);
-
-    await expect(new Repository(client as never).insertEstimate({
-      id: estimateId,
-      tenantId,
-      installationId,
-      subjectHash: "a".repeat(64),
-      requestIpHash: "b".repeat(64),
-      pricingVersionId,
-      estimateNo,
-      requestPayload,
-      resultPayload,
-      expiresAt: "2026-09-20T03:04:05.000Z",
-      createdAt: now,
-    })).resolves.toEqual(row);
-
-    const insertedRows = calls.find((call) => call.method === "insert")?.args[0] as
-      ReadonlyArray<Record<string, unknown>>;
-    const inserted = insertedRows[0];
-    expect(inserted).toEqual({
-      id: estimateId,
-      tenant_id: tenantId,
-      douyin_miniapp_installation_id: installationId,
-      subject_hash: "a".repeat(64),
-      request_ip_hash: "b".repeat(64),
-      pricing_version_id: pricingVersionId,
-      estimate_no: estimateNo,
-      request_payload: requestPayload,
-      result_payload: resultPayload,
-      ai_status: "pending",
-      expires_at: "2026-09-20T03:04:05.000Z",
-      created_at: now,
-    });
-    expect(JSON.stringify(inserted)).not.toContain("192.0.2.10");
-    expect(calls).toContainEqual({
-      method: "select",
-      args: [
-        "id,estimate_no,tenant_id,douyin_miniapp_installation_id,"
-          + "pricing_version_id,ai_status",
+  test("maps strict rate and estimate-number envelopes to stable retry semantics", async () => {
+    for (const [error, expected] of [
+      [
+        { status_code: 429, code: "DOUYIN_BUDGET_RATE_LIMITED" },
+        { statusCode: 429, code: "DOUYIN_BUDGET_RATE_LIMITED" },
       ],
-    });
+      [
+        { status_code: 409, code: "DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT" },
+        { statusCode: 409, code: "DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT" },
+      ],
+    ] as const) {
+      const { client } = clientWith([{ data: { error }, error: null }]);
+      await expect(new Repository(client as never).createEstimateAtomic(atomicInput))
+        .rejects.toMatchObject(expected);
+    }
   });
 
-  test("rejects wrong-scope responses and maps database failures without details", async () => {
-    const estimateNo = "DYYS-20260821-000042";
-    const input = {
-      id: estimateId,
-      tenantId,
-      installationId,
-      subjectHash: "a".repeat(64),
-      requestIpHash: "b".repeat(64),
-      pricingVersionId,
-      estimateNo,
-      requestPayload: {},
-      resultPayload: {},
-      expiresAt: "2026-09-20T03:04:05.000Z",
-      createdAt: now,
-    };
-    const wrongScope = clientWith([{ data: {
-      id: estimateId,
-      estimate_no: estimateNo,
-      tenant_id: "99999999-9999-4999-8999-999999999999",
-      douyin_miniapp_installation_id: installationId,
-      pricing_version_id: pricingVersionId,
-      ai_status: "pending",
-    }, error: null }]);
-    await expect(new Repository(wrongScope.client as never).insertEstimate(input))
-      .rejects.toMatchObject({
-        statusCode: 500,
-        code: "DOUYIN_BUDGET_REPOSITORY_RESPONSE_INVALID",
-      });
+  test("rejects wrong-scope, ambiguous, and unknown command envelopes", async () => {
+    for (const data of [
+      { data: { ...atomicData, tenant_id: "99999999-9999-4999-8999-999999999999" } },
+      { data: atomicData, error: { status_code: 429, code: "DOUYIN_BUDGET_RATE_LIMITED" } },
+      { error: { status_code: 418, code: "RAW_DATABASE_DETAIL" } },
+    ]) {
+      const { client } = clientWith([{ data, error: null }]);
+      await expect(new Repository(client as never).createEstimateAtomic(atomicInput))
+        .rejects.toMatchObject({
+          statusCode: 500,
+          code: "DOUYIN_BUDGET_REPOSITORY_RESPONSE_INVALID",
+        });
+    }
+  });
 
-    const sensitive = "duplicate raw request IP 192.0.2.10";
-    const rejected = clientWith([{ data: null, error: {
-      code: "08006",
-      message: sensitive,
-      details: sensitive,
-      hint: sensitive,
-    } }]);
+  test("maps transport failures without leaking database details", async () => {
+    const sensitive = "raw SQL failure 192.0.2.10";
+    const { client } = clientWith([{
+      data: null,
+      error: { code: "P0001", message: sensitive, details: sensitive },
+    }]);
     let caught: unknown;
     try {
-      await new Repository(rejected.client as never).insertEstimate(input);
+      await new Repository(client as never).createEstimateAtomic(atomicInput);
     } catch (error) {
       caught = error;
     }
@@ -330,31 +254,5 @@ describe("DouyinBudgetRepository estimate rate and persistence", () => {
       code: "DOUYIN_BUDGET_REPOSITORY_ERROR",
     });
     expect(JSON.stringify(caught)).not.toContain(sensitive);
-  });
-
-  test("maps only the estimate number unique constraint to a retryable collision", async () => {
-    const estimateNo = "DYYS-20260821-000042";
-    const collision = clientWith([{ data: null, error: {
-      code: "23505",
-      message: "duplicate key",
-      details: "Key (estimate_no) already exists",
-      hint: null,
-    } }]);
-    await expect(new Repository(collision.client as never).insertEstimate({
-      id: estimateId,
-      tenantId,
-      installationId,
-      subjectHash: "a".repeat(64),
-      requestIpHash: "b".repeat(64),
-      pricingVersionId,
-      estimateNo,
-      requestPayload: {},
-      resultPayload: {},
-      expiresAt: "2026-09-20T03:04:05.000Z",
-      createdAt: now,
-    })).rejects.toMatchObject({
-      statusCode: 409,
-      code: "DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT",
-    });
   });
 });

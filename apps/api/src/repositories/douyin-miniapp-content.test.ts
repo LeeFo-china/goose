@@ -76,6 +76,7 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
       tenant_id: "33333333-3333-4333-8333-333333333333",
       authorizer_appid: "tt-authorizer-1",
       authorization_status: "active",
+      installation_kind: "merchant",
       template_version: "1.0.0",
       runtime_config: {},
       tenant: { id: "33333333-3333-4333-8333-333333333333", status: "suspended" },
@@ -90,7 +91,7 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
     })).resolves.toMatchObject({ tenant: { status: "suspended" } });
 
     const select = String(calls.find((call) => call.method === "select")?.args[0]);
-    expect(select).toBe("id,tenant_id,authorizer_appid,authorization_status,template_version,"
+    expect(select).toBe("id,tenant_id,authorizer_appid,authorization_status,installation_kind,template_version,"
       + "runtime_config,tenant:tenants(id,status)");
     expect(select).not.toMatch(/access_token|refresh_token|encrypted/i);
     expect(calls).toContainEqual({ method: "eq", args: ["id", suspendedInstallation.id] });

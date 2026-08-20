@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
+import type { Database, Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
 
 const ACTIVE_VERSION_SELECT = [
@@ -24,14 +25,6 @@ const PRICING_ITEM_SELECT = [
   "maximum_amount",
   "condition_payload",
   "sort_order",
-].join(",");
-const INSERTED_ESTIMATE_SELECT = [
-  "id",
-  "estimate_no",
-  "tenant_id",
-  "douyin_miniapp_installation_id",
-  "pricing_version_id",
-  "ai_status",
 ].join(",");
 const MAX_PRICING_ITEMS = 100;
 
@@ -65,6 +58,32 @@ const InsertedEstimateSchema = z.strictObject({
   pricing_version_id: z.uuid(),
   ai_status: z.literal("pending"),
 });
+const CommandErrorSchema = z.discriminatedUnion("code", [
+  z.strictObject({
+    status_code: z.literal(400),
+    code: z.literal("DOUYIN_BUDGET_COMMAND_INVALID"),
+  }),
+  z.strictObject({
+    status_code: z.literal(404),
+    code: z.literal("DOUYIN_BUDGET_NOT_CONFIGURED"),
+  }),
+  z.strictObject({
+    status_code: z.literal(409),
+    code: z.literal("DOUYIN_BUDGET_INSTALLATION_UNSUPPORTED"),
+  }),
+  z.strictObject({
+    status_code: z.literal(409),
+    code: z.literal("DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT"),
+  }),
+  z.strictObject({
+    status_code: z.literal(429),
+    code: z.literal("DOUYIN_BUDGET_RATE_LIMITED"),
+  }),
+]);
+const CommandEnvelopeSchema = z.union([
+  z.strictObject({ data: InsertedEstimateSchema }),
+  z.strictObject({ error: CommandErrorSchema }),
+]);
 
 export type DouyinBudgetPricingVersionRecord = z.infer<
   typeof ActiveVersionSchema
@@ -79,36 +98,38 @@ export type DouyinBudgetDatabaseResult = {
   readonly error: unknown;
   readonly count?: number | null;
 };
+type CreateEstimateRpcArgs = Database["public"]["Functions"][
+  "create_douyin_budget_estimate"
+]["Args"];
 
 export interface DouyinBudgetQuery
   extends PromiseLike<DouyinBudgetDatabaseResult> {
   select(columns: string, options?: Record<string, unknown>): DouyinBudgetQuery;
   eq(column: string, value: unknown): DouyinBudgetQuery;
-  gte(column: string, value: unknown): DouyinBudgetQuery;
   lte(column: string, value: unknown): DouyinBudgetQuery;
   or(filters: string): DouyinBudgetQuery;
   order(column: string, options: Record<string, unknown>): DouyinBudgetQuery;
   limit(count: number): DouyinBudgetQuery;
-  insert(rows: readonly Record<string, unknown>[]): DouyinBudgetQuery;
-  single(): Promise<DouyinBudgetDatabaseResult>;
 }
 
 export interface DouyinBudgetDatabaseClient {
   from(table: string): DouyinBudgetQuery;
+  rpc(
+    name: "create_douyin_budget_estimate",
+    args: CreateEstimateRpcArgs,
+  ): PromiseLike<DouyinBudgetDatabaseResult>;
 }
 
-export interface InsertDouyinBudgetEstimateInput {
-  readonly id: string;
+export interface CreateDouyinBudgetEstimateAtomicInput {
   readonly tenantId: string;
   readonly installationId: string;
   readonly subjectHash: string;
   readonly requestIpHash: string;
   readonly pricingVersionId: string;
   readonly estimateNo: string;
-  readonly requestPayload: Record<string, unknown>;
-  readonly resultPayload: Record<string, unknown>;
+  readonly requestPayload: Json;
+  readonly resultPayload: Json;
   readonly expiresAt: string;
-  readonly createdAt: string;
 }
 
 export class DouyinBudgetRepository {
@@ -163,77 +184,35 @@ export class DouyinBudgetRepository {
     });
   }
 
-  async countRecentEstimates(input: {
-    readonly tenantId: string;
-    readonly subjectHash: string;
-    readonly requestIpHash: string;
-    readonly since: string;
-  }): Promise<{ readonly subjectCount: number; readonly ipCount: number }> {
-    return execute(async () => {
-      const recentCount = (column: "subject_hash" | "request_ip_hash", value: string) =>
-        this.client
-          .from("douyin_budget_estimates")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", input.tenantId)
-          .eq(column, value)
-          .gte("created_at", input.since);
-      const [subjectResult, ipResult] = await Promise.all([
-        recentCount("subject_hash", input.subjectHash),
-        recentCount("request_ip_hash", input.requestIpHash),
-      ]);
-      assertDatabaseSuccess(subjectResult);
-      assertDatabaseSuccess(ipResult);
-      return {
-        subjectCount: parseCount(subjectResult.count),
-        ipCount: parseCount(ipResult.count),
-      };
-    });
-  }
-
-  async insertEstimate(
-    input: InsertDouyinBudgetEstimateInput,
+  async createEstimateAtomic(
+    input: CreateDouyinBudgetEstimateAtomicInput,
   ): Promise<DouyinBudgetInsertedEstimate> {
     return execute(async () => {
-      const result = await this.client
-        .from("douyin_budget_estimates")
-        .insert([{
-          id: input.id,
-          tenant_id: input.tenantId,
-          douyin_miniapp_installation_id: input.installationId,
-          subject_hash: input.subjectHash,
-          request_ip_hash: input.requestIpHash,
-          pricing_version_id: input.pricingVersionId,
-          estimate_no: input.estimateNo,
-          request_payload: input.requestPayload,
-          result_payload: input.resultPayload,
-          ai_status: "pending",
-          expires_at: input.expiresAt,
-          created_at: input.createdAt,
-        }])
-        .select(INSERTED_ESTIMATE_SELECT)
-        .single();
-      if (result.error) {
-        if (isEstimateNumberCollision(result.error)) {
-          throw Errors.business(
-            409,
-            "预算编号冲突",
-            "DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT",
-          );
-        }
-        throw repositoryError();
-      }
-      const parsed = InsertedEstimateSchema.safeParse(result.data);
+      const result = await this.client.rpc("create_douyin_budget_estimate", {
+        p_tenant_id: input.tenantId,
+        p_douyin_miniapp_installation_id: input.installationId,
+        p_subject_hash: input.subjectHash,
+        p_request_ip_hash: input.requestIpHash,
+        p_pricing_version_id: input.pricingVersionId,
+        p_estimate_no: input.estimateNo,
+        p_request_payload: input.requestPayload,
+        p_result_payload: input.resultPayload,
+        p_expires_at: input.expiresAt,
+      });
+      assertDatabaseSuccess(result);
+      const parsed = CommandEnvelopeSchema.safeParse(result.data);
+      if (!parsed.success) throw responseInvalid();
+      if ("error" in parsed.data) throw commandError(parsed.data.error);
+      const inserted = parsed.data.data;
       if (
-        !parsed.success ||
-        parsed.data.id !== input.id ||
-        parsed.data.estimate_no !== input.estimateNo ||
-        parsed.data.tenant_id !== input.tenantId ||
-        parsed.data.douyin_miniapp_installation_id !== input.installationId ||
-        parsed.data.pricing_version_id !== input.pricingVersionId
+        inserted.estimate_no !== input.estimateNo ||
+        inserted.tenant_id !== input.tenantId ||
+        inserted.douyin_miniapp_installation_id !== input.installationId ||
+        inserted.pricing_version_id !== input.pricingVersionId
       ) {
         throw responseInvalid();
       }
-      return parsed.data;
+      return inserted;
     });
   }
 }
@@ -256,13 +235,6 @@ function validateItemScopeAndOrder(
   }
 }
 
-function parseCount(value: number | null | undefined): number {
-  if (!Number.isSafeInteger(value) || (value ?? -1) < 0) {
-    throw responseInvalid();
-  }
-  return value as number;
-}
-
 function assertDatabaseSuccess(result: DouyinBudgetDatabaseResult): void {
   if (result.error) throw repositoryError();
 }
@@ -276,16 +248,15 @@ async function execute<Result>(operation: () => Promise<Result>): Promise<Result
   }
 }
 
-function isEstimateNumberCollision(error: unknown): boolean {
-  if (!isRecord(error) || error.code !== "23505") return false;
-  const marker = [error.message, error.details]
-    .filter((value): value is string => typeof value === "string")
-    .join(" ");
-  return /douyin_budget_estimates_estimate_no_key|\(estimate_no\)/i.test(marker);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function commandError(error: z.infer<typeof CommandErrorSchema>) {
+  const messages = {
+    DOUYIN_BUDGET_COMMAND_INVALID: "预算创建请求无效",
+    DOUYIN_BUDGET_NOT_CONFIGURED: "预算报价暂未配置",
+    DOUYIN_BUDGET_INSTALLATION_UNSUPPORTED: "当前小程序不支持预算试算",
+    DOUYIN_BUDGET_ESTIMATE_NUMBER_CONFLICT: "预算编号冲突",
+    DOUYIN_BUDGET_RATE_LIMITED: "预算试算过于频繁，请稍后再试",
+  } as const;
+  return Errors.business(error.status_code, messages[error.code], error.code);
 }
 
 function repositoryError() {
