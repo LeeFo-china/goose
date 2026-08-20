@@ -42,6 +42,12 @@ export const DOUYIN_BUDGET_AI_STATUS_VALUES = [
 const MoneyYuanSchema = z.int().nonnegative();
 const ResultItemTextSchema = z.string().trim().min(1).max(300);
 const AiListItemSchema = z.string().trim().min(1).max(300);
+const PublicPricingDateTimeSchema = z.union([
+  z.iso.datetime({ offset: true, precision: 0 }),
+  z.iso.datetime({ offset: true, precision: 1 }),
+  z.iso.datetime({ offset: true, precision: 2 }),
+  z.iso.datetime({ offset: true, precision: 3 }),
+]);
 const OptionCodeSchema = z
   .string()
   .trim()
@@ -98,8 +104,8 @@ export const DouyinBudgetEstimateResultSchema = z
     included_items: z.array(ResultItemTextSchema).max(50),
     excluded_items: z.array(ResultItemTextSchema).max(50),
     pricing_version: z.string().trim().min(1).max(40),
-    pricing_effective_from: z.iso.datetime({ offset: true }),
-    pricing_effective_to: z.iso.datetime({ offset: true }).nullable(),
+    pricing_effective_from: PublicPricingDateTimeSchema,
+    pricing_effective_to: PublicPricingDateTimeSchema.nullable(),
     disclaimer: z.string().trim().min(1).max(500),
     ai_status: z.enum(DOUYIN_BUDGET_AI_STATUS_VALUES),
   })

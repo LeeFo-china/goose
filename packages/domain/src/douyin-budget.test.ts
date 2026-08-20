@@ -129,6 +129,17 @@ describe('douyin budget contracts', () => {
         false,
       );
     }
+
+    const oversizedOptions = DouyinBudgetEstimateRequestSchema.safeParse({
+      ...validRequest,
+      option_codes: Array.from({ length: 21 }, () => 'custom_cabinet'),
+    });
+    expect(oversizedOptions.success).toBe(false);
+    if (!oversizedOptions.success) {
+      expect(oversizedOptions.error.issues.map((issue) => issue.code)).toContain(
+        'too_big',
+      );
+    }
   });
 
   test('accepts strict result amounts as non-negative integer yuan', () => {
@@ -174,10 +185,35 @@ describe('douyin budget contracts', () => {
     }
   });
 
+  test('rejects duplicate result categories', () => {
+    expect(DouyinBudgetEstimateResultSchema.safeParse({
+      ...validResult,
+      categories: [validResult.categories[0], validResult.categories[0]],
+    }).success).toBe(false);
+  });
+
   test('accepts UTC and offset pricing validity with an optional end time', () => {
     expect(DouyinBudgetEstimateResultSchema.parse(validResult)).toEqual(
       validResult,
     );
+    const validPricingDateTimes = [
+      '2026-08-20T00:00:00Z',
+      '2026-08-20T00:00:00.1Z',
+      '2026-08-20T00:00:00.12+00:00',
+      '2026-08-20T08:00:00.123+08:00',
+    ];
+    for (const pricingEffectiveFrom of validPricingDateTimes) {
+      expect(DouyinBudgetEstimateResultSchema.safeParse({
+        ...validResult,
+        pricing_effective_from: pricingEffectiveFrom,
+        pricing_effective_to: null,
+      }).success).toBe(true);
+    }
+    expect(DouyinBudgetEstimateResultSchema.safeParse({
+      ...validResult,
+      pricing_effective_from: '2026-08-20T00:00:00.123Z',
+      pricing_effective_to: '2026-08-20T00:00:00.124Z',
+    }).success).toBe(true);
     expect(DouyinBudgetEstimateResultSchema.parse({
       ...validResult,
       pricing_effective_from: '2026-08-20T08:00:00+08:00',
@@ -198,6 +234,16 @@ describe('douyin budget contracts', () => {
         ...validResult,
         pricing_effective_from: '2026-08-20T00:00:01Z',
         pricing_effective_to: '2026-08-20T00:00:00Z',
+      },
+      {
+        ...validResult,
+        pricing_effective_from: '2026-08-20T00:00:00.1234Z',
+        pricing_effective_to: '2026-08-20T00:00:00.124Z',
+      },
+      {
+        ...validResult,
+        pricing_effective_from: '2026-08-20T00:00:00.123456Z',
+        pricing_effective_to: '2026-08-20T00:00:00.124Z',
       },
     ];
 
@@ -234,6 +280,33 @@ describe('douyin budget contracts', () => {
       );
     }
   });
+
+  const aiListFields = [
+    'allocation_advice',
+    'risk_factors',
+    'onsite_questions',
+  ] as const;
+
+  for (const field of aiListFields) {
+    test(`enforces text and array boundaries for AI ${field}`, () => {
+      expect(DouyinBudgetAiAnalysisSchema.safeParse({
+        ...validAiAnalysis,
+        [field]: ['x'.repeat(300)],
+      }).success).toBe(true);
+      expect(DouyinBudgetAiAnalysisSchema.safeParse({
+        ...validAiAnalysis,
+        [field]: ['x'.repeat(301)],
+      }).success).toBe(false);
+      expect(DouyinBudgetAiAnalysisSchema.safeParse({
+        ...validAiAnalysis,
+        [field]: Array.from({ length: 10 }, () => 'x'),
+      }).success).toBe(true);
+      expect(DouyinBudgetAiAnalysisSchema.safeParse({
+        ...validAiAnalysis,
+        [field]: Array.from({ length: 11 }, () => 'x'),
+      }).success).toBe(false);
+    });
+  }
 
   test('re-exports the same budget contracts from shared and the package root', () => {
     expect(shared.DouyinBudgetEstimateRequestSchema).toBe(
