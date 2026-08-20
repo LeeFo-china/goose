@@ -64,13 +64,16 @@ import {
   PROJECT_PUBLICATION_MAX_IMAGES as MAX_IMAGES,
   PROJECT_PUBLICATION_PAGE_SIZE as PAGE_SIZE,
   buildProjectPublicationHref,
+  candidateImageAccessibleLabel,
   emptyCandidatePage,
   emptyPublicationDraft,
   getPublicationReadinessWarnings,
+  getPublicationRefreshPage,
   getPublicationWarnings,
   normalizeCandidatePage,
   normalizeProjectPage,
   normalizeSavedProjectProfile,
+  projectPhaseDisplay,
   projectProfileDraft,
   safeHttpsPreview,
   updateImageSelection,
@@ -232,6 +235,17 @@ export function ProjectPublication({
         project={editing}
         onOpenChange={(open) => !open && setEditing(null)}
         onSaved={(profile) => {
+          const refreshPage = getPublicationRefreshPage({
+            activeStatus: status,
+            currentPage: data.pagination.page,
+            currentPageRowCount: data.list.length,
+            savedStatus: profile.publication_status,
+          });
+          setEditing(null);
+          if (refreshPage !== null) {
+            void loadPage(refreshPage);
+            return;
+          }
           setData((current) => ({
             ...current,
             list: current.list.map((row) =>
@@ -240,7 +254,6 @@ export function ProjectPublication({
                 : row
             ),
           }));
-          setEditing(null);
         }}
       />
     </div>
@@ -281,9 +294,10 @@ function ProjectTable({
         const warnings = getPublicationReadinessWarnings(
           projectProfileDraft(row),
         );
+        const phase = projectPhaseDisplay(row.status);
         return <TableRow key={row.id}>
           <TableCell><div className="min-w-[220px]"><p className="font-medium">{row.name?.trim() || "未命名项目"}</p><p className="mt-1 text-xs text-muted-foreground">{row.property?.community || "未填写小区"}{row.property?.layout ? ` · ${row.property.layout}` : ""}</p></div></TableCell>
-          <TableCell><Badge variant={phaseVariant(row.status)}>{phaseLabel(row.status)}</Badge></TableCell>
+          <TableCell><Badge variant={phase.variant}>{phase.label}</Badge></TableCell>
           <TableCell><Badge variant={publicationVariant(row.public_profile?.publication_status)}>{publicationLabel(row.public_profile?.publication_status)}</Badge></TableCell>
           <TableCell className="tabular-nums">已选图片 {row.public_profile?.public_image_urls.length ?? 0} 张</TableCell>
           <TableCell>{warnings.length ? <span className="text-sm text-destructive">{warnings.join("；")}</span> : <span className="text-sm text-success">内容完整</span>}</TableCell>
@@ -378,7 +392,7 @@ function PublicationDialog({ project, onOpenChange, onSaved }: { project: Projec
             <FieldLegend className="mb-0 text-sm">项目图片</FieldLegend>
             <div className="flex flex-wrap items-center justify-between gap-2"><FieldDescription>已选图片 {draft.public_image_urls.length} / {MAX_IMAGES} 张，翻页不会清空已选项。</FieldDescription><Badge variant={draft.public_image_urls.length >= 3 ? "success" : "warning"}>发布至少 3 张</Badge></div>
             {candidateLoading ? <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <Skeleton key={index} className="aspect-[4/3] w-full" />)}</div> : candidates.items.length ? (
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{candidates.items.map((item) => <CandidateImageOption key={item.reference} item={item} checked={draft.public_image_urls.includes(item.reference)} disabled={saving || (!draft.public_image_urls.includes(item.reference) && draft.public_image_urls.length >= MAX_IMAGES)} onCheckedChange={(checked) => setDraft({ ...draft, public_image_urls: updateImageSelection(draft.public_image_urls, item.reference, checked) })} />)}</div>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">{candidates.items.map((item, index) => <CandidateImageOption key={item.reference} item={item} accessibleName={candidateImageAccessibleLabel({ page: candidates.pagination.page, pageSize: candidates.pagination.pageSize, index })} checked={draft.public_image_urls.includes(item.reference)} disabled={saving || (!draft.public_image_urls.includes(item.reference) && draft.public_image_urls.length >= MAX_IMAGES)} onCheckedChange={(checked) => setDraft({ ...draft, public_image_urls: updateImageSelection(draft.public_image_urls, item.reference, checked) })} />)}</div>
             ) : <Empty className="border"><EmptyHeader><EmptyMedia variant="icon"><ImageOff /></EmptyMedia><EmptyTitle>暂无可选图片</EmptyTitle><EmptyDescription>请先在该项目的施工日志中上传实景图片。</EmptyDescription></EmptyHeader></Empty>}
             <div className="flex items-center justify-between gap-3"><span className="text-xs text-muted-foreground tabular-nums">第 {candidates.pagination.page} / {Math.max(candidates.pagination.totalPages, 1)} 页，共 {candidates.pagination.total} 张</span><div className="flex gap-2"><Button size="sm" variant="outline" disabled={candidateLoading || candidates.pagination.page <= 1} onClick={() => project && void loadCandidates(project, candidates.pagination.page - 1)}><ChevronLeft data-icon="inline-start" />上一页</Button><Button size="sm" variant="outline" disabled={candidateLoading || candidates.pagination.page >= candidates.pagination.totalPages} onClick={() => project && void loadCandidates(project, candidates.pagination.page + 1)}>下一页<ChevronRight data-icon="inline-end" /></Button></div></div>
             <FieldError>{draft.publication_status === "published" && draft.public_image_urls.length < 3 ? "还需选择至少 3 张项目图片才能发布" : null}</FieldError>
@@ -392,12 +406,12 @@ function PublicationDialog({ project, onOpenChange, onSaved }: { project: Projec
   );
 }
 
-function CandidateImageOption({ item, checked, disabled, onCheckedChange }: { item: CandidateImage; checked: boolean; disabled: boolean; onCheckedChange(checked: boolean): void }) {
+function CandidateImageOption({ item, accessibleName, checked, disabled, onCheckedChange }: { item: CandidateImage; accessibleName: string; checked: boolean; disabled: boolean; onCheckedChange(checked: boolean): void }) {
   const [failed, setFailed] = useState(false);
   const preview = failed ? null : safeHttpsPreview(item.preview_url);
   return <label className="flex cursor-pointer flex-col gap-2 rounded-md border p-2 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring data-[disabled=true]:cursor-not-allowed data-[disabled=true]:opacity-50" data-disabled={disabled}>
-    <span className="relative aspect-[4/3] overflow-hidden rounded-sm bg-muted">{preview ? <Image alt="项目候选实景图" fill unoptimized sizes="(min-width: 768px) 180px, 45vw" className="object-cover" src={preview} onError={() => setFailed(true)} /> : <span className="flex h-full items-center justify-center text-muted-foreground"><ImageOff aria-hidden="true" /></span>}</span>
-    <span className="flex items-center gap-2 text-xs"><Checkbox aria-label="选择该项目图片" checked={checked} disabled={disabled} onCheckedChange={(value) => onCheckedChange(value === true)} /><span>{checked ? "已选择" : "选择图片"}</span></span>
+    <span className="relative aspect-[4/3] overflow-hidden rounded-sm bg-muted">{preview ? <Image alt={accessibleName} fill unoptimized sizes="(min-width: 768px) 180px, 45vw" className="object-cover" src={preview} onError={() => setFailed(true)} /> : <span className="flex h-full items-center justify-center text-muted-foreground"><ImageOff aria-hidden="true" /><span className="sr-only">{accessibleName}预览不可用</span></span>}</span>
+    <span className="flex items-center gap-2 text-xs"><Checkbox aria-label={`选择${accessibleName}`} checked={checked} disabled={disabled} onCheckedChange={(value) => onCheckedChange(value === true)} /><span>{checked ? "已选择" : "选择图片"}</span></span>
   </label>;
 }
 
@@ -406,7 +420,5 @@ function ProjectTableSkeleton() {
 }
 
 function parseTags(value: string): string[] { return Array.from(new Set(value.split(/[,，]/).map((item) => item.trim()).filter(Boolean))); }
-function phaseLabel(status: string | null): string { return ({ started: "已开工", constructing: "施工中", acceptance: "竣工验收", final_acceptance_completed: "已完成" } as Record<string, string>)[status || ""] || status || "未设置"; }
-function phaseVariant(status: string | null): "warning" | "success" | "outline" { return status === "started" || status === "constructing" ? "warning" : status === "acceptance" || status === "final_acceptance_completed" ? "success" : "outline"; }
 function publicationLabel(status?: PublicationStatus): string { return status === "published" ? "已发布" : status === "hidden" ? "已隐藏" : "草稿"; }
 function publicationVariant(status?: PublicationStatus): "success" | "secondary" | "warning" { return status === "published" ? "success" : status === "hidden" ? "secondary" : "warning"; }

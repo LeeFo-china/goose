@@ -1,3 +1,5 @@
+import { isProjectStatus, ProjectStatusConfig } from "@gooes/domain";
+
 export const PROJECT_PUBLICATION_PAGE_SIZE = 20;
 export const PROJECT_PUBLICATION_MAX_IMAGES = 30;
 export const PROJECT_PUBLICATION_STATUSES = [
@@ -40,6 +42,13 @@ export type ProjectPublicationPage = {
 };
 export type CandidateImage = { reference: string; preview_url: string | null };
 export type CandidatePage = { items: CandidateImage[]; pagination: Pagination };
+type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "outline"
+  | "success"
+  | "warning"
+  | "danger";
 
 export function getPublicationWarnings(draft: ProjectPublicationDraft): string[] {
   const warnings: string[] = [];
@@ -73,6 +82,27 @@ export function getPublicationReadinessWarnings(
   });
 }
 
+export function projectPhaseDisplay(
+  status: string | null,
+): { label: string; variant: BadgeVariant } {
+  if (status === "final_acceptance_completed") {
+    return { label: "已完成", variant: "success" };
+  }
+  if (!status) return { label: "未设置", variant: "outline" };
+  if (!isProjectStatus(status)) {
+    return { label: "未知阶段", variant: "outline" };
+  }
+  const config = ProjectStatusConfig[status];
+  return {
+    label: config.label,
+    variant: config.type === "primary"
+      ? "default"
+      : config.type === "default"
+        ? "secondary"
+        : config.type,
+  };
+}
+
 export function updateImageSelection(
   selected: readonly string[],
   reference: string,
@@ -95,6 +125,14 @@ export function safeHttpsPreview(value: string | null): string | null {
   }
 }
 
+export function candidateImageAccessibleLabel(input: {
+  page: number;
+  pageSize: number;
+  index: number;
+}): string {
+  return `第 ${(input.page - 1) * input.pageSize + input.index + 1} 张项目图片`;
+}
+
 export function buildProjectPublicationHref(input: {
   page: number;
   publicationStatus?: string;
@@ -111,6 +149,20 @@ export function buildProjectPublicationHref(input: {
   return value
     ? `/douyin-miniapp/projects?${value}`
     : "/douyin-miniapp/projects";
+}
+
+export function getPublicationRefreshPage(input: {
+  activeStatus: string;
+  currentPage: number;
+  currentPageRowCount: number;
+  savedStatus: PublicationStatus;
+}): number | null {
+  if (!input.activeStatus || input.activeStatus === input.savedStatus) {
+    return null;
+  }
+  return input.currentPageRowCount <= 1 && input.currentPage > 1
+    ? input.currentPage - 1
+    : input.currentPage;
 }
 
 export function normalizeProjectPage(
@@ -170,10 +222,7 @@ export function projectProfileDraft(
   row: ProjectPublicationRow,
 ): ProjectPublicationDraft {
   if (!row.public_profile) {
-    return {
-      ...emptyPublicationDraft(),
-      public_title: row.name?.trim() || "",
-    };
+    return emptyPublicationDraft();
   }
   return {
     public_title: row.public_profile.public_title,

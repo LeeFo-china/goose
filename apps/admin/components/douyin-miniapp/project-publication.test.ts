@@ -2,10 +2,14 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildProjectPublicationHref,
+  candidateImageAccessibleLabel,
   getPublicationReadinessWarnings,
+  getPublicationRefreshPage,
   getPublicationWarnings,
   normalizeProjectPage,
   normalizeSavedProjectProfile,
+  projectProfileDraft,
+  projectPhaseDisplay,
   safeHttpsPreview,
   updateImageSelection,
   type ProjectPublicationDraft,
@@ -73,6 +77,21 @@ describe("tenant project publication behavior", () => {
     expect(updateImageSelection(maximum, "image-31", true)).toEqual(maximum);
   });
 
+  test("never copies an internal project name into a new public profile", () => {
+    const internalName = "客户王某 138****0000 固始晴天花园3栋2单元";
+    const draft = projectProfileDraft({
+      id: "11111111-1111-4111-8111-111111111111",
+      name: internalName,
+      status: "constructing",
+      updated_at: "2026-08-21T00:00:00.000Z",
+      property: { community: "晴天花园", layout: "三室两厅", area: 120 },
+      public_profile: null,
+    });
+
+    expect(draft.public_title).toBe("");
+    expect(JSON.stringify(draft)).not.toContain(internalName);
+  });
+
   test("resets list page on status changes and keeps list pagination fixed at 20", () => {
     expect(buildProjectPublicationHref({
       page: 8,
@@ -83,6 +102,33 @@ describe("tenant project publication behavior", () => {
       page: 2,
       publicationStatus: "draft",
     })).toBe("/douyin-miniapp/projects?page=2&publicationStatus=draft");
+  });
+
+  test("refreshes an active status page after moving its last row away", () => {
+    expect(getPublicationRefreshPage({
+      activeStatus: "draft",
+      currentPage: 3,
+      currentPageRowCount: 1,
+      savedStatus: "published",
+    })).toBe(2);
+    expect(getPublicationRefreshPage({
+      activeStatus: "draft",
+      currentPage: 3,
+      currentPageRowCount: 2,
+      savedStatus: "published",
+    })).toBe(3);
+    expect(getPublicationRefreshPage({
+      activeStatus: "draft",
+      currentPage: 3,
+      currentPageRowCount: 1,
+      savedStatus: "draft",
+    })).toBeNull();
+    expect(getPublicationRefreshPage({
+      activeStatus: "",
+      currentPage: 3,
+      currentPageRowCount: 1,
+      savedStatus: "published",
+    })).toBeNull();
   });
 
   test("rejects mismatched pagination echoes and malformed project pages", () => {
@@ -125,6 +171,17 @@ describe("tenant project publication behavior", () => {
     expect(safeHttpsPreview(null)).toBeNull();
   });
 
+  test("numbers candidate images globally without exposing their raw reference", () => {
+    const rawReference = "tenants/private/project-log/customer-name.jpg";
+    const label = candidateImageAccessibleLabel({
+      page: 2,
+      pageSize: 20,
+      index: 0,
+    });
+    expect(label).toBe("第 21 张项目图片");
+    expect(label).not.toContain(rawReference);
+  });
+
   test("accepts only a complete saved profile response", () => {
     const saved = {
       ...completeDraft,
@@ -140,6 +197,25 @@ describe("tenant project publication behavior", () => {
       public_image_urls: [1, 2, 3],
     })).toBeNull();
   });
+
+  test("uses domain project labels and never exposes an unknown status code", () => {
+    expect(projectPhaseDisplay("constructing")).toEqual({
+      label: "施工中",
+      variant: "warning",
+    });
+    expect(projectPhaseDisplay("final_acceptance_completed")).toEqual({
+      label: "已完成",
+      variant: "success",
+    });
+    expect(projectPhaseDisplay("private_internal_phase")).toEqual({
+      label: "未知阶段",
+      variant: "outline",
+    });
+    expect(projectPhaseDisplay(null)).toEqual({
+      label: "未设置",
+      variant: "outline",
+    });
+  });
 });
 
 describe("tenant project publication source contract", () => {
@@ -149,6 +225,9 @@ describe("tenant project publication source contract", () => {
     ).text();
     const pageSource = await Bun.file(
       new URL("../../app/(console)/douyin-miniapp/projects/page.tsx", import.meta.url),
+    ).text();
+    const logicSource = await Bun.file(
+      new URL("./project-publication-logic.ts", import.meta.url),
     ).text();
     const menuSource = await Bun.file(
       new URL("../layout/menu-config.ts", import.meta.url),
@@ -171,6 +250,8 @@ describe("tenant project publication source contract", () => {
     expect(componentSource).not.toContain("手工输入项目 ID");
     expect(componentSource).not.toContain("space-y-");
     expect(componentSource).not.toMatch(/(?:bg|text|border)-(?:red|blue|green|yellow|orange|purple)-/);
+    expect(logicSource).toContain("ProjectStatusConfig");
+    expect(logicSource).toContain("isProjectStatus");
 
     expect(pageSource).toContain("/tenant/douyin-miniapp/projects?");
     expect(pageSource).toContain('pageSize: "20"');
