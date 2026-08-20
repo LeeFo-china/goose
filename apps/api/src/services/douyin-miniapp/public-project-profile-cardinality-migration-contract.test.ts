@@ -6,24 +6,32 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 
+function executableStatements(sql: string): string[] {
+  return sql
+    .replace(/--.*$/gm, "")
+    .split(";")
+    .map((statement) => statement.replace(/\s+/g, " ").trim())
+    .filter((statement) => statement.length > 0);
+}
+
 describe("Douyin public project profile cardinality migration", () => {
-  test("replaces the tenant/project index and aligns the one-to-one foreign key", () => {
+  test("allows only the six statements required to align the relationship", () => {
     expect(existsSync(migrationUrl)).toBe(true);
 
     const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
-    const normalizedSql = sql.replace(/\s+/g, " ").trim();
+    const statements = executableStatements(sql);
+    const executableSql = statements.join("; ");
 
-    expect(normalizedSql).toContain(
+    expect(statements).toEqual([
+      "BEGIN",
       "DROP INDEX public.projects_tenant_id_id_idx",
-    );
-    expect(normalizedSql).toContain(
       "ALTER TABLE public.projects ADD CONSTRAINT projects_tenant_id_id_key UNIQUE (tenant_id, id)",
-    );
-    expect(normalizedSql).toContain(
       "ALTER TABLE public.douyin_project_public_profiles DROP CONSTRAINT douyin_project_public_profiles_project_tenant_fkey",
-    );
-    expect(normalizedSql).toContain(
-      "ADD CONSTRAINT douyin_project_public_profiles_project_tenant_fkey FOREIGN KEY (tenant_id, project_id) REFERENCES public.projects(tenant_id, id) ON DELETE CASCADE",
+      "ALTER TABLE public.douyin_project_public_profiles ADD CONSTRAINT douyin_project_public_profiles_project_tenant_fkey FOREIGN KEY (tenant_id, project_id) REFERENCES public.projects(tenant_id, id) ON DELETE CASCADE",
+      "COMMIT",
+    ]);
+    expect(executableSql).not.toContain(
+      "DROP CONSTRAINT projects_id_tenant_key",
     );
   });
 
