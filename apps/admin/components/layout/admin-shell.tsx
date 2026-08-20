@@ -9,6 +9,11 @@ import { AdminNav } from "@/components/layout/admin-nav";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
 import {
+  getServiceAccessProviderKey,
+  ServiceAccessProvider,
+} from "@/components/service-access/service-access-context";
+import { ServiceAccessGate } from "@/components/service-access/service-access-gate";
+import {
   AdminPreferencesMenu,
   applyThemeTone,
   defaultPreferences,
@@ -17,13 +22,16 @@ import {
 } from "@/components/layout/admin-shell-preferences";
 import { NotificationMenu } from "@/components/layout/notification-menu";
 import { isPlatformOnlySession } from "@/lib/session-mode";
+import type { TenantServiceAccessLoadResult } from "@/lib/tenant-service-access";
 import { cn } from "@/lib/utils";
 
 export function AdminShell({
   session,
+  serviceAccess,
   children,
 }: {
   session: AdminSession;
+  serviceAccess: TenantServiceAccessLoadResult;
   children: React.ReactNode;
 }) {
   const [preferences, setPreferences] = useState(defaultPreferences);
@@ -79,6 +87,11 @@ export function AdminShell({
       tenantId={session.tenant?.id ?? null}
       userId={session.user_id}
     >
+      <ServiceAccessProvider
+        key={getServiceAccessProviderKey(serviceAccess)}
+        session={session}
+        initialLoadResult={serviceAccess}
+      >
       <AdminSessionGuard />
       <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
@@ -157,10 +170,11 @@ export function AdminShell({
           mainWidthClassName,
           preferences.compact ? "py-3" : "py-5",
         )}>
-          {children}
+          <ServiceAccessGate>{children}</ServiceAccessGate>
         </main>
       </div>
       </div>
+      </ServiceAccessProvider>
     </AdminSessionScopeProvider>
   );
 }

@@ -42,6 +42,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAdminSession, getAdminToken } from "@/lib/auth";
 import { buildBackendUrl, parseBackendJson } from "@/lib/backend";
+import { isPlatformOnlySession } from "@/lib/session-mode";
 import { cn } from "@/lib/utils";
 
 const emptySummary: TenantBillingSummary = {
@@ -174,7 +175,7 @@ export default async function TenantBillingPage() {
     redirect("/login");
   }
 
-  if (session.roles.includes("platform_admin")) {
+  if (isPlatformOnlySession(session)) {
     redirect("/platform/billing");
   }
 

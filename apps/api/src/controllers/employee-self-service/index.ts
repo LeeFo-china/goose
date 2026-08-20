@@ -1,8 +1,10 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
+import { adminServicePurchaseLinkService } from "@/services/admin-service-purchase-link";
+import { adminTenantServiceAccessService } from "@/services/admin-tenant-service-access";
 import { employeePersonalizationService } from "@/services/employee-personalization";
-import { Get } from "@/utils/decorators/route";
+import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import { z } from "zod";
 import { EmployeeBootstrapHandler } from "./bootstrap-handler";
@@ -48,6 +50,33 @@ class EmployeeSelfServiceController extends TenantBaseController {
       queryResult.data.scene,
     );
     return ResponseHandler.success(payload);
+  }
+
+  @Get("/employee/service-access", { tenantServiceAccess: "session" })
+  async getServiceAccess(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const permissionCodes = authContext.permissions.map(({ code }) => code);
+    const data = await adminTenantServiceAccessService.resolve({
+      tenantId: authContext.tenantId,
+      permissionCodes,
+    });
+    return ResponseHandler.success(data);
+  }
+
+  @Post("/employee/service-access/purchase-link", {
+    tenantServiceAccess: "recovery",
+  })
+  async createServicePurchaseLink(
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) {
+    const authContext = await this.getRequiredTenantContext(request);
+    const permissionCodes = authContext.permissions.map(({ code }) => code);
+    const data = await adminServicePurchaseLinkService.create({
+      tenantId: authContext.tenantId,
+      permissionCodes,
+    });
+    return ResponseHandler.success(data);
   }
 }
 
