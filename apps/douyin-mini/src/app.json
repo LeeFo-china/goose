@@ -31,7 +31,7 @@
       },
       {
         "pagePath": "pages/cases/index",
-        "text": "案例",
+        "text": "项目实景",
         "iconPath": "assets/tabbar/cases.png",
         "selectedIconPath": "assets/tabbar/cases-active.png"
       },

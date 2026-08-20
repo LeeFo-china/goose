@@ -66,6 +66,7 @@ export type BootstrapData = {
   content: {
     home_banners: HomeBanner[];
     trust_metrics: Array<{ label: string; value: string }>;
+    featured_projects?: UnifiedPublicProject[];
     featured_cases: PublicProject[];
     active_sites: PublicProject[];
   };
@@ -102,6 +103,7 @@ export type CompanyData = {
 export type PublicProject = {
   id: string;
   title: string;
+  phase?: PublicProjectPhase;
   cover_image_url: string | null;
   public_images: string[];
   style_tags: string[];
@@ -117,6 +119,12 @@ export type PublicProject = {
   description: string | null;
 };
 
+export type PublicProjectPhase = "in_progress" | "completed";
+
+export type UnifiedPublicProject = Omit<PublicProject, "phase"> & {
+  phase: PublicProjectPhase;
+};
+
 export type PaginationMeta = {
   page: number;
   pageSize: number;
@@ -125,6 +133,11 @@ export type PaginationMeta = {
 };
 
 export type PublicProjectPage = { items: PublicProject[]; pagination: PaginationMeta };
+
+export type UnifiedPublicProjectPage = {
+  items: UnifiedPublicProject[];
+  pagination: PaginationMeta;
+};
 
 export type PublicSiteLog = {
   id: string;

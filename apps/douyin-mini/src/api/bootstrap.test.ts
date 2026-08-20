@@ -26,6 +26,7 @@ const bootstrap = {
   content: {
     home_banners: [],
     trust_metrics: [],
+    featured_projects: [],
     featured_cases: [],
     active_sites: [],
   },

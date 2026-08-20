@@ -1,6 +1,7 @@
 .detail-page { padding-bottom: 224rpx; }
-.detail-kicker { color: #9a4124; font-size: 22rpx; font-weight: 600; letter-spacing: 2rpx; }
-.detail-title { margin-top: 10rpx; color: #25211e; font-size: 42rpx; font-weight: 600; line-height: 1.35; }
+.detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; }
+.detail-title { min-width: 0; flex: 1; color: #25211e; font-size: 42rpx; font-weight: 600; line-height: 1.35; }
+.phase-badge { flex: none; margin-top: 6rpx; padding: 7rpx 14rpx; border: 1rpx solid; border-radius: 999rpx; background: #fff; color: #191817; font-size: 22rpx; font-weight: 650; line-height: 1.4; }
 .detail-location { margin-top: 14rpx; color: #665f5a; font-size: 25rpx; }
 .gallery-block { margin-top: 34rpx; }
 .fact-grid { display: flex; flex-wrap: wrap; margin-top: 44rpx; border-top: 1rpx solid #dfdad5; border-left: 1rpx solid #dfdad5; }
@@ -10,5 +11,21 @@
 .description-section { margin-top: 54rpx; }
 .section-title { color: #25211e; font-size: 32rpx; font-weight: 600; }
 .description-copy { margin-top: 18rpx; color: #5f5853; font-size: 26rpx; line-height: 1.8; }
+.progress-section { margin-top: 54rpx; }
+.progress-note { margin-top: 18rpx; color: #716963; font-size: 23rpx; line-height: 1.6; }
+.timeline { margin-top: 34rpx; }
+.timeline-item { display: flex; }
+.timeline-rail { position: relative; width: 48rpx; flex: none; }
+.timeline-rail::after { position: absolute; top: 24rpx; bottom: 0; left: 11rpx; width: 2rpx; background: #d9d3ce; content: ""; }
+.timeline-item:last-child .timeline-rail::after { display: none; }
+.timeline-dot { position: relative; z-index: 1; width: 22rpx; height: 22rpx; margin-top: 6rpx; border: 6rpx solid #eceae6; border-radius: 50%; }
+.timeline-content { min-width: 0; flex: 1; padding-bottom: 48rpx; }
+.progress-date { color: #827a74; font-size: 22rpx; }
+.progress-title { margin-top: 8rpx; color: #25211e; font-size: 30rpx; font-weight: 600; }
+.progress-images { margin-top: 22rpx; }
+.progress-loading { margin-top: 32rpx; }
+.progress-loading-bar { height: 160rpx; margin-top: 18rpx; border-radius: 16rpx; background: #e8e4df; animation: progress-pulse 1.4s ease-in-out infinite; }
 .update-copy { margin-top: 30rpx; color: #827a74; font-size: 22rpx; }
 .detail-cta { position: fixed; right: 0; bottom: 0; left: 0; z-index: 5; padding: 20rpx 32rpx calc(20rpx + env(safe-area-inset-bottom)); background: rgba(247,246,244,.96); }
+@keyframes progress-pulse { 50% { opacity: .52; } }
+@media (prefers-reduced-motion: reduce) { .progress-loading-bar { animation: none; opacity: .65; } }

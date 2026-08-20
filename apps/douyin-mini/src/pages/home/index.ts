@@ -1,13 +1,13 @@
 import type { DouyinAppContext } from "../../app";
 import { resolveThemeColor } from "../../components/theme";
 import { buildTrustMetrics, type TrustMetric } from "../../components/trust-metrics/view-model";
-import type { PublicProject } from "../../models";
+import type { UnifiedPublicProject } from "../../models";
 import {
   navigateToEntityDetail,
   navigateToPage,
   switchToTab,
 } from "../../platform/navigation";
-import { toPublicSitePresentation } from "../sites/view-model";
+import { projectPhaseLabel } from "../cases/project-phase";
 
 const SERVICE_PROCESS = [
   { id: "consult", index: "01", title: "沟通需求", description: "了解户型、预算和装修计划" },
@@ -24,15 +24,12 @@ Page({
     city: "",
     summary: "",
     bannerTitle: "装修先规划，开工更放心",
-    bannerSubtitle: "查看真实案例与在建工地，再预约专人沟通",
+    bannerSubtitle: "查看真实项目实景，再预约专人沟通",
     bannerImageUrl: "",
     primaryColor: "#191817",
     primaryTextColor: "#FFFFFF",
     metrics: [] as TrustMetric[],
-    featuredCases: [] as PublicProject[],
-    activeSites: [] as PublicProject[],
-    casesEnabled: true,
-    sitesEnabled: true,
+    featuredProjects: [] as Array<UnifiedPublicProject & { phaseLabel: string }>,
     serviceRegions: [] as string[],
     serviceProcess: SERVICE_PROCESS,
   },
@@ -54,15 +51,17 @@ Page({
         city,
         summary: bootstrap.company.summary || "",
         bannerTitle: banner?.title || "装修先规划，开工更放心",
-        bannerSubtitle: banner?.subtitle || "查看真实案例与在建工地，再预约专人沟通",
+        bannerSubtitle: banner?.subtitle || "查看真实项目实景，再预约专人沟通",
         bannerImageUrl: banner?.image_url || "",
         primaryColor: theme.primaryColor,
         primaryTextColor: theme.primaryTextColor,
         metrics: buildTrustMetrics(bootstrap.content.trust_metrics),
-        featuredCases: bootstrap.content.featured_cases.slice(0, 1),
-        activeSites: bootstrap.content.active_sites.map(toPublicSitePresentation).slice(0, 1),
-        casesEnabled: bootstrap.features.cases,
-        sitesEnabled: bootstrap.features.sites,
+        featuredProjects: uniqueProjects(bootstrap.content.featured_projects ?? [])
+          .slice(0, 2)
+          .map((project) => ({
+            ...project,
+            phaseLabel: projectPhaseLabel(project.phase),
+          })),
         serviceRegions: formatRegions(bootstrap.company.service_regions),
       });
       getApp<DouyinAppContext>().recordAnalytics("page_view");
@@ -74,17 +73,17 @@ Page({
     getApp<DouyinAppContext>().recordAnalytics("lead_cta_click");
     navigateWithFeedback(switchToTab("lead"));
   },
-  onViewCases() { navigateWithFeedback(switchToTab("cases")); },
-  onViewSites() { navigateWithFeedback(switchToTab("sites")); },
+  onViewProjects() { navigateWithFeedback(switchToTab("cases")); },
   onViewCompany() { navigateWithFeedback(navigateToPage("pages/company/index")); },
   onViewPrivacy() { navigateWithFeedback(navigateToPage("pages/privacy/index")); },
-  onCaseSelect(event: { detail: { id?: string } }) {
+  onProjectSelect(event: { detail: { id?: string } }) {
     if (event.detail.id) navigateWithFeedback(navigateToEntityDetail("case", event.detail.id));
   },
-  onSiteSelect(event: { detail: { id?: string } }) {
-    if (event.detail.id) navigateWithFeedback(navigateToEntityDetail("site", event.detail.id));
-  },
 });
+
+function uniqueProjects(projects: UnifiedPublicProject[]): UnifiedPublicProject[] {
+  return [...new Map(projects.map((project) => [project.id, project])).values()];
+}
 
 function formatRegions(regions: Array<{ province: string | null; city: string; district: string | null }>) {
   return [...new Set(regions.map((region) =>

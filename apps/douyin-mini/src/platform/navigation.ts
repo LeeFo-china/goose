@@ -32,8 +32,7 @@ export function buildTabRoute(tab: TabName): string {
 
 export function buildEntityDetailRoute(type: "case" | "site", id: string): string {
   if (!UUID_PATTERN.test(id)) throw invalidNavigationTarget();
-  const path = type === "case" ? "pages/case-detail/index" : "pages/site-detail/index";
-  return `${buildPageRoute(path)}?id=${encodeURIComponent(id)}`;
+  return `${buildPageRoute("pages/case-detail/index")}?id=${encodeURIComponent(id)}`;
 }
 
 export function navigateToPage(path: string): Promise<void> {

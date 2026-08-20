@@ -1,5 +1,7 @@
 .cases-page { padding-bottom: 36rpx; }
 .page-header { padding: 8rpx 0 4rpx; }
+.phase-scroll { margin-top: 28rpx; white-space: nowrap; }
+.phase-options { display: inline-flex; gap: 12rpx; padding-right: 24rpx; }
 .filters { margin-top: 32rpx; padding: 24rpx 0; border-top: 1rpx solid #dddad5; border-bottom: 1rpx solid #dddad5; }
 .filter-heading { display: flex; min-height: 56rpx; align-items: center; justify-content: space-between; gap: 20rpx; margin-bottom: 8rpx; }
 .filter-heading-title { color: #191817; font-size: 26rpx; font-weight: 650; }
@@ -10,3 +12,5 @@
 .filter-options { display: inline-flex; gap: 12rpx; padding-right: 24rpx; }
 .filter-chip { min-width: 104rpx; min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 1rpx solid #dddad5; border-radius: 44rpx; background: #fff; color: #625f5b; font-size: 24rpx; line-height: 86rpx; }
 .case-list { display: flex; flex-direction: column; gap: 24rpx; margin-top: 28rpx; }
+.project-card { position: relative; }
+.project-phase { position: absolute; top: 20rpx; right: 20rpx; z-index: 1; padding: 7rpx 14rpx; border: 1rpx solid; border-radius: 999rpx; background: rgba(255,255,255,.94); color: #191817; font-size: 22rpx; font-weight: 650; line-height: 1.4; pointer-events: none; }

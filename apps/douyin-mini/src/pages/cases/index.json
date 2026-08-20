@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "装修案例",
+  "navigationBarTitleText": "项目实景",
   "enablePullDownRefresh": true,
   "usingComponents": {
     "case-card": "/components/case-card/index",
