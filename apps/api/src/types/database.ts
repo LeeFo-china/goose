@@ -27530,6 +27530,19 @@ export type Database = {
         }
         Returns: string
       }
+      upsert_douyin_project_public_profile: {
+        Args: {
+          p_budget_band: string
+          p_project_id: string
+          p_public_description: string
+          p_public_image_urls: string[]
+          p_public_title: string
+          p_publication_status: string
+          p_style_tags: string[]
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       upsert_platform_payment_secret_setting: {
         Args: {
           p_changed_by_employee_id: string
