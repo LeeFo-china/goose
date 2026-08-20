@@ -32,6 +32,31 @@ export type {
   DouyinProjectPublicationStatus,
 } from './douyin-public-project';
 
+export {
+  DOUYIN_BUDGET_AI_STATUS_VALUES,
+  DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_DECORATION_SCOPE_VALUES,
+  DOUYIN_DECORATION_TIER_VALUES,
+  DOUYIN_PROPERTY_CONDITION_VALUES,
+  DouyinBudgetAiAnalysisSchema,
+  DouyinBudgetEstimateCategorySchema,
+  DouyinBudgetEstimateRequestSchema,
+  DouyinBudgetEstimateResultSchema,
+} from './douyin-budget';
+export type {
+  DouyinBudgetAiAnalysis,
+  DouyinBudgetAiStatus,
+  DouyinBudgetCategoryCode,
+  DouyinBudgetEstimateCategory,
+  DouyinBudgetEstimateRequest,
+  DouyinBudgetEstimateResult,
+  DouyinBudgetOptionCode,
+  DouyinDecorationScope,
+  DouyinDecorationTier,
+  DouyinPropertyCondition,
+} from './douyin-budget';
+
 export { EMPLOYEE_ROLE_VALUES, EMPLOYEE_STATUS_VALUES } from './employee';
 export type { EmployeeRole, EmployeeStatus } from './employee';
 

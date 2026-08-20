@@ -6,6 +6,7 @@ export * from './customer';
 export * from './customer-service';
 export * from './department';
 export * from './department-post-rule';
+export * from './douyin-budget';
 export * from './douyin-miniapp';
 export * from './douyin-public-project';
 export * from './employee';
