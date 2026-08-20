@@ -42,15 +42,20 @@ function clientWith(results: Result[]) {
 
 const project = {
   id: "11111111-1111-4111-8111-111111111111",
-  name: "现代简约案例",
   status: "constructing",
-  budget: 260000,
   start_date: "2026-07-01",
-  created_at: "2026-06-01T00:00:00.000Z",
   updated_at: "2026-07-20T00:00:00.000Z",
-  style_tags: ["现代"],
   property: { community: "示例花园", layout: "三室两厅", area: 120,
     city: "郑州市", district: "金水区" },
+  public_profile: {
+    public_title: "现代简约案例",
+    public_description: "公开项目介绍",
+    public_image_urls: ["https://assets.example.com/selected-cover.jpg"],
+    style_tags: ["现代"],
+    budget_band: "20-30万",
+    publication_status: "published",
+    updated_at: "2026-07-21T00:00:00.000Z",
+  },
 };
 
 describe("DouyinMiniappContentRepository privacy and pagination", () => {
@@ -116,46 +121,162 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
     expect(selects[1]).toBe("province,city,district,priority");
   });
 
-  test("lists tenant-scoped public cases with exact filters and a bounded range", async () => {
+  test("lists the published project feed with an exact count and bounded range", async () => {
     const { client, calls } = clientWith([{ data: [project], error: null, count: 21 }]);
     const repository = new Repository(client as never);
+    const tenantId = "33333333-3333-4333-8333-333333333333";
 
-    const result = await repository.listCases({
-      tenantId: "33333333-3333-4333-8333-333333333333",
-      page: 2, pageSize: 20, style: "现代", layout: "三室两厅",
+    const result = await repository.listProjects({
+      tenantId, phase: "in_progress", page: 2, pageSize: 20,
     });
 
-    expect(result.total).toBe(21);
-    const select = String(calls.find((call) => call.method === "select")?.args[0]);
-    expect(select).toContain("property:properties!inner");
+    expect(result).toMatchObject({ count: 21, rows: [{
+      public_profile: {
+        public_image_urls: ["https://assets.example.com/selected-cover.jpg"],
+      },
+    }] });
+    const selectCall = calls.find((call) => call.method === "select");
+    expect(selectCall?.args[1]).toEqual({ count: "exact" });
+    const select = String(selectCall?.args[0]);
+    expect(select).toContain("public_profile:douyin_project_public_profiles!inner(");
+    expect(select).toContain("public_title,public_description,public_image_urls,style_tags,");
+    expect(select).toContain("budget_band,publication_status,updated_at");
+    expect(select).toContain("property:properties!inner(community,layout,area,city,district)");
     expect(select).not.toMatch(/customer|customer_id|phone|wx_openid|signed_amount|\baddress\b|building_info|latitude|longitude|content/i);
-    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id",
-      "33333333-3333-4333-8333-333333333333"] });
-    expect(calls).toContainEqual({ method: "neq", args: ["visibility_status", "hidden"] });
-    expect(calls).toContainEqual({ method: "contains", args: ["style_tags", ["现代"]] });
-    expect(calls).toContainEqual({ method: "eq", args: ["property.layout", "三室两厅"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id", tenantId] });
+    expect(calls).toContainEqual({ method: "eq",
+      args: ["public_profile.publication_status", "published"] });
+    expect(calls).toContainEqual({ method: "in",
+      args: ["status", ["started", "constructing"]] });
+    expect(calls).toContainEqual({ method: "order",
+      args: ["updated_at", { ascending: false }] });
+    expect(calls).toContainEqual({ method: "order",
+      args: ["id", { ascending: false }] });
     expect(calls).toContainEqual({ method: "range", args: [20, 39] });
+    expect(calls.filter((call) => call.method === "from"))
+      .toEqual([{ method: "from", args: ["projects"] }]);
   });
 
-  test("uses active construction statuses for sites and tenant/id guards for details", async () => {
+  test("limits the unfiltered feed to statuses with a public phase", async () => {
+    const { client, calls } = clientWith([{ data: [project], error: null, count: 1 }]);
+    const repository = new Repository(client as never);
+
+    await repository.listProjects({
+      tenantId: "33333333-3333-4333-8333-333333333333",
+      page: 1, pageSize: 20,
+    });
+
+    expect(calls).toContainEqual({ method: "in",
+      args: ["status", ["started", "constructing", "acceptance"]] });
+  });
+
+  test("uses the acceptance status for completed projects", async () => {
+    const completed = { ...project, status: "acceptance" };
+    const { client, calls } = clientWith([{ data: [completed], error: null, count: 1 }]);
+    const repository = new Repository(client as never);
+
+    await repository.listProjects({
+      tenantId: "33333333-3333-4333-8333-333333333333",
+      phase: "completed", page: 1, pageSize: 20,
+    });
+
+    expect(calls).toContainEqual({ method: "eq", args: ["status", "acceptance"] });
+    expect(calls).not.toContainEqual({ method: "in",
+      args: ["status", ["started", "constructing"]] });
+  });
+
+  test("rejects a missing or invalid exact project count", async () => {
+    const { client } = clientWith([{ data: [project], error: null, count: null }]);
+    const repository = new Repository(client as never);
+
+    await expect(repository.listProjects({
+      tenantId: "33333333-3333-4333-8333-333333333333",
+      page: 1, pageSize: 20,
+    })).rejects.toMatchObject({ code: "DOUYIN_CONTENT_RESPONSE_INVALID" });
+  });
+
+  test("rejects array profiles and non-string public image urls", async () => {
+    const { client } = clientWith([
+      { data: [{ ...project, public_profile: [project.public_profile] }],
+        error: null, count: 1 },
+      { data: [{ ...project, public_profile: {
+        ...project.public_profile, public_image_urls: [123],
+      } }], error: null, count: 1 },
+    ]);
+    const repository = new Repository(client as never);
+    const input = { tenantId: "33333333-3333-4333-8333-333333333333",
+      page: 1, pageSize: 20 };
+
+    await expect(repository.listProjects(input))
+      .rejects.toMatchObject({ code: "DOUYIN_CONTENT_RESPONSE_INVALID" });
+    await expect(repository.listProjects(input))
+      .rejects.toMatchObject({ code: "DOUYIN_CONTENT_RESPONSE_INVALID" });
+  });
+
+  test("finds only a tenant-scoped published project by id", async () => {
+    const tenantId = "33333333-3333-4333-8333-333333333333";
+    const { client, calls } = clientWith([{ data: project, error: null }]);
+    const repository = new Repository(client as never);
+
+    await expect(repository.findProject({ tenantId, id: project.id }))
+      .resolves.toMatchObject({ id: project.id });
+
+    expect(calls).toContainEqual({ method: "from", args: ["projects"] });
+    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id", tenantId] });
+    expect(calls).toContainEqual({ method: "eq", args: ["id", project.id] });
+    expect(calls).toContainEqual({ method: "eq",
+      args: ["public_profile.publication_status", "published"] });
+    expect(calls).toContainEqual({ method: "maybeSingle", args: [] });
+  });
+
+  test("keeps legacy list filters in the unified server-side project query", async () => {
     const { client, calls } = clientWith([
       { data: [project], error: null, count: 1 },
+      { data: [project], error: null, count: 1 },
+    ]);
+    const repository = new Repository(client as never);
+    const tenantId = "33333333-3333-4333-8333-333333333333";
+
+    const cases = await repository.listCases({ tenantId, page: 1, pageSize: 6,
+      style: "现代", layout: "三室两厅" });
+    const sites = await repository.listSites({ tenantId, page: 1, pageSize: 6 });
+
+    expect(cases.total).toBe(1);
+    expect(sites.total).toBe(1);
+    expect(calls).toContainEqual({ method: "contains",
+      args: ["public_profile.style_tags", ["现代"]] });
+    expect(calls).toContainEqual({ method: "eq", args: ["property.layout", "三室两厅"] });
+    expect(calls).toContainEqual({ method: "in", args: ["status", ["started", "constructing"]] });
+    expect(calls).toContainEqual({ method: "range", args: [0, 5] });
+    expect(calls.filter((call) => call.method === "from" && call.args[0] === "projects"))
+      .toHaveLength(2);
+    const projectSelects = calls.filter((call) => call.method === "select")
+      .map((call) => call.args[0]);
+    expect(new Set(projectSelects).size).toBe(1);
+  });
+
+  test("delegates both legacy detail methods to the same published project detail", async () => {
+    const { client, calls } = clientWith([
       { data: project, error: null },
       { data: project, error: null },
     ]);
     const repository = new Repository(client as never);
     const tenantId = "33333333-3333-4333-8333-333333333333";
 
-    await repository.listSites({ tenantId, page: 1, pageSize: 6 });
     await repository.findCase({ tenantId, id: project.id });
     await repository.findSite({ tenantId, id: project.id });
 
-    expect(calls).toContainEqual({ method: "in", args: ["status", ["started", "constructing"]] });
-    expect(calls).toContainEqual({ method: "range", args: [0, 5] });
-    expect(calls.filter((call) => call.method === "eq" && call.args[0] === "tenant_id"))
-      .toHaveLength(3);
-    expect(calls.filter((call) => call.method === "eq" && call.args[0] === "id"))
+    expect(calls.filter((call) => call.method === "from" && call.args[0] === "projects"))
       .toHaveLength(2);
+    expect(calls.filter((call) => call.method === "select")
+      .map((call) => call.args[0])).toEqual([
+      expect.stringContaining("public_profile:douyin_project_public_profiles!inner"),
+      expect.stringContaining("public_profile:douyin_project_public_profiles!inner"),
+    ]);
+    expect(calls.filter((call) => call.method === "eq"
+      && call.args[0] === "public_profile.publication_status"
+      && call.args[1] === "published")).toHaveLength(2);
+    expect(calls.filter((call) => call.method === "maybeSingle")).toHaveLength(2);
   });
 
   test("lists only bounded, tenant-scoped public progress fields without raw content", async () => {

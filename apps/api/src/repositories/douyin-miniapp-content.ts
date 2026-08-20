@@ -5,9 +5,11 @@ import { Errors } from "@/errors/error-factory";
 import { SupabaseDB } from "@/utils/supabase";
 
 const PROJECT_SELECT = [
-  "id", "name", "status", "budget", "start_date", "created_at", "updated_at",
-  "style_tags",
+  "id", "status", "start_date", "updated_at",
   "property:properties!inner(community,layout,area,city,district)",
+  "public_profile:douyin_project_public_profiles!inner(public_title,"
+    + "public_description,public_image_urls,style_tags,budget_band,"
+    + "publication_status,updated_at)",
 ].join(",");
 const COMPANY_SELECT = [
   "public_name", "introduction", "public_phone", "address_province",
@@ -22,9 +24,8 @@ const LOG_SELECT = "id,stage_code,node_name,images,created_at";
 const PROJECT_IMAGE_LOG_SELECT = "project_id,images,created_at";
 const PROJECT_IMAGE_LOGS_PER_PROJECT = 20;
 const MAX_PROJECT_IMAGE_LOGS = 2_000;
-const PUBLIC_STATUSES = [
-  "signed", "design_finalized", "pending_start", "started", "constructing", "acceptance",
-].join(",");
+const IN_PROGRESS_STATUSES = ["started", "constructing"] as const;
+const PUBLIC_PROJECT_STATUSES = [...IN_PROGRESS_STATUSES, "acceptance"] as const;
 
 const NullableString = z.string().nullable();
 const InstallationSchema = z.object({
@@ -48,12 +49,22 @@ const PropertySchema = z.object({
   area: z.union([z.number(), z.string()]).nullable(),
   city: NullableString, district: NullableString,
 }).strict();
-const ProjectSchema = z.object({
-  id: z.uuid(), name: NullableString, status: NullableString,
-  budget: z.union([z.number(), z.string()]).nullable(), start_date: NullableString,
-  created_at: NullableString, updated_at: z.string(), style_tags: z.unknown(),
-  property: PropertySchema,
+const PublicProjectProfileSchema = z.object({
+  public_title: z.string().min(1), public_description: z.string().min(1),
+  public_image_urls: z.array(z.string()), style_tags: z.array(z.string()),
+  budget_band: NullableString, publication_status: z.literal("published"),
+  updated_at: z.string().min(1),
 }).strict();
+const ProjectSchema = z.object({
+  id: z.uuid(), status: NullableString, start_date: NullableString,
+  updated_at: z.string(), property: PropertySchema,
+  public_profile: PublicProjectProfileSchema,
+}).strict().transform((project) => ({
+  ...project,
+  name: project.public_profile.public_title,
+  budget: null,
+  style_tags: project.public_profile.style_tags,
+}));
 const LogSchema = z.object({
   id: z.uuid(), stage_code: NullableString, node_name: NullableString,
   images: z.unknown(), created_at: z.string(),
@@ -70,6 +81,10 @@ export type DouyinContentLog = z.infer<typeof LogSchema>;
 export type DouyinContentProjectImageLog = z.infer<typeof ProjectImageLogSchema>;
 type PageInput = { tenantId: string; page: number; pageSize: number };
 type CaseListInput = PageInput & { style?: string; layout?: string };
+type ProjectPhase = "in_progress" | "completed";
+type ProjectListInput = CaseListInput & { phase?: ProjectPhase };
+type ProjectListResult = { rows: DouyinContentProject[]; count: number };
+type LegacyProjectListResult = { rows: DouyinContentProject[]; total: number };
 type DatabaseResult = { data: unknown; error: unknown; count?: number | null };
 
 export interface DouyinContentQuery extends PromiseLike<DatabaseResult> {
@@ -119,30 +134,38 @@ export class DouyinMiniappContentRepository {
     });
   }
 
-  listCases(input: CaseListInput) {
-    let query = this.publicProjects(input.tenantId, { count: "exact" });
-    if (input.style) query = query.contains("style_tags", [input.style]);
-    if (input.layout) query = query.eq("property.layout", input.layout);
-    return this.listProjects(query, input, "查询抖音装修案例失败");
+  async listProjects(input: ProjectListInput): Promise<ProjectListResult> {
+    return execute("查询抖音公开项目失败", async () => {
+      const result = await this.publicProjects(input, { count: "exact" })
+        .order("updated_at", { ascending: false })
+        .order("id", { ascending: false }).range(...pageRange(input));
+      return { rows: parseRows(ProjectSchema, result), count: validCount(result.count) };
+    });
   }
 
-  listSites(input: PageInput) {
-    const query = this.client.from("projects").select(PROJECT_SELECT, { count: "exact" })
-      .eq("tenant_id", input.tenantId).neq("visibility_status", "hidden")
-      .in("status", ["started", "constructing"]);
-    return this.listProjects(query, input, "查询抖音在建工地失败");
+  findProject(input: { tenantId: string; id: string }): Promise<DouyinContentProject | null> {
+    return execute("查询抖音公开项目失败", async () => {
+      const result = await this.publicProjects(input).eq("id", input.id).maybeSingle();
+      return parseOne(ProjectSchema, result);
+    });
+  }
+
+  async listCases(input: CaseListInput): Promise<LegacyProjectListResult> {
+    const result = await this.listProjects(input);
+    return { rows: result.rows, total: result.count };
+  }
+
+  async listSites(input: PageInput): Promise<LegacyProjectListResult> {
+    const result = await this.listProjects({ ...input, phase: "in_progress" });
+    return { rows: result.rows, total: result.count };
   }
 
   findCase(input: { tenantId: string; id: string }) {
-    return this.findProject(this.publicProjects(input.tenantId).eq("id", input.id),
-      "查询抖音装修案例失败");
+    return this.findProject(input);
   }
 
   findSite(input: { tenantId: string; id: string }) {
-    const query = this.client.from("projects").select(PROJECT_SELECT)
-      .eq("tenant_id", input.tenantId).eq("id", input.id)
-      .neq("visibility_status", "hidden").in("status", ["started", "constructing"]);
-    return this.findProject(query, "查询抖音在建工地失败");
+    return this.findProject(input);
   }
 
   async listSiteLogs(input: PageInput & { projectId: string }) {
@@ -171,25 +194,23 @@ export class DouyinMiniappContentRepository {
     });
   }
 
-  private publicProjects(tenantId: string, options?: { count: "exact" }) {
-    return this.client.from("projects").select(PROJECT_SELECT, options)
-      .eq("tenant_id", tenantId).neq("visibility_status", "hidden")
-      .or(`status.in.(${PUBLIC_STATUSES}),visibility_status.eq.public`);
-  }
-
-  private async listProjects(query: DouyinContentQuery, input: PageInput, message: string) {
-    return execute(message, async () => {
-      const result = await query.order("updated_at", { ascending: false })
-        .order("id", { ascending: false }).range(...pageRange(input));
-      return { rows: parseRows(ProjectSchema, result), total: validCount(result.count) };
-    });
-  }
-
-  private findProject(query: DouyinContentQuery, message: string) {
-    return execute(message, async () => {
-      const result = await query.maybeSingle();
-      return parseOne(ProjectSchema, result);
-    });
+  private publicProjects(
+    input: { tenantId: string; phase?: ProjectPhase; style?: string; layout?: string },
+    options?: { count: "exact" },
+  ) {
+    let query = this.client.from("projects").select(PROJECT_SELECT, options)
+      .eq("tenant_id", input.tenantId)
+      .eq("public_profile.publication_status", "published");
+    if (input.phase === "in_progress") {
+      query = query.in("status", IN_PROGRESS_STATUSES);
+    } else if (input.phase === "completed") {
+      query = query.eq("status", "acceptance");
+    } else {
+      query = query.in("status", PUBLIC_PROJECT_STATUSES);
+    }
+    if (input.style) query = query.contains("public_profile.style_tags", [input.style]);
+    if (input.layout) query = query.eq("property.layout", input.layout);
+    return query;
   }
 
   private findOne<T>(table: string, select: string, schema: z.ZodType<T>, message: string,
