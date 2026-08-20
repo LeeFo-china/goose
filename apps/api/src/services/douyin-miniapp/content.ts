@@ -54,13 +54,30 @@ export class DouyinMiniappContentService {
 
   async bootstrap(user?: JwtPayload) {
     const context = await this.loadContext(user);
-    const [profile, areas, projects] = await Promise.all([
+    const emptyProjects = Promise.resolve({
+      rows: [] as DouyinContentProject[],
+      count: 0,
+    });
+    const [profile, areas, projects, activeSites] = await Promise.all([
       this.repository.findPublishedCompany(context.tenantId),
       this.repository.listServiceAreas(context.tenantId),
       this.repository.listProjects({ tenantId: context.tenantId, page: 1, pageSize: 6 }),
+      context.runtime.features.sites
+        ? this.repository.listProjects({
+          tenantId: context.tenantId,
+          phase: "in_progress",
+          page: 1,
+          pageSize: 6,
+        })
+        : emptyProjects,
     ]);
     const company = this.mapCompany(context.runtime, requireCompany(profile), areas);
-    const featuredProjects = await this.mapPublicProjects(projects.rows);
+    const mappedProjects = await this.mapPublicProjects([
+      ...projects.rows,
+      ...activeSites.rows,
+    ]);
+    const mappedById = new Map(mappedProjects.map((project) => [project.id, project]));
+    const featuredProjects = selectPublicProjects(projects.rows, mappedById);
     return {
       installation: {
         status: "active" as const,
@@ -73,9 +90,11 @@ export class DouyinMiniappContentService {
         home_banners: context.runtime.home_banners,
         trust_metrics: context.runtime.trust_metrics,
         featured_projects: featuredProjects,
-        featured_cases: context.runtime.features.cases ? featuredProjects : [],
+        featured_cases: context.runtime.features.cases
+          ? compatibilityProjects(projects.rows, mappedById, false)
+          : [],
         active_sites: context.runtime.features.sites
-          ? featuredProjects.filter((project) => project.phase === "in_progress")
+          ? compatibilityProjects(activeSites.rows, mappedById, true)
           : [],
       },
       privacy_policy_version: context.runtime.privacy_policy_version,
@@ -289,6 +308,53 @@ function mapPublicProject(
     updated_at: project.updated_at,
     description: project.public_profile.public_description,
   };
+}
+
+type PublicProjectDto = ReturnType<typeof mapPublicProject>;
+
+function selectPublicProjects(
+  projects: readonly DouyinContentProject[],
+  mappedById: ReadonlyMap<string, PublicProjectDto>,
+) {
+  const selected: PublicProjectDto[] = [];
+  const selectedIds = new Set<string>();
+  for (const project of projects) {
+    const mapped = mappedById.get(project.id);
+    if (!mapped || selectedIds.has(project.id)) continue;
+    selectedIds.add(project.id);
+    selected.push(mapped);
+  }
+  return selected;
+}
+
+function compatibilityProjects(
+  projects: readonly DouyinContentProject[],
+  mappedById: ReadonlyMap<string, PublicProjectDto>,
+  useSiteTitle: boolean,
+) {
+  const sourceById = new Map(projects.map((project) => [project.id, project]));
+  return selectPublicProjects(projects, mappedById).flatMap((project) => {
+    const source = sourceById.get(project.id);
+    if (!source) return [];
+    const community = project.community.trim();
+    return [{
+      id: project.id,
+      title: useSiteTitle ? community || "公开在建工地" : project.title,
+      cover_image_url: project.cover_image_url,
+      public_images: project.public_images.slice(0, 9),
+      style_tags: stringArray(project.style_tags, 12, 40),
+      layout: project.layout,
+      area: project.area,
+      budget_band: project.budget_band,
+      community,
+      city: project.city,
+      district: project.district,
+      status: source.status,
+      start_date: project.start_date,
+      updated_at: project.updated_at,
+      description: null,
+    }];
+  });
 }
 
 function mapProject(project: DouyinContentProject, images: readonly string[] = []) {

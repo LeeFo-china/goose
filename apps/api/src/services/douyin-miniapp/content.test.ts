@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { JwtPayload } from "@/utils/jwt";
+import { parseBootstrap } from "../../../../douyin-mini/src/api/content-validation";
 import { DouyinMiniappContentService } from "./content";
 
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
@@ -96,13 +97,35 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("DouyinMiniappContentService", () => {
-  test("loads one de-duplicated unified project feed and keeps compatibility fields", async () => {
+  test("loads bounded unified and in-progress feeds with legacy parser compatibility", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const deps = dependencies({
-      listProjects: mock(async () => ({ rows: [project, project], count: 2 })),
+    const completedProjects = Array.from({ length: 6 }, (_, index) => ({
+      ...project,
+      id: `11111111-1111-4111-8111-${String(index + 2).padStart(12, "0")}`,
+      status: "acceptance",
+    }));
+    const profileImages = Array.from(
+      { length: 12 },
+      (_, index) => `https://cdn.example.com/public-${index}.jpg`,
+    );
+    const activeProject = {
+      ...project,
+      public_profile: { ...project.public_profile, public_image_urls: profileImages },
+    };
+    const listProjects = mock(async (input: {
+      tenantId: string;
+      phase?: string;
+      page: number;
+      pageSize: number;
+    }) => {
+      await gate;
+      return input.phase === "in_progress"
+        ? { rows: [activeProject], count: 1 }
+        : { rows: completedProjects, count: 6 };
     });
-    for (const method of ["findPublishedCompany", "listServiceAreas", "listProjects"] as const) {
+    const deps = dependencies({ listProjects });
+    for (const method of ["findPublishedCompany", "listServiceAreas"] as const) {
       const value = await deps.repository[method]();
       deps.repository[method] = mock(async () => { await gate; return value; }) as never;
     }
@@ -112,23 +135,35 @@ describe("DouyinMiniappContentService", () => {
 
     expect(deps.repository.findPublishedCompany).toHaveBeenCalledTimes(1);
     expect(deps.repository.listServiceAreas).toHaveBeenCalledTimes(1);
-    expect(deps.repository.listProjects).toHaveBeenCalledWith({ tenantId: TENANT_ID,
-      page: 1, pageSize: 6 });
+    expect(listProjects.mock.calls).toEqual([
+      [{ tenantId: TENANT_ID, page: 1, pageSize: 6 }],
+      [{ tenantId: TENANT_ID, phase: "in_progress", page: 1, pageSize: 6 }],
+    ]);
     release();
     const result = await pending;
     expect(result).toMatchObject({
       installation: { status: "active", template_version: "1.0.0" },
       company: { name: "示例装饰", logo_url: runtime.brand.logo_url },
       theme: runtime.theme, features: runtime.features,
-      content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics,
-        featured_projects: [{ id: PROJECT_ID, phase: "in_progress",
-          title: "现代简约实景", description: "明亮通透的现代简约空间",
-          budget_band: "20-30万", cover_image_url: resolvedCover }],
-        featured_cases: [{ id: PROJECT_ID, budget_band: "20-30万",
-          cover_image_url: resolvedCover }],
-        active_sites: [{ id: PROJECT_ID, cover_image_url: resolvedCover }] },
+      content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics },
     });
-    expect(result.content.featured_projects).toHaveLength(1);
+    expect(result.content.featured_projects[0]).toMatchObject({
+      id: completedProjects[0]!.id, phase: "completed", title: "现代简约实景",
+      description: "明亮通透的现代简约空间", budget_band: "20-30万",
+      cover_image_url: resolvedCover,
+    });
+    expect(result.content.featured_cases[0]).toMatchObject({
+      id: completedProjects[0]!.id, status: "acceptance", budget_band: "20-30万",
+      cover_image_url: resolvedCover,
+    });
+    expect(result.content.active_sites[0]).toMatchObject({
+      id: PROJECT_ID, status: "constructing",
+      cover_image_url: "https://cdn.example.com/public-0.jpg",
+    });
+    expect(result.content.featured_projects).toHaveLength(6);
+    expect(result.content.active_sites).toHaveLength(1);
+    expect(result.content.active_sites[0]!.public_images).toHaveLength(9);
+    expect(parseBootstrap(result)).not.toBeNull();
     expect(deps.repository.listCases).not.toHaveBeenCalled();
     expect(deps.repository.listSites).not.toHaveBeenCalled();
     expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
@@ -136,6 +171,32 @@ describe("DouyinMiniappContentService", () => {
     expect(JSON.stringify(result)).not.toMatch(
       /260000|张先生|1号楼101室|customer|signed_amount|latitude|longitude/i,
     );
+  });
+
+  test("keeps the new project images while bounding legacy bootstrap media", async () => {
+    const profileImages = Array.from(
+      { length: 12 },
+      (_, index) => `https://cdn.example.com/compat-${index}.jpg`,
+    );
+    const publicProject = {
+      ...project,
+      public_profile: { ...project.public_profile, public_image_urls: profileImages },
+    };
+    const deps = dependencies({
+      listProjects: mock(async () => ({ rows: [publicProject, publicProject], count: 2 })),
+    });
+
+    const result = await new DouyinMiniappContentService(deps as never).bootstrap(user);
+
+    expect(result.content.featured_projects[0]!.public_images).toHaveLength(12);
+    expect(result.content.featured_projects).toHaveLength(1);
+    expect(parseBootstrap(result)).not.toBeNull();
+    expect(result.content.featured_cases[0]).toMatchObject({ status: "constructing" });
+    expect(result.content.featured_cases).toHaveLength(1);
+    expect(result.content.featured_cases[0]!.public_images).toHaveLength(9);
+    expect(result.content.active_sites[0]).toMatchObject({ status: "constructing" });
+    expect(result.content.active_sites).toHaveLength(1);
+    expect(result.content.active_sites[0]!.public_images).toHaveLength(9);
   });
 
   test("maps unified list and detail DTOs only from public profile fields", async () => {
@@ -325,7 +386,7 @@ describe("DouyinMiniappContentService", () => {
     const list = await service.listSites(user, { page: 1, pageSize: 20 });
     const detail = await service.getSite(user, PROJECT_ID);
 
-    expect(bootstrap.content.active_sites[0]!.title).toBe("现代简约实景");
+    expect(bootstrap.content.active_sites[0]!.title).toBe("示例花园");
     expect(list.items[0]!.title).toBe("示例花园");
     expect(detail.title).toBe("示例花园");
     expect(JSON.stringify({ bootstrap, list, detail })).not.toContain(privateName);
