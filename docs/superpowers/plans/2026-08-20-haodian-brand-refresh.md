@@ -34,7 +34,6 @@
 - `apps/admin/components/layout/admin-shell.tsx`：租户/平台共用工作台品牌。
 - `apps/admin/components/layout/platform-mode-access-denied.tsx`：平台拒绝页语义品牌色。
 - `apps/admin/app/(site)/partners/page.tsx`：遗留公开合伙人页品牌。
-- `apps/admin/components/marketing/h5-page-editor-image-upload-field.tsx`：移除旧暖黄硬编码，不改 H5 输出。
 - `apps/admin/components/site-content/site-content-editor.test.ts`、`apps/admin/e2e/admin-smoke.spec.ts`：品牌断言。
 
 ### Web
@@ -120,46 +119,53 @@ git commit -m "feat(brand): 更新好店智装云品牌资产"
 - Modify: `apps/admin/components/layout/admin-shell.tsx`
 - Modify: `apps/admin/components/layout/platform-mode-access-denied.tsx`
 - Modify: `apps/admin/app/(site)/partners/page.tsx`
-- Modify: `apps/admin/components/marketing/h5-page-editor-image-upload-field.tsx`
 - Modify: `apps/admin/components/site-content/site-content-editor.test.ts`
 - Modify: `apps/admin/e2e/admin-smoke.spec.ts`
 
 - [ ] **Step 1：写失败的 Admin 品牌契约**
 
-新增测试读取 Admin 品牌入口，并固定去渐变边界：
+新增测试固定最终品牌、去渐变和跨端边界。最终契约不是入口文件白名单，而是以下递归与 Git
+边界检查：
 
 ```ts
-import { readFileSync } from "node:fs";
-import { describe, expect, test } from "bun:test";
-
-const repositoryRoot = new URL("../../../../", import.meta.url);
-const read = (path: string) =>
-  readFileSync(new URL(path, repositoryRoot), "utf8");
-
-describe("好店智装云 Admin 品牌契约", () => {
-  test("租户与平台共用入口使用新品牌且不渲染渐变", () => {
-    const activeBrandSources = [
-      "apps/admin/app/layout.tsx",
-      "apps/admin/app/login/page.tsx",
-      "apps/admin/components/login-form.tsx",
-      "apps/admin/components/layout/admin-shell.tsx",
-      "apps/admin/app/globals.css",
-    ].map(read).join("\n");
-
-    expect(activeBrandSources).toContain("好店智装云");
-    expect(activeBrandSources).not.toContain("鹅班长");
-    expect(activeBrandSources).not.toMatch(
-      /(?:linear|radial|conic)-gradient|bg-gradient-/iu,
-    );
-  });
-
-  test("H5 与抖音图片遮罩保持原有渐变", () => {
-    expect(read("apps/h5/src/styles.css")).toContain("linear-gradient");
-    expect(read("apps/douyin-mini/src/components/hero-banner/index.ttss"))
-      .toContain("linear-gradient");
-  });
+const adminRenderSources = recursivelyRead("apps/admin", {
+  extensions: [".css", ".tsx"],
+  excludeDirectories: [
+    ".next", "coverage", "e2e", "node_modules",
+    "playwright-report", "test-results", "tests",
+  ],
+  excludeFiles: [/\.(?:test|spec)\.tsx$/],
 });
+const gradientViolations = adminRenderSources
+  .filter(({ source }) =>
+    /(?:linear|radial|conic)-gradient|bg-gradient-/.test(source)
+  )
+  .map(({ path }) => path);
+expect(gradientViolations).toEqual([]);
+
+const originPaths = gitTreePaths("origin/main");
+const trackedPaths = gitTrackedPaths();
+const untrackedPaths = gitUntrackedPaths();
+const protectedPaths = union(
+  originPaths,
+  trackedPaths,
+  untrackedPaths,
+).filter(isH5OrDouyinPath);
+// isH5OrDouyinPath 精确匹配 apps/h5/、apps/douyin-mini/，以及 apps/admin/
+// 下由路径分隔符或 . _ - 界定的 h5/douyin 名称，避免普通子串误命中。
+const changedPaths = unique([
+  ...gitDiffNames("origin/main", protectedPaths),
+  ...untrackedPaths.filter(isH5OrDouyinPath),
+]);
+expect(changedPaths).toEqual([]); // 覆盖新增、修改、删除和改名两端路径
+
+expect(read("apps/h5/src/styles.css")).toContain("linear-gradient");
+expect(read("apps/douyin-mini/src/components/hero-banner/index.ttss"))
+  .toContain("linear-gradient");
 ```
+
+品牌入口同时断言租户与平台壳统一使用“好店智装云”，并由独立 E2E 覆盖租户工作台。Web
+生产源码的递归品牌与无渐变契约在 Task 3 的 Web 测试中负责，不纳入 Admin 扫描。
 
 - [ ] **Step 2：运行测试确认失败**
 
@@ -185,7 +191,7 @@ Expected: FAIL，旧名称或 Admin 渐变仍存在。
 --secondary-foreground: 204 70% 20%;
 --muted: 207 33% 95%;
 --accent: 20 100% 58%;
---accent-foreground: 0 0% 100%;
+--accent-foreground: 204 70% 16%;
 --border: 207 24% 86%;
 --input: 207 24% 82%;
 --ring: 203 88% 29%;
@@ -197,6 +203,15 @@ Expected: FAIL，旧名称或 Admin 渐变仍存在。
 --goose-brown: #35556a;
 --goose-surface-warm: #f4f8fb;
 ```
+
+`--accent-foreground` 使用深蓝 `204 70% 16%`，这是实施时为满足 WCAG AA 对比度而对最初
+白色建议的替代；与橙色 Accent 的实测对比度为 5.068:1。`--primary-foreground` 仍保持白色。
+
+`--goose-yellow`、`--goose-yellow-soft`、`--goose-cream`、`--goose-cream-deep`、
+`--goose-ink`、`--goose-brown`、`--goose-surface-warm`、`themeTokens.goose` 和
+`goose-workbench-bg` 全部是为现有主题存储、CSS 选择器与组件引用保留的兼容层标识，禁止
+新代码依赖其字面语义；新代码优先使用语义 Token，本次不重命名这些标识。规范前景以
+`204 70% 16%`（约 `#0c2f45`）为准，`--goose-ink: #0b2f46` 仅是兼容的 Shell 深蓝别名。
 
 纯色背景实现：
 
@@ -433,6 +448,7 @@ git commit -m "feat(api): 更新好店智装云运行时兜底"
 - Modify: `PRODUCT.md`
 - Modify: `DESIGN.md`
 - Modify: `docs/assets/official-site-assets.md`
+- Modify: `docs/superpowers/plans/2026-08-20-haodian-brand-refresh.md`（仅纠正当前计划中已确认的可访问性 Token、Task 5 文件与检查清单，不重写历史事实）
 
 - [ ] **Step 1：更新当前规范**
 
@@ -442,6 +458,10 @@ Creative North Star 改为 `The Blue Project Ledger`。明确 Admin 禁止装饰
 
 `docs/assets/official-site-assets.md` 更新为新 Logo 角色、蓝橙色彩和分尺寸资产说明。不要
 重写 `docs/operations/evidence/**` 和已有日期的历史计划/规格事实。
+
+同时把本计划 Task 2 中实施后确认的 `--accent-foreground` 记录为 `204 70% 16%`，保留
+`--primary-foreground` 白色，并注明橙色配深蓝的实测对比度 5.068:1；这只纠正当前计划的
+实现值，不回写其他历史计划、规格或证据。
 
 - [ ] **Step 2：检查当前规范不再指导旧品牌**
 
@@ -454,10 +474,22 @@ git grep -n -I -E '鹅班长|黄黑|Gooes yellow|yellow and black|Yellow Site Le
 
 Expected: 无输出。
 
+Run:
+
+```bash
+git grep -n -A 2 -- '--accent-foreground: 204 70% 16%' \
+  docs/superpowers/plans/2026-08-20-haodian-brand-refresh.md
+git diff --check
+bun run check:file-size
+```
+
+Expected: 当前计划显示深蓝 Accent 前景及 WCAG AA 说明，格式与文件大小检查通过。
+
 - [ ] **Step 3：提交规范**
 
 ```bash
-git add PRODUCT.md DESIGN.md docs/assets/official-site-assets.md
+git add PRODUCT.md DESIGN.md docs/assets/official-site-assets.md \
+  docs/superpowers/plans/2026-08-20-haodian-brand-refresh.md
 git commit -m "docs: 更新好店智装云品牌规范"
 ```
 
