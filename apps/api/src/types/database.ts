@@ -2798,6 +2798,70 @@ export type Database = {
           },
         ]
       }
+      douyin_project_public_profiles: {
+        Row: {
+          budget_band: string | null
+          created_at: string
+          id: string
+          project_id: string
+          public_description: string
+          public_image_urls: string[]
+          public_title: string
+          publication_status: string
+          style_tags: string[]
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          budget_band?: string | null
+          created_at?: string
+          id?: string
+          project_id: string
+          public_description: string
+          public_image_urls?: string[]
+          public_title: string
+          publication_status?: string
+          style_tags?: string[]
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          budget_band?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          public_description?: string
+          public_image_urls?: string[]
+          public_title?: string
+          publication_status?: string
+          style_tags?: string[]
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_project_public_profiles_project_tenant_fkey"
+            columns: ["project_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_project_public_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_project_public_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       douyin_third_party_components: {
         Row: {
           access_token_ciphertext: string | null
@@ -24624,6 +24688,10 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      douyin_public_image_urls_are_valid: {
+        Args: { p_urls: string[] }
+        Returns: boolean
       }
       enable_douyin_miniapp_installation: {
         Args: { p_installation_id: string }
