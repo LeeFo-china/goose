@@ -24,7 +24,7 @@ const platformProfile = {
   id: "00000000-0000-4000-8000-000000000020", scope: "platform",
   tenant_id: null, display_name: "未发布的平台草稿",
   logo_file_id: "00000000-0000-4000-8000-000000000099",
-  published_display_name: "字节跳动", status: "published",
+  published_display_name: "已发布平台品牌", status: "published",
   published_logo_file_id: PLATFORM_LOGO_ID,
   version: 5, published_version: 4,
   published_at: "2026-07-27T09:00:00.000Z",
@@ -191,9 +191,9 @@ function fixture(options: FixtureOptions = {}) {
 const expectedPlatform = {
   source: "platform",
   tenant_id: null,
-  display_name: "字节跳动",
+  display_name: "已发布平台品牌",
   logo_url: platformLogo.public_url ?? "",
-  support_text: "字节跳动",
+  support_text: "已发布平台品牌",
   version: 4,
   updated_at: platformProfile.published_at ?? "",
 } satisfies EffectiveBranding;

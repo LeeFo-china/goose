@@ -39,7 +39,7 @@ const entitlement = {
 describe("branding display contracts", () => {
   test("exports stable branding constants and builds support text", () => {
     expect(CUSTOM_SUPPORT_BRANDING).toBe("custom_support_branding");
-    expect(PLATFORM_FALLBACK_DISPLAY_NAME).toBe("字节跳动");
+    expect(PLATFORM_FALLBACK_DISPLAY_NAME).toBe("好店智装云");
     expect(buildSupportText("晴天装饰")).toBe("晴天装饰");
   });
 });
@@ -172,9 +172,9 @@ describe("branding serializers", () => {
       id: "00000000-0000-4000-8000-000000000040",
       scope: "platform",
       tenant_id: null,
-      display_name: "字节跳动",
+      display_name: "好店智装云",
       logo_file_id: "00000000-0000-4000-8000-000000000010",
-      published_display_name: "字节跳动",
+      published_display_name: "好店智装云",
       published_logo_file_id: "00000000-0000-4000-8000-000000000010",
       status: "published",
       version: 4,

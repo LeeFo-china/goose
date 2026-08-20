@@ -19,7 +19,7 @@ const authContext = {
 };
 const draft = {
   templateAppId: TEMPLATE_APP_ID,
-  appName: "鹅班长装企管家",
+  appName: "好店智装云装企管家",
   version: "0.1.4",
   description: "收紧工地卡片并修复项目配置",
   createdAt: 1_786_608_000,
@@ -221,7 +221,7 @@ describe("PlatformDouyinTemplatePromotionService", () => {
   test("rejects missing draft metadata and ambiguous matching templates", async () => {
     const missingDraft = createHarness();
     missingDraft.gateway.listTemplateApps.mockResolvedValue({
-      items: [{ templateAppId: TEMPLATE_APP_ID, appName: "鹅班长装企管家" }],
+      items: [{ templateAppId: TEMPLATE_APP_ID, appName: "好店智装云装企管家" }],
       logId: "apps-log",
     });
     await expect(missingDraft.service.confirmLatest(authContext as never, {

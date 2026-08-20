@@ -24,7 +24,7 @@ describe("Douyin template management V2", () => {
       rawJsonResponse(
         "{\"err_no\":0,\"err_msg\":\"\",\"log_id\":\"template-apps-log\","
         + "\"data\":{\"tpl_app_list\":[{\"tpl_app_id\":\"tt0d647bd99301341b01\","
-        + "\"app_name\":\"鹅班长装企管家\",\"nick_name\":\"鹅班长装企管家\","
+        + "\"app_name\":\"好店智装云装企管家\",\"nick_name\":\"好店智装云装企管家\","
         + "\"user_version\":\"0.1.4\",\"user_desc\":\"收紧工地卡片并修复项目配置\","
         + "\"create_time\":1786608000,\"draft_id\":9133504853504535288}]}}",
       ));
@@ -34,8 +34,8 @@ describe("Douyin template management V2", () => {
       .resolves.toEqual({
         items: [{
           templateAppId: "tt0d647bd99301341b01",
-          appName: "鹅班长装企管家",
-          nickName: "鹅班长装企管家",
+          appName: "好店智装云装企管家",
+          nickName: "好店智装云装企管家",
           version: "0.1.4",
           description: "收紧工地卡片并修复项目配置",
           createdAt: 1_786_608_000,
