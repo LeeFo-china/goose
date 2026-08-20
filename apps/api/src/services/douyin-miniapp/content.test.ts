@@ -31,15 +31,24 @@ const company = {
   address: "公开门店地址", status: "published" as const,
   published_at: "2026-07-01T00:00:00.000Z",
 };
+const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
+const resolvedCover = `https://assets.example.com/${storedCover}`;
 const project = {
-  id: PROJECT_ID, name: "现代简约案例", status: "constructing", budget: 260000,
+  id: PROJECT_ID, name: "张先生 1号楼101室装修", status: "constructing", budget: 260000,
   start_date: "2026-07-01", created_at: "2026-06-01T00:00:00.000Z",
   updated_at: "2026-07-20T00:00:00.000Z", style_tags: ["现代"],
   property: { community: "示例花园", layout: "三室两厅", area: 120,
-    city: "郑州市", district: "金水区" },
+    city: "郑州市", district: "金水区", address: "1号楼101室" },
+  public_profile: {
+    public_title: "现代简约实景",
+    public_description: "明亮通透的现代简约空间",
+    public_image_urls: [storedCover],
+    style_tags: ["现代", "简约"],
+    budget_band: "20-30万",
+    publication_status: "published" as const,
+    updated_at: "2026-07-20T00:00:00.000Z",
+  },
 };
-const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
-const resolvedCover = `https://assets.example.com/${storedCover}`;
 
 function resolveImageUrls(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -66,6 +75,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     findCase: mock(async () => project),
     listSites: mock(async () => ({ rows: [project], total: 1 })),
     findSite: mock(async () => project),
+    listProjects: mock(async () => ({ rows: [project], count: 1 })),
+    findProject: mock(async () => project),
     listProjectImageLogs: mock(async () => [{
       project_id: PROJECT_ID,
       images: [storedCover],
@@ -85,11 +96,13 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("DouyinMiniappContentService", () => {
-  test("loads company, six cases and six sites in one bounded parallel bootstrap", async () => {
+  test("loads one de-duplicated unified project feed and keeps compatibility fields", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const deps = dependencies();
-    for (const method of ["findPublishedCompany", "listServiceAreas", "listCases", "listSites"] as const) {
+    const deps = dependencies({
+      listProjects: mock(async () => ({ rows: [project, project], count: 2 })),
+    });
+    for (const method of ["findPublishedCompany", "listServiceAreas", "listProjects"] as const) {
       const value = await deps.repository[method]();
       deps.repository[method] = mock(async () => { await gate; return value; }) as never;
     }
@@ -99,9 +112,7 @@ describe("DouyinMiniappContentService", () => {
 
     expect(deps.repository.findPublishedCompany).toHaveBeenCalledTimes(1);
     expect(deps.repository.listServiceAreas).toHaveBeenCalledTimes(1);
-    expect(deps.repository.listCases).toHaveBeenCalledWith({ tenantId: TENANT_ID,
-      page: 1, pageSize: 6 });
-    expect(deps.repository.listSites).toHaveBeenCalledWith({ tenantId: TENANT_ID,
+    expect(deps.repository.listProjects).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       page: 1, pageSize: 6 });
     release();
     const result = await pending;
@@ -110,16 +121,100 @@ describe("DouyinMiniappContentService", () => {
       company: { name: "示例装饰", logo_url: runtime.brand.logo_url },
       theme: runtime.theme, features: runtime.features,
       content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics,
+        featured_projects: [{ id: PROJECT_ID, phase: "in_progress",
+          title: "现代简约实景", description: "明亮通透的现代简约空间",
+          budget_band: "20-30万", cover_image_url: resolvedCover }],
         featured_cases: [{ id: PROJECT_ID, budget_band: "20-30万",
           cover_image_url: resolvedCover }],
         active_sites: [{ id: PROJECT_ID, cover_image_url: resolvedCover }] },
     });
-    expect(deps.repository.listProjectImageLogs).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      projectIds: [PROJECT_ID],
-    });
+    expect(result.content.featured_projects).toHaveLength(1);
+    expect(deps.repository.listCases).not.toHaveBeenCalled();
+    expect(deps.repository.listSites).not.toHaveBeenCalled();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
     expect(deps.prepareImageUrls).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(result)).not.toMatch(/260000|customer|signed_amount|latitude|longitude/i);
+    expect(JSON.stringify(result)).not.toMatch(
+      /260000|张先生|1号楼101室|customer|signed_amount|latitude|longitude/i,
+    );
+  });
+
+  test("maps unified list and detail DTOs only from public profile fields", async () => {
+    const deps = dependencies();
+    const service = new DouyinMiniappContentService(deps as never);
+
+    const list = await service.listProjects(user, {
+      page: 2, pageSize: 20, phase: "in_progress", style: "现代", layout: "三室两厅",
+    });
+    const detail = await service.getProject(user, PROJECT_ID);
+    const expected = {
+      id: PROJECT_ID,
+      title: "现代简约实景",
+      phase: "in_progress" as const,
+      cover_image_url: resolvedCover,
+      public_images: [resolvedCover],
+      style_tags: ["现代", "简约"],
+      layout: "三室两厅",
+      area: 120,
+      budget_band: "20-30万",
+      community: "示例花园",
+      city: "郑州市",
+      district: "金水区",
+      start_date: "2026-07-01",
+      updated_at: "2026-07-20T00:00:00.000Z",
+      description: "明亮通透的现代简约空间",
+    };
+
+    expect(list).toEqual({ items: [expected], pagination: {
+      page: 2, pageSize: 20, total: 1, totalPages: 1,
+    } });
+    expect(detail).toEqual(expected);
+    expect(deps.repository.listProjects).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, page: 2, pageSize: 20,
+      phase: "in_progress", style: "现代", layout: "三室两厅",
+    });
+    expect(deps.repository.findProject).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, id: PROJECT_ID,
+    });
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(JSON.stringify({ list, detail })).not.toMatch(/张先生|1号楼101室|260000/);
+  });
+
+  test("hides detail and logs when a project has no public phase", async () => {
+    const hidden = dependencies({
+      findProject: mock(async () => ({ ...project, status: "pending_start" })),
+    });
+    const service = new DouyinMiniappContentService(hidden as never);
+
+    await expect(service.getProject(user, PROJECT_ID)).rejects.toMatchObject({
+      code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404,
+    });
+    await expect(service.listProjectLogs(user, PROJECT_ID, {
+      page: 1, pageSize: 20,
+    })).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
+    expect(hidden.repository.listSiteLogs).not.toHaveBeenCalled();
+  });
+
+  test("only lists paginated logs for a public in-progress project", async () => {
+    const deps = dependencies();
+    const result = await new DouyinMiniappContentService(deps as never).listProjectLogs(
+      user, PROJECT_ID, { page: 2, pageSize: 20 },
+    );
+
+    expect(deps.repository.findProject).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, id: PROJECT_ID,
+    });
+    expect(deps.repository.listSiteLogs).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, projectId: PROJECT_ID, page: 2, pageSize: 20,
+    });
+    expect(result.pagination).toEqual({ page: 2, pageSize: 20, total: 1, totalPages: 1 });
+
+    const completed = dependencies({
+      findProject: mock(async () => ({ ...project, status: "acceptance" })),
+    });
+    await expect(new DouyinMiniappContentService(completed as never).listProjectLogs(
+      user, PROJECT_ID, { page: 1, pageSize: 20 },
+    )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
+    expect(completed.repository.listSiteLogs).not.toHaveBeenCalled();
   });
 
   test("always scopes list and detail reads to the signed session tenant", async () => {
@@ -230,7 +325,7 @@ describe("DouyinMiniappContentService", () => {
     const list = await service.listSites(user, { page: 1, pageSize: 20 });
     const detail = await service.getSite(user, PROJECT_ID);
 
-    expect(bootstrap.content.active_sites[0]!.title).toBe("示例花园");
+    expect(bootstrap.content.active_sites[0]!.title).toBe("现代简约实景");
     expect(list.items[0]!.title).toBe("示例花园");
     expect(detail.title).toBe("示例花园");
     expect(JSON.stringify({ bootstrap, list, detail })).not.toContain(privateName);

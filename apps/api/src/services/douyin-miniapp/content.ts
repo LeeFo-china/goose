@@ -1,3 +1,4 @@
+import { toDouyinProjectPhase } from "@gooes/domain";
 import { Errors } from "@/errors/error-factory";
 import {
   DouyinMiniappContentRepository,
@@ -16,6 +17,7 @@ import {
 import type {
   DouyinCaseListQuery,
   DouyinContentPageQuery,
+  DouyinProjectListQuery,
 } from "@/schema/douyin-miniapp";
 import type { JwtPayload } from "@/utils/jwt";
 import {
@@ -26,7 +28,7 @@ import {
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
   | "listCases" | "findCase" | "listSites" | "findSite" | "listSiteLogs"
-  | "listProjectImageLogs">;
+  | "listProjectImageLogs" | "listProjects" | "findProject">;
 type Dependencies = {
   readonly repository?: RepositoryPort;
   readonly prepareImageUrls?: () => Promise<void>;
@@ -52,22 +54,13 @@ export class DouyinMiniappContentService {
 
   async bootstrap(user?: JwtPayload) {
     const context = await this.loadContext(user);
-    const emptyProjects = Promise.resolve({ rows: [] as DouyinContentProject[], total: 0 });
-    const [profile, areas, cases, sites] = await Promise.all([
+    const [profile, areas, projects] = await Promise.all([
       this.repository.findPublishedCompany(context.tenantId),
       this.repository.listServiceAreas(context.tenantId),
-      context.runtime.features.cases
-        ? this.repository.listCases({ tenantId: context.tenantId, page: 1, pageSize: 6 })
-        : emptyProjects,
-      context.runtime.features.sites
-        ? this.repository.listSites({ tenantId: context.tenantId, page: 1, pageSize: 6 })
-        : emptyProjects,
+      this.repository.listProjects({ tenantId: context.tenantId, page: 1, pageSize: 6 }),
     ]);
     const company = this.mapCompany(context.runtime, requireCompany(profile), areas);
-    const projectImages = await this.loadProjectImages(
-      context.tenantId,
-      [...cases.rows, ...sites.rows],
-    );
+    const featuredProjects = await this.mapPublicProjects(projects.rows);
     return {
       installation: {
         status: "active" as const,
@@ -79,10 +72,11 @@ export class DouyinMiniappContentService {
       content: {
         home_banners: context.runtime.home_banners,
         trust_metrics: context.runtime.trust_metrics,
-        featured_cases: cases.rows.map((project) =>
-          mapProject(project, projectImages.get(project.id))),
-        active_sites: sites.rows.map((project) =>
-          mapSiteProject(project, projectImages.get(project.id))),
+        featured_projects: featuredProjects,
+        featured_cases: context.runtime.features.cases ? featuredProjects : [],
+        active_sites: context.runtime.features.sites
+          ? featuredProjects.filter((project) => project.phase === "in_progress")
+          : [],
       },
       privacy_policy_version: context.runtime.privacy_policy_version,
     };
@@ -133,6 +127,48 @@ export class DouyinMiniappContentService {
     }));
     const projectImages = await this.loadProjectImages(context.tenantId, [project]);
     return mapSiteProject(project, projectImages.get(project.id));
+  }
+
+  async listProjects(user: JwtPayload | undefined, query: DouyinProjectListQuery) {
+    const context = await this.loadContext(user);
+    const result = await this.repository.listProjects({
+      tenantId: context.tenantId,
+      ...query,
+    });
+    return page(await this.mapPublicProjects(result.rows), query, result.count);
+  }
+
+  async getProject(user: JwtPayload | undefined, id: string) {
+    const context = await this.loadContext(user);
+    const project = requirePublicProject(await this.repository.findProject({
+      tenantId: context.tenantId,
+      id,
+    }));
+    const [mapped] = await this.mapPublicProjects([project]);
+    if (!mapped) throw publicProjectNotFound();
+    return mapped;
+  }
+
+  async listProjectLogs(
+    user: JwtPayload | undefined,
+    projectId: string,
+    query: DouyinContentPageQuery,
+  ) {
+    const context = await this.loadContext(user);
+    const project = requirePublicProject(await this.repository.findProject({
+      tenantId: context.tenantId,
+      id: projectId,
+    }));
+    if (toDouyinProjectPhase(project.status) !== "in_progress") {
+      throw publicProjectNotFound();
+    }
+    const result = await this.repository.listSiteLogs({
+      tenantId: context.tenantId,
+      projectId,
+      ...query,
+    });
+    if (result.rows.length > 0) await this.prepareImageUrls();
+    return page(result.rows.map((log) => mapLog(log, this.resolveImageUrls)), query, result.total);
   }
 
   async listSiteLogs(
@@ -216,6 +252,43 @@ export class DouyinMiniappContentService {
     ]);
     return projectImageMap(logs, this.resolveImageUrls);
   }
+
+  private async mapPublicProjects(projects: readonly DouyinContentProject[]) {
+    const uniqueProjects = [...new Map(projects.map((project) => [project.id, project])).values()];
+    if (uniqueProjects.some((project) => project.public_profile.public_image_urls.length > 0)) {
+      await this.prepareImageUrls();
+    }
+    return uniqueProjects.map((project) => mapPublicProject(project, this.resolveImageUrls));
+  }
+}
+
+function mapPublicProject(
+  project: DouyinContentProject,
+  resolveImageUrls: (value: unknown) => string[],
+) {
+  const phase = toDouyinProjectPhase(project.status);
+  if (!phase) throw publicProjectNotFound();
+  const publicImages = resolvedPublicImages(
+    project.public_profile.public_image_urls,
+    resolveImageUrls,
+  );
+  return {
+    id: project.id,
+    title: project.public_profile.public_title,
+    phase,
+    cover_image_url: publicImages[0] ?? null,
+    public_images: publicImages,
+    style_tags: [...project.public_profile.style_tags],
+    layout: project.property.layout,
+    area: finiteNumber(project.property.area),
+    budget_band: project.public_profile.budget_band,
+    community: project.property.community,
+    city: project.property.city,
+    district: project.property.district,
+    start_date: project.start_date,
+    updated_at: project.updated_at,
+    description: project.public_profile.public_description,
+  };
 }
 
 function mapProject(project: DouyinContentProject, images: readonly string[] = []) {
@@ -284,6 +357,15 @@ function resolvedHttpsImages(
     .filter(isHttpsUrl).slice(0, 9);
 }
 
+function resolvedPublicImages(
+  value: unknown,
+  resolveImageUrls: (value: unknown) => string[],
+) {
+  const publicReferences = stringArray(value, 30, 2048).filter(isPublicImageReference);
+  return stringArray(resolveImageUrls(publicReferences), 30, 2048)
+    .filter(isHttpsUrl);
+}
+
 function isPublicImageReference(value: string) {
   return isHttpsUrl(value) || /^(?:tenants|public|system)\//.test(value);
 }
@@ -325,6 +407,13 @@ function requireCompany(value: DouyinContentCompany | null) {
 function requireProject(value: DouyinContentProject | null) {
   if (!value) throw Errors.business(404, "公开内容不存在", "DOUYIN_CONTENT_NOT_FOUND");
   return value;
+}
+function requirePublicProject(value: DouyinContentProject | null) {
+  if (!value || !toDouyinProjectPhase(value.status)) throw publicProjectNotFound();
+  return value;
+}
+function publicProjectNotFound() {
+  return Errors.business(404, "公开项目不存在", "DOUYIN_PROJECT_NOT_FOUND");
 }
 function requireContentFeature(context: ContentContext, feature: "cases" | "sites") {
   if (!context.runtime.features[feature]) {

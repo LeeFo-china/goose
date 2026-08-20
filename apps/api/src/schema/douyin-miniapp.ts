@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOUYIN_PROJECT_PHASE_VALUES } from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 
 const DouyinEntryPathSchema = z.enum([
@@ -44,6 +45,10 @@ export const DouyinContentPageQuerySchema = PaginationQuerySchema.strict();
 export const DouyinCaseListQuerySchema = PaginationQuerySchema.extend({
   style: z.string().trim().min(1).max(40).optional(),
   layout: z.string().trim().min(1).max(40).optional(),
+}).strict();
+
+export const DouyinProjectListQuerySchema = DouyinCaseListQuerySchema.extend({
+  phase: z.enum(DOUYIN_PROJECT_PHASE_VALUES).optional(),
 }).strict();
 
 export const DouyinContentIdParamsSchema = z.strictObject({
@@ -95,6 +100,7 @@ export type DouyinMiniappSessionRequest = z.infer<
 >;
 export type DouyinContentPageQuery = z.infer<typeof DouyinContentPageQuerySchema>;
 export type DouyinCaseListQuery = z.infer<typeof DouyinCaseListQuerySchema>;
+export type DouyinProjectListQuery = z.infer<typeof DouyinProjectListQuerySchema>;
 export type DouyinLeadSmsRequest = z.infer<typeof DouyinLeadSmsRequestSchema>;
 export type DouyinLeadRequest = z.infer<typeof DouyinLeadRequestSchema>;
 export type DouyinAnalyticsRequest = z.infer<typeof DouyinAnalyticsRequestSchema>;

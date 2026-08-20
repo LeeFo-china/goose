@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { DouyinProjectListQuerySchema } from "@/schema/douyin-miniapp";
 
 let DouyinMiniappController: typeof import(".").DouyinMiniappController;
 
@@ -53,6 +54,9 @@ describe("DouyinMiniappController", () => {
       "GET /douyin-mini/sites",
       "GET /douyin-mini/sites/:id",
       "GET /douyin-mini/sites/:id/logs",
+      "GET /douyin-mini/projects",
+      "GET /douyin-mini/projects/:id",
+      "GET /douyin-mini/projects/:id/logs",
       "POST /douyin-mini/sms/send",
       "POST /douyin-mini/leads",
       "POST /douyin-mini/events",
@@ -76,6 +80,8 @@ describe("DouyinMiniappController", () => {
       bootstrap: mock(async () => ({})), company: mock(async () => ({})), listCases,
       getCase: mock(async () => ({})), listSites: mock(async () => ({})),
       getSite: mock(async () => ({})), listSiteLogs: mock(async () => ({})),
+      listProjects: mock(async () => ({})), getProject: mock(async () => ({})),
+      listProjectLogs: mock(async () => ({})),
     };
     const controller = new DouyinMiniappController(undefined, content as never);
     const user = { token_type: "douyin_miniapp", tenant_id:
@@ -91,6 +97,59 @@ describe("DouyinMiniappController", () => {
       .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
     await expect(controller.listCases({ user, query: { pageSize: 101 } } as never))
       .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+  });
+
+  test("defines a strict bounded unified project query", () => {
+    expect(DouyinProjectListQuerySchema.parse({})).toEqual({ page: 1, pageSize: 20 });
+    expect(DouyinProjectListQuerySchema.parse({ phase: "completed" }).phase)
+      .toBe("completed");
+    expect(() => DouyinProjectListQuerySchema.parse({ pageSize: 101 })).toThrow();
+    expect(() => DouyinProjectListQuerySchema.parse({ phase: "pending_start" })).toThrow();
+    expect(() => DouyinProjectListQuerySchema.parse({ tenant_id:
+      "44444444-4444-4444-8444-444444444444" })).toThrow();
+  });
+
+  test("validates unified project routes before dispatching to content service", async () => {
+    const listProjects = mock(async () => ({ items: [], pagination: {
+      page: 1, pageSize: 20, total: 0, totalPages: 0,
+    } }));
+    const getProject = mock(async () => ({}));
+    const listProjectLogs = mock(async () => ({}));
+    const content = {
+      bootstrap: mock(async () => ({})), company: mock(async () => ({})),
+      listCases: mock(async () => ({})), getCase: mock(async () => ({})),
+      listSites: mock(async () => ({})), getSite: mock(async () => ({})),
+      listSiteLogs: mock(async () => ({})), listProjects, getProject, listProjectLogs,
+    };
+    const controller = new DouyinMiniappController(undefined, content as never);
+    const user = { token_type: "douyin_miniapp", tenant_id:
+      "33333333-3333-4333-8333-333333333333" };
+
+    await controller.listProjects({ user, query: {
+      phase: "completed", style: "现代", layout: "三室两厅",
+    } } as never);
+    expect(listProjects).toHaveBeenCalledWith(user, {
+      page: 1, pageSize: 20, phase: "completed", style: "现代", layout: "三室两厅",
+    });
+    await controller.getProject({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" } } as never);
+    expect(getProject).toHaveBeenCalledWith(user,
+      "11111111-1111-4111-8111-111111111111");
+    await controller.listProjectLogs({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" }, query: {} } as never);
+    expect(listProjectLogs).toHaveBeenCalledWith(user,
+      "11111111-1111-4111-8111-111111111111", { page: 1, pageSize: 20 });
+
+    await expect(controller.listProjects({ user, query: { phase: "started" } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.getProject({ user, params: { id: "not-a-uuid" } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.listProjectLogs({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" }, query: { pageSize: 101 } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    expect(listProjects).toHaveBeenCalledTimes(1);
+    expect(getProject).toHaveBeenCalledTimes(1);
+    expect(listProjectLogs).toHaveBeenCalledTimes(1);
   });
 
   test("rejects forged tenant IDs and malformed launch attribution", async () => {
