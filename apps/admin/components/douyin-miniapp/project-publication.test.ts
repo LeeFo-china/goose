@@ -4,6 +4,7 @@ import {
   buildProjectPublicationHref,
   candidateImageAccessibleLabel,
   clearImageSelection,
+  createLatestListRequestTarget,
   createRequestAuthority,
   getCollectionViewState,
   getPublicationReadinessWarnings,
@@ -102,6 +103,28 @@ describe("tenant project publication behavior", () => {
     authority.invalidate();
     expect(second.controller.signal.aborted).toBe(true);
     expect(authority.isCurrent(second)).toBe(false);
+  });
+
+  test("retries the latest authoritative list request instead of the last successful page", () => {
+    const target = createLatestListRequestTarget({
+      page: 8,
+      publicationStatus: "draft",
+    });
+    const authority = createRequestAuthority();
+
+    const pageTwo = authority.begin();
+    target.update({ page: 2, publicationStatus: "draft" });
+    expect(target.current()).toEqual({ page: 2, publicationStatus: "draft" });
+
+    const filteredPageOne = authority.begin();
+    target.update({ page: 1, publicationStatus: "published" });
+    expect(pageTwo.controller.signal.aborted).toBe(true);
+    expect(authority.isCurrent(pageTwo)).toBe(false);
+    expect(authority.isCurrent(filteredPageOne)).toBe(true);
+    expect(target.current()).toEqual({
+      page: 1,
+      publicationStatus: "published",
+    });
   });
 
   test("separates collection errors from empty and supports retry transitions", () => {

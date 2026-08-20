@@ -46,6 +46,7 @@ export type ProjectPublicationPage = {
 export type CandidateImage = { reference: string; preview_url: string | null };
 export type CandidatePage = { items: CandidateImage[]; pagination: Pagination };
 export type RequestTicket = { id: number; controller: AbortController };
+export type ListRequestTarget = { page: number; publicationStatus: string };
 export type SelectedImageItem = CandidateImage & { label: string };
 type BadgeVariant =
   | "default"
@@ -195,6 +196,18 @@ export function createRequestAuthority() {
       current?.controller.abort();
       current = null;
       sequence += 1;
+    },
+  };
+}
+
+export function createLatestListRequestTarget(initial: ListRequestTarget) {
+  let target = { ...initial };
+  return {
+    update(next: ListRequestTarget): void {
+      target = { ...next };
+    },
+    current(): ListRequestTarget {
+      return { ...target };
     },
   };
 }

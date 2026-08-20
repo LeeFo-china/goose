@@ -67,6 +67,7 @@ import {
   buildProjectPublicationHref,
   candidateImageAccessibleLabel,
   clearImageSelection,
+  createLatestListRequestTarget,
   createRequestAuthority,
   emptyCandidatePage,
   emptyPublicationDraft,
@@ -108,12 +109,17 @@ export function ProjectPublication({
   const [error, setError] = useState(initialError);
   const [editing, setEditing] = useState<ProjectPublicationRow | null>(null);
   const listAuthority = useRef(createRequestAuthority()).current;
+  const listRequestTarget = useRef(createLatestListRequestTarget({
+    page: initialData.pagination.page,
+    publicationStatus: initialPublicationStatus,
+  })).current;
 
   const loadPage = useCallback(async (
     page: number,
     nextStatus: string,
     statusChanged = false,
   ) => {
+    listRequestTarget.update({ page, publicationStatus: nextStatus });
     const request = listAuthority.begin();
     setLoading(true);
     setError(null);
@@ -150,7 +156,7 @@ export function ProjectPublication({
     } finally {
       if (listAuthority.isCurrent(request)) setLoading(false);
     }
-  }, [listAuthority]);
+  }, [listAuthority, listRequestTarget]);
 
   useEffect(() => () => listAuthority.invalidate(), [listAuthority]);
 
@@ -204,7 +210,7 @@ export function ProjectPublication({
         </CardHeader>
         <CardContent className="relative flex min-h-0 flex-1 flex-col p-0">
           <div className="min-h-0 flex-1 overflow-auto">
-            {listView === "error" ? <div className="flex min-h-72 flex-col items-center justify-center gap-3 p-5"><StatusAlert>{error}</StatusAlert><Button variant="outline" onClick={() => void loadPage(data.pagination.page, status)}>重新加载项目列表</Button></div> : null}
+            {listView === "error" ? <div className="flex min-h-72 flex-col items-center justify-center gap-3 p-5"><StatusAlert>{error}</StatusAlert><Button variant="outline" onClick={() => { const target = listRequestTarget.current(); void loadPage(target.page, target.publicationStatus); }}>重新加载项目列表</Button></div> : null}
             {listView === "loading" ? <ProjectTableSkeleton /> : null}
             {listView === "empty" || listView === "ready" ? <ProjectTable rows={data.list} onEdit={setEditing} /> : null}
           </div>
