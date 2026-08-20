@@ -1,6 +1,6 @@
 import type { DouyinAppContext } from "../../app";
 import { fetchProjectDetail, fetchProjectLogs } from "../../api/projects";
-import type { PublicSiteLog, UnifiedPublicProject } from "../../models";
+import type { PublicProject, PublicSiteLog } from "../../models";
 import { switchToTab } from "../../platform/navigation";
 import {
   beginPaginationRequest,
@@ -18,7 +18,7 @@ Page({
   data: {
     loading: true,
     error: false,
-    project: null as UnifiedPublicProject | null,
+    project: null as PublicProject | null,
     images: [] as string[],
     styleText: "",
     phaseLabel: "",

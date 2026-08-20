@@ -74,6 +74,7 @@ describe("public site progress presentation", () => {
     const site = toPublicSitePresentation({
       id: FIRST_ID,
       title: "张先生 1号楼101室装修",
+      phase: "in_progress",
       cover_image_url: null,
       public_images: [],
       style_tags: [],

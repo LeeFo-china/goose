@@ -1,8 +1,8 @@
 import type {
   PublicProjectPhase,
+  PublicProject,
+  PublicProjectPage,
   PublicSiteLogPage,
-  UnifiedPublicProject,
-  UnifiedPublicProjectPage,
 } from "../models";
 import {
   isPublicContentId,
@@ -25,7 +25,7 @@ export type ProjectLogQuery = { page: number; pageSize: number };
 export async function fetchProjects(
   client: ApiClient,
   query: ProjectListQuery,
-): Promise<UnifiedPublicProjectPage> {
+): Promise<PublicProjectPage> {
   validatePage(query);
   if (query.phase !== undefined
     && query.phase !== "in_progress"
@@ -46,7 +46,7 @@ export async function fetchProjects(
 export async function fetchProjectDetail(
   client: ApiClient,
   id: string,
-): Promise<UnifiedPublicProject> {
+): Promise<PublicProject> {
   validateId(id);
   const value = await client.request<unknown>({
     path: `/douyin-mini/projects/${encodeURIComponent(id)}`,

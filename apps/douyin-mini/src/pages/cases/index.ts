@@ -1,7 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import { fetchProjects } from "../../api/projects";
 import { resolveThemeColor } from "../../components/theme";
-import type { UnifiedPublicProject } from "../../models";
+import type { PublicProject } from "../../models";
 import { navigateToEntityDetail } from "../../platform/navigation";
 import {
   beginPaginationRequest,
@@ -27,10 +27,10 @@ type ProjectFilters = {
   selectedLayout: string;
 };
 
-type ProjectListItem = UnifiedPublicProject & { phaseLabel: string };
+type ProjectListItem = PublicProject & { phaseLabel: string };
 
 Page({
-  pagination: createPaginationState<UnifiedPublicProject>(20),
+  pagination: createPaginationState<PublicProject>(20),
   data: {
     items: [] as ProjectListItem[],
     firstLoading: true,

@@ -1,7 +1,7 @@
 import type { DouyinAppContext } from "../../app";
 import { resolveThemeColor } from "../../components/theme";
 import { buildTrustMetrics, type TrustMetric } from "../../components/trust-metrics/view-model";
-import type { UnifiedPublicProject } from "../../models";
+import type { PublicProject } from "../../models";
 import {
   navigateToEntityDetail,
   navigateToPage,
@@ -29,7 +29,7 @@ Page({
     primaryColor: "#191817",
     primaryTextColor: "#FFFFFF",
     metrics: [] as TrustMetric[],
-    featuredProjects: [] as Array<UnifiedPublicProject & { phaseLabel: string }>,
+    featuredProjects: [] as Array<PublicProject & { phaseLabel: string }>,
     serviceRegions: [] as string[],
     serviceProcess: SERVICE_PROCESS,
   },
@@ -56,7 +56,7 @@ Page({
         primaryColor: theme.primaryColor,
         primaryTextColor: theme.primaryTextColor,
         metrics: buildTrustMetrics(bootstrap.content.trust_metrics),
-        featuredProjects: uniqueProjects(bootstrap.content.featured_projects ?? [])
+        featuredProjects: uniqueProjects(bootstrap.content.featured_projects)
           .slice(0, 2)
           .map((project) => ({
             ...project,
@@ -81,7 +81,7 @@ Page({
   },
 });
 
-function uniqueProjects(projects: UnifiedPublicProject[]): UnifiedPublicProject[] {
+function uniqueProjects(projects: PublicProject[]): PublicProject[] {
   return [...new Map(projects.map((project) => [project.id, project])).values()];
 }
 

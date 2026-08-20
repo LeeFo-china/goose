@@ -2,12 +2,12 @@ import type {
   BootstrapData,
   CompanyData,
   HomeBanner,
+  PublicProject,
+  PublicProjectPage,
   PublicProjectPhase,
   PublicSiteLog,
   PublicSiteLogPage,
   ServiceRegion,
-  UnifiedPublicProject,
-  UnifiedPublicProjectPage,
 } from "../models";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,6 +18,10 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
   const company = parseCompany(value.company);
   const homeBanners = parseHomeBanners(value.content.home_banners);
   const trustMetrics = parseMetrics(value.content.trust_metrics);
+  const hasProjectFeed = value.content.featured_projects !== undefined
+    || value.content.featured_cases !== undefined
+    || value.content.active_sites !== undefined;
+  if (!hasProjectFeed) return null;
   const featuredCases = parseOptionalProjects(value.content.featured_cases, 6);
   const activeSites = parseOptionalProjects(value.content.active_sites, 6);
   if (!featuredCases || !activeSites) return null;
@@ -87,7 +91,7 @@ export function parseCompany(value: unknown): CompanyData | null {
   };
 }
 
-export function parseProject(value: unknown): UnifiedPublicProject | null {
+export function parseProject(value: unknown): PublicProject | null {
   if (!isRecord(value) || typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
     || !isBoundedString(value.title, 1, 120) || !isHttpsOrNull(value.cover_image_url)
     || !isNullableBoundedString(value.layout, 80) || !isNonNegativeNumberOrNull(value.area)
@@ -123,7 +127,7 @@ export function parseProject(value: unknown): UnifiedPublicProject | null {
   };
 }
 
-export function parseProjectPage(value: unknown): UnifiedPublicProjectPage | null {
+export function parseProjectPage(value: unknown): PublicProjectPage | null {
   if (!isRecord(value) || !Array.isArray(value.items) || !isRecord(value.pagination)) return null;
   const projects = parseProjects(value.items, 100);
   const { page, pageSize, total, totalPages } = value.pagination;
@@ -171,19 +175,19 @@ function parseSiteLog(value: unknown): PublicSiteLog | null {
   } : null;
 }
 
-function parseProjects(value: unknown, limit: number): UnifiedPublicProject[] | null {
+function parseProjects(value: unknown, limit: number): PublicProject[] | null {
   if (!Array.isArray(value) || value.length > limit) return null;
   const projects = value.map(parseProject);
-  return projects.every((project): project is UnifiedPublicProject => project !== null)
+  return projects.every((project): project is PublicProject => project !== null)
     ? projects
     : null;
 }
 
-function parseOptionalProjects(value: unknown, limit: number): UnifiedPublicProject[] | null {
+function parseOptionalProjects(value: unknown, limit: number): PublicProject[] | null {
   return value === undefined ? [] : parseProjects(value, limit);
 }
 
-function uniqueProjects(projects: UnifiedPublicProject[]): UnifiedPublicProject[] {
+function uniqueProjects(projects: PublicProject[]): PublicProject[] {
   return [...new Map(projects.map((project) => [project.id, project])).values()];
 }
 
