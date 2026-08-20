@@ -32,7 +32,7 @@ describe("官网内容后台合同", () => {
     canonicalUrl: null,
     metadata: {
       category: "装修指南",
-      author: "鹅班长编辑部",
+      author: "好店智装云编辑部",
       displayPublishedAt: "2026-07-12T08:00:00.000+08:00",
     },
   } as const;

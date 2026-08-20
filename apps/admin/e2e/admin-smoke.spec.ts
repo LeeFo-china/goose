@@ -22,10 +22,12 @@ test.describe("admin smoke", () => {
     await loginAsTenantAdmin(page);
   });
 
-  test("租户管理员可访问组织架构并打开配置岗位弹窗", async ({ page }) => {
+  test("租户管理员看到好店智装云工作台", async ({ page }) => {
     await gotoAdminPage(page, "/dashboard");
-    await expect(page.getByText("鹅班长工作台")).toBeVisible();
+    await expect(page.getByText("好店智装云工作台")).toBeVisible();
+  });
 
+  test("租户管理员可访问组织架构并打开配置岗位弹窗", async ({ page }) => {
     await gotoAdminPage(page, "/organization");
     const configurePostButton = page.getByRole("button", { name: /配置岗位/ }).first();
     await expect(configurePostButton).toBeVisible();
