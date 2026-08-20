@@ -6,9 +6,10 @@ const TENANT_PROJECT_LOG_IMAGE_REFERENCE_PATTERN =
 
 const HttpsImageReferenceSchema = z.string().trim().min(1).max(2048)
   .refine((value) => {
-    if (/\s/.test(value)) return false;
+    if (/\s|[?#]/.test(value)) return false;
     try {
-      return new URL(value).protocol === "https:";
+      const url = new URL(value);
+      return url.protocol === "https:" && !url.search && !url.hash;
     } catch {
       return false;
     }

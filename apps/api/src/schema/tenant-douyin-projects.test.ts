@@ -78,6 +78,10 @@ describe("tenant Douyin project schemas", () => {
   test("rejects unsafe, legacy and wrong-shaped publication inputs", () => {
     for (const reference of [
       "http://cdn.example.test/project.jpg",
+      "https://cdn.example.test/project.jpg?q-signature=expires-soon",
+      "https://cdn.example.test/project.jpg#preview",
+      "https://cdn.example.test/project.jpg?",
+      "https://cdn.example.test/project.jpg#",
       "project-log/legacy.jpg",
       `public/project-log/projects/${PROJECT_ID}/${IMAGE_ID}.jpg`,
       `tenants/${TENANT_ID}/project-log/projects/${PROJECT_ID}/2026/13/21/${IMAGE_ID}.jpg`,
@@ -98,5 +102,56 @@ describe("tenant Douyin project schemas", () => {
     }).success).toBe(false);
     expect(TenantDouyinProjectParamsSchema.safeParse({ projectId: "bad" }).success)
       .toBe(false);
+  });
+
+  test("enforces every publication field boundary for all statuses", () => {
+    const parse = (overrides: Record<string, unknown>) =>
+      TenantDouyinProjectPublicationSchema.safeParse({
+        ...validBody,
+        publication_status: "draft",
+        public_image_urls: [],
+        ...overrides,
+      }).success;
+
+    expect(parse({ public_title: "标题" })).toBe(true);
+    expect(parse({ public_title: "标" })).toBe(false);
+    expect(parse({ public_title: "标".repeat(100) })).toBe(true);
+    expect(parse({ public_title: "标".repeat(101) })).toBe(false);
+    expect(parse({ public_description: "说".repeat(20) })).toBe(true);
+    expect(parse({ public_description: "说".repeat(19) })).toBe(false);
+    expect(parse({ public_description: "说".repeat(2000) })).toBe(true);
+    expect(parse({ public_description: "说".repeat(2001) })).toBe(false);
+    expect(parse({ style_tags: Array.from({ length: 8 }, (_, index) =>
+      `${index}${"风".repeat(39)}`) })).toBe(true);
+    expect(parse({ style_tags: Array.from({ length: 9 }, (_, index) =>
+      `风格${index}`) })).toBe(false);
+    expect(parse({ style_tags: ["风".repeat(41)] })).toBe(false);
+    expect(parse({ style_tags: [""] })).toBe(false);
+    expect(parse({ budget_band: null })).toBe(true);
+    expect(parse({ budget_band: "预".repeat(80) })).toBe(true);
+    expect(parse({ budget_band: "" })).toBe(false);
+    expect(parse({ budget_band: "预".repeat(81) })).toBe(false);
+    expect(parse({ publication_status: "archived" })).toBe(false);
+
+    const thirtyImages = Array.from(
+      { length: 30 },
+      (_, index) => `https://cdn.example.test/${index}.jpg`,
+    );
+    expect(parse({ publication_status: "draft", public_image_urls: thirtyImages }))
+      .toBe(true);
+    expect(parse({ publication_status: "hidden", public_image_urls: [] }))
+      .toBe(true);
+    expect(parse({
+      publication_status: "hidden",
+      public_image_urls: [...thirtyImages, "https://cdn.example.test/30.jpg"],
+    })).toBe(false);
+    expect(parse({
+      publication_status: "published",
+      public_image_urls: thirtyImages.slice(0, 2),
+    })).toBe(false);
+    expect(parse({
+      publication_status: "published",
+      public_image_urls: thirtyImages.slice(0, 3),
+    })).toBe(true);
   });
 });

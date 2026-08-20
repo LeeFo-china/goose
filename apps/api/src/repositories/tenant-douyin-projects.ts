@@ -5,6 +5,7 @@ import type {
   TenantDouyinProjectListQuery,
   TenantDouyinProjectPublicationInput,
 } from "@/schema/tenant-douyin-projects";
+import type { Database } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
 
 const PROFILE_FIELDS = [
@@ -23,13 +24,15 @@ const PROJECT_FIELDS = [
   "updated_at",
   "property:properties(community,layout,area)",
 ].join(",");
-const PROFILE_RETURN_FIELDS = [
-  "id",
-  "tenant_id",
-  "project_id",
-  PROFILE_FIELDS,
-].join(",");
 const ATTACHED_IMAGE_LOG_LIMIT = 100;
+const PUBLICATION_RPC_NAME = "upsert_douyin_project_public_profile";
+const PUBLICATION_RPC_ERROR_CODES = [
+  "DOUYIN_PROJECT_PUBLICATION_INVALID",
+  "DOUYIN_PROJECT_NOT_FOUND",
+  "DOUYIN_PROJECT_IMAGE_REFERENCE_SCOPE_MISMATCH",
+  "DOUYIN_PROJECT_IMAGE_NOT_ATTACHED",
+  "DOUYIN_PROJECT_PUBLICATION_IMAGES_REQUIRED",
+] as const;
 
 const NullableStringSchema = z.string().nullable();
 const ProfileSchema = z.strictObject({
@@ -62,7 +65,21 @@ const SavedProfileSchema = ProfileSchema.extend({
   id: z.uuid(),
   tenant_id: z.uuid(),
   project_id: z.uuid(),
+  created_at: z.string(),
 }).strict();
+const PublicationRpcErrorSchema = z.strictObject({
+  status_code: z.union([z.literal(400), z.literal(404)]),
+  code: z.enum(PUBLICATION_RPC_ERROR_CODES),
+  message: z.string().trim().min(1).max(1000),
+});
+const PublicationRpcEnvelopeSchema = z.union([
+  z.strictObject({ data: SavedProfileSchema }),
+  z.strictObject({ error: PublicationRpcErrorSchema }),
+]);
+
+export type TenantDouyinProfileCommandResult =
+  | { readonly ok: true; readonly data: z.infer<typeof SavedProfileSchema> }
+  | { readonly ok: false; readonly error: z.infer<typeof PublicationRpcErrorSchema> };
 
 type DatabaseResult = {
   readonly data: unknown;
@@ -75,12 +92,24 @@ export interface TenantDouyinProjectsQuery extends PromiseLike<DatabaseResult> {
   order(...args: unknown[]): TenantDouyinProjectsQuery;
   range(...args: unknown[]): TenantDouyinProjectsQuery;
   limit(...args: unknown[]): TenantDouyinProjectsQuery;
-  upsert(...args: unknown[]): TenantDouyinProjectsQuery;
   maybeSingle(): Promise<DatabaseResult>;
-  single(): Promise<DatabaseResult>;
 }
+type GeneratedPublicationRpcArgs = Database["public"]["Functions"][
+  "upsert_douyin_project_public_profile"
+]["Args"];
+type PublicationRpcArgs = Omit<
+  GeneratedPublicationRpcArgs,
+  "p_budget_band" | "p_publication_status"
+> & {
+  readonly p_budget_band: string | null;
+  readonly p_publication_status: "draft" | "published" | "hidden";
+};
 export interface TenantDouyinProjectsDatabaseClient {
   from(table: string): TenantDouyinProjectsQuery;
+  rpc(
+    functionName: typeof PUBLICATION_RPC_NAME,
+    args: PublicationRpcArgs,
+  ): Promise<DatabaseResult>;
 }
 
 export class TenantDouyinProjectsRepository {
@@ -159,21 +188,32 @@ export class TenantDouyinProjectsRepository {
     );
   }
 
-  async upsertProfile(input: {
+  async publishProfileAtomic(input: {
     tenantId: string;
     projectId: string;
     profile: TenantDouyinProjectPublicationInput;
-  }) {
-    const result = await this.client.from("douyin_project_public_profiles")
-      .upsert({
-        tenant_id: input.tenantId,
-        project_id: input.projectId,
-        ...input.profile,
-      }, { onConflict: "tenant_id,project_id" })
-      .select(PROFILE_RETURN_FIELDS)
-      .single();
-    assertDatabaseSuccess(result, "保存抖音项目公开资料失败");
-    return parseData(SavedProfileSchema, result.data, "解析抖音项目公开资料失败");
+  }): Promise<TenantDouyinProfileCommandResult> {
+    // The SQL function accepts nullable text even though the checked-in generated
+    // declaration currently narrows p_budget_band to string.
+    const result = await this.client.rpc(PUBLICATION_RPC_NAME, {
+      p_tenant_id: input.tenantId,
+      p_project_id: input.projectId,
+      p_public_title: input.profile.public_title,
+      p_public_description: input.profile.public_description,
+      p_public_image_urls: input.profile.public_image_urls,
+      p_style_tags: input.profile.style_tags,
+      p_budget_band: input.profile.budget_band ?? null,
+      p_publication_status: input.profile.publication_status,
+    });
+    assertDatabaseSuccess(result, "原子保存抖音项目公开资料失败");
+    const envelope = parseData(
+      PublicationRpcEnvelopeSchema,
+      result.data,
+      "解析抖音项目公开资料命令结果失败",
+    );
+    return "data" in envelope
+      ? { ok: true, data: envelope.data }
+      : { ok: false, error: envelope.error };
   }
 }
 

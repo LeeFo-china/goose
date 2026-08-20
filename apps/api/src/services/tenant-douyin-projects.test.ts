@@ -18,7 +18,7 @@ const PROJECT_ID = "22222222-2222-4222-8222-222222222222";
 const OTHER_TENANT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_PROJECT_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const imageKey = (tenantId = TENANT_ID, projectId = PROJECT_ID, suffix = "1") =>
-  `tenants/${tenantId}/project-log/projects/${projectId}/2026/08/21/33333333-3333-4333-8333-${suffix.padStart(12, "3")}.jpg`;
+  `tenants/${tenantId}/project-log/projects/${projectId}/2026/08/21/33333333-3333-4333-8333-${suffix.padStart(12, "0")}.jpg`;
 const HTTPS_IMAGE = "https://cdn.example.test/attached.jpg";
 const body = {
   public_title: "现代简约实景",
@@ -29,11 +29,14 @@ const body = {
   publication_status: "published" as const,
 };
 
-function authContext(permissions = ["douyin_miniapp.manage"]): AuthContext {
+function authContext(
+  permissions = ["douyin_miniapp.manage"],
+  tenantId: string | null = TENANT_ID,
+): AuthContext {
   return {
     authUserId: "44444444-4444-4444-8444-444444444444",
     employeeId: "55555555-5555-4555-8555-555555555555",
-    tenantId: TENANT_ID,
+    tenantId,
     permissions: permissions.map((code) => ({ code, scope: "all" })),
   } as AuthContext;
 }
@@ -58,13 +61,18 @@ function fixture(
       HTTPS_IMAGE,
       ...Array.from({ length: 40 }, (_, index) => `ignored-${index}`),
     ] }]),
-    upsertProfile: mock(async (input: Record<string, unknown>) => ({
-      id: "66666666-6666-4666-8666-666666666666",
-      ...input.profile as Record<string, unknown>,
-      tenant_id: input.tenantId,
-      project_id: input.projectId,
-      updated_at: "2026-08-21T01:00:00.000Z",
+    publishProfileAtomic: mock(async (input: Record<string, unknown>) => ({
+      ok: true as const,
+      data: {
+        id: "66666666-6666-4666-8666-666666666666",
+        ...input.profile as Record<string, unknown>,
+        tenant_id: input.tenantId,
+        project_id: input.projectId,
+        created_at: "2026-08-21T00:30:00.000Z",
+        updated_at: "2026-08-21T01:00:00.000Z",
+      },
     })),
+    upsertProfile: mock(async () => { throw new TypeError("legacy write called"); }),
     ...overrides,
   };
   const accessPolicy = {
@@ -126,15 +134,9 @@ describe("TenantDouyinProjectsService", () => {
       totalPages: 1,
     });
 
-    const forbidden = fixture();
-    await expect(forbidden.service.list(authContext([]), {
-      page: 1,
-      pageSize: 20,
-    })).rejects.toThrow("missing permission");
-    expect(forbidden.repository.listProjects).not.toHaveBeenCalled();
   });
 
-  test("writes only server-owned tenant/project identifiers and stable refs", async () => {
+  test("writes once through the atomic command and never calls legacy read/write paths", async () => {
     const context = fixture();
 
     const result = await context.service.updatePublication(
@@ -143,78 +145,93 @@ describe("TenantDouyinProjectsService", () => {
       body,
     );
 
-    expect(context.repository.findProject).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      projectId: PROJECT_ID,
-    });
-    expect(context.repository.listAttachedImageRows).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      projectId: PROJECT_ID,
-      limit: 100,
-    });
-    expect(context.repository.listAttachedImageRows).toHaveBeenCalledTimes(1);
-    expect(context.repository.upsertProfile).toHaveBeenCalledWith({
+    expect(context.repository.publishProfileAtomic).toHaveBeenCalledTimes(1);
+    expect(context.repository.publishProfileAtomic).toHaveBeenCalledWith({
       tenantId: TENANT_ID,
       projectId: PROJECT_ID,
       profile: body,
     });
+    expect(context.repository.findProject).not.toHaveBeenCalled();
+    expect(context.repository.listAttachedImageRows).not.toHaveBeenCalled();
+    expect(context.repository.upsertProfile).not.toHaveBeenCalled();
     expect(result.public_image_urls).toEqual(body.public_image_urls);
     expect(result.public_image_urls[0]).not.toContain("q-signature");
   });
 
-  test("rejects projects outside the authenticated tenant", async () => {
-    const context = fixture({ findProject: mock(async () => null) });
-    await expect(context.service.updatePublication(
-      authContext(), PROJECT_ID, body,
-    )).rejects.toMatchObject({
-      statusCode: 404,
-      code: "DOUYIN_PROJECT_NOT_FOUND",
-    });
-    expect(context.repository.listAttachedImageRows).not.toHaveBeenCalled();
-    expect(context.repository.upsertProfile).not.toHaveBeenCalled();
+  test("maps only known coherent RPC errors to stable business errors", async () => {
+    const knownErrors = [
+      [400, "DOUYIN_PROJECT_PUBLICATION_INVALID"],
+      [404, "DOUYIN_PROJECT_NOT_FOUND"],
+      [400, "DOUYIN_PROJECT_IMAGE_REFERENCE_SCOPE_MISMATCH"],
+      [400, "DOUYIN_PROJECT_IMAGE_NOT_ATTACHED"],
+      [400, "DOUYIN_PROJECT_PUBLICATION_IMAGES_REQUIRED"],
+    ] as const;
+    for (const [statusCode, code] of knownErrors) {
+      const context = fixture({
+        publishProfileAtomic: mock(async () => ({
+          ok: false as const,
+          error: { status_code: statusCode, code, message: "RPC 拒绝" },
+        })),
+      });
+      await expect(context.service.updatePublication(authContext(), PROJECT_ID, body))
+        .rejects.toMatchObject({ statusCode, code, message: "RPC 拒绝" });
+    }
 
-    const mismatched = fixture({
-      findProject: mock(async () => ({
-        id: PROJECT_ID,
-        tenant_id: OTHER_TENANT_ID,
+    const incoherent = fixture({
+      publishProfileAtomic: mock(async () => ({
+        ok: false as const,
+        error: {
+          status_code: 404,
+          code: "DOUYIN_PROJECT_IMAGE_NOT_ATTACHED",
+          message: "wrong pair",
+        },
       })),
     });
-    await expect(mismatched.service.updatePublication(
-      authContext(), PROJECT_ID, body,
-    )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND" });
-    expect(mismatched.repository.upsertProfile).not.toHaveBeenCalled();
+    await expect(incoherent.service.updatePublication(authContext(), PROJECT_ID, body))
+      .rejects.toMatchObject({
+        statusCode: 500,
+        code: "DOUYIN_TENANT_PROJECTS_RESPONSE_INVALID",
+      });
   });
 
-  test("rejects cross-tenant and cross-project canonical references", async () => {
+  test("rejects saved profiles outside the authenticated tenant/project scope", async () => {
+    for (const scope of [
+      { tenant_id: OTHER_TENANT_ID, project_id: PROJECT_ID },
+      { tenant_id: TENANT_ID, project_id: OTHER_PROJECT_ID },
+    ]) {
+      const context = fixture({
+        publishProfileAtomic: mock(async () => ({
+          ok: true as const,
+          data: {
+            ...body,
+            id: "66666666-6666-4666-8666-666666666666",
+            ...scope,
+            created_at: "2026-08-21T00:30:00.000Z",
+            updated_at: "2026-08-21T01:00:00.000Z",
+          },
+        })),
+      });
+      await expect(context.service.updatePublication(authContext(), PROJECT_ID, body))
+        .rejects.toMatchObject({
+          statusCode: 500,
+          code: "DOUYIN_TENANT_PROJECTS_RESPONSE_INVALID",
+        });
+    }
+  });
+
+  test("rejects signed HTTPS references before the atomic command", async () => {
     for (const reference of [
-      imageKey(OTHER_TENANT_ID, PROJECT_ID),
-      imageKey(TENANT_ID, OTHER_PROJECT_ID),
+      `${HTTPS_IMAGE}?q-signature=expires-soon`,
+      `${HTTPS_IMAGE}#preview`,
     ]) {
       const context = fixture();
       await expect(context.service.updatePublication(authContext(), PROJECT_ID, {
         ...body,
         publication_status: "draft",
         public_image_urls: [reference],
-      })).rejects.toMatchObject({
-        statusCode: 400,
-        code: "DOUYIN_PROJECT_IMAGE_REFERENCE_SCOPE_MISMATCH",
-      });
-      expect(context.repository.upsertProfile).not.toHaveBeenCalled();
+      })).rejects.toMatchObject({ statusCode: 400 });
+      expect(context.repository.publishProfileAtomic).not.toHaveBeenCalled();
     }
-  });
-
-  test("rejects selected refs not exactly attached to a bounded project log set", async () => {
-    const signedPreview = `${HTTPS_IMAGE}?q-signature=expires-soon`;
-    const context = fixture();
-    await expect(context.service.updatePublication(authContext(), PROJECT_ID, {
-      ...body,
-      publication_status: "draft",
-      public_image_urls: [signedPreview],
-    })).rejects.toMatchObject({
-      statusCode: 400,
-      code: "DOUYIN_PROJECT_IMAGE_NOT_ATTACHED",
-    });
-    expect(context.repository.upsertProfile).not.toHaveBeenCalled();
   });
 
   test("returns a stable paginated image picker without exposing previews as refs", async () => {
@@ -225,7 +242,13 @@ describe("TenantDouyinProjectsService", () => {
     const crossProject = imageKey(TENANT_ID, OTHER_PROJECT_ID);
     const context = fixture({
       listAttachedImageRows: mock(async () => [
-        { images: [keys[0], HTTPS_IMAGE, "project-log/legacy.jpg", crossProject] },
+        { images: [
+          keys[0],
+          HTTPS_IMAGE,
+          `${HTTPS_IMAGE}?q-signature=expires-soon`,
+          "project-log/legacy.jpg",
+          crossProject,
+        ] },
         { images: [...keys.slice(1), keys[0], "http://unsafe.test/image.jpg"] },
       ]),
     });
@@ -270,5 +293,75 @@ describe("TenantDouyinProjectsService", () => {
     )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND" });
     expect(context.repository.listAttachedImageRows).not.toHaveBeenCalled();
     expect(context.prepareImageUrls).not.toHaveBeenCalled();
+  });
+
+  test("bounds candidates to first 30 per log and 300 unique refs with stable pages", async () => {
+    const rows = Array.from({ length: 11 }, (_, rowIndex) => ({
+      images: Array.from({ length: 31 }, (_, imageIndex) =>
+        imageKey(
+          TENANT_ID,
+          PROJECT_ID,
+          String(rowIndex * 31 + imageIndex + 1),
+        )),
+    }));
+    const context = fixture({ listAttachedImageRows: mock(async () => rows) });
+    const result = await context.service.listAttachedImages(
+      authContext(),
+      PROJECT_ID,
+      { page: 3, pageSize: 100 },
+    );
+
+    expect(result.pagination).toEqual({
+      page: 3,
+      pageSize: 100,
+      total: 300,
+      totalPages: 3,
+    });
+    expect(result.items).toHaveLength(100);
+    expect(result.items[0]?.reference).toBe(imageKey(
+      TENANT_ID,
+      PROJECT_ID,
+      String(6 * 31 + 21),
+    ));
+    expect(result.items.at(-1)?.reference).toBe(imageKey(
+      TENANT_ID,
+      PROJECT_ID,
+      String(9 * 31 + 30),
+    ));
+    for (let rowIndex = 0; rowIndex < 10; rowIndex += 1) {
+      expect(result.items.some((item) => item.reference === imageKey(
+        TENANT_ID,
+        PROJECT_ID,
+        String(rowIndex * 31 + 31),
+      ))).toBe(false);
+    }
+    expect(context.repository.listAttachedImageRows).toHaveBeenCalledTimes(1);
+  });
+
+  test("requires tenant and manage permission for every operation", async () => {
+    const operations = [
+      (service: InstanceType<typeof Service>, context: AuthContext) =>
+        service.list(context, { page: 1, pageSize: 20 }),
+      (service: InstanceType<typeof Service>, context: AuthContext) =>
+        service.updatePublication(context, PROJECT_ID, body),
+      (service: InstanceType<typeof Service>, context: AuthContext) =>
+        service.listAttachedImages(context, PROJECT_ID, { page: 1, pageSize: 20 }),
+    ];
+
+    for (const operation of operations) {
+      const missingTenant = fixture();
+      await expect(operation(missingTenant.service, authContext(undefined, null)))
+        .rejects.toThrow("missing tenant");
+      expect(missingTenant.repository.listProjects).not.toHaveBeenCalled();
+      expect(missingTenant.repository.publishProfileAtomic).not.toHaveBeenCalled();
+      expect(missingTenant.repository.findProject).not.toHaveBeenCalled();
+
+      const missingManage = fixture();
+      await expect(operation(missingManage.service, authContext([])))
+        .rejects.toThrow("missing permission");
+      expect(missingManage.repository.listProjects).not.toHaveBeenCalled();
+      expect(missingManage.repository.publishProfileAtomic).not.toHaveBeenCalled();
+      expect(missingManage.repository.findProject).not.toHaveBeenCalled();
+    }
   });
 });

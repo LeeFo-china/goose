@@ -46,10 +46,18 @@ function clientWith(results: Result[]) {
       return Promise.resolve(this.result).then(onfulfilled, onrejected);
     }
   }
-  const client = { from: mock((table: string) => {
-    calls.push({ method: "from", args: [table] });
-    return new Query(results[resultIndex++] ?? { data: null, error: null });
-  }) };
+  const client = {
+    from: mock((table: string) => {
+      calls.push({ method: "from", args: [table] });
+      return new Query(results[resultIndex++] ?? { data: null, error: null });
+    }),
+    rpc: mock((functionName: string, args: unknown) => {
+      calls.push({ method: "rpc", args: [functionName, args] });
+      return Promise.resolve(
+        results[resultIndex++] ?? { data: null, error: null },
+      );
+    }),
+  };
   return { client, calls };
 }
 
@@ -151,7 +159,7 @@ describe("TenantDouyinProjectsRepository", () => {
       .toEqual(["id,tenant_id", "images"]);
   });
 
-  test("upserts a server-scoped profile and wraps database failures", async () => {
+  test("publishes through one atomic RPC with exact server-scoped arguments", async () => {
     const input = {
       tenantId: TENANT_ID,
       projectId: PROJECT_ID,
@@ -164,19 +172,120 @@ describe("TenantDouyinProjectsRepository", () => {
         publication_status: "published" as const,
       },
     };
-    const { client, calls } = clientWith([{ data: {
+    const savedProfile = {
       id: "44444444-4444-4444-8444-444444444444",
       tenant_id: TENANT_ID,
       project_id: PROJECT_ID,
       ...profile,
-    }, error: null }]);
+      created_at: "2026-08-21T00:30:00.000Z",
+    };
+    const { client, calls } = clientWith([{
+      data: { data: savedProfile },
+      error: null,
+    }]);
     const repository = new Repository(client as never);
-    await repository.upsertProfile(input);
-    expect(calls).toContainEqual({ method: "upsert", args: [{
-      tenant_id: TENANT_ID,
-      project_id: PROJECT_ID,
-      ...input.profile,
-    }, { onConflict: "tenant_id,project_id" }] });
+    await expect(repository.publishProfileAtomic(input)).resolves.toEqual({
+      ok: true,
+      data: savedProfile,
+    });
+    expect(calls).toEqual([{ method: "rpc", args: [
+      "upsert_douyin_project_public_profile",
+      {
+        p_tenant_id: TENANT_ID,
+        p_project_id: PROJECT_ID,
+        p_public_title: profile.public_title,
+        p_public_description: profile.public_description,
+        p_public_image_urls: profile.public_image_urls,
+        p_style_tags: profile.style_tags,
+        p_budget_band: profile.budget_band,
+        p_publication_status: profile.publication_status,
+      },
+    ] }]);
+
+    const nullableBudget = clientWith([{
+      data: { data: { ...savedProfile, budget_band: null } },
+      error: null,
+    }]);
+    await new Repository(nullableBudget.client as never).publishProfileAtomic({
+      ...input,
+      profile: { ...input.profile, budget_band: null },
+    });
+    expect(nullableBudget.calls[0]).toMatchObject({
+      method: "rpc",
+      args: [expect.any(String), expect.objectContaining({ p_budget_band: null })],
+    });
+  });
+
+  test("returns only strict known RPC business envelopes", async () => {
+    const input = {
+      tenantId: TENANT_ID,
+      projectId: PROJECT_ID,
+      profile: {
+        public_title: profile.public_title,
+        public_description: profile.public_description,
+        public_image_urls: profile.public_image_urls,
+        style_tags: profile.style_tags,
+        budget_band: null,
+        publication_status: "draft" as const,
+      },
+    };
+    const rpcError = {
+      status_code: 404 as const,
+      code: "DOUYIN_PROJECT_NOT_FOUND" as const,
+      message: "项目不存在",
+    };
+    const repository = new Repository(clientWith([{
+      data: { error: rpcError },
+      error: null,
+    }]).client as never);
+
+    await expect(repository.publishProfileAtomic(input)).resolves.toEqual({
+      ok: false,
+      error: rpcError,
+    });
+  });
+
+  test("wraps RPC transport failures and rejects unknown envelopes", async () => {
+    const input = {
+      tenantId: TENANT_ID,
+      projectId: PROJECT_ID,
+      profile: {
+        public_title: profile.public_title,
+        public_description: profile.public_description,
+        public_image_urls: profile.public_image_urls,
+        style_tags: profile.style_tags,
+        budget_band: profile.budget_band,
+        publication_status: "published" as const,
+      },
+    };
+    const transportFailure = new Repository(clientWith([{
+      data: null,
+      error: { message: "database unavailable" },
+    }]).client as never);
+    await expect(transportFailure.publishProfileAtomic(input))
+      .rejects.toMatchObject({ code: "DB_ERROR" });
+
+    for (const data of [
+      null,
+      { data: { tenant_id: TENANT_ID } },
+      { error: { status_code: 418, code: "UNKNOWN", message: "bad" } },
+      {
+        error: {
+          status_code: 404,
+          code: "DOUYIN_PROJECT_NOT_FOUND",
+          message: "项目不存在",
+          extra: true,
+        },
+      },
+      { data: {}, error: {} },
+    ]) {
+      const invalid = new Repository(clientWith([{ data, error: null }]).client as never);
+      await expect(invalid.publishProfileAtomic(input))
+        .rejects.toMatchObject({ code: "DB_ERROR" });
+    }
+  });
+
+  test("wraps ordinary database failures", async () => {
 
     const failure = new Repository(clientWith([{
       data: null,

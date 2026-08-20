@@ -37,8 +37,19 @@ type SavedProfile = TenantDouyinProjectPublicationInput & {
   readonly id: string;
   readonly tenant_id: string;
   readonly project_id: string;
+  readonly created_at: string;
   readonly updated_at: string;
 };
+type ProfileCommandResult =
+  | { readonly ok: true; readonly data: SavedProfile }
+  | {
+    readonly ok: false;
+    readonly error: {
+      readonly status_code: number;
+      readonly code: string;
+      readonly message: string;
+    };
+  };
 type RepositoryPort = {
   listProjects(input: TenantDouyinProjectListQuery & { tenantId: string }):
     Promise<{ rows: readonly ProjectRow[]; total: number }>;
@@ -49,11 +60,11 @@ type RepositoryPort = {
     projectId: string;
     limit: number;
   }): Promise<readonly AttachedImageRow[]>;
-  upsertProfile(input: {
+  publishProfileAtomic(input: {
     tenantId: string;
     projectId: string;
     profile: TenantDouyinProjectPublicationInput;
-  }): Promise<SavedProfile>;
+  }): Promise<ProfileCommandResult>;
 };
 type AccessPolicyPort = {
   assertTenantContext(authContext: AuthContext): string;
@@ -103,50 +114,19 @@ export class TenantDouyinProjectsService {
     const tenantId = this.requireTenant(authContext);
     const params = parseRequest(TenantDouyinProjectParamsSchema, { projectId });
     const profile = parseRequest(TenantDouyinProjectPublicationSchema, input);
-    await this.requireOwnedProject(tenantId, params.projectId);
-
-    for (const reference of profile.public_image_urls) {
-      const scope = parseTenantProjectLogImageReference(reference);
-      if (
-        scope
-        && (scope.tenantId !== tenantId || scope.projectId !== params.projectId)
-      ) {
-        throw Errors.business(
-          400,
-          "公开图片不属于当前项目",
-          "DOUYIN_PROJECT_IMAGE_REFERENCE_SCOPE_MISMATCH",
-        );
-      }
-    }
-
-    const imageRows = await this.dependencies.repository.listAttachedImageRows({
-      tenantId,
-      projectId: params.projectId,
-      limit: ATTACHED_IMAGE_LOG_LIMIT,
-    });
-    const attachedReferences = collectAttachedImageReferences(
-      imageRows,
-      (reference) => isSelectableAttachedImageReference(
-        reference,
-        tenantId,
-        params.projectId,
-      ),
-    );
-    if (profile.public_image_urls.some((reference) =>
-      !attachedReferences.has(reference)
-    )) {
-      throw Errors.business(
-        400,
-        "公开图片必须来自当前项目的施工日志",
-        "DOUYIN_PROJECT_IMAGE_NOT_ATTACHED",
-      );
-    }
-
-    return this.dependencies.repository.upsertProfile({
+    const result = await this.dependencies.repository.publishProfileAtomic({
       tenantId,
       projectId: params.projectId,
       profile,
     });
+    if (!result.ok) {
+      throwPublicationCommandError(result.error);
+    }
+    if (
+      result.data.tenant_id !== tenantId
+      || result.data.project_id !== params.projectId
+    ) throwInvalidResponse();
+    return result.data;
   }
 
   async listAttachedImages(
@@ -276,6 +256,33 @@ function httpsPreview(value: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+const PUBLICATION_COMMAND_ERROR_STATUS: Readonly<Record<string, number>> = {
+  DOUYIN_PROJECT_PUBLICATION_INVALID: 400,
+  DOUYIN_PROJECT_NOT_FOUND: 404,
+  DOUYIN_PROJECT_IMAGE_REFERENCE_SCOPE_MISMATCH: 400,
+  DOUYIN_PROJECT_IMAGE_NOT_ATTACHED: 400,
+  DOUYIN_PROJECT_PUBLICATION_IMAGES_REQUIRED: 400,
+};
+
+function throwPublicationCommandError(error: {
+  readonly status_code: number;
+  readonly code: string;
+  readonly message: string;
+}): never {
+  if (PUBLICATION_COMMAND_ERROR_STATUS[error.code] !== error.status_code) {
+    throwInvalidResponse();
+  }
+  throw Errors.business(error.status_code, error.message, error.code);
+}
+
+function throwInvalidResponse(): never {
+  throw Errors.business(
+    500,
+    "租户抖音项目数据无效",
+    "DOUYIN_TENANT_PROJECTS_RESPONSE_INVALID",
+  );
 }
 
 function parseRequest<T>(schema: { safeParse(value: unknown):
