@@ -11,10 +11,16 @@ import {
   type DouyinPropertyCondition,
 } from '@gooes/domain';
 
-const BIGINT_ZERO = BigInt(0);
-const BIGINT_ONE = BigInt(1);
-const BIGINT_TEN = BigInt(10);
-const BASIS_POINTS_SCALE = BigInt(10_000);
+import {
+  addFenRangeToMap,
+  calculateFenRange,
+  decimalNumberToFraction,
+  fenToIntegerYuan,
+  safeBigIntToNumber,
+  type DecimalFraction,
+  type FenRange,
+} from './calculator-money';
+
 const MAX_PRICING_ITEMS = 100;
 const MAX_SELECTED_OPTIONS = 20;
 export const MAX_DOUYIN_BUDGET_COEFFICIENT_BPS = 100_000;
@@ -44,6 +50,10 @@ export interface DouyinBudgetBasePricingItem extends DouyinBudgetPricingItemBase
   readonly role: 'base';
   readonly category: 'base';
   readonly unit: 'sqm';
+  readonly propertyConditionCoefficientBps: number;
+  readonly decorationScopeCoefficientBps: Readonly<
+    Record<DouyinDecorationScope, number>
+  >;
 }
 
 export interface DouyinBudgetOptionPricingItem extends DouyinBudgetPricingItemBase {
@@ -60,8 +70,6 @@ export interface DouyinBudgetPricingRules {
   readonly versionId: string;
   readonly versionNo: number;
   readonly disclaimer: string;
-  readonly propertyConditionCoefficientBps: Readonly<Record<DouyinPropertyCondition, number>>;
-  readonly decorationScopeCoefficientBps: Readonly<Record<DouyinDecorationScope, number>>;
   readonly items: readonly DouyinBudgetPricingItem[];
 }
 
@@ -85,11 +93,11 @@ export type DouyinBudgetCalculationErrorCode =
   | 'DOUYIN_BUDGET_OPTION_DUPLICATE'
   | 'DOUYIN_BUDGET_OPTION_UNKNOWN'
   | 'DOUYIN_BUDGET_OPTION_NOT_APPLICABLE'
+  | 'DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID'
   | 'DOUYIN_BUDGET_AMOUNT_OVERFLOW';
 
 export class DouyinBudgetCalculationError extends Error {
   override readonly name = 'DouyinBudgetCalculationError';
-
   constructor(
     readonly code: DouyinBudgetCalculationErrorCode,
     message: string,
@@ -120,9 +128,18 @@ export interface DouyinBudgetCalculationResult {
   readonly excluded_items: readonly string[];
 }
 
-type FenRange = { minimum: bigint; maximum: bigint };
-type DecimalFraction = { numerator: bigint; denominator: bigint };
-type RationalFenRange = FenRange & { denominator: bigint };
+export interface DouyinBudgetPublicYuanProjection {
+  readonly minimum_total: number;
+  readonly maximum_total: number;
+  readonly categories: readonly {
+    readonly category_code: DouyinBudgetCategoryCode;
+    readonly minimum_amount: number;
+    readonly maximum_amount: number;
+  }[];
+  readonly calculation_basis: DouyinBudgetCalculationResult['calculation_basis'];
+  readonly included_items: readonly string[];
+  readonly excluded_items: readonly string[];
+}
 
 export function calculateDouyinBudget(
   rules: DouyinBudgetPricingRules,
@@ -164,23 +181,24 @@ export function calculateDouyinBudget(
     return option;
   });
 
-  const propertyCoefficient =
-    rules.propertyConditionCoefficientBps[input.property_condition];
+  const propertyCoefficient = matchingBase.propertyConditionCoefficientBps;
   const scopeCoefficient =
-    rules.decorationScopeCoefficientBps[input.decoration_scope];
-  if (propertyCoefficient === undefined || scopeCoefficient === undefined) {
+    matchingBase.decorationScopeCoefficientBps[input.decoration_scope];
+  if (scopeCoefficient === undefined) {
     fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
   }
-  const baseRange = calculateBaseRange(
-    matchingBase,
+  const baseRange = calculateFenRange({
+    ...matchingBase,
     area,
-    propertyCoefficient,
-    scopeCoefficient,
-  );
+    coefficientBps: [propertyCoefficient, scopeCoefficient],
+  });
   const categoryRanges = new Map<DouyinBudgetCategoryCode, FenRange>();
-  addRange(categoryRanges, matchingBase.category, baseRange);
+  addFenRangeToMap(categoryRanges, matchingBase.category, baseRange);
   for (const option of options) {
-    addRange(categoryRanges, option.category, calculateOptionRange(option, area));
+    addFenRangeToMap(categoryRanges, option.category, calculateFenRange({
+      ...option,
+      area,
+    }));
   }
 
   const categories = DOUYIN_BUDGET_CATEGORY_CODE_VALUES.flatMap(
@@ -200,7 +218,7 @@ export function calculateDouyinBudget(
       minimum: sum.minimum + range.minimum,
       maximum: sum.maximum + range.maximum,
     }),
-    { minimum: BIGINT_ZERO, maximum: BIGINT_ZERO },
+    { minimum: BigInt(0), maximum: BigInt(0) },
   );
   const selectedCodeSet = new Set(selectedCodes);
 
@@ -229,6 +247,41 @@ export function calculateDouyinBudget(
   };
 }
 
+export function projectDouyinBudgetToPublicYuan(
+  result: DouyinBudgetCalculationResult,
+): DouyinBudgetPublicYuanProjection {
+  if (result.minimum_total_fen > result.maximum_total_fen) {
+    fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算总额区间无效');
+  }
+  const minimumTotal = fenToSafeIntegerYuan(result.minimum_total_fen);
+  const maximumTotal = fenToSafeIntegerYuan(result.maximum_total_fen);
+  const categories = result.categories.map((category) => {
+    if (category.minimum_amount_fen > category.maximum_amount_fen) {
+      fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算分类区间无效');
+    }
+    const minimumAmount = fenToSafeIntegerYuan(category.minimum_amount_fen);
+    const maximumAmount = fenToSafeIntegerYuan(category.maximum_amount_fen);
+    return {
+      category_code: category.category_code,
+      minimum_amount: minimumAmount,
+      maximum_amount: maximumAmount,
+    };
+  });
+  return {
+    minimum_total: minimumTotal,
+    maximum_total: maximumTotal,
+    categories,
+    calculation_basis: {
+      ...result.calculation_basis,
+      selected_option_codes: [
+        ...result.calculation_basis.selected_option_codes,
+      ],
+    },
+    included_items: [...result.included_items],
+    excluded_items: [...result.excluded_items],
+  };
+}
+
 function validateInput(input: DouyinBudgetCalculatorInput): DecimalFraction {
   if (
     !Number.isFinite(input.area) ||
@@ -242,7 +295,9 @@ function validateInput(input: DouyinBudgetCalculatorInput): DecimalFraction {
   ) {
     fail('DOUYIN_BUDGET_INPUT_INVALID', '预算计算输入无效');
   }
-  return decimalNumberToFraction(input.area);
+  const area = decimalNumberToFraction(input.area);
+  if (!area) fail('DOUYIN_BUDGET_INPUT_INVALID', '面积格式无效');
+  return area;
 }
 
 function validateRules(rules: DouyinBudgetPricingRules): void {
@@ -259,11 +314,6 @@ function validateRules(rules: DouyinBudgetPricingRules): void {
   ) {
     fail('DOUYIN_BUDGET_RULE_INVALID', '报价规则无效');
   }
-  validateCoefficientMap(rules.propertyConditionCoefficientBps,
-    DOUYIN_PROPERTY_CONDITION_VALUES);
-  validateCoefficientMap(rules.decorationScopeCoefficientBps,
-    DOUYIN_DECORATION_SCOPE_VALUES);
-
   const codes = new Set<string>();
   for (const item of rules.items) {
     validatePricingItem(item);
@@ -283,15 +333,16 @@ function validateCoefficientMap(
   }
   for (const key of expectedKeys) {
     const coefficient = map[key];
-    if (
-      coefficient === undefined ||
-      !Number.isSafeInteger(coefficient) ||
-      coefficient < 1 ||
-      coefficient > MAX_DOUYIN_BUDGET_COEFFICIENT_BPS
-    ) {
+    if (!isValidCoefficient(coefficient)) {
       fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
     }
   }
+}
+
+function isValidCoefficient(value: unknown): value is number {
+  return Number.isSafeInteger(value) &&
+    (value as number) >= 1 &&
+    (value as number) <= MAX_DOUYIN_BUDGET_COEFFICIENT_BPS;
 }
 
 function validatePricingItem(item: DouyinBudgetPricingItem): void {
@@ -318,10 +369,21 @@ function validatePricingItem(item: DouyinBudgetPricingItem): void {
       (item.category !== 'base' || item.unit !== 'sqm')) ||
     (item.role === 'option' &&
       (!OPTION_CODES.has(item.code) ||
-        (item.unit !== 'sqm' && item.unit !== 'fixed'))) ||
+        (item.unit !== 'sqm' && item.unit !== 'fixed') ||
+        'propertyConditionCoefficientBps' in item ||
+        'decorationScopeCoefficientBps' in item)) ||
     (item.role !== 'base' && item.role !== 'option')
   ) {
     fail('DOUYIN_BUDGET_RULE_INVALID', '报价项目类型无效');
+  }
+  if (item.role === 'base') {
+    if (!isValidCoefficient(item.propertyConditionCoefficientBps)) {
+      fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
+    }
+    validateCoefficientMap(
+      item.decorationScopeCoefficientBps,
+      DOUYIN_DECORATION_SCOPE_VALUES,
+    );
   }
   validateCondition(item.condition);
 }
@@ -366,93 +428,23 @@ function matchesCondition(
   );
 }
 
-function calculateBaseRange(
-  item: DouyinBudgetBasePricingItem,
-  area: DecimalFraction,
-  propertyCoefficientBps: number,
-  scopeCoefficientBps: number,
-): FenRange {
-  const range = rationalRangeForItem(item, area);
-  const coefficient =
-    BigInt(propertyCoefficientBps) * BigInt(scopeCoefficientBps);
-  const denominator =
-    range.denominator * BASIS_POINTS_SCALE * BASIS_POINTS_SCALE;
-  return {
-    minimum: divideHalfUp(range.minimum * coefficient, denominator),
-    maximum: divideHalfUp(range.maximum * coefficient, denominator),
-  };
-}
-
-function calculateOptionRange(
-  item: DouyinBudgetOptionPricingItem,
-  area: DecimalFraction,
-): FenRange {
-  const range = rationalRangeForItem(item, area);
-  return {
-    minimum: divideHalfUp(range.minimum, range.denominator),
-    maximum: divideHalfUp(range.maximum, range.denominator),
-  };
-}
-
-function rationalRangeForItem(
-  item: DouyinBudgetPricingItem,
-  area: DecimalFraction,
-): RationalFenRange {
-  const multiplier = item.unit === 'sqm' ? area.numerator : BIGINT_ONE;
-  const denominator = item.unit === 'sqm' ? area.denominator : BIGINT_ONE;
-  return {
-    minimum: BigInt(item.minimumAmountFen) * multiplier,
-    maximum: BigInt(item.maximumAmountFen) * multiplier,
-    denominator,
-  };
-}
-
-function decimalNumberToFraction(value: number): DecimalFraction {
-  const match = /^(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/i.exec(
-    value.toString(),
-  );
-  if (!match?.[1]) {
-    fail('DOUYIN_BUDGET_INPUT_INVALID', '面积格式无效');
-  }
-  const fractionalDigits = match[2] ?? '';
-  const exponent = Number(match[3] ?? '0');
-  const digits = BigInt(`${match[1]}${fractionalDigits}`);
-  const scale = fractionalDigits.length - exponent;
-  return scale <= 0
-    ? { numerator: digits * powerOfTen(-scale), denominator: BIGINT_ONE }
-    : { numerator: digits, denominator: powerOfTen(scale) };
-}
-
-function powerOfTen(exponent: number): bigint {
-  let result = BIGINT_ONE;
-  for (let index = 0; index < exponent; index += 1) result *= BIGINT_TEN;
-  return result;
-}
-
-function divideHalfUp(value: bigint, divisor: bigint): bigint {
-  return (value + divisor / BigInt(2)) / divisor;
-}
-
-function addRange(
-  ranges: Map<DouyinBudgetCategoryCode, FenRange>,
-  category: DouyinBudgetCategoryCode,
-  range: FenRange,
-): void {
-  const current = ranges.get(category) ?? {
-    minimum: BIGINT_ZERO,
-    maximum: BIGINT_ZERO,
-  };
-  ranges.set(category, {
-    minimum: current.minimum + range.minimum,
-    maximum: current.maximum + range.maximum,
-  });
-}
-
 function toSafeFen(value: bigint): number {
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) {
+  const safeValue = safeBigIntToNumber(value);
+  if (safeValue === null) {
     fail('DOUYIN_BUDGET_AMOUNT_OVERFLOW', '预算金额超出安全整数范围');
   }
-  return Number(value);
+  return safeValue;
+}
+
+function fenToSafeIntegerYuan(value: unknown): number {
+  const conversion = fenToIntegerYuan(value);
+  if (!conversion.ok && conversion.reason === 'overflow') {
+    fail('DOUYIN_BUDGET_AMOUNT_OVERFLOW', '预算金额超出安全整数范围');
+  }
+  if (!conversion.ok) {
+    fail('DOUYIN_BUDGET_PUBLIC_PROJECTION_INVALID', '预算金额分值无效');
+  }
+  return conversion.value;
 }
 
 function isSafeFen(value: unknown): value is number {
