@@ -3,16 +3,23 @@ import { describe, expect, test } from "bun:test";
 import {
   buildProjectPublicationHref,
   candidateImageAccessibleLabel,
+  clearImageSelection,
+  createRequestAuthority,
+  getCollectionViewState,
   getPublicationReadinessWarnings,
   getPublicationRefreshPage,
+  getPublicationSaveWarnings,
   getPublicationWarnings,
+  getSelectedImageItems,
   normalizeProjectPage,
   normalizeSavedProjectProfile,
+  publicationSubmitLabel,
   projectProfileDraft,
   projectPhaseDisplay,
   safeHttpsPreview,
   updateImageSelection,
   type ProjectPublicationDraft,
+  type ProjectPublicationRow,
 } from "./project-publication-logic";
 
 const completeDraft: ProjectPublicationDraft = {
@@ -22,6 +29,15 @@ const completeDraft: ProjectPublicationDraft = {
   style_tags: ["现代", "简约"],
   budget_band: "20-30 万",
   publication_status: "published",
+};
+
+const publishableProject: ProjectPublicationRow = {
+  id: "11111111-1111-4111-8111-111111111111",
+  name: "内部项目名称",
+  status: "constructing",
+  updated_at: "2026-08-21T00:00:00.000Z",
+  property: { community: "晴天花园", layout: "三室两厅", area: 120 },
+  public_profile: null,
 };
 
 describe("tenant project publication behavior", () => {
@@ -58,11 +74,115 @@ describe("tenant project publication behavior", () => {
       publication_status: "draft",
       style_tags: Array.from({ length: 9 }, (_, index) => `风格${index + 1}`),
     })).toContain("风格标签最多选择 8 个");
-    expect(getPublicationReadinessWarnings({
+    expect(getPublicationWarnings({
+      ...completeDraft,
+      publication_status: "draft",
+      style_tags: ["   "],
+      budget_band: "   ",
+    })).toEqual(["风格标签不能为空", "预算区间填写后不能为空"]);
+    expect(getPublicationReadinessWarnings(publishableProject, {
       ...completeDraft,
       publication_status: "draft",
       public_image_urls: [],
     })).toContain("发布项目至少需要选择 3 张图片");
+  });
+
+  test("keeps only the latest list or candidate request authoritative", () => {
+    const authority = createRequestAuthority();
+    const first = authority.begin();
+    let loading = true;
+    const second = authority.begin();
+
+    expect(first.controller.signal.aborted).toBe(true);
+    expect(authority.isCurrent(first)).toBe(false);
+    if (authority.isCurrent(first)) loading = false;
+    expect(loading).toBe(true);
+    expect(authority.isCurrent(second)).toBe(true);
+
+    authority.invalidate();
+    expect(second.controller.signal.aborted).toBe(true);
+    expect(authority.isCurrent(second)).toBe(false);
+  });
+
+  test("separates collection errors from empty and supports retry transitions", () => {
+    expect(getCollectionViewState({ loading: false, error: "加载失败", itemCount: 0 }))
+      .toBe("error");
+    expect(getCollectionViewState({ loading: true, error: null, itemCount: 0 }))
+      .toBe("loading");
+    expect(getCollectionViewState({ loading: false, error: null, itemCount: 0 }))
+      .toBe("empty");
+    expect(getCollectionViewState({ loading: false, error: null, itemCount: 1 }))
+      .toBe("ready");
+  });
+
+  test("matches publication readiness to the public miniapp repository gate", () => {
+    for (const status of ["started", "constructing", "acceptance"]) {
+      expect(getPublicationReadinessWarnings({
+        ...publishableProject,
+        status,
+      }, completeDraft)).toEqual([]);
+    }
+    expect(getPublicationReadinessWarnings({
+      ...publishableProject,
+      status: "final_acceptance_completed",
+      property: { community: "晴天花园", layout: null, area: null },
+    }, {
+      ...completeDraft,
+      style_tags: [],
+      budget_band: null,
+    })).toEqual([
+      "当前项目阶段暂不支持公开",
+      "请完善项目户型",
+      "请完善项目面积",
+      "发布前至少填写 1 个风格标签",
+      "发布前请填写预算区间",
+    ]);
+
+    const incompleteDraft = {
+      ...completeDraft,
+      publication_status: "draft" as const,
+      style_tags: [],
+      budget_band: null,
+    };
+    expect(getPublicationSaveWarnings(publishableProject, incompleteDraft)).toEqual([]);
+    expect(getPublicationSaveWarnings(publishableProject, {
+      ...incompleteDraft,
+      publication_status: "published",
+    })).toEqual([
+      "发布前至少填写 1 个风格标签",
+      "发布前请填写预算区间",
+    ]);
+    expect(getPublicationReadinessWarnings({
+      ...publishableProject,
+      public_profile: { ...completeDraft, public_description: "不完整", updated_at: publishableProject.updated_at },
+    }, {
+      ...completeDraft,
+      public_description: "不完整",
+    })).toContain("公开说明至少需要 20 个字符");
+  });
+
+  test("keeps off-page selections readable and removable without exposing references", () => {
+    const hiddenReference = "tenants/private/off-page-customer.jpg";
+    const visibleReference = "tenants/private/current-page.jpg";
+    const selected = getSelectedImageItems(
+      [hiddenReference, visibleReference],
+      [{ reference: visibleReference, preview_url: "https://cdn.example.test/current.jpg" }],
+    );
+
+    expect(selected).toEqual([
+      { reference: hiddenReference, label: "第 1 张已选图片", preview_url: null },
+      { reference: visibleReference, label: "第 2 张已选图片", preview_url: "https://cdn.example.test/current.jpg" },
+    ]);
+    expect(selected.map((item) => item.label).join(" ")).not.toContain(hiddenReference);
+    expect(updateImageSelection(selected.map((item) => item.reference), hiddenReference, false))
+      .toEqual([visibleReference]);
+    expect(clearImageSelection()).toEqual([]);
+  });
+
+  test("labels explicit publication and takedown actions", () => {
+    expect(publicationSubmitLabel("published", "draft")).toBe("保存为草稿并下线");
+    expect(publicationSubmitLabel("published", "hidden")).toBe("隐藏并下线");
+    expect(publicationSubmitLabel("draft", "published")).toBe("发布项目实景");
   });
 
   test("keeps image selections across candidate pages and caps them at 30", () => {
@@ -243,8 +363,14 @@ describe("tenant project publication source contract", () => {
     expect(componentSource).toContain("FieldLegend");
     expect(componentSource).toContain("styleTagsInput");
     expect(componentSource).toContain("FieldError");
+    expect(logicSource).toContain("new AbortController()");
+    expect(componentSource).toContain("signal:");
+    expect(componentSource).toContain("aria-describedby");
+    expect(componentSource).toContain("aria-required");
+    expect(componentSource).toContain("已选择图片");
+    expect(componentSource).toContain("重新加载项目列表");
+    expect(componentSource).toContain("重新加载项目图片");
     expect(componentSource).toContain("useEffect");
-    expect(componentSource).toContain("}, [project]);");
     expect(componentSource).toContain("/tenant/douyin-miniapp/projects/");
     expect(componentSource).toContain("/images?");
     expect(componentSource).not.toContain("手工输入项目 ID");

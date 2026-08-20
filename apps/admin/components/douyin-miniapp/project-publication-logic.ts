@@ -1,4 +1,7 @@
-import { isProjectStatus, ProjectStatusConfig } from "@gooes/domain";
+import {
+  isProjectStatus,
+  ProjectStatusConfig,
+} from "@gooes/domain";
 
 export const PROJECT_PUBLICATION_PAGE_SIZE = 20;
 export const PROJECT_PUBLICATION_MAX_IMAGES = 30;
@@ -42,6 +45,8 @@ export type ProjectPublicationPage = {
 };
 export type CandidateImage = { reference: string; preview_url: string | null };
 export type CandidatePage = { items: CandidateImage[]; pagination: Pagination };
+export type RequestTicket = { id: number; controller: AbortController };
+export type SelectedImageItem = CandidateImage & { label: string };
 type BadgeVariant =
   | "default"
   | "secondary"
@@ -54,15 +59,29 @@ export function getPublicationWarnings(draft: ProjectPublicationDraft): string[]
   const warnings: string[] = [];
   if (draft.public_title.trim().length < 2) {
     warnings.push("公开标题至少需要 2 个字符");
+  } else if (draft.public_title.trim().length > 100) {
+    warnings.push("公开标题最多 100 个字符");
   }
   if (draft.public_description.trim().length < 20) {
     warnings.push("公开说明至少需要 20 个字符");
+  } else if (draft.public_description.trim().length > 2000) {
+    warnings.push("公开说明最多 2000 个字符");
   }
-  if (draft.style_tags.some((tag) => tag.trim().length > 40)) {
+  if (draft.style_tags.some((tag) => tag.trim().length === 0)) {
+    warnings.push("风格标签不能为空");
+  } else if (draft.style_tags.some((tag) => tag.trim().length > 40)) {
     warnings.push("每个风格标签最多 40 个字符");
   }
   if (draft.style_tags.length > 8) {
     warnings.push("风格标签最多选择 8 个");
+  }
+  if (draft.budget_band !== null && !draft.budget_band.trim()) {
+    warnings.push("预算区间填写后不能为空");
+  } else if ((draft.budget_band?.trim().length ?? 0) > 80) {
+    warnings.push("预算区间最多 80 个字符");
+  }
+  if (draft.public_image_urls.length > PROJECT_PUBLICATION_MAX_IMAGES) {
+    warnings.push("项目图片最多选择 30 张");
   }
   if (
     draft.publication_status === "published"
@@ -74,12 +93,37 @@ export function getPublicationWarnings(draft: ProjectPublicationDraft): string[]
 }
 
 export function getPublicationReadinessWarnings(
+  row: ProjectPublicationRow,
   draft: ProjectPublicationDraft,
 ): string[] {
-  return getPublicationWarnings({
+  const warnings = getPublicationWarnings({
     ...draft,
     publication_status: "published",
   });
+  if (!(["started", "constructing", "acceptance"] as const).includes(
+    row.status as "started" | "constructing" | "acceptance",
+  )) warnings.push("当前项目阶段暂不支持公开");
+  if (!row.property?.layout?.trim()) warnings.push("请完善项目户型");
+  const area = row.property?.area;
+  if (
+    area === null
+    || area === undefined
+    || (typeof area === "string" && !area.trim())
+  ) warnings.push("请完善项目面积");
+  if (!draft.style_tags.some((tag) => tag.trim())) {
+    warnings.push("发布前至少填写 1 个风格标签");
+  }
+  if (draft.budget_band === null) warnings.push("发布前请填写预算区间");
+  return warnings;
+}
+
+export function getPublicationSaveWarnings(
+  row: ProjectPublicationRow,
+  draft: ProjectPublicationDraft,
+): string[] {
+  return draft.publication_status === "published"
+    ? getPublicationReadinessWarnings(row, draft)
+    : getPublicationWarnings(draft);
 }
 
 export function projectPhaseDisplay(
@@ -114,6 +158,72 @@ export function updateImageSelection(
     || selected.length >= PROJECT_PUBLICATION_MAX_IMAGES
   ) return [...selected];
   return [...selected, reference];
+}
+
+export function clearImageSelection(): string[] {
+  return [];
+}
+
+export function getSelectedImageItems(
+  selected: readonly string[],
+  candidates: readonly CandidateImage[],
+): SelectedImageItem[] {
+  const previewByReference = new Map(
+    candidates.map((item) => [item.reference, item.preview_url]),
+  );
+  return selected.map((reference, index) => ({
+    reference,
+    label: `第 ${index + 1} 张已选图片`,
+    preview_url: previewByReference.get(reference) ?? null,
+  }));
+}
+
+export function createRequestAuthority() {
+  let sequence = 0;
+  let current: RequestTicket | null = null;
+  return {
+    begin(): RequestTicket {
+      current?.controller.abort();
+      current = { id: sequence + 1, controller: new AbortController() };
+      sequence = current.id;
+      return current;
+    },
+    isCurrent(ticket: RequestTicket): boolean {
+      return current?.id === ticket.id && !ticket.controller.signal.aborted;
+    },
+    invalidate(): void {
+      current?.controller.abort();
+      current = null;
+      sequence += 1;
+    },
+  };
+}
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+export function getCollectionViewState(input: {
+  loading: boolean;
+  error: string | null;
+  itemCount: number;
+}): "error" | "loading" | "empty" | "ready" {
+  if (input.error) return "error";
+  if (input.loading && input.itemCount === 0) return "loading";
+  return input.itemCount === 0 ? "empty" : "ready";
+}
+
+export function publicationSubmitLabel(
+  originalStatus: PublicationStatus | undefined,
+  nextStatus: PublicationStatus,
+): string {
+  if (originalStatus === "published" && nextStatus === "draft") {
+    return "保存为草稿并下线";
+  }
+  if (originalStatus === "published" && nextStatus === "hidden") {
+    return "隐藏并下线";
+  }
+  return nextStatus === "published" ? "发布项目实景" : "保存公开资料";
 }
 
 export function safeHttpsPreview(value: string | null): string | null {
