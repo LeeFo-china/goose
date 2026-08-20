@@ -2369,6 +2369,221 @@ export type Database = {
           },
         ]
       }
+      douyin_budget_estimates: {
+        Row: {
+          ai_analysis: Json | null
+          ai_attempt_count: number
+          ai_claimed_at: string | null
+          ai_last_error_code: string | null
+          ai_model: string | null
+          ai_provider: string | null
+          ai_status: string
+          created_at: string
+          douyin_miniapp_installation_id: string
+          estimate_no: string
+          expires_at: string
+          id: string
+          pricing_version_id: string
+          request_ip_hash: string
+          request_payload: Json
+          result_payload: Json
+          subject_hash: string
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          ai_attempt_count?: number
+          ai_claimed_at?: string | null
+          ai_last_error_code?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          ai_status?: string
+          created_at?: string
+          douyin_miniapp_installation_id: string
+          estimate_no: string
+          expires_at: string
+          id?: string
+          pricing_version_id: string
+          request_ip_hash: string
+          request_payload: Json
+          result_payload: Json
+          subject_hash: string
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          ai_attempt_count?: number
+          ai_claimed_at?: string | null
+          ai_last_error_code?: string | null
+          ai_model?: string | null
+          ai_provider?: string | null
+          ai_status?: string
+          created_at?: string
+          douyin_miniapp_installation_id?: string
+          estimate_no?: string
+          expires_at?: string
+          id?: string
+          pricing_version_id?: string
+          request_ip_hash?: string
+          request_payload?: Json
+          result_payload?: Json
+          subject_hash?: string
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_budget_estimates_installation_owner_fkey"
+            columns: ["douyin_miniapp_installation_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_budget_estimates_pricing_owner_fkey"
+            columns: ["pricing_version_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_budget_pricing_versions"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_budget_estimates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_budget_estimates_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_budget_pricing_items: {
+        Row: {
+          category_code: string
+          condition_payload: Json
+          created_at: string
+          id: string
+          item_code: string
+          label: string
+          maximum_amount: number
+          minimum_amount: number
+          pricing_version_id: string
+          sort_order: number
+          status: string
+          unit: string
+          updated_at: string
+        }
+        Insert: {
+          category_code: string
+          condition_payload?: Json
+          created_at?: string
+          id?: string
+          item_code: string
+          label: string
+          maximum_amount: number
+          minimum_amount: number
+          pricing_version_id: string
+          sort_order: number
+          status?: string
+          unit: string
+          updated_at?: string
+        }
+        Update: {
+          category_code?: string
+          condition_payload?: Json
+          created_at?: string
+          id?: string
+          item_code?: string
+          label?: string
+          maximum_amount?: number
+          minimum_amount?: number
+          pricing_version_id?: string
+          sort_order?: number
+          status?: string
+          unit?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_budget_pricing_items_pricing_version_id_fkey"
+            columns: ["pricing_version_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_budget_pricing_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_budget_pricing_versions: {
+        Row: {
+          created_at: string
+          created_by_employee_id: string
+          currency: string
+          disclaimer: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          version_no: number
+        }
+        Insert: {
+          created_at?: string
+          created_by_employee_id: string
+          currency?: string
+          disclaimer: string
+          effective_from: string
+          effective_to?: string | null
+          id?: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          version_no: number
+        }
+        Update: {
+          created_at?: string
+          created_by_employee_id?: string
+          currency?: string
+          disclaimer?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          version_no?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_budget_pricing_versions_creator_tenant_fkey"
+            columns: ["created_by_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_budget_pricing_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_budget_pricing_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       douyin_miniapp_authorization_intents: {
         Row: {
           authorization_code_digest: string | null
