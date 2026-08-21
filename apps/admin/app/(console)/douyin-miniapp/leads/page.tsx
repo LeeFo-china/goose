@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 
 import { StatusAlert } from "@/components/admin/status-alert";
+import {
+  buildAssigneeOptionsPath, normalizeAssigneeFilterOptionPage,
+  type AssigneeFilterOptionsState,
+} from "@/components/douyin-miniapp/leads-assignee-options";
 import { LeadsWorkbench } from "@/components/douyin-miniapp/leads-workbench";
 import {
   buildLeadApiQuery,
@@ -38,13 +42,20 @@ export default async function TenantDouyinLeadsPage({ searchParams }: {
   const filters = parseLeadFilters(params);
   let data = emptyPage(filters);
   let error: string | null = null;
+  let initialFilterAssigneeOptions: AssigneeFilterOptionsState = {
+    options: [], hasMore: false,
+  };
 
   if (!token) {
     error = "缺少登录凭证，请重新登录后重试";
   } else {
-    const leadResult = await loadLeads(token, filters);
+    const [leadResult, filterOptions] = await Promise.all([
+      loadLeads(token, filters),
+      loadInitialAssigneeFilterOptions(token, filters),
+    ]);
     data = leadResult.data;
     error = leadResult.error;
+    initialFilterAssigneeOptions = filterOptions;
   }
 
   return <div className="flex h-[calc(100vh-6.5625rem)] min-h-0 flex-col overflow-hidden">
@@ -52,9 +63,25 @@ export default async function TenantDouyinLeadsPage({ searchParams }: {
       initialData={data}
       initialError={error}
       initialFilters={filters}
+      initialFilterAssigneeOptions={initialFilterAssigneeOptions}
       permissions={permissions}
     />
   </div>;
+}
+
+export async function loadInitialAssigneeFilterOptions(token: string,
+  filters: LeadFilters): Promise<AssigneeFilterOptionsState> {
+  try {
+    const response = await fetch(buildBackendUrl(
+      buildAssigneeOptionsPath("filter", "", filters.assigneeId),
+    ), { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
+    const payload = await parseBackendJson<unknown>(response);
+    const parsed = normalizeAssigneeFilterOptionPage(payload.data, filters.assigneeId);
+    return parsed ? { options: parsed.list,
+      hasMore: parsed.pagination.totalPages > 1 } : { options: [], hasMore: false };
+  } catch {
+    return { options: [], hasMore: false };
+  }
 }
 
 async function loadLeads(token: string, filters: LeadFilters): Promise<{

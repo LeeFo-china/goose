@@ -37,8 +37,9 @@ export function FormSelect({
   "aria-required"?: boolean | "true" | "false";
   onChange: (value: string) => void;
 }) {
+  const selectedOption = options.find((option) => option.value === value);
   return (
-    <Select value={value} disabled={disabled} onValueChange={onChange}>
+    <Select value={selectedOption?.value ?? ""} disabled={disabled} onValueChange={onChange}>
       <SelectTrigger
         id={id}
         aria-describedby={ariaDescribedBy}
@@ -46,7 +47,7 @@ export function FormSelect({
         aria-invalid={invalid}
         className={triggerClassName}
       >
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder}>{selectedOption?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

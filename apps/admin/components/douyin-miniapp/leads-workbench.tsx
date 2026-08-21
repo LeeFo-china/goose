@@ -19,17 +19,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { requestBackendJson } from "@/lib/backend-client";
 import {
+  buildAssigneeOptionsPath, normalizeAssigneeCandidatePage,
+  normalizeAssigneeFilterOptionPage,
+  type AssigneeCandidatePage, type AssigneeFilterOptionsState,
+} from "./leads-assignee-options";
+import {
   buildLeadApiQuery, buildLeadCommand, buildLeadHref,
   createLatestLeadListTarget, createLeadIdempotencyIntent,
   createLeadRequestAuthority, createSubmissionGate, getAllowedLeadActions,
   getLeadViewState, isLeadCommandResult, normalizeFollowUpPage,
-  normalizeAssigneeCandidatePage, normalizeLeadDetail, normalizeLeadPage,
+  normalizeLeadDetail, normalizeLeadPage,
   normalizeLeadDateRange, parseLeadFilters,
   type Appointment, type LeadAction,
   type LeadDetail, type LeadFilters, type LeadPage,
 } from "./leads-workbench-logic";
 
 export type { LeadDetail, LeadPage } from "./leads-workbench-logic";
+export { buildAssigneeOptionsPath, normalizeAssigneeFilterOptionPage } from
+  "./leads-assignee-options";
 type Option = { value: string; label: string };
 type ActionValues = {
   assigneeId?: string; appointmentId?: string; followUpType?: string;
@@ -54,12 +61,13 @@ export function createActionSubmissionCoordinator() {
   };
 }
 
-export function buildAssigneeOptionsPath(kind: "assign" | "filter", keyword: string) {
-  const params = new URLSearchParams({ page: "1", pageSize: "100" });
-  const normalizedKeyword = keyword.trim();
-  if (normalizedKeyword) params.set("keyword", normalizedKeyword);
-  const resource = kind === "assign" ? "assignee-candidates" : "assignee-filter-options";
-  return `${API_PATH}/${resource}?${params}`;
+type AssigneeFilterOptionsEvent = { type: "failed" | "invalid" } | {
+  type: "success"; page: AssigneeCandidatePage;
+};
+export function transitionAssigneeFilterOptions(current: AssigneeFilterOptionsState,
+  event: AssigneeFilterOptionsEvent): AssigneeFilterOptionsState {
+  return event.type === "success" ? { options: event.page.list,
+    hasMore: event.page.pagination.totalPages > 1 } : current;
 }
 
 export function validateLeadFilterDraft(filters: LeadFilters): string | null {
@@ -68,8 +76,9 @@ export function validateLeadFilterDraft(filters: LeadFilters): string | null {
 }
 
 export function LeadsWorkbench({ initialData, initialError, initialFilters,
-  permissions }: {
+  initialFilterAssigneeOptions, permissions }: {
   initialData: LeadPage; initialError: string | null; initialFilters: LeadFilters;
+  initialFilterAssigneeOptions?: AssigneeFilterOptionsState;
   permissions: readonly string[];
 }) {
   const [data, setData] = useState(initialData);
@@ -91,11 +100,13 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   const [assigneeLoading, setAssigneeLoading] = useState(false);
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const [assigneeHasMore, setAssigneeHasMore] = useState(false);
-  const [filterAssigneeOptions, setFilterAssigneeOptions] = useState<Option[]>([]);
+  const [filterAssigneeState, setFilterAssigneeState] = useState<AssigneeFilterOptionsState>({
+    options: initialFilterAssigneeOptions?.options ?? [],
+    hasMore: initialFilterAssigneeOptions?.hasMore ?? false,
+  });
   const [filterAssigneeKeyword, setFilterAssigneeKeyword] = useState("");
   const [filterAssigneeLoading, setFilterAssigneeLoading] = useState(false);
   const [filterAssigneeError, setFilterAssigneeError] = useState<string | null>(null);
-  const [filterAssigneeHasMore, setFilterAssigneeHasMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const listAuthority = useRef(createLeadRequestAuthority()).current;
   const detailAuthority = useRef(createLeadRequestAuthority()).current;
@@ -177,24 +188,27 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
     }
   }, [assigneeAuthority]);
 
-  const loadFilterAssigneeOptions = useCallback(async (keyword: string) => {
+  const loadFilterAssigneeOptions = useCallback(async (keyword: string,
+    includeEmployeeId: string) => {
     const request = filterAssigneeAuthority.begin();
     setFilterAssigneeLoading(true); setFilterAssigneeError(null);
     try {
       const raw = await requestBackendJson<unknown>(
-        buildAssigneeOptionsPath("filter", keyword),
+        buildAssigneeOptionsPath("filter", keyword, includeEmployeeId),
         { cache: "no-store", signal: request.controller.signal,
           fallbackMessage: "负责人筛选项加载失败" },
       );
       if (!filterAssigneeAuthority.isCurrent(request)) return;
-      const parsed = normalizeAssigneeCandidatePage(raw);
-      if (!parsed) { setFilterAssigneeOptions([]); setFilterAssigneeHasMore(false);
+      const parsed = normalizeAssigneeFilterOptionPage(raw, includeEmployeeId);
+      if (!parsed) { setFilterAssigneeState((current) =>
+        transitionAssigneeFilterOptions(current, { type: "invalid" }));
         setFilterAssigneeError("负责人筛选项响应无效，请重试"); return; }
-      setFilterAssigneeOptions(parsed.list);
-      setFilterAssigneeHasMore(parsed.pagination.totalPages > 1);
+      setFilterAssigneeState((current) => transitionAssigneeFilterOptions(current,
+        { type: "success", page: parsed }));
     } catch {
       if (filterAssigneeAuthority.isCurrent(request)) {
-        setFilterAssigneeOptions([]); setFilterAssigneeHasMore(false);
+        setFilterAssigneeState((current) =>
+          transitionAssigneeFilterOptions(current, { type: "failed" }));
         setFilterAssigneeError("负责人筛选项加载失败，请重试");
       }
     } finally {
@@ -208,9 +222,9 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   }, [assigneeAuthority, canAssign, loadAssigneeCandidates]);
 
   useEffect(() => {
-    void loadFilterAssigneeOptions("");
+    void loadFilterAssigneeOptions("", filters.assigneeId);
     return () => filterAssigneeAuthority.invalidate();
-  }, [filterAssigneeAuthority, loadFilterAssigneeOptions]);
+  }, [filterAssigneeAuthority, filters.assigneeId, loadFilterAssigneeOptions]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -334,7 +348,7 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
       <div className="min-w-0"><h1 className="text-xl font-semibold tracking-normal">抖音线索</h1><p className="mt-1 text-sm text-muted-foreground">处理量房预约、负责人、跟进和客户转化。当前筛选共 {data.pagination.total} 条记录。</p></div>
     </header>
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-      <CardHeader className="shrink-0 border-b bg-muted/20 p-3"><CardTitle className="sr-only">线索任务列表</CardTitle><CardDescription className="sr-only">按状态、负责人、日期和关键词筛选抖音量房线索</CardDescription><LeadFiltersToolbar filters={filters} assigneeOptions={filterAssigneeOptions} assigneeKeyword={filterAssigneeKeyword} assigneeLoading={filterAssigneeLoading} assigneeError={filterAssigneeError} assigneeHasMore={filterAssigneeHasMore} disabled={loading} onAssigneeKeywordChange={setFilterAssigneeKeyword} onAssigneeSearch={() => void loadFilterAssigneeOptions(filterAssigneeKeyword)} onNavigate={navigate} /></CardHeader>
+      <CardHeader className="shrink-0 border-b bg-muted/20 p-3"><CardTitle className="sr-only">线索任务列表</CardTitle><CardDescription className="sr-only">按状态、负责人、日期和关键词筛选抖音量房线索</CardDescription><LeadFiltersToolbar filters={filters} assigneeOptions={filterAssigneeState.options} assigneeKeyword={filterAssigneeKeyword} assigneeLoading={filterAssigneeLoading} assigneeError={filterAssigneeError} assigneeHasMore={filterAssigneeState.hasMore} disabled={loading} onAssigneeKeywordChange={setFilterAssigneeKeyword} onAssigneeSearch={(includeEmployeeId) => void loadFilterAssigneeOptions(filterAssigneeKeyword, includeEmployeeId)} onNavigate={navigate} /></CardHeader>
       <CardContent className="relative flex min-h-0 flex-1 flex-col p-0" aria-busy={loading}>
         <div className="min-h-0 flex-1 overflow-auto">
           {viewState === "loading" ? <LeadListSkeleton /> : null}
@@ -374,7 +388,8 @@ function LeadFiltersToolbar({ filters, assigneeOptions, assigneeKeyword,
   filters: LeadFilters; assigneeOptions: readonly Option[]; assigneeKeyword: string;
   assigneeLoading: boolean; assigneeError: string | null; assigneeHasMore: boolean;
   disabled: boolean; onAssigneeKeywordChange: (value: string) => void;
-  onAssigneeSearch: () => void; onNavigate: (filters: LeadFilters) => void;
+  onAssigneeSearch: (includeEmployeeId: string) => void;
+  onNavigate: (filters: LeadFilters) => void;
 }) {
   const [draft, setDraft] = useState(filters);
   const [error, setError] = useState<string | null>(null);
@@ -384,8 +399,7 @@ function LeadFiltersToolbar({ filters, assigneeOptions, assigneeKeyword,
     if (validationError) { setError(validationError); return; }
     setError(null); onNavigate({ ...draft, page: 1, keyword: draft.keyword.trim() }); }
   function searchAssigneeOptions() {
-    setDraft((current) => ({ ...current, assigneeId: "" }));
-    onAssigneeSearch();
+    onAssigneeSearch(draft.assigneeId);
   }
   return <form className="grid gap-2 md:grid-cols-2 xl:grid-cols-[140px_minmax(220px,1fr)_160px_145px_145px_minmax(180px,1fr)_72px]" onSubmit={submit}>
     <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-status-filter">状态</FieldLabel><FormSelect id="douyin-lead-status-filter" value={draft.status || "__all"} disabled={disabled} options={STATUS_OPTIONS} onChange={(value) => setDraft({ ...draft, status: value === "__all" ? "" : value as LeadFilters["status"] })} /></Field>

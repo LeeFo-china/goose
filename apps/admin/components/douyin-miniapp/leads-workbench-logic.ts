@@ -65,7 +65,6 @@ export type LeadDetail = LeadRow & {
   follow_ups: { list: FollowUp[]; pagination: Pagination };
 };
 export type FollowUpPage = { list: FollowUp[]; pagination: Pagination };
-export type AssigneeCandidatePage = { list: Array<{ value: string; label: string }>; pagination: Pagination };
 export type LeadSourceProjection = {
   attribution: Partial<Record<
     "source_type" | "entry_path" | "scene" | "campaign_code" | "content_id",
@@ -147,10 +146,6 @@ const followUpSchema = z.strictObject({
 });
 const followUpPageSchema = z.strictObject({
   list: z.array(followUpSchema), pagination: paginationSchema,
-});
-const assigneeCandidatePageSchema = z.strictObject({
-  list: z.array(z.strictObject({ id: z.uuid(), name: z.string().trim().min(1).max(100) })),
-  pagination: paginationSchema,
 });
 const leadDetailSchema = z.strictObject({
   ...leadBaseShape, latest_appointment: appointmentDetailSchema.nullable(),
@@ -479,18 +474,6 @@ export function getLeadViewState(input: { loading: boolean; error: string | null
   if (input.error && input.count === 0) return "error" as const;
   if (input.count === 0) return "empty" as const;
   return "ready" as const;
-}
-
-export function normalizeAssigneeCandidatePage(raw: unknown): AssigneeCandidatePage | null {
-  const parsed = assigneeCandidatePageSchema.safeParse(raw);
-  if (!parsed.success || parsed.data.pagination.page !== 1
-    || parsed.data.pagination.pageSize !== 100 || parsed.data.list.length > 100
-    || parsed.data.list.length > parsed.data.pagination.total) return null;
-  const expectedPages = parsed.data.pagination.total === 0 ? 0
-    : Math.ceil(parsed.data.pagination.total / 100);
-  if (parsed.data.pagination.totalPages !== expectedPages) return null;
-  return { list: parsed.data.list.map((item) => ({ value: item.id, label: item.name })),
-    pagination: parsed.data.pagination };
 }
 
 export function isLeadCommandResult(raw: unknown, action: LeadAction, leadId: string): boolean {

@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { tenantNavGroups } from "@/components/layout/menu-config";
+import { normalizeAssigneeCandidatePage } from "./leads-assignee-options";
 import * as workbenchModule from "./leads-workbench";
 import {
   LeadActionForm,
@@ -23,7 +24,6 @@ import {
   createSubmissionGate,
   getAllowedLeadActions,
   getLeadViewState,
-  normalizeAssigneeCandidatePage,
   normalizeLeadPage,
   parseLeadFilters,
   projectLeadSourceSnapshot,
@@ -252,6 +252,17 @@ describe("tenant Douyin lead workbench behavior", () => {
       list: [{ id: EMPLOYEE_ID, name: "王顾问", tenant_id: LEAD_ID }],
       pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
     })).toBeNull();
+    const selectedOutsideSearch = {
+      list: [{ id: EMPLOYEE_ID, name: "第 101 位负责人" }],
+      pagination: { page: 1, pageSize: 100, total: 0, totalPages: 0 },
+    };
+    const normalizeFilter = (workbenchModule as unknown as Record<string, unknown>)
+      .normalizeAssigneeFilterOptionPage;
+    expect(typeof normalizeFilter).toBe("function");
+    if (typeof normalizeFilter !== "function") return;
+    expect(normalizeFilter(selectedOutsideSearch, EMPLOYEE_ID)?.list)
+      .toEqual([{ value: EMPLOYEE_ID, label: "第 101 位负责人" }]);
+    expect(normalizeAssigneeCandidatePage(selectedOutsideSearch)).toBeNull();
   });
 
   test("targets separate read filter and assignment option endpoints", () => {
@@ -259,12 +270,41 @@ describe("tenant Douyin lead workbench behavior", () => {
       .buildAssigneeOptionsPath;
     expect(typeof builder).toBe("function");
     if (typeof builder !== "function") return;
-    expect(builder("filter", " 王顾问 ")).toBe(
-      "/tenant/douyin-miniapp/leads/assignee-filter-options?page=1&pageSize=100&keyword=%E7%8E%8B%E9%A1%BE%E9%97%AE",
+    expect(builder("filter", " 王顾问 ", EMPLOYEE_ID)).toBe(
+      `/tenant/douyin-miniapp/leads/assignee-filter-options?page=1&pageSize=100&keyword=%E7%8E%8B%E9%A1%BE%E9%97%AE&includeEmployeeId=${EMPLOYEE_ID}`,
     );
     expect(builder("assign", "")).toBe(
       "/tenant/douyin-miniapp/leads/assignee-candidates?page=1&pageSize=100",
     );
+  });
+
+  test("retains filter options and the selected employee after failed searches", () => {
+    const transition = (workbenchModule as unknown as Record<string, unknown>)
+      .transitionAssigneeFilterOptions;
+    expect(typeof transition).toBe("function");
+    if (typeof transition !== "function") return;
+    const current = { options: [{ value: EMPLOYEE_ID, label: "第 101 位负责人" }],
+      hasMore: true };
+    expect(transition(current, { type: "failed" })).toBe(current);
+    expect(transition(current, { type: "invalid" })).toBe(current);
+    expect(transition(current, { type: "success", page: {
+      list: [{ value: LEAD_ID, label: "新负责人" }],
+      pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
+    } })).toEqual({ options: [{ value: LEAD_ID, label: "新负责人" }], hasMore: false });
+  });
+
+  test("renders the restored URL assignee as a selectable filter option", () => {
+    const html = renderToStaticMarkup(createElement(LeadsWorkbench, {
+      initialData: page, initialError: null,
+      initialFilters: { ...DEFAULT_LEAD_FILTERS, assigneeId: EMPLOYEE_ID },
+      initialFilterAssigneeOptions: {
+        options: [{ value: EMPLOYEE_ID, label: "第 101 位负责人" }], hasMore: true,
+      },
+      permissions: ["douyin_lead.read"],
+    }));
+    expect(html).toContain("第 101 位负责人");
+    expect(html).toContain('role="combobox"');
+    expect(html).toContain('id="douyin-lead-assignee-filter"');
   });
 
   test("blocks reversed interactive dates before list navigation", () => {
