@@ -38,6 +38,9 @@ const PhonePatternSource =
 const PhonePattern = new RegExp(PhonePatternSource, 'g');
 const PhoneDetectionPattern = new RegExp(PhonePatternSource);
 const FormatCharacterPattern = /\p{Cf}/gu;
+const UnsafeAiNumeralPattern =
+  /[\p{N}零〇○一二两兩俩倆幺仨三四五六七八九十百千万萬亿億兆半几幾壹贰貳叁參肆伍陆陸柒捌玖拾佰仟廿卅卌皕]/u;
+const HighRiskContactMarkers = ['@', '微信', '威信', 'v信', 'vx', 'wechat'];
 const IdentityNumeralPattern = /[零〇一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟]/gu;
 const IdentityNumeralMap: Readonly<Record<string, string>> = {
   '零': '0', '〇': '0', '一': '1', '二': '2', '两': '2', '三': '3', '四': '4', '五': '5',
@@ -45,12 +48,6 @@ const IdentityNumeralMap: Readonly<Record<string, string>> = {
   '伍': '5', '陆': '6', '柒': '7', '捌': '8', '玖': '9', '十': '0', '百': '0',
   '千': '0', '万': '0', '亿': '0', '拾': '0', '佰': '0', '仟': '0',
 };
-const MoneyNumberSource = String.raw`(?:\d+(?:[.,]\d+)?|[零〇一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟]+)`;
-const MoneyExpressionPattern = new RegExp([
-  String.raw`(?:人民币|[¥￥]|RMB|CNY)\s*${MoneyNumberSource}`,
-  String.raw`${MoneyNumberSource}\s*(?:万元|千元|百元|元|块|万|人民币|[¥￥]|RMB|CNY)`,
-  String.raw`(?:预算|金额|报价|单价|价格|费用|造价|总价|材料费|人工费)\s*(?:(?:为|是|约|大约|预计|建议|新增|追加|调整至|控制在)\s*)?(?:[:：]\s*)?${MoneyNumberSource}`,
-].join('|'), 'iu');
 const RoadAddressPattern = new RegExp(
   String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?!\d)(?![ \u3000]*(?:[VvＶｖ]|伏|版|毫米|厘米|公分|平方米|米|㎡|(?:[mMｍＭ]|[cCｃＣ][mMｍＭ]|[mMｍＭ]{2})(?:²|2)?(?![A-Za-z])))`,
   'gu',
@@ -70,7 +67,7 @@ const SYSTEM_PROMPT = [
   '你是装修预算初算解释助手。',
   '只能解释服务端已经计算完成的规则结果，不得新增、删除或修改任何金额。',
   '不得把初算描述为正式报价，不得承诺最终价格、工期、材料或施工结果。',
-  '不得输出任何金额、单价、预算数字或人民币/¥/￥/元/块/万/万元/千元/RMB/CNY等货币表达。',
+  '不得输出任何数字、数字词、金额、单价或预算数字。',
   '不得返回联系方式或详细地址。',
   '只返回符合指定结构的 JSON 对象，不要输出 Markdown 或额外字段。',
 ].join('\n');
@@ -239,12 +236,12 @@ function sanitizeAiAnalysis(
     ...analysis.risk_factors,
     ...analysis.onsite_questions,
   ];
-  if (textValues.some(containsMoneyExpression)) throw invalid();
+  if (textValues.some(containsUnsafeAiText)) throw invalid();
   const sanitized = DouyinBudgetAiAnalysisSchema.safeParse({
-    summary: sanitizeText(analysis.summary),
-    allocation_advice: sanitizeTextList(analysis.allocation_advice),
-    risk_factors: sanitizeTextList(analysis.risk_factors),
-    onsite_questions: sanitizeTextList(analysis.onsite_questions),
+    summary: normalizeAiText(analysis.summary),
+    allocation_advice: analysis.allocation_advice.map(normalizeAiText),
+    risk_factors: analysis.risk_factors.map(normalizeAiText),
+    onsite_questions: analysis.onsite_questions.map(normalizeAiText),
   });
   if (!sanitized.success) throw invalid();
   return sanitized.data;
@@ -276,19 +273,10 @@ function buildUserPrompt(
 function promptRequestSnapshot(request: DouyinBudgetEstimateRequest) {
   return {
     area: request.area,
-    property_condition: sanitizeText(request.property_condition),
-    decoration_tier: sanitizeText(request.decoration_tier),
-    decoration_scope: sanitizeText(request.decoration_scope),
-    ...(request.layout !== undefined
-      ? { layout: sanitizeText(request.layout) }
-      : {}),
-    ...(request.style !== undefined
-      ? { style: sanitizeText(request.style) }
-      : {}),
-    option_codes: sanitizeTextList(request.option_codes),
-    ...(request.demand !== undefined
-      ? { demand: sanitizeText(request.demand) }
-      : {}),
+    property_condition: request.property_condition,
+    decoration_tier: request.decoration_tier,
+    decoration_scope: request.decoration_scope,
+    option_codes: request.option_codes,
   };
 }
 
@@ -345,9 +333,23 @@ function normalizeForSafety(value: string) {
   return { cleaned, normalized, identity, hadFormatCharacters };
 }
 
-function containsMoneyExpression(value: string): boolean {
-  const normalized = value.replace(FormatCharacterPattern, '').normalize('NFKC');
-  return MoneyExpressionPattern.test(normalized);
+function normalizeAiText(value: string): string {
+  return value.replace(FormatCharacterPattern, '').normalize('NFKC');
+}
+
+function containsUnsafeAiText(value: string): boolean {
+  const cleaned = value.replace(FormatCharacterPattern, '');
+  const normalized = cleaned.normalize('NFKC');
+  return UnsafeAiNumeralPattern.test(cleaned)
+    || UnsafeAiNumeralPattern.test(normalized)
+    || containsHighRiskContact(normalized)
+    || PhoneDetectionPattern.test(normalized)
+    || containsDetailedAddress(normalized);
+}
+
+function containsHighRiskContact(value: string): boolean {
+  const compact = value.toLowerCase().replace(/\s/gu, '');
+  return HighRiskContactMarkers.some((marker) => compact.includes(marker));
 }
 
 function containsDetailedAddress(value: string): boolean {

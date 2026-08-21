@@ -14,6 +14,10 @@ const sceneMigration = new URL(
   '20260821103100_seed_douyin_budget_ai_route.sql',
   migrationsDirectory,
 );
+const primaryBindingMigration = new URL(
+  '20260821103150_bind_douyin_budget_ai_primary_model.sql',
+  migrationsDirectory,
+);
 const fallbackRepairMigration = new URL(
   '20260821103200_remove_douyin_budget_ai_fallback.sql',
   migrationsDirectory,
@@ -68,6 +72,10 @@ describe('douyin budget AI state machine migration', () => {
       [
         '20260821103100_seed_douyin_budget_ai_route.sql',
         'a83177f0603509b300c3e326d14010ff183bfd4ee2e1a7ecbd8f29f50ae8620d',
+      ],
+      [
+        '20260821103150_bind_douyin_budget_ai_primary_model.sql',
+        '1a2180514751814f5989b6af6fe5cd32c4d2709c4a3131bf78e48254a8568219',
       ],
       [
         '20260821103200_remove_douyin_budget_ai_fallback.sql',
@@ -211,5 +219,28 @@ describe('douyin budget AI state machine migration', () => {
     expect(sql).not.toMatch(/set\s+temperature/);
     expect(sql).not.toMatch(/set\s+response_format/);
     expect(sql).not.toMatch(/set\s+timeout_ms/);
+  });
+
+  test('binds the primary model before the fallback repair on fresh replay', async () => {
+    const source = await Bun.file(primaryBindingMigration).text();
+    const sql = compact(source);
+    expect(source.startsWith('-- Rollback: forward-only.')).toBe(true);
+    expect(sql).toContain("route.scene_code = 'douyin_budget_explanation'");
+    expect(sql).toContain('set primary_model_id = model.id');
+    expect(sql).toContain("model.code = 'deepseek-chat'");
+    expect(sql).toContain("provider.code = 'deepseek'");
+    expect(sql).toContain("model.status = 'active'");
+    expect(sql).toContain("provider.status = 'active'");
+    expect(sql).toContain('route.temperature = 0.200::numeric');
+    expect(sql).toContain("route.response_format = 'json_object'");
+    expect(sql).toContain('route.timeout_ms = 30000');
+    expect(sql).not.toMatch(/set\s+fallback_model_id/);
+    expect(sql).not.toMatch(/set\s+temperature/);
+    expect(sql).not.toMatch(/set\s+response_format/);
+    expect(sql).not.toMatch(/set\s+timeout_ms/);
+    expect(
+      '20260821103150_bind_douyin_budget_ai_primary_model.sql'
+        < '20260821103200_remove_douyin_budget_ai_fallback.sql',
+    ).toBe(true);
   });
 });

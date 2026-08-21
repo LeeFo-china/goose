@@ -88,7 +88,9 @@ describe('DouyinBudgetAiExplanationService', () => {
     const prompt = JSON.stringify(input.messages);
     expect(prompt).toContain('105000');
     expect(prompt).toContain('155000');
-    expect(prompt).toContain('三室两厅');
+    expect(prompt).not.toContain('三室两厅');
+    expect(prompt).not.toContain('幸福大道88号3栋的现代风');
+    expect(prompt).not.toContain('需要更多收纳');
     expect(prompt).toContain('预算编号9138001380001应保留');
     expect(prompt).toContain('[已脱敏]');
     for (const pii of [
@@ -157,7 +159,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     }
   });
 
-  test('sanitizes historical saved analysis at the read boundary', async () => {
+  test('fail-closes historical saved unsafe analysis at the read boundary', async () => {
     const deps = buildDependencies();
     const historicalAnalysis: DouyinBudgetAiAnalysis = {
       summary: '联系138-0013-8000确认预算。',
@@ -177,19 +179,12 @@ describe('DouyinBudgetAiExplanationService', () => {
       },
     } as never);
 
-    const response = await new Service(deps.values as never).generate(
-      user,
-      estimateId,
-      false,
-    );
-    const serialized = JSON.stringify(response);
-    for (const pii of [
-      '138-0013-8000', '138 0013 8000',
-      '幸福大道88号3栋', '门牌号66',
-    ]) {
-      expect(serialized).not.toContain(pii);
-    }
-    expect(serialized).toContain('[已脱敏]');
+    await expect(
+      new Service(deps.values as never).generate(user, estimateId, false),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: 'DOUYIN_BUDGET_PUBLIC_RESULT_INVALID',
+    });
     expect(deps.gateway.chat).not.toHaveBeenCalled();
     expect(deps.budgetRepository.completeAiAnalysis).not.toHaveBeenCalled();
     expect(deps.budgetRepository.failAiAnalysis).not.toHaveBeenCalled();
@@ -237,7 +232,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     expect(deps.budgetRepository.completeAiAnalysis).not.toHaveBeenCalled();
   });
 
-  test('redacts a landline without suppressing non-address demand context', async () => {
+  test('omits landline-bearing demand instead of forwarding free text', async () => {
     const deps = buildDependencies();
     deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
       ...deps.claimed,
@@ -251,12 +246,11 @@ describe('DouyinBudgetAiExplanationService', () => {
     });
     await new Service(deps.values as never).generate(user, estimateId, false);
     const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
-    expect(prompt).toContain('需要更多收纳');
-    expect(prompt).toContain('[已脱敏]');
+    expect(prompt).not.toContain('需要更多收纳');
     expect(prompt).not.toContain('0376-1234567');
   });
 
-  test('keeps renovation terms while redacting only high-confidence address forms', async () => {
+  test('omits renovation free text while sanitizing deterministic addresses', async () => {
     const deps = buildDependencies();
     const addresses = [
       '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
@@ -283,14 +277,14 @@ describe('DouyinBudgetAiExplanationService', () => {
     });
     await new Service(deps.values as never).generate(user, estimateId, false);
     const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
-    expect(prompt).toContain('卧室电路 220V需要调整；厨房水路12米需要改造');
-    expect(prompt).toContain('装修思路 2026版；全屋线路20米需要更换');
-    expect(prompt).toContain('施工道路8米宽、全屋回路30厘米、厨房管路500毫米、空调风路2公分、燃气气路3㎡、设备油路4m、施工支路6米宽');
+    expect(prompt).not.toContain('卧室电路 220V需要调整；厨房水路12米需要改造');
+    expect(prompt).not.toContain('装修思路 2026版；全屋线路20米需要更换');
+    expect(prompt).not.toContain('施工道路8米宽、全屋回路30厘米、厨房管路500毫米、空调风路2公分、燃气气路3㎡、设备油路4m、施工支路6米宽');
     for (const address of addresses) expect(prompt).not.toContain(address);
     expect(prompt).toContain('[已脱敏]');
   });
 
-  test('sanitizes PII in every AI analysis string before persistence and response', async () => {
+  test('rejects unsafe AI analysis before persistence', async () => {
     const deps = buildDependencies();
     const piiAnalysis = {
       summary: '联系138 0013 8000确认预算。',
@@ -316,21 +310,25 @@ describe('DouyinBudgetAiExplanationService', () => {
       provider: 'deepseek',
       model: 'deepseek-chat',
     });
-    deps.budgetRepository.completeAiAnalysis.mockImplementationOnce(
-      async (input: unknown) => ({
-        ...deps.completedRecord,
-        ai_analysis: (input as { analysis: DouyinBudgetAiAnalysis }).analysis,
-      }),
-    );
     const response = await new Service(deps.values as never).generate(
       user,
       estimateId,
       false,
     );
-    const persisted = JSON.stringify(
-      deps.budgetRepository.completeAiAnalysis.mock.calls[0]?.[0],
-    );
     const publicResponse = JSON.stringify(response);
+    expect(response).toEqual({
+      estimate: { ...estimateResult, ai_status: 'failed' },
+      ai_analysis: null,
+    });
+    expect(deps.budgetRepository.completeAiAnalysis).not.toHaveBeenCalled();
+    expect(deps.budgetRepository.failAiAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({
+        errorCode: 'DOUYIN_BUDGET_AI_INVALID_RESPONSE',
+      }),
+    );
+    const failureCall = JSON.stringify(
+      deps.budgetRepository.failAiAnalysis.mock.calls[0]?.[0],
+    );
     for (const pii of [
       '138 0013 8000', '0376-1234567', '幸福大道88号3栋',
       '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
@@ -338,19 +336,13 @@ describe('DouyinBudgetAiExplanationService', () => {
       '春风小区2号楼', '固始幸福村6号楼', '王府弄5号',
       '门牌号66', '2单元501室',
     ]) {
-      expect(persisted).not.toContain(pii);
+      expect(failureCall).not.toContain(pii);
       expect(publicResponse).not.toContain(pii);
     }
-    expect(persisted).toContain('卧室收纳');
-    expect(publicResponse).toContain('卧室收纳');
-    expect(persisted).toContain('卧室电路 220V需要调整；厨房水路12米需要改造；全屋线路20米需要更换');
-    expect(publicResponse).toContain('施工道路8米宽；全屋回路30厘米；厨房管路500毫米；空调风路2公分；燃气气路3㎡；设备油路4m；施工支路6米宽');
-    expect(publicResponse).toContain('卧室电路220，装修思路2026');
-    expect(persisted).toContain('[已脱敏]');
     const gatewayInput = deps.gateway.chat.mock.calls[0]?.[0] as {
       messages: Array<{ content: string }>;
     };
-    expect(gatewayInput.messages[0]?.content).toContain('不得返回联系方式或详细地址');
+    expect(gatewayInput.messages[0]?.content).toContain('不得输出任何数字、数字词');
   });
 
   test('records a stable timeout code without leaking gateway details', async () => {
@@ -409,7 +401,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     }
   });
 
-  test('returns current state when a stale worker loses its completion or failure lease', async () => {
+  test('fail-closes unsafe succeeded state returned to stale workers', async () => {
     const historicalAnalysis: DouyinBudgetAiAnalysis = {
       ...analysis,
       summary: '联系138-0013-8000确认预算。',
@@ -434,11 +426,12 @@ describe('DouyinBudgetAiExplanationService', () => {
       ...completedDeps.completedRecord,
       ai_analysis: historicalAnalysis,
     });
-    const completedResponse = await new Service(
-      completedDeps.values as never,
-    ).generate(user, estimateId, false);
-    expect(JSON.stringify(completedResponse)).not.toContain('138-0013-8000');
-    expect(JSON.stringify(completedResponse)).not.toContain('幸福大道88号3栋');
+    await expect(
+      new Service(completedDeps.values as never).generate(user, estimateId, false),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: 'DOUYIN_BUDGET_PUBLIC_RESULT_INVALID',
+    });
 
     const failedDeps = buildDependencies();
     failedDeps.gateway.chat.mockRejectedValueOnce(new Error('timeout'));
@@ -450,16 +443,12 @@ describe('DouyinBudgetAiExplanationService', () => {
       ai_model: 'deepseek-chat',
       ai_claimed_at: null,
     } as never);
-    const staleResponse = await new Service(failedDeps.values as never).generate(
-      user,
-      estimateId,
-      false,
-    );
-    expect(staleResponse.estimate.ai_status).toBe('succeeded');
-    const serialized = JSON.stringify(staleResponse);
-    expect(serialized).toContain('[已脱敏]');
-    expect(serialized).not.toContain('138-0013-8000');
-    expect(serialized).not.toContain('幸福大道88号3栋');
+    await expect(
+      new Service(failedDeps.values as never).generate(user, estimateId, false),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+      code: 'DOUYIN_BUDGET_PUBLIC_RESULT_INVALID',
+    });
   });
 
   test('never reports a fake failed state when the failure command itself fails', async () => {

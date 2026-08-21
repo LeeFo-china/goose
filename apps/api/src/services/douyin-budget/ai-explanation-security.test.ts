@@ -23,23 +23,23 @@ beforeAll(async () => {
 });
 
 describe('DouyinBudgetAiExplanationService security boundaries', () => {
-  test('normalizes Unicode before redacting prompt and AI output PII', async () => {
+  test('omits every user free-text field and sanitizes controlled result text', async () => {
     const deps = buildDependencies();
-    const unicodeOutput: DouyinBudgetAiAnalysis = {
-      summary: '联系１３８　００１３　８０００确认。',
-      allocation_advice: ['联系138​0013⁠8000确认。'],
-      risk_factors: ['人民路八十八号需要复核。'],
-      onsite_questions: ['联系１三８​〇〇1３８0００确认。'],
-    };
+    const layout = '自由布局：联系１３８　００１３　８０００';
+    const style = '自由风格：联系138​0013⁠8000';
+    const demand = [
+      '自由需求', '联系１三８​〇〇1３８0００',
+      '人民路八十八号', '幸福小区三号楼二单元五〇一室',
+    ].join('；');
     deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
       ...deps.claimed,
       estimate: {
         ...baseRecord,
         request_payload: {
           ...baseRecord.request_payload as object,
-          layout: '现代​简约',
-          style: '联系１３８　００１３　８０００',
-          demand: '联系138​0013⁠8000，厨房水路十二米需要改造',
+          layout,
+          style,
+          demand,
         },
         result_payload: {
           ...estimateResult,
@@ -55,63 +55,67 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
         },
       },
     });
-    deps.gateway.chat.mockResolvedValueOnce({
-      content: JSON.stringify(unicodeOutput),
-      provider: 'deepseek',
-      model: 'deepseek-chat',
-    });
-    deps.budgetRepository.completeAiAnalysis.mockImplementationOnce(
-      async (input: unknown) => ({
-        ...deps.completedRecord,
-        ai_analysis: (input as { analysis: DouyinBudgetAiAnalysis }).analysis,
-      }),
-    );
 
     const response = await new Service(deps.values as never).generate(
       user,
       estimateId,
       false,
     );
-    const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
-    const persisted = JSON.stringify(
-      deps.budgetRepository.completeAiAnalysis.mock.calls[0]?.[0],
-    );
-    const publicResponse = JSON.stringify(response);
-    expect(prompt).toContain('现代简约');
-    expect(prompt).toContain('厨房水路十二米需要改造');
-    for (const pii of [
-      '１３８　００１３　８０００', '138 0013 8000',
-      '138​0013⁠8000', '13800138000',
-      '１三８​〇〇1３８0００', '一三八〇〇一三八〇〇〇',
-      '人民路八十八号', '人民路088号',
-      '幸福小区三号楼二单元五〇一室',
-      '幸福小区3号楼2单元501室',
-    ]) {
-      expect(prompt).not.toContain(pii);
-      expect(persisted).not.toContain(pii);
-      expect(publicResponse).not.toContain(pii);
+    const gatewayInput = deps.gateway.chat.mock.calls[0]?.[0] as {
+      messages: Array<{ content: string }>;
+    };
+    const userPrompt = JSON.parse(gatewayInput.messages[1]?.content ?? '{}') as {
+      request: Record<string, unknown>;
+    };
+    const prompt = JSON.stringify(userPrompt);
+    expect(userPrompt.request).toEqual({
+      area: 100,
+      property_condition: 'rough',
+      decoration_tier: 'comfortable',
+      decoration_scope: 'whole_house',
+      option_codes: ['custom_cabinet'],
+    });
+    expect(prompt).not.toContain('layout');
+    expect(prompt).not.toContain('style');
+    expect(prompt).not.toContain('demand');
+    for (const freeText of [layout, style, demand]) {
+      expect(prompt).not.toContain(freeText);
     }
-    expect(persisted).toContain('[已脱敏]');
-    expect(publicResponse).toContain('[已脱敏]');
+    for (const pii of [
+      '１３８　００１３　８０００',
+      '138​0013⁠8000', '１三８​〇〇1３８0００',
+      '人民路八十八号', '幸福小区三号楼二单元五〇一室',
+    ]) expect(prompt).not.toContain(pii);
+    expect(prompt).toContain('[已脱敏]');
+    expect(response.ai_analysis).toEqual(analysis);
   });
 
-  test('fails one logical attempt for every generated monetary expression', async () => {
-    const monetaryExpressions = [
+  test('fails one logical attempt for any numeric or high-risk AI text', async () => {
+    const unsafeExpressions = [
       '建议新增硬装预算999万元',
-      '预算人民币九百元',
-      '单价￥９９９',
-      '材料费 RMB 999',
-      '人工费 999 CNY',
-      '追加三千块',
-      '预留20万',
-      '建议硬装预算999',
-      '主材单价九百',
+      '建议确认第2项',
+      '建议确认第２项',
+      '建议确认第Ⅳ项',
+      '建议确认幺号区域',
+      '建议确认兩处墙面',
+      '建议确认壹处节点',
+      '联系138​0013⁠8000确认',
+      '邮箱 contact@example.com',
+      '微信号 abcdef',
+      '幸福小区',
     ];
     let systemPrompt: string | undefined;
-    for (const expression of monetaryExpressions) {
+    for (const [index, expression] of unsafeExpressions.entries()) {
       const deps = buildDependencies();
+      const unsafeAnalysis: DouyinBudgetAiAnalysis = index % 4 === 0
+        ? { ...analysis, summary: expression }
+        : index % 4 === 1
+          ? { ...analysis, allocation_advice: [expression] }
+          : index % 4 === 2
+            ? { ...analysis, risk_factors: [expression] }
+            : { ...analysis, onsite_questions: [expression] };
       deps.gateway.chat.mockResolvedValueOnce({
-        content: JSON.stringify({ ...analysis, summary: expression }),
+        content: JSON.stringify(unsafeAnalysis),
         provider: 'deepseek',
         model: 'deepseek-chat',
       });
@@ -136,10 +140,43 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
         }),
       );
     }
-    expect(systemPrompt).toContain('不得输出任何金额、单价、预算数字');
+    expect(systemPrompt).toContain('不得输出任何数字、数字词、金额');
+    expect(systemPrompt).toContain('联系方式或详细地址');
   });
 
-  test('fail-closes saved and stale succeeded analysis containing money', async () => {
+  test('accepts safe AI text without numeric or identity markers', async () => {
+    const deps = buildDependencies();
+    const safeAnalysis: DouyinBudgetAiAnalysis = {
+      ...analysis,
+      summary: '规则​解释，保持克制。',
+      risk_factors: ['风险因素：墙体现状待核实。'],
+    };
+    deps.gateway.chat.mockResolvedValueOnce({
+      content: JSON.stringify(safeAnalysis),
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+    });
+    deps.budgetRepository.completeAiAnalysis.mockImplementationOnce(
+      async (input: unknown) => ({
+        ...deps.completedRecord,
+        ai_analysis: (input as { analysis: DouyinBudgetAiAnalysis }).analysis,
+      }),
+    );
+    const response = await new Service(deps.values as never).generate(
+      user,
+      estimateId,
+      false,
+    );
+    expect(response.ai_analysis).toEqual({
+      ...safeAnalysis,
+      summary: '规则解释,保持克制。',
+      risk_factors: ['风险因素:墙体现状待核实。'],
+    });
+    expect(deps.budgetRepository.completeAiAnalysis).toHaveBeenCalledTimes(1);
+    expect(deps.budgetRepository.failAiAnalysis).not.toHaveBeenCalled();
+  });
+
+  test('fail-closes saved and stale succeeded unsafe analysis', async () => {
     for (const attemptCount of [1, 2]) {
       const deps = buildDependencies();
       deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
@@ -149,7 +186,9 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
           ai_status: 'succeeded',
           ai_analysis: {
             ...analysis,
-            summary: '建议新增硬装预算999万元',
+            summary: attemptCount === 1
+              ? '建议确认第2项'
+              : '幸福小区',
           },
           ai_provider: 'deepseek',
           ai_model: 'deepseek-chat',
