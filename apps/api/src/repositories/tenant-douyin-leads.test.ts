@@ -149,7 +149,8 @@ describe("TenantDouyinLeadsRepository", () => {
       keyword: "晴天",
       visibleAssigneeIds: [EMPLOYEE_ID],
     })).resolves.toEqual({
-      rows: [{ lead, appointments: [appointmentSummary], customer, assignee: employee }],
+      rows: [{ lead, appointments: [{ ...appointmentSummary,
+        budget_range: null }], customer, assignee: employee }],
       total: 21,
     });
 
@@ -210,7 +211,8 @@ describe("TenantDouyinLeadsRepository", () => {
     const result = await new Repository(context.client as never).listLeads({
       tenantId: TENANT_ID, page: 1, pageSize: 100, visibleAssigneeIds: null,
     });
-    expect(result.rows[0]?.appointments).toEqual([latest]);
+    expect(result.rows[0]?.appointments).toEqual([{ ...latest,
+      budget_range: null }]);
     expect(context.calls.filter((call) => call.method === "rpc"))
       .toEqual([{ method: "rpc", args: [
         "list_tenant_douyin_lead_latest_appointments",

@@ -45,6 +45,8 @@ export const TenantDouyinLeadAssigneeCandidatesQuerySchema = z.strictObject({
     && value.trim() === "" ? undefined : value,
   z.string().trim().max(100).optional()),
 });
+export const TenantDouyinLeadAssigneeFilterOptionsQuerySchema =
+  TenantDouyinLeadAssigneeCandidatesQuerySchema;
 
 export const TenantDouyinLeadParamsSchema = z.strictObject({
   id: z.uuid("无效的抖音线索 ID"),
@@ -115,6 +117,12 @@ export type TenantDouyinLeadAssigneeCandidatesQuery = z.infer<
 >;
 export type TenantDouyinLeadAssigneeCandidatesQueryInput = z.input<
   typeof TenantDouyinLeadAssigneeCandidatesQuerySchema
+>;
+export type TenantDouyinLeadAssigneeFilterOptionsQuery = z.infer<
+  typeof TenantDouyinLeadAssigneeFilterOptionsQuerySchema
+>;
+export type TenantDouyinLeadAssigneeFilterOptionsQueryInput = z.input<
+  typeof TenantDouyinLeadAssigneeFilterOptionsQuerySchema
 >;
 export type TenantDouyinLeadAssign = z.infer<
   typeof TenantDouyinLeadAssignSchema

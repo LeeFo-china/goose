@@ -23,6 +23,8 @@ function createController() {
       total: 0, totalPages: 0 } })),
     listAssigneeCandidates: mock(async () => ({ list: [], pagination: { page: 1,
       pageSize: 100, total: 0, totalPages: 0 } })),
+    listAssigneeFilterOptions: mock(async () => ({ list: [], pagination: {
+      page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
     getDetail: mock(async () => ({ id: LEAD_ID })),
     listFollowUps: mock(async () => ({ list: [], pagination: { page: 1,
       pageSize: 20, total: 0, totalPages: 0 } })),
@@ -39,7 +41,7 @@ function createController() {
 }
 
 describe("TenantDouyinLeadsController", () => {
-  test("registers exactly eight routes and the root registry", async () => {
+  test("registers exactly nine routes and the root registry", async () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -50,6 +52,7 @@ describe("TenantDouyinLeadsController", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/tenant/douyin-miniapp/leads" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/assignee-candidates" },
+      { method: "GET", path: "/tenant/douyin-miniapp/leads/assignee-filter-options" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id/follow-ups" },
       { method: "POST", path: "/tenant/douyin-miniapp/leads/:id/assign" },
@@ -104,6 +107,25 @@ describe("TenantDouyinLeadsController", () => {
     } } as never);
     expect(blank.service.listAssigneeCandidates).toHaveBeenCalledWith(
       authContext, { page: 1, pageSize: 20 },
+    );
+  });
+
+  test("validates and delegates independent assignee filter options", async () => {
+    const invalid = createController();
+    await expect(invalid.controller.listAssigneeFilterOptions({ query: {
+      pageSize: 101,
+    } } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(invalid.controller.listAssigneeFilterOptions({ query: {
+      page: 10_001,
+    } } as never)).rejects.toMatchObject({ statusCode: 400 });
+    expect(invalid.getRequiredTenantContext).not.toHaveBeenCalled();
+
+    const valid = createController();
+    await valid.controller.listAssigneeFilterOptions({ query: {
+      page: "2", pageSize: "20", keyword: " 历史顾问 ",
+    } } as never);
+    expect(valid.service.listAssigneeFilterOptions).toHaveBeenCalledWith(
+      authContext, { page: 2, pageSize: 20, keyword: "历史顾问" },
     );
   });
 

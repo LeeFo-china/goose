@@ -11,7 +11,6 @@ import type {
 import { tenantDouyinLeadsRepository } from
   "@/repositories/tenant-douyin-leads";
 import {
-  TenantDouyinLeadAssigneeCandidatesQuerySchema,
   TenantDouyinLeadAssignSchema,
   TenantDouyinLeadConvertSchema,
   TenantDouyinLeadFollowUpListQuerySchema,
@@ -22,6 +21,8 @@ import {
   type TenantDouyinLeadAssign,
   type TenantDouyinLeadAssigneeCandidatesQuery,
   type TenantDouyinLeadAssigneeCandidatesQueryInput,
+  type TenantDouyinLeadAssigneeFilterOptionsQuery,
+  type TenantDouyinLeadAssigneeFilterOptionsQueryInput,
   type TenantDouyinLeadConvert,
   type TenantDouyinLeadFollowUp,
   type TenantDouyinLeadFollowUpListQueryInput,
@@ -39,10 +40,12 @@ import {
   type CustomerPhonePrivacyContext,
 } from "@/services/customer-phone-privacy";
 import {
-  serializeAssigneeCandidate, serializeFollowUpBundle,
-  serializeLeadBundle,
+  serializeFollowUpBundle, serializeLeadBundle,
   type TenantDouyinLeadPhonePrivacyPort,
 } from "@/services/tenant-douyin-leads-serializer";
+import { listTenantDouyinLeadAssigneeCandidates,
+  listTenantDouyinLeadAssigneeFilterOptions } from
+  "@/services/tenant-douyin-lead-assignee-options";
 import type { z } from "zod";
 
 type LeadAction =
@@ -63,6 +66,9 @@ export function permissionFor(action: LeadAction): string {
 }
 
 type RepositoryPort = {
+  listAssigneeFilterOptions(input: TenantDouyinLeadAssigneeFilterOptionsQuery & {
+    tenantId: string; visibleEmployeeIds: readonly string[] | null;
+  }): Promise<{ rows: readonly { id: string; name: string | null }[]; total: number }>;
   listAssigneeCandidates(input: TenantDouyinLeadAssigneeCandidatesQuery & {
     tenantId: string; scope: EffectivePermission["scope"];
     employeeId: string | null; tenantDepartmentId: string | null;
@@ -160,24 +166,14 @@ export class TenantDouyinLeadsService {
 
   async listAssigneeCandidates(authContext: AuthContext,
     input: TenantDouyinLeadAssigneeCandidatesQueryInput) {
-    const tenantId = this.dependencies.accessPolicy
-      .assertTenantContext(authContext);
-    const scope = this.dependencies.accessPolicy.assertPermission(
-      authContext, permissionFor("assign"),
-    );
-    if (!scope || !authContext.employeeId
-      || (scope === "department" && !authContext.tenantDepartmentId)) {
-      throw Errors.forbidden();
-    }
-    const query = parseRequest(TenantDouyinLeadAssigneeCandidatesQuerySchema,
-      input);
-    const result = await this.dependencies.repository.listAssigneeCandidates({
-      tenantId, scope, employeeId: authContext.employeeId,
-      tenantDepartmentId: authContext.tenantDepartmentId, ...query,
-    });
-    assertTotal(result.total);
-    return { list: result.rows.map(serializeAssigneeCandidate),
-      pagination: pagination(query.page, query.pageSize, result.total) };
+    return listTenantDouyinLeadAssigneeCandidates({ authContext, query: input,
+      dependencies: this.dependencies });
+  }
+
+  async listAssigneeFilterOptions(authContext: AuthContext,
+    input: TenantDouyinLeadAssigneeFilterOptionsQueryInput) {
+    return listTenantDouyinLeadAssigneeFilterOptions({ authContext, query: input,
+      dependencies: this.dependencies });
   }
 
   async getDetail(authContext: AuthContext, leadId: string) {

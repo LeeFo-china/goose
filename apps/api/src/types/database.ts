@@ -26171,6 +26171,16 @@ export type Database = {
         }
         Returns: Json
       }
+      list_tenant_douyin_lead_assignee_filter_options: {
+        Args: {
+          p_keyword: string
+          p_page: number
+          p_page_size: number
+          p_tenant_id: string
+          p_visible_employee_ids: string[]
+        }
+        Returns: Json
+      }
       list_tenant_douyin_lead_latest_appointments: {
         Args: { p_marketing_lead_ids: string[]; p_tenant_id: string }
         Returns: {

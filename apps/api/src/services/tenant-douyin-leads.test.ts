@@ -63,7 +63,9 @@ function authContext(
 
 function fixture(overrides: Record<string, unknown> = {}) {
   const repository = {
-    listLeads: mock(async () => ({ rows: [{ lead, appointments: [appointment], customer, assignee: employee }], total: 1 })),
+    listLeads: mock(async () => ({ rows: [{ lead,
+      appointments: [{ ...appointment, budget_range: null }],
+      customer, assignee: employee }], total: 1 })),
     getLeadDetail: mock(async () => ({ lead, appointments: [appointment],
       appointmentTotal: 21, customer, assignee: employee,
       followUps: [], followUpTotal: 0 })),
@@ -135,7 +137,8 @@ describe("TenantDouyinLeadsService", () => {
     const auth = authContext(["douyin_lead.read", "customer.read", "customer.phone.view"]);
     await expect(context.service.list(auth, {})).resolves.toMatchObject({
       list: [{ id: LEAD_ID, phone: lead.phone, phone_masked: "138****8000",
-        latest_appointment: { id: APPOINTMENT_ID }, customer: { id: CUSTOMER_ID } }],
+        latest_appointment: { id: APPOINTMENT_ID, budget_range: null },
+        customer: { id: CUSTOMER_ID } }],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     });
     expect(context.repository.listLeads).toHaveBeenCalledWith({
@@ -234,6 +237,7 @@ describe("TenantDouyinLeadsService", () => {
     const result = await fixture().service.getDetail(
       authContext(["douyin_lead.read"]), LEAD_ID,
     );
+    expect(result.latest_appointment).toEqual(appointment);
     expect(result.appointments).toEqual({
       list: [appointment],
       pagination: { page: 1, pageSize: 20, total: 21, totalPages: 2 },

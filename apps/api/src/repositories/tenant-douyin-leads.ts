@@ -25,6 +25,10 @@ import {
 } from "@/repositories/tenant-douyin-leads-hydration";
 import { listTenantDouyinLeadAssigneeCandidates } from
   "@/repositories/tenant-douyin-lead-assignee-candidates";
+import { listTenantDouyinLeadAssigneeFilterOptions } from
+  "@/repositories/tenant-douyin-lead-assignee-filter-options";
+import { loadTenantDouyinLeadBudgetRanges } from
+  "@/repositories/tenant-douyin-lead-budget-ranges";
 import type { TenantDouyinLeadListQuery } from
   "@/schema/tenant-douyin-leads";
 import type { Json } from "@/types/database";
@@ -79,6 +83,7 @@ type CommandName =
   | "assign_douyin_lead"
   | "append_douyin_lead_follow_up"
   | "convert_douyin_lead_to_customer"
+  | "list_tenant_douyin_lead_assignee_filter_options"
   | "list_tenant_douyin_lead_latest_appointments"
   | "mark_douyin_lead_invalid";
 export interface TenantDouyinLeadsDatabaseClient {
@@ -163,8 +168,12 @@ export class TenantDouyinLeadsRepository {
         compactIds(leads, "assigned_employee_id"),
       ),
     ]);
+    const budgetRanges = await loadTenantDouyinLeadBudgetRanges(this.client, {
+      tenantId: input.tenantId, appointments,
+    });
     return {
-      rows: safeHydrateLeadBundles({ leads, appointments, customers, employees }),
+      rows: safeHydrateLeadBundles({ leads, appointments, customers, employees,
+        budgetRanges }),
       total,
     };
   }
@@ -173,6 +182,12 @@ export class TenantDouyinLeadsRepository {
     typeof listTenantDouyinLeadAssigneeCandidates
   >[1]) {
     return listTenantDouyinLeadAssigneeCandidates(this.client, input);
+  }
+
+  listAssigneeFilterOptions(input: Parameters<
+    typeof listTenantDouyinLeadAssigneeFilterOptions
+  >[1]) {
+    return listTenantDouyinLeadAssigneeFilterOptions(this.client, input);
   }
 
   async getLeadDetail(input: { tenantId: string; leadId: string }) {
