@@ -23,6 +23,7 @@ import {
   resolveBudgetCalculationResult,
   resolveConfigLoad,
   resolveConfigLoadResult,
+  shouldPreserveBudgetResultOnReturn,
 } from "./page-model";
 
 const config = { pricing_version: "1" } as DouyinBudgetPublicConfig;
@@ -69,6 +70,24 @@ describe("budget page request state", () => {
       config: { pricing_version: "2" },
       estimate: null,
     });
+  });
+
+  test("preserves only the matching immutable result for one success-page return", () => {
+    const result = {
+      ...createBudgetPageState(),
+      status: "result" as const,
+      config,
+      estimate,
+    };
+
+    expect(shouldPreserveBudgetResultOnReturn(result, estimate.id)).toBe(true);
+    expect(shouldPreserveBudgetResultOnReturn(
+      result,
+      "33333333-3333-4333-8333-333333333333",
+    )).toBe(false);
+    expect(shouldPreserveBudgetResultOnReturn(result, null)).toBe(false);
+    expect(shouldPreserveBudgetResultOnReturn({ ...result, estimate: null }, estimate.id))
+      .toBe(false);
   });
 
   test("hide and unload invalidate config, estimate and AI request authorities", () => {

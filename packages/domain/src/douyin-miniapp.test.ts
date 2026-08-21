@@ -3,6 +3,7 @@ import { SMS_SCENE_VALUES } from './auth';
 import * as domain from './index';
 import * as shared from './shared';
 import {
+  DOUYIN_ENTRY_PATH_VALUES,
   DouyinContactSlaTextSchema,
   DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DOUYIN_INSTALLATION_KIND_VALUES,
@@ -11,6 +12,7 @@ import {
   DOUYIN_PHONE_CAPTURE_MODE_VALUES,
   DOUYIN_RELEASE_STATUS_VALUES,
   DouyinRuntimeConfigSchema,
+  DouyinEntryPathSchema,
   isDouyinTestQrUrlUsable,
   type DouyinRuntimeConfigInput,
   type DouyinRuntimeConfigDto,
@@ -75,6 +77,10 @@ describe('Douyin miniapp domain contracts', () => {
       expect(entryPoint.DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
         DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
       );
+      expect(entryPoint.DOUYIN_ENTRY_PATH_VALUES).toBe(
+        DOUYIN_ENTRY_PATH_VALUES,
+      );
+      expect(entryPoint.DouyinEntryPathSchema).toBe(DouyinEntryPathSchema);
       expect(entryPoint.DouyinContactSlaTextSchema).toBe(
         DouyinContactSlaTextSchema,
       );
@@ -85,6 +91,12 @@ describe('Douyin miniapp domain contracts', () => {
         isDouyinTestQrUrlUsable,
       );
     }
+  });
+
+  test('keeps every cold-start mini-program page in one canonical entry schema', () => {
+    expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/budget/index');
+    expect(DouyinEntryPathSchema.safeParse('pages/budget/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/admin/index').success).toBe(false);
   });
 
   test('rejects expired signed test QR URLs', () => {

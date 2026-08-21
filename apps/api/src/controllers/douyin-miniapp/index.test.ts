@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { DouyinEntryPathSchema as CanonicalDouyinEntryPathSchema } from "@gooes/domain";
 import {
+  DouyinLaunchContextSchema,
   DouyinLeadRequestSchema,
   DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
@@ -24,6 +26,19 @@ const body = {
 };
 
 describe("DouyinMiniappController", () => {
+  test("accepts the canonical budget cold-start path and rejects unknown fallbacks", () => {
+    expect(DouyinLaunchContextSchema.shape.entry_path)
+      .toBe(CanonicalDouyinEntryPathSchema);
+    expect(DouyinLaunchContextSchema.safeParse({
+      ...body.launch_context,
+      entry_path: "pages/budget/index",
+    }).success).toBe(true);
+    expect(DouyinLaunchContextSchema.safeParse({
+      ...body.launch_context,
+      entry_path: "pages/admin/index",
+    }).success).toBe(false);
+  });
+
   test("registers the session route in the root registry", async () => {
     const source = await Bun.file(new URL("../../routes/index.ts", import.meta.url)).text();
     expect(source).toContain(

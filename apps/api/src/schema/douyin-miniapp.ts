@@ -1,21 +1,10 @@
 import { z } from "zod";
 import {
+  DouyinEntryPathSchema,
   DOUYIN_PROJECT_PHASE_VALUES,
   DOUYIN_VISIT_PERIOD_VALUES,
 } from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
-
-const DouyinEntryPathSchema = z.enum([
-  "pages/home/index",
-  "pages/company/index",
-  "pages/privacy/index",
-  "pages/cases/index",
-  "pages/case-detail/index",
-  "pages/sites/index",
-  "pages/site-detail/index",
-  "pages/lead/index",
-  "pages/lead-success/index",
-]);
 
 const AttributionCodeSchema = z.string().trim()
   .regex(/^[A-Za-z0-9_-]{1,64}$/, "归因编号格式无效");

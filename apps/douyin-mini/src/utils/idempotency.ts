@@ -98,8 +98,10 @@ export function failIdempotentSubmission<Fields extends IdempotencyBusinessField
 
 export function succeedIdempotentSubmission<Fields extends IdempotencyBusinessFields>(
   state: IdempotencyState<Fields>,
+  attemptKey: string = state.key,
 ): IdempotencyState<Fields> {
-  if (state.status !== "submitting") return state;
+  if (attemptKey !== state.key
+    || (state.status !== "submitting" && state.status !== "failed")) return state;
   return {
     ...state,
     status: "succeeded",

@@ -12,8 +12,9 @@
 .picker-placeholder { color: #706c67; }
 .picker-arrow { color: #706c67; font-size: 38rpx; }
 .period-options { display: flex; gap: 14rpx; }
-.period-option { box-sizing: border-box; display: flex; min-height: 88rpx; flex: 1; align-items: center; justify-content: center; border: 1rpx solid #d4d0ca; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 26rpx; }
+.period-option { box-sizing: border-box; display: flex; min-height: 88rpx; flex: 1; align-items: center; justify-content: center; margin: 0; padding: 0; border: 1rpx solid #d4d0ca; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 26rpx; line-height: normal; }
 .period-option--active { background: #f7f6f4; font-weight: 650; }
+.period-option[disabled] { opacity: .6; }
 .estimate-card { margin-top: 30rpx; padding: 22rpx; border: 1rpx solid #d4d0ca; border-radius: 12rpx; background: #f7f6f4; text-align: left; }
 .estimate-label { color: #625f5b; font-size: 22rpx; }
 .estimate-number { margin-top: 8rpx; color: #191817; font-size: 27rpx; font-weight: 650; }

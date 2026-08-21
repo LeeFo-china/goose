@@ -2,12 +2,18 @@ import { describe, expect, test } from "bun:test";
 import {
   clearLeadFieldError,
   getShanghaiNaturalDate,
+  resolveLinkedBudgetContext,
   resolveOptionalDetailsExpanded,
   toggleOptionalDetails,
   validateLeadForm,
   type LeadFormValue,
 } from "./form-model";
-import * as formModel from "./form-model";
+import {
+  beginIdempotentSubmission,
+  createIdempotencyState,
+  failIdempotentSubmission,
+  updateIdempotencyDraft,
+} from "../../utils/idempotency";
 
 const VALID_FORM: LeadFormValue = {
   name: "李先生",
@@ -97,37 +103,38 @@ describe("lead form model", () => {
     expect(toggleOptionalDetails(true)).toBe(false);
   });
 
-  test("builds and strictly parses a bounded success-page route", () => {
-    const build = Reflect.get(formModel, "buildLeadSuccessRoute");
-    const parse = Reflect.get(formModel, "parseLeadSuccessOptions");
-    expect(typeof build).toBe("function");
-    expect(typeof parse).toBe("function");
-    if (typeof build !== "function" || typeof parse !== "function") return;
+  test("keeps an attempted linked budget after transient TTL expiry", () => {
+    const firstKey = "11111111-1111-4111-8111-111111111111";
+    const linkedBudget = {
+      version: 1 as const,
+      estimateId: "22222222-2222-4222-8222-222222222222",
+      estimateNo: "DYYS-20260820-000001",
+      displayRange: "¥110,000 - ¥140,000",
+      storedAt: 1_775_000_000_000,
+    };
+    const draft = {
+      name: "李先生",
+      budget_estimate_id: linkedBudget.estimateId,
+    };
+    const attempted = beginIdempotentSubmission(
+      createIdempotencyState(draft, () => firstKey),
+    );
+    const failed = failIdempotentSubmission(attempted.state);
+    const retained = resolveLinkedBudgetContext(linkedBudget, null, failed.status);
+    const afterExpiry = updateIdempotencyDraft(failed, {
+      ...draft,
+      budget_estimate_id: retained?.estimateId ?? "",
+    }, () => { throw new Error("exact retry must not rotate"); });
+    const retry = beginIdempotentSubmission(afterExpiry);
 
-    const route = build({
-      appointmentNo: "DYLF-20260825-000001",
-      preferredVisitDate: "2026-08-25",
-      preferredVisitPeriod: "afternoon",
-      estimateLinked: true,
-    });
-    const query = Object.fromEntries(new URLSearchParams(route.split("?")[1]).entries());
-    expect(route.startsWith("/pages/lead-success/index?")).toBe(true);
-    expect(parse(query)).toEqual({
-      appointmentNo: "DYLF-20260825-000001",
-      preferredVisitDate: "2026-08-25",
-      preferredVisitDateLabel: "2026年8月25日",
-      preferredVisitPeriod: "afternoon",
-      preferredVisitPeriodLabel: "下午",
-      estimateLinked: true,
-    });
-    expect(Array.from(new URLSearchParams(route.split("?")[1]).keys()))
-      .toEqual([
-        "appointment_no",
-        "preferred_visit_date",
-        "preferred_visit_period",
-        "estimate_linked",
-      ]);
-    expect(parse({ ...query, customer_id: "internal" })).toBeNull();
+    expect(retained).toBe(linkedBudget);
+    expect(retry.key).toBe(firstKey);
+    expect(retry.state.draft).toEqual(draft);
+
+    const differentBudget = { ...linkedBudget,
+      estimateId: "33333333-3333-4333-8333-333333333333" };
+    expect(resolveLinkedBudgetContext(linkedBudget, differentBudget, failed.status))
+      .toBe(differentBudget);
   });
 
   test("appointment page consumes only the approved transient budget fields", async () => {
@@ -148,11 +155,28 @@ describe("lead form model", () => {
     expect(source).not.toContain("throw new TypeError");
     expect(source).toContain("failIdempotentSubmission");
     expect(source).toContain("succeedIdempotentSubmission");
+    expect(source).toContain("LeadPageCoordinator");
+    expect(source).toContain("finishSms");
+    expect(source).toContain("finishSubmit");
+    expect(source).toContain("this.lifecycle.onLoad()");
+    expect(source).toContain("onHide()");
+    expect(source).toContain("onUnload()");
+    expect(source).toContain("if (!bootstrap || !this.lifecycle.isVisible()) return;");
+    expect(source).toContain("if (this.lifecycle.isVisible()) {");
+    expect(source).toContain("cooldownUntil");
+    expect(source).toContain("this.resumeCooldown()");
+    expect(source).toContain("getCooldownRemainingSeconds");
+    expect(source).toContain("writeMeasurementSuccessContext");
+    expect(source).toContain('navigateToPage("pages/lead-success/index")');
+    expect(source).not.toContain("buildLeadSuccessRoute");
+    expect(source).not.toContain("successRoute");
+    expect(source.indexOf("writeMeasurementSuccessContext"))
+      .toBeLessThan(source.lastIndexOf("finishSubmit"));
     expect(source).toContain("budget_estimate_id: linkedBudget?.estimateId ?? \"\"");
     const frozenContextGuard = source.indexOf(
       "if (this.data.submitting) return this.linkedBudget;",
     );
-    const transientRead = source.indexOf("const context = readBudgetLeadContext();");
+    const transientRead = source.indexOf("readBudgetLeadContext()");
     expect(frozenContextGuard).toBeGreaterThan(-1);
     expect(frozenContextGuard).toBeLessThan(transientRead);
     expect(source).not.toMatch(/setStorageSync[\s\S]*(?:name|phone)/);
@@ -162,7 +186,13 @@ describe("lead form model", () => {
     expect(template).not.toContain('data-field="budget"');
     expect(template).not.toContain('data-field="start_time"');
     expect(template).not.toContain('data-field="area"');
+    expect(successSource).toContain("readMeasurementSuccessContext");
+    expect(successSource).toContain("writeBudgetResultReturnIntent");
     expect(successSource).toContain('switchToTab("budget")');
+    expect(successSource).not.toContain("parseLeadSuccessOptions");
+    expect(successSource).not.toMatch(/options|appointment_no|estimate_linked/);
+    expect(successSource).toContain("onUnload()");
+    expect(successSource).toContain("this.unloaded");
     expect(successSource).toContain("bootstrap.company.name");
     expect(successSource).toContain("bootstrap.contact_sla_text");
     expect(successTemplate).toContain("申请已提交，工作人员将与你确认具体时间");

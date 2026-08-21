@@ -89,6 +89,15 @@ export function createBudgetPageState(): BudgetPageState {
   };
 }
 
+export function shouldPreserveBudgetResultOnReturn(
+  current: BudgetPageState,
+  estimateId: string | null,
+): boolean {
+  return estimateId !== null
+    && current.status === "result"
+    && current.estimate?.id === estimateId;
+}
+
 export function buildBudgetResultView(
   estimate: DouyinBudgetEstimateResult | null,
 ): BudgetResultView {

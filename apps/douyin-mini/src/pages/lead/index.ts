@@ -2,15 +2,16 @@ import type { DouyinAppContext } from "../../app";
 import { sendLeadSms, submitLead } from "../../api/leads";
 import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
-import type {
-  DouyinMeasurementAppointmentResult,
-  DouyinVisitPeriod,
-} from "../../models";
+import type { DouyinVisitPeriod } from "../../models";
 import {
   readBudgetLeadContext,
   type BudgetLeadContext,
 } from "../../platform/budget-lead-context";
 import { navigateToPage } from "../../platform/navigation";
+import {
+  readMeasurementSuccessContext,
+  writeMeasurementSuccessContext,
+} from "../../platform/measurement-success-context";
 import {
   beginIdempotentSubmission,
   createIdempotencyState,
@@ -19,9 +20,9 @@ import {
   updateIdempotencyDraft,
 } from "../../utils/idempotency";
 import {
-  buildLeadSuccessRoute,
   clearLeadFieldError,
   getShanghaiNaturalDate,
+  resolveLinkedBudgetContext,
   resolveOptionalDetailsExpanded,
   toggleOptionalDetails,
   validateLeadForm,
@@ -29,6 +30,10 @@ import {
   type LeadFieldErrors,
   type LeadFormValue,
 } from "./form-model";
+import {
+  LeadPageCoordinator,
+  getCooldownRemainingSeconds,
+} from "./lead-page-coordinator";
 
 const INITIAL_FORM: LeadFormValue = {
   name: "",
@@ -54,9 +59,9 @@ const LEAD_FIELDS = new Set<LeadField>([
 Page({
   idempotency: createIdempotencyState(toIdempotencyDraft(INITIAL_FORM, "", null)),
   linkedBudget: null as BudgetLeadContext | null,
-  successRoute: "",
+  lifecycle: new LeadPageCoordinator(),
   cooldownTimer: null as ReturnType<typeof setInterval> | null,
-  smsInFlight: false,
+  cooldownUntil: 0,
   successNavigationInFlight: false,
   data: {
     loading: true,
@@ -82,14 +87,33 @@ Page({
     focusedField: "",
     optionalDetailsExpanded: false,
   },
-  onLoad() { void this.load(); },
-  onShow() { this.syncBudgetContext(); },
-  onUnload() { this.stopCooldown(); },
+  onLoad() {
+    this.lifecycle.onLoad();
+    void this.load();
+  },
+  onShow() {
+    this.lifecycle.onShow();
+    if (!this.lifecycle.isVisible()) return;
+    this.setData({ smsSending: false, submitting: false });
+    this.syncBudgetContext();
+    this.resumeCooldown();
+  },
+  onHide() {
+    if (!this.lifecycle.onHide()) return;
+    this.idempotency = failIdempotentSubmission(this.idempotency);
+    this.stopCooldown();
+  },
+  onUnload() {
+    this.lifecycle.onUnload();
+    this.idempotency = failIdempotentSubmission(this.idempotency);
+    this.stopCooldown();
+    this.cooldownUntil = 0;
+  },
   async load() {
     this.setData({ loading: true, error: false });
     try {
       const bootstrap = await getApp<DouyinAppContext>().startup;
-      if (!bootstrap) return;
+      if (!bootstrap || !this.lifecycle.isVisible()) return;
       const theme = resolveThemeColor(bootstrap.theme.primary_color);
       this.idempotency = updateIdempotencyDraft(
         this.idempotency,
@@ -110,12 +134,18 @@ Page({
       });
       getApp<DouyinAppContext>().recordAnalytics("page_view");
     } catch {
-      this.setData({ loading: false, error: true });
+      if (this.lifecycle.isVisible()) {
+        this.setData({ loading: false, error: true });
+      }
     }
   },
   syncBudgetContext() {
     if (this.data.submitting) return this.linkedBudget;
-    const context = readBudgetLeadContext();
+    const context = resolveLinkedBudgetContext(
+      this.linkedBudget,
+      readBudgetLeadContext(),
+      this.idempotency.status,
+    );
     this.linkedBudget = context;
     this.idempotency = updateIdempotencyDraft(
       this.idempotency,
@@ -173,7 +203,7 @@ Page({
       .catch(() => this.setData({ formError: "隐私政策页面打开失败，请稍后重试" }));
   },
   async onSendSms() {
-    if (this.data.submitting || this.smsInFlight || this.data.smsCooldown > 0) return;
+    if (this.data.submitting || this.data.smsCooldown > 0) return;
     const phone = this.data.form.phone.trim();
     if (!/^1[3-9][0-9]{9}$/.test(phone)) {
       const phoneError = "请先填写正确的手机号";
@@ -184,18 +214,22 @@ Page({
       });
       return;
     }
-    this.smsInFlight = true;
+    const authority = this.lifecycle.beginSms();
+    if (!authority) return;
     this.setData({ smsSending: true, formError: "" });
     try {
       const app = getApp<DouyinAppContext>();
       const result = await sendLeadSms(app.api, { phone, attribution: app.launchContext });
+      if (!this.lifecycle.finishSms(authority)) return;
       this.startCooldown(result.cooldown_seconds);
+      this.setData({ smsSending: false });
       void tt.showToast({ title: "验证码已发送", icon: "none" });
     } catch (error) {
-      this.setData({ formError: readableError(error, "验证码发送失败，请稍后重试") });
-    } finally {
-      this.smsInFlight = false;
-      this.setData({ smsSending: false });
+      if (!this.lifecycle.finishSms(authority)) return;
+      this.setData({
+        smsSending: false,
+        formError: readableError(error, "验证码发送失败，请稍后重试"),
+      });
     }
   },
   onToggleOptionalDetails() {
@@ -243,6 +277,11 @@ Page({
       if (decision.state.status === "succeeded") this.openSuccessPage();
       return;
     }
+    const authority = this.lifecycle.beginSubmit();
+    if (!authority) {
+      this.idempotency = failIdempotentSubmission(this.idempotency);
+      return;
+    }
     this.setData({ submitting: true, formError: "", fieldErrors: {}, focusedField: "" });
     try {
       const app = getApp<DouyinAppContext>();
@@ -261,14 +300,33 @@ Page({
         idempotency_key: decision.key,
         attribution: app.launchContext,
       });
-      this.successRoute = toSuccessRoute(
-        result,
-        form.preferred_visit_date,
+      const succeeded = succeedIdempotentSubmission(this.idempotency, decision.key);
+      const acceptedAttempt = succeeded.key === decision.key
+        && succeeded.status === "succeeded";
+      if (acceptedAttempt) this.idempotency = succeeded;
+      const recorded = acceptedAttempt && writeMeasurementSuccessContext({
+        appointmentNo: result.appointment_no,
+        preferredVisitDate: form.preferred_visit_date,
         preferredVisitPeriod,
-        linkedBudget !== null,
-      );
-      this.idempotency = succeedIdempotentSubmission(this.idempotency);
+        linkedEstimateId: linkedBudget?.estimateId ?? null,
+      });
+      const canPresent = this.lifecycle.finishSubmit(authority);
+      if (!acceptedAttempt || !canPresent) return;
+      if (!recorded) {
+        this.setData({
+          submitting: false,
+          formError: "申请已提交，结果暂时无法显示，请返回后重试",
+        });
+        return;
+      }
     } catch (error) {
+      if (!this.lifecycle.finishSubmit(authority)) return;
+      if (this.idempotency.status === "succeeded"
+        && readMeasurementSuccessContext()) {
+        this.setData({ submitting: false });
+        this.openSuccessPage();
+        return;
+      }
       this.idempotency = failIdempotentSubmission(this.idempotency);
       if (isPrivacyVersionMismatch(error)) {
         this.setData({ formError: "隐私政策正在更新，请稍候" });
@@ -286,7 +344,7 @@ Page({
     const app = getApp<DouyinAppContext>();
     try {
       const bootstrap = await app.bootstrap.load();
-      if (!bootstrap) return;
+      if (!bootstrap || !this.lifecycle.isVisible()) return;
       const form = { ...this.data.form, consented_at: "" };
       this.idempotency = updateIdempotencyDraft(
         this.idempotency,
@@ -304,19 +362,22 @@ Page({
         formError: "隐私政策已更新，请重新阅读并确认后提交",
       });
     } catch {
-      this.setData({ formError: "隐私政策已更新，请稍后重新进入量房页" });
+      if (this.lifecycle.isVisible()) {
+        this.setData({ formError: "隐私政策已更新，请稍后重新进入量房页" });
+      }
     }
   },
   openSuccessPage() {
-    if (this.successNavigationInFlight || !this.successRoute) return;
+    if (this.successNavigationInFlight || !this.lifecycle.isVisible()
+      || !readMeasurementSuccessContext()) return;
     this.successNavigationInFlight = true;
-    tt.navigateTo({
-      url: this.successRoute,
-      fail: () => this.setData({
-        formError: "申请已提交，点击提交按钮可重新打开结果页",
-      }),
-      complete: () => { this.successNavigationInFlight = false; },
-    });
+    void navigateToPage("pages/lead-success/index")
+      .catch(() => {
+        if (this.lifecycle.isVisible()) this.setData({
+          formError: "申请已提交，点击提交按钮可重新打开结果页",
+        });
+      })
+      .finally(() => { this.successNavigationInFlight = false; });
   },
   onPhoneCall() {
     const phoneNumber = this.data.servicePhone;
@@ -328,10 +389,21 @@ Page({
     });
   },
   startCooldown(seconds: number) {
+    this.cooldownUntil = Date.now() + seconds * 1_000;
+    this.resumeCooldown();
+  },
+  resumeCooldown() {
     this.stopCooldown();
-    this.setData({ smsCooldown: seconds });
+    if (!this.lifecycle.isVisible()) return;
+    const remaining = getCooldownRemainingSeconds(this.cooldownUntil);
+    this.setData({ smsCooldown: remaining });
+    if (remaining === 0) return;
     this.cooldownTimer = setInterval(() => {
-      const next = Math.max(0, this.data.smsCooldown - 1);
+      if (!this.lifecycle.isVisible()) {
+        this.stopCooldown();
+        return;
+      }
+      const next = getCooldownRemainingSeconds(this.cooldownUntil);
       this.setData({ smsCooldown: next });
       if (next === 0) this.stopCooldown();
     }, 1_000);
@@ -383,20 +455,6 @@ function toVisitPeriod(
 ): DouyinVisitPeriod | null {
   if (value === "morning" || value === "afternoon" || value === "evening") return value;
   return null;
-}
-
-function toSuccessRoute(
-  result: DouyinMeasurementAppointmentResult,
-  preferredVisitDate: string,
-  preferredVisitPeriod: DouyinVisitPeriod,
-  estimateLinked: boolean,
-): string {
-  return buildLeadSuccessRoute({
-    appointmentNo: result.appointment_no,
-    preferredVisitDate,
-    preferredVisitPeriod,
-    estimateLinked,
-  });
 }
 
 function isPrivacyVersionMismatch(error: unknown): error is ApiRequestError {

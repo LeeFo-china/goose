@@ -3,37 +3,21 @@ import { createBudgetEstimate, fetchBudgetAiAnalysis, fetchBudgetConfig } from "
 import { resolveThemeColor } from "../../components/theme";
 import type { DouyinBudgetEstimateResult, DouyinBudgetOptionCode, DouyinBudgetPublicConfig } from "../../models";
 import { writeBudgetLeadContext } from "../../platform/budget-lead-context";
+import { consumeBudgetResultReturnIntent } from "../../platform/measurement-success-context";
 import { switchToTab } from "../../platform/navigation";
 import { BudgetAiAnalysisRunner } from "./ai-polling";
 import {
-  BudgetFormValidationError,
-  buildBudgetOptionViews,
-  buildEstimateRequest,
-  normalizeBudgetFormForConfig,
-  reconcileSelectedOptions,
-  updateBudgetSelection,
-  type BudgetChoiceField,
-  type BudgetFormValue,
-  type BudgetOptionView,
+  BudgetFormValidationError, buildBudgetOptionViews, buildEstimateRequest,
+  normalizeBudgetFormForConfig, reconcileSelectedOptions, updateBudgetSelection,
+  type BudgetChoiceField, type BudgetFormValue, type BudgetOptionView,
 } from "./form-model";
 import {
-  BudgetPageLifecycleCoordinator,
-  applyBudgetFormMutation,
-  beginAiRequest,
-  beginBudgetCalculation,
-  beginConfigLoad,
-  buildBudgetPageView,
-  createBudgetPageState,
-  describeBudgetUnavailable,
-  failAiRequest,
-  failBudgetCalculation,
-  failConfigLoad,
-  invalidateBudgetPageRequests,
-  markAiRequestUncertain,
-  readBudgetError,
-  resolveAiRequestResult,
-  resolveBudgetCalculationResult,
-  resolveConfigLoadResult,
+  BudgetPageLifecycleCoordinator, applyBudgetFormMutation, beginAiRequest,
+  beginBudgetCalculation, beginConfigLoad, buildBudgetPageView, createBudgetPageState,
+  describeBudgetUnavailable, failAiRequest, failBudgetCalculation, failConfigLoad,
+  invalidateBudgetPageRequests, markAiRequestUncertain, readBudgetError,
+  resolveAiRequestResult, resolveBudgetCalculationResult, resolveConfigLoadResult,
+  shouldPreserveBudgetResultOnReturn,
   type BudgetPageState,
 } from "./page-model";
 const INITIAL_FORM: BudgetFormValue = {
@@ -79,7 +63,15 @@ Page({
     aiRetryMode: "none" as BudgetPageState["aiRetryMode"],
   },
   onLoad() { if (this.lifecycle.onLoad()) void this.loadConfig(false); },
-  onShow() { if (this.lifecycle.onShow()) void this.loadConfig(false); },
+  onShow() {
+    if (!this.lifecycle.onShow()) return;
+    const estimateId = consumeBudgetResultReturnIntent();
+    if (shouldPreserveBudgetResultOnReturn(this.pageState, estimateId)) {
+      this.syncState();
+      return;
+    }
+    void this.loadConfig(false);
+  },
   onHide() { if (this.lifecycle.onHide()) this.suspendPage(); },
   onUnload() { this.lifecycle.onUnload(); this.suspendPage(); },
   onPullDownRefresh() { void this.loadConfig(true); },

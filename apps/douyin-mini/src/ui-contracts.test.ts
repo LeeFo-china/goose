@@ -141,6 +141,12 @@ test("lead form labels every input and keeps optional details collapsed", async 
   }
   expect(formTemplate).toContain("补充装修需求（选填）");
   expect(formTemplate).toContain('tt:if="{{optionalDetailsExpanded}}"');
+  expect(formTemplate.match(/<button[^>]*class="period-option/g)).toHaveLength(3);
+  expect(formTemplate.match(/<view[^>]*class="period-option(?:\s|")/g)).toBeNull();
+  expect(formTemplate.match(/role="radio"/g)).toHaveLength(3);
+  expect(formTemplate.match(/aria-checked=/g)).toHaveLength(3);
+  expect(formTemplate.match(/disabled="{{submitting}}"/g)?.length ?? 0)
+    .toBeGreaterThanOrEqual(8);
   expect(consentTemplate).toContain('<view class="consent-row"');
   expect(consentTemplate).toContain('class="consent-toggle ui-pressable"');
   expect(consentTemplate).toContain('catchtap="onOpenPolicy"');

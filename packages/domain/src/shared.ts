@@ -74,12 +74,15 @@ export {
 } from './douyin-lead';
 
 export {
+  DOUYIN_ENTRY_PATH_VALUES,
   DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DouyinContactSlaTextSchema,
+  DouyinEntryPathSchema,
   DouyinRuntimeConfigSchema,
   isDouyinTestQrUrlUsable,
 } from './douyin-miniapp';
 export type {
+  DouyinEntryPath,
   DouyinRuntimeConfigDto,
   DouyinRuntimeConfigInput,
 } from './douyin-miniapp';

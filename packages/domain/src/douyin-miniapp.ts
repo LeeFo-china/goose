@@ -1,5 +1,20 @@
 import { z } from 'zod';
 
+export const DOUYIN_ENTRY_PATH_VALUES = [
+  'pages/home/index',
+  'pages/company/index',
+  'pages/privacy/index',
+  'pages/cases/index',
+  'pages/case-detail/index',
+  'pages/sites/index',
+  'pages/site-detail/index',
+  'pages/budget/index',
+  'pages/lead/index',
+  'pages/lead-success/index',
+] as const;
+
+export const DouyinEntryPathSchema = z.enum(DOUYIN_ENTRY_PATH_VALUES);
+
 export const DOUYIN_INSTALLATION_KIND_VALUES = [
   'merchant',
   'template_development',
@@ -104,6 +119,7 @@ export const DouyinRuntimeConfigSchema = z
 
 export type DouyinInstallationKind =
   (typeof DOUYIN_INSTALLATION_KIND_VALUES)[number];
+export type DouyinEntryPath = z.infer<typeof DouyinEntryPathSchema>;
 export type DouyinInstallationStatus =
   (typeof DOUYIN_INSTALLATION_STATUS_VALUES)[number];
 export type DouyinReleaseStatus =
