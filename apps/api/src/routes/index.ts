@@ -95,6 +95,7 @@ import WechatPayCallbacksController from "@/controllers/wechat-pay-callbacks";
 import DouyinThirdPartyEventsController from "@/controllers/douyin-third-party-events";
 import DouyinMiniappController from "@/controllers/douyin-miniapp";
 import DouyinBudgetController from "@/controllers/douyin-budget";
+import TenantDouyinBudgetController from "@/controllers/tenant-douyin-budget";
 import TenantDouyinMiniappController from "@/controllers/tenant-douyin-miniapp";
 import TenantDouyinProjectsController from "@/controllers/tenant-douyin-projects";
 import PlatformDouyinMiniappsController from "@/controllers/platform-douyin-miniapps";
@@ -216,6 +217,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   DouyinThirdPartyEventsController.registerExtraRoutes(app);
   DouyinMiniappController.registerExtraRoutes(app);
   DouyinBudgetController.registerExtraRoutes(app);
+  TenantDouyinBudgetController.registerExtraRoutes(app);
   TenantDouyinMiniappController.registerExtraRoutes(app);
   TenantDouyinProjectsController.registerExtraRoutes(app);
   PlatformDouyinMiniappsController.registerExtraRoutes(app);

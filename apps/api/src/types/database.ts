@@ -21675,6 +21675,14 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: number
       }
+      activate_douyin_budget_pricing_version: {
+        Args: {
+          p_expected_updated_at: string
+          p_pricing_version_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       activate_wechat_pay_applyment_config: {
         Args: {
           p_applyment_id: string
@@ -21747,6 +21755,14 @@ export type Database = {
           p_review_remark?: string
           p_reviewer_employee_id: string
           p_tenant_slug: string
+        }
+        Returns: Json
+      }
+      archive_douyin_budget_pricing_version: {
+        Args: {
+          p_expected_updated_at: string
+          p_pricing_version_id: string
+          p_tenant_id: string
         }
         Returns: Json
       }
@@ -24253,6 +24269,16 @@ export type Database = {
         }
         Returns: Json
       }
+      create_douyin_budget_pricing_draft: {
+        Args: {
+          p_created_by_employee_id: string
+          p_disclaimer: string
+          p_effective_from: string
+          p_effective_to: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       create_douyin_template_development_installation: {
         Args: {
           p_authorizer_appid: string
@@ -24948,6 +24974,14 @@ export type Database = {
         }
         Returns: Json
       }
+      douyin_budget_json_integer_in_range: {
+        Args: { p_maximum: number; p_minimum: number; p_value: Json }
+        Returns: boolean
+      }
+      douyin_budget_pricing_version_payload: {
+        Args: { p_pricing_version_id: string; p_tenant_id: string }
+        Returns: Json
+      }
       douyin_public_image_urls_are_valid: {
         Args: { p_urls: string[] }
         Returns: boolean
@@ -25420,6 +25454,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      is_valid_douyin_budget_pricing_item: {
+        Args: { p_item: Json }
+        Returns: boolean
       }
       list_accessible_project_workflow_tasks: {
         Args: {
@@ -26821,6 +26859,15 @@ export type Database = {
         Returns: {
           status: string
         }[]
+      }
+      replace_douyin_budget_pricing_items: {
+        Args: {
+          p_expected_updated_at: string
+          p_items: Json
+          p_pricing_version_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       replace_platform_operator_roles: {
         Args: {
