@@ -35,8 +35,12 @@ const AI_TIMEOUT_MS = 30_000;
 const AI_TEMPERATURE = 0.2;
 const PhonePattern =
   /(?<!\d)(?:(?:\+?86[- \u3000]?)?1[3-9]\d(?:[- \u3000]?\d{4}){2}|(?:0\d{2,3}[- \u3000]?)?\d{7,8})(?!\d)/g;
-const DetailedAddressPattern = new RegExp([
-  String.raw`[\p{Script=Han}]{2,20}(?:大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?:号楼|号|栋|幢|单元|室)`,
+const RoadAddressPattern = new RegExp(
+  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?![ \u3000]*(?:[VvＶｖ]|伏|版))(?:[ \u3000]*(?:号楼|号|栋|幢|单元|室|楼)|(?=[ \u3000]*(?:$|[，,。；;、!?！？])))`,
+  'gu',
+);
+const NonAddressRoadCompoundPattern = /(?:电路|思路)$/u;
+const StandaloneDetailedAddressPattern = new RegExp([
   String.raw`[\p{Script=Han}]{2,20}(?:小区|村)(?=$|[\s，,。；;、]|\d)`,
   String.raw`门牌(?:号)?\s*\d{1,6}`,
   String.raw`(?<!\d)\d{1,6}(?:号楼|号|栋|幢|单元|楼)(?![A-Za-z])`,
@@ -289,8 +293,20 @@ function sanitizeTextList(values: readonly string[]): string[] {
 }
 
 function sanitizeText(value: string): string {
-  if (DetailedAddressPattern.test(value)) return '[已脱敏]';
+  if (containsDetailedAddress(value)) return '[已脱敏]';
   return value.replace(PhonePattern, '[已脱敏]');
+}
+
+function containsDetailedAddress(value: string): boolean {
+  if (StandaloneDetailedAddressPattern.test(value)) return true;
+  for (const match of value.matchAll(RoadAddressPattern)) {
+    const roadName = match[1] ?? '';
+    const roadSuffix = match[2] ?? '';
+    if (!NonAddressRoadCompoundPattern.test(`${roadName}${roadSuffix}`)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function aiFailureCode(error: unknown): string {

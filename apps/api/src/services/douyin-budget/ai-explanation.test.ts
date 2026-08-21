@@ -259,8 +259,8 @@ describe('DouyinBudgetAiExplanationService', () => {
   test('keeps renovation terms while redacting only high-confidence address forms', async () => {
     const deps = buildDependencies();
     const addresses = [
-      '建设大道12号', '中山路88号', '幸福路3号楼', '幸福路5栋',
-      '中山街12号', '梧桐巷8号', '王府弄5号', '幸福村',
+      '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
+      '幸福路3号楼', '幸福路5栋', '幸福村',
       '春风小区', '6号楼', '3栋',
       '2幢', '1单元', '门牌号66', '501室',
     ];
@@ -272,7 +272,7 @@ describe('DouyinBudgetAiExplanationService', () => {
           ...baseRecord.request_payload as object,
           layout: '卧室电路 220V需要调整',
           style: '装修思路 2026版',
-          demand: '卧室电路 220V与装修思路 2026版都需要保留',
+          demand: '卧室电路220伏、装修思路2026版、卧室电路220，装修思路2026都需要保留',
         },
         result_payload: {
           ...estimateResult,
@@ -285,7 +285,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
     expect(prompt).toContain('卧室电路 220V需要调整');
     expect(prompt).toContain('装修思路 2026版');
-    expect(prompt).toContain('卧室电路 220V与装修思路 2026版都需要保留');
+    expect(prompt).toContain('卧室电路220伏、装修思路2026版、卧室电路220，装修思路2026都需要保留');
     for (const address of addresses) expect(prompt).not.toContain(address);
     expect(prompt).toContain('[已脱敏]');
   });
@@ -294,8 +294,12 @@ describe('DouyinBudgetAiExplanationService', () => {
     const deps = buildDependencies();
     const piiAnalysis = {
       summary: '联系138 0013 8000确认预算。',
-      allocation_advice: ['卧室收纳可拨打0376-1234567咨询。'],
+      allocation_advice: [
+        '卧室收纳可拨打0376-1234567咨询。', '卧室电路 220V需要调整',
+        '装修思路 2026版；卧室电路220，装修思路2026',
+      ],
       risk_factors: [
+        '人民路88', '中山街12', '建设大道12', '梧桐巷8', '王府弄5',
         '幸福大道88号3栋可能需要二次量房。',
         '春风小区2号楼需要确认电梯。',
         '固始幸福村6号楼需要确认道路。',
@@ -329,6 +333,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     const publicResponse = JSON.stringify(response);
     for (const pii of [
       '138 0013 8000', '0376-1234567', '幸福大道88号3栋',
+      '人民路88', '中山街12', '建设大道12', '梧桐巷8', '王府弄5',
       '春风小区2号楼', '固始幸福村6号楼', '王府弄5号',
       '门牌号66', '2单元501室',
     ]) {
@@ -337,6 +342,9 @@ describe('DouyinBudgetAiExplanationService', () => {
     }
     expect(persisted).toContain('卧室收纳');
     expect(publicResponse).toContain('卧室收纳');
+    expect(persisted).toContain('卧室电路 220V需要调整');
+    expect(publicResponse).toContain('装修思路 2026版');
+    expect(publicResponse).toContain('卧室电路220，装修思路2026');
     expect(persisted).toContain('[已脱敏]');
     const gatewayInput = deps.gateway.chat.mock.calls[0]?.[0] as {
       messages: Array<{ content: string }>;
