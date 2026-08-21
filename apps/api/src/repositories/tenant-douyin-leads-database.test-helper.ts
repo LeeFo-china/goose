@@ -7,6 +7,7 @@ export const TENANT_LEAD_DATABASE_SCENARIOS = [
   "preflight_conflict_zero_writes",
   "existing_customer_conversion_shape",
   "unassigned_customer_owner",
+  "stale_create_preflight_rejected",
   "repeated_conversion_conflict_zero_writes",
   "latest_index_plan",
   "fixture_cleanup",
@@ -41,6 +42,7 @@ export async function runTenantLeadDatabaseIntegration(databaseUrl?: string) {
   if (!parsed.ok) throw new Error("LOCAL_DATABASE_REQUIRED");
   const admin = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
   const service = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
+  const contender = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
   const ids = fixtureIds();
   const summary = Object.fromEntries(TENANT_LEAD_DATABASE_SCENARIOS
     .map((scenario) => [scenario, false])) as Summary;
@@ -49,10 +51,13 @@ export async function runTenantLeadDatabaseIntegration(databaseUrl?: string) {
     await createFixture(admin, ids);
     await service`set role service_role`;
     await service`set statement_timeout = '5s'`;
-    await runScenarios(admin, service, ids, summary);
+    await contender`set role service_role`;
+    await contender`set statement_timeout = '5s'`;
+    await runScenarios(admin, service, contender, ids, summary);
   } catch (error) {
     failure = error;
   } finally {
+    await contender.close().catch(() => undefined);
     await service.close().catch(() => undefined);
     try {
       summary.fixture_cleanup = await cleanupFixture(admin, ids);
@@ -133,7 +138,7 @@ async function createFixture(sql: DatabaseSql, ids: FixtureIds) {
 }
 
 async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
-  ids: FixtureIds, summary: Summary) {
+  contender: DatabaseSql, ids: FixtureIds, summary: Summary) {
   const acl = (await admin<Array<Record<string, boolean>>>`select
     has_function_privilege('service_role',
       'public.convert_douyin_lead_to_customer(uuid,uuid,uuid,integer,uuid)',
@@ -194,14 +199,52 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
     === ids.customer && converted.data.appointments_updated === 21
     && converted.data.created_customer === false;
 
+  const preflight = (await contender<Array<{ customer_id: string | null }>>`select
+      customer.id as customer_id
+    from public.marketing_leads as lead
+    left join public.customers as customer
+      on customer.tenant_id=lead.tenant_id and customer.phone=lead.phone
+    where lead.tenant_id=${ids.tenant}::uuid
+      and lead.id=${ids.secondLead}::uuid`)[0];
+  const winnerKey = randomUUID();
   const created = commandData(await service`
     select public.convert_douyin_lead_to_customer(
       ${ids.tenant}::uuid,${ids.secondLead}::uuid,${ids.employee}::uuid,1,
-      ${randomUUID()}::uuid,null::uuid,true) as result`);
+      ${winnerKey}::uuid,null::uuid,true) as result`);
   const owner = (await admin<Array<{ owner_id: string }>>`select owner_id
     from public.customers where id=${String(created.data?.customer_id)}::uuid`)[0];
   summary.unassigned_customer_owner = created.data?.created_customer === true
     && created.data.appointments_updated === 0 && owner?.owner_id === ids.employee;
+
+  const staleKey = randomUUID();
+  const beforeStale = await operationCount(admin, ids.tenant);
+  const stale = commandData(await contender`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.secondLead}::uuid,${ids.employee}::uuid,1,
+      ${staleKey}::uuid,null::uuid,true) as result`);
+  const afterStale = await operationCount(admin, ids.tenant);
+  const corrected = commandData(await contender`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.secondLead}::uuid,${ids.employee}::uuid,1,
+      ${staleKey}::uuid,${String(created.data?.customer_id)}::uuid,false) as result`);
+  const afterCorrected = await operationCount(admin, ids.tenant);
+  const replayed = commandData(await contender`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.secondLead}::uuid,${ids.employee}::uuid,1,
+      ${staleKey}::uuid,${String(created.data?.customer_id)}::uuid,false) as result`);
+  const afterReplay = await operationCount(admin, ids.tenant);
+  summary.stale_create_preflight_rejected = preflight?.customer_id === null
+    && stale.error?.code === "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT"
+    && beforeStale === afterStale
+    && corrected.data?.customer_id === created.data?.customer_id
+    && corrected.data?.repeated_conversion === true
+    && corrected.data?.appointments_updated === 0
+    && corrected.data?.idempotent === false
+    && afterCorrected === beforeStale + 1
+    && replayed.data?.customer_id === created.data?.customer_id
+    && replayed.data?.repeated_conversion === true
+    && replayed.data?.idempotent === true
+    && afterReplay === afterCorrected;
 
   await admin`alter table public.douyin_measurement_appointments disable trigger
     douyin_measurement_appointment_guard`;
@@ -221,11 +264,11 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
     select public.convert_douyin_lead_to_customer(
       ${ids.tenant}::uuid,${ids.lead}::uuid,${ids.employee}::uuid,1,
       ${randomUUID()}::uuid,${ids.customer}::uuid,false) as result`);
-  const afterReplay = (await admin<Array<{ count: number }>>`select count(*)::integer
+  const afterCorruptReplay = (await admin<Array<{ count: number }>>`select count(*)::integer
     from public.douyin_lead_workflow_operations where tenant_id=${ids.tenant}::uuid`)[0]?.count;
   summary.repeated_conversion_conflict_zero_writes = replayConflict.error?.code
     === "DOUYIN_LEAD_APPOINTMENT_CUSTOMER_CONFLICT"
-    && beforeReplay === afterReplay;
+    && beforeReplay === afterCorruptReplay;
 
   await admin`set enable_seqscan=off`;
   const explain = await admin<Array<Record<string, unknown>>>`
@@ -244,6 +287,12 @@ function commandData(rows: Array<Record<string, unknown>>) {
     data: result?.data as JsonRecord | undefined,
     error: result?.error as JsonRecord | undefined,
   };
+}
+
+async function operationCount(sql: DatabaseSql, tenantId: string) {
+  return (await sql<Array<{ count: number }>>`select count(*)::integer as count
+    from public.douyin_lead_workflow_operations
+    where tenant_id=${tenantId}::uuid`)[0]?.count ?? -1;
 }
 
 async function cleanupFixture(sql: DatabaseSql, ids: FixtureIds) {

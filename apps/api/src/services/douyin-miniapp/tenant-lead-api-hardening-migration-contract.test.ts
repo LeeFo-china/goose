@@ -13,6 +13,10 @@ const replayRepairMigration = new URL(
   "../../../../../supabase/migrations/20260821105610_preserve_tenant_douyin_conversion_appointment_ownership.sql",
   import.meta.url,
 );
+const stalePreflightRepairMigration = new URL(
+  "../../../../../supabase/migrations/20260821105620_reject_stale_douyin_customer_preflight.sql",
+  import.meta.url,
+);
 
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -107,6 +111,44 @@ describe("tenant lead API hardening migration", () => {
     const withoutRepair = (body.slice(0, appointmentLock) + body.slice(resultWrite))
       .replace("create or replace function", "create function");
     expect(withoutRepair).toBe(original);
+    const statements = topLevelSql(sql).split(";")
+      .map((statement) => statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^(begin|set local |revoke all on function |grant execute on function |comment on function |commit$)/);
+    }
+  });
+
+  test("keeps 105610 immutable and rejects stale create preflight before writes", async () => {
+    const bytes = await Bun.file(replayRepairMigration).arrayBuffer();
+    expect(createHash("sha256").update(new Uint8Array(bytes)).digest("hex"))
+      .toBe("002c29c55e0ff33285c8c3d515218d11b4dd26bd78137e0b768b65ca8fcbf89f");
+    const sql = await Bun.file(stalePreflightRepairMigration).text();
+    const body = functionBody(sql, "convert_douyin_lead_to_customer");
+    const repeated = body.indexOf("if v_lead.lead_status = 'converted' then");
+    const guard = body.indexOf("if p_allow_customer_create then", repeated);
+    const conflict = body.indexOf("douyin_lead_customer_preflight_conflict", guard);
+    const stateCheck = body.indexOf("if v_lead.customer_id is null", conflict);
+    const resultWrite = body.indexOf("v_result := jsonb_build_object", repeated);
+    const operationWrite = body.indexOf(
+      "insert into public.douyin_lead_workflow_operations", repeated,
+    );
+
+    expect(repeated).toBeGreaterThanOrEqual(0);
+    expect(guard).toBeGreaterThan(repeated);
+    expect(conflict).toBeGreaterThan(guard);
+    expect(stateCheck).toBeGreaterThan(conflict);
+    expect(conflict).toBeLessThan(resultWrite);
+    expect(conflict).toBeLessThan(operationWrite);
+    expect(body.slice(repeated, stateCheck)).not.toMatch(
+      /(?:insert into|update|delete from) public\./,
+    );
+    const original = functionBody(await Bun.file(replayRepairMigration).text(),
+      "convert_douyin_lead_to_customer");
+    expect(body.slice(0, guard) + body.slice(stateCheck)).toBe(original);
+
+    const normalized = normalize(sql);
+    expect(normalized).toMatch(/revoke all on function public\.convert_douyin_lead_to_customer\(\s*uuid, uuid, uuid, integer, uuid, uuid, boolean\s*\) from public, anon, authenticated/);
+    expect(normalized).toMatch(/grant execute on function public\.convert_douyin_lead_to_customer\(\s*uuid, uuid, uuid, integer, uuid, uuid, boolean\s*\) to service_role/);
     const statements = topLevelSql(sql).split(";")
       .map((statement) => statement.trim()).filter(Boolean);
     for (const statement of statements) {

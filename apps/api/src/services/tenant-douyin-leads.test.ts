@@ -368,6 +368,21 @@ describe("TenantDouyinLeadsService", () => {
     )).rejects.toMatchObject({ statusCode: 409,
       code: "DOUYIN_LEAD_IDEMPOTENCY_CONFLICT" });
 
+    const stalePreflight = fixture({ repository: {
+      ...fixture().repository,
+      findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
+        phone: lead.phone, assignedEmployeeId: EMPLOYEE_ID, customerId: null })),
+      convert: mock(async () => ({ ok: false as const, error: {
+        status_code: 409 as const,
+        code: "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT" as const,
+      } })),
+    } });
+    await expect(stalePreflight.service.convert(
+      authContext(["douyin_lead.convert", "customer.create"]), LEAD_ID,
+      { expected_lead_version: 1, idempotency_key: IDEMPOTENCY_KEY },
+    )).rejects.toMatchObject({ statusCode: 409,
+      code: "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT" });
+
     const wrongLead = fixture({ repository: {
       ...fixture().repository,
       markInvalid: mock(async () => ({ ok: true as const, data: {

@@ -31,6 +31,7 @@ describe("tenant douyin lead local PostgreSQL integration", () => {
       "preflight_conflict_zero_writes",
       "existing_customer_conversion_shape",
       "unassigned_customer_owner",
+      "stale_create_preflight_rejected",
       "repeated_conversion_conflict_zero_writes",
       "latest_index_plan",
       "fixture_cleanup",
