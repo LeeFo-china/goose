@@ -19,13 +19,19 @@ export type CustomerAccessRecord = {
   tenant_id: string | null;
 };
 
-type EmployeeLite = {
+type RawEmployeeLite = {
   id: string;
   name: string | null;
   phone: string | null;
 };
 
-type PlatformLeadLite = {
+type EmployeeLite = {
+  id: string;
+  name: string | null;
+  phone_masked: string | null;
+};
+
+type RawPlatformLeadLite = {
   id: string;
   phone: string | null;
   name: string | null;
@@ -33,6 +39,10 @@ type PlatformLeadLite = {
   community: string | null;
   status: string | null;
   source: string | null;
+};
+
+type PlatformLeadLite = Omit<RawPlatformLeadLite, "phone"> & {
+  phone_masked: string | null;
 };
 
 type TenantShareLinkLite = {
@@ -108,7 +118,7 @@ export class CustomerSourceRepository {
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
     if (error) {
-      throw Errors.dbError("查询客户失败", error);
+      throw Errors.dbError("查询客户失败");
     }
 
     return (data || null) as CustomerAccessRecord | null;
@@ -131,7 +141,7 @@ export class CustomerSourceRepository {
 
     const { data, error, count } = await request;
     if (error) {
-      throw Errors.dbError("查询客户来源时间线失败", error);
+      throw Errors.dbError("查询客户来源时间线失败");
     }
 
     const list = await this.serializeRows(
@@ -225,15 +235,21 @@ export class CustomerSourceRepository {
         is_old_customer_new_lead: row.source === "platform_lead" && dedupeResult === "existing_customer",
         is_platform_new_lead: row.source === "platform_lead" && dedupeResult === "created_customer",
         is_employee_share: isEmployeeShareSource(row.source),
-        source_employee: row.source_employee_id
-          ? sourceEmployees.get(row.source_employee_id) ?? null
-          : null,
-        assigned_by: row.assigned_by_employee_id
-          ? assignedEmployees.get(row.assigned_by_employee_id) ?? null
-          : null,
-        platform_lead: row.platform_lead_id
-          ? platformLeads.get(row.platform_lead_id) ?? null
-          : null,
+        source_employee: serializeEmployee(
+          row.source_employee_id
+            ? sourceEmployees.get(row.source_employee_id) ?? null
+            : null,
+        ),
+        assigned_by: serializeEmployee(
+          row.assigned_by_employee_id
+            ? assignedEmployees.get(row.assigned_by_employee_id) ?? null
+            : null,
+        ),
+        platform_lead: serializePlatformLead(
+          row.platform_lead_id
+            ? platformLeads.get(row.platform_lead_id) ?? null
+            : null,
+        ),
         share_link: row.share_link_id
           ? shareLinks.get(row.share_link_id) ?? null
           : null,
@@ -244,8 +260,8 @@ export class CustomerSourceRepository {
   private async findEmployees(
     ids: string[],
     tenantId: string,
-  ): Promise<Map<string, EmployeeLite>> {
-    if (ids.length === 0) return new Map<string, EmployeeLite>();
+  ): Promise<Map<string, RawEmployeeLite>> {
+    if (ids.length === 0) return new Map<string, RawEmployeeLite>();
 
     const { data, error } = await this.from("employees")
       .select("id,name,phone")
@@ -253,24 +269,24 @@ export class CustomerSourceRepository {
       .eq("tenant_id", tenantId);
 
     if (error) {
-      throw Errors.dbError("查询客户来源员工失败", error);
+      throw Errors.dbError("查询客户来源员工失败");
     }
 
-    return new Map((data || []).map((item: EmployeeLite) => [item.id, item]));
+    return new Map((data || []).map((item: RawEmployeeLite) => [item.id, item]));
   }
 
-  private async findPlatformLeads(ids: string[]): Promise<Map<string, PlatformLeadLite>> {
-    if (ids.length === 0) return new Map<string, PlatformLeadLite>();
+  private async findPlatformLeads(ids: string[]): Promise<Map<string, RawPlatformLeadLite>> {
+    if (ids.length === 0) return new Map<string, RawPlatformLeadLite>();
 
     const { data, error } = await this.from("platform_leads")
       .select("id,phone,name,city,community,status,source")
       .in("id", ids);
 
     if (error) {
-      throw Errors.dbError("查询平台线索来源失败", error);
+      throw Errors.dbError("查询平台线索来源失败");
     }
 
-    return new Map((data || []).map((item: PlatformLeadLite) => [item.id, item]));
+    return new Map((data || []).map((item: RawPlatformLeadLite) => [item.id, item]));
   }
 
   private async findShareLinks(
@@ -285,7 +301,7 @@ export class CustomerSourceRepository {
       .eq("tenant_id", tenantId);
 
     if (error) {
-      throw Errors.dbError("查询分享链接来源失败", error);
+      throw Errors.dbError("查询分享链接来源失败");
     }
 
     return new Map((data || []).map((item: TenantShareLinkLite) => [item.id, item]));
@@ -294,6 +310,38 @@ export class CustomerSourceRepository {
 
 function unique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((item): item is string => Boolean(item))));
+}
+
+function serializeEmployee(value: RawEmployeeLite | null): EmployeeLite | null {
+  return value ? {
+    id: value.id,
+    name: value.name,
+    phone_masked: maskSourcePhone(value.phone),
+  } : null;
+}
+
+function serializePlatformLead(
+  value: RawPlatformLeadLite | null,
+): PlatformLeadLite | null {
+  return value ? {
+    id: value.id,
+    phone_masked: maskSourcePhone(value.phone),
+    name: value.name,
+    city: value.city,
+    community: value.community,
+    status: value.status,
+    source: value.source,
+  } : null;
+}
+
+function maskSourcePhone(phone: string | null | undefined) {
+  const value = phone?.trim();
+  if (!value) return null;
+  if (value.length === 11) {
+    return `${value.slice(0, 3)}****${value.slice(-4)}`;
+  }
+  if (value.length <= 4) return value;
+  return `${value.slice(0, 2)}****${value.slice(-2)}`;
 }
 
 function readDedupeResult(metadata: unknown) {

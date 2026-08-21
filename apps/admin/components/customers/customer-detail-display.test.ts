@@ -115,6 +115,14 @@ describe("customer detail display", () => {
       new URL("./customer-douyin-source-snapshot.tsx", import.meta.url),
       "utf8",
     );
+    const sourceTypes = readFileSync(
+      new URL("./customer-mutation-types.ts", import.meta.url),
+      "utf8",
+    );
+    const sourceDisplay = readFileSync(
+      new URL("./customer-mutation-display.tsx", import.meta.url),
+      "utf8",
+    );
 
     expect(dialog).toContain("CustomerDouyinSourceSnapshot");
     expect(dialog).toContain('role="status"');
@@ -126,5 +134,10 @@ describe("customer detail display", () => {
     expect(snapshot).toContain("formatDouyinBudgetRange");
     expect(snapshot).not.toMatch(/JSON\.stringify\s*\(\s*source\.metadata/);
     expect(snapshot).not.toMatch(/request_ip|user_agent|subject_hash|raw_response/);
+    expect(dialog).toContain("item.platform_lead?.phone_masked");
+    expect(dialog).not.toContain("item.platform_lead?.phone ||");
+    expect(sourceDisplay).toContain("source.source_employee?.phone_masked");
+    expect(sourceDisplay).toContain("source.assigned_by?.phone_masked");
+    expect(sourceTypes).toContain("phone_masked: string | null");
   });
 });

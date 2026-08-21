@@ -27,7 +27,7 @@ export type PropertySummary = {
 export type CustomerSourceEmployee = {
   id: string;
   name: string | null;
-  phone: string | null;
+  phone_masked: string | null;
 };
 
 export type DouyinCustomerSourceMetadata = {
@@ -55,7 +55,7 @@ export type CustomerSourceRecord = {
   assigned_by?: CustomerSourceEmployee | null;
   platform_lead?: {
     id: string;
-    phone: string | null;
+    phone_masked: string | null;
     name: string | null;
     city: string | null;
     community: string | null;

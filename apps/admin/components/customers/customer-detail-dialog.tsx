@@ -315,7 +315,12 @@ export function CustomerDetailDialog({
                     <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
                       <div>操作人：{sourceActorName(item)}</div>
                       <div>去重：{customerDedupeResultLabel(item.dedupe_result)}</div>
-                      <div>平台线索：{item.platform_lead?.name || item.platform_lead?.phone || "-"}</div>
+                      <div>
+                        平台线索：
+                        {item.platform_lead?.name
+                          || item.platform_lead?.phone_masked
+                          || "平台线索"}
+                      </div>
                     </div>
                     <CustomerDouyinSourceSnapshot source={item} />
                   </div>

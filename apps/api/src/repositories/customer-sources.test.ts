@@ -21,22 +21,27 @@ type QueryResult = { data: unknown; error: unknown; count?: number | null };
 function clientWith(
   result: QueryResult,
   rpcResult: QueryResult = { data: null, error: null },
+  tableResults: Record<string, QueryResult> = {},
 ) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   class Query implements PromiseLike<QueryResult> {
+    constructor(private readonly queryResult: QueryResult) {}
+
     private chain(method: string, args: unknown[]) {
       calls.push({ method, args });
       return this;
     }
     select(...args: unknown[]) { return this.chain("select", args); }
     eq(...args: unknown[]) { return this.chain("eq", args); }
+    in(...args: unknown[]) { return this.chain("in", args); }
     order(...args: unknown[]) { return this.chain("order", args); }
     range(...args: unknown[]) { return this.chain("range", args); }
+    maybeSingle() { return this.chain("maybeSingle", []); }
     then<TResult1 = QueryResult, TResult2 = never>(
       onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
       onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
     ) {
-      return Promise.resolve(result).then(onfulfilled, onrejected);
+      return Promise.resolve(this.queryResult).then(onfulfilled, onrejected);
     }
   }
   return {
@@ -44,7 +49,7 @@ function clientWith(
     client: {
       from(table: string) {
         calls.push({ method: "from", args: [table] });
-        return new Query();
+        return new Query(tableResults[table] ?? result);
       },
       rpc(name: string, args: unknown) {
         calls.push({ method: "rpc", args: [name, args] });
@@ -284,6 +289,85 @@ describe("Douyin customer source serialization", () => {
     expect(JSON.stringify(result)).not.toContain("marketing_lead_id");
   });
 
+  test("masks every hydrated nested phone at the public DTO boundary", async () => {
+    const context = clientWith(
+      {
+        data: [{
+          id: "source-1",
+          tenant_id: "tenant-1",
+          customer_id: "customer-1",
+          source: "platform_lead",
+          source_label: "平台线索",
+          platform_lead_id: "lead-1",
+          assigned_by_employee_id: "employee-2",
+          assigned_at: "2026-08-22T10:00:00.000Z",
+          metadata: { dedupe_result: "created_customer" },
+          created_at: "2026-08-22T10:00:00.000Z",
+          source_employee_id: "employee-1",
+          related_type: null,
+          related_id: null,
+          share_link_id: null,
+          marketing_lead_id: null,
+          douyin_measurement_appointment_id: null,
+        }],
+        error: null,
+        count: 1,
+      },
+      { data: null, error: null },
+      {
+        employees: {
+          data: [
+            { id: "employee-1", name: "来源员工", phone: "13900139000" },
+            { id: "employee-2", name: "分配员工", phone: "13700137000" },
+          ],
+          error: null,
+        },
+        platform_leads: {
+          data: [{
+            id: "lead-1",
+            phone: "13800138000",
+            name: null,
+            city: "上海",
+            community: "测试小区",
+            status: "pending",
+            source: "douyin",
+          }],
+          error: null,
+        },
+      },
+    );
+
+    const result = await new CustomerSourceRepository(context.client as never)
+      .listByCustomer({
+        tenantId: "tenant-1",
+        customerId: "customer-1",
+        query: { page: 1, pageSize: 20 },
+      });
+
+    expect(result.list[0]?.source_employee).toEqual({
+      id: "employee-1",
+      name: "来源员工",
+      phone_masked: "139****9000",
+    });
+    expect(result.list[0]?.assigned_by).toEqual({
+      id: "employee-2",
+      name: "分配员工",
+      phone_masked: "137****7000",
+    });
+    expect(result.list[0]?.platform_lead).toEqual({
+      id: "lead-1",
+      phone_masked: "138****8000",
+      name: null,
+      city: "上海",
+      community: "测试小区",
+      status: "pending",
+      source: "douyin",
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /13800138000|13900139000|13700137000|"phone":/,
+    );
+  });
+
   test("rejects duplicate inputs and malformed RPC rows without exposing raw data", async () => {
     const duplicateContext = clientWith({ data: null, error: null });
     const duplicateRepository = new CustomerSourceRepository(
@@ -345,4 +429,5 @@ describe("Douyin customer source serialization", () => {
     expect(databaseError).toMatchObject({ statusCode: 500 });
     expect(JSON.stringify(databaseError)).not.toMatch(/raw database detail|unsafe/);
   });
+
 });
