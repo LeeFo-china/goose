@@ -1775,7 +1775,9 @@ export type Database = {
           assigned_by_employee_id: string | null
           created_at: string
           customer_id: string
+          douyin_measurement_appointment_id: string | null
           id: string
+          marketing_lead_id: string | null
           metadata: Json
           platform_lead_id: string | null
           related_id: string | null
@@ -1791,7 +1793,9 @@ export type Database = {
           assigned_by_employee_id?: string | null
           created_at?: string
           customer_id: string
+          douyin_measurement_appointment_id?: string | null
           id?: string
+          marketing_lead_id?: string | null
           metadata?: Json
           platform_lead_id?: string | null
           related_id?: string | null
@@ -1807,7 +1811,9 @@ export type Database = {
           assigned_by_employee_id?: string | null
           created_at?: string
           customer_id?: string
+          douyin_measurement_appointment_id?: string | null
           id?: string
+          marketing_lead_id?: string | null
           metadata?: Json
           platform_lead_id?: string | null
           related_id?: string | null
@@ -1832,6 +1838,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "customers"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_sources_marketing_lead_tenant_fkey"
+            columns: ["marketing_lead_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "customer_sources_measurement_appointment_tenant_fkey"
+            columns: ["douyin_measurement_appointment_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_measurement_appointments"
+            referencedColumns: ["id", "tenant_id"]
           },
           {
             foreignKeyName: "customer_sources_platform_lead_id_fkey"
@@ -2577,6 +2597,290 @@ export type Database = {
           },
           {
             foreignKeyName: "douyin_budget_pricing_versions_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_lead_follow_ups: {
+        Row: {
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at: string
+          douyin_measurement_appointment_id: string
+          employee_id: string
+          follow_up_type: string
+          id: string
+          marketing_lead_id: string
+          next_follow_up_at: string | null
+          result: string
+          summary: string
+          tenant_id: string
+        }
+        Insert: {
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at?: string
+          douyin_measurement_appointment_id: string
+          employee_id: string
+          follow_up_type: string
+          id?: string
+          marketing_lead_id: string
+          next_follow_up_at?: string | null
+          result: string
+          summary: string
+          tenant_id: string
+        }
+        Update: {
+          create_idempotency_key?: string
+          create_request_hash?: string
+          created_at?: string
+          douyin_measurement_appointment_id?: string
+          employee_id?: string
+          follow_up_type?: string
+          id?: string
+          marketing_lead_id?: string
+          next_follow_up_at?: string | null
+          result?: string
+          summary?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_lead_follow_ups_appointment_tenant_fkey"
+            columns: ["douyin_measurement_appointment_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_measurement_appointments"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_follow_ups_employee_tenant_fkey"
+            columns: ["employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_follow_ups_lead_tenant_fkey"
+            columns: ["marketing_lead_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_follow_ups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_follow_ups_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_lead_workflow_operations: {
+        Row: {
+          action: string
+          actor_employee_id: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          marketing_lead_id: string
+          request_hash: string
+          result_payload: Json
+          tenant_id: string
+        }
+        Insert: {
+          action: string
+          actor_employee_id: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          marketing_lead_id: string
+          request_hash: string
+          result_payload: Json
+          tenant_id: string
+        }
+        Update: {
+          action?: string
+          actor_employee_id?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          marketing_lead_id?: string
+          request_hash?: string
+          result_payload?: Json
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_lead_workflow_operations_actor_tenant_fkey"
+            columns: ["actor_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_workflow_operations_lead_tenant_fkey"
+            columns: ["marketing_lead_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_workflow_operations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_lead_workflow_operations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      douyin_measurement_appointments: {
+        Row: {
+          appointment_no: string
+          assigned_at: string | null
+          assigned_employee_id: string | null
+          budget_estimate_id: string | null
+          community: string
+          confirmed_visit_at: string | null
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at: string
+          customer_id: string | null
+          douyin_miniapp_installation_id: string
+          existing_customer_linked_at_submit: boolean
+          id: string
+          marketing_lead_id: string
+          preferred_visit_date: string
+          preferred_visit_period: string
+          recent_pending_appointment_exists: boolean
+          sms_verification_code_id: string
+          source_snapshot: Json
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_existing: boolean
+          version: number
+        }
+        Insert: {
+          appointment_no: string
+          assigned_at?: string | null
+          assigned_employee_id?: string | null
+          budget_estimate_id?: string | null
+          community: string
+          confirmed_visit_at?: string | null
+          create_idempotency_key: string
+          create_request_hash: string
+          created_at?: string
+          customer_id?: string | null
+          douyin_miniapp_installation_id: string
+          existing_customer_linked_at_submit: boolean
+          id?: string
+          marketing_lead_id: string
+          preferred_visit_date: string
+          preferred_visit_period: string
+          recent_pending_appointment_exists: boolean
+          sms_verification_code_id: string
+          source_snapshot?: Json
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_existing: boolean
+          version?: number
+        }
+        Update: {
+          appointment_no?: string
+          assigned_at?: string | null
+          assigned_employee_id?: string | null
+          budget_estimate_id?: string | null
+          community?: string
+          confirmed_visit_at?: string | null
+          create_idempotency_key?: string
+          create_request_hash?: string
+          created_at?: string
+          customer_id?: string | null
+          douyin_miniapp_installation_id?: string
+          existing_customer_linked_at_submit?: boolean
+          id?: string
+          marketing_lead_id?: string
+          preferred_visit_date?: string
+          preferred_visit_period?: string
+          recent_pending_appointment_exists?: boolean
+          sms_verification_code_id?: string
+          source_snapshot?: Json
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_existing?: boolean
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "douyin_measurement_appointments_assignee_tenant_fkey"
+            columns: ["assigned_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_customer_tenant_fkey"
+            columns: ["customer_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_estimate_tenant_fkey"
+            columns: ["budget_estimate_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_budget_estimates"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_installation_tenant_fkey"
+            columns: ["douyin_miniapp_installation_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "douyin_miniapp_installations"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_lead_tenant_fkey"
+            columns: ["marketing_lead_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_leads"
+            referencedColumns: ["id", "tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_sms_verification_code_id_fkey"
+            columns: ["sms_verification_code_id"]
+            isOneToOne: true
+            referencedRelation: "sms_verification_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "platform_ocr_tenant_policy_overview"
+            referencedColumns: ["tenant_id"]
+          },
+          {
+            foreignKeyName: "douyin_measurement_appointments_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
@@ -4783,6 +5087,8 @@ export type Database = {
       }
       marketing_leads: {
         Row: {
+          assigned_at: string | null
+          assigned_employee_id: string | null
           city: string | null
           community: string | null
           created_at: string
@@ -4802,9 +5108,12 @@ export type Database = {
           source: string
           tenant_id: string | null
           user_agent: string | null
+          version: number
           wx_openid: string | null
         }
         Insert: {
+          assigned_at?: string | null
+          assigned_employee_id?: string | null
           city?: string | null
           community?: string | null
           created_at?: string
@@ -4824,9 +5133,12 @@ export type Database = {
           source?: string
           tenant_id?: string | null
           user_agent?: string | null
+          version?: number
           wx_openid?: string | null
         }
         Update: {
+          assigned_at?: string | null
+          assigned_employee_id?: string | null
           city?: string | null
           community?: string | null
           created_at?: string
@@ -4846,9 +5158,17 @@ export type Database = {
           source?: string
           tenant_id?: string | null
           user_agent?: string | null
+          version?: number
           wx_openid?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketing_leads_assignee_tenant_fkey"
+            columns: ["assigned_employee_id", "tenant_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id", "tenant_id"]
+          },
           {
             foreignKeyName: "marketing_leads_customer_id_fkey"
             columns: ["customer_id"]
@@ -21701,6 +22021,23 @@ export type Database = {
         }
         Returns: Json
       }
+      append_douyin_lead_follow_up: {
+        Args: {
+          p_actor_employee_id: string
+          p_appointment_id: string
+          p_appointment_status: string
+          p_confirmed_visit_at: string
+          p_expected_version: number
+          p_follow_up_type: string
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_next_follow_up_at: string
+          p_result: string
+          p_summary: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       apply_tenant_entitlement_action: {
         Args: {
           p_action: string
@@ -21876,6 +22213,17 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: undefined
+      }
+      assign_douyin_lead: {
+        Args: {
+          p_actor_employee_id: string
+          p_assigned_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       assign_platform_lead: {
         Args: {
@@ -24134,6 +24482,16 @@ export type Database = {
         }
         Returns: string
       }
+      convert_douyin_lead_to_customer: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       convert_supplier_purchase_requisition: {
         Args: {
           p_actor_employee_id: string
@@ -24982,6 +25340,19 @@ export type Database = {
         Args: { p_pricing_version_id: string; p_tenant_id: string }
         Returns: Json
       }
+      douyin_measurement_estimate_snapshot: {
+        Args: {
+          p_estimate: Database["public"]["Tables"]["douyin_budget_estimates"]["Row"]
+          p_now: string
+        }
+        Returns: Json
+      }
+      douyin_measurement_source_metadata: {
+        Args: {
+          p_appointment: Database["public"]["Tables"]["douyin_measurement_appointments"]["Row"]
+        }
+        Returns: Json
+      }
       douyin_public_image_urls_are_valid: {
         Args: { p_urls: string[] }
         Returns: boolean
@@ -25459,6 +25830,10 @@ export type Database = {
         Args: { p_item: Json }
         Returns: boolean
       }
+      is_valid_douyin_measurement_source_metadata: {
+        Args: { p_metadata: Json }
+        Returns: boolean
+      }
       list_accessible_project_workflow_tasks: {
         Args: {
           p_employee_id?: string
@@ -25830,6 +26205,17 @@ export type Database = {
       lock_tenant_onboarding_employee_phones: {
         Args: { p_phones: string[] }
         Returns: undefined
+      }
+      mark_douyin_lead_invalid: {
+        Args: {
+          p_actor_employee_id: string
+          p_expected_version: number
+          p_idempotency_key: string
+          p_marketing_lead_id: string
+          p_reason: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       mutate_platform_supplier: {
         Args: {
@@ -27463,6 +27849,28 @@ export type Database = {
           p_subject_id: string
           p_subject_type: string
           p_tenant_id: string
+        }
+        Returns: Json
+      }
+      submit_douyin_measurement_appointment: {
+        Args: {
+          p_attribution: Json
+          p_budget_estimate_id: string
+          p_community: string
+          p_consented_at: string
+          p_demand: string
+          p_douyin_miniapp_installation_id: string
+          p_idempotency_key: string
+          p_name: string
+          p_phone: string
+          p_preferred_visit_date: string
+          p_preferred_visit_period: string
+          p_privacy_policy_version: string
+          p_request_ip: string
+          p_sms_code: string
+          p_subject_hash: string
+          p_tenant_id: string
+          p_user_agent: string
         }
         Returns: Json
       }
