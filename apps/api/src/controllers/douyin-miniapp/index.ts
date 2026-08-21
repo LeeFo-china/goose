@@ -157,6 +157,7 @@ function requestMetadata(request: FastifyRequest) {
   return {
     requestIp: resolveTrustedClientIp(request),
     userAgent: userAgent ?? null,
+    log: request.log,
   };
 }
 

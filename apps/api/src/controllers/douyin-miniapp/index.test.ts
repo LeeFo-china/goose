@@ -177,17 +177,22 @@ describe("DouyinMiniappController", () => {
     const user = { token_type: "douyin_miniapp", tenant_id:
       "33333333-3333-4333-8333-333333333333" };
     const attribution = body.launch_context;
-    const request = { user, ip: "127.0.0.1", headers: { "user-agent": "Douyin" } };
+    const log = { warn: mock(() => undefined) };
+    const request = { user, ip: "127.0.0.1", headers: { "user-agent": "Douyin" }, log };
 
     await controller.sendLeadCode({ ...request, body: {
       phone: "13800000000", attribution,
     } } as never);
     expect(sendCode).toHaveBeenCalledWith(user, {
       phone: "13800000000", attribution,
-    }, { requestIp: "127.0.0.1", userAgent: "Douyin" });
+    }, { requestIp: "127.0.0.1", userAgent: "Douyin", log });
 
     const leadBody = {
       name: "李先生", phone: "13800000000", sms_code: "123456",
+      community: "晴天花园",
+      preferred_visit_date: "2026-08-25",
+      preferred_visit_period: "afternoon",
+      budget_estimate_id: "22222222-2222-4222-8222-222222222222",
       privacy_policy_version: "2026-07-19",
       consented_at: "2026-07-19T10:00:00.000Z",
       idempotency_key: "44444444-4444-4444-8444-444444444444",
@@ -195,11 +200,26 @@ describe("DouyinMiniappController", () => {
     };
     await controller.submitLead({ ...request, body: leadBody } as never);
     expect(submitLead).toHaveBeenCalledWith(user, leadBody,
-      { requestIp: "127.0.0.1", userAgent: "Douyin" });
+      { requestIp: "127.0.0.1", userAgent: "Douyin", log });
+    const { budget_estimate_id: _budgetEstimateId, ...leadWithoutEstimate } = leadBody;
+    await controller.submitLead({ ...request, body: leadWithoutEstimate } as never);
+    expect(submitLead).toHaveBeenLastCalledWith(user, leadWithoutEstimate,
+      { requestIp: "127.0.0.1", userAgent: "Douyin", log });
 
     await expect(controller.submitLead({ ...request, body: {
       ...leadBody, tenant_id: "99999999-9999-4999-8999-999999999999",
     } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    for (const invalidBody of [
+      { ...leadBody, community: undefined },
+      { ...leadBody, preferred_visit_date: undefined },
+      { ...leadBody, preferred_visit_date: "2026-02-30" },
+      { ...leadBody, preferred_visit_period: "noon" },
+      { ...leadBody, budget_estimate_id: "not-a-uuid" },
+    ]) {
+      await expect(controller.submitLead({ ...request, body: invalidBody } as never))
+        .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+    expect(submitLead).toHaveBeenCalledTimes(2);
     await expect(controller.recordEvents({ ...request, body: { events: [{
       event_name: "lead_submit_success", occurred_at: "2026-07-19T10:00:00.000Z",
       attribution,

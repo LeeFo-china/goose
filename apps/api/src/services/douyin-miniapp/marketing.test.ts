@@ -28,9 +28,9 @@ const lead: DouyinLeadRequest = {
   phone: "13800000000",
   sms_code: "123456",
   community: "示例花园",
-  area: 120,
-  budget: "20-30万",
-  start_time: "三个月内",
+  preferred_visit_date: "2026-07-20",
+  preferred_visit_period: "afternoon",
+  budget_estimate_id: "88888888-8888-4888-8888-888888888888",
   demand: "旧房改造",
   privacy_policy_version: "2026-07-19",
   consented_at: "2026-07-19T09:59:00.000Z",
@@ -39,7 +39,6 @@ const lead: DouyinLeadRequest = {
 };
 
 type CapturedLeadInput = {
-  requestDigest: string;
   tenantId: string;
   installationId: string;
   subjectHash: string;
@@ -65,23 +64,36 @@ function harness(features = { sms_lead: true }) {
     },
     tenant: { id: TENANT_ID, status: "active" },
   }));
-  const submitLead = mock(async (_input: CapturedLeadInput) => ({
+  const submitMeasurementAppointment = mock(async (_input: CapturedLeadInput) => ({
     lead_id: "44444444-4444-4444-8444-444444444444",
+    appointment_id: "55555555-5555-4555-8555-555555555555",
+    appointment_no: "DYLF-20260719-000001",
+    status: "pending_confirmation" as const,
     already_submitted: false,
     updated_existing: false,
-    message: "你已提交预约，我们将尽快联系你",
+    existing_customer_linked: false,
+    recent_pending_appointment_exists: false,
   }));
+  const createTenantAdminNotifications = mock(async (_input: unknown) => []);
   const insertEvents = mock(async (_input: unknown) => undefined);
   const sendCode = mock(async (_input: unknown) => (
     { success: true as const, cooldown_seconds: 60 }
   ));
   const service = new DouyinMiniappMarketingService({
     contextRepository: { findActiveInstallation } as never,
-    marketingRepository: { submitLead, insertEvents } as never,
+    marketingRepository: { submitMeasurementAppointment, insertEvents } as never,
+    notificationService: { createTenantAdminNotifications } as never,
     smsService: { sendCode } as never,
     now: () => new Date("2026-07-19T10:00:00.000Z"),
   });
-  return { findActiveInstallation, insertEvents, sendCode, service, submitLead };
+  return {
+    createTenantAdminNotifications,
+    findActiveInstallation,
+    insertEvents,
+    sendCode,
+    service,
+    submitMeasurementAppointment,
+  };
 }
 
 describe("DouyinMiniappMarketingService", () => {
@@ -141,34 +153,121 @@ describe("DouyinMiniappMarketingService", () => {
     )).resolves.toEqual({ success: true, cooldown_seconds: 60 });
   });
 
-  test("uses a canonical digest bound to server identity but excluding the SMS secret", async () => {
+  test("passes the server-owned appointment command fields without a caller digest", async () => {
     const first = harness();
-    const second = harness();
-    const reordered = {
-      ...lead,
-      sms_code: "654321",
-      attribution: {
-        content_id: "video-100", campaign_code: "summer-2026",
-        source_type: "short_video" as const, scene: "021001",
-        entry_path: "pages/lead/index" as const,
-      },
-    };
     await first.service.submitLead(user, lead, { requestIp: null, userAgent: null });
-    await second.service.submitLead(user, reordered, { requestIp: null, userAgent: null });
 
-    const firstDigest = first.submitLead.mock.calls[0]![0].requestDigest;
-    const secondDigest = second.submitLead.mock.calls[0]![0].requestDigest;
-    expect(firstDigest).toMatch(/^[0-9a-f]{64}$/);
-    expect(firstDigest).toBe(secondDigest);
-    expect(first.submitLead.mock.calls[0]![0]).toMatchObject({
+    const command = first.submitMeasurementAppointment.mock.calls[0]![0];
+    expect(command).toMatchObject({
       tenantId: TENANT_ID, installationId: INSTALLATION_ID,
       subjectHash: SUBJECT_HASH, phone: lead.phone, smsCode: "123456",
+      community: "示例花园",
+      preferredVisitDate: "2026-07-20",
+      preferredVisitPeriod: "afternoon",
+      budgetEstimateId: "88888888-8888-4888-8888-888888888888",
+    });
+    expect(command).not.toHaveProperty("requestDigest");
+    expect(command).not.toHaveProperty("area");
+    expect(command).not.toHaveProperty("budget");
+    expect(command).not.toHaveProperty("startTime");
+  });
+
+  test("notifies tenant admins after commit and keeps notification failure non-fatal and private", async () => {
+    const succeeded = harness();
+    await succeeded.service.submitLead(user, lead, { requestIp: null, userAgent: null });
+    expect(succeeded.createTenantAdminNotifications).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      scene: "douyin_measurement_appointment_submitted",
+      title: "新的免费量房预约",
+      content: "量房预约 DYLF-20260719-000001 已提交，请及时联系并确认具体时间。",
+      targetType: "marketing_lead",
+      targetId: "44444444-4444-4444-8444-444444444444",
+      targetUrl: "/douyin-miniapp/leads",
+      payload: {
+        marketing_lead_id: "44444444-4444-4444-8444-444444444444",
+        appointment_id: "55555555-5555-4555-8555-555555555555",
+        appointment_no: "DYLF-20260719-000001",
+      },
     });
 
-    const otherSubject = { ...user, sub: "b".repeat(64), subject_hash: "b".repeat(64) };
-    const third = harness();
-    await third.service.submitLead(otherSubject, lead, { requestIp: null, userAgent: null });
-    expect(third.submitLead.mock.calls[0]![0].requestDigest).not.toBe(firstDigest);
+    const failed = harness();
+    failed.createTenantAdminNotifications.mockImplementationOnce(async () => {
+      throw new Error(`notification failed ${lead.name} ${lead.phone}`);
+    });
+    const warn = mock((_payload: unknown, _message: string) => undefined);
+    await expect(failed.service.submitLead(user, lead, {
+      requestIp: null,
+      userAgent: null,
+      log: { warn },
+    })).resolves.toMatchObject({ appointment_no: "DYLF-20260719-000001" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).toContain("DOUYIN_MEASUREMENT_NOTIFICATION_FAILED");
+    expect(logged).toContain("55555555-5555-4555-8555-555555555555");
+    expect(logged).toContain("DYLF-20260719-000001");
+    expect(logged).not.toContain(TENANT_ID);
+    expect(logged).not.toContain(INSTALLATION_ID);
+    expect(logged).not.toContain(lead.name);
+    expect(logged).not.toContain(lead.phone);
+    expect(logged).not.toContain("notification failed");
+  });
+
+  test("does not create a duplicate notification for an idempotent command replay", async () => {
+    const replayed = harness();
+    replayed.submitMeasurementAppointment.mockImplementationOnce(async () => ({
+      lead_id: "44444444-4444-4444-8444-444444444444",
+      appointment_id: "55555555-5555-4555-8555-555555555555",
+      appointment_no: "DYLF-20260719-000001",
+      status: "pending_confirmation" as const,
+      already_submitted: true,
+      updated_existing: true,
+      existing_customer_linked: false,
+      recent_pending_appointment_exists: true,
+    }));
+
+    await expect(replayed.service.submitLead(
+      user,
+      lead,
+      { requestIp: null, userAgent: null },
+    )).resolves.toMatchObject({ already_submitted: true });
+    expect(replayed.createTenantAdminNotifications).not.toHaveBeenCalled();
+  });
+
+  test("uses the Shanghai natural day for the minimum preferred visit date", async () => {
+    const beforeMidnight = harness();
+    await expect(beforeMidnight.service.submitLead(user, {
+      ...lead,
+      preferred_visit_date: "2026-07-19",
+    }, { requestIp: null, userAgent: null })).resolves.toMatchObject({
+      status: "pending_confirmation",
+    });
+
+    const afterMidnight = harness();
+    const service = new DouyinMiniappMarketingService({
+      contextRepository: { findActiveInstallation: afterMidnight.findActiveInstallation } as never,
+      marketingRepository: {
+        submitMeasurementAppointment: afterMidnight.submitMeasurementAppointment,
+        insertEvents: afterMidnight.insertEvents,
+      } as never,
+      notificationService: {
+        createTenantAdminNotifications: afterMidnight.createTenantAdminNotifications,
+      } as never,
+      smsService: { sendCode: afterMidnight.sendCode } as never,
+      now: () => new Date("2026-07-19T16:00:00.000Z"),
+    });
+    await expect(service.submitLead(user, {
+      ...lead,
+      preferred_visit_date: "2026-07-19",
+    }, { requestIp: null, userAgent: null })).rejects.toMatchObject({
+      code: "DOUYIN_MEASUREMENT_VISIT_DATE_PAST",
+      statusCode: 400,
+    });
+    await expect(service.submitLead(user, {
+      ...lead,
+      preferred_visit_date: "2026-07-20",
+    }, { requestIp: null, userAgent: null })).resolves.toMatchObject({
+      status: "pending_confirmation",
+    });
   });
 
   test("rejects disabled lead capture, stale consent, and server-authoritative client events", async () => {

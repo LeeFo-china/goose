@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { DOUYIN_PROJECT_PHASE_VALUES } from "@gooes/domain";
+import {
+  DOUYIN_PROJECT_PHASE_VALUES,
+  DOUYIN_VISIT_PERIOD_VALUES,
+} from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 
 const DouyinEntryPathSchema = z.enum([
@@ -66,10 +69,10 @@ export const DouyinLeadRequestSchema = z.strictObject({
   name: z.string().trim().min(1).max(40),
   phone: PhoneSchema,
   sms_code: z.string().trim().regex(/^[0-9]{6}$/, "验证码格式无效"),
-  community: z.string().trim().min(1).max(80).optional(),
-  area: z.number().positive().max(100000).optional(),
-  budget: z.string().trim().min(1).max(40).optional(),
-  start_time: z.string().trim().min(1).max(40).optional(),
+  community: z.string().trim().min(1).max(80),
+  preferred_visit_date: z.iso.date(),
+  preferred_visit_period: z.enum(DOUYIN_VISIT_PERIOD_VALUES),
+  budget_estimate_id: z.uuid("预算编号格式无效").optional(),
   demand: z.string().trim().min(1).max(1000).optional(),
   privacy_policy_version: z.string().trim().min(1).max(40),
   consented_at: z.iso.datetime({ offset: true }),

@@ -64,12 +64,11 @@ const leadInput = {
   phone: "13800000000",
   name: "李先生",
   community: "示例花园",
-  area: 120,
-  budget: "20-30万",
-  startTime: "三个月内",
+  preferredVisitDate: "2026-07-20",
+  preferredVisitPeriod: "afternoon" as const,
+  budgetEstimateId: "88888888-8888-4888-8888-888888888888",
   demand: "旧房改造",
   smsCode: "123456",
-  requestDigest: "a".repeat(64),
   idempotencyKey: "33333333-3333-4333-8333-333333333333",
   subjectHash: "b".repeat(64),
   requestIp: "192.0.2.10",
@@ -87,32 +86,35 @@ const leadInput = {
 
 const leadResult = {
   lead_id: "44444444-4444-4444-8444-444444444444",
+  appointment_id: "55555555-5555-4555-8555-555555555555",
+  appointment_no: "DYLF-20260719-000001",
+  status: "pending_confirmation",
   already_submitted: false,
   updated_existing: false,
-  message: "你已提交预约，我们将尽快联系你",
+  existing_customer_linked: false,
+  recent_pending_appointment_exists: false,
 } as const;
 
-describe("DouyinMiniappMarketingRepository.submitLead", () => {
-  test("calls the atomic RPC once with the exact 18 parameters", async () => {
-    const { client, calls } = createClient([{ data: [leadResult], error: null }]);
+describe("DouyinMiniappMarketingRepository.submitMeasurementAppointment", () => {
+  test("calls the appointment RPC once with the exact server-owned parameters", async () => {
+    const { client, calls } = createClient([{ data: { data: leadResult }, error: null }]);
     const repository = new DouyinMiniappMarketingRepository(client);
 
-    await expect(repository.submitLead(leadInput)).resolves.toEqual(leadResult);
+    await expect(repository.submitMeasurementAppointment(leadInput)).resolves.toEqual(leadResult);
 
     expect(calls).toEqual([{
       method: "rpc",
-      args: ["submit_douyin_miniapp_lead", {
+      args: ["submit_douyin_measurement_appointment", {
         p_douyin_miniapp_installation_id: leadInput.installationId,
         p_tenant_id: leadInput.tenantId,
         p_phone: leadInput.phone,
         p_name: leadInput.name,
         p_community: leadInput.community,
-        p_area: leadInput.area,
-        p_budget: leadInput.budget,
-        p_start_time: leadInput.startTime,
+        p_preferred_visit_date: leadInput.preferredVisitDate,
+        p_preferred_visit_period: leadInput.preferredVisitPeriod,
+        p_budget_estimate_id: leadInput.budgetEstimateId,
         p_demand: leadInput.demand,
         p_sms_code: leadInput.smsCode,
-        p_request_digest: leadInput.requestDigest,
         p_idempotency_key: leadInput.idempotencyKey,
         p_subject_hash: leadInput.subjectHash,
         p_request_ip: leadInput.requestIp,
@@ -124,20 +126,24 @@ describe("DouyinMiniappMarketingRepository.submitLead", () => {
     }]);
   });
 
-  test("requires exactly one strict UUID/boolean/fixed-message result row", async () => {
+  test("requires one strict appointment result envelope", async () => {
     const invalidResults = [
-      [],
-      [leadResult, leadResult],
-      [{ ...leadResult, lead_id: "not-a-uuid" }],
-      [{ ...leadResult, already_submitted: "false" }],
-      [{ ...leadResult, message: "预约已提交" }],
-      [{ ...leadResult, extra: "unexpected" }],
-      [{ ...leadResult, updated_existing: true, already_submitted: false }],
+      null,
+      leadResult,
+      { data: { ...leadResult, lead_id: "not-a-uuid" } },
+      { data: { ...leadResult, status: "confirmed" } },
+      { data: { ...leadResult, appointment_no: "bad" } },
+      { data: { ...leadResult, already_submitted: "false" } },
+      { data: { ...leadResult, extra: "unexpected" } },
+      { data: leadResult, extra: "unexpected" },
+      { error: { status_code: 400, code: "UNKNOWN_COMMAND_ERROR" } },
+      { error: { status_code: 500, code: "DOUYIN_MEASUREMENT_SMS_INVALID" } },
     ];
 
     for (const data of invalidResults) {
       const { client } = createClient([{ data, error: null }]);
-      await expect(new DouyinMiniappMarketingRepository(client).submitLead(leadInput))
+      await expect(new DouyinMiniappMarketingRepository(client)
+        .submitMeasurementAppointment(leadInput))
         .rejects.toMatchObject({
           statusCode: 500,
           code: "DOUYIN_MARKETING_REPOSITORY_RESPONSE_INVALID",
@@ -145,27 +151,45 @@ describe("DouyinMiniappMarketingRepository.submitLead", () => {
     }
   });
 
+  test("preserves replay and lead/customer duplicate flags from the command", async () => {
+    const replay = {
+      ...leadResult,
+      already_submitted: true,
+      updated_existing: true,
+      existing_customer_linked: true,
+      recent_pending_appointment_exists: true,
+    };
+    const { client } = createClient([{ data: { data: replay }, error: null }]);
+
+    await expect(new DouyinMiniappMarketingRepository(client)
+      .submitMeasurementAppointment(leadInput)).resolves.toEqual(replay);
+  });
+
   test("maps known SQL markers to stable safe business errors", async () => {
     const markers = [
-      ["SMS_CODE_INVALID", 400],
-      ["SMS_CODE_EXPIRED", 400],
-      ["DOUYIN_IDEMPOTENCY_CONFLICT", 409],
-      ["DOUYIN_INSTALLATION_DISABLED", 409],
-      ["DOUYIN_TENANT_NOT_ACTIVE", 409],
-      ["DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH", 409],
-      ["DOUYIN_LEAD_INVALID_INPUT", 400],
-      ["DOUYIN_ATTRIBUTION_INVALID", 400],
+      ["DOUYIN_MEASUREMENT_COMMAND_INVALID", 400],
+      ["DOUYIN_MEASUREMENT_ATTRIBUTION_INVALID", 400],
+      ["DOUYIN_MEASUREMENT_INSTALLATION_UNSUPPORTED", 409],
+      ["DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH", 409],
+      ["DOUYIN_MEASUREMENT_IDEMPOTENCY_CONFLICT", 409],
+      ["DOUYIN_MEASUREMENT_SMS_INVALID", 400],
+      ["DOUYIN_MEASUREMENT_SMS_EXPIRED", 400],
+      ["DOUYIN_MEASUREMENT_ESTIMATE_NOT_FOUND", 404],
+      ["DOUYIN_MEASUREMENT_SNAPSHOT_TOO_LARGE", 400],
+      ["DOUYIN_MEASUREMENT_NUMBER_EXHAUSTED", 409],
+      ["DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT", 409],
     ] as const;
 
     for (const [marker, statusCode] of markers) {
       const sensitive = `postgres detail phone=13800000000 ${marker}`;
       const { client } = createClient([{
-        data: null,
-        error: { message: marker, details: sensitive, hint: sensitive },
+        error: null,
+        data: { error: { status_code: statusCode, code: marker } },
       }]);
       let caught: unknown;
       try {
-        await new DouyinMiniappMarketingRepository(client).submitLead(leadInput);
+        await new DouyinMiniappMarketingRepository(client)
+          .submitMeasurementAppointment(leadInput);
       } catch (error) {
         caught = error;
       }
@@ -177,14 +201,15 @@ describe("DouyinMiniappMarketingRepository.submitLead", () => {
 
   test("wraps unknown and rejected database failures without PostgreSQL text", async () => {
     const sensitive = "duplicate key phone=13800000000";
-    for (const message of [sensitive, "SMS_CODE_INVALID: extra", "toString"]) {
+    for (const message of [sensitive, "DOUYIN_MEASUREMENT_SMS_INVALID: extra", "toString"]) {
       const unknown = createClient([{
         data: null,
         error: { code: "23505", message, details: sensitive },
       }]);
       let caught: unknown;
       try {
-        await new DouyinMiniappMarketingRepository(unknown.client).submitLead(leadInput);
+        await new DouyinMiniappMarketingRepository(unknown.client)
+          .submitMeasurementAppointment(leadInput);
       } catch (error) {
         caught = error;
       }
@@ -198,12 +223,23 @@ describe("DouyinMiniappMarketingRepository.submitLead", () => {
     };
     let caught: unknown;
     try {
-      await new DouyinMiniappMarketingRepository(rejectedClient).submitLead(leadInput);
+      await new DouyinMiniappMarketingRepository(rejectedClient)
+        .submitMeasurementAppointment(leadInput);
     } catch (error) {
       caught = error;
     }
     expect(caught).toMatchObject({ statusCode: 500, code: "DB_ERROR" });
     expect(JSON.stringify(caught)).not.toContain(sensitive);
+
+    const synchronousClient: DouyinMiniappMarketingDatabaseClient = {
+      from: () => { throw new TypeError(sensitive); },
+      rpc: () => { throw new TypeError(sensitive); },
+    };
+    await expect(new DouyinMiniappMarketingRepository(synchronousClient)
+      .submitMeasurementAppointment(leadInput)).rejects.toMatchObject({
+      statusCode: 500,
+      code: "DB_ERROR",
+    });
   });
 });
 
