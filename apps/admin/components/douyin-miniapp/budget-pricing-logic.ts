@@ -241,11 +241,18 @@ export function calculatePricingPreview(items: readonly BudgetPricingEditorItem[
   }
 }
 
-export function pricingStatusDisplay(status: BudgetPricingStatus): {
+export function pricingStatusDisplay(
+  status: BudgetPricingStatus,
+  isCurrent: boolean,
+): {
   label: string;
   variant: "success" | "secondary" | "outline";
 } {
-  if (status === "active") return { label: "使用中", variant: "success" };
+  if (status === "active") {
+    return isCurrent
+      ? { label: "使用中", variant: "success" }
+      : { label: "已启用但当前失效", variant: "outline" };
+  }
   if (status === "draft") return { label: "草稿", variant: "secondary" };
   return { label: "已归档", variant: "outline" };
 }

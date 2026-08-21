@@ -13,6 +13,7 @@ import {
   getPricingItemWarnings,
   normalizePricingVersion,
   normalizePricingVersionPage,
+  pricingStatusDisplay,
   pricingItemToEditor,
   toggleCanonicalCondition,
   yuanInputToFen,
@@ -193,5 +194,18 @@ describe("douyin budget pricing admin logic", () => {
     ]);
     expect(toggleCanonicalCondition(["rough", "old_house"], "rough", false, order))
       .toEqual(["old_house"]);
+  });
+
+  test("labels raw active history from the authoritative effective version", () => {
+    expect(pricingStatusDisplay("active", true)).toEqual({
+      label: "使用中",
+      variant: "success",
+    });
+    expect(pricingStatusDisplay("active", false)).toEqual({
+      label: "已启用但当前失效",
+      variant: "outline",
+    });
+    expect(pricingStatusDisplay("draft", false).label).toBe("草稿");
+    expect(pricingStatusDisplay("archived", false).label).toBe("已归档");
   });
 });

@@ -19,6 +19,12 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("createBudgetPricingRequestAuthority");
     expect(source).toContain("撤销未保存修改");
     expect(source).toContain("const requestAuthority");
+    expect(source).toContain(
+      "isCurrent={version.id === activeVersion?.id}",
+    );
+    expect(source).toContain(
+      "pricingStatusDisplay(version.status, isCurrent)",
+    );
     expect(source).not.toContain("const listAuthority");
     expect(source).toContain("signal: mutationRequest.controller.signal");
     expect(source).toContain("await loadPage(pageTarget.current())");
