@@ -63,6 +63,7 @@ const appointment = {
   updated_at: CREATED_AT,
   version: 1,
 };
+const { source_snapshot: _sourceSnapshot, ...appointmentSummary } = appointment;
 const customer = {
   id: CUSTOMER_ID,
   tenant_id: TENANT_ID,
@@ -93,6 +94,7 @@ function clientWith(results: Result[]) {
     select(...args: unknown[]) { return this.chain("select", args); }
     eq(...args: unknown[]) { return this.chain("eq", args); }
     gte(...args: unknown[]) { return this.chain("gte", args); }
+    lt(...args: unknown[]) { return this.chain("lt", args); }
     lte(...args: unknown[]) { return this.chain("lte", args); }
     or(...args: unknown[]) { return this.chain("or", args); }
     in(...args: unknown[]) { return this.chain("in", args); }
@@ -129,7 +131,7 @@ describe("TenantDouyinLeadsRepository", () => {
   test("uses exact pagination, strict tenant filters and bounded batch hydration", async () => {
     const context = clientWith([
       { data: [lead], error: null, count: 21 },
-      { data: [appointment], error: null },
+      { data: [appointmentSummary], error: null },
       { data: [customer], error: null },
       { data: [employee], error: null },
     ]);
@@ -146,7 +148,7 @@ describe("TenantDouyinLeadsRepository", () => {
       keyword: "晴天",
       visibleAssigneeIds: [EMPLOYEE_ID],
     })).resolves.toEqual({
-      rows: [{ lead, appointments: [appointment], customer, assignee: employee }],
+      rows: [{ lead, appointments: [appointmentSummary], customer, assignee: employee }],
       total: 21,
     });
 
@@ -162,17 +164,19 @@ describe("TenantDouyinLeadsRepository", () => {
       method: "gte", args: ["created_at", "2026-08-01T00:00:00+08:00"],
     });
     expect(context.calls).toContainEqual({
-      method: "lte", args: ["created_at", "2026-08-21T23:59:59.999+08:00"],
+      method: "lt", args: ["created_at", "2026-08-22T00:00:00+08:00"],
     });
     expect(context.calls).toContainEqual({
       method: "or",
       args: ["name.ilike.%晴天%,phone.ilike.%晴天%,community.ilike.%晴天%"],
     });
     expect(context.calls.filter((call) => call.method === "from"))
-      .toHaveLength(4);
+      .toHaveLength(3);
     const selects = context.calls.filter((call) => call.method === "select")
       .map((call) => String(call.args[0])).join(",");
     expect(selects).not.toMatch(/request_ip|user_agent|sms_verification_code_id|create_request_hash/);
+    expect(String(context.calls.find((call) => call.method === "select")?.args[0]))
+      .not.toContain("form_data");
   });
 
   test("does not hydrate an empty page and rejects invalid exact counts", async () => {
@@ -188,28 +192,33 @@ describe("TenantDouyinLeadsRepository", () => {
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
-  test("chunks appointment hydration below the PostgREST boundary", async () => {
+  test("loads exactly one latest summary per lead through the bounded RPC", async () => {
     const leads = Array.from({ length: 51 }, (_, index) => ({
       ...lead,
       id: `22222222-2222-4222-8222-${String(index + 1).padStart(12, "0")}`,
       customer_id: null,
       assigned_employee_id: null,
     }));
+    const latest = { ...appointmentSummary, marketing_lead_id: leads[0]!.id,
+      customer_id: null, assigned_employee_id: null };
     const context = clientWith([
       { data: leads, error: null, count: 51 },
-      { data: [], error: null },
+      { data: [latest], error: null },
       { data: [], error: null },
     ]);
-    await new Repository(context.client as never).listLeads({
+    const result = await new Repository(context.client as never).listLeads({
       tenantId: TENANT_ID, page: 1, pageSize: 100, visibleAssigneeIds: null,
     });
-    const batches = context.calls.filter((call) =>
-      call.method === "in" && call.args[0] === "marketing_lead_id"
-    );
-    expect(batches.map((call) => (call.args[1] as string[]).length))
-      .toEqual([49, 2]);
-    expect(context.calls.filter((call) => call.method === "limit")
-      .map((call) => call.args[0])).toEqual([981, 41]);
+    expect(result.rows[0]?.appointments).toEqual([latest]);
+    expect(context.calls.filter((call) => call.method === "rpc"))
+      .toEqual([{ method: "rpc", args: [
+        "list_tenant_douyin_lead_latest_appointments",
+        { p_tenant_id: TENANT_ID,
+          p_marketing_lead_ids: leads.map((item) => item.id) },
+      ] }]);
+    expect(context.calls.filter((call) => call.method === "from")
+      .map((call) => call.args[0]))
+      .not.toContain("douyin_measurement_appointments");
   });
 
   test("loads bounded detail appointments and the first follow-up page", async () => {
@@ -223,7 +232,9 @@ describe("TenantDouyinLeadsRepository", () => {
     };
     const context = clientWith([
       { data: lead, error: null },
-      { data: [appointment], error: null },
+      { data: Array.from({ length: 20 }, (_, index) => ({ ...appointment,
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}` })),
+        error: null, count: 21 },
       { data: [customer], error: null },
       { data: [employee], error: null },
       { data: [followUp], error: null, count: 22 },
@@ -232,11 +243,12 @@ describe("TenantDouyinLeadsRepository", () => {
     await expect(new Repository(context.client as never).getLeadDetail({
       tenantId: TENANT_ID, leadId: LEAD_ID,
     })).resolves.toMatchObject({
-      lead: { id: LEAD_ID }, appointments: [{ id: APPOINTMENT_ID }],
+      lead: { id: LEAD_ID }, appointments: expect.any(Array), appointmentTotal: 21,
       followUps: [{ followUp: { id: followUp.id } }], followUpTotal: 22,
     });
-    expect(context.calls).toContainEqual({ method: "limit", args: [21] });
     expect(context.calls).toContainEqual({ method: "range", args: [0, 19] });
+    expect(context.calls).toContainEqual({ method: "select",
+      args: [expect.stringContaining("source_snapshot"), { count: "exact" }] });
   });
 
   test("paginates follow-ups and hydrates employees in one bounded batch", async () => {
@@ -274,7 +286,8 @@ describe("TenantDouyinLeadsRepository", () => {
 
   test("preflights customer creation with deterministic tenant phone lookup", async () => {
     const context = clientWith([
-      { data: { id: LEAD_ID, tenant_id: TENANT_ID, phone: lead.phone, customer_id: null }, error: null },
+      { data: { id: LEAD_ID, tenant_id: TENANT_ID, phone: lead.phone,
+        customer_id: null, assigned_employee_id: EMPLOYEE_ID }, error: null },
       { data: customer, error: null },
     ]);
     await expect(new Repository(context.client as never).findConversionPreflight({
@@ -283,6 +296,7 @@ describe("TenantDouyinLeadsRepository", () => {
     })).resolves.toEqual({
       leadId: LEAD_ID,
       phone: lead.phone,
+      assignedEmployeeId: EMPLOYEE_ID,
       customerId: CUSTOMER_ID,
     });
     expect(context.calls).toContainEqual({ method: "eq", args: ["tenant_id", TENANT_ID] });
@@ -303,7 +317,8 @@ describe("TenantDouyinLeadsRepository", () => {
         appointment_version: 2, appointment_status: "confirmed", idempotent: false } },
       { data: { action: "convert", result: "converted", lead_id: LEAD_ID,
         customer_id: CUSTOMER_ID, created_customer: false,
-        repeated_conversion: false, lead_version: 4, idempotent: false } },
+        repeated_conversion: false, lead_version: 4,
+        appointments_updated: 1, idempotent: false } },
       { data: { action: "mark_invalid", result: "invalid", lead_id: LEAD_ID,
         lead_version: 4, appointments_updated: 1,
         repeated_invalidation: false, idempotent: false } },
@@ -321,7 +336,8 @@ describe("TenantDouyinLeadsRepository", () => {
       idempotencyKey: IDEMPOTENCY_KEY });
     await repository.convert({ tenantId: TENANT_ID, leadId: LEAD_ID,
       actorEmployeeId: EMPLOYEE_ID, expectedVersion: 3,
-      idempotencyKey: IDEMPOTENCY_KEY });
+      idempotencyKey: IDEMPOTENCY_KEY, expectedCustomerId: CUSTOMER_ID,
+      allowCustomerCreate: false });
     await repository.markInvalid({ tenantId: TENANT_ID, leadId: LEAD_ID,
       actorEmployeeId: EMPLOYEE_ID, reason: "超出服务范围", expectedVersion: 3,
       idempotencyKey: IDEMPOTENCY_KEY });
@@ -345,6 +361,25 @@ describe("TenantDouyinLeadsRepository", () => {
       p_expected_version: 2,
       p_idempotency_key: IDEMPOTENCY_KEY,
     });
+    expect(rpcCalls[2]?.args[1]).toEqual({
+      p_tenant_id: TENANT_ID, p_marketing_lead_id: LEAD_ID,
+      p_actor_employee_id: EMPLOYEE_ID, p_expected_version: 3,
+      p_idempotency_key: IDEMPOTENCY_KEY,
+      p_expected_customer_id: CUSTOMER_ID, p_allow_customer_create: false,
+    });
+  });
+
+  test("requires appointments_updated in the real conversion response", async () => {
+    const context = clientWith([{ data: { data: {
+      action: "convert", result: "converted", lead_id: LEAD_ID,
+      customer_id: CUSTOMER_ID, created_customer: false,
+      repeated_conversion: false, lead_version: 2, idempotent: false,
+    } }, error: null }]);
+    await expect(new Repository(context.client as never).convert({
+      tenantId: TENANT_ID, leadId: LEAD_ID, actorEmployeeId: EMPLOYEE_ID,
+      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
+      expectedCustomerId: CUSTOMER_ID, allowCustomerCreate: false,
+    })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
 
   test("returns the canonical idempotent replay without rewriting it", async () => {
@@ -377,6 +412,7 @@ describe("TenantDouyinLeadsRepository", () => {
       await new Repository(databaseFailure.client as never).convert({
         tenantId: TENANT_ID, leadId: LEAD_ID, actorEmployeeId: EMPLOYEE_ID,
         expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
+        expectedCustomerId: CUSTOMER_ID, allowCustomerCreate: false,
       });
       throw new TypeError("expected rejection");
     } catch (error) {

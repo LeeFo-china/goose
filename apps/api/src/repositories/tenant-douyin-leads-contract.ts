@@ -17,14 +17,14 @@ export const TenantDouyinLeadRowSchema = z.strictObject({
   phone: NullableStringSchema,
   community: NullableStringSchema,
   lead_status: LeadStatusSchema,
-  form_data: z.record(z.string(), z.unknown()),
+  form_data: z.record(z.string(), z.unknown()).optional(),
   created_at: DateTimeSchema,
   followed_at: DateTimeSchema.nullable(),
   follow_remark: NullableStringSchema,
   version: z.int().min(1),
 });
 
-export const TenantDouyinAppointmentRowSchema = z.strictObject({
+const TenantDouyinAppointmentShape = {
   id: z.uuid(),
   appointment_no: z.string().trim().min(1).max(40),
   tenant_id: z.uuid(),
@@ -37,10 +37,16 @@ export const TenantDouyinAppointmentRowSchema = z.strictObject({
   community: z.string().trim().min(1).max(80),
   status: z.enum(DOUYIN_APPOINTMENT_STATUS_VALUES),
   confirmed_visit_at: DateTimeSchema.nullable(),
-  source_snapshot: z.record(z.string(), z.unknown()),
   created_at: DateTimeSchema,
   updated_at: DateTimeSchema,
   version: z.int().min(1),
+};
+export const TenantDouyinAppointmentSummaryRowSchema = z.strictObject({
+  ...TenantDouyinAppointmentShape,
+});
+export const TenantDouyinAppointmentDetailRowSchema = z.strictObject({
+  ...TenantDouyinAppointmentShape,
+  source_snapshot: z.record(z.string(), z.unknown()),
 });
 
 export const TenantDouyinCustomerRowSchema = z.strictObject({
@@ -83,6 +89,7 @@ const COMMAND_ERROR_CODE_VALUES = [
   "DOUYIN_LEAD_CONVERTED_NOT_INVALIDATABLE",
   "DOUYIN_LEAD_CONVERT_COMMAND_INVALID",
   "DOUYIN_LEAD_CUSTOMER_UPSERT_FAILED",
+  "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT",
   "DOUYIN_LEAD_FOLLOW_UP_COMMAND_INVALID",
   "DOUYIN_LEAD_IDEMPOTENCY_CONFLICT",
   "DOUYIN_LEAD_INVALID_COMMAND_INVALID",
@@ -108,6 +115,7 @@ const COMMAND_ERROR_STATUS = {
   DOUYIN_MEASUREMENT_APPOINTMENT_NOT_FOUND: 404,
   DOUYIN_LEAD_CONVERSION_STATE_INVALID: 500,
   DOUYIN_LEAD_CUSTOMER_UPSERT_FAILED: 500,
+  DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT: 409,
   DOUYIN_LEAD_APPOINTMENT_CUSTOMER_CONFLICT: 409,
   DOUYIN_LEAD_CONVERTED_NOT_INVALIDATABLE: 409,
   DOUYIN_LEAD_IDEMPOTENCY_CONFLICT: 409,
@@ -154,7 +162,8 @@ export const TenantDouyinLeadCommandDataSchema = z.discriminatedUnion("action", 
   z.strictObject({
     action: z.literal("convert"), result: z.literal("converted"),
     customer_id: z.uuid(), created_customer: z.boolean(),
-    repeated_conversion: z.boolean(), ...CommandBaseShape,
+    repeated_conversion: z.boolean(), appointments_updated: z.int().min(0),
+    ...CommandBaseShape,
   }),
   z.strictObject({
     action: z.literal("mark_invalid"), result: z.literal("invalid"),
@@ -170,7 +179,10 @@ export const TenantDouyinLeadCommandEnvelopeSchema = z.union([
 
 export type TenantDouyinLeadRow = z.infer<typeof TenantDouyinLeadRowSchema>;
 export type TenantDouyinAppointmentRow = z.infer<
-  typeof TenantDouyinAppointmentRowSchema
+  typeof TenantDouyinAppointmentSummaryRowSchema
+>;
+export type TenantDouyinAppointmentDetailRow = z.infer<
+  typeof TenantDouyinAppointmentDetailRowSchema
 >;
 export type TenantDouyinCustomerRow = z.infer<
   typeof TenantDouyinCustomerRowSchema

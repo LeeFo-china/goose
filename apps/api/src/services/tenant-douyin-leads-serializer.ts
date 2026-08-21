@@ -29,6 +29,9 @@ export function serializeLeadBundle(input: {
   includeDetail: boolean;
 }) {
   assertLeadBundleScope(input.bundle, input.tenantId);
+  if (input.includeDetail && input.bundle.lead.form_data === undefined) {
+    throwInvalidResponse();
+  }
   const { lead, appointments, customer, assignee } = input.bundle;
   const phoneFields = input.phonePrivacy.serializeCustomerPhoneFields(
     input.phoneContext,

@@ -24485,16 +24485,29 @@ export type Database = {
         }
         Returns: string
       }
-      convert_douyin_lead_to_customer: {
-        Args: {
-          p_actor_employee_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_marketing_lead_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
+      convert_douyin_lead_to_customer:
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_marketing_lead_id: string
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_allow_customer_create: boolean
+              p_expected_customer_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_marketing_lead_id: string
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
       convert_supplier_purchase_requisition: {
         Args: {
           p_actor_employee_id: string
@@ -26117,6 +26130,26 @@ export type Database = {
           p_tenant_id: string
         }
         Returns: Json
+      }
+      list_tenant_douyin_lead_latest_appointments: {
+        Args: { p_marketing_lead_ids: string[]; p_tenant_id: string }
+        Returns: {
+          appointment_no: string
+          assigned_employee_id: string
+          budget_estimate_id: string
+          community: string
+          confirmed_visit_at: string
+          created_at: string
+          customer_id: string
+          id: string
+          marketing_lead_id: string
+          preferred_visit_date: string
+          preferred_visit_period: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          version: number
+        }[]
       }
       list_tenant_service_provider_publications: {
         Args: { p_keyword: string; p_status: string }

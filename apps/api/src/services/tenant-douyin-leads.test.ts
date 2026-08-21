@@ -1,7 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
-import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -9,10 +8,15 @@ process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
 let Service: typeof import("./tenant-douyin-leads").TenantDouyinLeadsService;
 let permissionFor: typeof import("./tenant-douyin-leads").permissionFor;
+let customerPhonePrivacyService: typeof import("@/services/customer-phone-privacy")
+  .customerPhonePrivacyService;
 
 beforeAll(async () => {
   ({ TenantDouyinLeadsService: Service, permissionFor } = await import(
     "./tenant-douyin-leads"
+  ));
+  ({ customerPhonePrivacyService } = await import(
+    "@/services/customer-phone-privacy"
   ));
 });
 
@@ -37,8 +41,8 @@ const appointment = {
   tenant_id: TENANT_ID, marketing_lead_id: LEAD_ID,
   customer_id: CUSTOMER_ID, assigned_employee_id: EMPLOYEE_ID,
   budget_estimate_id: null, preferred_visit_date: "2026-08-23",
-  preferred_visit_period: "morning", community: "晴天花园",
-  status: "pending_confirmation", confirmed_visit_at: null,
+  preferred_visit_period: "morning" as const, community: "晴天花园",
+  status: "pending_confirmation" as const, confirmed_visit_at: null,
   source_snapshot: { privacy_policy_version: "2026-08-01",
     consented_at: CREATED_AT, attribution: {}, demand: null,
     budget_estimate: null },
@@ -60,13 +64,15 @@ function authContext(
 function fixture(overrides: Record<string, unknown> = {}) {
   const repository = {
     listLeads: mock(async () => ({ rows: [{ lead, appointments: [appointment], customer, assignee: employee }], total: 1 })),
-    getLeadDetail: mock(async () => ({ lead, appointments: [appointment], customer,
-      assignee: employee, followUps: [], followUpTotal: 0 })),
+    getLeadDetail: mock(async () => ({ lead, appointments: [appointment],
+      appointmentTotal: 21, customer, assignee: employee,
+      followUps: [], followUpTotal: 0 })),
     listFollowUps: mock(async () => ({ rows: [], total: 0 })),
     findLeadAccess: mock(async () => ({ id: LEAD_ID, tenant_id: TENANT_ID,
       assigned_employee_id: EMPLOYEE_ID })),
     findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
-      phone: lead.phone, customerId: CUSTOMER_ID })),
+      phone: lead.phone, assignedEmployeeId: EMPLOYEE_ID,
+      customerId: CUSTOMER_ID })),
     assign: mock(async () => ({ ok: true as const, data: { action: "assign" as const,
       result: "assigned" as const, lead_id: LEAD_ID,
       assigned_employee_id: EMPLOYEE_ID, lead_version: 2,
@@ -80,7 +86,8 @@ function fixture(overrides: Record<string, unknown> = {}) {
     convert: mock(async () => ({ ok: true as const, data: {
       action: "convert" as const, result: "converted" as const,
       lead_id: LEAD_ID, customer_id: CUSTOMER_ID, created_customer: false,
-      repeated_conversion: false, lead_version: 2, idempotent: false } })),
+      repeated_conversion: false, lead_version: 2, appointments_updated: 0,
+      idempotent: false } })),
     markInvalid: mock(async () => ({ ok: true as const, data: {
       action: "mark_invalid" as const, result: "invalid" as const,
       lead_id: LEAD_ID, lead_version: 2, appointments_updated: 1,
@@ -193,6 +200,30 @@ describe("TenantDouyinLeadsService", () => {
     });
   });
 
+  test("returns explicit bounded appointment pagination for detail", async () => {
+    const result = await fixture().service.getDetail(
+      authContext(["douyin_lead.read"]), LEAD_ID,
+    );
+    expect(result.appointments).toEqual({
+      list: [appointment],
+      pagination: { page: 1, pageSize: 20, total: 21, totalPages: 2 },
+      truncated: true,
+    });
+  });
+
+  test("rejects an invalid exact appointment total", async () => {
+    const context = fixture({ repository: {
+      ...fixture().repository,
+      getLeadDetail: mock(async () => ({ lead, appointments: [appointment],
+        appointmentTotal: -1, customer, assignee: employee,
+        followUps: [], followUpTotal: 0 })),
+    } });
+    await expect(context.service.getDetail(
+      authContext(["douyin_lead.read"]), LEAD_ID,
+    )).rejects.toMatchObject({ statusCode: 500,
+      code: "DOUYIN_LEAD_RESPONSE_INVALID" });
+  });
+
   test("denies missing tenant or permission for every read and write action", async () => {
     const command = { expected_lead_version: 1,
       idempotency_key: IDEMPOTENCY_KEY };
@@ -275,7 +306,7 @@ describe("TenantDouyinLeadsService", () => {
     const absent = fixture({ repository: {
       ...fixture().repository,
       findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
-        phone: lead.phone, customerId: null })),
+        phone: lead.phone, assignedEmployeeId: EMPLOYEE_ID, customerId: null })),
     } });
     await expect(absent.service.convert(authContext(["douyin_lead.convert"]), LEAD_ID, {
       expected_lead_version: 1, idempotency_key: IDEMPOTENCY_KEY,
@@ -358,7 +389,7 @@ describe("TenantDouyinLeadsService", () => {
         action: "convert" as const, result: "converted" as const,
         lead_id: LEAD_ID, customer_id: "99999999-9999-4999-8999-999999999999",
         created_customer: false, repeated_conversion: false,
-        lead_version: 2, idempotent: false } })),
+        lead_version: 2, appointments_updated: 0, idempotent: false } })),
     } });
     await expect(wrongCustomer.service.convert(
       authContext(["douyin_lead.convert"]), LEAD_ID,

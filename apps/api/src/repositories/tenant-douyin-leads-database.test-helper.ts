@@ -1,0 +1,296 @@
+import { randomUUID } from "node:crypto";
+
+export const TENANT_LEAD_DATABASE_SCENARIOS = [
+  "function_acl_catalog",
+  "latest_of_twenty_one",
+  "detail_page_twenty_of_twenty_one",
+  "preflight_conflict_zero_writes",
+  "existing_customer_conversion_shape",
+  "unassigned_customer_owner",
+  "repeated_conversion_conflict_zero_writes",
+  "latest_index_plan",
+  "fixture_cleanup",
+] as const;
+
+type Scenario = (typeof TENANT_LEAD_DATABASE_SCENARIOS)[number];
+type Summary = Record<Scenario, boolean>;
+type DatabaseSql = InstanceType<typeof Bun.SQL>;
+type JsonRecord = Record<string, unknown>;
+const DEFAULT_DATABASE_URL =
+  "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+
+export function parseLocalTenantLeadDatabaseUrl(input: string | undefined):
+  | { ok: true; databaseUrl: string }
+  | { ok: false } {
+  const databaseUrl = input?.trim() || DEFAULT_DATABASE_URL;
+  try {
+    const url = new URL(databaseUrl);
+    if (!["postgres:", "postgresql:"].includes(url.protocol)
+      || !["127.0.0.1", "localhost"].includes(url.hostname)
+      || url.port !== "54322" || url.pathname !== "/postgres"
+      || url.username !== "postgres" || url.password !== "postgres"
+      || url.search !== "" || url.hash !== "") return { ok: false };
+    return { ok: true, databaseUrl };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function runTenantLeadDatabaseIntegration(databaseUrl?: string) {
+  const parsed = parseLocalTenantLeadDatabaseUrl(databaseUrl);
+  if (!parsed.ok) throw new Error("LOCAL_DATABASE_REQUIRED");
+  const admin = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
+  const service = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
+  const ids = fixtureIds();
+  const summary = Object.fromEntries(TENANT_LEAD_DATABASE_SCENARIOS
+    .map((scenario) => [scenario, false])) as Summary;
+  let failure: unknown;
+  try {
+    await createFixture(admin, ids);
+    await service`set role service_role`;
+    await service`set statement_timeout = '5s'`;
+    await runScenarios(admin, service, ids, summary);
+  } catch (error) {
+    failure = error;
+  } finally {
+    await service.close().catch(() => undefined);
+    try {
+      summary.fixture_cleanup = await cleanupFixture(admin, ids);
+    } catch (cleanupError) {
+      failure ??= cleanupError;
+    }
+    await admin.close().catch(() => undefined);
+  }
+  if (failure) throw new Error(stableFailure(failure));
+  return summary;
+}
+
+type FixtureIds = ReturnType<typeof fixtureIds>;
+function fixtureIds() {
+  const suffix = randomUUID().replaceAll("-", "");
+  return {
+    tenant: randomUUID(), employee: randomUUID(), installation: randomUUID(),
+    lead: randomUUID(), secondLead: randomUUID(), customer: randomUUID(),
+    component: `lead-test-${suffix}`, authorizer: `lead-test-auth-${suffix}`,
+    phone: `139${String(Date.now()).slice(-8)}`,
+    secondPhone: `137${String(Date.now() + 1).slice(-8)}`,
+  };
+}
+
+async function createFixture(sql: DatabaseSql, ids: FixtureIds) {
+  await sql`insert into public.tenants (id,name,slug,status) values
+    (${ids.tenant}::uuid,'线索集成测试',${`lead-test-${ids.tenant}`} ,'active')`;
+  await sql`insert into public.employees (id,name,status,tenant_id)
+    values (${ids.employee}::uuid,'线索测试员工','active',${ids.tenant}::uuid)`;
+  await sql`insert into public.douyin_third_party_components
+    (component_appid,status) values (${ids.component},'active')`;
+  await sql`insert into public.douyin_miniapp_installations
+    (id,tenant_id,component_appid,authorizer_appid,installation_kind,
+      authorization_status)
+    values (${ids.installation}::uuid,${ids.tenant}::uuid,${ids.component},
+      ${ids.authorizer},'merchant','disabled')`;
+  await sql`insert into public.marketing_leads
+    (id,name,phone,community,form_data,source,tenant_id,
+      douyin_miniapp_installation_id,version)
+    values
+    (${ids.lead}::uuid,'李女士',${ids.phone},'晴天花园','{}'::jsonb,
+      'douyin_miniapp',${ids.tenant}::uuid,${ids.installation}::uuid,1),
+    (${ids.secondLead}::uuid,'王女士',${ids.secondPhone},'云栖花园','{}'::jsonb,
+      'douyin_miniapp',${ids.tenant}::uuid,${ids.installation}::uuid,1)`;
+  await sql`insert into public.customers
+    (id,tenant_id,name,phone,status,source,owner_id)
+    values (${ids.customer}::uuid,${ids.tenant}::uuid,'李女士',${ids.phone},
+      'potential','douyin',${ids.employee}::uuid)`;
+  await sql`with generated as (select g from generate_series(1,21) as g)
+    insert into public.sms_verification_codes
+      (id,phone,scene,code,status,expired_at,verified_at)
+    select gen_random_uuid(),${ids.phone},'douyin_lead','123456','verified',
+      now()+interval '1 hour',now() from generated`;
+  await sql`with sms as (
+      select id,row_number() over(order by id) as n
+      from public.sms_verification_codes
+      where phone=${ids.phone} and scene='douyin_lead'
+      order by id limit 21
+    )
+    insert into public.douyin_measurement_appointments (
+      appointment_no,tenant_id,douyin_miniapp_installation_id,
+      marketing_lead_id,sms_verification_code_id,preferred_visit_date,
+      preferred_visit_period,community,status,create_idempotency_key,
+      create_request_hash,source_snapshot,updated_existing,
+      existing_customer_linked_at_submit,recent_pending_appointment_exists,
+      created_at,updated_at
+    )
+    select 'DYLF-20991231-'||lpad((900000+n)::text,6,'0'),
+      ${ids.tenant}::uuid,${ids.installation}::uuid,${ids.lead}::uuid,id,
+      date '2099-12-31','morning','晴天花园','pending_confirmation',
+      gen_random_uuid(),extensions.digest(convert_to(n::text,'UTF8'),'sha256'),
+      jsonb_build_object('privacy_policy_version','2026-08-01',
+        'consented_at','2026-08-21T00:00:00Z','attribution','{}'::jsonb,
+        'demand',null,'budget_estimate',null),false,false,false,
+      timestamptz '2026-08-21 00:00:00+00'+n*interval '1 second',
+      timestamptz '2026-08-21 00:00:00+00'+n*interval '1 second'
+    from sms`;
+}
+
+async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
+  ids: FixtureIds, summary: Summary) {
+  const acl = (await admin<Array<Record<string, boolean>>>`select
+    has_function_privilege('service_role',
+      'public.convert_douyin_lead_to_customer(uuid,uuid,uuid,integer,uuid)',
+      'EXECUTE') as old_convert,
+    has_function_privilege('service_role',
+      'public.convert_douyin_lead_to_customer(uuid,uuid,uuid,integer,uuid,uuid,boolean)',
+      'EXECUTE') as new_convert,
+    has_function_privilege('service_role',
+      'public.list_tenant_douyin_lead_latest_appointments(uuid,uuid[])',
+      'EXECUTE') as latest,
+    has_function_privilege('authenticated',
+      'public.list_tenant_douyin_lead_latest_appointments(uuid,uuid[])',
+      'EXECUTE') as authenticated_latest`)[0];
+  summary.function_acl_catalog = acl?.old_convert === false
+    && acl.new_convert === true && acl.latest === true
+    && acl.authenticated_latest === false;
+
+  const latest = await service<Array<Record<string, unknown>>>`
+    select * from public.list_tenant_douyin_lead_latest_appointments(
+      ${ids.tenant}::uuid,array[${ids.lead}::uuid])`;
+  summary.latest_of_twenty_one = latest.length === 1
+    && latest[0]?.tenant_id === ids.tenant
+    && latest[0]?.marketing_lead_id === ids.lead
+    && !("source_snapshot" in (latest[0] ?? {}));
+
+  const detail = await admin<Array<Record<string, unknown>>>`select
+      appointment.*,count(*) over()::integer as exact_total
+    from public.douyin_measurement_appointments as appointment
+    where appointment.tenant_id=${ids.tenant}::uuid
+      and appointment.marketing_lead_id=${ids.lead}::uuid
+    order by appointment.created_at desc,appointment.id desc limit 20`;
+  summary.detail_page_twenty_of_twenty_one = detail.length === 20
+    && detail[0]?.exact_total === 21 && 21 > detail.length
+    && "source_snapshot" in (detail[0] ?? {});
+
+  const conflict = commandData(await service`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.lead}::uuid,${ids.employee}::uuid,1,
+      ${randomUUID()}::uuid,${randomUUID()}::uuid,false) as result`);
+  const unchanged = (await admin<Array<Record<string, unknown>>>`select
+      lead.lead_status,lead.customer_id,
+      (select count(*)::integer from public.douyin_lead_workflow_operations
+        where tenant_id=${ids.tenant}::uuid) as operation_count,
+      (select count(*)::integer from public.douyin_measurement_appointments
+        where tenant_id=${ids.tenant}::uuid and customer_id is not null)
+        as linked_count
+    from public.marketing_leads as lead where lead.id=${ids.lead}::uuid`)[0];
+  summary.preflight_conflict_zero_writes = conflict.error?.code
+    === "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT"
+    && unchanged?.lead_status === "new" && unchanged.customer_id === null
+    && unchanged.operation_count === 0 && unchanged.linked_count === 0;
+
+  const converted = commandData(await service`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.lead}::uuid,${ids.employee}::uuid,1,
+      ${randomUUID()}::uuid,${ids.customer}::uuid,false) as result`);
+  summary.existing_customer_conversion_shape = converted.data?.customer_id
+    === ids.customer && converted.data.appointments_updated === 21
+    && converted.data.created_customer === false;
+
+  const created = commandData(await service`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.secondLead}::uuid,${ids.employee}::uuid,1,
+      ${randomUUID()}::uuid,null::uuid,true) as result`);
+  const owner = (await admin<Array<{ owner_id: string }>>`select owner_id
+    from public.customers where id=${String(created.data?.customer_id)}::uuid`)[0];
+  summary.unassigned_customer_owner = created.data?.created_customer === true
+    && created.data.appointments_updated === 0 && owner?.owner_id === ids.employee;
+
+  await admin`alter table public.douyin_measurement_appointments disable trigger
+    douyin_measurement_appointment_guard`;
+  try {
+    await admin`update public.douyin_measurement_appointments set
+      customer_id=${String(created.data?.customer_id)}::uuid
+      where id=(select id from public.douyin_measurement_appointments
+        where tenant_id=${ids.tenant}::uuid and marketing_lead_id=${ids.lead}::uuid
+        order by id limit 1)`;
+  } finally {
+    await admin`alter table public.douyin_measurement_appointments enable trigger
+      douyin_measurement_appointment_guard`;
+  }
+  const beforeReplay = (await admin<Array<{ count: number }>>`select count(*)::integer
+    from public.douyin_lead_workflow_operations where tenant_id=${ids.tenant}::uuid`)[0]?.count;
+  const replayConflict = commandData(await service`
+    select public.convert_douyin_lead_to_customer(
+      ${ids.tenant}::uuid,${ids.lead}::uuid,${ids.employee}::uuid,1,
+      ${randomUUID()}::uuid,${ids.customer}::uuid,false) as result`);
+  const afterReplay = (await admin<Array<{ count: number }>>`select count(*)::integer
+    from public.douyin_lead_workflow_operations where tenant_id=${ids.tenant}::uuid`)[0]?.count;
+  summary.repeated_conversion_conflict_zero_writes = replayConflict.error?.code
+    === "DOUYIN_LEAD_APPOINTMENT_CUSTOMER_CONFLICT"
+    && beforeReplay === afterReplay;
+
+  await admin`set enable_seqscan=off`;
+  const explain = await admin<Array<Record<string, unknown>>>`
+    explain (analyze,costs off,buffers,format json)
+    select appointment.id from public.douyin_measurement_appointments appointment
+    where appointment.marketing_lead_id=${ids.lead}::uuid
+      and appointment.tenant_id=${ids.tenant}::uuid
+    order by appointment.created_at desc,appointment.id desc limit 1`;
+  summary.latest_index_plan = JSON.stringify(explain)
+    .includes("douyin_measurement_appointments_lead_created_idx");
+}
+
+function commandData(rows: Array<Record<string, unknown>>) {
+  const result = rows[0]?.result as JsonRecord | undefined;
+  return {
+    data: result?.data as JsonRecord | undefined,
+    error: result?.error as JsonRecord | undefined,
+  };
+}
+
+async function cleanupFixture(sql: DatabaseSql, ids: FixtureIds) {
+  await setFixtureGuards(sql, "disable");
+  try {
+    await sql`delete from public.customer_sources where tenant_id=${ids.tenant}::uuid`;
+    await sql`delete from public.douyin_lead_workflow_operations
+      where tenant_id=${ids.tenant}::uuid`;
+    await sql`delete from public.douyin_measurement_appointments
+      where tenant_id=${ids.tenant}::uuid`;
+    await sql`delete from public.sms_verification_codes
+      where phone in (${ids.phone},${ids.secondPhone}) and scene='douyin_lead'`;
+    await sql`delete from public.marketing_leads where tenant_id=${ids.tenant}::uuid`;
+    await sql`delete from public.customers where tenant_id=${ids.tenant}::uuid`;
+    await sql`delete from public.douyin_miniapp_installations
+      where id=${ids.installation}::uuid`;
+    await sql`delete from public.douyin_third_party_components
+      where component_appid=${ids.component}`;
+    await sql`delete from public.employees where id=${ids.employee}::uuid`;
+    await sql`delete from public.tenants where id=${ids.tenant}::uuid`;
+  } finally {
+    await setFixtureGuards(sql, "enable");
+  }
+  const remaining = await sql<Array<{ count: number }>>`select count(*)::integer
+    from public.tenants where id=${ids.tenant}::uuid`;
+  return remaining[0]?.count === 0;
+}
+
+async function setFixtureGuards(sql: DatabaseSql, state: "enable" | "disable") {
+  if (state === "disable") {
+    await sql`alter table public.customer_sources disable trigger
+      douyin_measurement_customer_source_guard`;
+    await sql`alter table public.douyin_lead_workflow_operations disable trigger
+      douyin_lead_workflow_operation_immutable`;
+    await sql`alter table public.douyin_measurement_appointments disable trigger
+      douyin_measurement_appointment_guard`;
+    return;
+  }
+  await sql`alter table public.customer_sources enable trigger
+    douyin_measurement_customer_source_guard`;
+  await sql`alter table public.douyin_lead_workflow_operations enable trigger
+    douyin_lead_workflow_operation_immutable`;
+  await sql`alter table public.douyin_measurement_appointments enable trigger
+    douyin_measurement_appointment_guard`;
+}
+
+function stableFailure(error: unknown): string {
+  if (error instanceof Error) return `TENANT_LEAD_DB_INTEGRATION_FAILED:${error.message}`;
+  return "TENANT_LEAD_DB_INTEGRATION_FAILED";
+}

@@ -3,7 +3,8 @@ import { z } from "zod";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
-  TenantDouyinAppointmentRowSchema,
+  TenantDouyinAppointmentDetailRowSchema,
+  TenantDouyinAppointmentSummaryRowSchema,
   TenantDouyinCustomerRowSchema,
   TenantDouyinEmployeeRowSchema,
   TenantDouyinFollowUpRowSchema,
@@ -17,8 +18,6 @@ import {
   type TenantDouyinLeadRow,
 } from "@/repositories/tenant-douyin-leads-contract";
 import {
-  APPOINTMENTS_PER_LEAD_LIMIT,
-  APPOINTMENT_LEAD_IDS_PER_BATCH,
   RELATED_IDS_PER_BATCH,
   chunkValues,
   hydrateFollowUps,
@@ -32,8 +31,9 @@ import { SupabaseDB } from "@/utils/supabase";
 const LEAD_FIELDS = [
   "id", "tenant_id", "douyin_miniapp_installation_id", "customer_id",
   "assigned_employee_id", "name", "phone", "community", "lead_status",
-  "form_data", "created_at", "followed_at", "follow_remark", "version",
+  "created_at", "followed_at", "follow_remark", "version",
 ].join(",");
+const LEAD_DETAIL_FIELDS = `${LEAD_FIELDS},form_data`;
 const APPOINTMENT_FIELDS = [
   "id", "appointment_no", "tenant_id", "marketing_lead_id", "customer_id",
   "assigned_employee_id", "budget_estimate_id", "preferred_visit_date",
@@ -51,6 +51,7 @@ const PRE_FLIGHT_FIELDS = "id,tenant_id,phone,customer_id";
 const PreflightLeadSchema = z.strictObject({
   id: z.uuid(), tenant_id: z.uuid(),
   phone: z.string().regex(/^1[3-9]\d{9}$/), customer_id: z.uuid().nullable(),
+  assigned_employee_id: z.uuid().nullable(),
 });
 
 type DatabaseResult = {
@@ -62,6 +63,7 @@ export interface TenantDouyinLeadsQuery extends PromiseLike<DatabaseResult> {
   select(...args: unknown[]): TenantDouyinLeadsQuery;
   eq(...args: unknown[]): TenantDouyinLeadsQuery;
   gte(...args: unknown[]): TenantDouyinLeadsQuery;
+  lt(...args: unknown[]): TenantDouyinLeadsQuery;
   lte(...args: unknown[]): TenantDouyinLeadsQuery;
   or(...args: unknown[]): TenantDouyinLeadsQuery;
   in(...args: unknown[]): TenantDouyinLeadsQuery;
@@ -74,6 +76,7 @@ type CommandName =
   | "assign_douyin_lead"
   | "append_douyin_lead_follow_up"
   | "convert_douyin_lead_to_customer"
+  | "list_tenant_douyin_lead_latest_appointments"
   | "mark_douyin_lead_invalid";
 export interface TenantDouyinLeadsDatabaseClient {
   from(table: string): TenantDouyinLeadsQuery;
@@ -93,6 +96,10 @@ type CommandBaseInput = {
   readonly actorEmployeeId: string;
   readonly expectedVersion: number;
   readonly idempotencyKey: string;
+};
+type ConvertCommandInput = CommandBaseInput & {
+  readonly expectedCustomerId: string | null;
+  readonly allowCustomerCreate: boolean;
 };
 
 export class TenantDouyinLeadsRepository {
@@ -127,7 +134,7 @@ export class TenantDouyinLeadsRepository {
         query = query.gte("created_at", `${input.dateFrom}T00:00:00+08:00`);
       }
       if (input.dateTo) {
-        query = query.lte("created_at", `${input.dateTo}T23:59:59.999+08:00`);
+        query = query.lt("created_at", `${nextIsoDate(input.dateTo)}T00:00:00+08:00`);
       }
       if (input.keyword) {
         const pattern = `%${input.keyword}%`;
@@ -146,7 +153,7 @@ export class TenantDouyinLeadsRepository {
     if (leads.length === 0) return { rows: [], total };
 
     const [appointments, customers, employees] = await Promise.all([
-      this.loadAppointments(input.tenantId, leads.map((lead) => lead.id)),
+      this.loadLatestAppointments(input.tenantId, leads.map((lead) => lead.id)),
       this.loadCustomers(input.tenantId, compactIds(leads, "customer_id")),
       this.loadEmployees(
         input.tenantId,
@@ -161,7 +168,7 @@ export class TenantDouyinLeadsRepository {
 
   async getLeadDetail(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads").select(LEAD_FIELDS)
+      () => this.client.from("marketing_leads").select(LEAD_DETAIL_FIELDS)
         .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
         .eq("id", input.leadId).maybeSingle(),
       "查询抖音线索详情失败",
@@ -170,17 +177,19 @@ export class TenantDouyinLeadsRepository {
     if (leadResult.data === null) return null;
     const lead = parseData(TenantDouyinLeadRowSchema, leadResult.data,
       "解析抖音线索详情失败");
-    const [appointments, customers, employees, followUps] = await Promise.all([
-      this.loadAppointments(input.tenantId, [lead.id]),
+    const [appointmentPage, customers, employees, followUps] = await Promise.all([
+      this.listAppointments(input),
       this.loadCustomers(input.tenantId, compactIds([lead], "customer_id")),
       this.loadEmployees(input.tenantId,
         compactIds([lead], "assigned_employee_id")),
       this.listFollowUps({ ...input, page: 1, pageSize: 20 }),
     ]);
-    const bundle = safeHydrateLeadBundles({ leads: [lead], appointments,
+    const bundle = safeHydrateLeadBundles({ leads: [lead],
+      appointments: appointmentPage.rows,
       customers, employees })[0];
     if (!bundle) throw Errors.dbError("解析抖音线索详情失败");
-    return { ...bundle, followUps: followUps.rows,
+    return { ...bundle, appointmentTotal: appointmentPage.total,
+      followUps: followUps.rows,
       followUpTotal: followUps.total };
   }
 
@@ -198,6 +207,21 @@ export class TenantDouyinLeadsRepository {
       id: z.uuid(), tenant_id: z.uuid(),
       assigned_employee_id: z.uuid().nullable(),
     }), result.data, "解析抖音线索访问范围失败");
+  }
+
+  async findEmployeeAccess(input: { tenantId: string; employeeId: string }) {
+    const result = await executeDatabase(
+      () => this.client.from("employees")
+        .select("id,tenant_id,tenant_department_id,status")
+        .eq("tenant_id", input.tenantId).eq("id", input.employeeId)
+        .maybeSingle(),
+      "查询负责人访问范围失败",
+    );
+    assertDatabaseSuccess(result, "查询负责人访问范围失败");
+    if (result.data === null) return null;
+    return parseData(z.strictObject({ id: z.uuid(), tenant_id: z.uuid(),
+      tenant_department_id: z.uuid().nullable(), status: z.string().nullable() }),
+    result.data, "解析负责人访问范围失败");
   }
 
   async listFollowUps(input: {
@@ -227,7 +251,8 @@ export class TenantDouyinLeadsRepository {
 
   async findConversionPreflight(input: { tenantId: string; leadId: string }) {
     const leadResult = await executeDatabase(
-      () => this.client.from("marketing_leads").select(PRE_FLIGHT_FIELDS)
+      () => this.client.from("marketing_leads")
+        .select(`${PRE_FLIGHT_FIELDS},assigned_employee_id`)
         .eq("tenant_id", input.tenantId).eq("source", "douyin_miniapp")
         .eq("id", input.leadId).maybeSingle(),
       "查询抖音线索转化条件失败",
@@ -249,6 +274,7 @@ export class TenantDouyinLeadsRepository {
       "解析抖音线索关联客户失败",
     );
     return { leadId: lead.id, phone: lead.phone,
+      assignedEmployeeId: lead.assigned_employee_id,
       customerId: customer?.id ?? null };
   }
 
@@ -280,24 +306,21 @@ export class TenantDouyinLeadsRepository {
     });
   }
 
-  convert(input: CommandBaseInput) {
-    return this.runSimpleCommand("convert_douyin_lead_to_customer", "convert", input);
+  convert(input: ConvertCommandInput) {
+    return this.runCommand("convert_douyin_lead_to_customer", "convert", {
+      p_tenant_id: input.tenantId, p_marketing_lead_id: input.leadId,
+      p_actor_employee_id: input.actorEmployeeId,
+      p_expected_version: input.expectedVersion,
+      p_idempotency_key: input.idempotencyKey,
+      p_expected_customer_id: input.expectedCustomerId,
+      p_allow_customer_create: input.allowCustomerCreate,
+    });
   }
 
   markInvalid(input: CommandBaseInput & { reason: string }) {
     return this.runCommand("mark_douyin_lead_invalid", "mark_invalid", {
       p_tenant_id: input.tenantId, p_marketing_lead_id: input.leadId,
       p_actor_employee_id: input.actorEmployeeId, p_reason: input.reason,
-      p_expected_version: input.expectedVersion,
-      p_idempotency_key: input.idempotencyKey,
-    });
-  }
-
-  private runSimpleCommand(name: CommandName, action: "convert",
-    input: CommandBaseInput) {
-    return this.runCommand(name, action, {
-      p_tenant_id: input.tenantId, p_marketing_lead_id: input.leadId,
-      p_actor_employee_id: input.actorEmployeeId,
       p_expected_version: input.expectedVersion,
       p_idempotency_key: input.idempotencyKey,
     });
@@ -320,25 +343,37 @@ export class TenantDouyinLeadsRepository {
     return { ok: true, data: envelope.data };
   }
 
-  private async loadAppointments(tenantId: string, leadIds: readonly string[]) {
-    const rows: TenantDouyinAppointmentRow[] = [];
-    for (const ids of chunkValues(leadIds, APPOINTMENT_LEAD_IDS_PER_BATCH)) {
-      const limit = ids.length * APPOINTMENTS_PER_LEAD_LIMIT + 1;
-      const result = await executeDatabase(
-        () => this.client.from("douyin_measurement_appointments")
-          .select(APPOINTMENT_FIELDS).eq("tenant_id", tenantId)
-          .in("marketing_lead_id", ids)
-          .order("created_at", { ascending: false })
-          .order("id", { ascending: false }).limit(limit),
-        "查询抖音量房预约失败",
-      );
-      assertDatabaseSuccess(result, "查询抖音量房预约失败");
-      const batch = parseData(z.array(TenantDouyinAppointmentRowSchema),
-        result.data ?? [], "解析抖音量房预约失败");
-      if (batch.length >= limit) throw Errors.dbError("抖音量房预约数量超限");
-      rows.push(...batch);
-    }
+  private async loadLatestAppointments(tenantId: string,
+    leadIds: readonly string[]) {
+    const result = await executeDatabase(
+      () => this.client.rpc("list_tenant_douyin_lead_latest_appointments", {
+        p_tenant_id: tenantId, p_marketing_lead_ids: [...leadIds],
+      }),
+      "查询抖音线索最新量房预约失败",
+    );
+    assertDatabaseSuccess(result, "查询抖音线索最新量房预约失败");
+    const rows = parseData(z.array(TenantDouyinAppointmentSummaryRowSchema),
+      result.data ?? [], "解析抖音线索最新量房预约失败");
+    assertLatestAppointmentScope(rows, tenantId, leadIds);
     return rows;
+  }
+
+  private async listAppointments(input: { tenantId: string; leadId: string }) {
+    const result = await executeDatabase(
+      () => this.client.from("douyin_measurement_appointments")
+        .select(APPOINTMENT_FIELDS, { count: "exact" })
+        .eq("tenant_id", input.tenantId)
+        .eq("marketing_lead_id", input.leadId)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }).range(0, 19),
+      "查询抖音量房预约详情失败",
+    );
+    assertDatabaseSuccess(result, "查询抖音量房预约详情失败");
+    return {
+      rows: parseData(z.array(TenantDouyinAppointmentDetailRowSchema),
+        result.data ?? [], "解析抖音量房预约详情失败"),
+      total: parseExactCount(result.count, "查询抖音量房预约总数失败"),
+    };
   }
 
   private loadCustomers(tenantId: string, customerIds: readonly string[]) {
@@ -373,6 +408,29 @@ function compactIds<K extends "customer_id" | "assigned_employee_id">(
   leads: readonly TenantDouyinLeadRow[], key: K,
 ): string[] {
   return [...new Set(leads.flatMap((lead) => lead[key] ? [lead[key]] : []))];
+}
+
+function assertLatestAppointmentScope(
+  rows: readonly TenantDouyinAppointmentRow[],
+  tenantId: string,
+  leadIds: readonly string[],
+): void {
+  const requested = new Set(leadIds);
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (row.tenant_id !== tenantId
+      || !requested.has(row.marketing_lead_id)
+      || seen.has(row.marketing_lead_id)) {
+      throw Errors.dbError("解析抖音线索最新量房预约失败");
+    }
+    seen.add(row.marketing_lead_id);
+  }
+}
+
+function nextIsoDate(value: string): string {
+  const next = new Date(`${value}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
 }
 
 function safeHydrateLeadBundles(input: Parameters<
