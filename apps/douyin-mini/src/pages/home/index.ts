@@ -69,10 +69,7 @@ Page({
       this.setData({ loading: false, error: true });
     }
   },
-  onLead() {
-    getApp<DouyinAppContext>().recordAnalytics("lead_cta_click");
-    navigateWithFeedback(switchToTab("lead"));
-  },
+  onBudget() { navigateWithFeedback(switchToTab("budget")); },
   onViewProjects() { navigateWithFeedback(switchToTab("cases")); },
   onViewCompany() { navigateWithFeedback(navigateToPage("pages/company/index")); },
   onViewPrivacy() { navigateWithFeedback(navigateToPage("pages/privacy/index")); },

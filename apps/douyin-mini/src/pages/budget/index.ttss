@@ -1,0 +1,52 @@
+@import "../../styles/tokens.ttss";
+
+.budget-page { padding-bottom: 64rpx; }
+.page-header { padding: 8rpx 0 24rpx; }
+.budget-form { padding: 32rpx; }
+.field-group + .field-group { margin-top: 30rpx; }
+.field-label { margin-bottom: 14rpx; color: #191817; font-size: 26rpx; font-weight: 650; line-height: 1.45; }
+.required { margin-left: 4rpx; }
+.area-control { display: flex; align-items: center; min-height: 88rpx; padding: 0 24rpx; }
+.area-input { min-width: 0; height: 88rpx; flex: 1; color: #191817; font-size: 30rpx; }
+.area-unit { color: #625f5b; font-size: 25rpx; }
+.choice-grid, .option-list { display: flex; flex-wrap: wrap; gap: 14rpx; }
+.choice-button, .option-button { box-sizing: border-box; min-width: 142rpx; min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 25rpx; line-height: 86rpx; }
+.option-button { min-width: 0; }
+.field-help, .config-note, .result-empty { color: #706c67; font-size: 22rpx; line-height: 1.6; }
+.optional-grid { display: flex; gap: 18rpx; margin-top: 30rpx; }
+.compact-field { min-width: 0; flex: 1; }
+.compact-field + .compact-field { margin-top: 0; }
+.text-input { box-sizing: border-box; width: 100%; height: 88rpx; padding: 0 20rpx; font-size: 25rpx; }
+.demand-input { box-sizing: border-box; width: 100%; min-height: 176rpx; padding: 20rpx; font-size: 25rpx; line-height: 1.6; }
+.form-error { margin-top: 22rpx; padding: 20rpx 22rpx; font-size: 24rpx; line-height: 1.6; }
+.calculate-button, .measurement-button, .retry-ai { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 30rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
+.config-note { margin-top: 18rpx; text-align: center; }
+.result-section { margin-top: 52rpx; }
+.result-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; }
+.estimate-no, .range-label { margin-top: 10rpx; color: #706c67; font-size: 22rpx; line-height: 1.5; }
+.range-label { flex: none; }
+.total-range { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14rpx; margin-top: 22rpx; color: #191817; font-size: 42rpx; font-weight: 700; line-height: 1.3; }
+.range-separator { color: #706c67; font-size: 23rpx; font-weight: 500; }
+.result-block, .result-columns, .ai-block, .disclaimer { margin-top: 30rpx; }
+.result-block { padding-top: 26rpx; border-top: 1rpx solid #dddad5; }
+.result-title { color: #191817; font-size: 28rpx; font-weight: 650; line-height: 1.4; }
+.category-list { margin-top: 14rpx; }
+.category-row { display: flex; justify-content: space-between; gap: 20rpx; padding: 18rpx 0; border-bottom: 1rpx solid #e8e5e1; font-size: 25rpx; }
+.category-label { color: #625f5b; }
+.category-range { color: #191817; font-weight: 650; }
+.result-item { position: relative; margin-top: 12rpx; padding-left: 22rpx; color: #4d4a46; font-size: 24rpx; line-height: 1.6; }
+.result-item::before { position: absolute; top: 17rpx; left: 2rpx; width: 7rpx; height: 7rpx; border-radius: 50%; background: #625f5b; content: ""; }
+.result-columns { display: flex; gap: 26rpx; }
+.result-list { min-width: 0; flex: 1; padding-top: 26rpx; border-top: 1rpx solid #dddad5; }
+.result-empty { margin-top: 12rpx; }
+.ai-block { padding: 28rpx; }
+.ai-heading { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
+.ai-status { display: flex; align-items: center; gap: 10rpx; color: #625f5b; font-size: 22rpx; }
+.ai-dot { width: 12rpx; height: 12rpx; border-radius: 50%; background: #625f5b; animation: ai-pulse 1.2s ease-in-out infinite; }
+.ai-copy, .ai-summary { margin-top: 16rpx; color: #4d4a46; font-size: 24rpx; line-height: 1.65; }
+.ai-group { margin-top: 22rpx; }
+.ai-label { color: #191817; font-size: 24rpx; font-weight: 650; }
+.retry-ai { width: auto; min-width: 208rpx; margin-top: 20rpx; border: 1rpx solid #625f5b; background: #fff; color: #191817; font-size: 25rpx; }
+.disclaimer { padding: 24rpx; border-radius: 12rpx; background: #eceae6; color: #625f5b; font-size: 22rpx; line-height: 1.7; }
+@keyframes ai-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .ai-dot { animation: none; } }

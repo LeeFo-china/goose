@@ -8,7 +8,7 @@ test("global shell imports semantic styles and contains no terracotta tab accent
     readSource("app.ttss"),
     readSource("app.json"),
     readSource("components/theme.ts"),
-    ...["home", "cases", "sites", "lead"].flatMap((name) => [
+    ...["home", "cases", "budget", "lead"].flatMap((name) => [
       readSource(`assets/tabbar/${name}.svg`),
       readSource(`assets/tabbar/${name}-active.svg`),
     ]),
@@ -167,7 +167,7 @@ test("shared state actions use semantic styles and native press feedback", async
   }
 });
 
-test("four-page target contains no fixed terracotta brand palette", async () => {
+test("primary mini-program surfaces contain no fixed terracotta brand palette", async () => {
   const targetFiles = [
     "pages/home/index.ts",
     "pages/home/index.ttml",
@@ -181,6 +181,9 @@ test("four-page target contains no fixed terracotta brand palette", async () => 
     "pages/lead/index.ts",
     "pages/lead/index.ttml",
     "pages/lead/index.ttss",
+    "pages/budget/index.ts",
+    "pages/budget/index.ttml",
+    "pages/budget/index.ttss",
     "components/tenant-brand/index.ttss",
     "components/hero-banner/index.ts",
     "components/hero-banner/index.ttss",

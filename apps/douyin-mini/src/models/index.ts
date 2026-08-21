@@ -6,6 +6,7 @@ export const DOUYIN_ENTRY_PATHS = [
   "pages/case-detail/index",
   "pages/sites/index",
   "pages/site-detail/index",
+  "pages/budget/index",
   "pages/lead/index",
   "pages/lead-success/index",
 ] as const;
@@ -139,6 +140,86 @@ export type PublicSiteLog = {
 };
 
 export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: PaginationMeta };
+
+export type DouyinPropertyCondition = "rough" | "old_house";
+export type DouyinDecorationTier = "economy" | "comfortable" | "quality";
+export type DouyinDecorationScope = "whole_house" | "partial";
+export type DouyinBudgetOptionCode =
+  | "demolition"
+  | "water_electricity_upgrade"
+  | "custom_cabinet";
+export type DouyinBudgetCategoryCode =
+  | "base"
+  | "water_electricity"
+  | "materials"
+  | "custom"
+  | "other";
+export type DouyinBudgetAiStatus = "pending" | "succeeded" | "failed" | "skipped";
+
+export type DouyinBudgetPublicOption = {
+  code: DouyinBudgetOptionCode;
+  label: string;
+  applicable_property_conditions: DouyinPropertyCondition[];
+  applicable_decoration_tiers: DouyinDecorationTier[];
+  applicable_decoration_scopes: DouyinDecorationScope[];
+};
+
+export type DouyinBudgetPublicConfig = {
+  property_conditions: Array<{ value: DouyinPropertyCondition; label: string }>;
+  decoration_tiers: Array<{ value: DouyinDecorationTier; label: string }>;
+  decoration_scopes: Array<{ value: DouyinDecorationScope; label: string }>;
+  options: DouyinBudgetPublicOption[];
+  pricing_version: string;
+  effective_from: string;
+  effective_to: string | null;
+  disclaimer: string;
+};
+
+export type DouyinBudgetEstimateRequest = {
+  area: number;
+  property_condition: DouyinPropertyCondition;
+  decoration_tier: DouyinDecorationTier;
+  decoration_scope: DouyinDecorationScope;
+  layout?: string;
+  style?: string;
+  option_codes: DouyinBudgetOptionCode[];
+  demand?: string;
+};
+
+export type DouyinBudgetEstimateCategory = {
+  category_code: DouyinBudgetCategoryCode;
+  label: string;
+  minimum_amount: number;
+  maximum_amount: number;
+};
+
+export type DouyinBudgetEstimateResult = {
+  id: string;
+  estimate_no: string;
+  minimum_total: number;
+  maximum_total: number;
+  categories: DouyinBudgetEstimateCategory[];
+  calculation_basis: string[];
+  included_items: string[];
+  excluded_items: string[];
+  pricing_version: string;
+  pricing_effective_from: string;
+  pricing_effective_to: string | null;
+  disclaimer: string;
+  ai_status: DouyinBudgetAiStatus;
+};
+
+export type DouyinBudgetAiAnalysis = {
+  summary: string;
+  allocation_advice: string[];
+  risk_factors: string[];
+  onsite_questions: string[];
+};
+
+export type DouyinBudgetAiExplanationResponse = {
+  estimate: DouyinBudgetEstimateResult;
+  ai_analysis: DouyinBudgetAiAnalysis | null;
+};
 
 export type ServiceUnavailableCode =
   | "DOUYIN_INSTALLATION_MISSING"

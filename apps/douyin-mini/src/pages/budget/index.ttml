@@ -1,0 +1,74 @@
+<page-skeleton tt:if="{{status === 'loading_config'}}" />
+<empty-state tt:elif="{{status === 'unavailable'}}" title="{{unavailableTitle}}" description="{{unavailableDescription}}" action-label="重新加载" bindaction="onRetryConfig" />
+<view tt:else class="page-content budget-page">
+  <view class="page-header">
+    <view class="ui-page-title">预算初算</view>
+    <view class="ui-page-description">按面积和装修需求生成规则预算区间，无需填写手机号。</view>
+  </view>
+
+  <view class="budget-form ui-card">
+    <view class="field-group">
+      <view class="field-label">建筑面积 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <view class="area-control ui-control {{areaError ? 'ui-control--error' : ''}}">
+        <input class="area-input" aria-label="建筑面积" type="digit" maxlength="8" value="{{form.areaText}}" placeholder="例如：110" placeholder-style="color: #706C67;" disabled="{{status === 'calculating'}}" bindinput="onAreaInput" />
+        <view class="area-unit">㎡</view>
+      </view>
+      <view tt:if="{{areaError}}" class="ui-field-error" role="alert">{{areaError}}</view>
+    </view>
+
+    <view class="field-group">
+      <view class="field-label">房屋现状</view>
+      <view class="choice-grid" role="radiogroup"><button tt:for="{{config.property_conditions}}" tt:key="value" class="choice-button ui-pressable" hover-class="ui-pressable--pressed" style="{{form.propertyCondition === item.value ? activeChoiceStyle : ''}}" role="radio" aria-label="房屋现状：{{item.label}}" aria-checked="{{form.propertyCondition === item.value}}" data-field="propertyCondition" data-value="{{item.value}}" disabled="{{status === 'calculating'}}" bindtap="onSelectChoice">{{item.label}}</button></view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">装修档次</view>
+      <view class="choice-grid" role="radiogroup"><button tt:for="{{config.decoration_tiers}}" tt:key="value" class="choice-button ui-pressable" hover-class="ui-pressable--pressed" style="{{form.decorationTier === item.value ? activeChoiceStyle : ''}}" role="radio" aria-label="装修档次：{{item.label}}" aria-checked="{{form.decorationTier === item.value}}" data-field="decorationTier" data-value="{{item.value}}" disabled="{{status === 'calculating'}}" bindtap="onSelectChoice">{{item.label}}</button></view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">装修范围</view>
+      <view class="choice-grid" role="radiogroup"><button tt:for="{{config.decoration_scopes}}" tt:key="value" class="choice-button ui-pressable" hover-class="ui-pressable--pressed" style="{{form.decorationScope === item.value ? activeChoiceStyle : ''}}" role="radio" aria-label="装修范围：{{item.label}}" aria-checked="{{form.decorationScope === item.value}}" data-field="decorationScope" data-value="{{item.value}}" disabled="{{status === 'calculating'}}" bindtap="onSelectChoice">{{item.label}}</button></view>
+    </view>
+
+    <view class="field-group">
+      <view class="field-label">选配项目（选填）</view>
+      <view tt:if="{{applicableOptions.length}}" class="option-list"><button tt:for="{{applicableOptions}}" tt:key="code" class="option-button ui-pressable" hover-class="ui-pressable--pressed" style="{{item.selected ? activeChoiceStyle : ''}}" role="checkbox" aria-label="选配项目：{{item.label}}" aria-checked="{{item.selected}}" data-code="{{item.code}}" disabled="{{status === 'calculating'}}" bindtap="onToggleOption">{{item.label}}</button></view>
+      <view tt:else class="field-help">当前房屋现状、档次和范围暂无可选项目。</view>
+    </view>
+
+    <view class="optional-grid">
+      <view class="field-group compact-field"><view class="field-label">户型（选填）</view><input class="text-input ui-control" aria-label="户型" data-field="layout" maxlength="40" value="{{form.layout}}" placeholder="例如：三室两厅" placeholder-style="color: #706C67;" disabled="{{status === 'calculating'}}" bindinput="onTextInput" /></view>
+      <view class="field-group compact-field"><view class="field-label">风格（选填）</view><input class="text-input ui-control" aria-label="装修风格" data-field="style" maxlength="40" value="{{form.style}}" placeholder="例如：现代简约" placeholder-style="color: #706C67;" disabled="{{status === 'calculating'}}" bindinput="onTextInput" /></view>
+    </view>
+    <view class="field-group"><view class="field-label">个性需求（选填）</view><textarea class="demand-input ui-control" aria-label="个性需求" data-field="demand" maxlength="1000" value="{{form.demand}}" placeholder="可填写收纳、材料或空间改造重点" placeholder-style="color: #706C67;" disabled="{{status === 'calculating'}}" bindinput="onTextInput" /></view>
+    <view tt:if="{{pageError}}" class="form-error ui-error-surface" role="alert">{{pageError}}</view>
+    <button class="calculate-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" loading="{{status === 'calculating'}}" disabled="{{status === 'calculating'}}" bindtap="onCalculate">{{status === 'calculating' ? '正在计算' : '开始预算初算'}}</button>
+    <view class="config-note">当前报价版本 {{config.pricing_version}}，{{config.disclaimer}}</view>
+  </view>
+
+  <view tt:if="{{status === 'result' && estimate}}" class="result-section">
+    <view class="result-heading"><view><view class="ui-section-title">预算初算结果</view><view class="estimate-no">预算编号 {{estimate.estimate_no}}</view></view><view class="range-label">预计总价区间</view></view>
+    <view class="total-range"><text>{{displayMinimum}}</text><text class="range-separator">至</text><text>{{displayMaximum}}</text></view>
+
+    <view class="result-block">
+      <view class="result-title">分类参考</view>
+      <view class="category-list"><view tt:for="{{categoryRows}}" tt:key="category_code" class="category-row"><view class="category-label">{{item.label}}</view><view class="category-range">{{item.range}}</view></view></view>
+      <view tt:if="{{!categoryRows.length}}" class="result-empty">暂无分类明细，请以总价区间和量房确认信息为准。</view>
+    </view>
+    <view class="result-block"><view class="result-title">计算依据</view><view tt:for="{{estimate.calculation_basis}}" tt:key="*this" class="result-item">{{item}}</view></view>
+    <view class="result-columns">
+      <view class="result-list"><view class="result-title">包含内容</view><view tt:for="{{estimate.included_items}}" tt:key="*this" class="result-item">{{item}}</view><view tt:if="{{!estimate.included_items.length}}" class="result-empty">以量房确认范围为准</view></view>
+      <view class="result-list"><view class="result-title">未包含内容</view><view tt:for="{{estimate.excluded_items}}" tt:key="*this" class="result-item">{{item}}</view><view tt:if="{{!estimate.excluded_items.length}}" class="result-empty">暂无单列项目</view></view>
+    </view>
+
+    <view class="ai-block ui-card">
+      <view class="ai-heading"><view class="result-title">AI 预算建议</view><view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-status"><view class="ai-dot"></view>正在生成</view></view>
+      <view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-copy">规则预算已生成，AI 仅补充需求与量房确认建议。</view>
+      <view tt:elif="{{estimate.ai_status === 'succeeded' && aiAnalysis}}"><view class="ai-summary">{{aiAnalysis.summary}}</view><view class="ai-group"><view class="ai-label">预算分配建议</view><view tt:for="{{aiAnalysis.allocation_advice}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">需要关注</view><view tt:for="{{aiAnalysis.risk_factors}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">量房时确认</view><view tt:for="{{aiAnalysis.onsite_questions}}" tt:key="*this" class="result-item">{{item}}</view></view></view>
+      <view tt:elif="{{estimate.ai_status === 'failed'}}" class="ai-fallback"><view class="ai-copy">{{aiError || 'AI 建议暂时无法生成，规则预算仍可正常使用。'}}</view><button class="retry-ai ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryAi">重试 AI 建议</button></view>
+      <view tt:else class="ai-copy">当前仅展示规则预算，建议量房时确认现场情况。</view>
+    </view>
+
+    <view class="disclaimer" role="note">{{estimate.disclaimer}} 具体施工范围和费用以量房后双方确认的方案为准。</view>
+    <button class="measurement-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBookMeasurement">预约免费量房</button>
+  </view>
+</view>

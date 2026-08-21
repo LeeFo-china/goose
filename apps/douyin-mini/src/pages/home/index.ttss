@@ -2,6 +2,9 @@
 .home-block { margin-top: 28rpx; }
 .home-hero { margin-top: 24rpx; }
 .home-section { margin-top: 56rpx; }
+.budget-entry { padding: 32rpx; }
+.budget-description { margin-top: 12rpx; color: #625f5b; font-size: 24rpx; line-height: 1.65; }
+.budget-action { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 26rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; margin-bottom: 24rpx; }
 .section-link, .text-action, .privacy-link { min-height: 88rpx; margin: 0; padding: 0 8rpx; background: transparent; font-size: 26rpx; line-height: 88rpx; }
 .card-list { display: flex; flex-direction: column; gap: 24rpx; }

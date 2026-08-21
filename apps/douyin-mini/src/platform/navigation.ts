@@ -2,6 +2,7 @@ import type { ServiceUnavailableCode } from "../models";
 import { ApiRequestError } from "../api/request";
 
 const PAGE_PATHS = new Set([
+  "pages/sites/index",
   "pages/company/index",
   "pages/privacy/index",
   "pages/case-detail/index",
@@ -12,7 +13,7 @@ const PAGE_PATHS = new Set([
 const TAB_PATHS = {
   home: "pages/home/index",
   cases: "pages/cases/index",
-  sites: "pages/sites/index",
+  budget: "pages/budget/index",
   lead: "pages/lead/index",
 } as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

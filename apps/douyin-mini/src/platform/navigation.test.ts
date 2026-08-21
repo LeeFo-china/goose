@@ -18,7 +18,9 @@ describe("Douyin native navigation and visual view models", () => {
   test("builds allowlisted tab and page routes and rejects unknown paths", () => {
     expect(buildTabRoute("home")).toBe("/pages/home/index");
     expect(buildTabRoute("cases")).toBe("/pages/cases/index");
+    expect(buildTabRoute("budget")).toBe("/pages/budget/index");
     expect(buildPageRoute("pages/company/index")).toBe("/pages/company/index");
+    expect(buildPageRoute("pages/sites/index")).toBe("/pages/sites/index");
     expect(() => buildPageRoute("pages/home/index"))
       .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => navigateToPage("pages/cases/index"))
