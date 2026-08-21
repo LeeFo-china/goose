@@ -168,7 +168,9 @@ async function createFixture(sql: DatabaseSql, ids: FixtureIds) {
       date '2099-12-31','morning','晴天花园','pending_confirmation',
       gen_random_uuid(),extensions.digest(convert_to(n::text,'UTF8'),'sha256'),
       jsonb_build_object('privacy_policy_version','2026-08-01',
-        'consented_at','2026-08-21T00:00:00Z','attribution','{}'::jsonb,
+        'consented_at','2026-08-21T00:00:00Z','attribution',
+        jsonb_build_object('source_type','direct','entry_path',
+          'pages/lead/index','scene','1001'),
         'demand',null,'budget_estimate',null),false,false,false,
       timestamptz '2026-08-21 00:00:00+00'+n*interval '1 second',
       timestamptz '2026-08-21 00:00:00+00'+n*interval '1 second'
@@ -222,9 +224,18 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
     where appointment.tenant_id=${ids.tenant}::uuid
       and appointment.marketing_lead_id=${ids.lead}::uuid
     order by appointment.created_at desc,appointment.id desc limit 20`;
+  const fixtureSnapshotValid = (await admin<Array<{ valid: boolean }>>`select
+      bool_and(public.is_valid_douyin_measurement_attribution_snapshot(
+        appointment.source_snapshot->'attribution') is true) as valid
+    from public.douyin_measurement_appointments as appointment
+    where appointment.tenant_id=${ids.tenant}::uuid
+      and appointment.marketing_lead_id=${ids.lead}::uuid`)[0]?.valid === true;
   summary.detail_page_twenty_of_twenty_one = detail.length === 20
     && detail[0]?.exact_total === 21 && 21 > detail.length
-    && "source_snapshot" in (detail[0] ?? {});
+    && "source_snapshot" in (detail[0] ?? {}) && fixtureSnapshotValid;
+  if (!fixtureSnapshotValid) {
+    throw new Error("DOUYIN_LEAD_FIXTURE_SOURCE_SNAPSHOT_INVALID");
+  }
 
   await admin`select
     gin_clean_pending_list('public.marketing_leads_douyin_name_trgm_idx'::regclass),
@@ -320,9 +331,21 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
     select public.convert_douyin_lead_to_customer(
       ${ids.tenant}::uuid,${ids.lead}::uuid,${ids.employee}::uuid,1,
       ${randomUUID()}::uuid,${ids.customer}::uuid,false) as result`);
+  const convertedSources = (await admin<Array<{
+    count: number;
+    valid: boolean;
+  }>>`select
+      count(*)::integer as count,
+      bool_and(public.is_valid_douyin_measurement_source_metadata(
+        source.metadata) is true) as valid
+    from public.customer_sources as source
+    where source.tenant_id=${ids.tenant}::uuid
+      and source.customer_id=${ids.customer}::uuid
+      and source.marketing_lead_id=${ids.lead}::uuid`)[0];
   summary.existing_customer_conversion_shape = converted.data?.customer_id
     === ids.customer && converted.data.appointments_updated === 21
-    && converted.data.created_customer === false;
+    && converted.data.created_customer === false
+    && convertedSources?.count === 21 && convertedSources.valid === true;
 
   const preflight = (await contender<Array<{ customer_id: string | null }>>`select
       customer.id as customer_id
