@@ -34,10 +34,10 @@ const AI_SCENE_CODE = 'douyin_budget_explanation';
 const AI_TIMEOUT_MS = 30_000;
 const AI_TEMPERATURE = 0.2;
 const PhonePattern =
-  /(?<!\d)(?:(?:\+?86[-\s]?)?1[3-9]\d{9}|(?:0\d{2,3}[-\s]?)?\d{7,8})(?!\d)/g;
+  /(?<!\d)(?:(?:\+?86[- \u3000]?)?1[3-9]\d(?:[- \u3000]?\d{4}){2}|(?:0\d{2,3}[- \u3000]?)?\d{7,8})(?!\d)/g;
 const DetailedAddressPattern = new RegExp([
-  String.raw`[\p{Script=Han}]{2,20}(?:大道|(?<!道)路|街(?!道)|巷|弄)(?:\d{1,6}号)?`,
-  String.raw`[\p{Script=Han}A-Za-z0-9]{2,20}(?:小区|村)`,
+  String.raw`[\p{Script=Han}]{1,20}(?:大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?:号)?`,
+  String.raw`[\p{Script=Han}]{2,20}(?:小区|村)(?=$|[\s，,。；;、]|\d)`,
   String.raw`门牌(?:号)?\s*\d{1,6}`,
   String.raw`(?<!\d)\d{1,6}(?:号楼|号|栋|幢|单元|楼)(?![A-Za-z])`,
   String.raw`(?<!\d)\d{3,6}室(?!\d*[厅房])`,
@@ -180,7 +180,9 @@ function toPublicResponse(
 ): DouyinBudgetAiExplanationResponse {
   const parsed = DouyinBudgetAiExplanationResponseSchema.safeParse({
     estimate: parsePublicEstimate(record),
-    ai_analysis: record.ai_status === 'succeeded' ? record.ai_analysis : null,
+    ai_analysis: record.ai_status === 'succeeded'
+      ? parsePersistedAiAnalysis(record.ai_analysis)
+      : null,
   });
   if (!parsed.success) throw invalidPersistedResult();
   return parsed.data;
@@ -195,13 +197,26 @@ function parseAiAnalysis(content: string): DouyinBudgetAiAnalysis {
   }
   const parsed = DouyinBudgetAiAnalysisSchema.safeParse(raw);
   if (!parsed.success) throw invalidAiOutput();
+  return sanitizeAiAnalysis(parsed.data, invalidAiOutput);
+}
+
+function parsePersistedAiAnalysis(input: unknown): DouyinBudgetAiAnalysis {
+  const parsed = DouyinBudgetAiAnalysisSchema.safeParse(input);
+  if (!parsed.success) throw invalidPersistedResult();
+  return sanitizeAiAnalysis(parsed.data, invalidPersistedResult);
+}
+
+function sanitizeAiAnalysis(
+  analysis: DouyinBudgetAiAnalysis,
+  invalid: () => Error,
+): DouyinBudgetAiAnalysis {
   const sanitized = DouyinBudgetAiAnalysisSchema.safeParse({
-    summary: sanitizeText(parsed.data.summary),
-    allocation_advice: sanitizeTextList(parsed.data.allocation_advice),
-    risk_factors: sanitizeTextList(parsed.data.risk_factors),
-    onsite_questions: sanitizeTextList(parsed.data.onsite_questions),
+    summary: sanitizeText(analysis.summary),
+    allocation_advice: sanitizeTextList(analysis.allocation_advice),
+    risk_factors: sanitizeTextList(analysis.risk_factors),
+    onsite_questions: sanitizeTextList(analysis.onsite_questions),
   });
-  if (!sanitized.success) throw invalidAiOutput();
+  if (!sanitized.success) throw invalid();
   return sanitized.data;
 }
 

@@ -38,19 +38,22 @@ describe('DouyinBudgetAiExplanationService', () => {
         ...baseRecord,
         request_payload: {
           ...baseRecord.request_payload as object,
-          layout: '三室两厅，联系13800138000',
+          layout: '三室两厅，联系138-0013-8000',
           style: '幸福大道88号3栋的现代风',
         },
         result_payload: {
           ...estimateResult,
           categories: estimateResult.categories.map((category, index) => ({
             ...category,
-            label: index === 0 ? '基础施工13800138000' : category.label,
+            label: index === 0 ? '基础施工138　0013　8000' : category.label,
           })),
           calculation_basis: ['幸福大道88号3栋的规则依据'],
-          included_items: ['联系0376-1234567确认施工'],
+          included_items: [
+            '联系0376-1234567确认施工',
+            '预算编号9138001380001应保留',
+          ],
           excluded_items: ['王府弄5号不在服务范围'],
-          disclaimer: '详情联系13900139000',
+          disclaimer: '详情联系138 0013 8000',
         },
       },
     });
@@ -86,14 +89,12 @@ describe('DouyinBudgetAiExplanationService', () => {
     expect(prompt).toContain('105000');
     expect(prompt).toContain('155000');
     expect(prompt).toContain('三室两厅');
+    expect(prompt).toContain('预算编号9138001380001应保留');
     expect(prompt).toContain('[已脱敏]');
     for (const pii of [
-      '13800138000',
-      '幸福大道88号3栋',
-      '幸福路88号',
-      '0376-1234567',
-      '王府弄5号',
-      '13900139000',
+      '138-0013-8000', '138　0013　8000', '138 0013 8000',
+      '幸福大道88号3栋', '幸福路88号', '0376-1234567',
+      '王府弄5号', '13900139000',
     ]) {
       expect(prompt).not.toContain(pii);
     }
@@ -154,6 +155,44 @@ describe('DouyinBudgetAiExplanationService', () => {
       expect(deps.budgetRepository.completeAiAnalysis).not.toHaveBeenCalled();
       expect(deps.budgetRepository.failAiAnalysis).not.toHaveBeenCalled();
     }
+  });
+
+  test('sanitizes historical saved analysis at the read boundary', async () => {
+    const deps = buildDependencies();
+    const historicalAnalysis: DouyinBudgetAiAnalysis = {
+      summary: '联系138-0013-8000确认预算。',
+      allocation_advice: ['可拨打138 0013 8000咨询。'],
+      risk_factors: ['幸福大道88号3栋需要复核。'],
+      onsite_questions: ['门牌号66是否准确？'],
+    };
+    deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
+      action: 'saved',
+      estimate: {
+        ...baseRecord,
+        ai_status: 'succeeded',
+        ai_analysis: historicalAnalysis,
+        ai_provider: 'deepseek',
+        ai_model: 'deepseek-chat',
+        ai_claimed_at: null,
+      },
+    } as never);
+
+    const response = await new Service(deps.values as never).generate(
+      user,
+      estimateId,
+      false,
+    );
+    const serialized = JSON.stringify(response);
+    for (const pii of [
+      '138-0013-8000', '138 0013 8000',
+      '幸福大道88号3栋', '门牌号66',
+    ]) {
+      expect(serialized).not.toContain(pii);
+    }
+    expect(serialized).toContain('[已脱敏]');
+    expect(deps.gateway.chat).not.toHaveBeenCalled();
+    expect(deps.budgetRepository.completeAiAnalysis).not.toHaveBeenCalled();
+    expect(deps.budgetRepository.failAiAnalysis).not.toHaveBeenCalled();
   });
 
   test('passes explicit retry semantics to the atomic claim command', async () => {
@@ -217,10 +256,43 @@ describe('DouyinBudgetAiExplanationService', () => {
     expect(prompt).not.toContain('0376-1234567');
   });
 
+  test('keeps renovation terms while redacting only high-confidence address forms', async () => {
+    const deps = buildDependencies();
+    const addresses = [
+      '幸福大道88号', '人民路88号', '中山街12号', '梧桐巷8号',
+      '王府弄5号', '幸福村', '春风小区', '6号楼', '3栋',
+      '2幢', '1单元', '门牌号66', '501室',
+    ];
+    deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
+      ...deps.claimed,
+      estimate: {
+        ...baseRecord,
+        request_payload: {
+          ...baseRecord.request_payload as object,
+          layout: '卧室电路需要调整',
+          style: '装修思路清晰',
+          demand: '卧室电路与装修思路都需要保留',
+        },
+        result_payload: {
+          ...estimateResult,
+          calculation_basis: addresses,
+        },
+      },
+    });
+
+    await new Service(deps.values as never).generate(user, estimateId, false);
+    const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
+    expect(prompt).toContain('卧室电路需要调整');
+    expect(prompt).toContain('装修思路清晰');
+    expect(prompt).toContain('卧室电路与装修思路都需要保留');
+    for (const address of addresses) expect(prompt).not.toContain(address);
+    expect(prompt).toContain('[已脱敏]');
+  });
+
   test('sanitizes PII in every AI analysis string before persistence and response', async () => {
     const deps = buildDependencies();
     const piiAnalysis = {
-      summary: '联系13800138000确认预算。',
+      summary: '联系138 0013 8000确认预算。',
       allocation_advice: ['卧室收纳可拨打0376-1234567咨询。'],
       risk_factors: [
         '幸福大道88号3栋可能需要二次量房。',
@@ -255,14 +327,9 @@ describe('DouyinBudgetAiExplanationService', () => {
     );
     const publicResponse = JSON.stringify(response);
     for (const pii of [
-      '13800138000',
-      '0376-1234567',
-      '幸福大道88号3栋',
-      '春风小区2号楼',
-      '固始幸福村6号楼',
-      '王府弄5号',
-      '门牌号66',
-      '2单元501室',
+      '138 0013 8000', '0376-1234567', '幸福大道88号3栋',
+      '春风小区2号楼', '固始幸福村6号楼', '王府弄5号',
+      '门牌号66', '2单元501室',
     ]) {
       expect(persisted).not.toContain(pii);
       expect(publicResponse).not.toContain(pii);
@@ -334,6 +401,11 @@ describe('DouyinBudgetAiExplanationService', () => {
   });
 
   test('returns current state when a stale worker loses its completion or failure lease', async () => {
+    const historicalAnalysis: DouyinBudgetAiAnalysis = {
+      ...analysis,
+      summary: '联系138-0013-8000确认预算。',
+      onsite_questions: ['幸福大道88号3栋是否方便量房？'],
+    };
     const deps = buildDependencies();
     deps.budgetRepository.completeAiAnalysis.mockResolvedValueOnce({
       ...baseRecord,
@@ -348,22 +420,37 @@ describe('DouyinBudgetAiExplanationService', () => {
       ai_analysis: null,
     });
 
+    const completedDeps = buildDependencies();
+    completedDeps.budgetRepository.completeAiAnalysis.mockResolvedValueOnce({
+      ...completedDeps.completedRecord,
+      ai_analysis: historicalAnalysis,
+    });
+    const completedResponse = await new Service(
+      completedDeps.values as never,
+    ).generate(user, estimateId, false);
+    expect(JSON.stringify(completedResponse)).not.toContain('138-0013-8000');
+    expect(JSON.stringify(completedResponse)).not.toContain('幸福大道88号3栋');
+
     const failedDeps = buildDependencies();
     failedDeps.gateway.chat.mockRejectedValueOnce(new Error('timeout'));
     failedDeps.budgetRepository.failAiAnalysis.mockResolvedValueOnce({
       ...baseRecord,
       ai_status: 'succeeded',
-      ai_analysis: analysis,
+      ai_analysis: historicalAnalysis,
       ai_provider: 'deepseek',
       ai_model: 'deepseek-chat',
       ai_claimed_at: null,
     } as never);
-    await expect(
-      new Service(failedDeps.values as never).generate(user, estimateId, false),
-    ).resolves.toEqual({
-      estimate: { ...estimateResult, ai_status: 'succeeded' },
-      ai_analysis: analysis,
-    });
+    const staleResponse = await new Service(failedDeps.values as never).generate(
+      user,
+      estimateId,
+      false,
+    );
+    expect(staleResponse.estimate.ai_status).toBe('succeeded');
+    const serialized = JSON.stringify(staleResponse);
+    expect(serialized).toContain('[已脱敏]');
+    expect(serialized).not.toContain('138-0013-8000');
+    expect(serialized).not.toContain('幸福大道88号3栋');
   });
 
   test('never reports a fake failed state when the failure command itself fails', async () => {
