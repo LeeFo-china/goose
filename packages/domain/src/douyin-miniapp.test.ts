@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { SMS_SCENE_VALUES } from './auth';
 import * as domain from './index';
 import {
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DOUYIN_INSTALLATION_KIND_VALUES,
   DOUYIN_INSTALLATION_STATUS_VALUES,
   DOUYIN_MARKETING_EVENT_VALUES,
@@ -44,6 +45,7 @@ const runtimeConfig = {
   home_banners: [homeBanner],
   trust_metrics: [trustMetric],
   privacy_policy_version: '2026-07-19',
+  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
 } satisfies DouyinRuntimeConfigDto;
 
 interface CollectionBoundaryCase {
@@ -125,6 +127,40 @@ describe('Douyin miniapp domain contracts', () => {
 
   test('accepts the strict HTTPS-only runtime configuration', () => {
     expect(DouyinRuntimeConfigSchema.parse(runtimeConfig)).toEqual(runtimeConfig);
+  });
+
+  test('falls back to the exact non-duration contact SLA copy when absent', () => {
+    const { contact_sla_text: _, ...configWithoutContactSla } = runtimeConfig;
+
+    expect(
+      DouyinRuntimeConfigSchema.parse(configWithoutContactSla).contact_sla_text,
+    ).toBe('工作人员将在营业时间内与你联系');
+  });
+
+  test('trims and bounds configured contact SLA copy to 1 through 80 characters', () => {
+    expect(
+      DouyinRuntimeConfigSchema.parse({
+        ...runtimeConfig,
+        contact_sla_text: '  工作人员稍后与你联系  ',
+      }).contact_sla_text,
+    ).toBe('工作人员稍后与你联系');
+
+    for (const contactSlaText of ['x', 'x'.repeat(80)]) {
+      expect(
+        DouyinRuntimeConfigSchema.safeParse({
+          ...runtimeConfig,
+          contact_sla_text: contactSlaText,
+        }).success,
+      ).toBe(true);
+    }
+    for (const contactSlaText of ['', '   ', 'x'.repeat(81)]) {
+      expect(
+        DouyinRuntimeConfigSchema.safeParse({
+          ...runtimeConfig,
+          contact_sla_text: contactSlaText,
+        }).success,
+      ).toBe(false);
+    }
   });
 
   const collectionBoundaryCases: readonly CollectionBoundaryCase[] = [

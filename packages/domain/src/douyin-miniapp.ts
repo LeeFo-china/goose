@@ -37,6 +37,9 @@ export const DOUYIN_MARKETING_EVENT_VALUES = [
 
 export const DOUYIN_PHONE_CAPTURE_MODE_VALUES = ['sms'] as const;
 
+export const DOUYIN_DEFAULT_CONTACT_SLA_TEXT =
+  '工作人员将在营业时间内与你联系';
+
 export const DouyinRuntimeConfigSchema = z
   .object({
     brand: z
@@ -91,6 +94,12 @@ export const DouyinRuntimeConfigSchema = z
       )
       .max(4),
     privacy_policy_version: z.string().min(1).max(40),
+    contact_sla_text: z
+      .string()
+      .trim()
+      .min(1)
+      .max(80)
+      .default(DOUYIN_DEFAULT_CONTACT_SLA_TEXT),
   })
   .strict();
 

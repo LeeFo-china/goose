@@ -61,6 +61,25 @@ export type {
   DouyinPropertyCondition,
 } from './douyin-budget';
 
+export {
+  DOUYIN_APPOINTMENT_STATUS_VALUES,
+  DOUYIN_APPOINTMENT_TRANSITIONS,
+  DOUYIN_LEAD_ACTION_RESULT_VALUES,
+  DOUYIN_LEAD_ACTION_VALUES,
+  DOUYIN_VISIT_PERIOD_VALUES,
+  DouyinAppointmentStatusSchema,
+  DouyinLeadActionResultSchema,
+  DouyinVisitPeriodSchema,
+  canTransitionDouyinAppointment,
+} from './douyin-lead';
+export type {
+  DouyinAppointmentStatus,
+  DouyinLeadAction,
+  DouyinLeadActionResult,
+  DouyinLeadActionResultValue,
+  DouyinVisitPeriod,
+} from './douyin-lead';
+
 export { EMPLOYEE_ROLE_VALUES, EMPLOYEE_STATUS_VALUES } from './employee';
 export type { EmployeeRole, EmployeeStatus } from './employee';
 
