@@ -33,14 +33,22 @@ import {
 const AI_SCENE_CODE = 'douyin_budget_explanation';
 const AI_TIMEOUT_MS = 30_000;
 const AI_TEMPERATURE = 0.2;
-const PhoneSchema = /(?:\+?86[-\s]?)?1[3-9]\d{9}|(?:0\d{2,3}[-\s]?)?\d{7,8}/g;
-const PreciseAddressMarker = /路|街|巷|门牌|\d+号|栋|幢|单元|室|小区/;
+const PhonePattern =
+  /(?<!\d)(?:(?:\+?86[-\s]?)?1[3-9]\d{9}|(?:0\d{2,3}[-\s]?)?\d{7,8})(?!\d)/g;
+const DetailedAddressPattern = new RegExp([
+  String.raw`[\p{Script=Han}]{2,20}(?:大道|(?<!道)路|街(?!道)|巷|弄)(?:\d{1,6}号)?`,
+  String.raw`[\p{Script=Han}A-Za-z0-9]{2,20}(?:小区|村)`,
+  String.raw`门牌(?:号)?\s*\d{1,6}`,
+  String.raw`(?<!\d)\d{1,6}(?:号楼|号|栋|幢|单元|楼)(?![A-Za-z])`,
+  String.raw`(?<!\d)\d{3,6}室(?!\d*[厅房])`,
+].join('|'), 'u');
 const ProviderModelSchema = z.string().trim().min(1).max(100);
 
 const SYSTEM_PROMPT = [
   '你是装修预算初算解释助手。',
   '只能解释服务端已经计算完成的规则结果，不得新增、删除或修改任何金额。',
   '不得把初算描述为正式报价，不得承诺最终价格、工期、材料或施工结果。',
+  '不得返回联系方式或详细地址。',
   '只返回符合指定结构的 JSON 对象，不要输出 Markdown 或额外字段。',
 ].join('\n');
 
@@ -187,7 +195,14 @@ function parseAiAnalysis(content: string): DouyinBudgetAiAnalysis {
   }
   const parsed = DouyinBudgetAiAnalysisSchema.safeParse(raw);
   if (!parsed.success) throw invalidAiOutput();
-  return parsed.data;
+  const sanitized = DouyinBudgetAiAnalysisSchema.safeParse({
+    summary: sanitizeText(parsed.data.summary),
+    allocation_advice: sanitizeTextList(parsed.data.allocation_advice),
+    risk_factors: sanitizeTextList(parsed.data.risk_factors),
+    onsite_questions: sanitizeTextList(parsed.data.onsite_questions),
+  });
+  if (!sanitized.success) throw invalidAiOutput();
+  return sanitized.data;
 }
 
 function parseProviderModel(value: string): string {
@@ -216,14 +231,18 @@ function buildUserPrompt(
 function promptRequestSnapshot(request: DouyinBudgetEstimateRequest) {
   return {
     area: request.area,
-    property_condition: request.property_condition,
-    decoration_tier: request.decoration_tier,
-    decoration_scope: request.decoration_scope,
-    ...(request.layout !== undefined ? { layout: request.layout } : {}),
-    ...(request.style !== undefined ? { style: request.style } : {}),
-    option_codes: [...request.option_codes],
+    property_condition: sanitizeText(request.property_condition),
+    decoration_tier: sanitizeText(request.decoration_tier),
+    decoration_scope: sanitizeText(request.decoration_scope),
+    ...(request.layout !== undefined
+      ? { layout: sanitizeText(request.layout) }
+      : {}),
+    ...(request.style !== undefined
+      ? { style: sanitizeText(request.style) }
+      : {}),
+    option_codes: sanitizeTextList(request.option_codes),
     ...(request.demand !== undefined
-      ? { demand: sanitizeDemand(request.demand) }
+      ? { demand: sanitizeText(request.demand) }
       : {}),
   };
 }
@@ -233,24 +252,30 @@ function promptEstimateSnapshot(estimate: DouyinBudgetEstimateResult) {
     minimum_total: estimate.minimum_total,
     maximum_total: estimate.maximum_total,
     categories: estimate.categories.map((category) => ({
-      category_code: category.category_code,
-      label: category.label,
+      category_code: sanitizeText(category.category_code),
+      label: sanitizeText(category.label),
       minimum_amount: category.minimum_amount,
       maximum_amount: category.maximum_amount,
     })),
-    calculation_basis: [...estimate.calculation_basis],
-    included_items: [...estimate.included_items],
-    excluded_items: [...estimate.excluded_items],
-    pricing_version: estimate.pricing_version,
-    pricing_effective_from: estimate.pricing_effective_from,
-    pricing_effective_to: estimate.pricing_effective_to,
-    disclaimer: estimate.disclaimer,
+    calculation_basis: sanitizeTextList(estimate.calculation_basis),
+    included_items: sanitizeTextList(estimate.included_items),
+    excluded_items: sanitizeTextList(estimate.excluded_items),
+    pricing_version: sanitizeText(estimate.pricing_version),
+    pricing_effective_from: sanitizeText(estimate.pricing_effective_from),
+    pricing_effective_to: estimate.pricing_effective_to === null
+      ? null
+      : sanitizeText(estimate.pricing_effective_to),
+    disclaimer: sanitizeText(estimate.disclaimer),
   };
 }
 
-function sanitizeDemand(value: string): string {
-  if (PreciseAddressMarker.test(value)) return '[已脱敏]';
-  return value.replace(PhoneSchema, '[已脱敏]');
+function sanitizeTextList(values: readonly string[]): string[] {
+  return values.map(sanitizeText);
+}
+
+function sanitizeText(value: string): string {
+  if (DetailedAddressPattern.test(value)) return '[已脱敏]';
+  return value.replace(PhonePattern, '[已脱敏]');
 }
 
 function aiFailureCode(error: unknown): string {
