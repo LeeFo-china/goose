@@ -23,6 +23,8 @@ import {
   hydrateFollowUps,
   hydrateLeadBundles,
 } from "@/repositories/tenant-douyin-leads-hydration";
+import { listTenantDouyinLeadAssigneeCandidates } from
+  "@/repositories/tenant-douyin-lead-assignee-candidates";
 import type { TenantDouyinLeadListQuery } from
   "@/schema/tenant-douyin-leads";
 import type { Json } from "@/types/database";
@@ -65,6 +67,7 @@ export interface TenantDouyinLeadsQuery extends PromiseLike<DatabaseResult> {
   gte(...args: unknown[]): TenantDouyinLeadsQuery;
   lt(...args: unknown[]): TenantDouyinLeadsQuery;
   lte(...args: unknown[]): TenantDouyinLeadsQuery;
+  ilike(...args: unknown[]): TenantDouyinLeadsQuery;
   or(...args: unknown[]): TenantDouyinLeadsQuery;
   in(...args: unknown[]): TenantDouyinLeadsQuery;
   order(...args: unknown[]): TenantDouyinLeadsQuery;
@@ -164,6 +167,12 @@ export class TenantDouyinLeadsRepository {
       rows: safeHydrateLeadBundles({ leads, appointments, customers, employees }),
       total,
     };
+  }
+
+  listAssigneeCandidates(input: Parameters<
+    typeof listTenantDouyinLeadAssigneeCandidates
+  >[1]) {
+    return listTenantDouyinLeadAssigneeCandidates(this.client, input);
   }
 
   async getLeadDetail(input: { tenantId: string; leadId: string }) {

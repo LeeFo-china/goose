@@ -3,6 +3,7 @@ import type { FastifyRequest } from "fastify";
 import { TenantBaseController } from "@/controllers/TenantBaseController";
 import { Errors } from "@/errors/error-factory";
 import {
+  TenantDouyinLeadAssigneeCandidatesQuerySchema,
   TenantDouyinLeadAssignSchema,
   TenantDouyinLeadConvertSchema,
   TenantDouyinLeadEmptyQuerySchema,
@@ -20,7 +21,7 @@ import { Get, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
 type ServicePort = Pick<TenantDouyinLeadsService,
-  | "list" | "getDetail" | "listFollowUps" | "assign"
+  | "list" | "listAssigneeCandidates" | "getDetail" | "listFollowUps" | "assign"
   | "appendFollowUp" | "convert" | "markInvalid">;
 
 export class TenantDouyinLeadsController extends TenantBaseController {
@@ -35,6 +36,18 @@ export class TenantDouyinLeadsController extends TenantBaseController {
     const query = parsePart(TenantDouyinLeadListQuerySchema, request.query || {});
     const authContext = await this.getRequiredTenantContext(request);
     return ResponseHandler.success(await this.service.list(authContext, query));
+  }
+
+  @Get("/tenant/douyin-miniapp/leads/assignee-candidates")
+  async listAssigneeCandidates(request: FastifyRequest) {
+    const query = parsePart(
+      TenantDouyinLeadAssigneeCandidatesQuerySchema,
+      request.query || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.listAssigneeCandidates(authContext, query),
+    );
   }
 
   @Get("/tenant/douyin-miniapp/leads/:id")

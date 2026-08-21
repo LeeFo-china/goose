@@ -21,6 +21,8 @@ function createController() {
   const service = {
     list: mock(async () => ({ list: [], pagination: { page: 1, pageSize: 20,
       total: 0, totalPages: 0 } })),
+    listAssigneeCandidates: mock(async () => ({ list: [], pagination: { page: 1,
+      pageSize: 100, total: 0, totalPages: 0 } })),
     getDetail: mock(async () => ({ id: LEAD_ID })),
     listFollowUps: mock(async () => ({ list: [], pagination: { page: 1,
       pageSize: 20, total: 0, totalPages: 0 } })),
@@ -37,7 +39,7 @@ function createController() {
 }
 
 describe("TenantDouyinLeadsController", () => {
-  test("registers exactly seven routes and the root registry", async () => {
+  test("registers exactly eight routes and the root registry", async () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -47,6 +49,7 @@ describe("TenantDouyinLeadsController", () => {
     controller.registerExtraRoutes(fastify as never);
     expect(routes).toEqual([
       { method: "GET", path: "/tenant/douyin-miniapp/leads" },
+      { method: "GET", path: "/tenant/douyin-miniapp/leads/assignee-candidates" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id/follow-ups" },
       { method: "POST", path: "/tenant/douyin-miniapp/leads/:id/assign" },
@@ -72,6 +75,36 @@ describe("TenantDouyinLeadsController", () => {
     expect(valid.service.list).toHaveBeenCalledWith(authContext, {
       page: 1, pageSize: 20,
     });
+  });
+
+  test("validates and trims assignee candidate search before auth", async () => {
+    const invalid = createController();
+    await expect(invalid.controller.listAssigneeCandidates({
+      query: { pageSize: 101 },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(invalid.controller.listAssigneeCandidates({
+      query: { keyword: "x".repeat(101) },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
+    expect(invalid.getRequiredTenantContext).not.toHaveBeenCalled();
+
+    const valid = createController();
+    await expect(valid.controller.listAssigneeCandidates({ query: {
+      page: "1", pageSize: "100", keyword: "  王顾问  ",
+    } } as never)).resolves.toMatchObject({
+      data: { list: [], pagination: { page: 1, pageSize: 100 } },
+    });
+    expect(valid.service.listAssigneeCandidates).toHaveBeenCalledWith(
+      authContext,
+      { page: 1, pageSize: 100, keyword: "王顾问" },
+    );
+
+    const blank = createController();
+    await blank.controller.listAssigneeCandidates({ query: {
+      keyword: "   ",
+    } } as never);
+    expect(blank.service.listAssigneeCandidates).toHaveBeenCalledWith(
+      authContext, { page: 1, pageSize: 20 },
+    );
   });
 
   test("validates strict params and all command bodies before auth", async () => {

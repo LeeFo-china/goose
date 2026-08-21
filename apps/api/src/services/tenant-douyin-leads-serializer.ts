@@ -78,6 +78,14 @@ export function serializeFollowUpBundle(
   return { ...bundle.followUp, employee: bundle.employee };
 }
 
+export function serializeAssigneeCandidate(row: {
+  id: string;
+  name: string | null;
+}) {
+  const name = row.name?.trim().slice(0, 100) || "未命名员工";
+  return { id: row.id, name };
+}
+
 function assertLeadBundleScope(
   bundle: TenantDouyinLeadBundle,
   tenantId: string,

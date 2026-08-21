@@ -38,6 +38,14 @@ export const TenantDouyinLeadFollowUpListQuerySchema = z.strictObject({
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const TenantDouyinLeadAssigneeCandidatesQuerySchema = z.strictObject({
+  page: z.coerce.number().int().min(1).max(10_000).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  keyword: z.preprocess((value) => typeof value === "string"
+    && value.trim() === "" ? undefined : value,
+  z.string().trim().max(100).optional()),
+});
+
 export const TenantDouyinLeadParamsSchema = z.strictObject({
   id: z.uuid("无效的抖音线索 ID"),
 });
@@ -101,6 +109,12 @@ export type TenantDouyinLeadFollowUpListQuery = z.infer<
 >;
 export type TenantDouyinLeadFollowUpListQueryInput = z.input<
   typeof TenantDouyinLeadFollowUpListQuerySchema
+>;
+export type TenantDouyinLeadAssigneeCandidatesQuery = z.infer<
+  typeof TenantDouyinLeadAssigneeCandidatesQuerySchema
+>;
+export type TenantDouyinLeadAssigneeCandidatesQueryInput = z.input<
+  typeof TenantDouyinLeadAssigneeCandidatesQuerySchema
 >;
 export type TenantDouyinLeadAssign = z.infer<
   typeof TenantDouyinLeadAssignSchema
