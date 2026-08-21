@@ -327,6 +327,19 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     expect(JSON.stringify(deps.inserts[0])).not.toContain("192.0.2.10");
   });
 
+  test("fails closed before the atomic command when trusted client IP is missing", async () => {
+    const deps = dependencies();
+    await expect(new Service(deps.values as never).createEstimate(
+      user,
+      input,
+      null,
+    )).rejects.toMatchObject({
+      statusCode: 400,
+      code: "DOUYIN_BUDGET_CLIENT_IP_INVALID",
+    });
+    expect(deps.budgetRepository.createEstimateAtomic).not.toHaveBeenCalled();
+  });
+
   test("propagates the atomic command rate rejection without a fallback write", async () => {
     const deps = dependencies();
     deps.budgetRepository.createEstimateAtomic.mockImplementation(async () => {
