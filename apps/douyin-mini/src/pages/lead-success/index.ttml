@@ -1,7 +1,21 @@
-<view class="success-page">
+<view tt:if="{{loading}}" class="success-page success-page--center" role="status">正在加载申请结果</view>
+<view tt:elif="{{invalid}}" class="success-page success-page--center">
+  <view class="invalid-title">申请结果暂时无法显示</view>
+  <view class="invalid-copy">请返回免费量房页查看或重新提交。</view>
+  <button class="secondary-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBackAppointment">返回免费量房</button>
+</view>
+<view tt:else class="success-page">
   <view class="success-mark">✓</view>
-  <view class="success-title">装修需求已收到</view>
-  <view class="success-copy">无论这是首次提交，还是同一需求的重复提交，我们都只会按有效记录安排处理。装修公司服务人员将尽快与你沟通。</view>
-  <view class="success-note">请留意电话或短信，具体方案、报价与工期以双方后续确认的信息为准。</view>
-  <button class="home-button" bindtap="onBackHome">返回首页继续浏览</button>
+  <view class="success-title">量房申请已提交</view>
+  <view class="success-copy">申请已提交，工作人员将与你确认具体时间</view>
+
+  <view class="appointment-card">
+    <view class="detail-row"><view class="detail-label">申请编号</view><view class="detail-value">{{appointmentNo}}</view></view>
+    <view class="detail-row"><view class="detail-label">服务公司</view><view class="detail-value">{{companyName}}</view></view>
+    <view class="detail-row"><view class="detail-label">期望时间</view><view class="detail-value">{{preferredVisitDateLabel}} · {{preferredVisitPeriodLabel}}</view></view>
+  </view>
+
+  <view class="success-note" role="note">{{contactSlaText}}。请留意电话或短信，实际量房时间以工作人员与你确认的结果为准。</view>
+  <button tt:if="{{estimateLinked}}" class="budget-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onViewBudget">查看预算结果</button>
+  <button class="home-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBackHome">返回首页</button>
 </view>

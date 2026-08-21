@@ -7,6 +7,18 @@
 .field-input, .field-textarea { width: 100%; font-size: 27rpx; }
 .field-input { height: 92rpx; padding: 0 22rpx; }
 .field-textarea { min-height: 184rpx; padding: 20rpx 22rpx; line-height: 1.6; }
+.picker-control { box-sizing: border-box; display: flex; width: 100%; height: 92rpx; align-items: center; justify-content: space-between; padding: 0 22rpx; font-size: 27rpx; }
+.picker-value { color: #191817; }
+.picker-placeholder { color: #706c67; }
+.picker-arrow { color: #706c67; font-size: 38rpx; }
+.period-options { display: flex; gap: 14rpx; }
+.period-option { box-sizing: border-box; display: flex; min-height: 88rpx; flex: 1; align-items: center; justify-content: center; border: 1rpx solid #d4d0ca; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 26rpx; }
+.period-option--active { background: #f7f6f4; font-weight: 650; }
+.estimate-card { margin-top: 30rpx; padding: 22rpx; border: 1rpx solid #d4d0ca; border-radius: 12rpx; background: #f7f6f4; text-align: left; }
+.estimate-label { color: #625f5b; font-size: 22rpx; }
+.estimate-number { margin-top: 8rpx; color: #191817; font-size: 27rpx; font-weight: 650; }
+.estimate-range { margin-top: 8rpx; color: #191817; font-size: 25rpx; }
+.estimate-note { margin-top: 10rpx; color: #706c67; font-size: 22rpx; line-height: 1.55; }
 .optional-toggle { box-sizing: border-box; display: flex; width: 100%; min-height: 104rpx; align-items: center; justify-content: space-between; gap: 20rpx; margin: 30rpx 0 0; padding: 20rpx; border-radius: 12rpx; background: #eceae6; color: #191817; text-align: left; line-height: normal; }
 .optional-copy { min-width: 0; flex: 1; }
 .optional-title { font-size: 26rpx; font-weight: 650; line-height: 1.4; }

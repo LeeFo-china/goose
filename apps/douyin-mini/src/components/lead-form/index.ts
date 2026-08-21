@@ -12,6 +12,10 @@ Component({
     fieldErrors: { type: Object, value: {} },
     focusedField: { type: String, value: "" },
     optionalDetailsExpanded: { type: Boolean, value: false },
+    minVisitDate: { type: String, value: "" },
+    hasLinkedEstimate: { type: Boolean, value: false },
+    estimateNo: { type: String, value: "" },
+    estimateRange: { type: String, value: "" },
   },
   methods: {
     onInput(event: { currentTarget: { dataset: { field?: string } }; detail: { value: string } }) {
@@ -22,6 +26,23 @@ Component({
     onSmsCodeChange(event: { detail: { value: string } }) {
       if (this.data.submitting) return;
       this.triggerEvent("fieldchange", { field: "sms_code", value: event.detail.value });
+    },
+    onVisitDateChange(event: { detail: { value?: string } }) {
+      if (this.data.submitting || typeof event.detail.value !== "string") return;
+      this.triggerEvent("fieldchange", {
+        field: "preferred_visit_date",
+        value: event.detail.value,
+      });
+    },
+    onVisitPeriodChange(event: {
+      currentTarget: { dataset: { period?: string } };
+    }) {
+      if (this.data.submitting) return;
+      const period = event.currentTarget.dataset.period;
+      if (period) this.triggerEvent("fieldchange", {
+        field: "preferred_visit_period",
+        value: period,
+      });
     },
     onSendSms() {
       if (!this.data.submitting) this.triggerEvent("sendsms");

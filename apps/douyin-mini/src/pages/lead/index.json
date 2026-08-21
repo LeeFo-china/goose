@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "免费咨询",
+  "navigationBarTitleText": "免费量房",
   "usingComponents": {
     "lead-form": "/components/lead-form/index",
     "empty-state": "/components/empty-state/index",

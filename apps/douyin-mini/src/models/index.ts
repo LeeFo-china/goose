@@ -222,6 +222,23 @@ export type DouyinBudgetAiExplanationResponse = {
   ai_analysis: DouyinBudgetAiAnalysis | null;
 };
 
+export const DOUYIN_VISIT_PERIODS = [
+  "morning",
+  "afternoon",
+  "evening",
+] as const;
+
+export type DouyinVisitPeriod = (typeof DOUYIN_VISIT_PERIODS)[number];
+
+export type DouyinMeasurementAppointmentResult = {
+  lead_id: string;
+  appointment_no: string;
+  already_submitted: boolean;
+  existing_customer_linked: boolean;
+  status: "pending_confirmation";
+  message: "量房申请已提交，工作人员将与你确认具体时间";
+};
+
 export type ServiceUnavailableCode =
   | "DOUYIN_INSTALLATION_MISSING"
   | "DOUYIN_INSTALLATION_DISABLED"

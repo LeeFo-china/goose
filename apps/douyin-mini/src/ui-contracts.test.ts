@@ -133,14 +133,13 @@ test("lead form labels every input and keeps optional details collapsed", async 
     "联系电话",
     "短信验证码",
     "小区名称",
-    "房屋面积",
-    "预算范围",
-    "计划开工时间",
+    "期望量房日期",
+    "期望量房时段",
     "装修需求",
   ]) {
     expect(`${formTemplate}\n${smsTemplate}`).toContain(`aria-label="${label}"`);
   }
-  expect(formTemplate).toContain("补充装修信息（选填）");
+  expect(formTemplate).toContain("补充装修需求（选填）");
   expect(formTemplate).toContain('tt:if="{{optionalDetailsExpanded}}"');
   expect(consentTemplate).toContain('<view class="consent-row"');
   expect(consentTemplate).toContain('class="consent-toggle ui-pressable"');

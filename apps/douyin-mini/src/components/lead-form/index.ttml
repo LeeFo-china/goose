@@ -15,37 +15,51 @@
       <sms-code-input value="{{value.sms_code}}" phone-ready="{{phoneReady && !submitting}}" sending="{{smsSending || submitting}}" cooldown="{{smsCooldown}}" focused="{{focusedField === 'sms_code'}}" error="{{fieldErrors.sms_code || ''}}" primary-color="{{primaryColor}}" bindchange="onSmsCodeChange" bindsend="onSendSms" />
       <view tt:if="{{fieldErrors.sms_code}}" class="ui-field-error" role="alert">{{fieldErrors.sms_code}}</view>
     </view>
+    <view class="field-group">
+      <view class="field-label">小区名称 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <input class="field-input ui-control {{fieldErrors.community ? 'ui-control--error' : ''}}" aria-label="小区名称" data-field="community" maxlength="80" value="{{value.community}}" placeholder="例如：晴天花园" focus="{{focusedField === 'community'}}" disabled="{{submitting}}" bindinput="onInput" />
+      <view tt:if="{{fieldErrors.community}}" class="ui-field-error" role="alert">{{fieldErrors.community}}</view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">期望量房日期 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <picker mode="date" value="{{value.preferred_visit_date}}" start="{{minVisitDate}}" disabled="{{submitting}}" bindchange="onVisitDateChange">
+        <view class="picker-control ui-control {{fieldErrors.preferred_visit_date ? 'ui-control--error' : ''}}" aria-label="期望量房日期">
+          <text class="{{value.preferred_visit_date ? 'picker-value' : 'picker-placeholder'}}">{{value.preferred_visit_date || '请选择日期'}}</text>
+          <text class="picker-arrow">›</text>
+        </view>
+      </picker>
+      <view tt:if="{{fieldErrors.preferred_visit_date}}" class="ui-field-error" role="alert">{{fieldErrors.preferred_visit_date}}</view>
+    </view>
+    <view class="field-group">
+      <view class="field-label">期望量房时段 <text class="required" style="color: {{primaryColor}}">*</text></view>
+      <view class="period-options" role="radiogroup" aria-label="期望量房时段">
+        <view class="period-option ui-pressable {{value.preferred_visit_period === 'morning' ? 'period-option--active' : ''}}" hover-class="ui-pressable--pressed" style="{{value.preferred_visit_period === 'morning' ? 'border-color: ' + primaryColor + '; color: ' + primaryColor : ''}}" role="radio" aria-checked="{{value.preferred_visit_period === 'morning'}}" data-period="morning" bindtap="onVisitPeriodChange">上午</view>
+        <view class="period-option ui-pressable {{value.preferred_visit_period === 'afternoon' ? 'period-option--active' : ''}}" hover-class="ui-pressable--pressed" style="{{value.preferred_visit_period === 'afternoon' ? 'border-color: ' + primaryColor + '; color: ' + primaryColor : ''}}" role="radio" aria-checked="{{value.preferred_visit_period === 'afternoon'}}" data-period="afternoon" bindtap="onVisitPeriodChange">下午</view>
+        <view class="period-option ui-pressable {{value.preferred_visit_period === 'evening' ? 'period-option--active' : ''}}" hover-class="ui-pressable--pressed" style="{{value.preferred_visit_period === 'evening' ? 'border-color: ' + primaryColor + '; color: ' + primaryColor : ''}}" role="radio" aria-checked="{{value.preferred_visit_period === 'evening'}}" data-period="evening" bindtap="onVisitPeriodChange">晚间</view>
+      </view>
+      <view tt:if="{{fieldErrors.preferred_visit_period}}" class="ui-field-error" role="alert">{{fieldErrors.preferred_visit_period}}</view>
+    </view>
   </view>
 
-  <button class="optional-toggle ui-pressable" hover-class="ui-pressable--pressed" aria-label="{{optionalDetailsExpanded ? '收起补充装修信息' : '展开补充装修信息'}}" disabled="{{submitting}}" bindtap="onToggleOptionalDetails">
-    <view class="optional-copy"><view class="optional-title">补充装修信息（选填）</view><view class="optional-description">填写小区、面积和计划，有助于装修公司提前了解需求。</view></view>
-    <view class="optional-state" style="color: {{primaryColor}}">{{optionalDetailsExpanded ? '收起' : '展开'}}</view>
+  <view tt:if="{{hasLinkedEstimate}}" class="estimate-card" role="note">
+    <view class="estimate-label">已关联预算初算</view>
+    <view class="estimate-number">预算编号 {{estimateNo}}</view>
+    <view class="estimate-range">参考区间 {{estimateRange}}</view>
+    <view class="estimate-note">量房申请会关联此预算结果，现场仍需确认施工范围。</view>
+  </view>
+
+  <button class="optional-toggle ui-pressable" hover-class="ui-pressable--pressed" aria-label="{{optionalDetailsExpanded ? '收起装修需求' : '展开装修需求'}}" disabled="{{submitting}}" bindtap="onToggleOptionalDetails">
+    <view class="optional-copy"><view class="optional-title">补充装修需求（选填）</view><view class="optional-description">可填写风格、收纳或现场重点确认事项。</view></view>
+    <view class="optional-state" style="color: {{primaryColor}}">{{optionalDetailsExpanded ? '收起' : '填写'}}</view>
   </button>
 
   <view tt:if="{{optionalDetailsExpanded}}" class="optional-fields">
     <view class="field-group">
-      <view class="field-label">小区名称</view>
-      <input class="field-input ui-control" aria-label="小区名称" data-field="community" maxlength="80" value="{{value.community}}" placeholder="例如：示例花园" disabled="{{submitting}}" bindinput="onInput" />
-    </view>
-    <view class="field-group">
-      <view class="field-label">房屋面积</view>
-      <input class="field-input ui-control {{fieldErrors.area ? 'ui-control--error' : ''}}" aria-label="房屋面积" data-field="area" type="digit" maxlength="8" value="{{value.area}}" placeholder="请输入面积（㎡）" focus="{{focusedField === 'area'}}" disabled="{{submitting}}" bindinput="onInput" />
-      <view tt:if="{{fieldErrors.area}}" class="ui-field-error" role="alert">{{fieldErrors.area}}</view>
-    </view>
-    <view class="field-group">
-      <view class="field-label">预算范围</view>
-      <input class="field-input ui-control" aria-label="预算范围" data-field="budget" maxlength="40" value="{{value.budget}}" placeholder="例如：20-30万" disabled="{{submitting}}" bindinput="onInput" />
-    </view>
-    <view class="field-group">
-      <view class="field-label">计划开工时间</view>
-      <input class="field-input ui-control" aria-label="计划开工时间" data-field="start_time" maxlength="40" value="{{value.start_time}}" placeholder="例如：三个月内" disabled="{{submitting}}" bindinput="onInput" />
-    </view>
-    <view class="field-group">
       <view class="field-label">装修需求</view>
-      <textarea class="field-textarea ui-control" aria-label="装修需求" data-field="demand" maxlength="1000" value="{{value.demand}}" placeholder="可填写户型、风格、收纳等重点需求" disabled="{{submitting}}" bindinput="onInput" />
+      <textarea class="field-textarea ui-control" aria-label="装修需求" data-field="demand" maxlength="1000" value="{{value.demand}}" placeholder="例如：希望确认柜体和水电范围" disabled="{{submitting}}" bindinput="onInput" />
     </view>
   </view>
 
   <view class="consent-block"><privacy-consent checked="{{consented}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" error="{{fieldErrors.consent || ''}}" disabled="{{submitting}}" bindchange="onConsentChange" bindopenpolicy="onOpenPolicy" /></view>
-  <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交装修需求'}}</button>
+  <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" form-type="submit" loading="{{submitting}}" disabled="{{submitting}}">{{submitting ? '正在提交' : '提交量房申请'}}</button>
 </form>

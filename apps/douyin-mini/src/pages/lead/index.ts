@@ -2,6 +2,14 @@ import type { DouyinAppContext } from "../../app";
 import { sendLeadSms, submitLead } from "../../api/leads";
 import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
+import type {
+  DouyinMeasurementAppointmentResult,
+  DouyinVisitPeriod,
+} from "../../models";
+import {
+  readBudgetLeadContext,
+  type BudgetLeadContext,
+} from "../../platform/budget-lead-context";
 import { navigateToPage } from "../../platform/navigation";
 import {
   beginIdempotentSubmission,
@@ -11,7 +19,9 @@ import {
   updateIdempotencyDraft,
 } from "../../utils/idempotency";
 import {
+  buildLeadSuccessRoute,
   clearLeadFieldError,
+  getShanghaiNaturalDate,
   resolveOptionalDetailsExpanded,
   toggleOptionalDetails,
   validateLeadForm,
@@ -25,19 +35,26 @@ const INITIAL_FORM: LeadFormValue = {
   phone: "",
   sms_code: "",
   community: "",
-  area: "",
-  budget: "",
-  start_time: "",
+  preferred_visit_date: "",
+  preferred_visit_period: "",
   demand: "",
   consented_at: "",
 };
 const LEAD_FIELDS = new Set<LeadField>([
-  "name", "phone", "sms_code", "community", "area", "budget", "start_time",
-  "demand", "consented_at",
+  "name",
+  "phone",
+  "sms_code",
+  "community",
+  "preferred_visit_date",
+  "preferred_visit_period",
+  "demand",
+  "consented_at",
 ]);
 
 Page({
-  idempotency: createIdempotencyState(toIdempotencyDraft(INITIAL_FORM, "")),
+  idempotency: createIdempotencyState(toIdempotencyDraft(INITIAL_FORM, "", null)),
+  linkedBudget: null as BudgetLeadContext | null,
+  successRoute: "",
   cooldownTimer: null as ReturnType<typeof setInterval> | null,
   smsInFlight: false,
   successNavigationInFlight: false,
@@ -50,6 +67,10 @@ Page({
     primaryColor: "#191817",
     primaryTextColor: "#FFFFFF",
     privacyPolicyVersion: "",
+    minVisitDate: getShanghaiNaturalDate(),
+    estimateNo: "",
+    estimateRange: "",
+    hasLinkedEstimate: false,
     form: { ...INITIAL_FORM },
     consented: false,
     phoneReady: false,
@@ -62,6 +83,7 @@ Page({
     optionalDetailsExpanded: false,
   },
   onLoad() { void this.load(); },
+  onShow() { this.syncBudgetContext(); },
   onUnload() { this.stopCooldown(); },
   async load() {
     this.setData({ loading: true, error: false });
@@ -69,6 +91,14 @@ Page({
       const bootstrap = await getApp<DouyinAppContext>().startup;
       if (!bootstrap) return;
       const theme = resolveThemeColor(bootstrap.theme.primary_color);
+      this.idempotency = updateIdempotencyDraft(
+        this.idempotency,
+        toIdempotencyDraft(
+          this.data.form,
+          bootstrap.privacy_policy_version,
+          this.linkedBudget,
+        ),
+      );
       this.setData({
         loading: false,
         disabled: !bootstrap.features.sms_lead,
@@ -83,16 +113,32 @@ Page({
       this.setData({ loading: false, error: true });
     }
   },
+  syncBudgetContext() {
+    if (this.data.submitting) return this.linkedBudget;
+    const context = readBudgetLeadContext();
+    this.linkedBudget = context;
+    this.idempotency = updateIdempotencyDraft(
+      this.idempotency,
+      toIdempotencyDraft(this.data.form, this.data.privacyPolicyVersion, context),
+    );
+    this.setData({
+      minVisitDate: getShanghaiNaturalDate(),
+      estimateNo: context?.estimateNo ?? "",
+      estimateRange: context?.displayRange ?? "",
+      hasLinkedEstimate: context !== null,
+    });
+    return context;
+  },
   onFieldChange(event: { detail: { field?: string; value?: string } }) {
     if (this.data.submitting) return;
     const field = event.detail.field as LeadField;
     if (!LEAD_FIELDS.has(field) || field === "consented_at"
       || typeof event.detail.value !== "string") return;
     const value = sanitizeField(field, event.detail.value);
-    const form = { ...this.data.form, [field]: value };
+    const form = { ...this.data.form, [field]: value } as LeadFormValue;
     this.idempotency = updateIdempotencyDraft(
       this.idempotency,
-      toIdempotencyDraft(form, this.data.privacyPolicyVersion),
+      toIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
     );
     this.setData({
       form,
@@ -111,7 +157,7 @@ Page({
     };
     this.idempotency = updateIdempotencyDraft(
       this.idempotency,
-      toIdempotencyDraft(form, this.data.privacyPolicyVersion),
+      toIdempotencyDraft(form, this.data.privacyPolicyVersion, this.linkedBudget),
     );
     this.setData({
       consented,
@@ -159,7 +205,14 @@ Page({
     });
   },
   async onSubmit() {
-    const validation = validateLeadForm(this.data.form, this.data.consented);
+    const linkedBudget = this.syncBudgetContext();
+    const minimumVisitDate = getShanghaiNaturalDate();
+    this.setData({ minVisitDate: minimumVisitDate });
+    const validation = validateLeadForm(
+      this.data.form,
+      this.data.consented,
+      minimumVisitDate,
+    );
     if (validation.summary) {
       this.setData({
         fieldErrors: validation.fieldErrors,
@@ -174,40 +227,50 @@ Page({
       });
       return;
     }
+    const preferredVisitPeriod = toVisitPeriod(this.data.form.preferred_visit_period);
+    if (!preferredVisitPeriod) {
+      const message = "请选择期望量房时段";
+      this.setData({
+        fieldErrors: { ...this.data.fieldErrors, preferred_visit_period: message },
+        focusedField: "preferred_visit_period",
+        formError: message,
+      });
+      return;
+    }
     const decision = beginIdempotentSubmission(this.idempotency);
     this.idempotency = decision.state;
     if (!decision.shouldSubmit) {
       if (decision.state.status === "succeeded") this.openSuccessPage();
       return;
     }
-    this.setData({
-      submitting: true,
-      formError: "",
-      fieldErrors: {},
-      focusedField: "",
-    });
+    this.setData({ submitting: true, formError: "", fieldErrors: {}, focusedField: "" });
     try {
       const app = getApp<DouyinAppContext>();
       const form = this.data.form;
-      await submitLead(app.api, {
+      const result = await submitLead(app.api, {
         name: form.name.trim(),
         phone: form.phone.trim(),
         sms_code: form.sms_code.trim(),
-        ...optionalText("community", form.community),
-        ...optionalArea(form.area),
-        ...optionalText("budget", form.budget),
-        ...optionalText("start_time", form.start_time),
-        ...optionalText("demand", form.demand),
+        community: form.community.trim(),
+        preferred_visit_date: form.preferred_visit_date,
+        preferred_visit_period: preferredVisitPeriod,
+        ...(linkedBudget ? { budget_estimate_id: linkedBudget.estimateId } : {}),
+        ...optionalDemand(form.demand),
         privacy_policy_version: this.data.privacyPolicyVersion,
         consented_at: form.consented_at,
         idempotency_key: decision.key,
         attribution: app.launchContext,
       });
+      this.successRoute = toSuccessRoute(
+        result,
+        form.preferred_visit_date,
+        preferredVisitPeriod,
+        linkedBudget !== null,
+      );
       this.idempotency = succeedIdempotentSubmission(this.idempotency);
     } catch (error) {
       this.idempotency = failIdempotentSubmission(this.idempotency);
-      if (error instanceof ApiRequestError
-        && error.code === "DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH") {
+      if (isPrivacyVersionMismatch(error)) {
         this.setData({ formError: "隐私政策正在更新，请稍候" });
         await this.refreshPrivacyPolicy();
       } else {
@@ -227,7 +290,7 @@ Page({
       const form = { ...this.data.form, consented_at: "" };
       this.idempotency = updateIdempotencyDraft(
         this.idempotency,
-        toIdempotencyDraft(form, bootstrap.privacy_policy_version),
+        toIdempotencyDraft(form, bootstrap.privacy_policy_version, this.linkedBudget),
       );
       this.setData({
         form,
@@ -241,15 +304,19 @@ Page({
         formError: "隐私政策已更新，请重新阅读并确认后提交",
       });
     } catch {
-      this.setData({ formError: "隐私政策已更新，请稍后重新进入咨询页" });
+      this.setData({ formError: "隐私政策已更新，请稍后重新进入量房页" });
     }
   },
   openSuccessPage() {
-    if (this.successNavigationInFlight) return;
+    if (this.successNavigationInFlight || !this.successRoute) return;
     this.successNavigationInFlight = true;
-    void navigateToPage("pages/lead-success/index")
-      .catch(() => this.setData({ formError: "需求已提交，点击提交按钮可重新打开结果页" }))
-      .finally(() => { this.successNavigationInFlight = false; });
+    tt.navigateTo({
+      url: this.successRoute,
+      fail: () => this.setData({
+        formError: "申请已提交，点击提交按钮可重新打开结果页",
+      }),
+      complete: () => { this.successNavigationInFlight = false; },
+    });
   },
   onPhoneCall() {
     const phoneNumber = this.data.servicePhone;
@@ -278,37 +345,64 @@ Page({
 function sanitizeField(field: LeadField, value: string): string {
   if (field === "phone") return value.replace(/[^0-9]/g, "").slice(0, 11);
   if (field === "sms_code") return value.replace(/[^0-9]/g, "").slice(0, 6);
-  if (field === "area") return value.replace(/[^0-9.]/g, "").slice(0, 8);
+  if (field === "preferred_visit_date") return value.slice(0, 10);
+  if (field === "preferred_visit_period") return value.slice(0, 16);
   const limits: Partial<Record<LeadField, number>> = {
-    name: 40, community: 80, budget: 40, start_time: 40, demand: 1_000,
+    name: 40,
+    community: 80,
+    demand: 1_000,
   };
   return value.slice(0, limits[field] ?? value.length);
 }
 
-function optionalText<Key extends "community" | "budget" | "start_time" | "demand">(
-  key: Key,
-  value: string,
-): Partial<Record<Key, string>> {
+function optionalDemand(value: string): { demand?: string } {
   const normalized = value.trim();
-  return normalized ? { [key]: normalized } as Record<Key, string> : {};
+  return normalized ? { demand: normalized } : {};
 }
 
-function optionalArea(value: string): { area?: number } {
-  return value.trim() ? { area: Number(value) } : {};
-}
-
-function toIdempotencyDraft(form: LeadFormValue, privacyPolicyVersion: string) {
+function toIdempotencyDraft(
+  form: LeadFormValue,
+  privacyPolicyVersion: string,
+  linkedBudget: BudgetLeadContext | null,
+) {
   return {
     name: form.name.trim(),
     phone: form.phone.trim(),
     community: form.community.trim(),
-    area: form.area.trim(),
-    budget: form.budget.trim(),
-    start_time: form.start_time.trim(),
+    preferred_visit_date: form.preferred_visit_date,
+    preferred_visit_period: form.preferred_visit_period,
+    budget_estimate_id: linkedBudget?.estimateId ?? "",
     demand: form.demand.trim(),
     consented_at: form.consented_at,
     privacy_policy_version: privacyPolicyVersion,
   };
+}
+
+function toVisitPeriod(
+  value: LeadFormValue["preferred_visit_period"],
+): DouyinVisitPeriod | null {
+  if (value === "morning" || value === "afternoon" || value === "evening") return value;
+  return null;
+}
+
+function toSuccessRoute(
+  result: DouyinMeasurementAppointmentResult,
+  preferredVisitDate: string,
+  preferredVisitPeriod: DouyinVisitPeriod,
+  estimateLinked: boolean,
+): string {
+  return buildLeadSuccessRoute({
+    appointmentNo: result.appointment_no,
+    preferredVisitDate,
+    preferredVisitPeriod,
+    estimateLinked,
+  });
+}
+
+function isPrivacyVersionMismatch(error: unknown): error is ApiRequestError {
+  return error instanceof ApiRequestError
+    && (error.code === "DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH"
+      || error.code === "DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH");
 }
 
 function readableError(error: unknown, fallback: string): string {
