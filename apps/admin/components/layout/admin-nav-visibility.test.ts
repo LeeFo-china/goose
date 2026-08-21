@@ -91,6 +91,20 @@ describe("admin nav visibility", () => {
     expect(hasMenuItemAccess(createPlatformSuperAdminSession(), item!)).toBe(false);
   });
 
+  test("shows tenant budget pricing only with Douyin management permission", () => {
+    const item = tenantNavGroups.flatMap((group) => group.items).find(
+      (candidate) => candidate.href === "/douyin-miniapp/budget",
+    );
+
+    expect(item?.label).toBe("预算报价配置");
+    expect(item?.permission).toBe("douyin_miniapp.manage");
+    expect(hasMenuItemAccess(createSession([]), item!)).toBe(false);
+    expect(hasMenuItemAccess(createSession([{
+      code: "douyin_miniapp.manage",
+      scope: "all",
+    }]), item!)).toBe(true);
+  });
+
   test("consolidates tenant operations into one platform nav item", () => {
     const platformItems = platformNavGroups.flatMap((group) => group.items);
     const tenantManagementItem = platformItems.find(
@@ -271,10 +285,10 @@ describe("admin nav visibility", () => {
     expect(
       withManagePermission.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
-    ).toEqual(["项目实景内容"]);
+    ).toEqual(["项目实景内容", "预算报价配置"]);
     expect(
       withBothPermissions.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
-    ).toEqual(["小程序工作台", "项目实景内容"]);
+    ).toEqual(["小程序工作台", "项目实景内容", "预算报价配置"]);
   });
 });

@@ -52,7 +52,7 @@ describe("admin nav active matching", () => {
       (group) => group.label === "抖音小程序",
     )?.items ?? [];
 
-    expect(douyinItems).toHaveLength(2);
+    expect(douyinItems).toHaveLength(3);
     expect(
       isActivePath(
         "/douyin-miniapp/workspace",
@@ -69,6 +69,18 @@ describe("admin nav active matching", () => {
       isActivePath(
         "/douyin-miniapp/projects",
         douyinItems[0]?.href ?? "",
+      ),
+    ).toBe(false);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/budget",
+        douyinItems[2]?.href ?? "",
+      ),
+    ).toBe(true);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/budget",
+        douyinItems[1]?.href ?? "",
       ),
     ).toBe(false);
   });
