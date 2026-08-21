@@ -36,7 +36,7 @@ const AI_TEMPERATURE = 0.2;
 const PhonePattern =
   /(?<!\d)(?:(?:\+?86[- \u3000]?)?1[3-9]\d(?:[- \u3000]?\d{4}){2}|(?:0\d{2,3}[- \u3000]?)?\d{7,8})(?!\d)/g;
 const RoadAddressPattern = new RegExp(
-  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?![ \u3000]*(?:[VvＶｖ]|伏|版))(?:[ \u3000]*(?:号楼|号|栋|幢|单元|室|楼)|(?=[ \u3000]*(?:$|[，,。；;、!?！？])))`,
+  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?!\d)(?![ \u3000]*(?:[VvＶｖ]|伏|版))`,
   'gu',
 );
 const NonAddressRoadCompoundPattern = /(?:电路|思路)$/u;

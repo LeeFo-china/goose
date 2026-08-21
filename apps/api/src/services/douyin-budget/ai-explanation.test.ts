@@ -259,7 +259,7 @@ describe('DouyinBudgetAiExplanationService', () => {
   test('keeps renovation terms while redacting only high-confidence address forms', async () => {
     const deps = buildDependencies();
     const addresses = [
-      '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
+      '建设大道12靠近地铁', '人民路88附近量房', '中山街12需要复核', '梧桐巷8可以上门', '王府弄5安排测量',
       '幸福路3号楼', '幸福路5栋', '幸福村',
       '春风小区', '6号楼', '3栋',
       '2幢', '1单元', '门牌号66', '501室',
@@ -299,7 +299,7 @@ describe('DouyinBudgetAiExplanationService', () => {
         '装修思路 2026版；卧室电路220，装修思路2026',
       ],
       risk_factors: [
-        '人民路88', '中山街12', '建设大道12', '梧桐巷8', '王府弄5',
+        '人民路88附近量房', '中山街12需要复核', '建设大道12靠近地铁', '梧桐巷8可以上门', '王府弄5安排测量',
         '幸福大道88号3栋可能需要二次量房。',
         '春风小区2号楼需要确认电梯。',
         '固始幸福村6号楼需要确认道路。',
@@ -333,7 +333,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     const publicResponse = JSON.stringify(response);
     for (const pii of [
       '138 0013 8000', '0376-1234567', '幸福大道88号3栋',
-      '人民路88', '中山街12', '建设大道12', '梧桐巷8', '王府弄5',
+      '人民路88附近量房', '中山街12需要复核', '建设大道12靠近地铁', '梧桐巷8可以上门', '王府弄5安排测量',
       '春风小区2号楼', '固始幸福村6号楼', '王府弄5号',
       '门牌号66', '2单元501室',
     ]) {
