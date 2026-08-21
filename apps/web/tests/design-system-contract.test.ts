@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
 const root = new URL("../", import.meta.url);
@@ -7,6 +7,20 @@ function read(path: string): string {
   const file = new URL(path, root);
 
   return existsSync(file) ? readFileSync(file, "utf8") : "";
+}
+
+function readSourceTree(path: string): string {
+  const directory = new URL(path, root);
+
+  return readdirSync(directory)
+    .flatMap((entry) => {
+      const entryPath = `${path}/${entry}`;
+      const entryUrl = new URL(entryPath, root);
+
+      if (statSync(entryUrl).isDirectory()) return [readSourceTree(entryPath)];
+      return /\.(?:css|ts|tsx)$/.test(entry) ? [read(entryPath)] : [];
+    })
+    .join("\n");
 }
 
 const requiredUiFiles = [
@@ -142,6 +156,24 @@ describe("official website design system contract", () => {
     expect(css).toContain("@media (prefers-reduced-motion: reduce)");
     expect(css).not.toMatch(/--(?:cream|paper|sand|beige|bone|ivory)\b/i);
     expect(css).not.toMatch(/gradient-text|bg-clip-text|background-clip:\s*text/i);
+  });
+
+  test("uses the Haodian blue-orange brand tokens without production gradients", () => {
+    const css = read("app/globals.css");
+    const productionSource = [
+      readSourceTree("app"),
+      readSourceTree("components"),
+      readSourceTree("lib"),
+    ].join("\n");
+
+    expect(css).toContain("--primary: 0.43 0.11 242;");
+    expect(css).toContain("--accent: 0.72 0.18 45;");
+    expect(css).toContain("--primary: 0.76 0.11 235;");
+    expect(css).toContain("--accent: 0.76 0.16 45;");
+    expect(productionSource).not.toMatch(
+      /linear-gradient|radial-gradient|conic-gradient|bg-gradient/,
+    );
+    expect(productionSource).not.toContain("鹅班长");
   });
 
   test("maps Tailwind colors directly to OKLCH semantic variables", () => {

@@ -330,6 +330,11 @@ describe("official website release quality contract", () => {
   });
 
   test("gives every public landing and paginated list its own Open Graph URL", () => {
+    const sharedOpenGraph = read("lib/site-open-graph.ts");
+
+    expect(sharedOpenGraph).toContain('siteName: "好店智装云"');
+    expect(sharedOpenGraph).toContain('url: "/opengraph-image"');
+
     for (const [path, canonical] of [
       ["app/(marketing)/products/page.tsx", "/products"],
       ["app/(marketing)/solutions/page.tsx", "/solutions"],
@@ -341,6 +346,7 @@ describe("official website release quality contract", () => {
       expect(source).toContain(`url: "${canonical}"`);
       expect(source).toContain("title:");
       expect(source).toContain("description:");
+      expect(source).toContain("...sharedOpenGraphMetadata");
     }
 
     for (const path of [
@@ -351,6 +357,7 @@ describe("official website release quality contract", () => {
       expect(source).toContain("openGraph:");
       expect(source).toContain("canonical");
       expect(source).toContain("第 ${page} 页");
+      expect(source).toContain("...sharedOpenGraphMetadata");
     }
   });
 

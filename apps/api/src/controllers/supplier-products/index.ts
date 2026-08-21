@@ -11,10 +11,11 @@ import {
   SupplierSkuCreateSchema,
   SupplierSkuHttpListQuerySchema,
   SupplierSkuParamSchema,
+  SupplierSkuUnitConversionsReplaceSchema,
   SupplierSkuUpdateSchema,
 } from "@/schema/supplier-products";
 import { supplierProductsService } from "@/services/supplier-products";
-import { Get, Patch, Post } from "@/utils/decorators/route";
+import { Get, Patch, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 import type { FastifyRequest } from "fastify";
 import type { z } from "zod";
@@ -70,6 +71,7 @@ class SupplierProductsController extends TenantBaseController {
   @Patch("/supplier-products/:id")
   async updateProduct(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
     const { id } = this.parse(SupplierProductParamSchema, request.params);
     const { tenantSupplierId } = this.parse(
       SupplierScopeQuerySchema,
@@ -82,6 +84,7 @@ class SupplierProductsController extends TenantBaseController {
         tenantSupplierId,
         id,
         input,
+        key,
       ),
     );
   }
@@ -137,6 +140,7 @@ class SupplierProductsController extends TenantBaseController {
   @Patch("/supplier-products/:id/skus/:skuId")
   async updateSku(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
     const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
     const { tenantSupplierId } = this.parse(
       SupplierScopeQuerySchema,
@@ -150,6 +154,50 @@ class SupplierProductsController extends TenantBaseController {
         id,
         skuId,
         input,
+        key,
+      ),
+    );
+  }
+
+  @Put("/supplier-products/:id/skus/:skuId/unit-conversions")
+  async replaceSkuUnitConversions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireSupplierIdempotencyKey(request);
+    const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
+    const { tenantSupplierId } = this.parse(
+      SupplierScopeQuerySchema,
+      request.query,
+    );
+    const input = this.parse(
+      SupplierSkuUnitConversionsReplaceSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierProductsService.replaceSkuUnitConversions(
+        auth,
+        tenantSupplierId,
+        id,
+        skuId,
+        input,
+        key,
+      ),
+    );
+  }
+
+  @Get("/supplier-products/:id/skus/:skuId/unit-conversions")
+  async listSkuUnitConversions(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const { id, skuId } = this.parse(SupplierSkuParamSchema, request.params);
+    const { tenantSupplierId } = this.parse(
+      SupplierScopeQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierProductsService.listSkuUnitConversions(
+        auth,
+        tenantSupplierId,
+        id,
+        skuId,
       ),
     );
   }

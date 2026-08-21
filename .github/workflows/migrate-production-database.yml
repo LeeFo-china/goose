@@ -112,8 +112,19 @@ jobs:
           fi
 
           psql_prod() {
-            docker exec -i --env 'PGOPTIONS=-c standard_conforming_strings=on' supabase-db psql -U postgres -d postgres -v ON_ERROR_STOP=1 "$@"
+            docker exec -i \
+              --env 'PGOPTIONS=-c standard_conforming_strings=on' \
+              supabase-db \
+              sh -ceu \
+              'export PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"; exec psql -U supabase_admin -d postgres -v ON_ERROR_STOP=1 "$@"' \
+              sh "$@"
           }
+
+          runner_identity="$(psql_prod -Atc "select current_user || '|' || coalesce((select rolsuper::text from pg_roles where rolname = current_user), 'missing') || '|' || (to_regrole('supabase_admin') is not null)::text;")"
+          if [ "${runner_identity}" != "supabase_admin|true|true" ]; then
+            echo "error=migration_runner_invalid identity=${runner_identity}" >&2
+            exit 1
+          fi
 
           migration_table_exists="$(psql_prod -Atc "select to_regclass('supabase_migrations.schema_migrations') is not null;")"
           if [ "${migration_table_exists}" = "t" ]; then

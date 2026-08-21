@@ -156,7 +156,7 @@ describe('tenant private supplier error codes', () => {
 });
 
 describe('supplier catalog error codes', () => {
-  test('exports the stable catalog, spec, and conversion contract', () => {
+  test('exports the stable ownership, specification, and conversion contract', () => {
     expect([
       ErrorCodes.SHARED_RESOURCE_READ_ONLY,
       ErrorCodes.PRODUCT_OWNERSHIP_CONFLICT,

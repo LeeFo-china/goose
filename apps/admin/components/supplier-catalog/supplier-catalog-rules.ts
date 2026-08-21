@@ -7,6 +7,7 @@ import type {
   CategoryReturnState,
   CategoryTrailItem,
 } from "./supplier-catalog-types";
+import { CATALOG_CATEGORY_MAX_DEPTH } from "./catalog-category-depth";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,7 +37,7 @@ export function buildCatalogListPath(input: {
 }
 
 export function encodeCategoryTrail(trail: CategoryTrailItem[]) {
-  return JSON.stringify(trail.slice(0, 6));
+  return JSON.stringify(trail.slice(0, CATALOG_CATEGORY_MAX_DEPTH));
 }
 
 export function decodeCategoryTrail(
@@ -46,7 +47,7 @@ export function decodeCategoryTrail(
   try {
     const parsed: unknown = JSON.parse(value);
     if (!Array.isArray(parsed)) return [];
-    return parsed.slice(0, 6).flatMap((item) => {
+    return parsed.slice(0, CATALOG_CATEGORY_MAX_DEPTH).flatMap((item) => {
       if (
         typeof item !== "object" ||
         item === null ||

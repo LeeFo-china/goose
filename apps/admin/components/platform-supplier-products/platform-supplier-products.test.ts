@@ -1,29 +1,45 @@
-import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, test } from "bun:test";
 
-function readSource(path: string) {
-  const url = new URL(path, import.meta.url);
-  expect(existsSync(url), path).toBe(true);
-  return existsSync(url) ? readFileSync(url, "utf8") : "";
-}
+import {
+  canManagePlatformSupplierProducts,
+  platformSupplierProductScope,
+} from "./platform-supplier-product-rules";
+import {
+  buildProductListPath,
+  buildPriceListPath,
+} from "../supplier-products/supplier-product-api";
 
-describe("平台共享商品维护页", () => {
-  test("按平台商品权限挂载并查询平台共享商品", () => {
-    const page = readSource(
-      "../../app/(console)/platform/supplier-products/page.tsx",
+describe("平台共享商品管理边界", () => {
+  test("仅平台角色和专用权限可以进入维护态", () => {
+    expect(canManagePlatformSupplierProducts(
+      ["platform_admin"],
+      ["platform.supplier-product.manage"],
+    )).toBe(true);
+    expect(canManagePlatformSupplierProducts(
+      ["platform_staff"],
+      ["platform.supplier-product.manage"],
+    )).toBe(true);
+    expect(canManagePlatformSupplierProducts(
+      ["platform_admin"],
+      ["platform.catalog.manage"],
+    )).toBe(true);
+    expect(canManagePlatformSupplierProducts(
+      ["platform_staff"],
+      ["platform.catalog.manage"],
+    )).toBe(false);
+    expect(canManagePlatformSupplierProducts(
+      ["tenant_admin"],
+      ["platform.supplier-product.manage"],
+    )).toBe(false);
+  });
+
+  test("平台作用域只构建平台商品路径且拒绝价格路径", () => {
+    const scope = platformSupplierProductScope("supplier-platform-1");
+    expect(buildProductListPath(scope, 2, "瓷砖")).toBe(
+      "/platform/supplier-products?supplierId=supplier-platform-1&page=2&pageSize=20&keyword=%E7%93%B7%E7%A0%96",
     );
-    const component = readSource("./platform-supplier-products.tsx");
-    const api = readSource("./platform-supplier-products-api.ts");
-
-    expect(page).toContain('permissions.has("platform.supplier-product.manage")');
-    expect(component).toContain("loadPlatformSupplierProducts");
-    expect(api).toContain("/platform/supplier-products");
-    expect(component).toContain("不维护租户成交价");
-    expect(component).toContain("loadPlatformSuppliers");
-    expect(component).toContain("FormSelect");
-    expect(component).toContain("PlatformSupplierProductDialog");
-    expect(readSource("./platform-supplier-product-dialog.tsx")).toContain(
-      "createPlatformSupplierProduct",
+    expect(() => buildPriceListPath(scope, 1)).toThrow(
+      "平台商品页不能访问租户采购价",
     );
   });
 });

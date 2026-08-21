@@ -1,183 +1,81 @@
-import {
-  SUPPLIER_PRODUCT_STATUS_VALUES,
-  SUPPLIER_SKU_STATUS_VALUES,
-} from "@gooes/domain";
-import { z } from "zod";
-
-import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
-import { SupabaseDB } from "@/utils/supabase";
 import {
-  applyOwnership,
-  applySkuPostCreate,
-} from "./supplier-product-sku-postprocess";
-const PRODUCT_LIST_SELECT = [
-  "id",
-  "supplier_id",
-  "product_code",
-  "name",
-  "description",
-  "status",
-  "version",
-  "category:catalog_categories!category_id(id,code,name,status)",
-  "brand:catalog_brands!brand_id(id,code,name,status)",
-  "ownership_scope",
-  "owner_tenant_id",
-  "updated_at",
-].join(",");
-const PRODUCT_RECORD_SELECT = [
-  "id",
-  "supplier_id",
-  "product_code",
-  "name",
-  "category_id",
-  "brand_id",
-  "description",
-  "status",
-  "version",
-  "updated_at",
-].join(",");
-const SKU_LIST_SELECT = [
-  "id",
-  "supplier_id",
-  "supplier_product_id",
-  "sku_code",
-  "name",
-  "specification",
-  "model",
-  "purchase_unit_id",
-  "base_unit_id",
-  "base_unit_conversion::text",
-  "batch_managed",
-  "color_managed",
-  "serial_managed",
-  "status",
-  "version",
-  "purchase_unit:catalog_units!purchase_unit_id(id,code,name,symbol,status)",
-  "base_unit:catalog_units!base_unit_id(id,code,name,symbol,status)",
-  "updated_at",
-].join(",");
-const SKU_RECORD_SELECT = [
-  "id",
-  "supplier_id",
-  "supplier_product_id",
-  "sku_code",
-  "name",
-  "specification",
-  "model",
-  "purchase_unit_id",
-  "base_unit_id",
-  "base_unit_conversion::text",
-  "batch_managed",
-  "color_managed",
-  "serial_managed",
-  "status",
-  "version",
-  "updated_at",
-].join(",");
-const CatalogReferenceSchema = z.object({
-  id: z.uuid(),
-  code: z.string(),
-  name: z.string(),
-  status: z.enum(["active", "inactive"]),
-}).strict();
-const UnitReferenceSchema = CatalogReferenceSchema.extend({
-  symbol: z.string(),
-}).strict();
-const ProductSchema = z.object({
-  id: z.uuid(),
-  supplier_id: z.uuid(),
-  product_code: z.string(),
-  name: z.string(),
-  description: z.string().nullable(),
-  status: z.enum(SUPPLIER_PRODUCT_STATUS_VALUES),
-  version: z.number().int().positive(),
-  category: CatalogReferenceSchema,
-  brand: CatalogReferenceSchema,
-  ownership_scope: z.enum(["platform", "tenant"]).nullable().optional(),
-  owner_tenant_id: z.uuid().nullable().optional(),
-  updated_at: z.string(),
-}).strict();
-const ProductRecordSchema = ProductSchema.omit({
-  category: true,
-  brand: true,
-}).extend({
-  category_id: z.uuid(),
-  brand_id: z.uuid(),
-}).passthrough();
-const SkuSchema = z.object({
-  id: z.uuid(),
-  supplier_id: z.uuid(),
-  supplier_product_id: z.uuid(),
-  sku_code: z.string(),
-  name: z.string(),
-  specification: z.string().nullable(),
-  model: z.string().nullable(),
-  purchase_unit_id: z.uuid(),
-  base_unit_id: z.uuid(),
-  base_unit_conversion: z.string(),
-  batch_managed: z.boolean(),
-  color_managed: z.boolean(),
-  serial_managed: z.boolean(),
-  status: z.enum(SUPPLIER_SKU_STATUS_VALUES),
-  version: z.number().int().positive(),
-  purchase_unit: UnitReferenceSchema,
-  base_unit: UnitReferenceSchema,
-  updated_at: z.string(),
-}).strict();
-const SkuRecordSchema = SkuSchema.omit({
-  purchase_unit: true,
-  base_unit: true,
-}).passthrough();
-const ProductCommandResultSchema = z.object({
-  status: z.string(),
-  idempotent: z.boolean().optional(),
-  product: z.record(z.string(), z.unknown()).optional(),
-  sku: z.record(z.string(), z.unknown()).optional(),
-  version: z.number().int().nonnegative().optional(),
-  current_status: z.string().optional(),
-  error_code: z.string().optional(),
-  reason: z.string().optional(),
-}).passthrough();
-export type SupplierProduct = z.infer<typeof ProductSchema>;
-export type SupplierSku = z.infer<typeof SkuSchema>;
-export type SupplierProductCommandResult =
-  z.infer<typeof ProductCommandResultSchema>;
-export type SupplierProductPage = Page<SupplierProduct>;
-export type SupplierSkuPage = Page<SupplierSku>;
-export type Page<T> = {
-  list: T[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
-export type SupplierProductListInput = PageInput & {
+  listPlatformSkuUnitConversions,
+  listTenantSkuUnitConversions,
+  type PlatformSkuUnitConversionListInput,
+  type TenantSkuUnitConversionListInput,
+} from "@/repositories/supplier-product-subresources";
+import {
+  applyProductKeyword,
+  applySkuKeyword,
+  type Client,
+  normalizePage,
+  pageRange,
+  parse,
+  parseRows,
+  ProductCommandResultSchema,
+  ProductSchema,
+  PRODUCT_SELECT,
+  SkuSchema,
+  SKU_SELECT,
+  tenantReadScopeFilter,
+  toPage,
+  type Page,
+  type PageInput,
+  type SupplierProduct,
+  type SupplierProductCommandResult,
+  type SupplierSku,
+  type SupplierSkuUnitConversion,
+} from "@/repositories/supplier-products-model";
+import { Errors } from "@/errors/error-factory";
+import { SupabaseDB } from "@/utils/supabase";
+
+export type {
+  Page,
+  SupplierProduct,
+  SupplierProductCommandResult,
+  SupplierSku,
+  SupplierSkuUnitConversion,
+} from "@/repositories/supplier-products-model";
+export type {
+  PlatformSkuUnitConversionListInput,
+  TenantSkuUnitConversionListInput,
+} from "@/repositories/supplier-product-subresources";
+
+type ProductFilters = PageInput & {
   supplier_id: string;
-  tenant_id: string;
   keyword?: string;
   status?: string;
   category_id?: string;
   brand_id?: string;
 };
+
+export type SupplierProductListInput = ProductFilters & { tenant_id: string };
+export type PlatformSupplierProductListInput = ProductFilters;
 export type SupplierSkuListInput = PageInput & {
   supplier_id: string;
+  tenant_id: string;
   supplier_product_id: string;
   keyword?: string;
   status?: string;
 };
-export type SupplierCommandContext = {
+export type PlatformSupplierSkuListInput = Omit<SupplierSkuListInput, "tenant_id">;
+
+type OwnershipScope = "platform" | "tenant";
+type CommandActor = {
+  tenant_id: string | null;
+  tenant_supplier_id: string | null;
   supplier_id: string;
-  tenant_id: string;
   actor_user_id: string;
   actor_employee_id: string;
   idempotency_key: string;
-  proxy_reason: string | null;
-  ownership_scope?: "platform" | "tenant";
-  owner_tenant_id?: string | null;
 };
+
+export type SupplierCommandContext = Omit<CommandActor, "tenant_id" | "tenant_supplier_id"> & {
+  tenant_id: string;
+  tenant_supplier_id: string;
+};
+
 export type SupplierProductCreateCommand = SupplierCommandContext & {
   product_id: string;
   product_code: string;
@@ -186,102 +84,82 @@ export type SupplierProductCreateCommand = SupplierCommandContext & {
   brand_id: string;
   description?: string | null;
 };
-type PageInput = { page: number; pageSize: number };
-type Result = { data: unknown; error: unknown; count: number | null };
-type SingleResult = { data: unknown; error: unknown };
-export type Query = {
-  select: (...args: unknown[]) => Query;
-  insert: (value: Record<string, unknown> | unknown[]) => Query;
-  update: (value: Record<string, unknown>) => Query;
-  eq: (column: string, value: unknown) => Query;
-  or: (value: string) => Query;
-  order: (column: string, options: { ascending: boolean }) => Query;
-  range: (start: number, end: number) => Query;
-  maybeSingle: () => Promise<SingleResult>;
-  then: Promise<Result>["then"];
-};
-export type Client = {
-  from: (table: string) => Query;
-  rpc: (
-    name: string,
-    params: Record<string, unknown>,
-  ) => PromiseLike<SingleResult>;
-};
+
 export class SupplierProductsRepository {
   constructor(
     private readonly clientProvider: () => Client = () =>
       SupabaseDB.getAdminClient() as unknown as Client,
   ) {}
-  private get client() {
+
+  private get client(): Client {
     return this.clientProvider();
   }
-  async listProducts(input: SupplierProductListInput) {
-    const pagination = normalizePage(input);
-    let request = this.client.from("supplier_products")
-      .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
-      .or(
-        `ownership_scope.eq.platform,owner_tenant_id.eq.${input.tenant_id},ownership_scope.is.null`,
-      );
-    if (input.status) request = request.eq("status", input.status);
-    if (input.category_id) {
-      request = request.eq("category_id", input.category_id);
-    }
-    if (input.brand_id) request = request.eq("brand_id", input.brand_id);
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(...pageRange(pagination));
-    if (error) throw Errors.dbError("查询供应商商品失败", error);
-    return toPage(
-      parseRows(ProductSchema, data, "查询供应商商品失败"),
-      pagination,
-      count,
+
+  listProducts(input: SupplierProductListInput): Promise<Page<SupplierProduct>> {
+    return this.listProductsByScope(input, (request) =>
+      request.or(tenantReadScopeFilter(input.tenant_id)));
+  }
+
+  listPlatformProducts(
+    input: PlatformSupplierProductListInput,
+  ): Promise<Page<SupplierProduct>> {
+    return this.listProductsByScope(input, platformScope);
+  }
+
+  findProduct(
+    supplierId: string,
+    productId: string,
+    tenantId: string,
+  ): Promise<SupplierProduct | null> {
+    return this.findProductByScope(
+      supplierId,
+      productId,
+      (request) => request.or(tenantReadScopeFilter(tenantId)),
     );
   }
-  async listPlatformProducts(input: SupplierProductListInput) {
-    const pagination = normalizePage(input);
-    let request = this.client.from("supplier_products")
-      .select(PRODUCT_LIST_SELECT, { count: "exact" })
-      .eq("supplier_id", input.supplier_id)
-      .eq("ownership_scope", "platform");
-    if (input.status) request = request.eq("status", input.status);
-    if (input.category_id) {
-      request = request.eq("category_id", input.category_id);
-    }
-    if (input.brand_id) request = request.eq("brand_id", input.brand_id);
-    request = applyKeyword(request, input.keyword);
-    const { data, error, count } = await request
-      .order("updated_at", { ascending: false })
-      .order("id", { ascending: false })
-      .range(...pageRange(pagination));
-    if (error) throw Errors.dbError("查询平台供应商商品失败", error);
-    return toPage(
-      parseRows(ProductSchema, data, "查询平台供应商商品失败"),
-      pagination,
-      count,
-    );
+
+  findPlatformProduct(
+    supplierId: string,
+    productId: string,
+  ): Promise<SupplierProduct | null> {
+    return this.findProductByScope(supplierId, productId, platformScope);
   }
-  async findProduct(supplierId: string, productId: string) {
-    const { data, error } = await this.client.from("supplier_products")
-      .select(PRODUCT_LIST_SELECT)
-      .eq("supplier_id", supplierId)
-      .eq("id", productId)
-      .maybeSingle();
-    if (error) throw Errors.dbError("查询供应商商品失败", error);
-    return data === null
-      ? null
-      : parse(ProductSchema, data, "查询供应商商品失败");
+
+  async listSkus(input: SupplierSkuListInput): Promise<Page<SupplierSku>> {
+    return this.listSkusByScope(input, (request) =>
+      request.or(tenantReadScopeFilter(input.tenant_id)));
   }
-  async listSkus(input: SupplierSkuListInput) {
+
+  listPlatformSkus(
+    input: PlatformSupplierSkuListInput,
+  ): Promise<Page<SupplierSku>> {
+    return this.listSkusByScope(input, platformScope);
+  }
+
+  listSkuUnitConversions(
+    input: TenantSkuUnitConversionListInput,
+  ): Promise<SupplierSkuUnitConversion[] | null> {
+    return listTenantSkuUnitConversions(this.client, input);
+  }
+
+  listPlatformSkuUnitConversions(
+    input: PlatformSkuUnitConversionListInput,
+  ): Promise<SupplierSkuUnitConversion[] | null> {
+    return listPlatformSkuUnitConversions(this.client, input);
+  }
+
+  private async listSkusByScope(
+    input: PlatformSupplierSkuListInput,
+    applyScope: (request: import("./supplier-products-model").Query) =>
+      import("./supplier-products-model").Query,
+  ): Promise<Page<SupplierSku>> {
     const pagination = normalizePage(input);
-    let request = this.client.from("supplier_skus")
-      .select(SKU_LIST_SELECT, { count: "exact" })
+    let request = applyScope(this.client.from("supplier_skus")
+      .select(SKU_SELECT, { count: "exact" })
       .eq("supplier_id", input.supplier_id)
-      .eq("supplier_product_id", input.supplier_product_id);
+      .eq("supplier_product_id", input.supplier_product_id));
     if (input.status) request = request.eq("status", input.status);
-    request = applyKeyword(request, input.keyword);
+    request = applySkuKeyword(request, input.keyword);
     const { data, error, count } = await request
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
@@ -293,188 +171,315 @@ export class SupplierProductsRepository {
       count,
     );
   }
-  async createProduct(input: SupplierProductCreateCommand) {
-    const result = await this.command("create_supplier_product", {
-      p_product_id: input.product_id,
-      p_tenant_id: input.tenant_id,
-      p_supplier_id: input.supplier_id,
-      p_product_code: input.product_code,
-      p_name: input.name,
-      p_category_id: input.category_id,
-      p_brand_id: input.brand_id,
-      p_description: input.description ?? null,
-      ...commandParams(input),
-    }, "创建供应商商品失败");
-    await applyOwnership(
-      this.client,
-      "supplier_products",
-      input.product_id,
-      input.ownership_scope,
-      input.owner_tenant_id,
-    );
-    return result;
+
+  createProduct(input: SupplierProductCreateCommand) {
+    const {
+      product_code,
+      name,
+      category_id,
+      brand_id,
+      description,
+      ...context
+    } = input;
+    return this.productCommand("tenant", "create", context, null, {
+      product_code,
+      name,
+      category_id,
+      brand_id,
+      description: description ?? null,
+    });
   }
-  async createSku(input: SupplierCommandContext & Record<string, unknown>) {
-    const result = await this.command(
-      "create_supplier_sku",
-      rpcParams(input),
-      "创建供应商 SKU 失败",
-    );
-    await applySkuPostCreate(this.client, input);
-    return result;
-  }
-  mutateProduct(input: SupplierCommandContext & Record<string, unknown>) {
-    return this.command(
-      "mutate_supplier_product",
-      rpcParams(input),
-      "变更供应商商品状态失败",
+
+  createPlatformProduct(input: Record<string, unknown> & CommandActor & {
+    product_id: string;
+  }) {
+    return this.productCommand(
+      "platform",
+      "create",
+      input,
+      null,
+      commandPayload(input, ["product_id"]),
     );
   }
-  mutateSku(input: SupplierCommandContext & Record<string, unknown>) {
-    return this.command(
-      "mutate_supplier_sku_for_product",
-      rpcParams(input),
-      "变更供应商 SKU 状态失败",
-    );
-  }
-  async updateProduct(input: Record<string, unknown> & {
-    supplier_id: string;
+
+  updatePlatformProduct(input: Record<string, unknown> & CommandActor & {
     product_id: string;
     expected_version: number;
   }) {
-    const {
-      supplier_id,
-      product_id,
-      expected_version,
-      ...fields
-    } = input;
-    const { data, error } = await this.client.from("supplier_products")
-      .update({ ...fields, version: expected_version + 1 })
-      .eq("supplier_id", supplier_id)
-      .eq("id", product_id)
-      .eq("version", expected_version)
-      .select(PRODUCT_RECORD_SELECT)
-      .maybeSingle();
-    if (error) {
-      throwSupplierCommandDatabaseError(error, "更新供应商商品失败");
-    }
-    if (data === null) {
-      throw versionConflict(
-        "供应商商品版本已变化",
-        "SUPPLIER_PRODUCT_VERSION_CONFLICT",
-      );
-    }
-    return parse(ProductRecordSchema, data, "更新供应商商品失败");
+    return this.productCommand(
+      "platform",
+      "update",
+      input,
+      input.expected_version,
+      commandPayload(input, ["product_id"]),
+    );
   }
-  async updateSku(input: Record<string, unknown> & {
-    supplier_id: string;
+
+  mutatePlatformProduct(input: Record<string, unknown> & CommandActor & {
+    product_id: string;
+    action: "activate" | "deactivate";
+    expected_version: number;
+  }) {
+    return this.productCommand(
+      "platform",
+      input.action,
+      input,
+      input.expected_version,
+      {},
+    );
+  }
+
+  updateProduct(input: Record<string, unknown> & SupplierCommandContext & {
+    product_id: string;
+    expected_version: number;
+  }) {
+    const { expected_version, ...command } = input;
+    return this.productCommand(
+      "tenant",
+      "update",
+      command,
+      expected_version,
+      commandPayload(command, ["product_id"]),
+    );
+  }
+
+  mutateProduct(input: Record<string, unknown> & SupplierCommandContext & {
+    product_id: string;
+    action: "activate" | "deactivate";
+    expected_version: number;
+  }) {
+    return this.productCommand(
+      "tenant",
+      input.action,
+      input,
+      input.expected_version,
+      {},
+    );
+  }
+
+  createSku(input: Record<string, unknown> & SupplierCommandContext) {
+    return this.skuCommand(
+      "tenant",
+      "create",
+      input,
+      null,
+      commandPayload(input, ["product_id", "sku_id"]),
+    );
+  }
+
+  createPlatformSku(input: Record<string, unknown> & CommandActor) {
+    return this.skuCommand(
+      "platform",
+      "create",
+      input,
+      null,
+      commandPayload(input, ["product_id", "sku_id"]),
+    );
+  }
+
+  updatePlatformSku(input: Record<string, unknown> & CommandActor & {
     supplier_product_id: string;
     sku_id: string;
     expected_version: number;
   }) {
-    const {
-      supplier_id,
-      supplier_product_id,
-      sku_id,
-      expected_version,
-      ...fields
-    } = input;
-    const { data, error } = await this.client.from("supplier_skus")
-      .update({ ...fields, version: expected_version + 1 })
-      .eq("supplier_id", supplier_id)
-      .eq("supplier_product_id", supplier_product_id)
-      .eq("id", sku_id)
-      .eq("version", expected_version)
-      .select(SKU_RECORD_SELECT)
-      .maybeSingle();
-    if (error) {
-      throwSupplierCommandDatabaseError(error, "更新供应商 SKU 失败");
-    }
-    if (data === null) {
-      throw versionConflict(
-        "供应商 SKU 版本已变化",
-        "SUPPLIER_SKU_VERSION_CONFLICT",
-      );
-    }
-    return parse(SkuRecordSchema, data, "更新供应商 SKU 失败");
+    return this.skuCommand(
+      "platform",
+      "update",
+      input,
+      input.expected_version,
+      commandPayload(input, ["supplier_product_id", "sku_id"]),
+    );
   }
+
+  mutatePlatformSku(input: Record<string, unknown> & CommandActor & {
+    product_id: string;
+    sku_id: string;
+    action: "activate" | "deactivate";
+    expected_version: number;
+  }) {
+    return this.skuCommand(
+      "platform",
+      input.action,
+      input,
+      input.expected_version,
+      {},
+    );
+  }
+
+  updateSku(input: Record<string, unknown> & SupplierCommandContext & {
+    supplier_product_id: string;
+    sku_id: string;
+    expected_version: number;
+  }) {
+    return this.skuCommand(
+      "tenant",
+      "update",
+      input,
+      input.expected_version,
+      commandPayload(input, ["supplier_product_id", "sku_id"]),
+    );
+  }
+
+  mutateSku(input: Record<string, unknown> & SupplierCommandContext & {
+    product_id: string;
+    sku_id: string;
+    action: "activate" | "deactivate";
+    expected_version: number;
+  }) {
+    return this.skuCommand(
+      "tenant",
+      input.action,
+      input,
+      input.expected_version,
+      {},
+    );
+  }
+
+  replaceSkuUnitConversions(input: Record<string, unknown> & CommandActor & {
+    ownership_scope: OwnershipScope;
+    product_id: string;
+    sku_id: string;
+    expected_version: number;
+    purchase_unit_id: string;
+    base_unit_id: string;
+    conversions: unknown[];
+  }) {
+    return this.command("replace_supplier_sku_unit_conversions_v3", {
+      p_ownership_scope: input.ownership_scope,
+      p_tenant_id: input.tenant_id,
+      p_tenant_supplier_id: input.tenant_supplier_id,
+      p_supplier_id: input.supplier_id,
+      p_supplier_product_id: input.product_id,
+      p_supplier_sku_id: input.sku_id,
+      p_expected_sku_version: input.expected_version,
+      p_purchase_unit_id: input.purchase_unit_id,
+      p_base_unit_id: input.base_unit_id,
+      p_edges: input.conversions,
+      p_actor_user_id: input.actor_user_id,
+      p_actor_employee_id: input.actor_employee_id,
+      p_idempotency_key: input.idempotency_key,
+    }, "更新供应商 SKU 单位换算失败");
+  }
+
+  private async listProductsByScope(
+    input: ProductFilters,
+    applyScope: (request: import("./supplier-products-model").Query) =>
+      import("./supplier-products-model").Query,
+  ): Promise<Page<SupplierProduct>> {
+    const pagination = normalizePage(input);
+    let request = applyScope(this.client.from("supplier_products")
+      .select(PRODUCT_SELECT, { count: "exact" })
+      .eq("supplier_id", input.supplier_id));
+    if (input.status) request = request.eq("status", input.status);
+    if (input.category_id) request = request.eq("category_id", input.category_id);
+    if (input.brand_id) request = request.eq("brand_id", input.brand_id);
+    request = applyProductKeyword(request, input.keyword);
+    const { data, error, count } = await request
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(...pageRange(pagination));
+    if (error) throw Errors.dbError("查询供应商商品失败", error);
+    return toPage(
+      parseRows(ProductSchema, data, "查询供应商商品失败"),
+      pagination,
+      count,
+    );
+  }
+
+  private async findProductByScope(
+    supplierId: string,
+    productId: string,
+    applyScope: (request: import("./supplier-products-model").Query) =>
+      import("./supplier-products-model").Query,
+  ): Promise<SupplierProduct | null> {
+    const request = applyScope(this.client.from("supplier_products")
+      .select(PRODUCT_SELECT)
+      .eq("supplier_id", supplierId)
+      .eq("id", productId));
+    const { data, error } = await request.maybeSingle();
+    if (error) throw Errors.dbError("查询供应商商品失败", error);
+    return data === null ? null : parse(ProductSchema, data, "查询供应商商品失败");
+  }
+
+  private productCommand(
+    scope: OwnershipScope,
+    action: string,
+    input: Record<string, unknown> & CommandActor & { product_id: unknown },
+    expectedVersion: number | null,
+    payload: Record<string, unknown>,
+  ) {
+    return this.command("command_supplier_product_v2", {
+      ...baseCommandParams(scope, input),
+      p_action: action,
+      p_product_id: input.product_id,
+      p_expected_version: expectedVersion,
+      p_payload: payload,
+    }, "写入供应商商品失败");
+  }
+
+  private skuCommand(
+    scope: OwnershipScope,
+    action: string,
+    input: Record<string, unknown> & CommandActor,
+    expectedVersion: number | null,
+    payload: Record<string, unknown>,
+  ) {
+    return this.command("command_supplier_sku_v2", {
+      ...baseCommandParams(scope, input),
+      p_action: action,
+      p_supplier_product_id:
+        input.supplier_product_id ?? input.product_id,
+      p_sku_id: input.sku_id,
+      p_expected_version: expectedVersion,
+      p_payload: payload,
+    }, "写入供应商 SKU 失败");
+  }
+
   private async command(
     name: string,
     params: Record<string, unknown>,
     message: string,
-  ) {
+  ): Promise<SupplierProductCommandResult> {
     const { data, error } = await this.client.rpc(name, params);
     if (error) throwSupplierCommandDatabaseError(error, message);
     return parse(ProductCommandResultSchema, data, message);
   }
 }
-function commandParams(input: SupplierCommandContext) {
+
+function platformScope(request: import("./supplier-products-model").Query) {
+  return request.eq("ownership_scope", "platform").is("owner_tenant_id", null);
+}
+
+function baseCommandParams(scope: OwnershipScope, input: CommandActor) {
   return {
+    p_ownership_scope: scope,
+    p_tenant_id: input.tenant_id,
+    p_tenant_supplier_id: input.tenant_supplier_id,
+    p_supplier_id: input.supplier_id,
     p_actor_user_id: input.actor_user_id,
     p_actor_employee_id: input.actor_employee_id,
     p_idempotency_key: input.idempotency_key,
-    p_proxy_reason: input.proxy_reason,
   };
 }
-function rpcParams(input: Record<string, unknown>) {
-  return Object.fromEntries(
-    Object.entries(input)
-      .filter(([key]) =>
-        key !== "ownership_scope"
-        && key !== "owner_tenant_id"
-        && key !== "spec_values"
-        && key !== "unit_conversions"
-      )
-      .map(([key, value]) => [
-        key.startsWith("p_") ? key : `p_${key}`,
-        value,
-      ]),
-  );
+
+const COMMAND_CONTEXT_KEYS = new Set([
+  "tenant_id",
+  "tenant_supplier_id",
+  "supplier_id",
+  "actor_user_id",
+  "actor_employee_id",
+  "idempotency_key",
+  "expected_version",
+  "action",
+]);
+
+function commandPayload(
+  input: Record<string, unknown>,
+  resourceKeys: string[],
+): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(input).filter(([key]) =>
+    !COMMAND_CONTEXT_KEYS.has(key) && !resourceKeys.includes(key)
+  ));
 }
-function normalizePage(input: PageInput) {
-  return {
-    page: input.page > 0 ? input.page : 1,
-    pageSize: Math.min(Math.max(input.pageSize, 1), 100),
-  };
-}
-function pageRange(input: PageInput): [number, number] {
-  const start = (input.page - 1) * input.pageSize;
-  return [start, start + input.pageSize - 1];
-}
-function applyKeyword(request: Query, keyword?: string) {
-  const safe = keyword?.trim().replace(/[%_,().]/g, "");
-  return safe
-    ? request.or(`product_code.ilike.%${safe}%,name.ilike.%${safe}%`)
-    : request;
-}
-function toPage<T>(
-  list: T[],
-  pagination: PageInput,
-  count: number | null,
-): Page<T> {
-  const total = count ?? 0;
-  return {
-    list,
-    pagination: {
-      ...pagination,
-      total,
-      totalPages: total ? Math.ceil(total / pagination.pageSize) : 0,
-    },
-  };
-}
-function parseRows<T>(schema: z.ZodType<T>, data: unknown, message: string) {
-  return parse(z.array(schema), data ?? [], message);
-}
-function parse<T>(schema: z.ZodType<T>, data: unknown, message: string): T {
-  const result = schema.safeParse(data);
-  if (result.success) return result.data;
-  throw Errors.dbError(message, result.error.issues);
-}
-function versionConflict(message: string, code: string) {
-  return Errors.business(
-    409,
-    message,
-    code,
-  );
-}
+
 export const supplierProductsRepository = new SupplierProductsRepository();

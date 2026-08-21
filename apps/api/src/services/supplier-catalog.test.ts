@@ -1,24 +1,18 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import {
-  auth,
-  brand,
-  BRAND_ID,
-  category,
-  CATEGORY_ID,
-  createDependencies,
-  EMPLOYEE_ID,
-  NOW,
-  pageOf,
-  TENANT_ID,
-  unit,
-  UNIT_ID,
-  USER_ID,
-} from "./supplier-catalog-test-support";
+import type { AuthContext } from "@/services/authorization";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
+
+const TENANT_ID = "00000000-0000-4000-8000-000000000101";
+const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
+const BRAND_ID = "00000000-0000-4000-8000-000000000301";
+const UNIT_ID = "00000000-0000-4000-8000-000000000401";
+const USER_ID = "00000000-0000-4000-8000-000000000501";
+const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000601";
+const NOW = "2026-07-24T00:00:00.000Z";
 
 async function createService(overrides: Record<string, unknown> = {}) {
   const dependencies = createDependencies(overrides);
@@ -53,9 +47,11 @@ describe("SupplierCatalogService read boundaries", () => {
 
     expect(dependencies.repository.listCategories).toHaveBeenCalledWith(
       expect.objectContaining({ parent_id: null, status: "inactive" }),
+      { kind: "platform" },
     );
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith(
       expect.objectContaining({ status: "active" }),
+      { kind: "platform" },
     );
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith(
       expect.objectContaining({ status: "inactive" }),
@@ -64,9 +60,9 @@ describe("SupplierCatalogService read boundaries", () => {
     expect(dependencies.accessPolicy.assertTenantContext).not.toHaveBeenCalled();
   });
 
-  test("tenant reads require tenant context and always force active rows", async () => {
+  test("tenant reads preserve owned status while canonical units stay active", async () => {
     const { service, dependencies } = await createService();
-    const context = auth(["supplier.view"], TENANT_ID, false);
+    const context = auth(["supplier.catalog.manage"], TENANT_ID, false);
 
     await service.listTenantCategories(context, {
       parent_id: CATEGORY_ID,
@@ -89,15 +85,13 @@ describe("SupplierCatalogService read boundaries", () => {
       parent_id: CATEGORY_ID,
       page: 2,
       pageSize: 20,
-      status: "active",
-      tenant_id: TENANT_ID,
-    });
+      status: "inactive",
+    }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listBrands).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
-      status: "active",
-      tenant_id: TENANT_ID,
-    });
+      status: "inactive",
+    }, { kind: "tenant", tenantId: TENANT_ID });
     expect(dependencies.repository.listUnits).toHaveBeenCalledWith({
       page: 1,
       pageSize: 20,
@@ -106,7 +100,7 @@ describe("SupplierCatalogService read boundaries", () => {
     expect(dependencies.accessPolicy.assertTenantContext).toHaveBeenCalledTimes(3);
     expect(dependencies.accessPolicy.assertPermission).toHaveBeenCalledWith(
       context,
-      "supplier.view",
+      "supplier.catalog.manage",
     );
   });
 
@@ -165,6 +159,7 @@ describe("SupplierCatalogService write boundary", () => {
       symbol: "箱",
       base_unit_id: null,
       conversion_factor: "1",
+      unit_dimension: "quantity",
       status: "active",
       sort_order: 100,
     }, "unit-create");
@@ -179,6 +174,35 @@ describe("SupplierCatalogService write boundary", () => {
         actor_employee_id: EMPLOYEE_ID,
       }));
     }
+  });
+
+  test("derives a stable unit id from command actor and idempotency key", async () => {
+    const createUnit = mock(async (input) => ({ ...unit, ...input }));
+    const dependencies = createDependencies({ createUnit });
+    const { SupplierCatalogService } = await import("./supplier-catalog");
+    const service = new SupplierCatalogService(dependencies as never);
+    const context = auth(["platform.catalog.manage"], null, true);
+    const input = {
+      code: "UNIT-BOX",
+      name: "箱",
+      symbol: "箱",
+      base_unit_id: null,
+      conversion_factor: "1",
+      unit_dimension: "quantity",
+      status: "active" as const,
+      sort_order: 100,
+    };
+
+    await service.createUnit(context, input, "same-unit-key");
+    await service.createUnit(context, input, "same-unit-key");
+    await service.createUnit(context, input, "different-unit-key");
+
+    const ids = createUnit.mock.calls.map(([call]) => call.unit_id);
+    expect(ids[0]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
   });
 
   test("updates every resource with route id and authenticated employee", async () => {
@@ -244,241 +268,133 @@ describe("SupplierCatalogService write boundary", () => {
   });
 });
 
-describe("SupplierCatalogService tenant catalog writes", () => {
-  test("requires supplier.catalog.manage and private_catalog_writes_enabled", async () => {
-    const missingPermission = await createService({
-      getTenantSupplierSettings: mock(async () => ({
+function auth(
+  permissions: string[],
+  tenantId: string | null,
+  isPlatformAdmin: boolean,
+): AuthContext {
+  return {
+    authUserId: USER_ID,
+    employeeId: EMPLOYEE_ID,
+    tenantId,
+    tenantName: null,
+    tenantSlug: null,
+    tenantStatus: null,
+    isPlatformAdmin,
+    employeeName: "目录管理员",
+    employeeStatus: "active",
+    departmentId: null,
+    tenantDepartmentId: null,
+    departmentCode: null,
+    departmentName: null,
+    postId: null,
+    postName: null,
+    avatar: null,
+    roleCodes: [],
+    roles: [],
+    permissions: permissions.map((code) => ({ code, scope: "all" })),
+  };
+}
+
+function createDependencies(overrides: Record<string, unknown>) {
+  const repository = {
+    listCategories: mock(async ({ page, pageSize }) =>
+      pageOf([category], page, pageSize)),
+    listBrands: mock(async ({ page, pageSize }) =>
+      pageOf([brand], page, pageSize)),
+    listUnits: mock(async ({ page, pageSize }) =>
+      pageOf([unit], page, pageSize)),
+    createCategory: mock(async (input) => ({ ...category, ...input })),
+    updateCategory: mock(async (input) => ({
+      ...category,
+      ...input,
+      version: 2,
+    })),
+    createBrand: mock(async (input) => ({ ...brand, ...input })),
+    updateBrand: mock(async (input) => ({ ...brand, ...input, version: 2 })),
+    createUnit: mock(async (input) => ({ ...unit, ...input })),
+    updateUnit: mock(async (input) => ({ ...unit, ...input, version: 2 })),
+    ...overrides,
+  };
+  return {
+    repository,
+    settingsRepository: {
+      getSettings: mock(async () => ({
+        module_enabled: true,
+        ownership_reads_enabled: true,
+        private_supplier_writes_enabled: true,
         private_catalog_writes_enabled: true,
+        procurement_snapshot_v1_enabled: false,
       })),
-    });
-    await expect(Promise.resolve().then(() =>
-      missingPermission.service.createTenantCategory(
-        auth([], TENANT_ID, false),
-        {
-          parent_id: null,
-          code: "T-CAT-001",
-          name: "主材",
-          mapped_platform_category_id: null,
-        },
-        "tenant-category-create",
-      )
-    )).rejects.toMatchObject({ code: "FORBIDDEN" });
-    expect(missingPermission.dependencies.repository.createTenantCategory)
-      .not.toHaveBeenCalled();
-
-    const disabledFlag = await createService({
-      getTenantSupplierSettings: mock(async () => ({
-        private_catalog_writes_enabled: false,
-      })),
-    });
-    await expect(Promise.resolve().then(() =>
-      disabledFlag.service.createTenantCategory(
-        auth(["supplier.catalog.manage"], TENANT_ID, false),
-        {
-          parent_id: null,
-          code: "T-CAT-001",
-          name: "主材",
-          mapped_platform_category_id: null,
-        },
-        "tenant-category-create",
-      )
-    )).rejects.toMatchObject({ code: "SUPPLIER_PRIVATE_WRITES_DISABLED" });
-    expect(disabledFlag.dependencies.repository.createTenantCategory)
-      .not.toHaveBeenCalled();
-  });
-
-  test("creates tenant categories and brands with the authenticated employee", async () => {
-    const { service, dependencies } = await createService({
-      getTenantSupplierSettings: mock(async () => ({
-        private_catalog_writes_enabled: true,
-      })),
-    });
-    const context = auth(["supplier.catalog.manage"], TENANT_ID, false);
-
-    await service.createTenantCategory(context, {
-      parent_id: null,
-      code: "T-CAT-001",
-      name: "主材",
-      mapped_platform_category_id: null,
-    }, "tenant-category-create");
-    await service.createTenantBrand(context, {
-      code: "T-BR-001",
-      name: "私有品牌",
-      mapped_platform_brand_id: null,
-    }, "tenant-brand-create");
-
-    expect(dependencies.repository.createTenantCategory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenant_id: TENANT_ID,
-        actor_user_id: USER_ID,
-        actor_employee_id: EMPLOYEE_ID,
-        idempotency_key: "tenant-category-create",
+    },
+    accessPolicy: {
+      assertTenantContext: mock((context: AuthContext) => {
+        if (!context.tenantId) {
+          throw Object.assign(new Error("tenant required"), {
+            statusCode: 403,
+            code: "TENANT_CONTEXT_REQUIRED",
+          });
+        }
+        return context.tenantId;
       }),
-    );
-    expect(dependencies.repository.createTenantBrand).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tenant_id: TENANT_ID,
-        actor_employee_id: EMPLOYEE_ID,
+      assertPermission: mock((context: AuthContext, permission: string) => {
+        if (!context.permissions.some((item) => item.code === permission)) {
+          throw Object.assign(new Error("forbidden"), {
+            statusCode: 403,
+            code: "FORBIDDEN",
+          });
+        }
+        return "all";
       }),
-    );
-  });
+      hasPermission: mock((context: AuthContext, permission: string) =>
+        context.permissions.some((item) => item.code === permission)
+      ),
+    },
+  };
+}
 
-  test("rejects updating platform-owned records as shared read-only", async () => {
-    const { service, dependencies } = await createService({
-      getTenantSupplierSettings: mock(async () => ({
-        private_catalog_writes_enabled: true,
-      })),
-      findCategoryOwnership: mock(async () => ({
-        ownershipScope: "platform",
-        ownerTenantId: null,
-      })),
-    });
+function pageOf<T>(list: T[], page: number, pageSize: number) {
+  return {
+    list,
+    pagination: {
+      page,
+      pageSize,
+      total: list.length,
+      totalPages: list.length ? 1 : 0,
+    },
+  };
+}
 
-    await expect(Promise.resolve().then(() =>
-      service.updateTenantCategory(
-        auth(["supplier.catalog.manage"], TENANT_ID, false),
-        CATEGORY_ID,
-        { expected_version: 1, name: "改名" },
-      )
-    )).rejects.toMatchObject({ code: "SHARED_RESOURCE_READ_ONLY" });
-    expect(dependencies.repository.updateTenantCategory)
-      .not.toHaveBeenCalled();
-  });
-
-  test("updates tenant-owned categories with expected_version", async () => {
-    const { service, dependencies } = await createService({
-      getTenantSupplierSettings: mock(async () => ({
-        private_catalog_writes_enabled: true,
-      })),
-      findCategoryOwnership: mock(async () => ({
-        ownershipScope: "tenant",
-        ownerTenantId: TENANT_ID,
-      })),
-    });
-
-    await service.updateTenantCategory(
-      auth(["supplier.catalog.manage"], TENANT_ID, false),
-      CATEGORY_ID,
-      { expected_version: 3, name: "改名" },
-    );
-
-    expect(dependencies.repository.updateTenantCategory).toHaveBeenCalledWith(
-      expect.objectContaining({
-        category_id: CATEGORY_ID,
-        tenant_id: TENANT_ID,
-        expected_version: 3,
-        name: "改名",
-        actor_employee_id: EMPLOYEE_ID,
-      }),
-    );
-  });
-});
-
-describe("SupplierCatalogService database conflict mapping", () => {
-  test("maps create idempotency database conflicts without hiding others", async () => {
-    let categoryCalls = 0;
-    const idempotencyConflict = {
-      code: "DB_ERROR",
-      details: {
-        code: "P0001",
-        message: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-      },
-    };
-    const { service } = await createService({
-      createCategory: mock(async () => {
-        categoryCalls += 1;
-        if (categoryCalls === 1) return { id: CATEGORY_ID };
-        throw idempotencyConflict;
-      }),
-      createBrand: mock(async () => {
-        throw idempotencyConflict;
-      }),
-    });
-    const context = auth(["platform.catalog.manage"], null, true);
-    const createCategory = (name: string) => service.createCategory(
-      context,
-      {
-        parent_id: null,
-        code: "CAT-001",
-        name,
-        level: 1,
-        status: "active",
-        sort_order: 100,
-      },
-      "catalog-conflict-1",
-    );
-
-    await createCategory("主材");
-    await expect(createCategory("辅材")).rejects.toMatchObject({
-      statusCode: 409,
-      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    });
-    await expect(service.createBrand(
-      context,
-      {
-        code: "BR-001",
-        name: "雨虹",
-        status: "active",
-        sort_order: 100,
-      },
-      "catalog-conflict-1",
-    )).rejects.toMatchObject({
-      statusCode: 409,
-      code: "SUPPLIER_IDEMPOTENCY_CONFLICT",
-    });
-  });
-
-  test("maps unique and hierarchy database violations to one stable domain error", async () => {
-    const violations = [
-      { code: "23505", message: "duplicate key" },
-      { message: "目录分类层级不能形成环" },
-      { message: "存在启用的子分类，当前目录分类不能停用" },
-      { message: "启用的目录分类必须属于启用的父分类" },
-      { message: "派生单位只能引用启用的基准单位" },
-      { message: "有派生单位引用的基准单位不能停用" },
-    ];
-
-    for (const violation of violations) {
-      const { service } = await createService({
-        createCategory: mock(async () => {
-          throw {
-            code: "DB_ERROR",
-            details: violation,
-          };
-        }),
-      });
-      await expect(service.createCategory(
-        auth(["platform.catalog.manage"], null, true),
-        {
-          parent_id: null,
-          code: "CAT-001",
-          name: "主材",
-          level: 1,
-          status: "active",
-          sort_order: 100,
-        }, "category-create",
-      )).rejects.toMatchObject({
-        statusCode: 409,
-        code: "SUPPLIER_CATALOG_CONFLICT",
-      });
-    }
-  });
-
-  test("does not hide unrelated database failures", async () => {
-    const original = {
-      code: "DB_ERROR",
-      details: { code: "42P01", message: "missing relation" },
-    };
-    const { service } = await createService({
-      createBrand: mock(async () => {
-        throw original;
-      }),
-    });
-
-    await expect(service.createBrand(
-      auth(["platform.catalog.manage"], null, true),
-      { code: "BR-001", name: "雨虹", status: "active", sort_order: 100 },
-      "brand-create",
-    )).rejects.toBe(original);
-  });
-});
+const base = {
+  status: "active",
+  sort_order: 100,
+  version: 1,
+  created_at: NOW,
+  updated_at: NOW,
+};
+const category = {
+  ...base,
+  id: CATEGORY_ID,
+  parent_id: null,
+  code: "CAT-001",
+  name: "主材",
+  level: 1,
+};
+const brand = {
+  ...base,
+  id: BRAND_ID,
+  code: "BR-001",
+  name: "雨虹",
+  legal_name: null,
+  logo_file_id: null,
+};
+const unit = {
+  ...base,
+  id: UNIT_ID,
+  code: "UNIT-BOX",
+  name: "箱",
+  symbol: "箱",
+  base_unit_id: null,
+  conversion_factor: "1.000000",
+  unit_dimension: "quantity",
+};

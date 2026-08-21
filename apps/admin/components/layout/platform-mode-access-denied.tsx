@@ -14,9 +14,9 @@ import { isPlatformOnlySession } from "@/lib/session-mode";
 export function PlatformModeAccessDenied() {
   return (
     <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center">
-      <Card className="w-full max-w-2xl border-black/10 bg-white shadow-none">
+      <Card className="w-full max-w-2xl border-border bg-card shadow-none">
         <CardHeader className="gap-4">
-          <div className="flex size-12 items-center justify-center rounded-lg bg-[#141414] text-[#ffd449]">
+          <div className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <ShieldAlert className="size-6" />
           </div>
           <div>
@@ -27,7 +27,7 @@ export function PlatformModeAccessDenied() {
           </div>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <Button asChild className="bg-[#141414] text-[#ffd449] hover:bg-[#141414]/90">
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Link href="/dashboard">
               <Building2 data-icon="inline-start" />
               返回平台工作台
@@ -46,4 +46,3 @@ export async function getTenantBusinessAccessDenied() {
   const session = await getAdminSession();
   return isPlatformOnlySession(session) ? <PlatformModeAccessDenied /> : null;
 }
-

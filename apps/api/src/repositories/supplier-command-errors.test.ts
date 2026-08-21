@@ -10,11 +10,16 @@ import {
 describe("mapSupplierCommandDatabaseError", () => {
   test.each([
     ["SUPPLIER_IDEMPOTENCY_CONFLICT", 409],
+    ["PRODUCT_OWNERSHIP_CONFLICT", 409],
+    ["SPEC_TEMPLATE_VALIDATION_ERROR", 409],
+    ["UNIT_CONVERSION_INVALID", 400],
     ["SUPPLIER_PRODUCT_NOT_FOUND", 404],
     ["SUPPLIER_PROXY_ACTOR_INVALID", 403],
     ["SUPPLIER_ORDER_NOT_ELIGIBLE", 409],
     ["SUPPLIER_PRICE_LIST_INVALID_ACTION", 409],
     ["SUPPLIER_PURCHASE_ORDER_FULFILLMENT_STARTED", 409],
+    ["PRODUCT_CATEGORY_CHANGE_REQUIRES_SKU_MIGRATION", 409],
+    ["PLATFORM_PERMISSION_REQUIRED", 403],
   ])("maps %s to a business response", (code, statusCode) => {
     expect(mapSupplierCommandDatabaseError({
       code: "P0001",
@@ -22,6 +27,59 @@ describe("mapSupplierCommandDatabaseError", () => {
       details: null,
     })).toMatchObject({ code, statusCode });
   });
+
+  test("normalizes immutable product ownership to the public conflict code", () => {
+    expect(mapSupplierCommandDatabaseError("SUPPLIER_OWNERSHIP_IMMUTABLE"))
+      .toMatchObject({ code: "PRODUCT_OWNERSHIP_CONFLICT", statusCode: 409 });
+  });
+
+  test.each([
+    [
+      "supplier_products_platform_code_unique_idx",
+      "SUPPLIER_PRODUCT_CODE_CONFLICT",
+    ],
+    [
+      "supplier_products_tenant_code_unique_idx",
+      "SUPPLIER_PRODUCT_CODE_CONFLICT",
+    ],
+    [
+      "supplier_skus_platform_code_unique_idx",
+      "SUPPLIER_SKU_CODE_CONFLICT",
+    ],
+    [
+      "supplier_skus_tenant_code_unique_idx",
+      "SUPPLIER_SKU_CODE_CONFLICT",
+    ],
+  ])("maps unique index %s without falling back to 500", (constraint, code) => {
+    expect(mapSupplierCommandDatabaseError({
+      code: "23505",
+      message: `duplicate key value violates unique constraint "${constraint}"`,
+      details: "Key already exists.",
+    })).toMatchObject({ code, statusCode: 409 });
+  });
+
+  test.each([
+    [
+      "supplier_products_pkey",
+      "SUPPLIER_PRODUCT_ID_CONFLICT",
+      "商品编号已存在",
+    ],
+    [
+      "supplier_skus_pkey",
+      "SUPPLIER_SKU_ID_CONFLICT",
+      "供应商 SKU 编号已存在",
+    ],
+  ])(
+    "maps primary key constraint %s to a resource ID conflict",
+    (constraint, code, message) => {
+      expect(mapSupplierCommandDatabaseError({
+        code: "23505",
+        details: `Key (id) already exists for constraint ${constraint}.`,
+        message:
+          `duplicate key value violates unique constraint "${constraint}"`,
+      })).toMatchObject({ statusCode: 409, code, message });
+    },
+  );
 
   test.each([
     [

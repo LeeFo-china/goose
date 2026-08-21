@@ -9,9 +9,10 @@ const requiredText = (
   emptyMessage: string,
   maxMessage: string,
 ) => z.string().trim().min(1, emptyMessage).max(max, maxMessage);
-const proxyReason = z.string().trim()
+const legacyProxyReason = z.string().trim()
   .min(2, "请填写代录原因")
-  .max(500, "代录原因不能超过 500 个字符");
+  .max(500, "代录原因不能超过 500 个字符")
+  .optional();
 const expectedVersion = z.coerce.number().int()
   .positive("版本号必须是正整数");
 const dateTime = z.iso.datetime({
@@ -111,8 +112,9 @@ export const SupplierPriceListCreateSchema = z.object({
   ...priceListFields,
   currency: priceListFields.currency.default("CNY"),
   effective_until: priceListFields.effective_until.default(null),
-  proxy_reason: proxyReason.optional(),
-}).strict().superRefine(validPeriod);
+  proxy_reason: legacyProxyReason,
+}).strict().superRefine(validPeriod)
+  .transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
 export const SupplierPriceListUpdateSchema = z.object({
   expected_version: expectedVersion,
@@ -120,20 +122,23 @@ export const SupplierPriceListUpdateSchema = z.object({
   currency: priceListFields.currency.optional(),
   effective_from: priceListFields.effective_from.optional(),
   effective_until: priceListFields.effective_until.optional(),
-  proxy_reason: proxyReason.optional(),
-}).strict().superRefine(validPeriod).refine(hasBusinessUpdate, {
-  message: "至少需要提交一个价格簿更新字段",
-});
+  proxy_reason: legacyProxyReason,
+}).strict().superRefine(validPeriod)
+  .refine(hasBusinessUpdate, {
+    message: "至少需要提交一个价格簿更新字段",
+  })
+  .transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
 export const SupplierPriceListCommandSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
-}).strict();
+  proxy_reason: legacyProxyReason,
+}).strict().transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
-export const SupplierPriceListNewVersionSchema =
-  SupplierPriceListCommandSchema.extend({
-    new_price_list_id: uuid("无效的新价格簿 ID"),
-  }).strict();
+export const SupplierPriceListNewVersionSchema = z.object({
+  expected_version: expectedVersion,
+  new_price_list_id: uuid("无效的新价格簿 ID"),
+  proxy_reason: legacyProxyReason,
+}).strict().transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
 export const SupplierPriceItemUpsertSchema = z.object({
   supplier_sku_id: uuid("无效的供应商 SKU ID"),
@@ -143,13 +148,13 @@ export const SupplierPriceItemUpsertSchema = z.object({
   tax_rate: taxRate,
   tax_inclusive: z.boolean(),
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
-}).strict();
+  proxy_reason: legacyProxyReason,
+}).strict().transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
 export const SupplierPriceItemDeleteSchema = z.object({
   expected_version: expectedVersion,
-  proxy_reason: proxyReason.optional(),
-}).strict();
+  proxy_reason: legacyProxyReason,
+}).strict().transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 
 export type SupplierPriceListListQuery =
   z.infer<typeof SupplierPriceListListQuerySchema>;

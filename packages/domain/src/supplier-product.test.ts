@@ -1,12 +1,21 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  SUPPLIER_PRODUCT_SOURCE_VALUES,
   SUPPLIER_PRICE_LIST_STATUS_VALUES,
+  SUPPLIER_PRODUCT_SOURCE_VALUES,
   SUPPLIER_PRODUCT_STATUS_VALUES,
   SUPPLIER_SKU_STATUS_VALUES,
   isSupplierPriceListAction,
 } from "./supplier-product";
+import type { SupplierProductSource } from "./supplier-product";
+
+const platformProductSource: SupplierProductSource = "platform_shared";
+const tenantProductSource: SupplierProductSource = "tenant_private";
+
+// @ts-expect-error Product sources are limited to shared and private products.
+const invalidProductSource: SupplierProductSource = "supplier_private";
+
+void invalidProductSource;
 
 describe("supplier product domain", () => {
   test("keeps stable lifecycle values", () => {
@@ -34,8 +43,12 @@ describe("supplier product domain", () => {
     expect(isSupplierPriceListAction("delete")).toBe(false);
   });
 
-  test("keeps stable product source values", () => {
+  test("keeps stable platform shared and tenant private sources", () => {
     expect(SUPPLIER_PRODUCT_SOURCE_VALUES).toEqual([
+      "platform_shared",
+      "tenant_private",
+    ]);
+    expect([platformProductSource, tenantProductSource]).toEqual([
       "platform_shared",
       "tenant_private",
     ]);

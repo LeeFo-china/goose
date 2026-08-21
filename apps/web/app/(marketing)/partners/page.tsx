@@ -4,18 +4,20 @@ import { PartnerApplicationForm } from "@/components/official-site/partner-appli
 import { PartnerHero } from "@/components/official-site/partner-hero";
 import { PartnerProcess } from "@/components/official-site/partner-process";
 import { PartnerRevenue } from "@/components/official-site/partner-revenue";
+import { sharedOpenGraphMetadata } from "@/lib/site-open-graph";
 
 export const metadata: Metadata = {
   title: "城市合伙人招募",
   description:
-    "了解鹅班长城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
+    "了解好店智装云城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
   alternates: {
     canonical: "/partners",
   },
   openGraph: {
+    ...sharedOpenGraphMetadata,
     title: "城市合伙人招募",
     description:
-      "了解鹅班长城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
+      "了解好店智装云城市合伙人的合作边界、平台收益分成、装企二维码绑定和申请流程。",
     url: "/partners",
   },
 };

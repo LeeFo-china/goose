@@ -21,7 +21,7 @@ const platformProfile = {
   id: "00000000-0000-4000-8000-000000000020", scope: "platform",
   tenant_id: null, display_name: "未发布的平台草稿",
   logo_file_id: "00000000-0000-4000-8000-000000000099",
-  published_display_name: "字节跳动", status: "published",
+  published_display_name: "已发布平台品牌", status: "published",
   published_logo_file_id: PLATFORM_LOGO_ID,
   version: 5, published_version: 4,
   published_at: "2026-07-27T09:00:00.000Z",
@@ -89,7 +89,7 @@ describe("EffectiveBrandingService platform fallback", () => {
     const current = fixture();
     await expect(current.service.resolvePlatform()).resolves.toMatchObject({
       source: "platform",
-      display_name: "字节跳动",
+      display_name: "已发布平台品牌",
       logo_url: platformLogo.public_url,
       version: 4,
     });
@@ -108,9 +108,9 @@ describe("EffectiveBrandingService platform fallback", () => {
     expect(first).toEqual({
       source: "platform",
       tenant_id: null,
-      display_name: "字节跳动",
+      display_name: "好店智装云",
       logo_url: expect.stringMatching(/^data:image\/png;base64,/),
-      support_text: "字节跳动",
+      support_text: "好店智装云",
       version: 0,
       updated_at: "1970-01-01T00:00:00.000Z",
     });
@@ -127,9 +127,9 @@ describe("EffectiveBrandingService platform fallback", () => {
     );
     expect(png.readUInt32BE(16)).toBe(256);
     expect(png.readUInt32BE(20)).toBe(256);
-    expect(png.byteLength).toBe(10_152);
+    expect(png.byteLength).toBe(50_379);
     expect(createHash("sha256").update(png).digest("hex")).toBe(
-      "49e804acca9d15e15577cefd8b839dc92b86dfd35313a030b5f17888ed6fc932",
+      "3066f1174a22de26df47801f82ebab949d44b4a47052507139df6441091834ca",
     );
   });
 

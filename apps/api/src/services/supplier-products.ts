@@ -10,13 +10,19 @@ import type {
   SupplierProductUpdateInput,
   SupplierSkuCreateInput,
   SupplierSkuListQuery,
+  SupplierSkuUnitConversionsReplaceInput,
   SupplierSkuUpdateInput,
 } from "@/schema/supplier-products";
 import type { AuthContext } from "@/services/authorization";
+import { supplierCatalogRepository } from "@/repositories/supplier-catalog";
 import {
   supplierProductAccessService,
   type SupplierProxyScope,
 } from "@/services/supplier-product-access";
+import {
+  type SpecTemplateRepositoryPort,
+  validateSkuSpecsAgainstCurrentTemplate,
+} from "@/services/supplier-product-spec-template";
 
 type ProductAccessPort = Pick<
   typeof supplierProductAccessService,
@@ -27,26 +33,32 @@ type ProductRepositoryPort = Pick<
   | "listProducts"
   | "findProduct"
   | "listSkus"
+  | "listSkuUnitConversions"
   | "createProduct"
   | "updateProduct"
   | "createSku"
   | "updateSku"
   | "mutateProduct"
   | "mutateSku"
+  | "replaceSkuUnitConversions"
 >;
 
 export type SupplierProductsServiceDependencies = {
   access?: ProductAccessPort;
   repository?: ProductRepositoryPort;
+  catalogRepository?: SpecTemplateRepositoryPort;
 };
 
 export class SupplierProductsService {
   private readonly access: ProductAccessPort;
   private readonly repository: ProductRepositoryPort;
+  private readonly catalogRepository: SpecTemplateRepositoryPort;
 
   constructor(dependencies: SupplierProductsServiceDependencies = {}) {
     this.access = dependencies.access ?? supplierProductAccessService;
     this.repository = dependencies.repository ?? supplierProductsRepository;
+    this.catalogRepository = dependencies.catalogRepository ??
+      supplierCatalogRepository;
   }
 
   async listProducts(auth: AuthContext, query: SupplierProductListQuery) {
@@ -71,6 +83,7 @@ export class SupplierProductsService {
     const product = await this.repository.findProduct(
       scope.supplierId,
       productId,
+      scope.tenantId,
     );
     if (!product) {
       throw Errors.business(
@@ -93,10 +106,12 @@ export class SupplierProductsService {
       auth,
       tenantSupplierId,
     );
+    const { proxy_reason: _legacyProxyReason, ...safeInput } = input as
+      SupplierProductCreateInput & { proxy_reason?: unknown };
     return requireCommand(await this.repository.createProduct({
-      ...input,
+      ...safeInput,
       product_id: productId,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -105,23 +120,22 @@ export class SupplierProductsService {
     tenantSupplierId: string,
     productId: string,
     input: SupplierProductUpdateInput,
+    idempotencyKey: string,
   ) {
     const scope = await this.access.requireProductWrite(
       auth,
       tenantSupplierId,
     );
-    const {
-      expected_version,
-      proxy_reason,
-      ...fields
-    } = input;
-    return this.repository.updateProduct({
+    const { expected_version, ...fields } = input;
+    return requireCommand(await this.repository.updateProduct({
       ...fields,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
       product_id: productId,
       expected_version,
-      ...updateAudit(scope, proxy_reason),
-    });
+      ...actorContext(scope, idempotencyKey),
+    }));
   }
 
   async mutateProduct(
@@ -140,7 +154,7 @@ export class SupplierProductsService {
       product_id: productId,
       action,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -154,6 +168,7 @@ export class SupplierProductsService {
     return this.repository.listSkus({
       ...query,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
       supplier_product_id: productId,
     });
   }
@@ -170,11 +185,20 @@ export class SupplierProductsService {
       auth,
       tenantSupplierId,
     );
+    const product = await this.requireTenantProduct(scope, productId);
+    const { proxy_reason: _legacyProxyReason, ...safeInput } = input as
+      SupplierSkuCreateInput & { proxy_reason?: unknown };
+    await validateSkuSpecsAgainstCurrentTemplate(
+      product.category.id,
+      safeInput.spec_values,
+      { kind: "tenant", tenantId: scope.tenantId },
+      this.catalogRepository,
+    );
     return requireCommand(await this.repository.createSku({
-      ...input,
+      ...safeInput,
       sku_id: skuId,
       product_id: productId,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -184,24 +208,32 @@ export class SupplierProductsService {
     productId: string,
     skuId: string,
     input: SupplierSkuUpdateInput,
+    idempotencyKey: string,
   ) {
     const scope = await this.access.requireProductWrite(
       auth,
       tenantSupplierId,
     );
-    const {
-      expected_version,
-      proxy_reason,
-      ...fields
-    } = input;
-    return this.repository.updateSku({
+    const product = await this.requireTenantProduct(scope, productId);
+    if (input.spec_values) {
+      await validateSkuSpecsAgainstCurrentTemplate(
+        product.category.id,
+        input.spec_values,
+        { kind: "tenant", tenantId: scope.tenantId },
+        this.catalogRepository,
+      );
+    }
+    const { expected_version, ...fields } = input;
+    return requireCommand(await this.repository.updateSku({
       ...fields,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
       supplier_product_id: productId,
       sku_id: skuId,
       expected_version,
-      ...updateAudit(scope, proxy_reason),
-    });
+      ...actorContext(scope, idempotencyKey),
+    }));
   }
 
   async mutateSku(
@@ -222,39 +254,95 @@ export class SupplierProductsService {
       sku_id: skuId,
       action,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
+  }
+
+  async replaceSkuUnitConversions(
+    auth: AuthContext,
+    tenantSupplierId: string,
+    productId: string,
+    skuId: string,
+    input: SupplierSkuUnitConversionsReplaceInput,
+    idempotencyKey: string,
+  ) {
+    const scope = await this.access.requireProductWrite(
+      auth,
+      tenantSupplierId,
+    );
+    return requireCommand(await this.repository.replaceSkuUnitConversions({
+      ownership_scope: "tenant",
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
+      supplier_id: scope.supplierId,
+      product_id: productId,
+      sku_id: skuId,
+      expected_version: input.expected_version,
+      purchase_unit_id: input.purchase_unit_id,
+      base_unit_id: input.base_unit_id,
+      conversions: input.conversions,
+      ...actorContext(scope, idempotencyKey),
+    }));
+  }
+
+  async listSkuUnitConversions(
+    auth: AuthContext,
+    tenantSupplierId: string,
+    productId: string,
+    skuId: string,
+  ) {
+    const scope = await this.access.requireProductRead(auth, tenantSupplierId);
+    const conversions = await this.repository.listSkuUnitConversions({
+      supplier_id: scope.supplierId,
+      supplier_product_id: productId,
+      sku_id: skuId,
+      tenant_id: scope.tenantId,
+    });
+    if (conversions === null) throw skuNotFound();
+    return conversions;
+  }
+
+  private async requireTenantProduct(
+    scope: SupplierProxyScope,
+    productId: string,
+  ) {
+    const product = await this.repository.findProduct(
+      scope.supplierId,
+      productId,
+      scope.tenantId,
+    );
+    if (!product) throw productNotFound();
+    if (
+      product.ownership_scope !== "tenant" ||
+      product.owner_tenant_id !== scope.tenantId
+    ) {
+      throw Errors.business(
+        409,
+        "平台共享商品只读",
+        "SHARED_RESOURCE_READ_ONLY",
+      );
+    }
+    return product;
   }
 }
 
 function commandContext(
   scope: SupplierProxyScope,
-  proxyReason: string | undefined,
   idempotencyKey: string,
 ) {
   return {
     supplier_id: scope.supplierId,
     tenant_id: scope.tenantId,
-    ownership_scope: "tenant" as const,
-    owner_tenant_id: scope.tenantId,
-    actor_user_id: scope.authUserId,
-    actor_employee_id: scope.employeeId,
-    idempotency_key: idempotencyKey,
-    proxy_reason: proxyReason ?? null,
+    tenant_supplier_id: scope.tenantSupplierId,
+    ...actorContext(scope, idempotencyKey),
   };
 }
 
-function updateAudit(
-  scope: SupplierProxyScope,
-  proxyReason: string | undefined,
-) {
+function actorContext(scope: SupplierProxyScope, idempotencyKey: string) {
   return {
-    acting_tenant_id: scope.tenantId,
-    acting_employee_id: scope.employeeId,
-    operation_source: "tenant_proxy",
-    proxy_reason: proxyReason ?? null,
-    updated_by_employee_id: scope.employeeId,
-    updated_at: new Date().toISOString(),
+    actor_user_id: scope.authUserId,
+    actor_employee_id: scope.employeeId,
+    idempotency_key: idempotencyKey,
   };
 }
 
@@ -277,8 +365,23 @@ function requireCommand(result: SupplierProductCommandResult) {
 function commandErrorMessage(code: string) {
   if (code === "SUPPLIER_PRODUCT_NOT_FOUND") return "供应商商品不存在";
   if (code === "SUPPLIER_SKU_NOT_FOUND") return "供应商 SKU 不存在";
+  if (code === "SUPPLIER_SKU_VERSION_CONFLICT") {
+    return "供应商 SKU 版本已变化";
+  }
   if (code.includes("VERSION_CONFLICT")) return "供应商商品版本已变化";
   return "供应商商品当前状态不允许该操作";
+}
+
+function productNotFound() {
+  return Errors.business(
+    404,
+    "供应商商品不存在",
+    "SUPPLIER_PRODUCT_NOT_FOUND",
+  );
+}
+
+function skuNotFound() {
+  return Errors.business(404, "供应商 SKU 不存在", "SUPPLIER_SKU_NOT_FOUND");
 }
 
 export const supplierProductsService = new SupplierProductsService();

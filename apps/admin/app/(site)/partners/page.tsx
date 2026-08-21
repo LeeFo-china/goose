@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowDownRight,
@@ -17,8 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 export const metadata: Metadata = {
-  title: "城市合伙人招募 | 鹅班长",
-  description: "鹅班长面向区域代理商和独立业务合伙人开放城市合伙人申请。",
+  title: "城市合伙人招募 | 好店智装云",
+  description: "好店智装云面向区域代理商和独立业务合伙人开放城市合伙人申请。",
 };
 
 const revenueItems = [
@@ -177,9 +178,16 @@ function HeroSection() {
         <header className="flex items-center justify-between gap-4">
           <Link href="/partners" className="flex items-center gap-3 text-background">
             <span className="flex size-11 items-center justify-center rounded-lg border border-background/30 bg-background/95">
-              <img src="/logo.png" alt="鹅班长" className="size-9 object-contain" />
+              <Image
+                src="/icon.png"
+                alt="好店智装云"
+                className="size-9 object-contain"
+                height={36}
+                sizes="36px"
+                width={36}
+              />
             </span>
-            <span className="text-base font-semibold">鹅班长</span>
+            <span className="text-base font-semibold">好店智装云</span>
           </Link>
           <Button asChild variant="secondary">
             <a href="#apply">
@@ -193,7 +201,7 @@ function HeroSection() {
           <div className="max-w-3xl text-background">
             <Badge variant="secondary">城市合伙人招募</Badge>
             <h1 className="mt-6 text-4xl font-semibold leading-tight text-balance md:text-6xl">
-              在你的城市，运营鹅班长装修平台。
+              在你的城市，运营好店智装云装修管理平台。
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-9 text-background/85">
               面向区域代理商和独立业务合伙人开放。你负责本地装修公司拓展和市场运营，平台提供系统、线索、归因和结算依据。

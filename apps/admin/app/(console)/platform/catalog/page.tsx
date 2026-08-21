@@ -13,8 +13,12 @@ import {
   CatalogCategoryDialogButton,
   CatalogUnitDialogButton,
 } from "@/components/supplier-catalog/supplier-catalog-dialogs";
+import { CATALOG_CATEGORY_MAX_DEPTH } from "@/components/supplier-catalog/catalog-category-depth";
 import { SupplierCatalogFilters } from "@/components/supplier-catalog/supplier-catalog-filters";
 import { SupplierCatalogLoadError } from "@/components/supplier-catalog/supplier-catalog-error";
+import { PlatformSuggestionFilters } from "@/components/supplier-catalog/platform-suggestion-filters";
+import { PlatformUnitSuggestionTable } from "@/components/supplier-catalog/platform-unit-suggestions";
+import { buildPlatformSuggestionListPath } from "@/components/supplier-catalog/supplier-catalog-v2-requests";
 import {
   buildCatalogListPath,
   catalogViewHref,
@@ -23,14 +27,13 @@ import {
   normalizeCatalogPage,
 } from "@/components/supplier-catalog/supplier-catalog-rules";
 import { SupplierCatalogTable } from "@/components/supplier-catalog/supplier-catalog-table";
-import { PlatformUnitSuggestions } from "@/components/platform-catalog/platform-unit-suggestions";
-import { PlatformSpecDefinitions } from "@/components/platform-catalog/platform-spec-definitions";
 import type {
   CatalogBrand,
   CatalogCategory,
   CatalogPage,
   CatalogStatus,
   CatalogUnit,
+  CatalogUnitSuggestion,
   CatalogView,
   CategoryReturnState,
 } from "@/components/supplier-catalog/supplier-catalog-types";
@@ -47,13 +50,22 @@ type SearchParams = Promise<{
   categoryPath?: string;
 }>;
 
-function readView(value: string | undefined): CatalogView {
-  if (value === "brands" || value === "units") return value;
+type PlatformCatalogView = CatalogView | "unit-suggestions";
+type SuggestionStatus = "submitted" | "approved" | "rejected";
+
+function readView(value: string | undefined): PlatformCatalogView {
+  if (value === "brands" || value === "units" || value === "unit-suggestions") return value;
   return "categories";
 }
 
 function readStatus(value: string | undefined): CatalogStatus | "" {
   return value === "active" || value === "inactive" ? value : "";
+}
+
+function readSuggestionStatus(value: string | undefined): SuggestionStatus | "" {
+  return value === "submitted" || value === "approved" || value === "rejected"
+    ? value
+    : "";
 }
 
 function emptyPage<RecordType>(
@@ -95,24 +107,32 @@ export default async function PlatformCatalogPage({
   const pageSize = normalizePlatformListPageSize(params.pageSize);
   const keyword = (params.keyword || "").trim().slice(0, 80);
   const status = readStatus(params.status);
+  const suggestionStatus = readSuggestionStatus(params.status);
   const categoryTrail = view === "categories"
     ? decodeCategoryTrail(params.categoryPath)
     : [];
   const parentId = currentCategoryParent(categoryTrail);
   const parentName = categoryTrail.at(-1)?.name ?? "根级";
-  const currentCategoryId = categoryTrail.at(-1)?.id ?? null;
-  const listPath = buildCatalogListPath({
-    view,
-    page,
-    pageSize,
-    keyword,
-    status,
-    parentId,
-  });
+  const listPath = view === "unit-suggestions"
+    ? buildPlatformSuggestionListPath({
+        page,
+        pageSize,
+        status: suggestionStatus,
+        tenantId: "",
+      })
+    : buildCatalogListPath({
+        view,
+        page,
+        pageSize,
+        keyword,
+        status,
+        parentId,
+      });
 
   let categories = emptyPage<CatalogCategory>(page, pageSize);
   let brands = emptyPage<CatalogBrand>(page, pageSize);
   let units = emptyPage<CatalogUnit>(page, pageSize);
+  let suggestions = emptyPage<CatalogUnitSuggestion>(page, pageSize);
   let error: string | null = null;
 
   if (!canManage) {
@@ -124,7 +144,9 @@ export default async function PlatformCatalogPage({
       } else if (view === "brands") {
         brands = await getCatalogPage<CatalogBrand>(listPath);
       } else {
-        units = await getCatalogPage<CatalogUnit>(listPath);
+        if (view === "units") {
+          units = await getCatalogPage<CatalogUnit>(listPath);
+        } else suggestions = await getCatalogPage<CatalogUnitSuggestion>(listPath);
       }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : "供应标准目录加载失败";
@@ -135,7 +157,9 @@ export default async function PlatformCatalogPage({
     ? categories
     : view === "brands"
       ? brands
-      : units;
+      : view === "units"
+        ? units
+        : suggestions;
   const categoryReturnState: CategoryReturnState = {
     page,
     pageSize,
@@ -155,7 +179,8 @@ export default async function PlatformCatalogPage({
             </span>
           }
           action={canManage
-            ? view === "categories"
+            ? view === "categories" &&
+                categoryTrail.length < CATALOG_CATEGORY_MAX_DEPTH
               ? (
                   <CatalogCategoryDialogButton
                     parentId={parentId}
@@ -165,22 +190,27 @@ export default async function PlatformCatalogPage({
                 )
               : view === "brands"
                 ? <CatalogBrandDialogButton />
-                : <CatalogUnitDialogButton />
+                : view === "units"
+                  ? <CatalogUnitDialogButton />
+                  : null
             : null}
           tabs={
-            <div className="overflow-x-auto">
-              <TabsList className={platformTabsListClassName}>
-                <CatalogTab value="categories" label="标准类目" />
-                <CatalogTab value="brands" label="品牌" />
-                <CatalogTab value="units" label="单位" />
+            <div>
+              <TabsList className={`${platformTabsListClassName} flex-wrap overflow-visible`}>
+                <CatalogTab value="categories" label="标准类目" pageSize={pageSize} />
+                <CatalogTab value="brands" label="品牌" pageSize={pageSize} />
+                <CatalogTab value="units" label="单位" pageSize={pageSize} />
+                <CatalogTab value="unit-suggestions" label="单位建议" pageSize={pageSize} />
               </TabsList>
             </div>
           }
-          filters={<SupplierCatalogFilters keyword={keyword} status={status} />}
+          filters={view === "unit-suggestions"
+            ? <PlatformSuggestionFilters status={suggestionStatus} />
+            : <SupplierCatalogFilters keyword={keyword} status={status} />}
           pagination={currentPage.pagination}
           currentCount={currentPage.list.length}
           tableViewportTestId="supplier-catalog-table-viewport"
-          unit={view === "categories" ? "个类目" : view === "brands" ? "个品牌" : "个单位"}
+          unit={view === "categories" ? "个类目" : view === "brands" ? "个品牌" : view === "units" ? "个单位" : "条建议"}
         >
           {error ? (
             <SupplierCatalogLoadError
@@ -188,38 +218,48 @@ export default async function PlatformCatalogPage({
               canRetry={canManage}
             />
           ) : (
-            <SupplierCatalogTable
-              view={view}
-              categories={categories.list}
-              brands={brands.list}
-              units={units.list}
-              categoryTrail={categoryTrail}
-              categoryReturnState={categoryReturnState}
-            />
+            view === "unit-suggestions" ? (
+              <PlatformUnitSuggestionTable records={suggestions.list} />
+            ) : (
+              <SupplierCatalogTable
+                view={view}
+                categories={categories.list}
+                brands={brands.list}
+                units={units.list}
+                categoryTrail={categoryTrail}
+                categoryReturnState={categoryReturnState}
+              />
+            )
           )}
         </PlatformListPageShell>
       </Tabs>
-      {canManage ? <PlatformUnitSuggestions /> : null}
-      {canManage && view === "categories" && currentCategoryId ? (
-        <PlatformSpecDefinitions categoryId={currentCategoryId} />
-      ) : null}
     </div>
   );
 }
 function CatalogTab({
   value,
   label,
+  pageSize,
 }: {
-  value: CatalogView;
+  value: PlatformCatalogView;
   label: string;
+  pageSize: number;
 }) {
+  const href = new URL(
+    value === "unit-suggestions"
+      ? "/platform/catalog?view=unit-suggestions"
+      : catalogViewHref(value),
+    "http://admin.local",
+  );
+  href.searchParams.set("pageSize", String(pageSize));
+
   return (
     <TabsTrigger
       value={value}
       className={platformTabsTriggerClassName}
       asChild
     >
-      <Link href={catalogViewHref(value)}>{label}</Link>
+      <Link href={`${href.pathname}${href.search}`}>{label}</Link>
     </TabsTrigger>
   );
 }

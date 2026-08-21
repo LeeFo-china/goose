@@ -64,6 +64,7 @@ export class SupplierPriceListsService {
       ...filters,
       supplier_id: scope.supplierId,
       tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
     });
   }
 
@@ -73,10 +74,12 @@ export class SupplierPriceListsService {
     priceListId: string,
   ) {
     const scope = await this.access.requirePriceRead(auth, tenantSupplierId);
-    const priceList = await this.repository.findPriceList(
-      scope.supplierId,
-      priceListId,
-    );
+    const priceList = await this.repository.findPriceList({
+      supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
+      price_list_id: priceListId,
+    });
     if (!priceList) {
       throw Errors.business(
         404,
@@ -98,7 +101,7 @@ export class SupplierPriceListsService {
     return requireCommand(await this.repository.create({
       price_list_id: priceListId,
       ...input,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -107,20 +110,14 @@ export class SupplierPriceListsService {
     tenantSupplierId: string,
     priceListId: string,
     input: SupplierPriceListUpdateInput,
+    idempotencyKey: string,
   ) {
     const scope = await this.access.requirePriceWrite(auth, tenantSupplierId);
-    const {
-      expected_version,
-      proxy_reason,
-      ...fields
-    } = input;
-    return this.repository.updateDraft({
-      ...fields,
+    return requireCommand(await this.repository.updateDraft({
+      ...input,
       price_list_id: priceListId,
-      supplier_id: scope.supplierId,
-      expected_version,
-      ...updateAudit(scope, proxy_reason),
-    });
+      ...commandContext(scope, idempotencyKey),
+    }));
   }
 
   async listItems(
@@ -133,6 +130,8 @@ export class SupplierPriceListsService {
     return this.repository.listItems({
       ...query,
       supplier_id: scope.supplierId,
+      tenant_id: scope.tenantId,
+      tenant_supplier_id: scope.tenantSupplierId,
       price_list_id: priceListId,
     });
   }
@@ -154,7 +153,7 @@ export class SupplierPriceListsService {
       tax_rate: input.tax_rate,
       tax_inclusive: input.tax_inclusive,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -171,7 +170,7 @@ export class SupplierPriceListsService {
       item_id: itemId,
       price_list_id: priceListId,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -204,7 +203,7 @@ export class SupplierPriceListsService {
       new_price_list_id: input.new_price_list_id,
       source_price_list_id: sourcePriceListId,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 
@@ -240,37 +239,22 @@ export class SupplierPriceListsService {
     return requireCommand(await command({
       price_list_id: priceListId,
       expected_version: input.expected_version,
-      ...commandContext(scope, input.proxy_reason, idempotencyKey),
+      ...commandContext(scope, idempotencyKey),
     }));
   }
 }
 
 function commandContext(
   scope: SupplierProxyScope,
-  proxyReason: string | undefined,
   idempotencyKey: string,
 ) {
   return {
     supplier_id: scope.supplierId,
     tenant_id: scope.tenantId,
+    tenant_supplier_id: scope.tenantSupplierId,
     actor_user_id: scope.authUserId,
     actor_employee_id: scope.employeeId,
     idempotency_key: idempotencyKey,
-    proxy_reason: proxyReason ?? null,
-  };
-}
-
-function updateAudit(
-  scope: SupplierProxyScope,
-  proxyReason: string | undefined,
-) {
-  return {
-    acting_tenant_id: scope.tenantId,
-    acting_employee_id: scope.employeeId,
-    operation_source: "tenant_proxy",
-    proxy_reason: proxyReason ?? null,
-    updated_by_employee_id: scope.employeeId,
-    updated_at: new Date().toISOString(),
   };
 }
 

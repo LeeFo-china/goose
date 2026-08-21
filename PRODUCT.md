@@ -6,15 +6,15 @@ product
 
 ## Users
 
-Gooes serves tenant-side operations teams in装修 and施工 workflows: administrators, designers, supervisors, acceptance staff, customer-service staff, marketers, and operators. They work in a high-frequency admin console where they need to scan project state, act on exceptions, and coordinate customer-facing progress without losing business context.
+好店智装云 serves tenant-side operations teams across interior renovation and construction workflows: administrators, designers, supervisors, acceptance staff, customer-service staff, marketers, and operators. They work in a high-frequency admin console where they need to scan project state, act on exceptions, and coordinate customer-facing progress without losing business context.
 
 ## Product Purpose
 
-Gooes brings customers, properties, projects, construction logs, process acceptance, expenses, marketing assets, and operational data into one workbench. The product exists to make装修 project operations traceable, actionable, and reliable across roles. Success means users can understand the current state quickly, identify the next valid action, complete it with confidence, and recover from errors without ambiguity.
+好店智装云 brings customers, properties, projects, construction logs, process acceptance, expenses, marketing assets, and operational data into one workbench. The product exists to make renovation project operations traceable, actionable, and reliable across roles. Success means users can understand the current state quickly, identify the next valid action, complete it with confidence, and recover from errors without ambiguity.
 
 ## Brand Personality
 
-Pragmatic, clear, trustworthy. The interface should feel like a focused workbench with a recognizable Gooes yellow and black identity, not a decorative marketing surface. Copy should be direct and operational, with Chinese business terminology that matches the domain.
+Pragmatic, clear, trustworthy. The interface should feel like a focused workbench with a recognizable 好店智装云 identity: deep blue as the primary brand color, orange as a restrained accent, and neutral surfaces for dense operational content. It is not a decorative marketing surface. Copy should be direct and operational, with Chinese business terminology that matches the domain.
 
 ## Anti-references
 
@@ -28,7 +28,7 @@ Support dense scanning: users should compare projects, people, stages, statuses,
 
 Preserve operational confidence: destructive, irreversible, or customer-facing actions need explicit states, clear labels, and recoverable error handling.
 
-Use brand identity with restraint: Gooes yellow should guide attention and ownership, not dominate every surface.
+Use brand identity with restraint: deep blue establishes platform identity and guides primary actions, while orange is limited to small moments of emphasis. Neutral surfaces carry information density. Tenant Admin and platform super-admin surfaces do not use decorative gradients; the independent website adds no new gradients in this brand refresh, while existing H5 and Douyin mini-program image-readability overlays remain outside the Admin rule.
 
 Design for role boundaries: permissions, ownership, and unavailable actions should be visible enough to explain why a user can or cannot proceed.
 

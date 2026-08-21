@@ -1,44 +1,28 @@
+import type { FastifyRequest } from "fastify";
+
 import { TenantBaseController } from "@/controllers/TenantBaseController";
-import { ErrorCodes } from "@/errors/error-codes";
-import { Errors } from "@/errors/error-factory";
 import {
-  CatalogBrandListQuerySchema,
-  CatalogCategoryListQuerySchema,
-  CatalogUnitListQuerySchema,
-  CatalogCategoryParamSchema,
   CatalogBrandParamSchema,
+  CatalogCategoryParamSchema,
   CatalogSpecDefinitionCreateSchema,
-  CatalogSpecDefinitionIdParamSchema,
   CatalogSpecDefinitionListQuerySchema,
+  CatalogSpecDefinitionParamSchema,
   CatalogSpecDefinitionUpdateSchema,
+  CatalogUnitListQuerySchema,
   CatalogUnitSuggestionCreateSchema,
   CatalogUnitSuggestionListQuerySchema,
-  TenantCatalogCategoryCreateSchema,
-  TenantCatalogCategoryUpdateSchema,
+  CopyPlatformSpecDefinitionsSchema,
   TenantCatalogBrandCreateSchema,
+  TenantCatalogBrandListQuerySchema,
   TenantCatalogBrandUpdateSchema,
+  TenantCatalogCategoryCreateSchema,
+  TenantCatalogCategoryListQuerySchema,
+  TenantCatalogCategoryUpdateSchema,
 } from "@/schema/supplier-catalog";
 import { supplierCatalogService } from "@/services/supplier-catalog";
-import { supplierCatalogSpecService } from "@/services/supplier-catalog-spec";
 import { Get, Patch, Post } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
-import type { FastifyRequest } from "fastify";
-import type { z } from "zod";
-
-const MAX_IDEMPOTENCY_KEY_LENGTH = 120;
-
-function requireIdempotencyKey(request: FastifyRequest): string {
-  const value = request.headers["idempotency-key"];
-  const key = Array.isArray(value) ? value[0]?.trim() : value?.trim();
-  if (!key || key.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
-    throw Errors.business(
-      400,
-      "缺少有效的 Idempotency-Key",
-      ErrorCodes.VALIDATION_ERROR,
-    );
-  }
-  return key;
-}
+import { parseCatalogRequest, requireIdempotencyKey } from "./http";
 
 class SupplierCatalogController extends TenantBaseController {
   constructor() {
@@ -48,27 +32,12 @@ class SupplierCatalogController extends TenantBaseController {
   @Get("/catalog/categories")
   async listCategories(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const query = this.parse(CatalogCategoryListQuerySchema, request.query);
+    const query = parseCatalogRequest(
+      TenantCatalogCategoryListQuerySchema,
+      request.query,
+    );
     return ResponseHandler.success(
       await supplierCatalogService.listTenantCategories(auth, query),
-    );
-  }
-
-  @Get("/catalog/brands")
-  async listBrands(request: FastifyRequest) {
-    const auth = await this.getRequiredTenantContext(request);
-    const query = this.parse(CatalogBrandListQuerySchema, request.query);
-    return ResponseHandler.success(
-      await supplierCatalogService.listTenantBrands(auth, query),
-    );
-  }
-
-  @Get("/catalog/units")
-  async listUnits(request: FastifyRequest) {
-    const auth = await this.getRequiredTenantContext(request);
-    const query = this.parse(CatalogUnitListQuerySchema, request.query);
-    return ResponseHandler.success(
-      await supplierCatalogService.listTenantUnits(auth, query),
     );
   }
 
@@ -76,7 +45,10 @@ class SupplierCatalogController extends TenantBaseController {
   async createCategory(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const key = requireIdempotencyKey(request);
-    const input = this.parse(TenantCatalogCategoryCreateSchema, request.body);
+    const input = parseCatalogRequest(
+      TenantCatalogCategoryCreateSchema,
+      request.body,
+    );
     return ResponseHandler.success(
       await supplierCatalogService.createTenantCategory(auth, input, key),
     );
@@ -85,10 +57,26 @@ class SupplierCatalogController extends TenantBaseController {
   @Patch("/catalog/categories/:id")
   async updateCategory(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
-    const input = this.parse(TenantCatalogCategoryUpdateSchema, request.body);
+    const key = requireIdempotencyKey(request);
+    const { id } = parseCatalogRequest(CatalogCategoryParamSchema, request.params);
+    const input = parseCatalogRequest(
+      TenantCatalogCategoryUpdateSchema,
+      request.body,
+    );
     return ResponseHandler.success(
-      await supplierCatalogService.updateTenantCategory(auth, id, input),
+      await supplierCatalogService.updateTenantCategory(auth, id, input, key),
+    );
+  }
+
+  @Get("/catalog/brands")
+  async listBrands(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = parseCatalogRequest(
+      TenantCatalogBrandListQuerySchema,
+      request.query,
+    );
+    return ResponseHandler.success(
+      await supplierCatalogService.listTenantBrands(auth, query),
     );
   }
 
@@ -96,7 +84,10 @@ class SupplierCatalogController extends TenantBaseController {
   async createBrand(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const key = requireIdempotencyKey(request);
-    const input = this.parse(TenantCatalogBrandCreateSchema, request.body);
+    const input = parseCatalogRequest(
+      TenantCatalogBrandCreateSchema,
+      request.body,
+    );
     return ResponseHandler.success(
       await supplierCatalogService.createTenantBrand(auth, input, key),
     );
@@ -105,37 +96,50 @@ class SupplierCatalogController extends TenantBaseController {
   @Patch("/catalog/brands/:id")
   async updateBrand(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { id } = this.parse(CatalogBrandParamSchema, request.params);
-    const input = this.parse(TenantCatalogBrandUpdateSchema, request.body);
+    const key = requireIdempotencyKey(request);
+    const { id } = parseCatalogRequest(CatalogBrandParamSchema, request.params);
+    const input = parseCatalogRequest(
+      TenantCatalogBrandUpdateSchema,
+      request.body,
+    );
     return ResponseHandler.success(
-      await supplierCatalogService.updateTenantBrand(auth, id, input),
+      await supplierCatalogService.updateTenantBrand(auth, id, input, key),
+    );
+  }
+
+  @Get("/catalog/units")
+  async listUnits(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const query = parseCatalogRequest(CatalogUnitListQuerySchema, request.query);
+    return ResponseHandler.success(
+      await supplierCatalogService.listTenantUnits(auth, query),
     );
   }
 
   @Get("/catalog/categories/:id/spec-definitions")
   async listSpecDefinitions(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
-    const query = this.parse(
+    const { id } = parseCatalogRequest(CatalogCategoryParamSchema, request.params);
+    const query = parseCatalogRequest(
       CatalogSpecDefinitionListQuerySchema,
       request.query,
     );
     return ResponseHandler.success(
-      await supplierCatalogSpecService.listSpecDefinitions(auth, id, query),
+      await supplierCatalogService.listTenantSpecDefinitions(auth, id, query),
     );
   }
 
   @Post("/catalog/categories/:id/spec-definitions")
   async createSpecDefinition(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
     const key = requireIdempotencyKey(request);
-    const input = this.parse(
+    const { id } = parseCatalogRequest(CatalogCategoryParamSchema, request.params);
+    const input = parseCatalogRequest(
       CatalogSpecDefinitionCreateSchema,
       request.body,
     );
     return ResponseHandler.success(
-      await supplierCatalogSpecService.createTenantSpecDefinition(
+      await supplierCatalogService.createTenantSpecDefinition(
         auth,
         id,
         input,
@@ -144,65 +148,71 @@ class SupplierCatalogController extends TenantBaseController {
     );
   }
 
-  @Patch("/catalog/categories/:id/spec-definitions/:specId")
+  @Patch("/catalog/categories/:id/spec-definitions/:definitionId")
   async updateSpecDefinition(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { specId } = this.parse(
-      CatalogSpecDefinitionIdParamSchema,
+    const key = requireIdempotencyKey(request);
+    const { id, definitionId } = parseCatalogRequest(
+      CatalogSpecDefinitionParamSchema,
       request.params,
     );
-    const input = this.parse(
+    const input = parseCatalogRequest(
       CatalogSpecDefinitionUpdateSchema,
       request.body,
     );
     return ResponseHandler.success(
-      await supplierCatalogSpecService.updateTenantSpecDefinition(
+      await supplierCatalogService.updateTenantSpecDefinition(
         auth,
-        specId,
+        id,
+        definitionId,
         input,
+        key,
       ),
     );
   }
 
-  @Post("/catalog/categories/:id/spec-definitions/copy-platform")
-  async copyPlatformSpecs(request: FastifyRequest) {
+  @Post("/catalog/categories/:id/spec-definitions:copy-platform")
+  async copyPlatformSpecDefinitions(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const { id } = this.parse(CatalogCategoryParamSchema, request.params);
     const key = requireIdempotencyKey(request);
+    const { id } = parseCatalogRequest(CatalogCategoryParamSchema, request.params);
+    const input = parseCatalogRequest(
+      CopyPlatformSpecDefinitionsSchema,
+      request.body,
+    );
     return ResponseHandler.success(
-      await supplierCatalogSpecService.copyPlatformSpecs(auth, id, key),
+      await supplierCatalogService.copyPlatformSpecDefinitions(
+        auth,
+        id,
+        input,
+        key,
+      ),
     );
   }
 
   @Get("/catalog/unit-suggestions")
   async listUnitSuggestions(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const query = this.parse(
+    const query = parseCatalogRequest(
       CatalogUnitSuggestionListQuerySchema,
       request.query,
     );
     return ResponseHandler.success(
-      await supplierCatalogSpecService.listUnitSuggestions(auth, query),
+      await supplierCatalogService.listTenantUnitSuggestions(auth, query),
     );
   }
 
   @Post("/catalog/unit-suggestions")
-  async createUnitSuggestion(request: FastifyRequest) {
+  async submitUnitSuggestion(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const key = requireIdempotencyKey(request);
-    const input = this.parse(CatalogUnitSuggestionCreateSchema, request.body);
-    return ResponseHandler.success(
-      await supplierCatalogSpecService.submitUnitSuggestion(auth, input, key),
+    const input = parseCatalogRequest(
+      CatalogUnitSuggestionCreateSchema,
+      request.body,
     );
-  }
-
-  private parse<Schema extends z.ZodTypeAny>(
-    schema: Schema,
-    input: unknown,
-  ): z.infer<Schema> {
-    const result = schema.safeParse(input || {});
-    if (!result.success) throw Errors.fromZod(result.error);
-    return result.data;
+    return ResponseHandler.success(
+      await supplierCatalogService.submitTenantUnitSuggestion(auth, input, key),
+    );
   }
 }
 

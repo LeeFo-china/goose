@@ -1,5 +1,8 @@
 import type {
+  CatalogSpecValue,
+  CatalogSpecValueType,
   SupplierPriceListStatus,
+  SupplierProductSource,
   SupplierProductStatus,
   SupplierSkuStatus,
 } from "@gooes/domain";
@@ -18,6 +21,8 @@ export type CatalogReference = {
   status: "active" | "inactive";
 };
 
+export type OwnershipScope = "platform" | "tenant";
+
 export type UnitReference = CatalogReference & {
   symbol: string;
 };
@@ -30,20 +35,12 @@ export type SupplierProduct = {
   description: string | null;
   status: SupplierProductStatus;
   version: number;
+  ownership_scope: OwnershipScope;
+  owner_tenant_id: string | null;
   category: CatalogReference;
   brand: CatalogReference;
-  ownership_scope?: "platform" | "tenant" | null;
-  owner_tenant_id?: string | null;
   updated_at: string;
 };
-
-export type SupplierProductSource = "platform" | "tenant";
-
-export function supplierProductSourceLabel(
-  source: SupplierProductSource,
-): string {
-  return source === "platform" ? "平台共享" : "租户私有";
-}
 
 export type SupplierSku = {
   id: string;
@@ -53,6 +50,7 @@ export type SupplierSku = {
   name: string;
   specification: string | null;
   model: string | null;
+  spec_values: Record<string, CatalogSpecValue> | null;
   purchase_unit_id: string;
   base_unit_id: string;
   base_unit_conversion: string;
@@ -61,6 +59,8 @@ export type SupplierSku = {
   serial_managed: boolean;
   status: SupplierSkuStatus;
   version: number;
+  ownership_scope: OwnershipScope;
+  owner_tenant_id: string | null;
   purchase_unit: UnitReference;
   base_unit: UnitReference;
   updated_at: string;
@@ -119,7 +119,58 @@ export type CatalogOption = {
   code: string;
   name: string;
   symbol?: string;
+  full_name?: string;
+  unit_dimension?: string;
+  ownership_scope?: OwnershipScope;
+  owner_tenant_id?: string | null;
 };
+
+export type UnitOption = CatalogOption & {
+  symbol: string;
+  unit_dimension: string;
+};
+
+export type CatalogSpecDefinition = {
+  id: string;
+  category_id: string;
+  code: string;
+  name: string;
+  value_type: CatalogSpecValueType;
+  enum_options: string[];
+  unit_dimension: string | null;
+  is_required: boolean;
+  participates_in_sku_name: boolean;
+  is_filterable: boolean;
+  sort_order: number;
+  status: "active" | "inactive";
+  ownership_scope: OwnershipScope;
+  owner_tenant_id: string | null;
+};
+
+export type SupplierSkuUnitConversionInput = {
+  from_unit_id: string;
+  to_unit_id: string;
+  factor: string;
+};
+
+export type SupplierSkuUnitConversion = SupplierSkuUnitConversionInput & {
+  from_unit: UnitOption;
+  to_unit: UnitOption;
+};
+
+export type ProductApiScope =
+  | { kind: "tenant"; tenantSupplierId: string }
+  | { kind: "platform"; supplierId: string };
+
+export type PlatformSupplierOption = {
+  id: string;
+  code: string;
+  name: string;
+  onboarding_status: string;
+  operational_status: string;
+};
+
+export type { SupplierProductSource };
 
 export type SupplierProductPage = PageData<SupplierProduct>;
 export type SupplierSkuPage = PageData<SupplierSku>;

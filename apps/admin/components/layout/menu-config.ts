@@ -30,7 +30,6 @@ import {
   Shield,
   Sparkles,
   SlidersHorizontal,
-  Tags,
   TerminalSquare,
   Users,
   RefreshCw,
@@ -154,6 +153,12 @@ export const platformNavGroups: AdminMenuGroup[] = [
         permission: "platform.catalog.manage",
       },
       {
+        href: "/platform/supplier-products",
+        label: "平台共享商品",
+        icon: PackageOpen,
+        permission: "platform.supplier-product.manage",
+      },
+      {
         href: "/platform/operators",
         label: "平台人员",
         icon: Shield,
@@ -167,6 +172,25 @@ export const platformNavGroups: AdminMenuGroup[] = [
     label: "运维",
     items: [
       { href: "/ops", label: "运维脚本", icon: TerminalSquare },
+    ],
+  },
+];
+
+export const tenantServiceRecoveryNavGroups: AdminMenuGroup[] = [
+  {
+    label: "服务恢复",
+    items: [
+      { href: "/service-access", label: "服务状态", icon: Shield },
+      { href: "/billing", label: "计费账户", icon: CircleDollarSign },
+    ],
+  },
+];
+
+export const tenantHardBlockedNavGroups: AdminMenuGroup[] = [
+  {
+    label: "服务恢复",
+    items: [
+      { href: "/service-access", label: "服务状态", icon: Shield },
     ],
   },
 ];
@@ -221,7 +245,7 @@ export const tenantNavGroups: AdminMenuGroup[] = [
       {
         href: "/supplier-catalog",
         label: "供应商目录",
-        icon: Tags,
+        icon: PackageSearch,
         permission: "supplier.catalog.manage",
       },
       {

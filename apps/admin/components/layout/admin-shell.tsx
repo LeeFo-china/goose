@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { type AdminSession } from "@/lib/backend";
@@ -8,6 +9,11 @@ import { LogoutButton } from "@/components/layout/logout-button";
 import { AdminNav } from "@/components/layout/admin-nav";
 import { AdminSessionGuard } from "@/components/layout/admin-session-guard";
 import { AdminSessionScopeProvider } from "@/components/layout/admin-session-scope";
+import {
+  getServiceAccessProviderKey,
+  ServiceAccessProvider,
+} from "@/components/service-access/service-access-context";
+import { ServiceAccessGate } from "@/components/service-access/service-access-gate";
 import {
   AdminPreferencesMenu,
   applyThemeTone,
@@ -17,13 +23,16 @@ import {
 } from "@/components/layout/admin-shell-preferences";
 import { NotificationMenu } from "@/components/layout/notification-menu";
 import { isPlatformOnlySession } from "@/lib/session-mode";
+import type { TenantServiceAccessLoadResult } from "@/lib/tenant-service-access";
 import { cn } from "@/lib/utils";
 
 export function AdminShell({
   session,
+  serviceAccess,
   children,
 }: {
   session: AdminSession;
+  serviceAccess: TenantServiceAccessLoadResult;
   children: React.ReactNode;
 }) {
   const [preferences, setPreferences] = useState(defaultPreferences);
@@ -79,18 +88,30 @@ export function AdminShell({
       tenantId={session.tenant?.id ?? null}
       userId={session.user_id}
     >
+      <ServiceAccessProvider
+        key={getServiceAccessProviderKey(serviceAccess)}
+        session={session}
+        initialLoadResult={serviceAccess}
+      >
       <AdminSessionGuard />
       <div className="goose-workbench-bg h-screen overflow-hidden">
       <aside className={cn(
-        "fixed inset-y-0 left-0 hidden flex-col border-r border-black/10 bg-white transition-[width] duration-200 lg:flex",
+        "fixed inset-y-0 left-0 hidden flex-col border-r bg-card transition-[width] duration-200 lg:flex",
         preferences.sidebarCollapsed ? "w-20" : "w-64",
       )}>
         <div className={cn("flex h-16 items-center gap-3 px-5", preferences.sidebarCollapsed && "justify-center px-3")}>
-          <div className="flex size-10 items-center justify-center overflow-hidden rounded-full border-2 border-[var(--goose-yellow)] bg-white shadow-[0_8px_18px_rgba(17,17,17,0.08)]">
-            <img src="/logo.png" alt="鹅班长" className="size-8 object-contain" />
+          <div className="flex size-10 items-center justify-center overflow-hidden rounded-md border bg-background">
+            <Image
+              src="/icon.png"
+              alt="好店智装云"
+              width={32}
+              height={32}
+              sizes="32px"
+              className="size-8 object-contain"
+            />
           </div>
           <div className={preferences.sidebarCollapsed ? "sr-only" : undefined}>
-            <div className="text-sm font-extrabold text-[var(--goose-ink)]">鹅班长工作台</div>
+            <div className="text-sm font-extrabold text-[var(--goose-ink)]">好店智装云工作台</div>
             <div className="text-xs text-[var(--goose-brown)]">AI 装修管理后台</div>
           </div>
         </div>
@@ -108,11 +129,18 @@ export function AdminShell({
         </div>
       </aside>
       <div className={cn("flex h-screen min-h-0 flex-col transition-[padding] duration-200", preferences.sidebarCollapsed ? "lg:pl-20" : "lg:pl-64")}>
-        <header className="shrink-0 sticky top-0 z-40 border-b border-black/10 bg-card shadow-[0_6px_18px_rgba(17,17,17,0.05)]">
+        <header className="shrink-0 sticky top-0 z-40 border-b bg-card shadow-sm">
           <div className="flex min-h-16 items-center justify-between gap-3 px-3 md:px-5">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-background lg:hidden">
-                <img src="/logo.png" alt="鹅班长" className="size-7 object-contain" />
+                <Image
+                  src="/icon.png"
+                  alt="好店智装云"
+                  width={28}
+                  height={28}
+                  sizes="28px"
+                  className="size-7 object-contain"
+                />
               </div>
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
@@ -157,10 +185,11 @@ export function AdminShell({
           mainWidthClassName,
           preferences.compact ? "py-3" : "py-5",
         )}>
-          {children}
+          <ServiceAccessGate>{children}</ServiceAccessGate>
         </main>
       </div>
       </div>
+      </ServiceAccessProvider>
     </AdminSessionScopeProvider>
   );
 }
