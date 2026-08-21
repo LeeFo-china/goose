@@ -24,6 +24,9 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toMatch(/setItems\(normalizePricingEditorItemOrder/);
     expect(source).toContain("addPricingEditorItem(current");
     expect(source).toContain("removePricingEditorItem(current");
+    expect(source).toContain(
+      "setItems(normalizePricingEditorItemOrder(selectedVersion.items.map(pricingItemToEditor)))",
+    );
     expect(source).toContain("createBudgetPricingRequestAuthority");
     expect(source).toContain("撤销未保存修改");
     expect(source).toContain("const requestAuthority");
