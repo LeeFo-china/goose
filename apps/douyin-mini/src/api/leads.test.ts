@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { DOUYIN_ENTRY_PATH_VALUES as CANONICAL_ENTRY_PATHS } from
+  "../../../../packages/domain/src/douyin-miniapp";
 import type { LaunchContext } from "../models";
 import { sendLeadSms, submitLead } from "./leads";
 import { ApiClient, type TransportInput } from "./request";
@@ -21,6 +23,38 @@ function clientWith(handler: (input: TransportInput) => unknown): ApiClient {
 }
 
 describe("Douyin lead API client", () => {
+  test("forwards every canonical entry path in the strict appointment payload", async () => {
+    const calls: TransportInput[] = [];
+    const client = clientWith((input) => {
+      calls.push(input);
+      return {
+        lead_id: "55555555-5555-4555-8555-555555555555",
+        appointment_no: "DYLF-20260825-000001",
+        already_submitted: false,
+        existing_customer_linked: false,
+        status: "pending_confirmation",
+        message: "量房申请已提交，工作人员将与你确认具体时间",
+      };
+    });
+    for (const [index, entryPath] of CANONICAL_ENTRY_PATHS.entries()) {
+      await submitLead(client, {
+        name: "李先生",
+        phone: "13800000000",
+        sms_code: "123456",
+        community: "示例花园",
+        preferred_visit_date: "2026-08-25",
+        preferred_visit_period: "afternoon",
+        privacy_policy_version: "2026-07-19",
+        consented_at: "2026-07-19T10:00:00.000Z",
+        idempotency_key: eventId(index + 1),
+        attribution: { ...attribution, entry_path: entryPath },
+      });
+    }
+    expect(calls.map((call) => (
+      call.data as { attribution: LaunchContext }
+    ).attribution.entry_path)).toEqual([...CANONICAL_ENTRY_PATHS]);
+  });
+
   test("sends the strict SMS payload and validates its cooldown", async () => {
     const calls: TransportInput[] = [];
     const client = clientWith((input) => {
@@ -106,3 +140,7 @@ describe("Douyin lead API client", () => {
     })).rejects.toMatchObject({ code: "INVALID_API_RESPONSE" });
   });
 });
+
+function eventId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
+}

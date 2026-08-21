@@ -84,6 +84,73 @@ describe("lead page async authority", () => {
     expect(lifecycle.finishSubmit(retry!)).toBe(true);
   });
 
+  test("rejects a privacy refresh continuation after hide, show and a newer submit", async () => {
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onShow();
+    const stale = lifecycle.beginSubmit()!;
+    expect(lifecycle.finishSubmit(stale)).toBe(true);
+    let resolveRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => { resolveRefresh = resolve; });
+    const presentations: string[] = [];
+    const continuation = refresh.then(() => {
+      if (lifecycle.canPresentSubmitContinuation(stale)) presentations.push("stale");
+    });
+
+    lifecycle.onHide();
+    lifecycle.onShow();
+    const current = lifecycle.beginSubmit()!;
+    resolveRefresh();
+    await continuation;
+
+    expect(presentations).toEqual([]);
+    expect(lifecycle.beginSubmit()).toBeNull();
+    expect(lifecycle.finishSubmit(current)).toBe(true);
+  });
+
+  test("rejects a privacy refresh rejection after unload", async () => {
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onShow();
+    const stale = lifecycle.beginSubmit()!;
+    expect(lifecycle.finishSubmit(stale)).toBe(true);
+    let rejectRefresh!: (error: Error) => void;
+    const refresh = new Promise<void>((_, reject) => { rejectRefresh = reject; });
+    const presentations: string[] = [];
+    const continuation = refresh.catch(() => {
+      if (lifecycle.canPresentSubmitContinuation(stale)) presentations.push("stale-error");
+    });
+
+    lifecycle.onUnload();
+    rejectRefresh(new Error("refresh failed"));
+    await continuation;
+
+    expect(presentations).toEqual([]);
+  });
+
+  test("a stale policy navigation rejection cannot present or unlock a newer navigation", async () => {
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onShow();
+    const stale = lifecycle.beginPolicyNavigation();
+    expect(stale).not.toBeNull();
+    if (!stale) return;
+    let rejectNavigation!: (error: Error) => void;
+    const navigation = new Promise<void>((_, reject) => { rejectNavigation = reject; });
+    const presentations: string[] = [];
+    const continuation = navigation.catch(() => {
+      if (lifecycle.finishPolicyNavigation(stale)) presentations.push("stale-error");
+    });
+
+    lifecycle.onHide();
+    lifecycle.onShow();
+    const current = lifecycle.beginPolicyNavigation();
+    expect(current).not.toBeNull();
+    rejectNavigation(new Error("navigation failed"));
+    await continuation;
+
+    expect(presentations).toEqual([]);
+    expect(lifecycle.beginPolicyNavigation()).toBeNull();
+    expect(lifecycle.finishPolicyNavigation(current!)).toBe(true);
+  });
+
   test("never reactivates after unload", () => {
     const lifecycle = new LeadPageCoordinator();
     lifecycle.onShow();

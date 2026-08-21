@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { DouyinEntryPathSchema as CanonicalDouyinEntryPathSchema } from "@gooes/domain";
+import {
+  DOUYIN_ENTRY_PATH_VALUES,
+  DouyinEntryPathSchema as CanonicalDouyinEntryPathSchema,
+} from "@gooes/domain";
 import {
   DouyinLaunchContextSchema,
   DouyinLeadRequestSchema,
@@ -26,13 +29,15 @@ const body = {
 };
 
 describe("DouyinMiniappController", () => {
-  test("accepts the canonical budget cold-start path and rejects unknown fallbacks", () => {
+  test("accepts every canonical cold-start path and rejects unknown fallbacks", () => {
     expect(DouyinLaunchContextSchema.shape.entry_path)
       .toBe(CanonicalDouyinEntryPathSchema);
-    expect(DouyinLaunchContextSchema.safeParse({
-      ...body.launch_context,
-      entry_path: "pages/budget/index",
-    }).success).toBe(true);
+    for (const entryPath of DOUYIN_ENTRY_PATH_VALUES) {
+      expect(DouyinLaunchContextSchema.safeParse({
+        ...body.launch_context,
+        entry_path: entryPath,
+      }).success).toBe(true);
+    }
     expect(DouyinLaunchContextSchema.safeParse({
       ...body.launch_context,
       entry_path: "pages/admin/index",

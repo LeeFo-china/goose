@@ -138,8 +138,9 @@ describe("lead form model", () => {
   });
 
   test("appointment page consumes only the approved transient budget fields", async () => {
-    const [source, template, successSource, successTemplate] = await Promise.all([
-      Bun.file(`${__dirname}/index.ts`).text(),
+    const [source, formSource, template, successSource, successTemplate] = await Promise.all([
+      Bun.file(`${__dirname}/lead-page.ts`).text(),
+      Bun.file(`${__dirname}/form-model.ts`).text(),
       Bun.file(`${__dirname}/../../components/lead-form/index.ttml`).text(),
       Bun.file(`${__dirname}/../lead-success/index.ts`).text(),
       Bun.file(`${__dirname}/../lead-success/index.ttml`).text(),
@@ -149,7 +150,7 @@ describe("lead form model", () => {
     expect(source).toContain("budget_estimate_id");
     expect(source).toContain("preferred_visit_date");
     expect(source).toContain("preferred_visit_period");
-    expect(source).toContain("const result = await submitLead");
+    expect(source).toContain("const result = await dependencies.submitLead");
     expect(source).toContain("DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH");
     expect(source).toContain("DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH");
     expect(source).not.toContain("throw new TypeError");
@@ -166,8 +167,7 @@ describe("lead form model", () => {
     expect(source).toContain("app.bootstrap.getReadyOrLoad()");
     expect(source).toContain("onHide()");
     expect(source).toContain("onUnload()");
-    expect(source).toContain("if (!bootstrap || !this.lifecycle.isVisible()) return;");
-    expect(source).toContain("if (this.lifecycle.isVisible()) {");
+    expect(source).toContain("if (this.lifecycle.finishBootstrapLoad())");
     expect(source).toContain("cooldownUntil");
     expect(source).toContain("this.resumeCooldown()");
     expect(source).toContain("getCooldownRemainingSeconds");
@@ -180,7 +180,7 @@ describe("lead form model", () => {
       .toBeLessThan(source.lastIndexOf("finishSubmit"));
     expect(source.indexOf("recordSmsCooldownUntil"))
       .toBeLessThan(source.indexOf("finishSms(authority)"));
-    expect(source).toContain("budget_estimate_id: linkedBudget?.estimateId ?? \"\"");
+    expect(formSource).toContain("budget_estimate_id: linkedBudget?.estimateId ?? \"\"");
     const frozenContextGuard = source.indexOf(
       "if (this.data.submitting) return this.linkedBudget;",
     );

@@ -2,6 +2,7 @@ import {
   DOUYIN_VISIT_PERIODS,
   type DouyinVisitPeriod,
 } from "../../models";
+import type { BudgetLeadContext } from "../../platform/budget-lead-context";
 import type { IdempotencyStatus } from "../../utils/idempotency";
 
 export type LeadFormValue = {
@@ -122,6 +123,48 @@ export function resolveOptionalDetailsExpanded(
 
 export function getShanghaiNaturalDate(now = Date.now()): string {
   return new Date(now + SHANGHAI_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+export function sanitizeLeadField(field: LeadField, value: string): string {
+  if (field === "phone") return value.replace(/[^0-9]/g, "").slice(0, 11);
+  if (field === "sms_code") return value.replace(/[^0-9]/g, "").slice(0, 6);
+  if (field === "preferred_visit_date") return value.slice(0, 10);
+  if (field === "preferred_visit_period") return value.slice(0, 16);
+  const limits: Partial<Record<LeadField, number>> = {
+    name: 40,
+    community: 80,
+    demand: 1_000,
+  };
+  return value.slice(0, limits[field] ?? value.length);
+}
+
+export function optionalLeadDemand(value: string): { demand?: string } {
+  const normalized = value.trim();
+  return normalized ? { demand: normalized } : {};
+}
+
+export function toLeadIdempotencyDraft(
+  form: LeadFormValue,
+  privacyPolicyVersion: string,
+  linkedBudget: BudgetLeadContext | null,
+) {
+  return {
+    name: form.name.trim(),
+    phone: form.phone.trim(),
+    community: form.community.trim(),
+    preferred_visit_date: form.preferred_visit_date,
+    preferred_visit_period: form.preferred_visit_period,
+    budget_estimate_id: linkedBudget?.estimateId ?? "",
+    demand: form.demand.trim(),
+    consented_at: form.consented_at,
+    privacy_policy_version: privacyPolicyVersion,
+  };
+}
+
+export function toLeadVisitPeriod(
+  value: LeadFormValue["preferred_visit_period"],
+): DouyinVisitPeriod | null {
+  return DOUYIN_VISIT_PERIODS.find((period) => period === value) ?? null;
 }
 
 function isNaturalDate(value: string): boolean {

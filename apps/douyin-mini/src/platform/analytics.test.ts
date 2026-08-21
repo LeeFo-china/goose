@@ -1,4 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import { DOUYIN_ENTRY_PATH_VALUES as CANONICAL_ENTRY_PATHS } from
+  "../../../../packages/domain/src/douyin-miniapp";
 import type { ApiClient, ApiRequestInput } from "../api/request";
 import {
   AnalyticsQueue,
@@ -64,6 +66,41 @@ describe("AnalyticsQueue", () => {
         entity_id: ENTITY_ID,
       }],
     });
+  });
+
+  test("stores and flushes every canonical entry path without drift", async () => {
+    const { analytics, getStored, request } = harness();
+    for (const [index, entryPath] of CANONICAL_ENTRY_PATHS.entries()) {
+      expect(analytics.record({
+        event_id: eventId(index + 1),
+        event_name: "page_view",
+        attribution: { ...attribution, entry_path: entryPath },
+      }).status).toBe("queued");
+    }
+    const stored = getStored() as {
+      events: Array<{ attribution: { entry_path: string } }>;
+    };
+    expect(stored.events.map((event) => event.attribution.entry_path))
+      .toEqual([...CANONICAL_ENTRY_PATHS]);
+
+    await expect(analytics.flush()).resolves.toMatchObject({
+      status: "sent",
+      sent_count: CANONICAL_ENTRY_PATHS.length,
+    });
+    const requestEvents = request.mock.calls[0]?.[0]?.data?.events as
+      Array<{ attribution: { entry_path: string } }>;
+    expect(requestEvents.map((event) => event.attribution.entry_path))
+      .toEqual([...CANONICAL_ENTRY_PATHS]);
+  });
+
+  test("rejects an unknown entry path instead of storing it", () => {
+    const { analytics, getStored } = harness();
+    expect(analytics.record({
+      event_id: EVENT_ID,
+      event_name: "page_view",
+      attribution: { ...attribution, entry_path: "pages/admin/index" as never },
+    })).toEqual({ status: "rejected", queue_size: 0 });
+    expect(getStored()).toBeNull();
   });
 
   test("exposes only the six client-writable marketing events", () => {

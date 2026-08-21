@@ -1,4 +1,4 @@
-export const DOUYIN_ENTRY_PATHS = [
+export const DOUYIN_ENTRY_PATH_VALUES = [
   "pages/home/index",
   "pages/company/index",
   "pages/privacy/index",
@@ -15,7 +15,7 @@ export const DOUYIN_SOURCE_TYPES = [
   "short_video", "live", "search", "profile", "share", "direct", "other",
 ] as const;
 
-export type DouyinEntryPath = (typeof DOUYIN_ENTRY_PATHS)[number];
+export type DouyinEntryPath = (typeof DOUYIN_ENTRY_PATH_VALUES)[number];
 export type DouyinSourceType = (typeof DOUYIN_SOURCE_TYPES)[number];
 
 export type LaunchContext = {

@@ -1,6 +1,6 @@
 import type { ApiClient } from "../api/request";
 import {
-  DOUYIN_ENTRY_PATHS,
+  DOUYIN_ENTRY_PATH_VALUES,
   DOUYIN_SOURCE_TYPES,
   type LaunchContext,
 } from "../models";
@@ -286,7 +286,7 @@ function parseAttribution(value: unknown): LaunchContext | null {
     ["entry_path", "scene", "source_type", "campaign_code", "content_id"],
   )) return null;
   if (typeof value.entry_path !== "string"
-    || !DOUYIN_ENTRY_PATHS.includes(value.entry_path as LaunchContext["entry_path"])
+    || !DOUYIN_ENTRY_PATH_VALUES.includes(value.entry_path as LaunchContext["entry_path"])
     || typeof value.scene !== "string"
     || !/^[0-9]{1,20}$/.test(value.scene)
     || typeof value.source_type !== "string"

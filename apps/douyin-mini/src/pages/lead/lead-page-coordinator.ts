@@ -1,5 +1,5 @@
 type LeadPagePhase = "new" | "visible" | "hidden" | "unloaded";
-type LeadOperation = "sms" | "submit";
+type LeadOperation = "sms" | "submit" | "policy_navigation";
 
 export type LeadOperationAuthority = {
   readonly operation: LeadOperation;
@@ -10,9 +10,11 @@ export class LeadPageCoordinator {
   private phase: LeadPagePhase = "new";
   private smsSequence = 0;
   private submitSequence = 0;
+  private policyNavigationSequence = 0;
   private bootstrapLoading = false;
   private activeSms: LeadOperationAuthority | null = null;
   private activeSubmit: LeadOperationAuthority | null = null;
+  private activePolicyNavigation: LeadOperationAuthority | null = null;
 
   onLoad(): boolean {
     if (this.phase !== "new") return false;
@@ -81,11 +83,34 @@ export class LeadPageCoordinator {
     return this.isVisible();
   }
 
+  canPresentSubmitContinuation(authority: LeadOperationAuthority): boolean {
+    return this.isVisible()
+      && authority.operation === "submit"
+      && authority.sequence === this.submitSequence;
+  }
+
+  beginPolicyNavigation(): LeadOperationAuthority | null {
+    if (!this.isVisible() || this.activePolicyNavigation) return null;
+    this.activePolicyNavigation = {
+      operation: "policy_navigation",
+      sequence: ++this.policyNavigationSequence,
+    };
+    return this.activePolicyNavigation;
+  }
+
+  finishPolicyNavigation(authority: LeadOperationAuthority): boolean {
+    if (!matches(authority, this.activePolicyNavigation)) return false;
+    this.activePolicyNavigation = null;
+    return this.isVisible();
+  }
+
   private invalidateOperations(): void {
     this.smsSequence += 1;
     this.submitSequence += 1;
+    this.policyNavigationSequence += 1;
     this.activeSms = null;
     this.activeSubmit = null;
+    this.activePolicyNavigation = null;
   }
 }
 

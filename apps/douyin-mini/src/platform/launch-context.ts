@@ -1,5 +1,5 @@
 import {
-  DOUYIN_ENTRY_PATHS,
+  DOUYIN_ENTRY_PATH_VALUES,
   DOUYIN_SOURCE_TYPES,
   type DouyinEntryPath,
   type DouyinSourceType,
@@ -25,7 +25,7 @@ export function captureLaunchContext(options: {
 
 function normalizeEntryPath(value: string): DouyinEntryPath {
   const normalized = value.replace(/^\/+/, "");
-  return DOUYIN_ENTRY_PATHS.includes(normalized as DouyinEntryPath)
+  return DOUYIN_ENTRY_PATH_VALUES.includes(normalized as DouyinEntryPath)
     ? normalized as DouyinEntryPath
     : "pages/home/index";
 }
