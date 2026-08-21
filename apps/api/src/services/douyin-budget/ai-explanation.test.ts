@@ -259,8 +259,9 @@ describe('DouyinBudgetAiExplanationService', () => {
   test('keeps renovation terms while redacting only high-confidence address forms', async () => {
     const deps = buildDependencies();
     const addresses = [
-      '幸福大道88号', '人民路88号', '中山街12号', '梧桐巷8号',
-      '王府弄5号', '幸福村', '春风小区', '6号楼', '3栋',
+      '建设大道12号', '中山路88号', '幸福路3号楼', '幸福路5栋',
+      '中山街12号', '梧桐巷8号', '王府弄5号', '幸福村',
+      '春风小区', '6号楼', '3栋',
       '2幢', '1单元', '门牌号66', '501室',
     ];
     deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
@@ -269,9 +270,9 @@ describe('DouyinBudgetAiExplanationService', () => {
         ...baseRecord,
         request_payload: {
           ...baseRecord.request_payload as object,
-          layout: '卧室电路需要调整',
-          style: '装修思路清晰',
-          demand: '卧室电路与装修思路都需要保留',
+          layout: '卧室电路 220V需要调整',
+          style: '装修思路 2026版',
+          demand: '卧室电路 220V与装修思路 2026版都需要保留',
         },
         result_payload: {
           ...estimateResult,
@@ -282,9 +283,9 @@ describe('DouyinBudgetAiExplanationService', () => {
 
     await new Service(deps.values as never).generate(user, estimateId, false);
     const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
-    expect(prompt).toContain('卧室电路需要调整');
-    expect(prompt).toContain('装修思路清晰');
-    expect(prompt).toContain('卧室电路与装修思路都需要保留');
+    expect(prompt).toContain('卧室电路 220V需要调整');
+    expect(prompt).toContain('装修思路 2026版');
+    expect(prompt).toContain('卧室电路 220V与装修思路 2026版都需要保留');
     for (const address of addresses) expect(prompt).not.toContain(address);
     expect(prompt).toContain('[已脱敏]');
   });
