@@ -16,7 +16,16 @@ export type CustomerSourceSummary = {
   has_employee_share: boolean;
 };
 
-class CustomerSourceService {
+type CustomerSourceRepositoryPort = Pick<
+  typeof customerSourceRepository,
+  "findCustomerAccess" | "listByCustomer" | "listByCustomerIds"
+>;
+
+export class CustomerSourceService {
+  constructor(
+    private readonly repository: CustomerSourceRepositoryPort = customerSourceRepository,
+  ) {}
+
   async listCustomerSources(input: {
     authContext: AuthContext;
     customerId: string;
@@ -25,7 +34,7 @@ class CustomerSourceService {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
     await this.assertCanReadCustomer(input.authContext, input.customerId, tenantId);
 
-    return customerSourceRepository.listByCustomer({
+    return this.repository.listByCustomer({
       tenantId,
       customerId: input.customerId,
       query: input.query,
@@ -37,7 +46,7 @@ class CustomerSourceService {
     customerId: string;
     query: CustomerSourceListQuery;
   }) {
-    return customerSourceRepository.listByCustomer({
+    return this.repository.listByCustomer({
       tenantId: input.tenantId,
       customerId: input.customerId,
       query: input.query,
@@ -49,21 +58,14 @@ class CustomerSourceService {
     customerIds: string[];
   }) {
     const tenantId = accessPolicyService.assertTenantContext(input.authContext);
-    const rows = await customerSourceRepository.listByCustomerIds({
+    const rows = await this.repository.listByCustomerIds({
       tenantId,
       customerIds: input.customerIds,
     });
 
-    const grouped = new Map<string, SerializedCustomerSource[]>();
-    for (const row of rows) {
-      const current = grouped.get(row.customer_id) || [];
-      current.push(row);
-      grouped.set(row.customer_id, current);
-    }
-
     const result = new Map<string, CustomerSourceSummary>();
-    for (const customerId of input.customerIds) {
-      result.set(customerId, this.buildSummary(grouped.get(customerId) || []));
+    for (const row of rows) {
+      result.set(row.customerId, this.buildSummary(row));
     }
 
     return result;
@@ -74,7 +76,7 @@ class CustomerSourceService {
     customerId: string,
     tenantId: string,
   ) {
-    const customer = await customerSourceRepository.findCustomerAccess({
+    const customer = await this.repository.findCustomerAccess({
       customerId,
       tenantId,
     });
@@ -93,24 +95,26 @@ class CustomerSourceService {
     }
   }
 
-  private buildSummary(rows: SerializedCustomerSource[]): CustomerSourceSummary {
-    const latest = rows[0] || null;
-    const hasOldCustomerNewLead = rows.some((item) => item.is_old_customer_new_lead);
-    const hasPlatformNewLead = rows.some((item) => item.is_platform_new_lead);
-    const hasEmployeeShare = rows.some((item) => item.is_employee_share);
+  private buildSummary(row: {
+    total: number;
+    latestSource: SerializedCustomerSource | null;
+    hasOldCustomerNewLead: boolean;
+    hasPlatformNewLead: boolean;
+    hasEmployeeShare: boolean;
+  }): CustomerSourceSummary {
     const sourceTags = [
-      hasOldCustomerNewLead ? "old_customer_new_lead" : null,
-      hasPlatformNewLead ? "platform_new_lead" : null,
-      hasEmployeeShare ? "employee_share" : null,
+      row.hasOldCustomerNewLead ? "old_customer_new_lead" : null,
+      row.hasPlatformNewLead ? "platform_new_lead" : null,
+      row.hasEmployeeShare ? "employee_share" : null,
     ].filter((item): item is string => Boolean(item));
 
     return {
-      total: rows.length,
-      latest_source: latest,
+      total: row.total,
+      latest_source: row.latestSource,
       source_tags: sourceTags,
-      has_old_customer_new_lead: hasOldCustomerNewLead,
-      has_platform_new_lead: hasPlatformNewLead,
-      has_employee_share: hasEmployeeShare,
+      has_old_customer_new_lead: row.hasOldCustomerNewLead,
+      has_platform_new_lead: row.hasPlatformNewLead,
+      has_employee_share: row.hasEmployeeShare,
     };
   }
 }

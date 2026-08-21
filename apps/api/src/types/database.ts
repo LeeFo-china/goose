@@ -25859,6 +25859,22 @@ export type Database = {
         Args: { p_item: Json }
         Returns: boolean
       }
+      is_valid_douyin_measurement_attribution_snapshot: {
+        Args: { p_snapshot: Json }
+        Returns: boolean
+      }
+      is_valid_douyin_measurement_budget_ai_snapshot: {
+        Args: { p_snapshot: Json }
+        Returns: boolean
+      }
+      is_valid_douyin_measurement_budget_estimate_snapshot: {
+        Args: { p_snapshot: Json }
+        Returns: boolean
+      }
+      is_valid_douyin_measurement_budget_result_snapshot: {
+        Args: { p_snapshot: Json }
+        Returns: boolean
+      }
       is_valid_douyin_measurement_source_metadata: {
         Args: { p_metadata: Json }
         Returns: boolean
@@ -26036,6 +26052,17 @@ export type Database = {
           rating_count: number
           rating_sum: number
           stage_code: string
+        }[]
+      }
+      list_customer_source_summaries: {
+        Args: { p_customer_ids: string[]; p_tenant_id: string }
+        Returns: {
+          customer_id: string
+          has_employee_share: boolean
+          has_old_customer_new_lead: boolean
+          has_platform_new_lead: boolean
+          latest_source: Json
+          total: number
         }[]
       }
       list_employee_login_bindings: {

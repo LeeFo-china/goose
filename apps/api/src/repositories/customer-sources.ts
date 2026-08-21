@@ -3,27 +3,15 @@ import {
   serializeDouyinCustomerSourceMetadata,
   type DouyinCustomerSourceMetadata,
 } from "@/repositories/customer-source-douyin-metadata";
+import {
+  parseCustomerSourceSummaryRows,
+  type CustomerSourceRawRecord,
+  type CustomerSourceSummaryRecord,
+} from "@/repositories/customer-source-summary-parser";
 import type { CustomerSourceListQuery } from "@/schema/customer-sources";
 import { SupabaseDB } from "@/utils/supabase";
 
-export type CustomerSourceRecord = {
-  id: string;
-  tenant_id: string;
-  customer_id: string;
-  source: string;
-  source_label: string | null;
-  platform_lead_id: string | null;
-  assigned_by_employee_id: string | null;
-  assigned_at: string | null;
-  metadata: unknown;
-  created_at: string;
-  source_employee_id?: string | null;
-  related_type?: string | null;
-  related_id?: string | null;
-  share_link_id?: string | null;
-  marketing_lead_id?: string | null;
-  douyin_measurement_appointment_id?: string | null;
-};
+export type CustomerSourceRecord = CustomerSourceRawRecord;
 
 export type CustomerAccessRecord = {
   id: string;
@@ -55,7 +43,12 @@ type TenantShareLinkLite = {
   target_id: string | null;
 };
 
-export type SerializedCustomerSource = Omit<CustomerSourceRecord, "metadata"> & {
+export type SerializedCustomerSource = {
+  id: string;
+  source: string;
+  source_label: string | null;
+  assigned_at: string | null;
+  created_at: string;
   metadata: unknown | DouyinCustomerSourceMetadata;
   display_label: string;
   dedupe_result: string | null;
@@ -66,6 +59,13 @@ export type SerializedCustomerSource = Omit<CustomerSourceRecord, "metadata"> & 
   assigned_by: EmployeeLite | null;
   platform_lead: PlatformLeadLite | null;
   share_link: TenantShareLinkLite | null;
+};
+
+export type SerializedCustomerSourceSummary = Omit<
+  CustomerSourceSummaryRecord,
+  "latestSource"
+> & {
+  latestSource: SerializedCustomerSource | null;
 };
 
 const CUSTOMER_SOURCE_SELECT = [
@@ -154,21 +154,38 @@ export class CustomerSourceRepository {
     customerIds: string[];
   }) {
     if (input.customerIds.length === 0) {
-      return [] as SerializedCustomerSource[];
+      return [] as SerializedCustomerSourceSummary[];
+    }
+    if (
+      input.customerIds.length > 100
+      || new Set(input.customerIds).size !== input.customerIds.length
+    ) {
+      throw Errors.badRequest("客户来源摘要最多支持 100 个不重复客户");
     }
 
-    const request = this.from("customer_sources")
-      .select(CUSTOMER_SOURCE_SELECT)
-      .in("customer_id", input.customerIds)
-      .eq("tenant_id", input.tenantId)
-      .order("created_at", { ascending: false });
-
-    const { data, error } = await request;
+    const { data, error } = await this.client.rpc("list_customer_source_summaries", {
+      p_tenant_id: input.tenantId,
+      p_customer_ids: input.customerIds,
+    });
     if (error) {
-      throw Errors.dbError("查询客户来源摘要失败", error);
+      throw Errors.dbError("查询客户来源摘要失败");
     }
 
-    return this.serializeRows((data || []) as CustomerSourceRecord[], input.tenantId);
+    const rows = parseCustomerSourceSummaryRows(data, input);
+    if (!rows) {
+      throw Errors.dbError("查询客户来源摘要失败", {
+        code: "CUSTOMER_SOURCE_SUMMARY_INVALID_RESPONSE",
+      });
+    }
+
+    const latestRows = rows.flatMap((row) => row.latestSource ? [row.latestSource] : []);
+    const serializedLatestRows = await this.serializeRows(latestRows, input.tenantId);
+    let latestIndex = 0;
+
+    return rows.map((row): SerializedCustomerSourceSummary => ({
+      ...row,
+      latestSource: row.latestSource ? serializedLatestRows[latestIndex++]! : null,
+    }));
   }
 
   private async serializeRows(rows: CustomerSourceRecord[], tenantId: string) {
@@ -191,7 +208,7 @@ export class CustomerSourceRepository {
     return rows.map((row): SerializedCustomerSource => {
       const dedupeResult = readDedupeResult(row.metadata);
       return {
-        ...row,
+        id: row.id,
         source: isDouyinAppointmentSource(row) ? "douyin" : row.source,
         source_label: isDouyinAppointmentSource(row)
           ? "抖音小程序"
@@ -203,6 +220,8 @@ export class CustomerSourceRepository {
           ? "抖音小程序"
           : row.source_label || getSourceLabel(row.source),
         dedupe_result: dedupeResult,
+        assigned_at: row.assigned_at,
+        created_at: row.created_at,
         is_old_customer_new_lead: row.source === "platform_lead" && dedupeResult === "existing_customer",
         is_platform_new_lead: row.source === "platform_lead" && dedupeResult === "created_customer",
         is_employee_share: isEmployeeShareSource(row.source),

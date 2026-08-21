@@ -18,7 +18,10 @@ beforeAll(async () => {
 
 type QueryResult = { data: unknown; error: unknown; count?: number | null };
 
-function clientWith(result: QueryResult) {
+function clientWith(
+  result: QueryResult,
+  rpcResult: QueryResult = { data: null, error: null },
+) {
   const calls: Array<{ method: string; args: unknown[] }> = [];
   class Query implements PromiseLike<QueryResult> {
     private chain(method: string, args: unknown[]) {
@@ -42,6 +45,10 @@ function clientWith(result: QueryResult) {
       from(table: string) {
         calls.push({ method: "from", args: [table] });
         return new Query();
+      },
+      rpc(name: string, args: unknown) {
+        calls.push({ method: "rpc", args: [name, args] });
+        return Promise.resolve(rpcResult);
       },
     },
   };
@@ -174,6 +181,168 @@ describe("Douyin customer source serialization", () => {
         status: "pending_confirmation",
       },
     });
+    expect(Object.keys(result.list[0]!).sort()).toEqual([
+      "assigned_at",
+      "assigned_by",
+      "created_at",
+      "dedupe_result",
+      "display_label",
+      "id",
+      "is_employee_share",
+      "is_old_customer_new_lead",
+      "is_platform_new_lead",
+      "metadata",
+      "platform_lead",
+      "share_link",
+      "source",
+      "source_employee",
+      "source_label",
+    ].sort());
+    expect(result.list[0]).not.toHaveProperty("tenant_id");
+    expect(result.list[0]).not.toHaveProperty("customer_id");
+    expect(result.list[0]).not.toHaveProperty("platform_lead_id");
+    expect(result.list[0]).not.toHaveProperty("marketing_lead_id");
+    expect(result.list[0]).not.toHaveProperty("douyin_measurement_appointment_id");
+    expect(result.list[0]).not.toHaveProperty("related_id");
     expect(JSON.stringify(result.list[0]?.metadata)).not.toContain("request_ip");
+  });
+
+  test("loads one strict tenant-scoped summary row per customer through the bounded RPC", async () => {
+    const latestSource = {
+      id: "source-1",
+      tenant_id: "11111111-1111-4111-8111-111111111111",
+      customer_id: "22222222-2222-4222-8222-222222222222",
+      source: "douyin_miniapp",
+      source_label: "抖音小程序",
+      platform_lead_id: null,
+      assigned_by_employee_id: null,
+      assigned_at: "2026-08-22T10:00:00.000Z",
+      metadata: {
+        appointment_no: "DYLF-20260822-000001",
+        appointment_status: "confirmed",
+        budget_estimate: null,
+      },
+      created_at: "2026-08-22T10:00:00.000Z",
+      source_employee_id: null,
+      related_type: null,
+      related_id: null,
+      share_link_id: null,
+      marketing_lead_id: "33333333-3333-4333-8333-333333333333",
+      douyin_measurement_appointment_id: "44444444-4444-4444-8444-444444444444",
+    };
+    const context = clientWith(
+      { data: null, error: null },
+      {
+        data: [{
+          customer_id: "22222222-2222-4222-8222-222222222222",
+          total: 3,
+          latest_source: latestSource,
+          has_old_customer_new_lead: true,
+          has_platform_new_lead: false,
+          has_employee_share: true,
+        }],
+        error: null,
+      },
+    );
+
+    const result = await new CustomerSourceRepository(context.client as never)
+      .listByCustomerIds({
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        customerIds: ["22222222-2222-4222-8222-222222222222"],
+      });
+
+    expect(context.calls.filter((call) => call.method === "rpc")).toEqual([{
+      method: "rpc",
+      args: ["list_customer_source_summaries", {
+        p_tenant_id: "11111111-1111-4111-8111-111111111111",
+        p_customer_ids: ["22222222-2222-4222-8222-222222222222"],
+      }],
+    }]);
+    expect(context.calls.some((call) => call.method === "from" && call.args[0] === "customer_sources"))
+      .toBe(false);
+    expect(result).toEqual([{
+      customerId: "22222222-2222-4222-8222-222222222222",
+      total: 3,
+      latestSource: expect.objectContaining({
+        id: "source-1",
+        source: "douyin",
+        metadata: expect.objectContaining({ appointment_no: "DYLF-20260822-000001" }),
+      }),
+      hasOldCustomerNewLead: true,
+      hasPlatformNewLead: false,
+      hasEmployeeShare: true,
+    }]);
+    expect(result[0]?.latestSource).not.toHaveProperty("tenant_id");
+    expect(result[0]?.latestSource).not.toHaveProperty("customer_id");
+    expect(Object.keys(result[0]!.latestSource!).sort()).toEqual([
+      "assigned_at", "assigned_by", "created_at", "dedupe_result",
+      "display_label", "id", "is_employee_share",
+      "is_old_customer_new_lead", "is_platform_new_lead", "metadata",
+      "platform_lead", "share_link", "source", "source_employee",
+      "source_label",
+    ].sort());
+    expect(JSON.stringify(result)).not.toContain("marketing_lead_id");
+  });
+
+  test("rejects duplicate inputs and malformed RPC rows without exposing raw data", async () => {
+    const duplicateContext = clientWith({ data: null, error: null });
+    const duplicateRepository = new CustomerSourceRepository(
+      duplicateContext.client as never,
+    );
+    const duplicateId = "22222222-2222-4222-8222-222222222222";
+
+    await expect(duplicateRepository.listByCustomerIds({
+      tenantId: "11111111-1111-4111-8111-111111111111",
+      customerIds: [duplicateId, duplicateId],
+    })).rejects.toMatchObject({ statusCode: 400 });
+    expect(duplicateContext.calls.some((call) => call.method === "rpc")).toBe(false);
+
+    const malformedContext = clientWith(
+      { data: null, error: null },
+      {
+        data: [{
+          customer_id: duplicateId,
+          total: 1,
+          latest_source: null,
+          has_old_customer_new_lead: false,
+          has_platform_new_lead: false,
+          has_employee_share: false,
+          raw_rows: [{ raw_response: "unsafe-model-output" }],
+        }],
+        error: null,
+      },
+    );
+    const malformedRepository = new CustomerSourceRepository(
+      malformedContext.client as never,
+    );
+
+    let caught: unknown;
+    try {
+      await malformedRepository.listByCustomerIds({
+        tenantId: "11111111-1111-4111-8111-111111111111",
+        customerIds: [duplicateId],
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toMatchObject({ statusCode: 500 });
+    expect(JSON.stringify(caught)).not.toContain("unsafe-model-output");
+
+    const databaseErrorContext = clientWith(
+      { data: null, error: null },
+      { data: null, error: { message: "raw database detail", hint: "unsafe" } },
+    );
+    let databaseError: unknown;
+    try {
+      await new CustomerSourceRepository(databaseErrorContext.client as never)
+        .listByCustomerIds({
+          tenantId: "11111111-1111-4111-8111-111111111111",
+          customerIds: [duplicateId],
+        });
+    } catch (error) {
+      databaseError = error;
+    }
+    expect(databaseError).toMatchObject({ statusCode: 500 });
+    expect(JSON.stringify(databaseError)).not.toMatch(/raw database detail|unsafe/);
   });
 });

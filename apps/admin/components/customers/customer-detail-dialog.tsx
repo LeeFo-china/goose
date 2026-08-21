@@ -285,7 +285,9 @@ export function CustomerDetailDialog({
             {sourcesLoading ? (
               <div
                 aria-label="正在加载来源记录"
+                aria-live="polite"
                 className="flex flex-col gap-3 rounded-md border p-3"
+                role="status"
               >
                 <Skeleton className="h-4 w-36" />
                 <Skeleton className="h-4 w-full" />

@@ -117,6 +117,8 @@ describe("customer detail display", () => {
     );
 
     expect(dialog).toContain("CustomerDouyinSourceSnapshot");
+    expect(dialog).toContain('role="status"');
+    expect(dialog).toContain('aria-live="polite"');
     expect(snapshot).toContain("抖音预约");
     expect(snapshot).toContain("预算区间");
     expect(snapshot).toContain("AI 建议");
