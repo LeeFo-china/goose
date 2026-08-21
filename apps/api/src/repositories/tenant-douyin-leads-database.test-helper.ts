@@ -235,6 +235,7 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
   const afterReplay = await operationCount(admin, ids.tenant);
   summary.stale_create_preflight_rejected = preflight?.customer_id === null
     && stale.error?.code === "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT"
+    && stale.error.status_code === 409
     && beforeStale === afterStale
     && corrected.data?.customer_id === created.data?.customer_id
     && corrected.data?.repeated_conversion === true

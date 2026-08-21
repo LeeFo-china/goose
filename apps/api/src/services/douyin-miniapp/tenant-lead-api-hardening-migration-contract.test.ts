@@ -139,6 +139,7 @@ describe("tenant lead API hardening migration", () => {
     expect(stateCheck).toBeGreaterThan(conflict);
     expect(conflict).toBeLessThan(resultWrite);
     expect(conflict).toBeLessThan(operationWrite);
+    expect(body.slice(guard, stateCheck)).toContain("'status_code', 409");
     expect(body.slice(repeated, stateCheck)).not.toMatch(
       /(?:insert into|update|delete from) public\./,
     );
