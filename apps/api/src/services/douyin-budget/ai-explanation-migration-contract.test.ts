@@ -14,6 +14,10 @@ const sceneMigration = new URL(
   '20260821103100_seed_douyin_budget_ai_route.sql',
   migrationsDirectory,
 );
+const fallbackRepairMigration = new URL(
+  '20260821103200_remove_douyin_budget_ai_fallback.sql',
+  migrationsDirectory,
+);
 
 function compact(value: string): string {
   return value
@@ -64,6 +68,10 @@ describe('douyin budget AI state machine migration', () => {
       [
         '20260821103100_seed_douyin_budget_ai_route.sql',
         'a83177f0603509b300c3e326d14010ff183bfd4ee2e1a7ecbd8f29f50ae8620d',
+      ],
+      [
+        '20260821103200_remove_douyin_budget_ai_fallback.sql',
+        '99d1896ec5d9238bf4ae5d0f975e40b1f8120d1e829cffbad8f70e5f59f79fd8',
       ],
     ]);
     for (const [name, expectedHash] of hashes) {
@@ -186,5 +194,22 @@ describe('douyin budget AI state machine migration', () => {
       /fallback_model_id = coalesce\(\s*public\.ai_scene_routes\.fallback_model_id, excluded\.fallback_model_id\s*\)/,
     );
     expect(sql).not.toMatch(/api[_-]?key\s*=/);
+  });
+
+  test('removes the final scene fallback without changing its primary route', async () => {
+    const source = await Bun.file(fallbackRepairMigration).text();
+    const sql = compact(source);
+    expect(source.startsWith('-- Rollback: forward-only.')).toBe(true);
+    expect(sql).toContain("scene_code = 'douyin_budget_explanation'");
+    expect(sql).toContain('set fallback_model_id = null');
+    expect(sql).toContain('route.fallback_model_id is null');
+    expect(sql).toContain('route.temperature = 0.200::numeric');
+    expect(sql).toContain("route.response_format = 'json_object'");
+    expect(sql).toContain('route.timeout_ms = 30000');
+    expect(sql).toContain("model.code = 'deepseek-chat'");
+    expect(sql).not.toMatch(/set\s+primary_model_id/);
+    expect(sql).not.toMatch(/set\s+temperature/);
+    expect(sql).not.toMatch(/set\s+response_format/);
+    expect(sql).not.toMatch(/set\s+timeout_ms/);
   });
 });
