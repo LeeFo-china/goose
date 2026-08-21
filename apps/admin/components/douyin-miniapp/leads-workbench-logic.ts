@@ -22,7 +22,7 @@ export type Pagination = { page: number; pageSize: number; total: number; totalP
 export type Appointment = {
   id: string;
   appointment_no: string;
-  has_budget_estimate: boolean;
+  budget_range: { minimum_total: number; maximum_total: number } | null;
   preferred_visit_date: string;
   preferred_visit_period: "morning" | "afternoon" | "evening";
   community: string;
@@ -112,7 +112,13 @@ const appointmentShape = {
   confirmed_visit_at: dateTime.nullable(), created_at: dateTime,
   updated_at: dateTime, version: z.number().int().min(1),
 };
-const appointmentSchema = z.strictObject(appointmentShape);
+const safeBudgetAmount = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
+const budgetRangeSchema = z.strictObject({
+  minimum_total: safeBudgetAmount, maximum_total: safeBudgetAmount,
+}).refine((range) => range.minimum_total <= range.maximum_total);
+const appointmentSchema = z.strictObject({
+  ...appointmentShape, budget_range: budgetRangeSchema.nullable(),
+});
 const appointmentDetailSchema = z.strictObject({
   ...appointmentShape, source_snapshot: z.record(z.string(), z.unknown()),
 });
@@ -168,19 +174,19 @@ const commandSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("mark_invalid"), result: z.literal("invalid"),
     appointments_updated: z.number().int().min(0), repeated_invalidation: z.boolean(), ...commandBase }),
 ]);
-
-function projectAppointment(raw: z.infer<typeof appointmentSchema>): Appointment {
+type AppointmentProjectionInput = Omit<z.infer<typeof appointmentDetailSchema>, "source_snapshot" | "budget_estimate_id"> & { budget_range?: z.infer<typeof budgetRangeSchema> | null };
+type LeadProjectionInput = Omit<z.infer<typeof leadSchema>, "latest_appointment"> & { latest_appointment: AppointmentProjectionInput | null };
+function projectAppointment(raw: AppointmentProjectionInput): Appointment {
   return {
     id: raw.id, appointment_no: raw.appointment_no,
-    has_budget_estimate: raw.budget_estimate_id !== null,
+    budget_range: raw.budget_range ?? null,
     preferred_visit_date: raw.preferred_visit_date,
     preferred_visit_period: raw.preferred_visit_period, community: raw.community,
     status: raw.status, confirmed_visit_at: raw.confirmed_visit_at,
     created_at: raw.created_at, updated_at: raw.updated_at, version: raw.version,
   };
 }
-
-function projectLead(raw: z.infer<typeof leadSchema>): LeadRow {
+function projectLead(raw: LeadProjectionInput): LeadRow {
   return {
     id: raw.id, name: raw.name, phone_masked: raw.phone_masked,
     community: raw.community, status: raw.status, version: raw.version,
@@ -193,7 +199,6 @@ function projectLead(raw: z.infer<typeof leadSchema>): LeadRow {
       ? projectAppointment(raw.latest_appointment) : null,
   };
 }
-
 export function normalizeLeadPage(raw: unknown, expected: {
   page: number; pageSize: number;
 }): LeadPage | null {
@@ -316,19 +321,25 @@ export function parseLeadFilters(params: URLSearchParams): LeadFilters {
     ? statusValue as LeadStatus : "";
   const assigneeValue = params.get("assigneeId") ?? "";
   const assigneeId = z.uuid().safeParse(assigneeValue).success ? assigneeValue : "";
-  return { page, pageSize, status, assigneeId,
+  return normalizeLeadDateRange({ page, pageSize, status, assigneeId,
     dateFrom: validDate(params.get("dateFrom")), dateTo: validDate(params.get("dateTo")),
-    keyword: validKeyword(params.get("keyword")) };
+    keyword: validKeyword(params.get("keyword")) });
+}
+
+export function normalizeLeadDateRange(filters: LeadFilters): LeadFilters {
+  if (!filters.dateFrom || !filters.dateTo || filters.dateFrom <= filters.dateTo) return { ...filters };
+  return { ...filters, dateFrom: filters.dateTo, dateTo: filters.dateFrom };
 }
 
 export function buildLeadHref(filters: LeadFilters): string {
-  const params = new URLSearchParams({ pageSize: String(filters.pageSize) });
-  if (filters.page > 1) params.set("page", String(filters.page));
-  if (filters.status) params.set("status", filters.status);
-  if (filters.assigneeId) params.set("assigneeId", filters.assigneeId);
-  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-  if (filters.dateTo) params.set("dateTo", filters.dateTo);
-  if (filters.keyword) params.set("keyword", filters.keyword);
+  const safe = normalizeLeadDateRange(filters);
+  const params = new URLSearchParams({ pageSize: String(safe.pageSize) });
+  if (safe.page > 1) params.set("page", String(safe.page));
+  if (safe.status) params.set("status", safe.status);
+  if (safe.assigneeId) params.set("assigneeId", safe.assigneeId);
+  if (safe.dateFrom) params.set("dateFrom", safe.dateFrom);
+  if (safe.dateTo) params.set("dateTo", safe.dateTo);
+  if (safe.keyword) params.set("keyword", safe.keyword);
   return `/douyin-miniapp/leads?${params}`;
 }
 

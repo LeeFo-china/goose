@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { tenantNavGroups } from "@/components/layout/menu-config";
+import * as workbenchModule from "./leads-workbench";
 import {
   LeadActionForm,
   LeadDetailPanel,
@@ -22,8 +23,8 @@ import {
   createSubmissionGate,
   getAllowedLeadActions,
   getLeadViewState,
-  normalizeLeadPage,
   normalizeAssigneeCandidatePage,
+  normalizeLeadPage,
   parseLeadFilters,
   projectLeadSourceSnapshot,
 } from "./leads-workbench-logic";
@@ -48,7 +49,7 @@ const page: LeadPage = {
     latest_appointment: {
       id: APPOINTMENT_ID,
       appointment_no: "DYLF-20260821-000001",
-      has_budget_estimate: true,
+      budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
       preferred_visit_date: "2026-08-23",
       preferred_visit_period: "morning",
       community: "晴天花园",
@@ -96,6 +97,14 @@ describe("tenant Douyin lead workbench behavior", () => {
     expect(buildLeadHref({ ...DEFAULT_LEAD_FILTERS, status: "new" }))
       .toBe("/douyin-miniapp/leads?pageSize=20&status=new");
     expect(buildLeadApiQuery(DEFAULT_LEAD_FILTERS)).toBe("page=1&pageSize=20");
+    const reversed = { ...DEFAULT_LEAD_FILTERS,
+      dateFrom: "2026-08-22", dateTo: "2026-08-01" };
+    expect(parseLeadFilters(new URLSearchParams(
+      "dateFrom=2026-08-22&dateTo=2026-08-01",
+    ))).toMatchObject({ dateFrom: "2026-08-01", dateTo: "2026-08-22" });
+    expect(buildLeadApiQuery(reversed)).toContain(
+      "dateFrom=2026-08-01&dateTo=2026-08-22",
+    );
   });
 
   test("strictly projects the backend DTO and removes raw phone and relation IDs", () => {
@@ -118,6 +127,7 @@ describe("tenant Douyin lead workbench behavior", () => {
         customer_id: "44444444-4444-4444-8444-444444444444",
         assigned_employee_id: EMPLOYEE_ID,
         budget_estimate_id: "44444444-4444-4444-8444-444444444444",
+        budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
         preferred_visit_date: "2026-08-23", preferred_visit_period: "morning",
         community: "晴天花园", status: "pending_confirmation",
         confirmed_visit_at: null, created_at: "2026-08-21T08:00:00.000Z",
@@ -129,8 +139,10 @@ describe("tenant Douyin lead workbench behavior", () => {
     } }, { page: 1, pageSize: 20 });
     expect(normalized?.list[0]).toEqual(page.list[0]);
     expect(normalized?.list[0]).not.toHaveProperty("phone");
-    expect(normalized?.list[0]?.latest_appointment)
-      .not.toHaveProperty("budget_estimate_id");
+    expect(normalized?.list[0]?.latest_appointment).toMatchObject({
+      budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
+    });
+    expect(normalized?.list[0]?.latest_appointment).not.toHaveProperty("budget_estimate_id");
     expect(normalizeLeadPage({ list: [{ ...rawLead, source_snapshot: {} }],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } },
     { page: 1, pageSize: 20 })).toBeNull();
@@ -204,6 +216,20 @@ describe("tenant Douyin lead workbench behavior", () => {
     expect(second.controller.signal.aborted).toBe(true);
   });
 
+  test("keeps filter options, assignment candidates and mutations independent", () => {
+    const filterOptions = createLeadRequestAuthority();
+    const assignmentCandidates = createLeadRequestAuthority();
+    const mutation = createLeadRequestAuthority();
+    const firstFilter = filterOptions.begin();
+    const assignment = assignmentCandidates.begin();
+    const command = mutation.begin();
+    const latestFilter = filterOptions.begin();
+    expect(firstFilter.controller.signal.aborted).toBe(true);
+    expect(filterOptions.isCurrent(latestFilter)).toBe(true);
+    expect(assignment.controller.signal.aborted).toBe(false);
+    expect(command.controller.signal.aborted).toBe(false);
+  });
+
   test("hides unauthorized actions and never makes existing conversion depend on customer.create", () => {
     expect(getAllowedLeadActions([])).toEqual([]);
     expect(getAllowedLeadActions(["douyin_lead.assign", "douyin_lead.follow_up"]))
@@ -226,6 +252,30 @@ describe("tenant Douyin lead workbench behavior", () => {
       list: [{ id: EMPLOYEE_ID, name: "王顾问", tenant_id: LEAD_ID }],
       pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
     })).toBeNull();
+  });
+
+  test("targets separate read filter and assignment option endpoints", () => {
+    const builder = (workbenchModule as unknown as Record<string, unknown>)
+      .buildAssigneeOptionsPath;
+    expect(typeof builder).toBe("function");
+    if (typeof builder !== "function") return;
+    expect(builder("filter", " 王顾问 ")).toBe(
+      "/tenant/douyin-miniapp/leads/assignee-filter-options?page=1&pageSize=100&keyword=%E7%8E%8B%E9%A1%BE%E9%97%AE",
+    );
+    expect(builder("assign", "")).toBe(
+      "/tenant/douyin-miniapp/leads/assignee-candidates?page=1&pageSize=100",
+    );
+  });
+
+  test("blocks reversed interactive dates before list navigation", () => {
+    const validator = (workbenchModule as unknown as Record<string, unknown>)
+      .validateLeadFilterDraft;
+    expect(typeof validator).toBe("function");
+    if (typeof validator !== "function") return;
+    expect(validator({ ...DEFAULT_LEAD_FILTERS,
+      dateFrom: "2026-08-22", dateTo: "2026-08-01" }))
+      .toBe("结束日期不能早于开始日期");
+    expect(validator(DEFAULT_LEAD_FILTERS)).toBeNull();
   });
 
   test("serializes strict command payloads without tenant, customer or internal fields", () => {
@@ -309,8 +359,11 @@ describe("tenant Douyin lead workbench behavior", () => {
     }));
     for (const text of [
       "李女士", "138****8000", "晴天花园", "2026-08-23 上午",
-      "预算区间", "新线索", "王顾问", "已关联客户",
+      "¥100,000 至 ¥140,000", "新线索", "王顾问", "已关联客户",
+      "搜索负责人筛选", "暂无负责人筛选项",
     ]) expect(html).toContain(text);
+    expect(html).toContain("flex-col items-stretch");
+    expect(html).toContain("md:flex-row");
     expect(html).not.toContain(LEAD_ID);
     expect(html).not.toContain(APPOINTMENT_ID);
     expect(html).not.toContain("13800138000");

@@ -24,7 +24,7 @@ import {
   createLeadRequestAuthority, createSubmissionGate, getAllowedLeadActions,
   getLeadViewState, isLeadCommandResult, normalizeFollowUpPage,
   normalizeAssigneeCandidatePage, normalizeLeadDetail, normalizeLeadPage,
-  parseLeadFilters,
+  normalizeLeadDateRange, parseLeadFilters,
   type Appointment, type LeadAction,
   type LeadDetail, type LeadFilters, type LeadPage,
 } from "./leads-workbench-logic";
@@ -54,6 +54,19 @@ export function createActionSubmissionCoordinator() {
   };
 }
 
+export function buildAssigneeOptionsPath(kind: "assign" | "filter", keyword: string) {
+  const params = new URLSearchParams({ page: "1", pageSize: "100" });
+  const normalizedKeyword = keyword.trim();
+  if (normalizedKeyword) params.set("keyword", normalizedKeyword);
+  const resource = kind === "assign" ? "assignee-candidates" : "assignee-filter-options";
+  return `${API_PATH}/${resource}?${params}`;
+}
+
+export function validateLeadFilterDraft(filters: LeadFilters): string | null {
+  if (filters.dateFrom && filters.dateTo && filters.dateFrom > filters.dateTo) return "结束日期不能早于开始日期";
+  return /^[\p{L}\p{N}\s#号栋室-]{0,80}$/u.test(filters.keyword.trim()) ? null : "关键词格式无效";
+}
+
 export function LeadsWorkbench({ initialData, initialError, initialFilters,
   permissions }: {
   initialData: LeadPage; initialError: string | null; initialFilters: LeadFilters;
@@ -78,11 +91,17 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   const [assigneeLoading, setAssigneeLoading] = useState(false);
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const [assigneeHasMore, setAssigneeHasMore] = useState(false);
+  const [filterAssigneeOptions, setFilterAssigneeOptions] = useState<Option[]>([]);
+  const [filterAssigneeKeyword, setFilterAssigneeKeyword] = useState("");
+  const [filterAssigneeLoading, setFilterAssigneeLoading] = useState(false);
+  const [filterAssigneeError, setFilterAssigneeError] = useState<string | null>(null);
+  const [filterAssigneeHasMore, setFilterAssigneeHasMore] = useState(false);
   const [busy, setBusy] = useState(false);
   const listAuthority = useRef(createLeadRequestAuthority()).current;
   const detailAuthority = useRef(createLeadRequestAuthority()).current;
   const mutationAuthority = useRef(createLeadRequestAuthority()).current;
   const assigneeAuthority = useRef(createLeadRequestAuthority()).current;
+  const filterAssigneeAuthority = useRef(createLeadRequestAuthority()).current;
   const submissionGate = useRef(createSubmissionGate()).current;
   const actionSubmission = useRef(createActionSubmissionCoordinator()).current;
   const idempotencyIntent = useRef(createLeadIdempotencyIntent()).current;
@@ -135,13 +154,10 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
 
   const loadAssigneeCandidates = useCallback(async (keyword: string) => {
     const request = assigneeAuthority.begin();
-    const params = new URLSearchParams({ page: "1", pageSize: "100" });
-    const normalizedKeyword = keyword.trim();
-    if (normalizedKeyword) params.set("keyword", normalizedKeyword);
     setAssigneeLoading(true); setAssigneeError(null);
     try {
       const raw = await requestBackendJson<unknown>(
-        `${API_PATH}/assignee-candidates?${params}`,
+        buildAssigneeOptionsPath("assign", keyword),
         { cache: "no-store", signal: request.controller.signal,
           fallbackMessage: "负责人候选加载失败" },
       );
@@ -161,10 +177,40 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
     }
   }, [assigneeAuthority]);
 
+  const loadFilterAssigneeOptions = useCallback(async (keyword: string) => {
+    const request = filterAssigneeAuthority.begin();
+    setFilterAssigneeLoading(true); setFilterAssigneeError(null);
+    try {
+      const raw = await requestBackendJson<unknown>(
+        buildAssigneeOptionsPath("filter", keyword),
+        { cache: "no-store", signal: request.controller.signal,
+          fallbackMessage: "负责人筛选项加载失败" },
+      );
+      if (!filterAssigneeAuthority.isCurrent(request)) return;
+      const parsed = normalizeAssigneeCandidatePage(raw);
+      if (!parsed) { setFilterAssigneeOptions([]); setFilterAssigneeHasMore(false);
+        setFilterAssigneeError("负责人筛选项响应无效，请重试"); return; }
+      setFilterAssigneeOptions(parsed.list);
+      setFilterAssigneeHasMore(parsed.pagination.totalPages > 1);
+    } catch {
+      if (filterAssigneeAuthority.isCurrent(request)) {
+        setFilterAssigneeOptions([]); setFilterAssigneeHasMore(false);
+        setFilterAssigneeError("负责人筛选项加载失败，请重试");
+      }
+    } finally {
+      if (filterAssigneeAuthority.isCurrent(request)) setFilterAssigneeLoading(false);
+    }
+  }, [filterAssigneeAuthority]);
+
   useEffect(() => {
     if (canAssign) void loadAssigneeCandidates("");
     return () => assigneeAuthority.invalidate();
   }, [assigneeAuthority, canAssign, loadAssigneeCandidates]);
+
+  useEffect(() => {
+    void loadFilterAssigneeOptions("");
+    return () => filterAssigneeAuthority.invalidate();
+  }, [filterAssigneeAuthority, loadFilterAssigneeOptions]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -177,8 +223,9 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   }, [detailAuthority, listAuthority, loadList, mutationAuthority]);
 
   function navigate(next: LeadFilters) {
-    window.history.pushState(null, "", buildLeadHref(next));
-    void loadList(next);
+    const safe = normalizeLeadDateRange(next);
+    window.history.pushState(null, "", buildLeadHref(safe));
+    void loadList(safe);
   }
   function openDetail(leadId: string) {
     idempotencyIntent.complete(); actionLeadVersion.current = null;
@@ -287,7 +334,7 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
       <div className="min-w-0"><h1 className="text-xl font-semibold tracking-normal">抖音线索</h1><p className="mt-1 text-sm text-muted-foreground">处理量房预约、负责人、跟进和客户转化。当前筛选共 {data.pagination.total} 条记录。</p></div>
     </header>
     <Card className="flex min-h-0 flex-1 flex-col overflow-hidden shadow-none">
-      <CardHeader className="shrink-0 border-b bg-muted/20 p-3"><CardTitle className="sr-only">线索任务列表</CardTitle><CardDescription className="sr-only">按状态、负责人、日期和关键词筛选抖音量房线索</CardDescription><LeadFiltersToolbar filters={filters} assigneeOptions={assigneeOptions} disabled={loading} onNavigate={navigate} /></CardHeader>
+      <CardHeader className="shrink-0 border-b bg-muted/20 p-3"><CardTitle className="sr-only">线索任务列表</CardTitle><CardDescription className="sr-only">按状态、负责人、日期和关键词筛选抖音量房线索</CardDescription><LeadFiltersToolbar filters={filters} assigneeOptions={filterAssigneeOptions} assigneeKeyword={filterAssigneeKeyword} assigneeLoading={filterAssigneeLoading} assigneeError={filterAssigneeError} assigneeHasMore={filterAssigneeHasMore} disabled={loading} onAssigneeKeywordChange={setFilterAssigneeKeyword} onAssigneeSearch={() => void loadFilterAssigneeOptions(filterAssigneeKeyword)} onNavigate={navigate} /></CardHeader>
       <CardContent className="relative flex min-h-0 flex-1 flex-col p-0" aria-busy={loading}>
         <div className="min-h-0 flex-1 overflow-auto">
           {viewState === "loading" ? <LeadListSkeleton /> : null}
@@ -295,7 +342,7 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
           {viewState === "empty" ? <Empty><EmptyHeader><EmptyMedia variant="icon"><Inbox /></EmptyMedia><EmptyTitle>没有符合条件的线索</EmptyTitle><EmptyDescription>调整筛选条件后重试，新预约会显示在这里。</EmptyDescription></EmptyHeader></Empty> : null}
           {viewState === "ready" ? <LeadTable page={data} onOpen={openDetail} /> : null}
         </div>
-        <CardFooter className="shrink-0 justify-between gap-3 border-t p-3">
+        <CardFooter className="shrink-0 flex-col items-stretch justify-between gap-3 border-t p-3 md:flex-row md:items-center">
           <span className="text-sm tabular-nums text-muted-foreground">第 {data.pagination.page} / {Math.max(data.pagination.totalPages, 1)} 页，共 {data.pagination.total} 条</span>
           <div className="flex gap-2"><Button variant="outline" disabled={loading || data.pagination.page <= 1} onClick={() => navigate({ ...filters, page: data.pagination.page - 1 })}><ChevronLeft data-icon="inline-start" />上一页</Button><Button variant="outline" disabled={loading || data.pagination.page >= data.pagination.totalPages} onClick={() => navigate({ ...filters, page: data.pagination.page + 1 })}>下一页<ChevronRight data-icon="inline-end" /></Button></div>
         </CardFooter>
@@ -321,26 +368,42 @@ export function LeadsWorkbench({ initialData, initialError, initialFilters,
   </div>;
 }
 
-function LeadFiltersToolbar({ filters, assigneeOptions, disabled, onNavigate }: { filters: LeadFilters; assigneeOptions: readonly Option[]; disabled: boolean; onNavigate: (filters: LeadFilters) => void }) {
+function LeadFiltersToolbar({ filters, assigneeOptions, assigneeKeyword,
+  assigneeLoading, assigneeError, assigneeHasMore, disabled,
+  onAssigneeKeywordChange, onAssigneeSearch, onNavigate }: {
+  filters: LeadFilters; assigneeOptions: readonly Option[]; assigneeKeyword: string;
+  assigneeLoading: boolean; assigneeError: string | null; assigneeHasMore: boolean;
+  disabled: boolean; onAssigneeKeywordChange: (value: string) => void;
+  onAssigneeSearch: () => void; onNavigate: (filters: LeadFilters) => void;
+}) {
   const [draft, setDraft] = useState(filters);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setDraft(filters), [filters]);
   function submit(event: FormEvent) { event.preventDefault();
-    if (draft.dateFrom && draft.dateTo && draft.dateFrom > draft.dateTo) { setError("结束日期不能早于开始日期"); return; }
-    if (!/^[\p{L}\p{N}\s#号栋室-]{0,80}$/u.test(draft.keyword.trim())) { setError("关键词格式无效"); return; }
+    const validationError = validateLeadFilterDraft(draft);
+    if (validationError) { setError(validationError); return; }
     setError(null); onNavigate({ ...draft, page: 1, keyword: draft.keyword.trim() }); }
-  return <form className="grid gap-2 md:grid-cols-2 xl:grid-cols-[140px_160px_145px_145px_minmax(180px,1fr)_72px]" onSubmit={submit}>
+  function searchAssigneeOptions() {
+    setDraft((current) => ({ ...current, assigneeId: "" }));
+    onAssigneeSearch();
+  }
+  return <form className="grid gap-2 md:grid-cols-2 xl:grid-cols-[140px_minmax(220px,1fr)_160px_145px_145px_minmax(180px,1fr)_72px]" onSubmit={submit}>
     <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-status-filter">状态</FieldLabel><FormSelect id="douyin-lead-status-filter" value={draft.status || "__all"} disabled={disabled} options={STATUS_OPTIONS} onChange={(value) => setDraft({ ...draft, status: value === "__all" ? "" : value as LeadFilters["status"] })} /></Field>
-    <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-assignee-filter">负责人</FieldLabel><FormSelect id="douyin-lead-assignee-filter" value={draft.assigneeId || "__all"} disabled={disabled} options={[{ value: "__all", label: "全部负责人" }, ...assigneeOptions]} onChange={(value) => setDraft({ ...draft, assigneeId: value === "__all" ? "" : value })} /></Field>
+    <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-assignee-filter-search">搜索负责人筛选</FieldLabel><div className="flex gap-2"><Input id="douyin-lead-assignee-filter-search" value={assigneeKeyword} disabled={disabled || assigneeLoading} maxLength={100} placeholder="搜索负责人" onChange={(event) => onAssigneeKeywordChange(event.target.value)} /><Button type="button" variant="outline" disabled={disabled || assigneeLoading} onClick={searchAssigneeOptions}>{assigneeLoading ? <Loader2 className="animate-spin" data-icon="inline-start" /> : <Search data-icon="inline-start" />}搜索</Button></div></Field>
+    <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-assignee-filter">负责人</FieldLabel><FormSelect id="douyin-lead-assignee-filter" value={draft.assigneeId || "__all"} disabled={disabled || assigneeLoading || assigneeOptions.length === 0} options={[{ value: "__all", label: "全部负责人" }, ...assigneeOptions]} onChange={(value) => setDraft({ ...draft, assigneeId: value === "__all" ? "" : value })} /></Field>
     <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-date-from">开始日期</FieldLabel><Input id="douyin-lead-date-from" type="date" value={draft.dateFrom} disabled={disabled} onChange={(event) => setDraft({ ...draft, dateFrom: event.target.value })} /></Field>
     <Field><FieldLabel className="sr-only" htmlFor="douyin-lead-date-to">结束日期</FieldLabel><Input id="douyin-lead-date-to" type="date" value={draft.dateTo} disabled={disabled} aria-invalid={Boolean(error)} aria-describedby={error ? "douyin-lead-filter-error" : undefined} onChange={(event) => setDraft({ ...draft, dateTo: event.target.value })} /></Field>
     <Field data-invalid={Boolean(error) || undefined}><FieldLabel className="sr-only" htmlFor="douyin-lead-keyword-filter">关键词</FieldLabel><Input id="douyin-lead-keyword-filter" value={draft.keyword} disabled={disabled} placeholder="姓名、手机号或小区" aria-invalid={Boolean(error)} aria-describedby={error ? "douyin-lead-filter-error" : undefined} onChange={(event) => setDraft({ ...draft, keyword: event.target.value })} /><FieldError id="douyin-lead-filter-error">{error}</FieldError></Field>
     <Button type="submit" variant="outline" disabled={disabled}><Search data-icon="inline-start" />筛选</Button>
+    {assigneeError ? <Alert variant="destructive" className="md:col-span-2 xl:col-span-full"><AlertTitle>负责人筛选项加载失败</AlertTitle><AlertDescription className="flex flex-wrap items-center justify-between gap-2"><span>{assigneeError}</span><Button type="button" size="sm" variant="outline" disabled={disabled || assigneeLoading} onClick={searchAssigneeOptions}>重试负责人筛选项</Button></AlertDescription></Alert> : null}
+    {assigneeLoading ? <Skeleton className="h-9 md:col-span-2 xl:col-span-full" aria-label="正在加载负责人筛选项" /> : null}
+    {!assigneeLoading && !assigneeError && assigneeOptions.length === 0 ? <Empty className="min-h-16 p-2 md:col-span-2 xl:col-span-full"><EmptyHeader><EmptyTitle className="text-sm">暂无负责人筛选项</EmptyTitle><EmptyDescription>调整员工姓名后重新搜索。</EmptyDescription></EmptyHeader></Empty> : null}
+    {assigneeHasMore ? <p className="text-xs text-muted-foreground md:col-span-2 xl:col-span-full">负责人超过 100 位，请输入姓名缩小筛选范围。</p> : null}
   </form>;
 }
 
 function LeadTable({ page, onOpen }: { page: LeadPage; onOpen: (id: string) => void }) {
-  return <Table containerClassName="min-w-[1040px]"><TableHeader className="sticky top-0 bg-card"><TableRow><TableHead>联系人</TableHead><TableHead>手机号</TableHead><TableHead>小区</TableHead><TableHead>预约时间</TableHead><TableHead>预算区间</TableHead><TableHead>状态</TableHead><TableHead>负责人</TableHead><TableHead>客户关联状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>{page.list.map((lead) => <TableRow key={lead.id}><TableCell className="font-medium">{lead.name || "未填写"}</TableCell><TableCell className="tabular-nums">{lead.phone_masked || "未提供"}</TableCell><TableCell>{lead.community || "未填写"}</TableCell><TableCell className="tabular-nums">{lead.latest_appointment ? formatAppointment(lead.latest_appointment) : "未预约"}</TableCell><TableCell>{lead.latest_appointment?.has_budget_estimate ? "已关联预算测算" : "未提供"}</TableCell><TableCell><StatusBadge status={lead.status} /></TableCell><TableCell>{lead.assignee?.name || "待分配"}</TableCell><TableCell><Badge variant={lead.customer ? "success" : "outline"}>{lead.customer ? "已关联客户" : "待转客户"}</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => onOpen(lead.id)}>查看线索</Button></TableCell></TableRow>)}</TableBody></Table>;
+  return <Table containerClassName="min-w-[1040px]"><TableHeader className="sticky top-0 bg-card"><TableRow><TableHead>联系人</TableHead><TableHead>手机号</TableHead><TableHead>小区</TableHead><TableHead>预约时间</TableHead><TableHead>预算区间</TableHead><TableHead>状态</TableHead><TableHead>负责人</TableHead><TableHead>客户关联状态</TableHead><TableHead className="text-right">操作</TableHead></TableRow></TableHeader><TableBody>{page.list.map((lead) => <TableRow key={lead.id}><TableCell className="font-medium">{lead.name || "未填写"}</TableCell><TableCell className="tabular-nums">{lead.phone_masked || "未提供"}</TableCell><TableCell>{lead.community || "未填写"}</TableCell><TableCell className="tabular-nums">{lead.latest_appointment ? formatAppointment(lead.latest_appointment) : "未预约"}</TableCell><TableCell>{lead.latest_appointment?.budget_range ? `${formatMoney(lead.latest_appointment.budget_range.minimum_total)} 至 ${formatMoney(lead.latest_appointment.budget_range.maximum_total)}` : "未提供"}</TableCell><TableCell><StatusBadge status={lead.status} /></TableCell><TableCell>{lead.assignee?.name || "待分配"}</TableCell><TableCell><Badge variant={lead.customer ? "success" : "outline"}>{lead.customer ? "已关联客户" : "待转客户"}</Badge></TableCell><TableCell className="text-right"><Button variant="ghost" size="sm" onClick={() => onOpen(lead.id)}>查看线索</Button></TableCell></TableRow>)}</TableBody></Table>;
 }
 
 export function LeadDetailPanel({ detail, actions, busy, followUpLoading, onAction, onFollowUpPage }: { detail: LeadDetail; actions: readonly LeadAction[]; busy: boolean; followUpLoading: boolean; onAction: (action: LeadAction) => void; onFollowUpPage: (page: number) => void }) {
