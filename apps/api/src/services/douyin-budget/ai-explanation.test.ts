@@ -30,7 +30,7 @@ beforeAll(async () => {
 });
 
 describe('DouyinBudgetAiExplanationService', () => {
-  test('claims once, sends only a sanitized public snapshot, and completes with the database lease', async () => {
+  test('claims once, sends only codes and amounts, and completes with the database lease', async () => {
     const deps = buildDependencies();
     deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
       ...deps.claimed,
@@ -88,11 +88,16 @@ describe('DouyinBudgetAiExplanationService', () => {
     const prompt = JSON.stringify(input.messages);
     expect(prompt).toContain('105000');
     expect(prompt).toContain('155000');
+    expect(prompt).toContain('category_code');
+    expect(prompt).toContain('base');
     expect(prompt).not.toContain('三室两厅');
     expect(prompt).not.toContain('幸福大道88号3栋的现代风');
     expect(prompt).not.toContain('需要更多收纳');
-    expect(prompt).toContain('预算编号9138001380001应保留');
-    expect(prompt).toContain('[已脱敏]');
+    expect(prompt).not.toContain('预算编号9138001380001应保留');
+    expect(prompt).not.toContain('基础施工138　0013　8000');
+    expect(prompt).not.toContain('联系0376-1234567确认施工');
+    expect(prompt).not.toContain('详情联系138 0013 8000');
+    expect(prompt).not.toContain('[已脱敏]');
     for (const pii of [
       '138-0013-8000', '138　0013　8000', '138 0013 8000',
       '幸福大道88号3栋', '幸福路88号', '0376-1234567',
@@ -250,7 +255,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     expect(prompt).not.toContain('0376-1234567');
   });
 
-  test('omits renovation free text while sanitizing deterministic addresses', async () => {
+  test('omits renovation and deterministic result free text', async () => {
     const deps = buildDependencies();
     const addresses = [
       '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
@@ -281,7 +286,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     expect(prompt).not.toContain('装修思路 2026版；全屋线路20米需要更换');
     expect(prompt).not.toContain('施工道路8米宽、全屋回路30厘米、厨房管路500毫米、空调风路2公分、燃气气路3㎡、设备油路4m、施工支路6米宽');
     for (const address of addresses) expect(prompt).not.toContain(address);
-    expect(prompt).toContain('[已脱敏]');
+    expect(prompt).not.toContain('[已脱敏]');
   });
 
   test('rejects unsafe AI analysis before persistence', async () => {
@@ -342,7 +347,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     const gatewayInput = deps.gateway.chat.mock.calls[0]?.[0] as {
       messages: Array<{ content: string }>;
     };
-    expect(gatewayInput.messages[0]?.content).toContain('不得输出任何数字、数字词');
+    expect(gatewayInput.messages[0]?.content).toContain('只能返回允许的选择代码');
   });
 
   test('records a stable timeout code without leaking gateway details', async () => {

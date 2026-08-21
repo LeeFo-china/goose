@@ -7,6 +7,7 @@ import {
   buildDependencies,
   estimateId,
   estimateResult,
+  selection,
   user,
 } from './ai-explanation.test-fixture';
 
@@ -23,7 +24,7 @@ beforeAll(async () => {
 });
 
 describe('DouyinBudgetAiExplanationService security boundaries', () => {
-  test('omits every user free-text field and sanitizes controlled result text', async () => {
+  test('omits every request and result free-text field from the prompt', async () => {
     const deps = buildDependencies();
     const layout = '自由布局：联系１３８　００１３　８０００';
     const style = '自由风格：联系138​0013⁠8000';
@@ -86,36 +87,45 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
       '138​0013⁠8000', '１三８​〇〇1３８0００',
       '人民路八十八号', '幸福小区三号楼二单元五〇一室',
     ]) expect(prompt).not.toContain(pii);
-    expect(prompt).toContain('[已脱敏]');
+    expect(prompt).not.toContain('[已脱敏]');
+    for (const resultText of [
+      '基础施工', '定制', '人民路八十八号',
+      '幸福小区三号楼二单元五〇一室',
+      '厨房水路十二米需要改造', '家电', '软装',
+      '初步估算，不构成最终报价',
+    ]) expect(prompt).not.toContain(resultText);
+    expect(prompt).toContain('rules_estimate_overview');
+    expect(prompt).toContain('prioritize_core_work');
+    for (const templateText of [
+      analysis.summary,
+      ...analysis.allocation_advice,
+      ...analysis.risk_factors,
+      ...analysis.onsite_questions,
+    ]) expect(prompt).not.toContain(templateText);
     expect(response.ai_analysis).toEqual(analysis);
   });
 
-  test('fails one logical attempt for any numeric or high-risk AI text', async () => {
-    const unsafeExpressions = [
-      '建议新增硬装预算999万元',
-      '建议确认第2项',
-      '建议确认第２项',
-      '建议确认第Ⅳ项',
-      '建议确认幺号区域',
-      '建议确认兩处墙面',
-      '建议确认壹处节点',
-      '联系138​0013⁠8000确认',
-      '邮箱 contact@example.com',
-      '微信号 abcdef',
-      '幸福小区',
+  test('rejects free text, unknown codes, duplicates and extra fields', async () => {
+    const invalidSelections = [
+      analysis,
+      { ...selection, summary_code: '联系13800138000追加999万元' },
+      { ...selection, summary_code: 'unknown_summary' },
+      { ...selection, extra: '联系13800138000' },
+      { ...selection, allocation_advice_codes: [] },
+      {
+        ...selection,
+        risk_factor_codes: ['site_conditions', 'site_conditions'],
+      },
+      {
+        ...selection,
+        onsite_question_codes: ['verify_structure', '幸福小区'],
+      },
     ];
     let systemPrompt: string | undefined;
-    for (const [index, expression] of unsafeExpressions.entries()) {
+    for (const invalidSelection of invalidSelections) {
       const deps = buildDependencies();
-      const unsafeAnalysis: DouyinBudgetAiAnalysis = index % 4 === 0
-        ? { ...analysis, summary: expression }
-        : index % 4 === 1
-          ? { ...analysis, allocation_advice: [expression] }
-          : index % 4 === 2
-            ? { ...analysis, risk_factors: [expression] }
-            : { ...analysis, onsite_questions: [expression] };
       deps.gateway.chat.mockResolvedValueOnce({
-        content: JSON.stringify(unsafeAnalysis),
+        content: JSON.stringify(invalidSelection),
         provider: 'deepseek',
         model: 'deepseek-chat',
       });
@@ -140,19 +150,13 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
         }),
       );
     }
-    expect(systemPrompt).toContain('不得输出任何数字、数字词、金额');
-    expect(systemPrompt).toContain('联系方式或详细地址');
+    expect(systemPrompt).toContain('只能返回允许的选择代码');
   });
 
-  test('accepts safe AI text without numeric or identity markers', async () => {
+  test('maps a legal selection to exact static templates before completion', async () => {
     const deps = buildDependencies();
-    const safeAnalysis: DouyinBudgetAiAnalysis = {
-      ...analysis,
-      summary: '规则​解释，保持克制。',
-      risk_factors: ['风险因素：墙体现状待核实。'],
-    };
     deps.gateway.chat.mockResolvedValueOnce({
-      content: JSON.stringify(safeAnalysis),
+      content: JSON.stringify(selection),
       provider: 'deepseek',
       model: 'deepseek-chat',
     });
@@ -167,32 +171,52 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
       estimateId,
       false,
     );
-    expect(response.ai_analysis).toEqual({
-      ...safeAnalysis,
-      summary: '规则解释,保持克制。',
-      risk_factors: ['风险因素:墙体现状待核实。'],
-    });
+    expect(response.ai_analysis).toEqual(analysis);
+    expect(deps.budgetRepository.completeAiAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({ analysis }),
+    );
     expect(deps.budgetRepository.completeAiAnalysis).toHaveBeenCalledTimes(1);
     expect(deps.budgetRepository.failAiAnalysis).not.toHaveBeenCalled();
   });
 
-  test('fail-closes saved and stale succeeded unsafe analysis', async () => {
-    for (const attemptCount of [1, 2]) {
+  test('returns only exact historical templates and rejects every other string', async () => {
+    const safeDeps = buildDependencies();
+    safeDeps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
+      action: 'saved',
+      estimate: { ...safeDeps.completedRecord, ai_analysis: analysis },
+    } as never);
+    await expect(
+      new Service(safeDeps.values as never).generate(user, estimateId, false),
+    ).resolves.toMatchObject({ ai_analysis: analysis });
+
+    const invalidHistorical = [
+      {
+        ...analysis,
+        summary: '安全但不在模板中的自由文本。',
+      },
+      {
+        ...analysis,
+        allocation_advice: [
+          '建议优先确认基础施工与隐蔽工程范围。',
+          '建议优先确认基础施工与隐蔽工程范围。',
+        ],
+      },
+      {
+        ...analysis,
+        onsite_questions: ['联系13800138000追加999万元。'],
+      },
+    ];
+    for (const [index, invalidAnalysis] of invalidHistorical.entries()) {
       const deps = buildDependencies();
       deps.budgetRepository.claimAiAnalysis.mockResolvedValueOnce({
         action: 'saved',
         estimate: {
           ...baseRecord,
           ai_status: 'succeeded',
-          ai_analysis: {
-            ...analysis,
-            summary: attemptCount === 1
-              ? '建议确认第2项'
-              : '幸福小区',
-          },
+          ai_analysis: invalidAnalysis,
           ai_provider: 'deepseek',
           ai_model: 'deepseek-chat',
-          ai_attempt_count: attemptCount,
+          ai_attempt_count: index + 1,
           ai_claimed_at: null,
         },
       } as never);

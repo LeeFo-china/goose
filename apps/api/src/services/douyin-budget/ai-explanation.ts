@@ -33,43 +33,85 @@ import {
 const AI_SCENE_CODE = 'douyin_budget_explanation';
 const AI_TIMEOUT_MS = 30_000;
 const AI_TEMPERATURE = 0.2;
-const PhonePatternSource =
-  String.raw`(?<!\d)(?:(?:\+?86[- ]?)?1[3-9]\d(?:[- ]?\d{4}){2}|(?:0\d{2,3}[- ]?)?\d{7,8})(?!\d)`;
-const PhonePattern = new RegExp(PhonePatternSource, 'g');
-const PhoneDetectionPattern = new RegExp(PhonePatternSource);
-const FormatCharacterPattern = /\p{Cf}/gu;
-const UnsafeAiNumeralPattern =
-  /[\p{N}零〇○一二两兩俩倆幺仨三四五六七八九十百千万萬亿億兆半几幾壹贰貳叁參肆伍陆陸柒捌玖拾佰仟廿卅卌皕]/u;
-const HighRiskContactMarkers = ['@', '微信', '威信', 'v信', 'vx', 'wechat'];
-const IdentityNumeralPattern = /[零〇一二两三四五六七八九十百千万亿壹贰叁肆伍陆柒捌玖拾佰仟]/gu;
-const IdentityNumeralMap: Readonly<Record<string, string>> = {
-  '零': '0', '〇': '0', '一': '1', '二': '2', '两': '2', '三': '3', '四': '4', '五': '5',
-  '六': '6', '七': '7', '八': '8', '九': '9', '壹': '1', '贰': '2', '叁': '3', '肆': '4',
-  '伍': '5', '陆': '6', '柒': '7', '捌': '8', '玖': '9', '十': '0', '百': '0',
-  '千': '0', '万': '0', '亿': '0', '拾': '0', '佰': '0', '仟': '0',
-};
-const RoadAddressPattern = new RegExp(
-  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?!\d)(?![ \u3000]*(?:[VvＶｖ]|伏|版|毫米|厘米|公分|平方米|米|㎡|(?:[mMｍＭ]|[cCｃＣ][mMｍＭ]|[mMｍＭ]{2})(?:²|2)?(?![A-Za-z])))`,
-  'gu',
-);
-const NonAddressRoadCompounds = new Set([
-  '电路', '思路', '水路', '线路', '道路', '回路', '管路', '风路', '气路', '油路',
-]);
-const StandaloneDetailedAddressPattern = new RegExp([
-  String.raw`[\p{Script=Han}]{2,20}(?:小区|村)(?=$|[\s，,。；;、]|\d)`,
-  String.raw`门牌(?:号)?\s*\d{1,6}`,
-  String.raw`(?<!\d)\d{1,6}(?:号楼|号|栋|幢|单元|楼)(?![A-Za-z])`,
-  String.raw`(?<!\d)\d{3,6}室(?!\d*[厅房])`,
-].join('|'), 'u');
 const ProviderModelSchema = z.string().trim().min(1).max(100);
 
+const SummaryCodeSchema = z.literal('rules_estimate_overview');
+const AllocationAdviceCodeSchema = z.enum([
+  'prioritize_core_work',
+  'confirm_material_scope',
+]);
+const RiskFactorCodeSchema = z.enum([
+  'site_conditions',
+  'scope_changes',
+]);
+const OnsiteQuestionCodeSchema = z.enum([
+  'verify_structure',
+  'verify_utilities',
+]);
+
+function uniqueCodeList<T>(values: readonly T[]): boolean {
+  return new Set(values).size === values.length;
+}
+
+const AiExplanationSelectionSchema = z.strictObject({
+  summary_code: SummaryCodeSchema,
+  allocation_advice_codes: z
+    .array(AllocationAdviceCodeSchema)
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+  risk_factor_codes: z
+    .array(RiskFactorCodeSchema)
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+  onsite_question_codes: z
+    .array(OnsiteQuestionCodeSchema)
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+});
+type AiExplanationSelection = z.infer<typeof AiExplanationSelectionSchema>;
+
+const SUMMARY_TEMPLATE =
+  '本结果基于规则初算，仅用于理解预算构成，不构成正式报价。';
+const ALLOCATION_ADVICE_TEMPLATES = {
+  prioritize_core_work: '建议优先确认基础施工与隐蔽工程范围。',
+  confirm_material_scope: '建议结合材料范围与施工边界安排预算分配。',
+} as const;
+const RISK_FACTOR_TEMPLATES = {
+  site_conditions: '现场墙体与水电现状可能影响施工方案。',
+  scope_changes: '施工范围调整可能影响规则初算的适用性。',
+} as const;
+const ONSITE_QUESTION_TEMPLATES = {
+  verify_structure: '量房时请确认墙体与空间结构现状。',
+  verify_utilities: '量房时请确认水电与隐蔽工程现状。',
+} as const;
+
+const StaticAiAnalysisSchema = z.strictObject({
+  summary: z.literal(SUMMARY_TEMPLATE),
+  allocation_advice: z
+    .array(z.enum(Object.values(ALLOCATION_ADVICE_TEMPLATES)))
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+  risk_factors: z
+    .array(z.enum(Object.values(RISK_FACTOR_TEMPLATES)))
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+  onsite_questions: z
+    .array(z.enum(Object.values(ONSITE_QUESTION_TEMPLATES)))
+    .min(1)
+    .max(2)
+    .refine(uniqueCodeList),
+});
+
 const SYSTEM_PROMPT = [
-  '你是装修预算初算解释助手。',
-  '只能解释服务端已经计算完成的规则结果，不得新增、删除或修改任何金额。',
-  '不得把初算描述为正式报价，不得承诺最终价格、工期、材料或施工结果。',
-  '不得输出任何数字、数字词、金额、单价或预算数字。',
-  '不得返回联系方式或详细地址。',
-  '只返回符合指定结构的 JSON 对象，不要输出 Markdown 或额外字段。',
+  '你是装修预算初算选择助手。',
+  '只能返回允许的选择代码，不得返回自由文本或额外字段。',
+  '不得新增、删除或修改服务端规则结果。',
+  '只返回符合指定结构的 JSON 对象，不要输出 Markdown。',
 ].join('\n');
 
 type AiRepositoryPort = Pick<
@@ -143,7 +185,7 @@ export class DouyinBudgetAiExplanationService {
         ],
       });
       generated = {
-        analysis: parseAiAnalysis(result.content),
+        analysis: parseSelectionAnalysis(result.content),
         provider: parseProviderModel(result.provider),
         model: parseProviderModel(result.model),
       };
@@ -208,43 +250,44 @@ function toPublicResponse(
   return parsed.data;
 }
 
-function parseAiAnalysis(content: string): DouyinBudgetAiAnalysis {
+function parseSelectionAnalysis(content: string): DouyinBudgetAiAnalysis {
   let raw: unknown;
   try {
     raw = JSON.parse(content);
   } catch {
     throw invalidAiOutput();
   }
-  const parsed = DouyinBudgetAiAnalysisSchema.safeParse(raw);
-  if (!parsed.success) throw invalidAiOutput();
-  return sanitizeAiAnalysis(parsed.data, invalidAiOutput);
+  const selection = AiExplanationSelectionSchema.safeParse(raw);
+  if (!selection.success) throw invalidAiOutput();
+  return mapSelectionToAnalysis(selection.data, invalidAiOutput);
 }
 
 function parsePersistedAiAnalysis(input: unknown): DouyinBudgetAiAnalysis {
-  const parsed = DouyinBudgetAiAnalysisSchema.safeParse(input);
+  const allowed = StaticAiAnalysisSchema.safeParse(input);
+  if (!allowed.success) throw invalidPersistedResult();
+  const parsed = DouyinBudgetAiAnalysisSchema.safeParse(allowed.data);
   if (!parsed.success) throw invalidPersistedResult();
-  return sanitizeAiAnalysis(parsed.data, invalidPersistedResult);
+  return parsed.data;
 }
 
-function sanitizeAiAnalysis(
-  analysis: DouyinBudgetAiAnalysis,
+function mapSelectionToAnalysis(
+  selection: AiExplanationSelection,
   invalid: () => Error,
 ): DouyinBudgetAiAnalysis {
-  const textValues = [
-    analysis.summary,
-    ...analysis.allocation_advice,
-    ...analysis.risk_factors,
-    ...analysis.onsite_questions,
-  ];
-  if (textValues.some(containsUnsafeAiText)) throw invalid();
-  const sanitized = DouyinBudgetAiAnalysisSchema.safeParse({
-    summary: normalizeAiText(analysis.summary),
-    allocation_advice: analysis.allocation_advice.map(normalizeAiText),
-    risk_factors: analysis.risk_factors.map(normalizeAiText),
-    onsite_questions: analysis.onsite_questions.map(normalizeAiText),
+  const parsed = DouyinBudgetAiAnalysisSchema.safeParse({
+    summary: SUMMARY_TEMPLATE,
+    allocation_advice: selection.allocation_advice_codes.map(
+      (code) => ALLOCATION_ADVICE_TEMPLATES[code],
+    ),
+    risk_factors: selection.risk_factor_codes.map(
+      (code) => RISK_FACTOR_TEMPLATES[code],
+    ),
+    onsite_questions: selection.onsite_question_codes.map(
+      (code) => ONSITE_QUESTION_TEMPLATES[code],
+    ),
   });
-  if (!sanitized.success) throw invalid();
-  return sanitized.data;
+  if (!parsed.success) throw invalid();
+  return parsed.data;
 }
 
 function parseProviderModel(value: string): string {
@@ -258,12 +301,33 @@ function buildUserPrompt(
   estimate: DouyinBudgetEstimateResult,
 ): string {
   return JSON.stringify({
-    instruction: '解释规则预算结果，给出分配建议、风险因素和量房问题。',
-    output_schema: {
-      summary: '不超过1000字的规则结果说明，不得给出新的金额',
-      allocation_advice: ['每项不超过300字，不得给出新的金额'],
-      risk_factors: ['每项不超过300字，不得作价格或结果承诺'],
-      onsite_questions: ['每项不超过300字，仅列量房需确认的问题'],
+    instruction: '根据规则初算结果选择适用代码。',
+    selection_schema: {
+      summary_code: {
+        allowed: ['rules_estimate_overview'],
+        meaning: '规则初算概览',
+      },
+      allocation_advice_codes: {
+        allowed: [
+          ['prioritize_core_work', '优先确认核心施工范围'],
+          ['confirm_material_scope', '确认材料与施工边界'],
+        ],
+        rule: '至少选择一个且不得重复',
+      },
+      risk_factor_codes: {
+        allowed: [
+          ['site_conditions', '关注现场条件'],
+          ['scope_changes', '关注施工范围调整'],
+        ],
+        rule: '至少选择一个且不得重复',
+      },
+      onsite_question_codes: {
+        allowed: [
+          ['verify_structure', '确认墙体与空间结构'],
+          ['verify_utilities', '确认水电与隐蔽工程'],
+        ],
+        rule: '至少选择一个且不得重复',
+      },
     },
     request: promptRequestSnapshot(request),
     estimate: promptEstimateSnapshot(estimate),
@@ -285,84 +349,11 @@ function promptEstimateSnapshot(estimate: DouyinBudgetEstimateResult) {
     minimum_total: estimate.minimum_total,
     maximum_total: estimate.maximum_total,
     categories: estimate.categories.map((category) => ({
-      category_code: sanitizeText(category.category_code),
-      label: sanitizeText(category.label),
+      category_code: category.category_code,
       minimum_amount: category.minimum_amount,
       maximum_amount: category.maximum_amount,
     })),
-    calculation_basis: sanitizeTextList(estimate.calculation_basis),
-    included_items: sanitizeTextList(estimate.included_items),
-    excluded_items: sanitizeTextList(estimate.excluded_items),
-    pricing_version: sanitizeText(estimate.pricing_version),
-    pricing_effective_from: sanitizeText(estimate.pricing_effective_from),
-    pricing_effective_to: estimate.pricing_effective_to === null
-      ? null
-      : sanitizeText(estimate.pricing_effective_to),
-    disclaimer: sanitizeText(estimate.disclaimer),
   };
-}
-
-function sanitizeTextList(values: readonly string[]): string[] {
-  return values.map(sanitizeText);
-}
-
-function sanitizeText(value: string): string {
-  const safety = normalizeForSafety(value);
-  const hasAddress = containsDetailedAddress(safety.identity);
-  const hasNormalizedPhone = PhoneDetectionPattern.test(safety.normalized);
-  const hasIdentityPhone = PhoneDetectionPattern.test(safety.identity);
-  if (hasAddress) return '[已脱敏]';
-  if (
-    hasIdentityPhone
-    && (safety.hadFormatCharacters || !hasNormalizedPhone)
-  ) return '[已脱敏]';
-  if (hasNormalizedPhone) {
-    return safety.normalized.replace(PhonePattern, '[已脱敏]');
-  }
-  return safety.cleaned;
-}
-
-function normalizeForSafety(value: string) {
-  const cleaned = value.replace(FormatCharacterPattern, '');
-  const hadFormatCharacters = cleaned !== value;
-  const normalized = cleaned.normalize('NFKC');
-  const identity = normalized.replace(
-    IdentityNumeralPattern,
-    (numeral) => IdentityNumeralMap[numeral] ?? '0',
-  );
-  return { cleaned, normalized, identity, hadFormatCharacters };
-}
-
-function normalizeAiText(value: string): string {
-  return value.replace(FormatCharacterPattern, '').normalize('NFKC');
-}
-
-function containsUnsafeAiText(value: string): boolean {
-  const cleaned = value.replace(FormatCharacterPattern, '');
-  const normalized = cleaned.normalize('NFKC');
-  return UnsafeAiNumeralPattern.test(cleaned)
-    || UnsafeAiNumeralPattern.test(normalized)
-    || containsHighRiskContact(normalized)
-    || PhoneDetectionPattern.test(normalized)
-    || containsDetailedAddress(normalized);
-}
-
-function containsHighRiskContact(value: string): boolean {
-  const compact = value.toLowerCase().replace(/\s/gu, '');
-  return HighRiskContactMarkers.some((marker) => compact.includes(marker));
-}
-
-function containsDetailedAddress(value: string): boolean {
-  if (StandaloneDetailedAddressPattern.test(value)) return true;
-  for (const match of value.matchAll(RoadAddressPattern)) {
-    const roadName = match[1] ?? '';
-    const roadSuffix = match[2] ?? '';
-    const roadCompound = `${roadName.slice(-1)}${roadSuffix}`;
-    if (!NonAddressRoadCompounds.has(roadCompound)) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function aiFailureCode(error: unknown): string {

@@ -64,11 +64,29 @@ export const estimateResult: DouyinBudgetEstimateResult = {
   ai_status: 'pending',
 };
 export const analysis: DouyinBudgetAiAnalysis = {
-  summary: '预算主要由基础施工和定制柜体构成。',
-  allocation_advice: ['优先确认隐蔽工程范围。'],
-  risk_factors: ['现场墙体情况可能影响施工方案。'],
-  onsite_questions: ['量房时确认墙体和水电现状。'],
+  summary: '本结果基于规则初算，仅用于理解预算构成，不构成正式报价。',
+  allocation_advice: [
+    '建议优先确认基础施工与隐蔽工程范围。',
+    '建议结合材料范围与施工边界安排预算分配。',
+  ],
+  risk_factors: [
+    '现场墙体与水电现状可能影响施工方案。',
+    '施工范围调整可能影响规则初算的适用性。',
+  ],
+  onsite_questions: [
+    '量房时请确认墙体与空间结构现状。',
+    '量房时请确认水电与隐蔽工程现状。',
+  ],
 };
+export const selection = {
+  summary_code: 'rules_estimate_overview',
+  allocation_advice_codes: [
+    'prioritize_core_work',
+    'confirm_material_scope',
+  ],
+  risk_factor_codes: ['site_conditions', 'scope_changes'],
+  onsite_question_codes: ['verify_structure', 'verify_utilities'],
+} as const;
 export const baseRecord: DouyinBudgetAiEstimateRecord = {
   id: estimateId,
   estimate_no: estimateResult.estimate_no,
@@ -134,7 +152,7 @@ export function buildDependencies(overrides: Record<string, unknown> = {}) {
   };
   const gateway = {
     chat: mock(async (_input: unknown) => ({
-      content: JSON.stringify(analysis),
+      content: JSON.stringify(selection),
       provider: 'deepseek',
       model: 'deepseek-chat',
     })),
