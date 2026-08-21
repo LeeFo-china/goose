@@ -267,10 +267,15 @@ describe("admin nav visibility", () => {
       createSession([{ code: "douyin_miniapp.manage", scope: "all" }]),
       tenantNavGroups,
     );
+    const withLeadPermission = getVisibleGroups(
+      createSession([{ code: "douyin_lead.read", scope: "all" }]),
+      tenantNavGroups,
+    );
     const withBothPermissions = getVisibleGroups(
       createSession([
         { code: "douyin_miniapp.read", scope: "all" },
         { code: "douyin_miniapp.manage", scope: "all" },
+        { code: "douyin_lead.read", scope: "all" },
       ]),
       tenantNavGroups,
     );
@@ -287,8 +292,12 @@ describe("admin nav visibility", () => {
         .map((item) => item.label),
     ).toEqual(["项目实景内容", "预算报价配置"]);
     expect(
+      withLeadPermission.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["抖音线索"]);
+    expect(
       withBothPermissions.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
-    ).toEqual(["小程序工作台", "项目实景内容", "预算报价配置"]);
+    ).toEqual(["小程序工作台", "抖音线索", "项目实景内容", "预算报价配置"]);
   });
 });
