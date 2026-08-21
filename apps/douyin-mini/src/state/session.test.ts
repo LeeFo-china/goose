@@ -207,6 +207,36 @@ describe("Douyin native session state", () => {
       });
   });
 
+  test("request transport honors a bounded per-call deadline without forwarding it", async () => {
+    const abort = mock(() => {});
+    const requestMock = mock((options: Parameters<typeof tt.request>[0]) => {
+      setTimeout(() => options.success?.({
+        errMsg: "request:ok", statusCode: 200, header: {}, data: { data: { ok: true } },
+      }), 5);
+      return { abort };
+    });
+    const transport = new DouyinRequestTransport(
+      "https://api.goodcms.cn",
+      2,
+      requestMock as typeof tt.request,
+    );
+
+    await expect(transport.send({
+      path: "/douyin-mini/budget-estimates/id/ai-analysis",
+      method: "POST",
+      timeoutMs: 35,
+    })).resolves.toEqual({ ok: true });
+    const options = requestMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options).not.toHaveProperty("timeoutMs");
+    expect(abort).not.toHaveBeenCalled();
+
+    await expect(transport.send({
+      path: "/douyin-mini/bootstrap",
+      method: "GET",
+      timeoutMs: 60_001,
+    })).rejects.toMatchObject({ code: "INVALID_API_CONFIG" });
+  });
+
   test("stored session parsing rejects extra fields and launch attribution is allowlisted", () => {
     expect(parseStoredSession({ accessToken: "jwt", expiresAt: now })).toEqual({
       accessToken: "jwt", expiresAt: now,

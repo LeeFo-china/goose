@@ -18,6 +18,7 @@ export type BudgetPageState = {
   estimate: DouyinBudgetEstimateResult | null;
   aiAnalysis: DouyinBudgetAiAnalysis | null;
   aiError: string;
+  aiRetryMode: "none" | "refresh" | "retry";
   pageError: string;
   configSequence: number;
   calculationSequence: number;
@@ -31,6 +32,7 @@ export function createBudgetPageState(): BudgetPageState {
     estimate: null,
     aiAnalysis: null,
     aiError: "",
+    aiRetryMode: "none",
     pageError: "",
     configSequence: 1,
     calculationSequence: 0,
@@ -54,9 +56,27 @@ export function resolveConfigLoad(
   sequence: number,
   config: DouyinBudgetPublicConfig,
 ): BudgetPageState {
-  return sequence === current.configSequence
-    ? { ...current, status: "ready", config, estimate: null, aiAnalysis: null }
-    : current;
+  return resolveConfigLoadResult(current, sequence, config).state;
+}
+
+export function resolveConfigLoadResult(
+  current: BudgetPageState,
+  sequence: number,
+  config: DouyinBudgetPublicConfig,
+): { state: BudgetPageState; accepted: boolean } {
+  if (sequence !== current.configSequence) return { state: current, accepted: false };
+  return {
+    accepted: true,
+    state: {
+      ...current,
+      status: "ready",
+      config,
+      estimate: null,
+      aiAnalysis: null,
+      aiError: "",
+      aiRetryMode: "none",
+    },
+  };
 }
 
 export function failConfigLoad(
@@ -79,10 +99,25 @@ export function beginBudgetCalculation(current: BudgetPageState) {
       estimate: null,
       aiAnalysis: null,
       aiError: "",
+      aiRetryMode: "none" as const,
       pageError: "",
       calculationSequence: sequence,
       aiSequence: current.aiSequence + 1,
     },
+  };
+}
+
+export function applyBudgetFormMutation(current: BudgetPageState): BudgetPageState {
+  return {
+    ...current,
+    status: current.config ? "ready" : "loading_config",
+    estimate: null,
+    aiAnalysis: null,
+    aiError: "",
+    aiRetryMode: "none",
+    pageError: "",
+    calculationSequence: current.calculationSequence + 1,
+    aiSequence: current.aiSequence + 1,
   };
 }
 
@@ -115,6 +150,7 @@ export function beginAiRequest(current: BudgetPageState) {
       aiSequence: sequence,
       aiAnalysis: null,
       aiError: "",
+      aiRetryMode: "none" as const,
       estimate: current.estimate
         ? { ...current.estimate, ai_status: "pending" as const }
         : null,
@@ -135,6 +171,23 @@ export function resolveAiRequest(
     estimate: { ...current.estimate, ai_status: response.estimate.ai_status },
     aiAnalysis: response.ai_analysis,
     aiError: response.estimate.ai_status === "failed" ? "AI 建议暂时无法生成" : "",
+    aiRetryMode: response.estimate.ai_status === "failed" ? "retry" : "none",
+  };
+}
+
+export function markAiRequestUncertain(
+  current: BudgetPageState,
+  sequence: number,
+  estimateId: string,
+  message: string,
+): BudgetPageState {
+  if (sequence !== current.aiSequence || current.estimate?.id !== estimateId) return current;
+  return {
+    ...current,
+    estimate: { ...current.estimate, ai_status: "pending" },
+    aiAnalysis: null,
+    aiError: message,
+    aiRetryMode: "none",
   };
 }
 
@@ -150,5 +203,6 @@ export function failAiRequest(
     estimate: { ...current.estimate, ai_status: "failed" },
     aiAnalysis: null,
     aiError: message,
+    aiRetryMode: "refresh",
   };
 }

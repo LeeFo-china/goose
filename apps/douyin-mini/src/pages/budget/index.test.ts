@@ -18,11 +18,19 @@ test("budget page registers native handlers and mutually exclusive states", asyn
     "onCalculate()",
     "onRetryAi()",
     "onBookMeasurement()",
+    "onUnload()",
   ]) expect(source).toContain(handler);
   expect(source).toContain("fetchBudgetConfig");
   expect(source).toContain("createBudgetEstimate");
   expect(source).toContain("fetchBudgetAiAnalysis");
   expect(source).toContain("const pending = beginConfigLoad(this.pageState);");
+  expect(source).toContain("applyBudgetFormMutation");
+  expect(source).toContain("resolveConfigLoadResult");
+  expect(source).toContain("aiPolling.cancel()");
+  expect(source).toContain("BudgetAiAnalysisRunner");
+  expect(source.match(/this\.commitFormMutation\(/g)).toHaveLength(4);
+  expect(source).toContain("if (!resolution.accepted) return;");
+  expect(source).toContain("resolution.state.config");
   expect(source).toContain('switchToTab("lead")');
   expect(template).toContain('tt:if="{{status === \'loading_config\'}}"');
   expect(template).toContain('tt:elif="{{status === \'unavailable\'}}"');
@@ -50,6 +58,7 @@ test("budget result keeps estimate, AI and disclaimer hierarchy without promises
   expect(template).toContain("AI 预算建议");
   expect(template).toContain("{{estimate.disclaimer}}");
   expect(template).toContain('bindtap="onRetryAi"');
+  expect(template).toContain("重新获取 AI 说明");
   expect(template).toContain('bindtap="onBookMeasurement"');
   expect(template).not.toMatch(/保证|确保|绝不超预算|最终报价/);
   expect(style).not.toContain("border-left");

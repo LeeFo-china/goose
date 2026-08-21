@@ -10,11 +10,13 @@ import {
   beginBudgetCalculation,
   beginConfigLoad,
   createBudgetPageState,
+  applyBudgetFormMutation,
   failAiRequest,
   failBudgetCalculation,
   resolveAiRequest,
   resolveBudgetCalculation,
   resolveConfigLoad,
+  resolveConfigLoadResult,
 } from "./page-model";
 
 const config = { pricing_version: "1" } as DouyinBudgetPublicConfig;
@@ -32,6 +34,18 @@ describe("budget page request state", () => {
     const refresh = beginConfigLoad(first);
     expect(resolveConfigLoad(refresh, first.configSequence, config)).toBe(refresh);
     expect(resolveConfigLoad(refresh, refresh.configSequence, config).status).toBe("ready");
+  });
+
+  test("reports config acceptance so stale responses cannot update visible data", () => {
+    const first = beginConfigLoad(createBudgetPageState());
+    const second = beginConfigLoad(first);
+    const newConfig = { ...config, pricing_version: "2" };
+    const accepted = resolveConfigLoadResult(second, second.configSequence, newConfig);
+    const stale = resolveConfigLoadResult(accepted.state, first.configSequence, config);
+    expect(accepted).toMatchObject({ accepted: true });
+    expect(stale.accepted).toBe(false);
+    expect(stale.state.config).toBe(newConfig);
+    expect(stale.state.config?.pricing_version).toBe("2");
   });
 
   test("uses only the required page states", () => {
@@ -105,5 +119,45 @@ describe("budget page request state", () => {
     expect(failed.status).toBe("result");
     expect(failed.estimate).toEqual({ ...estimate, ai_status: "failed" });
     expect(failed.aiError).toBe("AI 暂时不可用");
+    expect(failed.aiRetryMode).toBe("refresh");
+
+    const providerFailed = resolveAiRequest(
+      retry.state,
+      retry.sequence,
+      estimate.id,
+      { estimate: { ...estimate, ai_status: "failed" }, ai_analysis: null },
+    );
+    expect(providerFailed.aiRetryMode).toBe("retry");
+  });
+
+  test("invalidates result and AI authority after any request-bearing form edit", () => {
+    const ready = resolveConfigLoad(createBudgetPageState(), 1, config);
+    const calculation = beginBudgetCalculation(ready);
+    const result = resolveBudgetCalculation(
+      calculation.state,
+      calculation.sequence,
+      estimate,
+    );
+    const ai = beginAiRequest(result);
+    const edited = applyBudgetFormMutation(ai.state);
+
+    expect(edited).toMatchObject({
+      status: "ready",
+      estimate: null,
+      aiAnalysis: null,
+      aiError: "",
+    });
+    expect(edited.aiSequence).toBeGreaterThan(ai.sequence);
+    expect(resolveAiRequest(
+      edited,
+      ai.sequence,
+      estimate.id,
+      { estimate: { ...estimate, ai_status: "succeeded" }, ai_analysis: {
+        summary: "旧建议",
+        allocation_advice: [],
+        risk_factors: [],
+        onsite_questions: [],
+      } },
+    )).toBe(edited);
   });
 });

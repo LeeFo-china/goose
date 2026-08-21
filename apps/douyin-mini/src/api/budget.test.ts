@@ -167,6 +167,7 @@ describe("Douyin budget API client", () => {
       path: `/douyin-mini/budget-estimates/${ESTIMATE_ID}/ai-analysis`,
       method: "POST",
       data: { retry: true },
+      timeoutMs: 35_000,
       token: "test-token",
     }]);
 

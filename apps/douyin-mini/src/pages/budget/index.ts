@@ -14,6 +14,7 @@ import type {
 } from "../../models";
 import { writeBudgetLeadContext } from "../../platform/budget-lead-context";
 import { switchToTab } from "../../platform/navigation";
+import { BudgetAiAnalysisRunner } from "./ai-polling";
 import {
   BudgetFormValidationError,
   buildEstimateRequest,
@@ -28,12 +29,14 @@ import {
   beginBudgetCalculation,
   beginConfigLoad,
   createBudgetPageState,
+  applyBudgetFormMutation,
   failAiRequest,
   failBudgetCalculation,
   failConfigLoad,
+  markAiRequestUncertain,
   resolveAiRequest,
   resolveBudgetCalculation,
-  resolveConfigLoad,
+  resolveConfigLoadResult,
   type BudgetPageState,
 } from "./page-model";
 
@@ -55,6 +58,9 @@ type BudgetOptionView = DouyinBudgetPublicOption & { selected: boolean };
 
 Page({
   pageState: createBudgetPageState(),
+  aiPolling: new BudgetAiAnalysisRunner((estimateId, retry, timeoutMs) => (
+    fetchBudgetAiAnalysis(getApp<DouyinAppContext>().api, estimateId, retry, timeoutMs)
+  )),
   data: {
     status: "loading_config",
     primaryColor: "#191817",
@@ -74,11 +80,14 @@ Page({
     categoryRows: [] as Array<DouyinBudgetEstimateResult["categories"][number] & { range: string }>,
     aiAnalysis: null as BudgetPageState["aiAnalysis"],
     aiError: "",
+    aiRetryMode: "none" as BudgetPageState["aiRetryMode"],
   },
   onLoad() { void this.loadConfig(false); },
+  onUnload() { this.aiPolling.cancel(); },
   onPullDownRefresh() { void this.loadConfig(true); },
   onRetryConfig() { void this.loadConfig(false); },
   async loadConfig(stopRefresh: boolean) {
+    this.aiPolling.cancel();
     const pending = beginConfigLoad(this.pageState);
     this.pageState = pending;
     this.syncState();
@@ -89,16 +98,20 @@ Page({
         fetchBudgetConfig(app.api),
       ]);
       if (!bootstrap) return;
-      const theme = resolveThemeColor(bootstrap.theme.primary_color);
-      this.pageState = resolveConfigLoad(
+      const resolution = resolveConfigLoadResult(
         this.pageState,
         pending.configSequence,
         config,
       );
-      const form = normalizeFormForConfig(this.data.form, config);
+      if (!resolution.accepted) return;
+      this.pageState = resolution.state;
+      const acceptedConfig = resolution.state.config;
+      if (!acceptedConfig) return;
+      const theme = resolveThemeColor(bootstrap.theme.primary_color);
+      const form = normalizeFormForConfig(this.data.form, acceptedConfig);
       this.setData({
         form,
-        applicableOptions: buildOptionViews(config, form),
+        applicableOptions: buildOptionViews(acceptedConfig, form),
         primaryColor: theme.primaryColor,
         primaryTextColor: theme.primaryTextColor,
         activeChoiceStyle: `border-color: ${theme.primaryColor}; background-color: ${theme.primaryColor}; color: ${theme.primaryTextColor};`,
@@ -106,6 +119,7 @@ Page({
       this.syncState();
       app.recordAnalytics("page_view");
     } catch (error) {
+      if (pending.configSequence !== this.pageState.configSequence) return;
       const unavailable = describeUnavailable(error);
       this.pageState = failConfigLoad(
         this.pageState,
@@ -126,11 +140,7 @@ Page({
     const areaText = typeof event.detail.value === "string"
       ? event.detail.value.replace(/[^0-9.]/g, "").slice(0, 8)
       : "";
-    this.setData({
-      form: { ...this.data.form, areaText },
-      areaError: "",
-      pageError: "",
-    });
+    this.commitFormMutation({ ...this.data.form, areaText }, { areaError: "" });
   },
   onTextInput(event: {
     currentTarget: { dataset: { field?: string } };
@@ -143,9 +153,9 @@ Page({
       || typeof value !== "string") return;
     const textField = field as "layout" | "style" | "demand";
     const maximum = textField === "demand" ? 1_000 : 40;
-    this.setData({
-      form: { ...this.data.form, [textField]: value.slice(0, maximum) },
-      pageError: "",
+    this.commitFormMutation({
+      ...this.data.form,
+      [textField]: value.slice(0, maximum),
     });
   },
   onSelectChoice(event: {
@@ -160,11 +170,7 @@ Page({
       field as BudgetChoiceField,
       value,
     );
-    this.setData({
-      form,
-      applicableOptions: buildOptionViews(this.data.config, form),
-      pageError: "",
-    });
+    this.commitFormMutation(form);
   },
   onToggleOption(event: { currentTarget: { dataset: { code?: string } } }) {
     if (this.data.status === "calculating" || !this.data.config) return;
@@ -174,11 +180,17 @@ Page({
       ? this.data.form.selectedOptions.filter((item) => item !== code)
       : [...this.data.form.selectedOptions, code];
     const form = { ...this.data.form, selectedOptions };
+    this.commitFormMutation(form);
+  },
+  commitFormMutation(form: BudgetFormValue, fields: { areaError?: string } = {}) {
+    this.aiPolling.cancel();
+    this.pageState = applyBudgetFormMutation(this.pageState);
     this.setData({
       form,
-      applicableOptions: buildOptionViews(this.data.config, form),
-      pageError: "",
+      applicableOptions: this.data.config ? buildOptionViews(this.data.config, form) : [],
+      ...fields,
     });
+    this.syncState();
   },
   async onCalculate() {
     if (!this.data.config || this.data.status === "calculating") return;
@@ -199,6 +211,7 @@ Page({
       }
       return;
     }
+    this.aiPolling.cancel();
     const pending = beginBudgetCalculation(this.pageState);
     this.pageState = pending.state;
     this.syncState();
@@ -210,7 +223,7 @@ Page({
         estimate,
       );
       this.syncState();
-      if (this.pageState.estimate?.id === estimate.id) void this.loadAi(estimate.id, false);
+      if (this.pageState.estimate?.id === estimate.id) this.loadAi(estimate.id, false);
     } catch (error) {
       this.pageState = failBudgetCalculation(
         this.pageState,
@@ -222,33 +235,41 @@ Page({
   },
   onRetryAi() {
     const id = this.pageState.estimate?.id;
-    if (id) void this.loadAi(id, true);
+    if (id) this.loadAi(id, this.pageState.aiRetryMode === "retry");
   },
-  async loadAi(estimateId: string, retry: boolean) {
+  loadAi(estimateId: string, retry: boolean) {
     const pending = beginAiRequest(this.pageState);
     this.pageState = pending.state;
     this.syncState();
-    try {
-      const response = await fetchBudgetAiAnalysis(
-        getApp<DouyinAppContext>().api,
-        estimateId,
-        retry,
-      );
-      this.pageState = resolveAiRequest(
-        this.pageState,
-        pending.sequence,
-        estimateId,
-        response,
-      );
-    } catch (error) {
-      this.pageState = failAiRequest(
-        this.pageState,
-        pending.sequence,
-        estimateId,
-        readableError(error, "AI 建议暂时无法生成"),
-      );
-    }
-    this.syncState();
+    this.aiPolling.start(estimateId, retry, {
+      onResponse: (response) => {
+        this.pageState = resolveAiRequest(
+          this.pageState,
+          pending.sequence,
+          estimateId,
+          response,
+        );
+        this.syncState();
+      },
+      onUncertain: () => {
+        this.pageState = markAiRequestUncertain(
+          this.pageState,
+          pending.sequence,
+          estimateId,
+          "AI 说明仍在生成，正在自动获取结果。",
+        );
+        this.syncState();
+      },
+      onExhausted: () => {
+        this.pageState = failAiRequest(
+          this.pageState,
+          pending.sequence,
+          estimateId,
+          "AI 说明暂未完成，规则预算仍可正常使用。",
+        );
+        this.syncState();
+      },
+    });
   },
   onBookMeasurement() {
     const estimate = this.pageState.estimate;
@@ -283,6 +304,7 @@ Page({
       })) ?? [],
       aiAnalysis: this.pageState.aiAnalysis,
       aiError: this.pageState.aiError,
+      aiRetryMode: this.pageState.aiRetryMode,
     });
   },
 });

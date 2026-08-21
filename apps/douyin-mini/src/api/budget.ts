@@ -53,6 +53,7 @@ export async function fetchBudgetAiAnalysis(
   client: ApiClient,
   estimateId: string,
   retry = false,
+  timeoutMs = 35_000,
 ): Promise<DouyinBudgetAiExplanationResponse> {
   if (!UUID_PATTERN.test(estimateId)) {
     throw new ApiRequestError(0, "INVALID_BUDGET_ESTIMATE_ID", "预算编号无效");
@@ -61,6 +62,7 @@ export async function fetchBudgetAiAnalysis(
     path: `/douyin-mini/budget-estimates/${encodeURIComponent(estimateId)}/ai-analysis`,
     method: "POST",
     data: { retry },
+    timeoutMs,
   });
   const parsed = parseAiResponse(value);
   if (!parsed || parsed.estimate.id !== estimateId) throw invalidResponse();

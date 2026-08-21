@@ -2,6 +2,7 @@ export type ApiRequestInput = {
   path: string;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   data?: Record<string, unknown>;
+  timeoutMs?: number;
 };
 
 export type TransportInput = ApiRequestInput & { token?: string };
@@ -66,6 +67,14 @@ export class DouyinRequestTransport implements RequestTransport {
   }
 
   send(input: TransportInput): Promise<unknown> {
+    const timeoutMs = input.timeoutMs ?? this.timeoutMs;
+    if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
+      return Promise.reject(new ApiRequestError(
+        0,
+        "INVALID_API_CONFIG",
+        "请求超时配置无效",
+      ));
+    }
     return new Promise((resolve, reject) => {
       let settled = false;
       let task: { abort(): void } | undefined;
@@ -78,7 +87,7 @@ export class DouyinRequestTransport implements RequestTransport {
       const timer = setTimeout(() => {
         task?.abort();
         finish(() => reject(new ApiRequestError(0, "NETWORK_ERROR", "网络请求超时")));
-      }, this.timeoutMs);
+      }, timeoutMs);
 
       task = this.request({
         url: `${this.baseUrl}${normalizePath(input.path)}`,
