@@ -24,6 +24,7 @@ import {
   resolveConfigLoad,
   resolveConfigLoadResult,
   shouldPreserveBudgetResultOnReturn,
+  shouldResumeBudgetAiOnReturn,
 } from "./page-model";
 
 const config = { pricing_version: "1" } as DouyinBudgetPublicConfig;
@@ -88,6 +89,30 @@ describe("budget page request state", () => {
     expect(shouldPreserveBudgetResultOnReturn(result, null)).toBe(false);
     expect(shouldPreserveBudgetResultOnReturn({ ...result, estimate: null }, estimate.id))
       .toBe(false);
+    expect(shouldResumeBudgetAiOnReturn(result, estimate.id)).toBe(true);
+    expect(shouldResumeBudgetAiOnReturn({
+      ...result,
+      estimate: { ...estimate, ai_status: "succeeded" },
+    }, estimate.id)).toBe(false);
+    expect(shouldResumeBudgetAiOnReturn(result,
+      "33333333-3333-4333-8333-333333333333")).toBe(false);
+  });
+
+  test("resumes a matching pending AI runner only once per hidden transition", () => {
+    const lifecycle = new BudgetPageLifecycleCoordinator();
+    const result = {
+      ...createBudgetPageState(),
+      status: "result" as const,
+      config,
+      estimate,
+    };
+    let starts = 0;
+    lifecycle.onLoad();
+    lifecycle.onHide();
+    if (lifecycle.onShow() && shouldResumeBudgetAiOnReturn(result, estimate.id)) starts += 1;
+    if (lifecycle.onShow() && shouldResumeBudgetAiOnReturn(result, estimate.id)) starts += 1;
+
+    expect(starts).toBe(1);
   });
 
   test("hide and unload invalidate config, estimate and AI request authorities", () => {

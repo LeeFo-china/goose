@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   LeadPageCoordinator,
   getCooldownRemainingSeconds,
+  recordSmsCooldownUntil,
 } from "./lead-page-coordinator";
 
 describe("lead page async authority", () => {
@@ -30,6 +31,42 @@ describe("lead page async authority", () => {
     expect(lifecycle.finishSms(hiddenSms!)).toBe(false);
     expect(lifecycle.beginSms()).toBeNull();
     expect(lifecycle.finishSms(currentSms!)).toBe(true);
+  });
+
+  test("records a hidden SMS success as a deadline without presentation authority", () => {
+    const now = 1_775_000_000_000;
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onShow();
+    const hiddenSms = lifecycle.beginSms();
+    lifecycle.onHide();
+
+    const cooldownUntil = recordSmsCooldownUntil(0, 60, now);
+    expect(lifecycle.finishSms(hiddenSms!)).toBe(false);
+    expect(cooldownUntil).toBe(now + 60_000);
+
+    lifecycle.onShow();
+    expect(getCooldownRemainingSeconds(cooldownUntil, now + 15_001)).toBe(45);
+  });
+
+  test("shares one bootstrap flight across hide and show", () => {
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onLoad();
+    expect(lifecycle.beginBootstrapLoad()).toBe(true);
+    lifecycle.onHide();
+    lifecycle.onShow();
+
+    expect(lifecycle.beginBootstrapLoad()).toBe(false);
+    expect(lifecycle.finishBootstrapLoad()).toBe(true);
+  });
+
+  test("allows reload when a hidden bootstrap flight settled without presentation", () => {
+    const lifecycle = new LeadPageCoordinator();
+    lifecycle.onLoad();
+    expect(lifecycle.beginBootstrapLoad()).toBe(true);
+    lifecycle.onHide();
+    expect(lifecycle.finishBootstrapLoad()).toBe(false);
+    lifecycle.onShow();
+    expect(lifecycle.beginBootstrapLoad()).toBe(true);
   });
 
   test("invalidates hidden submit presentation but allows a deliberate retry", () => {
@@ -66,5 +103,6 @@ describe("lead page async authority", () => {
     expect(getCooldownRemainingSeconds(cooldownUntil, now)).toBe(60);
     expect(getCooldownRemainingSeconds(cooldownUntil, now + 30_001)).toBe(30);
     expect(getCooldownRemainingSeconds(cooldownUntil, now + 60_000)).toBe(0);
+    expect(recordSmsCooldownUntil(cooldownUntil, 10, now)).toBe(cooldownUntil);
   });
 });

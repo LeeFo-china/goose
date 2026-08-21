@@ -159,6 +159,11 @@ describe("lead form model", () => {
     expect(source).toContain("finishSms");
     expect(source).toContain("finishSubmit");
     expect(source).toContain("this.lifecycle.onLoad()");
+    expect(source).toContain("beginBootstrapLoad");
+    expect(source).toContain("finishBootstrapLoad");
+    expect(source).toContain("bootstrapSnapshot");
+    expect(source).toContain("presentBootstrap");
+    expect(source).toContain("app.bootstrap.getReadyOrLoad()");
     expect(source).toContain("onHide()");
     expect(source).toContain("onUnload()");
     expect(source).toContain("if (!bootstrap || !this.lifecycle.isVisible()) return;");
@@ -166,12 +171,15 @@ describe("lead form model", () => {
     expect(source).toContain("cooldownUntil");
     expect(source).toContain("this.resumeCooldown()");
     expect(source).toContain("getCooldownRemainingSeconds");
+    expect(source).toContain("recordSmsCooldownUntil");
     expect(source).toContain("writeMeasurementSuccessContext");
     expect(source).toContain('navigateToPage("pages/lead-success/index")');
     expect(source).not.toContain("buildLeadSuccessRoute");
     expect(source).not.toContain("successRoute");
     expect(source.indexOf("writeMeasurementSuccessContext"))
       .toBeLessThan(source.lastIndexOf("finishSubmit"));
+    expect(source.indexOf("recordSmsCooldownUntil"))
+      .toBeLessThan(source.indexOf("finishSms(authority)"));
     expect(source).toContain("budget_estimate_id: linkedBudget?.estimateId ?? \"\"");
     const frozenContextGuard = source.indexOf(
       "if (this.data.submitting) return this.linkedBudget;",

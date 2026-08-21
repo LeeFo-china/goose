@@ -2,7 +2,7 @@ import type { DouyinAppContext } from "../../app";
 import { sendLeadSms, submitLead } from "../../api/leads";
 import { ApiRequestError } from "../../api/request";
 import { resolveThemeColor } from "../../components/theme";
-import type { DouyinVisitPeriod } from "../../models";
+import type { BootstrapData, DouyinVisitPeriod } from "../../models";
 import {
   readBudgetLeadContext,
   type BudgetLeadContext,
@@ -33,6 +33,7 @@ import {
 import {
   LeadPageCoordinator,
   getCooldownRemainingSeconds,
+  recordSmsCooldownUntil,
 } from "./lead-page-coordinator";
 
 const INITIAL_FORM: LeadFormValue = {
@@ -62,6 +63,8 @@ Page({
   lifecycle: new LeadPageCoordinator(),
   cooldownTimer: null as ReturnType<typeof setInterval> | null,
   cooldownUntil: 0,
+  bootstrapSnapshot: null as BootstrapData | null,
+  initialBootstrapConsumed: false,
   successNavigationInFlight: false,
   data: {
     loading: true,
@@ -92,11 +95,15 @@ Page({
     void this.load();
   },
   onShow() {
-    this.lifecycle.onShow();
+    const becameVisible = this.lifecycle.onShow();
     if (!this.lifecycle.isVisible()) return;
     this.setData({ smsSending: false, submitting: false });
     this.syncBudgetContext();
     this.resumeCooldown();
+    if (becameVisible && (this.data.loading || this.data.error)) {
+      if (this.bootstrapSnapshot) this.presentBootstrap(this.bootstrapSnapshot);
+      else void this.load();
+    }
   },
   onHide() {
     if (!this.lifecycle.onHide()) return;
@@ -110,34 +117,42 @@ Page({
     this.cooldownUntil = 0;
   },
   async load() {
-    this.setData({ loading: true, error: false });
+    if (!this.lifecycle.beginBootstrapLoad()) return;
+    if (this.lifecycle.isVisible()) this.setData({ loading: true, error: false });
+    let bootstrap: BootstrapData | null;
     try {
-      const bootstrap = await getApp<DouyinAppContext>().startup;
-      if (!bootstrap || !this.lifecycle.isVisible()) return;
-      const theme = resolveThemeColor(bootstrap.theme.primary_color);
-      this.idempotency = updateIdempotencyDraft(
-        this.idempotency,
-        toIdempotencyDraft(
-          this.data.form,
-          bootstrap.privacy_policy_version,
-          this.linkedBudget,
-        ),
-      );
-      this.setData({
-        loading: false,
-        disabled: !bootstrap.features.sms_lead,
-        companyName: bootstrap.company.name,
-        servicePhone: bootstrap.company.service_phone,
-        primaryColor: theme.primaryColor,
-        primaryTextColor: theme.primaryTextColor,
-        privacyPolicyVersion: bootstrap.privacy_policy_version,
-      });
-      getApp<DouyinAppContext>().recordAnalytics("page_view");
+      const app = getApp<DouyinAppContext>();
+      const bootstrapFlight = this.initialBootstrapConsumed
+        ? app.bootstrap.getReadyOrLoad()
+        : app.startup;
+      this.initialBootstrapConsumed = true;
+      bootstrap = await bootstrapFlight;
     } catch {
-      if (this.lifecycle.isVisible()) {
-        this.setData({ loading: false, error: true });
-      }
+      if (this.lifecycle.finishBootstrapLoad()) this.setData({ loading: false, error: true });
+      return;
     }
+    if (bootstrap) this.bootstrapSnapshot = bootstrap;
+    if (!this.lifecycle.finishBootstrapLoad() || !bootstrap) return;
+    this.presentBootstrap(bootstrap);
+  },
+  presentBootstrap(bootstrap: BootstrapData) {
+    if (!this.lifecycle.isVisible()) return;
+    const theme = resolveThemeColor(bootstrap.theme.primary_color);
+    this.idempotency = updateIdempotencyDraft(
+      this.idempotency,
+      toIdempotencyDraft(this.data.form, bootstrap.privacy_policy_version, this.linkedBudget),
+    );
+    this.setData({
+      loading: false,
+      error: false,
+      disabled: !bootstrap.features.sms_lead,
+      companyName: bootstrap.company.name,
+      servicePhone: bootstrap.company.service_phone,
+      primaryColor: theme.primaryColor,
+      primaryTextColor: theme.primaryTextColor,
+      privacyPolicyVersion: bootstrap.privacy_policy_version,
+    });
+    getApp<DouyinAppContext>().recordAnalytics("page_view");
   },
   syncBudgetContext() {
     if (this.data.submitting) return this.linkedBudget;
@@ -203,7 +218,7 @@ Page({
       .catch(() => this.setData({ formError: "隐私政策页面打开失败，请稍后重试" }));
   },
   async onSendSms() {
-    if (this.data.submitting || this.data.smsCooldown > 0) return;
+    if (this.data.submitting || getCooldownRemainingSeconds(this.cooldownUntil) > 0) return;
     const phone = this.data.form.phone.trim();
     if (!/^1[3-9][0-9]{9}$/.test(phone)) {
       const phoneError = "请先填写正确的手机号";
@@ -220,12 +235,17 @@ Page({
     try {
       const app = getApp<DouyinAppContext>();
       const result = await sendLeadSms(app.api, { phone, attribution: app.launchContext });
+      this.cooldownUntil = recordSmsCooldownUntil(
+        this.cooldownUntil,
+        result.cooldown_seconds,
+      );
       if (!this.lifecycle.finishSms(authority)) return;
-      this.startCooldown(result.cooldown_seconds);
+      this.resumeCooldown();
       this.setData({ smsSending: false });
       void tt.showToast({ title: "验证码已发送", icon: "none" });
     } catch (error) {
       if (!this.lifecycle.finishSms(authority)) return;
+      this.resumeCooldown();
       this.setData({
         smsSending: false,
         formError: readableError(error, "验证码发送失败，请稍后重试"),
@@ -387,10 +407,6 @@ Page({
       phoneNumber,
       fail: () => tt.showToast({ title: "未能发起拨号，请稍后重试", icon: "none" }),
     });
-  },
-  startCooldown(seconds: number) {
-    this.cooldownUntil = Date.now() + seconds * 1_000;
-    this.resumeCooldown();
   },
   resumeCooldown() {
     this.stopCooldown();

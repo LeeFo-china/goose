@@ -33,6 +33,8 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(source).toContain("BudgetPageLifecycleCoordinator");
   expect(source).toContain("consumeBudgetResultReturnIntent");
   expect(source).toContain("shouldPreserveBudgetResultOnReturn");
+  expect(source).toContain("shouldResumeBudgetAiOnReturn");
+  expect(source).toContain("this.loadAi(estimateId, false)");
   expect(source).toContain("this.suspendPage()");
   expect(source.match(/this\.commitFormMutation\(/g)).toHaveLength(4);
   expect(source).toContain("if (!resolution.accepted) return;");

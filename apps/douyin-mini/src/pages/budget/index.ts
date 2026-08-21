@@ -17,7 +17,7 @@ import {
   describeBudgetUnavailable, failAiRequest, failBudgetCalculation, failConfigLoad,
   invalidateBudgetPageRequests, markAiRequestUncertain, readBudgetError,
   resolveAiRequestResult, resolveBudgetCalculationResult, resolveConfigLoadResult,
-  shouldPreserveBudgetResultOnReturn,
+  shouldPreserveBudgetResultOnReturn, shouldResumeBudgetAiOnReturn,
   type BudgetPageState,
 } from "./page-model";
 const INITIAL_FORM: BudgetFormValue = {
@@ -67,7 +67,11 @@ Page({
     if (!this.lifecycle.onShow()) return;
     const estimateId = consumeBudgetResultReturnIntent();
     if (shouldPreserveBudgetResultOnReturn(this.pageState, estimateId)) {
-      this.syncState();
+      if (shouldResumeBudgetAiOnReturn(this.pageState, estimateId) && estimateId) {
+        this.loadAi(estimateId, false);
+      } else {
+        this.syncState();
+      }
       return;
     }
     void this.loadConfig(false);

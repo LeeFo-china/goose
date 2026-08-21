@@ -98,6 +98,14 @@ export function shouldPreserveBudgetResultOnReturn(
     && current.estimate?.id === estimateId;
 }
 
+export function shouldResumeBudgetAiOnReturn(
+  current: BudgetPageState,
+  estimateId: string | null,
+): boolean {
+  return shouldPreserveBudgetResultOnReturn(current, estimateId)
+    && current.estimate?.ai_status === "pending";
+}
+
 export function buildBudgetResultView(
   estimate: DouyinBudgetEstimateResult | null,
 ): BudgetResultView {

@@ -10,6 +10,7 @@ export class LeadPageCoordinator {
   private phase: LeadPagePhase = "new";
   private smsSequence = 0;
   private submitSequence = 0;
+  private bootstrapLoading = false;
   private activeSms: LeadOperationAuthority | null = null;
   private activeSubmit: LeadOperationAuthority | null = null;
 
@@ -42,6 +43,18 @@ export class LeadPageCoordinator {
 
   isVisible(): boolean {
     return this.phase === "visible";
+  }
+
+  beginBootstrapLoad(): boolean {
+    if (this.phase === "unloaded" || this.bootstrapLoading) return false;
+    this.bootstrapLoading = true;
+    return true;
+  }
+
+  finishBootstrapLoad(): boolean {
+    if (!this.bootstrapLoading) return false;
+    this.bootstrapLoading = false;
+    return this.isVisible();
   }
 
   beginSms(): LeadOperationAuthority | null {
@@ -82,6 +95,16 @@ export function getCooldownRemainingSeconds(
 ): number {
   if (!Number.isFinite(cooldownUntil) || !Number.isFinite(now)) return 0;
   return Math.max(0, Math.ceil((cooldownUntil - now) / 1_000));
+}
+
+export function recordSmsCooldownUntil(
+  current: number,
+  seconds: number,
+  now = Date.now(),
+): number {
+  if (!Number.isSafeInteger(seconds) || seconds <= 0 || !Number.isFinite(now)) return current;
+  const candidate = now + seconds * 1_000;
+  return Number.isSafeInteger(candidate) ? Math.max(current, candidate) : current;
 }
 
 function matches(
