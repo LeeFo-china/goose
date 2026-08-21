@@ -18,7 +18,14 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("buildPricingItemsPayload");
     expect(source).toContain("createBudgetPricingRequestAuthority");
     expect(source).toContain("撤销未保存修改");
-    expect(source).toMatch(/handleCreateDraft[\s\S]+?loadPage\(1\)/);
+    expect(source).toContain("const requestAuthority");
+    expect(source).not.toContain("const listAuthority");
+    expect(source).toContain("signal: mutationRequest.controller.signal");
+    expect(source).toContain("await loadPage(pageTarget.current())");
+    expect(source).not.toContain("void loadPage");
+    expect(source).toContain("disabled={busy}");
+    expect(source.indexOf("await loadPage(pageTarget.current())"))
+      .toBeLessThan(source.indexOf("toast.success(successMessage)"));
   });
 
   test("uses accessible human-facing fields and never exposes internal expressions or AI secrets", async () => {
@@ -29,6 +36,10 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("100㎡舒适档毛坯全屋预览");
     expect(source).toContain("项目状态");
     expect(source).toContain("适用房屋现状");
+    expect(source).toContain('id="budget-pricing-save-validation-summary"');
+    expect(source).toContain('id="budget-pricing-activation-validation-summary"');
+    expect(source).toMatch(/aria-describedby=\{saveWarnings\.length > 0 \? "budget-pricing-save-validation-summary"/);
+    expect(source).toMatch(/aria-describedby=\{activationWarnings\.length > 0 \? "budget-pricing-activation-validation-summary"/);
     expect(source).not.toContain("condition_payload");
     expect(source).not.toMatch(/ai[_ -]?(provider|model|key)|api[_ -]?key/i);
   });

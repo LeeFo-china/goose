@@ -19,6 +19,7 @@ import {
   type BudgetPricingDraftInput,
   type BudgetPricingEditorItem,
   type BudgetPricingItem,
+  type BudgetPricingPage,
   type BudgetPricingStatus,
 } from "./budget-pricing-contract";
 
@@ -268,6 +269,34 @@ export function createBudgetPricingRequestAuthority() {
       current?.controller.abort();
       current = null;
       sequence += 1;
+    },
+  };
+}
+
+export function createBudgetPricingPageTarget(initialPage: number) {
+  let page = initialPage;
+  return {
+    current(): number {
+      return page;
+    },
+    update(nextPage: number): void {
+      page = nextPage;
+    },
+  };
+}
+
+export function createBudgetPricingFailurePage(input: {
+  page: number;
+  pageSize: number;
+}): BudgetPricingPage {
+  return {
+    active_version: null,
+    list: [],
+    pagination: {
+      page: input.page,
+      pageSize: input.pageSize,
+      total: 0,
+      totalPages: 0,
     },
   };
 }

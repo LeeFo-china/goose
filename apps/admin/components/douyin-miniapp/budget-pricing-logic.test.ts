@@ -4,6 +4,8 @@ import {
   BUDGET_PRICING_PAGE_SIZE,
   buildPricingItemsPayload,
   calculatePricingPreview,
+  createBudgetPricingFailurePage,
+  createBudgetPricingPageTarget,
   createBudgetPricingRequestAuthority,
   createEmptyPricingEditorItem,
   getBudgetPricingViewState,
@@ -154,6 +156,33 @@ describe("douyin budget pricing admin logic", () => {
     expect(getBudgetPricingViewState({ loading: false, error: "失败", count: 0 })).toBe("error");
     expect(getBudgetPricingViewState({ loading: false, error: null, count: 0 })).toBe("empty");
     expect(getBudgetPricingViewState({ loading: false, error: null, count: 1 })).toBe("ready");
+  });
+
+  test("rejects an old GET that resolves after a mutation takes request authority", async () => {
+    const authority = createBudgetPricingRequestAuthority();
+    const oldGet = authority.begin();
+    let resolveOldGet!: (value: string) => void;
+    const oldGetResult = new Promise<string>((resolve) => { resolveOldGet = resolve; });
+
+    const mutation = authority.begin();
+    resolveOldGet("stale page");
+
+    expect(await oldGetResult).toBe("stale page");
+    expect(oldGet.controller.signal.aborted).toBe(true);
+    expect(authority.isCurrent(oldGet)).toBe(false);
+    expect(authority.isCurrent(mutation)).toBe(true);
+  });
+
+  test("preserves the latest pagination target and clears stale active state after refresh failure", () => {
+    const target = createBudgetPricingPageTarget(2);
+    target.update(3);
+    expect(target.current()).toBe(3);
+
+    expect(createBudgetPricingFailurePage({ page: target.current(), pageSize: 20 })).toEqual({
+      active_version: null,
+      list: [],
+      pagination: { page: 3, pageSize: 20, total: 0, totalPages: 0 },
+    });
   });
 
   test("keeps structured applicability filters in canonical order", () => {
