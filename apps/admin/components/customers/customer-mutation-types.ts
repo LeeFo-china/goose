@@ -30,6 +30,19 @@ export type CustomerSourceEmployee = {
   phone: string | null;
 };
 
+export type DouyinCustomerSourceMetadata = {
+  appointment_no: string | null;
+  status: "pending_confirmation" | "confirmed" | "completed" | "canceled" | "invalid" | null;
+  estimate_no: string | null;
+  minimum_total: number | null;
+  maximum_total: number | null;
+  ai_status: "pending" | "succeeded" | "failed" | "skipped" | null;
+  ai_summary: string | null;
+  allocation_advice: string[];
+  risk_factors: string[];
+  onsite_questions: string[];
+};
+
 export type CustomerSourceRecord = {
   id: string;
   source: string;

@@ -7,6 +7,8 @@ import {
   customerSourceDisplayLabel,
   customerSourceLabel,
   customerStatusMeta,
+  douyinAppointmentStatusLabel,
+  formatDouyinBudgetRange,
 } from "./customer-detail-display";
 
 function hasEnglishEnumText(value: string) {
@@ -90,5 +92,37 @@ describe("customer detail display", () => {
     expect(dialog).not.toContain("item.dedupe_result || \"-\"");
     expect(dialog).not.toContain(">{image}</a>");
     expect(dialog).toContain("查看截图 {index + 1}");
+  });
+
+  test("formats the stored Douyin appointment snapshot without recalculation", () => {
+    expect(customerSourceDisplayLabel({
+      display_label: "抖音小程序",
+      source: "douyin",
+    })).toBe("抖音小程序");
+    expect(douyinAppointmentStatusLabel("pending_confirmation")).toBe("待确认");
+    expect(douyinAppointmentStatusLabel("confirmed")).toBe("已确认");
+    expect(douyinAppointmentStatusLabel("legacy_status")).toBe("状态未知");
+    expect(formatDouyinBudgetRange(98_000, 128_000)).toBe("¥98,000 - ¥128,000");
+    expect(formatDouyinBudgetRange(null, 128_000)).toBe("-");
+  });
+
+  test("shows safe Douyin source fields and never renders raw source metadata", () => {
+    const dialog = readFileSync(
+      new URL("./customer-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    );
+    const snapshot = readFileSync(
+      new URL("./customer-douyin-source-snapshot.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(dialog).toContain("CustomerDouyinSourceSnapshot");
+    expect(snapshot).toContain("抖音预约");
+    expect(snapshot).toContain("预算区间");
+    expect(snapshot).toContain("AI 建议");
+    expect(snapshot).toContain("douyinAppointmentStatusLabel");
+    expect(snapshot).toContain("formatDouyinBudgetRange");
+    expect(snapshot).not.toMatch(/JSON\.stringify\s*\(\s*source\.metadata/);
+    expect(snapshot).not.toMatch(/request_ip|user_agent|subject_hash|raw_response/);
   });
 });

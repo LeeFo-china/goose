@@ -1,4 +1,8 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  serializeDouyinCustomerSourceMetadata,
+  type DouyinCustomerSourceMetadata,
+} from "@/repositories/customer-source-douyin-metadata";
 import type { CustomerSourceListQuery } from "@/schema/customer-sources";
 import { SupabaseDB } from "@/utils/supabase";
 
@@ -17,6 +21,8 @@ export type CustomerSourceRecord = {
   related_type?: string | null;
   related_id?: string | null;
   share_link_id?: string | null;
+  marketing_lead_id?: string | null;
+  douyin_measurement_appointment_id?: string | null;
 };
 
 export type CustomerAccessRecord = {
@@ -49,7 +55,8 @@ type TenantShareLinkLite = {
   target_id: string | null;
 };
 
-export type SerializedCustomerSource = CustomerSourceRecord & {
+export type SerializedCustomerSource = Omit<CustomerSourceRecord, "metadata"> & {
+  metadata: unknown | DouyinCustomerSourceMetadata;
   display_label: string;
   dedupe_result: string | null;
   is_old_customer_new_lead: boolean;
@@ -61,8 +68,31 @@ export type SerializedCustomerSource = CustomerSourceRecord & {
   share_link: TenantShareLinkLite | null;
 };
 
-class CustomerSourceRepository {
-  private client = SupabaseDB.getAdminClient();
+const CUSTOMER_SOURCE_SELECT = [
+  "id",
+  "tenant_id",
+  "customer_id",
+  "source",
+  "source_label",
+  "platform_lead_id",
+  "assigned_by_employee_id",
+  "assigned_at",
+  "metadata",
+  "created_at",
+  "source_employee_id",
+  "related_type",
+  "related_id",
+  "share_link_id",
+  "marketing_lead_id",
+  "douyin_measurement_appointment_id",
+].join(",");
+
+export class CustomerSourceRepository {
+  private client;
+
+  constructor(client = SupabaseDB.getAdminClient()) {
+    this.client = client;
+  }
 
   private from(table: string) {
     return (this.client as unknown as { from: (table: string) => any }).from(table);
@@ -93,7 +123,7 @@ class CustomerSourceRepository {
     const to = from + input.query.pageSize - 1;
 
     const request = this.from("customer_sources")
-      .select("*", { count: "exact" })
+      .select(CUSTOMER_SOURCE_SELECT, { count: "exact" })
       .eq("customer_id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
@@ -128,7 +158,7 @@ class CustomerSourceRepository {
     }
 
     const request = this.from("customer_sources")
-      .select("*")
+      .select(CUSTOMER_SOURCE_SELECT)
       .in("customer_id", input.customerIds)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false });
@@ -162,7 +192,16 @@ class CustomerSourceRepository {
       const dedupeResult = readDedupeResult(row.metadata);
       return {
         ...row,
-        display_label: row.source_label || getSourceLabel(row.source),
+        source: isDouyinAppointmentSource(row) ? "douyin" : row.source,
+        source_label: isDouyinAppointmentSource(row)
+          ? "抖音小程序"
+          : row.source_label,
+        metadata: isDouyinAppointmentSource(row)
+          ? serializeDouyinCustomerSourceMetadata(row.metadata)
+          : row.metadata,
+        display_label: isDouyinAppointmentSource(row)
+          ? "抖音小程序"
+          : row.source_label || getSourceLabel(row.source),
         dedupe_result: dedupeResult,
         is_old_customer_new_lead: row.source === "platform_lead" && dedupeResult === "existing_customer",
         is_platform_new_lead: row.source === "platform_lead" && dedupeResult === "created_customer",
@@ -256,6 +295,10 @@ function isEmployeeShareSource(source: string) {
   ].includes(source);
 }
 
+function isDouyinAppointmentSource(row: CustomerSourceRecord) {
+  return row.source === "douyin_miniapp";
+}
+
 function getSourceLabel(source: string) {
   switch (source) {
     case "platform_lead":
@@ -272,6 +315,8 @@ function getSourceLabel(source: string) {
       return "员工小程序码分享";
     case "douyin":
       return "抖音";
+    case "douyin_miniapp":
+      return "抖音小程序";
     case "referral":
       return "转介绍";
     case "walk_in":
