@@ -79,7 +79,7 @@ function clientWith(results: Result[]) {
 describe("TenantDouyinLeadsRepository budget ranges", () => {
   test("hydrates only a strict public yuan range for the latest appointment", async () => {
     const context = clientWith([
-      { data: [lead], error: null, count: 1 },
+      { data: { data: { list: [lead], total: 1 } }, error: null },
       { data: [appointment], error: null },
       { data: [budgetRow(BUDGET_ID)], error: null },
     ]);
@@ -111,7 +111,8 @@ describe("TenantDouyinLeadsRepository budget ranges", () => {
       marketing_lead_id: item.id, budget_estimate_id: budgetIds[index] }));
     const budgetRows = budgetIds.map((id) => budgetRow(id));
     const context = clientWith([
-      { data: leads, error: null, count: 51 }, { data: appointments, error: null },
+      { data: { data: { list: leads, total: 51 } }, error: null },
+      { data: appointments, error: null },
       { data: budgetRows.slice(0, 50), error: null },
       { data: budgetRows.slice(50), error: null },
     ]);
@@ -146,7 +147,7 @@ describe("TenantDouyinLeadsRepository budget ranges", () => {
       { minimum_total: 110_000.5, maximum_total: 140_000 },
     ]) {
       const unsafe = clientWith([
-        { data: [lead], error: null, count: 1 },
+        { data: { data: { list: [lead], total: 1 } }, error: null },
         { data: [appointment], error: null },
         { data: [budgetRow(BUDGET_ID, totals)], error: null },
       ]);

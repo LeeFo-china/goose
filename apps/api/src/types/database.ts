@@ -26201,6 +26201,20 @@ export type Database = {
           version: number
         }[]
       }
+      list_tenant_douyin_leads: {
+        Args: {
+          p_assignee_id: string
+          p_date_from: string
+          p_date_to_exclusive: string
+          p_keyword: string
+          p_page: number
+          p_page_size: number
+          p_status: string
+          p_tenant_id: string
+          p_visible_assignee_ids: string[]
+        }
+        Returns: Json
+      }
       list_tenant_service_provider_publications: {
         Args: { p_keyword: string; p_status: string }
         Returns: {

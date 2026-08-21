@@ -59,16 +59,16 @@ describe("TenantDouyinLeadsRepository database failures", () => {
       {
         secret: "sync-query-secret", message: "查询抖音线索失败",
         run: () => new Repository({
-          from: mock(() => { throw new Error("sync-query-secret"); }),
-          rpc: mock(async () => ({ data: null, error: null })),
+          from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => { throw new Error("sync-query-secret"); }),
         } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
           visibleAssigneeIds: null }),
       },
       {
         secret: "async-query-secret", message: "查询抖音线索失败",
         run: () => new Repository({
-          from: mock(() => new RejectedQuery(new Error("async-query-secret"))),
-          rpc: mock(async () => ({ data: null, error: null })),
+          from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => Promise.reject(new Error("async-query-secret"))),
         } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
           visibleAssigneeIds: null }),
       },
@@ -87,16 +87,16 @@ describe("TenantDouyinLeadsRepository database failures", () => {
       {
         secret: "sync-query-app-error", message: "查询抖音线索失败",
         run: () => new Repository({
-          from: mock(() => { throw rawAppError("sync-query-app-error"); }),
-          rpc: mock(async () => ({ data: null, error: null })),
+          from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => { throw rawAppError("sync-query-app-error"); }),
         } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
           visibleAssigneeIds: null }),
       },
       {
         secret: "async-query-app-error", message: "查询抖音线索失败",
         run: () => new Repository({
-          from: mock(() => new RejectedQuery(rawAppError("async-query-app-error"))),
-          rpc: mock(async () => ({ data: null, error: null })),
+          from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => Promise.reject(rawAppError("async-query-app-error"))),
         } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
           visibleAssigneeIds: null }),
       },

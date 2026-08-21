@@ -37,6 +37,8 @@ export const TenantDouyinLeadFollowUpListQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
+export const TenantDouyinLeadAppointmentListQuerySchema =
+  TenantDouyinLeadFollowUpListQuerySchema;
 
 export const TenantDouyinLeadAssigneeCandidatesQuerySchema = z.strictObject({
   page: z.coerce.number().int().min(1).max(10_000).default(1),
@@ -113,6 +115,9 @@ export type TenantDouyinLeadFollowUpListQuery = z.infer<
 >;
 export type TenantDouyinLeadFollowUpListQueryInput = z.input<
   typeof TenantDouyinLeadFollowUpListQuerySchema
+>;
+export type TenantDouyinLeadAppointmentListQueryInput = z.input<
+  typeof TenantDouyinLeadAppointmentListQuerySchema
 >;
 export type TenantDouyinLeadAssigneeCandidatesQuery = z.infer<
   typeof TenantDouyinLeadAssigneeCandidatesQuerySchema

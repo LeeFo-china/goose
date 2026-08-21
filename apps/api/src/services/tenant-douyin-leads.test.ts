@@ -69,6 +69,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
     getLeadDetail: mock(async () => ({ lead, appointments: [appointment],
       appointmentTotal: 21, customer, assignee: employee,
       followUps: [], followUpTotal: 0 })),
+    listAppointments: mock(async () => ({ rows: [appointment], total: 21 })),
     listFollowUps: mock(async () => ({ rows: [], total: 0 })),
     findLeadAccess: mock(async () => ({ id: LEAD_ID, tenant_id: TENANT_ID,
       assigned_employee_id: EMPLOYEE_ID })),
@@ -110,6 +111,8 @@ function fixture(overrides: Record<string, unknown> = {}) {
   };
   const phonePrivacy = {
     createPrivacyContext: mock(async (context: AuthContext) => context),
+    serializeMaskedPhoneOnly: mock(() => ({ phone: null,
+      phone_masked: "138****8000" })),
     serializeCustomerPhoneFields: mock((_context: unknown, target: { phone?: string | null }) => ({
       phone: target.phone ?? null, phone_masked: "138****8000",
       can_view_phone: true, can_call_phone: false, can_copy_phone: false,
@@ -125,6 +128,7 @@ describe("TenantDouyinLeadsService", () => {
   test("defines the exact action permissions including invalidation", () => {
     expect(permissionFor("list")).toBe("douyin_lead.read");
     expect(permissionFor("detail")).toBe("douyin_lead.read");
+    expect(permissionFor("appointment_list")).toBe("douyin_lead.read");
     expect(permissionFor("follow_up_list")).toBe("douyin_lead.read");
     expect(permissionFor("assign")).toBe("douyin_lead.assign");
     expect(permissionFor("follow_up")).toBe("douyin_lead.follow_up");
@@ -136,22 +140,23 @@ describe("TenantDouyinLeadsService", () => {
     const context = fixture();
     const auth = authContext(["douyin_lead.read", "customer.read", "customer.phone.view"]);
     await expect(context.service.list(auth, {})).resolves.toMatchObject({
-      list: [{ id: LEAD_ID, phone: lead.phone, phone_masked: "138****8000",
+      list: [{ id: LEAD_ID, phone_masked: "138****8000",
         latest_appointment: { id: APPOINTMENT_ID, budget_range: null },
-        customer: { id: CUSTOMER_ID } }],
+        customer: { name: "李女士", status: "potential" } }],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     });
     expect(context.repository.listLeads).toHaveBeenCalledWith({
       tenantId: TENANT_ID, page: 1, pageSize: 20, visibleAssigneeIds: null,
     });
-    expect(context.phonePrivacy.createPrivacyContext).toHaveBeenCalledTimes(1);
+    expect(context.phonePrivacy.serializeMaskedPhoneOnly).toHaveBeenCalledTimes(1);
+    expect(context.phonePrivacy.createPrivacyContext).not.toHaveBeenCalled();
 
     for (const auth of [authContext([], TENANT_ID), authContext(["douyin_lead.read"], null)]) {
       await expect(fixture().service.list(auth, {})).rejects.toMatchObject({ statusCode: 403 });
     }
   });
 
-  test("applies the read permission scope to list, detail and follow-up pages", async () => {
+  test("applies read scope to list, detail, appointment and follow-up pages", async () => {
     const hiddenAccessPolicy = {
       ...fixture().accessPolicy,
       getVisibleCustomerOwnerIds: mock(async () => [] as string[]),
@@ -164,6 +169,10 @@ describe("TenantDouyinLeadsService", () => {
       authContext(["douyin_lead.read"]), LEAD_ID,
     )).rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_LEAD_NOT_FOUND" });
     expect(hidden.repository.getLeadDetail).not.toHaveBeenCalled();
+    await expect(hidden.service.listAppointments(
+      authContext(["douyin_lead.read"]), LEAD_ID, {},
+    )).rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_LEAD_NOT_FOUND" });
+    expect(hidden.repository.listAppointments).not.toHaveBeenCalled();
     await expect(hidden.service.listFollowUps(
       authContext(["douyin_lead.read"]), LEAD_ID, {},
     )).rejects.toMatchObject({ statusCode: 404, code: "DOUYIN_LEAD_NOT_FOUND" });
@@ -180,27 +189,22 @@ describe("TenantDouyinLeadsService", () => {
       visibleAssigneeIds: [EMPLOYEE_ID],
     });
   });
-
   test("uses the real customer phone scopes and defaults to masked-only", async () => {
     const context = fixture({ phonePrivacy: customerPhonePrivacyService });
     const result = await context.service.list(authContext(["douyin_lead.read"]), {});
-    expect(result.list[0]).toMatchObject({
-      phone: null,
-      phone_masked: "138****8000",
-      can_view_phone: false,
-    });
+    expect(result.list[0]).toMatchObject({ phone_masked: "138****8000" });
+    expect(result.list[0]).not.toHaveProperty("phone");
+    expect(result.list[0]).not.toHaveProperty("can_view_phone");
 
     const viewOnly = await context.service.list(authContext([
       "douyin_lead.read", "customer.phone.view",
     ]), {});
-    expect(viewOnly.list[0]).toMatchObject({ phone: null, can_view_phone: false });
+    expect(viewOnly.list[0]).not.toHaveProperty("phone");
 
     const visible = await context.service.list(authContext([
       "douyin_lead.read", "customer.read", "customer.phone.view",
     ]), {});
-    expect(visible.list[0]).toMatchObject({
-      phone: "13800138000", can_view_phone: true,
-    });
+    expect(visible.list[0]).not.toHaveProperty("phone");
   });
 
   test("uses an existing customer's owner without weakening lead-only fallback", async () => {
@@ -218,8 +222,7 @@ describe("TenantDouyinLeadsService", () => {
           appointments: [appointment], customer: { ...customer, owner_id: null },
           assignee: employee }], total: 1 })) } });
     await expect(ownerlessCustomer.service.list(selfPhoneAuth, {}))
-      .resolves.toMatchObject({ list: [{ phone: null,
-        phone_masked: "138****8000", can_view_phone: false }] });
+      .resolves.toMatchObject({ list: [{ phone_masked: "138****8000" }] });
 
     const unconvertedLead = { ...lead, customer_id: null };
     const unlinkedAppointment = { ...appointment, customer_id: null };
@@ -229,20 +232,38 @@ describe("TenantDouyinLeadsService", () => {
           appointments: [unlinkedAppointment], customer: null,
           assignee: employee }], total: 1 })) } });
     await expect(leadOnly.service.list(selfPhoneAuth, {}))
-      .resolves.toMatchObject({ list: [{ phone: "13800138000",
-        can_view_phone: true }] });
+      .resolves.toMatchObject({ list: [{ phone_masked: "138****8000" }] });
   });
 
   test("returns explicit bounded appointment pagination for detail", async () => {
     const result = await fixture().service.getDetail(
       authContext(["douyin_lead.read"]), LEAD_ID,
     );
-    expect(result.latest_appointment).toEqual(appointment);
+    expect(result.latest_appointment).toMatchObject({
+      id: APPOINTMENT_ID, source: { attribution: {}, demand: null,
+        budget: null, ai: null },
+    });
+    expect(result.latest_appointment).not.toHaveProperty("tenant_id");
     expect(result.appointments).toEqual({
-      list: [appointment],
+      list: [result.latest_appointment!],
       pagination: { page: 1, pageSize: 20, total: 21, totalPages: 2 },
       truncated: true,
     });
+  });
+
+  test("returns a separately paginated safe appointment page", async () => {
+    const context = fixture();
+    const result = await context.service.listAppointments(
+      authContext(["douyin_lead.read"]), LEAD_ID,
+      { page: "2", pageSize: "100" },
+    );
+    expect(context.repository.listAppointments).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, leadId: LEAD_ID, page: 2, pageSize: 100,
+    });
+    expect(result).toMatchObject({ list: [{ id: APPOINTMENT_ID,
+      source: { attribution: {}, demand: null, budget: null, ai: null } }],
+    pagination: { page: 2, pageSize: 100, total: 21, totalPages: 1 } });
+    expect(result.list[0]).not.toHaveProperty("source_snapshot");
   });
 
   test("rejects an invalid exact appointment total", async () => {
@@ -264,6 +285,7 @@ describe("TenantDouyinLeadsService", () => {
     const attempts = (context: ReturnType<typeof fixture>, auth: AuthContext) => [
       () => context.service.list(auth, {}),
       () => context.service.getDetail(auth, LEAD_ID),
+      () => context.service.listAppointments(auth, LEAD_ID, {}),
       () => context.service.listFollowUps(auth, LEAD_ID, {}),
       () => context.service.assign(auth, LEAD_ID, {
         ...command, assigned_employee_id: EMPLOYEE_ID,
@@ -472,6 +494,6 @@ describe("TenantDouyinLeadsService", () => {
       {},
     )).rejects.toMatchObject({ statusCode: 500,
       code: "DOUYIN_LEAD_RESPONSE_INVALID" });
-    expect(context.phonePrivacy.serializeCustomerPhoneFields).not.toHaveBeenCalled();
+    expect(context.phonePrivacy.serializeMaskedPhoneOnly).not.toHaveBeenCalled();
   });
 });

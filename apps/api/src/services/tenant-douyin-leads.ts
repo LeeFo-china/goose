@@ -1,7 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import type {
-  TenantDouyinLeadCommandData,
-  TenantDouyinLeadCommandError,
+  TenantDouyinAppointmentDetailRow,
   TenantDouyinLeadCommandResult,
 } from "@/repositories/tenant-douyin-leads-contract";
 import type {
@@ -12,13 +11,14 @@ import { tenantDouyinLeadsRepository } from
   "@/repositories/tenant-douyin-leads";
 import {
   TenantDouyinLeadAssignSchema,
+  TenantDouyinLeadAppointmentListQuerySchema,
   TenantDouyinLeadConvertSchema,
   TenantDouyinLeadFollowUpListQuerySchema,
   TenantDouyinLeadFollowUpSchema,
   TenantDouyinLeadListQuerySchema,
   TenantDouyinLeadMarkInvalidSchema,
-  TenantDouyinLeadParamsSchema,
   type TenantDouyinLeadAssign,
+  type TenantDouyinLeadAppointmentListQueryInput,
   type TenantDouyinLeadAssigneeCandidatesQuery,
   type TenantDouyinLeadAssigneeCandidatesQueryInput,
   type TenantDouyinLeadAssigneeFilterOptionsQuery,
@@ -35,10 +35,7 @@ import type {
   AuthContext,
   EffectivePermission,
 } from "@/services/authorization";
-import {
-  customerPhonePrivacyService,
-  type CustomerPhonePrivacyContext,
-} from "@/services/customer-phone-privacy";
+import { customerPhonePrivacyService } from "@/services/customer-phone-privacy";
 import {
   serializeFollowUpBundle, serializeLeadBundle,
   type TenantDouyinLeadPhonePrivacyPort,
@@ -46,14 +43,26 @@ import {
 import { listTenantDouyinLeadAssigneeCandidates,
   listTenantDouyinLeadAssigneeFilterOptions } from
   "@/services/tenant-douyin-lead-assignee-options";
-import type { z } from "zod";
+import { serializePublicAppointment } from
+  "@/services/tenant-douyin-leads-public";
+import {
+  assertTotal,
+  isVisibleAssignee,
+  pagination,
+  parseLeadId,
+  parseRequest,
+  throwInvalidResponse,
+  throwLeadNotFound,
+  unwrapCommand,
+} from "@/services/tenant-douyin-leads-service-helpers";
 
 type LeadAction =
-  | "list" | "detail" | "follow_up_list" | "assign"
+  | "list" | "detail" | "appointment_list" | "follow_up_list" | "assign"
   | "follow_up" | "convert" | "mark_invalid";
 const ACTION_PERMISSIONS = {
   list: "douyin_lead.read",
   detail: "douyin_lead.read",
+  appointment_list: "douyin_lead.read",
   follow_up_list: "douyin_lead.read",
   assign: "douyin_lead.assign",
   follow_up: "douyin_lead.follow_up",
@@ -93,6 +102,11 @@ type RepositoryPort = {
     pageSize: number }): Promise<{
       rows: readonly TenantDouyinFollowUpBundle[]; total: number;
     }>;
+  listAppointments(input: { tenantId: string; leadId: string; page: number;
+    pageSize: number }): Promise<{
+      rows: readonly TenantDouyinAppointmentDetailRow[];
+      total: number;
+    }>;
   findConversionPreflight(input: { tenantId: string; leadId: string }): Promise<{
     leadId: string; phone: string; assignedEmployeeId: string | null;
     customerId: string | null;
@@ -124,10 +138,7 @@ type AccessPolicyPort = {
     id: string; tenant_id: string | null; tenant_department_id?: string | null;
   }, permission: string): boolean;
 };
-type PhonePrivacyPort = TenantDouyinLeadPhonePrivacyPort & {
-  createPrivacyContext(authContext: AuthContext):
-    Promise<CustomerPhonePrivacyContext>;
-};
+type PhonePrivacyPort = TenantDouyinLeadPhonePrivacyPort;
 type CommandBase = {
   tenantId: string; leadId: string; actorEmployeeId: string;
   expectedVersion: number; idempotencyKey: string;
@@ -152,11 +163,9 @@ export class TenantDouyinLeadsService {
       tenantId, ...query, visibleAssigneeIds,
     });
     assertTotal(result.total);
-    const phoneContext = await this.dependencies.phonePrivacy
-      .createPrivacyContext(authContext);
     return {
       list: result.rows.map((bundle) => serializeLeadBundle({
-        bundle, tenantId, phoneContext,
+        bundle, tenantId,
         phonePrivacy: this.dependencies.phonePrivacy,
         includeDetail: false,
       })),
@@ -199,15 +208,14 @@ export class TenantDouyinLeadsService {
     )) throwLeadNotFound();
     assertTotal(detail.appointmentTotal);
     assertTotal(detail.followUpTotal);
-    const phoneContext = await this.dependencies.phonePrivacy
-      .createPrivacyContext(authContext);
     const serialized = serializeLeadBundle({ bundle: detail, tenantId,
-      phoneContext, phonePrivacy: this.dependencies.phonePrivacy,
+      phonePrivacy: this.dependencies.phonePrivacy,
       includeDetail: true });
     return {
       ...serialized,
       appointments: {
-        list: [...detail.appointments],
+        list: detail.appointments.map((row) =>
+          serializePublicAppointment(row, { includeSource: true })),
         pagination: pagination(1, 20, detail.appointmentTotal),
         truncated: detail.appointmentTotal > detail.appointments.length,
       },
@@ -219,6 +227,24 @@ export class TenantDouyinLeadsService {
     };
   }
 
+  async listAppointments(authContext: AuthContext, leadId: string,
+    input: TenantDouyinLeadAppointmentListQueryInput) {
+    const { tenantId, visibleAssigneeIds } = await this.requireRead(
+      authContext,
+      "appointment_list",
+    );
+    const id = parseLeadId(leadId);
+    const query = parseRequest(TenantDouyinLeadAppointmentListQuerySchema, input);
+    await this.assertReadableLead(tenantId, id, visibleAssigneeIds);
+    const result = await this.dependencies.repository.listAppointments({
+      tenantId, leadId: id, ...query,
+    });
+    assertTotal(result.total);
+    return { list: result.rows.map((row) =>
+      serializePublicAppointment(row, { includeSource: true })),
+    pagination: pagination(query.page, query.pageSize, result.total) };
+  }
+
   async listFollowUps(authContext: AuthContext, leadId: string,
     input: TenantDouyinLeadFollowUpListQueryInput) {
     const { tenantId, visibleAssigneeIds } = await this.requireRead(
@@ -227,14 +253,7 @@ export class TenantDouyinLeadsService {
     );
     const id = parseLeadId(leadId);
     const query = parseRequest(TenantDouyinLeadFollowUpListQuerySchema, input);
-    const access = await this.dependencies.repository.findLeadAccess({
-      tenantId,
-      leadId: id,
-    });
-    if (!access || access.id !== id || access.tenant_id !== tenantId
-      || !isVisibleAssignee(access.assigned_employee_id, visibleAssigneeIds)) {
-      throwLeadNotFound();
-    }
+    await this.assertReadableLead(tenantId, id, visibleAssigneeIds);
     const result = await this.dependencies.repository.listFollowUps({
       tenantId, leadId: id, ...query,
     });
@@ -367,12 +386,24 @@ export class TenantDouyinLeadsService {
 
   private async requireRead(
     authContext: AuthContext,
-    action: Extract<LeadAction, "list" | "detail" | "follow_up_list">,
+    action: Extract<LeadAction, "list" | "detail" | "appointment_list" |
+      "follow_up_list">,
   ) {
     const tenantId = this.requireAction(authContext, action);
     const visibleAssigneeIds = await this.dependencies.accessPolicy
       .getVisibleCustomerOwnerIds(authContext, permissionFor(action));
     return { tenantId, visibleAssigneeIds };
+  }
+
+  private async assertReadableLead(tenantId: string, leadId: string,
+    visibleAssigneeIds: readonly string[] | null): Promise<void> {
+    const access = await this.dependencies.repository.findLeadAccess({
+      tenantId, leadId,
+    });
+    if (!access || access.id !== leadId || access.tenant_id !== tenantId
+      || !isVisibleAssignee(access.assigned_employee_id, visibleAssigneeIds)) {
+      throwLeadNotFound();
+    }
   }
 
   private async commandContext(authContext: AuthContext,
@@ -406,12 +437,6 @@ export class TenantDouyinLeadsService {
   }
 }
 
-function parseRequest<T>(schema: z.ZodType<T>, input: unknown): T {
-  const result = schema.safeParse(input);
-  if (!result.success) throw Errors.fromZod(result.error);
-  return result.data;
-}
-
 function commandBase(input: CommandBase): CommandBase {
   return {
     tenantId: input.tenantId,
@@ -420,72 +445,6 @@ function commandBase(input: CommandBase): CommandBase {
     expectedVersion: input.expectedVersion,
     idempotencyKey: input.idempotencyKey,
   };
-}
-
-function parseLeadId(leadId: string): string {
-  return parseRequest(TenantDouyinLeadParamsSchema, { id: leadId }).id;
-}
-
-function pagination(page: number, pageSize: number, total: number) {
-  return { page, pageSize, total,
-    totalPages: total === 0 ? 0 : Math.ceil(total / pageSize) };
-}
-
-function isVisibleAssignee(
-  assignedEmployeeId: string | null,
-  visibleAssigneeIds: readonly string[] | null,
-): boolean {
-  return visibleAssigneeIds === null
-    || (assignedEmployeeId !== null
-      && visibleAssigneeIds.includes(assignedEmployeeId));
-}
-
-function assertTotal(total: number): void {
-  if (!Number.isInteger(total) || total < 0) throwInvalidResponse();
-}
-
-function unwrapCommand(result: TenantDouyinLeadCommandResult) {
-  if (!result.ok) throwCommandError(result.error);
-  return result.data;
-}
-
-function throwCommandError(error: TenantDouyinLeadCommandError): never {
-  throw Errors.business(error.status_code, commandErrorMessage(error.code), error.code);
-}
-
-function commandErrorMessage(code: TenantDouyinLeadCommandError["code"]): string {
-  if (code === "DOUYIN_LEAD_NOT_FOUND") return "抖音线索不存在";
-  if (code === "DOUYIN_MEASUREMENT_APPOINTMENT_NOT_FOUND") return "量房预约不存在";
-  if (code === "DOUYIN_LEAD_ASSIGNEE_NOT_FOUND") return "负责人不存在或不可用";
-  if (code === "DOUYIN_LEAD_ASSIGNEE_SCOPE_CONFLICT") {
-    return "负责人部门已变化，请刷新后重试";
-  }
-  if (code === "DOUYIN_LEAD_VERSION_CONFLICT") return "线索已更新，请刷新后重试";
-  if (code === "DOUYIN_LEAD_IDEMPOTENCY_CONFLICT") return "幂等键已用于其他请求";
-  if (code === "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT") {
-    return "客户状态已变化，请刷新后重试";
-  }
-  if (code === "DOUYIN_MEASUREMENT_APPOINTMENT_TRANSITION_INVALID") {
-    return "量房预约状态不能这样变更";
-  }
-  if (code === "DOUYIN_LEAD_CONVERTED_NOT_INVALIDATABLE") {
-    return "已转化线索不能标记为无效";
-  }
-  if (code === "DOUYIN_LEAD_INVALID_NOT_CONVERTIBLE") return "无效线索不能转为客户";
-  if (code === "DOUYIN_LEAD_NOT_ASSIGNABLE") return "当前线索不能分配";
-  if (code === "DOUYIN_LEAD_NOT_FOLLOWABLE") return "当前线索不能继续跟进";
-  if (code === "DOUYIN_LEAD_ACTOR_NOT_FOUND") return "当前员工不可用";
-  if (code.endsWith("_COMMAND_INVALID")) return "线索操作参数无效";
-  return "抖音线索操作失败";
-}
-
-function throwLeadNotFound(): never {
-  throw Errors.business(404, "抖音线索不存在", "DOUYIN_LEAD_NOT_FOUND");
-}
-
-function throwInvalidResponse(): never {
-  throw Errors.business(500, "抖音线索响应数据无效",
-    "DOUYIN_LEAD_RESPONSE_INVALID");
 }
 
 export const tenantDouyinLeadsService = new TenantDouyinLeadsService({

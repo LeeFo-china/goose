@@ -26,6 +26,8 @@ function createController() {
     listAssigneeFilterOptions: mock(async () => ({ list: [], pagination: {
       page: 1, pageSize: 20, total: 0, totalPages: 0 } })),
     getDetail: mock(async () => ({ id: LEAD_ID })),
+    listAppointments: mock(async () => ({ list: [], pagination: { page: 1,
+      pageSize: 20, total: 0, totalPages: 0 } })),
     listFollowUps: mock(async () => ({ list: [], pagination: { page: 1,
       pageSize: 20, total: 0, totalPages: 0 } })),
     assign: mock(async () => ({ lead_id: LEAD_ID })),
@@ -41,7 +43,7 @@ function createController() {
 }
 
 describe("TenantDouyinLeadsController", () => {
-  test("registers exactly nine routes and the root registry", async () => {
+  test("registers exactly ten routes and the root registry", async () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -55,6 +57,7 @@ describe("TenantDouyinLeadsController", () => {
       { method: "GET", path: "/tenant/douyin-miniapp/leads/assignee-filter-options" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id" },
       { method: "GET", path: "/tenant/douyin-miniapp/leads/:id/follow-ups" },
+      { method: "GET", path: "/tenant/douyin-miniapp/leads/:id/appointments" },
       { method: "POST", path: "/tenant/douyin-miniapp/leads/:id/assign" },
       { method: "POST", path: "/tenant/douyin-miniapp/leads/:id/follow-ups" },
       { method: "POST", path: "/tenant/douyin-miniapp/leads/:id/convert-customer" },
@@ -156,10 +159,12 @@ describe("TenantDouyinLeadsController", () => {
     expect(context.getRequiredTenantContext).not.toHaveBeenCalled();
   });
 
-  test("delegates the seven validated requests and wraps responses", async () => {
+  test("delegates the eight validated requests and wraps responses", async () => {
     const context = createController();
     const command = { expected_lead_version: 1, idempotency_key: IDEMPOTENCY_KEY };
     await context.controller.getDetail({ params: { id: LEAD_ID } } as never);
+    await context.controller.listAppointments({ params: { id: LEAD_ID },
+      query: { page: "2", pageSize: "100" } } as never);
     await context.controller.listFollowUps({ params: { id: LEAD_ID }, query: {} } as never);
     await context.controller.assign({ params: { id: LEAD_ID }, body: {
       ...command, assigned_employee_id: EMPLOYEE_ID,
@@ -174,6 +179,9 @@ describe("TenantDouyinLeadsController", () => {
       ...command, reason: "超出服务范围",
     } } as never)).resolves.toMatchObject({ data: { lead_id: LEAD_ID }, message: "success" });
     expect(context.service.getDetail).toHaveBeenCalledWith(authContext, LEAD_ID);
+    expect(context.service.listAppointments).toHaveBeenCalledWith(
+      authContext, LEAD_ID, { page: 2, pageSize: 100 },
+    );
     expect(context.service.listFollowUps).toHaveBeenCalledWith(authContext, LEAD_ID, {
       page: 1, pageSize: 20,
     });

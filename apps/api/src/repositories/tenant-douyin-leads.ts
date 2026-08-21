@@ -29,17 +29,15 @@ import { listTenantDouyinLeadAssigneeFilterOptions } from
   "@/repositories/tenant-douyin-lead-assignee-filter-options";
 import { loadTenantDouyinLeadBudgetRanges } from
   "@/repositories/tenant-douyin-lead-budget-ranges";
-import type { TenantDouyinLeadListQuery } from
-  "@/schema/tenant-douyin-leads";
+import {
+  TENANT_DOUYIN_LEAD_FIELDS,
+  listTenantDouyinLeads,
+  type ScopedLeadListInput,
+} from "@/repositories/tenant-douyin-lead-list";
 import type { Json } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
 
-const LEAD_FIELDS = [
-  "id", "tenant_id", "douyin_miniapp_installation_id", "customer_id",
-  "assigned_employee_id", "name", "phone", "community", "lead_status",
-  "created_at", "followed_at", "follow_remark", "version",
-].join(",");
-const LEAD_DETAIL_FIELDS = `${LEAD_FIELDS},form_data`;
+const LEAD_DETAIL_FIELDS = `${TENANT_DOUYIN_LEAD_FIELDS},form_data`;
 const APPOINTMENT_FIELDS = [
   "id", "appointment_no", "tenant_id", "marketing_lead_id", "customer_id",
   "assigned_employee_id", "budget_estimate_id", "preferred_visit_date",
@@ -84,6 +82,7 @@ type CommandName =
   | "append_douyin_lead_follow_up"
   | "convert_douyin_lead_to_customer"
   | "list_tenant_douyin_lead_assignee_filter_options"
+  | "list_tenant_douyin_leads"
   | "list_tenant_douyin_lead_latest_appointments"
   | "mark_douyin_lead_invalid";
 export interface TenantDouyinLeadsDatabaseClient {
@@ -94,10 +93,6 @@ export interface TenantDouyinLeadsDatabaseClient {
   ): Promise<DatabaseResult>;
 }
 
-type ScopedLeadListInput = TenantDouyinLeadListQuery & {
-  readonly tenantId: string;
-  readonly visibleAssigneeIds: readonly string[] | null;
-};
 type CommandBaseInput = {
   readonly tenantId: string;
   readonly leadId: string;
@@ -119,45 +114,9 @@ export class TenantDouyinLeadsRepository {
   }
 
   async listLeads(input: ScopedLeadListInput) {
-    if (input.visibleAssigneeIds !== null
-      && (input.visibleAssigneeIds.length === 0
-        || (input.assigneeId !== undefined
-          && !input.visibleAssigneeIds.includes(input.assigneeId)))) {
-      return { rows: [], total: 0 };
-    }
-    const offset = (input.page - 1) * input.pageSize;
-    const result = await executeDatabase(async () => {
-      let query = this.client.from("marketing_leads")
-        .select(LEAD_FIELDS, { count: "exact" })
-        .eq("tenant_id", input.tenantId)
-        .eq("source", "douyin_miniapp");
-      if (input.status) query = query.eq("lead_status", input.status);
-      if (input.assigneeId) {
-        query = query.eq("assigned_employee_id", input.assigneeId);
-      }
-      if (input.visibleAssigneeIds !== null) {
-        query = query.in("assigned_employee_id", input.visibleAssigneeIds);
-      }
-      if (input.dateFrom) {
-        query = query.gte("created_at", `${input.dateFrom}T00:00:00+08:00`);
-      }
-      if (input.dateTo) {
-        query = query.lt("created_at", `${nextIsoDate(input.dateTo)}T00:00:00+08:00`);
-      }
-      if (input.keyword) {
-        const pattern = `%${input.keyword}%`;
-        query = query.or(
-          `name.ilike.${pattern},phone.ilike.${pattern},community.ilike.${pattern}`,
-        );
-      }
-      return await query.order("created_at", { ascending: false })
-        .order("id", { ascending: false })
-        .range(offset, offset + input.pageSize - 1);
-    }, "查询抖音线索失败");
-    assertDatabaseSuccess(result, "查询抖音线索失败");
-    const total = parseExactCount(result.count, "查询抖音线索总数失败");
-    const leads = parseData(z.array(TenantDouyinLeadRowSchema),
-      result.data ?? [], "解析抖音线索失败");
+    const { rows: leads, total } = await listTenantDouyinLeads(
+      this.client, input,
+    );
     if (leads.length === 0) return { rows: [], total };
 
     const [appointments, customers, employees] = await Promise.all([
@@ -202,7 +161,7 @@ export class TenantDouyinLeadsRepository {
     const lead = parseData(TenantDouyinLeadRowSchema, leadResult.data,
       "解析抖音线索详情失败");
     const [appointmentPage, customers, employees, followUps] = await Promise.all([
-      this.listAppointments(input),
+      this.listAppointments({ ...input, page: 1, pageSize: 20 }),
       this.loadCustomers(input.tenantId, compactIds([lead], "customer_id")),
       this.loadEmployees(input.tenantId,
         compactIds([lead], "assigned_employee_id")),
@@ -384,22 +343,32 @@ export class TenantDouyinLeadsRepository {
     return rows;
   }
 
-  private async listAppointments(input: { tenantId: string; leadId: string }) {
+  async listAppointments(input: { tenantId: string; leadId: string;
+    page: number; pageSize: number }) {
+    const offset = (input.page - 1) * input.pageSize;
     const result = await executeDatabase(
       () => this.client.from("douyin_measurement_appointments")
         .select(APPOINTMENT_FIELDS, { count: "exact" })
         .eq("tenant_id", input.tenantId)
         .eq("marketing_lead_id", input.leadId)
         .order("created_at", { ascending: false })
-        .order("id", { ascending: false }).range(0, 19),
+        .order("id", { ascending: false })
+        .range(offset, offset + input.pageSize - 1),
       "查询抖音量房预约详情失败",
     );
     assertDatabaseSuccess(result, "查询抖音量房预约详情失败");
-    return {
-      rows: parseData(z.array(TenantDouyinAppointmentDetailRowSchema),
-        result.data ?? [], "解析抖音量房预约详情失败"),
-      total: parseExactCount(result.count, "查询抖音量房预约总数失败"),
-    };
+    const rows = parseData(z.array(TenantDouyinAppointmentDetailRowSchema),
+      result.data ?? [], "解析抖音量房预约详情失败");
+    const total = parseExactCount(result.count, "查询抖音量房预约总数失败");
+    const seen = new Set<string>();
+    if (rows.length > input.pageSize
+      || (rows.length > 0 && offset + rows.length > total)
+      || rows.some((row) => row.tenant_id !== input.tenantId
+        || row.marketing_lead_id !== input.leadId
+        || seen.has(row.id) || !seen.add(row.id))) {
+      throw Errors.dbError("解析抖音量房预约详情失败");
+    }
+    return { rows, total };
   }
 
   private loadCustomers(tenantId: string, customerIds: readonly string[]) {
@@ -451,12 +420,6 @@ function assertLatestAppointmentScope(
     }
     seen.add(row.marketing_lead_id);
   }
-}
-
-function nextIsoDate(value: string): string {
-  const next = new Date(`${value}T00:00:00.000Z`);
-  next.setUTCDate(next.getUTCDate() + 1);
-  return next.toISOString().slice(0, 10);
 }
 
 function safeHydrateLeadBundles(input: Parameters<

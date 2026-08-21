@@ -131,7 +131,7 @@ function clientWith(results: Result[]) {
 describe("TenantDouyinLeadsRepository", () => {
   test("uses exact pagination, strict tenant filters and bounded batch hydration", async () => {
     const context = clientWith([
-      { data: [lead], error: null, count: 21 },
+      { data: { data: { list: [lead], total: 21 } }, error: null },
       { data: [appointmentSummary], error: null },
       { data: [customer], error: null },
       { data: [employee], error: null },
@@ -154,26 +154,17 @@ describe("TenantDouyinLeadsRepository", () => {
       total: 21,
     });
 
-    expect(context.calls).toContainEqual({ method: "range", args: [20, 39] });
-    expect(context.calls).toContainEqual({ method: "eq", args: ["tenant_id", TENANT_ID] });
-    expect(context.calls).toContainEqual({ method: "eq", args: ["source", "douyin_miniapp"] });
-    expect(context.calls).toContainEqual({ method: "eq", args: ["lead_status", "new"] });
-    expect(context.calls).toContainEqual({ method: "eq", args: ["assigned_employee_id", EMPLOYEE_ID] });
-    expect(context.calls).toContainEqual({
-      method: "in", args: ["assigned_employee_id", [EMPLOYEE_ID]],
-    });
-    expect(context.calls).toContainEqual({
-      method: "gte", args: ["created_at", "2026-08-01T00:00:00+08:00"],
-    });
-    expect(context.calls).toContainEqual({
-      method: "lt", args: ["created_at", "2026-08-22T00:00:00+08:00"],
-    });
-    expect(context.calls).toContainEqual({
-      method: "or",
-      args: ["name.ilike.%晴天%,phone.ilike.%晴天%,community.ilike.%晴天%"],
-    });
+    expect(context.calls[0]).toEqual({ method: "rpc", args: [
+      "list_tenant_douyin_leads", {
+        p_tenant_id: TENANT_ID, p_visible_assignee_ids: [EMPLOYEE_ID],
+        p_status: "new", p_assignee_id: EMPLOYEE_ID,
+        p_date_from: "2026-08-01T00:00:00+08:00",
+        p_date_to_exclusive: "2026-08-22T00:00:00+08:00",
+        p_keyword: "晴天", p_page: 2, p_page_size: 20,
+      },
+    ] });
     expect(context.calls.filter((call) => call.method === "from"))
-      .toHaveLength(3);
+      .toHaveLength(2);
     const selects = context.calls.filter((call) => call.method === "select")
       .map((call) => String(call.args[0])).join(",");
     expect(selects).not.toMatch(/request_ip|user_agent|sms_verification_code_id|create_request_hash/);
@@ -182,18 +173,30 @@ describe("TenantDouyinLeadsRepository", () => {
   });
 
   test("does not hydrate an empty page and rejects invalid exact counts", async () => {
-    const empty = clientWith([{ data: [], error: null, count: 0 }]);
+    const empty = clientWith([{ data: { data: { list: [], total: 0 } }, error: null }]);
     await expect(new Repository(empty.client as never).listLeads({
       tenantId: TENANT_ID, page: 1, pageSize: 20, visibleAssigneeIds: null,
     })).resolves.toEqual({ rows: [], total: 0 });
-    expect(empty.calls.filter((call) => call.method === "from")).toHaveLength(1);
+    expect(empty.calls.filter((call) => call.method === "from")).toHaveLength(0);
 
-    const badCount = clientWith([{ data: [], error: null, count: null }]);
+    const badCount = clientWith([{ data: { data: { list: [], total: -1 } }, error: null }]);
     await expect(new Repository(badCount.client as never).listLeads({
       tenantId: TENANT_ID, page: 1, pageSize: 20, visibleAssigneeIds: null,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
   });
-
+  test("posts a thousand visible assignee ids without an unbounded GET filter", async () => {
+    const visible = Array.from({ length: 1_000 }, (_, index) =>
+      `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}`);
+    const context = clientWith([{
+      data: { data: { list: [], total: 0 } }, error: null }]);
+    await new Repository(context.client as never).listLeads({
+      tenantId: TENANT_ID, page: 1, pageSize: 100, visibleAssigneeIds: visible,
+    });
+    expect(context.calls).toEqual([{ method: "rpc", args: [
+      "list_tenant_douyin_leads", expect.objectContaining({
+        p_visible_assignee_ids: visible, p_page_size: 100 }),
+    ] }]);
+  });
   test("loads exactly one latest summary per lead through the bounded RPC", async () => {
     const leads = Array.from({ length: 51 }, (_, index) => ({
       ...lead,
@@ -204,7 +207,7 @@ describe("TenantDouyinLeadsRepository", () => {
     const latest = { ...appointmentSummary, marketing_lead_id: leads[0]!.id,
       customer_id: null, assigned_employee_id: null };
     const context = clientWith([
-      { data: leads, error: null, count: 51 },
+      { data: { data: { list: leads, total: 51 } }, error: null },
       { data: [latest], error: null },
       { data: [], error: null },
     ]);
@@ -213,7 +216,8 @@ describe("TenantDouyinLeadsRepository", () => {
     });
     expect(result.rows[0]?.appointments).toEqual([{ ...latest,
       budget_range: null }]);
-    expect(context.calls.filter((call) => call.method === "rpc"))
+    expect(context.calls.filter((call) => call.method === "rpc"
+      && call.args[0] === "list_tenant_douyin_lead_latest_appointments"))
       .toEqual([{ method: "rpc", args: [
         "list_tenant_douyin_lead_latest_appointments",
         { p_tenant_id: TENANT_ID,
@@ -252,6 +256,35 @@ describe("TenantDouyinLeadsRepository", () => {
     expect(context.calls).toContainEqual({ method: "range", args: [0, 19] });
     expect(context.calls).toContainEqual({ method: "select",
       args: [expect.stringContaining("source_snapshot"), { count: "exact" }] });
+  });
+  test("paginates appointment details with necessary fields and exact count", async () => {
+    const context = clientWith([{ data: [appointment], error: null, count: 121 }]);
+    const result = await new Repository(context.client as never).listAppointments({
+      tenantId: TENANT_ID, leadId: LEAD_ID, page: 2, pageSize: 100,
+    });
+    expect(result).toEqual({ rows: [appointment], total: 121 });
+    expect(context.calls).toContainEqual({ method: "range", args: [100, 199] });
+    expect(context.calls).toContainEqual({ method: "eq",
+      args: ["tenant_id", TENANT_ID] });
+    expect(context.calls).toContainEqual({ method: "eq",
+      args: ["marketing_lead_id", LEAD_ID] });
+    const select = context.calls.find((call) => call.method === "select");
+    expect(String(select?.args[0])).toContain("source_snapshot");
+    expect(String(select?.args[0])).not.toMatch(/request_ip|form_data|phone/);
+  });
+
+  test("rejects cross-scope or over-page appointment responses", async () => {
+    for (const data of [
+      [{ ...appointment, tenant_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" }],
+      Array.from({ length: 21 }, (_, index) => ({ ...appointment,
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-${String(index + 1).padStart(12, "0")}` })),
+    ]) {
+      const context = clientWith([{ data, error: null, count: data.length }]);
+      await expect(new Repository(context.client as never).listAppointments({
+        tenantId: TENANT_ID, leadId: LEAD_ID, page: 1, pageSize: 20 }))
+        .rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR",
+          details: undefined });
+    }
   });
 
   test("paginates follow-ups and hydrates employees in one bounded batch", async () => {
@@ -454,8 +487,9 @@ describe("TenantDouyinLeadsRepository", () => {
       customer_id: null,
     }));
     const overflow = clientWith([
-      { data: [{ ...lead, customer_id: null, assigned_employee_id: null }, secondLead],
-        error: null, count: 2 },
+      { data: { data: { list: [
+        { ...lead, customer_id: null, assigned_employee_id: null }, secondLead,
+      ], total: 2 } }, error: null },
       { data: tooMany, error: null },
     ]);
     await expect(new Repository(overflow.client as never).listLeads({

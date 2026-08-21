@@ -5,6 +5,7 @@ import { Errors } from "@/errors/error-factory";
 import {
   TenantDouyinLeadAssigneeCandidatesQuerySchema,
   TenantDouyinLeadAssigneeFilterOptionsQuerySchema,
+  TenantDouyinLeadAppointmentListQuerySchema,
   TenantDouyinLeadAssignSchema,
   TenantDouyinLeadConvertSchema,
   TenantDouyinLeadEmptyQuerySchema,
@@ -23,7 +24,7 @@ import { ResponseHandler } from "@/utils/response";
 
 type ServicePort = Pick<TenantDouyinLeadsService,
   | "list" | "listAssigneeCandidates" | "listAssigneeFilterOptions"
-  | "getDetail" | "listFollowUps" | "assign"
+  | "getDetail" | "listAppointments" | "listFollowUps" | "assign"
   | "appendFollowUp" | "convert" | "markInvalid">;
 
 export class TenantDouyinLeadsController extends TenantBaseController {
@@ -84,6 +85,19 @@ export class TenantDouyinLeadsController extends TenantBaseController {
     const authContext = await this.getRequiredTenantContext(request);
     return ResponseHandler.success(
       await this.service.listFollowUps(authContext, params.id, query),
+    );
+  }
+
+  @Get("/tenant/douyin-miniapp/leads/:id/appointments")
+  async listAppointments(request: FastifyRequest) {
+    const params = parsePart(TenantDouyinLeadParamsSchema, request.params || {});
+    const query = parsePart(
+      TenantDouyinLeadAppointmentListQuerySchema,
+      request.query || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.listAppointments(authContext, params.id, query),
     );
   }
 
