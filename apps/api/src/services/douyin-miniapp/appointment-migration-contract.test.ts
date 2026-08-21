@@ -495,4 +495,5 @@ describe('douyin appointment migration', () => {
       expect(statement).toMatch(/^(begin|set local |drop sequence |revoke all on function |grant execute on function |comment on |commit$)/);
     }
   });
+
 });
