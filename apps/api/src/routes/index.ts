@@ -98,6 +98,7 @@ import DouyinBudgetController from "@/controllers/douyin-budget";
 import TenantDouyinBudgetController from "@/controllers/tenant-douyin-budget";
 import TenantDouyinMiniappController from "@/controllers/tenant-douyin-miniapp";
 import TenantDouyinProjectsController from "@/controllers/tenant-douyin-projects";
+import TenantDouyinLeadsController from "@/controllers/tenant-douyin-leads";
 import PlatformDouyinMiniappsController from "@/controllers/platform-douyin-miniapps";
 import SiteContentController from "@/controllers/site-content";
 import ProjectHealthController from "@/controllers/project-health";
@@ -220,6 +221,7 @@ const indexRoutes: FastifyPluginAsync = async (app, options) => {
   TenantDouyinBudgetController.registerExtraRoutes(app);
   TenantDouyinMiniappController.registerExtraRoutes(app);
   TenantDouyinProjectsController.registerExtraRoutes(app);
+  TenantDouyinLeadsController.registerExtraRoutes(app);
   PlatformDouyinMiniappsController.registerExtraRoutes(app);
   SiteContentController.registerExtraRoutes(app);
   ProjectHealthController.registerExtraRoutes(app);
