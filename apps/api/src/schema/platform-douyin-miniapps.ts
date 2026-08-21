@@ -1,3 +1,7 @@
+import {
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  DouyinContactSlaTextSchema,
+} from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
 
@@ -34,6 +38,9 @@ export const DouyinRuntimeConfigSchema = z.strictObject({
     value: z.string().max(16),
   })).max(4),
   privacy_policy_version: z.string().trim().min(1).max(40),
+  contact_sla_text: DouyinContactSlaTextSchema.default(
+    DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  ),
 });
 
 export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema.extend({

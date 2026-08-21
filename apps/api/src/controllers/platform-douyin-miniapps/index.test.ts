@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "@gooes/domain";
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
@@ -15,6 +16,10 @@ const runtimeConfig = {
   home_banners: [],
   trust_metrics: [],
   privacy_policy_version: "2026-07-19",
+};
+const normalizedRuntimeConfig = {
+  ...runtimeConfig,
+  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
 };
 function createController() {
   const service = {
@@ -176,10 +181,10 @@ describe("PlatformDouyinMiniappsController", () => {
     await controller.enableInstallation({ params } as never, {} as never);
     expect(service.createTemplateDevelopment).toHaveBeenCalledWith(authContext, {
       tenant_id: "33333333-3333-4333-8333-333333333333",
-      runtime_config: runtimeConfig,
+      runtime_config: normalizedRuntimeConfig,
     });
     expect(service.updateConfig).toHaveBeenCalledWith(authContext, params.id, {
-      runtime_config: runtimeConfig,
+      runtime_config: normalizedRuntimeConfig,
     });
     expect(service.rotateDeploymentKey).toHaveBeenCalledWith(authContext, params.id);
     expect(service.disable).toHaveBeenCalledWith(authContext, params.id);

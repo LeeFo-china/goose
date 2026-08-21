@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "@gooes/domain";
 import type { JwtPayload } from "@/utils/jwt";
 import {
   parseBootstrap,
@@ -152,6 +153,7 @@ describe("DouyinMiniappContentService", () => {
       company: { name: "示例装饰", logo_url: runtime.brand.logo_url },
       theme: runtime.theme, features: runtime.features,
       content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics },
+      contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
     });
     expect(result.content.featured_projects[0]).toMatchObject({
       id: completedProjects[0]!.id, phase: "completed", title: "现代简约实景",
@@ -176,6 +178,25 @@ describe("DouyinMiniappContentService", () => {
     expect(deps.prepareImageUrls).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result)).not.toMatch(
       /260000|张先生|1号楼101室|customer|signed_amount|latitude|longitude/i,
+    );
+  });
+
+  test("normalizes configured contact SLA copy before bootstrap output", async () => {
+    const configured = dependencies({ findActiveInstallation: mock(async () => ({
+      ...installation,
+      runtime_config: {
+        ...runtime,
+        contact_sla_text: "  工作人员将在今天与你联系  ",
+      },
+    })) });
+
+    const result = await new DouyinMiniappContentService(
+      configured as never,
+    ).bootstrap(user);
+
+    expect(result.contact_sla_text).toBe("工作人员将在今天与你联系");
+    expect(parseBootstrap(result)?.contact_sla_text).toBe(
+      "工作人员将在今天与你联系",
     );
   });
 

@@ -46,7 +46,7 @@ describe('douyin lead contracts', () => {
     ]);
   });
 
-  test('documents every allowed appointment transition explicitly', () => {
+  test('keeps the explicit map and all twenty-five transition decisions aligned', () => {
     expect(DOUYIN_APPOINTMENT_TRANSITIONS).toEqual({
       pending_confirmation: ['confirmed', 'canceled', 'invalid'],
       confirmed: ['completed', 'canceled', 'invalid'],
@@ -55,30 +55,15 @@ describe('douyin lead contracts', () => {
       invalid: [],
     });
 
-    expect(
-      canTransitionDouyinAppointment('pending_confirmation', 'confirmed'),
-    ).toBe(true);
-    expect(canTransitionDouyinAppointment('confirmed', 'completed')).toBe(
-      true,
-    );
-    expect(
-      canTransitionDouyinAppointment('pending_confirmation', 'completed'),
-    ).toBe(false);
-    expect(canTransitionDouyinAppointment('confirmed', 'confirmed')).toBe(
-      false,
-    );
-  });
-
-  test('keeps completed, canceled and invalid appointments terminal', () => {
-    for (const terminalStatus of [
-      'completed',
-      'canceled',
-      'invalid',
-    ] as const) {
+    for (const currentStatus of DOUYIN_APPOINTMENT_STATUS_VALUES) {
       for (const nextStatus of DOUYIN_APPOINTMENT_STATUS_VALUES) {
         expect(
-          canTransitionDouyinAppointment(terminalStatus, nextStatus),
-        ).toBe(false);
+          canTransitionDouyinAppointment(currentStatus, nextStatus),
+        ).toBe(
+          DOUYIN_APPOINTMENT_TRANSITIONS[currentStatus].some(
+            (allowedStatus) => allowedStatus === nextStatus,
+          ),
+        );
       }
     }
   });

@@ -97,6 +97,7 @@ export class DouyinMiniappContentService {
           : [],
       },
       privacy_policy_version: context.runtime.privacy_policy_version,
+      contact_sla_text: context.runtime.contact_sla_text,
     };
   }
 

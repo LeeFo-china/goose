@@ -72,6 +72,7 @@ export type BootstrapData = {
     active_sites: PublicProject[];
   };
   privacy_policy_version: string;
+  contact_sla_text: string;
 };
 
 export type HomeBanner = {

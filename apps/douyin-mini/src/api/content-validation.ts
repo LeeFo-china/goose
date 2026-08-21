@@ -11,13 +11,29 @@ import type {
 } from "../models";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BOOTSTRAP_FIELD_NAMES: ReadonlySet<string> = new Set([
+  "installation",
+  "company",
+  "theme",
+  "features",
+  "content",
+  "privacy_policy_version",
+  "contact_sla_text",
+]);
+
+// The mini-program has no runtime dependency on the workspace domain package.
+// Keep this single parser-boundary fallback for rolling backend compatibility.
+export const DOUYIN_DEFAULT_CONTACT_SLA_TEXT =
+  "工作人员将在营业时间内与你联系";
 
 export function parseBootstrap(value: unknown): BootstrapData | null {
-  if (!isRecord(value) || !isRecord(value.installation) || !isRecord(value.theme)
+  if (!isRecord(value) || !hasOnlyKeys(value, BOOTSTRAP_FIELD_NAMES)
+    || !isRecord(value.installation) || !isRecord(value.theme)
     || !isRecord(value.features) || !isRecord(value.content)) return null;
   const company = parseCompany(value.company);
   const homeBanners = parseHomeBanners(value.content.home_banners);
   const trustMetrics = parseMetrics(value.content.trust_metrics);
+  const contactSlaText = parseContactSlaText(value.contact_sla_text);
   const hasProjectFeed = value.content.featured_projects !== undefined
     || value.content.featured_cases !== undefined
     || value.content.active_sites !== undefined;
@@ -29,6 +45,7 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
     ? uniqueProjects([...featuredCases, ...activeSites]).slice(0, 6)
     : parseProjects(value.content.featured_projects, 6);
   if (!company || !homeBanners || !trustMetrics || !featuredProjects
+    || contactSlaText === null
     || value.installation.status !== "active"
     || !isNullableString(value.installation.template_version)
     || typeof value.theme.primary_color !== "string"
@@ -66,6 +83,7 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
       active_sites: activeSites,
     },
     privacy_policy_version: value.privacy_policy_version,
+    contact_sla_text: contactSlaText,
   };
 }
 
@@ -279,6 +297,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  allowedKeys: ReadonlySet<string>,
+): boolean {
+  return Object.keys(value).every((key) => allowedKeys.has(key));
+}
+
 function isHttps(value: unknown): value is string {
   return typeof value === "string" && /^https:\/\/[^\s]+$/i.test(value);
 }
@@ -289,6 +314,15 @@ function isHttpsOrNull(value: unknown): value is string | null {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function parseContactSlaText(value: unknown): string | null {
+  if (value === undefined) return DOUYIN_DEFAULT_CONTACT_SLA_TEXT;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length >= 1 && normalized.length <= 80
+    ? normalized
+    : null;
 }
 
 function isBoundedString(value: unknown, min: number, max: number): value is string {

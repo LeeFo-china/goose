@@ -72,6 +72,17 @@ export {
   DouyinVisitPeriodSchema,
   canTransitionDouyinAppointment,
 } from './douyin-lead';
+
+export {
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  DouyinContactSlaTextSchema,
+  DouyinRuntimeConfigSchema,
+  isDouyinTestQrUrlUsable,
+} from './douyin-miniapp';
+export type {
+  DouyinRuntimeConfigDto,
+  DouyinRuntimeConfigInput,
+} from './douyin-miniapp';
 export type {
   DouyinAppointmentStatus,
   DouyinLeadAction,

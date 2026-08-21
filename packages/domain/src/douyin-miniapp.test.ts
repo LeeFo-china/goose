@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { SMS_SCENE_VALUES } from './auth';
 import * as domain from './index';
+import * as shared from './shared';
 import {
+  DouyinContactSlaTextSchema,
   DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DOUYIN_INSTALLATION_KIND_VALUES,
   DOUYIN_INSTALLATION_STATUS_VALUES,
@@ -10,6 +12,7 @@ import {
   DOUYIN_RELEASE_STATUS_VALUES,
   DouyinRuntimeConfigSchema,
   isDouyinTestQrUrlUsable,
+  type DouyinRuntimeConfigInput,
   type DouyinRuntimeConfigDto,
 } from './douyin-miniapp';
 
@@ -67,9 +70,21 @@ interface InvalidConfigCase {
 }
 
 describe('Douyin miniapp domain contracts', () => {
-  test('re-exports the runtime schema from the domain entry point', () => {
-    expect(domain.DouyinRuntimeConfigSchema).toBe(DouyinRuntimeConfigSchema);
-    expect(domain.isDouyinTestQrUrlUsable).toBe(isDouyinTestQrUrlUsable);
+  test('re-exports identical runtime contracts from root and shared entry points', () => {
+    for (const entryPoint of [domain, shared]) {
+      expect(entryPoint.DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+        DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+      );
+      expect(entryPoint.DouyinContactSlaTextSchema).toBe(
+        DouyinContactSlaTextSchema,
+      );
+      expect(entryPoint.DouyinRuntimeConfigSchema).toBe(
+        DouyinRuntimeConfigSchema,
+      );
+      expect(entryPoint.isDouyinTestQrUrlUsable).toBe(
+        isDouyinTestQrUrlUsable,
+      );
+    }
   });
 
   test('rejects expired signed test QR URLs', () => {
@@ -131,10 +146,17 @@ describe('Douyin miniapp domain contracts', () => {
 
   test('falls back to the exact non-duration contact SLA copy when absent', () => {
     const { contact_sla_text: _, ...configWithoutContactSla } = runtimeConfig;
+    const legacyInput = configWithoutContactSla satisfies DouyinRuntimeConfigInput;
+    const normalized: DouyinRuntimeConfigDto =
+      DouyinRuntimeConfigSchema.parse(legacyInput);
 
-    expect(
-      DouyinRuntimeConfigSchema.parse(configWithoutContactSla).contact_sla_text,
-    ).toBe('工作人员将在营业时间内与你联系');
+    expect(normalized.contact_sla_text).toBe(
+      '工作人员将在营业时间内与你联系',
+    );
+
+    // @ts-expect-error normalized output always includes the fallback field
+    const invalidOutput: DouyinRuntimeConfigDto = legacyInput;
+    expect(invalidOutput.contact_sla_text).toBeUndefined();
   });
 
   test('trims and bounds configured contact SLA copy to 1 through 80 characters', () => {
