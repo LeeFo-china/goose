@@ -1,22 +1,53 @@
 import { z } from "zod";
-import { AppError } from "@/errors/app-error";
-import { Errors } from "@/errors/error-factory";
 import {
   DOUYIN_MARKETING_EVENT_VALUES,
+  DOUYIN_VISIT_PERIOD_VALUES,
   type DouyinMarketingEventName,
+  type DouyinVisitPeriod,
 } from "@gooes/domain";
+import { AppError } from "@/errors/app-error";
+import { Errors } from "@/errors/error-factory";
+import type { Database } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
 
-const LEAD_SUCCESS_MESSAGE = "你已提交预约，我们将尽快联系你";
 const MIN_EVENT_COUNT = 1;
 const MAX_EVENT_COUNT = 20;
 
-const LeadResultSchema = z.strictObject({
+const AppointmentResultSchema = z.strictObject({
   lead_id: z.string().uuid(),
+  appointment_id: z.string().uuid(),
+  appointment_no: z.string().regex(/^DYLF-[0-9]{8}-[0-9]{6}$/),
+  status: z.literal("pending_confirmation"),
   already_submitted: z.boolean(),
   updated_existing: z.boolean(),
-  message: z.literal(LEAD_SUCCESS_MESSAGE),
+  existing_customer_linked: z.boolean(),
+  recent_pending_appointment_exists: z.boolean(),
 });
+
+const MEASUREMENT_COMMAND_ERROR_CODES = [
+  "DOUYIN_MEASUREMENT_COMMAND_INVALID",
+  "DOUYIN_MEASUREMENT_ATTRIBUTION_INVALID",
+  "DOUYIN_MEASUREMENT_INSTALLATION_UNSUPPORTED",
+  "DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH",
+  "DOUYIN_MEASUREMENT_IDEMPOTENCY_CONFLICT",
+  "DOUYIN_MEASUREMENT_SMS_INVALID",
+  "DOUYIN_MEASUREMENT_SMS_EXPIRED",
+  "DOUYIN_MEASUREMENT_ESTIMATE_NOT_FOUND",
+  "DOUYIN_MEASUREMENT_SNAPSHOT_TOO_LARGE",
+  "DOUYIN_MEASUREMENT_NUMBER_EXHAUSTED",
+  "DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT",
+  "DOUYIN_MEASUREMENT_VISIT_DATE_INVALID",
+] as const;
+
+const AppointmentCommandErrorSchema = z.strictObject({
+  status_code: z.number().int(),
+  code: z.enum(MEASUREMENT_COMMAND_ERROR_CODES),
+});
+
+const AppointmentCommandEnvelopeSchema = z.union([
+  z.strictObject({ data: AppointmentResultSchema }),
+  z.strictObject({ error: AppointmentCommandErrorSchema }),
+]);
 
 const InsertedEventSchema = z.strictObject({
   id: z.string().uuid(),
@@ -32,18 +63,17 @@ export type DouyinMarketingAttribution = {
   readonly content_id?: string;
 };
 
-export type SubmitDouyinMiniappLeadInput = {
+export type SubmitDouyinMeasurementAppointmentInput = {
   readonly installationId: string;
   readonly tenantId: string;
   readonly phone: string;
-  readonly name: string | null;
-  readonly community: string | null;
-  readonly area: number | null;
-  readonly budget: string | null;
-  readonly startTime: string | null;
+  readonly name: string;
+  readonly community: string;
+  readonly preferredVisitDate: string;
+  readonly preferredVisitPeriod: DouyinVisitPeriod;
+  readonly budgetEstimateId: string | null;
   readonly demand: string | null;
   readonly smsCode: string;
-  readonly requestDigest: string;
   readonly idempotencyKey: string;
   readonly subjectHash: string;
   readonly requestIp: string | null;
@@ -91,26 +121,36 @@ export interface DouyinMiniappMarketingDatabaseClient {
   ): PromiseLike<DouyinMiniappMarketingDatabaseResult>;
 }
 
+type GeneratedAppointmentArgs = Database["public"]["Functions"][
+  "submit_douyin_measurement_appointment"
+]["Args"];
+type AppointmentRpcArgs = Omit<GeneratedAppointmentArgs,
+  | "p_budget_estimate_id" | "p_demand" | "p_request_ip" | "p_user_agent"> & {
+  readonly p_budget_estimate_id: string | null;
+  readonly p_demand: string | null;
+  readonly p_request_ip: string | null;
+  readonly p_user_agent: string | null;
+};
+
 export class DouyinMiniappMarketingRepository {
   constructor(
     private readonly client: DouyinMiniappMarketingDatabaseClient =
       SupabaseDB.getAdminClient() as unknown as DouyinMiniappMarketingDatabaseClient,
   ) {}
 
-  async submitLead(input: SubmitDouyinMiniappLeadInput) {
+  async submitMeasurementAppointment(input: SubmitDouyinMeasurementAppointmentInput) {
     return executeDatabaseOperation("提交抖音小程序预约失败", async () => {
-      const result = await this.client.rpc("submit_douyin_miniapp_lead", {
+      const args = {
         p_douyin_miniapp_installation_id: input.installationId,
         p_tenant_id: input.tenantId,
         p_phone: input.phone,
         p_name: input.name,
         p_community: input.community,
-        p_area: input.area,
-        p_budget: input.budget,
-        p_start_time: input.startTime,
+        p_preferred_visit_date: input.preferredVisitDate,
+        p_preferred_visit_period: input.preferredVisitPeriod,
+        p_budget_estimate_id: input.budgetEstimateId,
         p_demand: input.demand,
         p_sms_code: input.smsCode,
-        p_request_digest: input.requestDigest,
         p_idempotency_key: input.idempotencyKey,
         p_subject_hash: input.subjectHash,
         p_request_ip: input.requestIp,
@@ -118,16 +158,16 @@ export class DouyinMiniappMarketingRepository {
         p_privacy_policy_version: input.privacyPolicyVersion,
         p_consented_at: input.consentedAt,
         p_attribution: copyAttribution(input.attribution),
-      });
+      } satisfies AppointmentRpcArgs;
+      const result = await this.client.rpc(
+        "submit_douyin_measurement_appointment",
+        args,
+      );
       assertDatabaseSuccess(result, "提交抖音小程序预约失败");
-      if (!Array.isArray(result.data) || result.data.length !== 1) {
-        throw invalidResponse();
-      }
-      const parsed = LeadResultSchema.safeParse(result.data[0]);
-      if (!parsed.success || (parsed.data.updated_existing && !parsed.data.already_submitted)) {
-        throw invalidResponse();
-      }
-      return parsed.data;
+      const parsed = AppointmentCommandEnvelopeSchema.safeParse(result.data);
+      if (!parsed.success) throw invalidResponse();
+      if ("data" in parsed.data) return parsed.data.data;
+      throwMeasurementCommandError(parsed.data.error);
     });
   }
 
@@ -190,33 +230,56 @@ function assertDatabaseSuccess(
   message: string,
 ): void {
   if (!result.error) return;
-  const marker = databaseErrorMessage(result.error);
-  const mapped = marker !== null
-    && Object.prototype.hasOwnProperty.call(BUSINESS_ERRORS, marker)
-    ? BUSINESS_ERRORS[marker]
-    : undefined;
-  if (marker !== null && mapped) {
-    throw Errors.business(mapped.statusCode, mapped.message, marker);
-  }
   throw Errors.dbError(message);
 }
 
-const BUSINESS_ERRORS: Readonly<Record<string, {
+const MEASUREMENT_COMMAND_ERRORS: Readonly<Record<
+  (typeof MEASUREMENT_COMMAND_ERROR_CODES)[number], {
   readonly statusCode: number;
   readonly message: string;
 }>> = {
-  SMS_CODE_INVALID: { statusCode: 400, message: "验证码错误" },
-  SMS_CODE_EXPIRED: { statusCode: 400, message: "验证码已过期" },
-  DOUYIN_IDEMPOTENCY_CONFLICT: { statusCode: 409, message: "请勿重复提交不同内容" },
-  DOUYIN_INSTALLATION_DISABLED: { statusCode: 409, message: "小程序服务暂不可用" },
-  DOUYIN_TENANT_NOT_ACTIVE: { statusCode: 409, message: "装修公司服务暂不可用" },
-  DOUYIN_PRIVACY_POLICY_VERSION_MISMATCH: {
+  DOUYIN_MEASUREMENT_COMMAND_INVALID: {
+    statusCode: 400, message: "预约信息格式无效",
+  },
+  DOUYIN_MEASUREMENT_ATTRIBUTION_INVALID: {
+    statusCode: 400, message: "来源信息格式无效",
+  },
+  DOUYIN_MEASUREMENT_INSTALLATION_UNSUPPORTED: {
+    statusCode: 409, message: "小程序服务暂不可用",
+  },
+  DOUYIN_MEASUREMENT_PRIVACY_VERSION_MISMATCH: {
     statusCode: 409,
     message: "隐私政策版本已更新，请重新确认",
   },
-  DOUYIN_LEAD_INVALID_INPUT: { statusCode: 400, message: "预约信息格式无效" },
-  DOUYIN_ATTRIBUTION_INVALID: { statusCode: 400, message: "来源信息格式无效" },
+  DOUYIN_MEASUREMENT_IDEMPOTENCY_CONFLICT: {
+    statusCode: 409, message: "请勿重复提交不同内容",
+  },
+  DOUYIN_MEASUREMENT_SMS_INVALID: { statusCode: 400, message: "验证码错误" },
+  DOUYIN_MEASUREMENT_SMS_EXPIRED: { statusCode: 400, message: "验证码已过期" },
+  DOUYIN_MEASUREMENT_ESTIMATE_NOT_FOUND: {
+    statusCode: 404, message: "预算结果不存在或不可用",
+  },
+  DOUYIN_MEASUREMENT_SNAPSHOT_TOO_LARGE: {
+    statusCode: 400, message: "预约信息过大",
+  },
+  DOUYIN_MEASUREMENT_NUMBER_EXHAUSTED: {
+    statusCode: 409, message: "今日预约已满，请稍后再试",
+  },
+  DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT: {
+    statusCode: 409, message: "验证码已被使用，请重新获取",
+  },
+  DOUYIN_MEASUREMENT_VISIT_DATE_INVALID: {
+    statusCode: 400, message: "期望量房日期不能早于今天",
+  },
 };
+
+function throwMeasurementCommandError(
+  error: z.infer<typeof AppointmentCommandErrorSchema>,
+): never {
+  const mapped = MEASUREMENT_COMMAND_ERRORS[error.code];
+  if (error.status_code !== mapped.statusCode) throw invalidResponse();
+  throw Errors.business(mapped.statusCode, mapped.message, error.code);
+}
 
 function copyAttribution(input: DouyinMarketingAttribution): Record<string, string> {
   const output: Record<string, string> = {};
@@ -226,11 +289,6 @@ function copyAttribution(input: DouyinMarketingAttribution): Record<string, stri
   if (input.campaign_code !== undefined) output.campaign_code = input.campaign_code;
   if (input.content_id !== undefined) output.content_id = input.content_id;
   return output;
-}
-
-function databaseErrorMessage(error: unknown): string | null {
-  if (typeof error !== "object" || error === null || !("message" in error)) return null;
-  return typeof error.message === "string" ? error.message : null;
 }
 
 function invalidResponse() {

@@ -4,12 +4,17 @@ import type {
   HomeBanner,
   PublicProject,
   PublicProjectPage,
+  PublicProjectPhase,
   PublicSiteLog,
   PublicSiteLogPage,
   ServiceRegion,
 } from "../models";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// The mini-program has no runtime dependency on the workspace domain package.
+// Keep this single parser-boundary fallback for rolling backend compatibility.
+export const DOUYIN_DEFAULT_CONTACT_SLA_TEXT =
+  "工作人员将在营业时间内与你联系";
 
 export function parseBootstrap(value: unknown): BootstrapData | null {
   if (!isRecord(value) || !isRecord(value.installation) || !isRecord(value.theme)
@@ -17,9 +22,19 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
   const company = parseCompany(value.company);
   const homeBanners = parseHomeBanners(value.content.home_banners);
   const trustMetrics = parseMetrics(value.content.trust_metrics);
-  const featuredCases = parseProjects(value.content.featured_cases, 6);
-  const activeSites = parseProjects(value.content.active_sites, 6);
-  if (!company || !homeBanners || !trustMetrics || !featuredCases || !activeSites
+  const contactSlaText = parseContactSlaText(value.contact_sla_text);
+  const hasProjectFeed = value.content.featured_projects !== undefined
+    || value.content.featured_cases !== undefined
+    || value.content.active_sites !== undefined;
+  if (!hasProjectFeed) return null;
+  const featuredCases = parseOptionalProjects(value.content.featured_cases, 6);
+  const activeSites = parseOptionalProjects(value.content.active_sites, 6);
+  if (!featuredCases || !activeSites) return null;
+  const featuredProjects = value.content.featured_projects === undefined
+    ? uniqueProjects([...featuredCases, ...activeSites]).slice(0, 6)
+    : parseProjects(value.content.featured_projects, 6);
+  if (!company || !homeBanners || !trustMetrics || !featuredProjects
+    || contactSlaText === null
     || value.installation.status !== "active"
     || !isNullableString(value.installation.template_version)
     || typeof value.theme.primary_color !== "string"
@@ -52,10 +67,12 @@ export function parseBootstrap(value: unknown): BootstrapData | null {
     content: {
       home_banners: homeBanners,
       trust_metrics: trustMetrics,
+      featured_projects: featuredProjects,
       featured_cases: featuredCases,
       active_sites: activeSites,
     },
     privacy_policy_version: value.privacy_policy_version,
+    contact_sla_text: contactSlaText,
   };
 }
 
@@ -85,20 +102,22 @@ export function parseProject(value: unknown): PublicProject | null {
   if (!isRecord(value) || typeof value.id !== "string" || !UUID_PATTERN.test(value.id)
     || !isBoundedString(value.title, 1, 120) || !isHttpsOrNull(value.cover_image_url)
     || !isNullableBoundedString(value.layout, 80) || !isNonNegativeNumberOrNull(value.area)
-    || !isNullableBoundedString(value.budget_band, 40)
+    || !isNullableBoundedString(value.budget_band, 80)
     || !isBoundedString(value.community, 0, 120)
     || !isNullableBoundedString(value.city, 80)
     || !isNullableBoundedString(value.district, 80)
-    || !isNullableBoundedString(value.status, 80)
+    || (value.status !== undefined && !isNullableBoundedString(value.status, 80))
     || !isNullableBoundedString(value.start_date, 40)
     || !isBoundedString(value.updated_at, 1, 80)
     || !isNullableBoundedString(value.description, 2_000)) return null;
+  const phase = parseProjectPhase(value.phase, value.status);
   const publicImages = parseHttpsArray(value.public_images, 9);
   const styleTags = parseStringArray(value.style_tags, 12, 40);
-  if (!publicImages || !styleTags) return null;
+  if (!phase || !publicImages || !styleTags) return null;
   return {
     id: value.id,
     title: value.title,
+    phase,
     cover_image_url: value.cover_image_url,
     public_images: publicImages,
     style_tags: styleTags,
@@ -108,7 +127,7 @@ export function parseProject(value: unknown): PublicProject | null {
     community: value.community,
     city: value.city,
     district: value.district,
-    status: value.status,
+    status: value.status ?? null,
     start_date: value.start_date,
     updated_at: value.updated_at,
     description: value.description,
@@ -169,6 +188,27 @@ function parseProjects(value: unknown, limit: number): PublicProject[] | null {
   return projects.every((project): project is PublicProject => project !== null)
     ? projects
     : null;
+}
+
+function parseOptionalProjects(value: unknown, limit: number): PublicProject[] | null {
+  return value === undefined ? [] : parseProjects(value, limit);
+}
+
+function uniqueProjects(projects: PublicProject[]): PublicProject[] {
+  return [...new Map(projects.map((project) => [project.id, project])).values()];
+}
+
+function parseProjectPhase(
+  phase: unknown,
+  legacyStatus: unknown,
+): PublicProjectPhase | null {
+  if (phase !== undefined) {
+    return phase === "in_progress" || phase === "completed" ? phase : null;
+  }
+  if (legacyStatus === "started" || legacyStatus === "constructing") {
+    return "in_progress";
+  }
+  return legacyStatus === "acceptance" ? "completed" : null;
 }
 
 function parseHomeBanners(value: unknown): HomeBanner[] | null {
@@ -256,6 +296,15 @@ function isHttpsOrNull(value: unknown): value is string | null {
 
 function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
+}
+
+function parseContactSlaText(value: unknown): string | null {
+  if (value === undefined) return DOUYIN_DEFAULT_CONTACT_SLA_TEXT;
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized.length >= 1 && normalized.length <= 80
+    ? normalized
+    : null;
 }
 
 function isBoundedString(value: unknown, min: number, max: number): value is string {

@@ -47,17 +47,53 @@ describe("admin nav active matching", () => {
     expect(activeLabels).toEqual(["服务商资料"]);
   });
 
-  test("matches the Douyin miniapp workspace inside its own section", () => {
+  test("matches each Douyin miniapp workspace route inside its own section", () => {
     const douyinItems = tenantNavGroups.find(
       (group) => group.label === "抖音小程序",
     )?.items ?? [];
 
-    expect(douyinItems).toHaveLength(1);
+    expect(douyinItems).toHaveLength(4);
     expect(
       isActivePath(
         "/douyin-miniapp/workspace",
         douyinItems[0]?.href ?? "",
       ),
     ).toBe(true);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/leads",
+        douyinItems[1]?.href ?? "",
+      ),
+    ).toBe(true);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/leads",
+        douyinItems[0]?.href ?? "",
+      ),
+    ).toBe(false);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/projects",
+        douyinItems[2]?.href ?? "",
+      ),
+    ).toBe(true);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/projects",
+        douyinItems[1]?.href ?? "",
+      ),
+    ).toBe(false);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/budget",
+        douyinItems[3]?.href ?? "",
+      ),
+    ).toBe(true);
+    expect(
+      isActivePath(
+        "/douyin-miniapp/budget",
+        douyinItems[2]?.href ?? "",
+      ),
+    ).toBe(false);
   });
 });

@@ -58,6 +58,8 @@ try {
     join(consumerRoot, 'verify.ts'),
     `import {
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  DouyinRuntimeConfigSchema,
   EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
@@ -71,6 +73,8 @@ try {
   type ServiceTrialFollowUpType,
   type ServiceTrialNotificationEvent,
   type EmployeeServiceAccessSummary,
+  type DouyinRuntimeConfigDto,
+  type DouyinRuntimeConfigInput,
   type SiteContentDraftBlock,
   type SiteContentPublicDetail,
   type SiteContentPublicSummary,
@@ -105,6 +109,22 @@ const employeeAccess: EmployeeServiceAccessSummary =
     secondary_action: null,
     evaluated_at: '2026-08-12T00:00:00.000Z',
   });
+const runtimeConfigInput: DouyinRuntimeConfigInput = {
+  brand: { logo_url: null, qualifications: [] },
+  theme: { primary_color: '#C45A32', navigation_text_color: 'black' },
+  features: {
+    cases: true,
+    sites: true,
+    sms_lead: true,
+    douyin_phone: false,
+    phone_capture_mode: 'sms',
+  },
+  home_banners: [],
+  trust_metrics: [],
+  privacy_policy_version: '2026-08-21',
+};
+const runtimeConfig: DouyinRuntimeConfigDto =
+  DouyinRuntimeConfigSchema.parse(runtimeConfigInput);
 
 const assertTypes = (
   block: SiteContentDraftBlock,
@@ -125,6 +145,8 @@ void followUpType;
 void followUpStatus;
 void notificationEvent;
 void employeeAccess;
+void runtimeConfig;
+void DOUYIN_DEFAULT_CONTACT_SLA_TEXT;
 `,
   );
   await execFileAsync('pnpm', ['exec', 'tsc', '-p', 'tsconfig.json', '--noEmit'], {
@@ -135,6 +157,8 @@ void employeeAccess;
     join(consumerRoot, 'verify.mjs'),
     `import {
   EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES,
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  DouyinRuntimeConfigSchema,
   EmployeeServiceAccessSummarySchema,
   PLATFORM_SERVICE_TRIAL_STATUS_VALUES,
   SERVICE_TRIAL_FOLLOW_UP_STATUS_VALUES,
@@ -174,6 +198,30 @@ if (!(PlatformServiceTrialScopeSchema instanceof z.ZodType)) {
 
 if (!(EmployeeServiceAccessSummarySchema instanceof z.ZodType)) {
   throw new Error('packed employee service access schema 与 consumer 使用了不同的 Zod 类型身份');
+}
+
+if (!(DouyinRuntimeConfigSchema instanceof z.ZodType)) {
+  throw new Error('packed domain 缺少抖音运行配置 schema');
+}
+
+const normalizedRuntimeConfig = DouyinRuntimeConfigSchema.safeParse({
+  brand: { logo_url: null, qualifications: [] },
+  theme: { primary_color: '#C45A32', navigation_text_color: 'black' },
+  features: {
+    cases: true,
+    sites: true,
+    sms_lead: true,
+    douyin_phone: false,
+    phone_capture_mode: 'sms',
+  },
+  home_banners: [],
+  trust_metrics: [],
+  privacy_policy_version: '2026-08-21',
+});
+if (!normalizedRuntimeConfig.success
+  || DOUYIN_DEFAULT_CONTACT_SLA_TEXT !== '工作人员将在营业时间内与你联系'
+  || normalizedRuntimeConfig.data.contact_sla_text !== DOUYIN_DEFAULT_CONTACT_SLA_TEXT) {
+  throw new Error('packed domain 无法从 root export 规范化抖音联系文案');
 }
 
 if (EMPLOYEE_SERVICE_ACCESS_STATUS_VALUES[3] !== 'grace_period') {

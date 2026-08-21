@@ -1,14 +1,20 @@
 import { describe, expect, test } from 'bun:test';
 import { SMS_SCENE_VALUES } from './auth';
 import * as domain from './index';
+import * as shared from './shared';
 import {
+  DOUYIN_ENTRY_PATH_VALUES,
+  DouyinContactSlaTextSchema,
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
   DOUYIN_INSTALLATION_KIND_VALUES,
   DOUYIN_INSTALLATION_STATUS_VALUES,
   DOUYIN_MARKETING_EVENT_VALUES,
   DOUYIN_PHONE_CAPTURE_MODE_VALUES,
   DOUYIN_RELEASE_STATUS_VALUES,
   DouyinRuntimeConfigSchema,
+  DouyinEntryPathSchema,
   isDouyinTestQrUrlUsable,
+  type DouyinRuntimeConfigInput,
   type DouyinRuntimeConfigDto,
 } from './douyin-miniapp';
 
@@ -44,6 +50,7 @@ const runtimeConfig = {
   home_banners: [homeBanner],
   trust_metrics: [trustMetric],
   privacy_policy_version: '2026-07-19',
+  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
 } satisfies DouyinRuntimeConfigDto;
 
 interface CollectionBoundaryCase {
@@ -65,9 +72,31 @@ interface InvalidConfigCase {
 }
 
 describe('Douyin miniapp domain contracts', () => {
-  test('re-exports the runtime schema from the domain entry point', () => {
-    expect(domain.DouyinRuntimeConfigSchema).toBe(DouyinRuntimeConfigSchema);
-    expect(domain.isDouyinTestQrUrlUsable).toBe(isDouyinTestQrUrlUsable);
+  test('re-exports identical runtime contracts from root and source barrel', () => {
+    for (const entryPoint of [domain, shared]) {
+      expect(entryPoint.DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+        DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+      );
+      expect(entryPoint.DOUYIN_ENTRY_PATH_VALUES).toBe(
+        DOUYIN_ENTRY_PATH_VALUES,
+      );
+      expect(entryPoint.DouyinEntryPathSchema).toBe(DouyinEntryPathSchema);
+      expect(entryPoint.DouyinContactSlaTextSchema).toBe(
+        DouyinContactSlaTextSchema,
+      );
+      expect(entryPoint.DouyinRuntimeConfigSchema).toBe(
+        DouyinRuntimeConfigSchema,
+      );
+      expect(entryPoint.isDouyinTestQrUrlUsable).toBe(
+        isDouyinTestQrUrlUsable,
+      );
+    }
+  });
+
+  test('keeps every cold-start mini-program page in one canonical entry schema', () => {
+    expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/budget/index');
+    expect(DouyinEntryPathSchema.safeParse('pages/budget/index').success).toBe(true);
+    expect(DouyinEntryPathSchema.safeParse('pages/admin/index').success).toBe(false);
   });
 
   test('rejects expired signed test QR URLs', () => {
@@ -125,6 +154,73 @@ describe('Douyin miniapp domain contracts', () => {
 
   test('accepts the strict HTTPS-only runtime configuration', () => {
     expect(DouyinRuntimeConfigSchema.parse(runtimeConfig)).toEqual(runtimeConfig);
+  });
+
+  test('falls back to the exact non-duration contact SLA copy when absent', () => {
+    const { contact_sla_text: _, ...configWithoutContactSla } = runtimeConfig;
+    const legacyInput = configWithoutContactSla satisfies DouyinRuntimeConfigInput;
+    const normalized: DouyinRuntimeConfigDto =
+      DouyinRuntimeConfigSchema.parse(legacyInput);
+
+    expect(normalized.contact_sla_text).toBe(
+      '工作人员将在营业时间内与你联系',
+    );
+
+    // @ts-expect-error normalized output always includes the fallback field
+    const invalidOutput: DouyinRuntimeConfigDto = legacyInput;
+    expect(invalidOutput.contact_sla_text).toBeUndefined();
+  });
+
+  test('trims and bounds configured contact SLA copy to 1 through 80 characters', () => {
+    expect(
+      DouyinRuntimeConfigSchema.parse({
+        ...runtimeConfig,
+        contact_sla_text: '  工作人员稍后与你联系  ',
+      }).contact_sla_text,
+    ).toBe('工作人员稍后与你联系');
+
+    for (const contactSlaText of ['x', 'x'.repeat(80)]) {
+      expect(
+        DouyinRuntimeConfigSchema.safeParse({
+          ...runtimeConfig,
+          contact_sla_text: contactSlaText,
+        }).success,
+      ).toBe(true);
+    }
+    for (const contactSlaText of ['', '   ', 'x'.repeat(81)]) {
+      expect(
+        DouyinRuntimeConfigSchema.safeParse({
+          ...runtimeConfig,
+          contact_sla_text: contactSlaText,
+        }).success,
+      ).toBe(false);
+    }
+  });
+
+  test('normalizes qualification titles and privacy versions at the canonical boundary', () => {
+    const parsed = DouyinRuntimeConfigSchema.parse({
+      ...runtimeConfig,
+      brand: {
+        ...runtimeConfig.brand,
+        qualifications: [{ ...qualification, title: '  装修资质  ' }],
+      },
+      privacy_policy_version: '  2026-08-21  ',
+    });
+
+    expect(parsed.brand.qualifications[0]?.title).toBe('装修资质');
+    expect(parsed.privacy_policy_version).toBe('2026-08-21');
+    for (const invalid of [
+      {
+        ...runtimeConfig,
+        brand: {
+          ...runtimeConfig.brand,
+          qualifications: [{ ...qualification, title: '   ' }],
+        },
+      },
+      { ...runtimeConfig, privacy_policy_version: '   ' },
+    ]) {
+      expect(DouyinRuntimeConfigSchema.safeParse(invalid).success).toBe(false);
+    }
   });
 
   const collectionBoundaryCases: readonly CollectionBoundaryCase[] = [

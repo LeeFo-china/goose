@@ -100,8 +100,8 @@ export function SourceTags({ customer }: { customer: CustomerRecord }) {
 export function sourceActorName(source: CustomerSourceRecord) {
   return source.source_employee?.name
     || source.assigned_by?.name
-    || source.source_employee?.phone
-    || source.assigned_by?.phone
+    || source.source_employee?.phone_masked
+    || source.assigned_by?.phone_masked
     || "-";
 }
 

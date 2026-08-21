@@ -3,6 +3,7 @@
     "pages/home/index",
     "pages/cases/index",
     "pages/sites/index",
+    "pages/budget/index",
     "pages/lead/index",
     "pages/company/index",
     "pages/privacy/index",
@@ -31,19 +32,19 @@
       },
       {
         "pagePath": "pages/cases/index",
-        "text": "案例",
+        "text": "项目实景",
         "iconPath": "assets/tabbar/cases.png",
         "selectedIconPath": "assets/tabbar/cases-active.png"
       },
       {
-        "pagePath": "pages/sites/index",
-        "text": "工地",
-        "iconPath": "assets/tabbar/sites.png",
-        "selectedIconPath": "assets/tabbar/sites-active.png"
+        "pagePath": "pages/budget/index",
+        "text": "预算初算",
+        "iconPath": "assets/tabbar/budget.png",
+        "selectedIconPath": "assets/tabbar/budget-active.png"
       },
       {
         "pagePath": "pages/lead/index",
-        "text": "免费咨询",
+        "text": "免费量房",
         "iconPath": "assets/tabbar/lead.png",
         "selectedIconPath": "assets/tabbar/lead-active.png"
       }

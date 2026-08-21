@@ -88,6 +88,21 @@ describe("idempotency state", () => {
     expect(succeeded.lastSuccess?.snapshot).not.toBe(source);
   });
 
+  test("accepts a late success for the same unknown attempt and ignores an old key", () => {
+    const keys = createKeyFactory([FIRST_KEY, SECOND_KEY]);
+    const initial = createIdempotencyState({ name: "李先生" }, keys.factory);
+    const unknown = failIdempotentSubmission(beginIdempotentSubmission(initial).state);
+    const lateSuccess = succeedIdempotentSubmission(unknown, FIRST_KEY);
+    const changed = updateIdempotencyDraft(
+      unknown,
+      { name: "王先生" },
+      keys.factory,
+    );
+
+    expect(lateSuccess).toMatchObject({ status: "succeeded", key: FIRST_KEY });
+    expect(succeedIdempotentSubmission(changed, FIRST_KEY)).toBe(changed);
+  });
+
   test("returns the same success without a new submission when clicked again unedited", () => {
     const keys = createKeyFactory([FIRST_KEY]);
     const initial = createIdempotencyState({ name: "李先生" }, keys.factory);

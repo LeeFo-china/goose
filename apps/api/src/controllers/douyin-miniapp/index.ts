@@ -8,6 +8,7 @@ import {
   DouyinLeadRequestSchema,
   DouyinLeadSmsRequestSchema,
   DouyinMiniappSessionRequestSchema,
+  DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
 import {
   getDouyinMiniappContentService,
@@ -27,7 +28,8 @@ import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 type SessionService = Pick<DouyinMiniappSessionService, "exchange">;
 type ContentService = Pick<DouyinMiniappContentService,
   | "bootstrap" | "company" | "listCases" | "getCase"
-  | "listSites" | "getSite" | "listSiteLogs">;
+  | "listSites" | "getSite" | "listSiteLogs"
+  | "listProjects" | "getProject" | "listProjectLogs">;
 type MarketingService = Pick<DouyinMiniappMarketingService,
   "sendCode" | "submitLead" | "recordEvents">;
 
@@ -47,6 +49,9 @@ export class DouyinMiniappController {
     fastify.get("/douyin-mini/sites", this.listSites);
     fastify.get("/douyin-mini/sites/:id", this.getSite);
     fastify.get("/douyin-mini/sites/:id/logs", this.listSiteLogs);
+    fastify.get("/douyin-mini/projects", this.listProjects);
+    fastify.get("/douyin-mini/projects/:id", this.getProject);
+    fastify.get("/douyin-mini/projects/:id/logs", this.listProjectLogs);
     fastify.post("/douyin-mini/sms/send", this.sendLeadCode);
     fastify.post("/douyin-mini/leads", this.submitLead);
     fastify.post("/douyin-mini/events", this.recordEvents);
@@ -95,6 +100,24 @@ export class DouyinMiniappController {
     );
   };
 
+  listProjects = async (request: FastifyRequest) => {
+    const query = parse(DouyinProjectListQuerySchema, request.query || {});
+    return ResponseHandler.success(await this.content().listProjects(request.user, query));
+  };
+
+  getProject = async (request: FastifyRequest) => {
+    const { id } = parse(DouyinContentIdParamsSchema, request.params || {});
+    return ResponseHandler.success(await this.content().getProject(request.user, id));
+  };
+
+  listProjectLogs = async (request: FastifyRequest) => {
+    const { id } = parse(DouyinContentIdParamsSchema, request.params || {});
+    const query = parse(DouyinContentPageQuerySchema, request.query || {});
+    return ResponseHandler.success(
+      await this.content().listProjectLogs(request.user, id, query),
+    );
+  };
+
   sendLeadCode = async (request: FastifyRequest) => ResponseHandler.success(
     await this.marketing().sendCode(
       request.user,
@@ -134,6 +157,7 @@ function requestMetadata(request: FastifyRequest) {
   return {
     requestIp: resolveTrustedClientIp(request),
     userAgent: userAgent ?? null,
+    log: request.log,
   };
 }
 

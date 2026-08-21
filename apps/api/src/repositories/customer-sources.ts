@@ -1,23 +1,17 @@
 import { Errors } from "@/errors/error-factory";
+import {
+  serializeDouyinCustomerSourceMetadata,
+  type DouyinCustomerSourceMetadata,
+} from "@/repositories/customer-source-douyin-metadata";
+import {
+  parseCustomerSourceSummaryRows,
+  type CustomerSourceRawRecord,
+  type CustomerSourceSummaryRecord,
+} from "@/repositories/customer-source-summary-parser";
 import type { CustomerSourceListQuery } from "@/schema/customer-sources";
 import { SupabaseDB } from "@/utils/supabase";
 
-export type CustomerSourceRecord = {
-  id: string;
-  tenant_id: string;
-  customer_id: string;
-  source: string;
-  source_label: string | null;
-  platform_lead_id: string | null;
-  assigned_by_employee_id: string | null;
-  assigned_at: string | null;
-  metadata: unknown;
-  created_at: string;
-  source_employee_id?: string | null;
-  related_type?: string | null;
-  related_id?: string | null;
-  share_link_id?: string | null;
-};
+export type CustomerSourceRecord = CustomerSourceRawRecord;
 
 export type CustomerAccessRecord = {
   id: string;
@@ -25,13 +19,19 @@ export type CustomerAccessRecord = {
   tenant_id: string | null;
 };
 
-type EmployeeLite = {
+type RawEmployeeLite = {
   id: string;
   name: string | null;
   phone: string | null;
 };
 
-type PlatformLeadLite = {
+type EmployeeLite = {
+  id: string;
+  name: string | null;
+  phone_masked: string | null;
+};
+
+type RawPlatformLeadLite = {
   id: string;
   phone: string | null;
   name: string | null;
@@ -39,6 +39,10 @@ type PlatformLeadLite = {
   community: string | null;
   status: string | null;
   source: string | null;
+};
+
+type PlatformLeadLite = Omit<RawPlatformLeadLite, "phone"> & {
+  phone_masked: string | null;
 };
 
 type TenantShareLinkLite = {
@@ -49,7 +53,13 @@ type TenantShareLinkLite = {
   target_id: string | null;
 };
 
-export type SerializedCustomerSource = CustomerSourceRecord & {
+export type SerializedCustomerSource = {
+  id: string;
+  source: string;
+  source_label: string | null;
+  assigned_at: string | null;
+  created_at: string;
+  metadata: unknown | DouyinCustomerSourceMetadata;
   display_label: string;
   dedupe_result: string | null;
   is_old_customer_new_lead: boolean;
@@ -61,8 +71,38 @@ export type SerializedCustomerSource = CustomerSourceRecord & {
   share_link: TenantShareLinkLite | null;
 };
 
-class CustomerSourceRepository {
-  private client = SupabaseDB.getAdminClient();
+export type SerializedCustomerSourceSummary = Omit<
+  CustomerSourceSummaryRecord,
+  "latestSource"
+> & {
+  latestSource: SerializedCustomerSource | null;
+};
+
+const CUSTOMER_SOURCE_SELECT = [
+  "id",
+  "tenant_id",
+  "customer_id",
+  "source",
+  "source_label",
+  "platform_lead_id",
+  "assigned_by_employee_id",
+  "assigned_at",
+  "metadata",
+  "created_at",
+  "source_employee_id",
+  "related_type",
+  "related_id",
+  "share_link_id",
+  "marketing_lead_id",
+  "douyin_measurement_appointment_id",
+].join(",");
+
+export class CustomerSourceRepository {
+  private client;
+
+  constructor(client = SupabaseDB.getAdminClient()) {
+    this.client = client;
+  }
 
   private from(table: string) {
     return (this.client as unknown as { from: (table: string) => any }).from(table);
@@ -78,7 +118,7 @@ class CustomerSourceRepository {
       .eq("tenant_id", input.tenantId)
       .maybeSingle();
     if (error) {
-      throw Errors.dbError("查询客户失败", error);
+      throw Errors.dbError("查询客户失败");
     }
 
     return (data || null) as CustomerAccessRecord | null;
@@ -93,7 +133,7 @@ class CustomerSourceRepository {
     const to = from + input.query.pageSize - 1;
 
     const request = this.from("customer_sources")
-      .select("*", { count: "exact" })
+      .select(CUSTOMER_SOURCE_SELECT, { count: "exact" })
       .eq("customer_id", input.customerId)
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: false })
@@ -101,7 +141,7 @@ class CustomerSourceRepository {
 
     const { data, error, count } = await request;
     if (error) {
-      throw Errors.dbError("查询客户来源时间线失败", error);
+      throw Errors.dbError("查询客户来源时间线失败");
     }
 
     const list = await this.serializeRows(
@@ -124,21 +164,38 @@ class CustomerSourceRepository {
     customerIds: string[];
   }) {
     if (input.customerIds.length === 0) {
-      return [] as SerializedCustomerSource[];
+      return [] as SerializedCustomerSourceSummary[];
+    }
+    if (
+      input.customerIds.length > 100
+      || new Set(input.customerIds).size !== input.customerIds.length
+    ) {
+      throw Errors.badRequest("客户来源摘要最多支持 100 个不重复客户");
     }
 
-    const request = this.from("customer_sources")
-      .select("*")
-      .in("customer_id", input.customerIds)
-      .eq("tenant_id", input.tenantId)
-      .order("created_at", { ascending: false });
-
-    const { data, error } = await request;
+    const { data, error } = await this.client.rpc("list_customer_source_summaries", {
+      p_tenant_id: input.tenantId,
+      p_customer_ids: input.customerIds,
+    });
     if (error) {
-      throw Errors.dbError("查询客户来源摘要失败", error);
+      throw Errors.dbError("查询客户来源摘要失败");
     }
 
-    return this.serializeRows((data || []) as CustomerSourceRecord[], input.tenantId);
+    const rows = parseCustomerSourceSummaryRows(data, input);
+    if (!rows) {
+      throw Errors.dbError("查询客户来源摘要失败", {
+        code: "CUSTOMER_SOURCE_SUMMARY_INVALID_RESPONSE",
+      });
+    }
+
+    const latestRows = rows.flatMap((row) => row.latestSource ? [row.latestSource] : []);
+    const serializedLatestRows = await this.serializeRows(latestRows, input.tenantId);
+    let latestIndex = 0;
+
+    return rows.map((row): SerializedCustomerSourceSummary => ({
+      ...row,
+      latestSource: row.latestSource ? serializedLatestRows[latestIndex++]! : null,
+    }));
   }
 
   private async serializeRows(rows: CustomerSourceRecord[], tenantId: string) {
@@ -161,21 +218,38 @@ class CustomerSourceRepository {
     return rows.map((row): SerializedCustomerSource => {
       const dedupeResult = readDedupeResult(row.metadata);
       return {
-        ...row,
-        display_label: row.source_label || getSourceLabel(row.source),
+        id: row.id,
+        source: isDouyinAppointmentSource(row) ? "douyin" : row.source,
+        source_label: isDouyinAppointmentSource(row)
+          ? "抖音小程序"
+          : row.source_label,
+        metadata: isDouyinAppointmentSource(row)
+          ? serializeDouyinCustomerSourceMetadata(row.metadata)
+          : row.metadata,
+        display_label: isDouyinAppointmentSource(row)
+          ? "抖音小程序"
+          : row.source_label || getSourceLabel(row.source),
         dedupe_result: dedupeResult,
+        assigned_at: row.assigned_at,
+        created_at: row.created_at,
         is_old_customer_new_lead: row.source === "platform_lead" && dedupeResult === "existing_customer",
         is_platform_new_lead: row.source === "platform_lead" && dedupeResult === "created_customer",
         is_employee_share: isEmployeeShareSource(row.source),
-        source_employee: row.source_employee_id
-          ? sourceEmployees.get(row.source_employee_id) ?? null
-          : null,
-        assigned_by: row.assigned_by_employee_id
-          ? assignedEmployees.get(row.assigned_by_employee_id) ?? null
-          : null,
-        platform_lead: row.platform_lead_id
-          ? platformLeads.get(row.platform_lead_id) ?? null
-          : null,
+        source_employee: serializeEmployee(
+          row.source_employee_id
+            ? sourceEmployees.get(row.source_employee_id) ?? null
+            : null,
+        ),
+        assigned_by: serializeEmployee(
+          row.assigned_by_employee_id
+            ? assignedEmployees.get(row.assigned_by_employee_id) ?? null
+            : null,
+        ),
+        platform_lead: serializePlatformLead(
+          row.platform_lead_id
+            ? platformLeads.get(row.platform_lead_id) ?? null
+            : null,
+        ),
         share_link: row.share_link_id
           ? shareLinks.get(row.share_link_id) ?? null
           : null,
@@ -186,8 +260,8 @@ class CustomerSourceRepository {
   private async findEmployees(
     ids: string[],
     tenantId: string,
-  ): Promise<Map<string, EmployeeLite>> {
-    if (ids.length === 0) return new Map<string, EmployeeLite>();
+  ): Promise<Map<string, RawEmployeeLite>> {
+    if (ids.length === 0) return new Map<string, RawEmployeeLite>();
 
     const { data, error } = await this.from("employees")
       .select("id,name,phone")
@@ -195,24 +269,24 @@ class CustomerSourceRepository {
       .eq("tenant_id", tenantId);
 
     if (error) {
-      throw Errors.dbError("查询客户来源员工失败", error);
+      throw Errors.dbError("查询客户来源员工失败");
     }
 
-    return new Map((data || []).map((item: EmployeeLite) => [item.id, item]));
+    return new Map((data || []).map((item: RawEmployeeLite) => [item.id, item]));
   }
 
-  private async findPlatformLeads(ids: string[]): Promise<Map<string, PlatformLeadLite>> {
-    if (ids.length === 0) return new Map<string, PlatformLeadLite>();
+  private async findPlatformLeads(ids: string[]): Promise<Map<string, RawPlatformLeadLite>> {
+    if (ids.length === 0) return new Map<string, RawPlatformLeadLite>();
 
     const { data, error } = await this.from("platform_leads")
       .select("id,phone,name,city,community,status,source")
       .in("id", ids);
 
     if (error) {
-      throw Errors.dbError("查询平台线索来源失败", error);
+      throw Errors.dbError("查询平台线索来源失败");
     }
 
-    return new Map((data || []).map((item: PlatformLeadLite) => [item.id, item]));
+    return new Map((data || []).map((item: RawPlatformLeadLite) => [item.id, item]));
   }
 
   private async findShareLinks(
@@ -227,7 +301,7 @@ class CustomerSourceRepository {
       .eq("tenant_id", tenantId);
 
     if (error) {
-      throw Errors.dbError("查询分享链接来源失败", error);
+      throw Errors.dbError("查询分享链接来源失败");
     }
 
     return new Map((data || []).map((item: TenantShareLinkLite) => [item.id, item]));
@@ -236,6 +310,38 @@ class CustomerSourceRepository {
 
 function unique(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.filter((item): item is string => Boolean(item))));
+}
+
+function serializeEmployee(value: RawEmployeeLite | null): EmployeeLite | null {
+  return value ? {
+    id: value.id,
+    name: value.name,
+    phone_masked: maskSourcePhone(value.phone),
+  } : null;
+}
+
+function serializePlatformLead(
+  value: RawPlatformLeadLite | null,
+): PlatformLeadLite | null {
+  return value ? {
+    id: value.id,
+    phone_masked: maskSourcePhone(value.phone),
+    name: value.name,
+    city: value.city,
+    community: value.community,
+    status: value.status,
+    source: value.source,
+  } : null;
+}
+
+function maskSourcePhone(phone: string | null | undefined) {
+  const value = phone?.trim();
+  if (!value) return null;
+  if (value.length === 11) {
+    return `${value.slice(0, 3)}****${value.slice(-4)}`;
+  }
+  if (value.length <= 4) return value;
+  return `${value.slice(0, 2)}****${value.slice(-2)}`;
 }
 
 function readDedupeResult(metadata: unknown) {
@@ -256,6 +362,10 @@ function isEmployeeShareSource(source: string) {
   ].includes(source);
 }
 
+function isDouyinAppointmentSource(row: CustomerSourceRecord) {
+  return row.source === "douyin_miniapp";
+}
+
 function getSourceLabel(source: string) {
   switch (source) {
     case "platform_lead":
@@ -272,6 +382,8 @@ function getSourceLabel(source: string) {
       return "员工小程序码分享";
     case "douyin":
       return "抖音";
+    case "douyin_miniapp":
+      return "抖音小程序";
     case "referral":
       return "转介绍";
     case "walk_in":

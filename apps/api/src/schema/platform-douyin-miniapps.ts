@@ -1,40 +1,13 @@
+import {
+  DouyinRuntimeConfigSchema as DomainDouyinRuntimeConfigSchema,
+} from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
 import { z } from "zod";
 
-const HttpsUrlSchema = z.url({ protocol: /^https$/ });
 const SensitiveReleaseMetadataPattern = /token|secret|phone|openid/i;
 const ReleaseSemverPattern = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
-export const DouyinRuntimeConfigSchema = z.strictObject({
-  brand: z.strictObject({
-    logo_url: HttpsUrlSchema.nullable(),
-    qualifications: z.array(z.strictObject({
-      title: z.string().trim().min(1).max(40),
-      image_url: HttpsUrlSchema.nullable(),
-    })).max(12),
-  }),
-  theme: z.strictObject({
-    primary_color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),
-    navigation_text_color: z.enum(["black", "white"]),
-  }),
-  features: z.strictObject({
-    cases: z.boolean(),
-    sites: z.boolean(),
-    sms_lead: z.boolean(),
-    douyin_phone: z.literal(false),
-    phone_capture_mode: z.literal("sms"),
-  }),
-  home_banners: z.array(z.strictObject({
-    image_url: HttpsUrlSchema,
-    title: z.string().max(40),
-    subtitle: z.string().max(80),
-  })).max(5),
-  trust_metrics: z.array(z.strictObject({
-    label: z.string().max(16),
-    value: z.string().max(16),
-  })).max(4),
-  privacy_policy_version: z.string().trim().min(1).max(40),
-});
+export const DouyinRuntimeConfigSchema = DomainDouyinRuntimeConfigSchema;
 
 export const PlatformDouyinMiniappListQuerySchema = PaginationQuerySchema.extend({
   page: z.coerce.number().int().min(1, "页码必须大于 0")
@@ -142,17 +115,20 @@ export const PlatformDouyinMiniappSafeRecordSchema = z.object({
   tenant: PlatformTenantSummarySchema.nullable(),
 });
 
-export type DouyinRuntimeConfig = z.infer<typeof DouyinRuntimeConfigSchema>;
+export type DouyinRuntimeConfigInput = z.input<
+  typeof DouyinRuntimeConfigSchema
+>;
+export type DouyinRuntimeConfig = z.output<typeof DouyinRuntimeConfigSchema>;
 export type PlatformDouyinMiniappListQuery = z.infer<
   typeof PlatformDouyinMiniappListQuerySchema
 >;
-export type BindPlatformDouyinMiniappInput = z.infer<
+export type BindPlatformDouyinMiniappInput = z.output<
   typeof BindPlatformDouyinMiniappSchema
 >;
-export type CreateTemplateDevelopmentInstallationInput = z.infer<
+export type CreateTemplateDevelopmentInstallationInput = z.output<
   typeof CreateTemplateDevelopmentInstallationSchema
 >;
-export type UpdatePlatformDouyinMiniappConfigInput = z.infer<
+export type UpdatePlatformDouyinMiniappConfigInput = z.output<
   typeof UpdatePlatformDouyinMiniappConfigSchema
 >;
 export type PlatformDouyinMiniappSafeRecord = z.infer<

@@ -1,4 +1,4 @@
-export const DOUYIN_ENTRY_PATHS = [
+export const DOUYIN_ENTRY_PATH_VALUES = [
   "pages/home/index",
   "pages/company/index",
   "pages/privacy/index",
@@ -6,6 +6,7 @@ export const DOUYIN_ENTRY_PATHS = [
   "pages/case-detail/index",
   "pages/sites/index",
   "pages/site-detail/index",
+  "pages/budget/index",
   "pages/lead/index",
   "pages/lead-success/index",
 ] as const;
@@ -14,7 +15,7 @@ export const DOUYIN_SOURCE_TYPES = [
   "short_video", "live", "search", "profile", "share", "direct", "other",
 ] as const;
 
-export type DouyinEntryPath = (typeof DOUYIN_ENTRY_PATHS)[number];
+export type DouyinEntryPath = (typeof DOUYIN_ENTRY_PATH_VALUES)[number];
 export type DouyinSourceType = (typeof DOUYIN_SOURCE_TYPES)[number];
 
 export type LaunchContext = {
@@ -66,10 +67,12 @@ export type BootstrapData = {
   content: {
     home_banners: HomeBanner[];
     trust_metrics: Array<{ label: string; value: string }>;
+    featured_projects: PublicProject[];
     featured_cases: PublicProject[];
     active_sites: PublicProject[];
   };
   privacy_policy_version: string;
+  contact_sla_text: string;
 };
 
 export type HomeBanner = {
@@ -102,6 +105,7 @@ export type CompanyData = {
 export type PublicProject = {
   id: string;
   title: string;
+  phase: PublicProjectPhase;
   cover_image_url: string | null;
   public_images: string[];
   style_tags: string[];
@@ -116,6 +120,8 @@ export type PublicProject = {
   updated_at: string;
   description: string | null;
 };
+
+export type PublicProjectPhase = "in_progress" | "completed";
 
 export type PaginationMeta = {
   page: number;
@@ -135,6 +141,103 @@ export type PublicSiteLog = {
 };
 
 export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: PaginationMeta };
+
+export type DouyinPropertyCondition = "rough" | "old_house";
+export type DouyinDecorationTier = "economy" | "comfortable" | "quality";
+export type DouyinDecorationScope = "whole_house" | "partial";
+export type DouyinBudgetOptionCode =
+  | "demolition"
+  | "water_electricity_upgrade"
+  | "custom_cabinet";
+export type DouyinBudgetCategoryCode =
+  | "base"
+  | "water_electricity"
+  | "materials"
+  | "custom"
+  | "other";
+export type DouyinBudgetAiStatus = "pending" | "succeeded" | "failed" | "skipped";
+
+export type DouyinBudgetPublicOption = {
+  code: DouyinBudgetOptionCode;
+  label: string;
+  applicable_property_conditions: DouyinPropertyCondition[];
+  applicable_decoration_tiers: DouyinDecorationTier[];
+  applicable_decoration_scopes: DouyinDecorationScope[];
+};
+
+export type DouyinBudgetPublicConfig = {
+  property_conditions: Array<{ value: DouyinPropertyCondition; label: string }>;
+  decoration_tiers: Array<{ value: DouyinDecorationTier; label: string }>;
+  decoration_scopes: Array<{ value: DouyinDecorationScope; label: string }>;
+  options: DouyinBudgetPublicOption[];
+  pricing_version: string;
+  effective_from: string;
+  effective_to: string | null;
+  disclaimer: string;
+};
+
+export type DouyinBudgetEstimateRequest = {
+  area: number;
+  property_condition: DouyinPropertyCondition;
+  decoration_tier: DouyinDecorationTier;
+  decoration_scope: DouyinDecorationScope;
+  layout?: string;
+  style?: string;
+  option_codes: DouyinBudgetOptionCode[];
+  demand?: string;
+};
+
+export type DouyinBudgetEstimateCategory = {
+  category_code: DouyinBudgetCategoryCode;
+  label: string;
+  minimum_amount: number;
+  maximum_amount: number;
+};
+
+export type DouyinBudgetEstimateResult = {
+  id: string;
+  estimate_no: string;
+  minimum_total: number;
+  maximum_total: number;
+  categories: DouyinBudgetEstimateCategory[];
+  calculation_basis: string[];
+  included_items: string[];
+  excluded_items: string[];
+  pricing_version: string;
+  pricing_effective_from: string;
+  pricing_effective_to: string | null;
+  disclaimer: string;
+  ai_status: DouyinBudgetAiStatus;
+};
+
+export type DouyinBudgetAiAnalysis = {
+  summary: string;
+  allocation_advice: string[];
+  risk_factors: string[];
+  onsite_questions: string[];
+};
+
+export type DouyinBudgetAiExplanationResponse = {
+  estimate: DouyinBudgetEstimateResult;
+  ai_analysis: DouyinBudgetAiAnalysis | null;
+};
+
+export const DOUYIN_VISIT_PERIODS = [
+  "morning",
+  "afternoon",
+  "evening",
+] as const;
+
+export type DouyinVisitPeriod = (typeof DOUYIN_VISIT_PERIODS)[number];
+
+export type DouyinMeasurementAppointmentResult = {
+  lead_id: string;
+  appointment_no: string;
+  already_submitted: boolean;
+  existing_customer_linked: boolean;
+  status: "pending_confirmation";
+  message: "量房申请已提交，工作人员将与你确认具体时间";
+};
 
 export type ServiceUnavailableCode =
   | "DOUYIN_INSTALLATION_MISSING"

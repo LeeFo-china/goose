@@ -6,7 +6,11 @@ import {
   isCustomerSource,
   isCustomerStatus,
 } from "@gooes/domain";
-import type { BadgeVariant } from "@/components/customers/customer-mutation-types";
+import type {
+  BadgeVariant,
+  CustomerSourceRecord,
+  DouyinCustomerSourceMetadata,
+} from "@/components/customers/customer-mutation-types";
 
 export type CustomerDetailMeta = {
   label: string;
@@ -97,4 +101,73 @@ export function customerDedupeResultLabel(result: string | null | undefined) {
   if (result === "created_customer") return "新客户线索";
 
   return "未识别结果";
+}
+
+export function douyinAppointmentStatusLabel(status: string | null | undefined) {
+  if (status === "pending_confirmation") return "待确认";
+  if (status === "confirmed") return "已确认";
+  if (status === "completed") return "已完成";
+  if (status === "canceled") return "已取消";
+  if (status === "invalid") return "无效";
+  return "状态未知";
+}
+
+export function douyinAppointmentStatusVariant(
+  status: string | null | undefined,
+): BadgeVariant {
+  if (status === "completed") return "success";
+  if (status === "confirmed") return "default";
+  if (status === "pending_confirmation") return "warning";
+  if (status === "canceled" || status === "invalid") return "danger";
+  return "outline";
+}
+
+export function formatDouyinBudgetRange(
+  minimum: number | null | undefined,
+  maximum: number | null | undefined,
+) {
+  if (typeof minimum !== "number"
+    || typeof maximum !== "number"
+    || !Number.isSafeInteger(minimum)
+    || !Number.isSafeInteger(maximum)) {
+    return "-";
+  }
+  return `¥${minimum.toLocaleString("zh-CN")} - ¥${maximum.toLocaleString("zh-CN")}`;
+}
+
+export function getDouyinCustomerSourceMetadata(
+  source: CustomerSourceRecord,
+): DouyinCustomerSourceMetadata | null {
+  if (source.source !== "douyin" || !isRecord(source.metadata)) return null;
+  const metadata = source.metadata;
+  if (!isNullableString(metadata.appointment_no)
+    || !isNullableString(metadata.status)
+    || !isNullableString(metadata.estimate_no)
+    || !isNullableNumber(metadata.minimum_total)
+    || !isNullableNumber(metadata.maximum_total)
+    || !isNullableString(metadata.ai_status)
+    || !isNullableString(metadata.ai_summary)
+    || !isStringArray(metadata.allocation_advice)
+    || !isStringArray(metadata.risk_factors)
+    || !isStringArray(metadata.onsite_questions)) {
+    return null;
+  }
+
+  return metadata as DouyinCustomerSourceMetadata;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isNullableNumber(value: unknown): value is number | null {
+  return value === null || typeof value === "number";
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
 }

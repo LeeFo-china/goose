@@ -3,24 +3,21 @@
 <view tt:else class="page-content home-page">
   <tenant-brand name="{{brandName}}" city="{{city}}" logo-url="{{logoUrl}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" />
   <view class="home-block home-hero">
-    <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" primary-color="{{primaryColor}}" bindaction="onLead" />
+    <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" action-label="开始预算初算" primary-color="{{primaryColor}}" bindaction="onBudget" />
   </view>
   <view class="home-block"><trust-metrics items="{{metrics}}" /></view>
 
-  <view tt:if="{{casesEnabled}}" class="home-section">
-    <view class="section-heading"><view class="ui-section-title">精选装修案例</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewCases">查看全部</button></view>
-    <view tt:if="{{featuredCases.length}}" class="card-list">
-      <view tt:for="{{featuredCases}}" tt:key="id"><case-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onCaseSelect" /></view>
-    </view>
-    <empty-state tt:else title="案例正在整理" description="装修公司尚未发布公开案例。" />
+  <view class="home-section budget-entry ui-card">
+    <view class="budget-copy"><view class="ui-section-title">先算预算，再规划装修</view><view class="budget-description">选择面积、房屋现状和装修档次，立即查看规则预算区间。无需填写联系方式。</view></view>
+    <button class="budget-action ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBudget">开始预算初算</button>
   </view>
 
-  <view tt:if="{{sitesEnabled}}" class="home-section">
-    <view class="section-heading"><view class="ui-section-title">在建工地</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewSites">查看全部</button></view>
-    <view tt:if="{{activeSites.length}}" class="site-list">
-      <view tt:for="{{activeSites}}" tt:key="id"><site-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onSiteSelect" /></view>
+  <view class="home-section">
+    <view class="section-heading"><view class="ui-section-title">项目实景</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewProjects">查看全部项目</button></view>
+    <view tt:if="{{featuredProjects.length}}" class="card-list">
+      <view tt:for="{{featuredProjects}}" tt:key="id" class="project-card"><view class="project-phase" style="border-color: {{primaryColor}}">{{item.phaseLabel}}</view><case-card item="{{item}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" bindselect="onProjectSelect" /></view>
     </view>
-    <empty-state tt:else title="暂无公开工地" description="在建项目将由装修公司确认公开后展示。" />
+    <empty-state tt:else title="项目实景正在整理" description="装修公司尚未发布可公开的项目内容。" />
   </view>
 
   <view class="home-section">

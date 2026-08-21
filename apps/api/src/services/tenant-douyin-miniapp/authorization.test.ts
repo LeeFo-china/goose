@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import { createHash, createSecretKey } from "node:crypto";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "@gooes/domain";
 
 import { Errors } from "@/errors/error-factory";
 import type {
@@ -46,6 +47,7 @@ const runtimeConfig = {
   home_banners: [],
   trust_metrics: [],
   privacy_policy_version: "2026-07-19",
+  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
 };
 
 function tenantContext(tenantId = TENANT_ID): AuthContext {

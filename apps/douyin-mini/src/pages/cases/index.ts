@@ -1,6 +1,5 @@
 import type { DouyinAppContext } from "../../app";
-import { fetchCases } from "../../api/cases";
-import { isApiRequestErrorCode } from "../../api/request";
+import { fetchProjects } from "../../api/projects";
 import { resolveThemeColor } from "../../components/theme";
 import type { PublicProject } from "../../models";
 import { navigateToEntityDetail } from "../../platform/navigation";
@@ -11,23 +10,28 @@ import {
   resolvePaginationRequest,
 } from "../../utils/pagination";
 import {
-  clearCaseFilters,
-  hasActiveCaseFilters,
-  toggleCaseFilter,
-} from "./filter-state";
+  createProjectPhaseSelection,
+  PROJECT_PHASE_FILTERS,
+  projectFilterToPhase,
+  projectPhaseLabel,
+  type ProjectFilter,
+} from "./project-phase";
+
+type ProjectFilterSnapshot = {
+  selectedPhase: ProjectFilter;
+};
+
+type ProjectListItem = PublicProject & { phaseLabel: string };
 
 Page({
   pagination: createPaginationState<PublicProject>(20),
   data: {
-    items: [] as PublicProject[],
+    items: [] as ProjectListItem[],
     firstLoading: true,
     firstError: false,
     paginationStatus: "idle",
-    styleOptions: [] as string[],
-    layoutOptions: [] as string[],
-    selectedStyle: "",
-    selectedLayout: "",
-    disabled: false,
+    selectedPhase: "all" as ProjectFilter,
+    phaseFilters: PROJECT_PHASE_FILTERS,
     featureReady: false,
     primaryColor: "#191817",
     primaryTextColor: "#FFFFFF",
@@ -55,23 +59,17 @@ Page({
         primaryTextColor: theme.primaryTextColor,
         activeFilterStyle: `border-color: ${theme.primaryColor}; background-color: ${theme.primaryColor}; color: ${theme.primaryTextColor};`,
       };
-      if (!bootstrap.features.cases) {
-        this.setData({
-          firstLoading: false,
-          disabled: true,
-          featureReady: true,
-          ...themeData,
-        });
-        return;
-      }
       this.setData({ featureReady: true, ...themeData });
       await this.load("loadMore");
     } catch {
       this.setData({ firstLoading: false, firstError: true });
     }
   },
-  async load(mode: "loadMore" | "refresh" | "retry") {
-    if (!this.data.featureReady || this.data.disabled) {
+  async load(
+    mode: "loadMore" | "refresh" | "retry",
+    filterSnapshot?: ProjectFilterSnapshot,
+  ) {
+    if (!this.data.featureReady) {
       if (mode === "refresh") void tt.stopPullDownRefresh({});
       return;
     }
@@ -81,30 +79,16 @@ Page({
     this.pagination = pending.state;
     this.syncState();
     try {
-      const result = await fetchCases(getApp<DouyinAppContext>().api, {
+      const selectedPhase = filterSnapshot?.selectedPhase ?? this.data.selectedPhase;
+      const phase = projectFilterToPhase(selectedPhase);
+      const result = await fetchProjects(getApp<DouyinAppContext>().api, {
         page: pending.request.page,
         pageSize: pending.request.pageSize,
-        ...(this.data.selectedStyle ? { style: this.data.selectedStyle } : {}),
-        ...(this.data.selectedLayout ? { layout: this.data.selectedLayout } : {}),
+        ...(phase ? { phase } : {}),
       });
-      const isCurrentRequest = pending.request.sequence === this.pagination.requestSequence;
       this.pagination = resolvePaginationRequest(this.pagination, pending.request, result);
-      if (isCurrentRequest) {
-        this.setData({
-          styleOptions: mergeOptions(this.data.styleOptions,
-            result.items.flatMap((item) => item.style_tags)),
-          layoutOptions: mergeOptions(this.data.layoutOptions,
-            result.items.map((item) => item.layout)
-              .filter((item): item is string => Boolean(item))),
-        });
-      }
-    } catch (error) {
-      if (isApiRequestErrorCode(error, "DOUYIN_CONTENT_FEATURE_DISABLED")) {
-        this.pagination = createPaginationState<PublicProject>(20);
-        this.setData({ disabled: true });
-      } else {
-        this.pagination = rejectPaginationRequest(this.pagination, pending.request);
-      }
+    } catch {
+      this.pagination = rejectPaginationRequest(this.pagination, pending.request);
     } finally {
       this.syncState();
       if (mode === "refresh") void tt.stopPullDownRefresh({});
@@ -112,7 +96,10 @@ Page({
   },
   syncState() {
     this.setData({
-      items: this.pagination.items,
+      items: this.pagination.items.map((project) => ({
+        ...project,
+        phaseLabel: projectPhaseLabel(project.phase),
+      })),
       firstLoading: this.pagination.status === "loading" && this.pagination.items.length === 0,
       firstError: this.pagination.status === "error" && this.pagination.items.length === 0,
       paginationStatus: this.pagination.status,
@@ -120,38 +107,21 @@ Page({
   },
   onRetry() { void this.load("retry"); },
   onLoadMore() { void this.load("loadMore"); },
-  onSelectStyle(event: { currentTarget: { dataset: { value?: string } } }) {
-    this.applyFilters(toggleCaseFilter(
-      this.data,
-      "style",
-      event.currentTarget.dataset.value || "",
-    ));
-  },
-  onSelectLayout(event: { currentTarget: { dataset: { value?: string } } }) {
-    this.applyFilters(toggleCaseFilter(
-      this.data,
-      "layout",
-      event.currentTarget.dataset.value || "",
-    ));
-  },
-  onClearFilters() {
-    if (!hasActiveCaseFilters(this.data)) return;
-    this.applyFilters(clearCaseFilters());
-  },
-  applyFilters(filters: { selectedStyle: string; selectedLayout: string }) {
+  onSelectPhase(event: { currentTarget: { dataset: { value?: string } } }) {
+    const selection = createProjectPhaseSelection(
+      this.data.selectedPhase,
+      event.currentTarget.dataset.value,
+    );
+    if (!selection) return;
     this.setData({
-      ...filters,
-      hasActiveFilters: hasActiveCaseFilters(filters),
+      selectedPhase: selection.selectedPhase,
+      hasActiveFilters: selection.selectedPhase !== "all",
     });
-    void this.load("refresh");
+    void this.load(selection.loadMode, selection.filterSnapshot);
   },
-  onCaseSelect(event: { detail: { id?: string } }) {
+  onProjectSelect(event: { detail: { id?: string } }) {
     if (!event.detail.id) return;
     void navigateToEntityDetail("case", event.detail.id)
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },
 });
-
-function mergeOptions(current: string[], incoming: string[]) {
-  return [...new Set([...current, ...incoming])].slice(0, 8);
-}

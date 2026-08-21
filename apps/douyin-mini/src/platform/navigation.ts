@@ -2,6 +2,7 @@ import type { ServiceUnavailableCode } from "../models";
 import { ApiRequestError } from "../api/request";
 
 const PAGE_PATHS = new Set([
+  "pages/sites/index",
   "pages/company/index",
   "pages/privacy/index",
   "pages/case-detail/index",
@@ -12,7 +13,7 @@ const PAGE_PATHS = new Set([
 const TAB_PATHS = {
   home: "pages/home/index",
   cases: "pages/cases/index",
-  sites: "pages/sites/index",
+  budget: "pages/budget/index",
   lead: "pages/lead/index",
 } as const;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -32,8 +33,7 @@ export function buildTabRoute(tab: TabName): string {
 
 export function buildEntityDetailRoute(type: "case" | "site", id: string): string {
   if (!UUID_PATTERN.test(id)) throw invalidNavigationTarget();
-  const path = type === "case" ? "pages/case-detail/index" : "pages/site-detail/index";
-  return `${buildPageRoute(path)}?id=${encodeURIComponent(id)}`;
+  return `${buildPageRoute("pages/case-detail/index")}?id=${encodeURIComponent(id)}`;
 }
 
 export function navigateToPage(path: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { fetchCaseDetail, fetchCases } from "./cases";
 import { fetchCompany } from "./company";
+import { parseBootstrap, parseProject } from "./content-validation";
 import { ApiClient, type TransportInput } from "./request";
 
 const PROJECT_ID = "11111111-1111-4111-8111-111111111111";
@@ -35,6 +36,145 @@ const project = {
 };
 
 describe("Douyin public content API clients", () => {
+  test("strictly parses unified phases and rejects unknown values", () => {
+    expect(parseProject({ ...project, phase: "in_progress" })?.phase)
+      .toBe("in_progress");
+    expect(parseProject({ ...project, phase: "completed" })?.phase)
+      .toBe("completed");
+    expect(parseProject({ ...project, phase: "unknown" })).toBeNull();
+  });
+
+  test("accepts public budget bands through eighty characters", () => {
+    for (const length of [40, 41, 80]) {
+      expect(parseProject({
+        ...project,
+        phase: "completed",
+        budget_band: "预".repeat(length),
+      })?.budget_band).toHaveLength(length);
+    }
+    expect(parseProject({
+      ...project,
+      phase: "completed",
+      budget_band: "预".repeat(81),
+    })).toBeNull();
+
+    const base = {
+      installation: { status: "active", template_version: "1.0.0" },
+      company: {
+        name: "示例装饰", logo_url: null, summary: null, service_phone: "4000000000",
+        public_address: null,
+        address_region: { province: null, city: "郑州市", district: null },
+        service_regions: [], qualifications: [],
+      },
+      theme: { primary_color: "#191817", navigation_text_color: "black" },
+      features: {
+        cases: true, sites: true, sms_lead: true, douyin_phone: false,
+        phone_capture_mode: "sms",
+      },
+      content: { home_banners: [], trust_metrics: [] },
+      privacy_policy_version: "2026-07-19",
+    };
+    for (const length of [41, 80]) {
+      expect(parseBootstrap({
+        ...base,
+        content: {
+          ...base.content,
+          featured_projects: [{
+            ...project,
+            phase: "completed",
+            budget_band: "预".repeat(length),
+          }],
+        },
+      })?.content.featured_projects[0]?.budget_band).toHaveLength(length);
+    }
+  });
+
+  test("normalizes featured projects while tolerating legacy bootstrap fields", () => {
+    const base = {
+      installation: { status: "active", template_version: "1.0.0" },
+      company: {
+        name: "示例装饰", logo_url: null, summary: null, service_phone: "4000000000",
+        public_address: null,
+        address_region: { province: null, city: "郑州市", district: null },
+        service_regions: [], qualifications: [],
+      },
+      theme: { primary_color: "#191817", navigation_text_color: "black" },
+      features: {
+        cases: true, sites: true, sms_lead: true, douyin_phone: false,
+        phone_capture_mode: "sms",
+      },
+      content: { home_banners: [], trust_metrics: [] },
+      privacy_policy_version: "2026-07-19",
+    };
+    const current = parseBootstrap({
+      ...base,
+      content: {
+        ...base.content,
+        featured_projects: [{ ...project, phase: "in_progress" }],
+        featured_cases: [project],
+        active_sites: [project],
+      },
+    });
+    expect(current?.content.featured_projects).toHaveLength(1);
+    expect(current?.content.featured_projects[0]?.phase).toBe("in_progress");
+    expect(current?.content.featured_cases).toHaveLength(1);
+    expect(current?.content.active_sites).toHaveLength(1);
+
+    const legacy = parseBootstrap({
+      ...base,
+      content: {
+        ...base.content,
+        featured_cases: [project],
+        active_sites: [project],
+      },
+    });
+    expect(legacy?.content.featured_projects).toHaveLength(1);
+    expect(legacy?.content.featured_projects[0]?.phase).toBe("in_progress");
+  });
+
+  test("requires at least one current or legacy bootstrap project feed field", () => {
+    const base = {
+      installation: { status: "active", template_version: "1.0.0" },
+      company: {
+        name: "示例装饰", logo_url: null, summary: null, service_phone: "4000000000",
+        public_address: null,
+        address_region: { province: null, city: "郑州市", district: null },
+        service_regions: [], qualifications: [],
+      },
+      theme: { primary_color: "#191817", navigation_text_color: "black" },
+      features: {
+        cases: true, sites: true, sms_lead: true, douyin_phone: false,
+        phone_capture_mode: "sms",
+      },
+      content: { home_banners: [], trust_metrics: [] },
+      privacy_policy_version: "2026-07-19",
+    };
+
+    expect(parseBootstrap(base)).toBeNull();
+
+    const current = parseBootstrap({
+      ...base,
+      content: { ...base.content, featured_projects: [] },
+    });
+    expect(current?.content).toMatchObject({
+      featured_projects: [], featured_cases: [], active_sites: [],
+    });
+
+    const legacyCase = parseBootstrap({
+      ...base,
+      content: { ...base.content, featured_cases: [project] },
+    });
+    expect(legacyCase?.content.featured_projects).toHaveLength(1);
+    expect(legacyCase?.content.active_sites).toEqual([]);
+
+    const legacySite = parseBootstrap({
+      ...base,
+      content: { ...base.content, active_sites: [project] },
+    });
+    expect(legacySite?.content.featured_projects).toHaveLength(1);
+    expect(legacySite?.content.featured_cases).toEqual([]);
+  });
+
   test("fetches and reconstructs only public company fields", async () => {
     const client = clientWith((input) => {
       expect(input.path).toBe("/douyin-mini/company");

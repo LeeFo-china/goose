@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "@gooes/domain";
 import type { PlatformDouyinMiniappSafeRecord } from "@/schema/platform-douyin-miniapps";
 import type { AuthContext } from "@/services/authorization";
 
@@ -32,6 +33,7 @@ const runtimeConfig = {
   home_banners: [],
   trust_metrics: [{ label: "服务客户", value: "1200+" }],
   privacy_policy_version: "2026-07-19",
+  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
 };
 
 const installation: PlatformDouyinMiniappSafeRecord = {

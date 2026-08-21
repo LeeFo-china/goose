@@ -1,4 +1,8 @@
-import type { LaunchContext } from "../models";
+import type {
+  DouyinMeasurementAppointmentResult,
+  DouyinVisitPeriod,
+  LaunchContext,
+} from "../models";
 import { ApiClient, ApiRequestError } from "./request";
 
 export type SendLeadSmsInput = {
@@ -15,10 +19,10 @@ export type SubmitLeadInput = {
   name: string;
   phone: string;
   sms_code: string;
-  community?: string;
-  area?: number;
-  budget?: string;
-  start_time?: string;
+  community: string;
+  preferred_visit_date: string;
+  preferred_visit_period: DouyinVisitPeriod;
+  budget_estimate_id?: string;
   demand?: string;
   privacy_policy_version: string;
   consented_at: string;
@@ -26,14 +30,18 @@ export type SubmitLeadInput = {
   attribution: LaunchContext;
 };
 
-export type SubmitLeadResult = {
-  lead_id: string;
-  already_submitted: boolean;
-  updated_existing: boolean;
-  message: "你已提交预约，我们将尽快联系你";
-};
+export type SubmitLeadResult = DouyinMeasurementAppointmentResult;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const APPOINTMENT_NO_PATTERN = /^DYLF-[0-9]{8}-[0-9]{6}$/;
+const APPOINTMENT_RESULT_KEYS = [
+  "lead_id",
+  "appointment_no",
+  "already_submitted",
+  "existing_customer_linked",
+  "status",
+  "message",
+] as const;
 
 export async function sendLeadSms(
   client: ApiClient,
@@ -67,21 +75,34 @@ export async function submitLead(
     data: input,
   });
   const record = toRecord(value);
-  if (!record
+  if (!record || !hasOnlyKeys(record, APPOINTMENT_RESULT_KEYS)
     || typeof record.lead_id !== "string"
     || !UUID_PATTERN.test(record.lead_id)
+    || typeof record.appointment_no !== "string"
+    || !APPOINTMENT_NO_PATTERN.test(record.appointment_no)
     || typeof record.already_submitted !== "boolean"
-    || typeof record.updated_existing !== "boolean"
-    || (record.updated_existing && !record.already_submitted)
-    || record.message !== "你已提交预约，我们将尽快联系你") {
+    || typeof record.existing_customer_linked !== "boolean"
+    || record.status !== "pending_confirmation"
+    || record.message !== "量房申请已提交，工作人员将与你确认具体时间") {
     throw invalidResponse();
   }
   return {
     lead_id: record.lead_id,
+    appointment_no: record.appointment_no,
     already_submitted: record.already_submitted,
-    updated_existing: record.updated_existing,
+    existing_customer_linked: record.existing_customer_linked,
+    status: "pending_confirmation",
     message: record.message,
   };
+}
+
+function hasOnlyKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
+  const actualKeys = Object.keys(value);
+  return actualKeys.length === keys.length
+    && actualKeys.every((key) => keys.includes(key));
 }
 
 function toRecord(value: unknown): Record<string, unknown> | null {

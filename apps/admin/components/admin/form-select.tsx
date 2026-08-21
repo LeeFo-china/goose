@@ -22,6 +22,8 @@ export function FormSelect({
   disabled,
   invalid,
   triggerClassName,
+  "aria-describedby": ariaDescribedBy,
+  "aria-required": ariaRequired,
   onChange,
 }: {
   id: string;
@@ -31,12 +33,21 @@ export function FormSelect({
   disabled?: boolean;
   invalid?: boolean;
   triggerClassName?: string;
+  "aria-describedby"?: string;
+  "aria-required"?: boolean | "true" | "false";
   onChange: (value: string) => void;
 }) {
+  const selectedOption = options.find((option) => option.value === value);
   return (
-    <Select value={value} disabled={disabled} onValueChange={onChange}>
-      <SelectTrigger id={id} aria-invalid={invalid} className={triggerClassName}>
-        <SelectValue placeholder={placeholder} />
+    <Select value={selectedOption?.value ?? ""} disabled={disabled} onValueChange={onChange}>
+      <SelectTrigger
+        id={id}
+        aria-describedby={ariaDescribedBy}
+        aria-required={ariaRequired}
+        aria-invalid={invalid}
+        className={triggerClassName}
+      >
+        <SelectValue placeholder={placeholder}>{selectedOption?.label}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectGroup>

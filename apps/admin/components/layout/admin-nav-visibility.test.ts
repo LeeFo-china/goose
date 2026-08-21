@@ -91,6 +91,20 @@ describe("admin nav visibility", () => {
     expect(hasMenuItemAccess(createPlatformSuperAdminSession(), item!)).toBe(false);
   });
 
+  test("shows tenant budget pricing only with Douyin management permission", () => {
+    const item = tenantNavGroups.flatMap((group) => group.items).find(
+      (candidate) => candidate.href === "/douyin-miniapp/budget",
+    );
+
+    expect(item?.label).toBe("预算报价配置");
+    expect(item?.permission).toBe("douyin_miniapp.manage");
+    expect(hasMenuItemAccess(createSession([]), item!)).toBe(false);
+    expect(hasMenuItemAccess(createSession([{
+      code: "douyin_miniapp.manage",
+      scope: "all",
+    }]), item!)).toBe(true);
+  });
+
   test("consolidates tenant operations into one platform nav item", () => {
     const platformItems = platformNavGroups.flatMap((group) => group.items);
     const tenantManagementItem = platformItems.find(
@@ -240,13 +254,29 @@ describe("admin nav visibility", () => {
     ]);
   });
 
-  test("shows the Douyin miniapp group only with tenant read permission", () => {
+  test("shows each Douyin miniapp entry only with its tenant permission", () => {
     const withoutPermission = getVisibleGroups(
       createSession([]),
       tenantNavGroups,
     );
     const withPermission = getVisibleGroups(
       createSession([{ code: "douyin_miniapp.read", scope: "all" }]),
+      tenantNavGroups,
+    );
+    const withManagePermission = getVisibleGroups(
+      createSession([{ code: "douyin_miniapp.manage", scope: "all" }]),
+      tenantNavGroups,
+    );
+    const withLeadPermission = getVisibleGroups(
+      createSession([{ code: "douyin_lead.read", scope: "all" }]),
+      tenantNavGroups,
+    );
+    const withBothPermissions = getVisibleGroups(
+      createSession([
+        { code: "douyin_miniapp.read", scope: "all" },
+        { code: "douyin_miniapp.manage", scope: "all" },
+        { code: "douyin_lead.read", scope: "all" },
+      ]),
       tenantNavGroups,
     );
 
@@ -257,5 +287,17 @@ describe("admin nav visibility", () => {
       withPermission.find((group) => group.label === "抖音小程序")?.items
         .map((item) => item.label),
     ).toEqual(["小程序工作台"]);
+    expect(
+      withManagePermission.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["项目实景内容", "预算报价配置"]);
+    expect(
+      withLeadPermission.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["抖音线索"]);
+    expect(
+      withBothPermissions.find((group) => group.label === "抖音小程序")?.items
+        .map((item) => item.label),
+    ).toEqual(["小程序工作台", "抖音线索", "项目实景内容", "预算报价配置"]);
   });
 });

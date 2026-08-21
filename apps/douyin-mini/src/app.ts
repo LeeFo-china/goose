@@ -3,15 +3,16 @@ import { fetchBootstrap } from "./api/bootstrap";
 import { ApiClient, DouyinRequestTransport } from "./api/request";
 import { API_TIMEOUT_MS, resolveApiBaseUrl } from "./config";
 import type { BootstrapData, LaunchContext } from "./models";
+import {
+  AnalyticsQueue,
+  type ClientAnalyticsEventName,
+} from "./platform/analytics";
+import { readBudgetLeadContext } from "./platform/budget-lead-context";
 import { readDouyinEnvironment } from "./platform/env-info";
 import { readDeploymentConfig } from "./platform/ext-config";
 import { captureLaunchContext } from "./platform/launch-context";
 import { loginOnce } from "./platform/login";
 import { navigateToServiceUnavailable } from "./platform/navigation";
-import {
-  AnalyticsQueue,
-  type ClientAnalyticsEventName,
-} from "./platform/analytics";
 import {
   clearStoredSession,
   readStoredSession,
@@ -65,6 +66,7 @@ App({
   launchContext: DEFAULT_LAUNCH_CONTEXT,
   startup: Promise.resolve(null) as Promise<BootstrapData | null>,
   onLaunch(options) {
+    readBudgetLeadContext();
     this.launchContext = captureLaunchContext(options);
     this.analytics.record({
       event_id: createUuidV4IdempotencyKey(),

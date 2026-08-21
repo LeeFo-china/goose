@@ -5,6 +5,13 @@ const getCustomerPropertySummaries = mock(async () => []);
 const getLatestFollowUpMap = mock(async () => new Map());
 const getCustomerSourceSummaryMap = mock(async () => new Map());
 const getFollowUpState = mock(() => "none");
+const serializeCustomerPhoneFields = mock(() => ({
+  phone: "13200001003",
+  phone_masked: "132****1003",
+  can_view_phone: true,
+  can_call_phone: true,
+  can_copy_phone: true,
+}));
 const warnLog = mock(() => undefined);
 const getState = mock(async () => ({
   workflow_state: {
@@ -51,13 +58,7 @@ mock.module("@/services/customer-sources", () => ({
 mock.module("@/services/customer-phone-privacy", () => ({
   customerPhonePrivacyService: {
     maskPhone: (phone: string | null | undefined) => phone ?? null,
-    serializeCustomerPhoneFields: () => ({
-      phone: "13200001003",
-      phone_masked: "132****1003",
-      can_view_phone: true,
-      can_call_phone: true,
-      can_copy_phone: true,
-    }),
+    serializeCustomerPhoneFields,
   },
 }));
 
@@ -86,6 +87,7 @@ describe("CustomerBaseController.buildCustomerDetailResponse", () => {
     getLatestFollowUpMap.mockClear();
     getCustomerSourceSummaryMap.mockClear();
     getFollowUpState.mockClear();
+    serializeCustomerPhoneFields.mockClear();
     getState.mockClear();
     warnLog.mockClear();
   });
@@ -204,5 +206,71 @@ describe("CustomerBaseController.buildCustomerDetailResponse", () => {
       }),
       "[customer-detail] workflow_state load failed",
     );
+  });
+
+  test("keeps full customer phone permission-gated in detail responses", async () => {
+    class TestCustomerController extends CustomerBaseController {
+      buildDetail(customer: Record<string, unknown>, options: Record<string, unknown>) {
+        return this.buildCustomerDetailResponse(customer as never, options as never);
+      }
+    }
+
+    const response = await new TestCustomerController().buildDetail(
+      {
+        id: "customer-1",
+        name: "李女士",
+        phone: "13800138000",
+        status: "potential",
+        owner_id: null,
+        avatar: null,
+        douyin_screenshot_images: [],
+      },
+      {
+        tenantId: "tenant-1",
+        phonePrivacyContext: {
+          authContext: {
+            tenantId: "tenant-1",
+            employeeId: "employee-1",
+            roleCodes: [],
+            permissions: [{ code: "customer.read" }],
+          },
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      phone: "13200001003",
+      phone_masked: "132****1003",
+      can_view_phone: true,
+      can_call_phone: true,
+      can_copy_phone: true,
+    });
+    expect(serializeCustomerPhoneFields).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authContext: expect.objectContaining({ tenantId: "tenant-1" }),
+      }),
+      { id: "customer-1", owner_id: null, phone: "13800138000" },
+    );
+    expect(getCustomerSourceSummaryMap).toHaveBeenCalledWith({
+      authContext: expect.objectContaining({ tenantId: "tenant-1" }),
+      customerIds: ["customer-1"],
+    });
+  });
+
+  test("keeps the detail activity source query bounded to twenty", async () => {
+    const controller = await Bun.file(
+      new URL("./extras-controller.ts", import.meta.url),
+    ).text();
+    const activityStart = controller.indexOf("const [followUps, sources]");
+    const activityEnd = controller.indexOf(
+      "return ResponseHandler.success",
+      activityStart,
+    );
+    const activity = controller.slice(activityStart, activityEnd);
+
+    expect(activity).toContain("listAccessibleCustomerSources");
+    expect(activity).toContain("page: 1");
+    expect(activity).toContain("pageSize: 20");
+    expect(controller).toContain("detail_activity");
   });
 });

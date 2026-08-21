@@ -1,17 +1,10 @@
 import { z } from "zod";
+import {
+  DouyinEntryPathSchema,
+  DOUYIN_PROJECT_PHASE_VALUES,
+  DOUYIN_VISIT_PERIOD_VALUES,
+} from "@gooes/domain";
 import { PaginationQuerySchema } from "@/schema/request";
-
-const DouyinEntryPathSchema = z.enum([
-  "pages/home/index",
-  "pages/company/index",
-  "pages/privacy/index",
-  "pages/cases/index",
-  "pages/case-detail/index",
-  "pages/sites/index",
-  "pages/site-detail/index",
-  "pages/lead/index",
-  "pages/lead-success/index",
-]);
 
 const AttributionCodeSchema = z.string().trim()
   .regex(/^[A-Za-z0-9_-]{1,64}$/, "归因编号格式无效");
@@ -46,6 +39,10 @@ export const DouyinCaseListQuerySchema = PaginationQuerySchema.extend({
   layout: z.string().trim().min(1).max(40).optional(),
 }).strict();
 
+export const DouyinProjectListQuerySchema = DouyinCaseListQuerySchema.extend({
+  phase: z.enum(DOUYIN_PROJECT_PHASE_VALUES).optional(),
+}).strict();
+
 export const DouyinContentIdParamsSchema = z.strictObject({
   id: z.uuid("无效的公开内容 ID"),
 });
@@ -61,10 +58,10 @@ export const DouyinLeadRequestSchema = z.strictObject({
   name: z.string().trim().min(1).max(40),
   phone: PhoneSchema,
   sms_code: z.string().trim().regex(/^[0-9]{6}$/, "验证码格式无效"),
-  community: z.string().trim().min(1).max(80).optional(),
-  area: z.number().positive().max(100000).optional(),
-  budget: z.string().trim().min(1).max(40).optional(),
-  start_time: z.string().trim().min(1).max(40).optional(),
+  community: z.string().trim().min(1).max(80),
+  preferred_visit_date: z.iso.date("期望量房日期格式无效"),
+  preferred_visit_period: z.enum(DOUYIN_VISIT_PERIOD_VALUES),
+  budget_estimate_id: z.uuid("预算编号格式无效").optional(),
   demand: z.string().trim().min(1).max(1000).optional(),
   privacy_policy_version: z.string().trim().min(1).max(40),
   consented_at: z.iso.datetime({ offset: true }),
@@ -95,6 +92,7 @@ export type DouyinMiniappSessionRequest = z.infer<
 >;
 export type DouyinContentPageQuery = z.infer<typeof DouyinContentPageQuerySchema>;
 export type DouyinCaseListQuery = z.infer<typeof DouyinCaseListQuerySchema>;
+export type DouyinProjectListQuery = z.infer<typeof DouyinProjectListQuerySchema>;
 export type DouyinLeadSmsRequest = z.infer<typeof DouyinLeadSmsRequestSchema>;
 export type DouyinLeadRequest = z.infer<typeof DouyinLeadRequestSchema>;
 export type DouyinAnalyticsRequest = z.infer<typeof DouyinAnalyticsRequestSchema>;

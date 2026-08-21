@@ -27,7 +27,20 @@ export type PropertySummary = {
 export type CustomerSourceEmployee = {
   id: string;
   name: string | null;
-  phone: string | null;
+  phone_masked: string | null;
+};
+
+export type DouyinCustomerSourceMetadata = {
+  appointment_no: string | null;
+  status: "pending_confirmation" | "confirmed" | "completed" | "canceled" | "invalid" | null;
+  estimate_no: string | null;
+  minimum_total: number | null;
+  maximum_total: number | null;
+  ai_status: "pending" | "succeeded" | "failed" | "skipped" | null;
+  ai_summary: string | null;
+  allocation_advice: string[];
+  risk_factors: string[];
+  onsite_questions: string[];
 };
 
 export type CustomerSourceRecord = {
@@ -42,7 +55,7 @@ export type CustomerSourceRecord = {
   assigned_by?: CustomerSourceEmployee | null;
   platform_lead?: {
     id: string;
-    phone: string | null;
+    phone_masked: string | null;
     name: string | null;
     city: string | null;
     community: string | null;

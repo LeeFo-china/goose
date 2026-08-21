@@ -79,6 +79,7 @@ function FieldError({
   className,
   children,
   errors,
+  ...props
 }: React.HTMLAttributes<HTMLParagraphElement> & {
   errors?: Array<{ message?: string } | undefined>;
 }) {
@@ -86,7 +87,7 @@ function FieldError({
   if (!message) return null;
 
   return (
-    <p className={cn("text-xs font-medium text-destructive", className)}>
+    <p className={cn("text-xs font-medium text-destructive", className)} {...props}>
       {message}
     </p>
   );

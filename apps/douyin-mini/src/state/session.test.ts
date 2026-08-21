@@ -3,6 +3,7 @@ import {
   ApiClient,
   ApiRequestError,
   DouyinRequestTransport,
+  type ApiOperationClock,
   type TransportInput,
 } from "../api/request";
 import { captureLaunchContext } from "../platform/launch-context";
@@ -17,6 +18,33 @@ const launchContext = {
   source_type: "direct" as const,
 };
 const now = 1_800_000_000_000;
+
+function operationClockHarness() {
+  let current = 1_000;
+  const timers: Array<{ at: number; active: boolean; callback: () => void }> = [];
+  const clock: ApiOperationClock = {
+    now: () => current,
+    schedule(callback, delayMs) {
+      const timer = { at: current + delayMs, active: true, callback };
+      timers.push(timer);
+      return () => { timer.active = false; };
+    },
+  };
+  return {
+    clock,
+    elapse: (milliseconds: number) => { current += milliseconds; },
+    expire: (milliseconds: number) => {
+      current += milliseconds;
+      for (const timer of timers) {
+        if (timer.active && timer.at <= current) {
+          timer.active = false;
+          timer.callback();
+        }
+      }
+    },
+    activeTimers: () => timers.filter((timer) => timer.active).length,
+  };
+}
 
 function dependencies(overrides: Partial<SessionDependencies> = {}): SessionDependencies {
   return {
@@ -205,6 +233,101 @@ describe("Douyin native session state", () => {
         code: "TENANT_NOT_AVAILABLE",
         message: "装修公司服务已暂停",
       });
+  });
+
+  test("request transport honors a bounded per-call deadline without forwarding it", async () => {
+    const abort = mock(() => {});
+    const requestMock = mock((options: Parameters<typeof tt.request>[0]) => {
+      setTimeout(() => options.success?.({
+        errMsg: "request:ok", statusCode: 200, header: {}, data: { data: { ok: true } },
+      }), 5);
+      return { abort };
+    });
+    const transport = new DouyinRequestTransport(
+      "https://api.goodcms.cn",
+      2,
+      requestMock as typeof tt.request,
+    );
+
+    await expect(transport.send({
+      path: "/douyin-mini/budget-estimates/id/ai-analysis",
+      method: "POST",
+      timeoutMs: 35,
+    })).resolves.toEqual({ ok: true });
+    const options = requestMock.mock.calls[0]![0] as Record<string, unknown>;
+    expect(options).not.toHaveProperty("timeoutMs");
+    expect(abort).not.toHaveBeenCalled();
+
+    await expect(transport.send({
+      path: "/douyin-mini/bootstrap",
+      method: "GET",
+      timeoutMs: 60_001,
+    })).rejects.toMatchObject({ code: "INVALID_API_CONFIG" });
+  });
+
+  test("treats timeoutMs as one operation deadline including a hanging token provider", async () => {
+    const harness = operationClockHarness();
+    let resolveToken: (token: string) => void = () => {};
+    const send = mock(async () => ({ ok: true }));
+    const client = new ApiClient(
+      { send },
+      {
+        getAccessToken: () => new Promise<string>((resolve) => { resolveToken = resolve; }),
+        refreshAfterUnauthorized: async () => "unused",
+      },
+      harness.clock,
+    );
+
+    const request = client.request({
+      path: "/douyin-mini/budget-estimates/id/ai-analysis",
+      method: "POST",
+      timeoutMs: 35_000,
+    });
+    harness.expire(35_000);
+    await expect(request).rejects.toMatchObject({ code: "NETWORK_ERROR", statusCode: 0 });
+    resolveToken("late-token");
+    await Bun.sleep(0);
+    expect(send).not.toHaveBeenCalled();
+    expect(harness.activeTimers()).toBe(0);
+  });
+
+  test("passes only remaining operation time through 401 refresh and retry", async () => {
+    const harness = operationClockHarness();
+    const calls: TransportInput[] = [];
+    const client = new ApiClient(
+      {
+        send: async (input) => {
+          calls.push(input);
+          if (calls.length === 1) {
+            harness.elapse(9_000);
+            throw new ApiRequestError(401, "TOKEN_INVALID", "会话已失效");
+          }
+          return { ok: true };
+        },
+      },
+      {
+        getAccessToken: async () => {
+          harness.elapse(5_000);
+          return "old-token";
+        },
+        refreshAfterUnauthorized: async () => {
+          harness.elapse(7_000);
+          return "new-token";
+        },
+      },
+      harness.clock,
+    );
+
+    await expect(client.request<{ ok: boolean }>({
+      path: "/douyin-mini/budget-estimates/id/ai-analysis",
+      method: "POST",
+      timeoutMs: 35_000,
+    })).resolves.toEqual({ ok: true });
+    expect(calls.map((call) => ({ token: call.token, timeoutMs: call.timeoutMs }))).toEqual([
+      { token: "old-token", timeoutMs: 30_000 },
+      { token: "new-token", timeoutMs: 14_000 },
+    ]);
+    expect(harness.activeTimers()).toBe(0);
   });
 
   test("stored session parsing rejects extra fields and launch attribution is allowlisted", () => {

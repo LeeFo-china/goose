@@ -22,6 +22,78 @@ export type { CustomerOrigin, CustomerSource, CustomerStatus } from './customer'
 export { DEPARTMENT_CODE_VALUES } from './department';
 export type { DepartmentCode } from './department';
 
+export {
+  DOUYIN_PROJECT_PHASE_VALUES,
+  DOUYIN_PROJECT_PUBLICATION_STATUS_VALUES,
+  toDouyinProjectPhase,
+} from './douyin-public-project';
+export type {
+  DouyinProjectPhase,
+  DouyinProjectPublicationStatus,
+} from './douyin-public-project';
+
+export {
+  DOUYIN_BUDGET_AI_STATUS_VALUES,
+  DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_DECORATION_SCOPE_VALUES,
+  DOUYIN_DECORATION_TIER_VALUES,
+  DOUYIN_PROPERTY_CONDITION_VALUES,
+  DouyinBudgetAiAnalysisSchema,
+  DouyinBudgetAiExplanationResponseSchema,
+  DouyinBudgetEstimateCategorySchema,
+  DouyinBudgetEstimateRequestSchema,
+  DouyinBudgetEstimateResultSchema,
+  DouyinBudgetPublicConfigSchema,
+} from './douyin-budget';
+export type {
+  DouyinBudgetAiAnalysis,
+  DouyinBudgetAiExplanationResponse,
+  DouyinBudgetAiStatus,
+  DouyinBudgetCategoryCode,
+  DouyinBudgetEstimateCategory,
+  DouyinBudgetEstimateRequest,
+  DouyinBudgetEstimateResult,
+  DouyinBudgetPublicConfig,
+  DouyinBudgetOptionCode,
+  DouyinDecorationScope,
+  DouyinDecorationTier,
+  DouyinPropertyCondition,
+} from './douyin-budget';
+
+export {
+  DOUYIN_APPOINTMENT_STATUS_VALUES,
+  DOUYIN_APPOINTMENT_TRANSITIONS,
+  DOUYIN_LEAD_ACTION_RESULT_VALUES,
+  DOUYIN_LEAD_ACTION_VALUES,
+  DOUYIN_VISIT_PERIOD_VALUES,
+  DouyinAppointmentStatusSchema,
+  DouyinLeadActionResultSchema,
+  DouyinVisitPeriodSchema,
+  canTransitionDouyinAppointment,
+} from './douyin-lead';
+
+export {
+  DOUYIN_ENTRY_PATH_VALUES,
+  DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  DouyinContactSlaTextSchema,
+  DouyinEntryPathSchema,
+  DouyinRuntimeConfigSchema,
+  isDouyinTestQrUrlUsable,
+} from './douyin-miniapp';
+export type {
+  DouyinEntryPath,
+  DouyinRuntimeConfigDto,
+  DouyinRuntimeConfigInput,
+} from './douyin-miniapp';
+export type {
+  DouyinAppointmentStatus,
+  DouyinLeadAction,
+  DouyinLeadActionResult,
+  DouyinLeadActionResultValue,
+  DouyinVisitPeriod,
+} from './douyin-lead';
+
 export { EMPLOYEE_ROLE_VALUES, EMPLOYEE_STATUS_VALUES } from './employee';
 export type { EmployeeRole, EmployeeStatus } from './employee';
 

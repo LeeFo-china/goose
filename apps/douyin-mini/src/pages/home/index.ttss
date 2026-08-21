@@ -2,9 +2,14 @@
 .home-block { margin-top: 28rpx; }
 .home-hero { margin-top: 24rpx; }
 .home-section { margin-top: 56rpx; }
+.budget-entry { padding: 32rpx; }
+.budget-description { margin-top: 12rpx; color: #625f5b; font-size: 24rpx; line-height: 1.65; }
+.budget-action { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 26rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; margin-bottom: 24rpx; }
 .section-link, .text-action, .privacy-link { min-height: 88rpx; margin: 0; padding: 0 8rpx; background: transparent; font-size: 26rpx; line-height: 88rpx; }
-.card-list, .site-list { display: flex; flex-direction: column; gap: 24rpx; }
+.card-list { display: flex; flex-direction: column; gap: 24rpx; }
+.project-card { position: relative; }
+.project-phase { position: absolute; top: 20rpx; right: 20rpx; z-index: 1; padding: 7rpx 14rpx; border: 1rpx solid; border-radius: 999rpx; background: rgba(255,255,255,.94); color: #191817; font-size: 22rpx; font-weight: 650; line-height: 1.4; pointer-events: none; }
 .process-list { margin-top: 22rpx; border-top: 1rpx solid #dddad5; }
 .process-item { display: flex; gap: 24rpx; padding: 26rpx 0; border-bottom: 1rpx solid #dddad5; }
 .process-index { width: 60rpx; flex: none; font-size: 24rpx; font-weight: 650; }

@@ -20,6 +20,7 @@ import {
   customerSourceLabel,
   customerStatusMeta,
 } from "@/components/customers/customer-detail-display";
+import { CustomerDouyinSourceSnapshot } from "@/components/customers/customer-douyin-source-snapshot";
 import type {
   CustomerFollowUpRecord,
   CustomerRecord,
@@ -51,6 +52,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Skeleton } from "@/components/ui/skeleton";
 
 function primaryProperty(customer: CustomerRecord): PropertySummary | null {
   return customer.properties?.find((property) => property.is_primary)
@@ -274,9 +283,15 @@ export function CustomerDetailDialog({
             </div>
             {sourcesError ? <StatusAlert>{sourcesError}</StatusAlert> : null}
             {sourcesLoading ? (
-              <div className="flex h-24 items-center justify-center gap-2 rounded-md border text-sm text-muted-foreground">
-                <Loader2 className="animate-spin" />
-                正在加载来源记录
+              <div
+                aria-label="正在加载来源记录"
+                aria-live="polite"
+                className="flex flex-col gap-3 rounded-md border p-3"
+                role="status"
+              >
+                <Skeleton className="h-4 w-36" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
               </div>
             ) : sources.length > 0 ? (
               <div className="relative ml-3 flex flex-col gap-4 border-l pl-5">
@@ -300,15 +315,29 @@ export function CustomerDetailDialog({
                     <div className="mt-3 grid gap-2 text-xs text-muted-foreground md:grid-cols-3">
                       <div>操作人：{sourceActorName(item)}</div>
                       <div>去重：{customerDedupeResultLabel(item.dedupe_result)}</div>
-                      <div>平台线索：{item.platform_lead?.name || item.platform_lead?.phone || "-"}</div>
+                      <div>
+                        平台线索：
+                        {item.platform_lead?.name
+                          || item.platform_lead?.phone_masked
+                          || "平台线索"}
+                      </div>
                     </div>
+                    <CustomerDouyinSourceSnapshot source={item} />
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="rounded-md border p-4 text-sm text-muted-foreground">
-                暂无来源记录。
-              </div>
+              <Empty className="border">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <Share2 aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>暂无来源记录</EmptyTitle>
+                  <EmptyDescription>
+                    客户产生新的来源归因后会显示在这里。
+                  </EmptyDescription>
+                </EmptyHeader>
+              </Empty>
             )}
           </section>
           <section>

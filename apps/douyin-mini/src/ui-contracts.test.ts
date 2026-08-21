@@ -8,7 +8,7 @@ test("global shell imports semantic styles and contains no terracotta tab accent
     readSource("app.ttss"),
     readSource("app.json"),
     readSource("components/theme.ts"),
-    ...["home", "cases", "sites", "lead"].flatMap((name) => [
+    ...["home", "cases", "budget", "lead"].flatMap((name) => [
       readSource(`assets/tabbar/${name}.svg`),
       readSource(`assets/tabbar/${name}-active.svg`),
     ]),
@@ -65,12 +65,49 @@ test("hero collapses the reserved media column when no image is visible", async 
   expect(style).toMatch(/\.hero--without-image \.hero-action\s*\{[^}]*width:\s*100%/);
 });
 
-test("cases exposes a compact header and one-step filter reset", async () => {
-  const template = await readSource("pages/cases/index.ttml");
+test("unified projects bind authoritative phase and paginated detail actions", async () => {
+  const [template, pageSource, pageConfig, detailTemplate, detailConfig, homeTemplate] = await Promise.all([
+    readSource("pages/cases/index.ttml"),
+    readSource("pages/cases/index.ts"),
+    readSource("pages/cases/index.json"),
+    readSource("pages/case-detail/index.ttml"),
+    readSource("pages/case-detail/index.json"),
+    readSource("pages/home/index.ttml"),
+  ]);
   expect(template).not.toContain("page-kicker");
-  expect(template).toContain('bindtap="onClearFilters"');
-  expect(template).toContain('bindaction="onClearFilters"');
+  expect(template).toContain('bindtap="onSelectPhase"');
+  expect(template).not.toContain("更多筛选");
+  expect(template).not.toContain("onSelectStyle");
+  expect(template).not.toContain("onSelectLayout");
+  expect(template).not.toContain("onClearFilters");
   expect(template).toContain('primary-color="{{primaryColor}}"');
+  expect(pageSource).toContain('onPullDownRefresh()');
+  expect(pageSource).toContain('void this.load("refresh")');
+  expect(pageSource).toContain('onRetry() { void this.load("retry"); }');
+  expect(pageConfig).toContain('"pagination-loader"');
+  expect(pageConfig).toContain('"empty-state"');
+  expect(pageConfig).toContain('"error-state"');
+  expect(detailTemplate).toContain('bindloadmore="onLoadMoreProgress"');
+  expect(detailTemplate).toContain('bindretry="onRetryProgress"');
+  expect(detailConfig).toContain('"pagination-loader"');
+  expect(homeTemplate.match(/<case-card/g)).toHaveLength(1);
+  expect(homeTemplate).not.toContain("<site-card");
+});
+
+test("project detail bounds long public copy with existing overflow patterns", async () => {
+  const style = await readSource("pages/case-detail/index.ttss");
+  for (const className of [
+    "detail-title",
+    "fact-value",
+    "progress-title",
+  ]) {
+    expect(style).toMatch(new RegExp(`\\.${className}\\s*\\{[^}]*max-height:[^}]*overflow:\\s*hidden`));
+  }
+  expect(style).toMatch(/\.description-copy\s*\{[^}]*overflow:\s*hidden/);
+  expect(style).not.toMatch(/\.description-copy\s*\{[^}]*max-height:/);
+  expect(style).toMatch(
+    /\.detail-location\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/,
+  );
 });
 
 test("sites uses a compact public-boundary notice without an alert stripe", async () => {
@@ -96,15 +133,20 @@ test("lead form labels every input and keeps optional details collapsed", async 
     "联系电话",
     "短信验证码",
     "小区名称",
-    "房屋面积",
-    "预算范围",
-    "计划开工时间",
+    "期望量房日期",
+    "期望量房时段",
     "装修需求",
   ]) {
     expect(`${formTemplate}\n${smsTemplate}`).toContain(`aria-label="${label}"`);
   }
-  expect(formTemplate).toContain("补充装修信息（选填）");
+  expect(formTemplate).toContain("补充装修需求（选填）");
   expect(formTemplate).toContain('tt:if="{{optionalDetailsExpanded}}"');
+  expect(formTemplate.match(/<button[^>]*class="period-option/g)).toHaveLength(3);
+  expect(formTemplate.match(/<view[^>]*class="period-option(?:\s|")/g)).toBeNull();
+  expect(formTemplate.match(/role="radio"/g)).toHaveLength(3);
+  expect(formTemplate.match(/aria-checked=/g)).toHaveLength(3);
+  expect(formTemplate.match(/disabled="{{submitting}}"/g)?.length ?? 0)
+    .toBeGreaterThanOrEqual(8);
   expect(consentTemplate).toContain('<view class="consent-row"');
   expect(consentTemplate).toContain('class="consent-toggle ui-pressable"');
   expect(consentTemplate).toContain('catchtap="onOpenPolicy"');
@@ -130,7 +172,7 @@ test("shared state actions use semantic styles and native press feedback", async
   }
 });
 
-test("four-page target contains no fixed terracotta brand palette", async () => {
+test("primary mini-program surfaces contain no fixed terracotta brand palette", async () => {
   const targetFiles = [
     "pages/home/index.ts",
     "pages/home/index.ttml",
@@ -144,6 +186,9 @@ test("four-page target contains no fixed terracotta brand palette", async () => 
     "pages/lead/index.ts",
     "pages/lead/index.ttml",
     "pages/lead/index.ttss",
+    "pages/budget/index.ts",
+    "pages/budget/index.ttml",
+    "pages/budget/index.ttss",
     "components/tenant-brand/index.ttss",
     "components/hero-banner/index.ts",
     "components/hero-banner/index.ttss",

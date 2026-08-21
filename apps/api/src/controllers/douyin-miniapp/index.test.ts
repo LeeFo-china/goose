@@ -1,4 +1,13 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import {
+  DOUYIN_ENTRY_PATH_VALUES,
+  DouyinEntryPathSchema as CanonicalDouyinEntryPathSchema,
+} from "@gooes/domain";
+import {
+  DouyinLaunchContextSchema,
+  DouyinLeadRequestSchema,
+  DouyinProjectListQuerySchema,
+} from "@/schema/douyin-miniapp";
 
 let DouyinMiniappController: typeof import(".").DouyinMiniappController;
 
@@ -20,6 +29,21 @@ const body = {
 };
 
 describe("DouyinMiniappController", () => {
+  test("accepts every canonical cold-start path and rejects unknown fallbacks", () => {
+    expect(DouyinLaunchContextSchema.shape.entry_path)
+      .toBe(CanonicalDouyinEntryPathSchema);
+    for (const entryPath of DOUYIN_ENTRY_PATH_VALUES) {
+      expect(DouyinLaunchContextSchema.safeParse({
+        ...body.launch_context,
+        entry_path: entryPath,
+      }).success).toBe(true);
+    }
+    expect(DouyinLaunchContextSchema.safeParse({
+      ...body.launch_context,
+      entry_path: "pages/admin/index",
+    }).success).toBe(false);
+  });
+
   test("registers the session route in the root registry", async () => {
     const source = await Bun.file(new URL("../../routes/index.ts", import.meta.url)).text();
     expect(source).toContain(
@@ -53,6 +77,9 @@ describe("DouyinMiniappController", () => {
       "GET /douyin-mini/sites",
       "GET /douyin-mini/sites/:id",
       "GET /douyin-mini/sites/:id/logs",
+      "GET /douyin-mini/projects",
+      "GET /douyin-mini/projects/:id",
+      "GET /douyin-mini/projects/:id/logs",
       "POST /douyin-mini/sms/send",
       "POST /douyin-mini/leads",
       "POST /douyin-mini/events",
@@ -76,6 +103,8 @@ describe("DouyinMiniappController", () => {
       bootstrap: mock(async () => ({})), company: mock(async () => ({})), listCases,
       getCase: mock(async () => ({})), listSites: mock(async () => ({})),
       getSite: mock(async () => ({})), listSiteLogs: mock(async () => ({})),
+      listProjects: mock(async () => ({})), getProject: mock(async () => ({})),
+      listProjectLogs: mock(async () => ({})),
     };
     const controller = new DouyinMiniappController(undefined, content as never);
     const user = { token_type: "douyin_miniapp", tenant_id:
@@ -91,6 +120,59 @@ describe("DouyinMiniappController", () => {
       .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
     await expect(controller.listCases({ user, query: { pageSize: 101 } } as never))
       .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+  });
+
+  test("defines a strict bounded unified project query", () => {
+    expect(DouyinProjectListQuerySchema.parse({})).toEqual({ page: 1, pageSize: 20 });
+    expect(DouyinProjectListQuerySchema.parse({ phase: "completed" }).phase)
+      .toBe("completed");
+    expect(() => DouyinProjectListQuerySchema.parse({ pageSize: 101 })).toThrow();
+    expect(() => DouyinProjectListQuerySchema.parse({ phase: "pending_start" })).toThrow();
+    expect(() => DouyinProjectListQuerySchema.parse({ tenant_id:
+      "44444444-4444-4444-8444-444444444444" })).toThrow();
+  });
+
+  test("validates unified project routes before dispatching to content service", async () => {
+    const listProjects = mock(async () => ({ items: [], pagination: {
+      page: 1, pageSize: 20, total: 0, totalPages: 0,
+    } }));
+    const getProject = mock(async () => ({}));
+    const listProjectLogs = mock(async () => ({}));
+    const content = {
+      bootstrap: mock(async () => ({})), company: mock(async () => ({})),
+      listCases: mock(async () => ({})), getCase: mock(async () => ({})),
+      listSites: mock(async () => ({})), getSite: mock(async () => ({})),
+      listSiteLogs: mock(async () => ({})), listProjects, getProject, listProjectLogs,
+    };
+    const controller = new DouyinMiniappController(undefined, content as never);
+    const user = { token_type: "douyin_miniapp", tenant_id:
+      "33333333-3333-4333-8333-333333333333" };
+
+    await controller.listProjects({ user, query: {
+      phase: "completed", style: "现代", layout: "三室两厅",
+    } } as never);
+    expect(listProjects).toHaveBeenCalledWith(user, {
+      page: 1, pageSize: 20, phase: "completed", style: "现代", layout: "三室两厅",
+    });
+    await controller.getProject({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" } } as never);
+    expect(getProject).toHaveBeenCalledWith(user,
+      "11111111-1111-4111-8111-111111111111");
+    await controller.listProjectLogs({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" }, query: {} } as never);
+    expect(listProjectLogs).toHaveBeenCalledWith(user,
+      "11111111-1111-4111-8111-111111111111", { page: 1, pageSize: 20 });
+
+    await expect(controller.listProjects({ user, query: { phase: "started" } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.getProject({ user, params: { id: "not-a-uuid" } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    await expect(controller.listProjectLogs({ user, params: { id:
+      "11111111-1111-4111-8111-111111111111" }, query: { pageSize: 101 } } as never))
+      .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    expect(listProjects).toHaveBeenCalledTimes(1);
+    expect(getProject).toHaveBeenCalledTimes(1);
+    expect(listProjectLogs).toHaveBeenCalledTimes(1);
   });
 
   test("rejects forged tenant IDs and malformed launch attribution", async () => {
@@ -109,8 +191,15 @@ describe("DouyinMiniappController", () => {
 
   test("strictly validates marketing bodies and passes trusted request metadata", async () => {
     const sendCode = mock(async () => ({ success: true, cooldown_seconds: 60 }));
-    const submitLead = mock(async () => ({ lead_id:
-      "55555555-5555-4555-8555-555555555555" }));
+    const publicAppointmentResult = {
+      lead_id: "55555555-5555-4555-8555-555555555555",
+      appointment_no: "DYLF-20260821-000001",
+      already_submitted: false,
+      existing_customer_linked: false,
+      status: "pending_confirmation" as const,
+      message: "量房申请已提交，工作人员将与你确认具体时间" as const,
+    };
+    const submitLead = mock(async () => publicAppointmentResult);
     const recordEvents = mock(async () => ({ accepted: 1 }));
     const controller = new DouyinMiniappController(undefined, undefined, {
       sendCode, submitLead, recordEvents,
@@ -118,29 +207,58 @@ describe("DouyinMiniappController", () => {
     const user = { token_type: "douyin_miniapp", tenant_id:
       "33333333-3333-4333-8333-333333333333" };
     const attribution = body.launch_context;
-    const request = { user, ip: "127.0.0.1", headers: { "user-agent": "Douyin" } };
+    const log = { warn: mock(() => undefined) };
+    const request = { user, ip: "127.0.0.1", headers: { "user-agent": "Douyin" }, log };
 
     await controller.sendLeadCode({ ...request, body: {
       phone: "13800000000", attribution,
     } } as never);
     expect(sendCode).toHaveBeenCalledWith(user, {
       phone: "13800000000", attribution,
-    }, { requestIp: "127.0.0.1", userAgent: "Douyin" });
+    }, { requestIp: "127.0.0.1", userAgent: "Douyin", log });
 
     const leadBody = {
       name: "李先生", phone: "13800000000", sms_code: "123456",
+      community: "晴天花园",
+      preferred_visit_date: "2026-08-25",
+      preferred_visit_period: "afternoon",
+      budget_estimate_id: "22222222-2222-4222-8222-222222222222",
       privacy_policy_version: "2026-07-19",
       consented_at: "2026-07-19T10:00:00.000Z",
       idempotency_key: "44444444-4444-4444-8444-444444444444",
       attribution,
     };
-    await controller.submitLead({ ...request, body: leadBody } as never);
+    const invalidDate = DouyinLeadRequestSchema.safeParse({
+      ...leadBody,
+      preferred_visit_date: "2026-02-30",
+    });
+    expect(invalidDate.success).toBe(false);
+    if (!invalidDate.success) {
+      expect(invalidDate.error.issues[0]?.message).toBe("期望量房日期格式无效");
+    }
+    await expect(controller.submitLead({ ...request, body: leadBody } as never))
+      .resolves.toEqual({ data: publicAppointmentResult, message: "success" });
     expect(submitLead).toHaveBeenCalledWith(user, leadBody,
-      { requestIp: "127.0.0.1", userAgent: "Douyin" });
+      { requestIp: "127.0.0.1", userAgent: "Douyin", log });
+    const { budget_estimate_id: _budgetEstimateId, ...leadWithoutEstimate } = leadBody;
+    await controller.submitLead({ ...request, body: leadWithoutEstimate } as never);
+    expect(submitLead).toHaveBeenLastCalledWith(user, leadWithoutEstimate,
+      { requestIp: "127.0.0.1", userAgent: "Douyin", log });
 
     await expect(controller.submitLead({ ...request, body: {
       ...leadBody, tenant_id: "99999999-9999-4999-8999-999999999999",
     } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    for (const invalidBody of [
+      { ...leadBody, community: undefined },
+      { ...leadBody, preferred_visit_date: undefined },
+      { ...leadBody, preferred_visit_date: "2026-02-30" },
+      { ...leadBody, preferred_visit_period: "noon" },
+      { ...leadBody, budget_estimate_id: "not-a-uuid" },
+    ]) {
+      await expect(controller.submitLead({ ...request, body: invalidBody } as never))
+        .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+    expect(submitLead).toHaveBeenCalledTimes(2);
     await expect(controller.recordEvents({ ...request, body: { events: [{
       event_name: "lead_submit_success", occurred_at: "2026-07-19T10:00:00.000Z",
       attribution,

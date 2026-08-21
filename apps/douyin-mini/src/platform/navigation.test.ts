@@ -18,7 +18,9 @@ describe("Douyin native navigation and visual view models", () => {
   test("builds allowlisted tab and page routes and rejects unknown paths", () => {
     expect(buildTabRoute("home")).toBe("/pages/home/index");
     expect(buildTabRoute("cases")).toBe("/pages/cases/index");
+    expect(buildTabRoute("budget")).toBe("/pages/budget/index");
     expect(buildPageRoute("pages/company/index")).toBe("/pages/company/index");
+    expect(buildPageRoute("pages/sites/index")).toBe("/pages/sites/index");
     expect(() => buildPageRoute("pages/home/index"))
       .toThrow("INVALID_NAVIGATION_TARGET");
     expect(() => navigateToPage("pages/cases/index"))
@@ -33,14 +35,18 @@ describe("Douyin native navigation and visual view models", () => {
     for (const type of ["case", "site"] as const) {
       const route = buildEntityDetailRoute(type, ENTITY_ID);
       const [path, query = ""] = route.split("?");
-      expect(path).toBe(type === "case"
-        ? "/pages/case-detail/index"
-        : "/pages/site-detail/index");
+      expect(path).toBe("/pages/case-detail/index");
       expect(Array.from(new URLSearchParams(query).entries())).toEqual([["id", ENTITY_ID]]);
       expect(route).not.toMatch(/tenant|deployment|customer/i);
     }
     expect(() => buildEntityDetailRoute("case", `${ENTITY_ID}&tenant_id=forged`))
       .toThrow("INVALID_NAVIGATION_TARGET");
+  });
+
+  test("labels the existing case tab as the unified project showcase", async () => {
+    const appConfig = await Bun.file(`${__dirname}/../app.json`).text();
+    expect(appConfig).toContain('"pagePath": "pages/cases/index"');
+    expect(appConfig).toContain('"text": "项目实景"');
   });
 
   test("image gallery keeps at most nine unique HTTPS images", () => {

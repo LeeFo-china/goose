@@ -1,8 +1,9 @@
 {
-  "navigationBarTitleText": "案例详情",
+  "navigationBarTitleText": "项目详情",
   "usingComponents": {
     "image-gallery": "/components/image-gallery/index",
     "lead-cta": "/components/lead-cta/index",
+    "pagination-loader": "/components/pagination-loader/index",
     "empty-state": "/components/empty-state/index",
     "error-state": "/components/error-state/index",
     "page-skeleton": "/components/page-skeleton/index"

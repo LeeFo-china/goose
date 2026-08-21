@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { AppError } from "@/errors/app-error";
 import { Errors } from "@/errors/error-factory";
 import {
@@ -9,6 +8,7 @@ import {
   DouyinMiniappMarketingRepository,
   douyinMiniappMarketingRepository,
 } from "@/repositories/douyin-miniapp-marketing";
+import { notificationService } from "@/services/notifications";
 import type {
   DouyinAnalyticsRequest,
   DouyinLeadRequest,
@@ -25,12 +25,22 @@ import {
 import type { JwtPayload } from "@/utils/jwt";
 
 type ContextRepository = Pick<DouyinMiniappContentRepository, "findActiveInstallation">;
-type MarketingRepository = Pick<DouyinMiniappMarketingRepository, "submitLead" | "insertEvents">;
+type MarketingRepository = Pick<DouyinMiniappMarketingRepository,
+  "submitMeasurementAppointment" | "insertEvents">;
 type SmsService = Pick<SmsVerificationCodeService, "sendCode">;
-type RequestMetadata = { requestIp: string | null; userAgent: string | null };
+type NotificationService = Pick<typeof notificationService, "createTenantAdminNotifications">;
+type MarketingLogger = {
+  warn(payload: Record<string, unknown>, message: string): void;
+};
+type RequestMetadata = {
+  requestIp: string | null;
+  userAgent: string | null;
+  log?: MarketingLogger;
+};
 type Dependencies = {
   contextRepository?: ContextRepository;
   marketingRepository?: MarketingRepository;
+  notificationService?: NotificationService;
   smsService?: SmsService;
   now?: () => Date;
 };
@@ -43,6 +53,7 @@ type Context = {
 
 const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+const APPOINTMENT_SUBMITTED_MESSAGE = "量房申请已提交，工作人员将与你确认具体时间";
 const CLIENT_EVENTS = new Set([
   "app_launch", "page_view", "case_view", "site_view",
   "lead_cta_click", "phone_call_click",
@@ -51,6 +62,7 @@ const CLIENT_EVENTS = new Set([
 export class DouyinMiniappMarketingService {
   private readonly contextRepository: ContextRepository;
   private readonly marketingRepository: MarketingRepository;
+  private readonly notificationService: NotificationService;
   private readonly smsService: SmsService;
   private readonly now: () => Date;
 
@@ -58,6 +70,7 @@ export class DouyinMiniappMarketingService {
     this.contextRepository = dependencies.contextRepository ?? douyinMiniappContentRepository;
     this.marketingRepository = dependencies.marketingRepository
       ?? douyinMiniappMarketingRepository;
+    this.notificationService = dependencies.notificationService ?? notificationService;
     this.smsService = dependencies.smsService ?? smsVerificationCodeService;
     this.now = dependencies.now ?? (() => new Date());
   }
@@ -106,35 +119,18 @@ export class DouyinMiniappMarketingService {
     const now = this.now();
     validateConsent(input, context.runtime.privacy_policy_version, now);
     const consentedAt = new Date(input.consented_at).toISOString();
-    const requestDigest = digest({
-      version: 1,
-      tenant_id: context.tenantId,
-      installation_id: context.installationId,
-      subject_hash: context.subjectHash,
-      name: input.name,
-      phone: input.phone,
-      community: input.community ?? null,
-      area: input.area ?? null,
-      budget: input.budget ?? null,
-      start_time: input.start_time ?? null,
-      demand: input.demand ?? null,
-      privacy_policy_version: input.privacy_policy_version,
-      consented_at: consentedAt,
-      attribution: normalizedAttribution(input.attribution),
-    });
-    return this.marketingRepository.submitLead({
+    const appointment = await this.marketingRepository.submitMeasurementAppointment({
       tenantId: context.tenantId,
       installationId: context.installationId,
       subjectHash: context.subjectHash,
       phone: input.phone,
       name: input.name,
-      community: input.community ?? null,
-      area: input.area ?? null,
-      budget: input.budget ?? null,
-      startTime: input.start_time ?? null,
+      community: input.community,
+      preferredVisitDate: input.preferred_visit_date,
+      preferredVisitPeriod: input.preferred_visit_period,
+      budgetEstimateId: input.budget_estimate_id ?? null,
       demand: input.demand ?? null,
       smsCode: input.sms_code,
-      requestDigest,
       idempotencyKey: input.idempotency_key,
       requestIp: metadata.requestIp,
       userAgent: boundedUserAgent(metadata.userAgent),
@@ -142,6 +138,17 @@ export class DouyinMiniappMarketingService {
       consentedAt,
       attribution: input.attribution,
     });
+    if (!appointment.already_submitted) {
+      await this.notifyTenant(context, appointment, metadata.log);
+    }
+    return {
+      lead_id: appointment.lead_id,
+      appointment_no: appointment.appointment_no,
+      already_submitted: appointment.already_submitted,
+      existing_customer_linked: appointment.existing_customer_linked,
+      status: appointment.status,
+      message: APPOINTMENT_SUBMITTED_MESSAGE,
+    };
   }
 
   async recordEvents(
@@ -217,6 +224,36 @@ export class DouyinMiniappMarketingService {
       runtime: runtime.data,
     } satisfies Context;
   }
+
+  private async notifyTenant(
+    context: Context,
+    appointment: Awaited<ReturnType<MarketingRepository["submitMeasurementAppointment"]>>,
+    log?: MarketingLogger,
+  ): Promise<void> {
+    try {
+      await this.notificationService.createTenantAdminNotifications({
+        tenantId: context.tenantId,
+        scene: "douyin_measurement_appointment_submitted",
+        title: "新的免费量房预约",
+        content: `量房预约 ${appointment.appointment_no} 已提交，请及时联系并确认具体时间。`,
+        targetType: "marketing_lead",
+        targetId: appointment.lead_id,
+        targetUrl: "/douyin-miniapp/leads",
+        payload: {
+          marketing_lead_id: appointment.lead_id,
+          appointment_id: appointment.appointment_id,
+          appointment_no: appointment.appointment_no,
+        },
+      });
+    } catch {
+      log?.warn({
+        code: "DOUYIN_MEASUREMENT_NOTIFICATION_FAILED",
+        marketingLeadId: appointment.lead_id,
+        appointmentId: appointment.appointment_id,
+        appointmentNo: appointment.appointment_no,
+      }, "抖音量房预约通知创建失败");
+    }
+  }
 }
 
 function validateConsent(input: DouyinLeadRequest, expectedVersion: string, now: Date) {
@@ -228,29 +265,6 @@ function validateConsent(input: DouyinLeadRequest, expectedVersion: string, now:
     || consentedAt > now.getTime() + MAX_FUTURE_SKEW_MS) {
     throw Errors.business(400, "授权时间无效", "DOUYIN_CONSENT_TIME_INVALID");
   }
-}
-
-function digest(value: unknown) {
-  return createHash("sha256").update(canonicalJson(value)).digest("hex");
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value).sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonicalJson(item)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-function normalizedAttribution(value: DouyinLeadRequest["attribution"]) {
-  return {
-    source_type: value.source_type,
-    entry_path: value.entry_path,
-    scene: value.scene,
-    campaign_code: value.campaign_code ?? null,
-    content_id: value.content_id ?? null,
-  };
 }
 
 function boundedUserAgent(value: string | null) {

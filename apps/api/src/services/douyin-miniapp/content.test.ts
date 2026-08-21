@@ -1,5 +1,11 @@
 import { describe, expect, mock, test } from "bun:test";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "@gooes/domain";
 import type { JwtPayload } from "@/utils/jwt";
+import {
+  parseBootstrap,
+  parseProject,
+  parseProjectPage,
+} from "../../../../douyin-mini/src/api/content-validation";
 import { DouyinMiniappContentService } from "./content";
 
 const TENANT_ID = "33333333-3333-4333-8333-333333333333";
@@ -31,15 +37,26 @@ const company = {
   address: "公开门店地址", status: "published" as const,
   published_at: "2026-07-01T00:00:00.000Z",
 };
+const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
+const resolvedCover = `https://assets.example.com/${storedCover}`;
+const logOnlyCover = `tenants/${TENANT_ID}/project_log/internal-log-only.jpg`;
+const resolvedLogOnlyCover = `https://assets.example.com/${logOnlyCover}`;
 const project = {
-  id: PROJECT_ID, name: "现代简约案例", status: "constructing", budget: 260000,
+  id: PROJECT_ID, name: "张先生 1号楼101室装修", status: "constructing", budget: 260000,
   start_date: "2026-07-01", created_at: "2026-06-01T00:00:00.000Z",
   updated_at: "2026-07-20T00:00:00.000Z", style_tags: ["现代"],
   property: { community: "示例花园", layout: "三室两厅", area: 120,
-    city: "郑州市", district: "金水区" },
+    city: "郑州市", district: "金水区", address: "1号楼101室" },
+  public_profile: {
+    public_title: "现代简约实景",
+    public_description: "明亮通透的现代简约空间",
+    public_image_urls: [storedCover],
+    style_tags: ["现代", "简约"],
+    budget_band: "30-50万",
+    publication_status: "published" as const,
+    updated_at: "2026-07-20T00:00:00.000Z",
+  },
 };
-const storedCover = `tenants/${TENANT_ID}/project_log/cover.jpg`;
-const resolvedCover = `https://assets.example.com/${storedCover}`;
 
 function resolveImageUrls(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -66,14 +83,16 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     findCase: mock(async () => project),
     listSites: mock(async () => ({ rows: [project], total: 1 })),
     findSite: mock(async () => project),
+    listProjects: mock(async () => ({ rows: [project], count: 1 })),
+    findProject: mock(async () => project),
     listProjectImageLogs: mock(async () => [{
       project_id: PROJECT_ID,
-      images: [storedCover],
+      images: [logOnlyCover],
       created_at: "2026-07-19T00:00:00.000Z",
     }]),
     listSiteLogs: mock(async () => ({ rows: [{
       id: "44444444-4444-4444-8444-444444444444", stage_code: "water-electric",
-      node_name: "水电施工", images: [storedCover,
+      node_name: "水电施工", images: [logOnlyCover,
         "project-log/e2e/broken-legacy-image.jpg", "http://unsafe.test/a.jpg",
         ...Array.from({ length: 12 }, (_, index) => `https://cdn.example.com/${index}.jpg`)],
       created_at: "2026-07-20T00:00:00.000Z",
@@ -85,11 +104,35 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("DouyinMiniappContentService", () => {
-  test("loads company, six cases and six sites in one bounded parallel bootstrap", async () => {
+  test("loads bounded unified and in-progress feeds with legacy parser compatibility", async () => {
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
-    const deps = dependencies();
-    for (const method of ["findPublishedCompany", "listServiceAreas", "listCases", "listSites"] as const) {
+    const completedProjects = Array.from({ length: 6 }, (_, index) => ({
+      ...project,
+      id: `11111111-1111-4111-8111-${String(index + 2).padStart(12, "0")}`,
+      status: "acceptance",
+    }));
+    const profileImages = Array.from(
+      { length: 12 },
+      (_, index) => `https://cdn.example.com/public-${index}.jpg`,
+    );
+    const activeProject = {
+      ...project,
+      public_profile: { ...project.public_profile, public_image_urls: profileImages },
+    };
+    const listProjects = mock(async (input: {
+      tenantId: string;
+      phase?: string;
+      page: number;
+      pageSize: number;
+    }) => {
+      await gate;
+      return input.phase === "in_progress"
+        ? { rows: [activeProject], count: 1 }
+        : { rows: completedProjects, count: 6 };
+    });
+    const deps = dependencies({ listProjects });
+    for (const method of ["findPublishedCompany", "listServiceAreas"] as const) {
       const value = await deps.repository[method]();
       deps.repository[method] = mock(async () => { await gate; return value; }) as never;
     }
@@ -99,44 +142,201 @@ describe("DouyinMiniappContentService", () => {
 
     expect(deps.repository.findPublishedCompany).toHaveBeenCalledTimes(1);
     expect(deps.repository.listServiceAreas).toHaveBeenCalledTimes(1);
-    expect(deps.repository.listCases).toHaveBeenCalledWith({ tenantId: TENANT_ID,
-      page: 1, pageSize: 6 });
-    expect(deps.repository.listSites).toHaveBeenCalledWith({ tenantId: TENANT_ID,
-      page: 1, pageSize: 6 });
+    expect(listProjects.mock.calls).toEqual([
+      [{ tenantId: TENANT_ID, page: 1, pageSize: 6 }],
+      [{ tenantId: TENANT_ID, phase: "in_progress", page: 1, pageSize: 6 }],
+    ]);
     release();
     const result = await pending;
     expect(result).toMatchObject({
       installation: { status: "active", template_version: "1.0.0" },
       company: { name: "示例装饰", logo_url: runtime.brand.logo_url },
       theme: runtime.theme, features: runtime.features,
-      content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics,
-        featured_cases: [{ id: PROJECT_ID, budget_band: "20-30万",
-          cover_image_url: resolvedCover }],
-        active_sites: [{ id: PROJECT_ID, cover_image_url: resolvedCover }] },
+      content: { home_banners: runtime.home_banners, trust_metrics: runtime.trust_metrics },
+      contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
     });
-    expect(deps.repository.listProjectImageLogs).toHaveBeenCalledWith({
-      tenantId: TENANT_ID,
-      projectIds: [PROJECT_ID],
+    expect(result.content.featured_projects[0]).toMatchObject({
+      id: completedProjects[0]!.id, phase: "completed", title: "现代简约实景",
+      description: "明亮通透的现代简约空间", budget_band: "30-50万",
+      cover_image_url: resolvedCover,
     });
+    expect(result.content.featured_cases[0]).toMatchObject({
+      id: completedProjects[0]!.id, status: "acceptance", budget_band: "30-50万",
+      cover_image_url: resolvedCover,
+    });
+    expect(result.content.active_sites[0]).toMatchObject({
+      id: PROJECT_ID, status: "constructing",
+      cover_image_url: "https://cdn.example.com/public-0.jpg",
+    });
+    expect(result.content.featured_projects).toHaveLength(6);
+    expect(result.content.active_sites).toHaveLength(1);
+    expect(result.content.active_sites[0]!.public_images).toHaveLength(9);
+    expect(parseBootstrap(result)).not.toBeNull();
+    expect(deps.repository.listCases).not.toHaveBeenCalled();
+    expect(deps.repository.listSites).not.toHaveBeenCalled();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
     expect(deps.prepareImageUrls).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(result)).not.toMatch(/260000|customer|signed_amount|latitude|longitude/i);
+    expect(JSON.stringify(result)).not.toMatch(
+      /260000|张先生|1号楼101室|customer|signed_amount|latitude|longitude/i,
+    );
+  });
+
+  test("normalizes configured contact SLA copy before bootstrap output", async () => {
+    const configured = dependencies({ findActiveInstallation: mock(async () => ({
+      ...installation,
+      runtime_config: {
+        ...runtime,
+        contact_sla_text: "  工作人员将在今天与你联系  ",
+      },
+    })) });
+
+    const result = await new DouyinMiniappContentService(
+      configured as never,
+    ).bootstrap(user);
+
+    expect(result.contact_sla_text).toBe("工作人员将在今天与你联系");
+    expect(parseBootstrap(result)?.contact_sla_text).toBe(
+      "工作人员将在今天与你联系",
+    );
+  });
+
+  test("keeps the new project images while bounding legacy bootstrap media", async () => {
+    const profileImages = Array.from(
+      { length: 12 },
+      (_, index) => `https://cdn.example.com/compat-${index}.jpg`,
+    );
+    const publicProject = {
+      ...project,
+      public_profile: { ...project.public_profile, public_image_urls: profileImages },
+    };
+    const deps = dependencies({
+      listProjects: mock(async () => ({ rows: [publicProject, publicProject], count: 2 })),
+    });
+
+    const result = await new DouyinMiniappContentService(deps as never).bootstrap(user);
+
+    expect(result.content.featured_projects[0]!.public_images).toHaveLength(12);
+    expect(result.content.featured_projects).toHaveLength(1);
+    expect(parseBootstrap(result)).not.toBeNull();
+    expect(result.content.featured_cases[0]).toMatchObject({ status: "constructing" });
+    expect(result.content.featured_cases).toHaveLength(1);
+    expect(result.content.featured_cases[0]!.public_images).toHaveLength(9);
+    expect(result.content.active_sites[0]).toMatchObject({ status: "constructing" });
+    expect(result.content.active_sites).toHaveLength(1);
+    expect(result.content.active_sites[0]!.public_images).toHaveLength(9);
+  });
+
+  test("maps unified list and detail DTOs only from public profile fields", async () => {
+    const deps = dependencies();
+    const service = new DouyinMiniappContentService(deps as never);
+
+    const list = await service.listProjects(user, {
+      page: 2, pageSize: 20, phase: "in_progress", style: "现代", layout: "三室两厅",
+    });
+    const detail = await service.getProject(user, PROJECT_ID);
+    const expected = {
+      id: PROJECT_ID,
+      title: "现代简约实景",
+      phase: "in_progress" as const,
+      cover_image_url: resolvedCover,
+      public_images: [resolvedCover],
+      style_tags: ["现代", "简约"],
+      layout: "三室两厅",
+      area: 120,
+      budget_band: "30-50万",
+      community: "示例花园",
+      city: "郑州市",
+      district: "金水区",
+      start_date: "2026-07-01",
+      updated_at: "2026-07-20T00:00:00.000Z",
+      description: "明亮通透的现代简约空间",
+    };
+
+    expect(list).toEqual({ items: [expected], pagination: {
+      page: 2, pageSize: 20, total: 1, totalPages: 1,
+    } });
+    expect(detail).toEqual(expected);
+    expect(deps.repository.listProjects).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, page: 2, pageSize: 20,
+      phase: "in_progress", style: "现代", layout: "三室两厅",
+    });
+    expect(deps.repository.findProject).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, id: PROJECT_ID,
+    });
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(JSON.stringify({ list, detail })).not.toMatch(/张先生|1号楼101室|260000/);
+  });
+
+  test("hides detail and logs when a project has no public phase", async () => {
+    const hidden = dependencies({
+      findProject: mock(async () => ({ ...project, status: "pending_start" })),
+    });
+    const service = new DouyinMiniappContentService(hidden as never);
+
+    await expect(service.getProject(user, PROJECT_ID)).rejects.toMatchObject({
+      code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404,
+    });
+    await expect(service.listProjectLogs(user, PROJECT_ID, {
+      page: 1, pageSize: 20,
+    })).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
+    expect(hidden.repository.listSiteLogs).not.toHaveBeenCalled();
+
+    const missing = dependencies({ findProject: mock(async () => null) });
+    await expect(new DouyinMiniappContentService(missing as never).getProject(
+      user,
+      PROJECT_ID,
+    )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
+  });
+
+  test("only lists paginated logs for a public in-progress project", async () => {
+    const deps = dependencies();
+    const result = await new DouyinMiniappContentService(deps as never).listProjectLogs(
+      user, PROJECT_ID, { page: 2, pageSize: 20 },
+    );
+
+    expect(deps.repository.findProject).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, id: PROJECT_ID,
+    });
+    expect(deps.repository.listSiteLogs).toHaveBeenCalledWith({
+      tenantId: TENANT_ID, projectId: PROJECT_ID, page: 2, pageSize: 20,
+    });
+    expect(result.pagination).toEqual({ page: 2, pageSize: 20, total: 1, totalPages: 1 });
+
+    const completed = dependencies({
+      findProject: mock(async () => ({ ...project, status: "acceptance" })),
+    });
+    await expect(new DouyinMiniappContentService(completed as never).listProjectLogs(
+      user, PROJECT_ID, { page: 1, pageSize: 20 },
+    )).rejects.toMatchObject({ code: "DOUYIN_PROJECT_NOT_FOUND", statusCode: 404 });
+    expect(completed.repository.listSiteLogs).not.toHaveBeenCalled();
   });
 
   test("always scopes list and detail reads to the signed session tenant", async () => {
-    const deps = dependencies();
+    const deps = dependencies({
+      listCases: mock(async () => ({ rows: [project], total: 21 })),
+    });
     const service = new DouyinMiniappContentService(deps as never);
 
     const cases = await service.listCases(user, { page: 2, pageSize: 20,
       style: "现代", layout: "三室两厅" });
-    await service.getCase(user, PROJECT_ID);
+    const detail = await service.getCase(user, PROJECT_ID);
 
     expect(deps.repository.listCases).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       page: 2, pageSize: 20, style: "现代", layout: "三室两厅" });
     expect(deps.repository.findCase).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       id: PROJECT_ID });
     expect(cases).toMatchObject({ items: [{ cover_image_url: resolvedCover,
-      public_images: [resolvedCover], description: null }],
-      pagination: { page: 2, pageSize: 20, total: 1, totalPages: 1 } });
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" }],
+      pagination: { page: 2, pageSize: 20, total: 21, totalPages: 2 } });
+    expect(detail).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(parseProjectPage(cases)).not.toBeNull();
+    expect(parseProject(detail)).not.toBeNull();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(deps.prepareImageUrls).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify({ cases, detail })).not.toMatch(/张先生|1号楼101室|260000/);
   });
 
   test("fails closed for invalid stored runtime config and cross-tenant ids", async () => {
@@ -211,7 +411,7 @@ describe("DouyinMiniappContentService", () => {
     expect(deps.repository.listSiteLogs).toHaveBeenCalledWith({ tenantId: TENANT_ID,
       projectId: PROJECT_ID, page: 1, pageSize: 20 });
     expect(result.items[0]!.images).toHaveLength(9);
-    expect(result.items[0]!.images[0]).toBe(resolvedCover);
+    expect(result.items[0]!.images[0]).toBe(resolvedLogOnlyCover);
     expect(result.items[0]!.images.every((url) => url.startsWith("https://"))).toBe(true);
     expect(result.items[0]!.images.join(",")).not.toContain("broken-legacy-image");
     expect(JSON.stringify(result)).not.toMatch(/content|employee|customer|address/i);
@@ -233,6 +433,16 @@ describe("DouyinMiniappContentService", () => {
     expect(bootstrap.content.active_sites[0]!.title).toBe("示例花园");
     expect(list.items[0]!.title).toBe("示例花园");
     expect(detail.title).toBe("示例花园");
+    expect(list.items[0]).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(detail).toMatchObject({ cover_image_url: resolvedCover,
+      public_images: [resolvedCover], budget_band: "30-50万",
+      description: "明亮通透的现代简约空间" });
+    expect(parseProjectPage(list)).not.toBeNull();
+    expect(parseProject(detail)).not.toBeNull();
+    expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
+    expect(deps.prepareImageUrls).toHaveBeenCalledTimes(3);
     expect(JSON.stringify({ bootstrap, list, detail })).not.toContain(privateName);
   });
 });

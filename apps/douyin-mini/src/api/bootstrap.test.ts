@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { BootstrapData } from "../models";
 import { fetchBootstrap } from "./bootstrap";
+import { DOUYIN_DEFAULT_CONTACT_SLA_TEXT } from "./content-validation";
 import { ApiClient } from "./request";
 
 const bootstrap = {
@@ -26,10 +27,12 @@ const bootstrap = {
   content: {
     home_banners: [],
     trust_metrics: [],
+    featured_projects: [],
     featured_cases: [],
     active_sites: [],
   },
   privacy_policy_version: "2026-07-19",
+  contact_sla_text: "工作人员将在营业时间内与你联系",
 } satisfies BootstrapData;
 
 function clientWith(value: unknown): ApiClient {
@@ -45,6 +48,52 @@ function clientWith(value: unknown): ApiClient {
 describe("Douyin bootstrap response validation", () => {
   test("accepts a six-digit hexadecimal tenant theme color", async () => {
     await expect(fetchBootstrap(clientWith(bootstrap))).resolves.toEqual(bootstrap);
+  });
+
+  test("normalizes old backend responses and trims configured SLA copy", async () => {
+    const { contact_sla_text: _, ...legacyBootstrap } = bootstrap;
+    await expect(fetchBootstrap(clientWith(legacyBootstrap))).resolves.toEqual(
+      bootstrap,
+    );
+    await expect(fetchBootstrap(clientWith({
+      ...bootstrap,
+      contact_sla_text: "  工作人员将在今天与你联系  ",
+    }))).resolves.toMatchObject({
+      contact_sla_text: "工作人员将在今天与你联系",
+    });
+  });
+
+  test("rejects invalid configured SLA copy", async () => {
+    for (const contactSlaText of ["", "   ", "x".repeat(81)]) {
+      await expect(fetchBootstrap(clientWith({
+        ...bootstrap,
+        contact_sla_text: contactSlaText,
+      }))).rejects.toMatchObject({
+        statusCode: 502,
+        code: "INVALID_API_RESPONSE",
+      });
+    }
+  });
+
+  test("ignores undocumented top-level fields without returning them", async () => {
+    const result = await fetchBootstrap(clientWith({
+      ...bootstrap,
+      internal_tenant_id: "must-not-leak",
+    }));
+    expect(result).toEqual(bootstrap);
+    expect(result).not.toHaveProperty("internal_tenant_id");
+  });
+
+  test("keeps the parser fallback aligned with the canonical domain source", async () => {
+    const domain = await import(
+      "../../../../packages/domain/src/douyin-miniapp"
+    );
+    expect(DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+      domain.DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+    );
+    expect(DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+      "工作人员将在营业时间内与你联系",
+    );
   });
 
   test("rejects a theme value that could escape an inline color declaration", async () => {
