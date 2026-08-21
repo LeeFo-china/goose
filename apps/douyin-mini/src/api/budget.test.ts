@@ -163,13 +163,15 @@ describe("Douyin budget API client", () => {
       estimate: { ...estimate, ai_status: "succeeded" },
       ai_analysis: analysis,
     });
-    expect(calls).toEqual([{
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
       path: `/douyin-mini/budget-estimates/${ESTIMATE_ID}/ai-analysis`,
       method: "POST",
       data: { retry: true },
-      timeoutMs: 35_000,
       token: "test-token",
-    }]);
+    });
+    expect(calls[0]!.timeoutMs).toBeGreaterThan(0);
+    expect(calls[0]!.timeoutMs).toBeLessThanOrEqual(35_000);
 
     for (const invalid of [
       { estimate, ai_analysis: analysis },

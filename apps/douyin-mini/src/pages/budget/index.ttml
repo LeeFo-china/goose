@@ -42,11 +42,11 @@
     <view class="field-group"><view class="field-label">个性需求（选填）</view><textarea class="demand-input ui-control" aria-label="个性需求" data-field="demand" maxlength="1000" value="{{form.demand}}" placeholder="可填写收纳、材料或空间改造重点" placeholder-style="color: #706C67;" disabled="{{status === 'calculating'}}" bindinput="onTextInput" /></view>
     <view tt:if="{{pageError}}" class="form-error ui-error-surface" role="alert">{{pageError}}</view>
     <button class="calculate-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" loading="{{status === 'calculating'}}" disabled="{{status === 'calculating'}}" bindtap="onCalculate">{{status === 'calculating' ? '正在计算' : '开始预算初算'}}</button>
-    <view class="config-note">当前报价版本 {{config.pricing_version}}，{{config.disclaimer}}</view>
+    <view class="config-note">当前配置版本 {{config.pricing_version}}，{{config.disclaimer}}</view>
   </view>
 
-  <view tt:if="{{status === 'result' && estimate}}" class="result-section">
-    <view class="result-heading"><view><view class="ui-section-title">预算初算结果</view><view class="estimate-no">预算编号 {{estimate.estimate_no}}</view></view><view class="range-label">预计总价区间</view></view>
+  <view tt:if="{{status === 'result' && estimate}}" class="result-section" role="status">
+    <view class="result-heading"><view><view class="ui-section-title">预算初算结果</view><view class="estimate-no">预算编号 {{estimate.estimate_no}}</view><view class="estimate-snapshot">报价版本 {{resultPricingVersion}}</view><view class="estimate-snapshot">{{resultEffectivePeriod}}</view></view><view class="range-label">预计总价区间</view></view>
     <view class="total-range"><text>{{displayMinimum}}</text><text class="range-separator">至</text><text>{{displayMaximum}}</text></view>
 
     <view class="result-block">
@@ -62,9 +62,9 @@
 
     <view class="ai-block ui-card">
       <view class="ai-heading"><view class="result-title">AI 预算建议</view><view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-status"><view class="ai-dot"></view>正在生成</view></view>
-      <view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-copy">{{aiError || '规则预算已生成，AI 仅补充需求与量房确认建议。'}}</view>
-      <view tt:elif="{{estimate.ai_status === 'succeeded' && aiAnalysis}}"><view class="ai-summary">{{aiAnalysis.summary}}</view><view class="ai-group"><view class="ai-label">预算分配建议</view><view tt:for="{{aiAnalysis.allocation_advice}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">需要关注</view><view tt:for="{{aiAnalysis.risk_factors}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">量房时确认</view><view tt:for="{{aiAnalysis.onsite_questions}}" tt:key="*this" class="result-item">{{item}}</view></view></view>
-      <view tt:elif="{{estimate.ai_status === 'failed'}}" class="ai-fallback"><view class="ai-copy">{{aiError || 'AI 建议暂时无法生成，规则预算仍可正常使用。'}}</view><button class="retry-ai ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryAi">{{aiRetryMode === 'retry' ? '重试 AI 建议' : '重新获取 AI 说明'}}</button></view>
+      <view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-copy" role="status">{{aiError || '规则预算已生成，AI 仅补充需求与量房确认建议。'}}</view>
+      <view tt:elif="{{estimate.ai_status === 'succeeded' && aiAnalysis}}" role="status"><view class="ai-summary">{{aiAnalysis.summary}}</view><view class="ai-group"><view class="ai-label">预算分配建议</view><view tt:for="{{aiAnalysis.allocation_advice}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">需要关注</view><view tt:for="{{aiAnalysis.risk_factors}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">量房时确认</view><view tt:for="{{aiAnalysis.onsite_questions}}" tt:key="*this" class="result-item">{{item}}</view></view></view>
+      <view tt:elif="{{estimate.ai_status === 'failed'}}" class="ai-fallback" role="status"><view class="ai-copy">{{aiError || 'AI 建议暂时无法生成，规则预算仍可正常使用。'}}</view><button class="retry-ai ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryAi">{{aiRetryMode === 'retry' ? '重试 AI 建议' : '重新获取 AI 说明'}}</button></view>
       <view tt:else class="ai-copy">当前仅展示规则预算，建议量房时确认现场情况。</view>
     </view>
 

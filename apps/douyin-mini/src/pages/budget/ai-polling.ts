@@ -2,7 +2,6 @@ import type { DouyinBudgetAiExplanationResponse } from "../../models";
 
 const POLL_INTERVAL_MS = 2_000;
 const AI_RUN_WINDOW_MS = 55_000;
-const MAX_POLL_ATTEMPTS = 10;
 const POLL_REQUEST_TIMEOUT_MS = 3_000;
 const INITIAL_REQUEST_TIMEOUT_MS = 35_000;
 
@@ -27,7 +26,6 @@ const defaultScheduler: BudgetAiPollingScheduler = {
 export class BudgetAiPollingCoordinator {
   private nextId = 0;
   private currentId = 0;
-  private attempts = 0;
   private cancelScheduled: (() => void) | null = null;
 
   constructor(private readonly scheduler: BudgetAiPollingScheduler = defaultScheduler) {}
@@ -36,7 +34,6 @@ export class BudgetAiPollingCoordinator {
     this.cancel();
     const run = { id: ++this.nextId, deadlineAt: this.scheduler.now() + AI_RUN_WINDOW_MS };
     this.currentId = run.id;
-    this.attempts = 0;
     return run;
   }
 
@@ -49,10 +46,9 @@ export class BudgetAiPollingCoordinator {
   }
 
   scheduleNext(run: BudgetAiPollingRun, callback: () => void): boolean {
-    if (!this.isCurrent(run) || this.attempts >= MAX_POLL_ATTEMPTS
+    if (!this.isCurrent(run)
       || this.scheduler.now() + POLL_INTERVAL_MS >= run.deadlineAt) return false;
     this.cancelScheduled?.();
-    this.attempts += 1;
     this.cancelScheduled = this.scheduler.schedule(() => {
       this.cancelScheduled = null;
       if (this.isCurrent(run)) callback();

@@ -10,8 +10,9 @@
 .area-input { min-width: 0; height: 88rpx; flex: 1; color: #191817; font-size: 30rpx; }
 .area-unit { color: #625f5b; font-size: 25rpx; }
 .choice-grid, .option-list { display: flex; flex-wrap: wrap; gap: 14rpx; }
-.choice-button, .option-button { box-sizing: border-box; min-width: 142rpx; min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 25rpx; line-height: 86rpx; }
-.option-button { min-width: 0; }
+.choice-button, .option-button { box-sizing: border-box; min-width: 142rpx; min-height: 88rpx; margin: 0; padding: 0 24rpx; border: 1rpx solid #dddad5; border-radius: 12rpx; background: #fff; color: #625f5b; font-size: 25rpx; }
+.choice-button { line-height: 86rpx; }
+.option-button { display: flex; min-width: 0; align-items: center; justify-content: center; padding-top: 14rpx; padding-bottom: 14rpx; overflow: hidden; line-height: 1.5; white-space: normal; }
 .field-help, .config-note, .result-empty { color: #706c67; font-size: 22rpx; line-height: 1.6; }
 .optional-grid { display: flex; gap: 18rpx; margin-top: 30rpx; }
 .compact-field { min-width: 0; flex: 1; }
@@ -23,7 +24,7 @@
 .config-note { margin-top: 18rpx; text-align: center; }
 .result-section { margin-top: 52rpx; }
 .result-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; }
-.estimate-no, .range-label { margin-top: 10rpx; color: #706c67; font-size: 22rpx; line-height: 1.5; }
+.estimate-no, .estimate-snapshot, .range-label { margin-top: 10rpx; color: #706c67; font-size: 22rpx; line-height: 1.5; }
 .range-label { flex: none; }
 .total-range { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14rpx; margin-top: 22rpx; color: #191817; font-size: 42rpx; font-weight: 700; line-height: 1.3; }
 .range-separator { color: #706c67; font-size: 23rpx; font-weight: 500; }
@@ -35,6 +36,7 @@
 .category-label { color: #625f5b; }
 .category-range { color: #191817; font-weight: 650; }
 .result-item { position: relative; margin-top: 12rpx; padding-left: 22rpx; color: #4d4a46; font-size: 24rpx; line-height: 1.6; }
+.result-item, .ai-copy, .ai-summary, .disclaimer, .estimate-snapshot { min-width: 0; overflow: hidden; white-space: normal; }
 .result-item::before { position: absolute; top: 17rpx; left: 2rpx; width: 7rpx; height: 7rpx; border-radius: 50%; background: #625f5b; content: ""; }
 .result-columns { display: flex; gap: 26rpx; }
 .result-list { min-width: 0; flex: 1; padding-top: 26rpx; border-top: 1rpx solid #dddad5; }

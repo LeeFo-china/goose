@@ -6,15 +6,21 @@ import type {
   DouyinBudgetPublicConfig,
 } from "../../models";
 import {
+  BudgetPageLifecycleCoordinator,
   beginAiRequest,
   beginBudgetCalculation,
   beginConfigLoad,
+  buildBudgetResultView,
+  buildBudgetPageView,
   createBudgetPageState,
   applyBudgetFormMutation,
   failAiRequest,
   failBudgetCalculation,
+  invalidateBudgetPageRequests,
   resolveAiRequest,
+  resolveAiRequestResult,
   resolveBudgetCalculation,
+  resolveBudgetCalculationResult,
   resolveConfigLoad,
   resolveConfigLoadResult,
 } from "./page-model";
@@ -29,6 +35,50 @@ const estimate = {
 } as DouyinBudgetEstimateResult;
 
 describe("budget page request state", () => {
+  test("loads once on first lifecycle and refreshes only after a hidden page is shown", () => {
+    const lifecycle = new BudgetPageLifecycleCoordinator();
+    expect(lifecycle.onLoad()).toBe(true);
+    expect(lifecycle.onShow()).toBe(false);
+    expect(lifecycle.isActive()).toBe(true);
+    expect(lifecycle.onHide()).toBe(true);
+    expect(lifecycle.isActive()).toBe(false);
+    expect(lifecycle.onShow()).toBe(true);
+    expect(lifecycle.onShow()).toBe(false);
+    expect(lifecycle.onUnload()).toBe(true);
+    expect(lifecycle.isActive()).toBe(false);
+    expect(lifecycle.onShow()).toBe(false);
+  });
+
+  test("a hidden page refreshes to the authoritative current pricing version on show", () => {
+    const lifecycle = new BudgetPageLifecycleCoordinator();
+    expect(lifecycle.onLoad()).toBe(true);
+    const first = resolveConfigLoad(createBudgetPageState(), 1, config);
+    expect(lifecycle.onHide()).toBe(true);
+    const hidden = invalidateBudgetPageRequests(first);
+    expect(lifecycle.onShow()).toBe(true);
+    const refresh = beginConfigLoad(hidden);
+    const current = resolveConfigLoadResult(
+      refresh,
+      refresh.configSequence,
+      { ...config, pricing_version: "2" },
+    );
+
+    expect(current.accepted).toBe(true);
+    expect(current.state).toMatchObject({
+      status: "ready",
+      config: { pricing_version: "2" },
+      estimate: null,
+    });
+  });
+
+  test("hide and unload invalidate config, estimate and AI request authorities", () => {
+    const current = resolveConfigLoad(createBudgetPageState(), 1, config);
+    const invalidated = invalidateBudgetPageRequests(current);
+    expect(invalidated.configSequence).toBe(current.configSequence + 1);
+    expect(invalidated.calculationSequence).toBe(current.calculationSequence + 1);
+    expect(invalidated.aiSequence).toBe(current.aiSequence + 1);
+  });
+
   test("ignores an older config load after pull-down refresh starts", () => {
     const first = beginConfigLoad(createBudgetPageState());
     const refresh = beginConfigLoad(first);
@@ -71,6 +121,36 @@ describe("budget page request state", () => {
       .toBe(second.state);
   });
 
+  test("a late estimate after hide is rejected and cannot start AI", () => {
+    const ready = resolveConfigLoad(createBudgetPageState(), 1, config);
+    const calculation = beginBudgetCalculation(ready);
+    const hidden = invalidateBudgetPageRequests(calculation.state);
+    const resolution = resolveBudgetCalculationResult(hidden, calculation.sequence, estimate);
+    let aiCalls = 0;
+    if (resolution.accepted) aiCalls += 1;
+
+    expect(resolution.accepted).toBe(false);
+    expect(resolution.state).toBe(hidden);
+    expect(aiCalls).toBe(0);
+  });
+
+  test("a late AI response after hide is rejected without a view update", () => {
+    const ready = resolveConfigLoad(createBudgetPageState(), 1, config);
+    const calculation = beginBudgetCalculation(ready);
+    const result = resolveBudgetCalculation(calculation.state, calculation.sequence, estimate);
+    const ai = beginAiRequest(result);
+    const hidden = invalidateBudgetPageRequests(ai.state);
+    const resolution = resolveAiRequestResult(
+      hidden,
+      ai.sequence,
+      estimate.id,
+      { estimate: { ...estimate, ai_status: "failed" }, ai_analysis: null },
+    );
+
+    expect(resolution.accepted).toBe(false);
+    expect(resolution.state).toBe(hidden);
+  });
+
   test("shows deterministic result before AI and updates only AI fields", () => {
     const ready = resolveConfigLoad(createBudgetPageState(), 1, config);
     const calculation = beginBudgetCalculation(ready);
@@ -95,6 +175,35 @@ describe("budget page request state", () => {
     expect(ai.state.estimate).toMatchObject({ id: estimate.id, ai_status: "pending" });
     expect(resolved.estimate).toMatchObject({ id: estimate.id, ai_status: "succeeded" });
     expect(resolved.aiAnalysis).toEqual(response.ai_analysis);
+  });
+
+  test("projects the immutable estimate pricing version and local validity period", () => {
+    const from = "2026-08-20T00:00:00Z";
+    const to = "2026-12-31T15:59:59Z";
+    const view = buildBudgetResultView({
+      ...estimate,
+      categories: [],
+      pricing_version: "7",
+      pricing_effective_from: from,
+      pricing_effective_to: to,
+    } as DouyinBudgetEstimateResult);
+
+    expect(view.resultPricingVersion).toBe("7");
+    expect(view.resultEffectivePeriod).toBe(
+      `生效时间 ${new Date(from).toLocaleString("zh-CN", { hour12: false })}；有效至 ${new Date(to).toLocaleString("zh-CN", { hour12: false })}`,
+    );
+    const stateView = buildBudgetPageView({
+      ...createBudgetPageState(),
+      status: "result",
+      estimate: {
+        ...estimate,
+        categories: [],
+        pricing_version: "7",
+        pricing_effective_from: from,
+        pricing_effective_to: to,
+      } as DouyinBudgetEstimateResult,
+    });
+    expect(stateView).toMatchObject({ status: "result", resultPricingVersion: "7" });
   });
 
   test("ignores stale AI and preserves the estimate when AI fails", () => {

@@ -45,11 +45,11 @@ describe("budget AI polling coordinator", () => {
     expect(polling.scheduleNext(run, () => {})).toBe(false);
   });
 
-  test("caps polling at ten attempts and makes old runs stale", () => {
+  test("uses the shared deadline rather than an early attempt cap", () => {
     const fake = harness();
     const polling = new BudgetAiPollingCoordinator(fake.scheduler);
     const run = polling.begin();
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    for (let attempt = 0; attempt < 27; attempt += 1) {
       expect(polling.scheduleNext(run, () => {})).toBe(true);
       fake.callbacks.shift()?.();
     }
@@ -138,13 +138,37 @@ describe("budget AI analysis runner", () => {
       onResponse: () => {}, onUncertain: () => {}, onExhausted,
     });
     await Bun.sleep(0);
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    while (fake.callbacks.length) {
       fake.callbacks.shift()?.();
       await Bun.sleep(0);
     }
     expect(onExhausted).toHaveBeenCalledTimes(1);
-    expect(request).toHaveBeenCalledTimes(11);
+    expect(fake.scheduler.now() - 1_000).toBeGreaterThanOrEqual(52_000);
+    expect(fake.scheduler.now() - 1_000).toBeLessThan(55_000);
+    expect(request).toHaveBeenCalledTimes(28);
     expect(request.mock.calls.every((call) => call[1] === false)).toBe(true);
+  });
+
+  test("keeps polling a fast pending response beyond thirty seconds and accepts success", async () => {
+    const fake = harness();
+    const request = mock(async () => (
+      fake.scheduler.now() - 1_000 > 30_000 ? succeeded : pending
+    ));
+    const onResponse = mock(() => {});
+    const onExhausted = mock(() => {});
+    const runner = new BudgetAiAnalysisRunner(request, new BudgetAiPollingCoordinator(fake.scheduler));
+    runner.start(pending.estimate.id, false, {
+      onResponse, onUncertain: () => {}, onExhausted,
+    });
+    await Bun.sleep(0);
+    while (fake.callbacks.length) {
+      fake.callbacks.shift()?.();
+      await Bun.sleep(0);
+    }
+
+    expect(fake.scheduler.now() - 1_000).toBeGreaterThan(30_000);
+    expect(onResponse).toHaveBeenLastCalledWith(succeeded);
+    expect(onExhausted).not.toHaveBeenCalled();
   });
 
   test("counts initial request time against the hard deadline and never polls at sixty seconds", async () => {

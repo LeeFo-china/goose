@@ -3,8 +3,10 @@ import { describe, expect, test } from "bun:test";
 import type { DouyinBudgetPublicConfig } from "../../models";
 import {
   BudgetFormValidationError,
+  buildBudgetOptionViews,
   buildEstimateRequest,
   filterApplicableOptions,
+  normalizeBudgetFormForConfig,
   reconcileSelectedOptions,
   updateBudgetSelection,
   type BudgetFormValue,
@@ -110,5 +112,19 @@ describe("budget form model", () => {
       .toMatchObject({ decorationScope: "partial", selectedOptions: [] });
     expect(updateBudgetSelection(config, form, "propertyCondition", "old_house"))
       .toMatchObject({ propertyCondition: "old_house" });
+  });
+
+  test("reconciles a refreshed config and builds selected option views", () => {
+    const refreshed = {
+      ...config,
+      pricing_version: "2",
+      options: config.options.filter((option) => option.code !== "custom_cabinet"),
+    };
+    const normalized = normalizeBudgetFormForConfig(refreshed, form);
+    expect(normalized.selectedOptions).toEqual([]);
+    expect(buildBudgetOptionViews(config, form)).toEqual([{
+      ...config.options[1],
+      selected: true,
+    }]);
   });
 });

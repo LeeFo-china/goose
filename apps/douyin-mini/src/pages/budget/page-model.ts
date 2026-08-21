@@ -1,3 +1,4 @@
+import { ApiRequestError } from "../../api/request";
 import type {
   DouyinBudgetAiAnalysis,
   DouyinBudgetAiExplanationResponse,
@@ -25,6 +26,54 @@ export type BudgetPageState = {
   aiSequence: number;
 };
 
+export type BudgetPageResolution = {
+  state: BudgetPageState;
+  accepted: boolean;
+};
+
+export type BudgetResultView = {
+  displayMinimum: string;
+  displayMaximum: string;
+  displayRange: string;
+  categoryRows: Array<DouyinBudgetEstimateResult["categories"][number] & { range: string }>;
+  resultPricingVersion: string;
+  resultEffectivePeriod: string;
+};
+
+type BudgetPageLifecyclePhase = "new" | "visible" | "hidden" | "unloaded";
+
+export class BudgetPageLifecycleCoordinator {
+  private phase: BudgetPageLifecyclePhase = "new";
+
+  onLoad(): boolean {
+    if (this.phase !== "new") return false;
+    this.phase = "visible";
+    return true;
+  }
+
+  onShow(): boolean {
+    if (this.phase !== "hidden") return false;
+    this.phase = "visible";
+    return true;
+  }
+
+  onHide(): boolean {
+    if (this.phase !== "visible") return false;
+    this.phase = "hidden";
+    return true;
+  }
+
+  onUnload(): boolean {
+    if (this.phase === "unloaded") return false;
+    this.phase = "unloaded";
+    return true;
+  }
+
+  isActive(): boolean {
+    return this.phase === "visible";
+  }
+}
+
 export function createBudgetPageState(): BudgetPageState {
   return {
     status: "loading_config",
@@ -40,11 +89,85 @@ export function createBudgetPageState(): BudgetPageState {
   };
 }
 
+export function buildBudgetResultView(
+  estimate: DouyinBudgetEstimateResult | null,
+): BudgetResultView {
+  if (!estimate) {
+    return {
+      displayMinimum: "",
+      displayMaximum: "",
+      displayRange: "",
+      categoryRows: [],
+      resultPricingVersion: "",
+      resultEffectivePeriod: "",
+    };
+  }
+  const effectiveFrom = formatLocalDateTime(estimate.pricing_effective_from);
+  const effectiveTo = estimate.pricing_effective_to
+    ? formatLocalDateTime(estimate.pricing_effective_to)
+    : null;
+  return {
+    displayMinimum: formatMoney(estimate.minimum_total),
+    displayMaximum: formatMoney(estimate.maximum_total),
+    displayRange: formatRange(estimate.minimum_total, estimate.maximum_total),
+    categoryRows: estimate.categories.map((category) => ({
+      ...category,
+      range: formatRange(category.minimum_amount, category.maximum_amount),
+    })),
+    resultPricingVersion: estimate.pricing_version,
+    resultEffectivePeriod: `生效时间 ${effectiveFrom}${effectiveTo ? `；有效至 ${effectiveTo}` : "；长期有效"}`,
+  };
+}
+
+export function buildBudgetPageView(current: BudgetPageState) {
+  return {
+    status: current.status,
+    config: current.config,
+    pageError: current.pageError,
+    estimate: current.estimate,
+    ...buildBudgetResultView(current.estimate),
+    aiAnalysis: current.aiAnalysis,
+    aiError: current.aiError,
+    aiRetryMode: current.aiRetryMode,
+  };
+}
+
+export function describeBudgetUnavailable(error: unknown) {
+  return error instanceof ApiRequestError && error.code === "DOUYIN_BUDGET_NOT_CONFIGURED"
+    ? { title: "预算初算暂未开放", description: "装修公司尚未配置可用报价，请稍后再试。" }
+    : { title: "预算初算暂时无法加载", description: readBudgetError(error, "请检查网络后重试。") };
+}
+
+export function readBudgetError(error: unknown, fallback: string): string {
+  return error instanceof ApiRequestError && error.message.trim() ? error.message : fallback;
+}
+
+export function formatRange(minimum: number, maximum: number): string {
+  return `${formatMoney(minimum)} - ${formatMoney(maximum)}`;
+}
+
+function formatMoney(amount: number): string {
+  return `¥${String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}`;
+}
+
+function formatLocalDateTime(value: string): string {
+  return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
 export function beginConfigLoad(current: BudgetPageState): BudgetPageState {
   return {
     ...current,
     status: "loading_config",
     pageError: "",
+    configSequence: current.configSequence + 1,
+    calculationSequence: current.calculationSequence + 1,
+    aiSequence: current.aiSequence + 1,
+  };
+}
+
+export function invalidateBudgetPageRequests(current: BudgetPageState): BudgetPageState {
+  return {
+    ...current,
     configSequence: current.configSequence + 1,
     calculationSequence: current.calculationSequence + 1,
     aiSequence: current.aiSequence + 1,
@@ -126,9 +249,19 @@ export function resolveBudgetCalculation(
   sequence: number,
   estimate: DouyinBudgetEstimateResult,
 ): BudgetPageState {
-  return sequence === current.calculationSequence
-    ? { ...current, status: "result", estimate, aiAnalysis: null }
-    : current;
+  return resolveBudgetCalculationResult(current, sequence, estimate).state;
+}
+
+export function resolveBudgetCalculationResult(
+  current: BudgetPageState,
+  sequence: number,
+  estimate: DouyinBudgetEstimateResult,
+): BudgetPageResolution {
+  if (sequence !== current.calculationSequence) return { state: current, accepted: false };
+  return {
+    accepted: true,
+    state: { ...current, status: "result", estimate, aiAnalysis: null },
+  };
 }
 
 export function failBudgetCalculation(
@@ -164,14 +297,26 @@ export function resolveAiRequest(
   estimateId: string,
   response: DouyinBudgetAiExplanationResponse,
 ): BudgetPageState {
+  return resolveAiRequestResult(current, sequence, estimateId, response).state;
+}
+
+export function resolveAiRequestResult(
+  current: BudgetPageState,
+  sequence: number,
+  estimateId: string,
+  response: DouyinBudgetAiExplanationResponse,
+): BudgetPageResolution {
   if (sequence !== current.aiSequence || current.estimate?.id !== estimateId
-    || response.estimate.id !== estimateId) return current;
+    || response.estimate.id !== estimateId) return { state: current, accepted: false };
   return {
-    ...current,
-    estimate: { ...current.estimate, ai_status: response.estimate.ai_status },
-    aiAnalysis: response.ai_analysis,
-    aiError: response.estimate.ai_status === "failed" ? "AI 建议暂时无法生成" : "",
-    aiRetryMode: response.estimate.ai_status === "failed" ? "retry" : "none",
+    accepted: true,
+    state: {
+      ...current,
+      estimate: { ...current.estimate, ai_status: response.estimate.ai_status },
+      aiAnalysis: response.ai_analysis,
+      aiError: response.estimate.ai_status === "failed" ? "AI 建议暂时无法生成" : "",
+      aiRetryMode: response.estimate.ai_status === "failed" ? "retry" : "none",
+    },
   };
 }
 

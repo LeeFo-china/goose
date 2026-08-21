@@ -10,6 +10,8 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   ]);
 
   for (const handler of [
+    "onShow()",
+    "onHide()",
     "onPullDownRefresh()",
     "onRetryConfig()",
     "onAreaInput(",
@@ -28,6 +30,8 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(source).toContain("resolveConfigLoadResult");
   expect(source).toContain("aiPolling.cancel()");
   expect(source).toContain("BudgetAiAnalysisRunner");
+  expect(source).toContain("BudgetPageLifecycleCoordinator");
+  expect(source).toContain("this.suspendPage()");
   expect(source.match(/this\.commitFormMutation\(/g)).toHaveLength(4);
   expect(source).toContain("if (!resolution.accepted) return;");
   expect(source).toContain("resolution.state.config");
@@ -43,9 +47,12 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(template).not.toContain("indexOf(");
   expect(template).not.toContain("{{estimate.id}}");
   expect(template).toContain("{{estimate.estimate_no}}");
+  expect(template).toContain("报价版本 {{resultPricingVersion}}");
+  expect(template).toContain("{{resultEffectivePeriod}}");
   expect(config).toContain('"enablePullDownRefresh": true');
   expect(config).toContain('"page-skeleton"');
   expect(config).toContain('"empty-state"');
+  expect(source.split("\n").length).toBeLessThanOrEqual(300);
 });
 
 test("budget result keeps estimate, AI and disclaimer hierarchy without promises", async () => {
@@ -57,6 +64,7 @@ test("budget result keeps estimate, AI and disclaimer hierarchy without promises
   expect(template).toContain("未包含内容");
   expect(template).toContain("AI 预算建议");
   expect(template).toContain("{{estimate.disclaimer}}");
+  expect(template).toContain('role="status"');
   expect(template).toContain('bindtap="onRetryAi"');
   expect(template).toContain("重新获取 AI 说明");
   expect(template).toContain('bindtap="onBookMeasurement"');
@@ -64,6 +72,8 @@ test("budget result keeps estimate, AI and disclaimer hierarchy without promises
   expect(style).not.toContain("border-left");
   expect(style).not.toMatch(/border-radius:\s*(?:3[2-9]|[4-9]\d)rpx/);
   expect(style).toMatch(/min-height:\s*88rpx/);
+  expect(style).toContain("white-space: normal");
+  expect(style).toContain("overflow: hidden");
 });
 
 test("tab assets and navigation preserve sites as a deep link", async () => {

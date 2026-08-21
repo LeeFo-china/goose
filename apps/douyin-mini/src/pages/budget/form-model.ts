@@ -31,6 +31,8 @@ export type BudgetChoiceField =
   | "decorationTier"
   | "decorationScope";
 
+export type BudgetOptionView = DouyinBudgetPublicOption & { selected: boolean };
+
 export class BudgetFormValidationError extends Error {
   constructor(readonly field: keyof BudgetFormValue, message: string) {
     super(message);
@@ -82,6 +84,39 @@ export function filterApplicableOptions(
     option.applicable_property_conditions.includes(form.propertyCondition)
     && option.applicable_decoration_tiers.includes(form.decorationTier)
     && option.applicable_decoration_scopes.includes(form.decorationScope));
+}
+
+export function normalizeBudgetFormForConfig(
+  config: DouyinBudgetPublicConfig,
+  form: BudgetFormValue,
+): BudgetFormValue {
+  const normalized = {
+    ...form,
+    propertyCondition: config.property_conditions.some(
+      (item) => item.value === form.propertyCondition,
+    ) ? form.propertyCondition : config.property_conditions[0]!.value,
+    decorationTier: config.decoration_tiers.some(
+      (item) => item.value === form.decorationTier,
+    ) ? form.decorationTier : config.decoration_tiers[0]!.value,
+    decorationScope: config.decoration_scopes.some(
+      (item) => item.value === form.decorationScope,
+    ) ? form.decorationScope : config.decoration_scopes[0]!.value,
+  };
+  return {
+    ...normalized,
+    selectedOptions: reconcileSelectedOptions(config, normalized),
+  };
+}
+
+export function buildBudgetOptionViews(
+  config: DouyinBudgetPublicConfig,
+  form: BudgetFormValue,
+): BudgetOptionView[] {
+  const selected = new Set(form.selectedOptions);
+  return filterApplicableOptions(config, form).map((option) => ({
+    ...option,
+    selected: selected.has(option.code),
+  }));
 }
 
 export function reconcileSelectedOptions(
