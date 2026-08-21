@@ -24,9 +24,9 @@ import {
   createSubmissionGate,
   getAllowedLeadActions,
   getLeadViewState,
+  normalizeLeadDetail,
   normalizeLeadPage,
   parseLeadFilters,
-  projectLeadSourceSnapshot,
 } from "./leads-workbench-logic";
 
 const LEAD_ID = "22222222-2222-4222-8222-222222222222";
@@ -47,24 +47,36 @@ const page: LeadPage = {
     customer: { name: "李女士", status: "potential" },
     assignee: { name: "王顾问", avatar: null, status: "active" },
     latest_appointment: {
-      id: APPOINTMENT_ID,
-      appointment_no: "DYLF-20260821-000001",
+      id: APPOINTMENT_ID, appointment_no: "DYLF-20260821-000001",
       budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
-      preferred_visit_date: "2026-08-23",
-      preferred_visit_period: "morning",
-      community: "晴天花园",
-      status: "pending_confirmation",
-      confirmed_visit_at: null,
-      created_at: "2026-08-21T08:00:00.000Z",
-      updated_at: "2026-08-21T08:00:00.000Z",
-      version: 1,
+      preferred_visit_date: "2026-08-23", preferred_visit_period: "morning",
+      community: "晴天花园", status: "pending_confirmation",
+      confirmed_visit_at: null, created_at: "2026-08-21T08:00:00.000Z",
+      updated_at: "2026-08-21T08:00:00.000Z", version: 1,
     },
   }],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
 };
 
+const detailAppointment = {
+  id: APPOINTMENT_ID, appointment_no: "DYLF-20260821-000001",
+  preferred_visit_date: "2026-08-23" as const,
+  preferred_visit_period: "morning" as const,
+  community: "晴天花园", status: "pending_confirmation" as const,
+  confirmed_visit_at: null, created_at: "2026-08-21T08:00:00.000Z",
+  updated_at: "2026-08-21T08:00:00.000Z", version: 1,
+  source: {
+    demand: "旧房翻新，希望增加收纳",
+    attribution: { source_type: "short_video", scene: "023009",
+      entry_path: "pages/case-detail/index" },
+    budget: { estimate_no: "DYYS-20260821-000001", minimum_total: 100_000,
+      maximum_total: 140_000, ai_status: "succeeded" as const },
+    ai: { summary: "优先核实拆改范围", allocation_advice: ["先确认水电"],
+      risk_factors: ["旧房墙体待核验"], onsite_questions: ["是否调整厨房布局"] },
+  },
+};
 const detail: LeadDetail = {
-  ...page.list[0]!,
+  ...page.list[0]!, latest_appointment: detailAppointment,
   demand: "旧房翻新，希望增加收纳",
   attribution: { source_type: "short_video", scene: "023009",
     entry_path: "pages/case-detail/index" },
@@ -72,7 +84,7 @@ const detail: LeadDetail = {
     maximum_total: 140_000, ai_status: "succeeded" },
   ai: { summary: "优先核实拆改范围", allocation_advice: ["先确认水电"],
     risk_factors: ["旧房墙体待核验"], onsite_questions: ["是否调整厨房布局"] },
-  appointments: { list: [page.list[0]!.latest_appointment!],
+  appointments: { list: [detailAppointment],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
     truncated: false },
   follow_ups: { list: [], pagination: {
@@ -107,102 +119,35 @@ describe("tenant Douyin lead workbench behavior", () => {
     );
   });
 
-  test("strictly projects the backend DTO and removes raw phone and relation IDs", () => {
-    const rawLead = {
-      id: LEAD_ID, name: "李女士", phone: "13800138000",
-      phone_masked: "138****8000", can_view_phone: true,
-      can_call_phone: false, can_copy_phone: false, community: "晴天花园",
-      status: "new", version: 3, created_at: "2026-08-21T08:00:00.000Z",
-      followed_at: null, follow_remark: null,
-      customer: { id: "44444444-4444-4444-8444-444444444444",
-        tenant_id: "11111111-1111-4111-8111-111111111111", name: "李女士",
-        status: "potential", owner_id: EMPLOYEE_ID },
-      assignee: { id: EMPLOYEE_ID,
-        tenant_id: "11111111-1111-4111-8111-111111111111", name: "王顾问",
-        avatar: null, status: "active" },
-      latest_appointment: {
-        id: APPOINTMENT_ID, appointment_no: "DYLF-20260821-000001",
-        tenant_id: "11111111-1111-4111-8111-111111111111",
-        marketing_lead_id: LEAD_ID,
-        customer_id: "44444444-4444-4444-8444-444444444444",
-        assigned_employee_id: EMPLOYEE_ID,
-        budget_estimate_id: "44444444-4444-4444-8444-444444444444",
-        budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
-        preferred_visit_date: "2026-08-23", preferred_visit_period: "morning",
-        community: "晴天花园", status: "pending_confirmation",
-        confirmed_visit_at: null, created_at: "2026-08-21T08:00:00.000Z",
-        updated_at: "2026-08-21T08:00:00.000Z", version: 1,
-      },
-    };
-    const normalized = normalizeLeadPage({ list: [rawLead], pagination: {
+  test("accepts only the final safe list DTO and rejects internal wire fields", () => {
+    const normalized = normalizeLeadPage({ list: [page.list[0]], pagination: {
       page: 1, pageSize: 20, total: 1, totalPages: 1,
     } }, { page: 1, pageSize: 20 });
-    expect(normalized?.list[0]).toEqual(page.list[0]);
-    expect(normalized?.list[0]).not.toHaveProperty("phone");
-    expect(normalized?.list[0]?.latest_appointment).toMatchObject({
-      budget_range: { minimum_total: 100_000, maximum_total: 140_000 },
-    });
-    expect(normalized?.list[0]?.latest_appointment).not.toHaveProperty("budget_estimate_id");
-    expect(normalizeLeadPage({ list: [{ ...rawLead, source_snapshot: {} }],
+    expect(normalized).toEqual(page);
+    for (const internal of ["phone", "capabilities", "installation_id", "form_data",
+      "source_snapshot", "tenant_id", "assigned_employee_id"]) {
+      expect(normalizeLeadPage({ list: [{ ...page.list[0], [internal]: "must-not-pass" }],
+        pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } },
+      { page: 1, pageSize: 20 })).toBeNull();
+    }
+    expect(normalizeLeadPage({ list: [{ ...page.list[0], customer: {
+      ...page.list[0]!.customer, id: LEAD_ID } }],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 } },
     { page: 1, pageSize: 20 })).toBeNull();
   });
 
-  test("whitelists source snapshot budget and AI fields without forwarding unknown data", () => {
-    const projection = projectLeadSourceSnapshot({
-      privacy_policy_version: "2026-08-01",
-      consented_at: "2026-08-21T08:00:00.000Z",
-      attribution: {
-        source_type: "short_video", entry_path: "pages/case-detail/index",
-        scene: "023009", campaign_code: "summer-2026", content_id: "video-12",
-        subject_hash: "must-not-leak",
-      },
-      demand: "旧房翻新，希望增加收纳",
-      budget_estimate: {
-        estimate_no: "DYYS-20260821-000001",
-        result: { minimum_total: 100_000, maximum_total: 140_000,
-          pricing_version_id: "must-not-leak" },
-        ai_status: "succeeded",
-        ai_analysis: {
-          summary: "预算主要集中在基础施工和收纳。",
-          allocation_advice: ["优先确认水电点位"],
-          risk_factors: ["旧房拆改范围待现场核实"],
-          onsite_questions: ["确认承重墙与管线位置"],
-        },
-        raw_response: "must-not-leak",
-        request_ip: "must-not-leak",
-      },
-      internal_id: LEAD_ID,
-    });
-    expect(projection).toEqual({
-      attribution: {
-        source_type: "short_video", entry_path: "pages/case-detail/index",
-        scene: "023009", campaign_code: "summer-2026", content_id: "video-12",
-      },
-      demand: "旧房翻新，希望增加收纳",
-      budget: { estimate_no: "DYYS-20260821-000001",
-        minimum_total: 100_000, maximum_total: 140_000, ai_status: "succeeded" },
-      ai: { summary: "预算主要集中在基础施工和收纳。",
-        allocation_advice: ["优先确认水电点位"],
-        risk_factors: ["旧房拆改范围待现场核实"],
-        onsite_questions: ["确认承重墙与管线位置"] },
-    });
-    expect(JSON.stringify(projection)).not.toMatch(/raw_response|subject_hash|request_ip|internal_id|pricing_version_id/);
-    expect(projectLeadSourceSnapshot({ budget_estimate: {
-      estimate_no: "bad", result: { minimum_total: 200, maximum_total: 100 },
-      ai_status: "succeeded", ai_analysis: {},
-    } })).toMatchObject({ budget: null, ai: null });
-    expect(projectLeadSourceSnapshot({ budget_estimate: {
-      estimate_no: "DYYS-20260821-000001",
-      result: { minimum_total: 100, maximum_total: 200 },
-      ai_status: "succeeded", ai_analysis: {
-        summary: "有效摘要", allocation_advice: [], risk_factors: [],
-        onsite_questions: [], raw_response: "unknown",
-      },
-    } })).toMatchObject({ budget: {
-      estimate_no: "DYYS-20260821-000001", minimum_total: 100,
-      maximum_total: 200, ai_status: "succeeded",
-    }, ai: null });
+  test("accepts direct safe detail fields and rejects raw snapshot or unknown internals", () => {
+    expect(normalizeLeadDetail(detail)).toEqual(detail);
+    for (const internal of ["installation_id", "form_data", "source_snapshot", "phone"]) {
+      expect(normalizeLeadDetail({ ...detail, [internal]: "must-not-pass" })).toBeNull();
+    }
+    expect(normalizeLeadDetail({ ...detail, appointments: {
+      ...detail.appointments, list: [{ ...detailAppointment,
+        source_snapshot: { request_ip: "must-not-pass" } }],
+    } })).toBeNull();
+    expect(normalizeLeadDetail({ ...detail, appointments: {
+      ...detail.appointments, pagination: { ...detail.appointments.pagination, page: 2 },
+    } })).toBeNull();
   });
 
   test("only the latest list or detail request may update state", () => {
@@ -426,7 +371,7 @@ describe("tenant Douyin lead workbench behavior", () => {
   test("uses stable accessible field relationships for invalid follow-up input", () => {
     const html = renderToStaticMarkup(createElement(LeadActionForm, {
       action: "follow_up",
-      appointments: [{ value: APPOINTMENT_ID, label: "2026-08-23 上午" }],
+      appointments: [detailAppointment],
       assigneeOptions: [],
       values: { appointmentId: APPOINTMENT_ID, followUpType: "phone", summary: "", result: "" },
       errors: { summary: "请填写跟进摘要" },
