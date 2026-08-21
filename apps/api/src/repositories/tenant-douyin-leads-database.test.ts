@@ -28,6 +28,8 @@ describe("tenant douyin lead local PostgreSQL integration", () => {
       "function_acl_catalog",
       "latest_of_twenty_one",
       "detail_page_twenty_of_twenty_one",
+      "keyword_bitmap_or_indexes",
+      "assignee_scope_conflict_zero_writes",
       "preflight_conflict_zero_writes",
       "existing_customer_conversion_shape",
       "unassigned_customer_owner",

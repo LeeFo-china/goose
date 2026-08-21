@@ -88,7 +88,8 @@ type RepositoryPort = {
     id: string; tenant_id: string; tenant_department_id: string | null;
     status: string | null;
   } | null>;
-  assign(input: CommandBase & { assignedEmployeeId: string }):
+  assign(input: CommandBase & { assignedEmployeeId: string;
+    expectedAssigneeDepartmentId: string | null }):
     Promise<TenantDouyinLeadCommandResult>;
   appendFollowUp(input: CommandBase & {
     appointmentId: string; followUpType: string; summary: string; result: string;
@@ -224,6 +225,11 @@ export class TenantDouyinLeadsService {
     input: TenantDouyinLeadAssign) {
     const context = await this.commandContext(authContext, "assign", leadId);
     const body = parseRequest(TenantDouyinLeadAssignSchema, input);
+    const expectedAssigneeDepartmentId = context.scope === "department"
+      ? authContext.tenantDepartmentId : null;
+    if (context.scope === "department" && !expectedAssigneeDepartmentId) {
+      throw Errors.forbidden();
+    }
     if (context.scope !== "all") {
       const target = await this.dependencies.repository.findEmployeeAccess({
         tenantId: context.tenantId, employeeId: body.assigned_employee_id,
@@ -236,6 +242,7 @@ export class TenantDouyinLeadsService {
     }
     const result = await this.dependencies.repository.assign({
       ...commandBase(context), assignedEmployeeId: body.assigned_employee_id,
+      expectedAssigneeDepartmentId,
       expectedVersion: body.expected_lead_version,
       idempotencyKey: body.idempotency_key,
     });
@@ -426,6 +433,9 @@ function commandErrorMessage(code: TenantDouyinLeadCommandError["code"]): string
   if (code === "DOUYIN_LEAD_NOT_FOUND") return "抖音线索不存在";
   if (code === "DOUYIN_MEASUREMENT_APPOINTMENT_NOT_FOUND") return "量房预约不存在";
   if (code === "DOUYIN_LEAD_ASSIGNEE_NOT_FOUND") return "负责人不存在或不可用";
+  if (code === "DOUYIN_LEAD_ASSIGNEE_SCOPE_CONFLICT") {
+    return "负责人部门已变化，请刷新后重试";
+  }
   if (code === "DOUYIN_LEAD_VERSION_CONFLICT") return "线索已更新，请刷新后重试";
   if (code === "DOUYIN_LEAD_IDEMPOTENCY_CONFLICT") return "幂等键已用于其他请求";
   if (code === "DOUYIN_LEAD_CUSTOMER_PREFLIGHT_CONFLICT") {

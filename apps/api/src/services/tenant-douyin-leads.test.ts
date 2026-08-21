@@ -200,6 +200,36 @@ describe("TenantDouyinLeadsService", () => {
     });
   });
 
+  test("uses an existing customer's owner without weakening lead-only fallback", async () => {
+    const selfPhoneAuth = {
+      ...authContext([]),
+      permissions: [
+        { code: "douyin_lead.read", scope: "all" },
+        { code: "customer.read", scope: "self" },
+        { code: "customer.phone.view", scope: "self" },
+      ],
+    } as AuthContext;
+    const ownerlessCustomer = fixture({ phonePrivacy: customerPhonePrivacyService,
+      repository: { ...fixture().repository,
+        listLeads: mock(async () => ({ rows: [{ lead,
+          appointments: [appointment], customer: { ...customer, owner_id: null },
+          assignee: employee }], total: 1 })) } });
+    await expect(ownerlessCustomer.service.list(selfPhoneAuth, {}))
+      .resolves.toMatchObject({ list: [{ phone: null,
+        phone_masked: "138****8000", can_view_phone: false }] });
+
+    const unconvertedLead = { ...lead, customer_id: null };
+    const unlinkedAppointment = { ...appointment, customer_id: null };
+    const leadOnly = fixture({ phonePrivacy: customerPhonePrivacyService,
+      repository: { ...fixture().repository,
+        listLeads: mock(async () => ({ rows: [{ lead: unconvertedLead,
+          appointments: [unlinkedAppointment], customer: null,
+          assignee: employee }], total: 1 })) } });
+    await expect(leadOnly.service.list(selfPhoneAuth, {}))
+      .resolves.toMatchObject({ list: [{ phone: "13800138000",
+        can_view_phone: true }] });
+  });
+
   test("returns explicit bounded appointment pagination for detail", async () => {
     const result = await fixture().service.getDetail(
       authContext(["douyin_lead.read"]), LEAD_ID,
@@ -354,6 +384,20 @@ describe("TenantDouyinLeadsService", () => {
       assigned_employee_id: EMPLOYEE_ID, expected_lead_version: 1,
       idempotency_key: IDEMPOTENCY_KEY,
     })).rejects.toMatchObject({ statusCode: 409, code: "DOUYIN_LEAD_VERSION_CONFLICT" });
+
+    const assigneeScopeConflict = fixture({ repository: {
+      ...fixture().repository,
+      assign: mock(async () => ({ ok: false as const, error: {
+        status_code: 409 as const,
+        code: "DOUYIN_LEAD_ASSIGNEE_SCOPE_CONFLICT" as const,
+      } })),
+    } });
+    await expect(assigneeScopeConflict.service.assign(
+      authContext(["douyin_lead.assign"]), LEAD_ID,
+      { assigned_employee_id: EMPLOYEE_ID, expected_lead_version: 1,
+        idempotency_key: IDEMPOTENCY_KEY },
+    )).rejects.toMatchObject({ statusCode: 409,
+      code: "DOUYIN_LEAD_ASSIGNEE_SCOPE_CONFLICT" });
 
     const idempotencyConflict = fixture({ repository: {
       ...fixture().repository,

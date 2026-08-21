@@ -278,13 +278,15 @@ export class TenantDouyinLeadsRepository {
       customerId: customer?.id ?? null };
   }
 
-  assign(input: CommandBaseInput & { assignedEmployeeId: string }) {
+  assign(input: CommandBaseInput & { assignedEmployeeId: string;
+    expectedAssigneeDepartmentId: string | null }) {
     return this.runCommand("assign_douyin_lead", "assign", {
       p_tenant_id: input.tenantId, p_marketing_lead_id: input.leadId,
       p_actor_employee_id: input.actorEmployeeId,
       p_assigned_employee_id: input.assignedEmployeeId,
       p_expected_version: input.expectedVersion,
       p_idempotency_key: input.idempotencyKey,
+      p_expected_assignee_department_id: input.expectedAssigneeDepartmentId,
     });
   }
 

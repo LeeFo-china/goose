@@ -18,13 +18,14 @@ const APPOINTMENT_ID = "33333333-3333-4333-8333-333333333333";
 const CUSTOMER_ID = "44444444-4444-4444-8444-444444444444";
 const ACTOR_ID = "55555555-5555-4555-8555-555555555555";
 const OTHER_ID = "77777777-7777-4777-8777-777777777777";
+const DEPARTMENT_ID = "99999999-9999-4999-8999-999999999999";
 const IDEMPOTENCY_KEY = "66666666-6666-4666-8666-666666666666";
 const command = { expected_lead_version: 1, idempotency_key: IDEMPOTENCY_KEY };
 
 type Scope = "self" | "department" | "assigned" | "all";
 function auth(permission: string, scope: Scope, extra: string[] = []): AuthContext {
   return { tenantId: TENANT_ID, employeeId: ACTOR_ID,
-    tenantDepartmentId: "99999999-9999-4999-8999-999999999999",
+    tenantDepartmentId: DEPARTMENT_ID,
     permissions: [permission, ...extra].map((code) => ({ code, scope })) } as AuthContext;
 }
 
@@ -34,6 +35,8 @@ function fixture(input: {
   customerId?: string | null;
   createScope?: Scope | null;
   targetVisible?: boolean;
+  targetEmployeeId?: string;
+  targetDepartmentId?: string | null;
 } = {}) {
   const assignedEmployeeId = input.assignedEmployeeId === undefined
     ? ACTOR_ID : input.assignedEmployeeId;
@@ -42,8 +45,11 @@ function fixture(input: {
     getLeadDetail: mock(async () => null), listFollowUps: mock(async () => ({ rows: [], total: 0 })),
     findLeadAccess: mock(async () => ({ id: LEAD_ID, tenant_id: TENANT_ID,
       assigned_employee_id: assignedEmployeeId })),
-    findEmployeeAccess: mock(async () => ({ id: OTHER_ID, tenant_id: TENANT_ID,
-      tenant_department_id: "88888888-8888-4888-8888-888888888888", status: "active" })),
+    findEmployeeAccess: mock(async () => ({ id: input.targetEmployeeId ?? OTHER_ID,
+      tenant_id: TENANT_ID,
+      tenant_department_id: input.targetDepartmentId === undefined
+        ? "88888888-8888-4888-8888-888888888888" : input.targetDepartmentId,
+      status: "active" })),
     findConversionPreflight: mock(async () => ({ leadId: LEAD_ID,
       phone: "13800138000", assignedEmployeeId, customerId: input.customerId ?? null })),
     assign: mock(async (args: { assignedEmployeeId: string }) => ({ ok: true as const, data: {
@@ -121,7 +127,37 @@ describe("TenantDouyinLeadsService write access", () => {
     await all.service.assign(auth("douyin_lead.assign", "all"), LEAD_ID,
       { ...command, assigned_employee_id: OTHER_ID });
     expect(all.repository.findEmployeeAccess).not.toHaveBeenCalled();
-    expect(all.repository.assign).toHaveBeenCalledTimes(1);
+    expect(all.repository.assign).toHaveBeenCalledWith(expect.objectContaining({
+      expectedAssigneeDepartmentId: null,
+    }));
+  });
+
+  test("binds only department assignment to the authenticated department snapshot", async () => {
+    const department = fixture({ visibleIds: [ACTOR_ID], targetVisible: true,
+      targetDepartmentId: DEPARTMENT_ID });
+    await department.service.assign(auth("douyin_lead.assign", "department"),
+      LEAD_ID, { ...command, assigned_employee_id: OTHER_ID });
+    expect(department.repository.assign).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedAssigneeDepartmentId: DEPARTMENT_ID }),
+    );
+
+    for (const scope of ["self", "assigned"] as const) {
+      const scoped = fixture({ visibleIds: [ACTOR_ID], targetVisible: true,
+        targetEmployeeId: ACTOR_ID });
+      await scoped.service.assign(auth("douyin_lead.assign", scope), LEAD_ID,
+        { ...command, assigned_employee_id: ACTOR_ID });
+      expect(scoped.repository.assign).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedAssigneeDepartmentId: null }),
+      );
+    }
+
+    const missingDepartment = fixture({ visibleIds: [ACTOR_ID],
+      targetVisible: true, targetDepartmentId: DEPARTMENT_ID });
+    await expect(missingDepartment.service.assign({
+      ...auth("douyin_lead.assign", "department"), tenantDepartmentId: null,
+    } as AuthContext, LEAD_ID, { ...command, assigned_employee_id: OTHER_ID }))
+      .rejects.toMatchObject({ statusCode: 403 });
+    expect(missingDepartment.repository.assign).not.toHaveBeenCalled();
   });
 
   test("rejects a mismatched scoped assignee lookup before mutation", async () => {

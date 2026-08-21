@@ -22217,17 +22217,30 @@ export type Database = {
         }
         Returns: undefined
       }
-      assign_douyin_lead: {
-        Args: {
-          p_actor_employee_id: string
-          p_assigned_employee_id: string
-          p_expected_version: number
-          p_idempotency_key: string
-          p_marketing_lead_id: string
-          p_tenant_id: string
-        }
-        Returns: Json
-      }
+      assign_douyin_lead:
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_assigned_employee_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_marketing_lead_id: string
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actor_employee_id: string
+              p_assigned_employee_id: string
+              p_expected_assignee_department_id: string
+              p_expected_version: number
+              p_idempotency_key: string
+              p_marketing_lead_id: string
+              p_tenant_id: string
+            }
+            Returns: Json
+          }
       assign_platform_lead: {
         Args: {
           p_assigned_note?: string

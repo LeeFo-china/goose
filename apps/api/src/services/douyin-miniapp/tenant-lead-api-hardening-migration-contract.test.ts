@@ -17,6 +17,10 @@ const stalePreflightRepairMigration = new URL(
   "../../../../../supabase/migrations/20260821105620_reject_stale_douyin_customer_preflight.sql",
   import.meta.url,
 );
+const assignmentScopeRepairMigration = new URL(
+  "../../../../../supabase/migrations/20260821105630_bind_douyin_assignee_department_scope.sql",
+  import.meta.url,
+);
 
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
@@ -154,6 +158,61 @@ describe("tenant lead API hardening migration", () => {
       .map((statement) => statement.trim()).filter(Boolean);
     for (const statement of statements) {
       expect(statement).toMatch(/^(begin|set local |revoke all on function |grant execute on function |comment on function |commit$)/);
+    }
+  });
+
+  test("keeps 105620 immutable and binds department assignment before writes", async () => {
+    const bytes = await Bun.file(stalePreflightRepairMigration).arrayBuffer();
+    expect(createHash("sha256").update(new Uint8Array(bytes)).digest("hex"))
+      .toBe("0cd98361aeaeb4c8dbec5a8dcbe307e824c967aea6382e281f1dfe7f9d48f4a7");
+    const sql = await Bun.file(assignmentScopeRepairMigration).text();
+    const normalized = normalize(sql);
+    const body = functionBody(sql, "assign_douyin_lead");
+    const requestHash = body.indexOf("v_request_hash :=");
+    const advisoryLock = body.indexOf("pg_catalog.pg_advisory_xact_lock");
+    const operationReplay = body.indexOf("if found then", advisoryLock);
+    const assigneeLock = body.indexOf("from public.employees as employee",
+      operationReplay);
+    const scopeConflict = body.indexOf("douyin_lead_assignee_scope_conflict",
+      assigneeLock);
+    const leadWrite = body.indexOf("update public.marketing_leads", scopeConflict);
+    const operationWrite = body.indexOf(
+      "insert into public.douyin_lead_workflow_operations", scopeConflict,
+    );
+
+    expect(body).toContain("p_expected_assignee_department_id uuid");
+    expect(body.slice(requestHash, advisoryLock))
+      .not.toContain("p_expected_assignee_department_id");
+    expect(operationReplay).toBeGreaterThan(advisoryLock);
+    expect(assigneeLock).toBeGreaterThan(operationReplay);
+    expect(body.slice(assigneeLock, scopeConflict)).toContain("for share");
+    expect(body.slice(assigneeLock, scopeConflict))
+      .toContain("v_assignee_department_id is distinct from p_expected_assignee_department_id");
+    expect(body.slice(assigneeLock, scopeConflict))
+      .toContain("p_expected_assignee_department_id is not null");
+    expect(body.slice(assigneeLock, scopeConflict)).toContain("'status_code', 409");
+    expect(scopeConflict).toBeLessThan(leadWrite);
+    expect(scopeConflict).toBeLessThan(operationWrite);
+
+    expect(normalized).toMatch(/revoke all on function public\.assign_douyin_lead\(\s*uuid, uuid, uuid, uuid, integer, uuid\s*\) from service_role/);
+    expect(normalized).toMatch(/grant execute on function public\.assign_douyin_lead\(\s*uuid, uuid, uuid, uuid, integer, uuid, uuid\s*\) to service_role/);
+    for (const [column, indexName] of [
+      ["name", "marketing_leads_douyin_name_trgm_idx"],
+      ["phone", "marketing_leads_douyin_phone_trgm_idx"],
+      ["community", "marketing_leads_douyin_community_trgm_idx"],
+    ] as const) {
+      const contract = `create index ${indexName} on public.marketing_leads `
+        + `using gin (${column} extensions.gin_trgm_ops) `
+        + "where source = 'douyin_miniapp'";
+      expect(normalized).toContain(contract);
+      expect(normalize(sql.replace(`CREATE INDEX ${indexName}`,
+        `CREATE INDEX ${indexName}_removed`))).not.toContain(contract);
+    }
+    expect(normalized).not.toContain("create extension");
+    const statements = topLevelSql(sql).split(";")
+      .map((statement) => statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^(begin|set local |create index |revoke all on function |grant execute on function |comment on (?:function|index) |commit$)/);
     }
   });
 });

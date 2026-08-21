@@ -20,6 +20,7 @@ const LEAD_ID = "22222222-2222-4222-8222-222222222222";
 const APPOINTMENT_ID = "33333333-3333-4333-8333-333333333333";
 const CUSTOMER_ID = "44444444-4444-4444-8444-444444444444";
 const EMPLOYEE_ID = "55555555-5555-4555-8555-555555555555";
+const DEPARTMENT_ID = "99999999-9999-4999-8999-999999999999";
 const IDEMPOTENCY_KEY = "66666666-6666-4666-8666-666666666666";
 const CREATED_AT = "2026-08-21T08:00:00.000Z";
 
@@ -327,7 +328,8 @@ describe("TenantDouyinLeadsRepository", () => {
     const repository = new Repository(context.client as never);
     await repository.assign({ tenantId: TENANT_ID, leadId: LEAD_ID,
       actorEmployeeId: EMPLOYEE_ID, assignedEmployeeId: EMPLOYEE_ID,
-      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY });
+      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
+      expectedAssigneeDepartmentId: DEPARTMENT_ID });
     await repository.appendFollowUp({ tenantId: TENANT_ID, leadId: LEAD_ID,
       appointmentId: APPOINTMENT_ID, actorEmployeeId: EMPLOYEE_ID,
       followUpType: "phone", summary: "已联系", result: "等待上门",
@@ -347,6 +349,13 @@ describe("TenantDouyinLeadsRepository", () => {
       "assign_douyin_lead", "append_douyin_lead_follow_up",
       "convert_douyin_lead_to_customer", "mark_douyin_lead_invalid",
     ]);
+    expect(rpcCalls[0]?.args[1]).toEqual({
+      p_tenant_id: TENANT_ID, p_marketing_lead_id: LEAD_ID,
+      p_actor_employee_id: EMPLOYEE_ID,
+      p_assigned_employee_id: EMPLOYEE_ID,
+      p_expected_version: 1, p_idempotency_key: IDEMPOTENCY_KEY,
+      p_expected_assignee_department_id: DEPARTMENT_ID,
+    });
     expect(rpcCalls[1]?.args[1]).toEqual({
       p_tenant_id: TENANT_ID,
       p_marketing_lead_id: LEAD_ID,
@@ -392,7 +401,8 @@ describe("TenantDouyinLeadsRepository", () => {
     }]).client as never);
     await expect(repository.assign({ tenantId: TENANT_ID, leadId: LEAD_ID,
       actorEmployeeId: EMPLOYEE_ID, assignedEmployeeId: EMPLOYEE_ID,
-      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY }))
+      expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
+      expectedAssigneeDepartmentId: null }))
       .resolves.toEqual({ ok: true, data: replay });
   });
 
@@ -404,7 +414,7 @@ describe("TenantDouyinLeadsRepository", () => {
     await expect(new Repository(invalidEnvelope.client as never).assign({
       tenantId: TENANT_ID, leadId: LEAD_ID, actorEmployeeId: EMPLOYEE_ID,
       assignedEmployeeId: EMPLOYEE_ID, expectedVersion: 1,
-      idempotencyKey: IDEMPOTENCY_KEY,
+      idempotencyKey: IDEMPOTENCY_KEY, expectedAssigneeDepartmentId: null,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR", details: undefined });
 
     const databaseFailure = clientWith([{ data: null, error: { message: "secret" } }]);
@@ -430,7 +440,7 @@ describe("TenantDouyinLeadsRepository", () => {
     await expect(new Repository(mismatched.client as never).assign({
       tenantId: TENANT_ID, leadId: LEAD_ID, actorEmployeeId: EMPLOYEE_ID,
       assignedEmployeeId: EMPLOYEE_ID, expectedVersion: 1,
-      idempotencyKey: IDEMPOTENCY_KEY,
+      idempotencyKey: IDEMPOTENCY_KEY, expectedAssigneeDepartmentId: null,
     })).rejects.toMatchObject({ statusCode: 500, code: "DB_ERROR" });
 
     const secondLead = { ...lead,

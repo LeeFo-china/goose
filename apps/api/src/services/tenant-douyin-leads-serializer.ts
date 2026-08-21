@@ -38,7 +38,7 @@ export function serializeLeadBundle(input: {
     {
       id: customer?.id ?? lead.id,
       tenant_id: input.tenantId,
-      owner_id: customer?.owner_id ?? lead.assigned_employee_id,
+      owner_id: customer ? customer.owner_id : lead.assigned_employee_id,
       phone: lead.phone,
     },
   );
