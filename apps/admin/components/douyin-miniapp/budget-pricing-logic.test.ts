@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { TenantDouyinBudgetReplaceItemsSchema } from "../../../api/src/schema/tenant-douyin-budget";
 
 import {
+  addPricingEditorItem,
   BUDGET_PRICING_PAGE_SIZE,
   buildPricingItemsPayload,
   calculatePricingPreview,
@@ -11,10 +13,12 @@ import {
   getBudgetPricingViewState,
   getPricingDraftWarnings,
   getPricingItemWarnings,
+  normalizePricingEditorItemOrder,
   normalizePricingVersion,
   normalizePricingVersionPage,
   pricingStatusDisplay,
   pricingItemToEditor,
+  removePricingEditorItem,
   toggleCanonicalCondition,
   yuanInputToFen,
   type BudgetPricingItem,
@@ -106,6 +110,35 @@ describe("douyin budget pricing admin logic", () => {
     expect(JSON.stringify(payload)).not.toContain("condition_payload");
   });
 
+  test("normalizes sparse loaded order across add, remove and the API payload boundary", () => {
+    const loaded = [
+      pricingItemToEditor(baseItem),
+      pricingItemToEditor({
+        ...baseItem,
+        item_code: "base.quality.rough",
+        label: "品质档毛坯基础施工",
+        decoration_tier: "quality",
+        sort_order: 2,
+      }),
+    ];
+    expect(loaded.map((item) => item.sort_order)).toEqual([0, 2]);
+
+    const added = addPricingEditorItem(loaded, {
+      ...createEmptyPricingEditorItem("custom_cabinet", 99),
+      minimum_amount_yuan: "1000",
+      maximum_amount_yuan: "2000",
+    });
+    expect(added.map((item) => item.sort_order)).toEqual([0, 1, 2]);
+    expect(TenantDouyinBudgetReplaceItemsSchema.safeParse(
+      buildPricingItemsPayload(version.updated_at, added),
+    ).success).toBe(true);
+
+    expect(removePricingEditorItem(added, 1).map((item) => item.sort_order))
+      .toEqual([0, 1]);
+    expect(normalizePricingEditorItemOrder([{ ...added[0]!, sort_order: 8 }])[0]?.sort_order)
+      .toBe(0);
+  });
+
   test("summarizes metadata, coverage and amount validation before save or activation", () => {
     expect(getPricingDraftWarnings({
       effective_from: "2026-08-22T00:00",
@@ -135,6 +168,14 @@ describe("douyin budget pricing admin logic", () => {
       { ...createEmptyPricingEditorItem("custom_cabinet", 1), label: editor.label,
         minimum_amount_yuan: "1", maximum_amount_yuan: "2" },
     ], { requireActivationCoverage: false })).toContain("报价项目名称不能重复");
+    expect(getPricingItemWarnings([
+      editor,
+      { ...createEmptyPricingEditorItem("custom_cabinet", 0), label: "定制柜体",
+        minimum_amount_yuan: "1", maximum_amount_yuan: "2" },
+    ], { requireActivationCoverage: false })).toContain("报价项目排序不能重复");
+    expect(getPricingItemWarnings([{ ...editor, sort_order: -1 }], {
+      requireActivationCoverage: false,
+    })).toContain("报价项目排序必须是 0 至 99 的整数");
   });
 
   test("uses the existing deterministic calculator for the 100 sqm preview", () => {

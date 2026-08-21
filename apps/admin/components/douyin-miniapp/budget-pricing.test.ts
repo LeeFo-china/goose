@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { PricingItemEditor } from "./budget-pricing";
+import { createEmptyPricingEditorItem } from "./budget-pricing-logic";
 
 const componentFile = new URL("./budget-pricing.tsx", import.meta.url);
 const pageFile = new URL(
@@ -16,6 +21,9 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("AlertDialogTitle");
     expect(source).toContain("启用报价版本");
     expect(source).toContain("buildPricingItemsPayload");
+    expect(source).toMatch(/setItems\(normalizePricingEditorItemOrder/);
+    expect(source).toContain("addPricingEditorItem(current");
+    expect(source).toContain("removePricingEditorItem(current");
     expect(source).toContain("createBudgetPricingRequestAuthority");
     expect(source).toContain("撤销未保存修改");
     expect(source).toContain("const requestAuthority");
@@ -48,6 +56,42 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toMatch(/aria-describedby=\{activationWarnings\.length > 0 \? "budget-pricing-activation-validation-summary"/);
     expect(source).not.toContain("condition_payload");
     expect(source).not.toMatch(/ai[_ -]?(provider|model|key)|api[_ -]?key/i);
+  });
+
+  test("renders unique field errors for inverted, overflowing and out-of-range values", () => {
+    const inverted = {
+      ...createEmptyPricingEditorItem("base.comfortable.rough", 0),
+      minimum_amount_yuan: "1200",
+      maximum_amount_yuan: "900",
+      property_condition_coefficient_bps: 0,
+      whole_house_coefficient_bps: 100_001,
+    };
+    const overflowing = {
+      ...createEmptyPricingEditorItem("custom_cabinet", 1),
+      minimum_amount_yuan: "90071992547410",
+      maximum_amount_yuan: "90071992547410",
+    };
+    const markup = renderToStaticMarkup(createElement("div", null,
+      createElement(PricingItemEditor, {
+        item: inverted, index: 0, onChange: () => undefined, onRemove: () => undefined,
+      }),
+      createElement(PricingItemEditor, {
+        item: overflowing, index: 1, onChange: () => undefined, onRemove: () => undefined,
+      }),
+    ));
+
+    expect(markup).toContain("最低价不能高于最高价");
+    expect(markup).toContain("最高价不能低于最低价");
+    expect(markup).toContain("金额超出可保存范围");
+    expect(markup).toContain("系数必须大于 0");
+    expect(markup).toContain("系数不能超过 1000%");
+    const describedIds = [...markup.matchAll(/aria-describedby="([^"]+-error)"/g)]
+      .map((match) => match[1]!);
+    const renderedIds = [...markup.matchAll(/id="([^"]+-error)"/g)]
+      .map((match) => match[1]!);
+    expect(describedIds.length).toBeGreaterThanOrEqual(6);
+    expect(new Set(renderedIds).size).toBe(renderedIds.length);
+    expect(describedIds.every((id) => renderedIds.includes(id))).toBe(true);
   });
 
   test("server-loads the first bounded page and enforces tenant management permission", async () => {

@@ -72,6 +72,26 @@ export function pricingItemToEditor(item: BudgetPricingItem): BudgetPricingEdito
       };
 }
 
+export function normalizePricingEditorItemOrder(
+  items: readonly BudgetPricingEditorItem[],
+): BudgetPricingEditorItem[] {
+  return items.map((item, index) => ({ ...item, sort_order: index }));
+}
+
+export function addPricingEditorItem(
+  items: readonly BudgetPricingEditorItem[],
+  item: BudgetPricingEditorItem,
+): BudgetPricingEditorItem[] {
+  return normalizePricingEditorItemOrder([...items, item]);
+}
+
+export function removePricingEditorItem(
+  items: readonly BudgetPricingEditorItem[],
+  index: number,
+): BudgetPricingEditorItem[] {
+  return normalizePricingEditorItemOrder(items.filter((_, itemIndex) => itemIndex !== index));
+}
+
 export function createEmptyPricingEditorItem(
   itemCode: BudgetItemCode,
   sortOrder: number,
@@ -145,6 +165,11 @@ export function getPricingItemWarnings(
   if (items.length === 0) return ["请至少添加 1 条报价项目"];
   if (items.length > BUDGET_PRICING_MAX_ITEMS) warnings.push("报价项目最多 100 条");
   const codes = new Set<BudgetItemCode>();
+  const sortOrders = items.map((item) => item.sort_order);
+  if (sortOrders.some((value) => !Number.isInteger(value) || value < 0 || value > 99)) {
+    warnings.push("报价项目排序必须是 0 至 99 的整数");
+  }
+  if (new Set(sortOrders).size !== sortOrders.length) warnings.push("报价项目排序不能重复");
   const labels = items.map((item) => item.label.trim()).filter(Boolean);
   if (new Set(labels).size !== labels.length) warnings.push("报价项目名称不能重复");
   for (const item of items) {
@@ -188,8 +213,30 @@ export function buildPricingItemsPayload(
 ): { expected_updated_at: string; items: BudgetPricingItem[] } {
   return {
     expected_updated_at: expectedUpdatedAt,
-    items: items.map(editorItemToWire),
+    items: normalizePricingEditorItemOrder(items).map(editorItemToWire),
   };
+}
+
+export function getPricingAmountFieldErrors(item: BudgetPricingEditorItem): {
+  minimum: string | null;
+  maximum: string | null;
+} {
+  const minimum = yuanInputToFen(item.minimum_amount_yuan);
+  const maximum = yuanInputToFen(item.maximum_amount_yuan);
+  if (!minimum.ok || !maximum.ok) {
+    return {
+      minimum: minimum.ok ? null : minimum.message,
+      maximum: maximum.ok ? null : maximum.message,
+    };
+  }
+  return minimum.value > maximum.value
+    ? { minimum: "最低价不能高于最高价", maximum: "最高价不能低于最低价" }
+    : { minimum: null, maximum: null };
+}
+
+export function getPricingCoefficientFieldError(value: number): string | null {
+  if (!Number.isSafeInteger(value) || value <= 0) return "系数必须大于 0";
+  return value > 100_000 ? "系数不能超过 1000%" : null;
 }
 
 export function buildPricingDraftPayload(input: BudgetPricingDraftInput): {
