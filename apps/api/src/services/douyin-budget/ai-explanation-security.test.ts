@@ -67,6 +67,12 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
     };
     const userPrompt = JSON.parse(gatewayInput.messages[1]?.content ?? '{}') as {
       request: Record<string, unknown>;
+      selection_schema: {
+        summary_code: { allowed: string[]; meaning: string };
+        allocation_advice_codes: { allowed: Array<[string, string]> };
+        risk_factor_codes: { allowed: Array<[string, string]> };
+        onsite_question_codes: { allowed: Array<[string, string]> };
+      };
     };
     const prompt = JSON.stringify(userPrompt);
     expect(userPrompt.request).toEqual({
@@ -96,6 +102,24 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
     ]) expect(prompt).not.toContain(resultText);
     expect(prompt).toContain('rules_estimate_overview');
     expect(prompt).toContain('prioritize_core_work');
+    const promptCatalog = [
+      ...userPrompt.selection_schema.summary_code.allowed.map(
+        (code) => [code, userPrompt.selection_schema.summary_code.meaning],
+      ),
+      ...userPrompt.selection_schema.allocation_advice_codes.allowed,
+      ...userPrompt.selection_schema.risk_factor_codes.allowed,
+      ...userPrompt.selection_schema.onsite_question_codes.allowed,
+    ];
+    expect(promptCatalog).toEqual([
+      ['rules_estimate_overview', '规则初算概览'],
+      ['prioritize_core_work', '优先确认核心施工范围'],
+      ['confirm_material_scope', '确认材料与施工边界'],
+      ['site_conditions', '关注现场条件'],
+      ['scope_changes', '关注施工范围调整'],
+      ['verify_structure', '确认墙体与空间结构'],
+      ['verify_utilities', '确认水电与隐蔽工程'],
+    ]);
+    expect(new Set(promptCatalog.map(([code]) => code)).size).toBe(7);
     for (const templateText of [
       analysis.summary,
       ...analysis.allocation_advice,
@@ -103,6 +127,23 @@ describe('DouyinBudgetAiExplanationService security boundaries', () => {
       ...analysis.onsite_questions,
     ]) expect(prompt).not.toContain(templateText);
     expect(response.ai_analysis).toEqual(analysis);
+  });
+
+  test('defines every selection code exactly once in one catalog source', async () => {
+    const source = await Bun.file(new URL('./ai-explanation.ts', import.meta.url))
+      .text();
+    expect(source).toContain('const AI_EXPLANATION_CATALOG =');
+    for (const code of [
+      'rules_estimate_overview',
+      'prioritize_core_work',
+      'confirm_material_scope',
+      'site_conditions',
+      'scope_changes',
+      'verify_structure',
+      'verify_utilities',
+    ]) {
+      expect(source.split(code)).toHaveLength(2);
+    }
   });
 
   test('rejects free text, unknown codes, duplicates and extra fields', async () => {

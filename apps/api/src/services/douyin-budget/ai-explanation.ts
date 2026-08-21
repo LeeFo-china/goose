@@ -35,19 +35,85 @@ const AI_TIMEOUT_MS = 30_000;
 const AI_TEMPERATURE = 0.2;
 const ProviderModelSchema = z.string().trim().min(1).max(100);
 
-const SummaryCodeSchema = z.literal('rules_estimate_overview');
-const AllocationAdviceCodeSchema = z.enum([
-  'prioritize_core_work',
-  'confirm_material_scope',
-]);
-const RiskFactorCodeSchema = z.enum([
-  'site_conditions',
-  'scope_changes',
-]);
-const OnsiteQuestionCodeSchema = z.enum([
-  'verify_structure',
-  'verify_utilities',
-]);
+type CatalogEntry = Readonly<{ meaning: string; template: string }>;
+type CatalogGroup = Readonly<Record<string, CatalogEntry>>;
+
+const AI_EXPLANATION_CATALOG = {
+  summary: {
+    rules_estimate_overview: {
+      meaning: '规则初算概览',
+      template: '本结果基于规则初算，仅用于理解预算构成，不构成正式报价。',
+    },
+  },
+  allocationAdvice: {
+    prioritize_core_work: {
+      meaning: '优先确认核心施工范围',
+      template: '建议优先确认基础施工与隐蔽工程范围。',
+    },
+    confirm_material_scope: {
+      meaning: '确认材料与施工边界',
+      template: '建议结合材料范围与施工边界安排预算分配。',
+    },
+  },
+  riskFactors: {
+    site_conditions: {
+      meaning: '关注现场条件',
+      template: '现场墙体与水电现状可能影响施工方案。',
+    },
+    scope_changes: {
+      meaning: '关注施工范围调整',
+      template: '施工范围调整可能影响规则初算的适用性。',
+    },
+  },
+  onsiteQuestions: {
+    verify_structure: {
+      meaning: '确认墙体与空间结构',
+      template: '量房时请确认墙体与空间结构现状。',
+    },
+    verify_utilities: {
+      meaning: '确认水电与隐蔽工程',
+      template: '量房时请确认水电与隐蔽工程现状。',
+    },
+  },
+} as const satisfies Readonly<Record<string, CatalogGroup>>;
+
+type CatalogCode<T extends CatalogGroup> = Extract<keyof T, string>;
+
+function catalogCodes<const T extends CatalogGroup>(
+  catalog: T,
+): CatalogCode<T>[] {
+  return Object.keys(catalog) as CatalogCode<T>[];
+}
+
+function catalogTemplates<const T extends CatalogGroup>(
+  catalog: T,
+): Array<T[CatalogCode<T>]['template']> {
+  return Object.values(catalog).map(
+    (entry) => entry.template,
+  ) as Array<T[CatalogCode<T>]['template']>;
+}
+
+function catalogPromptOptions<const T extends CatalogGroup>(
+  catalog: T,
+): Array<readonly [CatalogCode<T>, string]> {
+  return Object.entries(catalog).map(([code, entry]) => [
+    code as CatalogCode<T>,
+    entry.meaning,
+  ] as const);
+}
+
+const SummaryCodes = catalogCodes(AI_EXPLANATION_CATALOG.summary);
+const AllocationAdviceCodes = catalogCodes(
+  AI_EXPLANATION_CATALOG.allocationAdvice,
+);
+const RiskFactorCodes = catalogCodes(AI_EXPLANATION_CATALOG.riskFactors);
+const OnsiteQuestionCodes = catalogCodes(
+  AI_EXPLANATION_CATALOG.onsiteQuestions,
+);
+const SummaryCodeSchema = z.enum(SummaryCodes);
+const AllocationAdviceCodeSchema = z.enum(AllocationAdviceCodes);
+const RiskFactorCodeSchema = z.enum(RiskFactorCodes);
+const OnsiteQuestionCodeSchema = z.enum(OnsiteQuestionCodes);
 
 function uniqueCodeList<T>(values: readonly T[]): boolean {
   return new Set(values).size === values.length;
@@ -58,52 +124,37 @@ const AiExplanationSelectionSchema = z.strictObject({
   allocation_advice_codes: z
     .array(AllocationAdviceCodeSchema)
     .min(1)
-    .max(2)
+    .max(AllocationAdviceCodes.length)
     .refine(uniqueCodeList),
   risk_factor_codes: z
     .array(RiskFactorCodeSchema)
     .min(1)
-    .max(2)
+    .max(RiskFactorCodes.length)
     .refine(uniqueCodeList),
   onsite_question_codes: z
     .array(OnsiteQuestionCodeSchema)
     .min(1)
-    .max(2)
+    .max(OnsiteQuestionCodes.length)
     .refine(uniqueCodeList),
 });
 type AiExplanationSelection = z.infer<typeof AiExplanationSelectionSchema>;
 
-const SUMMARY_TEMPLATE =
-  '本结果基于规则初算，仅用于理解预算构成，不构成正式报价。';
-const ALLOCATION_ADVICE_TEMPLATES = {
-  prioritize_core_work: '建议优先确认基础施工与隐蔽工程范围。',
-  confirm_material_scope: '建议结合材料范围与施工边界安排预算分配。',
-} as const;
-const RISK_FACTOR_TEMPLATES = {
-  site_conditions: '现场墙体与水电现状可能影响施工方案。',
-  scope_changes: '施工范围调整可能影响规则初算的适用性。',
-} as const;
-const ONSITE_QUESTION_TEMPLATES = {
-  verify_structure: '量房时请确认墙体与空间结构现状。',
-  verify_utilities: '量房时请确认水电与隐蔽工程现状。',
-} as const;
-
 const StaticAiAnalysisSchema = z.strictObject({
-  summary: z.literal(SUMMARY_TEMPLATE),
+  summary: z.enum(catalogTemplates(AI_EXPLANATION_CATALOG.summary)),
   allocation_advice: z
-    .array(z.enum(Object.values(ALLOCATION_ADVICE_TEMPLATES)))
+    .array(z.enum(catalogTemplates(AI_EXPLANATION_CATALOG.allocationAdvice)))
     .min(1)
-    .max(2)
+    .max(AllocationAdviceCodes.length)
     .refine(uniqueCodeList),
   risk_factors: z
-    .array(z.enum(Object.values(RISK_FACTOR_TEMPLATES)))
+    .array(z.enum(catalogTemplates(AI_EXPLANATION_CATALOG.riskFactors)))
     .min(1)
-    .max(2)
+    .max(RiskFactorCodes.length)
     .refine(uniqueCodeList),
   onsite_questions: z
-    .array(z.enum(Object.values(ONSITE_QUESTION_TEMPLATES)))
+    .array(z.enum(catalogTemplates(AI_EXPLANATION_CATALOG.onsiteQuestions)))
     .min(1)
-    .max(2)
+    .max(OnsiteQuestionCodes.length)
     .refine(uniqueCodeList),
 });
 
@@ -275,15 +326,15 @@ function mapSelectionToAnalysis(
   invalid: () => Error,
 ): DouyinBudgetAiAnalysis {
   const parsed = DouyinBudgetAiAnalysisSchema.safeParse({
-    summary: SUMMARY_TEMPLATE,
+    summary: AI_EXPLANATION_CATALOG.summary[selection.summary_code].template,
     allocation_advice: selection.allocation_advice_codes.map(
-      (code) => ALLOCATION_ADVICE_TEMPLATES[code],
+      (code) => AI_EXPLANATION_CATALOG.allocationAdvice[code].template,
     ),
     risk_factors: selection.risk_factor_codes.map(
-      (code) => RISK_FACTOR_TEMPLATES[code],
+      (code) => AI_EXPLANATION_CATALOG.riskFactors[code].template,
     ),
     onsite_questions: selection.onsite_question_codes.map(
-      (code) => ONSITE_QUESTION_TEMPLATES[code],
+      (code) => AI_EXPLANATION_CATALOG.onsiteQuestions[code].template,
     ),
   });
   if (!parsed.success) throw invalid();
@@ -300,32 +351,24 @@ function buildUserPrompt(
   request: DouyinBudgetEstimateRequest,
   estimate: DouyinBudgetEstimateResult,
 ): string {
+  const summaryOptions = catalogPromptOptions(AI_EXPLANATION_CATALOG.summary);
   return JSON.stringify({
     instruction: '根据规则初算结果选择适用代码。',
     selection_schema: {
       summary_code: {
-        allowed: ['rules_estimate_overview'],
-        meaning: '规则初算概览',
+        allowed: summaryOptions.map(([code]) => code),
+        meaning: summaryOptions.map(([, meaning]) => meaning).join(''),
       },
       allocation_advice_codes: {
-        allowed: [
-          ['prioritize_core_work', '优先确认核心施工范围'],
-          ['confirm_material_scope', '确认材料与施工边界'],
-        ],
+        allowed: catalogPromptOptions(AI_EXPLANATION_CATALOG.allocationAdvice),
         rule: '至少选择一个且不得重复',
       },
       risk_factor_codes: {
-        allowed: [
-          ['site_conditions', '关注现场条件'],
-          ['scope_changes', '关注施工范围调整'],
-        ],
+        allowed: catalogPromptOptions(AI_EXPLANATION_CATALOG.riskFactors),
         rule: '至少选择一个且不得重复',
       },
       onsite_question_codes: {
-        allowed: [
-          ['verify_structure', '确认墙体与空间结构'],
-          ['verify_utilities', '确认水电与隐蔽工程'],
-        ],
+        allowed: catalogPromptOptions(AI_EXPLANATION_CATALOG.onsiteQuestions),
         rule: '至少选择一个且不得重复',
       },
     },
