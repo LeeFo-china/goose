@@ -220,6 +220,7 @@ describe("DouyinMiniappMarketingService", () => {
     expect(logged).toContain("DYLF-20260719-000001");
     expect(logged).not.toContain(TENANT_ID);
     expect(logged).not.toContain(INSTALLATION_ID);
+    expect(logged).not.toContain(SUBJECT_HASH);
     expect(logged).not.toContain(lead.name);
     expect(logged).not.toContain(lead.phone);
     expect(logged).not.toContain("notification failed");

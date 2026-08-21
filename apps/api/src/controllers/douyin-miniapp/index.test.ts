@@ -1,5 +1,8 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
-import { DouyinProjectListQuerySchema } from "@/schema/douyin-miniapp";
+import {
+  DouyinLeadRequestSchema,
+  DouyinProjectListQuerySchema,
+} from "@/schema/douyin-miniapp";
 
 let DouyinMiniappController: typeof import(".").DouyinMiniappController;
 
@@ -205,6 +208,14 @@ describe("DouyinMiniappController", () => {
       idempotency_key: "44444444-4444-4444-8444-444444444444",
       attribution,
     };
+    const invalidDate = DouyinLeadRequestSchema.safeParse({
+      ...leadBody,
+      preferred_visit_date: "2026-02-30",
+    });
+    expect(invalidDate.success).toBe(false);
+    if (!invalidDate.success) {
+      expect(invalidDate.error.issues[0]?.message).toBe("期望量房日期格式无效");
+    }
     await expect(controller.submitLead({ ...request, body: leadBody } as never))
       .resolves.toEqual({ data: publicAppointmentResult, message: "success" });
     expect(submitLead).toHaveBeenCalledWith(user, leadBody,

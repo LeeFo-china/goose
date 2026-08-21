@@ -16,6 +16,11 @@ const visitDateRepairMigrationFile = new URL(
   import.meta.url,
 );
 
+const subjectHashRepairMigrationFile = new URL(
+  '../../../../../supabase/migrations/20260821105500_bind_douyin_appointment_subject_hash.sql',
+  import.meta.url,
+);
+
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -51,6 +56,76 @@ describe('douyin appointment ownership repair migration', () => {
     expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
       'a2059d9c6fa3319c1ec0198ea43feffe777a20492c0c0809b8a1c7e9d1ad00fc',
     );
+  });
+
+  test('keeps the applied 105400 migration byte-for-byte immutable', async () => {
+    const sql = await Bun.file(visitDateRepairMigrationFile).arrayBuffer();
+    expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
+      'cc96630e55f0ab1b5db73a6f0c1fb23e45ca229e27b01f6612569bc0a5ce9c4a',
+    );
+  });
+
+  test('requires an empty appointment table before replacing historical hash semantics', async () => {
+    const sql = await Bun.file(subjectHashRepairMigrationFile).text();
+    const normalized = normalize(sql);
+    const preflight = normalized.indexOf('do $block$');
+    const tableLock = normalized.indexOf(
+      'lock table public.douyin_measurement_appointments in access exclusive mode',
+    );
+    const emptyTableCheck = normalized.indexOf(
+      'if exists ( select 1 from public.douyin_measurement_appointments ) then',
+    );
+    const replacement = normalized.indexOf(
+      'create or replace function public.submit_douyin_measurement_appointment',
+    );
+
+    expect(preflight).toBeGreaterThanOrEqual(0);
+    expect(preflight).toBeLessThan(tableLock);
+    expect(tableLock).toBeLessThan(emptyTableCheck);
+    expect(emptyTableCheck).toBeLessThan(replacement);
+    expect(normalized).toContain("errcode = 'p0001'");
+    expect(normalized).toContain(
+      "message = 'douyin_measurement_subject_hash_repair_requires_empty_table'",
+    );
+  });
+
+  test('binds the server subject into idempotency before replay without exposing it', async () => {
+    const sql = await Bun.file(subjectHashRepairMigrationFile).text();
+    const body = functionBody(sql, 'submit_douyin_measurement_appointment');
+    const hashStart = body.indexOf('v_request_hash :=');
+    const idempotencyLock = body.indexOf("'douyin-measurement-idempotency:'");
+    const replayStart = body.indexOf('if found then', idempotencyLock);
+    const replayResult = body.indexOf("'already_submitted', true");
+    const dateGuard = body.indexOf('p_preferred_visit_date <');
+    const smsLock = body.indexOf("'sms:phone:douyin_lead:'");
+    const hashInput = body.slice(hashStart, idempotencyLock);
+    const replayBranch = body.slice(replayStart, dateGuard);
+    const snapshotStart = body.indexOf('v_source_snapshot :=');
+    const snapshotEnd = body.indexOf('if pg_column_size(v_source_snapshot)', snapshotStart);
+    const snapshot = body.slice(snapshotStart, snapshotEnd);
+    const finalResult = body.slice(body.lastIndexOf('return jsonb_build_object('));
+
+    expect(hashInput).toContain("'subject_hash', p_subject_hash");
+    expect(hashStart).toBeLessThan(idempotencyLock);
+    expect(idempotencyLock).toBeLessThan(replayStart);
+    expect(replayStart).toBeLessThan(replayResult);
+    expect(replayResult).toBeLessThan(dateGuard);
+    expect(dateGuard).toBeLessThan(smsLock);
+    expect(replayBranch).not.toContain('p_subject_hash');
+    expect(snapshot).not.toContain('p_subject_hash');
+    expect(finalResult).not.toContain('p_subject_hash');
+  });
+
+  test('keeps the subject-hash repair forward-only and free of top-level business DML', async () => {
+    const sql = await Bun.file(subjectHashRepairMigrationFile).text();
+    const normalized = normalize(sql);
+    const topLevel = topLevelSql(sql);
+
+    expect(normalized).toContain('begin;');
+    expect(normalized).toContain("set local lock_timeout = '5s'");
+    expect(normalized).toContain("set local statement_timeout = '30s'");
+    expect(normalized).toEndWith('commit;');
+    expect(topLevel).not.toMatch(/\b(insert|update|delete|merge|copy|call|select)\b/);
   });
 
   test('validates Shanghai visit dates after replay and before SMS or writes', async () => {
