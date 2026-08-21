@@ -36,6 +36,7 @@ const MEASUREMENT_COMMAND_ERROR_CODES = [
   "DOUYIN_MEASUREMENT_SNAPSHOT_TOO_LARGE",
   "DOUYIN_MEASUREMENT_NUMBER_EXHAUSTED",
   "DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT",
+  "DOUYIN_MEASUREMENT_VISIT_DATE_INVALID",
 ] as const;
 
 const AppointmentCommandErrorSchema = z.strictObject({
@@ -266,6 +267,9 @@ const MEASUREMENT_COMMAND_ERRORS: Readonly<Record<
   },
   DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT: {
     statusCode: 409, message: "验证码已被使用，请重新获取",
+  },
+  DOUYIN_MEASUREMENT_VISIT_DATE_INVALID: {
+    statusCode: 400, message: "期望量房日期不能早于今天",
   },
 };
 

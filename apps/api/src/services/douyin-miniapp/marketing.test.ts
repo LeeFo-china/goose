@@ -38,6 +38,15 @@ const lead: DouyinLeadRequest = {
   attribution,
 };
 
+const publicAppointmentResult = {
+  lead_id: "44444444-4444-4444-8444-444444444444",
+  appointment_no: "DYLF-20260719-000001",
+  already_submitted: false,
+  existing_customer_linked: false,
+  status: "pending_confirmation" as const,
+  message: "量房申请已提交，工作人员将与你确认具体时间" as const,
+};
+
 type CapturedLeadInput = {
   tenantId: string;
   installationId: string;
@@ -155,7 +164,11 @@ describe("DouyinMiniappMarketingService", () => {
 
   test("passes the server-owned appointment command fields without a caller digest", async () => {
     const first = harness();
-    await first.service.submitLead(user, lead, { requestIp: null, userAgent: null });
+    await expect(first.service.submitLead(
+      user,
+      lead,
+      { requestIp: null, userAgent: null },
+    )).resolves.toEqual(publicAppointmentResult);
 
     const command = first.submitMeasurementAppointment.mock.calls[0]![0];
     expect(command).toMatchObject({
@@ -199,7 +212,7 @@ describe("DouyinMiniappMarketingService", () => {
       requestIp: null,
       userAgent: null,
       log: { warn },
-    })).resolves.toMatchObject({ appointment_no: "DYLF-20260719-000001" });
+    })).resolves.toEqual(publicAppointmentResult);
     expect(warn).toHaveBeenCalledTimes(1);
     const logged = JSON.stringify(warn.mock.calls);
     expect(logged).toContain("DOUYIN_MEASUREMENT_NOTIFICATION_FAILED");
@@ -229,19 +242,14 @@ describe("DouyinMiniappMarketingService", () => {
       user,
       lead,
       { requestIp: null, userAgent: null },
-    )).resolves.toMatchObject({ already_submitted: true });
+    )).resolves.toEqual({
+      ...publicAppointmentResult,
+      already_submitted: true,
+    });
     expect(replayed.createTenantAdminNotifications).not.toHaveBeenCalled();
   });
 
-  test("uses the Shanghai natural day for the minimum preferred visit date", async () => {
-    const beforeMidnight = harness();
-    await expect(beforeMidnight.service.submitLead(user, {
-      ...lead,
-      preferred_visit_date: "2026-07-19",
-    }, { requestIp: null, userAgent: null })).resolves.toMatchObject({
-      status: "pending_confirmation",
-    });
-
+  test("delegates past-date validation to the atomic command so replay remains possible", async () => {
     const afterMidnight = harness();
     const service = new DouyinMiniappMarketingService({
       contextRepository: { findActiveInstallation: afterMidnight.findActiveInstallation } as never,
@@ -258,16 +266,10 @@ describe("DouyinMiniappMarketingService", () => {
     await expect(service.submitLead(user, {
       ...lead,
       preferred_visit_date: "2026-07-19",
-    }, { requestIp: null, userAgent: null })).rejects.toMatchObject({
-      code: "DOUYIN_MEASUREMENT_VISIT_DATE_PAST",
-      statusCode: 400,
-    });
-    await expect(service.submitLead(user, {
-      ...lead,
-      preferred_visit_date: "2026-07-20",
-    }, { requestIp: null, userAgent: null })).resolves.toMatchObject({
-      status: "pending_confirmation",
-    });
+    }, { requestIp: null, userAgent: null })).resolves.toEqual(publicAppointmentResult);
+    expect(afterMidnight.submitMeasurementAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ preferredVisitDate: "2026-07-19" }),
+    );
   });
 
   test("rejects disabled lead capture, stale consent, and server-authoritative client events", async () => {

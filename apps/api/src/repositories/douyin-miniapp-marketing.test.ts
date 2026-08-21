@@ -178,6 +178,7 @@ describe("DouyinMiniappMarketingRepository.submitMeasurementAppointment", () => 
       ["DOUYIN_MEASUREMENT_SNAPSHOT_TOO_LARGE", 400],
       ["DOUYIN_MEASUREMENT_NUMBER_EXHAUSTED", 409],
       ["DOUYIN_MEASUREMENT_SMS_CONSUME_CONFLICT", 409],
+      ["DOUYIN_MEASUREMENT_VISIT_DATE_INVALID", 400],
     ] as const;
 
     for (const [marker, statusCode] of markers) {

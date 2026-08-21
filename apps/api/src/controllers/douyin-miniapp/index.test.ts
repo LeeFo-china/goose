@@ -168,8 +168,15 @@ describe("DouyinMiniappController", () => {
 
   test("strictly validates marketing bodies and passes trusted request metadata", async () => {
     const sendCode = mock(async () => ({ success: true, cooldown_seconds: 60 }));
-    const submitLead = mock(async () => ({ lead_id:
-      "55555555-5555-4555-8555-555555555555" }));
+    const publicAppointmentResult = {
+      lead_id: "55555555-5555-4555-8555-555555555555",
+      appointment_no: "DYLF-20260821-000001",
+      already_submitted: false,
+      existing_customer_linked: false,
+      status: "pending_confirmation" as const,
+      message: "量房申请已提交，工作人员将与你确认具体时间" as const,
+    };
+    const submitLead = mock(async () => publicAppointmentResult);
     const recordEvents = mock(async () => ({ accepted: 1 }));
     const controller = new DouyinMiniappController(undefined, undefined, {
       sendCode, submitLead, recordEvents,
@@ -198,7 +205,8 @@ describe("DouyinMiniappController", () => {
       idempotency_key: "44444444-4444-4444-8444-444444444444",
       attribution,
     };
-    await controller.submitLead({ ...request, body: leadBody } as never);
+    await expect(controller.submitLead({ ...request, body: leadBody } as never))
+      .resolves.toEqual({ data: publicAppointmentResult, message: "success" });
     expect(submitLead).toHaveBeenCalledWith(user, leadBody,
       { requestIp: "127.0.0.1", userAgent: "Douyin", log });
     const { budget_estimate_id: _budgetEstimateId, ...leadWithoutEstimate } = leadBody;

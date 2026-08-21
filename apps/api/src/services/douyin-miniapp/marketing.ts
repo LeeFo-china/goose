@@ -53,6 +53,7 @@ type Context = {
 
 const MAX_EVENT_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+const APPOINTMENT_SUBMITTED_MESSAGE = "量房申请已提交，工作人员将与你确认具体时间";
 const CLIENT_EVENTS = new Set([
   "app_launch", "page_view", "case_view", "site_view",
   "lead_cta_click", "phone_call_click",
@@ -117,7 +118,6 @@ export class DouyinMiniappMarketingService {
     const context = await this.loadContext(user, true);
     const now = this.now();
     validateConsent(input, context.runtime.privacy_policy_version, now);
-    validatePreferredVisitDate(input.preferred_visit_date, now);
     const consentedAt = new Date(input.consented_at).toISOString();
     const appointment = await this.marketingRepository.submitMeasurementAppointment({
       tenantId: context.tenantId,
@@ -141,7 +141,14 @@ export class DouyinMiniappMarketingService {
     if (!appointment.already_submitted) {
       await this.notifyTenant(context, appointment, metadata.log);
     }
-    return appointment;
+    return {
+      lead_id: appointment.lead_id,
+      appointment_no: appointment.appointment_no,
+      already_submitted: appointment.already_submitted,
+      existing_customer_linked: appointment.existing_customer_linked,
+      status: appointment.status,
+      message: APPOINTMENT_SUBMITTED_MESSAGE,
+    };
   }
 
   async recordEvents(
@@ -258,28 +265,6 @@ function validateConsent(input: DouyinLeadRequest, expectedVersion: string, now:
     || consentedAt > now.getTime() + MAX_FUTURE_SKEW_MS) {
     throw Errors.business(400, "授权时间无效", "DOUYIN_CONSENT_TIME_INVALID");
   }
-}
-
-function validatePreferredVisitDate(value: string, now: Date): void {
-  if (value < shanghaiDate(now)) {
-    throw Errors.business(
-      400,
-      "期望量房日期不能早于今天",
-      "DOUYIN_MEASUREMENT_VISIT_DATE_PAST",
-    );
-  }
-}
-
-function shanghaiDate(value: Date): string {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(value);
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    parts.find((item) => item.type === type)?.value ?? "";
-  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 function boundedUserAgent(value: string | null) {

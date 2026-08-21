@@ -11,6 +11,11 @@ const ownershipRepairMigrationFile = new URL(
   import.meta.url,
 );
 
+const visitDateRepairMigrationFile = new URL(
+  '../../../../../supabase/migrations/20260821105400_validate_douyin_appointment_visit_date.sql',
+  import.meta.url,
+);
+
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -39,6 +44,43 @@ describe('douyin appointment ownership repair migration', () => {
     expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
       'f74489b5ff1dd723422ff5e0c2a36c7b77c3b88e4d0679f4a60cb01a8ab5a1cf',
     );
+  });
+
+  test('keeps the applied 105300 migration byte-for-byte immutable', async () => {
+    const sql = await Bun.file(ownershipRepairMigrationFile).arrayBuffer();
+    expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
+      'a2059d9c6fa3319c1ec0198ea43feffe777a20492c0c0809b8a1c7e9d1ad00fc',
+    );
+  });
+
+  test('validates Shanghai visit dates after replay and before SMS or writes', async () => {
+    const sql = await Bun.file(visitDateRepairMigrationFile).text();
+    const body = functionBody(sql, 'submit_douyin_measurement_appointment');
+    const replayResult = body.indexOf("'already_submitted', true");
+    const dateGuard = body.indexOf(
+      "p_preferred_visit_date < (v_now at time zone 'asia/shanghai')::date",
+    );
+    const smsLock = body.indexOf("'sms:phone:douyin_lead:'");
+    const beforeGuard = body.slice(0, dateGuard);
+
+    expect(replayResult).toBeGreaterThanOrEqual(0);
+    expect(dateGuard).toBeGreaterThan(replayResult);
+    expect(dateGuard).toBeLessThan(smsLock);
+    expect(body).toContain("'code', 'douyin_measurement_visit_date_invalid'");
+    expect(beforeGuard).not.toContain('insert into public.');
+    expect(beforeGuard).not.toContain('update public.');
+  });
+
+  test('keeps the visit-date repair forward-only and free of top-level business DML', async () => {
+    const sql = await Bun.file(visitDateRepairMigrationFile).text();
+    const normalized = normalize(sql);
+    const topLevel = topLevelSql(sql);
+
+    expect(normalized).toContain('begin;');
+    expect(normalized).toContain("set local lock_timeout = '5s'");
+    expect(normalized).toContain("set local statement_timeout = '30s'");
+    expect(normalized).toEndWith('commit;');
+    expect(topLevel).not.toMatch(/\b(insert|update|delete|merge|copy|call|select)\b/);
   });
 
   test('reuses only recent leads whose linked customer still owns the current phone', async () => {
