@@ -70,7 +70,7 @@ interface InvalidConfigCase {
 }
 
 describe('Douyin miniapp domain contracts', () => {
-  test('re-exports identical runtime contracts from root and shared entry points', () => {
+  test('re-exports identical runtime contracts from root and source barrel', () => {
     for (const entryPoint of [domain, shared]) {
       expect(entryPoint.DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
         DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
@@ -182,6 +182,32 @@ describe('Douyin miniapp domain contracts', () => {
           contact_sla_text: contactSlaText,
         }).success,
       ).toBe(false);
+    }
+  });
+
+  test('normalizes qualification titles and privacy versions at the canonical boundary', () => {
+    const parsed = DouyinRuntimeConfigSchema.parse({
+      ...runtimeConfig,
+      brand: {
+        ...runtimeConfig.brand,
+        qualifications: [{ ...qualification, title: '  装修资质  ' }],
+      },
+      privacy_policy_version: '  2026-08-21  ',
+    });
+
+    expect(parsed.brand.qualifications[0]?.title).toBe('装修资质');
+    expect(parsed.privacy_policy_version).toBe('2026-08-21');
+    for (const invalid of [
+      {
+        ...runtimeConfig,
+        brand: {
+          ...runtimeConfig.brand,
+          qualifications: [{ ...qualification, title: '   ' }],
+        },
+      },
+      { ...runtimeConfig, privacy_policy_version: '   ' },
+    ]) {
+      expect(DouyinRuntimeConfigSchema.safeParse(invalid).success).toBe(false);
     }
   });
 

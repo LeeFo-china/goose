@@ -51,7 +51,7 @@ export const DouyinRuntimeConfigSchema = z
           .array(
             z
               .object({
-                title: z.string().min(1).max(40),
+                title: z.string().trim().min(1).max(40),
                 image_url: z.url({ protocol: /^https$/ }).nullable(),
               })
               .strict(),
@@ -95,7 +95,7 @@ export const DouyinRuntimeConfigSchema = z
           .strict(),
       )
       .max(4),
-    privacy_policy_version: z.string().min(1).max(40),
+    privacy_policy_version: z.string().trim().min(1).max(40),
     contact_sla_text: DouyinContactSlaTextSchema.default(
       DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
     ),

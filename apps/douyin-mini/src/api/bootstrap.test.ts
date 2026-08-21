@@ -32,7 +32,7 @@ const bootstrap = {
     active_sites: [],
   },
   privacy_policy_version: "2026-07-19",
-  contact_sla_text: DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+  contact_sla_text: "工作人员将在营业时间内与你联系",
 } satisfies BootstrapData;
 
 function clientWith(value: unknown): ApiClient {
@@ -75,14 +75,25 @@ describe("Douyin bootstrap response validation", () => {
     }
   });
 
-  test("rejects undocumented top-level bootstrap fields", async () => {
-    await expect(fetchBootstrap(clientWith({
+  test("ignores undocumented top-level fields without returning them", async () => {
+    const result = await fetchBootstrap(clientWith({
       ...bootstrap,
       internal_tenant_id: "must-not-leak",
-    }))).rejects.toMatchObject({
-      statusCode: 502,
-      code: "INVALID_API_RESPONSE",
-    });
+    }));
+    expect(result).toEqual(bootstrap);
+    expect(result).not.toHaveProperty("internal_tenant_id");
+  });
+
+  test("keeps the parser fallback aligned with the canonical domain source", async () => {
+    const domain = await import(
+      "../../../../packages/domain/src/douyin-miniapp"
+    );
+    expect(DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+      domain.DOUYIN_DEFAULT_CONTACT_SLA_TEXT,
+    );
+    expect(DOUYIN_DEFAULT_CONTACT_SLA_TEXT).toBe(
+      "工作人员将在营业时间内与你联系",
+    );
   });
 
   test("rejects a theme value that could escape an inline color declaration", async () => {

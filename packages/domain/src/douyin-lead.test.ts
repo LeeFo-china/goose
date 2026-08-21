@@ -120,7 +120,7 @@ describe('douyin lead contracts', () => {
     }
   });
 
-  test('exports the same runtime contracts from root and shared entry points', () => {
+  test('exports the same runtime contracts from root and source barrel', () => {
     for (const entryPoint of [domain, shared]) {
       expect(entryPoint.DOUYIN_VISIT_PERIOD_VALUES).toBe(
         DOUYIN_VISIT_PERIOD_VALUES,

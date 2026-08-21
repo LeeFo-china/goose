@@ -11,24 +11,13 @@ import type {
 } from "../models";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const BOOTSTRAP_FIELD_NAMES: ReadonlySet<string> = new Set([
-  "installation",
-  "company",
-  "theme",
-  "features",
-  "content",
-  "privacy_policy_version",
-  "contact_sla_text",
-]);
-
 // The mini-program has no runtime dependency on the workspace domain package.
 // Keep this single parser-boundary fallback for rolling backend compatibility.
 export const DOUYIN_DEFAULT_CONTACT_SLA_TEXT =
   "工作人员将在营业时间内与你联系";
 
 export function parseBootstrap(value: unknown): BootstrapData | null {
-  if (!isRecord(value) || !hasOnlyKeys(value, BOOTSTRAP_FIELD_NAMES)
-    || !isRecord(value.installation) || !isRecord(value.theme)
+  if (!isRecord(value) || !isRecord(value.installation) || !isRecord(value.theme)
     || !isRecord(value.features) || !isRecord(value.content)) return null;
   const company = parseCompany(value.company);
   const homeBanners = parseHomeBanners(value.content.home_banners);
@@ -295,13 +284,6 @@ function parseStringArray(value: unknown, limit: number, maxLength: number): str
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function hasOnlyKeys(
-  value: Record<string, unknown>,
-  allowedKeys: ReadonlySet<string>,
-): boolean {
-  return Object.keys(value).every((key) => allowedKeys.has(key));
 }
 
 function isHttps(value: unknown): value is string {
