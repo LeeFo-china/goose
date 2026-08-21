@@ -10,6 +10,7 @@ import requestLoggingPlugin from "./plugins/request-logging";
 import { refreshPlatformCosPublicBaseUrlCache } from "@/services/files/file-url-resolver";
 import { administrativeAreaService } from "@/services/administrative-areas";
 import { visitorPictureLibraryService } from "@/services/visitor-picture-library";
+import { parseFastifyTrustProxy } from "@/utils/trusted-proxy-client-ip";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,6 +19,7 @@ const logLevel = process.env.LOG_LEVEL ||
   (process.env.NODE_ENV === "production" ? "info" : "debug");
 
 const app = Fastify({
+  trustProxy: parseFastifyTrustProxy(process.env.GOOES_TRUST_PROXY_HOPS),
   logger: {
     level: logLevel,
     redact: {

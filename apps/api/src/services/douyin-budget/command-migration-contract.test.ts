@@ -7,7 +7,7 @@ const migrationsDirectory = new URL(
   import.meta.url,
 );
 const commandMigration = new URL(
-  "20260821102000_create_douyin_budget_estimate_command.sql",
+  "20260821102200_order_douyin_budget_rate_locks.sql",
   migrationsDirectory,
 );
 const insertRestrictionMigration = new URL(
@@ -29,7 +29,7 @@ async function migrationSql(): Promise<string> {
 
 function functionDefinition(source: string): string {
   return compact(source.match(
-    /CREATE FUNCTION public\.create_douyin_budget_estimate\([\s\S]*?\n\$function\$;/,
+    /CREATE OR REPLACE FUNCTION public\.create_douyin_budget_estimate\([\s\S]*?\n\$function\$;/,
   )?.[0] ?? "");
 }
 
@@ -47,6 +47,14 @@ describe("douyin budget atomic estimate command migration", () => {
       [
         "20260821102000_create_douyin_budget_estimate_command.sql",
         "c7cef16093948b334c62c83f6a32d9d6d3ffcd65ce4cf4adce2da5575442cae1",
+      ],
+      [
+        "20260821102100_restrict_douyin_budget_estimate_inserts.sql",
+        "4f2de46df739320d43d364ba323ab8020c3b99328da686cc67fdb672a5c931a1",
+      ],
+      [
+        "20260821102200_order_douyin_budget_rate_locks.sql",
+        "3a7f817f339bf7c393723e4e84ba1d50579342ef8b1a1f965f32df9d84eef5e1",
       ],
     ]);
 
@@ -80,7 +88,7 @@ describe("douyin budget atomic estimate command migration", () => {
     const source = await migrationSql();
     const fn = functionDefinition(source);
     expect(fn).toContain(
-      "create function public.create_douyin_budget_estimate( p_tenant_id uuid, p_douyin_miniapp_installation_id uuid, p_subject_hash text, p_request_ip_hash text, p_pricing_version_id uuid, p_estimate_no text, p_request_payload jsonb, p_result_payload jsonb, p_expires_at timestamptz ) returns jsonb language plpgsql security definer set search_path = pg_catalog, public",
+      "create or replace function public.create_douyin_budget_estimate( p_tenant_id uuid, p_douyin_miniapp_installation_id uuid, p_subject_hash text, p_request_ip_hash text, p_pricing_version_id uuid, p_estimate_no text, p_request_payload jsonb, p_result_payload jsonb, p_expires_at timestamptz ) returns jsonb language plpgsql security definer set search_path = pg_catalog, public",
     );
     expect(source).toMatch(
       /REVOKE ALL ON FUNCTION public\.create_douyin_budget_estimate\(\s*uuid, uuid, text, text, uuid, text, jsonb, jsonb, timestamptz\s*\)\s*FROM PUBLIC, anon, authenticated;/,
@@ -115,13 +123,18 @@ describe("douyin budget atomic estimate command migration", () => {
     expect(fn).toContain("'code', 'douyin_budget_not_configured'");
   });
 
-  test("serializes both rate dimensions in deterministic advisory-lock order", async () => {
+  test("deduplicates and orders the final bigint advisory lock identifiers", async () => {
     const fn = functionDefinition(await migrationSql());
     expect(fn).toContain("'douyin-budget-rate:' || p_tenant_id::text || ':subject:' || p_subject_hash");
     expect(fn).toContain("'douyin-budget-rate:' || p_tenant_id::text || ':ip:' || p_request_ip_hash");
-    expect(fn).toContain("order by lock_key");
+    expect(fn).toContain("v_lock_id bigint");
+    expect(fn).toMatch(
+      /select distinct pg_catalog\.hashtextextended\(\s*rate_lock\.lock_key, 6720260821102000\s*\) as lock_id/,
+    );
+    expect(fn).toContain("order by lock_id");
     expect(fn).toContain("pg_catalog.pg_advisory_xact_lock");
-    expect(fn).toContain("pg_catalog.hashtextextended(v_lock_key, 6720260821102000)");
+    expect(fn).toContain("pg_catalog.pg_advisory_xact_lock(v_lock_id)");
+    expect(fn).not.toContain("order by lock_key");
   });
 
   test("counts at most the rejection threshold on each indexed dimension", async () => {

@@ -12,6 +12,10 @@ interface RequestLike {
   readonly ip?: string;
 }
 
+export function parseFastifyTrustProxy(value: string | undefined): false | 1 {
+  return value === "1" ? 1 : false;
+}
+
 function invalidInternalClientIpSignature() {
   return Errors.business(
     400,
@@ -53,6 +57,7 @@ export function resolveTrustedClientIp(
   request: RequestLike,
   secret = process.env.GOOES_WEB_PROXY_SHARED_SECRET,
   now = Date.now(),
+  trustProxyHops = process.env.GOOES_TRUST_PROXY_HOPS,
 ): string | null {
   const internalHeaderNames = [
     "x-gooes-client-ip",
@@ -60,7 +65,15 @@ export function resolveTrustedClientIp(
     "x-gooes-client-ip-signature",
   ];
   const hasInternalHeaders = internalHeaderNames.some((name) => name in request.headers);
-  if (!hasInternalHeaders) return request.ip ?? null;
+  if (!hasInternalHeaders) {
+    if (
+      parseFastifyTrustProxy(trustProxyHops) === 1 &&
+      !firstHeader(request.headers, "x-forwarded-for")
+    ) {
+      return null;
+    }
+    return request.ip ?? null;
+  }
 
   return resolveRequiredTrustedClientIp(request, secret, now);
 }

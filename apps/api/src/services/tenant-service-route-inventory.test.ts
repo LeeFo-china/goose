@@ -112,6 +112,36 @@ const UNGUARDED_ROUTE_ALLOWLIST = [
     reason: "public mini-program content",
   },
   {
+    method: "GET",
+    url: "/douyin-mini/projects",
+    reason: "public mini-program content",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/projects",
+    reason: "public mini-program content",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/projects/:id",
+    reason: "public mini-program content",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/projects/:id",
+    reason: "public mini-program content",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/projects/:id/logs",
+    reason: "public mini-program content",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/projects/:id/logs",
+    reason: "public mini-program content",
+  },
+  {
     method: "POST",
     url: "/douyin-mini/sms/send",
     reason: "public mini-program lead flow",
@@ -125,6 +155,21 @@ const UNGUARDED_ROUTE_ALLOWLIST = [
     method: "POST",
     url: "/douyin-mini/events",
     reason: "public mini-program analytics",
+  },
+  {
+    method: "GET",
+    url: "/douyin-mini/budget-config",
+    reason: "authenticated mini-program budget flow",
+  },
+  {
+    method: "HEAD",
+    url: "/douyin-mini/budget-config",
+    reason: "authenticated mini-program budget flow",
+  },
+  {
+    method: "POST",
+    url: "/douyin-mini/budget-estimates",
+    reason: "authenticated mini-program budget flow",
   },
   {
     method: "GET",
