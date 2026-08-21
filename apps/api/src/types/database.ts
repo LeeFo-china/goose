@@ -2616,6 +2616,7 @@ export type Database = {
           marketing_lead_id: string
           next_follow_up_at: string | null
           result: string
+          result_payload: Json
           summary: string
           tenant_id: string
         }
@@ -2630,6 +2631,7 @@ export type Database = {
           marketing_lead_id: string
           next_follow_up_at?: string | null
           result: string
+          result_payload: Json
           summary: string
           tenant_id: string
         }
@@ -2644,6 +2646,7 @@ export type Database = {
           marketing_lead_id?: string
           next_follow_up_at?: string | null
           result?: string
+          result_payload?: Json
           summary?: string
           tenant_id?: string
         }

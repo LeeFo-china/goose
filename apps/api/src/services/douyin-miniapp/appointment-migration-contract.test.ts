@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
 
 const migrationFile = new URL(
   '../../../../../supabase/migrations/20260821105000_create_douyin_measurement_appointments.sql',
+  import.meta.url,
+);
+
+const repairMigrationFile = new URL(
+  '../../../../../supabase/migrations/20260821105100_fix_douyin_appointment_replay_and_numbers.sql',
   import.meta.url,
 );
 
@@ -10,13 +16,18 @@ function normalize(sql: string): string {
 }
 
 function topLevelSql(sql: string): string {
-  return normalize(sql).replace(/as \$function\$.*?\$function\$;/g, ' ');
+  return normalize(sql)
+    .replace(/do \$block\$.*?\$block\$;/g, ' ')
+    .replace(/create (?:or replace )?function .*?as \$function\$.*?\$function\$;/g, ' ');
 }
 
 function functionBody(sql: string, functionName: string): string {
   const normalized = normalize(sql);
-  const marker = `create function public.${functionName}`;
-  const start = normalized.indexOf(marker);
+  const replaceMarker = `create or replace function public.${functionName}`;
+  const createMarker = `create function public.${functionName}`;
+  const start = normalized.indexOf(replaceMarker) >= 0
+    ? normalized.indexOf(replaceMarker)
+    : normalized.indexOf(createMarker);
   expect(start).toBeGreaterThanOrEqual(0);
   const bodyStart = normalized.indexOf('as $function$', start);
   expect(bodyStart).toBeGreaterThan(start);
@@ -36,6 +47,13 @@ function tableDefinition(sql: string, tableName: string): string {
 }
 
 describe('douyin appointment migration', () => {
+  test('keeps the applied 105000 migration byte-for-byte immutable', async () => {
+    const sql = await Bun.file(migrationFile).arrayBuffer();
+    expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
+      '0e135bd00efcadb6d0783628047080d63bae0be4f2855bc44f19c4bb80d833b8',
+    );
+  });
+
   test('is a forward-only ordered migration without fixture DML', async () => {
     const sql = await Bun.file(migrationFile).text();
     const normalized = normalize(sql);
@@ -359,6 +377,72 @@ describe('douyin appointment migration', () => {
       'on public.customer_sources(douyin_measurement_appointment_id)',
     ]) {
       expect(sql).toContain(fragment);
+    }
+  });
+
+  test('adds an exact non-null follow-up replay payload only when history is empty', async () => {
+    const sql = await Bun.file(repairMigrationFile).text();
+    const normalized = normalize(sql);
+
+    expect(normalized).toContain('if exists ( select 1 from public.douyin_lead_follow_ups ) then raise exception');
+    expect(normalized).toContain("message = 'douyin_lead_follow_up_replay_repair_requires_empty_table'");
+    expect(normalized).toContain('add column result_payload jsonb null');
+    expect(normalized).toContain('alter column result_payload set not null');
+    expect(normalized).toContain("result_payload - array[ 'action', 'result', 'follow_up_id', 'lead_id', 'appointment_id', 'lead_version', 'appointment_version', 'appointment_status', 'idempotent' ] = '{}'::jsonb");
+    expect(normalized).toContain("result_payload ->> 'action' = 'follow_up'");
+    expect(normalized).toContain("result_payload ->> 'result' = 'followed_up'");
+    expect(normalized).toContain("result_payload ->> 'follow_up_id' = id::text");
+    expect(normalized).toContain("result_payload ->> 'lead_id' = marketing_lead_id::text");
+    expect(normalized).toContain("result_payload ->> 'appointment_id' = douyin_measurement_appointment_id::text");
+    expect(normalized).toContain("result_payload -> 'idempotent' = 'false'::jsonb");
+    expect(normalized).toContain('pg_column_size(result_payload) <= 4096');
+  });
+
+  test('replays the stored follow-up result with only the idempotent flag changed', async () => {
+    const sql = await Bun.file(repairMigrationFile).text();
+    const body = functionBody(sql, 'append_douyin_lead_follow_up');
+
+    expect(body).toContain('v_follow_up.result_payload || jsonb_build_object(');
+    expect(body).toContain("'idempotent', true");
+    expect(body).toContain('v_follow_up.create_request_hash is distinct from v_request_hash');
+    expect(body).toContain("'code', 'douyin_lead_idempotency_conflict'");
+    expect(body).toContain("'lead_version', v_lead.version");
+    expect(body).toContain("'appointment_version', v_appointment.version");
+    expect(body).toContain("'appointment_status', v_appointment.status");
+    expect(body).toContain("'idempotent', false");
+    expect(body).toContain('result_payload,');
+    expect(body).toContain('v_result,');
+    expect(body.indexOf('update public.marketing_leads')).toBeLessThan(body.indexOf('insert into public.douyin_lead_follow_ups'));
+    expect(body.indexOf('update public.douyin_measurement_appointments')).toBeLessThan(body.indexOf('insert into public.douyin_lead_follow_ups'));
+    expect(body).toContain("return jsonb_build_object('data', v_result)");
+  });
+
+  test('allocates appointment numbers per Shanghai natural day from the unique index', async () => {
+    const sql = await Bun.file(repairMigrationFile).text();
+    const body = functionBody(sql, 'submit_douyin_measurement_appointment');
+
+    expect(body).toContain("to_char(v_now at time zone 'asia/shanghai', 'yyyymmdd')");
+    expect(body).toContain("'douyin-measurement-appointment-number:' || v_appointment_prefix");
+    expect(body).toContain('pg_catalog.pg_advisory_xact_lock');
+    expect(body).toContain('appointment.appointment_no >= v_appointment_prefix || \'000001\'');
+    expect(body).toContain('appointment.appointment_no <= v_appointment_prefix || \'999999\'');
+    expect(body).toContain('order by appointment.appointment_no desc');
+    expect(body).toContain('limit 1');
+    expect(body).toContain("substring(appointment.appointment_no from 15 for 6)::integer");
+    expect(body).toContain('v_number_value := coalesce(v_number_value, 0) + 1');
+    expect(body).toContain("'code', 'douyin_measurement_number_exhausted'");
+    expect(body).not.toContain('nextval');
+    expect(body).not.toContain('douyin_measurement_appointment_number_seq');
+  });
+
+  test('allows only reviewed top-level repair statements and no business invocation', async () => {
+    const sql = await Bun.file(repairMigrationFile).text();
+    const topLevel = topLevelSql(sql);
+
+    expect(topLevel).not.toMatch(/\b(insert|update|delete|merge|copy|call|select)\b/);
+    const statements = topLevel.split(';').map((statement) => statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^(begin|set local |alter table |revoke all on function |grant execute on function |comment on |commit$)/);
     }
   });
 });
