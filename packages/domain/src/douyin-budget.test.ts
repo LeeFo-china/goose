@@ -10,10 +10,12 @@ import {
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
   DouyinBudgetAiAnalysisSchema,
+  DouyinBudgetAiExplanationResponseSchema,
   DouyinBudgetEstimateRequestSchema,
   DouyinBudgetEstimateResultSchema,
   DouyinBudgetPublicConfigSchema,
   type DouyinBudgetAiAnalysis,
+  type DouyinBudgetAiExplanationResponse,
   type DouyinBudgetEstimateResult,
   type DouyinBudgetPublicConfig,
 } from './douyin-budget';
@@ -90,6 +92,48 @@ const validPublicConfig: DouyinBudgetPublicConfig = {
 };
 
 describe('douyin budget contracts', () => {
+  test('couples AI status and analysis without exposing monetary AI fields', () => {
+    const succeeded: DouyinBudgetAiExplanationResponse = {
+      estimate: { ...validResult, ai_status: 'succeeded' },
+      ai_analysis: validAiAnalysis,
+    };
+    expect(DouyinBudgetAiExplanationResponseSchema.parse(succeeded)).toEqual(
+      succeeded,
+    );
+
+    for (const invalid of [
+      { estimate: validResult, ai_analysis: validAiAnalysis },
+      {
+        estimate: { ...validResult, ai_status: 'succeeded' },
+        ai_analysis: null,
+      },
+      {
+        estimate: { ...validResult, ai_status: 'failed' },
+        ai_analysis: validAiAnalysis,
+      },
+      {
+        estimate: { ...validResult, ai_status: 'succeeded' },
+        ai_analysis: { ...validAiAnalysis, amount: 100_000 },
+      },
+      { ...succeeded, internal_status: 'claimed' },
+    ]) {
+      expect(
+        DouyinBudgetAiExplanationResponseSchema.safeParse(invalid).success,
+      ).toBe(false);
+    }
+
+    for (const aiStatus of ['pending', 'failed', 'skipped'] as const) {
+      expect(
+        DouyinBudgetAiExplanationResponseSchema.parse({
+          estimate: { ...validResult, ai_status: aiStatus },
+          ai_analysis: null,
+        }),
+      ).toEqual({
+        estimate: { ...validResult, ai_status: aiStatus },
+        ai_analysis: null,
+      });
+    }
+  });
   test('keeps the public condition, tier, scope, option, category and AI values stable', () => {
     expect(DOUYIN_PROPERTY_CONDITION_VALUES).toEqual(['rough', 'old_house']);
     expect(DOUYIN_DECORATION_TIER_VALUES).toEqual([
@@ -405,6 +449,9 @@ describe('douyin budget contracts', () => {
     expect(shared.DouyinBudgetAiAnalysisSchema).toBe(
       DouyinBudgetAiAnalysisSchema,
     );
+    expect(shared.DouyinBudgetAiExplanationResponseSchema).toBe(
+      DouyinBudgetAiExplanationResponseSchema,
+    );
     expect(domain.DouyinBudgetEstimateRequestSchema).toBe(
       DouyinBudgetEstimateRequestSchema,
     );
@@ -413,6 +460,9 @@ describe('douyin budget contracts', () => {
     );
     expect(domain.DouyinBudgetAiAnalysisSchema).toBe(
       DouyinBudgetAiAnalysisSchema,
+    );
+    expect(domain.DouyinBudgetAiExplanationResponseSchema).toBe(
+      DouyinBudgetAiExplanationResponseSchema,
     );
     expect(shared.DouyinBudgetPublicConfigSchema).toBe(
       DouyinBudgetPublicConfigSchema,

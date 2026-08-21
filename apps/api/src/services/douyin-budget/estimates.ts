@@ -17,7 +17,6 @@ import {
   type DouyinBudgetInsertedEstimate,
 } from "@/repositories/douyin-budget";
 import {
-  DouyinMiniappContentRepository,
   douyinMiniappContentRepository,
 } from "@/repositories/douyin-miniapp-content";
 import type { JwtPayload } from "@/utils/jwt";
@@ -29,6 +28,10 @@ import {
   type DouyinBudgetPricingRules,
 } from "./calculator";
 import {
+  resolveDouyinBudgetContext,
+  type DouyinBudgetContextRepository,
+} from "./context";
+import {
   buildDouyinBudgetCalculationBasis,
   buildDouyinBudgetPublicConfig,
   douyinBudgetCategoryLabel,
@@ -37,31 +40,22 @@ import {
   type ActiveDouyinBudgetPricing,
 } from "./pricing-rules";
 
-type ContextRepository = Pick<
-  DouyinMiniappContentRepository,
-  "findActiveInstallation"
->;
 type BudgetRepository = Pick<
   DouyinBudgetRepository,
   "loadActivePricing" | "createEstimateAtomic"
 >;
 type Dependencies = {
-  readonly contextRepository?: ContextRepository;
+  readonly contextRepository?: DouyinBudgetContextRepository;
   readonly budgetRepository?: BudgetRepository;
   readonly now?: () => Date;
   readonly randomInt?: (maxExclusive: number) => number;
-};
-type BudgetContext = {
-  readonly tenantId: string;
-  readonly installationId: string;
-  readonly subjectHash: string;
 };
 const ESTIMATE_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
 const ESTIMATE_NUMBER_ATTEMPTS = 5;
 const ESTIMATE_NUMBER_SPACE = 1_000_000;
 
 export class DouyinBudgetEstimatesService {
-  private readonly contextRepository: ContextRepository;
+  private readonly contextRepository: DouyinBudgetContextRepository;
   private readonly budgetRepository: BudgetRepository;
   private readonly now: () => Date;
   private readonly randomInt: (maxExclusive: number) => number;
@@ -76,7 +70,10 @@ export class DouyinBudgetEstimatesService {
   }
 
   async getConfig(user?: JwtPayload): Promise<DouyinBudgetPublicConfig> {
-    const context = await this.loadContext(user);
+    const context = await resolveDouyinBudgetContext(
+      user,
+      this.contextRepository,
+    );
     const pricing = requireActivePricing(await this.budgetRepository.loadActivePricing({
       tenantId: context.tenantId,
       now: this.now().toISOString(),
@@ -92,7 +89,10 @@ export class DouyinBudgetEstimatesService {
     const parsedInput = DouyinBudgetEstimateRequestSchema.safeParse(rawInput);
     if (!parsedInput.success) throw Errors.fromZod(parsedInput.error);
     const input = parsedInput.data;
-    const context = await this.loadContext(user);
+    const context = await resolveDouyinBudgetContext(
+      user,
+      this.contextRepository,
+    );
     const currentTime = this.now();
     const createdAt = currentTime.toISOString();
     const requestIpHash = hashRequestIp(context.tenantId, requestIp);
@@ -164,56 +164,6 @@ export class DouyinBudgetEstimatesService {
     );
   }
 
-  private async loadContext(user?: JwtPayload): Promise<BudgetContext> {
-    if (
-      user?.token_type !== "douyin_miniapp" ||
-      !user.tenant_id ||
-      !user.douyin_installation_id ||
-      !user.douyin_app_id ||
-      !user.subject_hash ||
-      !/^[0-9a-f]{64}$/.test(user.subject_hash) ||
-      user.sub !== user.subject_hash
-    ) {
-      throw Errors.unauthorized("请使用抖音小程序会话");
-    }
-    const installation = await this.contextRepository.findActiveInstallation({
-      installationId: user.douyin_installation_id,
-      tenantId: user.tenant_id,
-      appId: user.douyin_app_id,
-    });
-    if (
-      !installation ||
-      installation.id !== user.douyin_installation_id ||
-      installation.tenant_id !== user.tenant_id ||
-      installation.authorizer_appid !== user.douyin_app_id ||
-      installation.tenant.id !== user.tenant_id
-    ) {
-      throw Errors.business(
-        409,
-        "抖音小程序服务已暂停",
-        "DOUYIN_INSTALLATION_DISABLED",
-      );
-    }
-    if (installation.installation_kind !== "merchant") {
-      throw Errors.business(
-        409,
-        "当前小程序不支持预算试算",
-        "DOUYIN_BUDGET_INSTALLATION_UNSUPPORTED",
-      );
-    }
-    if (installation.tenant.status !== "active") {
-      throw Errors.business(
-        403,
-        "装修公司服务已暂停",
-        "TENANT_NOT_AVAILABLE",
-      );
-    }
-    return {
-      tenantId: user.tenant_id,
-      installationId: user.douyin_installation_id,
-      subjectHash: user.subject_hash,
-    };
-  }
 }
 
 function calculatePublicProjection(

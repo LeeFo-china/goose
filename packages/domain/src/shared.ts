@@ -40,6 +40,7 @@ export {
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
   DouyinBudgetAiAnalysisSchema,
+  DouyinBudgetAiExplanationResponseSchema,
   DouyinBudgetEstimateCategorySchema,
   DouyinBudgetEstimateRequestSchema,
   DouyinBudgetEstimateResultSchema,
@@ -47,6 +48,7 @@ export {
 } from './douyin-budget';
 export type {
   DouyinBudgetAiAnalysis,
+  DouyinBudgetAiExplanationResponse,
   DouyinBudgetAiStatus,
   DouyinBudgetCategoryCode,
   DouyinBudgetEstimateCategory,

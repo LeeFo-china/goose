@@ -179,6 +179,22 @@ export const DouyinBudgetAiAnalysisSchema = z.strictObject({
   onsite_questions: z.array(AiListItemSchema).max(10),
 });
 
+export const DouyinBudgetAiExplanationResponseSchema = z
+  .strictObject({
+    estimate: DouyinBudgetEstimateResultSchema,
+    ai_analysis: DouyinBudgetAiAnalysisSchema.nullable(),
+  })
+  .superRefine((response, context) => {
+    const mustHaveAnalysis = response.estimate.ai_status === 'succeeded';
+    if (mustHaveAnalysis !== (response.ai_analysis !== null)) {
+      context.addIssue({
+        code: 'custom',
+        message: 'AI 分析与处理状态不一致',
+        path: ['ai_analysis'],
+      });
+    }
+  });
+
 export type DouyinPropertyCondition =
   (typeof DOUYIN_PROPERTY_CONDITION_VALUES)[number];
 export type DouyinDecorationTier =
@@ -205,4 +221,7 @@ export type DouyinBudgetEstimateResult = z.infer<
 >;
 export type DouyinBudgetAiAnalysis = z.infer<
   typeof DouyinBudgetAiAnalysisSchema
+>;
+export type DouyinBudgetAiExplanationResponse = z.infer<
+  typeof DouyinBudgetAiExplanationResponseSchema
 >;

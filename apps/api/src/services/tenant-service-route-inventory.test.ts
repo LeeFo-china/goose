@@ -172,6 +172,11 @@ const UNGUARDED_ROUTE_ALLOWLIST = [
     reason: "authenticated mini-program budget flow",
   },
   {
+    method: "POST",
+    url: "/douyin-mini/budget-estimates/:id/ai-analysis",
+    reason: "authenticated mini-program budget flow",
+  },
+  {
     method: "GET",
     url: "/wechat/virtual-payment/events",
     reason: "verified WeChat callback",

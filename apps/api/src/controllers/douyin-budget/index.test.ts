@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type {
+  DouyinBudgetAiExplanationResponse,
   DouyinBudgetEstimateResult,
   DouyinBudgetPublicConfig,
 } from "@gooes/domain";
@@ -72,12 +73,21 @@ const estimate: DouyinBudgetEstimateResult = {
   disclaimer: "初步估算，不构成最终报价",
   ai_status: "pending",
 };
+const aiResponse: DouyinBudgetAiExplanationResponse = {
+  estimate,
+  ai_analysis: null,
+};
 
 describe("DouyinBudgetController", () => {
-  test("registers the two exact routes in the root registry", async () => {
+  test("registers the three exact routes in the root registry", async () => {
     const getConfig = mock(async () => config);
     const createEstimate = mock(async () => estimate);
-    const controller = new Controller({ getConfig, createEstimate } as never);
+    const generateAiAnalysis = mock(async () => aiResponse);
+    const controller = new Controller({
+      getConfig,
+      createEstimate,
+      generateAiAnalysis,
+    } as never);
     const routes: Array<{ method: string; path: string }> = [];
     controller.registerExtraRoutes({
       get: (path: string) => routes.push({ method: "GET", path }),
@@ -86,6 +96,10 @@ describe("DouyinBudgetController", () => {
     expect(routes).toEqual([
       { method: "GET", path: "/douyin-mini/budget-config" },
       { method: "POST", path: "/douyin-mini/budget-estimates" },
+      {
+        method: "POST",
+        path: "/douyin-mini/budget-estimates/:id/ai-analysis",
+      },
     ]);
 
     const source = await Bun.file(
@@ -95,6 +109,53 @@ describe("DouyinBudgetController", () => {
       'import DouyinBudgetController from "@/controllers/douyin-budget";',
     );
     expect(source).toContain("DouyinBudgetController.registerExtraRoutes(app);");
+  });
+
+  test("strictly parses AI params, empty query and retry body before service dispatch", async () => {
+    const generateAiAnalysis = mock(async () => aiResponse);
+    const controller = new Controller({
+      getConfig: mock(async () => config),
+      createEstimate: mock(async () => estimate),
+      generateAiAnalysis,
+    } as never);
+
+    await expect(controller.generateAiAnalysis({
+      user,
+      params: { id: estimate.id },
+      query: {},
+      body: {},
+    } as never)).resolves.toEqual({ data: aiResponse, message: "success" });
+    expect(generateAiAnalysis).toHaveBeenCalledWith(user, estimate.id, false);
+
+    await expect(controller.generateAiAnalysis({
+      user,
+      params: { id: estimate.id },
+      query: {},
+      body: { retry: true },
+    } as never)).resolves.toEqual({ data: aiResponse, message: "success" });
+    expect(generateAiAnalysis).toHaveBeenLastCalledWith(user, estimate.id, true);
+
+    for (const request of [
+      { params: { id: "not-a-uuid" }, query: {}, body: {} },
+      { params: { id: estimate.id, tenant_id: tenantId }, query: {}, body: {} },
+      { params: { id: estimate.id }, query: { retry: true }, body: {} },
+      { params: { id: estimate.id }, query: {}, body: null },
+      { params: { id: estimate.id }, query: {}, body: { retry: "true" } },
+      {
+        params: { id: estimate.id },
+        query: {},
+        body: { retry: false, force: true },
+      },
+    ]) {
+      await expect(controller.generateAiAnalysis({
+        user,
+        ...request,
+      } as never)).rejects.toMatchObject({
+        statusCode: 400,
+        code: "VALIDATION_ERROR",
+      });
+    }
+    expect(generateAiAnalysis).toHaveBeenCalledTimes(2);
   });
 
   test("delegates config with the authenticated session and wraps success", async () => {

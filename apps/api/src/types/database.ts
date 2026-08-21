@@ -23539,6 +23539,16 @@ export type Database = {
           claim_token: string
         }[]
       }
+      claim_douyin_budget_ai_analysis: {
+        Args: {
+          p_douyin_miniapp_installation_id: string
+          p_estimate_id: string
+          p_retry: boolean
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       claim_douyin_component_token_refresh: {
         Args: { p_component_appid: string }
         Returns: {
@@ -23927,6 +23937,20 @@ export type Database = {
           p_refresh_token_tag: string
         }
         Returns: boolean
+      }
+      complete_douyin_budget_ai_analysis: {
+        Args: {
+          p_ai_analysis: Json
+          p_ai_model: string
+          p_ai_provider: string
+          p_attempt_count: number
+          p_claimed_at: string
+          p_douyin_miniapp_installation_id: string
+          p_estimate_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       complete_douyin_component_token_refresh: {
         Args: {
@@ -24918,6 +24942,12 @@ export type Database = {
         }
         Returns: Json
       }
+      douyin_budget_ai_estimate_snapshot: {
+        Args: {
+          p_estimate: Database["public"]["Tables"]["douyin_budget_estimates"]["Row"]
+        }
+        Returns: Json
+      }
       douyin_public_image_urls_are_valid: {
         Args: { p_urls: string[] }
         Returns: boolean
@@ -25007,6 +25037,18 @@ export type Database = {
           p_last_refresh_error_code: string
         }
         Returns: boolean
+      }
+      fail_douyin_budget_ai_analysis: {
+        Args: {
+          p_attempt_count: number
+          p_claimed_at: string
+          p_douyin_miniapp_installation_id: string
+          p_error_code: string
+          p_estimate_id: string
+          p_subject_hash: string
+          p_tenant_id: string
+        }
+        Returns: Json
       }
       fail_douyin_component_token_refresh: {
         Args: {
