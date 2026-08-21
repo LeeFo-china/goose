@@ -11,6 +11,11 @@ const repairMigrationFile = new URL(
   import.meta.url,
 );
 
+const qualityRepairMigrationFile = new URL(
+  '../../../../../supabase/migrations/20260821105200_fix_douyin_appointment_command_invariants.sql',
+  import.meta.url,
+);
+
 function normalize(sql: string): string {
   return sql.replace(/--[^\n]*/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
 }
@@ -51,6 +56,13 @@ describe('douyin appointment migration', () => {
     const sql = await Bun.file(migrationFile).arrayBuffer();
     expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
       '0e135bd00efcadb6d0783628047080d63bae0be4f2855bc44f19c4bb80d833b8',
+    );
+  });
+
+  test('keeps the applied 105100 migration byte-for-byte immutable', async () => {
+    const sql = await Bun.file(repairMigrationFile).arrayBuffer();
+    expect(createHash('sha256').update(new Uint8Array(sql)).digest('hex')).toBe(
+      'de4179d47474aeb6f32dbac0a2381f625c94d685904e264ea08ec45b33517b32',
     );
   });
 
@@ -443,6 +455,44 @@ describe('douyin appointment migration', () => {
     const statements = topLevel.split(';').map((statement) => statement.trim()).filter(Boolean);
     for (const statement of statements) {
       expect(statement).toMatch(/^(begin|set local |alter table |revoke all on function |grant execute on function |comment on |commit$)/);
+    }
+  });
+
+  test('keeps submit replay status and reused lead customer identity stable', async () => {
+    const sql = await Bun.file(qualityRepairMigrationFile).text();
+    const body = functionBody(sql, 'submit_douyin_measurement_appointment');
+    const replayStart = body.indexOf('if found then');
+    const replayEnd = body.indexOf('perform pg_catalog.pg_advisory_xact_lock', replayStart);
+    const replay = body.slice(replayStart, replayEnd);
+
+    expect(body).toContain('p_preferred_visit_period is null');
+    expect(body).toContain("p_preferred_visit_period not in ('morning', 'afternoon', 'evening')");
+    expect(replay).toContain("'status', 'pending_confirmation'");
+    expect(replay).not.toContain("'status', v_appointment.status");
+    expect(body).toContain('customer_id = case when v_existing_customer_linked then v_customer.id else null end');
+    expect(body).not.toContain('else lead.customer_id');
+  });
+
+  test('returns the stable follow-up 400 envelope for a null follow-up type', async () => {
+    const sql = await Bun.file(qualityRepairMigrationFile).text();
+    const body = functionBody(sql, 'append_douyin_lead_follow_up');
+
+    expect(body).toContain('p_follow_up_type is null');
+    expect(body).toContain("p_follow_up_type not in ('phone', 'wechat', 'online_meeting', 'onsite', 'other')");
+    expect(body).toContain("'status_code', 400");
+    expect(body).toContain("'code', 'douyin_lead_follow_up_command_invalid'");
+  });
+
+  test('drops only the verified unused appointment number sequence at top level', async () => {
+    const sql = await Bun.file(qualityRepairMigrationFile).text();
+    const normalized = normalize(sql);
+    const topLevel = topLevelSql(sql);
+
+    expect(normalized).toContain('drop sequence public.douyin_measurement_appointment_number_seq restrict');
+    expect(topLevel).not.toMatch(/\b(insert|update|delete|merge|copy|call|select)\b/);
+    const statements = topLevel.split(';').map((statement) => statement.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^(begin|set local |drop sequence |revoke all on function |grant execute on function |comment on |commit$)/);
     }
   });
 });
