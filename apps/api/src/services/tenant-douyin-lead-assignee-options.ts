@@ -21,6 +21,7 @@ type RepositoryPort = {
   listAssigneeFilterOptions(input: {
     tenantId: string; visibleEmployeeIds: readonly string[] | null;
     page: number; pageSize: number; keyword?: string;
+    includeEmployeeId?: string;
   }): Promise<CandidatePage>;
 };
 type AccessPolicyPort = {
@@ -62,7 +63,7 @@ export async function listTenantDouyinLeadAssigneeFilterOptions(input: {
 }) {
   const tenantId = input.dependencies.accessPolicy
     .assertTenantContext(input.authContext);
-  input.dependencies.accessPolicy.assertPermission(
+  const scope = input.dependencies.accessPolicy.assertPermission(
     input.authContext, "douyin_lead.read",
   );
   const query = parseQuery(TenantDouyinLeadAssigneeFilterOptionsQuerySchema,
@@ -72,8 +73,15 @@ export async function listTenantDouyinLeadAssigneeFilterOptions(input: {
   if (visibleEmployeeIds !== null && visibleEmployeeIds.length === 0) {
     return candidatePage({ rows: [], total: 0 }, query.page, query.pageSize);
   }
+  const { includeEmployeeId, ...pageQuery } = query;
+  const effectiveIncludeEmployeeId = includeEmployeeId
+    && (scope === "all" || visibleEmployeeIds?.includes(includeEmployeeId))
+    ? includeEmployeeId : undefined;
   const result = await input.dependencies.repository.listAssigneeFilterOptions({
-    tenantId, visibleEmployeeIds, ...query,
+    tenantId, visibleEmployeeIds, ...pageQuery,
+    ...(effectiveIncludeEmployeeId ? {
+      includeEmployeeId: effectiveIncludeEmployeeId,
+    } : {}),
   });
   if (visibleEmployeeIds !== null) {
     const visible = new Set(visibleEmployeeIds);

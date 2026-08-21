@@ -118,14 +118,19 @@ describe("TenantDouyinLeadsController", () => {
     await expect(invalid.controller.listAssigneeFilterOptions({ query: {
       page: 10_001,
     } } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(invalid.controller.listAssigneeFilterOptions({ query: {
+      includeEmployeeId: "invalid",
+    } } as never)).rejects.toMatchObject({ statusCode: 400 });
     expect(invalid.getRequiredTenantContext).not.toHaveBeenCalled();
 
     const valid = createController();
     await valid.controller.listAssigneeFilterOptions({ query: {
       page: "2", pageSize: "20", keyword: " 历史顾问 ",
+      includeEmployeeId: EMPLOYEE_ID,
     } } as never);
     expect(valid.service.listAssigneeFilterOptions).toHaveBeenCalledWith(
-      authContext, { page: 2, pageSize: 20, keyword: "历史顾问" },
+      authContext, { page: 2, pageSize: 20, keyword: "历史顾问",
+        includeEmployeeId: EMPLOYEE_ID },
     );
   });
 

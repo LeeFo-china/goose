@@ -46,7 +46,9 @@ export const TenantDouyinLeadAssigneeCandidatesQuerySchema = z.strictObject({
   z.string().trim().max(100).optional()),
 });
 export const TenantDouyinLeadAssigneeFilterOptionsQuerySchema =
-  TenantDouyinLeadAssigneeCandidatesQuerySchema;
+  TenantDouyinLeadAssigneeCandidatesQuerySchema.extend({
+    includeEmployeeId: z.uuid("无效的负责人 ID").optional(),
+  });
 
 export const TenantDouyinLeadParamsSchema = z.strictObject({
   id: z.uuid("无效的抖音线索 ID"),

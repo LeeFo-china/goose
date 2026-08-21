@@ -27,6 +27,7 @@ function fixture(input: {
   visibleIds?: string[] | null;
   total?: number;
   rows?: readonly { id: string; name: string | null }[];
+  scope?: "all" | "department";
 } = {}) {
   const repository = {
     listAssigneeFilterOptions: mock(async () => ({
@@ -45,7 +46,7 @@ function fixture(input: {
       if (!context.permissions.some((item) => item.code === permission)) {
         throw Object.assign(new Error("forbidden"), { statusCode: 403 });
       }
-      return "department";
+      return input.scope ?? "department";
     }),
     getVisibleCustomerOwnerIds: mock(async () => input.visibleIds === undefined
       ? [INACTIVE_ID, SYSTEM_ADMIN_ID] : input.visibleIds),
@@ -59,6 +60,7 @@ describe("TenantDouyinLeadsService assignee filter options", () => {
     const context = fixture();
     await expect(context.service.listAssigneeFilterOptions(auth(), {
       page: 1, pageSize: 100, keyword: " 历史顾问 ",
+      includeEmployeeId: INACTIVE_ID,
     })).resolves.toEqual({
       list: [{ id: INACTIVE_ID, name: "历史顾问" }],
       pagination: { page: 1, pageSize: 100, total: 1, totalPages: 1 },
@@ -73,14 +75,30 @@ describe("TenantDouyinLeadsService assignee filter options", () => {
       tenantId: TENANT_ID,
       visibleEmployeeIds: [INACTIVE_ID, SYSTEM_ADMIN_ID],
       page: 1, pageSize: 100, keyword: "历史顾问",
+      includeEmployeeId: INACTIVE_ID,
     });
   });
 
   test("keeps all-scope null visibility and inactive historical rows", async () => {
-    const context = fixture({ visibleIds: null });
-    await context.service.listAssigneeFilterOptions(auth(), {});
+    const context = fixture({ visibleIds: null, scope: "all" });
+    await context.service.listAssigneeFilterOptions(auth(), {
+      includeEmployeeId: ACTOR_ID,
+    });
     expect(context.repository.listAssigneeFilterOptions).toHaveBeenCalledWith({
       tenantId: TENANT_ID, visibleEmployeeIds: null, page: 1, pageSize: 20,
+      includeEmployeeId: ACTOR_ID,
+    });
+  });
+
+  test("does not disclose an unauthorized selected employee", async () => {
+    const context = fixture();
+    await context.service.listAssigneeFilterOptions(auth(), {
+      includeEmployeeId: ACTOR_ID,
+    });
+    expect(context.repository.listAssigneeFilterOptions).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      visibleEmployeeIds: [INACTIVE_ID, SYSTEM_ADMIN_ID],
+      page: 1, pageSize: 20,
     });
   });
 
