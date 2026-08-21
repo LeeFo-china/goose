@@ -259,6 +259,7 @@ describe('DouyinBudgetAiExplanationService', () => {
   test('keeps renovation terms while redacting only high-confidence address forms', async () => {
     const deps = buildDependencies();
     const addresses = [
+      '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
       '建设大道12靠近地铁', '人民路88附近量房', '中山街12需要复核', '梧桐巷8可以上门', '王府弄5安排测量',
       '幸福路3号楼', '幸福路5栋', '幸福村',
       '春风小区', '6号楼', '3栋',
@@ -270,9 +271,9 @@ describe('DouyinBudgetAiExplanationService', () => {
         ...baseRecord,
         request_payload: {
           ...baseRecord.request_payload as object,
-          layout: '卧室电路 220V需要调整',
-          style: '装修思路 2026版',
-          demand: '卧室电路220伏、装修思路2026版、卧室电路220，装修思路2026都需要保留',
+          layout: '卧室电路 220V需要调整；厨房水路12米需要改造',
+          style: '装修思路 2026版；全屋线路20米需要更换',
+          demand: '卧室电路220伏、装修思路2026版、卧室电路220，装修思路2026、施工道路8米宽、全屋回路30厘米、厨房管路500毫米、空调风路2公分、燃气气路3㎡、设备油路4m、施工支路6米宽都需要保留',
         },
         result_payload: {
           ...estimateResult,
@@ -280,12 +281,11 @@ describe('DouyinBudgetAiExplanationService', () => {
         },
       },
     });
-
     await new Service(deps.values as never).generate(user, estimateId, false);
     const prompt = JSON.stringify(deps.gateway.chat.mock.calls[0]?.[0]);
-    expect(prompt).toContain('卧室电路 220V需要调整');
-    expect(prompt).toContain('装修思路 2026版');
-    expect(prompt).toContain('卧室电路220伏、装修思路2026版、卧室电路220，装修思路2026都需要保留');
+    expect(prompt).toContain('卧室电路 220V需要调整；厨房水路12米需要改造');
+    expect(prompt).toContain('装修思路 2026版；全屋线路20米需要更换');
+    expect(prompt).toContain('施工道路8米宽、全屋回路30厘米、厨房管路500毫米、空调风路2公分、燃气气路3㎡、设备油路4m、施工支路6米宽');
     for (const address of addresses) expect(prompt).not.toContain(address);
     expect(prompt).toContain('[已脱敏]');
   });
@@ -295,8 +295,8 @@ describe('DouyinBudgetAiExplanationService', () => {
     const piiAnalysis = {
       summary: '联系138 0013 8000确认预算。',
       allocation_advice: [
-        '卧室收纳可拨打0376-1234567咨询。', '卧室电路 220V需要调整',
-        '装修思路 2026版；卧室电路220，装修思路2026',
+        '卧室收纳可拨打0376-1234567咨询。', '卧室电路 220V需要调整；厨房水路12米需要改造；全屋线路20米需要更换',
+        '装修思路 2026版；卧室电路220，装修思路2026；施工道路8米宽；全屋回路30厘米；厨房管路500毫米；空调风路2公分；燃气气路3㎡；设备油路4m；施工支路6米宽',
       ],
       risk_factors: [
         '人民路88附近量房', '中山街12需要复核', '建设大道12靠近地铁', '梧桐巷8可以上门', '王府弄5安排测量',
@@ -305,6 +305,7 @@ describe('DouyinBudgetAiExplanationService', () => {
         '固始幸福村6号楼需要确认道路。',
       ],
       onsite_questions: [
+        '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
         '王府弄5号的门牌信息是什么？',
         '门牌号66是否准确？',
         '2单元501室是否方便量房？',
@@ -321,7 +322,6 @@ describe('DouyinBudgetAiExplanationService', () => {
         ai_analysis: (input as { analysis: DouyinBudgetAiAnalysis }).analysis,
       }),
     );
-
     const response = await new Service(deps.values as never).generate(
       user,
       estimateId,
@@ -333,6 +333,7 @@ describe('DouyinBudgetAiExplanationService', () => {
     const publicResponse = JSON.stringify(response);
     for (const pii of [
       '138 0013 8000', '0376-1234567', '幸福大道88号3栋',
+      '建设大道12', '人民路88', '中山街12', '梧桐巷8', '王府弄5',
       '人民路88附近量房', '中山街12需要复核', '建设大道12靠近地铁', '梧桐巷8可以上门', '王府弄5安排测量',
       '春风小区2号楼', '固始幸福村6号楼', '王府弄5号',
       '门牌号66', '2单元501室',
@@ -342,15 +343,14 @@ describe('DouyinBudgetAiExplanationService', () => {
     }
     expect(persisted).toContain('卧室收纳');
     expect(publicResponse).toContain('卧室收纳');
-    expect(persisted).toContain('卧室电路 220V需要调整');
-    expect(publicResponse).toContain('装修思路 2026版');
+    expect(persisted).toContain('卧室电路 220V需要调整；厨房水路12米需要改造；全屋线路20米需要更换');
+    expect(publicResponse).toContain('施工道路8米宽；全屋回路30厘米；厨房管路500毫米；空调风路2公分；燃气气路3㎡；设备油路4m；施工支路6米宽');
     expect(publicResponse).toContain('卧室电路220，装修思路2026');
     expect(persisted).toContain('[已脱敏]');
     const gatewayInput = deps.gateway.chat.mock.calls[0]?.[0] as {
       messages: Array<{ content: string }>;
     };
-    expect(gatewayInput.messages[0]?.content)
-      .toContain('不得返回联系方式或详细地址');
+    expect(gatewayInput.messages[0]?.content).toContain('不得返回联系方式或详细地址');
   });
 
   test('records a stable timeout code without leaking gateway details', async () => {

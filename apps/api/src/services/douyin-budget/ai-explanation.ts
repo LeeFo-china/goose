@@ -36,10 +36,12 @@ const AI_TEMPERATURE = 0.2;
 const PhonePattern =
   /(?<!\d)(?:(?:\+?86[- \u3000]?)?1[3-9]\d(?:[- \u3000]?\d{4}){2}|(?:0\d{2,3}[- \u3000]?)?\d{7,8})(?!\d)/g;
 const RoadAddressPattern = new RegExp(
-  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?!\d)(?![ \u3000]*(?:[VvＶｖ]|伏|版))`,
+  String.raw`([\p{Script=Han}]{2,20})(大道|路|街|巷|弄)[ \u3000]*\d{1,6}(?!\d)(?![ \u3000]*(?:[VvＶｖ]|伏|版|毫米|厘米|公分|平方米|米|㎡|(?:[mMｍＭ]|[cCｃＣ][mMｍＭ]|[mMｍＭ]{2})(?:²|2)?(?![A-Za-z])))`,
   'gu',
 );
-const NonAddressRoadCompoundPattern = /(?:电路|思路)$/u;
+const NonAddressRoadCompounds = new Set([
+  '电路', '思路', '水路', '线路', '道路', '回路', '管路', '风路', '气路', '油路',
+]);
 const StandaloneDetailedAddressPattern = new RegExp([
   String.raw`[\p{Script=Han}]{2,20}(?:小区|村)(?=$|[\s，,。；;、]|\d)`,
   String.raw`门牌(?:号)?\s*\d{1,6}`,
@@ -302,7 +304,8 @@ function containsDetailedAddress(value: string): boolean {
   for (const match of value.matchAll(RoadAddressPattern)) {
     const roadName = match[1] ?? '';
     const roadSuffix = match[2] ?? '';
-    if (!NonAddressRoadCompoundPattern.test(`${roadName}${roadSuffix}`)) {
+    const roadCompound = `${roadName.slice(-1)}${roadSuffix}`;
+    if (!NonAddressRoadCompounds.has(roadCompound)) {
       return true;
     }
   }
