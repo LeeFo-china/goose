@@ -4,6 +4,10 @@ const migration = new URL(
   "../../../../supabase/migrations/20260821104000_create_douyin_budget_pricing_management_commands.sql",
   import.meta.url,
 );
+const monotonicMigration = new URL(
+  "../../../../supabase/migrations/20260821104100_make_douyin_budget_pricing_version_tokens_monotonic.sql",
+  import.meta.url,
+);
 
 describe("douyin budget pricing management migration", () => {
   test("creates four service-role-only atomic commands and closes table writes", async () => {
@@ -49,5 +53,18 @@ describe("douyin budget pricing management migration", () => {
     expect(sql).toContain("status_code");
     expect(sql).toContain("DOUYIN_BUDGET_PRICING_NOT_FOUND");
     expect(sql).not.toMatch(/SQLERRM|PG_EXCEPTION_DETAIL|PG_EXCEPTION_CONTEXT/);
+  });
+
+  test("replaces only the pricing-version timestamp trigger with a monotonic token", async () => {
+    const sql = await Bun.file(monotonicMigration).text();
+    expect(sql).toContain(
+      "FUNCTION public.update_douyin_budget_pricing_version_updated_at()",
+    );
+    expect(sql).toMatch(/DROP TRIGGER tr_douyin_budget_pricing_versions_updated_at/i);
+    expect(sql).toMatch(/CREATE TRIGGER tr_douyin_budget_pricing_versions_updated_at/i);
+    expect(sql).toMatch(
+      /GREATEST\(\s*clock_timestamp\(\),\s*OLD\.updated_at \+ interval '1 microsecond',\s*NEW\.updated_at\s*\)/i,
+    );
+    expect(sql).not.toMatch(/CREATE OR REPLACE FUNCTION public\.update_updated_at_column/i);
   });
 });

@@ -1,6 +1,14 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 
 import type { AuthContext } from "@/services/authorization";
+import {
+  calculateDouyinBudget,
+  DouyinBudgetCalculationError,
+} from "@/services/douyin-budget/calculator";
+import {
+  buildDouyinBudgetPublicConfig,
+  toDouyinBudgetCalculatorRules,
+} from "@/services/douyin-budget/pricing-rules";
 
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
@@ -19,6 +27,7 @@ const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
 const VERSION_ID = "33333333-3333-4333-8333-333333333333";
 const UPDATED_AT = "2026-08-21T08:00:00.123456+00:00";
+const NOW = new Date("2026-08-21T08:30:00.000Z");
 const rawVersion = {
   id: VERSION_ID,
   tenant_id: TENANT_ID,
@@ -73,6 +82,19 @@ const wireBaseItem = {
   sort_order: 0,
   status: "active" as const,
 };
+type CapturedReplaceInput = {
+  items: Array<{
+    category_code: string;
+    item_code: string;
+    label: string;
+    unit: string;
+    minimum_amount: number;
+    maximum_amount: number;
+    condition_payload: Record<string, unknown>;
+    sort_order: number;
+    status: string;
+  }>;
+};
 
 function authContext(
   permissions = ["douyin_miniapp.manage"],
@@ -87,6 +109,7 @@ function authContext(
 }
 
 function fixture(overrides: Record<string, unknown> = {}) {
+  let replaceInput: CapturedReplaceInput | null = null;
   const repository = {
     listVersions: mock(async () => ({
       activeVersion: { ...rawVersion, status: "active" as const },
@@ -94,7 +117,10 @@ function fixture(overrides: Record<string, unknown> = {}) {
       total: 1,
     })),
     createDraft: mock(async () => ({ ok: true as const, data: rawVersion })),
-    replaceItems: mock(async () => ({ ok: true as const, data: rawVersion })),
+    replaceItems: mock(async (input: CapturedReplaceInput) => {
+      replaceInput = input;
+      return { ok: true as const, data: rawVersion };
+    }),
     activate: mock(async () => ({ ok: true as const, data: {
       ...rawVersion, status: "active" as const,
     } })),
@@ -114,11 +140,12 @@ function fixture(overrides: Record<string, unknown> = {}) {
       return "all";
     }),
   };
-  const dependencies = { repository, accessPolicy, ...overrides };
+  const dependencies = { repository, accessPolicy, now: () => NOW, ...overrides };
   return {
     service: new Service(dependencies as never),
     repository,
     accessPolicy,
+    getReplaceInput: () => replaceInput,
   };
 }
 
@@ -135,6 +162,12 @@ describe("TenantDouyinBudgetService", () => {
       expect.anything(),
       "douyin_miniapp.manage",
     );
+    expect(context.repository.listVersions).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+      now: NOW.toISOString(),
+    });
 
     for (const contextValue of [
       authContext([], TENANT_ID),
@@ -185,9 +218,9 @@ describe("TenantDouyinBudgetService", () => {
         unit: "fixed",
         minimum_amount_fen: 2_000_000,
         maximum_amount_fen: 3_000_000,
-        property_conditions: [],
-        decoration_tiers: ["comfortable"],
-        decoration_scopes: ["whole_house", "partial"],
+        property_conditions: ["old_house"],
+        decoration_tiers: ["quality"],
+        decoration_scopes: ["partial"],
         sort_order: 1,
         status: "active",
       }],
@@ -226,13 +259,59 @@ describe("TenantDouyinBudgetService", () => {
         maximum_amount: 3_000_000,
         condition_payload: {
           role: "option",
-          decoration_tiers: ["comfortable"],
-          decoration_scopes: ["whole_house", "partial"],
+          property_conditions: ["old_house"],
+          decoration_tiers: ["quality"],
+          decoration_scopes: ["partial"],
         },
         sort_order: 1,
         status: "active",
       }],
     });
+
+    const commandInput = context.getReplaceInput();
+    if (!commandInput) {
+      throw new TypeError("replace command input missing");
+    }
+    const pricing = {
+      version: {
+        id: VERSION_ID,
+        tenant_id: TENANT_ID,
+        version_no: 2,
+        effective_from: "2026-08-21T00:00:00.000Z",
+        effective_to: null,
+        currency: "CNY" as const,
+        disclaimer: "初步估算，不构成最终报价",
+      },
+      items: commandInput.items.map((item, index) => ({
+        ...item,
+        id: index === 0
+          ? "44444444-4444-4444-8444-444444444444"
+          : "55555555-5555-4555-8555-555555555555",
+        pricing_version_id: VERSION_ID,
+      })),
+    };
+    expect(buildDouyinBudgetPublicConfig(pricing as never).options[0])
+      .toMatchObject({
+        code: "custom_cabinet",
+        applicable_property_conditions: ["old_house"],
+        applicable_decoration_tiers: ["quality"],
+        applicable_decoration_scopes: ["partial"],
+      });
+    try {
+      calculateDouyinBudget(toDouyinBudgetCalculatorRules(pricing as never), {
+        area: 100,
+        property_condition: "rough",
+        decoration_tier: "comfortable",
+        decoration_scope: "whole_house",
+        option_codes: ["custom_cabinet"],
+      });
+      throw new TypeError("expected option applicability rejection");
+    } catch (error) {
+      expect(error).toBeInstanceOf(DouyinBudgetCalculationError);
+      expect(error).toMatchObject({
+        code: "DOUYIN_BUDGET_OPTION_NOT_APPLICABLE",
+      });
+    }
   });
 
   test("delegates optimistic activation/archive and maps only known errors", async () => {

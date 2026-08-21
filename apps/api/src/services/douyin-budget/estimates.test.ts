@@ -156,7 +156,13 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
         { value: "whole_house", label: "全屋" },
         { value: "partial", label: "局部" },
       ],
-      options: [{ code: "custom_cabinet", label: "定制柜体" }],
+      options: [{
+        code: "custom_cabinet",
+        label: "定制柜体",
+        applicable_property_conditions: ["rough", "old_house"],
+        applicable_decoration_tiers: ["economy", "comfortable", "quality"],
+        applicable_decoration_scopes: ["whole_house", "partial"],
+      }],
       pricing_version: "7",
       effective_from: "2026-08-20T00:00:00.000Z",
       effective_to: null,
@@ -217,6 +223,36 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
           code: "DOUYIN_BUDGET_RULE_CONDITION_INVALID",
       });
     }
+  });
+  test("carries persisted admin applicability into config and fail-closed calculation", async () => {
+    const restrictedOption = {
+      ...optionItem,
+      condition_payload: {
+        property_conditions: ["old_house"], decoration_tiers: ["quality"],
+        decoration_scopes: ["partial"], role: "option",
+      },
+    };
+    const deps = dependencies({
+      budgetRepository: {
+        loadActivePricing: mock(async () => ({
+          version, items: [baseItem, restrictedOption],
+        })),
+        createEstimateAtomic: mock(async () => ({})),
+      },
+    });
+    const service = new Service(deps.values as never);
+    await expect(service.getConfig(user)).resolves.toMatchObject({
+      options: [{
+        code: "custom_cabinet",
+        applicable_property_conditions: ["old_house"],
+        applicable_decoration_tiers: ["quality"],
+        applicable_decoration_scopes: ["partial"],
+      }],
+    });
+    await expect(service.createEstimate(user, input, "192.0.2.10"))
+      .rejects.toMatchObject({
+        statusCode: 422, code: "DOUYIN_BUDGET_OPTION_NOT_APPLICABLE",
+      });
   });
 
   test("rejects template-development installations consistently before budget access", async () => {

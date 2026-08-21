@@ -53,9 +53,29 @@ const OptionCodeSchema = z
   .trim()
   .pipe(z.enum(DOUYIN_BUDGET_OPTION_CODE_VALUES));
 const PublicLabelSchema = z.string().trim().min(1).max(40);
+function canonicalNonEmptyArray<
+  const Values extends readonly [string, ...string[]],
+>(values: Values) {
+  return z.array(z.enum(values)).min(1).max(values.length).refine(
+    (items) => items.every((item, index) =>
+      index === 0 || values.indexOf(item) >
+        values.indexOf(items[index - 1] ?? item)
+    ),
+    '适用条件必须按固定顺序且不能重复',
+  );
+}
 const PublicOptionSchema = z.strictObject({
   code: z.enum(DOUYIN_BUDGET_OPTION_CODE_VALUES),
   label: PublicLabelSchema,
+  applicable_property_conditions: canonicalNonEmptyArray(
+    DOUYIN_PROPERTY_CONDITION_VALUES,
+  ),
+  applicable_decoration_tiers: canonicalNonEmptyArray(
+    DOUYIN_DECORATION_TIER_VALUES,
+  ),
+  applicable_decoration_scopes: canonicalNonEmptyArray(
+    DOUYIN_DECORATION_SCOPE_VALUES,
+  ),
 });
 
 export const DouyinBudgetPublicConfigSchema = z.strictObject({

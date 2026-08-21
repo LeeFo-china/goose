@@ -58,6 +58,7 @@ type RepositoryPort = {
     tenantId: string;
     page: number;
     pageSize: number;
+    now: string;
   }): Promise<{
     activeVersion: TenantDouyinBudgetRawVersionWithItems | null;
     rows: TenantDouyinBudgetRawVersionWithItems[];
@@ -93,6 +94,7 @@ export class TenantDouyinBudgetService {
   constructor(private readonly dependencies: {
     readonly repository: RepositoryPort;
     readonly accessPolicy: AccessPolicyPort;
+    readonly now: () => Date;
   }) {}
 
   async list(authContext: AuthContext, input: TenantDouyinBudgetListQuery) {
@@ -101,6 +103,7 @@ export class TenantDouyinBudgetService {
     const result = await this.dependencies.repository.listVersions({
       tenantId,
       ...query,
+      now: this.dependencies.now().toISOString(),
     });
     if (!Number.isInteger(result.total) || result.total < 0) {
       throwInvalidResponse();
@@ -393,4 +396,5 @@ function canonicalArray<const Values extends readonly [string, ...string[]]>(
 export const tenantDouyinBudgetService = new TenantDouyinBudgetService({
   repository: tenantDouyinBudgetRepository,
   accessPolicy: accessPolicyService,
+  now: () => new Date(),
 });

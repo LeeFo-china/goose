@@ -104,6 +104,8 @@ type DatabaseResult = {
 export interface TenantDouyinBudgetQuery extends PromiseLike<DatabaseResult> {
   select(...args: unknown[]): TenantDouyinBudgetQuery;
   eq(...args: unknown[]): TenantDouyinBudgetQuery;
+  lte(...args: unknown[]): TenantDouyinBudgetQuery;
+  or(...args: unknown[]): TenantDouyinBudgetQuery;
   in(...args: unknown[]): TenantDouyinBudgetQuery;
   order(...args: unknown[]): TenantDouyinBudgetQuery;
   range(...args: unknown[]): TenantDouyinBudgetQuery;
@@ -135,6 +137,7 @@ export class TenantDouyinBudgetRepository {
     tenantId: string;
     page: number;
     pageSize: number;
+    now: string;
   }): Promise<{
     activeVersion: TenantDouyinBudgetRawVersionWithItems | null;
     rows: TenantDouyinBudgetRawVersionWithItems[];
@@ -146,6 +149,8 @@ export class TenantDouyinBudgetRepository {
         .select(VERSION_FIELDS)
         .eq("tenant_id", input.tenantId)
         .eq("status", "active")
+        .lte("effective_from", input.now)
+        .or(`effective_to.is.null,effective_to.gt.${input.now}`)
         .limit(1)
         .maybeSingle(),
       "查询当前生效抖音预算报价失败",
@@ -173,13 +178,17 @@ export class TenantDouyinBudgetRepository {
       versionResult.data ?? [],
       "解析抖音预算报价版本失败",
     );
-    const activeVersion = activeResult.data === null
+    const activeCandidate = activeResult.data === null
       ? null
       : parseData(
         RawVersionSchema,
         activeResult.data,
         "解析当前生效抖音预算报价失败",
       );
+    const activeVersion = activeCandidate && isEffectiveAt(
+      activeCandidate,
+      input.now,
+    ) ? activeCandidate : null;
     if (versions.length === 0 && !activeVersion) {
       return { activeVersion: null, rows: [], total: versionResult.count! };
     }
@@ -316,6 +325,16 @@ function chunkValues<T>(values: readonly T[], size: number): T[][] {
     chunks.push(values.slice(index, index + size));
   }
   return chunks;
+}
+
+function isEffectiveAt(
+  version: TenantDouyinBudgetRawVersion,
+  now: string,
+): boolean {
+  const timestamp = Date.parse(now);
+  return Number.isFinite(timestamp) &&
+    Date.parse(version.effective_from) <= timestamp &&
+    (version.effective_to === null || Date.parse(version.effective_to) > timestamp);
 }
 
 function assertDatabaseSuccess(result: DatabaseResult, message: string): void {

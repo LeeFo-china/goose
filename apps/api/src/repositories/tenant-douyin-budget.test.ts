@@ -24,6 +24,7 @@ const TENANT_ID = "11111111-1111-4111-8111-111111111111";
 const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
 const VERSION_ID = "33333333-3333-4333-8333-333333333333";
 const UPDATED_AT = "2026-08-21T08:00:00.123456+00:00";
+const NOW = "2026-08-21T08:30:00.000Z";
 const rawItem = {
   id: "44444444-4444-4444-8444-444444444444",
   pricing_version_id: VERSION_ID,
@@ -77,6 +78,8 @@ function clientWith(results: Result[]) {
     }
     select(...args: unknown[]) { return this.chain("select", args); }
     eq(...args: unknown[]) { return this.chain("eq", args); }
+    lte(...args: unknown[]) { return this.chain("lte", args); }
+    or(...args: unknown[]) { return this.chain("or", args); }
     in(...args: unknown[]) { return this.chain("in", args); }
     order(...args: unknown[]) { return this.chain("order", args); }
     range(...args: unknown[]) { return this.chain("range", args); }
@@ -122,6 +125,7 @@ describe("TenantDouyinBudgetRepository", () => {
       tenantId: TENANT_ID,
       page: 2,
       pageSize: 20,
+      now: NOW,
     })).resolves.toEqual({
       activeVersion: { ...rawVersion, status: "active", items: [rawItem] },
       rows: [{ ...rawVersion, items: [rawItem] }],
@@ -135,6 +139,14 @@ describe("TenantDouyinBudgetRepository", () => {
     });
     expect(calls).toContainEqual({ method: "limit", args: [1_000] });
     expect(calls).toContainEqual({ method: "eq", args: ["status", "active"] });
+    expect(calls).toContainEqual({
+      method: "lte",
+      args: ["effective_from", NOW],
+    });
+    expect(calls).toContainEqual({
+      method: "or",
+      args: [`effective_to.is.null,effective_to.gt.${NOW}`],
+    });
     expect(calls.filter((call) => call.method === "from")).toHaveLength(3);
     const selects = calls.filter((call) => call.method === "select")
       .map((call) => String(call.args[0]));
@@ -151,6 +163,7 @@ describe("TenantDouyinBudgetRepository", () => {
       tenantId: TENANT_ID,
       page: 1,
       pageSize: 20,
+      now: NOW,
     })).resolves.toEqual({ activeVersion: null, rows: [], total: 0 });
     expect(context.calls.filter((call) => call.method === "from")).toHaveLength(2);
   });
@@ -175,7 +188,12 @@ describe("TenantDouyinBudgetRepository", () => {
     ]);
     const repository = new Repository(context.client as never);
 
-    await repository.listVersions({ tenantId: TENANT_ID, page: 1, pageSize: 20 });
+    await repository.listVersions({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+      now: NOW,
+    });
 
     const itemBatches = context.calls
       .filter((call) => call.method === "in")
@@ -184,6 +202,31 @@ describe("TenantDouyinBudgetRepository", () => {
     expect(context.calls.filter((call) =>
       call.method === "limit" && call.args[0] === 1_000
     )).toHaveLength(3);
+  });
+
+  test.each([
+    ["future", { effective_from: "2026-08-22T00:00:00.000Z" }],
+    ["expired", { effective_to: "2026-08-21T08:29:59.999Z" }],
+  ])("does not expose a status-active but %s version as current", async (
+    _case,
+    validity,
+  ) => {
+    const active = { ...rawVersion, ...validity, status: "active" as const };
+    const context = clientWith([
+      { data: active, error: null },
+      { data: [], error: null, count: 0 },
+    ]);
+    const repository = new Repository(context.client as never);
+
+    await expect(repository.listVersions({
+      tenantId: TENANT_ID,
+      page: 1,
+      pageSize: 20,
+      now: NOW,
+    })).resolves.toEqual({ activeVersion: null, rows: [], total: 0 });
+    expect(context.calls.filter((call) =>
+      call.method === "from" && call.args[0] === "douyin_budget_pricing_items"
+    )).toHaveLength(0);
   });
 
   test("uses only atomic write commands with server-scoped arguments", async () => {

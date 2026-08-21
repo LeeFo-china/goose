@@ -110,10 +110,10 @@ export function buildDouyinBudgetPublicConfig(
   pricing: ActiveDouyinBudgetPricing,
 ): DouyinBudgetPublicConfig {
   const rules = toDouyinBudgetCalculatorRules(pricing);
-  const optionLabels = new Map(
+  const optionsByCode = new Map(
     rules.items
       .filter((item) => item.role === "option")
-      .map((item) => [item.code, item.label]),
+      .map((item) => [item.code, item]),
   );
   const parsed = DouyinBudgetPublicConfigSchema.safeParse({
     property_conditions: DOUYIN_PROPERTY_CONDITION_VALUES.map((value) => ({
@@ -129,8 +129,21 @@ export function buildDouyinBudgetPublicConfig(
       label: SCOPE_LABELS[value],
     })),
     options: DOUYIN_BUDGET_OPTION_CODE_VALUES.flatMap((code) => {
-      const label = optionLabels.get(code);
-      return label ? [{ code, label }] : [];
+      const option = optionsByCode.get(code);
+      return option ? [{
+        code,
+        label: option.label,
+        applicable_property_conditions: [
+          ...(option.condition.propertyConditions ??
+            DOUYIN_PROPERTY_CONDITION_VALUES),
+        ],
+        applicable_decoration_tiers: [
+          ...(option.condition.decorationTiers ?? DOUYIN_DECORATION_TIER_VALUES),
+        ],
+        applicable_decoration_scopes: [
+          ...(option.condition.decorationScopes ?? DOUYIN_DECORATION_SCOPE_VALUES),
+        ],
+      }] : [];
     }),
     pricing_version: String(pricing.version.version_no),
     effective_from: normalizedDateTime(pricing.version.effective_from),

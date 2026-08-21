@@ -34,6 +34,8 @@ describe("tenant douyin budget pricing PostgreSQL integration", () => {
       "stale_replace_rejected",
       "six_base_activation_atomic",
       "archive_command",
+      "same_transaction_tokens_monotonic",
+      "concurrent_replace_activate_serialized",
       "fixture_cleanup",
     ]);
   });

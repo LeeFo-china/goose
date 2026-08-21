@@ -82,8 +82,20 @@ const validPublicConfig: DouyinBudgetPublicConfig = {
     { value: 'partial', label: '局部' },
   ],
   options: [
-    { code: 'demolition', label: '拆除' },
-    { code: 'custom_cabinet', label: '定制柜体' },
+    {
+      code: 'demolition',
+      label: '拆除',
+      applicable_property_conditions: ['old_house'],
+      applicable_decoration_tiers: ['economy', 'comfortable', 'quality'],
+      applicable_decoration_scopes: ['whole_house', 'partial'],
+    },
+    {
+      code: 'custom_cabinet',
+      label: '定制柜体',
+      applicable_property_conditions: ['rough', 'old_house'],
+      applicable_decoration_tiers: ['comfortable', 'quality'],
+      applicable_decoration_scopes: ['whole_house'],
+    },
   ],
   pricing_version: '1',
   effective_from: '2026-08-20T00:00:00.123Z',
@@ -379,6 +391,27 @@ describe('douyin budget contracts', () => {
       {
         ...validPublicConfig,
         options: [{ code: 'unknown_option', label: '未知' }],
+      },
+      {
+        ...validPublicConfig,
+        options: [{
+          ...validPublicConfig.options[0],
+          applicable_property_conditions: [],
+        }],
+      },
+      {
+        ...validPublicConfig,
+        options: [{
+          ...validPublicConfig.options[0],
+          applicable_decoration_tiers: ['quality', 'economy'],
+        }],
+      },
+      {
+        ...validPublicConfig,
+        options: [{
+          ...validPublicConfig.options[0],
+          applicable_decoration_scopes: ['unknown_scope'],
+        }],
       },
       {
         ...validPublicConfig,

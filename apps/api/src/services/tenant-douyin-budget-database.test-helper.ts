@@ -8,6 +8,8 @@ export const PRICING_DATABASE_SCENARIOS = [
   "stale_replace_rejected",
   "six_base_activation_atomic",
   "archive_command",
+  "same_transaction_tokens_monotonic",
+  "concurrent_replace_activate_serialized",
   "fixture_cleanup",
 ] as const;
 
@@ -48,6 +50,7 @@ export async function runTenantDouyinBudgetDatabaseIntegration(
   if (!parsed.ok) throw new Error("LOCAL_DATABASE_REQUIRED");
   const admin = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
   const service = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
+  const contender = new Bun.SQL(parsed.databaseUrl, { max: 1, prepare: false });
   const ids = {
     tenant: randomUUID(),
     employee: randomUUID(),
@@ -61,13 +64,17 @@ export async function runTenantDouyinBudgetDatabaseIntegration(
   try {
     await createFixture(admin, ids);
     await service`set role service_role`;
+    await contender`set role service_role`;
     await service`set statement_timeout = '5s'`;
     await service`set lock_timeout = '2s'`;
-    await runScenarios(admin, service, ids, summary);
+    await contender`set statement_timeout = '5s'`;
+    await contender`set lock_timeout = '2s'`;
+    await runScenarios(admin, service, contender, ids, summary);
   } catch (error) {
     failure = error;
   } finally {
     await service.close().catch(() => undefined);
+    await contender.close().catch(() => undefined);
     try {
       summary.fixture_cleanup = await cleanupFixture(admin, ids.tenant);
     } catch (cleanupError) {
@@ -82,6 +89,7 @@ export async function runTenantDouyinBudgetDatabaseIntegration(
 async function runScenarios(
   admin: DatabaseSql,
   service: DatabaseSql,
+  contender: DatabaseSql,
   ids: { tenant: string; employee: string; active: string },
   summary: Summary,
 ) {
@@ -181,6 +189,87 @@ async function runScenarios(
     token: requireString(activeData.updated_at),
   });
   summary.archive_command = requireData(archived).status === "archived";
+
+  const sameTransactionTokens: string[] = [];
+  await service.begin(async (transaction) => {
+    const sameTransactionDraft = requireData(await command(transaction, "create", {
+      tenantId: ids.tenant,
+      employeeId: ids.employee,
+    }));
+    const versionId = requireString(sameTransactionDraft.id);
+    sameTransactionTokens.push(requireString(sameTransactionDraft.updated_at));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const replacedInTransaction = requireData(await command(transaction, "replace", {
+        tenantId: ids.tenant,
+        versionId,
+        token: sameTransactionTokens.at(-1),
+        items,
+      }));
+      sameTransactionTokens.push(requireString(replacedInTransaction.updated_at));
+    }
+    const activatedInTransaction = requireData(await command(transaction, "activate", {
+      tenantId: ids.tenant,
+      versionId,
+      token: sameTransactionTokens.at(-1),
+    }));
+    sameTransactionTokens.push(requireString(activatedInTransaction.updated_at));
+    const archivedInTransaction = requireData(await command(transaction, "archive", {
+      tenantId: ids.tenant,
+      versionId,
+      token: sameTransactionTokens.at(-1),
+    }));
+    sameTransactionTokens.push(requireString(archivedInTransaction.updated_at));
+  });
+  summary.same_transaction_tokens_monotonic = await tokensStrictlyIncrease(
+    admin,
+    sameTransactionTokens,
+  );
+
+  const concurrentDraft = requireData(await command(service, "create", {
+    tenantId: ids.tenant,
+    employeeId: ids.employee,
+  }));
+  const concurrentId = requireString(concurrentDraft.id);
+  const concurrentPrepared = requireData(await command(service, "replace", {
+    tenantId: ids.tenant,
+    versionId: concurrentId,
+    token: requireString(concurrentDraft.updated_at),
+    items,
+  }));
+  const concurrentToken = requireString(concurrentPrepared.updated_at);
+  const concurrentResults = await Promise.all([
+    command(service, "replace", {
+      tenantId: ids.tenant,
+      versionId: concurrentId,
+      token: concurrentToken,
+      items,
+    }),
+    command(contender, "activate", {
+      tenantId: ids.tenant,
+      versionId: concurrentId,
+      token: concurrentToken,
+    }),
+  ]);
+  const successes = concurrentResults.filter((result) => "data" in result);
+  const loserCodes = concurrentResults.flatMap((result) => {
+    const code = errorCode(result);
+    return code ? [code] : [];
+  });
+  summary.concurrent_replace_activate_serialized = successes.length === 1 &&
+    loserCodes.length === 1 &&
+    ["DOUYIN_BUDGET_PRICING_STALE", "DOUYIN_BUDGET_PRICING_NOT_DRAFT"]
+      .includes(loserCodes[0] ?? "");
+}
+
+async function tokensStrictlyIncrease(db: DatabaseSql, tokens: string[]) {
+  for (let index = 1; index < tokens.length; index += 1) {
+    const rows = await db<Array<{ advanced: boolean }>>`
+      select ${tokens[index - 1]}::timestamptz
+        < ${tokens[index]}::timestamptz as advanced;
+    `;
+    if (rows[0]?.advanced !== true) return false;
+  }
+  return tokens.length > 1;
 }
 
 async function command(
