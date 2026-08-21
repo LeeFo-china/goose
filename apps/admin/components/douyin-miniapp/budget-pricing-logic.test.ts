@@ -122,6 +122,9 @@ describe("douyin budget pricing admin logic", () => {
       }),
     ];
     expect(loaded.map((item) => item.sort_order)).toEqual([0, 2]);
+    const sparsePayload = buildPricingItemsPayload(version.updated_at, loaded);
+    expect(sparsePayload.items.map((item) => item.sort_order)).toEqual([0, 1]);
+    expect(TenantDouyinBudgetReplaceItemsSchema.safeParse(sparsePayload).success).toBe(true);
 
     const added = addPricingEditorItem(loaded, {
       ...createEmptyPricingEditorItem("custom_cabinet", 99),
