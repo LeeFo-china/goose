@@ -465,8 +465,7 @@ async function executeDatabase<T>(operation: () => T | PromiseLike<T>,
   message: string): Promise<T> {
   try {
     return await operation();
-  } catch (error) {
-    if (error instanceof AppError) throw error;
+  } catch {
     throw Errors.dbError(message);
   }
 }

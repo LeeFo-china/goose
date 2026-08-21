@@ -84,6 +84,34 @@ describe("TenantDouyinLeadsRepository database failures", () => {
           rpc: mock(() => Promise.reject(new Error("async-rpc-secret"))) } as never)
           .assign(assignInput()),
       },
+      {
+        secret: "sync-query-app-error", message: "查询抖音线索失败",
+        run: () => new Repository({
+          from: mock(() => { throw rawAppError("sync-query-app-error"); }),
+          rpc: mock(async () => ({ data: null, error: null })),
+        } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
+          visibleAssigneeIds: null }),
+      },
+      {
+        secret: "async-query-app-error", message: "查询抖音线索失败",
+        run: () => new Repository({
+          from: mock(() => new RejectedQuery(rawAppError("async-query-app-error"))),
+          rpc: mock(async () => ({ data: null, error: null })),
+        } as never).listLeads({ tenantId: TENANT_ID, page: 1, pageSize: 20,
+          visibleAssigneeIds: null }),
+      },
+      {
+        secret: "sync-rpc-app-error", message: "执行抖音线索命令失败",
+        run: () => new Repository({ from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => { throw rawAppError("sync-rpc-app-error"); }) } as never)
+          .assign(assignInput()),
+      },
+      {
+        secret: "async-rpc-app-error", message: "执行抖音线索命令失败",
+        run: () => new Repository({ from: mock(() => new RejectedQuery(new Error())),
+          rpc: mock(() => Promise.reject(rawAppError("async-rpc-app-error"))) } as never)
+          .assign(assignInput()),
+      },
     ];
 
     for (const failure of failures) {
@@ -101,4 +129,8 @@ function assignInput() {
     actorEmployeeId: EMPLOYEE_ID, assignedEmployeeId: EMPLOYEE_ID,
     expectedVersion: 1, idempotencyKey: IDEMPOTENCY_KEY,
     expectedAssigneeDepartmentId: null };
+}
+
+function rawAppError(secret: string) {
+  return new AppError(418, secret, "RAW_CODE", { raw: secret });
 }

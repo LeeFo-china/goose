@@ -184,6 +184,12 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
     coalesce(has_function_privilege('service_role',to_regprocedure(
       'public.assign_douyin_lead(uuid,uuid,uuid,uuid,integer,uuid,uuid)'),
       'EXECUTE'),false) as new_assign,
+    coalesce(has_function_privilege('anon',to_regprocedure(
+      'public.assign_douyin_lead(uuid,uuid,uuid,uuid,integer,uuid,uuid)'),
+      'EXECUTE'),false) as anon_assign,
+    coalesce(has_function_privilege('authenticated',to_regprocedure(
+      'public.assign_douyin_lead(uuid,uuid,uuid,uuid,integer,uuid,uuid)'),
+      'EXECUTE'),false) as authenticated_assign,
     has_function_privilege('service_role',
       'public.convert_douyin_lead_to_customer(uuid,uuid,uuid,integer,uuid)',
       'EXECUTE') as old_convert,
@@ -197,7 +203,8 @@ async function runScenarios(admin: DatabaseSql, service: DatabaseSql,
       'public.list_tenant_douyin_lead_latest_appointments(uuid,uuid[])',
       'EXECUTE') as authenticated_latest`)[0];
   summary.function_acl_catalog = acl?.old_assign === false
-    && acl.new_assign === true && acl.old_convert === false
+    && acl.new_assign === true && acl.anon_assign === false
+    && acl.authenticated_assign === false && acl.old_convert === false
     && acl.new_convert === true && acl.latest === true
     && acl.authenticated_latest === false;
 

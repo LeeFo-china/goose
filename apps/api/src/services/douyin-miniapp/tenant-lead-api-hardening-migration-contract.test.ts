@@ -195,6 +195,7 @@ describe("tenant lead API hardening migration", () => {
     expect(scopeConflict).toBeLessThan(operationWrite);
 
     expect(normalized).toMatch(/revoke all on function public\.assign_douyin_lead\(\s*uuid, uuid, uuid, uuid, integer, uuid\s*\) from service_role/);
+    expect(normalized).toMatch(/revoke all on function public\.assign_douyin_lead\(\s*uuid, uuid, uuid, uuid, integer, uuid, uuid\s*\) from public, anon, authenticated/);
     expect(normalized).toMatch(/grant execute on function public\.assign_douyin_lead\(\s*uuid, uuid, uuid, uuid, integer, uuid, uuid\s*\) to service_role/);
     for (const [column, indexName] of [
       ["name", "marketing_leads_douyin_name_trgm_idx"],
@@ -209,6 +210,7 @@ describe("tenant lead API hardening migration", () => {
         `CREATE INDEX ${indexName}_removed`))).not.toContain(contract);
     }
     expect(normalized).not.toContain("create extension");
+    expect(normalized.match(/\bcreate index\b/g)?.length).toBe(3);
     const statements = topLevelSql(sql).split(";")
       .map((statement) => statement.trim()).filter(Boolean);
     for (const statement of statements) {
