@@ -16,6 +16,7 @@ import {
   applyBudgetFormMutation,
   failAiRequest,
   failBudgetCalculation,
+  calculateBudgetResultScrollTop,
   invalidateBudgetPageRequests,
   resolveAiRequest,
   resolveAiRequestResult,
@@ -248,6 +249,13 @@ describe("budget page request state", () => {
       } as DouyinBudgetEstimateResult,
     });
     expect(stateView).toMatchObject({ status: "result", resultPricingVersion: "7" });
+  });
+
+  test("calculates a result scroll target from node position and viewport offset", () => {
+    expect(calculateBudgetResultScrollTop({ rectTop: 260, scrollTop: 120 }))
+      .toBe(356);
+    expect(calculateBudgetResultScrollTop({ rectTop: -30, scrollTop: 20 }))
+      .toBe(0);
   });
 
   test("ignores stale AI and preserves the estimate when AI fails", () => {

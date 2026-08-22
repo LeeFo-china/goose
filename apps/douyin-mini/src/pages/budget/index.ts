@@ -7,8 +7,9 @@ import { consumeBudgetResultReturnIntent } from "../../platform/measurement-succ
 import { switchToTab } from "../../platform/navigation";
 import { BudgetAiAnalysisRunner } from "./ai-polling";
 import {
-  BudgetFormValidationError, buildBudgetOptionViews, buildEstimateRequest,
-  normalizeBudgetFormForConfig, reconcileSelectedOptions, updateBudgetSelection,
+  BUDGET_LAYOUT_CHOICES, BUDGET_STYLE_CHOICES, BudgetFormValidationError,
+  buildBudgetOptionViews, buildEstimateRequest, normalizeBudgetFormForConfig,
+  reconcileSelectedOptions, selectBudgetTextChoice, updateBudgetSelection,
   type BudgetChoiceField, type BudgetFormValue, type BudgetOptionView,
 } from "./form-model";
 import {
@@ -16,7 +17,8 @@ import {
   beginBudgetCalculation, beginConfigLoad, buildBudgetPageView, createBudgetPageState,
   describeBudgetUnavailable, failAiRequest, failBudgetCalculation, failConfigLoad,
   invalidateBudgetPageRequests, markAiRequestUncertain, readBudgetError,
-  resolveAiRequestResult, resolveBudgetCalculationResult, resolveConfigLoadResult,
+  readBudgetResultScrollTop, resolveAiRequestResult, resolveBudgetCalculationResult,
+  resolveConfigLoadResult,
   shouldPreserveBudgetResultOnReturn, shouldResumeBudgetAiOnReturn,
   type BudgetPageState,
 } from "./page-model";
@@ -32,6 +34,8 @@ const CHOICE_FIELDS = new Set<BudgetChoiceField>(
   ["propertyCondition", "decorationTier", "decorationScope"],
 );
 const TEXT_FIELDS = new Set<"layout" | "style" | "demand">(["layout", "style", "demand"]);
+const LAYOUT_CHOICE_LABELS = BUDGET_LAYOUT_CHOICES.map((choice) => choice.label);
+const STYLE_CHOICE_LABELS = BUDGET_STYLE_CHOICES.map((choice) => choice.label);
 
 Page({
   pageState: createBudgetPageState(),
@@ -47,6 +51,13 @@ Page({
     config: null as DouyinBudgetPublicConfig | null,
     form: { ...INITIAL_FORM },
     applicableOptions: [] as BudgetOptionView[],
+    layoutChoiceLabels: LAYOUT_CHOICE_LABELS,
+    styleChoiceLabels: STYLE_CHOICE_LABELS,
+    layoutChoiceIndex: 0,
+    styleChoiceIndex: 0,
+    showLayoutCustomInput: false,
+    showStyleCustomInput: false,
+    showBudgetOptions: false,
     areaError: "",
     pageError: "",
     unavailableTitle: "预算初算暂未开放",
@@ -109,6 +120,7 @@ Page({
       this.setData({
         form,
         applicableOptions: buildBudgetOptionViews(acceptedConfig, form),
+        showBudgetOptions: form.decorationScope === "partial",
         primaryColor: theme.primaryColor,
         primaryTextColor: theme.primaryTextColor,
         activeChoiceStyle: `border-color: ${theme.primaryColor}; background-color: ${theme.primaryColor}; color: ${theme.primaryTextColor};`,
@@ -165,6 +177,32 @@ Page({
     );
     this.commitFormMutation(form);
   },
+  onLayoutChoiceChange(event: { detail: { value?: string } }) {
+    if (this.data.status === "calculating") return;
+    const selected = selectBudgetTextChoice(
+      BUDGET_LAYOUT_CHOICES,
+      String(event.detail.value ?? ""),
+      this.data.showLayoutCustomInput ? this.data.form.layout : "",
+    );
+    this.setData({
+      layoutChoiceIndex: Number(event.detail.value ?? 0),
+      showLayoutCustomInput: selected.isCustom,
+    });
+    this.commitFormMutation({ ...this.data.form, layout: selected.value });
+  },
+  onStyleChoiceChange(event: { detail: { value?: string } }) {
+    if (this.data.status === "calculating") return;
+    const selected = selectBudgetTextChoice(
+      BUDGET_STYLE_CHOICES,
+      String(event.detail.value ?? ""),
+      this.data.showStyleCustomInput ? this.data.form.style : "",
+    );
+    this.setData({
+      styleChoiceIndex: Number(event.detail.value ?? 0),
+      showStyleCustomInput: selected.isCustom,
+    });
+    this.commitFormMutation({ ...this.data.form, style: selected.value });
+  },
   onToggleOption(event: { currentTarget: { dataset: { code?: string } } }) {
     if (this.data.status === "calculating" || !this.data.config) return;
     const code = event.currentTarget.dataset.code as DouyinBudgetOptionCode;
@@ -181,6 +219,7 @@ Page({
     this.setData({
       form,
       applicableOptions: this.data.config ? buildBudgetOptionViews(this.data.config, form) : [],
+      showBudgetOptions: form.decorationScope === "partial",
       ...fields,
     });
     this.syncState();
@@ -217,7 +256,7 @@ Page({
       );
       if (!resolution.accepted) return;
       this.pageState = resolution.state;
-      this.syncState();
+      this.syncState(() => this.scrollBudgetResultIntoView());
       this.loadAi(estimate.id, false);
     } catch (error) {
       if (!this.lifecycle.isActive()
@@ -289,7 +328,16 @@ Page({
     void switchToTab("lead")
       .catch(() => tt.showToast({ title: "页面跳转失败，请重试", icon: "none" }));
   },
-  syncState() {
-    if (this.lifecycle.isActive()) this.setData(buildBudgetPageView(this.pageState));
+  scrollBudgetResultIntoView() {
+    const query = this.createSelectorQuery();
+    query.select("#budget-result").boundingClientRect();
+    query.selectViewport().scrollOffset();
+    query.exec((results: unknown) => {
+      const scrollTop = readBudgetResultScrollTop(results);
+      if (scrollTop !== null) void tt.pageScrollTo({ scrollTop, duration: 220 });
+    });
+  },
+  syncState(afterRender?: () => void) {
+    if (this.lifecycle.isActive()) this.setData(buildBudgetPageView(this.pageState), afterRender);
   },
 });

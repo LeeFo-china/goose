@@ -40,6 +40,8 @@ export type BudgetResultView = {
   resultEffectivePeriod: string;
 };
 
+const RESULT_SCROLL_OFFSET_PX = 24;
+
 type BudgetPageLifecyclePhase = "new" | "visible" | "hidden" | "unloaded";
 
 export class BudgetPageLifecycleCoordinator {
@@ -134,6 +136,28 @@ export function buildBudgetResultView(
     resultPricingVersion: estimate.pricing_version,
     resultEffectivePeriod: `生效时间 ${effectiveFrom}${effectiveTo ? `；有效至 ${effectiveTo}` : "；长期有效"}`,
   };
+}
+
+export function calculateBudgetResultScrollTop(input: {
+  rectTop: number;
+  scrollTop: number;
+}): number {
+  return Math.max(0, Math.round(input.scrollTop + input.rectTop - RESULT_SCROLL_OFFSET_PX));
+}
+
+export function readBudgetResultScrollTop(results: unknown): number | null {
+  if (!Array.isArray(results)) return null;
+  const rectTop = readNumberProperty(results[0], "top");
+  const scrollTop = readNumberProperty(results[1], "scrollTop");
+  return rectTop === null || scrollTop === null
+    ? null
+    : calculateBudgetResultScrollTop({ rectTop, scrollTop });
+}
+
+function readNumberProperty(value: unknown, key: string): number | null {
+  if (typeof value !== "object" || value === null || !(key in value)) return null;
+  const result = (value as Record<string, unknown>)[key];
+  return typeof result === "number" && Number.isFinite(result) ? result : null;
 }
 
 export function buildBudgetPageView(current: BudgetPageState) {

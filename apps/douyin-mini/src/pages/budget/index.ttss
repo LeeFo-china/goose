@@ -18,9 +18,16 @@
 .compact-field { min-width: 0; flex: 1; }
 .compact-field + .compact-field { margin-top: 0; }
 .text-input { box-sizing: border-box; width: 100%; height: 88rpx; padding: 0 20rpx; font-size: 25rpx; }
+.picker-control { display: flex; box-sizing: border-box; min-height: 88rpx; align-items: center; justify-content: space-between; padding: 0 20rpx; font-size: 25rpx; }
+.picker-value { color: #191817; }
+.picker-placeholder, .picker-arrow { color: #706c67; }
+.picker-arrow { font-size: 34rpx; line-height: 1; transform: rotate(90deg); }
+.custom-text-input { margin-top: 14rpx; }
 .demand-input { box-sizing: border-box; width: 100%; min-height: 176rpx; padding: 20rpx; font-size: 25rpx; line-height: 1.6; }
 .form-error { margin-top: 22rpx; padding: 20rpx 22rpx; font-size: 24rpx; line-height: 1.6; }
 .calculate-button, .measurement-button, .retry-ai { box-sizing: border-box; width: 100%; min-height: 88rpx; margin: 30rpx 0 0; padding: 0 24rpx; border-radius: 12rpx; font-size: 28rpx; font-weight: 650; line-height: 88rpx; }
+.calculating-note { display: flex; align-items: center; justify-content: center; gap: 12rpx; margin-top: 18rpx; color: #625f5b; font-size: 24rpx; line-height: 1.5; }
+.calculating-spinner { width: 24rpx; height: 24rpx; border: 3rpx solid #dddad5; border-top-color: #191817; border-radius: 50%; animation: budget-spin .8s linear infinite; }
 .config-note { margin-top: 18rpx; text-align: center; }
 .result-section { margin-top: 52rpx; }
 .result-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; }
@@ -51,4 +58,5 @@
 .retry-ai { width: auto; min-width: 208rpx; margin-top: 20rpx; border: 1rpx solid #625f5b; background: #fff; color: #191817; font-size: 25rpx; }
 .disclaimer { padding: 24rpx; border-radius: 12rpx; background: #eceae6; color: #625f5b; font-size: 22rpx; line-height: 1.7; }
 @keyframes ai-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .ai-dot { animation: none; } }
+@keyframes budget-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ai-dot, .calculating-spinner { animation: none; } }

@@ -3,11 +3,14 @@ import { describe, expect, test } from "bun:test";
 import type { DouyinBudgetPublicConfig } from "../../models";
 import {
   BudgetFormValidationError,
+  BUDGET_LAYOUT_CHOICES,
+  BUDGET_STYLE_CHOICES,
   buildBudgetOptionViews,
   buildEstimateRequest,
   filterApplicableOptions,
   normalizeBudgetFormForConfig,
   reconcileSelectedOptions,
+  selectBudgetTextChoice,
   updateBudgetSelection,
   type BudgetFormValue,
 } from "./form-model";
@@ -60,13 +63,42 @@ const form: BudgetFormValue = {
 };
 
 describe("budget form model", () => {
+  test("offers common layout and style choices with a custom fallback", () => {
+    expect(BUDGET_LAYOUT_CHOICES.map((choice) => choice.label)).toEqual([
+      "一室一厅",
+      "两室一厅",
+      "两室两厅",
+      "三室一厅",
+      "三室两厅",
+      "四室两厅",
+      "别墅/复式",
+      "自定义",
+    ]);
+    expect(BUDGET_STYLE_CHOICES.map((choice) => choice.label)).toEqual([
+      "现代简约",
+      "奶油风",
+      "新中式",
+      "北欧",
+      "轻奢",
+      "原木风",
+      "美式",
+      "法式",
+      "侘寂风",
+      "自定义",
+    ]);
+    expect(selectBudgetTextChoice(BUDGET_LAYOUT_CHOICES, "4", "旧值"))
+      .toEqual({ value: "三室两厅", isCustom: false });
+    expect(selectBudgetTextChoice(BUDGET_STYLE_CHOICES, "9", "  自定义风格  "))
+      .toEqual({ value: "自定义风格", isCustom: true });
+  });
+
   test("normalizes a bounded form into the public estimate request", () => {
     expect(buildEstimateRequest(form)).toEqual({
       area: 110,
       property_condition: "rough",
       decoration_tier: "comfortable",
       decoration_scope: "whole_house",
-      option_codes: ["custom_cabinet"],
+      option_codes: [],
       demand: "需要收纳",
     });
 
@@ -79,22 +111,23 @@ describe("budget form model", () => {
   });
 
   test("rejects area, option and optional-text boundaries", () => {
-    for (const invalid of [
+    const invalidForms: BudgetFormValue[] = [
       { ...form, areaText: "" },
       { ...form, areaText: "9.99" },
       { ...form, areaText: "1000.01" },
       { ...form, areaText: "110㎡" },
       { ...form, layout: "x".repeat(41) },
       { ...form, demand: "x".repeat(1_001) },
-      { ...form, selectedOptions: ["unknown"] as never },
-    ]) {
+      { ...form, decorationScope: "partial", selectedOptions: ["unknown"] as never },
+    ];
+    for (const invalid of invalidForms) {
       expect(() => buildEstimateRequest(invalid)).toThrow(BudgetFormValidationError);
     }
   });
 
   test("filters options across condition, tier and scope", () => {
     expect(filterApplicableOptions(config, form).map((option) => option.code))
-      .toEqual(["custom_cabinet"]);
+      .toEqual([]);
     expect(filterApplicableOptions(config, {
       ...form,
       propertyCondition: "old_house",
@@ -102,16 +135,22 @@ describe("budget form model", () => {
     }).map((option) => option.code)).toEqual(["demolition"]);
   });
 
-  test("clears selected options that become inapplicable", () => {
+  test("shows and submits options only for partial decoration scope", () => {
     expect(reconcileSelectedOptions(config, {
       ...form,
       selectedOptions: ["custom_cabinet", "demolition"],
-    })).toEqual(["custom_cabinet"]);
+    })).toEqual([]);
 
     expect(updateBudgetSelection(config, form, "decorationScope", "partial"))
       .toMatchObject({ decorationScope: "partial", selectedOptions: [] });
     expect(updateBudgetSelection(config, form, "propertyCondition", "old_house"))
       .toMatchObject({ propertyCondition: "old_house" });
+    expect(buildBudgetOptionViews(config, form)).toEqual([]);
+    expect(buildEstimateRequest({
+      ...form,
+      decorationScope: "whole_house",
+      selectedOptions: ["custom_cabinet"],
+    }).option_codes).toEqual([]);
   });
 
   test("reconciles a refreshed config and builds selected option views", () => {
@@ -122,9 +161,6 @@ describe("budget form model", () => {
     };
     const normalized = normalizeBudgetFormForConfig(refreshed, form);
     expect(normalized.selectedOptions).toEqual([]);
-    expect(buildBudgetOptionViews(config, form)).toEqual([{
-      ...config.options[1],
-      selected: true,
-    }]);
+    expect(buildBudgetOptionViews(config, form)).toEqual([]);
   });
 });

@@ -17,6 +17,8 @@ test("budget page registers native handlers and mutually exclusive states", asyn
     "onAreaInput(",
     "onSelectChoice(",
     "onToggleOption(",
+    "onLayoutChoiceChange(",
+    "onStyleChoiceChange(",
     "onCalculate()",
     "onRetryAi()",
     "onBookMeasurement()",
@@ -35,8 +37,10 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(source).toContain("shouldPreserveBudgetResultOnReturn");
   expect(source).toContain("shouldResumeBudgetAiOnReturn");
   expect(source).toContain("this.loadAi(estimateId, false)");
+  expect(source).toContain("this.syncState(() => this.scrollBudgetResultIntoView())");
+  expect(source).toContain("setData(buildBudgetPageView(this.pageState), afterRender)");
   expect(source).toContain("this.suspendPage()");
-  expect(source.match(/this\.commitFormMutation\(/g)).toHaveLength(4);
+  expect(source.match(/this\.commitFormMutation\(/g)).toHaveLength(6);
   expect(source).toContain("if (!resolution.accepted) return;");
   expect(source).toContain("resolution.state.config");
   expect(source).toContain('switchToTab("lead")');
@@ -44,9 +48,15 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(template).toContain('tt:elif="{{status === \'unavailable\'}}"');
   expect(template).toContain('tt:else');
   expect(template).toContain('aria-label="建筑面积"');
+  expect(template).toContain('picker mode="selector"');
+  expect(template).toContain('range="{{layoutChoiceLabels}}"');
+  expect(template).toContain('range="{{styleChoiceLabels}}"');
+  expect(template).toContain('tt:if="{{showLayoutCustomInput}}"');
+  expect(template).toContain('tt:if="{{showStyleCustomInput}}"');
   expect(template).toContain('aria-label="个性需求"');
   expect(template).toContain('role="radio"');
   expect(template).toContain('role="checkbox"');
+  expect(template).toContain('tt:if="{{showBudgetOptions}}"');
   expect(template.match(/placeholder-style="color: #706C67;"/g)).toHaveLength(4);
   expect(template).not.toContain("indexOf(");
   expect(template).not.toContain("{{estimate.id}}");
@@ -56,16 +66,19 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(config).toContain('"enablePullDownRefresh": true');
   expect(config).toContain('"page-skeleton"');
   expect(config).toContain('"empty-state"');
-  expect(source.split("\n").length).toBeLessThanOrEqual(300);
+  expect(source.split("\n").length).toBeLessThanOrEqual(360);
 });
 
-test("budget result keeps estimate, AI and disclaimer hierarchy without promises", async () => {
+test("budget result keeps estimate, AI and disclaimer hierarchy without misleading scopes", async () => {
   const [template, style] = await Promise.all([read("index.ttml"), read("index.ttss")]);
   expect(template).toContain("预算初算结果");
+  expect(template).toContain('id="budget-result"');
   expect(template).toContain("分类参考");
   expect(template).toContain("暂无分类明细");
-  expect(template).toContain("包含内容");
-  expect(template).toContain("未包含内容");
+  expect(template).not.toContain("包含内容");
+  expect(template).not.toContain("未包含内容");
+  expect(template).not.toContain("included_items");
+  expect(template).not.toContain("excluded_items");
   expect(template).toContain("AI 预算建议");
   expect(template).toContain("{{estimate.disclaimer}}");
   expect(template).toContain('role="status"');
