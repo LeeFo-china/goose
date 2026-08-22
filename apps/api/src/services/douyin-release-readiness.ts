@@ -12,6 +12,7 @@ import {
 } from "@/repositories/douyin-release-readiness";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import { isPhoneLoginWithoutCodeEnabled } from "@/utils/auth/test-login";
 
 type TenantStatus = "active" | "suspended" | "archived";
 type InstallationStatus = "active" | "disabled" | "revoked";
@@ -72,6 +73,8 @@ type ServiceDependencies = {
   readonly repository?: RepositoryPort;
   readonly accessPolicy?: AccessPolicyPort;
   readonly now?: () => Date;
+  readonly requiredHosts?: () => readonly string[];
+  readonly smsReadinessBypass?: () => boolean;
 };
 
 const MIN_PUBLIC_PROJECTS = 6;
@@ -90,17 +93,25 @@ export class DouyinReleaseReadinessService {
   private readonly repository: RepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly now: () => Date;
+  private readonly requiredHosts: () => readonly string[];
+  private readonly smsReadinessBypass: () => boolean;
 
   constructor(dependencies: ServiceDependencies = {}) {
     this.repository = dependencies.repository ?? douyinReleaseReadinessRepository;
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.now = dependencies.now ?? (() => new Date());
+    this.requiredHosts = dependencies.requiredHosts
+      ?? (() => parseDouyinReleaseRequiredHosts(
+        process.env.DOUYIN_RELEASE_REQUIRED_HOSTS,
+      ));
+    this.smsReadinessBypass = dependencies.smsReadinessBypass
+      ?? isPhoneLoginWithoutCodeEnabled;
   }
 
   async getReadiness(authContext: AuthContext): Promise<DouyinReleaseReadiness> {
     const tenantId = this.accessPolicy.assertTenantContext(authContext);
     this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
-    return this.evaluateTenant(tenantId, []);
+    return this.evaluateTenant(tenantId, this.requiredHosts());
   }
 
   async evaluateTenant(
@@ -113,12 +124,27 @@ export class DouyinReleaseReadinessService {
       now: now.toISOString(),
       requiredHosts,
     });
-    return evaluateDouyinReleaseReadiness(facts, now);
+    return evaluateDouyinReleaseReadiness(
+      this.smsReadinessBypass() ? { ...facts, smsReady: true } : facts,
+      now,
+    );
   }
 }
 
 export const douyinReleaseReadinessService =
   new DouyinReleaseReadinessService();
+
+export function parseDouyinReleaseRequiredHosts(
+  value: string | undefined,
+): string[] {
+  if (!value) return [];
+  return Array.from(new Set(
+    value
+      .split(/[\n,，]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  ));
+}
 
 export function evaluateDouyinReleaseReadiness(
   facts: DouyinReleaseReadinessFacts,

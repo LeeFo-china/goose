@@ -1,7 +1,9 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 
 import {
+  DouyinReleaseReadinessService,
   evaluateDouyinReleaseReadiness,
+  parseDouyinReleaseRequiredHosts,
   type DouyinReleaseReadinessFacts,
 } from "./douyin-release-readiness";
 
@@ -116,6 +118,92 @@ describe("evaluateDouyinReleaseReadiness", () => {
   });
 });
 
+describe("DouyinReleaseReadinessService", () => {
+  test("parses release host environment values deterministically", () => {
+    expect(parseDouyinReleaseRequiredHosts(" douyin, douyin ， toutiao\ndouyin "))
+      .toEqual(["douyin", "toutiao"]);
+    expect(parseDouyinReleaseRequiredHosts(undefined)).toEqual([]);
+  });
+
+  test("uses configured release hosts for authenticated workspace readiness", async () => {
+    const loadFacts = mock(async (input: {
+      readonly requiredHosts: readonly string[];
+    }) => ({
+      ...passingFacts,
+      requiredHosts: input.requiredHosts,
+    }));
+    const service = new DouyinReleaseReadinessService({
+      repository: { loadFacts },
+      accessPolicy: allowReadAccess(),
+      now: () => now,
+      requiredHosts: () => ["douyin"],
+    });
+
+    const result = await service.getReadiness({} as never);
+
+    expect(result.ready).toBe(true);
+    expect(result.metrics.required_host_count).toBe(1);
+    expect(loadFacts.mock.calls[0]?.[0]).toMatchObject({
+      tenantId,
+      requiredHosts: ["douyin"],
+    });
+  });
+
+  test("treats SMS as ready only when the development bypass is active", async () => {
+    const repository = {
+      loadFacts: mock(async (input: {
+        readonly requiredHosts: readonly string[];
+      }) => ({
+        ...passingFacts,
+        smsReady: false,
+        requiredHosts: input.requiredHosts,
+      })),
+    };
+    const devService = new DouyinReleaseReadinessService({
+      repository,
+      accessPolicy: allowReadAccess(),
+      now: () => now,
+      requiredHosts: () => ["douyin"],
+      smsReadinessBypass: () => true,
+    });
+    const productionService = new DouyinReleaseReadinessService({
+      repository,
+      accessPolicy: allowReadAccess(),
+      now: () => now,
+      requiredHosts: () => ["douyin"],
+      smsReadinessBypass: () => false,
+    });
+
+    await expect(devService.getReadiness({} as never)).resolves.toMatchObject({
+      ready: true,
+      blockers: [],
+    });
+    await expect(productionService.getReadiness({} as never))
+      .resolves.toMatchObject({
+        ready: false,
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: "SMS_UNAVAILABLE" }),
+        ]),
+      });
+  });
+
+  test("development API compose injects the Douyin release host", async () => {
+    const source = await Bun.file(new URL(
+      "../../../../deploy/docker-compose.dev.yml",
+      import.meta.url,
+    )).text();
+    const apiService = source.slice(
+      source.indexOf("  gooes-api-dev:"),
+      source.indexOf("\n  gooes-admin-dev:"),
+    );
+
+    expect(apiService).toContain("GOOES_DEPLOY_ENV: development");
+    expect(apiService).toContain(
+      'DOUYIN_RELEASE_REQUIRED_HOSTS: ${DOUYIN_RELEASE_REQUIRED_HOSTS:-douyin}',
+    );
+  });
+});
+
 function project(
   id: string,
   phase: "in_progress" | "completed",
@@ -133,4 +221,11 @@ function project(
     imageCount: 3,
     publicLogCount,
   } as const;
+}
+
+function allowReadAccess() {
+  return {
+    assertTenantContext: mock(() => tenantId),
+    assertPermission: mock(() => "all" as const),
+  };
 }
