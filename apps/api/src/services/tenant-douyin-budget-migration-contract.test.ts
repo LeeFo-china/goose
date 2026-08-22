@@ -8,6 +8,33 @@ const monotonicMigration = new URL(
   "../../../../supabase/migrations/20260821104100_make_douyin_budget_pricing_version_tokens_monotonic.sql",
   import.meta.url,
 );
+const factorMigration = new URL(
+  "../../../../supabase/migrations/20260822180000_add_douyin_budget_pricing_factors.sql",
+  import.meta.url,
+);
+
+const layoutCodes = [
+  "one_bedroom_one_living",
+  "two_bedroom_one_living",
+  "two_bedroom_two_living",
+  "three_bedroom_one_living",
+  "three_bedroom_two_living",
+  "four_bedroom_two_living",
+  "villa_duplex",
+  "custom",
+] as const;
+const styleCodes = [
+  "modern_simple",
+  "cream",
+  "new_chinese",
+  "nordic",
+  "light_luxury",
+  "natural_wood",
+  "american",
+  "french",
+  "wabi_sabi",
+  "custom",
+] as const;
 
 describe("douyin budget pricing management migration", () => {
   test("creates four service-role-only atomic commands and closes table writes", async () => {
@@ -66,5 +93,38 @@ describe("douyin budget pricing management migration", () => {
       /GREATEST\(\s*clock_timestamp\(\),\s*OLD\.updated_at \+ interval '1 microsecond',\s*NEW\.updated_at\s*\)/i,
     );
     expect(sql).not.toMatch(/CREATE OR REPLACE FUNCTION public\.update_updated_at_column/i);
+  });
+
+  test("adds exact version-level layout and style factor persistence", async () => {
+    const sql = await Bun.file(factorMigration).text();
+    expect(sql).toMatch(/ALTER TABLE public\.douyin_budget_pricing_versions\s+ADD COLUMN IF NOT EXISTS factor_payload jsonb/i);
+    expect(sql).toMatch(/ALTER TABLE public\.douyin_budget_pricing_versions\s+ALTER COLUMN factor_payload SET NOT NULL/i);
+    expect(sql).toContain("CONSTRAINT douyin_budget_pricing_versions_factor_payload_check");
+    expect(sql).toContain("public.is_valid_douyin_budget_pricing_factor_payload");
+    expect(sql).toContain("'layout_coefficients_bps'");
+    expect(sql).toContain("'style_coefficients_bps'");
+    for (const code of [...layoutCodes, ...styleCodes]) {
+      expect(sql).toContain(`'${code}'`);
+    }
+    expect(sql).toMatch(
+      /douyin_budget_json_integer_in_range\(\s*factor\.value,\s*1,\s*100000\s*\)/i,
+    );
+    expect(sql).toMatch(/jsonb_typeof\(p_payload->'layout_coefficients_bps'\)\s+<> 'object'/i);
+    expect(sql).toMatch(/jsonb_typeof\(p_payload->'style_coefficients_bps'\)\s+<> 'object'/i);
+  });
+
+  test("updates pricing payload and exposes a service-role-only factor command", async () => {
+    const sql = await Bun.file(factorMigration).text();
+    expect(sql).toMatch(/CREATE OR REPLACE FUNCTION public\.douyin_budget_pricing_version_payload\(\s*p_tenant_id uuid,\s*p_pricing_version_id uuid\s*\)/i);
+    expect(sql).toMatch(/'factor_payload', pricing_version\.factor_payload/i);
+    expect(sql).toMatch(/CREATE FUNCTION public\.update_douyin_budget_pricing_factors\(\s*p_tenant_id uuid,\s*p_pricing_version_id uuid,\s*p_expected_updated_at timestamptz,\s*p_factor_payload jsonb\s*\)/i);
+    expect(sql).toContain("DOUYIN_BUDGET_PRICING_NOT_DRAFT");
+    expect(sql).toContain("DOUYIN_BUDGET_PRICING_STALE");
+    expect(sql).toContain("DOUYIN_BUDGET_PRICING_INVALID");
+    expect(sql).toMatch(/FOR UPDATE/i);
+    expect(sql).toMatch(/GRANT EXECUTE ON FUNCTION public\.update_douyin_budget_pricing_factors\(\s*uuid,\s*uuid,\s*timestamptz,\s*jsonb\s*\)\s+TO service_role/i);
+    expect(sql).toMatch(/REVOKE ALL ON FUNCTION public\.update_douyin_budget_pricing_factors\(\s*uuid,\s*uuid,\s*timestamptz,\s*jsonb\s*\)\s+FROM PUBLIC, anon, authenticated/i);
+    expect(sql).toMatch(/REVOKE INSERT, UPDATE, DELETE\s+ON TABLE public\.douyin_budget_pricing_versions\s+FROM service_role/i);
+    expect(sql).not.toMatch(/SQLERRM|PG_EXCEPTION_DETAIL|PG_EXCEPTION_CONTEXT/);
   });
 });

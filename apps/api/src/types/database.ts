@@ -2548,6 +2548,7 @@ export type Database = {
           disclaimer: string
           effective_from: string
           effective_to: string | null
+          factor_payload: Json
           id: string
           status: string
           tenant_id: string
@@ -2561,6 +2562,7 @@ export type Database = {
           disclaimer: string
           effective_from: string
           effective_to?: string | null
+          factor_payload?: Json
           id?: string
           status?: string
           tenant_id: string
@@ -2574,6 +2576,7 @@ export type Database = {
           disclaimer?: string
           effective_from?: string
           effective_to?: string | null
+          factor_payload?: Json
           id?: string
           status?: string
           tenant_id?: string
@@ -25361,6 +25364,10 @@ export type Database = {
         }
         Returns: Json
       }
+      douyin_budget_default_pricing_factor_payload: {
+        Args: never
+        Returns: Json
+      }
       douyin_budget_json_integer_in_range: {
         Args: { p_maximum: number; p_minimum: number; p_value: Json }
         Returns: boolean
@@ -25854,6 +25861,10 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      is_valid_douyin_budget_pricing_factor_payload: {
+        Args: { p_payload: Json }
+        Returns: boolean
       }
       is_valid_douyin_budget_pricing_item: {
         Args: { p_item: Json }
@@ -28247,6 +28258,15 @@ export type Database = {
           p_tenant_id: string
           p_unit_dimension: string
           p_value_type: string
+        }
+        Returns: Json
+      }
+      update_douyin_budget_pricing_factors: {
+        Args: {
+          p_expected_updated_at: string
+          p_factor_payload: Json
+          p_pricing_version_id: string
+          p_tenant_id: string
         }
         Returns: Json
       }
