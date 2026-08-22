@@ -71,9 +71,10 @@ const requiredNonWebHealthAssertions = [
 ];
 const requiredProjectHealthSmokeFragments = [
   'if [ "${RELEASE_SERVICE}" = api ] || [ "${RELEASE_SERVICE}" = admin ]; then',
+  'test -n "${GOOES_DEV_SMOKE_TENANT_ADMIN_PHONE}"',
   'project_health_cookie_jar="$(mktemp)"',
   'https://admin-dev.goodcms.cn/api/auth/login',
-  '--data \'{"phone":"18800000001","code":""}\'',
+  '--data "$(jq -cn --arg phone "${GOOES_DEV_SMOKE_TENANT_ADMIN_PHONE}" \'{phone:$phone,code:""}\')"',
   'https://admin-dev.goodcms.cn/api/backend/project-health/risks?page=1&pageSize=20',
   'PROJECT_HEALTH_SMOKE_RESPONSE_PATH="${project_health_response_path}" node <<\'NODE\'',
   'if (payload?.message !== "success" || !Array.isArray(payload?.data?.items)) {',
