@@ -10,6 +10,7 @@ export * from './douyin-budget';
 export * from './douyin-lead';
 export * from './douyin-miniapp';
 export * from './douyin-public-project';
+export * from './douyin-release-readiness';
 export * from './employee';
 export * from './expense';
 export * from './marketing-page';

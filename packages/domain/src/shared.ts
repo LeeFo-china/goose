@@ -33,6 +33,19 @@ export type {
 } from './douyin-public-project';
 
 export {
+  DOUYIN_RELEASE_BLOCKER_CODES,
+  DOUYIN_RELEASE_FINDING_SEVERITY_VALUES,
+  DOUYIN_RELEASE_WARNING_CODES,
+  DouyinReleaseReadinessSchema,
+} from './douyin-release-readiness';
+export type {
+  DouyinReleaseBlockerCode,
+  DouyinReleaseFindingSeverity,
+  DouyinReleaseReadiness,
+  DouyinReleaseWarningCode,
+} from './douyin-release-readiness';
+
+export {
   DOUYIN_BUDGET_AI_STATUS_VALUES,
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
