@@ -1,5 +1,7 @@
 .git
 .github
+.codegraph
+.worktrees
 .DS_Store
 
 node_modules

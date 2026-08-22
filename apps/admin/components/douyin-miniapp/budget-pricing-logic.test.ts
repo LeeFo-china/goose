@@ -181,12 +181,18 @@ describe("douyin budget pricing admin logic", () => {
     })).toContain("报价项目排序必须是 0 至 99 的整数");
   });
 
-  test("uses the existing deterministic calculator for the 100 sqm preview", () => {
+  test("uses the deterministic 100 sqm preview calculator", () => {
     expect(calculatePricingPreview([pricingItemToEditor(baseItem)])).toEqual({
       ok: true,
       minimumTotalYuan: 90_000,
       maximumTotalYuan: 120_000,
     });
+  });
+
+  test("does not import API source files into the admin pricing logic", async () => {
+    const source = await Bun.file(new URL("./budget-pricing-logic.ts", import.meta.url)).text();
+    expect(source).not.toContain("../../../api/");
+    expect(source).not.toContain("apps/api");
   });
 
   test("aborts stale requests and keeps loading, error and empty states exclusive", () => {

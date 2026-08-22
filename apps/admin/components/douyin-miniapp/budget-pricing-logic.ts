@@ -6,11 +6,6 @@ import {
 } from "@gooes/domain";
 
 import {
-  calculateDouyinBudget,
-  projectDouyinBudgetToPublicYuan,
-  type DouyinBudgetPricingItem,
-} from "../../../api/src/services/douyin-budget/calculator";
-import {
   BASE_ITEM_CODES,
   BUDGET_ITEM_LABELS,
   BUDGET_PRICING_MAX_ITEMS,
@@ -22,6 +17,7 @@ import {
   type BudgetPricingPage,
   type BudgetPricingStatus,
 } from "./budget-pricing-contract";
+import { calculateBudgetPricingPreviewFromWire } from "./budget-pricing-preview";
 
 export * from "./budget-pricing-contract";
 
@@ -261,25 +257,7 @@ export function calculatePricingPreview(items: readonly BudgetPricingEditorItem[
   | { ok: false; message: string } {
   try {
     const wireItems = items.map(editorItemToWire).filter((item) => item.status === "active");
-    const calculatorItems = wireItems.map(toCalculatorItem);
-    const result = calculateDouyinBudget({
-      versionId: "00000000-0000-4000-8000-000000000000",
-      versionNo: 1,
-      disclaimer: "预算配置预览",
-      items: calculatorItems,
-    }, {
-      area: 100,
-      property_condition: "rough",
-      decoration_tier: "comfortable",
-      decoration_scope: "whole_house",
-      option_codes: [],
-    });
-    const projected = projectDouyinBudgetToPublicYuan(result);
-    return {
-      ok: true,
-      minimumTotalYuan: projected.minimum_total,
-      maximumTotalYuan: projected.maximum_total,
-    };
+    return calculateBudgetPricingPreviewFromWire(wireItems);
   } catch (error) {
     return {
       ok: false,
@@ -423,44 +401,6 @@ function editorItemToWire(item: BudgetPricingEditorItem): BudgetPricingItem {
     property_conditions: item.property_conditions ?? [],
     decoration_tiers: item.decoration_tiers ?? [],
     decoration_scopes: item.decoration_scopes ?? [],
-  };
-}
-
-function toCalculatorItem(item: BudgetPricingItem): DouyinBudgetPricingItem {
-  if (item.role === "base") {
-    return {
-      role: "base",
-      code: item.item_code,
-      category: "base",
-      label: item.label,
-      unit: "sqm",
-      minimumAmountFen: item.minimum_amount_fen,
-      maximumAmountFen: item.maximum_amount_fen,
-      condition: {
-        propertyConditions: [item.property_condition],
-        decorationTiers: [item.decoration_tier],
-        decorationScopes: ["whole_house", "partial"],
-      },
-      propertyConditionCoefficientBps: item.property_condition_coefficient_bps,
-      decorationScopeCoefficientBps: {
-        whole_house: item.whole_house_coefficient_bps,
-        partial: item.partial_coefficient_bps,
-      },
-    };
-  }
-  return {
-    role: "option",
-    code: item.item_code,
-    category: item.category_code,
-    label: item.label,
-    unit: item.unit,
-    minimumAmountFen: item.minimum_amount_fen,
-    maximumAmountFen: item.maximum_amount_fen,
-    condition: {
-      ...(item.property_conditions.length > 0 ? { propertyConditions: item.property_conditions } : {}),
-      ...(item.decoration_tiers.length > 0 ? { decorationTiers: item.decoration_tiers } : {}),
-      ...(item.decoration_scopes.length > 0 ? { decorationScopes: item.decoration_scopes } : {}),
-    },
   };
 }
 
