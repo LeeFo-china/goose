@@ -69,14 +69,6 @@
     </view>
     <view class="result-block"><view class="result-title">计算依据</view><view tt:for="{{estimate.calculation_basis}}" tt:key="*this" class="result-item">{{item}}</view></view>
 
-    <view class="ai-block ui-card">
-      <view class="ai-heading"><view class="result-title">AI 预算建议</view><view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-status"><view class="ai-dot"></view>正在生成</view></view>
-      <view tt:if="{{estimate.ai_status === 'pending'}}" class="ai-copy" role="status">{{aiError || '规则预算已生成，AI 仅补充需求与量房确认建议。'}}</view>
-      <view tt:elif="{{estimate.ai_status === 'succeeded' && aiAnalysis}}" role="status"><view class="ai-summary">{{aiAnalysis.summary}}</view><view class="ai-group"><view class="ai-label">预算分配建议</view><view tt:for="{{aiAnalysis.allocation_advice}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">需要关注</view><view tt:for="{{aiAnalysis.risk_factors}}" tt:key="*this" class="result-item">{{item}}</view></view><view class="ai-group"><view class="ai-label">量房时确认</view><view tt:for="{{aiAnalysis.onsite_questions}}" tt:key="*this" class="result-item">{{item}}</view></view></view>
-      <view tt:elif="{{estimate.ai_status === 'failed'}}" class="ai-fallback" role="status"><view class="ai-copy">{{aiError || 'AI 建议暂时无法生成，规则预算仍可正常使用。'}}</view><button class="retry-ai ui-pressable" hover-class="ui-pressable--pressed" bindtap="onRetryAi">{{aiRetryMode === 'retry' ? '重试 AI 建议' : '重新获取 AI 说明'}}</button></view>
-      <view tt:else class="ai-copy">当前仅展示规则预算，建议量房时确认现场情况。</view>
-    </view>
-
     <view class="disclaimer" role="note">{{estimate.disclaimer}} 具体施工范围和费用以量房后双方确认的方案为准。</view>
     <button class="measurement-button ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBookMeasurement">预约免费量房</button>
   </view>

@@ -35,7 +35,7 @@
 .range-label { flex: none; }
 .total-range { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14rpx; margin-top: 22rpx; color: #191817; font-size: 42rpx; font-weight: 700; line-height: 1.3; }
 .range-separator { color: #706c67; font-size: 23rpx; font-weight: 500; }
-.result-block, .result-columns, .ai-block, .disclaimer { margin-top: 30rpx; }
+.result-block, .result-columns, .disclaimer { margin-top: 30rpx; }
 .result-block { padding-top: 26rpx; border-top: 1rpx solid #dddad5; }
 .result-title { color: #191817; font-size: 28rpx; font-weight: 650; line-height: 1.4; }
 .category-list { margin-top: 14rpx; }
@@ -43,20 +43,11 @@
 .category-label { color: #625f5b; }
 .category-range { color: #191817; font-weight: 650; }
 .result-item { position: relative; margin-top: 12rpx; padding-left: 22rpx; color: #4d4a46; font-size: 24rpx; line-height: 1.6; }
-.result-item, .ai-copy, .ai-summary, .disclaimer, .estimate-snapshot { min-width: 0; overflow: hidden; white-space: normal; }
+.result-item, .disclaimer, .estimate-snapshot { min-width: 0; overflow: hidden; white-space: normal; }
 .result-item::before { position: absolute; top: 17rpx; left: 2rpx; width: 7rpx; height: 7rpx; border-radius: 50%; background: #625f5b; content: ""; }
 .result-columns { display: flex; gap: 26rpx; }
 .result-list { min-width: 0; flex: 1; padding-top: 26rpx; border-top: 1rpx solid #dddad5; }
 .result-empty { margin-top: 12rpx; }
-.ai-block { padding: 28rpx; }
-.ai-heading { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; }
-.ai-status { display: flex; align-items: center; gap: 10rpx; color: #625f5b; font-size: 22rpx; }
-.ai-dot { width: 12rpx; height: 12rpx; border-radius: 50%; background: #625f5b; animation: ai-pulse 1.2s ease-in-out infinite; }
-.ai-copy, .ai-summary { margin-top: 16rpx; color: #4d4a46; font-size: 24rpx; line-height: 1.65; }
-.ai-group { margin-top: 22rpx; }
-.ai-label { color: #191817; font-size: 24rpx; font-weight: 650; }
-.retry-ai { width: auto; min-width: 208rpx; margin-top: 20rpx; border: 1rpx solid #625f5b; background: #fff; color: #191817; font-size: 25rpx; }
 .disclaimer { padding: 24rpx; border-radius: 12rpx; background: #eceae6; color: #625f5b; font-size: 22rpx; line-height: 1.7; }
-@keyframes ai-pulse { 50% { opacity: .35; } }
 @keyframes budget-spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .ai-dot, .calculating-spinner { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .calculating-spinner { animation: none; } }

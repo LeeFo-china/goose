@@ -20,23 +20,21 @@ test("budget page registers native handlers and mutually exclusive states", asyn
     "onLayoutChoiceChange(",
     "onStyleChoiceChange(",
     "onCalculate()",
-    "onRetryAi()",
     "onBookMeasurement()",
     "onUnload()",
   ]) expect(source).toContain(handler);
   expect(source).toContain("fetchBudgetConfig");
   expect(source).toContain("createBudgetEstimate");
-  expect(source).toContain("fetchBudgetAiAnalysis");
+  expect(source).not.toContain("fetchBudgetAiAnalysis");
   expect(source).toContain("const pending = beginConfigLoad(this.pageState);");
   expect(source).toContain("applyBudgetFormMutation");
   expect(source).toContain("resolveConfigLoadResult");
-  expect(source).toContain("aiPolling.cancel()");
-  expect(source).toContain("BudgetAiAnalysisRunner");
+  expect(source).not.toContain("BudgetAiAnalysisRunner");
   expect(source).toContain("BudgetPageLifecycleCoordinator");
   expect(source).toContain("consumeBudgetResultReturnIntent");
   expect(source).toContain("shouldPreserveBudgetResultOnReturn");
-  expect(source).toContain("shouldResumeBudgetAiOnReturn");
-  expect(source).toContain("this.loadAi(estimateId, false)");
+  expect(source).not.toContain("this.loadAi(");
+  expect(source).not.toContain("loadAi(");
   expect(source).toContain("this.syncState(() => this.scrollBudgetResultIntoView())");
   expect(source).toContain("setData(buildBudgetPageView(this.pageState), afterRender)");
   expect(source).toContain("this.suspendPage()");
@@ -69,7 +67,7 @@ test("budget page registers native handlers and mutually exclusive states", asyn
   expect(source.split("\n").length).toBeLessThanOrEqual(360);
 });
 
-test("budget result keeps estimate, AI and disclaimer hierarchy without misleading scopes", async () => {
+test("budget result keeps estimate and disclaimer hierarchy without misleading scopes", async () => {
   const [template, style] = await Promise.all([read("index.ttml"), read("index.ttss")]);
   expect(template).toContain("预算初算结果");
   expect(template).toContain('id="budget-result"');
@@ -79,11 +77,12 @@ test("budget result keeps estimate, AI and disclaimer hierarchy without misleadi
   expect(template).not.toContain("未包含内容");
   expect(template).not.toContain("included_items");
   expect(template).not.toContain("excluded_items");
-  expect(template).toContain("AI 预算建议");
+  expect(template).not.toContain("AI 预算建议");
+  expect(template).not.toContain("aiAnalysis");
+  expect(template).not.toContain("ai_status");
+  expect(template).not.toContain('bindtap="onRetryAi"');
   expect(template).toContain("{{estimate.disclaimer}}");
   expect(template).toContain('role="status"');
-  expect(template).toContain('bindtap="onRetryAi"');
-  expect(template).toContain("重新获取 AI 说明");
   expect(template).toContain('bindtap="onBookMeasurement"');
   expect(template).not.toMatch(/保证|确保|绝不超预算|最终报价/);
   expect(style).not.toContain("border-left");

@@ -1,11 +1,10 @@
 import type { DouyinAppContext } from "../../app";
-import { createBudgetEstimate, fetchBudgetAiAnalysis, fetchBudgetConfig } from "../../api/budget";
+import { createBudgetEstimate, fetchBudgetConfig } from "../../api/budget";
 import { resolveThemeColor } from "../../components/theme";
 import type { DouyinBudgetEstimateResult, DouyinBudgetOptionCode, DouyinBudgetPublicConfig } from "../../models";
 import { writeBudgetLeadContext } from "../../platform/budget-lead-context";
 import { consumeBudgetResultReturnIntent } from "../../platform/measurement-success-context";
 import { switchToTab } from "../../platform/navigation";
-import { BudgetAiAnalysisRunner } from "./ai-polling";
 import {
   BUDGET_LAYOUT_CHOICES, BUDGET_STYLE_CHOICES, BudgetFormValidationError,
   buildBudgetOptionViews, buildEstimateRequest, normalizeBudgetFormForConfig,
@@ -13,14 +12,11 @@ import {
   type BudgetChoiceField, type BudgetFormValue, type BudgetOptionView,
 } from "./form-model";
 import {
-  BudgetPageLifecycleCoordinator, applyBudgetFormMutation, beginAiRequest,
-  beginBudgetCalculation, beginConfigLoad, buildBudgetPageView, createBudgetPageState,
-  describeBudgetUnavailable, failAiRequest, failBudgetCalculation, failConfigLoad,
-  invalidateBudgetPageRequests, markAiRequestUncertain, readBudgetError,
-  readBudgetResultScrollTop, resolveAiRequestResult, resolveBudgetCalculationResult,
-  resolveConfigLoadResult,
-  shouldPreserveBudgetResultOnReturn, shouldResumeBudgetAiOnReturn,
-  type BudgetPageState,
+  BudgetPageLifecycleCoordinator, applyBudgetFormMutation, beginBudgetCalculation,
+  beginConfigLoad, buildBudgetPageView, createBudgetPageState, describeBudgetUnavailable,
+  failBudgetCalculation, failConfigLoad, invalidateBudgetPageRequests, readBudgetError,
+  readBudgetResultScrollTop, resolveBudgetCalculationResult, resolveConfigLoadResult,
+  shouldPreserveBudgetResultOnReturn,
 } from "./page-model";
 const INITIAL_FORM: BudgetFormValue = {
   areaText: "",
@@ -40,9 +36,6 @@ const STYLE_CHOICE_LABELS = BUDGET_STYLE_CHOICES.map((choice) => choice.label);
 Page({
   pageState: createBudgetPageState(),
   lifecycle: new BudgetPageLifecycleCoordinator(),
-  aiPolling: new BudgetAiAnalysisRunner((estimateId, retry, timeoutMs) => (
-    fetchBudgetAiAnalysis(getApp<DouyinAppContext>().api, estimateId, retry, timeoutMs)
-  )),
   data: {
     status: "loading_config",
     primaryColor: "#191817",
@@ -69,20 +62,13 @@ Page({
     resultPricingVersion: "",
     resultEffectivePeriod: "",
     categoryRows: [] as Array<DouyinBudgetEstimateResult["categories"][number] & { range: string }>,
-    aiAnalysis: null as BudgetPageState["aiAnalysis"],
-    aiError: "",
-    aiRetryMode: "none" as BudgetPageState["aiRetryMode"],
   },
   onLoad() { if (this.lifecycle.onLoad()) void this.loadConfig(false); },
   onShow() {
     if (!this.lifecycle.onShow()) return;
     const estimateId = consumeBudgetResultReturnIntent();
     if (shouldPreserveBudgetResultOnReturn(this.pageState, estimateId)) {
-      if (shouldResumeBudgetAiOnReturn(this.pageState, estimateId) && estimateId) {
-        this.loadAi(estimateId, false);
-      } else {
-        this.syncState();
-      }
+      this.syncState();
       return;
     }
     void this.loadConfig(false);
@@ -92,12 +78,10 @@ Page({
   onPullDownRefresh() { void this.loadConfig(true); },
   onRetryConfig() { void this.loadConfig(false); },
   suspendPage() {
-    this.aiPolling.cancel();
     this.pageState = invalidateBudgetPageRequests(this.pageState);
   },
   async loadConfig(stopRefresh: boolean) {
     if (!this.lifecycle.isActive()) return;
-    this.aiPolling.cancel();
     const pending = beginConfigLoad(this.pageState);
     this.pageState = pending;
     this.syncState();
@@ -214,7 +198,6 @@ Page({
     this.commitFormMutation(form);
   },
   commitFormMutation(form: BudgetFormValue, fields: { areaError?: string } = {}) {
-    this.aiPolling.cancel();
     this.pageState = applyBudgetFormMutation(this.pageState);
     this.setData({
       form,
@@ -244,7 +227,6 @@ Page({
       }
       return;
     }
-    this.aiPolling.cancel();
     const pending = beginBudgetCalculation(this.pageState);
     this.pageState = pending.state;
     this.syncState();
@@ -257,7 +239,6 @@ Page({
       if (!resolution.accepted) return;
       this.pageState = resolution.state;
       this.syncState(() => this.scrollBudgetResultIntoView());
-      this.loadAi(estimate.id, false);
     } catch (error) {
       if (!this.lifecycle.isActive()
         || pending.sequence !== this.pageState.calculationSequence) return;
@@ -268,49 +249,6 @@ Page({
       );
       this.syncState();
     }
-  },
-  onRetryAi() {
-    const id = this.pageState.estimate?.id;
-    if (id && this.lifecycle.isActive()) {
-      this.loadAi(id, this.pageState.aiRetryMode === "retry");
-    }
-  },
-  loadAi(estimateId: string, retry: boolean) {
-    if (!this.lifecycle.isActive() || this.pageState.estimate?.id !== estimateId) return;
-    const pending = beginAiRequest(this.pageState);
-    this.pageState = pending.state;
-    this.syncState();
-    this.aiPolling.start(estimateId, retry, {
-      onResponse: (response) => {
-        if (!this.lifecycle.isActive()) return;
-        const resolution = resolveAiRequestResult(
-          this.pageState, pending.sequence, estimateId, response,
-        );
-        if (!resolution.accepted) return;
-        this.pageState = resolution.state;
-        this.syncState();
-      },
-      onUncertain: () => {
-        if (!this.lifecycle.isActive()) return;
-        this.pageState = markAiRequestUncertain(
-          this.pageState,
-          pending.sequence,
-          estimateId,
-          "AI 说明仍在生成，正在自动获取结果。",
-        );
-        this.syncState();
-      },
-      onExhausted: () => {
-        if (!this.lifecycle.isActive()) return;
-        this.pageState = failAiRequest(
-          this.pageState,
-          pending.sequence,
-          estimateId,
-          "AI 说明暂未完成，规则预算仍可正常使用。",
-        );
-        this.syncState();
-      },
-    });
   },
   onBookMeasurement() {
     const estimate = this.pageState.estimate;
