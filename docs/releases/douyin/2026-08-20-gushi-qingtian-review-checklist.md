@@ -138,7 +138,33 @@ DOUYIN_RELEASE_REQUIRED_HOSTS=douyin \
 - `bun run check:permission-boundaries`：pass
 - `bun run audit:supabase-writes`：exit 0；输出为既有候选列表，非本次新增失败
 
-## 6. 待执行 smoke
+2026-08-22 10:56 CST fresh Task6 自动验证：
+
+- Domain release/public-project/budget/lead focused：28/28 pass；
+- API focused（在 `apps/api` 包上下文执行，避免根目录 alias 误报）：160/160 pass，1 个显式本地 DB integration skip；
+- `cd packages/domain && bun run build`：pass，domain dist verified；
+- `bun run api:check`：pass；
+- `bun run douyin-mini:check`：198/198 + TypeScript pass；
+- `bun run admin:check`：pass；
+- `bun run check:permission-boundaries`：pass；
+- `bun run audit:supabase-writes`：exit 0；仍输出 17 个既有 Supabase write 候选，未作为本次新增 blocker。
+
+根目录直接混跑 API 测试会因 `@/` alias 只在 `apps/api` 包上下文解析而失败；该失败已定位为命令上下文问题，不是业务断言失败。
+
+## 6. Host 配置
+
+开发库当前最新 release 记录：
+
+- release id：`3073642f-4cf4-4f3a-9576-688247733659`
+- template id：`77595`
+- template version：`0.1.3`
+- channel：`default`
+- `audit_host_names`：`["douyin"]`
+- `ext_json` host 相关字段：`extAppid` 为目标 AppID；未记录 Lite / 火山独立 host 配置。
+
+因此本轮 readiness 使用 `DOUYIN_RELEASE_REQUIRED_HOSTS=douyin`。若后续 release 配置新增抖音 Lite / 火山 / 头条 host，必须按新的 `audit_host_names` 重新执行全路径 smoke 和 readiness。
+
+## 7. 待执行 smoke
 
 以下仍未执行，不能视为最终可提审完成：
 
@@ -153,11 +179,11 @@ DOUYIN_RELEASE_REQUIRED_HOSTS=douyin \
 - [ ] 按实际配置 host 做小程序端到端路径验证；
 - [ ] 清理 smoke 数据后重新运行 readiness。
 
-## 7. 提审说明草稿
+## 8. 提审说明草稿
 
 本版本提供真实装修项目实景、按面积和装修条件计算的预算初算、基于规则预算生成的 AI 个性化建议，以及短信验证后的免费量房申请。体验路径：首页 -> 项目实景 -> 预算初算 -> 免费量房。预算为初步估算，最终报价以现场量房、材料和施工范围为准。
 
-## 8. 操作边界
+## 9. 操作边界
 
 - 当前仅完成开发库 readiness 补齐和代码静态验证；
 - 尚未提交抖音审核；
