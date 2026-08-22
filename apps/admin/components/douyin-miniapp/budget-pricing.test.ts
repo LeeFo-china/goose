@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { PricingItemEditor } from "./budget-pricing";
+import { FactorEditor, PricingItemEditor } from "./budget-pricing";
 import { createEmptyPricingEditorItem } from "./budget-pricing-logic";
 
 const componentFile = new URL("./budget-pricing.tsx", import.meta.url);
@@ -16,6 +16,9 @@ describe("douyin budget pricing admin UI contract", () => {
     const source = await Bun.file(componentFile).text();
     expect(source).toContain("/tenant/douyin-miniapp/budget/pricing-versions");
     expect(source).toContain("/items");
+    expect(source).toContain("/factors");
+    expect(source).toContain("buildPricingFactorsPayload");
+    expect(source).toContain("dirty || factorDirty");
     expect(source).toContain('"activate"');
     expect(source).toContain('"archive"');
     expect(source).toContain("AlertDialogTitle");
@@ -53,12 +56,51 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("100㎡舒适档毛坯全屋预览");
     expect(source).toContain("项目状态");
     expect(source).toContain("适用房屋现状");
+    expect(source).toContain("户型复杂度系数");
+    expect(source).toContain("风格复杂度系数");
     expect(source).toContain('id="budget-pricing-save-validation-summary"');
     expect(source).toContain('id="budget-pricing-activation-validation-summary"');
     expect(source).toMatch(/aria-describedby=\{saveWarnings\.length > 0 \? "budget-pricing-save-validation-summary"/);
     expect(source).toMatch(/aria-describedby=\{activationWarnings\.length > 0 \? "budget-pricing-activation-validation-summary"/);
     expect(source).not.toContain("condition_payload");
     expect(source).not.toMatch(/ai[_ -]?(provider|model|key)|api[_ -]?key/i);
+  });
+
+  test("renders all layout and style factor labels from the version payload", () => {
+    const factorPayload = {
+      layout_coefficients_bps: {
+        one_bedroom_one_living: 10_000,
+        two_bedroom_one_living: 10_000,
+        two_bedroom_two_living: 10_100,
+        three_bedroom_one_living: 10_150,
+        three_bedroom_two_living: 10_200,
+        four_bedroom_two_living: 10_350,
+        villa_duplex: 10_800,
+        custom: 10_000,
+      },
+      style_coefficients_bps: {
+        modern_simple: 10_000,
+        cream: 10_300,
+        new_chinese: 10_800,
+        nordic: 10_200,
+        light_luxury: 10_700,
+        natural_wood: 10_300,
+        american: 10_600,
+        french: 10_800,
+        wabi_sabi: 10_700,
+        custom: 10_000,
+      },
+    };
+    const markup = renderToStaticMarkup(createElement(FactorEditor, {
+      factorPayload,
+      warnings: [],
+      onChange: () => undefined,
+    }));
+    expect(markup).toContain("自定义户型");
+    expect(markup).toContain("自定义风格");
+    expect(markup).toContain("三室两厅");
+    expect(markup).toContain("新中式");
+    expect(markup).toContain("value=\"101.50\"");
   });
 
   test("renders unique field errors for inverted, overflowing and out-of-range values", () => {
@@ -103,5 +145,12 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain('"douyin_miniapp.manage"');
     expect(source).toContain("pricing-versions?page=1&pageSize=20");
     expect(source).toContain("normalizePricingVersionPage");
+  });
+
+  test("uses a scroll-safe layout for long pricing forms", async () => {
+    const source = await Bun.file(componentFile).text();
+    expect(source).toContain("min-h-0");
+    expect(source).toContain("overflow-y-auto");
+    expect(source).toContain("pb-24");
   });
 });

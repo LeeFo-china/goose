@@ -3,7 +3,9 @@ import { TenantDouyinBudgetReplaceItemsSchema } from "../../../api/src/schema/te
 
 import {
   addPricingEditorItem,
+  buildPricingFactorsPayload,
   BUDGET_PRICING_PAGE_SIZE,
+  BUDGET_STYLE_FACTOR_LABELS,
   buildPricingItemsPayload,
   calculatePricingPreview,
   createBudgetPricingFailurePage,
@@ -16,6 +18,7 @@ import {
   normalizePricingEditorItemOrder,
   normalizePricingVersion,
   normalizePricingVersionPage,
+  percentInputToBps,
   pricingStatusDisplay,
   pricingItemToEditor,
   removePricingEditorItem,
@@ -54,6 +57,30 @@ const version: BudgetPricingVersion = {
   created_by_employee_id: "33333333-3333-4333-8333-333333333333",
   created_at: "2026-08-21T00:00:00.000Z",
   updated_at: "2026-08-21T00:00:00.000Z",
+  factor_payload: {
+    layout_coefficients_bps: {
+      one_bedroom_one_living: 10_000,
+      two_bedroom_one_living: 10_000,
+      two_bedroom_two_living: 10_100,
+      three_bedroom_one_living: 10_150,
+      three_bedroom_two_living: 10_200,
+      four_bedroom_two_living: 10_350,
+      villa_duplex: 10_800,
+      custom: 10_000,
+    },
+    style_coefficients_bps: {
+      modern_simple: 10_000,
+      cream: 10_300,
+      new_chinese: 10_800,
+      nordic: 10_200,
+      light_luxury: 10_700,
+      natural_wood: 10_300,
+      american: 10_600,
+      french: 10_800,
+      wabi_sabi: 10_700,
+      custom: 10_000,
+    },
+  },
   items: [baseItem],
 };
 
@@ -77,6 +104,17 @@ describe("douyin budget pricing admin logic", () => {
     expect(normalizePricingVersion({ ...version, internal_note: "不可见" })).toBeNull();
     expect(normalizePricingVersion({
       ...version,
+      factor_payload: {
+        ...version.factor_payload,
+        layout_coefficients_bps: {
+          ...version.factor_payload.layout_coefficients_bps,
+          loft: 11_000,
+        },
+      },
+      items: [baseItem],
+    })).toBeNull();
+    expect(normalizePricingVersion({
+      ...version,
       items: [{ ...baseItem, condition_payload: { expression: "cost * margin" } }],
     })).toBeNull();
     expect(normalizePricingVersion({
@@ -92,6 +130,40 @@ describe("douyin budget pricing admin logic", () => {
     expect(yuanInputToFen("1.001")).toEqual({ ok: false, message: "金额最多保留两位小数" });
     expect(yuanInputToFen("-1").ok).toBe(false);
     expect(yuanInputToFen("").ok).toBe(false);
+  });
+
+  test("edits layout and style factors as percentages and saves exact bps payload", () => {
+    expect(percentInputToBps("103.25")).toEqual({ ok: true, value: 10_325 });
+    expect(percentInputToBps("0.01")).toEqual({ ok: true, value: 1 });
+    expect(percentInputToBps("1000.01").ok).toBe(false);
+    expect(percentInputToBps("1.001").ok).toBe(false);
+    expect(BUDGET_STYLE_FACTOR_LABELS.new_chinese).toBe("新中式");
+
+    const payload = buildPricingFactorsPayload(version.updated_at, {
+      ...version.factor_payload,
+      layout_coefficients_bps: {
+        ...version.factor_payload.layout_coefficients_bps,
+        three_bedroom_two_living: 10_450,
+      },
+      style_coefficients_bps: {
+        ...version.factor_payload.style_coefficients_bps,
+        custom: 10_250,
+      },
+    });
+    expect(payload).toEqual({
+      expected_updated_at: version.updated_at,
+      factor_payload: {
+        ...version.factor_payload,
+        layout_coefficients_bps: {
+          ...version.factor_payload.layout_coefficients_bps,
+          three_bedroom_two_living: 10_450,
+        },
+        style_coefficients_bps: {
+          ...version.factor_payload.style_coefficients_bps,
+          custom: 10_250,
+        },
+      },
+    });
   });
 
   test("keeps empty items free of invented prices and builds the closed wire payload", () => {

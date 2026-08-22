@@ -7,9 +7,12 @@ import {
 
 import {
   BASE_ITEM_CODES,
+  BUDGET_LAYOUT_FACTOR_LABELS,
   BUDGET_ITEM_LABELS,
   BUDGET_PRICING_MAX_ITEMS,
+  BUDGET_STYLE_FACTOR_LABELS,
   isBaseItemCode,
+  type BudgetPricingFactorPayload,
   type BudgetItemCode,
   type BudgetPricingDraftInput,
   type BudgetPricingEditorItem,
@@ -38,6 +41,43 @@ export function yuanInputToFen(value: string):
     return { ok: false, message: "金额超出可保存范围" };
   }
   return { ok: true, value: Number(fen) };
+}
+
+export function percentInputToBps(value: string):
+  | { ok: true; value: number }
+  | { ok: false; message: string } {
+  const normalized = value.trim();
+  if (!normalized) return { ok: false, message: "请填写系数" };
+  if (/^\d+\.\d{3,}$/.test(normalized)) {
+    return { ok: false, message: "系数最多保留两位小数" };
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) {
+    return { ok: false, message: "请输入不小于 0.01 的有效百分比" };
+  }
+  const [integer = "0", decimals = ""] = normalized.split(".");
+  const bps = BigInt(integer) * BigInt(100) + BigInt(decimals.padEnd(2, "0"));
+  if (bps < BigInt(1)) return { ok: false, message: "系数必须大于 0" };
+  if (bps > BigInt(100_000)) return { ok: false, message: "系数不能超过 1000%" };
+  return { ok: true, value: Number(bps) };
+}
+
+export function bpsToPercentInput(value: number): string {
+  const integer = Math.trunc(value / 100);
+  const decimals = Math.abs(value % 100);
+  return decimals === 0 ? String(integer) : `${integer}.${String(decimals).padStart(2, "0")}`;
+}
+
+export function buildPricingFactorsPayload(
+  expectedUpdatedAt: string,
+  factorPayload: BudgetPricingFactorPayload,
+): { expected_updated_at: string; factor_payload: BudgetPricingFactorPayload } {
+  return {
+    expected_updated_at: expectedUpdatedAt,
+    factor_payload: {
+      layout_coefficients_bps: { ...factorPayload.layout_coefficients_bps },
+      style_coefficients_bps: { ...factorPayload.style_coefficients_bps },
+    },
+  };
 }
 
 export function pricingItemToEditor(item: BudgetPricingItem): BudgetPricingEditorItem {
@@ -233,6 +273,23 @@ export function getPricingAmountFieldErrors(item: BudgetPricingEditorItem): {
 export function getPricingCoefficientFieldError(value: number): string | null {
   if (!Number.isSafeInteger(value) || value <= 0) return "系数必须大于 0";
   return value > 100_000 ? "系数不能超过 1000%" : null;
+}
+
+export function getPricingFactorWarnings(factorPayload: BudgetPricingFactorPayload): string[] {
+  const warnings: string[] = [];
+  for (const [code, label] of Object.entries(BUDGET_LAYOUT_FACTOR_LABELS)) {
+    const error = getPricingCoefficientFieldError(factorPayload.layout_coefficients_bps[
+      code as keyof BudgetPricingFactorPayload["layout_coefficients_bps"]
+    ]);
+    if (error) warnings.push(`${label}户型复杂度系数：${error}`);
+  }
+  for (const [code, label] of Object.entries(BUDGET_STYLE_FACTOR_LABELS)) {
+    const error = getPricingCoefficientFieldError(factorPayload.style_coefficients_bps[
+      code as keyof BudgetPricingFactorPayload["style_coefficients_bps"]
+    ]);
+    if (error) warnings.push(`${label}风格复杂度系数：${error}`);
+  }
+  return warnings;
 }
 
 export function buildPricingDraftPayload(input: BudgetPricingDraftInput): {

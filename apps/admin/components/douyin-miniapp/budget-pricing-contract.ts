@@ -1,11 +1,15 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_BUDGET_STYLE_CODE_VALUES,
   DOUYIN_DECORATION_SCOPE_VALUES,
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
   type DouyinBudgetCategoryCode,
+  type DouyinBudgetLayoutCode,
   type DouyinBudgetOptionCode,
+  type DouyinBudgetStyleCode,
   type DouyinDecorationScope,
   type DouyinDecorationTier,
   type DouyinPropertyCondition,
@@ -33,6 +37,28 @@ export const BUDGET_CATEGORY_LABELS: Record<DouyinBudgetCategoryCode, string> = 
   materials: "主材",
   custom: "定制",
   other: "其他",
+};
+export const BUDGET_LAYOUT_FACTOR_LABELS: Record<DouyinBudgetLayoutCode, string> = {
+  one_bedroom_one_living: "一室一厅",
+  two_bedroom_one_living: "两室一厅",
+  two_bedroom_two_living: "两室两厅",
+  three_bedroom_one_living: "三室一厅",
+  three_bedroom_two_living: "三室两厅",
+  four_bedroom_two_living: "四室两厅",
+  villa_duplex: "别墅/复式",
+  custom: "自定义户型",
+};
+export const BUDGET_STYLE_FACTOR_LABELS: Record<DouyinBudgetStyleCode, string> = {
+  modern_simple: "现代简约",
+  cream: "奶油风",
+  new_chinese: "新中式",
+  nordic: "北欧",
+  light_luxury: "轻奢",
+  natural_wood: "原木",
+  american: "美式",
+  french: "法式",
+  wabi_sabi: "侘寂",
+  custom: "自定义风格",
 };
 
 export const BASE_ITEM_CODES = [
@@ -99,7 +125,13 @@ export interface BudgetPricingVersion {
   created_by_employee_id: string;
   created_at: string;
   updated_at: string;
+  factor_payload: BudgetPricingFactorPayload;
   items: BudgetPricingItem[];
+}
+
+export interface BudgetPricingFactorPayload {
+  layout_coefficients_bps: Record<DouyinBudgetLayoutCode, number>;
+  style_coefficients_bps: Record<DouyinBudgetStyleCode, number>;
 }
 
 export interface BudgetPricingPage {
@@ -175,6 +207,17 @@ const OptionItemSchema = z.strictObject({
   sort_order: z.int().min(0).max(99),
   status: z.enum(["active", "inactive"]),
 }).refine((item) => item.minimum_amount_fen <= item.maximum_amount_fen);
+const CoefficientBpsSchema = z.int().min(1).max(100_000);
+const LayoutCoefficientSchema = z.strictObject(Object.fromEntries(
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES.map((code) => [code, CoefficientBpsSchema]),
+) as Record<DouyinBudgetLayoutCode, typeof CoefficientBpsSchema>);
+const StyleCoefficientSchema = z.strictObject(Object.fromEntries(
+  DOUYIN_BUDGET_STYLE_CODE_VALUES.map((code) => [code, CoefficientBpsSchema]),
+) as Record<DouyinBudgetStyleCode, typeof CoefficientBpsSchema>);
+const PricingFactorPayloadSchema = z.strictObject({
+  layout_coefficients_bps: LayoutCoefficientSchema,
+  style_coefficients_bps: StyleCoefficientSchema,
+});
 const PricingVersionSchema = z.strictObject({
   id: z.uuid(),
   tenant_id: z.uuid(),
@@ -187,6 +230,7 @@ const PricingVersionSchema = z.strictObject({
   created_by_employee_id: z.uuid(),
   created_at: z.iso.datetime({ offset: true }),
   updated_at: z.iso.datetime({ offset: true }),
+  factor_payload: PricingFactorPayloadSchema,
   items: z.array(z.discriminatedUnion("role", [BaseItemSchema, OptionItemSchema]))
     .max(BUDGET_PRICING_MAX_ITEMS),
 }).superRefine((version, context) => {
