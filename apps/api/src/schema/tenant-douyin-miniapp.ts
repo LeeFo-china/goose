@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DouyinReleaseReadinessSchema } from "@gooes/domain";
 
 import {
   DouyinRuntimeConfigSchema,
@@ -38,6 +39,8 @@ export const TenantDouyinReleaseParamsSchema = z.strictObject({
 export const TenantDouyinReleaseEmptyObjectSchema = z.strictObject({});
 export const TenantDouyinSubmitReleaseAuditSchema =
   SubmitPlatformDouyinMiniappReleaseAuditSchema;
+export const TenantDouyinReleaseReadinessResponseSchema =
+  DouyinReleaseReadinessSchema;
 
 export const TenantDouyinAuthorizationStateSchema = z.enum([
   "unbound",

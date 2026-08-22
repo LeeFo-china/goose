@@ -26,7 +26,7 @@ import type { FastifyRequest } from "fastify";
 
 type WorkspaceServicePort = Pick<
   TenantDouyinMiniappWorkspaceService,
-  "getWorkspace"
+  "getWorkspace" | "getReleaseReadiness"
 >;
 type AuthorizationServicePort = Pick<
   TenantDouyinMiniappAuthorizationService,
@@ -61,6 +61,14 @@ export class TenantDouyinMiniappController extends TenantBaseController {
     const authContext = await this.getRequiredTenantContext(request);
     return ResponseHandler.success(
       await this.workspace.getWorkspace(authContext),
+    );
+  }
+
+  @Get("/tenant/douyin-miniapp/release-readiness")
+  async getReleaseReadiness(request: FastifyRequest) {
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.workspace.getReleaseReadiness(authContext),
     );
   }
 

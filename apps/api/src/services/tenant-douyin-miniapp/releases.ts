@@ -20,6 +20,11 @@ import {
 } from "@/repositories/tenant-douyin-miniapp-workspace";
 import type { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  assertDouyinReleaseReady,
+  douyinReleaseReadinessService,
+  type DouyinReleaseReadinessService,
+} from "@/services/douyin-release-readiness";
 import { PlatformDouyinMiniappReleaseOperations } from
   "@/services/platform-douyin-miniapp-releases/operation-service";
 import {
@@ -62,6 +67,7 @@ type OperationsPort = Pick<
   PlatformDouyinMiniappReleaseOperations,
   "upload" | "getTestQr" | "submitAudit" | "syncStatus" | "publish"
 >;
+type ReadinessPort = Pick<DouyinReleaseReadinessService, "evaluateTenant">;
 type ReleaseTarget = DouyinMiniappReleaseTarget & {
   readonly deployment_key: string;
 };
@@ -73,12 +79,17 @@ export type TenantDouyinMiniappReleasesDependencies = {
   readonly accessPolicy: AccessPolicyPort;
   readonly operations: OperationsPort;
   readonly templates: TemplatePort;
+  readonly readiness?: ReadinessPort;
 };
 
 export class TenantDouyinMiniappReleasesService {
+  private readonly readiness: ReadinessPort;
+
   constructor(
     private readonly dependencies: TenantDouyinMiniappReleasesDependencies,
-  ) {}
+  ) {
+    this.readiness = dependencies.readiness ?? douyinReleaseReadinessService;
+  }
 
   async list(
     authContext: AuthContext,
@@ -217,6 +228,9 @@ export class TenantDouyinMiniappReleasesService {
       context.tenantId,
     );
     assertAuditPreflight(profile, context.release);
+    assertDouyinReleaseReady(
+      await this.readiness.evaluateTenant(context.tenantId, auditInput.host_names),
+    );
     const result = await this.dependencies.operations.submitAudit(
       context.installation,
       context.installation.id,

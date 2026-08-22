@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test";
+import type { DouyinReleaseReadiness } from "@gooes/domain";
 
 import type { AuthContext } from "@/services/authorization";
 
@@ -25,6 +26,24 @@ const deployableTemplate = {
   template_version: "0.1.4",
   description: "租户发布闭环",
   channel: "default" as const,
+};
+const readyReadiness: DouyinReleaseReadiness = {
+  ready: true,
+  checked_at: "2026-08-20T10:00:00.000Z",
+  tenant: { id: TENANT_ID, name: "验收租户" },
+  blockers: [],
+  warnings: [],
+  metrics: {},
+};
+const blockedReadiness: DouyinReleaseReadiness = {
+  ...readyReadiness,
+  ready: false,
+  blockers: [{
+    severity: "blocker" as const,
+    code: "BUDGET_PRICING_MISSING" as const,
+    message: "预算报价未启用",
+    details: {},
+  }],
 };
 
 function tenantContext(
@@ -160,6 +179,9 @@ function fixture(options: {
     syncStatus: mock(async () => release({ status: "audit_approved" })),
     publish: mock(async () => release({ status: "released" })),
   };
+  const readiness = {
+    evaluateTenant: mock(async () => readyReadiness),
+  };
   const service = new Service({
     workspace: workspace as never,
     installations: installations as never,
@@ -167,6 +189,7 @@ function fixture(options: {
     accessPolicy: accessPolicy as never,
     operations: operations as never,
     templates: templates as never,
+    readiness: readiness as never,
   });
   return {
     service,
@@ -176,6 +199,7 @@ function fixture(options: {
     accessPolicy,
     operations,
     templates,
+    readiness,
   };
 }
 
@@ -239,6 +263,26 @@ describe("TenantDouyinMiniappReleasesService", () => {
       EMPLOYEE_ID,
       input,
     );
+    expect(context.readiness.evaluateTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      ["douyin.com"],
+    );
+  });
+
+  test("blocks audit submit when release readiness still has blockers", async () => {
+    const context = fixture();
+    context.readiness.evaluateTenant.mockResolvedValue(blockedReadiness);
+
+    await expect(context.service.submitAudit(
+      tenantContext(["douyin_miniapp.audit.submit"]),
+      RELEASE_ID,
+      { host_names: ["douyin.com"], audit_note: "审核说明" },
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_RELEASE_NOT_READY",
+      details: { blocker_codes: ["BUDGET_PRICING_MISSING"] },
+    });
+    expect(context.operations.submitAudit).not.toHaveBeenCalled();
   });
 
   test("creates a test version from the server-owned current template", async () => {

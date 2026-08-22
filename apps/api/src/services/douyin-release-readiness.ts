@@ -5,6 +5,14 @@ import {
   type DouyinReleaseWarningCode,
 } from "@gooes/domain";
 
+import { Errors } from "@/errors/error-factory";
+import {
+  douyinReleaseReadinessRepository,
+  type DouyinReleaseReadinessRepository,
+} from "@/repositories/douyin-release-readiness";
+import { accessPolicyService } from "@/services/access-policy";
+import type { AuthContext } from "@/services/authorization";
+
 type TenantStatus = "active" | "suspended" | "archived";
 type InstallationStatus = "active" | "disabled" | "revoked";
 type InstallationKind = "merchant" | "template_development";
@@ -55,6 +63,16 @@ export interface DouyinReleaseReadinessFacts {
 
 type Blocker = DouyinReleaseReadiness["blockers"][number];
 type Warning = DouyinReleaseReadiness["warnings"][number];
+type RepositoryPort = Pick<DouyinReleaseReadinessRepository, "loadFacts">;
+type AccessPolicyPort = Pick<
+  typeof accessPolicyService,
+  "assertTenantContext" | "assertPermission"
+>;
+type ServiceDependencies = {
+  readonly repository?: RepositoryPort;
+  readonly accessPolicy?: AccessPolicyPort;
+  readonly now?: () => Date;
+};
 
 const MIN_PUBLIC_PROJECTS = 6;
 const MIN_PHASE_PROJECTS = 2;
@@ -66,6 +84,41 @@ const MAINLAND_PHONE_PATTERN =
   /(?:\+?86[-\s]?)?1[3-9]\d[-\s]?\d{4}[-\s]?\d{4}/;
 const ROOM_PATTERN =
   /\d{1,3}\s*(?:号楼|栋|幢|单元)|\d{3,4}\s*室|\d{1,3}楼\d{1,4}/;
+const READ_PERMISSION = "douyin_miniapp.read";
+
+export class DouyinReleaseReadinessService {
+  private readonly repository: RepositoryPort;
+  private readonly accessPolicy: AccessPolicyPort;
+  private readonly now: () => Date;
+
+  constructor(dependencies: ServiceDependencies = {}) {
+    this.repository = dependencies.repository ?? douyinReleaseReadinessRepository;
+    this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
+    this.now = dependencies.now ?? (() => new Date());
+  }
+
+  async getReadiness(authContext: AuthContext): Promise<DouyinReleaseReadiness> {
+    const tenantId = this.accessPolicy.assertTenantContext(authContext);
+    this.accessPolicy.assertPermission(authContext, READ_PERMISSION);
+    return this.evaluateTenant(tenantId, []);
+  }
+
+  async evaluateTenant(
+    tenantId: string,
+    requiredHosts: readonly string[],
+  ): Promise<DouyinReleaseReadiness> {
+    const now = this.now();
+    const facts = await this.repository.loadFacts({
+      tenantId,
+      now: now.toISOString(),
+      requiredHosts,
+    });
+    return evaluateDouyinReleaseReadiness(facts, now);
+  }
+}
+
+export const douyinReleaseReadinessService =
+  new DouyinReleaseReadinessService();
 
 export function evaluateDouyinReleaseReadiness(
   facts: DouyinReleaseReadinessFacts,
@@ -112,6 +165,18 @@ export function evaluateDouyinReleaseReadiness(
     warnings,
     metrics: metrics(facts),
   });
+}
+
+export function assertDouyinReleaseReady(
+  readiness: DouyinReleaseReadiness,
+): void {
+  if (readiness.ready) return;
+  throw Errors.business(
+    409,
+    "抖音小程序尚未达到提审条件",
+    "DOUYIN_RELEASE_NOT_READY",
+    { blocker_codes: readiness.blockers.map((item) => item.code) },
+  );
 }
 
 function evaluateProfile(

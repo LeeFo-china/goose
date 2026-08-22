@@ -32,10 +32,19 @@ const workspaceData = {
   available_template: null,
   latest_release: null,
 };
+const readinessData = {
+  ready: true,
+  checked_at: "2026-08-20T10:00:00.000Z",
+  tenant: { id: authContext.tenantId, name: "示例租户" },
+  blockers: [],
+  warnings: [],
+  metrics: {},
+};
 
 function createController() {
   const workspace = {
     getWorkspace: mock(async () => workspaceData),
+    getReleaseReadiness: mock(async () => readinessData),
   };
   const authorization = {
     startAuthorization: mock(async () => ({
@@ -102,6 +111,7 @@ describe("TenantDouyinMiniappController", () => {
 
     expect(routes).toEqual([
       { method: "GET", path: "/tenant/douyin-miniapp/workspace" },
+      { method: "GET", path: "/tenant/douyin-miniapp/release-readiness" },
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/authorization-link",
@@ -144,6 +154,16 @@ describe("TenantDouyinMiniappController", () => {
       data: workspaceData,
       message: "success",
     });
+  });
+
+  test("returns release readiness from the authenticated tenant context", async () => {
+    const { controller, workspace } = createController();
+
+    await expect(controller.getReleaseReadiness({} as never)).resolves.toEqual({
+      data: readinessData,
+      message: "success",
+    });
+    expect(workspace.getReleaseReadiness).toHaveBeenCalledWith(authContext);
   });
 
   test("starts authorization with the authenticated tenant context", async () => {

@@ -17,6 +17,10 @@ import {
 } from "@/schema/tenant-douyin-miniapp";
 import { accessPolicyService } from "@/services/access-policy";
 import type { AuthContext } from "@/services/authorization";
+import {
+  douyinReleaseReadinessService,
+  type DouyinReleaseReadinessService,
+} from "@/services/douyin-release-readiness";
 
 const READ_PERMISSION = "douyin_miniapp.read";
 
@@ -37,11 +41,13 @@ type TemplateRepositoryPort = Pick<
   DouyinDeployableTemplatesRepository,
   "findCurrent"
 >;
+type ReadinessServicePort = Pick<DouyinReleaseReadinessService, "getReadiness">;
 
 type WorkspaceDependencies = {
   readonly repository?: WorkspaceRepositoryPort;
   readonly accessPolicy?: AccessPolicyPort;
   readonly templates?: TemplateRepositoryPort;
+  readonly readiness?: ReadinessServicePort;
 };
 
 type WorkspaceBuildInput = {
@@ -61,6 +67,7 @@ export class TenantDouyinMiniappWorkspaceService {
   private readonly repository: WorkspaceRepositoryPort;
   private readonly accessPolicy: AccessPolicyPort;
   private readonly templates: TemplateRepositoryPort;
+  private readonly readiness: ReadinessServicePort;
 
   constructor(dependencies: WorkspaceDependencies = {}) {
     this.repository = dependencies.repository
@@ -68,6 +75,7 @@ export class TenantDouyinMiniappWorkspaceService {
     this.accessPolicy = dependencies.accessPolicy ?? accessPolicyService;
     this.templates = dependencies.templates
       ?? douyinDeployableTemplatesRepository;
+    this.readiness = dependencies.readiness ?? douyinReleaseReadinessService;
   }
 
   async getWorkspace(authContext: AuthContext) {
@@ -104,6 +112,10 @@ export class TenantDouyinMiniappWorkspaceService {
       latestRelease,
       currentTemplate,
     });
+  }
+
+  getReleaseReadiness(authContext: AuthContext) {
+    return this.readiness.getReadiness(authContext);
   }
 }
 
