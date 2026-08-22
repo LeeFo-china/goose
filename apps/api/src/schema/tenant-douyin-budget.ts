@@ -1,6 +1,8 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_BUDGET_STYLE_CODE_VALUES,
   DOUYIN_DECORATION_SCOPE_VALUES,
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
@@ -84,6 +86,17 @@ const OptionPricingItemSchema = z.strictObject({
   }
 });
 
+const LayoutCoefficientSchema = z.strictObject(Object.fromEntries(
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES.map((code) => [code, CoefficientBpsSchema]),
+) as Record<(typeof DOUYIN_BUDGET_LAYOUT_CODE_VALUES)[number], typeof CoefficientBpsSchema>);
+const StyleCoefficientSchema = z.strictObject(Object.fromEntries(
+  DOUYIN_BUDGET_STYLE_CODE_VALUES.map((code) => [code, CoefficientBpsSchema]),
+) as Record<(typeof DOUYIN_BUDGET_STYLE_CODE_VALUES)[number], typeof CoefficientBpsSchema>);
+export const TenantDouyinBudgetFactorPayloadSchema = z.strictObject({
+  layout_coefficients_bps: LayoutCoefficientSchema,
+  style_coefficients_bps: StyleCoefficientSchema,
+});
+
 export const TenantDouyinBudgetPricingItemSchema = z.discriminatedUnion(
   "role",
   [BasePricingItemSchema, OptionPricingItemSchema],
@@ -132,6 +145,11 @@ export const TenantDouyinBudgetOptimisticActionSchema = z.strictObject({
   expected_updated_at: DateTimeSchema,
 });
 
+export const TenantDouyinBudgetUpdateFactorsSchema = z.strictObject({
+  expected_updated_at: DateTimeSchema,
+  factor_payload: TenantDouyinBudgetFactorPayloadSchema,
+});
+
 export type TenantDouyinBudgetPricingItem = z.infer<
   typeof TenantDouyinBudgetPricingItemSchema
 >;
@@ -146,6 +164,12 @@ export type TenantDouyinBudgetReplaceItems = z.infer<
 >;
 export type TenantDouyinBudgetOptimisticAction = z.infer<
   typeof TenantDouyinBudgetOptimisticActionSchema
+>;
+export type TenantDouyinBudgetFactorPayload = z.infer<
+  typeof TenantDouyinBudgetFactorPayloadSchema
+>;
+export type TenantDouyinBudgetUpdateFactors = z.infer<
+  typeof TenantDouyinBudgetUpdateFactorsSchema
 >;
 export type TenantDouyinBudgetPricingStatus = z.infer<
   typeof PricingStatusSchema

@@ -8,6 +8,7 @@ import {
   TenantDouyinBudgetListQuerySchema,
   TenantDouyinBudgetOptimisticActionSchema,
   TenantDouyinBudgetReplaceItemsSchema,
+  TenantDouyinBudgetUpdateFactorsSchema,
   TenantDouyinBudgetVersionParamsSchema,
 } from "@/schema/tenant-douyin-budget";
 import {
@@ -18,7 +19,8 @@ import { Get, Post, Put } from "@/utils/decorators/route";
 import { ResponseHandler } from "@/utils/response";
 
 type ServicePort = Pick<TenantDouyinBudgetService,
-  "list" | "createDraft" | "replaceItems" | "activate" | "archive">;
+  "list" | "createDraft" | "replaceItems" | "updateFactors" |
+  "activate" | "archive">;
 
 export class TenantDouyinBudgetController extends TenantBaseController {
   constructor(private readonly service: ServicePort = tenantDouyinBudgetService) {
@@ -51,6 +53,22 @@ export class TenantDouyinBudgetController extends TenantBaseController {
     const authContext = await this.getRequiredTenantContext(request);
     return ResponseHandler.success(
       await this.service.replaceItems(authContext, params.id, body),
+    );
+  }
+
+  @Put("/tenant/douyin-miniapp/budget/pricing-versions/:id/factors")
+  async updateFactors(request: FastifyRequest) {
+    const params = parse(
+      TenantDouyinBudgetVersionParamsSchema,
+      request.params || {},
+    );
+    const body = parse(
+      TenantDouyinBudgetUpdateFactorsSchema,
+      request.body || {},
+    );
+    const authContext = await this.getRequiredTenantContext(request);
+    return ResponseHandler.success(
+      await this.service.updateFactors(authContext, params.id, body),
     );
   }
 

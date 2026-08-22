@@ -1,6 +1,8 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_BUDGET_STYLE_CODE_VALUES,
   DOUYIN_DECORATION_SCOPE_VALUES,
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
@@ -29,6 +31,8 @@ const CATEGORY_INDEX = new Map<string, number>(
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES.map((code, index) => [code, index]),
 );
 const OPTION_CODES = new Set<string>(DOUYIN_BUDGET_OPTION_CODE_VALUES);
+const LAYOUT_CODES = new Set<string>(DOUYIN_BUDGET_LAYOUT_CODE_VALUES);
+const STYLE_CODES = new Set<string>(DOUYIN_BUDGET_STYLE_CODE_VALUES);
 const PROPERTY_CONDITIONS = new Set<string>(DOUYIN_PROPERTY_CONDITION_VALUES);
 const DECORATION_TIERS = new Set<string>(DOUYIN_DECORATION_TIER_VALUES);
 const DECORATION_SCOPES = new Set<string>(DOUYIN_DECORATION_SCOPE_VALUES);
@@ -49,6 +53,8 @@ export function validateInput(
     !PROPERTY_CONDITIONS.has(input.property_condition) ||
     !DECORATION_TIERS.has(input.decoration_tier) ||
     !DECORATION_SCOPES.has(input.decoration_scope) ||
+    (input.layout_code !== undefined && !LAYOUT_CODES.has(input.layout_code)) ||
+    (input.style_code !== undefined && !STYLE_CODES.has(input.style_code)) ||
     !Array.isArray(input.option_codes) ||
     input.option_codes.length > MAX_SELECTED_OPTIONS
   ) {
@@ -70,6 +76,15 @@ export function validateRules(
     rules.versionNo < 1 ||
     typeof rules.disclaimer !== 'string' ||
     rules.disclaimer.trim() === '' ||
+    !isRecord(rules.factorPayload) ||
+    !hasValidCoefficientMap(
+      rules.factorPayload.layoutCoefficientsBps,
+      DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
+    ) ||
+    !hasValidCoefficientMap(
+      rules.factorPayload.styleCoefficientsBps,
+      DOUYIN_BUDGET_STYLE_CODE_VALUES,
+    ) ||
     !Array.isArray(rules.items) ||
     rules.items.length === 0 ||
     rules.items.length > MAX_PRICING_ITEMS
@@ -272,6 +287,14 @@ function isValidCoefficient(value: unknown): value is number {
   return Number.isSafeInteger(value) &&
     (value as number) >= 1 &&
     (value as number) <= MAX_DOUYIN_BUDGET_COEFFICIENT_BPS;
+}
+
+function hasValidCoefficientMap(
+  value: unknown,
+  expectedKeys: readonly string[],
+): boolean {
+  if (!isRecord(value) || !hasExactlyKeys(value, expectedKeys)) return false;
+  return expectedKeys.every((key) => isValidCoefficient(value[key]));
 }
 
 function isSafeFen(value: unknown): value is number {

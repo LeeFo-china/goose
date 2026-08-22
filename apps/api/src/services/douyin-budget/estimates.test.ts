@@ -1,21 +1,15 @@
 import { createHash } from "node:crypto";
-
 import { beforeAll, describe, expect, mock, test } from "bun:test";
 import type { DouyinBudgetEstimateRequest } from "@gooes/domain";
-
 import { Errors } from "@/errors/error-factory";
 import type { JwtPayload } from "@/utils/jwt";
-
 process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
-
 let Service: typeof import("./estimates").DouyinBudgetEstimatesService;
-
 beforeAll(async () => {
   ({ DouyinBudgetEstimatesService: Service } = await import("./estimates"));
 });
-
 const tenantId = "11111111-1111-4111-8111-111111111111";
 const installationId = "22222222-2222-4222-8222-222222222222";
 const pricingVersionId = "33333333-3333-4333-8333-333333333333";
@@ -42,6 +36,10 @@ const installation = {
   runtime_config: {},
   tenant: { id: tenantId, status: "active" },
 };
+const factorPayload = {
+  layout_coefficients_bps: { one_bedroom_one_living: 10_000, two_bedroom_one_living: 10_000, two_bedroom_two_living: 10_100, three_bedroom_one_living: 10_150, three_bedroom_two_living: 10_200, four_bedroom_two_living: 10_350, villa_duplex: 10_800, custom: 10_000 },
+  style_coefficients_bps: { modern_simple: 10_000, cream: 10_300, new_chinese: 10_800, nordic: 10_200, light_luxury: 10_700, natural_wood: 10_300, american: 10_600, french: 10_800, wabi_sabi: 10_700, custom: 10_000 },
+} as const;
 const version = {
   id: pricingVersionId,
   tenant_id: tenantId,
@@ -50,6 +48,7 @@ const version = {
   effective_to: null,
   currency: "CNY",
   disclaimer: "初步估算，不构成最终报价",
+  factor_payload: factorPayload,
 };
 const baseItem = {
   id: "55555555-5555-4555-8555-555555555555",
@@ -95,12 +94,13 @@ const input: DouyinBudgetEstimateRequest = {
   property_condition: "rough",
   decoration_tier: "comfortable",
   decoration_scope: "whole_house",
+  layout_code: "three_bedroom_two_living",
   layout: "三室两厅",
+  style_code: "modern_simple",
   style: "现代简约",
   option_codes: ["custom_cabinet"],
   demand: "需要更多收纳",
 };
-
 function dependencies(overrides: Record<string, unknown> = {}) {
   const contextRepository = {
     findActiveInstallation: mock(async () => installation),
@@ -136,12 +136,10 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     inserts,
   };
 }
-
 describe("DouyinBudgetEstimatesService public configuration", () => {
   test("resolves the authenticated installation and exposes only safe labels", async () => {
     const deps = dependencies();
     const service = new Service(deps.values as never);
-
     await expect(service.getConfig(user)).resolves.toEqual({
       property_conditions: [
         { value: "rough", label: "毛坯" },
@@ -180,7 +178,6 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
     const serialized = JSON.stringify(await service.getConfig(user));
     expect(serialized).not.toMatch(/amount|condition_payload|tenant_id|installation_id|unit/);
   });
-
   test("returns a stable not-configured error when no effective version exists", async () => {
     const deps = dependencies({
       budgetRepository: {
@@ -193,7 +190,6 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
       code: "DOUYIN_BUDGET_NOT_CONFIGURED",
     });
   });
-
   test("rejects unknown or ambiguous persisted condition keys", async () => {
     for (const conditionPayload of [
       { ...baseItem.condition_payload, expression: "area * price" },
@@ -254,7 +250,6 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
         statusCode: 422, code: "DOUYIN_BUDGET_OPTION_NOT_APPLICABLE",
       });
   });
-
   test("rejects template-development installations consistently before budget access", async () => {
     const deps = dependencies({
       contextRepository: {
@@ -278,7 +273,6 @@ describe("DouyinBudgetEstimatesService public configuration", () => {
     expect(deps.budgetRepository.createEstimateAtomic).not.toHaveBeenCalled();
   });
 });
-
 describe("DouyinBudgetEstimatesService synchronous estimates", () => {
   test("uses the exact calculator adapter, public projection and strict snapshots", async () => {
     const deps = dependencies();
@@ -287,18 +281,17 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
       input,
       "192.0.2.10",
     );
-
     expect(result).toEqual(expect.objectContaining({
       id: estimateId,
       estimate_no: "DYYS-20260821-000042",
-      minimum_total: 105_000,
-      maximum_total: 155_000,
+      minimum_total: 107_000,
+      maximum_total: 158_000,
       categories: [
         {
           category_code: "base",
           label: "基础施工",
-          minimum_amount: 100_000,
-          maximum_amount: 150_000,
+          minimum_amount: 102_000,
+          maximum_amount: 153_000,
         },
         {
           category_code: "custom",
@@ -331,7 +324,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     expect(deps.inserts[0]?.resultPayload).not.toHaveProperty("id");
     expect(deps.inserts[0]?.resultPayload).not.toHaveProperty("estimate_no");
   });
-
   test("keeps monetary output consistent for identical pricing and input", async () => {
     let suffix = 40;
     const deps = dependencies({ randomInt: () => suffix++ });
@@ -348,7 +340,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
       categories: second.categories,
     });
   });
-
   test("hashes a normalized trusted IP with tenant scope and never persists raw IP", async () => {
     const deps = dependencies();
     await new Service(deps.values as never).createEstimate(
@@ -362,7 +353,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     expect(deps.inserts[0]).toMatchObject({ requestIpHash: expectedHash });
     expect(JSON.stringify(deps.inserts[0])).not.toContain("192.0.2.10");
   });
-
   test("fails closed before the atomic command when trusted client IP is missing", async () => {
     const deps = dependencies();
     await expect(new Service(deps.values as never).createEstimate(
@@ -375,7 +365,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     });
     expect(deps.budgetRepository.createEstimateAtomic).not.toHaveBeenCalled();
   });
-
   test("propagates the atomic command rate rejection without a fallback write", async () => {
     const deps = dependencies();
     deps.budgetRepository.createEstimateAtomic.mockImplementation(async () => {
@@ -395,7 +384,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     });
     expect(deps.budgetRepository.createEstimateAtomic).toHaveBeenCalledTimes(1);
   });
-
   test("does not accept tenant or installation ownership from the request body", async () => {
     const deps = dependencies();
     await expect(new Service(deps.values as never).createEstimate(
@@ -405,7 +393,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
     )).rejects.toMatchObject({ statusCode: 400, code: "VALIDATION_ERROR" });
     expect(deps.budgetRepository.createEstimateAtomic).not.toHaveBeenCalled();
   });
-
   test("retries a bounded estimate-number collision with a fresh random suffix", async () => {
     let randomValue = 41;
     let attempt = 0;
@@ -431,7 +418,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
         };
       },
     );
-
     await expect(new Service(deps.values as never).createEstimate(
       user,
       input,
@@ -442,7 +428,6 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
       "DYYS-20260821-000042",
     ]);
   });
-
   test("maps typed calculator failures to stable 422 responses", async () => {
     const deps = dependencies({
       budgetRepository: {
@@ -469,14 +454,12 @@ describe("DouyinBudgetEstimatesService synchronous estimates", () => {
       code: "DOUYIN_BUDGET_BASE_MISSING",
     });
   });
-
   test("rejects forged sessions and wrong-scope repository responses", async () => {
     const deps = dependencies();
     await expect(new Service(deps.values as never).getConfig({
       ...user,
       sub: "b".repeat(64),
     })).rejects.toMatchObject({ statusCode: 401 });
-
     deps.budgetRepository.createEstimateAtomic.mockImplementation(
       async (value: Record<string, unknown>) => ({
         id: estimateId,

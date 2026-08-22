@@ -17,6 +17,33 @@ const authContext = {
   permissions: [{ code: "douyin_miniapp.manage", scope: "all" }],
 };
 const actionBody = { expected_updated_at: "2026-08-21T08:00:00.123456+00:00" };
+const factorBody = {
+  ...actionBody,
+  factor_payload: {
+    layout_coefficients_bps: {
+      one_bedroom_one_living: 10_000,
+      two_bedroom_one_living: 10_000,
+      two_bedroom_two_living: 10_100,
+      three_bedroom_one_living: 10_150,
+      three_bedroom_two_living: 10_200,
+      four_bedroom_two_living: 10_350,
+      villa_duplex: 10_800,
+      custom: 10_000,
+    },
+    style_coefficients_bps: {
+      modern_simple: 10_000,
+      cream: 10_300,
+      new_chinese: 10_800,
+      nordic: 10_200,
+      light_luxury: 10_700,
+      natural_wood: 10_300,
+      american: 10_600,
+      french: 10_800,
+      wabi_sabi: 10_700,
+      custom: 10_000,
+    },
+  },
+};
 
 function createController() {
   const service = {
@@ -27,6 +54,7 @@ function createController() {
     })),
     createDraft: mock(async () => ({ id: VERSION_ID })),
     replaceItems: mock(async () => ({ id: VERSION_ID })),
+    updateFactors: mock(async () => ({ id: VERSION_ID })),
     activate: mock(async () => ({ id: VERSION_ID, status: "active" })),
     archive: mock(async () => ({ id: VERSION_ID, status: "archived" })),
   };
@@ -38,7 +66,7 @@ function createController() {
 }
 
 describe("TenantDouyinBudgetController", () => {
-  test("registers the five management routes and root registry", async () => {
+  test("registers the six management routes and root registry", async () => {
     const { controller } = createController();
     const routes: Array<{ method: string; path: string }> = [];
     const fastify = {
@@ -59,6 +87,10 @@ describe("TenantDouyinBudgetController", () => {
       {
         method: "PUT",
         path: "/tenant/douyin-miniapp/budget/pricing-versions/:id/items",
+      },
+      {
+        method: "PUT",
+        path: "/tenant/douyin-miniapp/budget/pricing-versions/:id/factors",
       },
       {
         method: "POST",
@@ -107,6 +139,16 @@ describe("TenantDouyinBudgetController", () => {
       params: { id: VERSION_ID },
       body: { ...actionBody, items: [] },
     } as never)).rejects.toMatchObject({ statusCode: 400 });
+    await expect(context.controller.updateFactors({
+      params: { id: VERSION_ID },
+      body: { ...factorBody, factor_payload: {
+        ...factorBody.factor_payload,
+        layout_coefficients_bps: {
+          ...factorBody.factor_payload.layout_coefficients_bps,
+          unknown: 10_000,
+        },
+      } },
+    } as never)).rejects.toMatchObject({ statusCode: 400 });
     await expect(context.controller.activate({
       params: { id: "bad" }, body: actionBody,
     } as never)).rejects.toMatchObject({ statusCode: 400 });
@@ -137,6 +179,22 @@ describe("TenantDouyinBudgetController", () => {
       authContext,
       VERSION_ID,
       actionBody,
+    );
+  });
+
+  test("delegates scoped factor updates and wraps success", async () => {
+    const context = createController();
+    await expect(context.controller.updateFactors({
+      params: { id: VERSION_ID },
+      body: factorBody,
+    } as never)).resolves.toMatchObject({
+      data: { id: VERSION_ID },
+      message: "success",
+    });
+    expect(context.service.updateFactors).toHaveBeenCalledWith(
+      authContext,
+      VERSION_ID,
+      factorBody,
     );
   });
 });

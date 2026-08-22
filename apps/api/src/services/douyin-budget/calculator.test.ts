@@ -1,16 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-
 import {
   calculateDouyinBudget,
   DouyinBudgetCalculationError,
   type DouyinBudgetCalculatorInput,
   type DouyinBudgetPricingRules,
 } from './calculator';
-
+const factorPayload = {
+  layoutCoefficientsBps: { one_bedroom_one_living: 10_000, two_bedroom_one_living: 10_000, two_bedroom_two_living: 10_100, three_bedroom_one_living: 10_150, three_bedroom_two_living: 10_200, four_bedroom_two_living: 10_350, villa_duplex: 10_800, custom: 10_000 },
+  styleCoefficientsBps: { modern_simple: 10_000, cream: 10_300, new_chinese: 10_800, nordic: 10_200, light_luxury: 10_700, natural_wood: 10_300, american: 10_600, french: 10_800, wabi_sabi: 10_700, custom: 10_000 },
+} as const;
 const rules = {
   versionId: '11111111-1111-4111-8111-111111111111',
   versionNo: 1,
   disclaimer: '初步估算，不构成最终报价',
+  factorPayload,
   items: [
     {
       role: 'base',
@@ -42,7 +45,6 @@ const rules = {
     },
   ],
 } as const;
-
 describe('calculateDouyinBudget', () => {
   test('replays coefficients from the matching versioned base item', () => {
     const versionTwo = {
@@ -90,7 +92,6 @@ describe('calculateDouyinBudget', () => {
       decoration_scope_coefficient_bps: 5_000,
     });
   });
-
   test('calculates raw fen category and total ranges', () => {
     const result = calculateDouyinBudget(rules, budgetInput({
       option_codes: ['custom_cabinet'],
@@ -121,10 +122,36 @@ describe('calculateDouyinBudget', () => {
       decoration_tier: 'comfortable',
       decoration_scope: 'whole_house',
       decoration_scope_coefficient_bps: 10_000,
+      layout_code: 'custom',
+      layout_coefficient_bps: 10_000,
+      style_code: 'custom',
+      style_coefficient_bps: 10_000,
       selected_option_codes: ['custom_cabinet'],
     });
   });
-
+  test('applies version-level layout and style coefficients only to the base subtotal', () => {
+    const priced = (
+      layout_code: DouyinBudgetCalculatorInput['layout_code'],
+      style_code: DouyinBudgetCalculatorInput['style_code'],
+    ) => calculateDouyinBudget(rules, budgetInput({
+      layout_code,
+      style_code,
+      option_codes: ['custom_cabinet'],
+    }));
+    const base = priced('three_bedroom_two_living', 'modern_simple');
+    const villa = priced('villa_duplex', 'modern_simple');
+    const luxury = priced('three_bedroom_two_living', 'light_luxury');
+    expect(villa.minimum_total_fen).toBeGreaterThan(base.minimum_total_fen);
+    expect(luxury.minimum_total_fen).toBeGreaterThan(base.minimum_total_fen);
+    expect(villa.categories.find((item) => item.category_code === 'custom'))
+      .toEqual(base.categories.find((item) => item.category_code === 'custom'));
+    expect(base.calculation_basis).toMatchObject({
+      layout_code: 'three_bedroom_two_living',
+      layout_coefficient_bps: 10_200,
+      style_code: 'modern_simple',
+      style_coefficient_bps: 10_000,
+    });
+  });
   test.each([10, 1_000])(
     'accepts the area boundary %s without selected options',
     (area) => {
@@ -135,7 +162,6 @@ describe('calculateDouyinBudget', () => {
       expect(result.excluded_items).toEqual(['定制柜体']);
     },
   );
-
   test('uses exact old-house and partial basis points with half-up fen rounding', () => {
     const result = calculateDouyinBudget({
       ...rules,
@@ -168,7 +194,6 @@ describe('calculateDouyinBudget', () => {
       decoration_scope_coefficient_bps: 5_001,
     });
   });
-
   test('multiplies sqm options by area and aggregates in canonical category order', () => {
     const result = calculateDouyinBudget({
       ...rules,
@@ -222,7 +247,6 @@ describe('calculateDouyinBudget', () => {
     expect(result.minimum_total_fen).toBe(900_500);
     expect(result.maximum_total_fen).toBe(1_100_800);
   });
-
   test('rounds a canonical decimal area exactly', () => {
     const result = calculateDouyinBudget({
       ...rules,
@@ -235,7 +259,6 @@ describe('calculateDouyinBudget', () => {
     expect(result.minimum_total_fen).toBe(1_023);
     expect(result.maximum_total_fen).toBe(1_023);
   });
-
   test('does not mutate inputs and is deterministic', () => {
     const mutableRules = structuredClone(rules);
     const input = {
@@ -253,7 +276,6 @@ describe('calculateDouyinBudget', () => {
     expect(mutableRules).toEqual(rulesBefore);
     expect(input).toEqual(inputBefore);
   });
-
   test.each([
     [
       'DOUYIN_BUDGET_BASE_MISSING',
@@ -290,7 +312,6 @@ describe('calculateDouyinBudget', () => {
       } as Partial<DouyinBudgetCalculatorInput>),
     ));
   });
-
   test.each([
     ['negative', { minimumAmountFen: -1 }],
     ['fractional', { minimumAmountFen: 1.5 }],
@@ -305,7 +326,6 @@ describe('calculateDouyinBudget', () => {
       calculateDouyinBudget(candidate, budgetInput())
     );
   });
-
   test.each([undefined, 0, -1, 1.5, 100_001, Number.MAX_SAFE_INTEGER + 1])(
     'rejects bad coefficient %s',
     (coefficient) => {
@@ -321,7 +341,6 @@ describe('calculateDouyinBudget', () => {
       );
     },
   );
-
   test.each([
     { whole_house: 10_000 },
     { whole_house: 10_000, partial: 6_000, legacy: 10_000 },
@@ -337,7 +356,6 @@ describe('calculateDouyinBudget', () => {
       calculateDouyinBudget(candidate, budgetInput())
     );
   });
-
   test.each([
     ['empty', { decorationTiers: [] }],
     ['duplicate', { propertyConditions: ['rough', 'rough'] }],
@@ -351,7 +369,6 @@ describe('calculateDouyinBudget', () => {
       calculateDouyinBudget(candidate, budgetInput())
     );
   });
-
   test.each([
     [
       'option-style base code',
@@ -389,7 +406,6 @@ describe('calculateDouyinBudget', () => {
       calculateDouyinBudget(candidate, budgetInput())
     );
   });
-
   test('rejects duplicate visible labels after trimming', () => {
     const candidate = {
       ...rules,
@@ -402,7 +418,6 @@ describe('calculateDouyinBudget', () => {
       calculateDouyinBudget(candidate, budgetInput())
     );
   });
-
   test.each([
     -0,
     9,
@@ -418,7 +433,6 @@ describe('calculateDouyinBudget', () => {
       );
     },
   );
-
   test('rejects a non-sqm base rule and unsafe calculated output', () => {
     const fixedBase = {
       ...rules,
@@ -427,7 +441,6 @@ describe('calculateDouyinBudget', () => {
     expectCalculationFailure('DOUYIN_BUDGET_RULE_INVALID', () =>
       calculateDouyinBudget(fixedBase, budgetInput())
     );
-
     const coefficientOption = {
       ...rules,
       items: [rules.items[0], {
@@ -438,7 +451,6 @@ describe('calculateDouyinBudget', () => {
     expectCalculationFailure('DOUYIN_BUDGET_RULE_INVALID', () =>
       calculateDouyinBudget(coefficientOption, budgetInput())
     );
-
     const overflowing = {
       ...rules,
       items: [{
@@ -452,7 +464,6 @@ describe('calculateDouyinBudget', () => {
     );
   });
 });
-
 function budgetInput(
   patch: Partial<DouyinBudgetCalculatorInput> = {},
 ): DouyinBudgetCalculatorInput {

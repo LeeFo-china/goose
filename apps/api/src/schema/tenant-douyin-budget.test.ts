@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   TenantDouyinBudgetCreateDraftSchema,
+  TenantDouyinBudgetUpdateFactorsSchema,
   TenantDouyinBudgetReplaceItemsSchema,
 } from "./tenant-douyin-budget";
 
@@ -56,6 +57,66 @@ describe("tenant douyin budget schemas", () => {
       }],
     });
     expect(result.items[0]?.minimum_amount_fen).toBe(90_000);
+  });
+
+  test("accepts exact version-level layout and style factor payload", () => {
+    const payload = {
+      layout_coefficients_bps: {
+        one_bedroom_one_living: 10_000,
+        two_bedroom_one_living: 10_000,
+        two_bedroom_two_living: 10_100,
+        three_bedroom_one_living: 10_150,
+        three_bedroom_two_living: 10_200,
+        four_bedroom_two_living: 10_350,
+        villa_duplex: 10_800,
+        custom: 10_000,
+      },
+      style_coefficients_bps: {
+        modern_simple: 10_000,
+        cream: 10_300,
+        new_chinese: 10_800,
+        nordic: 10_200,
+        light_luxury: 10_700,
+        natural_wood: 10_300,
+        american: 10_600,
+        french: 10_800,
+        wabi_sabi: 10_700,
+        custom: 10_000,
+      },
+    };
+    expect(TenantDouyinBudgetUpdateFactorsSchema.parse({
+      expected_updated_at: "2026-08-21T08:00:00.000Z",
+      factor_payload: payload,
+    }).factor_payload).toEqual(payload);
+
+    for (const factor_payload of [
+      {
+        ...payload,
+        layout_coefficients_bps: {
+          ...payload.layout_coefficients_bps,
+          unknown: 10_000,
+        },
+      },
+      {
+        ...payload,
+        style_coefficients_bps: {
+          ...payload.style_coefficients_bps,
+          cream: 0,
+        },
+      },
+      {
+        ...payload,
+        style_coefficients_bps: {
+          ...payload.style_coefficients_bps,
+          cream: 100_001,
+        },
+      },
+    ]) {
+      expect(() => TenantDouyinBudgetUpdateFactorsSchema.parse({
+        expected_updated_at: "2026-08-21T08:00:00.000Z",
+        factor_payload,
+      })).toThrow();
+    }
   });
 
   test("rejects unsafe, duplicate, inverted and internally inconsistent items", () => {

@@ -1,6 +1,8 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_BUDGET_STYLE_CODE_VALUES,
   DOUYIN_DECORATION_SCOPE_VALUES,
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
@@ -48,6 +50,28 @@ const CATEGORY_LABELS = {
   custom: "定制",
   other: "其他",
 } as const;
+const LAYOUT_LABELS = {
+  one_bedroom_one_living: "一室一厅",
+  two_bedroom_one_living: "两室一厅",
+  two_bedroom_two_living: "两室两厅",
+  three_bedroom_one_living: "三室一厅",
+  three_bedroom_two_living: "三室两厅",
+  four_bedroom_two_living: "四室两厅",
+  villa_duplex: "别墅/复式",
+  custom: "自定义户型",
+} as const;
+const STYLE_LABELS = {
+  modern_simple: "现代简约",
+  cream: "奶油风",
+  new_chinese: "新中式",
+  nordic: "北欧",
+  light_luxury: "轻奢",
+  natural_wood: "原木风",
+  american: "美式",
+  french: "法式",
+  wabi_sabi: "侘寂风",
+  custom: "自定义风格",
+} as const;
 
 const ConditionPropertyArraySchema = canonicalArray(
   DOUYIN_PROPERTY_CONDITION_VALUES,
@@ -61,6 +85,14 @@ const ConditionScopeArraySchema = canonicalArray(
 const CoefficientSchema = z.int().min(1).max(
   MAX_DOUYIN_BUDGET_COEFFICIENT_BPS,
 );
+const FactorPayloadSchema = z.strictObject({
+  layout_coefficients_bps: z.strictObject(Object.fromEntries(
+    DOUYIN_BUDGET_LAYOUT_CODE_VALUES.map((code) => [code, CoefficientSchema]),
+  ) as Record<(typeof DOUYIN_BUDGET_LAYOUT_CODE_VALUES)[number], typeof CoefficientSchema>),
+  style_coefficients_bps: z.strictObject(Object.fromEntries(
+    DOUYIN_BUDGET_STYLE_CODE_VALUES.map((code) => [code, CoefficientSchema]),
+  ) as Record<(typeof DOUYIN_BUDGET_STYLE_CODE_VALUES)[number], typeof CoefficientSchema>),
+});
 const BaseConditionSchema = z.strictObject({
   role: z.literal("base"),
   property_conditions: z.tuple([z.enum(DOUYIN_PROPERTY_CONDITION_VALUES)]),
@@ -102,6 +134,7 @@ export function toDouyinBudgetCalculatorRules(
     versionId: pricing.version.id,
     versionNo: pricing.version.version_no,
     disclaimer: pricing.version.disclaimer,
+    factorPayload: toFactorPayload(pricing.version.factor_payload),
     items,
   };
 }
@@ -190,6 +223,24 @@ export function buildDouyinBudgetCalculationBasis(
       `选配项目：${input.option_codes.map((code) => labels.get(code) ?? code).join("、")}`,
     );
   }
+  if (input.layout_code === "custom") {
+    basis.push("自定义户型用于量房沟通，预算按基础复杂度计算");
+  } else if (input.layout_code) {
+    const coefficient =
+      rules.factorPayload.layoutCoefficientsBps[input.layout_code];
+    basis.push(
+      `户型复杂度：${LAYOUT_LABELS[input.layout_code]} ×${formatCoefficient(coefficient)}`,
+    );
+  }
+  if (input.style_code === "custom") {
+    basis.push("自定义风格用于方案沟通，预算按基础复杂度计算");
+  } else if (input.style_code) {
+    const coefficient =
+      rules.factorPayload.styleCoefficientsBps[input.style_code];
+    basis.push(
+      `风格复杂度：${STYLE_LABELS[input.style_code]} ×${formatCoefficient(coefficient)}`,
+    );
+  }
   return basis;
 }
 
@@ -269,6 +320,21 @@ function toCalculatorItem(
     };
   }
   conditionFail();
+}
+
+function toFactorPayload(raw: unknown) {
+  const parsed = FactorPayloadSchema.safeParse(raw);
+  if (!parsed.success) {
+    fail("DOUYIN_BUDGET_COEFFICIENT_INVALID", "报价系数配置无效");
+  }
+  return {
+    layoutCoefficientsBps: parsed.data.layout_coefficients_bps,
+    styleCoefficientsBps: parsed.data.style_coefficients_bps,
+  };
+}
+
+function formatCoefficient(value: number): string {
+  return (value / 10_000).toFixed(2);
 }
 
 function normalizedDateTime(value: string): string {

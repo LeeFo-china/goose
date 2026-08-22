@@ -59,6 +59,30 @@ const installationId = "22222222-2222-4222-8222-222222222222";
 const pricingVersionId = "33333333-3333-4333-8333-333333333333";
 const estimateId = "44444444-4444-4444-8444-444444444444";
 const now = "2026-08-21T03:04:05.000Z";
+const factorPayload = {
+  layout_coefficients_bps: {
+    one_bedroom_one_living: 10_000,
+    two_bedroom_one_living: 10_000,
+    two_bedroom_two_living: 10_100,
+    three_bedroom_one_living: 10_150,
+    three_bedroom_two_living: 10_200,
+    four_bedroom_two_living: 10_350,
+    villa_duplex: 10_800,
+    custom: 10_000,
+  },
+  style_coefficients_bps: {
+    modern_simple: 10_000,
+    cream: 10_300,
+    new_chinese: 10_800,
+    nordic: 10_200,
+    light_luxury: 10_700,
+    natural_wood: 10_300,
+    american: 10_600,
+    french: 10_800,
+    wabi_sabi: 10_700,
+    custom: 10_000,
+  },
+};
 const version = {
   id: pricingVersionId,
   tenant_id: tenantId,
@@ -67,6 +91,7 @@ const version = {
   effective_to: null,
   currency: "CNY" as const,
   disclaimer: "初步估算，不构成最终报价",
+  factor_payload: factorPayload,
 };
 const baseItem = {
   id: "55555555-5555-4555-8555-555555555555",
@@ -119,7 +144,8 @@ describe("DouyinBudgetRepository active pricing", () => {
     const selects = calls.filter((call) => call.method === "select")
       .map((call) => String(call.args[0]));
     expect(selects[0]).toBe(
-      "id,tenant_id,version_no,effective_from,effective_to,currency,disclaimer",
+      "id,tenant_id,version_no,effective_from,effective_to,currency,disclaimer,"
+        + "factor_payload",
     );
     expect(selects[1]).toBe(
       "id,pricing_version_id,category_code,item_code,label,unit,minimum_amount,"

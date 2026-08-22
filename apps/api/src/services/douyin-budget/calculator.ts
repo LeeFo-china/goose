@@ -1,7 +1,9 @@
 import {
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
   type DouyinBudgetCategoryCode,
+  type DouyinBudgetLayoutCode,
   type DouyinBudgetOptionCode,
+  type DouyinBudgetStyleCode,
   type DouyinDecorationScope,
   type DouyinDecorationTier,
   type DouyinPropertyCondition,
@@ -65,6 +67,14 @@ export interface DouyinBudgetPricingRules {
   readonly versionId: string;
   readonly versionNo: number;
   readonly disclaimer: string;
+  readonly factorPayload: {
+    readonly layoutCoefficientsBps: Readonly<
+      Record<DouyinBudgetLayoutCode, number>
+    >;
+    readonly styleCoefficientsBps: Readonly<
+      Record<DouyinBudgetStyleCode, number>
+    >;
+  };
   readonly items: readonly DouyinBudgetPricingItem[];
 }
 
@@ -73,6 +83,8 @@ export interface DouyinBudgetCalculatorInput {
   readonly property_condition: DouyinPropertyCondition;
   readonly decoration_tier: DouyinDecorationTier;
   readonly decoration_scope: DouyinDecorationScope;
+  readonly layout_code?: DouyinBudgetLayoutCode;
+  readonly style_code?: DouyinBudgetStyleCode;
   readonly option_codes: readonly string[];
 }
 
@@ -116,6 +128,10 @@ export interface DouyinBudgetCalculationResult {
     readonly decoration_tier: DouyinDecorationTier;
     readonly decoration_scope: DouyinDecorationScope;
     readonly decoration_scope_coefficient_bps: number;
+    readonly layout_code: DouyinBudgetLayoutCode;
+    readonly layout_coefficient_bps: number;
+    readonly style_code: DouyinBudgetStyleCode;
+    readonly style_coefficient_bps: number;
     readonly selected_option_codes: readonly string[];
   };
   readonly included_items: readonly string[];
@@ -181,10 +197,24 @@ export function calculateDouyinBudget(
   if (scopeCoefficient === undefined) {
     fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
   }
+  const layoutCode = input.layout_code ?? 'custom';
+  const styleCode = input.style_code ?? 'custom';
+  const layoutCoefficient =
+    rules.factorPayload.layoutCoefficientsBps[layoutCode];
+  const styleCoefficient =
+    rules.factorPayload.styleCoefficientsBps[styleCode];
+  if (layoutCoefficient === undefined || styleCoefficient === undefined) {
+    fail('DOUYIN_BUDGET_COEFFICIENT_INVALID', '报价系数配置无效');
+  }
   const baseRange = calculateFenRange({
     ...matchingBase,
     area,
-    coefficientBps: [propertyCoefficient, scopeCoefficient],
+    coefficientBps: [
+      propertyCoefficient,
+      scopeCoefficient,
+      layoutCoefficient,
+      styleCoefficient,
+    ],
   });
   const categoryRanges = new Map<DouyinBudgetCategoryCode, FenRange>();
   addFenRangeToMap(categoryRanges, matchingBase.category, baseRange);
@@ -227,6 +257,10 @@ export function calculateDouyinBudget(
       decoration_tier: input.decoration_tier,
       decoration_scope: input.decoration_scope,
       decoration_scope_coefficient_bps: scopeCoefficient,
+      layout_code: layoutCode,
+      layout_coefficient_bps: layoutCoefficient,
+      style_code: styleCode,
+      style_coefficient_bps: styleCoefficient,
       selected_option_codes: [...selectedCodes],
     },
     included_items: [matchingBase, ...options].map((item) => item.label),

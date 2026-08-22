@@ -14,14 +14,17 @@ import {
 } from "@/repositories/tenant-douyin-budget";
 import {
   TenantDouyinBudgetCreateDraftSchema,
+  TenantDouyinBudgetFactorPayloadSchema,
   TenantDouyinBudgetListQuerySchema,
   TenantDouyinBudgetOptimisticActionSchema,
+  TenantDouyinBudgetUpdateFactorsSchema,
   TenantDouyinBudgetPricingItemSchema,
   TenantDouyinBudgetReplaceItemsSchema,
   TenantDouyinBudgetVersionParamsSchema,
   type TenantDouyinBudgetCreateDraft,
   type TenantDouyinBudgetListQuery,
   type TenantDouyinBudgetOptimisticAction,
+  type TenantDouyinBudgetUpdateFactors,
   type TenantDouyinBudgetPricingItem,
   type TenantDouyinBudgetReplaceItems,
 } from "@/schema/tenant-douyin-budget";
@@ -76,6 +79,12 @@ type RepositoryPort = {
     versionId: string;
     expectedUpdatedAt: string;
     items: readonly Record<string, Json>[];
+  }): Promise<TenantDouyinBudgetCommandResult>;
+  updateFactors(input: {
+    tenantId: string;
+    versionId: string;
+    expectedUpdatedAt: string;
+    factorPayload: Record<string, Json>;
   }): Promise<TenantDouyinBudgetCommandResult>;
   activate(input: OptimisticCommandInput): Promise<TenantDouyinBudgetCommandResult>;
   archive(input: OptimisticCommandInput): Promise<TenantDouyinBudgetCommandResult>;
@@ -163,6 +172,23 @@ export class TenantDouyinBudgetService {
     return this.unwrapCommand(result, tenantId, id);
   }
 
+  async updateFactors(
+    authContext: AuthContext,
+    versionId: string,
+    input: TenantDouyinBudgetUpdateFactors,
+  ) {
+    const tenantId = this.requireTenant(authContext);
+    const id = parseVersionId(versionId);
+    const body = parseRequest(TenantDouyinBudgetUpdateFactorsSchema, input);
+    const result = await this.dependencies.repository.updateFactors({
+      tenantId,
+      versionId: id,
+      expectedUpdatedAt: body.expected_updated_at,
+      factorPayload: body.factor_payload,
+    });
+    return this.unwrapCommand(result, tenantId, id);
+  }
+
   activate(
     authContext: AuthContext,
     versionId: string,
@@ -232,12 +258,19 @@ export class TenantDouyinBudgetService {
       effective_to: version.effective_to,
       currency: version.currency,
       disclaimer: version.disclaimer,
+      factor_payload: parseFactorPayload(version.factor_payload),
       created_by_employee_id: version.created_by_employee_id,
       created_at: version.created_at,
       updated_at: version.updated_at,
       items: version.items.map(toWireItem),
     };
   }
+}
+
+function parseFactorPayload(raw: unknown) {
+  const parsed = TenantDouyinBudgetFactorPayloadSchema.safeParse(raw);
+  if (!parsed.success) throwInvalidResponse();
+  return parsed.data;
 }
 
 function toWireItem(raw: TenantDouyinBudgetRawItem): TenantDouyinBudgetPricingItem {

@@ -14,6 +14,7 @@ const VERSION_FIELDS = [
   "effective_to",
   "currency",
   "disclaimer",
+  "factor_payload",
   "created_by_employee_id",
   "created_at",
   "updated_at",
@@ -62,6 +63,7 @@ const RawVersionSchema = z.strictObject({
   effective_to: DateTimeSchema.nullable(),
   currency: z.literal("CNY"),
   disclaimer: z.string().trim().min(1).max(500),
+  factor_payload: z.record(z.string(), z.unknown()),
   created_by_employee_id: z.uuid(),
   created_at: DateTimeSchema,
   updated_at: DateTimeSchema,
@@ -115,6 +117,7 @@ export interface TenantDouyinBudgetQuery extends PromiseLike<DatabaseResult> {
 type PricingCommandName =
   | "create_douyin_budget_pricing_draft"
   | "replace_douyin_budget_pricing_items"
+  | "update_douyin_budget_pricing_factors"
   | "activate_douyin_budget_pricing_version"
   | "archive_douyin_budget_pricing_version";
 export interface TenantDouyinBudgetDatabaseClient {
@@ -266,6 +269,20 @@ export class TenantDouyinBudgetRepository {
     });
   }
 
+  updateFactors(input: {
+    tenantId: string;
+    versionId: string;
+    expectedUpdatedAt: string;
+    factorPayload: Record<string, Json>;
+  }) {
+    return this.runCommand("update_douyin_budget_pricing_factors", {
+      p_tenant_id: input.tenantId,
+      p_pricing_version_id: input.versionId,
+      p_expected_updated_at: input.expectedUpdatedAt,
+      p_factor_payload: input.factorPayload,
+    });
+  }
+
   activate(input: { tenantId: string; versionId: string; expectedUpdatedAt: string }) {
     return this.runOptimisticCommand(
       "activate_douyin_budget_pricing_version",
@@ -282,7 +299,8 @@ export class TenantDouyinBudgetRepository {
 
   private runOptimisticCommand(
     name: Exclude<PricingCommandName, "create_douyin_budget_pricing_draft" |
-      "replace_douyin_budget_pricing_items">,
+      "replace_douyin_budget_pricing_items" |
+      "update_douyin_budget_pricing_factors">,
     input: { tenantId: string; versionId: string; expectedUpdatedAt: string },
   ) {
     return this.runCommand(name, {

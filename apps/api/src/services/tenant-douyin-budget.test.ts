@@ -37,6 +37,30 @@ const rawVersion = {
   effective_to: null,
   currency: "CNY" as const,
   disclaimer: "初步估算，不构成最终报价",
+  factor_payload: {
+    layout_coefficients_bps: {
+      one_bedroom_one_living: 10_000,
+      two_bedroom_one_living: 10_000,
+      two_bedroom_two_living: 10_100,
+      three_bedroom_one_living: 10_150,
+      three_bedroom_two_living: 10_200,
+      four_bedroom_two_living: 10_350,
+      villa_duplex: 10_800,
+      custom: 10_000,
+    },
+    style_coefficients_bps: {
+      modern_simple: 10_000,
+      cream: 10_300,
+      new_chinese: 10_800,
+      nordic: 10_200,
+      light_luxury: 10_700,
+      natural_wood: 10_300,
+      american: 10_600,
+      french: 10_800,
+      wabi_sabi: 10_700,
+      custom: 10_000,
+    },
+  },
   created_by_employee_id: EMPLOYEE_ID,
   created_at: UPDATED_AT,
   updated_at: UPDATED_AT,
@@ -121,6 +145,7 @@ function fixture(overrides: Record<string, unknown> = {}) {
       replaceInput = input;
       return { ok: true as const, data: rawVersion };
     }),
+    updateFactors: mock(async () => ({ ok: true as const, data: rawVersion })),
     activate: mock(async () => ({ ok: true as const, data: {
       ...rawVersion, status: "active" as const,
     } })),
@@ -281,6 +306,7 @@ describe("TenantDouyinBudgetService", () => {
         effective_to: null,
         currency: "CNY" as const,
         disclaimer: "初步估算，不构成最终报价",
+        factor_payload: rawVersion.factor_payload,
       },
       items: commandInput.items.map((item, index) => ({
         ...item,
@@ -312,6 +338,23 @@ describe("TenantDouyinBudgetService", () => {
         code: "DOUYIN_BUDGET_OPTION_NOT_APPLICABLE",
       });
     }
+  });
+
+  test("updates version-level layout and style factors through the scoped command", async () => {
+    const context = fixture();
+    await expect(context.service.updateFactors(authContext(), VERSION_ID, {
+      expected_updated_at: UPDATED_AT,
+      factor_payload: rawVersion.factor_payload,
+    })).resolves.toMatchObject({
+      id: VERSION_ID,
+      factor_payload: rawVersion.factor_payload,
+    });
+    expect(context.repository.updateFactors).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      versionId: VERSION_ID,
+      expectedUpdatedAt: UPDATED_AT,
+      factorPayload: rawVersion.factor_payload,
+    });
   });
 
   test("delegates optimistic activation/archive and maps only known errors", async () => {

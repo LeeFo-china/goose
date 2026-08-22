@@ -25,6 +25,30 @@ const EMPLOYEE_ID = "22222222-2222-4222-8222-222222222222";
 const VERSION_ID = "33333333-3333-4333-8333-333333333333";
 const UPDATED_AT = "2026-08-21T08:00:00.123456+00:00";
 const NOW = "2026-08-21T08:30:00.000Z";
+const factorPayload = {
+  layout_coefficients_bps: {
+    one_bedroom_one_living: 10_000,
+    two_bedroom_one_living: 10_000,
+    two_bedroom_two_living: 10_100,
+    three_bedroom_one_living: 10_150,
+    three_bedroom_two_living: 10_200,
+    four_bedroom_two_living: 10_350,
+    villa_duplex: 10_800,
+    custom: 10_000,
+  },
+  style_coefficients_bps: {
+    modern_simple: 10_000,
+    cream: 10_300,
+    new_chinese: 10_800,
+    nordic: 10_200,
+    light_luxury: 10_700,
+    natural_wood: 10_300,
+    american: 10_600,
+    french: 10_800,
+    wabi_sabi: 10_700,
+    custom: 10_000,
+  },
+};
 const rawItem = {
   id: "44444444-4444-4444-8444-444444444444",
   pricing_version_id: VERSION_ID,
@@ -59,6 +83,7 @@ const rawVersion = {
   effective_to: null,
   currency: "CNY",
   disclaimer: "初步估算，不构成最终报价",
+  factor_payload: factorPayload,
   created_by_employee_id: EMPLOYEE_ID,
   created_at: UPDATED_AT,
   updated_at: UPDATED_AT,
@@ -230,7 +255,7 @@ describe("TenantDouyinBudgetRepository", () => {
   });
 
   test("uses only atomic write commands with server-scoped arguments", async () => {
-    const results = Array.from({ length: 4 }, () => ({
+    const results = Array.from({ length: 5 }, () => ({
       data: { data: { ...rawVersion, items: [rawItem] } },
       error: null,
     }));
@@ -252,6 +277,12 @@ describe("TenantDouyinBudgetRepository", () => {
       expectedUpdatedAt: UPDATED_AT,
       items: rawItems,
     });
+    await repository.updateFactors({
+      tenantId: TENANT_ID,
+      versionId: VERSION_ID,
+      expectedUpdatedAt: UPDATED_AT,
+      factorPayload,
+    });
     await repository.activate({
       tenantId: TENANT_ID,
       versionId: VERSION_ID,
@@ -267,6 +298,7 @@ describe("TenantDouyinBudgetRepository", () => {
     expect(context.calls.map((call) => call.args[0])).toEqual([
       "create_douyin_budget_pricing_draft",
       "replace_douyin_budget_pricing_items",
+      "update_douyin_budget_pricing_factors",
       "activate_douyin_budget_pricing_version",
       "archive_douyin_budget_pricing_version",
     ]);
@@ -275,6 +307,12 @@ describe("TenantDouyinBudgetRepository", () => {
       p_pricing_version_id: VERSION_ID,
       p_expected_updated_at: UPDATED_AT,
       p_items: rawItems,
+    });
+    expect(context.calls[2]?.args[1]).toEqual({
+      p_tenant_id: TENANT_ID,
+      p_pricing_version_id: VERSION_ID,
+      p_expected_updated_at: UPDATED_AT,
+      p_factor_payload: factorPayload,
     });
   });
 

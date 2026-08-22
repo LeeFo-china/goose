@@ -13,6 +13,7 @@ const ACTIVE_VERSION_SELECT = [
   "effective_to",
   "currency",
   "disclaimer",
+  "factor_payload",
 ].join(",");
 const PRICING_ITEM_SELECT = [
   "id",
@@ -37,6 +38,7 @@ const ActiveVersionSchema = z.strictObject({
   effective_to: DatabaseDateTimeSchema.nullable(),
   currency: z.literal("CNY"),
   disclaimer: z.string().trim().min(1).max(500),
+  factor_payload: z.record(z.string(), z.unknown()),
 });
 const PricingItemSchema = z.strictObject({
   id: z.uuid(),
