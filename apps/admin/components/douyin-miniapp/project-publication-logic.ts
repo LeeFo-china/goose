@@ -239,6 +239,48 @@ export function publicationSubmitLabel(
   return nextStatus === "published" ? "发布项目实景" : "保存公开资料";
 }
 
+export function getProjectDisplayToggleState(
+  row: ProjectPublicationRow,
+): {
+  checked: boolean;
+  disabled: boolean;
+  label: string;
+  reason: string | null;
+} {
+  if (!row.public_profile) {
+    return {
+      checked: false,
+      disabled: true,
+      label: "需先编辑资料",
+      reason: "请先编辑公开资料",
+    };
+  }
+  if (row.public_profile.publication_status === "published") {
+    return { checked: true, disabled: false, label: "停止展示", reason: null };
+  }
+  const warnings = getPublicationReadinessWarnings(row, {
+    ...projectProfileDraft(row),
+    publication_status: "published",
+  });
+  return {
+    checked: false,
+    disabled: warnings.length > 0,
+    label: "开启展示",
+    reason: warnings[0] ?? null,
+  };
+}
+
+export function projectDisplayToggleDraft(
+  row: ProjectPublicationRow,
+  checked: boolean,
+): ProjectPublicationDraft | null {
+  if (!row.public_profile) return null;
+  return {
+    ...projectProfileDraft(row),
+    publication_status: checked ? "published" : "hidden",
+  };
+}
+
 export function safeHttpsPreview(value: string | null): string | null {
   if (!value || /\s/.test(value)) return null;
   try {

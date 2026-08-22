@@ -11,10 +11,12 @@ import {
   getPublicationRefreshPage,
   getPublicationSaveWarnings,
   getPublicationWarnings,
+  getProjectDisplayToggleState,
   getSelectedImageItems,
   normalizeProjectPage,
   normalizeSavedProjectProfile,
   publicationSubmitLabel,
+  projectDisplayToggleDraft,
   projectProfileDraft,
   projectPhaseDisplay,
   safeHttpsPreview,
@@ -208,6 +210,56 @@ describe("tenant project publication behavior", () => {
     expect(publicationSubmitLabel("draft", "published")).toBe("发布项目实景");
   });
 
+  test("exposes a direct display switch only when public profile can be shown", () => {
+    const published = {
+      ...publishableProject,
+      public_profile: { ...completeDraft, updated_at: publishableProject.updated_at },
+    };
+    expect(getProjectDisplayToggleState(published)).toEqual({
+      checked: true,
+      disabled: false,
+      label: "停止展示",
+      reason: null,
+    });
+    expect(projectDisplayToggleDraft(published, false)).toEqual({
+      ...completeDraft,
+      publication_status: "hidden",
+    });
+
+    const hidden = {
+      ...published,
+      public_profile: {
+        ...completeDraft,
+        publication_status: "hidden" as const,
+        updated_at: publishableProject.updated_at,
+      },
+    };
+    expect(getProjectDisplayToggleState(hidden)).toEqual({
+      checked: false,
+      disabled: false,
+      label: "开启展示",
+      reason: null,
+    });
+    expect(projectDisplayToggleDraft(hidden, true)).toEqual(completeDraft);
+
+    const incomplete = {
+      ...hidden,
+      public_profile: { ...hidden.public_profile, public_image_urls: [] },
+    };
+    expect(getProjectDisplayToggleState(incomplete)).toEqual({
+      checked: false,
+      disabled: true,
+      label: "开启展示",
+      reason: "发布项目至少需要选择 3 张图片",
+    });
+    expect(getProjectDisplayToggleState(publishableProject)).toEqual({
+      checked: false,
+      disabled: true,
+      label: "需先编辑资料",
+      reason: "请先编辑公开资料",
+    });
+  });
+
   test("keeps image selections across candidate pages and caps them at 30", () => {
     const firstPage = Array.from({ length: 20 }, (_, index) => `image-${index + 1}`);
     const acrossPages = updateImageSelection(firstPage, "image-21", true);
@@ -372,6 +424,9 @@ describe("tenant project publication source contract", () => {
     const logicSource = await Bun.file(
       new URL("./project-publication-logic.ts", import.meta.url),
     ).text();
+    const tableSource = await Bun.file(
+      new URL("./project-publication-table.tsx", import.meta.url),
+    ).text();
     const menuSource = await Bun.file(
       new URL("../layout/menu-config.ts", import.meta.url),
     ).text();
@@ -384,6 +439,13 @@ describe("tenant project publication source contract", () => {
     expect(componentSource).toContain("FieldGroup");
     expect(componentSource).toContain("FieldSet");
     expect(componentSource).toContain("FieldLegend");
+    expect(tableSource).toContain('from "@/components/ui/switch"');
+    expect(tableSource).toContain("onToggleDisplay");
+    expect(tableSource).toContain("切换项目实景展示状态");
+    expect(tableSource).toContain('<TableHead className="whitespace-nowrap">项目阶段</TableHead>');
+    expect(tableSource).toContain('<TableHead className="whitespace-nowrap">发布状态</TableHead>');
+    expect(tableSource).toContain('<TableHead className="whitespace-nowrap">图片</TableHead>');
+    expect(tableSource).toContain('className="whitespace-nowrap"');
     expect(componentSource).toContain("styleTagsInput");
     expect(componentSource).toContain("FieldError");
     expect(logicSource).toContain("new AbortController()");
