@@ -211,7 +211,7 @@ export function BudgetPricing({ initialData, initialError }: {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-24">
+    <div className="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pb-24 [scrollbar-gutter:stable]">
       <header className="flex min-w-0 items-start gap-3">
         <span className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-card text-muted-foreground"><Calculator aria-hidden="true" /></span>
         <div className="min-w-0">

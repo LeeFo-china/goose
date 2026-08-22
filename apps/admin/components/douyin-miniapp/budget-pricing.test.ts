@@ -149,6 +149,7 @@ describe("douyin budget pricing admin UI contract", () => {
 
   test("uses a scroll-safe layout for long pricing forms", async () => {
     const source = await Bun.file(componentFile).text();
+    expect(source).toContain("flex h-full min-h-0 flex-col");
     expect(source).toContain("min-h-0");
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("pb-24");
