@@ -16,6 +16,30 @@ export const DOUYIN_DECORATION_SCOPE_VALUES = [
   'partial',
 ] as const;
 
+export const DOUYIN_BUDGET_LAYOUT_CODE_VALUES = [
+  'one_bedroom_one_living',
+  'two_bedroom_one_living',
+  'two_bedroom_two_living',
+  'three_bedroom_one_living',
+  'three_bedroom_two_living',
+  'four_bedroom_two_living',
+  'villa_duplex',
+  'custom',
+] as const;
+
+export const DOUYIN_BUDGET_STYLE_CODE_VALUES = [
+  'modern_simple',
+  'cream',
+  'new_chinese',
+  'nordic',
+  'light_luxury',
+  'natural_wood',
+  'american',
+  'french',
+  'wabi_sabi',
+  'custom',
+] as const;
+
 export const DOUYIN_BUDGET_OPTION_CODE_VALUES = [
   'demolition',
   'water_electricity_upgrade',
@@ -126,7 +150,9 @@ export const DouyinBudgetEstimateRequestSchema = z.strictObject({
   property_condition: z.enum(DOUYIN_PROPERTY_CONDITION_VALUES),
   decoration_tier: z.enum(DOUYIN_DECORATION_TIER_VALUES),
   decoration_scope: z.enum(DOUYIN_DECORATION_SCOPE_VALUES),
+  layout_code: z.enum(DOUYIN_BUDGET_LAYOUT_CODE_VALUES).optional(),
   layout: z.string().trim().min(1).max(40).optional(),
+  style_code: z.enum(DOUYIN_BUDGET_STYLE_CODE_VALUES).optional(),
   style: z.string().trim().min(1).max(40).optional(),
   option_codes: z
     .array(OptionCodeSchema)
@@ -221,6 +247,10 @@ export type DouyinDecorationTier =
   (typeof DOUYIN_DECORATION_TIER_VALUES)[number];
 export type DouyinDecorationScope =
   (typeof DOUYIN_DECORATION_SCOPE_VALUES)[number];
+export type DouyinBudgetLayoutCode =
+  (typeof DOUYIN_BUDGET_LAYOUT_CODE_VALUES)[number];
+export type DouyinBudgetStyleCode =
+  (typeof DOUYIN_BUDGET_STYLE_CODE_VALUES)[number];
 export type DouyinBudgetOptionCode =
   (typeof DOUYIN_BUDGET_OPTION_CODE_VALUES)[number];
 export type DouyinBudgetCategoryCode =

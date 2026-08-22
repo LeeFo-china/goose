@@ -5,7 +5,9 @@ import * as shared from './shared';
 import {
   DOUYIN_BUDGET_AI_STATUS_VALUES,
   DOUYIN_BUDGET_CATEGORY_CODE_VALUES,
+  DOUYIN_BUDGET_LAYOUT_CODE_VALUES,
   DOUYIN_BUDGET_OPTION_CODE_VALUES,
+  DOUYIN_BUDGET_STYLE_CODE_VALUES,
   DOUYIN_DECORATION_SCOPE_VALUES,
   DOUYIN_DECORATION_TIER_VALUES,
   DOUYIN_PROPERTY_CONDITION_VALUES,
@@ -25,7 +27,9 @@ const validRequest = {
   property_condition: 'rough',
   decoration_tier: 'comfortable',
   decoration_scope: 'whole_house',
+  layout_code: 'three_bedroom_two_living',
   layout: '三室两厅',
+  style_code: 'modern_simple',
   style: '现代简约',
   option_codes: ['custom_cabinet'],
   demand: '需要较多收纳',
@@ -146,7 +150,7 @@ describe('douyin budget contracts', () => {
       });
     }
   });
-  test('keeps the public condition, tier, scope, option, category and AI values stable', () => {
+  test('keeps the public condition, tier, scope, layout, style, option, category and AI values stable', () => {
     expect(DOUYIN_PROPERTY_CONDITION_VALUES).toEqual(['rough', 'old_house']);
     expect(DOUYIN_DECORATION_TIER_VALUES).toEqual([
       'economy',
@@ -156,6 +160,28 @@ describe('douyin budget contracts', () => {
     expect(DOUYIN_DECORATION_SCOPE_VALUES).toEqual([
       'whole_house',
       'partial',
+    ]);
+    expect(DOUYIN_BUDGET_LAYOUT_CODE_VALUES).toEqual([
+      'one_bedroom_one_living',
+      'two_bedroom_one_living',
+      'two_bedroom_two_living',
+      'three_bedroom_one_living',
+      'three_bedroom_two_living',
+      'four_bedroom_two_living',
+      'villa_duplex',
+      'custom',
+    ]);
+    expect(DOUYIN_BUDGET_STYLE_CODE_VALUES).toEqual([
+      'modern_simple',
+      'cream',
+      'new_chinese',
+      'nordic',
+      'light_luxury',
+      'natural_wood',
+      'american',
+      'french',
+      'wabi_sabi',
+      'custom',
     ]);
     expect(DOUYIN_BUDGET_OPTION_CODE_VALUES).toEqual([
       'demolition',
@@ -187,6 +213,50 @@ describe('douyin budget contracts', () => {
       option_codes: ['custom_cabinet', 'demolition'],
       demand: '需要较多收纳',
     });
+  });
+
+  test('accepts structured layout and style codes while preserving communication text', () => {
+    expect(DouyinBudgetEstimateRequestSchema.parse({
+      area: 100,
+      property_condition: 'rough',
+      decoration_tier: 'comfortable',
+      decoration_scope: 'whole_house',
+      layout_code: 'three_bedroom_two_living',
+      layout: '三室两厅',
+      style_code: 'modern_simple',
+      style: '现代简约',
+      option_codes: [],
+    })).toMatchObject({
+      layout_code: 'three_bedroom_two_living',
+      layout: '三室两厅',
+      style_code: 'modern_simple',
+      style: '现代简约',
+    });
+
+    expect(DouyinBudgetEstimateRequestSchema.parse({
+      area: 100,
+      property_condition: 'rough',
+      decoration_tier: 'comfortable',
+      decoration_scope: 'whole_house',
+      layout_code: 'custom',
+      layout: 'loft 自定义',
+      style_code: 'custom',
+      style: '混搭自定义',
+      option_codes: [],
+    })).toMatchObject({
+      layout_code: 'custom',
+      layout: 'loft 自定义',
+      style_code: 'custom',
+      style: '混搭自定义',
+    });
+
+    for (const invalidRequest of [
+      { ...validRequest, layout_code: 'unknown' },
+      { ...validRequest, style_code: 'unknown' },
+    ]) {
+      expect(DouyinBudgetEstimateRequestSchema.safeParse(invalidRequest).success)
+        .toBe(false);
+    }
   });
 
   test('enforces request bounds, unique options and strict fields', () => {

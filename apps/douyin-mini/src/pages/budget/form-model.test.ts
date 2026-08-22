@@ -87,9 +87,9 @@ describe("budget form model", () => {
       "自定义",
     ]);
     expect(selectBudgetTextChoice(BUDGET_LAYOUT_CHOICES, "4", "旧值"))
-      .toEqual({ value: "三室两厅", isCustom: false });
+      .toEqual({ value: "三室两厅", code: "three_bedroom_two_living", isCustom: false });
     expect(selectBudgetTextChoice(BUDGET_STYLE_CHOICES, "9", "  自定义风格  "))
-      .toEqual({ value: "自定义风格", isCustom: true });
+      .toEqual({ value: "自定义风格", code: "custom", isCustom: true });
   });
 
   test("normalizes a bounded form into the public estimate request", () => {
@@ -107,7 +107,24 @@ describe("budget form model", () => {
       layout: "  三室两厅 ",
       style: " 现代简约 ",
       demand: "   ",
-    })).toMatchObject({ layout: "三室两厅", style: "现代简约" });
+    })).toMatchObject({
+      layout_code: "three_bedroom_two_living",
+      layout: "三室两厅",
+      style_code: "modern_simple",
+      style: "现代简约",
+    });
+
+    expect(buildEstimateRequest({
+      ...form,
+      layout: "loft 自定义",
+      style: "混搭自定义",
+      demand: "   ",
+    })).toMatchObject({
+      layout_code: "custom",
+      layout: "loft 自定义",
+      style_code: "custom",
+      style: "混搭自定义",
+    });
   });
 
   test("rejects area, option and optional-text boundaries", () => {

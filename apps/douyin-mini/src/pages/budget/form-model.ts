@@ -1,8 +1,10 @@
 import type {
   DouyinBudgetEstimateRequest,
+  DouyinBudgetLayoutCode,
   DouyinBudgetOptionCode,
   DouyinBudgetPublicConfig,
   DouyinBudgetPublicOption,
+  DouyinBudgetStyleCode,
   DouyinDecorationScope,
   DouyinDecorationTier,
   DouyinPropertyCondition,
@@ -16,34 +18,70 @@ const OPTION_CODES = new Set<DouyinBudgetOptionCode>([
 ]);
 const CUSTOM_TEXT_CHOICE_VALUE = "__custom__";
 
-export type BudgetTextChoice = Readonly<{
+export type BudgetTextChoice<Code extends string = string> = Readonly<{
   value: string;
   label: string;
+  code: Code;
   custom: boolean;
 }>;
 
-export const BUDGET_LAYOUT_CHOICES: readonly BudgetTextChoice[] = [
-  { value: "一室一厅", label: "一室一厅", custom: false },
-  { value: "两室一厅", label: "两室一厅", custom: false },
-  { value: "两室两厅", label: "两室两厅", custom: false },
-  { value: "三室一厅", label: "三室一厅", custom: false },
-  { value: "三室两厅", label: "三室两厅", custom: false },
-  { value: "四室两厅", label: "四室两厅", custom: false },
-  { value: "别墅/复式", label: "别墅/复式", custom: false },
-  { value: CUSTOM_TEXT_CHOICE_VALUE, label: "自定义", custom: true },
+export const BUDGET_LAYOUT_CHOICES: readonly BudgetTextChoice<DouyinBudgetLayoutCode>[] = [
+  {
+    value: "一室一厅",
+    label: "一室一厅",
+    code: "one_bedroom_one_living",
+    custom: false,
+  },
+  {
+    value: "两室一厅",
+    label: "两室一厅",
+    code: "two_bedroom_one_living",
+    custom: false,
+  },
+  {
+    value: "两室两厅",
+    label: "两室两厅",
+    code: "two_bedroom_two_living",
+    custom: false,
+  },
+  {
+    value: "三室一厅",
+    label: "三室一厅",
+    code: "three_bedroom_one_living",
+    custom: false,
+  },
+  {
+    value: "三室两厅",
+    label: "三室两厅",
+    code: "three_bedroom_two_living",
+    custom: false,
+  },
+  {
+    value: "四室两厅",
+    label: "四室两厅",
+    code: "four_bedroom_two_living",
+    custom: false,
+  },
+  {
+    value: "别墅/复式",
+    label: "别墅/复式",
+    code: "villa_duplex",
+    custom: false,
+  },
+  { value: CUSTOM_TEXT_CHOICE_VALUE, label: "自定义", code: "custom", custom: true },
 ];
 
-export const BUDGET_STYLE_CHOICES: readonly BudgetTextChoice[] = [
-  { value: "现代简约", label: "现代简约", custom: false },
-  { value: "奶油风", label: "奶油风", custom: false },
-  { value: "新中式", label: "新中式", custom: false },
-  { value: "北欧", label: "北欧", custom: false },
-  { value: "轻奢", label: "轻奢", custom: false },
-  { value: "原木风", label: "原木风", custom: false },
-  { value: "美式", label: "美式", custom: false },
-  { value: "法式", label: "法式", custom: false },
-  { value: "侘寂风", label: "侘寂风", custom: false },
-  { value: CUSTOM_TEXT_CHOICE_VALUE, label: "自定义", custom: true },
+export const BUDGET_STYLE_CHOICES: readonly BudgetTextChoice<DouyinBudgetStyleCode>[] = [
+  { value: "现代简约", label: "现代简约", code: "modern_simple", custom: false },
+  { value: "奶油风", label: "奶油风", code: "cream", custom: false },
+  { value: "新中式", label: "新中式", code: "new_chinese", custom: false },
+  { value: "北欧", label: "北欧", code: "nordic", custom: false },
+  { value: "轻奢", label: "轻奢", code: "light_luxury", custom: false },
+  { value: "原木风", label: "原木风", code: "natural_wood", custom: false },
+  { value: "美式", label: "美式", code: "american", custom: false },
+  { value: "法式", label: "法式", code: "french", custom: false },
+  { value: "侘寂风", label: "侘寂风", code: "wabi_sabi", custom: false },
+  { value: CUSTOM_TEXT_CHOICE_VALUE, label: "自定义", code: "custom", custom: true },
 ];
 
 export type BudgetFormValue = {
@@ -100,8 +138,8 @@ export function buildEstimateRequest(form: BudgetFormValue): DouyinBudgetEstimat
     property_condition: form.propertyCondition,
     decoration_tier: form.decorationTier,
     decoration_scope: form.decorationScope,
-    ...(layout ? { layout } : {}),
-    ...(style ? { style } : {}),
+    ...(layout ? { layout_code: layoutCodeFor(layout), layout } : {}),
+    ...(style ? { style_code: styleCodeFor(style), style } : {}),
     option_codes: optionCodes,
     ...(demand ? { demand } : {}),
   };
@@ -122,12 +160,12 @@ export function selectBudgetTextChoice(
   choices: readonly BudgetTextChoice[],
   rawIndex: string,
   customValue: string,
-): { value: string; isCustom: boolean } {
+): { value: string; code: string; isCustom: boolean } {
   const index = Number(rawIndex);
   const choice = Number.isInteger(index) ? choices[index] : undefined;
-  if (!choice) return { value: customValue.trim(), isCustom: true };
-  if (choice.custom) return { value: customValue.trim(), isCustom: true };
-  return { value: choice.value, isCustom: false };
+  if (!choice) return { value: customValue.trim(), code: "custom", isCustom: true };
+  if (choice.custom) return { value: customValue.trim(), code: choice.code, isCustom: true };
+  return { value: choice.value, code: choice.code, isCustom: false };
 }
 
 export function normalizeBudgetFormForConfig(
@@ -207,4 +245,16 @@ function optionalText(
   const normalized = value.trim();
   if (normalized.length > maximum) throw new BudgetFormValidationError(field, message);
   return normalized || undefined;
+}
+
+function layoutCodeFor(value: string): DouyinBudgetLayoutCode {
+  return BUDGET_LAYOUT_CHOICES.find(
+    (choice) => !choice.custom && choice.value === value,
+  )?.code ?? "custom";
+}
+
+function styleCodeFor(value: string): DouyinBudgetStyleCode {
+  return BUDGET_STYLE_CHOICES.find(
+    (choice) => !choice.custom && choice.value === value,
+  )?.code ?? "custom";
 }

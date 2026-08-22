@@ -145,6 +145,26 @@ export type PublicSiteLogPage = { items: PublicSiteLog[]; pagination: Pagination
 export type DouyinPropertyCondition = "rough" | "old_house";
 export type DouyinDecorationTier = "economy" | "comfortable" | "quality";
 export type DouyinDecorationScope = "whole_house" | "partial";
+export type DouyinBudgetLayoutCode =
+  | "one_bedroom_one_living"
+  | "two_bedroom_one_living"
+  | "two_bedroom_two_living"
+  | "three_bedroom_one_living"
+  | "three_bedroom_two_living"
+  | "four_bedroom_two_living"
+  | "villa_duplex"
+  | "custom";
+export type DouyinBudgetStyleCode =
+  | "modern_simple"
+  | "cream"
+  | "new_chinese"
+  | "nordic"
+  | "light_luxury"
+  | "natural_wood"
+  | "american"
+  | "french"
+  | "wabi_sabi"
+  | "custom";
 export type DouyinBudgetOptionCode =
   | "demolition"
   | "water_electricity_upgrade"
@@ -181,7 +201,9 @@ export type DouyinBudgetEstimateRequest = {
   property_condition: DouyinPropertyCondition;
   decoration_tier: DouyinDecorationTier;
   decoration_scope: DouyinDecorationScope;
+  layout_code?: DouyinBudgetLayoutCode;
   layout?: string;
+  style_code?: DouyinBudgetStyleCode;
   style?: string;
   option_codes: DouyinBudgetOptionCode[];
   demand?: string;
