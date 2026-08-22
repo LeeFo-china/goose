@@ -1,10 +1,8 @@
 import { redirect } from "next/navigation";
 
 import { StatusAlert } from "@/components/admin/status-alert";
-import {
-  buildAssigneeOptionsPath, normalizeAssigneeFilterOptionPage,
-  type AssigneeFilterOptionsState,
-} from "@/components/douyin-miniapp/leads-assignee-options";
+import type { AssigneeFilterOptionsState } from "@/components/douyin-miniapp/leads-assignee-options";
+import { loadInitialAssigneeFilterOptions } from "@/components/douyin-miniapp/leads-page-loaders";
 import { LeadsWorkbench } from "@/components/douyin-miniapp/leads-workbench";
 import {
   buildLeadApiQuery,
@@ -67,21 +65,6 @@ export default async function TenantDouyinLeadsPage({ searchParams }: {
       permissions={permissions}
     />
   </div>;
-}
-
-export async function loadInitialAssigneeFilterOptions(token: string,
-  filters: LeadFilters): Promise<AssigneeFilterOptionsState> {
-  try {
-    const response = await fetch(buildBackendUrl(
-      buildAssigneeOptionsPath("filter", "", filters.assigneeId),
-    ), { headers: { authorization: `Bearer ${token}` }, cache: "no-store" });
-    const payload = await parseBackendJson<unknown>(response);
-    const parsed = normalizeAssigneeFilterOptionPage(payload.data, filters.assigneeId);
-    return parsed ? { options: parsed.list,
-      hasMore: parsed.pagination.totalPages > 1 } : { options: [], hasMore: false };
-  } catch {
-    return { options: [], hasMore: false };
-  }
 }
 
 async function loadLeads(token: string, filters: LeadFilters): Promise<{
