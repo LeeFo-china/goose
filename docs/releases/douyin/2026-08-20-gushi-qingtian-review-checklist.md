@@ -10,6 +10,7 @@
 - 使用 `/Users/leefo/Public/work/gooes/.env` 的开发库连接。
 - `supabase migration list --db-url "$SUPABASE_DB_DIRECT_URL"` 已显示 Local/Remote 对齐至 `20260821105690`。
 - `supabase db push --db-url "$SUPABASE_DB_DIRECT_URL" --dry-run` 返回 `Remote database is up to date`。
+- 2026-08-22 10:50 CST fresh 复核：开发库仍无待执行 migration，dry-run 仍为 `Remote database is up to date`。
 
 ## 2. 上次审核反馈
 
@@ -98,6 +99,33 @@ DOUYIN_RELEASE_REQUIRED_HOSTS=douyin \
 
 退出码：`0`
 
+2026-08-22 10:50 CST fresh 复跑仍通过：
+
+```json
+{
+  "status": "ready",
+  "ready": true,
+  "checked_at": "2026-08-22T02:50:21.165Z",
+  "metrics": {
+    "published_project_count": 6,
+    "in_progress_project_count": 4,
+    "completed_project_count": 2,
+    "active_service_area_count": 1,
+    "active_pricing_version": 1,
+    "required_host_count": 1
+  },
+  "blockers": [],
+  "warnings": []
+}
+```
+
+开发库只读数据复核：
+
+- merchant installation：1 个，`authorization_status=active`，`installation_kind=merchant`，Logo 已配置；
+- published public project profile：6 个，每个至少 3 张公开图片；
+- active pricing version：`04eae302-a565-4cc0-ade3-a041424172c6` / version `1`；
+- active pricing items：9 个，覆盖 6 个基础组合和 3 个选配项。
+
 ## 5. 静态验证
 
 当前代码侧已执行：
@@ -114,6 +142,7 @@ DOUYIN_RELEASE_REQUIRED_HOSTS=douyin \
 
 以下仍未执行，不能视为最终可提审完成：
 
+- [ ] 当前 `.env` 未配置 `PLAYWRIGHT_BASE_URL`、`GOOES_E2E_TENANT_ADMIN_*`、`GOOES_E2E_TENANT_ID`、`GOOES_E2E_DOUYIN_INSTALLATION_ID`，因此本轮无法自动执行登录态浏览器 smoke；
 - [ ] 使用有效抖音小程序 session 验证 bootstrap 到目标租户；
 - [ ] 验证项目列表、项目详情、项目日志分页；
 - [ ] 验证预算初算和 AI 建议成功/失败路径；
