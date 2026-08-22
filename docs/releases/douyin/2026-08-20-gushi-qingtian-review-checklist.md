@@ -169,6 +169,8 @@ DOUYIN_RELEASE_REQUIRED_HOSTS=douyin \
 以下仍未执行，不能视为最终可提审完成：
 
 - [ ] 当前 `.env` 未配置 `PLAYWRIGHT_BASE_URL`、`GOOES_E2E_TENANT_ADMIN_*`、`GOOES_E2E_TENANT_ID`、`GOOES_E2E_DOUYIN_INSTALLATION_ID`，因此本轮无法自动执行登录态浏览器 smoke；
+- [ ] 2026-08-22 11:57 CST 只读可达性检查：`https://api-dev.goodcms.cn/` 返回 200；`/health` 返回 401 `TOKEN_MISSING`，服务在线但无匿名 health；
+- [ ] 2026-08-22 11:57 CST 只读可达性检查：`https://admin-dev.goodcms.cn/` 返回 307 到 `/dashboard`，`/douyin-miniapp/workspace` 未登录返回 307 到 `/login`；`/douyin-miniapp/leads`、`/douyin-miniapp/projects`、`/douyin-miniapp/budget` 当前返回 404，说明 admin-dev 当前部署/路由状态还不能执行完整抖音后台 smoke；
 - [ ] 使用有效抖音小程序 session 验证 bootstrap 到目标租户；
 - [ ] 验证项目列表、项目详情、项目日志分页；
 - [ ] 验证预算初算和 AI 建议成功/失败路径；
