@@ -122,7 +122,9 @@ test("sites uses a compact public-boundary notice without an alert stripe", asyn
 });
 
 test("lead form labels every input and keeps optional details collapsed", async () => {
-  const [formTemplate, smsTemplate, consentTemplate, consentStyle] = await Promise.all([
+  const [pageTemplate, pageStyle, formTemplate, smsTemplate, consentTemplate, consentStyle] = await Promise.all([
+    readSource("pages/lead/index.ttml"),
+    readSource("pages/lead/index.ttss"),
     readSource("components/lead-form/index.ttml"),
     readSource("components/sms-code-input/index.ttml"),
     readSource("components/privacy-consent/index.ttml"),
@@ -147,6 +149,10 @@ test("lead form labels every input and keeps optional details collapsed", async 
   expect(formTemplate.match(/aria-checked=/g)).toHaveLength(3);
   expect(formTemplate.match(/disabled="{{submitting}}"/g)?.length ?? 0)
     .toBeGreaterThanOrEqual(8);
+  expect(pageTemplate).toContain("验证码仅用于确认本次联系，不会用于其他用途");
+  expect(pageTemplate).not.toContain("平台不会在客户端读取抖音账号绑定手机号");
+  expect(pageStyle).toMatch(/\.security-note \{[^}]*white-space:\s*nowrap;/);
+  expect(pageStyle).toMatch(/\.security-note \{[^}]*font-size:\s*21rpx;/);
   expect(consentTemplate).toContain('<view class="consent-row"');
   expect(consentTemplate).toContain('class="consent-toggle ui-pressable"');
   expect(consentTemplate).toContain('catchtap="onOpenPolicy"');

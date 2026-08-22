@@ -10,6 +10,6 @@
     <lead-form value="{{form}}" company-name="{{companyName}}" primary-color="{{primaryColor}}" primary-text-color="{{primaryTextColor}}" phone-ready="{{phoneReady}}" sms-sending="{{smsSending}}" sms-cooldown="{{smsCooldown}}" consented="{{consented}}" submitting="{{submitting}}" field-errors="{{fieldErrors}}" focused-field="{{focusedField}}" optional-details-expanded="{{optionalDetailsExpanded}}" min-visit-date="{{minVisitDate}}" has-linked-estimate="{{hasLinkedEstimate}}" estimate-no="{{estimateNo}}" estimate-range="{{estimateRange}}" bindfieldchange="onFieldChange" bindsendsms="onSendSms" bindconsentchange="onConsentChange" bindopenpolicy="onOpenPolicy" bindtoggleoptional="onToggleOptionalDetails" bindsubmit="onSubmit" />
   </view>
   <view tt:if="{{formError}}" class="form-error ui-error-surface" role="alert">{{formError}}</view>
-  <view class="security-note">验证码仅用于确认本次联系方式。平台不会在客户端读取抖音账号绑定手机号。</view>
+  <view class="security-note">验证码仅用于确认本次联系，不会用于其他用途</view>
   <button tt:if="{{servicePhone}}" class="phone-action ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onPhoneCall">直接联系装修公司：{{servicePhone}}</button>
 </view>
