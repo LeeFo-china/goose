@@ -128,6 +128,10 @@ export function WorkspaceReleaseDialogs({
               label="体验二维码已生成"
             />
             <ChecklistItem
+              complete={checklist.readinessReady}
+              label="提审就绪检查无阻断"
+            />
+            <ChecklistItem
               complete={checklist.auditFieldsComplete}
               label="审核信息填写完整"
             />

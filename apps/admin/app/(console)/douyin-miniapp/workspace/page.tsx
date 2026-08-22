@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { DouyinReleaseReadiness } from "@gooes/domain";
 
 import { TenantDouyinMiniappWorkspace } from "@/components/douyin-miniapp/workspace";
 import type { TenantDouyinWorkspace } from "@/components/douyin-miniapp/workspace-types";
@@ -31,23 +32,35 @@ export default async function TenantDouyinMiniappWorkspacePage() {
     (permission) => permission.code === PUBLISH_PERMISSION,
   );
   let workspace: TenantDouyinWorkspace | null = null;
+  let readiness: DouyinReleaseReadiness | null = null;
+  let readinessLoadError: string | null = null;
   let loadError: string | null = null;
 
   if (canRead && token) {
-    try {
-      const response = await fetch(
-        buildBackendUrl("/tenant/douyin-miniapp/workspace"),
-        {
-          headers: { authorization: `Bearer ${token}` },
-          cache: "no-store",
-        },
-      );
-      const payload = await parseBackendJson<TenantDouyinWorkspace>(response);
-      workspace = payload.data ?? null;
-    } catch (error) {
-      loadError = error instanceof Error
-        ? error.message
+    const headers = { authorization: `Bearer ${token}` };
+    const [workspaceResult, readinessResult] = await Promise.allSettled([
+      fetch(buildBackendUrl("/tenant/douyin-miniapp/workspace"), {
+        headers,
+        cache: "no-store",
+      }).then((response) => parseBackendJson<TenantDouyinWorkspace>(response)),
+      fetch(buildBackendUrl("/tenant/douyin-miniapp/release-readiness"), {
+        headers,
+        cache: "no-store",
+      }).then((response) => parseBackendJson<DouyinReleaseReadiness>(response)),
+    ]);
+    if (workspaceResult.status === "fulfilled") {
+      workspace = workspaceResult.value.data ?? null;
+    } else {
+      loadError = workspaceResult.reason instanceof Error
+        ? workspaceResult.reason.message
         : "抖音小程序工作台加载失败";
+    }
+    if (readinessResult.status === "fulfilled") {
+      readiness = readinessResult.value.data ?? null;
+    } else {
+      readinessLoadError = readinessResult.reason instanceof Error
+        ? readinessResult.reason.message
+        : "提审就绪检查加载失败";
     }
   } else if (canRead) {
     loadError = "缺少登录凭证，请重新登录后重试";
@@ -60,6 +73,8 @@ export default async function TenantDouyinMiniappWorkspacePage() {
       canRead={canRead}
       canSubmitAudit={canSubmitAudit}
       loadError={loadError}
+      readiness={readiness}
+      readinessLoadError={readinessLoadError}
       workspace={workspace}
     />
   );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { DouyinReleaseReadiness } from "@gooes/domain";
 import {
   AppWindow,
   ArrowUpRight,
@@ -41,6 +42,7 @@ import {
 import {
   TenantDouyinMiniappWorkspaceActions,
 } from "./workspace-actions";
+import { ReleaseReadinessPanel } from "./release-readiness-panel";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
 type TenantDouyinMiniappWorkspaceProps = {
@@ -49,6 +51,8 @@ type TenantDouyinMiniappWorkspaceProps = {
   canPublish?: boolean;
   canSubmitAudit?: boolean;
   loadError: string | null;
+  readiness?: DouyinReleaseReadiness | null;
+  readinessLoadError?: string | null;
   workspace: TenantDouyinWorkspace | null;
 };
 
@@ -58,6 +62,8 @@ export function TenantDouyinMiniappWorkspace({
   canPublish = false,
   canSubmitAudit = false,
   loadError,
+  readiness = null,
+  readinessLoadError = null,
   workspace,
 }: TenantDouyinMiniappWorkspaceProps) {
   return (
@@ -77,6 +83,8 @@ export function TenantDouyinMiniappWorkspace({
           canManage={canManage}
           canPublish={canPublish}
           canSubmitAudit={canSubmitAudit}
+          readiness={readiness}
+          readinessLoadError={readinessLoadError}
           workspace={workspace}
         />
       ) : null}
@@ -138,110 +146,126 @@ function WorkspaceOverview({
   canManage,
   canPublish,
   canSubmitAudit,
+  readiness,
+  readinessLoadError,
   workspace,
 }: {
   canManage: boolean;
   canPublish: boolean;
   canSubmitAudit: boolean;
+  readiness: DouyinReleaseReadiness | null;
+  readinessLoadError: string | null;
   workspace: TenantDouyinWorkspace;
 }) {
   return (
     <div className="flex flex-col gap-4">
       <TemplateAvailabilityNotice workspace={workspace} />
+      {readiness ? <ReleaseReadinessPanel readiness={readiness} /> : null}
+      {readinessLoadError ? (
+        <Alert variant="destructive">
+          <ShieldAlert aria-hidden="true" />
+          <AlertTitle>提审就绪检查加载失败</AlertTitle>
+          <AlertDescription>
+            {readinessLoadError}。请刷新后重试；服务端仍会在提交审核前重新拦截。
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <Card className="overflow-hidden">
-      <CardHeader className="gap-4 border-b bg-muted/20">
-        <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <CardTitle>运营状态总览</CardTitle>
-            <CardDescription>
-              核对授权、公开资料与版本进度，按当前状态完成体验和提审。
-            </CardDescription>
+        <CardHeader className="gap-4 border-b bg-muted/20">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-start">
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <CardTitle>运营状态总览</CardTitle>
+              <CardDescription>
+                核对授权、公开资料与版本进度，按当前状态完成体验和提审。
+              </CardDescription>
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-2"
+              aria-label="小程序状态"
+            >
+              <Badge variant={authorizationTone(workspace.authorization_state)}>
+                {authorizationLabel(workspace.authorization_state)}
+              </Badge>
+              <Badge variant={releaseTone(workspace.release_state)}>
+                {releaseLabel(workspace.release_state)}
+              </Badge>
+            </div>
           </div>
-          <div
-            className="flex flex-wrap items-center gap-2"
-            aria-label="小程序状态"
+
+          <div className="rounded-md border bg-background p-4">
+            <TenantDouyinMiniappWorkspaceActions
+              canManage={canManage}
+              canPublish={canPublish}
+              canSubmitAudit={canSubmitAudit}
+              readiness={readiness}
+              readinessLoadError={readinessLoadError}
+              workspace={workspace}
+            />
+          </div>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-6 pt-5">
+          <section
+            className="flex flex-col gap-4"
+            aria-labelledby="douyin-brand-heading"
           >
-            <Badge variant={authorizationTone(workspace.authorization_state)}>
-              {authorizationLabel(workspace.authorization_state)}
-            </Badge>
-            <Badge variant={releaseTone(workspace.release_state)}>
-              {releaseLabel(workspace.release_state)}
-            </Badge>
-          </div>
-        </div>
-
-        <div className="rounded-md border bg-background p-4">
-          <TenantDouyinMiniappWorkspaceActions
-            canManage={canManage}
-            canPublish={canPublish}
-            canSubmitAudit={canSubmitAudit}
-            workspace={workspace}
-          />
-        </div>
-      </CardHeader>
-
-      <CardContent className="flex flex-col gap-6 pt-5">
-        <section
-          className="flex flex-col gap-4"
-          aria-labelledby="douyin-brand-heading"
-        >
-          <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2
-                  id="douyin-brand-heading"
-                  className="text-sm font-semibold"
-                >
-                  品牌与公开资料
-                </h2>
-                {workspace.public_profile ? (
-                  <Badge
-                    variant={profileStatusTone(
-                      workspace.public_profile.status,
-                    )}
+            <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+              <div className="flex min-w-0 flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2
+                    id="douyin-brand-heading"
+                    className="text-sm font-semibold"
                   >
-                    {profileStatusLabel(workspace.public_profile.status)}
-                  </Badge>
-                ) : (
-                  <Badge variant="secondary">公开资料未创建</Badge>
-                )}
+                    品牌与公开资料
+                  </h2>
+                  {workspace.public_profile ? (
+                    <Badge
+                      variant={profileStatusTone(
+                        workspace.public_profile.status,
+                      )}
+                    >
+                      {profileStatusLabel(workspace.public_profile.status)}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">公开资料未创建</Badge>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  内部租户名称用于后台识别，公开品牌展示给小程序访客。
+                </p>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                内部租户名称用于后台识别，公开品牌展示给小程序访客。
-              </p>
+              <Button asChild size="sm" variant="outline">
+                <Link href="/settings/service-provider">
+                  维护公开资料
+                  <ArrowUpRight aria-hidden="true" />
+                </Link>
+              </Button>
             </div>
-            <Button asChild size="sm" variant="outline">
-              <Link href="/settings/service-provider">
-                维护公开资料
-                <ArrowUpRight aria-hidden="true" />
-              </Link>
-            </Button>
-          </div>
 
-          <dl className="grid gap-4 sm:grid-cols-2">
-            <IdentityField
-              icon={Building2}
-              label="租户内部名称"
-              value={workspace.tenant.name}
-            />
-            <IdentityField
-              icon={AppWindow}
-              label="小程序公开品牌"
-              value={workspace.public_profile?.public_name || "尚未设置"}
-            />
-          </dl>
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <IdentityField
+                icon={Building2}
+                label="租户内部名称"
+                value={workspace.tenant.name}
+              />
+              <IdentityField
+                icon={AppWindow}
+                label="小程序公开品牌"
+                value={workspace.public_profile?.public_name || "尚未设置"}
+              />
+            </dl>
 
-          {workspace.public_profile?.introduction ? (
-            <div className="rounded-md border bg-muted/20 px-4 py-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                公开简介
-              </p>
-              <p className="mt-1 break-words text-sm leading-6">
-                {workspace.public_profile.introduction}
-              </p>
-            </div>
-          ) : null}
-        </section>
+            {workspace.public_profile?.introduction ? (
+              <div className="rounded-md border bg-muted/20 px-4 py-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  公开简介
+                </p>
+                <p className="mt-1 break-words text-sm leading-6">
+                  {workspace.public_profile.introduction}
+                </p>
+              </div>
+            ) : null}
+          </section>
 
         <Separator />
 

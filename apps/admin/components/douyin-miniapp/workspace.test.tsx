@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { DouyinReleaseReadiness } from "@gooes/domain";
 
 import { TenantDouyinMiniappWorkspace } from "./workspace";
 import type { TenantDouyinWorkspace } from "./workspace-types";
@@ -74,6 +75,24 @@ const workspace: TenantDouyinWorkspace = {
     updated_at: "2026-07-26T09:00:00.000Z",
   },
 };
+const blockedReadiness: DouyinReleaseReadiness = {
+  ready: false,
+  checked_at: "2026-08-20T10:00:00.000+08:00",
+  tenant: workspace.tenant,
+  blockers: [
+    {
+      severity: "blocker",
+      code: "BUDGET_PRICING_MISSING",
+      message: "预算报价版本未启用",
+      details: {},
+    },
+  ],
+  warnings: [],
+  metrics: {
+    published_project_count: 6,
+    active_service_area_count: 2,
+  },
+};
 
 describe("TenantDouyinMiniappWorkspace", () => {
   test("constrains the workspace to the shell height for internal scrolling", () => {
@@ -125,6 +144,25 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("体验二维码已就绪");
     expect(html).toContain("提交审核");
     expect(html).not.toMatch(/appsecret|component_access_token|template_app_secret/i);
+  });
+
+  test("disables local audit submission when readiness has blockers", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        readiness={blockedReadiness}
+        workspace={workspace}
+      />,
+    );
+
+    expect(html).toContain("提审就绪检查");
+    expect(html).toContain("预算报价版本未启用");
+    expect(html).toContain("当前仍有 1 项提审阻断");
+    expect(html).toContain("提交审核");
+    expect(html).toContain('disabled=""');
   });
 
   test("renders explicit permission and loading error states", () => {

@@ -190,6 +190,7 @@ describe("tenant Douyin workspace actions", () => {
       authorizationActive: true,
       profilePublished: true,
       testQrReady: true,
+      readinessReady: true,
       auditFieldsComplete: false,
     })).toBe(false);
   });

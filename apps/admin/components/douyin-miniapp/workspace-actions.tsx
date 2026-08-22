@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { isDouyinTestQrUrlUsable } from "@gooes/domain";
+import {
+  isDouyinTestQrUrlUsable,
+  type DouyinReleaseReadiness,
+} from "@gooes/domain";
 import {
   ExternalLink,
   Loader2,
@@ -35,6 +38,7 @@ export type AuditChecklist = {
   authorizationActive: boolean;
   profilePublished: boolean;
   testQrReady: boolean;
+  readinessReady: boolean;
   auditFieldsComplete: boolean;
 };
 
@@ -135,6 +139,8 @@ type WorkspaceActionsProps = {
   canManage: boolean;
   canPublish: boolean;
   canSubmitAudit: boolean;
+  readiness?: DouyinReleaseReadiness | null;
+  readinessLoadError?: string | null;
   workspace: TenantDouyinWorkspace;
 };
 
@@ -144,6 +150,8 @@ export function TenantDouyinMiniappWorkspaceActions({
   canManage,
   canPublish,
   canSubmitAudit: canSubmitAuditPermission,
+  readiness = null,
+  readinessLoadError = null,
   workspace,
 }: WorkspaceActionsProps) {
   const [release, setRelease] = useState(workspace.latest_release);
@@ -182,9 +190,15 @@ export function TenantDouyinMiniappWorkspaceActions({
     authorizationActive: workspace.authorization_state === "active",
     profilePublished: workspace.public_profile?.status === "published",
     testQrReady: Boolean(testQrUrl),
+    readinessReady: readiness?.ready ?? !readinessLoadError,
     auditFieldsComplete,
   };
   const auditReady = canSubmitAudit(checklist);
+  const readinessBlockedMessage = readiness && !readiness.ready
+    ? `当前仍有 ${readiness.blockers.length} 项提审阻断`
+    : readinessLoadError
+    ? "提审就绪检查暂不可用"
+    : null;
 
   async function handleAuthorization() {
     setError(null);
@@ -331,7 +345,11 @@ export function TenantDouyinMiniappWorkspaceActions({
           ) : null}
           {actions.includes("submit_audit") ? (
             <Button
-              disabled={!canSubmitAuditPermission || pending !== null}
+              disabled={
+                !canSubmitAuditPermission
+                || pending !== null
+                || Boolean(readinessBlockedMessage)
+              }
               onClick={() => setAuditOpen(true)}
               size="sm"
             >
@@ -391,6 +409,12 @@ export function TenantDouyinMiniappWorkspaceActions({
             当前账号缺少执行该操作的权限，请联系租户管理员。
           </p>
         ) : null}
+
+      {readinessBlockedMessage ? (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {readinessBlockedMessage}
+        </p>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">

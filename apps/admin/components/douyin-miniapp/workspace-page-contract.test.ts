@@ -26,7 +26,16 @@ describe("Douyin miniapp workspace page contract", () => {
 
   test("uses only the tenant-scoped workspace endpoint", () => {
     expect(pageSource).toContain('"/tenant/douyin-miniapp/workspace"');
+    expect(pageSource).toContain('"/tenant/douyin-miniapp/release-readiness"');
     expect(pageSource).not.toContain("/platform/douyin-miniapps");
+  });
+
+  test("keeps workspace loading independent from readiness loading", () => {
+    expect(pageSource).toContain("workspaceResult");
+    expect(pageSource).toContain("readinessResult");
+    expect(pageSource).not.toContain(
+      "const [workspaceResponse, readinessResponse] = await Promise.all([",
+    );
   });
 
   test("does not fetch tenant data without read permission", () => {
