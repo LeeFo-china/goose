@@ -154,4 +154,10 @@ describe("douyin budget pricing admin UI contract", () => {
     expect(source).toContain("overflow-y-auto");
     expect(source).toContain("pb-24");
   });
+
+  test("keeps added pricing item editors above the add-item action", async () => {
+    const source = await Bun.file(componentFile).text();
+    expect(source.indexOf("items.map((item, index) => <PricingItemEditor"))
+      .toBeLessThan(source.indexOf('htmlFor="budget-item-code"'));
+  });
 });
