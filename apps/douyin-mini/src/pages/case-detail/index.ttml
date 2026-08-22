@@ -14,7 +14,7 @@
     <view tt:elif="{{progress.length}}" class="timeline">
       <view tt:for="{{progress}}" tt:key="id" class="timeline-item">
         <view class="timeline-rail"><view class="timeline-dot" style="background: {{primaryColor}}"></view></view>
-        <view class="timeline-content"><view class="progress-date">{{item.date}}</view><view class="progress-title">{{item.title}}</view><view tt:if="{{item.images.length}}" class="progress-images"><image-gallery items="{{item.images}}" /></view></view>
+        <view class="timeline-content"><view class="progress-date">{{item.date}}</view><view class="progress-title">{{item.title}}</view><view tt:if="{{item.images.length}}" class="progress-images"><image-gallery items="{{item.images}}" variant="compact" /></view></view>
       </view>
     </view>
     <empty-state tt:else title="施工记录待更新" description="装修公司尚未发布该项目的公开施工进度。" />

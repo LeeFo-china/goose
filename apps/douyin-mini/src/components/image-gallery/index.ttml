@@ -5,8 +5,8 @@
   <view>图片加载失败</view><button class="gallery-action" bindtap="onRetry">重试</button>
 </view>
 <view tt:elif="{{!visibleItems.length}}" class="gallery-state">暂无可展示的公开图片</view>
-<view tt:else class="gallery">
-  <button tt:for="{{visibleItems}}" tt:key="url" class="gallery-item" data-url="{{item.url}}" bindtap="onPreview" aria-label="预览第 {{index + 1}} 张图片">
+<view tt:else class="gallery {{layoutClass}} {{variant === 'compact' ? 'gallery--compact' : ''}}">
+  <button tt:for="{{visibleItems}}" tt:key="url" class="gallery-item {{item.className}}" data-url="{{item.url}}" bindtap="onPreview" aria-label="预览第 {{index + 1}} 张图片">
     <image class="gallery-image" src="{{item.url}}" mode="aspectFill" data-url="{{item.url}}" binderror="onImageError" />
   </button>
 </view>

@@ -61,12 +61,29 @@ describe("Douyin native navigation and visual view models", () => {
 
     expect(images).toHaveLength(9);
     expect(images[0]).toEqual({
-      url: "https://cdn.example.com/0.jpg", previewIndex: 0,
+      url: "https://cdn.example.com/0.jpg", previewIndex: 0, className: "gallery-item--third",
     });
     expect(images.every((image) => image.url.startsWith("https://"))).toBe(true);
     expect(removeFailedImage(images, "https://cdn.example.com/0.jpg"))
       .not.toContainEqual(expect.objectContaining({ url: "https://cdn.example.com/0.jpg" }));
     expect(removeFailedImage([images[0]!], images[0]!.url)).toEqual([]);
+  });
+
+  test("image gallery assigns count-aware layouts for project detail photos", () => {
+    const urls = Array.from(
+      { length: 9 },
+      (_, index) => `https://cdn.example.com/gallery-${index + 1}.jpg`,
+    );
+    expect(buildImageGallery(urls.slice(0, 1)).map((item) => item.className))
+      .toEqual(["gallery-item--hero"]);
+    expect(buildImageGallery(urls.slice(0, 2)).map((item) => item.className))
+      .toEqual(["gallery-item--half", "gallery-item--half"]);
+    expect(buildImageGallery(urls.slice(0, 3)).map((item) => item.className))
+      .toEqual(["gallery-item--hero", "gallery-item--half", "gallery-item--half"]);
+    expect(buildImageGallery(urls.slice(0, 4)).every((item) =>
+      item.className === "gallery-item--half")).toBe(true);
+    expect(buildImageGallery(urls).every((item) =>
+      item.className === "gallery-item--third")).toBe(true);
   });
 
   test("trust metrics trim invalid entries and cap the row at four", () => {

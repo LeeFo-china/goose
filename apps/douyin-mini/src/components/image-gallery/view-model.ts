@@ -1,6 +1,7 @@
 export type GalleryImage = {
   url: string;
   previewIndex: number;
+  className: string;
 };
 
 export function buildImageGallery(value: unknown): GalleryImage[] {
@@ -15,13 +16,37 @@ export function buildImageGallery(value: unknown): GalleryImage[] {
     unique.add(url);
     if (unique.size === 9) break;
   }
-  return Array.from(unique, (url, previewIndex) => ({ url, previewIndex }));
+  return applyImageLayout(Array.from(unique, (url, previewIndex) => ({ url, previewIndex })));
 }
 
 export function removeFailedImage(images: GalleryImage[], failedUrl: string): GalleryImage[] {
-  return images
+  return applyImageLayout(images
     .filter((image) => image.url !== failedUrl)
-    .map((image, previewIndex) => ({ ...image, previewIndex }));
+    .map((image, previewIndex) => ({ url: image.url, previewIndex })));
+}
+
+export function buildGalleryLayoutClass(count: number): string {
+  if (count <= 1) return "gallery--single";
+  if (count === 2) return "gallery--two";
+  if (count === 3) return "gallery--three";
+  if (count === 4) return "gallery--grid";
+  return "gallery--dense";
+}
+
+function applyImageLayout(images: Array<Omit<GalleryImage, "className">>): GalleryImage[] {
+  const count = images.length;
+  return images.map((image, index) => ({
+    ...image,
+    className: imageClassName(count, index),
+  }));
+}
+
+function imageClassName(count: number, index: number): string {
+  if (count === 1) return "gallery-item--hero";
+  if (count === 2) return "gallery-item--half";
+  if (count === 3) return index === 0 ? "gallery-item--hero" : "gallery-item--half";
+  if (count === 4) return "gallery-item--half";
+  return "gallery-item--third";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -95,7 +95,13 @@ test("unified projects bind authoritative phase and paginated detail actions", a
 });
 
 test("project detail bounds long public copy with existing overflow patterns", async () => {
-  const style = await readSource("pages/case-detail/index.ttss");
+  const [style, galleryTemplate, galleryStyle, caseTemplate, siteTemplate] = await Promise.all([
+    readSource("pages/case-detail/index.ttss"),
+    readSource("components/image-gallery/index.ttml"),
+    readSource("components/image-gallery/index.ttss"),
+    readSource("pages/case-detail/index.ttml"),
+    readSource("pages/site-detail/index.ttml"),
+  ]);
   for (const className of [
     "detail-title",
     "fact-value",
@@ -108,6 +114,15 @@ test("project detail bounds long public copy with existing overflow patterns", a
   expect(style).toMatch(
     /\.detail-location\s*\{[^}]*overflow:\s*hidden[^}]*text-overflow:\s*ellipsis[^}]*white-space:\s*nowrap/,
   );
+  expect(galleryTemplate).toContain("gallery {{layoutClass}} {{variant === 'compact' ? 'gallery--compact' : ''}}");
+  expect(galleryTemplate).toContain("gallery-item {{item.className}}");
+  expect(galleryStyle).toMatch(/\.gallery-item--hero\s*\{[^}]*width:\s*100%[^}]*height:\s*360rpx/);
+  expect(galleryStyle).toMatch(/\.gallery--three \.gallery-item--hero\s*\{[^}]*height:\s*320rpx/);
+  expect(galleryStyle).toMatch(/\.gallery-item--third\s*\{[^}]*width:\s*calc\(\(100% - 24rpx\) \/ 3\)/);
+  expect(galleryStyle).toMatch(/\.gallery--compact \.gallery-item--hero\s*\{[^}]*height:\s*240rpx/);
+  expect(caseTemplate).toContain('<image-gallery items="{{images}}" />');
+  expect(caseTemplate).toContain('<image-gallery items="{{item.images}}" variant="compact" />');
+  expect(siteTemplate).toContain('<image-gallery items="{{item.images}}" variant="compact" />');
 });
 
 test("sites uses a compact public-boundary notice without an alert stripe", async () => {

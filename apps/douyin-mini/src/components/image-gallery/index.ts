@@ -1,4 +1,5 @@
 import {
+  buildGalleryLayoutClass,
   buildImageGallery,
   removeFailedImage,
   type GalleryImage,
@@ -7,16 +8,23 @@ import {
 Component({
   data: {
     visibleItems: [] as GalleryImage[],
+    layoutClass: "gallery--single",
     imageError: false,
   },
   properties: {
     items: { type: Array, value: [] },
     loading: { type: Boolean, value: false },
     error: { type: Boolean, value: false },
+    variant: { type: String, value: "default" },
   },
   observers: {
     items(value: unknown) {
-      this.setData({ visibleItems: buildImageGallery(value), imageError: false });
+      const visibleItems = buildImageGallery(value);
+      this.setData({
+        visibleItems,
+        layoutClass: buildGalleryLayoutClass(visibleItems.length),
+        imageError: false,
+      });
     },
   },
   methods: {
@@ -30,11 +38,20 @@ Component({
       const url = event.currentTarget.dataset.url;
       if (!url) return;
       const visibleItems = removeFailedImage(this.data.visibleItems, url);
-      this.setData({ visibleItems, imageError: visibleItems.length === 0 });
+      this.setData({
+        visibleItems,
+        layoutClass: buildGalleryLayoutClass(visibleItems.length),
+        imageError: visibleItems.length === 0,
+      });
       this.triggerEvent("imageerror", { url });
     },
     onRetry() {
-      this.setData({ visibleItems: buildImageGallery(this.data.items), imageError: false });
+      const visibleItems = buildImageGallery(this.data.items);
+      this.setData({
+        visibleItems,
+        layoutClass: buildGalleryLayoutClass(visibleItems.length),
+        imageError: false,
+      });
       this.triggerEvent("retry");
     },
   },

@@ -33,7 +33,11 @@ describe("public site progress presentation", () => {
 
     expect(progress.map((item) => item.id)).toEqual([SECOND_ID, FIRST_ID]);
     expect(progress[0]).toMatchObject({ title: "施工中", date: "2026-07-20" });
-    expect(progress[1]!.images).toEqual([{ url: "https://cdn.example.com/a.jpg", previewIndex: 0 }]);
+    expect(progress[1]!.images).toEqual([{
+      url: "https://cdn.example.com/a.jpg",
+      previewIndex: 0,
+      className: "gallery-item--hero",
+    }]);
   });
 
   test("appends a page stably without duplicates", () => {
