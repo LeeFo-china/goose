@@ -96,7 +96,7 @@ export default async function PlatformDouyinMiniappsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="flex h-full min-h-0 flex-col gap-8 overflow-y-auto pb-10 pr-1 [scrollbar-gutter:stable]">
       <PlatformDouyinTemplatePanel
         initialError={error}
         initialStatus={status}

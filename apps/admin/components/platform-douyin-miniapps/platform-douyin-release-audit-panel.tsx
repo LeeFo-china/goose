@@ -90,7 +90,7 @@ export function PlatformDouyinReleaseAuditPanel({
         </p>
       </header>
 
-      <Card className="max-w-4xl shadow-none">
+      <Card className="w-full shadow-none">
         <CardHeader className="border-b">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div className="space-y-1">

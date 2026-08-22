@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileClock,
   Loader2,
+  RefreshCw,
   UploadCloud,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,6 +40,7 @@ export function PlatformDouyinTemplatePanel({
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [pending, setPending] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(initialError);
   const confirmation = status
     ? getTemplateConfirmationState(status)
@@ -74,13 +76,50 @@ export function PlatformDouyinTemplatePanel({
     }
   }
 
+  async function refreshTemplateStatus() {
+    if (pending || refreshing) return;
+    setRefreshing(true);
+    setError(null);
+    try {
+      const refreshed = await requestBackendJson<PlatformDouyinTemplateStatus>(
+        "/platform/douyin-miniapps/deployable-template?channel=default",
+        { fallbackMessage: "获取抖音模板状态失败" },
+      );
+      setStatus(refreshed);
+      toast.success("已获取最新模板状态");
+    } catch (caught) {
+      const message = caught instanceof Error
+        ? caught.message
+        : "获取抖音模板状态失败";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
     <div className="space-y-5">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-normal">抖音模板版本</h1>
-        <p className="text-sm text-muted-foreground">
-          确认租户可使用的公共模板版本
-        </p>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-normal">抖音模板版本</h1>
+          <p className="text-sm text-muted-foreground">
+            确认租户可使用的公共模板版本
+          </p>
+        </div>
+        <Button
+          className="w-full sm:w-auto"
+          disabled={pending || refreshing}
+          onClick={refreshTemplateStatus}
+          variant="outline"
+        >
+          {refreshing ? (
+            <Loader2 className="animate-spin" aria-hidden="true" />
+          ) : (
+            <RefreshCw aria-hidden="true" />
+          )}
+          {refreshing ? "正在获取" : "获取最新模板"}
+        </Button>
       </header>
 
       {error ? (
@@ -91,13 +130,13 @@ export function PlatformDouyinTemplatePanel({
         </Alert>
       ) : null}
 
-      <Card className="max-w-4xl shadow-none">
+      <Card className="w-full shadow-none">
         <CardHeader className="gap-3 border-b">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
             <div className="space-y-1">
               <CardTitle>默认发布通道</CardTitle>
               <CardDescription>
-                确认后，各租户 Admin 可自行生成体验版、提审并发布。
+                上传新草稿后，先获取最新模板状态，确认无误后再设为租户可发布版本。
               </CardDescription>
             </div>
             <Badge variant={toneVariant(confirmation.tone)}>
@@ -137,7 +176,7 @@ export function PlatformDouyinTemplatePanel({
               </p>
             </div>
             <Button
-              disabled={!confirmation.canConfirm || pending}
+              disabled={!confirmation.canConfirm || pending || refreshing}
               onClick={confirmLatestTemplate}
             >
               {pending ? (
