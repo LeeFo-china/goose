@@ -123,7 +123,7 @@ function createService(input: {
   currentInstallation?: typeof installation | null;
   currentCounts?: typeof counts;
   latestRelease?: (Omit<typeof tenantRelease, "status"> & {
-    status: "testing" | "released";
+    status: "testing" | "released" | "audit_rejected";
   }) | null;
   currentTemplate?: typeof deployableTemplate | null;
 } = {}) {
@@ -226,7 +226,7 @@ describe("TenantDouyinMiniappWorkspaceService", () => {
     });
   });
 
-  test("derives new, in-progress and up-to-date availability by template id", async () => {
+  test("derives new, in-progress and up-to-date availability by template version", async () => {
     const available = createService();
     await expect(available.service.getWorkspace(tenantContext()))
       .resolves.toMatchObject({
@@ -253,6 +253,35 @@ describe("TenantDouyinMiniappWorkspaceService", () => {
         available_template: {
           template_id: deployableTemplate.template_id,
           state: "up_to_date",
+        },
+      });
+  });
+
+  test("does not expose a rolled-back current template as a new version", async () => {
+    const rolledBackTemplate = {
+      ...deployableTemplate,
+      template_id: "78149",
+      template_version: "0.1.2",
+      description: "旧模板误设为当前",
+    };
+    const rejectedNewerRelease = {
+      ...tenantRelease,
+      template_id: "77595",
+      template_version: "0.1.3",
+      description: "较新的审核记录",
+      status: "audit_rejected" as const,
+    };
+    const { service } = createService({
+      currentTemplate: rolledBackTemplate,
+      latestRelease: rejectedNewerRelease,
+    });
+
+    await expect(service.getWorkspace(tenantContext()))
+      .resolves.toMatchObject({
+        available_template: {
+          template_id: "78149",
+          version: "0.1.2",
+          state: "stale_version",
         },
       });
   });

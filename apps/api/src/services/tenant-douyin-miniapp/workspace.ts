@@ -21,6 +21,7 @@ import {
   douyinReleaseReadinessService,
   type DouyinReleaseReadinessService,
 } from "@/services/douyin-release-readiness";
+import { compareDouyinTemplateVersion } from "./template-version";
 
 const READ_PERMISSION = "douyin_miniapp.read";
 
@@ -140,17 +141,33 @@ function availableTemplate(
   release: TenantDouyinMiniappWorkspaceRelease | null,
 ) {
   if (!template) return null;
-  const sameTemplate = release?.template_id === template.template_id;
+  const versionComparison = release
+    ? compareDouyinTemplateVersion(
+      template.template_version,
+      release.template_version,
+    )
+    : 1;
   return {
     template_id: template.template_id,
     version: template.template_version,
     description: template.description,
     confirmed_at: template.confirmed_at,
-    state: !sameTemplate
+    state: versionComparison === null
+      ? "stale_version" as const
+      : versionComparison > 0
       ? "new_available" as const
-      : release.status === "released"
+      : versionComparison === 0
+        && release
+        && release.template_id === template.template_id
+        && release.description === template.description
+        && release.status === "released"
       ? "up_to_date" as const
-      : "in_progress" as const,
+      : versionComparison === 0
+        && release
+        && release.template_id === template.template_id
+        && release.description === template.description
+      ? "in_progress" as const
+      : "stale_version" as const,
   };
 }
 

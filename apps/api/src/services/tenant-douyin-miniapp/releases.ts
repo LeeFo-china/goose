@@ -39,6 +39,7 @@ import {
   type PlatformDouyinMiniappReleaseAuditInput,
   type PlatformDouyinMiniappReleaseListQuery,
 } from "@/services/platform-douyin-miniapp-releases/support";
+import { compareDouyinTemplateVersion } from "./template-version";
 
 const READ_PERMISSION = "douyin_miniapp.read";
 const MANAGE_PERMISSION = "douyin_miniapp.manage";
@@ -173,6 +174,7 @@ export class TenantDouyinMiniappReleasesService {
   private async currentTemplateDelivery(
     latestRelease: {
       readonly status: DouyinMiniappReleaseRecord["status"];
+      readonly template_version: string;
     } | null,
   ) {
     if (latestRelease && [
@@ -189,6 +191,19 @@ export class TenantDouyinMiniappReleasesService {
         409,
         "平台尚未确认可发布的抖音模板",
         "DOUYIN_DEPLOYABLE_TEMPLATE_NOT_FOUND",
+      );
+    }
+    if (
+      latestRelease
+      && !isNewerTemplateVersion(
+        template.template_version,
+        latestRelease.template_version,
+      )
+    ) {
+      throw Errors.business(
+        409,
+        "平台当前可发布模板不是新版，请先确认新的抖音模板版本",
+        "DOUYIN_DEPLOYABLE_TEMPLATE_VERSION_NOT_NEW",
       );
     }
     return {
@@ -414,4 +429,9 @@ Promise<TenantDouyinMiniappReleasesService> {
     defaultServicePromise = undefined;
     throw error;
   });
+}
+
+function isNewerTemplateVersion(current: string, latest: string): boolean {
+  const compared = compareDouyinTemplateVersion(current, latest);
+  return compared !== null && compared > 0;
 }

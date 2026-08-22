@@ -300,6 +300,40 @@ describe("TenantDouyinMiniappWorkspace", () => {
     expect(html).toContain("小程序功能不完整且可用性低");
   });
 
+  test("surfaces a stale platform template without offering test version creation", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        canSubmitAudit
+        loadError={null}
+        workspace={{
+          ...workspace,
+          available_template: {
+            template_id: "78149",
+            version: "0.1.2",
+            description: "旧模板误设为当前",
+            confirmed_at: "2026-08-13T04:00:00.000Z",
+            state: "stale_version",
+          },
+          release_state: "audit_rejected",
+          latest_release: workspace.latest_release
+            ? {
+              ...workspace.latest_release,
+              status: "audit_rejected",
+              template_id: "77595",
+              template_version: "0.1.3",
+            }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("当前可发布模板版本异常 0.1.2");
+    expect(html).toContain("请先在平台确认新的抖音模板版本");
+    expect(html).not.toContain("生成新版体验版");
+  });
+
   test("surfaces a pending public profile instead of implying it is live", () => {
     const html = renderToStaticMarkup(
       <TenantDouyinMiniappWorkspace

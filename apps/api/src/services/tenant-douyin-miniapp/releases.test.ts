@@ -348,6 +348,31 @@ describe("TenantDouyinMiniappReleasesService", () => {
     expect(context.operations.upload).not.toHaveBeenCalled();
   });
 
+  test("rejects a current template version that is not newer than the latest release", async () => {
+    const context = fixture({
+      latestRelease: release({
+        status: "audit_rejected",
+        template_id: "77595",
+        template_version: "0.1.3",
+        description: "较新的审核记录",
+      }),
+    });
+    context.templates.findCurrent.mockResolvedValue({
+      ...deployableTemplate,
+      template_id: "78149",
+      template_version: "0.1.2",
+      description: "旧模板误设为当前",
+    });
+
+    await expect(context.service.createFromCurrentTemplate(
+      tenantContext(["douyin_miniapp.manage"]),
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "DOUYIN_DEPLOYABLE_TEMPLATE_VERSION_NOT_NEW",
+    });
+    expect(context.operations.upload).not.toHaveBeenCalled();
+  });
+
   test("recovers the tenant's created release before starting a newer template", async () => {
     const createdRelease = release({ status: "created" });
     const context = fixture({

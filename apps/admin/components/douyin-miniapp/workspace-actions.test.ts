@@ -118,6 +118,25 @@ describe("tenant Douyin workspace actions", () => {
     ]);
   });
 
+  test("does not offer creation for a stale platform template version", () => {
+    const workspace = approvedWorkspace();
+    workspace.available_template = {
+      template_id: "78149",
+      version: "0.1.2",
+      description: "旧模板误设为当前",
+      confirmed_at: "2026-08-13T08:00:00.000Z",
+      state: "stale_version",
+    };
+    workspace.release_state = "audit_rejected";
+    if (workspace.latest_release) {
+      workspace.latest_release.status = "audit_rejected";
+      workspace.latest_release.template_id = "77595";
+      workspace.latest_release.template_version = "0.1.3";
+    }
+
+    expect(availableWorkspaceActions(workspace)).toEqual(["sync_status"]);
+  });
+
   test("continues an unfinished release before offering the newer template", () => {
     const expectations = [
       ["created", "create_test_version"],

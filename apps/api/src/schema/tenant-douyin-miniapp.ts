@@ -102,7 +102,12 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
     version: z.string().trim().min(1).max(64),
     description: z.string().trim().min(1).max(200),
     confirmed_at: DateTimeSchema,
-    state: z.enum(["new_available", "in_progress", "up_to_date"]),
+    state: z.enum([
+      "new_available",
+      "in_progress",
+      "up_to_date",
+      "stale_version",
+    ]),
   }).nullable(),
   latest_release: z.strictObject({
     id: z.string().uuid(),

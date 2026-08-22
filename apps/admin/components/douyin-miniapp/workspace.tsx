@@ -337,6 +337,12 @@ function TemplateAvailabilityNotice({
       description: "该租户线上版本与平台当前可发布模板一致。",
       variant: "default" as const,
     }
+    : template.state === "stale_version"
+    ? {
+      title: `当前可发布模板版本异常 ${template.version}`,
+      description: "平台当前模板不是该租户的新版本，请先在平台确认新的抖音模板版本。",
+      variant: "destructive" as const,
+    }
     : template.state === "in_progress"
     ? {
       title: `版本 ${template.version} 正在发布流程中`,

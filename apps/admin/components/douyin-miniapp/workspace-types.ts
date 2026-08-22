@@ -93,7 +93,7 @@ export type TenantDouyinWorkspace = {
     version: string;
     description: string;
     confirmed_at: string;
-    state: "new_available" | "in_progress" | "up_to_date";
+    state: "new_available" | "in_progress" | "up_to_date" | "stale_version";
   } | null;
   latest_release: {
     id: string;
