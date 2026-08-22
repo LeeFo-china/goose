@@ -58,6 +58,7 @@ import {
   type ReleaseWorkflow,
   type SuccessfulReleaseRef,
 } from "./shared";
+import { getSuccessfulRefWorkflows } from "./successful-ref-workflows";
 
 export async function listRuns(this: any, query: ReleaseRunListQuery) {
   const page = query.page || 1;
@@ -152,12 +153,10 @@ export async function hydrateRunServiceLabels(this: any, list: NormalizedRelease
 export async function listSuccessfulRefs(this: any, query: ReleaseSuccessfulRefListQuery) {
   const page = query.page || 1;
   const pageSize = Math.min(query.pageSize || 8, 20);
-  const environments = query.environment
-    ? [RELEASE_WORKFLOWS[query.environment]]
-    : Object.values(RELEASE_WORKFLOWS);
+  const workflows = getSuccessfulRefWorkflows(query.environment);
 
   const results = await Promise.all(
-    environments.map(async (workflow) => {
+    workflows.map(async (workflow) => {
       const request = (this.githubRequest || githubRequest) as typeof githubRequest;
       const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
         `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=100`,

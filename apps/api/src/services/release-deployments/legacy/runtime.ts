@@ -55,6 +55,7 @@ import {
   type ReleaseWorkflow,
   type SuccessfulReleaseRef,
 } from "./shared";
+import { getSuccessfulRefWorkflows } from "./successful-ref-workflows";
 
 export function getOptions(this: any) {
   let configured = true;
@@ -94,11 +95,20 @@ export function getOptions(this: any) {
 
 export async function getLatestSuccessfulRefsByEnvironment(this: any) {
   const entries = await Promise.all(
-    Object.values(RELEASE_WORKFLOWS).map(async (workflow) => {
-      const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-        `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=20`,
+    (["dev", "production"] as const).map(async (environment) => {
+      const request = (this.githubRequest || githubRequest) as typeof githubRequest;
+      const refs = await Promise.all(
+        getSuccessfulRefWorkflows(environment).map(async (workflow) => {
+          const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
+            `/actions/workflows/${workflow.workflowId}/runs?status=completed&per_page=20`,
+          );
+          return getLatestSuccessfulRunFromPayload(workflow, payload.workflow_runs || []);
+        }),
       );
-      return [workflow.environment, getLatestSuccessfulRunFromPayload(workflow, payload.workflow_runs || [])] as const;
+      const latest = refs
+        .filter((item): item is SuccessfulReleaseRef => Boolean(item))
+        .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0] || null;
+      return [environment, latest] as const;
     }),
   );
 

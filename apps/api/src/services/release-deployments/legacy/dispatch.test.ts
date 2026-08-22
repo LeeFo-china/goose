@@ -12,6 +12,7 @@ const originalSupabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 let shared: typeof import("./shared");
 let dispatchModule: typeof import("./dispatch");
 let runsModule: typeof import("./runs");
+let runtimeModule: typeof import("./runtime");
 
 beforeAll(async () => {
   process.env.SUPABASE_URL = process.env.SUPABASE_URL || "https://example.supabase.co";
@@ -20,6 +21,7 @@ beforeAll(async () => {
   shared = await import("./shared");
   dispatchModule = await import("./dispatch");
   runsModule = await import("./runs");
+  runtimeModule = await import("./runtime");
 });
 
 afterAll(() => {
@@ -220,6 +222,67 @@ describe("release run stages", () => {
 });
 
 describe("listSuccessfulRefs", () => {
+  test("includes automatic development deployments before older manual releases", async () => {
+    const autoSha = "5".repeat(40);
+    const manualSha = "6".repeat(40);
+    const requestedPaths: string[] = [];
+    const githubRequest = mock(async (path: string) => {
+      requestedPaths.push(path);
+      if (path.includes("auto-deploy-dev.yml")) {
+        return { workflow_runs: [run({
+          id: 11,
+          name: "Auto Deploy Dev",
+          display_title: "Auto dev deploy 5555555555555555555555555555555555555555",
+          event: "workflow_run",
+          head_branch: "main",
+          head_sha: autoSha,
+          created_at: "2026-08-22T16:18:21Z",
+        })] };
+      }
+      if (path.includes("release-dev.yml")) {
+        return { workflow_runs: [run({
+          id: 12,
+          display_title: "Dev release admin from main",
+          head_branch: "main",
+          head_sha: manualSha,
+          created_at: "2026-08-22T12:51:37Z",
+        })] };
+      }
+      if (path.includes("release-production.yml")) {
+        return { workflow_runs: [] };
+      }
+      return { workflow_runs: [] };
+    });
+
+    const result = await runsModule.listSuccessfulRefs.call(
+      { githubRequest },
+      { page: 1, pageSize: 5, environment: "dev" },
+    );
+
+    expect(requestedPaths.some((path) => path.includes("auto-deploy-dev.yml"))).toBe(true);
+    expect(result.list.map((item) => item.head_sha)).toEqual([autoSha, manualSha]);
+    expect(result.list[0]?.workflow_id).toBe("auto-deploy-dev.yml");
+    expect(result.list[0]?.workflow_label).toBe("开发环境自动部署");
+  });
+
+  test("does not include automatic development deployments in production sources", async () => {
+    const requestedPaths: string[] = [];
+    const githubRequest = mock(async (path: string) => {
+      requestedPaths.push(path);
+      return { workflow_runs: [] };
+    });
+
+    await runsModule.listSuccessfulRefs.call(
+      { githubRequest },
+      { page: 1, pageSize: 5, environment: "production" },
+    );
+
+    expect(requestedPaths.some((path) => path.includes("auto-deploy-dev.yml"))).toBe(false);
+    expect(requestedPaths).toEqual([
+      "/actions/workflows/release-production.yml/runs?status=completed&per_page=100",
+    ]);
+  });
+
   test("keeps only deployed stable orchestrator runs", async () => {
     const githubRequest = mock(async (path: string) => {
       if (path.includes("release-dev.yml")) {
@@ -245,6 +308,9 @@ describe("listSuccessfulRefs", () => {
           }),
         ] };
       }
+      if (path.includes("auto-deploy-dev.yml")) {
+        return { workflow_runs: [] };
+      }
       return { workflow_runs: [run({
         id: 4,
         display_title: "Build production all",
@@ -258,5 +324,44 @@ describe("listSuccessfulRefs", () => {
     );
 
     expect(result.list.map((item) => item.id).sort()).toEqual(["1", "3"]);
+  });
+
+  test("uses automatic development deployment as latest development runtime source", async () => {
+    const autoSha = "7".repeat(40);
+    const manualSha = "8".repeat(40);
+    const requestedPaths: string[] = [];
+    const githubRequest = mock(async (path: string) => {
+      requestedPaths.push(path);
+      if (path.includes("auto-deploy-dev.yml")) {
+        return { workflow_runs: [run({
+          id: 21,
+          name: "Auto Deploy Dev",
+          display_title: "Auto dev deploy 7777777777777777777777777777777777777777",
+          event: "workflow_run",
+          head_branch: "main",
+          head_sha: autoSha,
+          created_at: "2026-08-22T16:18:21Z",
+        })] };
+      }
+      if (path.includes("release-dev.yml")) {
+        return { workflow_runs: [run({
+          id: 22,
+          display_title: "Dev release admin from main",
+          head_branch: "main",
+          head_sha: manualSha,
+          created_at: "2026-08-22T12:51:37Z",
+        })] };
+      }
+      if (path.includes("release-production.yml")) {
+        return { workflow_runs: [] };
+      }
+      return { workflow_runs: [] };
+    });
+
+    const result = await runtimeModule.getLatestSuccessfulRefsByEnvironment.call({ githubRequest });
+
+    expect(requestedPaths.some((path) => path.includes("auto-deploy-dev.yml"))).toBe(true);
+    expect(result.dev?.head_sha).toBe(autoSha);
+    expect(result.dev?.workflow_id).toBe("auto-deploy-dev.yml");
   });
 });

@@ -24,7 +24,7 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
         <div className="flex flex-col gap-3">
           <div className={cn("flex flex-col gap-3", !embedded && "lg:flex-row lg:items-center lg:justify-between")}>
             <div className="flex items-center gap-2">
-              <div className="text-sm font-medium">{embedded ? "选择发布来源" : "成功 Commit"}</div>
+              <div className="text-sm font-medium">{embedded ? "选择已部署来源" : "成功 Commit"}</div>
               <Badge variant="outline">
                 {successfulRefEnvironmentLabel(successfulRefEnvironment)} · {currentSuccessfulRefsPagination.total}
               </Badge>
@@ -160,7 +160,7 @@ export function SuccessfulRefsCard({ state, actions, embedded = false }: { state
           )}
           <p className="text-xs text-muted-foreground">
             {embedded
-              ? "“作为来源”会把 Commit 填入创建新 Tag 流程；回滚候选只构建并校验证据，不会修改生产容器。"
+              ? "包含自动开发部署和手动发布成功记录；“作为来源”会把 Commit 填入创建新 Tag 流程，回滚候选不会修改生产容器。"
               : "“作为来源”会把 Commit 填入创建新 Tag 流程；“回滚 Tag”只创建并填入发布版本；“构建回滚候选”会创建 Tag 并提交生产候选构建。"}
           </p>
           <CompactPagination
