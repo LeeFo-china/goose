@@ -81,6 +81,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
       - name: Resolve build plan
         id: resolve
         env:

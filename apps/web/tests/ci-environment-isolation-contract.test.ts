@@ -195,6 +195,22 @@ describe("CI environment isolation", () => {
     }
   });
 
+  test("sets up Node before resolving the reusable build plan", () => {
+    const workflow = readWorkflow("build-docker-images.yml");
+    const validationJob = workflow.slice(
+      workflow.indexOf("  validate-request:"),
+      workflow.indexOf("  build:"),
+    );
+    const checkoutStart = validationJob.indexOf("      - uses: actions/checkout@v6");
+    const setupNodeStart = validationJob.indexOf("      - uses: actions/setup-node@v6");
+    const resolveStart = validationJob.indexOf("      - name: Resolve build plan");
+
+    expect(checkoutStart).toBeGreaterThanOrEqual(0);
+    expect(setupNodeStart).toBeGreaterThan(checkoutStart);
+    expect(resolveStart).toBeGreaterThan(setupNodeStart);
+    expect(validationJob).toContain('node-version: "24"');
+  });
+
   test("keeps production operations on a deploy-only runner", () => {
     for (const name of [
       "deploy-docker-services.yml",
