@@ -417,6 +417,10 @@ export type TenantSupplierSharedCreateInput =
   z.infer<typeof TenantSupplierSharedCreateSchema>;
 export type TenantSupplierPrivateCreateInput =
   z.infer<typeof TenantSupplierPrivateCreateSchema>;
+export type TenantSupplierExplicitPrivateCreateInput = Extract<
+  TenantSupplierPrivateCreateInput,
+  { code_source: "generated" | "manual" }
+>;
 export type TenantPrivateSupplierUpdateInput =
   z.infer<typeof TenantPrivateSupplierUpdateSchema>;
 export type TenantSupplierUpdateInput =

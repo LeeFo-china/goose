@@ -49,7 +49,7 @@ describe("tenant supplier internal code contracts", () => {
       name: "乙方材料",
       legal_name: "乙方材料有限公司",
       supplier_type: "distributor",
-    }).internal_supplier_code).toBe("HZ_SUPPLIER-02");
+    })).toMatchObject({ internal_supplier_code: "HZ_SUPPLIER-02" });
 
     expect(TenantSupplierPrivateCreateSchema.safeParse({
       code_source: "manual",
@@ -84,11 +84,11 @@ describe("tenant supplier internal code contracts", () => {
     expect(TenantSupplierPrivateCreateSchema.parse({
       ...privateSupplier,
       internal_supplier_code: "a1",
-    }).internal_supplier_code).toBe("A1");
+    })).toMatchObject({ internal_supplier_code: "A1" });
     expect(TenantSupplierPrivateCreateSchema.parse({
       ...privateSupplier,
       internal_supplier_code: "a".repeat(64),
-    }).internal_supplier_code).toBe("A".repeat(64));
+    })).toMatchObject({ internal_supplier_code: "A".repeat(64) });
   });
 
   test("requires the same generated or manual code contract for shared suppliers", () => {
@@ -175,7 +175,9 @@ describe("tenant private supplier master contracts", () => {
     expect(TenantSupplierPrivateCreateSchema.parse({
       ...validPrivateSupplier,
       unified_social_credit_code: " 91330100abc123xyz0 ",
-    }).unified_social_credit_code).toBe("91330100ABC123XYZ0");
+    })).toMatchObject({
+      unified_social_credit_code: "91330100ABC123XYZ0",
+    });
 
     expect(TenantPrivateSupplierUpdateSchema.parse({
       expected_version: 2,

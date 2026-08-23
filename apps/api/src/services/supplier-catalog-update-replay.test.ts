@@ -31,7 +31,7 @@ describe("SupplierCatalogService state-independent update replay", () => {
     await fixture.service.updateTenantBrand(
       tenantAuth,
       IDs.brand,
-      { expected_version: 2, legal_name: null },
+      { expected_version: 2, name: "品牌" },
       "brand-key",
     );
 
