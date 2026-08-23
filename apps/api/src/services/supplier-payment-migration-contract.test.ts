@@ -40,6 +40,13 @@ const latestSupplierCostMigration = readFileSync(
   ),
   "utf8",
 );
+const supplierPaymentServiceRoleReadMigration = readFileSync(
+  new URL(
+    "../../../../supabase/migrations/20260823110000_grant_supplier_payments_service_role_select.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 function table(name: string) {
   const start = migration.indexOf(`CREATE TABLE public.${name}`);
@@ -203,6 +210,15 @@ describe("supplier payment data migration contract", () => {
     );
     expect(migration).not.toMatch(
       /GRANT [^;]*(?:INSERT|UPDATE|DELETE|TRUNCATE)[^;]*ON TABLE[^;]*supplier_payment/,
+    );
+  });
+
+  test("grants service role read access to payment facts for finance summaries", () => {
+    expect(supplierPaymentServiceRoleReadMigration).toContain(
+      "GRANT SELECT ON TABLE public.supplier_payments TO service_role;",
+    );
+    expect(supplierPaymentServiceRoleReadMigration).not.toMatch(
+      /GRANT [^;]*(?:INSERT|UPDATE|DELETE|TRUNCATE)[^;]*ON TABLE[^;]*supplier_payments/i,
     );
   });
 
