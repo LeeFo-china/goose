@@ -172,20 +172,22 @@ describe("CI environment isolation", () => {
     expect(withoutBlockedTargets).not.toMatch(/\bssh\b/);
   });
 
-  test("builds images on a GitHub-hosted runner and publishes immutable evidence", () => {
+  test("builds development images on the dev runner and keeps production verification separate", () => {
     const workflow = readWorkflow("build-docker-images.yml");
     const productionPullStart = workflow.indexOf("  verify-production-pull:");
     expect(productionPullStart).toBeGreaterThanOrEqual(0);
     const buildJobs = workflow.slice(0, productionPullStart);
 
-    expect(buildJobs).toContain("runs-on: ubuntu-24.04");
+    expect(buildJobs).toContain("inputs.target_environment == 'development'");
+    expect(buildJobs).toContain("gooes-dev-deploy");
+    expect(buildJobs).toContain('test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"');
+    expect(buildJobs).toContain("ubuntu-24.04");
     expect(buildJobs).toContain("max-parallel: 4");
     expect(buildJobs).toContain("timeout-minutes: 45");
     expect(buildJobs).toContain("docker build");
     expect(buildJobs).toContain("${GITHUB_SHA}");
     expect(buildJobs).toContain("image-manifest");
     for (const label of [
-      "gooes-dev-deploy",
       "gooes-prod-deploy",
       ...forbiddenProductionRunnerLabels,
     ]) {
