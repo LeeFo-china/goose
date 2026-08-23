@@ -218,6 +218,31 @@ function FinanceUnallocatedProjectHoverCard({
   );
 }
 
+function FinanceRiskCell({ row }: { row: FinanceProjectOperatingSummary }) {
+  const level = riskLevel(row);
+  const reasonText = summarizeFinanceRiskReasons(row.risk_reasons || []);
+
+  return (
+    <div className="flex min-w-[11rem] max-w-[13rem] flex-col items-start gap-1">
+      <div className="flex max-w-full flex-wrap items-center gap-1">
+        <Badge variant={financeRiskVariant(level)} className="shrink-0">
+          {financeRiskLabel(level)}
+        </Badge>
+        {row.overdue_count > 0 ? (
+          <Badge variant="danger" className="shrink-0">
+            逾期 {row.overdue_count} 笔
+          </Badge>
+        ) : null}
+      </div>
+      {reasonText ? (
+        <div className="max-w-full truncate text-xs leading-5 text-muted-foreground">
+          {reasonText}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function FinanceProjectSummaryTable({
   rows,
 }: {
@@ -354,32 +379,10 @@ export function FinanceProjectSummaryTable({
     {
       accessorKey: "risk_level",
       header: "风险状态",
-      cell: ({ row }) => {
-        const level = riskLevel(row.original);
-        const reasonText = summarizeFinanceRiskReasons(
-          row.original.risk_reasons || [],
-        );
-        return (
-          <div className="max-w-[12rem]">
-            <Badge variant={financeRiskVariant(level)}>
-              {financeRiskLabel(level)}
-            </Badge>
-            {row.original.overdue_count > 0 ? (
-              <Badge variant="danger" className="ml-1">
-                逾期 {row.original.overdue_count} 笔
-              </Badge>
-            ) : null}
-            {reasonText ? (
-              <div className="mt-1 truncate text-xs text-muted-foreground">
-                {reasonText}
-              </div>
-            ) : null}
-          </div>
-        );
-      },
+      cell: ({ row }) => <FinanceRiskCell row={row.original} />,
       meta: {
-        headerClassName: "min-w-0",
-        cellClassName: "min-w-0",
+        headerClassName: "w-[12.5rem] min-w-[12.5rem]",
+        cellClassName: "min-w-[12.5rem] align-middle",
       },
     },
     {
@@ -413,7 +416,7 @@ export function FinanceProjectSummaryTable({
         headerClassName:
           "w-[13.5rem] text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
         cellClassName:
-          "text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
+          "w-[13.5rem] text-right lg:sticky lg:right-0 lg:z-10 lg:bg-card lg:shadow-[-12px_0_18px_-18px_hsl(var(--foreground)/0.25)]",
       },
     },
   ];
@@ -424,7 +427,7 @@ export function FinanceProjectSummaryTable({
       data={rows}
       emptyText="暂无项目经营数据"
       containerClassName="overflow-x-auto"
-      minWidth="min-w-[88rem]"
+      minWidth="min-w-[96rem]"
       tableClassName="table-fixed [&_td]:px-3 [&_td]:py-2 [&_th]:px-3"
       headerClassName="sticky top-0 z-10 bg-card shadow-[inset_0_-1px_0_hsl(var(--border))]"
       rowClassName={rowToneClass}

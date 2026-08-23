@@ -93,6 +93,18 @@ describe("项目供应商成本摘要", () => {
     expect(panel).toContain("supplier_cash_paid_amount: 0");
   });
 
+  test("财务表格风险状态列保留稳定宽度和可换行标签", () => {
+    const table = readSource("./finance-project-summary-table.tsx");
+
+    expect(table).toContain("function FinanceRiskCell");
+    expect(table).toContain("flex min-w-[11rem] max-w-[13rem]");
+    expect(table).toContain("flex max-w-full flex-wrap items-center gap-1");
+    expect(table).toContain('headerClassName: "w-[12.5rem] min-w-[12.5rem]"');
+    expect(table).toContain('cellClassName: "min-w-[12.5rem] align-middle"');
+    expect(table).toContain('minWidth="min-w-[96rem]"');
+    expect(table).not.toContain('className="ml-1"');
+  });
+
   test("总览不再把仅费用现金误标为全部已付成本", () => {
     const charts = readSource("./finance-overview-charts.tsx");
     const diagnostics = readSource("./finance-diagnostics-panel.tsx");
