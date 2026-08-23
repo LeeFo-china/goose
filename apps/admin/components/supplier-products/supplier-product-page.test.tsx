@@ -13,6 +13,7 @@ import {
   buildRelationshipListPath,
   buildSpecDefinitionListPath,
   canCreateCatalogOptionInline,
+  normalizeCreatedCatalogOption,
 } from "./supplier-product-api";
 import {
   buildSuggestedSkuName,
@@ -133,6 +134,44 @@ describe("供应商品与供货价行为", () => {
       "立邦油漆",
       "catalog-key-2",
     ).path).toBe("/catalog/brands");
+  });
+
+  test("目录快速新建命令结果会归一化为可选中的目录选项", () => {
+    expect(normalizeCreatedCatalogOption("categories", {
+      status: "created",
+      resource: {
+        id: "category-1",
+        code: "TC-001",
+        name: "防水辅料",
+        full_name: "防水辅料",
+        ownership_scope: "tenant",
+        owner_tenant_id: "tenant-1",
+      },
+    })).toEqual({
+      id: "category-1",
+      code: "TC-001",
+      name: "防水辅料",
+      full_name: "防水辅料",
+      ownership_scope: "tenant",
+      owner_tenant_id: "tenant-1",
+    });
+
+    expect(normalizeCreatedCatalogOption("brands", {
+      status: "created",
+      catalog_brand: {
+        id: "brand-1",
+        code: "TB-001",
+        name: "立邦油漆",
+        ownership_scope: "tenant",
+        owner_tenant_id: "tenant-1",
+      },
+    })).toEqual({
+      id: "brand-1",
+      code: "TB-001",
+      name: "立邦油漆",
+      ownership_scope: "tenant",
+      owner_tenant_id: "tenant-1",
+    });
   });
 
   test("目录快速新建只开放给租户侧分类和品牌的空结果搜索", () => {
