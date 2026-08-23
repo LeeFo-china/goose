@@ -53,6 +53,12 @@ on:
         description: "Successful Build Docker Images run ID"
         required: true
         type: string
+      expected_build_event:
+        description: "Expected Build Docker Images event"
+        required: false
+        default: workflow_dispatch
+        type: choice
+        options: [workflow_dispatch, push]
       gate_run_id:
         description: "Successful Verify Development Web Deployment Gate run ID (Web only)"
         required: false
@@ -73,7 +79,7 @@ env:
   SOURCE_SHA: ${{ inputs.commit_sha }}
   INPUT_BUILD_RUN_ID: ${{ inputs.build_run_id }}
   RELEASE_SERVICE: ${{ inputs.service }}
-  EXPECTED_BUILD_EVENT: ${{ github.event_name == 'workflow_dispatch' && 'workflow_dispatch' || inputs.expected_build_event }}
+  EXPECTED_BUILD_EVENT: ${{ inputs.expected_build_event }}
   EVIDENCE_MODE: ${{ inputs.evidence_mode || 'completed_run' }}
   EXPECTED_BUILD_WORKFLOW_PATH: ${{ inputs.expected_build_workflow_path || '.github/workflows/build-docker-images.yml' }}
   INLINE_GATE_RECEIPT_B64: ${{ inputs.gate_receipt_b64 }}
@@ -170,9 +176,19 @@ jobs:
               current_workflow_path="$(canonical_workflow_path "${current_run_json}")"
               case "${EXPECTED_BUILD_EVENT}" in
                 push)
-                  test "${GITHUB_EVENT_NAME}" = workflow_run
-                  test "${current_workflow_path}" = ".github/workflows/auto-deploy-dev.yml"
-                  test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_run
+                  test "$(jq -r '.head_branch' <<< "${run_json}")" = main
+                  case "${GITHUB_EVENT_NAME}" in
+                    workflow_run)
+                      test "${current_workflow_path}" = ".github/workflows/auto-deploy-dev.yml"
+                      test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_run
+                      ;;
+                    workflow_dispatch)
+                      test "${current_workflow_path}" = ".github/workflows/deploy-dev.yml"
+                      test "$(jq -r '.event' <<< "${current_run_json}")" = workflow_dispatch
+                      test -z "${INLINE_GATE_RECEIPT_B64}"
+                      ;;
+                    *) exit 1 ;;
+                  esac
                   ;;
                 workflow_dispatch)
                   test "${GITHUB_EVENT_NAME}" = workflow_dispatch
