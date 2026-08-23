@@ -220,11 +220,20 @@ export const specDefinitions = [
 export const mockStore = {
   config: { sessionMode: "tenant", relationshipStatus: "active" },
   state: { products: [], skus: [], conversions: [], priceLists: [], items: [] },
+  catalogSequence: 0,
+  createdCatalogIds: [],
   mutations: [],
   requests: [],
 };
 
 export function resetMockStore(config = {}) {
+  for (const catalogRecords of [categories, brands]) {
+    for (let index = catalogRecords.length - 1; index >= 0; index -= 1) {
+      if (mockStore.createdCatalogIds.includes(catalogRecords[index].id)) {
+        catalogRecords.splice(index, 1);
+      }
+    }
+  }
   mockStore.config = {
     sessionMode: config.sessionMode || "tenant",
     relationshipStatus: config.relationshipStatus || "active",
@@ -247,6 +256,8 @@ export function resetMockStore(config = {}) {
     priceLists: [],
     items: [],
   };
+  mockStore.catalogSequence = 0;
+  mockStore.createdCatalogIds = [];
   mockStore.mutations = [];
   mockStore.requests = [];
 }
