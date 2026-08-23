@@ -568,6 +568,18 @@ describe("domain permissions", () => {
         label: "管理供应商供货价",
         module: "supplier",
       },
+      "supplier.purchase-requisition.view": {
+        label: "查看供应商采购申请",
+        module: "supplier",
+      },
+      "supplier.purchase-requisition.manage": {
+        label: "管理供应商采购申请",
+        module: "supplier",
+      },
+      "supplier.purchase-requisition.approve": {
+        label: "审批供应商采购申请",
+        module: "supplier",
+      },
       "supplier.purchase-order.view": {
         label: "查看供应商采购单",
         module: "supplier",
