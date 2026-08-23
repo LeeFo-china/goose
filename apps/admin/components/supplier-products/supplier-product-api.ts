@@ -19,6 +19,9 @@ const PAGE_SIZE = 20;
 const BULK_PAGE_SIZE = 100;
 const MAX_CATALOG_PAGES = 5;
 
+type CatalogKind = "categories" | "brands" | "units";
+type WritableCatalogKind = "categories" | "brands";
+
 export function buildRelationshipListPath(keyword = "", page = 1) {
   const query = pagedQuery(page, PAGE_SIZE);
   if (keyword.trim()) query.set("keyword", keyword.trim());
@@ -145,7 +148,7 @@ export function mutateSupplierResource(
 }
 
 export function loadCatalogOptions(
-  kind: "categories" | "brands" | "units",
+  kind: CatalogKind,
   scope: ProductApiScope,
   page = 1,
   keyword = "",
@@ -158,7 +161,7 @@ export function loadCatalogOptions(
 }
 
 export function buildCatalogOptionListPath(
-  kind: "categories" | "brands" | "units",
+  kind: CatalogKind,
   scope: ProductApiScope,
   page = 1,
   keyword = "",
@@ -172,8 +175,68 @@ export function buildCatalogOptionListPath(
   return `${prefix}/catalog/${kind}?${query}`;
 }
 
+export function canCreateCatalogOptionInline({
+  kind,
+  scope,
+  keyword,
+  loading,
+  resultCount,
+}: {
+  kind: CatalogKind;
+  scope: ProductApiScope;
+  keyword: string;
+  loading: boolean;
+  resultCount: number;
+}): boolean {
+  return (
+    scope.kind === "tenant"
+    && (kind === "categories" || kind === "brands")
+    && keyword.trim().length > 0
+    && !loading
+    && resultCount === 0
+  );
+}
+
+export function buildCatalogOptionCreateCommand(
+  kind: WritableCatalogKind,
+  name: string,
+  idempotencyKey: string,
+): {
+  path: string;
+  init: {
+    method: "POST";
+    headers: { "Idempotency-Key": string };
+    body: string;
+  };
+} {
+  return {
+    path: `/catalog/${kind}`,
+    init: {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ name: name.trim() }),
+    },
+  };
+}
+
+export function createCatalogOption(
+  kind: WritableCatalogKind,
+  name: string,
+  idempotencyKey: string,
+) {
+  const { path, init } = buildCatalogOptionCreateCommand(
+    kind,
+    name,
+    idempotencyKey,
+  );
+  return requestBackendJson<CatalogOption>(path, {
+    ...init,
+    fallbackMessage: `新建${kind === "categories" ? "分类" : "品牌"}失败`,
+  });
+}
+
 export function loadAllCatalogOptions(
-  kind: "categories" | "brands" | "units",
+  kind: CatalogKind,
   scope: ProductApiScope,
 ) {
   return loadAllPages(

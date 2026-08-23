@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,11 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-import { loadCatalogOptions } from "./supplier-product-api";
+import {
+  canCreateCatalogOptionInline,
+  createCatalogOption,
+  loadCatalogOptions,
+} from "./supplier-product-api";
 import type {
   CatalogOption,
   PageData,
@@ -61,8 +65,17 @@ export function CatalogSearchSelect({
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [open, setOpen] = useState(false);
   const label = customLabel ?? labels[kind];
+  const createKeyword = appliedKeyword.trim();
+  const canQuickCreate = canCreateCatalogOptionInline({
+    kind,
+    scope,
+    keyword: createKeyword,
+    loading,
+    resultCount: result.list.length,
+  });
 
   useEffect(() => {
     let active = true;
@@ -98,6 +111,34 @@ export function CatalogSearchSelect({
   const isTriggerDisabled = loading && options.length === 0;
   const triggerText = selected?.label
     ?? (loading ? `${label}加载中...` : `请选择${label}`);
+
+  async function handleCreateOption() {
+    if (!canQuickCreate || creating || (kind !== "categories" && kind !== "brands")) {
+      return;
+    }
+    const idempotencyKey = `catalog-${kind}-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+    setCreating(true);
+    try {
+      const created = await createCatalogOption(kind, createKeyword, idempotencyKey);
+      setResult((current) => ({
+        ...current,
+        list: [created, ...current.list.filter(({ id }) => id !== created.id)],
+        pagination: {
+          ...current.pagination,
+          total: Math.max(current.pagination.total, current.list.length) + 1,
+        },
+      }));
+      onChange(created.id);
+      setOpen(false);
+      toast.success(`已新建${label}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `新建${label}失败`);
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <Field data-disabled={loading}>
@@ -154,6 +195,22 @@ export function CatalogSearchSelect({
                   </CommandItem>
                 ))}
               </CommandGroup>
+              {canQuickCreate ? (
+                <CommandGroup>
+                  <CommandItem
+                    disabled={creating}
+                    value={`create-${createKeyword}`}
+                    onSelect={() => void handleCreateOption()}
+                  >
+                    {creating ? (
+                      <Loader2 data-icon="inline-start" className="animate-spin" />
+                    ) : (
+                      <Plus data-icon="inline-start" />
+                    )}
+                    <span className="truncate">新建{label}“{createKeyword}”</span>
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
             </CommandList>
             {totalPages > 1 ? (
               <div className="flex items-center justify-between border-t p-1">

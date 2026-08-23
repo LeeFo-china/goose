@@ -8,9 +8,11 @@ import {
   isLatestResourceRequest,
 } from "./supplier-request-gate";
 import {
+  buildCatalogOptionCreateCommand,
   buildCatalogOptionListPath,
   buildRelationshipListPath,
   buildSpecDefinitionListPath,
+  canCreateCatalogOptionInline,
 } from "./supplier-product-api";
 import {
   buildSuggestedSkuName,
@@ -110,6 +112,85 @@ describe("供应商品与供货价行为", () => {
     )).toBe(
       "/platform/catalog/categories/category-1/spec-definitions?page=2&pageSize=100&status=active",
     );
+  });
+
+  test("租户分类和品牌支持快速新建命令并只提交名称", () => {
+    expect(buildCatalogOptionCreateCommand(
+      "categories",
+      " 防水辅料 ",
+      "catalog-key-1",
+    )).toEqual({
+      path: "/catalog/categories",
+      init: {
+        method: "POST",
+        headers: { "Idempotency-Key": "catalog-key-1" },
+        body: JSON.stringify({ name: "防水辅料" }),
+      },
+    });
+
+    expect(buildCatalogOptionCreateCommand(
+      "brands",
+      "立邦油漆",
+      "catalog-key-2",
+    ).path).toBe("/catalog/brands");
+  });
+
+  test("目录快速新建只开放给租户侧分类和品牌的空结果搜索", () => {
+    const tenantScope = {
+      kind: "tenant",
+      tenantSupplierId: "relationship-1",
+    } as const;
+    const platformScope = { kind: "platform", supplierId: "supplier-1" } as const;
+
+    expect(canCreateCatalogOptionInline({
+      kind: "categories",
+      scope: tenantScope,
+      keyword: "辅料",
+      loading: false,
+      resultCount: 0,
+    })).toBe(true);
+    expect(canCreateCatalogOptionInline({
+      kind: "brands",
+      scope: tenantScope,
+      keyword: "立邦",
+      loading: false,
+      resultCount: 0,
+    })).toBe(true);
+    expect(canCreateCatalogOptionInline({
+      kind: "units",
+      scope: tenantScope,
+      keyword: "箱",
+      loading: false,
+      resultCount: 0,
+    })).toBe(false);
+    expect(canCreateCatalogOptionInline({
+      kind: "brands",
+      scope: platformScope,
+      keyword: "立邦",
+      loading: false,
+      resultCount: 0,
+    })).toBe(false);
+    expect(canCreateCatalogOptionInline({
+      kind: "brands",
+      scope: tenantScope,
+      keyword: " ",
+      loading: false,
+      resultCount: 0,
+    })).toBe(false);
+    expect(canCreateCatalogOptionInline({
+      kind: "brands",
+      scope: tenantScope,
+      keyword: "立邦",
+      loading: true,
+      resultCount: 0,
+    })).toBe(false);
+    expect(canCreateCatalogOptionInline({
+      kind: "brands",
+      scope: tenantScope,
+      keyword: "立邦",
+      loading: false,
+      resultCount: 1,
+    })).toBe(false);
   });
 
   test("来源徽标渲染稳定的共享和私有语义", () => {

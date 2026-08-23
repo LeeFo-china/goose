@@ -121,6 +121,38 @@ function writableInScope(record, platform) {
     : record.ownership_scope === "tenant" && record.owner_tenant_id === currentTenantId();
 }
 
+async function createCatalogOption(request, response, url, kind) {
+  if (!requireIdempotency(request, response)) return;
+  const payload = await readBody(request);
+  const name = typeof payload.name === "string" ? payload.name.trim() : "";
+  if (!name) {
+    return sendJson(response, 400, {
+      success: false,
+      code: "VALIDATION_ERROR",
+      message: "目录名称不能为空",
+    });
+  }
+  mockStore.catalogSequence += 1;
+  const sequence = String(mockStore.catalogSequence).padStart(12, "0");
+  const record = {
+    id: `29000000-0000-4000-8000-${sequence}`,
+    code: `${kind === "categories" ? "TENANT-CAT" : "TENANT-BRAND"}-${mockStore.catalogSequence}`,
+    name,
+    status: "active",
+    ownership_scope: "tenant",
+    owner_tenant_id: currentTenantId(),
+    version: 1,
+    created_at: now,
+    updated_at: now,
+    ...(kind === "categories" ? { full_name: name, is_leaf: true } : {}),
+  };
+  const records = kind === "categories" ? categories : brands;
+  records.push(record);
+  mockStore.createdCatalogIds.push(record.id);
+  recordMutation(request, url, payload);
+  sendData(response, record, 201);
+}
+
 async function createProduct(request, response, url, productId, platform) {
   if (!requireIdempotency(request, response)) return;
   const payload = await readBody(request);
@@ -389,6 +421,9 @@ export async function handleSupplierProductPricingMock(request, response) {
   if (request.method === "GET" && catalog) {
     const records = catalog[2] === "categories" ? categories : catalog[2] === "brands" ? brands : units;
     return sendData(response, paginate(catalog[2] === "units" ? records : catalogList(records, Boolean(catalog[1])), url));
+  }
+  if (request.method === "POST" && !catalog?.[1] && (catalog?.[2] === "categories" || catalog?.[2] === "brands")) {
+    return createCatalogOption(request, response, url, catalog[2]);
   }
   const specs = url.pathname.match(/^\/(platform\/)?catalog\/categories\/([^/]+)\/spec-definitions$/);
   if (request.method === "GET" && specs) return sendData(response, paginate(specDefinitions.map((item) => ({ ...item, category_id: specs[2] })), url));

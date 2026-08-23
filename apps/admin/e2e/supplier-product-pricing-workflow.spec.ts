@@ -241,6 +241,52 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   });
 });
 
+test("租户新增私有商品可快速新建分类和品牌并保持单位只选不建", async ({
+  page,
+  request,
+}) => {
+  await resetMock(request);
+  await login(page);
+  await page.goto("/supplier-products", { waitUntil: "networkidle" });
+  await selectTwentyFirstSupplier(page);
+
+  await page.getByRole("button", { name: "新增商品" }).click();
+  let dialog = page.getByRole("dialog", { name: "新增租户私有商品" });
+  await dialog.getByLabel("商品名称").fill("E2E 快速目录商品");
+
+  await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
+  await page.getByPlaceholder("搜索分类名称或编码").fill("E2E 快速分类");
+  await page.getByRole("option", { name: "新建分类“E2E 快速分类”" }).click();
+  await expect(dialog.getByText(/E2E 快速分类 .* 租户私有/)).toBeVisible();
+
+  await dialog.getByRole("combobox", { name: "品牌", exact: true }).click();
+  await page.getByPlaceholder("搜索品牌名称或编码").fill("E2E 快速品牌");
+  await page.getByRole("option", { name: "新建品牌“E2E 快速品牌”" }).click();
+  await expect(dialog.getByText(/E2E 快速品牌 .* 租户私有/)).toBeVisible();
+
+  await dialog.getByRole("button", { name: "保存商品" }).click();
+  await expect(page.getByText("E2E 快速目录商品", { exact: true })).toBeVisible();
+
+  const productRow = page.getByRole("row").filter({ hasText: "E2E 快速目录商品" });
+  await productRow.getByRole("button", { name: "查看 SKU" }).click();
+  await page.getByRole("button", { name: "新增 SKU" }).click();
+  dialog = page.getByRole("dialog", { name: "新增供应商 SKU" });
+  await dialog.getByRole("combobox", { name: "采购单位", exact: true }).click();
+  await page.getByPlaceholder("搜索采购单位名称或编码").fill("E2E 快速单位");
+  await expect(page.getByText("新建采购单位")).toHaveCount(0);
+
+  const mutations = await readMutations(request);
+  expect(mutations).toHaveLength(3);
+  expect(mutations.map(({ method, path }) => `${method} ${path}`)).toEqual([
+    "POST /catalog/categories",
+    "POST /catalog/brands",
+    expect.stringMatching(/^POST \/supplier-products\/[0-9a-f-]+$/),
+  ]);
+  expect(mutations[0].payload).toEqual({ name: "E2E 快速分类" });
+  expect(mutations[1].payload).toEqual({ name: "E2E 快速品牌" });
+  expect("product_code" in mutations[2].payload).toBe(false);
+});
+
 test("暂停合作仍可检索和查看历史商品，但所有写入口关闭", async ({
   page,
   request,
