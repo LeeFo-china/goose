@@ -37,7 +37,7 @@ describe("TenantSuppliersService private supplier creation", () => {
     };
     const accessPolicy = {
       assertTenantContext: mock((context: AuthContext) => context.tenantId!),
-      assertPermission: mock(() => "all"),
+      assertPermission: mock((): "all" => "all"),
       hasPermission: mock(() => false),
     };
     const { TenantSuppliersService } = await import("./tenant-suppliers");

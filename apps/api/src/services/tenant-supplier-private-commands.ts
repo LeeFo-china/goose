@@ -2,6 +2,7 @@ import { Errors } from "@/errors/error-factory";
 import type { TenantSuppliersRepositoryPort } from "@/repositories/tenant-suppliers";
 import type {
   TenantPrivateSupplierUpdateInput,
+  TenantSupplierExplicitPrivateCreateInput,
   TenantSupplierPrivateCreateInput,
   TenantSupplierSharedCreateInput,
 } from "@/schema/tenant-suppliers";
@@ -56,7 +57,7 @@ export function allocateInternalCode(
 export function createPrivateSupplier(
   repository: TenantSuppliersRepositoryPort,
   actor: SupplierActor,
-  input: TenantSupplierPrivateCreateInput,
+  input: TenantSupplierExplicitPrivateCreateInput,
   idempotencyKey: string,
 ) {
   const command = {
@@ -98,7 +99,10 @@ export async function createSimplifiedPrivateSupplier(
 
 export function isSimplifiedPrivateSupplierInput(
   input: TenantSupplierPrivateCreateInput,
-) {
+): input is Exclude<
+  TenantSupplierPrivateCreateInput,
+  TenantSupplierExplicitPrivateCreateInput
+> {
   return !("code_source" in input);
 }
 

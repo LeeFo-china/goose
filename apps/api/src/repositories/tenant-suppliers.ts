@@ -13,6 +13,7 @@ import type {
   TenantSupplierContractPolicyCommand,
   TenantSupplierCreateCommand,
   TenantSupplierPrivateCreateInput,
+  TenantSupplierExplicitPrivateCreateInput,
   TenantPrivateSupplierUpdateInput,
   TenantSupplierSharedCreateInput,
   TenantSupplierDirectoryInput,
@@ -86,7 +87,8 @@ export type {
 export type AllocateCodeCommand = SupplierCommandContext & {
   tenant_id: string;
 };
-export type CreatePrivateSupplierCommand = TenantSupplierPrivateCreateInput &
+export type CreatePrivateSupplierCommand =
+  TenantSupplierExplicitPrivateCreateInput &
   SupplierCommandContext & { tenant_id: string };
 export type CreateSharedRelationshipCommand = TenantSupplierSharedCreateInput &
   SupplierCommandContext & { tenant_id: string };

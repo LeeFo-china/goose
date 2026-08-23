@@ -174,11 +174,8 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
       authWithPermissions("supplier.view"),
       {
         parent_id: null,
-        code: "CAT-VIEW",
         name: "只读账号分类",
         status: "active",
-        sort_order: 100,
-        mapped_platform_category_id: null,
       },
       "category-view-only",
     )).rejects.toMatchObject({ statusCode: 403, code: "FORBIDDEN" });
@@ -464,11 +461,8 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
       auth,
       {
         parent_id: null,
-        code: "CAT-1",
         name: "分类",
         status: "active",
-        sort_order: 100,
-        mapped_platform_category_id: null,
       },
       "category-create-disabled",
     )).rejects.toMatchObject({
