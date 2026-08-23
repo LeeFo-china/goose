@@ -53,6 +53,18 @@ async function selectTwentyFirstSupplier(page: Page, platform = false) {
   await expect(page.getByText(supplierName, { exact: false }).first()).toBeVisible();
 }
 
+async function chooseCatalogOption(
+  page: Page,
+  dialog: ReturnType<Page["getByRole"]>,
+  label: string,
+  keyword: string,
+  optionName: RegExp,
+) {
+  await dialog.getByRole("combobox", { name: label, exact: true }).click();
+  await page.getByPlaceholder(`搜索${label}名称或编码`).fill(keyword);
+  await page.getByRole("option", { name: optionName }).click();
+}
+
 async function fillStructuredSku(
   page: Page,
   dialogName: string,
@@ -71,10 +83,7 @@ async function fillStructuredSku(
   await dialog.getByLabel("上市日期 *").fill("2026-08-19");
   await dialog.getByRole("button", { name: "使用建议名称" }).click();
   await expect(dialog.getByLabel("SKU 名称")).toHaveValue(expectedName);
-  await dialog.getByLabel("搜索采购单位").fill("箱");
-  await dialog.getByRole("button", { name: "检索采购单位" }).click();
-  await dialog.getByRole("combobox", { name: "采购单位", exact: true }).click();
-  await page.getByRole("option", { name: /箱/ }).click();
+  await chooseCatalogOption(page, dialog, "采购单位", "箱", /^箱/);
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
   await dialog.getByRole("button", { name: "保存 SKU" }).click();
 }
@@ -123,11 +132,11 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
 
   await page.getByRole("button", { name: "新增商品" }).click();
   let dialog = page.getByRole("dialog", { name: "新增租户私有商品" });
-  await dialog.getByLabel("商品编码").fill("E2E-PRODUCT");
+  await expect(dialog.getByLabel("商品编码")).toBeDisabled();
+  await expect(dialog.getByLabel("商品编码")).toHaveValue("保存后系统自动生成");
   await dialog.getByLabel("商品名称").fill("E2E 瓷砖");
-  await dialog.getByLabel("搜索分类").fill("砖");
-  await dialog.getByRole("button", { name: "检索分类" }).click();
   await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
+  await page.getByPlaceholder("搜索分类名称或编码").fill("砖");
   await expect(
     page.getByRole("option", { name: /主材 \/ 瓷砖 \/ 地砖/ }),
   ).toBeVisible();
@@ -136,12 +145,8 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   ).toBeVisible();
   await expect(page.getByRole("option", { name: /其他租户分类/ })).toHaveCount(0);
   await page.getByRole("option", { name: /租户主材 \/ 定制砖/ }).click();
-  await dialog.getByLabel("搜索品牌").fill("租户自有品牌");
-  await dialog.getByRole("button", { name: "检索品牌" }).click();
-  await dialog.getByRole("combobox", { name: "品牌", exact: true }).click();
-  await expect(page.getByRole("option", { name: /租户自有品牌/ })).toBeVisible();
+  await chooseCatalogOption(page, dialog, "品牌", "租户自有品牌", /租户自有品牌/);
   await expect(page.getByRole("option", { name: /其他租户品牌/ })).toHaveCount(0);
-  await page.getByRole("option", { name: /租户自有品牌/ }).click();
   await expect(dialog.getByLabel("代录原因")).toHaveCount(0);
   await dialog.getByRole("button", { name: "保存商品" }).click();
   await expect(page.getByText("E2E 瓷砖", { exact: true })).toBeVisible();
@@ -210,6 +215,7 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   const mutations = await readMutations(request);
   expect(mutations).toHaveLength(8);
   expect(mutations.every(({ payload }) => !("proxy_reason" in payload))).toBe(true);
+  expect("product_code" in mutations[0].payload).toBe(false);
   expect(mutations[1].payload).toMatchObject({
     spec_values: {
       size: "800×800×10mm",
@@ -271,14 +277,8 @@ test("平台员工持专用权限时检索第21个平台供应商并仅维护共
   let dialog = page.getByRole("dialog", { name: "新增平台共享商品" });
   await dialog.getByLabel("商品编码").fill("PLATFORM-E2E");
   await dialog.getByLabel("商品名称").fill("平台 E2E 瓷砖");
-  await dialog.getByLabel("搜索分类").fill("瓷砖分类");
-  await dialog.getByRole("button", { name: "检索分类" }).click();
-  await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
-  await page.getByRole("option", { name: /主材 \/ 瓷砖 \/ 地砖/ }).click();
-  await dialog.getByLabel("搜索品牌").fill("E2E 品牌");
-  await dialog.getByRole("button", { name: "检索品牌" }).click();
-  await dialog.getByRole("combobox", { name: "品牌", exact: true }).click();
-  await page.getByRole("option", { name: /E2E 品牌/ }).click();
+  await chooseCatalogOption(page, dialog, "分类", "瓷砖分类", /主材 \/ 瓷砖 \/ 地砖/);
+  await chooseCatalogOption(page, dialog, "品牌", "E2E 品牌", /E2E 品牌/);
   await dialog.getByRole("button", { name: "保存商品" }).click();
 
   const productRow = page.getByRole("row").filter({ hasText: "平台 E2E 瓷砖" });

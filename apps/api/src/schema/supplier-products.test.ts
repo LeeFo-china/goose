@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   PlatformSupplierProductCommandSchema,
+  PlatformSupplierProductCreateSchema,
   SupplierProductCommandSchema,
   SupplierProductCreateSchema,
   SupplierProductListQuerySchema,
@@ -53,6 +54,26 @@ describe("supplier product schemas", () => {
       owner_tenant_id: tenantSupplierId,
       supplier_id: tenantSupplierId,
       actor_user_id: tenantSupplierId,
+    }).success).toBe(false);
+  });
+
+  test("accepts tenant creates without product code", () => {
+    expect(SupplierProductCreateSchema.parse({
+      name: "瓷砖",
+      category_id: categoryId,
+      brand_id: brandId,
+    })).toEqual({
+      name: "瓷砖",
+      category_id: categoryId,
+      brand_id: brandId,
+    });
+  });
+
+  test("requires product code for platform creates", () => {
+    expect(PlatformSupplierProductCreateSchema.safeParse({
+      name: "瓷砖",
+      category_id: categoryId,
+      brand_id: brandId,
     }).success).toBe(false);
   });
 
