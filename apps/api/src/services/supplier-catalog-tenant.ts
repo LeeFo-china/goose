@@ -158,13 +158,18 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    const brandId = this.commandIdFactory(
+      "tenant.catalog.brand.create",
+      actor.authUserId,
+      idempotencyKey,
+    );
     return this.repository.createTenantBrand({
       ...input,
-      brand_id: this.commandIdFactory(
-        "tenant.catalog.brand.create",
-        actor.authUserId,
-        idempotencyKey,
-      ),
+      brand_id: brandId,
+      code: generatedTenantBrandCode(brandId),
+      legal_name: null,
+      sort_order: 100,
+      mapped_platform_brand_id: null,
       ...tenantCommandContext(actor, idempotencyKey),
     });
   }
@@ -187,19 +192,13 @@ export class SupplierCatalogTenantService {
     const current = await this.requireWritableBrand(actor.tenantId, brandId);
     return this.repository.updateTenantBrand({
       brand_id: brandId,
-      code: input.code ?? current.code,
+      code: current.code,
       name: input.name ?? current.name,
-      legal_name: input.legal_name === undefined
-        ? current.legal_name
-        : input.legal_name,
-      logo_file_id: input.logo_file_id === undefined
-        ? current.logo_file_id
-        : input.logo_file_id,
+      legal_name: current.legal_name,
+      logo_file_id: current.logo_file_id,
       status: input.status ?? current.status,
-      sort_order: input.sort_order ?? current.sort_order,
-      mapped_platform_brand_id: input.mapped_platform_brand_id === undefined
-        ? current.mapped_platform_brand_id
-        : input.mapped_platform_brand_id,
+      sort_order: current.sort_order,
+      mapped_platform_brand_id: current.mapped_platform_brand_id,
       expected_version: input.expected_version,
       ...tenantCommandContext(actor, idempotencyKey),
     });
@@ -453,6 +452,10 @@ function tenantOwnedStatus<T extends { status?: "active" | "inactive" }>(
 
 function generatedTenantCategoryCode(categoryId: string) {
   return `TC-${categoryId.replaceAll("-", "").toUpperCase()}`;
+}
+
+function generatedTenantBrandCode(brandId: string) {
+  return `TB-${brandId.replaceAll("-", "").toUpperCase()}`;
 }
 
 function actorCommandContext(actor: CatalogActor, idempotencyKey: string) {

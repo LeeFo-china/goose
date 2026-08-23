@@ -170,7 +170,7 @@ test.describe("租户私有供应商目录", () => {
     );
   });
 
-  test("租户可置顶分类、提交单位建议并维护品牌映射", async ({ page, request }) => {
+  test("租户可置顶分类、创建简化品牌并提交单位建议", async ({ page, request }) => {
     await loginAsTenantAdmin(page);
     await page.goto("/supplier-catalog", { waitUntil: "networkidle" });
     await expect(
@@ -188,33 +188,22 @@ test.describe("租户私有供应商目录", () => {
     await expect(page.getByText("私有类目已置顶")).toBeVisible();
 
     await page.getByRole("tab", { name: "品牌" }).click();
-    let brandRow = page.getByRole("row").filter({
+    const brandRow = page.getByRole("row").filter({
       has: page.getByRole("cell", { name: "TENANT-BRAND", exact: true }),
     });
-    await expect(brandRow).toContainText("基准品牌");
-    await brandRow.getByRole("button", { name: "编辑" }).click();
-    const brandDialog = page.getByRole("dialog", { name: "编辑私有品牌" });
-    await brandDialog.getByLabel("选择平台品牌映射").click();
-    await page.getByRole("option", { name: /备选标准品牌.*BRAND-SECOND/ })
-      .click();
-    await expect(brandDialog.getByLabel("选择平台品牌映射"))
-      .toContainText("备选标准品牌");
+    await expect(brandRow).not.toContainText("基准品牌");
+    await page.getByRole("button", { name: "新建私有品牌" }).click();
+    const brandDialog = page.getByRole("dialog", { name: "新建私有品牌" });
+    await expect(brandDialog.getByLabel("编码")).toBeDisabled();
+    await expect(brandDialog.getByLabel("编码")).toHaveValue("保存后自动生成");
+    await expect(brandDialog.getByLabel("法定名称")).toHaveCount(0);
+    await expect(brandDialog.getByText(/平台品牌映射/)).toHaveCount(0);
+    await expect(brandDialog.getByLabel("排序")).toHaveCount(0);
+    await brandDialog.getByLabel("品牌名称").fill("租户精选品牌");
     await brandDialog.getByRole("button", { name: "保存品牌" }).click();
-    await expect(page.getByText("私有品牌已保存")).toBeVisible();
-    brandRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-BRAND", exact: true }),
-    });
-    await expect(brandRow).toContainText("备选标准品牌");
-    await brandRow.getByRole("button", { name: "编辑" }).click();
-    const clearBrandDialog = page.getByRole("dialog", { name: "编辑私有品牌" });
-    await clearBrandDialog.getByRole("button", {
-      name: "清除平台品牌映射",
-    }).click();
-    await clearBrandDialog.getByRole("button", { name: "保存品牌" }).click();
-    await expect(page.getByText("私有品牌已保存")).toBeVisible();
-    await expect(page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-BRAND", exact: true }),
-    })).toContainText("未映射");
+    await expect(page.getByText("私有品牌已创建")).toBeVisible();
+    await expect(page.getByRole("row").filter({ hasText: "租户精选品牌" }))
+      .toContainText("租户私有");
 
     await page.goto("/supplier-catalog?view=units", { waitUntil: "networkidle" });
     await expect(page.getByText("数量", { exact: true }).first()).toBeVisible();
@@ -245,10 +234,16 @@ test.describe("租户私有供应商目录", () => {
     );
     expect(categoryPins.map(({ payload }) => payload.expected_version))
       .toEqual([1]);
-    const brandUpdates = mutations.filter(({ path }) =>
-      path === "/catalog/brands/23000000-0000-4000-8000-000000000001"
+    const brandCreates = mutations.filter(({ path }) =>
+      path === "/catalog/brands"
     );
-    expect(brandUpdates.map(({ payload }) => payload.mapped_platform_brand_id))
-      .toEqual(["12000000-0000-4000-8000-000000000099", null]);
+    expect(brandCreates.map(({ payload }) => payload.name))
+      .toEqual(["租户精选品牌"]);
+    expect(brandCreates.at(0)?.payload).not.toHaveProperty("code");
+    expect(brandCreates.at(0)?.payload).not.toHaveProperty("legal_name");
+    expect(brandCreates.at(0)?.payload).not.toHaveProperty("sort_order");
+    expect(brandCreates.at(0)?.payload).not.toHaveProperty(
+      "mapped_platform_brand_id",
+    );
   });
 });

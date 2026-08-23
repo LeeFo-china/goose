@@ -17,7 +17,6 @@ export function TenantBrandTable({ records }: { records: TenantCatalogBrand[] })
     { accessorKey: "code", header: "编码", cell: ({ row }) => <span className="font-medium">{row.original.code}</span> },
     { accessorKey: "name", header: "品牌", cell: ({ row }) => <span className="font-semibold">{row.original.name}</span> },
     { accessorKey: "ownership_scope", header: "来源", cell: ({ row }) => <TenantCatalogSourceBadge ownershipScope={row.original.ownership_scope} /> },
-    { accessorKey: "mapped_platform_brand_id", header: "平台映射", cell: ({ row }) => row.original.mapped_platform_brand?.name ?? "未映射" },
     { accessorKey: "status", header: "状态", cell: ({ row }) => { const meta = catalogStatusMeta[row.original.status]; return <Badge variant={meta.variant}>{meta.label}</Badge>; } },
     {
       id: "actions",

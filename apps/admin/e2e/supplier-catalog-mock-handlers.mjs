@@ -47,6 +47,10 @@ export function createCatalogMockRuntime() {
     return `TC-${id.replaceAll("-", "").toUpperCase()}`;
   }
 
+  function generatedTenantBrandCode(id) {
+    return `TB-${id.replaceAll("-", "").toUpperCase()}`;
+  }
+
   function nextSpecId() {
     const count = Object.values(state.specs)
       .reduce((total, records) => total + records.length, 0);
@@ -266,6 +270,32 @@ export function createCatalogMockRuntime() {
     record.updated_at = new Date().toISOString();
     recordMutation(request, url, payload);
     sendJson(response, 200, { success: true, data: record });
+  }
+
+  async function createTenantBrand(request, response, url) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    if (!requireIdempotencyKey(request, response)) return;
+    const id = nextAvailableId("23000000", state.tenantBrands);
+    const now = new Date().toISOString();
+    const record = {
+      id,
+      code: payload.code ?? generatedTenantBrandCode(id),
+      name: payload.name,
+      legal_name: payload.legal_name ?? null,
+      logo_file_id: null,
+      mapped_platform_brand_id: payload.mapped_platform_brand_id ?? null,
+      mapped_platform_brand: null,
+      ownership_scope: "tenant",
+      owner_tenant_id: mockTenantCatalogSession.tenant.id,
+      status: payload.status,
+      sort_order: payload.sort_order ?? 100,
+      version: 1,
+      created_at: now,
+      updated_at: now,
+    };
+    state.tenantBrands.push(record);
+    recordMutation(request, url, payload);
+    sendJson(response, 201, { success: true, data: record });
   }
 
   async function createSpec(request, response, url, categoryId, scope) {
@@ -507,6 +537,7 @@ export function createCatalogMockRuntime() {
     createCategory,
     createTenantCategory,
     pinTenantCategory,
+    createTenantBrand,
     updateTenantCategory,
     updateTenantBrand,
     createBrand,
