@@ -229,10 +229,47 @@ export function createCatalogOption(
     name,
     idempotencyKey,
   );
-  return requestBackendJson<CatalogOption>(path, {
+  return requestBackendJson<unknown>(path, {
     ...init,
     fallbackMessage: `新建${kind === "categories" ? "分类" : "品牌"}失败`,
-  });
+  }).then((result) => normalizeCreatedCatalogOption(kind, result));
+}
+
+export function normalizeCreatedCatalogOption(
+  kind: WritableCatalogKind,
+  result: unknown,
+): CatalogOption {
+  const option = isCatalogOption(result)
+    ? result
+    : isRecord(result)
+      ? findCreatedCatalogOption(kind, result)
+      : null;
+
+  if (!option) {
+    throw new Error(`新建${kind === "categories" ? "分类" : "品牌"}返回数据无效`);
+  }
+
+  return option;
+}
+
+function findCreatedCatalogOption(
+  kind: WritableCatalogKind,
+  result: Record<string, unknown>,
+) {
+  const key = kind === "categories" ? "catalog_category" : "catalog_brand";
+  const candidates = [result.resource, result[key]];
+  return candidates.find(isCatalogOption) ?? null;
+}
+
+function isCatalogOption(value: unknown): value is CatalogOption {
+  return isRecord(value) &&
+    typeof value.id === "string" &&
+    typeof value.code === "string" &&
+    typeof value.name === "string";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function loadAllCatalogOptions(
