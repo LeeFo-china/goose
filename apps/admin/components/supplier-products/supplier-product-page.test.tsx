@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
+import { catalogOptionLabel } from "./catalog-search-select";
 import { SupplierProductSourceBadge } from "./supplier-product-source-badge";
 import {
   createLatestRequestGate,
@@ -52,6 +53,17 @@ const tenantProduct = {
 } as SupplierProduct;
 
 describe("供应商品与供货价行为", () => {
+  test("目录选择项展示名称、编码和来源", () => {
+    expect(catalogOptionLabel({
+      id: "category-1",
+      code: "CAT-1",
+      name: "地砖",
+      full_name: "主材 / 瓷砖 / 地砖",
+      ownership_scope: "tenant",
+      owner_tenant_id: "tenant-1",
+    })).toBe("主材 / 瓷砖 / 地砖 · CAT-1 · 租户私有");
+  });
+
   test("异步请求门只接受最后一次请求结果", () => {
     const gate = createLatestRequestGate();
     const first = gate.begin();

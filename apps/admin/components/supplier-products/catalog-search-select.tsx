@@ -1,13 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
-import { FormSelect } from "@/components/admin/form-select";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 import { loadCatalogOptions } from "./supplier-product-api";
 import type {
@@ -49,6 +61,7 @@ export function CatalogSearchSelect({
   const [keyword, setKeyword] = useState("");
   const [appliedKeyword, setAppliedKeyword] = useState("");
   const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
   const label = customLabel ?? labels[kind];
 
   useEffect(() => {
@@ -81,71 +94,100 @@ export function CatalogSearchSelect({
     }));
   }, [result.list, selectedOption]);
   const totalPages = Math.max(1, result.pagination.totalPages || 1);
+  const selected = options.find((option) => option.value === value);
+  const isTriggerDisabled = loading && options.length === 0;
+  const triggerText = selected?.label
+    ?? (loading ? `${label}加载中...` : `请选择${label}`);
 
   return (
     <Field data-disabled={loading}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <div className="flex gap-2">
-        <Input
-          aria-label={`搜索${label}`}
-          value={keyword}
-          placeholder={`名称或编码`}
-          onChange={(event) => setKeyword(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              setPage(1);
-              setAppliedKeyword(keyword.trim());
-            }
-          }}
-        />
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          aria-label={`检索${label}`}
-          disabled={loading}
-          onClick={() => {
-            setPage(1);
-            setAppliedKeyword(keyword.trim());
-          }}
-        >
-          <Search />
-        </Button>
-      </div>
-      <div className="flex gap-2">
-        <FormSelect
-          id={id}
-          value={value}
-          placeholder={`请选择${label}`}
-          options={options}
-          disabled={loading || options.length === 0}
-          onChange={onChange}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={`${label}上一页`}
-          disabled={loading || page <= 1}
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-        >
-          上一页
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          aria-label={`${label}下一页`}
-          disabled={loading || page >= totalPages}
-          onClick={() => setPage((current) => current + 1)}
-        >
-          下一页
-        </Button>
-      </div>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={isTriggerDisabled}
+            className="w-full justify-between"
+          >
+            <span className="truncate">{triggerText}</span>
+            <ChevronsUpDown data-icon="inline-end" className="opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+          <Command shouldFilter={false}>
+            <CommandInput
+              value={keyword}
+              placeholder={`搜索${label}名称或编码`}
+              onValueChange={(nextKeyword) => {
+                setKeyword(nextKeyword);
+                setPage(1);
+                setAppliedKeyword(nextKeyword.trim());
+              }}
+            />
+            <CommandList>
+              <CommandEmpty>
+                {loading ? `${label}加载中...` : `暂无${label}`}
+              </CommandEmpty>
+              <CommandGroup>
+                {options.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    disabled={loading}
+                    value={option.label}
+                    onSelect={() => {
+                      if (loading) return;
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      data-icon="inline-start"
+                      className={cn(
+                        value === option.value ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    <span className="truncate">{option.label}</span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+            {totalPages > 1 ? (
+              <div className="flex items-center justify-between border-t p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={loading || page <= 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  上一页
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {page} / {totalPages}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={loading || page >= totalPages}
+                  onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                >
+                  下一页
+                </Button>
+              </div>
+            ) : null}
+          </Command>
+        </PopoverContent>
+      </Popover>
     </Field>
   );
 }
 
-function catalogOptionLabel(option: CatalogOption) {
+export function catalogOptionLabel(option: CatalogOption): string {
   const name = option.full_name ?? option.name;
   const symbol = option.symbol ? `（${option.symbol}）` : "";
   const source = option.ownership_scope

@@ -29,6 +29,11 @@ import {
   resolveSupplierCommandAttempt,
   type SupplierCommandAttempt,
 } from "./supplier-command-attempt";
+import {
+  buildSupplierProductDialogPayload,
+  isSupplierProductDialogInvalid,
+  shouldShowProductCodeField,
+} from "./supplier-product-dialog-state";
 import type { ProductApiScope, SupplierProduct } from "./supplier-product-types";
 
 export function SupplierProductDialog({
@@ -51,7 +56,16 @@ export function SupplierProductDialog({
   const [description, setDescription] = useState(product?.description ?? "");
   const attemptRef = useRef<SupplierCommandAttempt | null>(null);
   const isPlatform = scope.kind === "platform";
-  const isEditing = Boolean(product);
+  const form = {
+    scope,
+    product,
+    productCode,
+    name,
+    categoryId,
+    brandId,
+    description,
+  };
+  const showProductCodeField = shouldShowProductCodeField(scope, product);
 
   useEffect(() => {
     if (!open) return;
@@ -62,21 +76,12 @@ export function SupplierProductDialog({
     setDescription(product?.description ?? "");
   }, [open, product, scope]);
 
-  const invalid = !productCode.trim() || !name.trim() || !categoryId || !brandId;
+  const invalid = isSupplierProductDialogInvalid(form);
 
   async function submit() {
     if (invalid) return;
     setSaving(true);
-    const fields = {
-      product_code: productCode.trim(),
-      name: name.trim(),
-      category_id: categoryId,
-      brand_id: brandId,
-      description: description.trim() || null,
-    };
-    const payload = product
-      ? { ...fields, expected_version: product.version }
-      : fields;
+    const payload = buildSupplierProductDialogPayload(form);
     const resourcePath = product
       ? buildProductResourcePath(scope, product.id)
       : `${scope.kind === "platform" ? "/platform" : ""}/supplier-products/:productId`;
@@ -142,10 +147,17 @@ export function SupplierProductDialog({
         </DialogHeader>
         <FieldGroup>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor={`supplier-product-code-${product?.id ?? "new"}`}>商品编码</FieldLabel>
-              <Input id={`supplier-product-code-${product?.id ?? "new"}`} value={productCode} maxLength={80} onChange={(event) => setProductCode(event.target.value)} />
-            </Field>
+            {showProductCodeField ? (
+              <Field>
+                <FieldLabel htmlFor={`supplier-product-code-${product?.id ?? "new"}`}>商品编码</FieldLabel>
+                <Input id={`supplier-product-code-${product?.id ?? "new"}`} value={productCode} maxLength={80} onChange={(event) => setProductCode(event.target.value)} />
+              </Field>
+            ) : (
+              <Field data-disabled>
+                <FieldLabel htmlFor={`supplier-product-code-${product?.id ?? "new"}`}>商品编码</FieldLabel>
+                <Input id={`supplier-product-code-${product?.id ?? "new"}`} value="保存后系统自动生成" disabled readOnly />
+              </Field>
+            )}
             <Field>
               <FieldLabel htmlFor={`supplier-product-name-${product?.id ?? "new"}`}>商品名称</FieldLabel>
               <Input id={`supplier-product-name-${product?.id ?? "new"}`} value={name} maxLength={160} onChange={(event) => setName(event.target.value)} />

@@ -104,6 +104,55 @@ describe("SupplierProductsService", () => {
       .not.toHaveProperty("proxy_reason");
   });
 
+  test("generates a stable tenant product code when omitted", async () => {
+    const deps = dependencies();
+    const { SupplierProductsService } = await import("./supplier-products");
+    const service = new SupplierProductsService(deps as never);
+
+    await service.createProduct(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      {
+        name: "瓷砖",
+        category_id: CATEGORY_ID,
+        brand_id: BRAND_ID,
+      } as never,
+      "product:create-auto-code",
+    );
+
+    expect(deps.repository.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        product_code: "TP-60000000000040008000000000000006",
+      }),
+    );
+  });
+
+  test("preserves explicit tenant product codes", async () => {
+    const deps = dependencies();
+    const { SupplierProductsService } = await import("./supplier-products");
+    const service = new SupplierProductsService(deps as never);
+
+    await service.createProduct(
+      {} as never,
+      TENANT_SUPPLIER_ID,
+      PRODUCT_ID,
+      {
+        product_code: "P-LEGACY",
+        name: "旧版商品",
+        category_id: CATEGORY_ID,
+        brand_id: BRAND_ID,
+      },
+      "product:create-legacy-code",
+    );
+
+    expect(deps.repository.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        product_code: "P-LEGACY",
+      }),
+    );
+  });
+
   test("uses an idempotent v2 command context for ordinary updates", async () => {
     const deps = dependencies();
     const { SupplierProductsService } = await import("./supplier-products");

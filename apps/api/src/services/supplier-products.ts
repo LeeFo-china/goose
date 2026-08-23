@@ -108,8 +108,11 @@ export class SupplierProductsService {
     );
     const { proxy_reason: _legacyProxyReason, ...safeInput } = input as
       SupplierProductCreateInput & { proxy_reason?: unknown };
+    const productCode = safeInput.product_code?.trim() ||
+      generatedTenantProductCode(productId);
     return requireCommand(await this.repository.createProduct({
       ...safeInput,
+      product_code: productCode,
       product_id: productId,
       ...commandContext(scope, idempotencyKey),
     }));
@@ -344,6 +347,10 @@ function actorContext(scope: SupplierProxyScope, idempotencyKey: string) {
     actor_employee_id: scope.employeeId,
     idempotency_key: idempotencyKey,
   };
+}
+
+function generatedTenantProductCode(productId: string) {
+  return `TP-${productId.replaceAll("-", "").toUpperCase()}`;
 }
 
 function requireCommand(result: SupplierProductCommandResult) {

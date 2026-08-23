@@ -102,6 +102,7 @@ const productFields = {
 
 export const SupplierProductCreateSchema = z.object({
   ...productFields,
+  product_code: productFields.product_code.optional(),
   proxy_reason: legacyProxyReason,
 }).strict().transform(({ proxy_reason: _legacyProxyReason, ...input }) => input);
 

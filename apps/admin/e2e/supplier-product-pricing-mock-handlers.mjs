@@ -1,8 +1,9 @@
 import {
   brands,
   categories,
-  currentTenantId,
   currentSession,
+  currentServiceAccessSummary,
+  currentTenantId,
   ids,
   mockPort,
   mockStore,
@@ -379,6 +380,9 @@ export async function handleSupplierProductPricingMock(request, response) {
     return sendData(response, currentSession());
   }
   if (request.method === "GET" && url.pathname === "/admin/auth/me") return sendData(response, currentSession());
+  if (request.method === "GET" && url.pathname === "/employee/service-access") {
+    return sendData(response, currentServiceAccessSummary());
+  }
   if (request.method === "GET" && url.pathname === "/suppliers") return sendData(response, paginate(tenantRelationships(), url));
   if (request.method === "GET" && url.pathname === "/platform/suppliers") return sendData(response, paginate(platformSuppliers(), url));
   const catalog = url.pathname.match(/^\/(platform\/)?catalog\/(categories|brands|units)$/);
