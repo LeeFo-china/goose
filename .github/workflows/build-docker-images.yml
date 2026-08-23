@@ -270,6 +270,9 @@ jobs:
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         uses: actions/checkout@v6
 
+      - uses: docker/setup-buildx-action@v3
+        if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
+
       - name: Verify Docker toolchain
         if: ${{ contains(format(' {0} ', needs.validate-request.outputs.build_services), format(' {0} ', matrix.service)) }}
         run: |

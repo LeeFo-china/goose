@@ -211,6 +211,21 @@ describe("CI environment isolation", () => {
     expect(validationJob).toContain('node-version: "24"');
   });
 
+  test("sets up Docker Buildx before verifying the build toolchain", () => {
+    const workflow = readWorkflow("build-docker-images.yml");
+    const buildJob = workflow.slice(
+      workflow.indexOf("  build:"),
+      workflow.indexOf("  verify-production-pull:"),
+    );
+    const checkoutStart = buildJob.indexOf("      - name: Checkout repository");
+    const setupBuildxStart = buildJob.indexOf("      - uses: docker/setup-buildx-action@v3");
+    const verifyStart = buildJob.indexOf("      - name: Verify Docker toolchain");
+
+    expect(checkoutStart).toBeGreaterThanOrEqual(0);
+    expect(setupBuildxStart).toBeGreaterThan(checkoutStart);
+    expect(verifyStart).toBeGreaterThan(setupBuildxStart);
+  });
+
   test("keeps production operations on a deploy-only runner", () => {
     for (const name of [
       "deploy-docker-services.yml",
