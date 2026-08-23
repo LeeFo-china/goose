@@ -1,6 +1,5 @@
 "use client";
 
-import type { SupplierType } from "@gooes/domain";
 import { Building2, Plus, Search, Store, WandSparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -15,9 +14,6 @@ import {
   Field, FieldDescription, FieldError, FieldGroup, FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
@@ -26,7 +22,6 @@ import {
   createTenantPrivateSupplier,
   createTenantSharedRelationship,
   isSupplierCodeConflict,
-  isSupplierIdentityConflict,
   manualSupplierCodeState,
   type SupplierCodeState,
 } from "./supplier-create-api";
@@ -38,9 +33,8 @@ import {
 type CreateMode = "shared" | "private";
 type PrivateForm = {
   name: string;
-  legalName: string;
-  creditCode: string;
-  supplierType: SupplierType;
+  contactName: string;
+  contactPhone: string;
 };
 
 const emptyDirectory: PageData<SupplierDirectoryItem> = {
@@ -49,9 +43,8 @@ const emptyDirectory: PageData<SupplierDirectoryItem> = {
 };
 const emptyPrivateForm: PrivateForm = {
   name: "",
-  legalName: "",
-  creditCode: "",
-  supplierType: "manufacturer",
+  contactName: "",
+  contactPhone: "",
 };
 
 export function AddSupplierDialog({
@@ -80,7 +73,6 @@ export function AddSupplierDialog({
   const [creatingId, setCreatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [codeError, setCodeError] = useState<string | null>(null);
-  const [creditCodeError, setCreditCodeError] = useState<string | null>(null);
   const allocationRequestRef = useRef(0);
 
   const loadDirectory = useCallback(async (page: number, search: string) => {
@@ -114,7 +106,6 @@ export function AddSupplierDialog({
     setCodeState(manualSupplierCodeState(""));
     setError(null);
     setCodeError(null);
-    setCreditCodeError(null);
   }
 
   function changeOpen(nextOpen: boolean) {
@@ -128,7 +119,6 @@ export function AddSupplierDialog({
     setMode(nextMode);
     setCodeState(manualSupplierCodeState(""));
     setCodeError(null);
-    setCreditCodeError(null);
     setError(null);
   }
 
@@ -191,33 +181,32 @@ export function AddSupplierDialog({
   }
 
   async function createPrivate() {
-    if (!privateForm.name.trim() || !privateForm.legalName.trim()) {
-      setError("请填写供应商名称和法定名称");
+    const supplierName = privateForm.name.trim();
+    const contactName = privateForm.contactName.trim();
+    const contactPhone = privateForm.contactPhone.trim();
+    if (!supplierName) {
+      setError("请填写供应商名称");
       return;
     }
-    if (!validCode()) return;
     setCreatingId("private");
     setError(null);
-    setCreditCodeError(null);
     try {
       await createTenantPrivateSupplier({
-        name: privateForm.name.trim(),
-        legal_name: privateForm.legalName.trim(),
-        supplier_type: privateForm.supplierType,
-        ...(privateForm.creditCode.trim()
-          ? { unified_social_credit_code: privateForm.creditCode.trim() }
+        name: supplierName,
+        ...(contactName
+          ? {
+            primary_contact: {
+              name: contactName,
+              phone: contactPhone || null,
+            },
+          }
           : {}),
-        ...codeState,
       }, newIdempotencyKey("tenant-private-supplier-create"));
       toast.success("已新建租户私有供应商");
       changeOpen(false);
       onCreated();
     } catch (caught) {
-      if (isSupplierCodeConflict(caught)) {
-        setCodeError(messageOf(caught, "供应商内部编码已存在"));
-      } else if (isSupplierIdentityConflict(caught)) {
-        setCreditCodeError(messageOf(caught, "当前租户已存在相同主体的私有供应商"));
-      } else setError(messageOf(caught, "新建租户私有供应商失败"));
+      setError(messageOf(caught, "新建租户私有供应商失败"));
     } finally {
       setCreatingId(null);
     }
@@ -258,24 +247,22 @@ export function AddSupplierDialog({
 
         {mode ? (
           <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pr-1">
-            <SupplierCodeField value={codeState.internal_supplier_code}
-              generated={codeState.code_source === "generated"}
-              allocating={allocating} allocationEnabled={codeAllocationEnabled}
-              error={codeError}
-              onChange={changeCode} onGenerate={() => void generateCode()} />
             {mode === "shared" ? (
-              <SharedDirectory keyword={keyword} setKeyword={setKeyword}
-                directory={directory} loading={loading} error={error}
-                creatingId={creatingId} allocating={allocating}
-                loadDirectory={loadDirectory}
-                createShared={createShared} />
+              <>
+                <SupplierCodeField value={codeState.internal_supplier_code}
+                  generated={codeState.code_source === "generated"}
+                  allocating={allocating} allocationEnabled={codeAllocationEnabled}
+                  error={codeError}
+                  onChange={changeCode} onGenerate={() => void generateCode()} />
+                <SharedDirectory keyword={keyword} setKeyword={setKeyword}
+                  directory={directory} loading={loading} error={error}
+                  creatingId={creatingId} allocating={allocating}
+                  loadDirectory={loadDirectory}
+                  createShared={createShared} />
+              </>
             ) : (
               <PrivateSupplierFields form={privateForm} setForm={setPrivateForm}
-                error={error} creditCodeError={creditCodeError}
-                onCreditCodeChange={(value) => {
-                  setPrivateForm((current) => ({ ...current, creditCode: value }));
-                  setCreditCodeError(null);
-                }} />
+                error={error} />
             )}
           </div>
         ) : (
@@ -370,7 +357,7 @@ function SharedDirectory(props: {
       </div>
     </Field>
     <div className="min-h-48 rounded-md border">
-      {props.loading ? <div className="space-y-2 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
+      {props.loading ? <div className="flex flex-col gap-2 p-3"><Skeleton className="h-14" /><Skeleton className="h-14" /></div>
         : props.error ? <div className="p-4 text-sm text-destructive">{props.error}</div>
         : props.directory.list.length ? <div className="divide-y">{props.directory.list.map((supplier) =>
           <div key={supplier.id} className="flex items-center justify-between gap-3 p-3">
@@ -400,8 +387,7 @@ function SharedDirectory(props: {
 
 function PrivateSupplierFields(props: {
   form: PrivateForm; setForm: React.Dispatch<React.SetStateAction<PrivateForm>>;
-  error: string | null; creditCodeError: string | null;
-  onCreditCodeChange: (value: string) => void;
+  error: string | null;
 }) {
   const set = (field: keyof PrivateForm, value: string) =>
     props.setForm((current) => ({ ...current, [field]: value }));
@@ -410,33 +396,14 @@ function PrivateSupplierFields(props: {
       <Field><FieldLabel htmlFor="private-supplier-name">供应商名称</FieldLabel>
         <Input id="private-supplier-name" value={props.form.name}
           onChange={(event) => set("name", event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="private-supplier-legal-name">法定名称</FieldLabel>
-        <Input id="private-supplier-legal-name" value={props.form.legalName}
-          onChange={(event) => set("legalName", event.target.value)} /></Field>
-      <Field><FieldLabel htmlFor="private-supplier-type">供应商类型</FieldLabel>
-        <Select value={props.form.supplierType}
-          onValueChange={(value) => set("supplierType", value)}>
-          <SelectTrigger id="private-supplier-type"><SelectValue /></SelectTrigger>
-          <SelectContent><SelectGroup>
-            {Object.entries(supplierTypeLabel).map(([value, label]) =>
-              <SelectItem key={value} value={value}>{label}</SelectItem>)}
-          </SelectGroup></SelectContent>
-        </Select></Field>
-      <Field data-invalid={Boolean(props.creditCodeError)}>
-        <FieldLabel htmlFor="private-supplier-credit-code">统一社会信用代码</FieldLabel>
-        <Input id="private-supplier-credit-code" value={props.form.creditCode}
-          aria-invalid={Boolean(props.creditCodeError)}
-          aria-describedby={props.creditCodeError
-            ? "private-supplier-credit-code-error" : undefined}
+      <Field><FieldLabel htmlFor="private-supplier-contact-name">联系人</FieldLabel>
+        <Input id="private-supplier-contact-name" value={props.form.contactName}
           placeholder="选填"
-          onChange={(event) =>
-            props.onCreditCodeChange(event.target.value.toUpperCase())} />
-        {props.creditCodeError ? (
-          <div id="private-supplier-credit-code-error" role="alert">
-            <FieldError>{props.creditCodeError}</FieldError>
-          </div>
-        ) : null}
-      </Field>
+          onChange={(event) => set("contactName", event.target.value)} /></Field>
+      <Field><FieldLabel htmlFor="private-supplier-contact-phone">联系电话</FieldLabel>
+        <Input id="private-supplier-contact-phone" value={props.form.contactPhone}
+          placeholder="选填"
+          onChange={(event) => set("contactPhone", event.target.value)} /></Field>
     </div>
     <FieldError>{props.error}</FieldError>
   </FieldGroup>;

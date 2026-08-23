@@ -1,5 +1,3 @@
-import type { SupplierType } from "@gooes/domain";
-
 import { requestBackendJson } from "@/lib/backend-client";
 
 export type SupplierCodeState =
@@ -51,11 +49,13 @@ export function createTenantSharedRelationship(
 }
 
 export function createTenantPrivateSupplier(
-  input: SupplierCodeState & {
+  input: {
     name: string;
-    legal_name: string;
-    supplier_type: SupplierType;
-    unified_social_credit_code?: string;
+    primary_contact?: {
+      name: string;
+      phone?: string | null;
+      email?: string | null;
+    };
   },
   idempotencyKey: string,
 ) {

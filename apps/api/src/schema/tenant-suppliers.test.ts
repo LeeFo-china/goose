@@ -126,6 +126,30 @@ describe("tenant private supplier master contracts", () => {
     supplier_type: "manufacturer",
   } as const;
 
+  test("accepts tenant private supplier creation with only a supplier name", () => {
+    expect(TenantSupplierPrivateCreateSchema.parse({
+      name: "固始晴天装饰工程有限公司",
+    })).toEqual({
+      name: "固始晴天装饰工程有限公司",
+    });
+  });
+
+  test("keeps accepting legacy explicit private supplier code payloads", () => {
+    expect(TenantSupplierPrivateCreateSchema.parse({
+      name: "晴天建材",
+      legal_name: "晴天建材有限公司",
+      supplier_type: "manufacturer",
+      code_source: "manual",
+      internal_supplier_code: "SUNNY-01",
+    })).toMatchObject({
+      name: "晴天建材",
+      legal_name: "晴天建材有限公司",
+      supplier_type: "manufacturer",
+      code_source: "manual",
+      internal_supplier_code: "SUNNY-01",
+    });
+  });
+
   test("accepts bounded primary contact and address details", () => {
     expect(TenantSupplierPrivateCreateSchema.parse({
       ...validPrivateSupplier,

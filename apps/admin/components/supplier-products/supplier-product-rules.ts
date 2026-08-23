@@ -46,9 +46,16 @@ export function supplierProductSource(
 export function relationshipIsWritable(
   relationship: TenantSupplierRelationship,
 ) {
-  return relationship.relationship_status === "active" &&
+  const tenantOwnedPrivateSupplier =
+    relationship.supplier.ownership_scope === "tenant" &&
+    relationship.supplier.owner_tenant_id === relationship.tenant_id;
+  const platformReady =
     relationship.supplier.onboarding_status === "approved" &&
     relationship.supplier.operational_status === "active";
+  const privateReady = tenantOwnedPrivateSupplier &&
+    relationship.supplier.operational_status === "active";
+  return relationship.relationship_status === "active" &&
+    (platformReady || privateReady);
 }
 
 export function relationshipReadOnlyMessage(

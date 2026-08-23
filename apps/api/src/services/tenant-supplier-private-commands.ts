@@ -15,6 +15,9 @@ export type SupplierActor = {
   authUserId: string;
   employeeId: string;
 };
+const PRIVATE_SUPPLIER_DEFAULTS = {
+  supplier_type: "other" as const,
+};
 
 export async function requirePrivateSupplierWrites(
   repository: TenantSuppliersRepositoryPort,
@@ -64,6 +67,39 @@ export function createPrivateSupplier(
     idempotency_key: idempotencyKey,
   };
   return repository.createPrivateSupplier(command);
+}
+
+export async function createSimplifiedPrivateSupplier(
+  repository: TenantSuppliersRepositoryPort,
+  actor: SupplierActor,
+  input: Pick<TenantSupplierPrivateCreateInput, "name" | "primary_contact">,
+  idempotencyKey: string,
+) {
+  const allocation = await allocateInternalCode(
+    repository,
+    actor,
+    supplierCodeAllocationKey(idempotencyKey),
+  );
+  return createPrivateSupplier(
+    repository,
+    actor,
+    {
+      name: input.name,
+      legal_name: input.name,
+      supplier_type: PRIVATE_SUPPLIER_DEFAULTS.supplier_type,
+      primary_contact: input.primary_contact,
+      code_source: "generated",
+      internal_supplier_code: allocation.code,
+      allocation_id: allocation.allocation_id,
+    },
+    idempotencyKey,
+  );
+}
+
+export function isSimplifiedPrivateSupplierInput(
+  input: TenantSupplierPrivateCreateInput,
+) {
+  return !("code_source" in input);
 }
 
 export function createSharedRelationship(
@@ -142,4 +178,9 @@ function omitTenantId<T extends object>(input: T): Omit<T, "tenant_id"> {
   const { tenant_id: _tenantId, ...rest } =
     input as T & { tenant_id?: unknown };
   return rest;
+}
+
+function supplierCodeAllocationKey(idempotencyKey: string) {
+  const key = `private-code:${idempotencyKey}`;
+  return key.length <= 120 ? key : key.slice(0, 120);
 }
