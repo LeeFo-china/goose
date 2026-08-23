@@ -59,6 +59,25 @@ export const mockTenantCatalogViewerSession = {
 
 const now = "2026-07-29T10:00:00+08:00";
 
+export function currentServiceAccessSummary() {
+  return {
+    accessStatus: "workspace_available",
+    accessMode: "paid",
+    accessLevel: "read_write",
+    canEnterWorkspace: true,
+    readonly: false,
+    trialId: null,
+    trialStatus: null,
+    startsAt: null,
+    endsAt: null,
+    evaluatedAt: now,
+    title: "平台技术服务可用",
+    message: "当前企业可正常使用工作台。",
+    primaryAction: { key: "enter_workspace", label: "进入工作台" },
+    secondaryAction: null,
+  };
+}
+
 const initialCategory = {
   id: "11000000-0000-4000-8000-000000000001",
   code: "CAT-BASE",

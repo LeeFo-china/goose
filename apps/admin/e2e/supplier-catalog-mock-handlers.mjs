@@ -43,6 +43,10 @@ export function createCatalogMockRuntime() {
     return nextId(prefix, count);
   }
 
+  function generatedTenantCategoryCode(id) {
+    return `TC-${id.replaceAll("-", "").toUpperCase()}`;
+  }
+
   function nextSpecId() {
     const count = Object.values(state.specs)
       .reduce((total, records) => total + records.length, 0);
@@ -72,6 +76,9 @@ export function createCatalogMockRuntime() {
       (parentId ? record.parent_id === parentId : record.parent_id === null) &&
       (url.searchParams.get("scope") !== "platform" ||
         record.ownership_scope === "platform")
+    ).sort((left, right) =>
+      (left.sort_order ?? 0) - (right.sort_order ?? 0) ||
+      left.created_at.localeCompare(right.created_at)
     ), url);
   }
 
@@ -137,6 +144,7 @@ export function createCatalogMockRuntime() {
   async function createTenantCategory(request, response, url) {
     const payload = JSON.parse(await readBody(request) || "{}");
     if (!requireIdempotencyKey(request, response)) return;
+    const id = nextId("21000000", state.tenantCategories.length);
     const parent = payload.parent_id
       ? state.tenantCategories.find(({ id }) => id === payload.parent_id)
       : null;
@@ -148,8 +156,8 @@ export function createCatalogMockRuntime() {
       : null;
     const now = new Date().toISOString();
     const record = {
-      id: nextId("21000000", state.tenantCategories.length),
-      code: payload.code,
+      id,
+      code: payload.code ?? generatedTenantCategoryCode(id),
       name: payload.name,
       parent_id: payload.parent_id ?? null,
       level: parent ? parent.level + 1 : 1,
@@ -166,7 +174,7 @@ export function createCatalogMockRuntime() {
       ownership_scope: "tenant",
       owner_tenant_id: mockTenantCatalogSession.tenant.id,
       status: payload.status,
-      sort_order: payload.sort_order,
+      sort_order: payload.sort_order ?? 100,
       version: 1,
       created_at: now,
       updated_at: now,
@@ -175,6 +183,29 @@ export function createCatalogMockRuntime() {
     state.tenantCategories.push(record);
     recordMutation(request, url, payload);
     sendJson(response, 201, { success: true, data: record });
+  }
+
+  async function pinTenantCategory(request, response, url, id) {
+    const payload = JSON.parse(await readBody(request) || "{}");
+    if (!requireIdempotencyKey(request, response)) return;
+    const record = state.tenantCategories.find((item) => item.id === id);
+    if (!record) return recordNotFound(response, "category");
+    if (payload.expected_version !== record.version) {
+      return versionConflict(response, record);
+    }
+    const siblingSorts = state.tenantCategories
+      .filter((item) =>
+        item.parent_id === record.parent_id &&
+        item.ownership_scope === record.ownership_scope
+      )
+      .map(({ sort_order }) => sort_order)
+      .filter((value) => Number.isFinite(value));
+    const minSort = siblingSorts.length ? Math.min(...siblingSorts) : record.sort_order;
+    record.sort_order = minSort - 10;
+    record.version += 1;
+    record.updated_at = new Date().toISOString();
+    recordMutation(request, url, payload);
+    sendJson(response, 200, { success: true, data: record });
   }
 
   async function updateTenantCategory(request, response, url, id) {
@@ -475,6 +506,7 @@ export function createCatalogMockRuntime() {
     listSpecs,
     createCategory,
     createTenantCategory,
+    pinTenantCategory,
     updateTenantCategory,
     updateTenantBrand,
     createBrand,

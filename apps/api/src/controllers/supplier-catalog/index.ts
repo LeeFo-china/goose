@@ -17,6 +17,7 @@ import {
   TenantCatalogBrandUpdateSchema,
   TenantCatalogCategoryCreateSchema,
   TenantCatalogCategoryListQuerySchema,
+  TenantCatalogCategoryPinSchema,
   TenantCatalogCategoryUpdateSchema,
 } from "@/schema/supplier-catalog";
 import { supplierCatalogService } from "@/services/supplier-catalog";
@@ -65,6 +66,20 @@ class SupplierCatalogController extends TenantBaseController {
     );
     return ResponseHandler.success(
       await supplierCatalogService.updateTenantCategory(auth, id, input, key),
+    );
+  }
+
+  @Post("/catalog/categories/:id:pin")
+  async pinCategory(request: FastifyRequest) {
+    const auth = await this.getRequiredTenantContext(request);
+    const key = requireIdempotencyKey(request);
+    const { id } = parseCatalogRequest(CatalogCategoryParamSchema, request.params);
+    const input = parseCatalogRequest(
+      TenantCatalogCategoryPinSchema,
+      request.body,
+    );
+    return ResponseHandler.success(
+      await supplierCatalogService.pinTenantCategory(auth, id, input, key),
     );
   }
 

@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 
 import {
+  currentServiceAccessSummary,
   mockCatalogSession,
   mockTenantCatalogSession,
   mockTenantCatalogViewerSession,
@@ -63,6 +64,10 @@ const server = createServer(async (request, response) => {
     sendJson(response, 200, { success: true, data: session });
     return;
   }
+  if (request.method === "GET" && url.pathname === "/employee/service-access") {
+    sendJson(response, 200, { success: true, data: currentServiceAccessSummary() });
+    return;
+  }
   if (request.method === "GET" && url.pathname.startsWith("/catalog/")) {
     runtime.recordCatalogRequest(url);
   }
@@ -75,6 +80,16 @@ const server = createServer(async (request, response) => {
   }
   if (request.method === "POST" && url.pathname === "/catalog/categories") {
     await runtime.createTenantCategory(request, response, url);
+    return;
+  }
+  const tenantCategoryPin = url.pathname.match(/^\/catalog\/categories\/([^/]+):pin$/);
+  if (request.method === "POST" && tenantCategoryPin) {
+    await runtime.pinTenantCategory(
+      request,
+      response,
+      url,
+      decodeURIComponent(tenantCategoryPin[1]),
+    );
     return;
   }
   const tenantCategory = url.pathname.match(/^\/catalog\/categories\/([^/]+)$/);

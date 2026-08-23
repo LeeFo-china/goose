@@ -27,7 +27,6 @@ import { requestBackendJson } from "@/lib/backend-client";
 import { buildTenantCategoryCommand } from "./tenant-catalog-requests";
 import { newTenantCatalogCommandKey } from "./tenant-catalog-rules";
 import type { TenantCatalogCategory } from "./tenant-catalog-types";
-import { TenantPlatformCategoryPicker } from "./tenant-platform-category-picker";
 
 export function TenantCategoryDialogButton({
   record,
@@ -41,20 +40,12 @@ export function TenantCategoryDialogButton({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [conflict, setConflict] = useState(false);
-  const [code, setCode] = useState(record?.code ?? "");
   const [name, setName] = useState(record?.name ?? "");
-  const [sortOrder, setSortOrder] = useState(String(record?.sort_order ?? 100));
-  const [mappingId, setMappingId] = useState(
-    record?.mapped_platform_category_id ?? "",
-  );
 
   const editing = Boolean(record);
 
   function reset() {
-    setCode(record?.code ?? "");
     setName(record?.name ?? "");
-    setSortOrder(String(record?.sort_order ?? 100));
-    setMappingId(record?.mapped_platform_category_id ?? "");
     setConflict(false);
   }
 
@@ -69,10 +60,7 @@ export function TenantCategoryDialogButton({
       ...(record
         ? { expected_version: record.version }
         : { parent_id: parentId, status: "active" }),
-      code: code.trim(),
       name: name.trim(),
-      mapped_platform_category_id: mappingId || null,
-      sort_order: Number(sortOrder),
     };
     const intent = resolveCatalogCreateIntent(
       intentRef.current,
@@ -128,7 +116,7 @@ export function TenantCategoryDialogButton({
         <DialogHeader>
           <DialogTitle>{editing ? "编辑私有类目" : "新建私有类目"}</DialogTitle>
           <DialogDescription>
-            私有类目永久属于当前租户，平台映射仅用于标准化。
+            私有类目永久属于当前租户，编码和排序由系统维护。
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -139,10 +127,9 @@ export function TenantCategoryDialogButton({
               </FieldLabel>
               <Input
                 id={`tenant-category-code-${record?.id ?? "new"}`}
-                required
-                maxLength={64}
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
+                value={record?.code ?? "保存后自动生成"}
+                disabled
+                readOnly
               />
             </Field>
             <Field>
@@ -155,26 +142,6 @@ export function TenantCategoryDialogButton({
                 maxLength={120}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel>平台分类映射</FieldLabel>
-              <TenantPlatformCategoryPicker
-                value={mappingId}
-                pinned={record?.mapped_platform_category ?? null}
-                onChange={setMappingId}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor={`tenant-category-sort-${record?.id ?? "new"}`}>
-                排序
-              </FieldLabel>
-              <Input
-                id={`tenant-category-sort-${record?.id ?? "new"}`}
-                type="number"
-                required
-                value={sortOrder}
-                onChange={(event) => setSortOrder(event.target.value)}
               />
             </Field>
             {conflict ? (

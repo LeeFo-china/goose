@@ -66,6 +66,48 @@ describe("supplier catalog tenant schemas", () => {
     }).success).toBe(false);
   });
 
+  test("tenant category creates only require user-facing fields", () => {
+    const category = schema("TenantCatalogCategoryCreateSchema");
+
+    expect(category.parse({
+      name: "租户分类",
+    })).toEqual({
+      parent_id: null,
+      name: "租户分类",
+      status: "active",
+    });
+    expect(category.parse({
+      parent_id: crypto.randomUUID(),
+      name: "子分类",
+    })).toMatchObject({
+      name: "子分类",
+      status: "active",
+    });
+  });
+
+  test("tenant category updates reject system-managed fields", () => {
+    const category = schema("TenantCatalogCategoryUpdateSchema");
+
+    expect(category.parse({
+      expected_version: 2,
+      name: "更新名称",
+    })).toEqual({
+      expected_version: 2,
+      name: "更新名称",
+    });
+    for (const field of [
+      { code: "MANUAL" },
+      { sort_order: 10 },
+      { mapped_platform_category_id: crypto.randomUUID() },
+    ]) {
+      expect(category.safeParse({
+        expected_version: 2,
+        name: "更新名称",
+        ...field,
+      }).success).toBe(false);
+    }
+  });
+
   test("validates spec value types and enum contracts", () => {
     const create = schema("CatalogSpecDefinitionCreateSchema");
     const common = { code: "COLOR", name: "颜色" };

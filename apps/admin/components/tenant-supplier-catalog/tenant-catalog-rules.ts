@@ -20,13 +20,12 @@ export function canBrowseTenantCategoryChildren(level: number) {
 
 export function getTenantCatalogCapabilities(record: {
   ownership_scope: CatalogOwnershipScope;
-  mapped_platform_category_id?: string | null;
 }) {
   const isTenantOwned = record.ownership_scope === "tenant";
   return {
     canEdit: isTenantOwned,
     canChangeStatus: isTenantOwned,
-    canCopySpecs: isTenantOwned && Boolean(record.mapped_platform_category_id),
+    canCopySpecs: false,
   };
 }
 

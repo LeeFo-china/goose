@@ -53,6 +53,19 @@ export function buildTenantCategoryCommand(input: {
   );
 }
 
+export function buildTenantCategoryPinCommand(input: {
+  id: string;
+  expectedVersion: number;
+  idempotencyKey: string;
+}) {
+  return command(
+    `/catalog/categories/${input.id}:pin`,
+    "POST",
+    { expected_version: input.expectedVersion },
+    input.idempotencyKey,
+  );
+}
+
 export function buildTenantBrandCommand(input: {
   id?: string;
   payload: object;

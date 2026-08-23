@@ -77,13 +77,17 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    const categoryId = this.commandIdFactory(
+      "tenant.catalog.category.create",
+      actor.authUserId,
+      idempotencyKey,
+    );
     return this.repository.createTenantCategory({
       ...input,
-      category_id: this.commandIdFactory(
-        "tenant.catalog.category.create",
-        actor.authUserId,
-        idempotencyKey,
-      ),
+      category_id: categoryId,
+      code: generatedTenantCategoryCode(categoryId),
+      sort_order: 100,
+      mapped_platform_category_id: null,
       ...tenantCommandContext(actor, idempotencyKey),
     });
   }
@@ -107,13 +111,42 @@ export class SupplierCatalogTenantService {
     return this.repository.updateTenantCategory({
       category_id: categoryId,
       parent_id: input.parent_id ?? current.parent_id,
-      code: input.code ?? current.code,
+      code: current.code,
       name: input.name ?? current.name,
       status: input.status ?? current.status,
-      sort_order: input.sort_order ?? current.sort_order,
-      mapped_platform_category_id: input.mapped_platform_category_id === undefined
-        ? current.mapped_platform_category_id
-        : input.mapped_platform_category_id,
+      sort_order: current.sort_order,
+      mapped_platform_category_id: current.mapped_platform_category_id,
+      expected_version: input.expected_version,
+      ...tenantCommandContext(actor, idempotencyKey),
+    });
+  }
+
+  async pinCategory(
+    auth: AuthContext,
+    categoryId: string,
+    input: { expected_version: number },
+    idempotencyKey: string,
+  ) {
+    const actor = await this.requireWrite(auth);
+    const current = await this.requireWritableCategory(actor.tenantId, categoryId);
+    const siblings = await this.repository.listCategories(
+      { parent_id: current.parent_id, page: 1, pageSize: 100 },
+      { kind: "tenant", tenantId: actor.tenantId },
+    );
+    const siblingSortOrders = siblings.list
+      .map((category) => category.sort_order)
+      .filter((sortOrder) => Number.isFinite(sortOrder));
+    const minSortOrder = siblingSortOrders.length
+      ? Math.min(...siblingSortOrders)
+      : current.sort_order;
+    return this.repository.updateTenantCategory({
+      category_id: categoryId,
+      parent_id: current.parent_id,
+      code: current.code,
+      name: current.name,
+      status: current.status,
+      sort_order: minSortOrder - 10,
+      mapped_platform_category_id: current.mapped_platform_category_id,
       expected_version: input.expected_version,
       ...tenantCommandContext(actor, idempotencyKey),
     });
@@ -416,6 +449,10 @@ function tenantOwnedStatus<T extends { status?: "active" | "inactive" }>(
   input: T,
 ) {
   return { ...input, status: input.status ?? "active" as const };
+}
+
+function generatedTenantCategoryCode(categoryId: string) {
+  return `TC-${categoryId.replaceAll("-", "").toUpperCase()}`;
 }
 
 function actorCommandContext(actor: CatalogActor, idempotencyKey: string) {
