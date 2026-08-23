@@ -56,13 +56,19 @@ env:
 jobs:
   validate-request:
     name: Validate image build request
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON((github.event_name == 'push' || inputs.target_environment == 'development') && '["self-hosted","Linux","X64","gooes-dev-deploy"]' || '["ubuntu-24.04"]') }}
     outputs:
       build_services: ${{ steps.resolve.outputs.build_services }}
       deploy_services: ${{ steps.resolve.outputs.deploy_services }}
       no_op: ${{ steps.resolve.outputs.no_op }}
       target_environment: ${{ steps.resolve.outputs.target_environment }}
     steps:
+      - name: Guard development build runner
+        if: ${{ github.event_name == 'push' || inputs.target_environment == 'development' }}
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Reject workflow re-runs
         run: |
           set -euo pipefail
@@ -220,7 +226,7 @@ jobs:
     needs: validate-request
     if: ${{ needs.validate-request.outputs.no_op != 'true' }}
     name: Build ${{ matrix.service }}
-    runs-on: ubuntu-24.04
+    runs-on: ${{ fromJSON(needs.validate-request.outputs.target_environment == 'development' && '["self-hosted","Linux","X64","gooes-dev-deploy"]' || '["ubuntu-24.04"]') }}
     timeout-minutes: 45
     environment: ${{ needs.validate-request.outputs.target_environment }}
     env:
@@ -242,6 +248,12 @@ jobs:
             image_repo: goose-web
 
     steps:
+      - name: Guard development build runner
+        if: ${{ needs.validate-request.outputs.target_environment == 'development' }}
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Reject build job re-runs
         run: |
           set -euo pipefail

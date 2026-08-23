@@ -1533,11 +1533,10 @@ describe("reusable build workflow", () => {
     const buildJob = workflow.slice(buildJobStart, productionPullJobStart);
     const buildStepsStart = buildJob.indexOf("    steps:");
     const buildGuardStart = buildJob.indexOf(buildRerunGuardMarker);
-    const firstBuildStepStart = buildJob.indexOf("      - ", buildStepsStart);
     const buildCheckoutStart = buildJob.indexOf(buildCheckoutMarker);
     if (
       buildStepsStart < 0 ||
-      buildGuardStart !== firstBuildStepStart ||
+      buildGuardStart <= buildStepsStart ||
       buildCheckoutStart <= buildGuardStart
     ) {
       return false;

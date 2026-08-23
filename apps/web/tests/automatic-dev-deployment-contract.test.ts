@@ -206,14 +206,16 @@ describe("automatic development image build contract", () => {
     expect(buildJob).toContain("image-manifest-${SERVICE}.json");
   });
 
-  test("keeps validation and build jobs off deployment runners", () => {
+  test("runs development validation and builds on the dev runner only", () => {
     const buildJobs = sliceBetween(
       "  validate-request:",
       "  verify-production-pull:",
     );
 
-    expect(buildJobs).toContain("runs-on: ubuntu-24.04");
-    expect(buildJobs).not.toContain("gooes-dev-deploy");
+    expect(buildJobs).toContain("gooes-dev-deploy");
+    expect(buildJobs).toContain('test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"');
+    expect(buildJobs).toContain("inputs.target_environment == 'development'");
+    expect(buildJobs).toContain('needs.validate-request.outputs.target_environment == \'development\'');
     expect(buildJobs).not.toContain("gooes-build-tencent");
     expect(buildJobs).not.toContain("gooes-prod-deploy");
     expect(buildJobs).not.toContain("gooes-prod-vm-0-3");
