@@ -40,17 +40,12 @@ export function UnitSuggestionStatusBadge({
 
 export function TenantCategoryIdentity({
   fullName,
-  mappedPlatformName,
 }: {
   fullName: string;
-  mappedPlatformName: string | null;
 }) {
   return (
     <div className="flex min-w-[220px] flex-col gap-1">
       <span className="font-semibold">{fullName}</span>
-      <span className="text-xs text-muted-foreground">
-        {mappedPlatformName ?? "未映射平台标准分类"}
-      </span>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { TenantCategoryDialogButton } from "./tenant-category-dialog";
+import { TenantCategoryPinAction } from "./tenant-category-pin-action";
 import { TenantCatalogStatusAction } from "./tenant-catalog-status-action";
 import {
   TenantCatalogSourceBadge,
@@ -45,13 +46,10 @@ export function TenantCategoryTable({
     },
     {
       accessorKey: "full_name",
-      header: "完整分类名 / 平台映射",
+      header: "完整分类名",
       cell: ({ row }) => (
         <div className="flex min-w-[260px] items-center gap-2">
-          <TenantCategoryIdentity
-            fullName={row.original.full_name}
-            mappedPlatformName={row.original.mapped_platform_category?.full_name ?? null}
-          />
+          <TenantCategoryIdentity fullName={row.original.full_name} />
           {canBrowseTenantCategoryChildren(row.original.level) ? (
             <Button type="button" size="sm" variant="ghost" asChild>
               <Link
@@ -104,6 +102,7 @@ export function TenantCategoryTable({
             {capabilities.canEdit ? (
               <>
                 <TenantCategoryDialogButton record={row.original} />
+                <TenantCategoryPinAction record={row.original} />
                 <TenantCatalogStatusAction kind="category" record={row.original} />
               </>
             ) : <span className="self-center text-sm text-muted-foreground">只读</span>}

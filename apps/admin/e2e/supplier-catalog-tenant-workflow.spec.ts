@@ -38,12 +38,11 @@ test.describe("租户私有供应商目录", () => {
 
     await page.getByRole("button", { name: "新建私有类目" }).click();
     const dialog = page.getByRole("dialog", { name: "新建私有类目" });
-    await dialog.getByLabel("编码").fill("TENANT-TILE");
+    await expect(dialog.getByLabel("编码")).toBeDisabled();
+    await expect(dialog.getByLabel("编码")).toHaveValue("保存后自动生成");
+    await expect(dialog.getByText(/平台映射/)).toHaveCount(0);
+    await expect(dialog.getByLabel("排序")).toHaveCount(0);
     await dialog.getByLabel("名称").fill("租户瓷砖");
-    await dialog.getByRole("button", {
-      name: /平台标准建材.*PLATFORM-MATERIAL/,
-    }).click();
-    await expect(dialog.getByText(/当前映射：平台标准建材/)).toBeVisible();
     await dialog.getByRole("button", { name: "保存类目" }).click();
 
     await expect(page.getByText("私有类目已创建")).toBeVisible();
@@ -57,7 +56,6 @@ test.describe("租户私有供应商目录", () => {
       .toBe(true);
     await page.getByRole("button", { name: "新建私有类目" }).click();
     const childDialog = page.getByRole("dialog", { name: "新建私有类目" });
-    await childDialog.getByLabel("编码").fill("TENANT-TILE-GLUE");
     await childDialog.getByLabel("名称").fill("瓷砖胶");
     await childDialog.getByRole("button", { name: "保存类目" }).click();
     await expect(page.getByRole("row").filter({ hasText: "租户瓷砖 / 瓷砖胶" }))
@@ -70,18 +68,29 @@ test.describe("租户私有供应商目录", () => {
           path: "/catalog/categories",
           payload: expect.objectContaining({
             parent_id: null,
-            code: "TENANT-TILE",
-            mapped_platform_category_id: "11000000-0000-4000-8000-000000000010",
+            name: "租户瓷砖",
+            status: "active",
           }),
         },
         {
           path: "/catalog/categories",
           payload: expect.objectContaining({
             parent_id: "21000000-0000-4000-8000-000000000010",
-            code: "TENANT-TILE-GLUE",
+            name: "瓷砖胶",
+            status: "active",
           }),
         },
       ]);
+    expect(mutations.at(-2)?.payload).not.toHaveProperty("code");
+    expect(mutations.at(-2)?.payload).not.toHaveProperty("sort_order");
+    expect(mutations.at(-2)?.payload).not.toHaveProperty(
+      "mapped_platform_category_id",
+    );
+    expect(mutations.at(-1)?.payload).not.toHaveProperty("code");
+    expect(mutations.at(-1)?.payload).not.toHaveProperty("sort_order");
+    expect(mutations.at(-1)?.payload).not.toHaveProperty(
+      "mapped_platform_category_id",
+    );
 
     await page.goto("/supplier-catalog", { waitUntil: "networkidle" });
     let deepRow = page.getByRole("row").filter({
@@ -108,16 +117,15 @@ test.describe("租户私有供应商目录", () => {
     await expect(page.getByRole("button", { name: "新建私有类目" })).toBeVisible();
     await page.getByRole("button", { name: "新建私有类目" }).click();
     const levelEightDialog = page.getByRole("dialog", { name: "新建私有类目" });
-    await levelEightDialog.getByLabel("编码").fill("TENANT-DEEP-8");
     await levelEightDialog.getByLabel("名称").fill("深层第8层");
     await levelEightDialog.getByRole("button", { name: "保存类目" }).click();
     await expect.poll(async () =>
       (await readMutations(request)).find(
-        ({ payload }) => payload.code === "TENANT-DEEP-8",
+        ({ payload }) => payload.name === "深层第8层",
       )
     ).not.toBeUndefined();
     const deepMutation = (await readMutations(request)).find(
-      ({ payload }) => payload.code === "TENANT-DEEP-8",
+      ({ payload }) => payload.name === "深层第8层",
     );
     expect(deepMutation?.payload.parent_id).toBe(
       "22000000-0000-4000-8000-000000000007",
@@ -127,12 +135,12 @@ test.describe("租户私有供应商目录", () => {
     );
     expect(deepPageResponse.ok()).toBe(true);
     const deepPage = await deepPageResponse.json() as {
-      data: { list: Array<{ code: string }> };
+      data: { list: Array<{ name: string }> };
     };
-    expect(deepPage.data.list.map(({ code }) => code)).toContain("TENANT-DEEP-8");
+    expect(deepPage.data.list.map(({ name }) => name)).toContain("深层第8层");
     await page.goto(levelSevenUrl, { waitUntil: "networkidle" });
     const levelEightRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-DEEP-8", exact: true }),
+      hasText: "深层第8层",
     });
     await expect(levelEightRow).toBeVisible();
     await expect(levelEightRow.getByRole("link", {
@@ -162,27 +170,22 @@ test.describe("租户私有供应商目录", () => {
     );
   });
 
-  test("可维护映射、单位建议并连续复制私有分类规格", async ({ page, request }) => {
+  test("租户可置顶分类、提交单位建议并维护品牌映射", async ({ page, request }) => {
     await loginAsTenantAdmin(page);
     await page.goto("/supplier-catalog", { waitUntil: "networkidle" });
+    await expect(
+      page.getByRole("heading", { name: "供应商目录", level: 1 }),
+    ).toBeVisible();
+    await expect.poll(async () => (await readCatalogRequests(request)).length)
+      .toBeGreaterThan(0);
     let categoryRow = page.getByRole("row").filter({
       has: page.getByRole("cell", { name: "TENANT-SUPPLIES", exact: true }),
     });
-    await expect(categoryRow).toContainText("平台标准建材");
-    await categoryRow.getByRole("button", { name: "编辑" }).click();
-    let categoryDialog = page.getByRole("dialog", { name: "编辑私有类目" });
-    await expect(categoryDialog).toBeVisible();
-    await categoryDialog.getByRole("button", {
-      name: /平台饰面材料.*PLATFORM-FINISH/,
-    }).click();
-    await expect(categoryDialog.getByText(/当前映射：平台饰面材料/))
-      .toBeVisible();
-    await categoryDialog.getByRole("button", { name: "保存类目" }).click();
-    await expect(page.getByText("私有类目已保存")).toBeVisible();
-    categoryRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-SUPPLIES", exact: true }),
-    });
-    await expect(categoryRow).toContainText("平台饰面材料");
+    await expect(categoryRow).toBeVisible();
+    await expect(categoryRow).not.toContainText("平台标准建材");
+    await expect(categoryRow.getByRole("button", { name: "置顶" })).toBeVisible();
+    await categoryRow.getByRole("button", { name: "置顶" }).click();
+    await expect(page.getByText("私有类目已置顶")).toBeVisible();
 
     await page.getByRole("tab", { name: "品牌" }).click();
     let brandRow = page.getByRole("row").filter({
@@ -234,43 +237,18 @@ test.describe("租户私有供应商目录", () => {
     const privateRow = page.getByRole("row").filter({ hasText: "租户标准辅料" });
     await privateRow.getByRole("button", { name: "规格模板" }).click();
     const specs = page.getByRole("dialog", { name: "租户标准辅料规格模板" });
-    await specs.getByRole("button", { name: "复制平台模板" }).click();
-    await expect(page.getByText("平台规格模板已复制")).toBeVisible();
-    await expect.poll(async () => (await readMutations(request)).filter(
-      ({ path }) => path.endsWith("spec-definitions:copy-platform"),
-    ).length).toBe(1);
-    await expect(specs).not.toBeVisible();
-
-    const refreshedPrivateRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-SUPPLIES", exact: true }),
-    });
-    await refreshedPrivateRow.getByRole("button", { name: "规格模板" }).click();
-    const refreshedSpecs = page.getByRole("dialog", {
-      name: "租户标准辅料规格模板",
-    });
-    await expect(refreshedSpecs.getByRole("row").filter({ hasText: "材质" }))
-      .toContainText("租户私有");
-    await refreshedSpecs.getByRole("button", { name: "复制平台模板" }).click();
-    await expect.poll(async () => (await readMutations(request)).filter(
-      ({ path }) => path.endsWith("spec-definitions:copy-platform"),
-    ).length).toBe(2);
+    await expect(specs.getByRole("button", { name: "复制平台模板" }))
+      .toHaveCount(0);
     const mutations = await readMutations(request);
-    const categoryUpdates = mutations.filter(({ path }) =>
-      path === "/catalog/categories/21000000-0000-4000-8000-000000000001"
+    const categoryPins = mutations.filter(({ path }) =>
+      path === "/catalog/categories/21000000-0000-4000-8000-000000000001:pin"
     );
-    expect(categoryUpdates.map(({ payload }) =>
-      payload.mapped_platform_category_id
-    )).toEqual(["11000000-0000-4000-8000-000000000011"]);
+    expect(categoryPins.map(({ payload }) => payload.expected_version))
+      .toEqual([1]);
     const brandUpdates = mutations.filter(({ path }) =>
       path === "/catalog/brands/23000000-0000-4000-8000-000000000001"
     );
     expect(brandUpdates.map(({ payload }) => payload.mapped_platform_brand_id))
       .toEqual(["12000000-0000-4000-8000-000000000099", null]);
-    const copies = mutations.filter(({ path }) =>
-      path.endsWith("spec-definitions:copy-platform")
-    );
-    expect(copies.map(({ payload }) => payload.expected_version)).toEqual([2, 3]);
-    expect(copies[0]?.idempotencyKey).not.toBe(copies[1]?.idempotencyKey);
-    await expect(refreshedSpecs).not.toBeVisible();
   });
 });

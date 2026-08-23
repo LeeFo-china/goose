@@ -277,6 +277,82 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
       .not.toHaveProperty("owner_tenant_id");
   });
 
+  test("generates tenant category code sort and empty mapping for simplified creates", async () => {
+    const { service, repository } = await setup();
+
+    await service.createTenantCategory(
+      auth,
+      { parent_id: null, name: "系统维护字段分类", status: "active" },
+      "category-create-system-fields",
+    );
+
+    expect(repository.createTenantCategory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category_id: "00000000-0000-4000-8000-000000000301",
+        parent_id: null,
+        code: "TC-00000000000040008000000000000301",
+        name: "系统维护字段分类",
+        status: "active",
+        sort_order: 100,
+        mapped_platform_category_id: null,
+      }),
+    );
+  });
+
+  test("pins tenant categories by moving sort ahead of visible siblings", async () => {
+    const { service, repository } = await setup();
+    repository.findVisibleCategory = mock(async () => ({
+      id: CATEGORY_ID,
+      ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID,
+      parent_id: null,
+      code: "TC-OLD",
+      name: "待置顶分类",
+      status: "active",
+      sort_order: 100,
+      mapped_platform_category_id: null,
+      version: 3,
+    })) as never;
+    repository.listCategories = mock(async () => ({
+      list: [
+        { id: CATEGORY_ID, sort_order: 100 },
+        { id: "00000000-0000-4000-8000-000000000202", sort_order: 20 },
+      ],
+      pagination: { page: 1, pageSize: 100, total: 2, totalPages: 1 },
+    })) as never;
+
+    await (service as unknown as {
+      pinTenantCategory(
+        auth: unknown,
+        id: string,
+        input: { expected_version: number },
+        key: string,
+      ): Promise<unknown>;
+    }).pinTenantCategory(
+      auth,
+      CATEGORY_ID,
+      { expected_version: 3 },
+      "category-pin-1",
+    );
+
+    expect(repository.listCategories).toHaveBeenCalledWith(
+      { parent_id: null, page: 1, pageSize: 100 },
+      { kind: "tenant", tenantId: TENANT_ID },
+    );
+    expect(repository.updateTenantCategory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category_id: CATEGORY_ID,
+        parent_id: null,
+        code: "TC-OLD",
+        name: "待置顶分类",
+        status: "active",
+        sort_order: 10,
+        mapped_platform_category_id: null,
+        expected_version: 3,
+      }),
+    );
+  });
+
   test("returns SHARED_RESOURCE_READ_ONLY before a tenant update command", async () => {
     const { service, repository } = await setup();
     repository.findVisibleCategory = mock(async () => ({

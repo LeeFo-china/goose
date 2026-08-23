@@ -27,26 +27,23 @@ const tenantCategoryFields = {
 };
 
 export const TenantCatalogCategoryCreateSchema = z.object({
-  ...tenantCategoryFields,
   parent_id: tenantCategoryFields.parent_id.default(null),
+  name: tenantCategoryFields.name,
   status: status.default("active"),
-  sort_order: tenantCategoryFields.sort_order.default(100),
-  mapped_platform_category_id:
-    tenantCategoryFields.mapped_platform_category_id.default(null),
 }).strict();
 
 export const TenantCatalogCategoryUpdateSchema = z.object({
   expected_version: expectedVersion,
   parent_id: tenantCategoryFields.parent_id.optional(),
-  code: tenantCategoryFields.code.optional(),
   name: tenantCategoryFields.name.optional(),
   status: status.optional(),
-  sort_order: tenantCategoryFields.sort_order.optional(),
-  mapped_platform_category_id:
-    tenantCategoryFields.mapped_platform_category_id.optional(),
 }).strict().refine(hasPatch, {
   message: "至少需要提交一个目录分类更新字段",
 });
+
+export const TenantCatalogCategoryPinSchema = z.object({
+  expected_version: expectedVersion,
+}).strict();
 
 const tenantBrandFields = {
   code: text(64, "目录品牌编码不能为空", "目录品牌编码不能超过 64 个字符"),
@@ -234,6 +231,8 @@ export type TenantCatalogCategoryCreateInput =
   z.infer<typeof TenantCatalogCategoryCreateSchema>;
 export type TenantCatalogCategoryUpdateInput =
   z.infer<typeof TenantCatalogCategoryUpdateSchema>;
+export type TenantCatalogCategoryPinInput =
+  z.infer<typeof TenantCatalogCategoryPinSchema>;
 export type TenantCatalogBrandCreateInput =
   z.infer<typeof TenantCatalogBrandCreateSchema>;
 export type TenantCatalogBrandUpdateInput =

@@ -56,15 +56,13 @@ describe("租户供应商目录", () => {
   test("derives read-only actions from permanent ownership", () => {
     expect(rules.getTenantCatalogCapabilities({
       ownership_scope: "platform",
-      mapped_platform_category_id: null,
     })).toEqual({ canEdit: false, canChangeStatus: false, canCopySpecs: false });
     expect(rules.getTenantCatalogCapabilities({
       ownership_scope: "tenant",
-      mapped_platform_category_id: PLATFORM_CATEGORY_ID,
-    })).toEqual({ canEdit: true, canChangeStatus: true, canCopySpecs: true });
+    })).toEqual({ canEdit: true, canChangeStatus: true, canCopySpecs: false });
   });
 
-  test("builds tenant brand, spec copy and spec edit commands", () => {
+  test("builds tenant brand, category pin and spec edit commands", () => {
     expect(requests.buildTenantBrandCommand({
       payload: {
         code: "TENANT-BRAND",
@@ -81,13 +79,12 @@ describe("租户供应商目录", () => {
     }).path).toBe(
       `/catalog/categories/${TENANT_CATEGORY_ID}/spec-definitions/${PLATFORM_CATEGORY_ID}`,
     );
-    expect(requests.buildTenantCopySpecsCommand({
-      categoryId: TENANT_CATEGORY_ID,
-      platformCategoryId: PLATFORM_CATEGORY_ID,
+    expect(requests.buildTenantCategoryPinCommand({
+      id: TENANT_CATEGORY_ID,
       expectedVersion: 3,
-      idempotencyKey: "tenant-spec:copy-1",
+      idempotencyKey: "tenant-category:pin-1",
     })).toMatchObject({
-      path: `/catalog/categories/${TENANT_CATEGORY_ID}/spec-definitions:copy-platform`,
+      path: `/catalog/categories/${TENANT_CATEGORY_ID}:pin`,
       init: { method: "POST" },
     });
   });
@@ -183,21 +180,18 @@ describe("租户供应商目录", () => {
     expect(JSON.stringify(requests)).not.toContain("/platform/catalog");
   });
 
-  test("renders source badges, full category path and platform mapping", () => {
+  test("renders source badges and full category path", () => {
     const platformBadge = renderToStaticMarkup(
       <display.TenantCatalogSourceBadge ownershipScope="platform" />,
     );
     const tenantSummary = renderToStaticMarkup(
-      <display.TenantCategoryIdentity
-        fullName="主材 / 瓷砖 / 地砖"
-        mappedPlatformName="平台标准：地砖"
-      />,
+      <display.TenantCategoryIdentity fullName="主材 / 瓷砖 / 地砖" />,
     );
 
     expect(platformBadge).toContain("平台共享");
     expect(platformBadge).toContain("inline-flex items-center");
     expect(tenantSummary).toContain("主材 / 瓷砖 / 地砖");
-    expect(tenantSummary).toContain("平台标准：地砖");
+    expect(tenantSummary).not.toContain("平台标准");
   });
 
   test("renders unit dimensions and suggestion lifecycle badges", () => {

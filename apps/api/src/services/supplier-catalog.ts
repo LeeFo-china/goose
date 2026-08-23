@@ -160,6 +160,20 @@ export class SupplierCatalogService {
     );
   }
 
+  pinTenantCategory(
+    authContext: AuthContext,
+    categoryId: string,
+    input: { expected_version: number },
+    idempotencyKey: string,
+  ) {
+    return this.tenantService.pinCategory(
+      authContext,
+      categoryId,
+      input,
+      idempotencyKey,
+    );
+  }
+
   createTenantBrand(
     authContext: AuthContext,
     input: TenantCatalogBrandCreateInput,

@@ -21,6 +21,7 @@ describe("SupplierCatalogController routes", () => {
       { method: "GET", path: "/catalog/categories" },
       { method: "POST", path: "/catalog/categories" },
       { method: "PATCH", path: "/catalog/categories/:id" },
+      { method: "POST", path: "/catalog/categories/:id:pin" },
       { method: "GET", path: "/catalog/brands" },
       { method: "POST", path: "/catalog/brands" },
       { method: "PATCH", path: "/catalog/brands/:id" },
@@ -55,6 +56,7 @@ describe("SupplierCatalogController routes", () => {
     const commands = [
       () => controller.createCategory(request),
       () => controller.updateCategory(request),
+      () => controller.pinCategory(request),
       () => controller.createBrand(request),
       () => controller.updateBrand(request),
       () => controller.createSpecDefinition(request),

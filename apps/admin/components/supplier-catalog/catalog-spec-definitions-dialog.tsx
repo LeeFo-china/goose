@@ -1,14 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { ColumnDef } from "@tanstack/react-table";
-import { toast } from "sonner";
 
 import { DataTable } from "@/components/admin/data-table";
 import { TenantCatalogSourceBadge } from "@/components/tenant-supplier-catalog/tenant-catalog-display";
-import { buildTenantCopySpecsCommand, buildTenantSpecListPath } from "@/components/tenant-supplier-catalog/tenant-catalog-requests";
-import { newTenantCatalogCommandKey } from "@/components/tenant-supplier-catalog/tenant-catalog-rules";
+import { buildTenantSpecListPath } from "@/components/tenant-supplier-catalog/tenant-catalog-requests";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,16 +29,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { CatalogSpecEditorDialog, type CatalogSpecScope } from "./catalog-spec-editor-dialog";
-import {
-  completeCatalogSpecCopy,
-  createLatestCatalogSpecRequestSequence,
-} from "./catalog-spec-copy-runtime";
-import {
-  initializeCatalogCreateIntent,
-  resolveCatalogCreateIntent,
-} from "./supplier-catalog-rules";
+import { createLatestCatalogSpecRequestSequence } from "./catalog-spec-copy-runtime";
 import type {
-  CatalogCreateIntent,
   CatalogPage,
   CatalogSpecDefinition,
   CatalogStatus,
@@ -70,7 +59,6 @@ export function CatalogSpecDefinitionsDialogButton({
     mapped_platform_category_id?: string | null;
   };
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<CatalogStatus | "">("active");
@@ -82,9 +70,7 @@ export function CatalogSpecDefinitionsDialogButton({
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<CatalogSpecDefinition | null>(null);
-  const copyIntentRef = useRef<CatalogCreateIntent | null>(null);
   const loadRequestsRef = useRef(createLatestCatalogSpecRequestSequence());
-  const [expectedVersion, setExpectedVersion] = useState(category.version);
   const isTenantOwned = scope === "tenant" &&
     category.ownership_scope === "tenant";
   const canManage = scope === "platform" || isTenantOwned;
@@ -117,46 +103,6 @@ export function CatalogSpecDefinitionsDialogButton({
     return () => loadRequestsRef.current.cancel();
   }, [load, open]);
 
-  async function copyPlatformSpecs() {
-    if (!category.mapped_platform_category_id) return;
-    const payload = {
-      platform_category_id: category.mapped_platform_category_id,
-      expected_version: expectedVersion,
-    };
-    const intent = resolveCatalogCreateIntent(
-      copyIntentRef.current,
-      payload,
-      () => newTenantCatalogCommandKey("spec-copy"),
-    );
-    copyIntentRef.current = intent;
-    const request = buildTenantCopySpecsCommand({
-      categoryId: category.id,
-      platformCategoryId: category.mapped_platform_category_id,
-      expectedVersion,
-      idempotencyKey: intent.key,
-    });
-    setLoading(true);
-    try {
-      const result = await requestBackendJson<unknown>(request.path, {
-        ...request.init,
-        fallbackMessage: "复制平台规格模板失败",
-      });
-      const completed = completeCatalogSpecCopy(
-        result,
-        () => newTenantCatalogCommandKey("spec-copy"),
-      );
-      setExpectedVersion(completed.expectedVersion);
-      copyIntentRef.current = completed.intent;
-      toast.success("平台规格模板已复制");
-      router.refresh();
-      await load();
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : "复制平台规格模板失败");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   const columns: ColumnDef<CatalogSpecDefinition>[] = [
     { accessorKey: "code", header: "编码" },
     { accessorKey: "name", header: "规格名称", cell: ({ row }) => <span className="font-semibold">{row.original.name}</span> },
@@ -179,13 +125,8 @@ export function CatalogSpecDefinitionsDialogButton({
         setOpen(value);
         if (value) {
           setPage(1);
-          setExpectedVersion(category.version);
-          copyIntentRef.current = initializeCatalogCreateIntent(
-            () => newTenantCatalogCommandKey("spec-copy"),
-          );
         } else {
           loadRequestsRef.current.cancel();
-          copyIntentRef.current = null;
         }
       }}>
         <DialogTrigger asChild>
@@ -206,9 +147,6 @@ export function CatalogSpecDefinitionsDialogButton({
               </SelectGroup></SelectContent>
             </Select>
             <div className="flex flex-wrap gap-2">
-              {isTenantOwned && category.mapped_platform_category_id ? (
-                <Button type="button" variant="outline" disabled={loading} onClick={() => void copyPlatformSpecs()}>复制平台模板</Button>
-              ) : null}
               {canManage ? (
                 <Button type="button" onClick={() => { setEditing(null); setEditorOpen(true); }}>新建规格</Button>
               ) : null}
