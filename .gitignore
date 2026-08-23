@@ -39,6 +39,8 @@ test-results
 
 # logs
 logs
+reports/platform-config-audit/
+reports/platform-config-sync/
 _.log
 report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
