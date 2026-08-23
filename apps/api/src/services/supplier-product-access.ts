@@ -168,13 +168,16 @@ export class SupplierProductAccessService {
     });
     this.assertDecision(decision, relationship, write);
 
-    if (
-      write &&
-      (
-        relationship.supplier.onboarding_status !== "approved" ||
-        relationship.supplier.operational_status !== "active"
-      )
-    ) {
+    const tenantOwnedPrivateSupplier =
+      relationship.supplier.ownership_scope === "tenant" &&
+      relationship.supplier.owner_tenant_id === tenantId;
+    const platformReady =
+      relationship.supplier.onboarding_status === "approved" &&
+      relationship.supplier.operational_status === "active";
+    const privateReady = tenantOwnedPrivateSupplier &&
+      relationship.supplier.operational_status === "active";
+
+    if (write && !platformReady && !privateReady) {
       throw Errors.business(
         409,
         "供应商当前不满足代录条件",

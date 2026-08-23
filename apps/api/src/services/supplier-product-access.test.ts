@@ -144,6 +144,36 @@ describe("SupplierProductAccessService", () => {
     });
   });
 
+  test("allows tenant-owned private suppliers to write products without platform onboarding semantics", async () => {
+    const deps = dependencies({
+      repository: {
+        getSettings: mock(async () => ({
+          tenant_id: TENANT_ID,
+          module_enabled: true,
+        })),
+        findRelationship: mock(async () => ({
+          ...relationship,
+          supplier: {
+            ...relationship.supplier,
+            ownership_scope: "tenant",
+            owner_tenant_id: TENANT_ID,
+            onboarding_status: "draft",
+            operational_status: "active",
+          },
+        })),
+      },
+    });
+    const { SupplierProductAccessService } = await import(
+      "./supplier-product-access"
+    );
+
+    await expect(new SupplierProductAccessService(deps as never)
+      .requireProductWrite(
+        auth("supplier.product.manage"),
+        TENANT_SUPPLIER_ID,
+      )).resolves.toMatchObject({ supplierId: SUPPLIER_ID });
+  });
+
   test("rejects disabled modules and non-active write relationships", async () => {
     const { SupplierProductAccessService } = await import(
       "./supplier-product-access"

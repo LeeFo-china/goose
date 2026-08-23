@@ -136,7 +136,7 @@ describe("供应商设置运行时交互", () => {
     })).toBe(false);
   });
 
-  test("私有供应商创建提交完整主档与显式编码来源", async () => {
+  test("私有供应商创建只提交用户填写字段", async () => {
     let body: unknown;
     globalThis.fetch = (async (_input, init) => {
       body = JSON.parse(String(init?.body));
@@ -144,19 +144,11 @@ describe("供应商设置运行时交互", () => {
     }) as typeof fetch;
 
     await createTenantPrivateSupplier({
-      name: "晴天建材",
-      legal_name: "晴天建材有限公司",
-      supplier_type: "manufacturer",
-      code_source: "manual",
-      internal_supplier_code: "SUNNY-01",
+      name: "固始晴天装饰工程有限公司",
     }, "private-create-key");
 
     expect(body).toEqual({
-      name: "晴天建材",
-      legal_name: "晴天建材有限公司",
-      supplier_type: "manufacturer",
-      code_source: "manual",
-      internal_supplier_code: "SUNNY-01",
+      name: "固始晴天装饰工程有限公司",
     });
   });
 

@@ -83,7 +83,7 @@ export function EligibilityPanel({
       <Alert variant={eligibility?.eligible ? "default" : "destructive"}>
         <AlertTitle>{eligibility?.eligible ? "当前可创建新订单" : "当前不可创建新订单"}</AlertTitle>
         <AlertDescription>
-          系统会综合平台准入、运营状态、租户合作状态、必填资质和合同策略实时判断。
+          平台共享供应商会综合平台准入、运营状态、租户合作状态、必填资质和合同策略实时判断。
         </AlertDescription>
       </Alert>
       {blocking_reasons.length ? (

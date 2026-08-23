@@ -64,6 +64,12 @@ describe("租户合作供应商工作台", () => {
     expect(source).toContain("新建私有供应商");
     expect(source).toContain("自动生成");
     expect(source).toContain("allocation_id");
+    expect(source).toContain("mode === \"shared\" ? (");
+    expect(source).toContain("创建私有供应商");
+    expect(source).not.toContain("privateForm.legalName");
+    expect(source).not.toContain("private-supplier-legal-name");
+    expect(source).not.toContain("private-supplier-type");
+    expect(source).not.toContain("private-supplier-credit-code");
     expect(source).toContain("privateCreationEnabled");
     expect(source).toContain("sharedCreationEnabled");
     expect(source).toContain("codeAllocationEnabled");
@@ -72,7 +78,7 @@ describe("租户合作供应商工作台", () => {
     expect(readSource("./supplier-workspace.tsx")).toContain(
       "codeAllocationEnabled={canGenerateInternalCode}",
     );
-    expect(source).toContain("isSupplierIdentityConflict");
+    expect(source).not.toContain("isSupplierIdentityConflict");
     expect(source).toContain('aria-pressed={props.active}');
     expect(source).toContain("allocationRequestRef");
     expect(source).toContain('role="alert"');
@@ -90,7 +96,7 @@ describe("租户合作供应商工作台", () => {
     const dataSource = readSource("./use-tenant-supplier-detail.ts");
 
     for (const tab of [
-      "合作设置",
+      "基本信息",
       "合同",
       "准入与资质",
       "服务区域",
@@ -98,9 +104,11 @@ describe("租户合作供应商工作台", () => {
     ]) {
       expect(source).toContain(tab);
     }
-    expect(source).toContain("平台供应商资料（只读）");
+    expect(source).toContain("const isPrivateSupplier");
+    expect(source).toContain("isPrivateSupplier ? null");
     expect(source).toContain("expected_version");
     expect(panels).toContain("blocking_reasons");
+    expect(panels).toContain("平台共享供应商会综合平台准入");
     expect(panels).not.toContain("/platform/suppliers");
     expect(dataSource).toContain("pageSize=10");
     expect(dataSource).not.toContain("Promise.all");

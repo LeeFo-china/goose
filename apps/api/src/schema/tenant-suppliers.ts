@@ -203,6 +203,11 @@ const privateSupplierCreateFields = {
   primary_contact: primaryContact.optional(),
   address: privateSupplierAddress.optional(),
 };
+const simplifiedPrivateSupplierCreateFields = z.object({
+  name: privateSupplierMasterFields.name,
+  primary_contact: primaryContact.optional(),
+  remark: optionalText(500, "备注不能超过 500 个字符"),
+}).strict();
 
 export const TenantSupplierCodeAllocationSchema = z.object({}).strict();
 
@@ -220,19 +225,17 @@ export const TenantSupplierSharedCreateSchema = z.discriminatedUnion(
   ],
 );
 
-export const TenantSupplierPrivateCreateSchema = z.discriminatedUnion(
-  "code_source",
-  [
-    z.object({
-      ...privateSupplierCreateFields,
-      ...generatedInternalSupplierCodeFields,
-    }).strict(),
-    z.object({
-      ...privateSupplierCreateFields,
-      ...manualInternalSupplierCodeFields,
-    }).strict(),
-  ],
-);
+export const TenantSupplierPrivateCreateSchema = z.union([
+  simplifiedPrivateSupplierCreateFields,
+  z.object({
+    ...privateSupplierCreateFields,
+    ...generatedInternalSupplierCodeFields,
+  }).strict(),
+  z.object({
+    ...privateSupplierCreateFields,
+    ...manualInternalSupplierCodeFields,
+  }).strict(),
+]);
 
 export const TenantPrivateSupplierUpdateSchema = z.object({
   expected_version: expectedVersion,

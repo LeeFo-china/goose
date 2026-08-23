@@ -24,7 +24,9 @@ import {
   allocateInternalCode as allocateTenantSupplierCode,
   assertPrivateSupplierMasterWritable,
   createPrivateSupplier as createTenantPrivateSupplier,
+  createSimplifiedPrivateSupplier as createTenantSimplifiedPrivateSupplier,
   createSharedRelationship as createTenantSharedRelationship,
+  isSimplifiedPrivateSupplierInput,
   requireActor as requireSupplierActor,
   requirePrivateSupplierWrites,
   updatePrivateSupplierMaster as updateTenantPrivateSupplierMaster,
@@ -154,6 +156,14 @@ export class TenantSuppliersService {
   ) {
     const actor = this.requireActor(authContext, "master");
     await requirePrivateSupplierWrites(this.repository, actor);
+    if (isSimplifiedPrivateSupplierInput(input)) {
+      return createTenantSimplifiedPrivateSupplier(
+        this.repository,
+        actor,
+        input,
+        idempotencyKey,
+      );
+    }
     return createTenantPrivateSupplier(
       this.repository,
       actor,

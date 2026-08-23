@@ -69,6 +69,18 @@ export function TenantSupplierDetail({
   });
   const detail = resource.detail.data ?? relationship;
   const status = relationshipStatusMeta[detail.relationship_status];
+  const isPrivateSupplier =
+    detail.supplier.ownership_scope === "tenant" &&
+    detail.supplier.owner_tenant_id === detail.tenant_id;
+
+  useEffect(() => {
+    if (
+      isPrivateSupplier &&
+      (activeTab === "eligibility" || activeTab === "regions")
+    ) {
+      setActiveTab("settings");
+    }
+  }, [activeTab, isPrivateSupplier]);
 
   function handleChanged() {
     void resource.loadDetail();
@@ -95,17 +107,21 @@ export function TenantSupplierDetail({
           <div className="shrink-0 border-b px-5 pt-3">
             <TabsList className={platformTabsListClassName}>
               <TabsTrigger value="settings" className={platformTabsTriggerClassName}>
-                合作设置
+                基本信息
               </TabsTrigger>
               <TabsTrigger value="contracts" className={platformTabsTriggerClassName}>
                 合同
               </TabsTrigger>
-              <TabsTrigger value="eligibility" className={platformTabsTriggerClassName}>
-                准入与资质
-              </TabsTrigger>
-              <TabsTrigger value="regions" className={platformTabsTriggerClassName}>
-                服务区域
-              </TabsTrigger>
+              {isPrivateSupplier ? null : (
+                <TabsTrigger value="eligibility" className={platformTabsTriggerClassName}>
+                  准入与资质
+                </TabsTrigger>
+              )}
+              {isPrivateSupplier ? null : (
+                <TabsTrigger value="regions" className={platformTabsTriggerClassName}>
+                  服务区域
+                </TabsTrigger>
+              )}
               <TabsTrigger value="events" className={platformTabsTriggerClassName}>
                 操作记录
               </TabsTrigger>
@@ -145,24 +161,28 @@ export function TenantSupplierDetail({
                 />
               )}
             </TabsContent>
-            <TabsContent value="eligibility" className="m-0">
-              {resource.eligibility.loading && !resource.eligibility.data ? (
-                <Skeleton className="h-48 w-full" />
-              ) : resource.eligibility.error ? (
-                <LoadError
-                  message={resource.eligibility.error}
-                  onRetry={resource.loadEligibility}
-                />
-              ) : (
-                <EligibilityPanel
-                  relationship={detail}
-                  eligibility={resource.eligibility.data ?? detail.eligibility}
-                />
-              )}
-            </TabsContent>
-            <TabsContent value="regions" className="m-0">
-              <ServiceRegionsPanel relationship={detail} />
-            </TabsContent>
+            {isPrivateSupplier ? null : (
+              <TabsContent value="eligibility" className="m-0">
+                {resource.eligibility.loading && !resource.eligibility.data ? (
+                  <Skeleton className="h-48 w-full" />
+                ) : resource.eligibility.error ? (
+                  <LoadError
+                    message={resource.eligibility.error}
+                    onRetry={resource.loadEligibility}
+                  />
+                ) : (
+                  <EligibilityPanel
+                    relationship={detail}
+                    eligibility={resource.eligibility.data ?? detail.eligibility}
+                  />
+                )}
+              </TabsContent>
+            )}
+            {isPrivateSupplier ? null : (
+              <TabsContent value="regions" className="m-0">
+                <ServiceRegionsPanel relationship={detail} />
+              </TabsContent>
+            )}
             <TabsContent value="events" className="m-0">
               {resource.events.loading && !resource.events.data ? (
                 <Skeleton className="h-56 w-full" />
@@ -260,7 +280,7 @@ function SettingsPanel({
   return (
     <div className="flex flex-col gap-5">
       <section>
-        <h3 className="text-sm font-semibold">平台供应商资料（只读）</h3>
+        <h3 className="text-sm font-semibold">供应商资料</h3>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <ReadOnlyField label="供应商名称" value={relationship.supplier.name} />
           <ReadOnlyField label="供应商编码" value={relationship.supplier.code} />

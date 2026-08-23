@@ -139,6 +139,30 @@ describe("供应商品与供货价行为", () => {
     }).writable).toBe(false);
   });
 
+  test("租户私有供应商商品维护不依赖平台准入状态", () => {
+    const privateRelationship = {
+      ...activeRelationship,
+      tenant_id: "tenant-1",
+      supplier: {
+        ...activeRelationship.supplier,
+        ownership_scope: "tenant",
+        owner_tenant_id: "tenant-1",
+        onboarding_status: "draft",
+        operational_status: "active",
+      },
+    } as TenantSupplierRelationship;
+
+    expect(getProductWriteState({
+      canManage: true,
+      relationship: privateRelationship,
+      product: tenantProduct,
+    })).toEqual({ writable: true, reason: null });
+    expect(getPriceWriteState({
+      canManage: true,
+      relationship: privateRelationship,
+    })).toEqual({ writable: true, reason: null });
+  });
+
   test("采购价写权限不依赖商品管理权限", () => {
     expect(getPriceWriteState({
       canManage: true,
