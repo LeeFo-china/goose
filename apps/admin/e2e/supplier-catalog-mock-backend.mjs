@@ -109,6 +109,10 @@ const server = createServer(async (request, response) => {
     });
     return;
   }
+  if (request.method === "POST" && url.pathname === "/catalog/brands") {
+    await runtime.createTenantBrand(request, response, url);
+    return;
+  }
   const tenantBrand = url.pathname.match(/^\/catalog\/brands\/([^/]+)$/);
   if (request.method === "PATCH" && tenantBrand) {
     await runtime.updateTenantBrand(

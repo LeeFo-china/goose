@@ -26,7 +26,6 @@ import { requestBackendJson } from "@/lib/backend-client";
 import { buildTenantBrandCommand } from "./tenant-catalog-requests";
 import { newTenantCatalogCommandKey } from "./tenant-catalog-rules";
 import type { TenantCatalogBrand } from "./tenant-catalog-types";
-import { TenantPlatformBrandPicker } from "./tenant-platform-brand-picker";
 
 export function TenantBrandDialogButton({
   record,
@@ -37,32 +36,18 @@ export function TenantBrandDialogButton({
   const intentRef = useRef<CatalogCreateIntent | null>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
-  const [code, setCode] = useState(record?.code ?? "");
   const [name, setName] = useState(record?.name ?? "");
-  const [legalName, setLegalName] = useState(record?.legal_name ?? "");
-  const [mappingId, setMappingId] = useState(
-    record?.mapped_platform_brand_id ?? "",
-  );
-  const [sortOrder, setSortOrder] = useState(String(record?.sort_order ?? 100));
   const editing = Boolean(record);
 
   function reset() {
-    setCode(record?.code ?? "");
     setName(record?.name ?? "");
-    setLegalName(record?.legal_name ?? "");
-    setMappingId(record?.mapped_platform_brand_id ?? "");
-    setSortOrder(String(record?.sort_order ?? 100));
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const payload = {
       ...(record ? { expected_version: record.version } : { status: "active" }),
-      code: code.trim(),
       name: name.trim(),
-      legal_name: legalName.trim() || null,
-      mapped_platform_brand_id: mappingId || null,
-      sort_order: Number(sortOrder),
     };
     const intent = resolveCatalogCreateIntent(
       intentRef.current,
@@ -113,22 +98,33 @@ export function TenantBrandDialogButton({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "编辑私有品牌" : "新建私有品牌"}</DialogTitle>
-          <DialogDescription>平台映射不会改变品牌名称和租户所有权。</DialogDescription>
+          <DialogDescription>私有品牌永久属于当前租户，编码由系统维护。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
-            <Field><FieldLabel htmlFor="tenant-brand-code">编码</FieldLabel><Input id="tenant-brand-code" required maxLength={64} value={code} onChange={(event) => setCode(event.target.value)} /></Field>
-            <Field><FieldLabel htmlFor="tenant-brand-name">品牌名称</FieldLabel><Input id="tenant-brand-name" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></Field>
-            <Field><FieldLabel htmlFor="tenant-brand-legal">法定名称</FieldLabel><Input id="tenant-brand-legal" maxLength={160} value={legalName} onChange={(event) => setLegalName(event.target.value)} /></Field>
             <Field>
-              <FieldLabel>平台品牌映射</FieldLabel>
-              <TenantPlatformBrandPicker
-                value={mappingId}
-                pinned={record?.mapped_platform_brand ?? null}
-                onChange={setMappingId}
+              <FieldLabel htmlFor={`tenant-brand-code-${record?.id ?? "new"}`}>
+                编码
+              </FieldLabel>
+              <Input
+                id={`tenant-brand-code-${record?.id ?? "new"}`}
+                value={record?.code ?? "保存后自动生成"}
+                disabled
+                readOnly
               />
             </Field>
-            <Field><FieldLabel htmlFor="tenant-brand-sort">排序</FieldLabel><Input id="tenant-brand-sort" type="number" required value={sortOrder} onChange={(event) => setSortOrder(event.target.value)} /></Field>
+            <Field>
+              <FieldLabel htmlFor={`tenant-brand-name-${record?.id ?? "new"}`}>
+                品牌名称
+              </FieldLabel>
+              <Input
+                id={`tenant-brand-name-${record?.id ?? "new"}`}
+                required
+                maxLength={120}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </Field>
           </FieldGroup>
           <DialogFooter className="mt-5">
             <Button type="button" variant="outline" disabled={pending} onClick={() => setOpen(false)}>取消编辑</Button>

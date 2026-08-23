@@ -65,9 +65,7 @@ describe("租户供应商目录", () => {
   test("builds tenant brand, category pin and spec edit commands", () => {
     expect(requests.buildTenantBrandCommand({
       payload: {
-        code: "TENANT-BRAND",
         name: "租户品牌",
-        mapped_platform_brand_id: null,
       },
       idempotencyKey: "tenant-brand:create-1",
     }).path).toBe("/catalog/brands");

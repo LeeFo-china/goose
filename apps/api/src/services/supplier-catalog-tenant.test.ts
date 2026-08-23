@@ -9,6 +9,7 @@ const TENANT_ID = "00000000-0000-4000-8000-000000000101";
 const USER_ID = "00000000-0000-4000-8000-000000000102";
 const EMPLOYEE_ID = "00000000-0000-4000-8000-000000000103";
 const CATEGORY_ID = "00000000-0000-4000-8000-000000000201";
+const BRAND_ID = "00000000-0000-4000-8000-000000000401";
 
 const auth: AuthContext = {
   tenantId: TENANT_ID,
@@ -61,6 +62,8 @@ async function setup(settings = enabledSettings) {
     listSpecDefinitions: mock(async () => ({ list: [], pagination: {} })),
     createTenantCategory: mock(async (input: unknown) => input),
     updateTenantCategory: mock(async (input: unknown) => input),
+    createTenantBrand: mock(async (input: unknown) => input),
+    updateTenantBrand: mock(async (input: unknown) => input),
     listUnitSuggestions: mock(async (input: unknown) => input),
     findVisibleCategory: mock(async () => ({
       id: "00000000-0000-4000-8000-000000000201",
@@ -71,6 +74,19 @@ async function setup(settings = enabledSettings) {
       name: "分类",
       status: "active",
       sort_order: 100,
+      version: 1,
+    })),
+    findVisibleBrand: mock(async () => ({
+      id: BRAND_ID,
+      ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID,
+      code: "TB-OLD",
+      name: "旧品牌",
+      legal_name: "旧品牌法定名称",
+      logo_file_id: null,
+      status: "active",
+      sort_order: 100,
+      mapped_platform_brand_id: "00000000-0000-4000-8000-000000000402",
       version: 1,
     })),
   };
@@ -349,6 +365,49 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
         sort_order: 10,
         mapped_platform_category_id: null,
         expected_version: 3,
+      }),
+    );
+  });
+
+  test("generates tenant brand code defaults and empty mapping for simplified creates", async () => {
+    const { service, repository } = await setup();
+
+    await service.createTenantBrand(auth, {
+      name: "系统维护字段品牌", status: "active",
+    }, "brand-create-system-fields");
+
+    expect(repository.createTenantBrand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        brand_id: "00000000-0000-4000-8000-000000000301",
+        code: "TB-00000000000040008000000000000301",
+        name: "系统维护字段品牌",
+        legal_name: null,
+        status: "active",
+        sort_order: 100,
+        mapped_platform_brand_id: null,
+      }),
+    );
+  });
+
+  test("preserves tenant brand system fields during simplified updates", async () => {
+    const { service, repository } = await setup();
+
+    await service.updateTenantBrand(auth, BRAND_ID, {
+      expected_version: 1,
+      name: "更新品牌名称",
+    }, "brand-update-system-fields");
+
+    expect(repository.updateTenantBrand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        brand_id: BRAND_ID,
+        code: "TB-OLD",
+        name: "更新品牌名称",
+        legal_name: "旧品牌法定名称",
+        logo_file_id: null,
+        status: "active",
+        sort_order: 100,
+        mapped_platform_brand_id: "00000000-0000-4000-8000-000000000402",
+        expected_version: 1,
       }),
     );
   });

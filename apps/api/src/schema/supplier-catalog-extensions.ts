@@ -46,33 +46,19 @@ export const TenantCatalogCategoryPinSchema = z.object({
 }).strict();
 
 const tenantBrandFields = {
-  code: text(64, "目录品牌编码不能为空", "目录品牌编码不能超过 64 个字符"),
   name: text(120, "目录品牌名称不能为空", "目录品牌名称不能超过 120 个字符"),
-  legal_name: nullableText(160, "品牌法定名称不能超过 160 个字符"),
-  logo_file_id: uuid("无效的品牌 Logo 文件 ID").nullable().optional(),
   status,
-  sort_order: z.coerce.number().int(),
-  mapped_platform_brand_id: uuid("无效的平台品牌 ID").nullable(),
 };
 
 export const TenantCatalogBrandCreateSchema = z.object({
-  ...tenantBrandFields,
+  name: tenantBrandFields.name,
   status: status.default("active"),
-  sort_order: tenantBrandFields.sort_order.default(100),
-  mapped_platform_brand_id:
-    tenantBrandFields.mapped_platform_brand_id.default(null),
 }).strict();
 
 export const TenantCatalogBrandUpdateSchema = z.object({
   expected_version: expectedVersion,
-  code: tenantBrandFields.code.optional(),
   name: tenantBrandFields.name.optional(),
-  legal_name: tenantBrandFields.legal_name,
-  logo_file_id: tenantBrandFields.logo_file_id,
   status: status.optional(),
-  sort_order: tenantBrandFields.sort_order.optional(),
-  mapped_platform_brand_id:
-    tenantBrandFields.mapped_platform_brand_id.optional(),
 }).strict().refine(hasPatch, {
   message: "至少需要提交一个目录品牌更新字段",
 });
