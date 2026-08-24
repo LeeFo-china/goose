@@ -142,11 +142,33 @@ describe("tenant Douyin workspace actions", () => {
     ]);
   });
 
-  test("continues an unfinished release before offering the newer template", () => {
+  test("allows a confirmed newer template to supersede uploaded or testing builds", () => {
+    for (const status of ["uploaded", "testing"] as const) {
+      const workspace = approvedWorkspace();
+      workspace.available_template = {
+        template_id: "78524",
+        version: "0.1.5",
+        description: "首页精简预算入口",
+        confirmed_at: "2026-08-24T12:30:51.607Z",
+        state: "new_available",
+      };
+      workspace.release_state = status;
+      if (workspace.latest_release) {
+        workspace.latest_release.status = status;
+        workspace.latest_release.template_id = "78495";
+        workspace.latest_release.template_version = "0.1.4";
+        workspace.latest_release.description = "预算与量房页面体验优化";
+      }
+
+      expect(availableWorkspaceActions(workspace)).toEqual([
+        "create_test_version",
+      ]);
+    }
+  });
+
+  test("continues protected release states before offering the newer template", () => {
     const expectations = [
       ["created", "create_test_version"],
-      ["uploaded", "get_test_qr"],
-      ["testing", "submit_audit"],
       ["audit_pending", "sync_status"],
       ["audit_approved", "publish"],
     ] as const;

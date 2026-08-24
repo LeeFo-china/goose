@@ -87,8 +87,6 @@ export function availableWorkspaceActions(
   const release = workspace.latest_release;
   const hasNewTemplate = workspace.available_template?.state === "new_available";
   const blocksNewTemplate = release?.status === "created"
-    || release?.status === "uploaded"
-    || release?.status === "testing"
     || release?.status === "audit_pending"
     || release?.status === "audit_approved";
   if (hasNewTemplate && !blocksNewTemplate) {

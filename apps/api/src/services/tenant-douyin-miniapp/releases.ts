@@ -178,8 +178,6 @@ export class TenantDouyinMiniappReleasesService {
     } | null,
   ) {
     if (latestRelease && [
-      "uploaded",
-      "testing",
       "audit_pending",
       "audit_approved",
     ].includes(latestRelease.status)) {

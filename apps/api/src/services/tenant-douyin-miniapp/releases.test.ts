@@ -399,13 +399,30 @@ describe("TenantDouyinMiniappReleasesService", () => {
     expect(context.templates.findCurrent).not.toHaveBeenCalled();
   });
 
-  test("does not replace any unfinished release with a newer template", async () => {
-    for (const status of [
-      "uploaded",
-      "testing",
-      "audit_pending",
-      "audit_approved",
-    ] as const) {
+  test("allows a confirmed newer template to replace uploaded or testing builds", async () => {
+    for (const status of ["uploaded", "testing"] as const) {
+      const context = fixture({ latestRelease: release({ status }) });
+
+      await context.service.createFromCurrentTemplate(
+        tenantContext(["douyin_miniapp.manage"]),
+      );
+
+      expect(context.operations.upload).toHaveBeenCalledWith(
+        expect.objectContaining({ id: INSTALLATION_ID }),
+        INSTALLATION_ID,
+        EMPLOYEE_ID,
+        {
+          template_id: deployableTemplate.template_id,
+          template_version: deployableTemplate.template_version,
+          description: deployableTemplate.description,
+          channel: "default",
+        },
+      );
+    }
+  });
+
+  test("does not replace audit-submitted release states with a newer template", async () => {
+    for (const status of ["audit_pending", "audit_approved"] as const) {
       const context = fixture({ latestRelease: release({ status }) });
 
       await expect(context.service.createFromCurrentTemplate(
