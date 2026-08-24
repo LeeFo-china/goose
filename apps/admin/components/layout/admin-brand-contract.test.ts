@@ -253,6 +253,18 @@ describe("Admin 好店智装云品牌合同", () => {
     expect(sources.loginPage).not.toContain("lg:grid-cols-[1fr_430px]");
   });
 
+  test("登录页将品牌和表单合并为一张聚焦卡片", () => {
+    expect(sources.loginPage).toContain('from "@/components/ui/card"');
+    expect(sources.loginPage).toContain('from "@/components/ui/separator"');
+    expect(sources.loginPage).toContain('className="pointer-events-none absolute');
+    expect(sources.loginPage).toContain("<LoginForm");
+    expect(sources.loginPage).not.toContain("<section");
+    expect(sources.loginForm).not.toContain("<Card");
+    expect(sources.loginForm).toMatch(/\n\s*登录\n\s*<\/Button>/);
+    expect(sources.loginForm).not.toContain("登录后台");
+    expect(sources.loginForm).not.toContain("phone.length !== 11");
+  });
+
   test("生产登录验证码提示不暴露测试环境文案", () => {
     expect(sources.loginForm).not.toContain("测试环境可不填");
     expect(sources.loginForm).toContain("请输入短信验证码");

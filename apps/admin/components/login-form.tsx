@@ -6,7 +6,6 @@ import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { navigateAfterAdminLogin } from "@/components/login-form-navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 
@@ -46,12 +45,18 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
   async function sendCode() {
     setError("");
     setMessage("");
+    const normalizedPhone = phone.trim();
+    if (!/^1\d{10}$/.test(normalizedPhone)) {
+      setError("请输入 11 位手机号");
+      return;
+    }
+
     setSending(true);
     try {
       const response = await fetch("/api/auth/send-code", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone: normalizedPhone }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.success === false) {
@@ -91,80 +96,76 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
   }
 
   return (
-    <Card className="w-full max-w-[420px] border-border bg-card shadow-sm">
-      <CardHeader className="gap-1 pb-4">
-        <div className="flex flex-col gap-1">
-          <CardTitle className="text-lg font-semibold text-foreground">员工后台登录</CardTitle>
-          <CardDescription className="text-muted-foreground">
-            输入手机号和短信验证码登录。
-          </CardDescription>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <form className="flex flex-col gap-4" onSubmit={login}>
-          {sessionNotice ? (
-            <StatusAlert tone="warning">{sessionNotice}</StatusAlert>
-          ) : null}
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="phone">手机号</FieldLabel>
-              <Input
-                className="border-input bg-background focus-visible:ring-ring"
-                id="phone"
-                inputMode="tel"
-                maxLength={11}
-                placeholder="请输入员工手机号"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                required
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="code">验证码</FieldLabel>
-              <div className="grid grid-cols-[1fr_112px] gap-2">
-                <Input
-                  className="border-input bg-background focus-visible:ring-ring"
-                  id="code"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder={verificationCodePlaceholder}
-                  value={code}
-                  onChange={(event) => setCode(event.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="border-border bg-card text-secondary-foreground hover:bg-secondary hover:text-secondary-foreground"
-                  disabled={sending || countdown > 0 || phone.length !== 11}
-                  onClick={sendCode}
-                >
-                  {sending ? (
-                    <Loader2 className="animate-spin" data-icon="inline-start" />
-                  ) : countdown > 0 ? (
-                    `${countdown}s`
-                  ) : (
-                    "获取验证码"
-                  )}
-                </Button>
-              </div>
-            </Field>
-          </FieldGroup>
-          {error ? (
-            <StatusAlert>{error}</StatusAlert>
-          ) : null}
-          {message ? (
-            <StatusAlert tone="success">{message}</StatusAlert>
-          ) : null}
-          <Button
-            className="h-11 w-full rounded-md bg-primary font-bold text-primary-foreground hover:bg-primary/90"
-            type="submit"
-            disabled={loggingIn}
-          >
-            {loggingIn ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
-            登录后台
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+    <form className="flex flex-col gap-5" onSubmit={login}>
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold leading-tight text-foreground">
+          欢迎登录
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          使用员工手机号登录好店智装云
+        </p>
+      </div>
+      {sessionNotice ? (
+        <StatusAlert tone="warning">{sessionNotice}</StatusAlert>
+      ) : null}
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="phone">手机号</FieldLabel>
+          <Input
+            className="h-11 border-input bg-background text-base focus-visible:ring-ring sm:text-sm"
+            id="phone"
+            inputMode="tel"
+            maxLength={11}
+            placeholder="请输入手机号"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            required
+          />
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="code">验证码</FieldLabel>
+          <div className="grid grid-cols-[minmax(0,1fr)_8.75rem] gap-3 max-[420px]:grid-cols-1">
+            <Input
+              className="h-11 border-input bg-background text-base focus-visible:ring-ring sm:text-sm"
+              id="code"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder={verificationCodePlaceholder}
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 border-primary/70 bg-card font-semibold text-primary hover:bg-secondary hover:text-primary disabled:border-border disabled:text-muted-foreground"
+              disabled={sending || countdown > 0}
+              onClick={sendCode}
+            >
+              {sending ? (
+                <Loader2 className="animate-spin" data-icon="inline-start" />
+              ) : countdown > 0 ? (
+                `${countdown}s`
+              ) : (
+                "获取验证码"
+              )}
+            </Button>
+          </div>
+        </Field>
+      </FieldGroup>
+      {error ? (
+        <StatusAlert>{error}</StatusAlert>
+      ) : null}
+      {message ? (
+        <StatusAlert tone="success">{message}</StatusAlert>
+      ) : null}
+      <Button
+        className="h-11 w-full rounded-md bg-primary text-base font-semibold text-primary-foreground hover:bg-primary/90"
+        type="submit"
+        disabled={loggingIn}
+      >
+        {loggingIn ? <Loader2 className="animate-spin" data-icon="inline-start" /> : null}
+        登录
+      </Button>
+    </form>
   );
 }
