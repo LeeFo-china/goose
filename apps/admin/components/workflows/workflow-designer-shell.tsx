@@ -30,7 +30,6 @@ import {
   type WorkflowConnectionSource,
 } from "@/components/workflows/workflow-branch-projection";
 import {
-  getWorkflowRuntimeIntegrationHint,
   getWorkflowTrack,
 } from "@/components/workflows/workflow-business-track";
 import { WorkflowNodeLibrary } from "@/components/workflows/workflow-node-library";
@@ -41,7 +40,6 @@ import {
   publishWorkflowDefinition,
   saveWorkflowGraph,
 } from "@/components/workflows/workflow-requests";
-import { WorkflowVersionEffectNotice } from "@/components/workflows/workflow-version-effect-notice";
 import { WorkflowVersionListPanel } from "@/components/workflows/workflow-version-list-panel";
 import { WorkflowValidationPanel } from "@/components/workflows/workflow-validation-panel";
 import { useWorkflowValidationPlayback } from "@/components/workflows/workflow-validation-playback";
@@ -298,7 +296,6 @@ export function WorkflowDesignerShell({
       ? "发布当前已保存流程"
       : "本地校验通过后才能发布";
   const workflowTrack = getWorkflowTrack(graph.definition);
-  const integrationHint = getWorkflowRuntimeIntegrationHint(graph.definition);
   const readiness = publishValidation.valid
     ? { label: "可发布", icon: CheckCircle2, badge: "success" as const }
     : { label: `${publishValidation.issues.length} 项待处理`, icon: CircleAlert, badge: "warning" as const };
@@ -336,9 +333,6 @@ export function WorkflowDesignerShell({
                 </span>
                 <span className="tabular-nums">节点 {graph.nodes.length}</span>
                 <span className="tabular-nums">连线 {graph.edges.length}</span>
-                <span className="hidden min-w-0 md:inline">
-                  {integrationHint?.headerSummary || "租户业务、施工、工序和审批流程编排"}
-                </span>
               </div>
             </div>
 
@@ -393,7 +387,6 @@ export function WorkflowDesignerShell({
           </div>
         </header>
 
-        <WorkflowVersionEffectNotice integrationHint={integrationHint} />
         <WorkflowVersionListPanel
           activeVersionId={graph.definition.active_version_id}
           workflowId={workflowId}

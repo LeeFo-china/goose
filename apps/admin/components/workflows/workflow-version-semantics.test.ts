@@ -60,7 +60,10 @@ describe("workflow version semantics", () => {
 
     expect(WORKFLOW_VERSION_EFFECT_COPY.publishConfirm).toContain("只影响新创建或受控重建的实例");
     expect(WORKFLOW_VERSION_EFFECT_COPY.versionPanelDescription).toContain("运行中的实例数量");
-    expect(designerSource).toContain("WorkflowVersionEffectNotice");
+    expect(designerSource).not.toContain("WorkflowVersionEffectNotice");
+    expect(designerSource).not.toContain("headerSummary");
+    expect(designerSource).not.toContain("关键节点同步施工状态");
+    expect(designerSource).not.toContain("租户业务、施工、工序和审批流程编排");
     expect(designerSource).toContain("WorkflowVersionListPanel");
     expect(designerSource).toContain("WorkflowPublishConfirmDialog");
     expect(tableSource).toContain("WorkflowVersionInlineList");
