@@ -315,6 +315,14 @@ describe("automatic development deployment orchestration contract", () => {
     }
   });
 
+  test("uses the development self-hosted runner for orchestration jobs", () => {
+    expect(autoDeployWorkflow).not.toContain("runs-on: ubuntu-24.04");
+    expect(autoDeployWorkflow.match(/runs-on: \[self-hosted, Linux, X64, gooes-dev-deploy\]/g))
+      .toHaveLength(4);
+    expect(autoDeployWorkflow.match(/test "\$\{RUNNER_NAME\}" = "gooes-dev-vm-0-11"/g))
+      .toHaveLength(4);
+  });
+
   test("runs the read-only migration gate before any deployment", () => {
     const migration = autoDeployWorkflow.indexOf("  migration:");
     const firstDeploy = autoDeployWorkflow.indexOf(

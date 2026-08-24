@@ -22,7 +22,7 @@ jobs:
       ${{ github.event.workflow_run.conclusion == 'success' &&
           github.event.workflow_run.event == 'push' &&
           github.event.workflow_run.head_branch == 'main' }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     outputs:
       commit_sha: ${{ steps.plan.outputs.commit_sha }}
       build_run_id: ${{ steps.plan.outputs.build_run_id }}
@@ -32,6 +32,11 @@ jobs:
       has_rest: ${{ steps.plan.outputs.has_rest }}
       rest_matrix: ${{ steps.plan.outputs.rest_matrix }}
     steps:
+      - name: Guard development runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Checkout verified source
         uses: actions/checkout@v6
         with:
@@ -114,13 +119,18 @@ jobs:
     name: Require migration and API readiness
     needs: [authorize, migration, deploy-api]
     if: ${{ always() && needs.authorize.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     env:
       NO_OP: ${{ needs.authorize.outputs.no_op }}
       HAS_API: ${{ needs.authorize.outputs.has_api }}
       MIGRATION_RESULT: ${{ needs.migration.result }}
       API_RESULT: ${{ needs.deploy-api.result }}
     steps:
+      - name: Guard development runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Propagate migration and API results
         run: |
           set -euo pipefail
@@ -161,12 +171,17 @@ jobs:
     name: Require remaining services readiness
     needs: [authorize, api-ready, deploy-rest]
     if: ${{ always() && needs.authorize.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     env:
       HAS_REST: ${{ needs.authorize.outputs.has_rest }}
       API_READY_RESULT: ${{ needs.api-ready.result }}
       REST_RESULT: ${{ needs.deploy-rest.result }}
     steps:
+      - name: Guard development runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Propagate remaining service results
         run: |
           set -euo pipefail
@@ -216,7 +231,7 @@ jobs:
       - web-gate
       - deploy-web
     if: ${{ always() && needs.authorize.result != 'skipped' }}
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64, gooes-dev-deploy]
     env:
       COMMIT_SHA: ${{ needs.authorize.outputs.commit_sha }}
       BUILD_RUN_ID: ${{ needs.authorize.outputs.build_run_id }}
@@ -233,6 +248,11 @@ jobs:
       WEB_GATE_RESULT: ${{ needs.web-gate.result }}
       WEB_RESULT: ${{ needs.deploy-web.result }}
     steps:
+      - name: Guard development runner
+        run: |
+          set -euo pipefail
+          test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"
+
       - name: Write deployment summary
         run: |
           set -euo pipefail
