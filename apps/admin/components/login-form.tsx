@@ -2,13 +2,16 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { StatusAlert } from "@/components/admin/status-alert";
 import { navigateAfterAdminLogin } from "@/components/login-form-navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+
+const verificationCodePlaceholder =
+  process.env.NODE_ENV === "production" ? "请输入短信验证码" : "开发环境可留空";
 
 function getPayloadMessage(payload: unknown, fallback: string) {
   if (payload && typeof payload === "object" && "message" in payload) {
@@ -89,14 +92,11 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
 
   return (
     <Card className="w-full max-w-[420px] border-border bg-card shadow-sm">
-      <CardHeader className="gap-4">
-        <div className="flex size-11 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <ShieldCheck className="size-5" />
-        </div>
+      <CardHeader className="gap-1 pb-4">
         <div className="flex flex-col gap-1">
-          <CardTitle className="text-xl font-extrabold text-foreground">员工后台登录</CardTitle>
+          <CardTitle className="text-lg font-semibold text-foreground">员工后台登录</CardTitle>
           <CardDescription className="text-muted-foreground">
-            使用已绑定员工档案的手机号进入管理后台。
+            输入手机号和短信验证码登录。
           </CardDescription>
         </div>
       </CardHeader>
@@ -127,7 +127,7 @@ export function LoginForm({ sessionNotice }: { sessionNotice?: string | null }) 
                   id="code"
                   inputMode="numeric"
                   maxLength={6}
-                  placeholder="测试环境可不填"
+                  placeholder={verificationCodePlaceholder}
                   value={code}
                   onChange={(event) => setCode(event.target.value)}
                 />

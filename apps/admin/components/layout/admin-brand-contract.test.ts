@@ -245,6 +245,20 @@ describe("Admin 好店智装云品牌合同", () => {
     }
   });
 
+  test("登录页保持后台入口而非营销页布局", () => {
+    expect(sources.loginPage).not.toContain("AI 助力装修管理");
+    expect(sources.loginPage).not.toContain("权限受控");
+    expect(sources.loginPage).not.toContain("审批可追踪");
+    expect(sources.loginPage).not.toContain("项目可扫描");
+    expect(sources.loginPage).not.toContain("lg:grid-cols-[1fr_430px]");
+  });
+
+  test("生产登录验证码提示不暴露测试环境文案", () => {
+    expect(sources.loginForm).not.toContain("测试环境可不填");
+    expect(sources.loginForm).toContain("请输入短信验证码");
+    expect(sources.loginForm).toContain("process.env.NODE_ENV");
+  });
+
   test("公开合伙人页使用优化图片组件且应用图标保持轻量", () => {
     const icon = statSync(new URL("app/icon.png", adminRoot));
 
