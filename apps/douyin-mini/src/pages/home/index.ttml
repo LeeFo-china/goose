@@ -5,12 +5,7 @@
   <view class="home-block home-hero">
     <hero-banner title="{{bannerTitle}}" subtitle="{{bannerSubtitle}}" image-url="{{bannerImageUrl}}" action-label="开始预算初算" primary-color="{{primaryColor}}" bindaction="onBudget" />
   </view>
-  <view class="home-block"><trust-metrics items="{{metrics}}" /></view>
-
-  <view class="home-section budget-entry ui-card">
-    <view class="budget-copy"><view class="ui-section-title">先算预算，再规划装修</view><view class="budget-description">选择面积、房屋现状和装修档次，立即查看规则预算区间。无需填写联系方式。</view></view>
-    <button class="budget-action ui-pressable" hover-class="ui-pressable--pressed" style="background-color: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onBudget">开始预算初算</button>
-  </view>
+  <view tt:if="{{metrics.length}}" class="home-block"><trust-metrics items="{{metrics}}" /></view>
 
   <view class="home-section">
     <view class="section-heading"><view class="ui-section-title">项目实景</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewProjects">查看全部项目</button></view>

@@ -51,6 +51,15 @@ test("home keeps one lead intent and uses direct Chinese section headings", asyn
   expect(config).not.toContain('"lead-cta"');
   expect(template).toContain("本地服务与公司介绍");
   expect(template).toContain('primary-color="{{primaryColor}}"');
+  expect(template.match(/开始预算初算/g)).toHaveLength(1);
+  expect(template).not.toContain("先算预算，再规划装修");
+  expect(template).toContain('tt:if="{{metrics.length}}"');
+});
+
+test("trust metrics hides empty public data instead of showing placeholder copy", async () => {
+  const template = await readSource("components/trust-metrics/index.ttml");
+  expect(template).not.toContain("更多服务数据正在完善");
+  expect(template).toContain('tt:elif="{{items.length}}"');
 });
 
 test("hero collapses the reserved media column when no image is visible", async () => {
