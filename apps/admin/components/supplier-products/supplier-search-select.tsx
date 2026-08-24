@@ -38,10 +38,11 @@ export function SupplierSearchSelect<T extends SupplierOption>({
 }) {
   const totalPages = Math.max(1, result.pagination.totalPages || 1);
   return (
-    <div className="grid gap-3 rounded-lg border bg-card p-3 md:grid-cols-[minmax(0,1fr)_minmax(15rem,1fr)]">
-      <div className="flex gap-2">
+    <div className="grid gap-3 rounded-lg border bg-card p-3 xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)] xl:items-end">
+      <div className="flex min-w-0 gap-2">
         <Input
           aria-label={searchLabel}
+          className="min-w-0 flex-1"
           value={keyword}
           placeholder={`输入${label}名称或编码`}
           onChange={(event) => onKeywordChange(event.target.value)}
@@ -49,17 +50,24 @@ export function SupplierSearchSelect<T extends SupplierOption>({
             if (event.key === "Enter") onSearch();
           }}
         />
-        <Button type="button" variant="outline" disabled={loading} onClick={onSearch}>
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0"
+          disabled={loading}
+          onClick={onSearch}
+        >
           <Search data-icon="inline-start" />
           {searchLabel}
         </Button>
       </div>
-      <Field>
+      <Field className="min-w-0">
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <div className="flex gap-2">
+        <div className="flex min-w-0 gap-2">
           <FormSelect
             id={id}
             value={value}
+            triggerClassName="min-w-0 flex-1"
             placeholder={result.list.length ? `请选择${label}` : "没有匹配结果"}
             disabled={loading || result.list.length === 0}
             options={result.list.map((item) => ({
@@ -71,6 +79,7 @@ export function SupplierSearchSelect<T extends SupplierOption>({
           <Button
             type="button"
             variant="outline"
+            className="shrink-0"
             aria-label={`${label}上一页`}
             disabled={loading || page <= 1}
             onClick={() => onPageChange(Math.max(1, page - 1))}
@@ -80,6 +89,7 @@ export function SupplierSearchSelect<T extends SupplierOption>({
           <Button
             type="button"
             variant="outline"
+            className="shrink-0"
             aria-label={`${label}下一页`}
             disabled={loading || page >= totalPages}
             onClick={() => onPageChange(page + 1)}

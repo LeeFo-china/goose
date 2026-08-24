@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { catalogOptionLabel } from "./catalog-search-select";
@@ -56,6 +57,21 @@ const tenantProduct = {
 } as SupplierProduct;
 
 describe("供应商品与供货价行为", () => {
+  test("合作供应商检索卡片保持稳定的两列工具栏布局", () => {
+    const source = readFileSync(
+      new URL("./supplier-search-select.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "xl:grid-cols-[minmax(28rem,0.9fr)_minmax(32rem,1.1fr)]",
+    );
+    expect(source).toContain('className="flex min-w-0 gap-2"');
+    expect(source).toContain('className="min-w-0 flex-1"');
+    expect(source).toContain('triggerClassName="min-w-0 flex-1"');
+    expect(source).toContain('className="shrink-0"');
+  });
+
   test("目录选择项展示名称、编码和来源", () => {
     expect(catalogOptionLabel({
       id: "category-1",
