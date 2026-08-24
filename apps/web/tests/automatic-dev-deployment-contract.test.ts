@@ -201,6 +201,8 @@ describe("automatic development image build contract", () => {
 
     expect(buildJob).toContain("docker/api.Dockerfile");
     expect(buildJob).toContain("docker/admin.Dockerfile");
+    expect(readFileSync(new URL("../../../docker/admin.Dockerfile", import.meta.url), "utf8"))
+      .toContain("NODE_OPTIONS=--max-old-space-size=2048");
     expect(buildJob).toContain("docker/web.Dockerfile");
     expect(buildJob).toContain("docker/social-video-worker.Dockerfile");
     expect(buildJob).toContain("image-manifest-${SERVICE}.json");

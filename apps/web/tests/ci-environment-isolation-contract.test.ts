@@ -182,7 +182,7 @@ describe("CI environment isolation", () => {
     expect(buildJobs).toContain("gooes-dev-deploy");
     expect(buildJobs).toContain('test "${RUNNER_NAME}" = "gooes-dev-vm-0-11"');
     expect(buildJobs).toContain("ubuntu-24.04");
-    expect(buildJobs).toContain("max-parallel: 4");
+    expect(buildJobs).toContain("max-parallel: 1");
     expect(buildJobs).toContain("timeout-minutes: 45");
     expect(buildJobs).toContain("docker build");
     expect(buildJobs).toContain("${GITHUB_SHA}");

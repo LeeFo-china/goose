@@ -237,7 +237,7 @@ jobs:
       TARGET_ENVIRONMENT: ${{ needs.validate-request.outputs.target_environment }}
     strategy:
       fail-fast: true
-      max-parallel: 4
+      max-parallel: 1
       matrix:
         include:
           - service: api
