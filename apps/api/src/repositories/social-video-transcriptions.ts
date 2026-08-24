@@ -2,6 +2,15 @@ import { Errors } from "@/errors/error-factory";
 import type { SocialVideoTranscriptionStatus } from "@/schema/social-video";
 import { SupabaseDB } from "@/utils/supabase";
 
+const SOCIAL_VIDEO_TRANSCRIPTION_SUMMARY_COLUMNS = [
+  "id", "tenant_id", "platform", "source_url", "normalized_url", "status",
+  "progress", "title", "text", "audio_duration_seconds", "billable",
+  "billing_duration_seconds", "billing_minutes", "billing_source", "billed_at",
+  "billing_frozen_credits", "billing_correlation_id", "billing_event_id",
+  "billing_charged", "billing_charged_at", "created_at", "updated_at",
+  "completed_at",
+].join(", ");
+
 export type SocialVideoTranscriptionRecord = {
   id: string;
   tenant_id: string | null;
@@ -42,6 +51,33 @@ export type SocialVideoTranscriptionRecord = {
   updated_at: string;
   completed_at: string | null;
 };
+
+export type SocialVideoTranscriptionSummaryRecord = Pick<
+  SocialVideoTranscriptionRecord,
+  | "id"
+  | "tenant_id"
+  | "platform"
+  | "source_url"
+  | "normalized_url"
+  | "status"
+  | "progress"
+  | "title"
+  | "text"
+  | "audio_duration_seconds"
+  | "billable"
+  | "billing_duration_seconds"
+  | "billing_minutes"
+  | "billing_source"
+  | "billed_at"
+  | "billing_frozen_credits"
+  | "billing_correlation_id"
+  | "billing_event_id"
+  | "billing_charged"
+  | "billing_charged_at"
+  | "created_at"
+  | "updated_at"
+  | "completed_at"
+>;
 
 type CreateSocialVideoTranscriptionRecordInput = {
   tenantId: string | null;
@@ -88,8 +124,8 @@ type UpdateSocialVideoTranscriptionRecordInput = {
   completedAt?: string | null;
 };
 
-class SocialVideoTranscriptionRepository {
-  private client = SupabaseDB.getAdminClient();
+export class SocialVideoTranscriptionRepository {
+  constructor(private readonly client = SupabaseDB.getAdminClient()) {}
 
   private table() {
     return (this.client as unknown as {
@@ -190,6 +226,44 @@ class SocialVideoTranscriptionRepository {
     }
 
     return count || 0;
+  }
+
+  async listRecentByUser(input: {
+    tenantId: string | null;
+    authUserId: string;
+    page: number;
+    pageSize: number;
+    platform: "douyin";
+    status?: SocialVideoTranscriptionStatus;
+  }) {
+    const from = (input.page - 1) * input.pageSize;
+    const to = from + input.pageSize - 1;
+
+    let query = this.table()
+      .select(SOCIAL_VIDEO_TRANSCRIPTION_SUMMARY_COLUMNS, { count: "exact" })
+      .eq("created_by_auth_user_id", input.authUserId)
+      .eq("platform", input.platform)
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    if (input.status) {
+      query = query.eq("status", input.status);
+    }
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询短视频识别历史失败", error);
+    }
+
+    return {
+      items: (data || []) as SocialVideoTranscriptionSummaryRecord[],
+      total: count || 0,
+    };
   }
 
   async claimNextPending(staleBefore: string) {

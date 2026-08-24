@@ -23,12 +23,15 @@ import {
   readNumber,
   readString,
   serializeRecord,
+  serializeRecordSummary,
+  socialVideoScriptRepository,
   socialVideoTranscriptionRepository,
   systemSettingsService,
   tencentAsrGateway,
   type ApifyRunResponse,
   type AuthContext,
   type CreateSocialVideoTranscriptionInput,
+  type ListSocialVideoTranscriptionsQuery,
   type MediaResolveResult,
   type SocialVideoTranscriptionRecord,
   type TranscriptResult,
@@ -156,4 +159,48 @@ export async function getTask(this: any, id: string, authContext: AuthContext) {
   }
 
   return serializeRecord(task);
+}
+
+export async function listTasks(
+  this: any,
+  query: ListSocialVideoTranscriptionsQuery,
+  authContext: AuthContext,
+) {
+  await this.assertEnabled();
+  if (authContext.employeeId && !authContext.isPlatformAdmin) {
+    accessPolicyService.assertPermission(authContext, "social_video_transcription.create");
+  }
+
+  const tenantId = await this.resolveTenantId(authContext);
+  const result = await socialVideoTranscriptionRepository.listRecentByUser({
+    tenantId,
+    authUserId: authContext.authUserId,
+    page: query.page,
+    pageSize: query.pageSize,
+    platform: query.platform,
+    status: query.status,
+  });
+
+  const transcriptionIds = result.items.map((item) => item.id);
+  const scripts = await socialVideoScriptRepository.listSummariesByTranscriptionIds({
+    tenantId,
+    transcriptionIds,
+  });
+  const scriptsByTranscriptionId = new Map<string, typeof scripts>();
+
+  for (const script of scripts) {
+    const grouped = scriptsByTranscriptionId.get(script.transcription_id) ?? [];
+    grouped.push(script);
+    scriptsByTranscriptionId.set(script.transcription_id, grouped);
+  }
+
+  return {
+    items: result.items.map((record) => serializeRecordSummary({
+      record,
+      scripts: scriptsByTranscriptionId.get(record.id) ?? [],
+    })),
+    total: result.total,
+    page: query.page,
+    pageSize: query.pageSize,
+  };
 }

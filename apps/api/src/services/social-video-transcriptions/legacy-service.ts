@@ -8,7 +8,7 @@ import {
   assertDailyLimit,
   findCached,
 } from "./legacy/config";
-import { createTask, getTask } from "./legacy/tasks";
+import { createTask, getTask, listTasks } from "./legacy/tasks";
 import { processTask } from "./legacy/processor";
 import { finalizeCompletedBilling } from "./legacy/billing";
 import { testApify } from "./legacy/testing";
@@ -25,6 +25,7 @@ class SocialVideoTranscriptionService {
   private findCached = findCached;
   createTask = createTask;
   getTask = getTask;
+  listTasks = listTasks;
   processTask = processTask;
   private finalizeCompletedBilling = finalizeCompletedBilling;
   testApify = testApify;

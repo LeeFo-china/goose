@@ -72,6 +72,13 @@ export const ListSocialVideoScriptsQuerySchema = z.object({
   status: z.enum(["completed", "failed"]).optional(),
 });
 
+export const ListSocialVideoTranscriptionsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional().default(1),
+  pageSize: z.coerce.number().int().min(1).max(20).optional().default(5),
+  platform: SocialVideoPlatformSchema.optional().default("douyin"),
+  status: SocialVideoTranscriptionStatusSchema.optional(),
+});
+
 function optionalQueryValue<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((value) => {
     if (value == null) return undefined;
@@ -102,6 +109,9 @@ export type CreateSocialVideoScriptInput = z.infer<
 >;
 export type ListSocialVideoScriptsQuery = z.infer<
   typeof ListSocialVideoScriptsQuerySchema
+>;
+export type ListSocialVideoTranscriptionsQuery = z.infer<
+  typeof ListSocialVideoTranscriptionsQuerySchema
 >;
 export type SocialVideoUsageSummaryQuery = z.infer<
   typeof SocialVideoUsageSummaryQuerySchema

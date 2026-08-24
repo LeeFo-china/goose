@@ -6,6 +6,8 @@ import type {
 } from "@/schema/social-video";
 import { SupabaseDB } from "@/utils/supabase";
 
+const MAX_SCRIPT_SUMMARIES_PER_TRANSCRIPTION = 100;
+
 export type SocialVideoScriptRecord = {
   id: string;
   tenant_id: string | null;
@@ -35,6 +37,17 @@ export type SocialVideoScriptRecord = {
   updated_at: string;
 };
 
+export type SocialVideoScriptSummaryRecord = Pick<
+  SocialVideoScriptRecord,
+  | "id"
+  | "transcription_id"
+  | "title"
+  | "target_platform"
+  | "style"
+  | "status"
+  | "created_at"
+>;
+
 type CreateSocialVideoScriptRecordInput = {
   tenantId: string | null;
   transcriptionId: string;
@@ -61,8 +74,8 @@ type CreateSocialVideoScriptRecordInput = {
   rawPayload?: unknown;
 };
 
-class SocialVideoScriptRepository {
-  private client = SupabaseDB.getAdminClient();
+export class SocialVideoScriptRepository {
+  constructor(private readonly client = SupabaseDB.getAdminClient()) {}
 
   private table() {
     return (this.client as unknown as {
@@ -228,6 +241,33 @@ class SocialVideoScriptRepository {
       items: (data || []) as SocialVideoScriptRecord[],
       total: count || 0,
     };
+  }
+
+  async listSummariesByTranscriptionIds(input: {
+    tenantId: string | null;
+    transcriptionIds: string[];
+  }) {
+    if (input.transcriptionIds.length === 0) {
+      return [] as SocialVideoScriptSummaryRecord[];
+    }
+
+    let query = this.table()
+      .select("id, transcription_id, title, target_platform, style, status, created_at")
+      .in("transcription_id", input.transcriptionIds)
+      .order("created_at", { ascending: false })
+      .limit(input.transcriptionIds.length * MAX_SCRIPT_SUMMARIES_PER_TRANSCRIPTION);
+
+    if (input.tenantId) {
+      query = query.eq("tenant_id", input.tenantId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw Errors.dbError("查询短视频脚本摘要失败", error);
+    }
+
+    return (data || []) as SocialVideoScriptSummaryRecord[];
   }
 
   async countCreatedByUserSince(input: {

@@ -4,6 +4,7 @@ import {
   CreateSocialVideoScriptSchema,
   CreateSocialVideoTranscriptionSchema,
   ListSocialVideoScriptsQuerySchema,
+  ListSocialVideoTranscriptionsQuerySchema,
   SocialVideoUsageSummaryQuerySchema,
   SocialVideoTranscriptionIdParamsSchema,
   TestSocialVideoTranscriptionSchema,
@@ -34,6 +35,25 @@ class SocialVideoController extends BaseController {
 
     const data = await socialVideoTranscriptionService.createTask(
       bodyResult.data,
+      authContext,
+    );
+    return ResponseHandler.success(data);
+  }
+
+  @Get("/social-video/transcriptions")
+  async listTranscriptions(request: FastifyRequest, reply: FastifyReply) {
+    const authContext = await authorizationService.getRequiredAuthContext(
+      request.user?.sub,
+      getTenantServiceAuthOptions(request),
+    );
+
+    const queryResult = ListSocialVideoTranscriptionsQuerySchema.safeParse(
+      request.query || {},
+    );
+    if (!queryResult.success) throw Errors.fromZod(queryResult.error);
+
+    const data = await socialVideoTranscriptionService.listTasks(
+      queryResult.data,
       authContext,
     );
     return ResponseHandler.success(data);

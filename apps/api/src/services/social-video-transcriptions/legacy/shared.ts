@@ -10,11 +10,17 @@ import type { AuthContext } from "@/services/authorization";
 import {
   socialVideoTranscriptionRepository,
   type SocialVideoTranscriptionRecord,
+  type SocialVideoTranscriptionSummaryRecord,
 } from "@/repositories/social-video-transcriptions";
+import {
+  socialVideoScriptRepository,
+  type SocialVideoScriptSummaryRecord,
+} from "@/repositories/social-video-scripts";
 import { SupabaseDB } from "@/utils/supabase";
 import type {
   CreateSocialVideoTranscriptionInput,
   TestSocialVideoTranscriptionInput,
+  ListSocialVideoTranscriptionsQuery,
 } from "@/schema/social-video";
 import { systemSettingsService } from "@/services/system-settings";
 import { billingService } from "@/services/billing";
@@ -58,6 +64,12 @@ export type TranscriptResult = {
   segments: unknown[];
   durationSeconds: number | null;
   rawPayload: unknown;
+};
+
+export type {
+  ListSocialVideoTranscriptionsQuery,
+  SocialVideoScriptSummaryRecord,
+  SocialVideoTranscriptionSummaryRecord,
 };
 
 export type MediaResolveResult = {
@@ -184,6 +196,58 @@ export function serializeRecord(record: SocialVideoTranscriptionRecord, cached =
     created_at: record.created_at,
     updated_at: record.updated_at,
     completed_at: record.completed_at,
+  };
+}
+
+export function serializeRecordSummary(input: {
+  record: SocialVideoTranscriptionSummaryRecord;
+  scripts: SocialVideoScriptSummaryRecord[];
+}) {
+  const durationSeconds = input.record.billing_duration_seconds
+    ?? input.record.audio_duration_seconds;
+  const cached = input.record.billing_source === "cache";
+  const text = typeof input.record.text === "string" ? input.record.text : "";
+  const latestScript = input.scripts[0] ?? null;
+
+  return {
+    id: input.record.id,
+    platform: input.record.platform,
+    source_url: input.record.source_url,
+    normalized_url: input.record.normalized_url,
+    status: input.record.status,
+    progress: input.record.progress,
+    title: input.record.title,
+    text_preview: text.slice(0, 80),
+    text_length: text.length,
+    audio_duration_seconds: input.record.audio_duration_seconds,
+    cached,
+    billing: {
+      billable: input.record.billable,
+      duration_seconds: durationSeconds,
+      minutes: input.record.billing_minutes,
+      source: input.record.billing_source,
+      cached,
+      billed_at: input.record.billed_at,
+      frozen_credits: input.record.billing_frozen_credits,
+      correlation_id: input.record.billing_correlation_id,
+      event_id: input.record.billing_event_id,
+      charged: input.record.billing_charged,
+      charged_at: input.record.billing_charged_at,
+    },
+    script_count: input.scripts.length,
+    latest_script: latestScript
+      ? {
+        id: latestScript.id,
+        title: latestScript.title,
+        target_platform: latestScript.target_platform,
+        style: latestScript.style,
+        status: latestScript.status,
+        created_at: latestScript.created_at,
+      }
+      : null,
+    created_at: input.record.created_at,
+    updated_at: input.record.updated_at,
+    completed_at: input.record.completed_at,
   };
 }
 
@@ -391,6 +455,7 @@ export {
   SupabaseDB,
   accessPolicyService,
   billingService,
+  socialVideoScriptRepository,
   socialVideoTranscriptionRepository,
   systemSettingsService,
   tencentAsrGateway,
