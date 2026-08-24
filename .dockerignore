@@ -25,6 +25,8 @@ coverage
 logs
 reports
 **/reports
+!apps/admin/app/**/reports
+!apps/admin/app/**/reports/**
 
 tmp
 temp
