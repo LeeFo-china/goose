@@ -65,6 +65,9 @@ function applyPatch(
     ...(patch.douyinLogId !== undefined
       ? { douyin_log_id: patch.douyinLogId }
       : {}),
+    ...(patch.testQrUrl !== undefined
+      ? { test_qr_url: patch.testQrUrl }
+      : {}),
     ...(patch.auditHostNames !== undefined
       ? { audit_host_names: [...patch.auditHostNames] }
       : {}),
@@ -74,6 +77,9 @@ function applyPatch(
       : {}),
     ...(patch.submittedAt !== undefined
       ? { submitted_at: patch.submittedAt }
+      : {}),
+    ...(patch.auditedAt !== undefined
+      ? { audited_at: patch.auditedAt }
       : {}),
     platform_operator_id: patch.platformOperatorId,
   };
@@ -146,6 +152,62 @@ async function caught(operation: () => Promise<unknown>): Promise<unknown> {
 }
 
 describe("Douyin audit retry state", () => {
+  test("regenerates a test QR from an audit rejection and clears review outcome", async () => {
+    const h = harness(release({
+      status: "audit_rejected",
+      test_qr_url:
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1",
+      audit_host_names: ["douyin"],
+      audit_note: "上次审核说明",
+      audit_result: { status: "rejected", reason: "功能不完整" },
+      submitted_at: "2026-07-26T02:00:00.000Z",
+      audited_at: "2026-07-26T03:00:00.000Z",
+    }), async () => ({ logId: "audit-log" }));
+
+    await h.operations.getTestQr(installation, h.current(), OPERATOR_ID);
+
+    expect(h.gateway.getTestQrCode).toHaveBeenCalledTimes(1);
+    expect(h.current()).toMatchObject({
+      status: "testing",
+      test_qr_url: "https://p3.douyinpic.com/test.png",
+      audit_host_names: [],
+      audit_note: null,
+      audit_result: null,
+      submitted_at: null,
+      audited_at: null,
+    });
+  });
+
+  test("resubmits an audit rejection with a fresh audit intent", async () => {
+    const h = harness(release({
+      status: "audit_rejected",
+      audit_host_names: ["old.douyin.com"],
+      audit_note: "上次审核说明",
+      audit_result: { status: "rejected", reason: "功能不完整" },
+      submitted_at: "2026-07-26T02:00:00.000Z",
+      audited_at: "2026-07-26T03:00:00.000Z",
+    }), async () => ({ logId: "audit-retry-log" }));
+
+    await h.operations.submitAudit(
+      installation,
+      INSTALLATION_ID,
+      h.current(),
+      OPERATOR_ID,
+      auditInput,
+    );
+
+    expect(h.gateway.getAvailableAuditHosts).toHaveBeenCalledTimes(1);
+    expect(h.gateway.submitVersionAudit).toHaveBeenCalledTimes(1);
+    expect(h.current()).toMatchObject({
+      status: "audit_pending",
+      audit_host_names: auditInput.host_names,
+      audit_note: auditInput.audit_note,
+      audit_result: null,
+      submitted_at: NOW,
+      audited_at: null,
+    });
+  });
+
   test("retries after a new explicit platform rejection", async () => {
     let attempts = 0;
     const h = harness(release(), async () => {

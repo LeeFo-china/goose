@@ -118,7 +118,7 @@ describe("tenant Douyin workspace actions", () => {
     ]);
   });
 
-  test("does not offer creation for a stale platform template version", () => {
+  test("offers QR regeneration for a rejected stale platform template version", () => {
     const workspace = approvedWorkspace();
     workspace.available_template = {
       template_id: "78149",
@@ -132,9 +132,14 @@ describe("tenant Douyin workspace actions", () => {
       workspace.latest_release.status = "audit_rejected";
       workspace.latest_release.template_id = "77595";
       workspace.latest_release.template_version = "0.1.3";
+      workspace.latest_release.test_qr_url =
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
     }
 
-    expect(availableWorkspaceActions(workspace)).toEqual(["sync_status"]);
+    expect(availableWorkspaceActions(workspace)).toEqual([
+      "sync_status",
+      "get_test_qr",
+    ]);
   });
 
   test("continues an unfinished release before offering the newer template", () => {
@@ -164,19 +169,40 @@ describe("tenant Douyin workspace actions", () => {
     }
   });
 
-  test("offers status sync for rejected or failed releases", () => {
-    for (const [releaseState, status] of [
-      ["audit_rejected", "audit_rejected"],
-      ["sync_error", "failed"],
-    ] as const) {
-      const workspace = approvedWorkspace();
-      workspace.release_state = releaseState;
-      if (workspace.latest_release) {
-        workspace.latest_release.status = status;
-      }
-
-      expect(availableWorkspaceActions(workspace)).toEqual(["sync_status"]);
+  test("offers rejected release retry actions based on QR usability", () => {
+    const expired = approvedWorkspace();
+    expired.release_state = "audit_rejected";
+    if (expired.latest_release) {
+      expired.latest_release.status = "audit_rejected";
+      expired.latest_release.test_qr_url =
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
     }
+
+    expect(availableWorkspaceActions(expired)).toEqual([
+      "sync_status",
+      "get_test_qr",
+    ]);
+
+    const usable = approvedWorkspace();
+    usable.release_state = "audit_rejected";
+    if (usable.latest_release) {
+      usable.latest_release.status = "audit_rejected";
+    }
+
+    expect(availableWorkspaceActions(usable)).toEqual([
+      "sync_status",
+      "submit_audit",
+    ]);
+  });
+
+  test("offers status sync for failed releases", () => {
+    const workspace = approvedWorkspace();
+    workspace.release_state = "sync_error";
+    if (workspace.latest_release) {
+      workspace.latest_release.status = "failed";
+    }
+
+    expect(availableWorkspaceActions(workspace)).toEqual(["sync_status"]);
   });
 
   test("keeps status sync visible while a newer template is available", () => {

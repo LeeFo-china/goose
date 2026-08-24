@@ -125,11 +125,12 @@ export class PlatformDouyinMiniappReleaseOperations {
     snapshot: DouyinMiniappReleaseRecord,
     operatorId: string,
   ): Promise<DouyinMiniappReleaseRecord> {
-    this.assertState(snapshot, ["uploaded", "testing"]);
+    const allowed = ["uploaded", "testing", "audit_rejected"] as const;
+    this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(
-      snapshot, "test_qr", ["uploaded", "testing"], operatorId,
+      snapshot, "test_qr", allowed, operatorId,
     );
-    this.assertState(release, ["uploaded", "testing"]);
+    this.assertState(release, allowed);
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
       status: release.status, platformOperatorId: operatorId,
     });
@@ -140,7 +141,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     }));
     return this.finish(release, claim, {
       status: "testing", testQrUrl: result.qrCodeUrl,
-      douyinLogId: result.logId, platformOperatorId: operatorId,
+      douyinLogId: result.logId,
+      ...clearedAuditRetryPatch(operatorId),
     });
   }
   async submitAudit(
@@ -154,31 +156,35 @@ export class PlatformDouyinMiniappReleaseOperations {
     this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(snapshot, "submit_audit", allowed, operatorId);
     this.assertState(release, allowed);
-    let hasIntent = release.audit_note !== null || release.audit_host_names.length > 0;
-    if (hasIntent && !sameAuditIntent(release, input)) {
-      await this.finish(release, claim, { status: release.status, platformOperatorId: operatorId });
+    let current = release;
+    if (current.status === "audit_rejected") {
+      current = await this.patch(current, claim, clearedAuditRetryPatch(operatorId));
+    }
+    let hasIntent = current.audit_note !== null || current.audit_host_names.length > 0;
+    if (hasIntent && !sameAuditIntent(current, input)) {
+      await this.finish(current, claim, { status: current.status, platformOperatorId: operatorId });
       throw releaseStateConflict();
     }
-    if (release.status !== "testing") {
-      return this.persistWithMetadata(release, claim, {
-        status: release.status, platformOperatorId: operatorId,
+    if (current.status !== "testing") {
+      return this.persistWithMetadata(current, claim, {
+        status: current.status, platformOperatorId: operatorId,
       }, installationId);
     }
 
-    const authorizerAccessToken = await this.accessToken(release, claim, installation, {
-      status: "testing", auditHostNames: release.audit_host_names,
-      auditNote: release.audit_note,
-      ...(hasIntent && release.audit_result !== null
-        ? { auditResult: release.audit_result }
+    const authorizerAccessToken = await this.accessToken(current, claim, installation, {
+      status: "testing", auditHostNames: current.audit_host_names,
+      auditNote: current.audit_note,
+      ...(hasIntent && current.audit_result !== null
+        ? { auditResult: current.audit_result }
         : {}),
       platformOperatorId: operatorId,
-    }, hasIntent && release.audit_result !== null);
+    }, hasIntent && current.audit_result !== null);
     if (
       hasIntent
       && !claim.recoveryRequired
-      && isStoredExplicitAuditRejection(release)
+      && isStoredExplicitAuditRejection(current)
     ) {
-      await this.patch(release, claim, {
+      current = await this.patch(current, claim, {
         status: "testing",
         auditHostNames: [],
         auditNote: null,
@@ -188,33 +194,33 @@ export class PlatformDouyinMiniappReleaseOperations {
       hasIntent = false;
     }
     if (hasIntent || claim.recoveryRequired) {
-      const versions = await this.provider(release, claim, {
+      const versions = await this.provider(current, claim, {
         status: "testing", platformOperatorId: operatorId,
       }, async () => this.dependencies.gateway.getVersionList({
         authorizerAccessToken, appId: installation.authorizer_appid,
       }), true);
-      const recovered = recoveryPatch(release, versions, this.dependencies.now(), false);
+      const recovered = recoveryPatch(current, versions, this.dependencies.now(), false);
       if (!recovered) throw outcomeUncertain();
-      return this.persistWithMetadata(release, claim, {
+      return this.persistWithMetadata(current, claim, {
         ...recovered, platformOperatorId: operatorId,
       }, installationId);
     }
 
-    const available = await this.provider(release, claim, {
+    const available = await this.provider(current, claim, {
       status: "testing", platformOperatorId: operatorId,
     }, async () => this.dependencies.gateway.getAvailableAuditHosts({
       authorizerAccessToken, appId: installation.authorizer_appid,
     }));
     if (!input.host_names.every((host) => new Set(available.hostNames).has(host))) {
-      await this.finish(release, claim, { status: "testing", platformOperatorId: operatorId });
+      await this.finish(current, claim, { status: "testing", platformOperatorId: operatorId });
       throw requestError("抖音审核宿主不可用", "DOUYIN_AUDIT_HOSTS_UNAVAILABLE");
     }
-    await this.patch(release, claim, {
+    current = await this.patch(current, claim, {
       status: "testing", auditHostNames: input.host_names,
       auditNote: input.audit_note, auditResult: null,
       platformOperatorId: operatorId,
     });
-    const submitted = await this.provider(release, claim, {
+    const submitted = await this.provider(current, claim, {
       status: "testing", auditHostNames: input.host_names, auditNote: input.audit_note,
       platformOperatorId: operatorId,
     }, async () => this.dependencies.gateway.submitVersionAudit({
@@ -222,9 +228,9 @@ export class PlatformDouyinMiniappReleaseOperations {
       hostNames: input.host_names, auditNote: input.audit_note,
     }), false, true);
     const submittedAt = this.dependencies.now();
-    return this.persistWithMetadata(release, claim, {
+    return this.persistWithMetadata(current, claim, {
       status: "audit_pending", auditHostNames: input.host_names, auditNote: input.audit_note,
-      submittedAt, douyinLogId: submitted.logId, platformOperatorId: operatorId,
+      submittedAt, auditedAt: null, douyinLogId: submitted.logId, platformOperatorId: operatorId,
     }, installationId);
   }
   async syncStatus(
@@ -455,9 +461,19 @@ function sameAuditIntent(release: DouyinMiniappReleaseRecord, input: AuditInput)
     && release.audit_host_names.every((host) => expectedHosts.has(host));
 }
 
-function isStoredExplicitAuditRejection(
-  release: DouyinMiniappReleaseRecord,
-): boolean {
+function clearedAuditRetryPatch(operatorId: string): UpdateDouyinMiniappReleaseInput {
+  return {
+    status: "testing",
+    auditHostNames: [],
+    auditNote: null,
+    auditResult: null,
+    submittedAt: null,
+    auditedAt: null,
+    platformOperatorId: operatorId,
+  };
+}
+
+function isStoredExplicitAuditRejection(release: DouyinMiniappReleaseRecord): boolean {
   return release.submitted_at === null
     && release.audit_result?.status === "failed"
     && release.audit_result.error_code === "DOUYIN_OPEN_PLATFORM_API_ERROR";

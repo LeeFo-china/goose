@@ -109,7 +109,9 @@ export function availableWorkspaceActions(
     case "audit_pending":
       return ["sync_status"];
     case "audit_rejected":
-      return ["sync_status"];
+      return isDouyinTestQrUrlUsable(release.test_qr_url)
+        ? ["sync_status", "submit_audit"]
+        : ["sync_status", "get_test_qr"];
     case "audit_approved":
       return ["publish"];
     case "sync_error":
@@ -340,7 +342,9 @@ export function TenantDouyinMiniappWorkspaceActions({
               {pending === "get_test_qr"
                 ? <Loader2 className="animate-spin" data-icon="inline-start" />
                 : <QrCode data-icon="inline-start" />}
-              生成体验二维码
+              {release?.status === "audit_rejected"
+                ? "重新获取体验二维码"
+                : "生成体验二维码"}
             </Button>
           ) : null}
           {actions.includes("submit_audit") ? (
@@ -354,7 +358,7 @@ export function TenantDouyinMiniappWorkspaceActions({
               size="sm"
             >
               <Send data-icon="inline-start" />
-              提交审核
+              {release?.status === "audit_rejected" ? "再次提交审核" : "提交审核"}
             </Button>
           ) : null}
           {actions.includes("sync_status") ? (
