@@ -4,9 +4,10 @@ const read = (name: string) => Bun.file(`${__dirname}/${name}`).text();
 
 describe("Douyin Q&A page", () => {
   test("registers a native page with safe question presets and lead CTA", async () => {
-    const [source, template, style, config, appConfig, navigation, models] =
+    const [source, pageSource, template, style, config, appConfig, navigation, models] =
       await Promise.all([
         read("index.ts"),
+        read("qa-page.ts"),
         read("index.ttml"),
         read("index.ttss"),
         read("index.json"),
@@ -18,23 +19,37 @@ describe("Douyin Q&A page", () => {
     expect(appConfig).toContain('"pages/qa/index"');
     expect(navigation).toContain('"pages/qa/index"');
     expect(models).toContain('"pages/qa/index"');
+    expect(source).toContain("createQaPageDefinition");
     expect(source).toContain("askDecorationQuestion");
-    expect(source).toContain('switchToTab("lead")');
-    expect(source).toContain("const app = getApp<DouyinAppContext>();");
-    expect(source).toContain("attribution: app.launchContext");
-    expect(source).toContain("requestSequence");
-    expect(source).toContain("if (this.requestSequence !== sequence) return;");
-    expect(source).toContain("onUnload()");
+    expect(source).toContain("switchToTab");
+    expect(pageSource).toContain('dependencies.switchToTab("lead")');
+    expect(source).toContain("getApp<DouyinAppContext>()");
+    expect(pageSource).toContain("attribution: app.launchContext");
+    expect(pageSource).toContain("requestSequence");
+    expect(pageSource).toContain("if (this.requestSequence !== sequence) return;");
+    expect(pageSource).toContain("beginAnswerStream");
+    expect(pageSource).toContain("appendAnswerChunk");
+    expect(pageSource).toContain("finishAnswerStream");
+    expect(pageSource).toContain("typingTimer");
+    expect(pageSource).toContain("clearTypingTimer()");
+    expect(pageSource).toContain("onUnload()");
     expect(template).toContain("装修问题助手");
-    expect(template).toContain("常见问题");
+    expect(template).toContain("qa-chat");
+    expect(template).toContain("qa-composer");
     expect(template).toContain('maxlength="120"');
     expect(template).toContain('bindtap="onSubmit"');
     expect(template).toContain('bindtap="onBookMeasurement"');
     expect(template).toContain('role="status"');
+    expect(template).toContain("typing-dot");
+    expect(template).not.toContain("参考建议");
+    expect(template).not.toContain("ui-card");
     expect(template).not.toContain("15518591857");
     expect(template).not.toContain("直接联系公司");
     expect(config).toContain('"navigationBarTitleText": "装修问题助手"');
-    expect(style).toMatch(/min-height:\s*88rpx/);
+    expect(style).toContain(".message--assistant");
+    expect(style).toContain(".qa-composer");
+    expect(style).toContain("@keyframes qaTypingPulse");
+    expect(style).not.toContain(":nth-child");
   });
 
   test("home exposes one AI Q&A card without duplicating the budget hero", async () => {

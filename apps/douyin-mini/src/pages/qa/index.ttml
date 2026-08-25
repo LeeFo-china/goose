@@ -1,39 +1,43 @@
 <view class="qa-page">
-  <view class="qa-hero ui-card">
-    <view class="qa-kicker">装修问题助手</view>
-    <view class="qa-title">把装修疑问先问清楚</view>
-    <view class="qa-copy">适合咨询预算准备、旧房翻新、局部装修和量房准备。请不要填写手机号、详细地址或微信号。</view>
+  <view class="qa-header">
+    <view class="qa-title">装修问题助手</view>
+    <view class="qa-subtitle">问预算、旧房、局部改造和量房准备，不填写手机号和详细地址。</view>
   </view>
 
-  <view class="qa-section ui-card">
-    <view class="qa-section-title">常见问题</view>
-    <view class="preset-list">
+  <scroll-view class="qa-chat" scroll-y>
+    <view tt:if="{{!stream && status !== 'failed'}}" class="preset-panel">
+      <view class="preset-title">可以这样问</view>
       <button tt:for="{{presetQuestions}}" tt:key="*this" class="preset-button ui-pressable" hover-class="ui-pressable--pressed" data-question="{{item}}" bindtap="onPresetTap">{{item}}</button>
     </view>
-  </view>
 
-  <view class="qa-section ui-card">
-    <view class="qa-section-title">输入你的问题</view>
-    <textarea class="question-input" value="{{question}}" maxlength="120" placeholder="例如：旧房翻新要先看哪些地方？" placeholder-style="color: #706C67;" auto-height bindinput="onQuestionInput" />
-    <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{status === 'submitting'}}" disabled="{{status === 'submitting'}}" bindtap="onSubmit">提交问题</button>
-  </view>
-
-  <view tt:if="{{status === 'answered' && answer}}" class="qa-section result-card ui-card" role="status">
-    <view class="qa-section-title">参考建议</view>
-    <view class="answer-list">
-      <view tt:for="{{answer.answer_points}}" tt:key="*this" class="answer-item">{{item}}</view>
+    <view tt:if="{{stream}}" class="message-list" role="status">
+      <view tt:for="{{stream.messages}}" tt:key="id" class="message message--{{item.role}}">
+        <view class="message-bubble">
+          <view tt:if="{{item.text}}" class="message-text">{{item.text}}</view>
+          <view tt:if="{{item.typing}}" class="typing-dot">
+            <view class="typing-dot__item typing-dot__item--one"></view>
+            <view class="typing-dot__item typing-dot__item--two"></view>
+            <view class="typing-dot__item typing-dot__item--three"></view>
+          </view>
+        </view>
+      </view>
+      <view tt:if="{{stream.disclaimer}}" class="qa-disclaimer">{{stream.disclaimer}}</view>
+      <view tt:if="{{stream.suggestedQuestions.length}}" class="suggestion-panel">
+        <view class="suggestion-title">继续了解</view>
+        <button tt:for="{{stream.suggestedQuestions}}" tt:key="*this" class="suggestion-button ui-pressable" hover-class="ui-pressable--pressed" data-question="{{item}}" bindtap="onSuggestedQuestionTap">{{item}}</button>
+        <button class="lead-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBookMeasurement">预约免费量房</button>
+      </view>
     </view>
-    <view class="qa-disclaimer">{{answer.disclaimer}}</view>
-    <view tt:if="{{answer.suggested_questions.length}}" class="qa-section-title follow-title">你还可以问</view>
-    <view class="preset-list">
-      <button tt:for="{{answer.suggested_questions}}" tt:key="*this" class="preset-button ui-pressable" hover-class="ui-pressable--pressed" data-question="{{item}}" bindtap="onSuggestedQuestionTap">{{item}}</button>
-    </view>
-    <button class="lead-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBookMeasurement">预约免费量房</button>
-  </view>
 
-  <view tt:elif="{{status === 'failed'}}" class="qa-section ui-card" role="status">
-    <view class="qa-section-title">暂时无法回答</view>
-    <view class="qa-copy">{{errorMessage}}</view>
-    <button class="lead-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBookMeasurement">预约免费量房</button>
+    <view tt:if="{{status === 'failed'}}" class="error-panel" role="status">
+      <view class="error-title">暂时无法回答</view>
+      <view class="error-copy">{{errorMessage}}</view>
+      <button class="lead-button ui-pressable" hover-class="ui-pressable--pressed" bindtap="onBookMeasurement">预约免费量房</button>
+    </view>
+  </scroll-view>
+
+  <view class="qa-composer">
+    <textarea class="question-input" value="{{question}}" maxlength="120" placeholder="输入装修问题" placeholder-style="color: #8A8580;" auto-height bindinput="onQuestionInput" />
+    <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" loading="{{status === 'submitting'}}" disabled="{{status === 'submitting'}}" bindtap="onSubmit">发送</button>
   </view>
 </view>
