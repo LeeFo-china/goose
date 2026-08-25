@@ -12,8 +12,8 @@ import {
 import {
   createProjectPhaseSelection,
   PROJECT_PHASE_FILTERS,
+  projectDisplayPhaseLabel,
   projectFilterToPhase,
-  projectPhaseLabel,
   type ProjectFilter,
 } from "./project-phase";
 
@@ -97,9 +97,9 @@ Page({
   syncState() {
     this.setData({
       items: this.pagination.items.map((project) => ({
-        ...project,
-        phaseLabel: projectPhaseLabel(project.phase),
-      })),
+          ...project,
+          phaseLabel: projectDisplayPhaseLabel(project),
+        })),
       firstLoading: this.pagination.status === "loading" && this.pagination.items.length === 0,
       firstError: this.pagination.status === "error" && this.pagination.items.length === 0,
       paginationStatus: this.pagination.status,

@@ -1,7 +1,9 @@
+import { isProjectStatus, ProjectStatusConfig } from "@gooes/domain";
+
 import {
-  isProjectStatus,
-  ProjectStatusConfig,
-} from "@gooes/domain";
+  projectPublicationStageLabel,
+  type ProjectPublicationWorkflowProgress,
+} from "./project-publication-stage-display";
 
 export const PROJECT_PUBLICATION_PAGE_SIZE = 20;
 export const PROJECT_PUBLICATION_MAX_IMAGES = 30;
@@ -28,6 +30,7 @@ export type ProjectPublicationRow = {
   status_label?: string | null;
   display_status?: string | null;
   display_status_label?: string | null;
+  workflow_progress?: ProjectPublicationWorkflowProgress | null;
   updated_at: string;
   property: {
     community: string;
@@ -154,13 +157,18 @@ export function projectPhaseDisplay(
 export function projectPublicationPhaseDisplay(
   row: Pick<
     ProjectPublicationRow,
-    "status" | "status_label" | "display_status" | "display_status_label"
+    | "status"
+    | "status_label"
+    | "display_status"
+    | "display_status_label"
+    | "workflow_progress"
   >,
 ): { label: string; variant: BadgeVariant } {
   const display = projectPhaseDisplay(row.display_status || row.status);
+  const stageLabel = projectPublicationStageLabel(row);
   return {
     ...display,
-    label: row.display_status_label || row.status_label || display.label,
+    label: row.display_status_label || stageLabel || row.status_label || display.label,
   };
 }
 

@@ -73,6 +73,11 @@ const LogSchema = z.object({
 const ProjectImageLogSchema = z.object({
   project_id: z.uuid(), images: z.unknown(), created_at: z.string(),
 }).strict();
+const WorkflowStateSchema = z.object({
+  subject_id: z.uuid(),
+  instance_status: NullableString,
+  current_node_title: NullableString,
+}).strict();
 
 export type DouyinContentInstallation = z.infer<typeof InstallationSchema>;
 export type DouyinContentCompany = z.infer<typeof CompanySchema>;
@@ -80,6 +85,7 @@ export type DouyinContentArea = z.infer<typeof AreaSchema>;
 export type DouyinContentProject = z.infer<typeof ProjectSchema>;
 export type DouyinContentLog = z.infer<typeof LogSchema>;
 export type DouyinContentProjectImageLog = z.infer<typeof ProjectImageLogSchema>;
+export type DouyinContentWorkflowState = z.infer<typeof WorkflowStateSchema>;
 type PageInput = { tenantId: string; page: number; pageSize: number };
 type CaseListInput = PageInput & { style?: string; layout?: string };
 type ProjectPhase = "in_progress" | "completed";
@@ -192,6 +198,22 @@ export class DouyinMiniappContentRepository {
         .in("project_id", projectIds).order("created_at", { ascending: false })
         .limit(limit);
       return parseRows(ProjectImageLogSchema, result);
+    });
+  }
+
+  async listWorkflowStatesByProjectIds(input: {
+    tenantId: string;
+    projectIds: readonly string[];
+  }) {
+    return execute("查询抖音公开项目当前工序失败", async () => {
+      const projectIds = [...new Set(input.projectIds)].slice(0, 100);
+      if (projectIds.length === 0) return [] as DouyinContentWorkflowState[];
+      const result = await this.client.from("workflow_subject_states")
+        .select("subject_id,instance_status,current_node_title")
+        .eq("tenant_id", input.tenantId)
+        .eq("subject_type", "project")
+        .in("subject_id", projectIds);
+      return parseRows(WorkflowStateSchema, result);
     });
   }
 

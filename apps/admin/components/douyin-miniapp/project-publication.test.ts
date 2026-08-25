@@ -430,6 +430,7 @@ describe("tenant project publication behavior", () => {
       variant: "warning",
     });
   });
+
 });
 
 describe("tenant project publication source contract", () => {

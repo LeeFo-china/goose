@@ -85,6 +85,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     findSite: mock(async () => project),
     listProjects: mock(async () => ({ rows: [project], count: 1 })),
     findProject: mock(async () => project),
+    listWorkflowStatesByProjectIds: mock(async () => []),
     listProjectImageLogs: mock(async () => [{
       project_id: PROJECT_ID,
       images: [logOnlyCover],
@@ -227,7 +228,13 @@ describe("DouyinMiniappContentService", () => {
   });
 
   test("maps unified list and detail DTOs only from public profile fields", async () => {
-    const deps = dependencies();
+    const deps = dependencies({
+      listWorkflowStatesByProjectIds: mock(async () => [{
+        subject_id: PROJECT_ID,
+        instance_status: "running",
+        current_node_title: "水电",
+      }]),
+    });
     const service = new DouyinMiniappContentService(deps as never);
 
     const list = await service.listProjects(user, {
@@ -238,6 +245,7 @@ describe("DouyinMiniappContentService", () => {
       id: PROJECT_ID,
       title: "现代简约实景",
       phase: "in_progress" as const,
+      stage_label: "水电进行中",
       cover_image_url: resolvedCover,
       public_images: [resolvedCover],
       style_tags: ["现代", "简约"],
@@ -262,6 +270,10 @@ describe("DouyinMiniappContentService", () => {
     });
     expect(deps.repository.findProject).toHaveBeenCalledWith({
       tenantId: TENANT_ID, id: PROJECT_ID,
+    });
+    expect(deps.repository.listWorkflowStatesByProjectIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      projectIds: [PROJECT_ID],
     });
     expect(deps.repository.listProjectImageLogs).not.toHaveBeenCalled();
     expect(JSON.stringify({ list, detail })).not.toMatch(/张先生|1号楼101室|260000/);

@@ -1,4 +1,4 @@
-import type { PublicProjectPhase } from "../../models";
+import type { PublicProject, PublicProjectPhase } from "../../models";
 
 export type ProjectFilter = "all" | PublicProjectPhase;
 
@@ -23,6 +23,14 @@ export function projectFilterToPhase(filter: ProjectFilter): PublicProjectPhase 
 
 export function projectPhaseLabel(phase: PublicProjectPhase): string {
   return phase === "in_progress" ? "施工中" : "已完工";
+}
+
+export function projectDisplayPhaseLabel(
+  project: Pick<PublicProject, "phase" | "stage_label">,
+): string {
+  if (project.phase === "completed") return "已完工";
+  const stageLabel = project.stage_label?.trim();
+  return stageLabel || "施工中";
 }
 
 export function createProjectPhaseSelection(

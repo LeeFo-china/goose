@@ -37,6 +37,11 @@ type ProjectOwnershipRow = {
   readonly id: string;
   readonly tenant_id: string;
 };
+type ProjectWorkflowStateRow = {
+  readonly subject_id: string;
+  readonly instance_status: string | null;
+  readonly current_node_title: string | null;
+};
 type AttachedImageRow = { readonly images: unknown };
 type SavedProfile = TenantDouyinProjectPublicationInput & {
   readonly id: string;
@@ -62,6 +67,10 @@ type RepositoryPort = {
     tenantId: string;
     projectIds: readonly string[];
   }): Promise<Set<string>>;
+  listWorkflowStatesByProjectIds(input: {
+    tenantId: string;
+    projectIds: readonly string[];
+  }): Promise<readonly ProjectWorkflowStateRow[]>;
   findProject(input: { tenantId: string; projectId: string }):
     Promise<ProjectOwnershipRow | null>;
   listAttachedImageRows(input: {
@@ -102,13 +111,23 @@ export class TenantDouyinProjectsService {
         "DOUYIN_TENANT_PROJECTS_RESPONSE_INVALID",
       );
     }
-    const completedProjectIds = await this.listCompletedDisplayProjectIds(
-      tenantId,
-      result.rows,
+    const projectIds = listProjectIds(result.rows);
+    const [completedProjectIds, workflowStates] = await Promise.all([
+      this.listCompletedDisplayProjectIds(tenantId, result.rows),
+      this.dependencies.repository.listWorkflowStatesByProjectIds({
+        tenantId,
+        projectIds,
+      }),
+    ]);
+    const workflowStateByProjectId = new Map(
+      workflowStates.map((state) => [state.subject_id, state]),
     );
     return {
       list: result.rows.map((row) =>
-        appendProjectDisplayStatus(row as Record<string, unknown>, completedProjectIds)
+        appendProjectDisplayStatus({
+          ...row as Record<string, unknown>,
+          workflow_progress: workflowStateByProjectId.get(row.id) ?? null,
+        }, completedProjectIds)
       ),
       pagination: {
         page: query.page,
@@ -233,6 +252,10 @@ export class TenantDouyinProjectsService {
     }
     return project;
   }
+}
+
+function listProjectIds(rows: readonly ProjectRow[]): string[] {
+  return [...new Set(rows.map((row) => row.id))].slice(0, 100);
 }
 
 function collectAttachedImageReferences(

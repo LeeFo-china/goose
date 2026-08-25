@@ -54,6 +54,7 @@ function fixture(
       property: { community: "示例花园", layout: "三室两厅", area: 120 },
       public_profile: null,
     }], total: 1 })),
+    listWorkflowStatesByProjectIds: mock(async () => []),
     listFinalAcceptanceCompletedProjectIds: mock(async () => new Set<string>()),
     findProject: mock(async () => ({ id: PROJECT_ID, tenant_id: TENANT_ID })),
     listAttachedImageRows: mock(async () => [{ images: [
@@ -134,7 +135,34 @@ describe("TenantDouyinProjectsService", () => {
       total: 1,
       totalPages: 1,
     });
+    expect(context.repository.listWorkflowStatesByProjectIds).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      projectIds: [PROJECT_ID],
+    });
 
+  });
+
+  test("attaches current workflow node so publication rows can show the concrete stage", async () => {
+    const context = fixture({
+      listWorkflowStatesByProjectIds: mock(async () => [{
+        subject_id: PROJECT_ID,
+        instance_status: "running",
+        current_node_title: "水电",
+      }]),
+    });
+
+    const result = await context.service.list(authContext(), {
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(result.list[0]).toMatchObject({
+      id: PROJECT_ID,
+      workflow_progress: {
+        current_node_title: "水电",
+        instance_status: "running",
+      },
+    });
   });
 
   test("uses final acceptance display status so project publication matches the project list", async () => {

@@ -330,6 +330,32 @@ describe("DouyinMiniappContentRepository privacy and pagination", () => {
     expect(calls).toContainEqual({ method: "range", args: [0, 19] });
   });
 
+  test("lists current workflow stage labels with one bounded tenant-scoped query", async () => {
+    const workflowState = {
+      subject_id: project.id,
+      instance_status: "running",
+      current_node_title: "水电",
+    };
+    const { client, calls } = clientWith([{ data: [workflowState], error: null }]);
+    const repository = new Repository(client as never);
+    const tenantId = "33333333-3333-4333-8333-333333333333";
+
+    await expect(repository.listWorkflowStatesByProjectIds({
+      tenantId,
+      projectIds: [project.id, project.id],
+    })).resolves.toEqual([workflowState]);
+
+    expect(calls).toContainEqual({ method: "from", args: ["workflow_subject_states"] });
+    expect(calls).toContainEqual({ method: "select", args: [
+      "subject_id,instance_status,current_node_title",
+    ] });
+    expect(calls).toContainEqual({ method: "eq", args: ["tenant_id", tenantId] });
+    expect(calls).toContainEqual({ method: "eq", args: ["subject_type", "project"] });
+    expect(calls).toContainEqual({ method: "in", args: ["subject_id", [project.id]] });
+    const select = String(calls.find((call) => call.method === "select")?.args[0]);
+    expect(select).not.toMatch(/current_node_snapshot|timeline|actions|definition|tenant_id/i);
+  });
+
   test("loads project image candidates in one bounded tenant-scoped query", async () => {
     const imageLog = {
       project_id: project.id,

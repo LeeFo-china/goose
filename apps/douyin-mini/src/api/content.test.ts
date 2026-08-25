@@ -39,8 +39,15 @@ describe("Douyin public content API clients", () => {
   test("strictly parses unified phases and rejects unknown values", () => {
     expect(parseProject({ ...project, phase: "in_progress" })?.phase)
       .toBe("in_progress");
+    expect(parseProject({
+      ...project,
+      phase: "in_progress",
+      stage_label: "水电进行中",
+    })?.stage_label).toBe("水电进行中");
     expect(parseProject({ ...project, phase: "completed" })?.phase)
       .toBe("completed");
+    expect(parseProject({ ...project, phase: "completed" })?.stage_label)
+      .toBeNull();
     expect(parseProject({ ...project, phase: "unknown" })).toBeNull();
   });
 

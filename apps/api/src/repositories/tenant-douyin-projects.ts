@@ -72,6 +72,11 @@ const SavedProfileSchema = ProfileSchema.extend({
 const AcceptanceProjectRowSchema = z.strictObject({
   project_id: z.uuid().nullable(),
 });
+const WorkflowStateRowSchema = z.strictObject({
+  subject_id: z.uuid(),
+  instance_status: z.string().nullable(),
+  current_node_title: z.string().nullable(),
+});
 const PublicationRpcErrorSchema = z.strictObject({
   status_code: z.union([z.literal(400), z.literal(404)]),
   code: z.enum(PUBLICATION_RPC_ERROR_CODES),
@@ -197,6 +202,28 @@ export class TenantDouyinProjectsRepository {
       "解析项目竣工验收完成状态失败",
     );
     return new Set(rows.flatMap((row) => row.project_id ? [row.project_id] : []));
+  }
+
+  async listWorkflowStatesByProjectIds(input: {
+    tenantId: string;
+    projectIds: readonly string[];
+  }) {
+    const projectIds = [...new Set(input.projectIds)].slice(0, 100);
+    if (projectIds.length === 0) return [];
+    const result = await executeDatabase(
+      () => this.client.from("workflow_subject_states")
+        .select("subject_id,instance_status,current_node_title")
+        .eq("tenant_id", input.tenantId)
+        .eq("subject_type", "project")
+        .in("subject_id", projectIds),
+      "查询项目当前工序失败",
+    );
+    assertDatabaseSuccess(result, "查询项目当前工序失败");
+    return parseData(
+      z.array(WorkflowStateRowSchema),
+      result.data ?? [],
+      "解析项目当前工序失败",
+    );
   }
 
   async listAttachedImageRows(input: {

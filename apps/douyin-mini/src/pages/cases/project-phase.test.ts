@@ -6,6 +6,7 @@ import {
 } from "../../utils/pagination";
 import {
   createProjectPhaseSelection,
+  projectDisplayPhaseLabel,
   PROJECT_PHASE_FILTERS,
   projectFilterToPhase,
   projectPhaseLabel,
@@ -31,6 +32,12 @@ describe("unified public project phase presentation", () => {
   test("uses direct Chinese labels for public lifecycle phases", () => {
     expect(projectPhaseLabel("in_progress")).toBe("施工中");
     expect(projectPhaseLabel("completed")).toBe("已完工");
+    expect(projectDisplayPhaseLabel({ phase: "in_progress", stage_label: "水电进行中" }))
+      .toBe("水电进行中");
+    expect(projectDisplayPhaseLabel({ phase: "in_progress", stage_label: null }))
+      .toBe("施工中");
+    expect(projectDisplayPhaseLabel({ phase: "completed", stage_label: "竣工验收已完成" }))
+      .toBe("已完工");
   });
 
   test("creates a refresh request with an immutable phase snapshot", () => {

@@ -8,6 +8,7 @@ import {
   type DouyinContentInstallation,
   type DouyinContentLog,
   type DouyinContentProject,
+  type DouyinContentWorkflowState,
 } from "@/repositories/douyin-miniapp-content";
 import {
   DouyinRuntimeConfigSchema,
@@ -27,7 +28,7 @@ import {
 type RepositoryPort = Pick<DouyinMiniappContentRepository,
   | "findActiveInstallation" | "findPublishedCompany" | "listServiceAreas"
   | "listCases" | "findCase" | "listSites" | "findSite" | "listSiteLogs"
-  | "listProjects" | "findProject">;
+  | "listProjects" | "findProject" | "listWorkflowStatesByProjectIds">;
 type Dependencies = {
   readonly repository?: RepositoryPort;
   readonly prepareImageUrls?: () => Promise<void>;
@@ -53,10 +54,7 @@ export class DouyinMiniappContentService {
 
   async bootstrap(user?: JwtPayload) {
     const context = await this.loadContext(user);
-    const emptyProjects = Promise.resolve({
-      rows: [] as DouyinContentProject[],
-      count: 0,
-    });
+    const emptyProjects = Promise.resolve({ rows: [] as DouyinContentProject[], count: 0 });
     const [profile, areas, projects, activeSites] = await Promise.all([
       this.repository.findPublishedCompany(context.tenantId),
       this.repository.listServiceAreas(context.tenantId),
@@ -71,7 +69,7 @@ export class DouyinMiniappContentService {
         : emptyProjects,
     ]);
     const company = this.mapCompany(context.runtime, requireCompany(profile), areas);
-    const mappedProjects = await this.mapPublicProjects([
+    const mappedProjects = await this.mapPublicProjects(context.tenantId, [
       ...projects.rows,
       ...activeSites.rows,
     ]);
@@ -114,7 +112,7 @@ export class DouyinMiniappContentService {
     const context = await this.loadContext(user);
     requireContentFeature(context, "cases");
     const result = await this.repository.listCases({ tenantId: context.tenantId, ...query });
-    const projects = await this.mapCompatibilityProjects(result.rows, false);
+    const projects = await this.mapCompatibilityProjects(context.tenantId, result.rows, false);
     return page(projects, query, result.total);
   }
 
@@ -124,14 +122,14 @@ export class DouyinMiniappContentService {
     const project = requireProject(await this.repository.findCase({
       tenantId: context.tenantId, id,
     }));
-    return this.mapCompatibilityProject(project, false);
+    return this.mapCompatibilityProject(context.tenantId, project, false);
   }
 
   async listSites(user: JwtPayload | undefined, query: DouyinContentPageQuery) {
     const context = await this.loadContext(user);
     requireContentFeature(context, "sites");
     const result = await this.repository.listSites({ tenantId: context.tenantId, ...query });
-    const projects = await this.mapCompatibilityProjects(result.rows, true);
+    const projects = await this.mapCompatibilityProjects(context.tenantId, result.rows, true);
     return page(projects, query, result.total);
   }
 
@@ -141,7 +139,7 @@ export class DouyinMiniappContentService {
     const project = requireProject(await this.repository.findSite({
       tenantId: context.tenantId, id,
     }));
-    return this.mapCompatibilityProject(project, true);
+    return this.mapCompatibilityProject(context.tenantId, project, true);
   }
 
   async listProjects(user: JwtPayload | undefined, query: DouyinProjectListQuery) {
@@ -150,7 +148,7 @@ export class DouyinMiniappContentService {
       tenantId: context.tenantId,
       ...query,
     });
-    return page(await this.mapPublicProjects(result.rows), query, result.count);
+    return page(await this.mapPublicProjects(context.tenantId, result.rows), query, result.count);
   }
 
   async getProject(user: JwtPayload | undefined, id: string) {
@@ -160,7 +158,7 @@ export class DouyinMiniappContentService {
       id,
     });
     if (!project) throw publicProjectNotFound();
-    return this.mapOnePublicProject(project);
+    return this.mapOnePublicProject(context.tenantId, project);
   }
 
   async listProjectLogs(
@@ -254,35 +252,57 @@ export class DouyinMiniappContentService {
     };
   }
 
-  private async mapPublicProjects(projects: readonly DouyinContentProject[]) {
+  private async mapPublicProjects(
+    tenantId: string,
+    projects: readonly DouyinContentProject[],
+  ) {
     const uniqueProjects = [...new Map(projects.map((project) => [project.id, project])).values()];
+    const workflowStateByProjectId = await this.workflowStateMap(tenantId, uniqueProjects);
     if (uniqueProjects.some((project) => project.public_profile.public_image_urls.length > 0)) {
       await this.prepareImageUrls();
     }
-    return uniqueProjects.map((project) => mapPublicProject(project, this.resolveImageUrls));
+    return uniqueProjects.map((project) => mapPublicProject(
+      project,
+      this.resolveImageUrls,
+      workflowStateByProjectId.get(project.id) ?? null,
+    ));
   }
 
-  private async mapOnePublicProject(project: DouyinContentProject) {
-    if (project.public_profile.public_image_urls.length > 0) {
-      await this.prepareImageUrls();
-    }
-    return mapPublicProject(project, this.resolveImageUrls);
+  private async mapOnePublicProject(tenantId: string, project: DouyinContentProject) {
+    const workflowStateByProjectId = await this.workflowStateMap(tenantId, [project]);
+    if (project.public_profile.public_image_urls.length > 0) await this.prepareImageUrls();
+    return mapPublicProject(
+      project,
+      this.resolveImageUrls,
+      workflowStateByProjectId.get(project.id) ?? null,
+    );
+  }
+
+  private async workflowStateMap(
+    tenantId: string,
+    projects: readonly DouyinContentProject[],
+  ): Promise<ReadonlyMap<string, DouyinContentWorkflowState>> {
+    const projectIds = [...new Set(projects.map((project) => project.id))].slice(0, 100);
+    const states = await this.repository.listWorkflowStatesByProjectIds({ tenantId, projectIds });
+    return new Map(states.map((state) => [state.subject_id, state]));
   }
 
   private async mapCompatibilityProjects(
+    tenantId: string,
     projects: readonly DouyinContentProject[],
     useSiteTitle: boolean,
   ) {
-    const mapped = await this.mapPublicProjects(projects);
+    const mapped = await this.mapPublicProjects(tenantId, projects);
     const mappedById = new Map(mapped.map((project) => [project.id, project]));
     return compatibilityProjects(projects, mappedById, useSiteTitle);
   }
 
   private async mapCompatibilityProject(
+    tenantId: string,
     project: DouyinContentProject,
     useSiteTitle: boolean,
   ) {
-    const mapped = await this.mapOnePublicProject(project);
+    const mapped = await this.mapOnePublicProject(tenantId, project);
     return compatibilityProject(project, mapped, useSiteTitle);
   }
 }
@@ -290,6 +310,7 @@ export class DouyinMiniappContentService {
 function mapPublicProject(
   project: DouyinContentProject,
   resolveImageUrls: (value: unknown) => string[],
+  workflowState: DouyinContentWorkflowState | null,
 ) {
   const phase = toDouyinProjectPhase(project.status);
   if (!phase) throw publicProjectNotFound();
@@ -301,6 +322,7 @@ function mapPublicProject(
     id: project.id,
     title: project.public_profile.public_title,
     phase,
+    stage_label: publicProjectStageLabel(phase, workflowState),
     cover_image_url: publicImages[0] ?? null,
     public_images: publicImages,
     style_tags: [...project.public_profile.style_tags],
@@ -314,6 +336,27 @@ function mapPublicProject(
     updated_at: project.updated_at,
     description: project.public_profile.public_description,
   };
+}
+
+const workflowInstanceStatusLabels: Record<string, string> = {
+  running: "进行中",
+  completed: "已完成",
+  canceled: "已取消",
+  failed: "异常",
+};
+
+function publicProjectStageLabel(
+  phase: "in_progress" | "completed",
+  workflowState: DouyinContentWorkflowState | null,
+): string | null {
+  if (phase !== "in_progress") return null;
+  const nodeLabel = workflowState?.current_node_title?.trim();
+  if (!nodeLabel) return null;
+  const instanceStatus = workflowState?.instance_status?.trim();
+  const suffix = instanceStatus
+    ? workflowInstanceStatusLabels[instanceStatus] ?? instanceStatus
+    : null;
+  return suffix ? `${nodeLabel}${suffix}` : nodeLabel;
 }
 
 type PublicProjectDto = ReturnType<typeof mapPublicProject>;
@@ -356,6 +399,7 @@ function compatibilityProject(
   return {
     id: project.id,
     title: title.slice(0, 120),
+    stage_label: project.stage_label,
     cover_image_url: project.cover_image_url,
     public_images: project.public_images.slice(0, 9),
     style_tags: stringArray(project.style_tags, 12, 40),

@@ -103,6 +103,7 @@ export function parseProject(value: unknown): PublicProject | null {
     || !isBoundedString(value.title, 1, 120) || !isHttpsOrNull(value.cover_image_url)
     || !isNullableBoundedString(value.layout, 80) || !isNonNegativeNumberOrNull(value.area)
     || !isNullableBoundedString(value.budget_band, 80)
+    || (value.stage_label !== undefined && !isNullableBoundedString(value.stage_label, 80))
     || !isBoundedString(value.community, 0, 120)
     || !isNullableBoundedString(value.city, 80)
     || !isNullableBoundedString(value.district, 80)
@@ -118,6 +119,7 @@ export function parseProject(value: unknown): PublicProject | null {
     id: value.id,
     title: value.title,
     phase,
+    stage_label: phase === "in_progress" ? value.stage_label ?? null : null,
     cover_image_url: value.cover_image_url,
     public_images: publicImages,
     style_tags: styleTags,

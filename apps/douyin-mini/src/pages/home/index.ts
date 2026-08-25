@@ -7,7 +7,7 @@ import {
   navigateToPage,
   switchToTab,
 } from "../../platform/navigation";
-import { projectPhaseLabel, uniqueProjectsById } from "../cases/project-phase";
+import { projectDisplayPhaseLabel, uniqueProjectsById } from "../cases/project-phase";
 
 const SERVICE_PROCESS = [
   { id: "consult", index: "01", title: "沟通需求", description: "了解户型、预算和装修计划" },
@@ -60,7 +60,7 @@ Page({
           .slice(0, 2)
           .map((project) => ({
             ...project,
-            phaseLabel: projectPhaseLabel(project.phase),
+            phaseLabel: projectDisplayPhaseLabel(project),
           })),
         serviceRegions: formatRegions(bootstrap.company.service_regions),
       });

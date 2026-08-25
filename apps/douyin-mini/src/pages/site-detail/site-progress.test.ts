@@ -79,6 +79,7 @@ describe("public site progress presentation", () => {
       id: FIRST_ID,
       title: "张先生 1号楼101室装修",
       phase: "in_progress",
+      stage_label: null,
       cover_image_url: null,
       public_images: [],
       style_tags: [],

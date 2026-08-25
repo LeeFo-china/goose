@@ -107,6 +107,7 @@ export type PublicProject = {
   id: string;
   title: string;
   phase: PublicProjectPhase;
+  stage_label: string | null;
   cover_image_url: string | null;
   public_images: string[];
   style_tags: string[];

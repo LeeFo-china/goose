@@ -8,7 +8,7 @@ import {
   rejectPaginationRequest,
   resolvePaginationRequest,
 } from "../../utils/pagination";
-import { projectPhaseLabel, shouldLoadProjectLogs } from "../cases/project-phase";
+import { projectDisplayPhaseLabel, shouldLoadProjectLogs } from "../cases/project-phase";
 import { buildSiteProgress, type SiteProgressItem } from "../site-detail/site-progress";
 
 Page({
@@ -55,7 +55,7 @@ Page({
         project,
         images,
         styleText: project.style_tags.join(" · "),
-        phaseLabel: projectPhaseLabel(project.phase),
+        phaseLabel: projectDisplayPhaseLabel(project),
         isInProgress: shouldLoadProjectLogs(project.phase),
         updatedDate: project.updated_at.slice(0, 10),
         primaryColor: bootstrap.theme.primary_color,
