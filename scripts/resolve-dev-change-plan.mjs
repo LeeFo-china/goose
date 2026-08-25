@@ -90,6 +90,8 @@ export function resolveDevChangePlan(paths, metadata) {
     } else if (path.startsWith("supabase/migrations/")) {
       migrationChanged = true;
       classifications.add("migration");
+    } else if (path.startsWith("apps/douyin-mini/")) {
+      classifications.add("douyin-mini");
     } else if (
       path.startsWith("apps/web/")
       || path === "docker/web.Dockerfile"

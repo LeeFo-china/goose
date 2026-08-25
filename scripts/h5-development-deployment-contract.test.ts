@@ -28,6 +28,27 @@ function resolveManual(mode: "build" | "deploy", service: string) {
 }
 
 describe("H5 development build plan", () => {
+  test("classifies Douyin mini-program changes as a development deploy no-op", () => {
+    const plan = resolveDevChangePlan(
+      [
+        "apps/douyin-mini/src/pages/qa/index.ttml",
+        "apps/douyin-mini/src/pages/qa/index.ttss",
+      ],
+      metadata,
+    );
+
+    expect(plan.classifications).toEqual(["douyin-mini"]);
+    expect(plan.build_services).toEqual([]);
+    expect(plan.deploy_services).toEqual([]);
+    expect(plan.no_op).toBe(true);
+    expect(
+      verifyDevBuildPlan(plan, {
+        commitSha: metadata.commitSha,
+        workflowRunId: metadata.workflowRunId,
+      }),
+    ).toEqual(plan);
+  });
+
   test("classifies H5 application changes as an independent service", () => {
     const plan = resolveDevChangePlan(["apps/h5/src/main.js"], metadata);
 

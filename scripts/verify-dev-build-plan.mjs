@@ -17,6 +17,7 @@ const TOP_LEVEL_FIELDS = [
 const CLASSIFICATIONS = new Set([
   "non-runtime",
   "migration",
+  "douyin-mini",
   "web",
   "h5",
   "api",
