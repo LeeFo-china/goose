@@ -5,6 +5,7 @@ import {
 } from "@gooes/domain";
 import {
   DouyinLaunchContextSchema,
+  DouyinMiniappQaRequestSchema,
   DouyinLeadRequestSchema,
   DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
@@ -80,6 +81,7 @@ describe("DouyinMiniappController", () => {
       "GET /douyin-mini/projects",
       "GET /douyin-mini/projects/:id",
       "GET /douyin-mini/projects/:id/logs",
+      "POST /douyin-mini/qa",
       "POST /douyin-mini/sms/send",
       "POST /douyin-mini/leads",
       "POST /douyin-mini/events",
@@ -264,5 +266,66 @@ describe("DouyinMiniappController", () => {
       attribution,
     }] } } as never)).rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
     expect(recordEvents).not.toHaveBeenCalled();
+  });
+
+  test("validates decoration Q&A requests and dispatches with launch attribution", async () => {
+    const ask = mock(async () => ({
+      answer_points: ["量房前先确认装修范围、房屋现状和大致入住计划。"],
+      suggested_questions: ["旧房翻新要先看哪些地方？"],
+      disclaimer: "以上内容仅供装修沟通参考，具体方案以现场量房为准。",
+    }));
+    const controller = new DouyinMiniappController(
+      undefined,
+      undefined,
+      undefined,
+      { ask } as never,
+    );
+    const user = { token_type: "douyin_miniapp", tenant_id:
+      "33333333-3333-4333-8333-333333333333" };
+    const requestBody = {
+      question: "旧房翻新需要先看哪些地方？",
+      attribution: body.launch_context,
+    };
+
+    await expect(controller.askQuestion({ user, body: requestBody } as never))
+      .resolves.toEqual({
+        data: {
+          answer_points: ["量房前先确认装修范围、房屋现状和大致入住计划。"],
+          suggested_questions: ["旧房翻新要先看哪些地方？"],
+          disclaimer: "以上内容仅供装修沟通参考，具体方案以现场量房为准。",
+        },
+        message: "success",
+      });
+    expect(ask).toHaveBeenCalledWith(user, requestBody);
+
+    for (const invalidBody of [
+      { ...requestBody, question: "" },
+      { ...requestBody, question: "x".repeat(121) },
+      { ...requestBody, question: "旧房翻新", attribution: {
+        ...body.launch_context,
+        entry_path: "pages/admin/index",
+      } },
+      { ...requestBody, tenant_id: "33333333-3333-4333-8333-333333333333" },
+    ]) {
+      await expect(controller.askQuestion({ user, body: invalidBody } as never))
+        .rejects.toMatchObject({ code: "VALIDATION_ERROR", statusCode: 400 });
+    }
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+
+  test("defines strict bounded decoration Q&A request bodies", () => {
+    expect(DouyinMiniappQaRequestSchema.parse({
+      question: "  旧房翻新要注意什么？ ",
+      attribution: body.launch_context,
+    }).question).toBe("旧房翻新要注意什么？");
+    expect(() => DouyinMiniappQaRequestSchema.parse({
+      question: "x".repeat(121),
+      attribution: body.launch_context,
+    })).toThrow();
+    expect(() => DouyinMiniappQaRequestSchema.parse({
+      question: "旧房翻新要注意什么？",
+      attribution: body.launch_context,
+      phone: "15518591857",
+    })).toThrow();
   });
 });

@@ -7,6 +7,13 @@
   </view>
   <view tt:if="{{metrics.length}}" class="home-block"><trust-metrics items="{{metrics}}" /></view>
 
+  <view class="home-section qa-card ui-card">
+    <view class="qa-eyebrow">装修问题助手</view>
+    <view class="qa-title">不确定先问什么，可以从常见装修问题开始</view>
+    <view class="qa-copy">围绕预算准备、旧房翻新、局部装修和量房准备，给出简短参考建议。</view>
+    <button class="qa-action ui-pressable" hover-class="ui-pressable--pressed" style="background: {{primaryColor}}; color: {{primaryTextColor}}" bindtap="onAskQuestion">去提问</button>
+  </view>
+
   <view class="home-section">
     <view class="section-heading"><view class="ui-section-title">项目实景</view><button class="section-link ui-pressable" hover-class="ui-pressable--pressed" style="color: {{primaryColor}}" bindtap="onViewProjects">查看全部项目</button></view>
     <view tt:if="{{featuredProjects.length}}" class="card-list">

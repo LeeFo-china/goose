@@ -9,6 +9,7 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   'pages/sites/index',
   'pages/site-detail/index',
   'pages/budget/index',
+  'pages/qa/index',
   'pages/lead/index',
   'pages/lead-success/index',
 ] as const;

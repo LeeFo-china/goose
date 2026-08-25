@@ -7,6 +7,7 @@ import {
   DouyinContentPageQuerySchema,
   DouyinLeadRequestSchema,
   DouyinLeadSmsRequestSchema,
+  DouyinMiniappQaRequestSchema,
   DouyinMiniappSessionRequestSchema,
   DouyinProjectListQuerySchema,
 } from "@/schema/douyin-miniapp";
@@ -22,6 +23,10 @@ import {
   getDouyinMiniappSessionService,
   type DouyinMiniappSessionService,
 } from "@/services/douyin-miniapp/session";
+import {
+  getDouyinMiniappQaService,
+  type DouyinMiniappQaService,
+} from "@/services/douyin-miniapp/qa";
 import { ResponseHandler } from "@/utils/response";
 import { resolveTrustedClientIp } from "@/utils/trusted-proxy-client-ip";
 
@@ -32,12 +37,14 @@ type ContentService = Pick<DouyinMiniappContentService,
   | "listProjects" | "getProject" | "listProjectLogs">;
 type MarketingService = Pick<DouyinMiniappMarketingService,
   "sendCode" | "submitLead" | "recordEvents">;
+type QaService = Pick<DouyinMiniappQaService, "ask">;
 
 export class DouyinMiniappController {
   constructor(
     private readonly sessionService?: SessionService,
     private readonly contentService?: ContentService,
     private readonly marketingService?: MarketingService,
+    private readonly qaService?: QaService,
   ) {}
 
   registerExtraRoutes(fastify: FastifyInstance): void {
@@ -52,6 +59,7 @@ export class DouyinMiniappController {
     fastify.get("/douyin-mini/projects", this.listProjects);
     fastify.get("/douyin-mini/projects/:id", this.getProject);
     fastify.get("/douyin-mini/projects/:id/logs", this.listProjectLogs);
+    fastify.post("/douyin-mini/qa", this.askQuestion);
     fastify.post("/douyin-mini/sms/send", this.sendLeadCode);
     fastify.post("/douyin-mini/leads", this.submitLead);
     fastify.post("/douyin-mini/events", this.recordEvents);
@@ -118,6 +126,13 @@ export class DouyinMiniappController {
     );
   };
 
+  askQuestion = async (request: FastifyRequest) => ResponseHandler.success(
+    await this.qa().ask(
+      request.user,
+      parse(DouyinMiniappQaRequestSchema, request.body || {}),
+    ),
+  );
+
   sendLeadCode = async (request: FastifyRequest) => ResponseHandler.success(
     await this.marketing().sendCode(
       request.user,
@@ -148,6 +163,10 @@ export class DouyinMiniappController {
 
   private marketing(): MarketingService {
     return this.marketingService ?? getDouyinMiniappMarketingService();
+  }
+
+  private qa(): QaService {
+    return this.qaService ?? getDouyinMiniappQaService();
   }
 }
 

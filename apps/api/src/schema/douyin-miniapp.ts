@@ -54,6 +54,11 @@ export const DouyinLeadSmsRequestSchema = z.strictObject({
   attribution: DouyinLaunchContextSchema,
 });
 
+export const DouyinMiniappQaRequestSchema = z.strictObject({
+  question: z.string().trim().min(2).max(120),
+  attribution: DouyinLaunchContextSchema,
+});
+
 export const DouyinLeadRequestSchema = z.strictObject({
   name: z.string().trim().min(1).max(40),
   phone: PhoneSchema,
@@ -94,5 +99,6 @@ export type DouyinContentPageQuery = z.infer<typeof DouyinContentPageQuerySchema
 export type DouyinCaseListQuery = z.infer<typeof DouyinCaseListQuerySchema>;
 export type DouyinProjectListQuery = z.infer<typeof DouyinProjectListQuerySchema>;
 export type DouyinLeadSmsRequest = z.infer<typeof DouyinLeadSmsRequestSchema>;
+export type DouyinMiniappQaRequest = z.infer<typeof DouyinMiniappQaRequestSchema>;
 export type DouyinLeadRequest = z.infer<typeof DouyinLeadRequestSchema>;
 export type DouyinAnalyticsRequest = z.infer<typeof DouyinAnalyticsRequestSchema>;

@@ -143,6 +143,11 @@ const UNGUARDED_ROUTE_ALLOWLIST = [
   },
   {
     method: "POST",
+    url: "/douyin-mini/qa",
+    reason: "authenticated mini-program decoration Q&A",
+  },
+  {
+    method: "POST",
     url: "/douyin-mini/sms/send",
     reason: "public mini-program lead flow",
   },

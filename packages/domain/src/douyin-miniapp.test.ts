@@ -95,6 +95,7 @@ describe('Douyin miniapp domain contracts', () => {
 
   test('keeps every cold-start mini-program page in one canonical entry schema', () => {
     expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/budget/index');
+    expect(DOUYIN_ENTRY_PATH_VALUES).toContain('pages/qa/index');
     expect(DouyinEntryPathSchema.safeParse('pages/budget/index').success).toBe(true);
     expect(DouyinEntryPathSchema.safeParse('pages/admin/index').success).toBe(false);
   });

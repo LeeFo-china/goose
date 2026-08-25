@@ -7,6 +7,7 @@ const PAGE_PATHS = new Set([
   "pages/privacy/index",
   "pages/case-detail/index",
   "pages/site-detail/index",
+  "pages/qa/index",
   "pages/lead-success/index",
   "pages/service-unavailable/index",
 ]);

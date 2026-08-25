@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "装修问题助手",
+  "usingComponents": {
+    "page-skeleton": "../../components/page-skeleton/index",
+    "error-state": "../../components/error-state/index"
+  }
+}

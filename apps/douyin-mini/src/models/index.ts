@@ -7,6 +7,7 @@ export const DOUYIN_ENTRY_PATH_VALUES = [
   "pages/sites/index",
   "pages/site-detail/index",
   "pages/budget/index",
+  "pages/qa/index",
   "pages/lead/index",
   "pages/lead-success/index",
 ] as const;
@@ -237,6 +238,12 @@ export type DouyinBudgetAiAnalysis = {
   allocation_advice: string[];
   risk_factors: string[];
   onsite_questions: string[];
+};
+
+export type DouyinQaAnswer = {
+  answer_points: string[];
+  suggested_questions: string[];
+  disclaimer: string;
 };
 
 export type DouyinBudgetAiExplanationResponse = {

@@ -70,6 +70,7 @@ Page({
     }
   },
   onBudget() { navigateWithFeedback(switchToTab("budget")); },
+  onAskQuestion() { navigateWithFeedback(navigateToPage("pages/qa/index")); },
   onViewProjects() { navigateWithFeedback(switchToTab("cases")); },
   onViewCompany() { navigateWithFeedback(navigateToPage("pages/company/index")); },
   onViewPrivacy() { navigateWithFeedback(navigateToPage("pages/privacy/index")); },
