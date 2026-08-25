@@ -89,6 +89,26 @@ function createPage(options: {
 }
 
 describe("Douyin Q&A page definition", () => {
+  test("moves the composer above the reported keyboard and restores it on close", () => {
+    const { page } = createPage();
+
+    page.onKeyboardHeightChange({ detail: { height: 336, duration: 250 } });
+    expect(page.data.keyboardHeight).toBe(336);
+
+    page.onKeyboardHeightChange({ detail: { height: 0, duration: 250 } });
+    expect(page.data.keyboardHeight).toBe(0);
+  });
+
+  test("ignores malformed keyboard heights instead of moving the composer", () => {
+    const { page } = createPage();
+
+    page.onKeyboardHeightChange({ detail: { height: Number.NaN, duration: 0 } });
+    expect(page.data.keyboardHeight).toBe(0);
+
+    page.onKeyboardHeightChange({ detail: { height: -20, duration: 0 } });
+    expect(page.data.keyboardHeight).toBe(0);
+  });
+
   test("form submit uses the current textarea value instead of stale page data", async () => {
     const askedQuestions: string[] = [];
     const { page } = createPage({

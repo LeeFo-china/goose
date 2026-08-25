@@ -37,12 +37,14 @@ describe("Douyin Q&A page", () => {
     expect(template).toContain("qa-chat");
     expect(template).toContain("qa-composer");
     expect(template).toContain('maxlength="120"');
-    expect(template).toContain('<form class="qa-composer" bindsubmit="onSubmit">');
+    expect(template).toContain("keyboardHeight > 0 ? 'qa-composer--keyboard' : ''");
+    expect(template).toContain('style="bottom: {{keyboardHeight}}px;"');
+    expect(template).toContain('bindkeyboardheightchange="onKeyboardHeightChange"');
     expect(template).toContain('name="question"');
     expect(template).toContain('show-confirm-bar="{{false}}"');
     expect(template).toContain('confirm-type="send"');
     expect(template).toContain('fixed="{{true}}"');
-    expect(template).toContain('adjust-position="{{true}}"');
+    expect(template).toContain('adjust-position="{{false}}"');
     expect(template).toContain('cursor-spacing="24"');
     expect(template).toContain('bindconfirm="onQuestionConfirm"');
     expect(template).toContain('form-type="submit"');
@@ -60,6 +62,7 @@ describe("Douyin Q&A page", () => {
     expect(config).toContain('"navigationBarTitleText": "装修问题助手"');
     expect(style).toContain(".message--assistant");
     expect(style).toContain(".qa-composer");
+    expect(style).toContain(".qa-composer--keyboard");
     expect(style).toContain("white-space: nowrap");
     expect(style).toContain("@keyframes qaSubmitSpin");
     expect(style).toContain("@keyframes qaTypingPulse");

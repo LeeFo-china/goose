@@ -33,6 +33,13 @@ type QaConfirmEvent = {
   };
 };
 
+type QaKeyboardHeightChangeEvent = {
+  detail?: {
+    height?: unknown;
+    duration?: unknown;
+  };
+};
+
 export type QaPageClock = {
   setTimeout(callback: () => void, delayMs: number): unknown;
   clearTimeout(timer: unknown): void;
@@ -62,6 +69,7 @@ export function createQaPageDefinition(dependencies: QaPageDependencies) {
       stream: null as QaStreamState | null,
       presetQuestions: [...PRESET_QUESTIONS],
       errorMessage: "",
+      keyboardHeight: 0,
     },
     onLoad() {
       dependencies.getApp().recordAnalytics("page_view");
@@ -72,6 +80,9 @@ export function createQaPageDefinition(dependencies: QaPageDependencies) {
     },
     onQuestionInput(event: { detail: { value?: string } }) {
       this.setData({ question: event.detail.value || "" });
+    },
+    onKeyboardHeightChange(event: QaKeyboardHeightChangeEvent) {
+      this.setData({ keyboardHeight: readKeyboardHeight(event) });
     },
     onPresetTap(event: { currentTarget: { dataset: { question?: string } } }) {
       const question = event.currentTarget.dataset.question || "";
@@ -178,4 +189,10 @@ function readSubmitQuestion(event?: QaSubmitEvent): string | null {
 function readConfirmQuestion(event: QaConfirmEvent): string | null {
   const question = event.detail?.value;
   return typeof question === "string" ? question : null;
+}
+
+function readKeyboardHeight(event: QaKeyboardHeightChangeEvent): number {
+  const height = event.detail?.height;
+  if (typeof height !== "number" || !Number.isFinite(height)) return 0;
+  return Math.min(1_000, Math.max(0, Math.round(height)));
 }
