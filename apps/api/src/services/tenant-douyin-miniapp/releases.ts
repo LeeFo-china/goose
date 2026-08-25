@@ -66,7 +66,7 @@ type AccessPolicyPort = Pick<
 >;
 type OperationsPort = Pick<
   PlatformDouyinMiniappReleaseOperations,
-  "upload" | "getTestQr" | "submitAudit" | "syncStatus" | "publish"
+  "upload" | "getTestQr" | "getAuditQr" | "submitAudit" | "syncStatus" | "publish"
 >;
 type ReadinessPort = Pick<DouyinReleaseReadinessService, "evaluateTenant">;
 type ReleaseTarget = DouyinMiniappReleaseTarget & {
@@ -226,6 +226,20 @@ export class TenantDouyinMiniappReleasesService {
     return sanitizeRelease(result);
   }
 
+  async getAuditQr(authContext: AuthContext, releaseId: string) {
+    const context = await this.requireOwnedRelease(
+      authContext,
+      MANAGE_PERMISSION,
+      releaseId,
+    );
+    const result = await this.dependencies.operations.getAuditQr(
+      context.installation,
+      context.release,
+      context.operatorId,
+    );
+    return sanitizeRelease(result);
+  }
+
   async submitAudit(
     authContext: AuthContext,
     releaseId: string,
@@ -369,7 +383,7 @@ function assertAuditPreflight(
 ): void {
   if (
     profile?.status === "published"
-    && isDouyinTestQrUrlUsable(release.test_qr_url)
+    && isDouyinTestQrUrlUsable(release.latest_test_qr_url ?? release.test_qr_url)
   ) {
     return;
   }
@@ -389,6 +403,8 @@ function sanitizeRelease(release: DouyinMiniappReleaseRecord) {
     description: release.description,
     status: release.status,
     test_qr_url: release.test_qr_url,
+    latest_test_qr_url: release.latest_test_qr_url,
+    audit_qr_url: release.audit_qr_url,
     audit_host_names: release.audit_host_names,
     audit_note: release.audit_note,
     audit_result: release.audit_result,

@@ -126,6 +126,8 @@ export const TenantDouyinWorkspaceSchema = z.strictObject({
       "failed",
     ]),
     test_qr_url: HttpsUrlSchema.nullable(),
+    latest_test_qr_url: HttpsUrlSchema.nullable(),
+    audit_qr_url: HttpsUrlSchema.nullable(),
     audit_note: NullableStringSchema,
     audit_result: z.strictObject({
       audit_id: z.string().regex(/^[A-Za-z0-9._:-]{1,128}$/).optional(),

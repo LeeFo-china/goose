@@ -81,6 +81,8 @@ const tenantRelease = {
   description: deployableTemplate.description,
   status: "testing" as const,
   test_qr_url: "https://example.test/test-qr.png",
+  latest_test_qr_url: "https://example.test/test-qr.png",
+  audit_qr_url: null,
   audit_note: null,
   audit_result: null,
   submitted_at: null,

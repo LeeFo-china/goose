@@ -93,6 +93,8 @@ function release(overrides: Record<string, unknown> = {}) {
     status: "testing" as const,
     douyin_log_id: "provider-log",
     test_qr_url: "https://example.test/test-qr.png",
+    latest_test_qr_url: "https://example.test/test-qr.png",
+    audit_qr_url: null,
     audit_host_names: [],
     audit_note: null,
     audit_result: null,
@@ -446,7 +448,7 @@ describe("TenantDouyinMiniappReleasesService", () => {
     });
 
     const noQr = fixture({
-      foundRelease: release({ test_qr_url: null }),
+      foundRelease: release({ test_qr_url: null, latest_test_qr_url: null }),
     });
     await expect(noQr.service.submitAudit(
       tenantContext(["douyin_miniapp.audit.submit"]),
@@ -459,6 +461,8 @@ describe("TenantDouyinMiniappReleasesService", () => {
     const expiredQr = fixture({
       foundRelease: release({
         test_qr_url:
+          "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1",
+        latest_test_qr_url:
           "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1",
       }),
     });

@@ -66,6 +66,8 @@ const workspace: TenantDouyinWorkspace = {
     description: "租户品牌、案例、工地与免费咨询联调版本",
     status: "testing",
     test_qr_url: "https://example.com/qr.png",
+    latest_test_qr_url: "https://example.com/qr.png",
+    audit_qr_url: null,
     audit_note: null,
     audit_result: null,
     submitted_at: null,
@@ -141,9 +143,37 @@ describe("TenantDouyinMiniappWorkspace", () => {
 
     expect(html).toContain("已授权");
     expect(html).toContain("体验测试中");
-    expect(html).toContain("体验二维码已就绪");
+    expect(html).toContain("测试版二维码");
     expect(html).toContain("提交审核");
     expect(html).not.toMatch(/appsecret|component_access_token|template_app_secret/i);
+  });
+
+  test("keeps test QR visible after audit submit and offers the audit QR", () => {
+    const html = renderToStaticMarkup(
+      <TenantDouyinMiniappWorkspace
+        canRead
+        canManage
+        loadError={null}
+        workspace={{
+          ...workspace,
+          release_state: "audit_pending",
+          latest_release: workspace.latest_release
+            ? {
+              ...workspace.latest_release,
+              status: "audit_pending",
+              latest_test_qr_url: "https://example.com/latest.png",
+              audit_qr_url: null,
+              submitted_at: "2026-08-25T09:30:00.000Z",
+            }
+            : null,
+        }}
+      />,
+    );
+
+    expect(html).toContain("测试版二维码");
+    expect(html).toContain("https://example.com/latest.png");
+    expect(html).toContain("获取审核版二维码");
+    expect(html).not.toContain("体验二维码已就绪");
   });
 
   test("disables local audit submission when readiness has blockers", () => {

@@ -22,25 +22,11 @@ export const DOUYIN_MINIAPP_RELEASE_STATUSES = [
 ] as const;
 
 const RELEASE_SELECT = [
-  "id",
-  "installation_id",
-  "template_id",
-  "template_version",
-  "description",
-  "channel",
-  "ext_json",
-  "status",
-  "douyin_log_id",
-  "test_qr_url",
-  "audit_host_names",
-  "audit_note",
-  "audit_result",
-  "submitted_at",
-  "audited_at",
-  "released_at",
-  "platform_operator_id",
-  "created_at",
-  "updated_at",
+  "id", "installation_id", "template_id", "template_version", "description",
+  "channel", "ext_json", "status", "douyin_log_id", "test_qr_url",
+  "latest_test_qr_url", "audit_qr_url", "audit_host_names", "audit_note",
+  "audit_result", "submitted_at", "audited_at", "released_at",
+  "platform_operator_id", "created_at", "updated_at",
 ].join(",");
 
 const FORBIDDEN_METADATA = /(token|secret|phone|openid)/i;
@@ -91,6 +77,8 @@ const ReleaseSchema = z.strictObject({
   status: z.enum(DOUYIN_MINIAPP_RELEASE_STATUSES),
   douyin_log_id: NullableSafeIdentifierSchema,
   test_qr_url: HttpsUrlSchema.nullable(),
+  latest_test_qr_url: HttpsUrlSchema.nullable(),
+  audit_qr_url: HttpsUrlSchema.nullable(),
   audit_host_names: AuditHostNamesSchema,
   audit_note: AuditNoteSchema.nullable(),
   audit_result: AuditResultSchema.nullable(),
@@ -145,6 +133,8 @@ export type UpdateDouyinMiniappReleaseInput = {
   readonly status?: DouyinMiniappReleaseStatus;
   readonly douyinLogId?: string | null;
   readonly testQrUrl?: string | null;
+  readonly latestTestQrUrl?: string | null;
+  readonly auditQrUrl?: string | null;
   readonly auditHostNames?: readonly string[];
   readonly auditNote?: string | null;
   readonly auditResult?: DouyinMiniappReleaseAuditResult | null;
@@ -355,6 +345,8 @@ const UpdateRowSchema = z.strictObject({
   status: z.enum(DOUYIN_MINIAPP_RELEASE_STATUSES).optional(),
   douyin_log_id: NullableSafeIdentifierSchema.optional(),
   test_qr_url: HttpsUrlSchema.nullable().optional(),
+  latest_test_qr_url: HttpsUrlSchema.nullable().optional(),
+  audit_qr_url: HttpsUrlSchema.nullable().optional(),
   audit_host_names: AuditHostNamesSchema.optional(),
   audit_note: AuditNoteSchema.nullable().optional(),
   audit_result: AuditResultSchema.nullable().optional(),
@@ -369,6 +361,10 @@ function compactUpdate(input: UpdateDouyinMiniappReleaseInput): Record<string, u
     ...(input.status !== undefined ? { status: input.status } : {}),
     ...(input.douyinLogId !== undefined ? { douyin_log_id: input.douyinLogId } : {}),
     ...(input.testQrUrl !== undefined ? { test_qr_url: input.testQrUrl } : {}),
+    ...(input.latestTestQrUrl !== undefined
+      ? { latest_test_qr_url: input.latestTestQrUrl }
+      : {}),
+    ...(input.auditQrUrl !== undefined ? { audit_qr_url: input.auditQrUrl } : {}),
     ...(input.auditHostNames !== undefined
       ? { audit_host_names: [...input.auditHostNames] }
       : {}),

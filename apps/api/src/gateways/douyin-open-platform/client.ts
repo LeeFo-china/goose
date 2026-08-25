@@ -15,23 +15,24 @@ import {
   type AuthorizerRequestInput,
   type AvailableAuditHostsResult,
   type DouyinMiniappReleaseGateway,
+  type DouyinQrCodeVersion,
   type DouyinVersionListResult,
+  type QrCodeInput,
   type ReleaseOperationResult,
   type SubmitVersionAuditInput,
   type TestQrCodeResult,
   type UploadTemplateVersionInput,
   type UploadTemplateVersionResult,
 } from "./release-client";
-export type {
-  GenerateAuthorizationLinkInput,
-  GenerateAuthorizationLinkResult,
-} from "./authorization-link";
+export type { GenerateAuthorizationLinkInput, GenerateAuthorizationLinkResult } from "./authorization-link";
 export type {
   AuthorizerRequestInput,
   AvailableAuditHostsResult,
   DouyinMiniappReleaseGateway,
+  DouyinQrCodeVersion,
   DouyinTemplateExtJson,
   DouyinVersionListResult,
+  QrCodeInput,
   ReleaseOperationResult,
   SafeDouyinVersionStage,
   SubmitVersionAuditInput,
@@ -302,25 +303,19 @@ export class DouyinOpenPlatformClient
     };
   }
 
-  async uploadTemplateVersion(
-    input: UploadTemplateVersionInput,
-  ): Promise<UploadTemplateVersionResult> {
+  async uploadTemplateVersion(input: UploadTemplateVersionInput): Promise<UploadTemplateVersionResult> {
     return this.releases.uploadTemplateVersion(input);
   }
 
-  async getTestQrCode(input: AuthorizerRequestInput): Promise<TestQrCodeResult> {
+  async getTestQrCode(input: QrCodeInput): Promise<TestQrCodeResult> {
     return this.releases.getTestQrCode(input);
   }
 
-  async getAvailableAuditHosts(
-    input: AuthorizerRequestInput,
-  ): Promise<AvailableAuditHostsResult> {
+  async getAvailableAuditHosts(input: AuthorizerRequestInput): Promise<AvailableAuditHostsResult> {
     return this.releases.getAvailableAuditHosts(input);
   }
 
-  async submitVersionAudit(
-    input: SubmitVersionAuditInput,
-  ): Promise<ReleaseOperationResult> {
+  async submitVersionAudit(input: SubmitVersionAuditInput): Promise<ReleaseOperationResult> {
     return this.releases.submitVersionAudit(input);
   }
 

@@ -73,6 +73,7 @@ export type AuthorizerRequestInput = {
   readonly authorizerAccessToken: string;
   readonly appId: string;
 };
+export type DouyinQrCodeVersion = "latest" | "audit";
 
 export type DouyinTemplateExtJson = {
   readonly extEnable: true;
@@ -89,6 +90,9 @@ export type UploadTemplateVersionInput = AuthorizerRequestInput & {
 };
 
 export type UploadTemplateVersionResult = { readonly logId: string };
+export type QrCodeInput = AuthorizerRequestInput & {
+  readonly version?: DouyinQrCodeVersion;
+};
 export type TestQrCodeResult = { readonly qrCodeUrl: string; readonly logId: string };
 export type AvailableAuditHostsResult = {
   readonly hostNames: readonly string[];
@@ -119,7 +123,7 @@ export type ReleaseOperationResult = { readonly logId: string };
 
 export interface DouyinMiniappReleaseGateway {
   uploadTemplateVersion(input: UploadTemplateVersionInput): Promise<UploadTemplateVersionResult>;
-  getTestQrCode(input: AuthorizerRequestInput): Promise<TestQrCodeResult>;
+  getTestQrCode(input: QrCodeInput): Promise<TestQrCodeResult>;
   getAvailableAuditHosts(input: AuthorizerRequestInput): Promise<AvailableAuditHostsResult>;
   submitVersionAudit(input: SubmitVersionAuditInput): Promise<ReleaseOperationResult>;
   getVersionList(input: AuthorizerRequestInput): Promise<DouyinVersionListResult>;
@@ -157,12 +161,13 @@ export class DouyinMiniappReleaseClient implements DouyinMiniappReleaseGateway {
     });
   }
 
-  async getTestQrCode(input: AuthorizerRequestInput): Promise<TestQrCodeResult> {
+  async getTestQrCode(input: QrCodeInput): Promise<TestQrCodeResult> {
     return this.transport.executeWithAuthorizerToken(input, async (accessToken) => {
+      const version = input.version ?? "latest";
       const body = await this.transport.request(TEST_QR_CODE_URL, {
         method: "POST",
         headers: { "access-token": accessToken, "content-type": "application/json" },
-        body: JSON.stringify({ version: "latest", path: "pages/home/index" }),
+        body: JSON.stringify({ version, path: "pages/home/index" }),
       });
       const parsed = this.parseSuccess(body, TestQrCodeSuccessSchema);
       return { qrCodeUrl: parsed.data.qr_code_url, logId: parsed.log_id };

@@ -71,6 +71,8 @@ const releaseRow = {
   status: "created" as const,
   douyin_log_id: null,
   test_qr_url: null,
+  latest_test_qr_url: null,
+  audit_qr_url: null,
   audit_host_names: [],
   audit_note: null,
   audit_result: null,
@@ -108,6 +110,37 @@ describe("DouyinMiniappReleasesRepository reads", () => {
     await expect(new Repository(client).findById(releaseRow.id)).resolves.toEqual(releaseRow);
     expect(calls).toContainEqual({ method: "eq", args: ["id", releaseRow.id] });
     expect(calls).toContainEqual({ method: "maybeSingle", args: [] });
+  });
+
+  test("reads and writes distinct latest-test and audit QR URLs", async () => {
+    const latestTestQrUrl = "https://example.test/latest.png";
+    const auditQrUrl = "https://example.test/audit.png";
+    const row = {
+      ...releaseRow,
+      test_qr_url: latestTestQrUrl,
+      latest_test_qr_url: latestTestQrUrl,
+      audit_qr_url: auditQrUrl,
+    };
+    const { client, calls } = createClient([{ data: row, error: null }]);
+
+    await expect(new Repository(client).patchClaimed(
+      releaseRow.id,
+      "77777777-7777-4777-8777-777777777777",
+      {
+        latestTestQrUrl,
+        auditQrUrl,
+        platformOperatorId: releaseRow.platform_operator_id,
+      },
+    )).resolves.toEqual(row);
+
+    const update = calls.find((call) => call.method === "update")!;
+    expect(update.args[0]).toMatchObject({
+      latest_test_qr_url: latestTestQrUrl,
+      audit_qr_url: auditQrUrl,
+    });
+    const select = calls.find((call) => call.method === "select")!;
+    expect(String(select.args[0])).toContain("latest_test_qr_url");
+    expect(String(select.args[0])).toContain("audit_qr_url");
   });
 
   test("rejects invalid pagination before it can create an unbounded range", async () => {

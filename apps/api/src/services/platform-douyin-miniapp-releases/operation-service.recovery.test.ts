@@ -38,6 +38,8 @@ function release(status: DouyinMiniappReleaseRecord["status"]): DouyinMiniappRel
     status,
     douyin_log_id: null,
     test_qr_url: null,
+    latest_test_qr_url: null,
+    audit_qr_url: null,
     audit_host_names: [],
     audit_note: null,
     audit_result: null,

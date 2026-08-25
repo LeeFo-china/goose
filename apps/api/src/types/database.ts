@@ -3237,6 +3237,7 @@ export type Database = {
         Row: {
           audit_host_names: string[]
           audit_note: string | null
+          audit_qr_url: string | null
           audit_result: Json | null
           audited_at: string | null
           channel: string
@@ -3246,6 +3247,7 @@ export type Database = {
           ext_json: Json
           id: string
           installation_id: string
+          latest_test_qr_url: string | null
           operation_claim_expires_at: string | null
           operation_claim_token: string | null
           operation_name: string | null
@@ -3261,6 +3263,7 @@ export type Database = {
         Insert: {
           audit_host_names?: string[]
           audit_note?: string | null
+          audit_qr_url?: string | null
           audit_result?: Json | null
           audited_at?: string | null
           channel?: string
@@ -3270,6 +3273,7 @@ export type Database = {
           ext_json: Json
           id?: string
           installation_id: string
+          latest_test_qr_url?: string | null
           operation_claim_expires_at?: string | null
           operation_claim_token?: string | null
           operation_name?: string | null
@@ -3285,6 +3289,7 @@ export type Database = {
         Update: {
           audit_host_names?: string[]
           audit_note?: string | null
+          audit_qr_url?: string | null
           audit_result?: Json | null
           audited_at?: string | null
           channel?: string
@@ -3294,6 +3299,7 @@ export type Database = {
           ext_json?: Json
           id?: string
           installation_id?: string
+          latest_test_qr_url?: string | null
           operation_claim_expires_at?: string | null
           operation_claim_token?: string | null
           operation_name?: string | null

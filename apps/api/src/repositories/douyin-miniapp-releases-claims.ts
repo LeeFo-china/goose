@@ -1,7 +1,7 @@
 import type { DouyinMiniappReleaseStatus } from "./douyin-miniapp-releases";
 
 export const DOUYIN_MINIAPP_RELEASE_OPERATIONS = [
-  "upload", "test_qr", "submit_audit", "sync_status", "publish",
+  "upload", "test_qr", "audit_qr", "submit_audit", "sync_status", "publish",
 ] as const;
 
 export type DouyinMiniappReleaseOperation =

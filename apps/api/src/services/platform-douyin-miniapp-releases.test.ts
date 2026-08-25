@@ -12,20 +12,12 @@ const NOW = "2026-07-20T03:00:00.000Z";
 const authContext: AuthContext = {
   authUserId: "44444444-4444-4444-8444-444444444444",
   employeeId: OPERATOR_ID,
-  tenantId: null,
-  tenantName: null,
-  tenantSlug: null,
-  tenantStatus: null,
+  tenantId: null, tenantName: null, tenantSlug: null, tenantStatus: null,
   isPlatformAdmin: true,
   employeeName: "平台管理员",
   employeeStatus: "active",
-  departmentId: null,
-  tenantDepartmentId: null,
-  departmentCode: null,
-  departmentName: null,
-  postId: null,
-  postName: null,
-  avatar: null,
+  departmentId: null, tenantDepartmentId: null, departmentCode: null,
+  departmentName: null, postId: null, postName: null, avatar: null,
   roleCodes: ["platform_admin"],
   roles: [],
   permissions: [{ code: "platform.douyin_miniapp.manage", scope: "all" }],
@@ -38,8 +30,7 @@ const target = {
   installation_kind: "merchant" as const,
   authorization_status: "active" as const,
   permission_snapshot: [{ id: 1, category: "untrusted label" }],
-  template_id: null,
-  template_version: null,
+  template_id: null, template_version: null,
 };
 
 const release: DouyinMiniappReleaseRecord = {
@@ -56,13 +47,10 @@ const release: DouyinMiniappReleaseRecord = {
   },
   status: "uploaded" as const,
   douyin_log_id: "upload-log",
-  test_qr_url: null,
+  test_qr_url: null, latest_test_qr_url: null, audit_qr_url: null,
   audit_host_names: [],
-  audit_note: null,
-  audit_result: null,
-  submitted_at: null,
-  audited_at: null,
-  released_at: null,
+  audit_note: null, audit_result: null, submitted_at: null,
+  audited_at: null, released_at: null,
   platform_operator_id: OPERATOR_ID,
   created_at: "2026-07-20T01:00:00.000Z",
   updated_at: "2026-07-20T01:00:00.000Z",
@@ -78,6 +66,8 @@ function dependencies(overrides: Record<string, unknown> = {}) {
     ...(patch.status ? { status: patch.status } : {}),
     ...(patch.douyinLogId ? { douyin_log_id: patch.douyinLogId } : {}),
     ...(patch.testQrUrl ? { test_qr_url: patch.testQrUrl } : {}),
+    ...(patch.latestTestQrUrl ? { latest_test_qr_url: patch.latestTestQrUrl } : {}),
+    ...(patch.auditQrUrl ? { audit_qr_url: patch.auditQrUrl } : {}),
   }));
   const releaseRepository = {
     listByInstallation: mock(async (_input: unknown) => ({ list: [release], total: 1 })),
@@ -281,11 +271,47 @@ describe("PlatformDouyinMiniappReleasesService", () => {
     expect(deps.gateway.getTestQrCode).toHaveBeenCalledWith({
       authorizerAccessToken: "authorizer-access-token",
       appId: target.authorizer_appid,
+      version: "latest",
     });
     expect(deps.releaseRepository.updateClaimed).toHaveBeenCalledWith(RELEASE_ID, CLAIM_TOKEN, {
       status: "testing",
       testQrUrl: "https://p3.douyinpic.com/test.png",
+      latestTestQrUrl: "https://p3.douyinpic.com/test.png",
       douyinLogId: "qr-log",
+      auditHostNames: [],
+      auditNote: null,
+      auditResult: null,
+      submittedAt: null,
+      auditedAt: null,
+      platformOperatorId: OPERATOR_ID,
+    });
+  });
+
+  test("creates audit QR from an audit-submitted release without replacing the test QR", async () => {
+    const deps = dependencies();
+    deps.releaseRepository.findById = mock(async () => ({
+      ...release,
+      status: "audit_pending",
+      test_qr_url: "https://p3.douyinpic.com/latest.png",
+      latest_test_qr_url: "https://p3.douyinpic.com/latest.png",
+    }));
+    deps.gateway.getTestQrCode = mock(async () => ({
+      qrCodeUrl: "https://p3.douyinpic.com/audit.png",
+      logId: "audit-qr-log",
+    }));
+
+    await new PlatformDouyinMiniappReleasesService(deps as never)
+      .getAuditQr(authContext, INSTALLATION_ID, RELEASE_ID);
+
+    expect(deps.gateway.getTestQrCode).toHaveBeenCalledWith({
+      authorizerAccessToken: "authorizer-access-token",
+      appId: target.authorizer_appid,
+      version: "audit",
+    });
+    expect(deps.releaseRepository.updateClaimed).toHaveBeenCalledWith(RELEASE_ID, CLAIM_TOKEN, {
+      status: "audit_pending",
+      auditQrUrl: "https://p3.douyinpic.com/audit.png",
+      douyinLogId: "audit-qr-log",
       platformOperatorId: OPERATOR_ID,
     });
   });

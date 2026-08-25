@@ -76,6 +76,8 @@ function approvedWorkspace(): TenantDouyinWorkspace {
       description: "租户品牌、案例、工地与免费咨询联调版本",
       status: "audit_approved",
       test_qr_url: "https://example.com/qr.png",
+      latest_test_qr_url: "https://example.com/qr.png",
+      audit_qr_url: null,
       audit_host_names: ["douyin"],
       audit_note: "装修行业模板联调版本",
       audit_result: {
@@ -134,6 +136,8 @@ describe("tenant Douyin workspace actions", () => {
       workspace.latest_release.template_version = "0.1.3";
       workspace.latest_release.test_qr_url =
         "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
+      workspace.latest_release.latest_test_qr_url =
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
     }
 
     expect(availableWorkspaceActions(workspace)).toEqual([
@@ -168,12 +172,12 @@ describe("tenant Douyin workspace actions", () => {
 
   test("continues protected release states before offering the newer template", () => {
     const expectations = [
-      ["created", "create_test_version"],
-      ["audit_pending", "sync_status"],
-      ["audit_approved", "publish"],
+      ["created", ["create_test_version"]],
+      ["audit_pending", ["sync_status", "get_audit_qr"]],
+      ["audit_approved", ["publish"]],
     ] as const;
 
-    for (const [status, action] of expectations) {
+    for (const [status, actions] of expectations) {
       const workspace = approvedWorkspace();
       workspace.available_template = {
         template_id: "77596",
@@ -187,7 +191,7 @@ describe("tenant Douyin workspace actions", () => {
         workspace.latest_release.status = status;
       }
 
-      expect(availableWorkspaceActions(workspace)).toEqual([action]);
+      expect(availableWorkspaceActions(workspace)).toEqual([...actions]);
     }
   });
 
@@ -197,6 +201,8 @@ describe("tenant Douyin workspace actions", () => {
     if (expired.latest_release) {
       expired.latest_release.status = "audit_rejected";
       expired.latest_release.test_qr_url =
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
+      expired.latest_release.latest_test_qr_url =
         "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
     }
 
@@ -275,6 +281,8 @@ describe("tenant Douyin workspace actions", () => {
     if (workspace.latest_release) {
       workspace.latest_release.status = "testing";
       workspace.latest_release.test_qr_url =
+        "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
+      workspace.latest_release.latest_test_qr_url =
         "https://p3-developer-sign.bytemaimg.com/test.jpeg?x-expires=1";
     }
 

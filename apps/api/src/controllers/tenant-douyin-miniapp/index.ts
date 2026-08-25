@@ -38,6 +38,7 @@ type ReleaseServicePort = Pick<
   | "list"
   | "createFromCurrentTemplate"
   | "getTestQr"
+  | "getAuditQr"
   | "submitAudit"
   | "syncStatus"
   | "publish"
@@ -129,6 +130,15 @@ export class TenantDouyinMiniappController extends TenantBaseController {
     const service = await this.releaseProvider();
     return ResponseHandler.success(
       await service.getTestQr(authContext, releaseId),
+    );
+  }
+
+  @Post("/tenant/douyin-miniapp/releases/:releaseId/audit-qr")
+  async getReleaseAuditQr(request: FastifyRequest) {
+    const { authContext, releaseId } = await this.releaseActionContext(request);
+    const service = await this.releaseProvider();
+    return ResponseHandler.success(
+      await service.getAuditQr(authContext, releaseId),
     );
   }
 

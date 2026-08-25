@@ -42,6 +42,8 @@ function release(
     status: "testing",
     douyin_log_id: null,
     test_qr_url: "https://p3.douyinpic.com/test.png",
+    latest_test_qr_url: "https://p3.douyinpic.com/test.png",
+    audit_qr_url: null,
     audit_host_names: [],
     audit_note: null,
     audit_result: null,
@@ -68,6 +70,10 @@ function applyPatch(
     ...(patch.testQrUrl !== undefined
       ? { test_qr_url: patch.testQrUrl }
       : {}),
+    ...(patch.latestTestQrUrl !== undefined
+      ? { latest_test_qr_url: patch.latestTestQrUrl }
+      : {}),
+    ...(patch.auditQrUrl !== undefined ? { audit_qr_url: patch.auditQrUrl } : {}),
     ...(patch.auditHostNames !== undefined
       ? { audit_host_names: [...patch.auditHostNames] }
       : {}),

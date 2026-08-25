@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useState } from "react";
 import {
   isDouyinTestQrUrlUsable,
@@ -24,23 +23,25 @@ import { Button } from "@/components/ui/button";
 import { requestBackendJson } from "@/lib/backend-client";
 
 import { WorkspaceReleaseDialogs } from "./workspace-release-dialogs";
+import {
+  actionSummary,
+  availableWorkspaceActions,
+  canSubmitAudit,
+  parseAuditHostNames,
+  permissionForActions,
+  type AuditChecklist,
+  type TenantDouyinWorkspaceAction,
+} from "./workspace-action-policy";
+import { ReleaseQrCard } from "./workspace-qr-card";
 import type { TenantDouyinWorkspace } from "./workspace-types";
 
-export type TenantDouyinWorkspaceAction =
-  | "authorize"
-  | "create_test_version"
-  | "get_test_qr"
-  | "submit_audit"
-  | "sync_status"
-  | "publish";
-
-export type AuditChecklist = {
-  authorizationActive: boolean;
-  profilePublished: boolean;
-  testQrReady: boolean;
-  readinessReady: boolean;
-  auditFieldsComplete: boolean;
-};
+export {
+  availableWorkspaceActions,
+  canSubmitAudit,
+  parseAuditHostNames,
+  type AuditChecklist,
+  type TenantDouyinWorkspaceAction,
+} from "./workspace-action-policy";
 
 type AuthorizationPopup = {
   close(): void;
@@ -77,62 +78,6 @@ export async function startAuthorizationFlow(input: {
     popup.close();
     throw error;
   }
-}
-
-export function availableWorkspaceActions(
-  workspace: TenantDouyinWorkspace,
-): TenantDouyinWorkspaceAction[] {
-  if (workspace.authorization_state !== "active") return ["authorize"];
-
-  const release = workspace.latest_release;
-  const hasNewTemplate = workspace.available_template?.state === "new_available";
-  const blocksNewTemplate = release?.status === "created"
-    || release?.status === "audit_pending"
-    || release?.status === "audit_approved";
-  if (hasNewTemplate && !blocksNewTemplate) {
-    if (release?.status === "audit_rejected" || release?.status === "failed") {
-      return ["sync_status", "create_test_version"];
-    }
-    return ["create_test_version"];
-  }
-  if (!release) return [];
-
-  switch (workspace.release_state) {
-    case "uploaded":
-      return ["get_test_qr"];
-    case "testing":
-      return isDouyinTestQrUrlUsable(release.test_qr_url)
-        ? ["submit_audit"]
-        : ["get_test_qr"];
-    case "audit_pending":
-      return ["sync_status"];
-    case "audit_rejected":
-      return isDouyinTestQrUrlUsable(release.test_qr_url)
-        ? ["sync_status", "submit_audit"]
-        : ["sync_status", "get_test_qr"];
-    case "audit_approved":
-      return ["publish"];
-    case "sync_error":
-      return ["sync_status"];
-    case "created":
-      return ["create_test_version"];
-    case "not_uploaded":
-    case "released":
-      return [];
-  }
-}
-
-export function canSubmitAudit(checklist: AuditChecklist) {
-  return Object.values(checklist).every(Boolean);
-}
-
-export function parseAuditHostNames(value: string) {
-  return Array.from(new Set(
-    value
-      .split(/[\n,，]/)
-      .map((entry) => entry.trim())
-      .filter(Boolean),
-  ));
 }
 
 type WorkspaceActionsProps = {
@@ -185,7 +130,12 @@ export function TenantDouyinMiniappWorkspaceActions({
     )
     && auditNote.trim().length > 0
     && auditNote.trim().length <= 1000;
-  const testQrUrl = isDouyinTestQrUrlUsable(release?.test_qr_url) ? release?.test_qr_url : null;
+  const latestTestQrRaw = release?.latest_test_qr_url ?? release?.test_qr_url ?? null;
+  const testQrUrl = isDouyinTestQrUrlUsable(latestTestQrRaw) ? latestTestQrRaw : null;
+  const testQrExpired = Boolean(latestTestQrRaw && !testQrUrl);
+  const auditQrRaw = release?.audit_qr_url ?? null;
+  const auditQrUrl = isDouyinTestQrUrlUsable(auditQrRaw) ? auditQrRaw : null;
+  const auditQrExpired = Boolean(auditQrRaw && !auditQrUrl);
   const checklist: AuditChecklist = {
     authorizationActive: workspace.authorization_state === "active",
     profilePublished: workspace.public_profile?.status === "published",
@@ -345,6 +295,25 @@ export function TenantDouyinMiniappWorkspaceActions({
                 : "生成体验二维码"}
             </Button>
           ) : null}
+          {actions.includes("get_audit_qr") ? (
+            <Button
+              disabled={!canManage || pending !== null}
+              onClick={() =>
+                mutateRelease(
+                  "get_audit_qr",
+                  `${releaseBasePath}/audit-qr`,
+                  "{}",
+                  "审核版二维码已生成",
+                )}
+              size="sm"
+              variant="outline"
+            >
+              {pending === "get_audit_qr"
+                ? <Loader2 className="animate-spin" data-icon="inline-start" />
+                : <QrCode data-icon="inline-start" />}
+              获取审核版二维码
+            </Button>
+          ) : null}
           {actions.includes("submit_audit") ? (
             <Button
               disabled={
@@ -426,23 +395,24 @@ export function TenantDouyinMiniappWorkspaceActions({
         </Alert>
       ) : null}
 
-      {testQrUrl ? (
-        <div className="flex flex-col gap-3 rounded-md border bg-background p-4 sm:flex-row sm:items-center">
-          <Image
-            alt="抖音小程序体验二维码"
-            className="size-32 rounded-md border bg-card object-contain"
-            height={128}
-            src={testQrUrl}
-            unoptimized
-            width={128}
-          />
-          <div className="flex min-w-0 flex-col gap-1">
-            <p className="text-sm font-semibold">体验二维码已就绪</p>
-            <p className="text-xs leading-5 text-muted-foreground">
-              请使用有体验权限的抖音账号扫码，确认品牌、案例、工地和咨询流程。
-            </p>
-          </div>
-        </div>
+      {testQrUrl || testQrExpired ? (
+        <ReleaseQrCard
+          description="请使用有体验权限的抖音账号扫码，确认品牌、案例、工地和咨询流程。"
+          expired={testQrExpired}
+          imageAlt="抖音小程序测试版二维码"
+          title="测试版二维码"
+          url={testQrUrl}
+        />
+      ) : null}
+
+      {auditQrUrl || auditQrExpired ? (
+        <ReleaseQrCard
+          description="提审后用于核对审核版内容。二维码过期时可重新获取，不影响已提交审核。"
+          expired={auditQrExpired}
+          imageAlt="抖音小程序审核版二维码"
+          title="审核版二维码"
+          url={auditQrUrl}
+        />
       ) : null}
 
       <WorkspaceReleaseDialogs
@@ -466,25 +436,4 @@ export function TenantDouyinMiniappWorkspaceActions({
       />
     </div>
   );
-}
-
-function actionSummary(actions: TenantDouyinWorkspaceAction[]) {
-  if (actions.includes("authorize")) return "连接租户自有抖音小程序";
-  if (actions.includes("get_test_qr")) return "生成体验二维码并完成手机验收";
-  if (actions.includes("submit_audit")) return "核对提审信息并提交平台审核";
-  if (actions.includes("sync_status")) return "从抖音开放平台同步审核状态";
-  if (actions.includes("publish")) return "审核已通过，可以正式发布";
-  if (actions.includes("create_test_version")) return "生成体验版并完成验收";
-  return "平台侧正在准备版本或当前版本已经发布";
-}
-
-function permissionForActions(
-  actions: TenantDouyinWorkspaceAction[],
-  canManage: boolean,
-  canSubmitAuditPermission: boolean,
-  canPublish: boolean,
-) {
-  if (actions.includes("submit_audit")) return canSubmitAuditPermission;
-  if (actions.includes("publish")) return canPublish;
-  return actions.length === 0 || canManage;
 }

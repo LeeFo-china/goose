@@ -68,6 +68,8 @@ const release: DouyinMiniappReleaseRecord = {
   status: "uploaded",
   douyin_log_id: "upload-log",
   test_qr_url: null,
+  latest_test_qr_url: null,
+  audit_qr_url: null,
   audit_host_names: [],
   audit_note: null,
   audit_result: null,
@@ -334,7 +336,7 @@ describe("PlatformDouyinMiniappReleasesService operation claims and recovery", (
     expect(deps.gateway.getTestQrCode).not.toHaveBeenCalled();
     expect(deps.releaseRepository.claimOperation).toHaveBeenCalledWith({
       releaseId: RELEASE_ID,
-      expectedStatuses: ["uploaded", "testing"],
+      expectedStatuses: ["uploaded", "testing", "audit_rejected"],
       operationName: "test_qr",
       claimToken: CLAIM_TOKEN,
       claimExpiresAt: "2026-07-20T03:02:00.000Z",

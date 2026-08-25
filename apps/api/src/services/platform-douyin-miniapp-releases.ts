@@ -115,6 +115,17 @@ export class PlatformDouyinMiniappReleasesService {
     return this.operations.getTestQr(installation, release, operatorId);
   }
 
+  async getAuditQr(
+    authContext: AuthContext,
+    installationId: string,
+    releaseId: string,
+  ): Promise<DouyinMiniappReleaseRecord> {
+    const operatorId = this.requireOperator(authContext);
+    const installation = await this.requireReleaseTarget(installationId);
+    const release = await this.requireOwnedRelease(installationId, releaseId);
+    return this.operations.getAuditQr(installation, release, operatorId);
+  }
+
   async submitAudit(
     authContext: AuthContext,
     installationId: string,

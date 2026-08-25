@@ -152,6 +152,30 @@ describe("DouyinOpenPlatformClient release operations", () => {
     });
   });
 
+  test("requests an audit QR code with the exact official stage", async () => {
+    const signedQrUrl = "https://p3.douyinpic.com/audit-qr-code?signature=abc";
+    const fetch = mock(async (_input: string | URL | Request, _init?: RequestInit) => jsonResponse({
+      err_no: 0,
+      err_msg: "",
+      log_id: "audit-qr-log",
+      data: { qr_code_url: signedQrUrl },
+    }));
+    const client = new DouyinOpenPlatformClient({ fetch });
+
+    await expect(client.getTestQrCode({
+      authorizerAccessToken: AUTHORIZER_TOKEN,
+      appId: "authorizer-appid",
+      version: "audit",
+    })).resolves.toEqual({
+      qrCodeUrl: signedQrUrl,
+      logId: "audit-qr-log",
+    });
+    expect(fetch.mock.calls[0]?.[1]).toMatchObject({
+      method: "POST",
+      body: JSON.stringify({ version: "audit", path: "pages/home/index" }),
+    });
+  });
+
   test("rejects non-HTTPS, credentialed, and overlong QR URLs", async () => {
     for (const qrCodeUrl of [
       "http://example.test/qr-code",

@@ -1,7 +1,5 @@
 import { Errors } from "@/errors/error-factory";
-import type {
-  DouyinMiniappReleaseGateway,
-} from "@/gateways/douyin-open-platform/client";
+import type { DouyinMiniappReleaseGateway } from "@/gateways/douyin-open-platform/client";
 import type { DouyinMiniappReleaseTarget } from "@/repositories/douyin-miniapp-installations";
 import type {
   DouyinMiniappClaimedUploadRelease,
@@ -28,11 +26,7 @@ type ReleaseRepository = Pick<DouyinMiniappReleasesRepository,
   "findById" | "claimOperation" | "getOrCreateAndClaimUpload" | "patchClaimed" | "updateClaimed">;
 type Dependencies = {
   readonly installationRepository: {
-    syncReleaseMetadata(
-      installationId: string,
-      releaseId: string,
-      claimToken: string,
-    ): Promise<boolean>;
+    syncReleaseMetadata(installationId: string, releaseId: string, claimToken: string): Promise<boolean>;
   };
   readonly releaseRepository: ReleaseRepository;
   readonly accessTokens: Pick<DouyinMiniappAccessTokenService, "getAuthorizerAccessToken">;
@@ -42,18 +36,13 @@ type Dependencies = {
 };
 type Claim = { readonly token: string; readonly recoveryRequired: boolean };
 type Acquired = { readonly claim: Claim; readonly release: DouyinMiniappReleaseRecord };
-type UploadInput = {
-  readonly template_id: string;
-  readonly template_version: string;
-  readonly description: string;
-  readonly channel: "default" | "1";
-};
+type UploadInput = { readonly template_id: string; readonly template_version: string;
+  readonly description: string; readonly channel: "default" | "1" };
 type AuditInput = { readonly host_names: string[]; readonly audit_note: string };
 
 const CLAIM_TTL_MS = 120_000;
 const UPLOAD_TERMINAL: readonly DouyinMiniappReleaseStatus[] = [
-  "uploaded", "testing", "audit_pending", "audit_rejected", "audit_approved", "released",
-];
+  "uploaded", "testing", "audit_pending", "audit_rejected", "audit_approved", "released"];
 
 export class PlatformDouyinMiniappReleaseOperations {
   constructor(private readonly dependencies: Dependencies) {}
@@ -84,8 +73,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     const release = publicRelease(claimed);
     const claim = { token, recoveryRequired: claimed.recovery_required };
     if (UPLOAD_TERMINAL.includes(release.status)) {
-      return this.persistWithMetadata(release, claim, { status: release.status,
-        platformOperatorId: operatorId }, installationId);
+      return this.persistWithMetadata(
+        release, claim, { status: release.status, platformOperatorId: operatorId }, installationId);
     }
 
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
@@ -120,29 +109,46 @@ export class PlatformDouyinMiniappReleaseOperations {
       douyinLogId: uploaded.logId, platformOperatorId: operatorId,
     }, installationId);
   }
-  async getTestQr(
-    installation: Installation,
-    snapshot: DouyinMiniappReleaseRecord,
-    operatorId: string,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  async getTestQr(installation: Installation, snapshot: DouyinMiniappReleaseRecord, operatorId: string):
+  Promise<DouyinMiniappReleaseRecord> {
     const allowed = ["uploaded", "testing", "audit_rejected"] as const;
     this.assertState(snapshot, allowed);
-    const { claim, release } = await this.acquire(
-      snapshot, "test_qr", allowed, operatorId,
-    );
+    const { claim, release } = await this.acquire(snapshot, "test_qr", allowed, operatorId);
     this.assertState(release, allowed);
     const authorizerAccessToken = await this.accessToken(release, claim, installation, {
       status: release.status, platformOperatorId: operatorId,
     });
-    const result = await this.provider(release, claim, {
-      status: release.status, platformOperatorId: operatorId,
-    }, async () => this.dependencies.gateway.getTestQrCode({
-      authorizerAccessToken, appId: installation.authorizer_appid,
-    }));
+    const result = await this.provider(
+      release, claim, { status: release.status, platformOperatorId: operatorId },
+      async () => this.dependencies.gateway.getTestQrCode({
+        authorizerAccessToken, appId: installation.authorizer_appid, version: "latest",
+      }));
     return this.finish(release, claim, {
       status: "testing", testQrUrl: result.qrCodeUrl,
+      latestTestQrUrl: result.qrCodeUrl,
       douyinLogId: result.logId,
       ...clearedAuditRetryPatch(operatorId),
+    });
+  }
+  async getAuditQr(installation: Installation, snapshot: DouyinMiniappReleaseRecord, operatorId: string):
+  Promise<DouyinMiniappReleaseRecord> {
+    const allowed = ["audit_pending", "audit_rejected", "audit_approved"] as const;
+    this.assertState(snapshot, allowed);
+    const { claim, release } = await this.acquire(snapshot, "audit_qr", allowed, operatorId);
+    this.assertState(release, allowed);
+    const authorizerAccessToken = await this.accessToken(release, claim, installation, {
+      status: release.status, platformOperatorId: operatorId,
+    });
+    const result = await this.provider(
+      release, claim, { status: release.status, platformOperatorId: operatorId },
+      async () => this.dependencies.gateway.getTestQrCode({
+        authorizerAccessToken, appId: installation.authorizer_appid, version: "audit",
+      }));
+    return this.finish(release, claim, {
+      status: release.status,
+      auditQrUrl: result.qrCodeUrl,
+      douyinLogId: result.logId,
+      platformOperatorId: operatorId,
     });
   }
   async submitAudit(
@@ -233,12 +239,8 @@ export class PlatformDouyinMiniappReleaseOperations {
       submittedAt, auditedAt: null, douyinLogId: submitted.logId, platformOperatorId: operatorId,
     }, installationId);
   }
-  async syncStatus(
-    installation: Installation,
-    installationId: string,
-    snapshot: DouyinMiniappReleaseRecord,
-    operatorId: string,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  async syncStatus(installation: Installation, installationId: string,
+    snapshot: DouyinMiniappReleaseRecord, operatorId: string): Promise<DouyinMiniappReleaseRecord> {
     const allowed = ["audit_pending", "audit_rejected", "audit_approved"] as const;
     this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(snapshot, "sync_status", allowed, operatorId);
@@ -265,12 +267,8 @@ export class PlatformDouyinMiniappReleaseOperations {
       ...patch, platformOperatorId: operatorId,
     }, installationId);
   }
-  async publish(
-    installation: Installation,
-    installationId: string,
-    snapshot: DouyinMiniappReleaseRecord,
-    operatorId: string,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  async publish(installation: Installation, installationId: string,
+    snapshot: DouyinMiniappReleaseRecord, operatorId: string): Promise<DouyinMiniappReleaseRecord> {
     const allowed = ["audit_pending", "audit_approved", "released"] as const;
     this.assertState(snapshot, allowed);
     const { claim, release } = await this.acquire(snapshot, "publish", allowed, operatorId);
@@ -324,12 +322,10 @@ export class PlatformDouyinMiniappReleaseOperations {
       ...final, platformOperatorId: operatorId,
     }, installationId);
   }
-  private async acquire(
-    release: DouyinMiniappReleaseRecord,
+  private async acquire(release: DouyinMiniappReleaseRecord,
     operationName: DouyinMiniappReleaseOperation,
     expectedStatuses: readonly DouyinMiniappReleaseStatus[],
-    platformOperatorId: string,
-  ): Promise<Acquired> {
+    platformOperatorId: string): Promise<Acquired> {
     const token = this.dependencies.claimToken();
     const claim = await this.dependencies.releaseRepository.claimOperation({
       releaseId: release.id, expectedStatuses, operationName, claimToken: token,
@@ -397,21 +393,15 @@ export class PlatformDouyinMiniappReleaseOperations {
     return this.finish(release, claim, patch);
   }
 
-  private async patch(
-    release: DouyinMiniappReleaseRecord,
-    claim: Claim,
-    patch: UpdateDouyinMiniappReleaseInput,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  private async patch(release: DouyinMiniappReleaseRecord, claim: Claim,
+    patch: UpdateDouyinMiniappReleaseInput): Promise<DouyinMiniappReleaseRecord> {
     const updated = await this.dependencies.releaseRepository.patchClaimed(release.id, claim.token, patch);
     if (!updated) throw releaseStateConflict();
     return updated;
   }
 
-  private async finish(
-    release: DouyinMiniappReleaseRecord,
-    claim: Claim,
-    patch: UpdateDouyinMiniappReleaseInput,
-  ): Promise<DouyinMiniappReleaseRecord> {
+  private async finish(release: DouyinMiniappReleaseRecord, claim: Claim,
+    patch: UpdateDouyinMiniappReleaseInput): Promise<DouyinMiniappReleaseRecord> {
     const updated = await this.dependencies.releaseRepository.updateClaimed(release.id, claim.token, patch);
     if (!updated) throw releaseStateConflict();
     return updated;
@@ -446,10 +436,8 @@ export class PlatformDouyinMiniappReleaseOperations {
     return new Date(Date.parse(this.dependencies.now()) + CLAIM_TTL_MS).toISOString();
   }
 
-  private assertState(
-    release: DouyinMiniappReleaseRecord,
-    allowed: readonly DouyinMiniappReleaseStatus[],
-  ): void {
+  private assertState(release: DouyinMiniappReleaseRecord,
+    allowed: readonly DouyinMiniappReleaseStatus[]): void {
     if (!allowed.includes(release.status)) throw releaseStateConflict();
   }
 }

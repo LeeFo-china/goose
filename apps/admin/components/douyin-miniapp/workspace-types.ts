@@ -111,6 +111,8 @@ export type TenantDouyinWorkspace = {
       | "released"
       | "failed";
     test_qr_url: string | null;
+    latest_test_qr_url: string | null;
+    audit_qr_url: string | null;
     audit_host_names?: string[];
     audit_note: string | null;
     audit_result: {

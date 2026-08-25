@@ -64,6 +64,7 @@ function createController() {
       id: "release-id", status: "testing",
     })),
     getTestQr: mock(async () => ({ id: "release-id", status: "testing" })),
+    getAuditQr: mock(async () => ({ id: "release-id", status: "audit_pending" })),
     submitAudit: mock(async () => ({
       id: "release-id", status: "audit_pending",
     })),
@@ -128,6 +129,10 @@ describe("TenantDouyinMiniappController", () => {
       {
         method: "POST",
         path: "/tenant/douyin-miniapp/releases/:releaseId/test-qr",
+      },
+      {
+        method: "POST",
+        path: "/tenant/douyin-miniapp/releases/:releaseId/audit-qr",
       },
       {
         method: "POST",
