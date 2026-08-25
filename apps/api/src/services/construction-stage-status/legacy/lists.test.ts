@@ -114,7 +114,7 @@ function procedureTimelineNode(input: {
 }
 
 describe("buildProjectConstructionStagesFromRows", () => {
-  test("uses workflow node acceptance attributes instead of requiring every previous stage acceptance", async () => {
+  test("does not expose acceptance before the current procedure is completed", async () => {
     const result = await buildProjectConstructionStagesFromRows({
       project,
       acceptanceRows: [],
@@ -158,11 +158,13 @@ describe("buildProjectConstructionStagesFromRows", () => {
     expect(demolition?.can_create_acceptance).toBe(false);
     expect(plumbing?.blocked_reason).toBeNull();
     expect(plumbing?.acceptance_action).toEqual({
-      type: "create",
-      label: "发起验收",
-      enabled: true,
+      type: "none",
+      label: "",
+      enabled: false,
       reason: null,
     });
+    expect(plumbing?.can_create_log).toBe(false);
+    expect(plumbing?.can_create_acceptance).toBe(false);
     expect(result.missing_required_stages).not.toContainEqual({
       stage_code: "demolition",
       stage_label: "拆改",

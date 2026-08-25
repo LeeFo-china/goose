@@ -186,6 +186,9 @@ export async function buildProjectConstructionStagesFromRows(input: {
   const workflowAcceptanceStageCodes = sourceMode === "workflow_runtime"
     ? resolveWorkflowAcceptanceStageCodes(workflowProgress)
     : null;
+  const workflowWritableLogStageCodes = sourceMode === "workflow_runtime"
+    ? resolveWorkflowWritableLogStageCodes(workflowProgress)
+    : null;
   const requiredStageCodes = workflowAcceptanceStageCodes
     ? PROJECT_CONSTRUCTION_STAGE_CODE_VALUES.filter((stageCode) =>
       workflowAcceptanceStageCodes.required.has(stageCode)
@@ -214,6 +217,9 @@ export async function buildProjectConstructionStagesFromRows(input: {
       blockedReason,
       projectStatus: project.status,
       canCreateAcceptanceByPermission: input.canCreateAcceptance ?? true,
+      canCreateLogByWorkflow: workflowWritableLogStageCodes
+        ? workflowWritableLogStageCodes.has(stageCode)
+        : true,
       canCreateAcceptanceByWorkflow: workflowAcceptanceStageCodes
         ? workflowAcceptanceStageCodes.enabled.has(stageCode)
         : true,
@@ -348,8 +354,9 @@ function resolveWorkflowAcceptanceStageCodes(
     if (!stageCode) continue;
 
     if (
-      node.attributes.acceptance_enabled === true ||
-      node.attributes.acceptance_required === true
+      (node.status === "done" || node.status === "blocked") &&
+      (node.attributes.acceptance_enabled === true ||
+        node.attributes.acceptance_required === true)
     ) {
       enabled.add(stageCode);
     }
@@ -360,6 +367,28 @@ function resolveWorkflowAcceptanceStageCodes(
   }
 
   return { enabled, required };
+}
+
+function resolveWorkflowWritableLogStageCodes(
+  workflowProgress: ProjectWorkflowProgress | null,
+) {
+  if (!workflowProgress || workflowProgress.source !== "workflow_runtime") {
+    return null;
+  }
+
+  const writable = new Set<ProjectLogStageCode>();
+  for (const node of workflowProgress.timeline_nodes) {
+    if (node.status !== "current") continue;
+    if (node.attributes.require_log !== true) continue;
+    if (node.attributes.procedure_assignment_status !== "in_progress") continue;
+
+    const stageCode = normalizeStageCode(node.attributes.stage_code);
+    if (stageCode) {
+      writable.add(stageCode);
+    }
+  }
+
+  return writable;
 }
 
 function resolveWorkflowCompletionBlockedReason(input: {

@@ -295,11 +295,16 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
       acceptance_id: readString(stage.acceptance_id),
       acceptance_status: acceptanceStatus,
     };
-    const acceptanceAction = buildAcceptanceTimelineAction({
-      stage,
-      stageCode,
-      acceptanceStatus,
-    });
+    const shouldExposeAcceptanceAction =
+      node.status === "done" || node.status === "blocked" ||
+      Boolean(readString(stage.acceptance_id));
+    const acceptanceAction = shouldExposeAcceptanceAction
+      ? buildAcceptanceTimelineAction({
+        stage,
+        stageCode,
+        acceptanceStatus,
+      })
+      : null;
     const actions = [
       ...node.actions.filter((action) =>
         action.business_domain !== "project_acceptance"

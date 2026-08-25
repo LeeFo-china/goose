@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { buildProjectWorkflowProgressProjection } from "./project-workflow-progress";
+import {
+  buildProjectWorkflowProgressProjection,
+  enrichProjectWorkflowProgressWithConstructionStages,
+} from "./project-workflow-progress";
 import type { ProcedureAssignmentRow } from "@/services/project-procedure-assignments";
 
 const woodworkNode = {
@@ -9,6 +12,20 @@ const woodworkNode = {
   node_type: "procedure",
   business_kind: "procedure_template",
   config: { stage_key: "woodwork" },
+};
+
+const plumbingNode = {
+  id: "node-plumbing",
+  node_key: "procedure_plumbing_electrical",
+  title: "水电",
+  node_type: "procedure",
+  business_kind: "procedure_template",
+  config: {
+    stage_key: "plumbing_electrical",
+    require_log: true,
+    min_image_count: 1,
+    trigger_acceptance: true,
+  },
 };
 
 const woodworkAssignment: ProcedureAssignmentRow = {
@@ -37,6 +54,65 @@ const woodworkAssignment: ProcedureAssignmentRow = {
 };
 
 describe("project workflow progress actions", () => {
+  test("keeps current procedure start action until acceptance-enabled procedure is completed", () => {
+    const progress = buildProjectWorkflowProgressProjection({
+      subjectState: {
+        instance_id: "instance-1",
+        instance_status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_title: "水电",
+        current_business_kind: "procedure_template",
+        pending_task_count: 1,
+      },
+      runtimeInstance: {
+        id: "instance-1",
+        status: "running",
+        current_node_key: "procedure_plumbing_electrical",
+        current_node_snapshot: plumbingNode,
+      },
+      graph: {
+        definition: { workflow_key: "construction_main", category: "construction" },
+        nodes: [plumbingNode],
+        edges: [],
+      },
+      pendingActions: [{
+        task_id: "task-plumbing",
+        key: "start_procedure",
+        label: "开始水电",
+        node_key: "procedure_plumbing_electrical",
+        node_type: "procedure",
+        business_domain: "project_procedure",
+        business_action: "start_procedure",
+        disabled: false,
+      }],
+    });
+
+    const enriched = enrichProjectWorkflowProgressWithConstructionStages(progress, {
+      stages: [{
+        stage_code: "plumbing_electrical",
+        stage_label: "水电",
+        acceptance_id: null,
+        acceptance_status: null,
+        acceptance_action: {
+          type: "create",
+          label: "发起验收",
+          enabled: true,
+          reason: null,
+        },
+      }],
+    });
+
+    expect(enriched.timeline_nodes[0]).toMatchObject({
+      status: "current",
+      actions: [{
+        key: "start_procedure",
+        business_domain: "project_procedure",
+        business_action: "start_procedure",
+        task_id: "task-plumbing",
+      }],
+    });
+  });
+
   test("keeps top-level procedure actions aligned with assignment-enriched timeline actions", () => {
     const progress = buildProjectWorkflowProgressProjection({
       subjectState: {
