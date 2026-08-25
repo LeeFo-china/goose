@@ -31,6 +31,18 @@ export function projectWorkflowSummary(input: ProjectWorkflowSummaryInput) {
   };
 }
 
+export function projectStatusStageSummary(input: ProjectWorkflowSummaryInput) {
+  if (input.status !== "constructing") return null;
+  const progress = input.workflow_progress ?? null;
+  const nodeLabel = readString(progress?.current_node_title);
+  if (!nodeLabel) return null;
+  const instanceStatus = readString(progress?.instance_status);
+  const statusLabel = instanceStatus
+    ? instanceStatusLabels[instanceStatus] ?? instanceStatus
+    : null;
+  return statusLabel ? `${nodeLabel}${statusLabel}` : nodeLabel;
+}
+
 function readString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }

@@ -15,7 +15,10 @@ import {
   ProjectRowActions,
   type ProjectRecord,
 } from "@/components/projects/project-mutations";
-import { projectWorkflowSummary } from "@/components/projects/project-list-workflow-display";
+import {
+  projectStatusStageSummary,
+  projectWorkflowSummary,
+} from "@/components/projects/project-list-workflow-display";
 
 const PROJECT_TABLE_ROW_HEIGHT_CLASS_NAME = "h-[var(--project-table-row-height,75px)]";
 const PROJECT_IDENTITY_COLUMN_CLASS_NAME = "w-[180px] min-w-0";
@@ -190,10 +193,18 @@ export function ProjectsTable({
       header: "状态",
       cell: ({ row }) => {
         const meta = projectStatusMeta(row.original);
+        const stageSummary = projectStatusStageSummary(row.original);
         return (
-          <Badge className="whitespace-nowrap" variant={meta.variant}>
-            {meta.label}
-          </Badge>
+          <div className="flex min-w-0 flex-col items-start gap-1">
+            <Badge className="whitespace-nowrap" variant={meta.variant}>
+              {meta.label}
+            </Badge>
+            {stageSummary ? (
+              <span className="max-w-[7rem] truncate text-xs font-medium text-muted-foreground">
+                {stageSummary}
+              </span>
+            ) : null}
+          </div>
         );
       },
       meta: {
