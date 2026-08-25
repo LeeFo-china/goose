@@ -110,6 +110,7 @@ export function createQaPageDefinition(dependencies: QaPageDependencies) {
       this.requestSequence = sequence;
       this.setData({
         status: "submitting",
+        question: "",
         errorMessage: "",
         stream: beginAnswerStream(question),
       });

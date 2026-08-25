@@ -23,14 +23,17 @@ const attribution = {
 };
 
 describe("DouyinMiniappQaService", () => {
-  test("uses AI only to select safe answer codes and maps output to static copy", async () => {
+  test("returns a bounded AI answer that directly responds to the user question", async () => {
     const chatCalls: AiGatewayChatInput[] = [];
     const chat = mock(async (input: AiGatewayChatInput) => {
       chatCalls.push(input);
       return {
         content: JSON.stringify({
-          answer_code: "old_house_check",
-          suggested_question_codes: ["budget_prepare", "measurement_prepare"],
+          answer_points: [
+            "我是装修问题助手，可以围绕预算、旧房、局部改造和量房准备给出参考。",
+            "你可以直接描述房屋现状和想解决的问题，我会先给出沟通建议。",
+          ],
+          suggested_questions: ["旧房翻新要先看哪些地方？", "量房前需要准备什么？"],
         }),
         provider: "deepseek",
         model: "deepseek-chat",
@@ -43,16 +46,15 @@ describe("DouyinMiniappQaService", () => {
     });
 
     await expect(service.ask(user, {
-      question: "旧房翻新要先看哪些地方？",
+      question: "你是做什么的？",
       attribution,
     })).resolves.toEqual({
       answer_points: [
-        "旧房翻新建议先看墙地面、水电线路、门窗和厨卫防水现状。",
-        "如果计划局部改造，优先确认保留区域和需要拆改的边界。",
-        "现场情况会影响施工方案，建议预约量房后再确认细节。",
+        "我是装修问题助手，可以围绕预算、旧房、局部改造和量房准备给出参考。",
+        "你可以直接描述房屋现状和想解决的问题，我会先给出沟通建议。",
       ],
       suggested_questions: [
-        "装修预算前要先准备哪些信息？",
+        "旧房翻新要先看哪些地方？",
         "量房前需要准备什么？",
       ],
       disclaimer: "以上内容仅供装修沟通参考，具体方案以现场量房为准。",
@@ -65,7 +67,8 @@ describe("DouyinMiniappQaService", () => {
       billable: true,
     }));
     const prompt = JSON.stringify(chatCalls[0]?.messages);
-    expect(prompt).toContain("旧房翻新要先看哪些地方？");
+    expect(prompt).toContain("你是做什么的？");
+    expect(prompt).toContain("直接回答用户当前问题");
     expect(prompt).not.toContain("15518591857");
     expect(findActiveInstallation).toHaveBeenCalledWith({
       installationId: INSTALLATION_ID,
@@ -101,8 +104,8 @@ describe("DouyinMiniappQaService", () => {
       aiGateway: {
         chat: mock(async () => ({
           content: JSON.stringify({
-            answer_code: "partial_plan",
-            suggested_question_codes: ["budget_prepare"],
+            answer_points: ["电话线和网线改造建议先确认弱电箱位置、走线路径和是否需要保留原有接口。"],
+            suggested_questions: ["局部装修适合先确认什么？"],
           }),
           provider: "deepseek",
           model: "deepseek-chat",
@@ -115,7 +118,7 @@ describe("DouyinMiniappQaService", () => {
       attribution,
     })).resolves.toMatchObject({
       answer_points: expect.arrayContaining([
-        "局部装修建议先明确改造空间、保留区域和是否影响日常居住。",
+        "电话线和网线改造建议先确认弱电箱位置、走线路径和是否需要保留原有接口。",
       ]),
     });
   });
@@ -137,20 +140,49 @@ describe("DouyinMiniappQaService", () => {
     });
 
     await expect(service.ask(user, {
-      question: "装修预算怎么准备？",
+      question: "你是做什么的？",
       attribution,
     })).resolves.toEqual({
       answer_points: [
-        "预算沟通前建议先确认面积、房屋现状、装修范围和期望档位。",
-        "同一面积下，旧房翻新、局部改造和材料档位都会影响预算区间。",
-        "初步预算只适合做规划参考，正式方案需要结合现场量房确认。",
+        "我是装修问题助手，可以围绕预算、旧房翻新、局部改造和量房准备给出参考。",
+        "如果问题不够明确，可以补充房屋现状、装修范围或想解决的具体问题。",
       ],
       suggested_questions: [
-        "量房前需要准备什么？",
+        "装修预算前要先准备哪些信息？",
         "局部装修适合先确认什么？",
       ],
       disclaimer: "以上内容仅供装修沟通参考，具体方案以现场量房为准。",
     });
+  });
+
+  test("drops unsafe AI answer text before returning to the miniapp", async () => {
+    const service = new DouyinMiniappQaService({
+      contextRepository: { findActiveInstallation: mock(activeInstallation) },
+      aiGateway: {
+        chat: mock(async () => ({
+          content: JSON.stringify({
+            answer_points: [
+              "可以拨打 15518591857 直接咨询，预算报价 10 万元左右。",
+            ],
+            suggested_questions: ["怎么联系你？"],
+          }),
+          provider: "deepseek",
+          model: "deepseek-chat",
+        })),
+      },
+    });
+
+    const response = await service.ask(user, {
+      question: "你是做什么的？",
+      attribution,
+    });
+
+    expect(JSON.stringify(response)).not.toContain("15518591857");
+    expect(JSON.stringify(response)).not.toContain("10 万元");
+    expect(response.answer_points).toEqual([
+      "我是装修问题助手，可以围绕预算、旧房翻新、局部改造和量房准备给出参考。",
+      "如果问题不够明确，可以补充房屋现状、装修范围或想解决的具体问题。",
+    ]);
   });
 
   test("requires a Douyin miniapp session scope", async () => {

@@ -104,6 +104,7 @@ describe("Douyin Q&A page definition", () => {
     });
 
     expect(askedQuestions).toEqual(["厨房漏水怎么处理？"]);
+    expect(page.data.question).toBe("");
     expect(page.data.stream?.messages[0].text).toBe("厨房漏水怎么处理？");
   });
 
@@ -121,6 +122,7 @@ describe("Douyin Q&A page definition", () => {
     });
 
     expect(askedQuestions).toEqual(["墙面开裂怎么办？"]);
+    expect(page.data.question).toBe("");
     expect(page.data.stream?.messages[0].text).toBe("墙面开裂怎么办？");
   });
 

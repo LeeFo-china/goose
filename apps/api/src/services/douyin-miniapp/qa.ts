@@ -18,8 +18,17 @@ import type { JwtPayload } from "@/utils/jwt";
 const AI_SCENE_CODE = "decoration_qa";
 const AI_TIMEOUT_MS = 30_000;
 const DISCLAIMER = "以上内容仅供装修沟通参考，具体方案以现场量房为准。";
+const MAX_TEXT_LENGTH = 120;
 
 const ANSWER_CATALOG = {
+  assistant_intro: {
+    meaning: "装修助手能力说明",
+    points: [
+      "我是装修问题助手，可以围绕预算、旧房翻新、局部改造和量房准备给出参考。",
+      "如果问题不够明确，可以补充房屋现状、装修范围或想解决的具体问题。",
+    ],
+    question: "装修预算前要先准备哪些信息？",
+  },
   budget_prepare: {
     meaning: "装修预算准备",
     points: [
@@ -69,6 +78,13 @@ const SelectionSchema = z.strictObject({
     .refine((values) => new Set(values).size === values.length),
 });
 type Selection = z.infer<typeof SelectionSchema>;
+const AiAnswerSchema = z.strictObject({
+  answer_points: z.array(z.string().trim().min(4).max(MAX_TEXT_LENGTH)).min(1).max(3),
+  suggested_questions: z.array(z.string().trim().min(2).max(60)).min(1)
+    .max(3)
+    .refine((values) => new Set(values).size === values.length),
+});
+type AiAnswer = z.infer<typeof AiAnswerSchema>;
 
 export type DouyinMiniappQaAnswer = {
   answer_points: string[];
@@ -117,9 +133,9 @@ export class DouyinMiniappQaService {
           { role: "user", content: buildPrompt(input.question) },
         ],
       });
-      return mapSelection(parseSelection(result.content));
+      return parseAnswer(result.content) ?? fallbackAnswer(input.question);
     } catch {
-      return mapSelection(fallbackSelection(input.question));
+      return fallbackAnswer(input.question);
     }
   }
 
@@ -150,38 +166,41 @@ export class DouyinMiniappQaService {
 }
 
 const SYSTEM_PROMPT = [
-  "你是装修问题分类助手。",
-  "只能从允许的代码中选择答案，不得输出自由文本或额外字段。",
-  "不要输出手机号、地址、报价承诺、法律或合同结论。",
+  "你是装修问题助手。",
+  "必须直接回答用户当前问题，不要套用固定问题或预设问法。",
+  "只给装修沟通参考，不做报价承诺、合同结论或法律结论。",
+  "不要输出手机号、微信、详细地址、门牌号或联系引导。",
   "只返回 JSON 对象，不要输出 Markdown。",
 ].join("\n");
 
 function buildPrompt(question: string): string {
   return JSON.stringify({
-    instruction: "根据用户装修问题选择最适合的答案代码和后续问题代码。",
+    instruction: "直接回答用户当前问题。若问题不是装修相关或语义不完整，请说明你只能回答装修问题，并请用户补充房屋现状、装修范围或想解决的具体问题。",
     question,
-    allowed_answers: AnswerCodes.map((code) => ({
-      code,
-      meaning: ANSWER_CATALOG[code].meaning,
-    })),
     schema: {
-      answer_code: AnswerCodes,
-      suggested_question_codes: "从允许代码中选择 1 到 2 个，不得重复",
+      answer_points: "1 到 3 条中文短句，每条不超过 120 字，必须围绕用户当前问题",
+      suggested_questions: "1 到 3 个可继续追问的装修问题，每个不超过 60 字，不得重复",
     },
   });
 }
 
-function parseSelection(content: string): Selection {
+function parseAnswer(content: string): DouyinMiniappQaAnswer | null {
   try {
-    const parsed = SelectionSchema.safeParse(JSON.parse(content));
-    if (parsed.success) return parsed.data;
+    const parsed = AiAnswerSchema.safeParse(JSON.parse(content));
+    if (!parsed.success || hasUnsafeText(parsed.data)) return null;
+    return mapAnswer(parsed.data);
   } catch {
-    // Fall through to deterministic fallback at caller boundary.
+    return null;
   }
-  throw new Error("invalid decoration qa selection");
 }
 
 function fallbackSelection(question: string): Selection {
+  if (/你是|你能|做什么|助手|功能/.test(question)) {
+    return {
+      answer_code: "assistant_intro",
+      suggested_question_codes: ["budget_prepare", "partial_plan"],
+    };
+  }
   if (/旧房|翻新|二手房|老房/.test(question)) {
     return {
       answer_code: "old_house_check",
@@ -206,7 +225,23 @@ function fallbackSelection(question: string): Selection {
   };
 }
 
+function fallbackAnswer(question: string): DouyinMiniappQaAnswer {
+  return mapSelection(fallbackSelection(question));
+}
+
 function mapSelection(selection: Selection): DouyinMiniappQaAnswer {
+  if (selection.answer_code === "assistant_intro") {
+    return {
+      answer_points: [
+        "我是装修问题助手，可以围绕预算、旧房翻新、局部改造和量房准备给出参考。",
+        "如果问题不够明确，可以补充房屋现状、装修范围或想解决的具体问题。",
+      ],
+      suggested_questions: selection.suggested_question_codes.map(
+        (code) => ANSWER_CATALOG[code].question,
+      ),
+      disclaimer: DISCLAIMER,
+    };
+  }
   return {
     answer_points: [...ANSWER_CATALOG[selection.answer_code].points],
     suggested_questions: selection.suggested_question_codes.map(
@@ -214,6 +249,23 @@ function mapSelection(selection: Selection): DouyinMiniappQaAnswer {
     ),
     disclaimer: DISCLAIMER,
   };
+}
+
+function mapAnswer(answer: AiAnswer): DouyinMiniappQaAnswer {
+  return {
+    answer_points: [...answer.answer_points],
+    suggested_questions: [...answer.suggested_questions],
+    disclaimer: DISCLAIMER,
+  };
+}
+
+function hasUnsafeText(answer: AiAnswer): boolean {
+  return [...answer.answer_points, ...answer.suggested_questions].some((text) =>
+    hasPhone(text)
+    || hasAddress(text)
+    || hasContactMarker(text)
+    || hasMoneyCommitment(text),
+  );
 }
 
 type RequiredDouyinSession = {
@@ -273,6 +325,10 @@ function hasAddress(value: string): boolean {
 
 function hasContactMarker(value: string): boolean {
   return /(?:微信|加微|联系方式|手机号|联系我|电话\s*[:：]?\s*1[3-9])/.test(value);
+}
+
+function hasMoneyCommitment(value: string): boolean {
+  return /(?:报价|价格|费用|预算|收费|单价)[^。；，,]{0,12}(?:[0-9一二三四五六七八九十百千万]+)\s*(?:元|万|块)/.test(value);
 }
 
 let defaultService: DouyinMiniappQaService | undefined;
