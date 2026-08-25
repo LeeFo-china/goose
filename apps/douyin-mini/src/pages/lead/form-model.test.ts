@@ -75,7 +75,11 @@ describe("lead form model", () => {
   });
 
   test("reports consent after valid fields", () => {
-    const result = validateLeadForm({ ...VALID_FORM, consented_at: "" }, false);
+    const result = validateLeadForm(
+      { ...VALID_FORM, consented_at: "" },
+      false,
+      "2026-08-22",
+    );
     expect(result.firstField).toBe("consent");
     expect(result.summary).toBe("请先阅读并同意隐私政策");
   });
