@@ -17,6 +17,7 @@ import {
   normalizeSavedProjectProfile,
   publicationSubmitLabel,
   projectDisplayToggleDraft,
+  projectPublicationPhaseDisplay,
   projectProfileDraft,
   projectPhaseDisplay,
   safeHttpsPreview,
@@ -409,6 +410,24 @@ describe("tenant project publication behavior", () => {
     expect(projectPhaseDisplay(null)).toEqual({
       label: "未设置",
       variant: "outline",
+    });
+  });
+
+  test("prefers the project-list display status for publication rows", () => {
+    expect(projectPublicationPhaseDisplay({
+      ...publishableProject,
+      status: "constructing",
+      status_label: "施工中",
+      display_status: "final_acceptance_completed",
+      display_status_label: "已完成",
+    })).toEqual({
+      label: "已完成",
+      variant: "success",
+    });
+
+    expect(projectPublicationPhaseDisplay(publishableProject)).toEqual({
+      label: "施工中",
+      variant: "warning",
     });
   });
 });

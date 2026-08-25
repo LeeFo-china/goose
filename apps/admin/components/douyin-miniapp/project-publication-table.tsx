@@ -23,7 +23,7 @@ import {
 import {
   getPublicationReadinessWarnings,
   getProjectDisplayToggleState,
-  projectPhaseDisplay,
+  projectPublicationPhaseDisplay,
   projectProfileDraft,
   type ProjectPublicationRow,
   type PublicationStatus,
@@ -70,7 +70,7 @@ export function ProjectTable({
           row,
           projectProfileDraft(row),
         );
-        const phase = projectPhaseDisplay(row.status);
+        const phase = projectPublicationPhaseDisplay(row);
         const displayToggle = getProjectDisplayToggleState(row);
         const toggleDisabled = loading || Boolean(togglingId)
           || displayToggle.disabled;

@@ -25,6 +25,9 @@ export type ProjectPublicationRow = {
   id: string;
   name: string | null;
   status: string | null;
+  status_label?: string | null;
+  display_status?: string | null;
+  display_status_label?: string | null;
   updated_at: string;
   property: {
     community: string;
@@ -145,6 +148,19 @@ export function projectPhaseDisplay(
       : config.type === "default"
         ? "secondary"
         : config.type,
+  };
+}
+
+export function projectPublicationPhaseDisplay(
+  row: Pick<
+    ProjectPublicationRow,
+    "status" | "status_label" | "display_status" | "display_status_label"
+  >,
+): { label: string; variant: BadgeVariant } {
+  const display = projectPhaseDisplay(row.display_status || row.status);
+  return {
+    ...display,
+    label: row.display_status_label || row.status_label || display.label,
   };
 }
 

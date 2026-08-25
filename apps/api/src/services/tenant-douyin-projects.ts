@@ -18,11 +18,16 @@ import {
   ensurePlatformCosAccessConfigCache,
   resolveStoredFileUrl,
 } from "@/services/files/file-url-resolver";
+import { appendProjectDisplayStatus } from "@/services/projects/legacy/display-status";
 
 const MANAGE_PERMISSION = "douyin_miniapp.manage";
 const ATTACHED_IMAGE_LOG_LIMIT = 100;
 const ATTACHED_IMAGES_PER_LOG_LIMIT = 30;
 const ATTACHED_IMAGE_REFERENCE_LIMIT = 300;
+const FINAL_ACCEPTANCE_DISPLAY_SOURCE_STATUSES = new Set([
+  "constructing",
+  "acceptance",
+]);
 
 type ProjectRow = {
   readonly id: string;
@@ -53,6 +58,10 @@ type ProfileCommandResult =
 type RepositoryPort = {
   listProjects(input: TenantDouyinProjectListQuery & { tenantId: string }):
     Promise<{ rows: readonly ProjectRow[]; total: number }>;
+  listFinalAcceptanceCompletedProjectIds(input: {
+    tenantId: string;
+    projectIds: readonly string[];
+  }): Promise<Set<string>>;
   findProject(input: { tenantId: string; projectId: string }):
     Promise<ProjectOwnershipRow | null>;
   listAttachedImageRows(input: {
@@ -93,8 +102,14 @@ export class TenantDouyinProjectsService {
         "DOUYIN_TENANT_PROJECTS_RESPONSE_INVALID",
       );
     }
+    const completedProjectIds = await this.listCompletedDisplayProjectIds(
+      tenantId,
+      result.rows,
+    );
     return {
-      list: [...result.rows],
+      list: result.rows.map((row) =>
+        appendProjectDisplayStatus(row as Record<string, unknown>, completedProjectIds)
+      ),
       pagination: {
         page: query.page,
         pageSize: query.pageSize,
@@ -104,6 +119,22 @@ export class TenantDouyinProjectsService {
           : Math.ceil(result.total / query.pageSize),
       },
     };
+  }
+
+  private async listCompletedDisplayProjectIds(
+    tenantId: string,
+    rows: readonly ProjectRow[],
+  ): Promise<Set<string>> {
+    const projectIds = rows.flatMap((row) =>
+      typeof row.status === "string"
+        && FINAL_ACCEPTANCE_DISPLAY_SOURCE_STATUSES.has(row.status)
+        ? [row.id]
+        : [],
+    );
+    return this.dependencies.repository.listFinalAcceptanceCompletedProjectIds({
+      tenantId,
+      projectIds,
+    });
   }
 
   async updatePublication(

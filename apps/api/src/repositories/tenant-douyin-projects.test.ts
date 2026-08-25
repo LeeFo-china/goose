@@ -5,8 +5,7 @@ process.env.SUPABASE_URL ??= "http://127.0.0.1:54321";
 process.env.SUPABASE_PUBLISH ??= "test-publish-key";
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= "test-service-role-key";
 
-let Repository:
-  typeof import("./tenant-douyin-projects").TenantDouyinProjectsRepository;
+let Repository: typeof import("./tenant-douyin-projects").TenantDouyinProjectsRepository;
 
 beforeAll(async () => {
   ({ TenantDouyinProjectsRepository: Repository } = await import(
@@ -28,6 +27,7 @@ function clientWith(results: Result[]) {
     }
     select(...args: unknown[]) { return this.chain("select", args); }
     eq(...args: unknown[]) { return this.chain("eq", args); }
+    in(...args: unknown[]) { return this.chain("in", args); }
     order(...args: unknown[]) { return this.chain("order", args); }
     range(...args: unknown[]) { return this.chain("range", args); }
     limit(...args: unknown[]) { return this.chain("limit", args); }

@@ -54,6 +54,7 @@ function fixture(
       property: { community: "示例花园", layout: "三室两厅", area: 120 },
       public_profile: null,
     }], total: 1 })),
+    listFinalAcceptanceCompletedProjectIds: mock(async () => new Set<string>()),
     findProject: mock(async () => ({ id: PROJECT_ID, tenant_id: TENANT_ID })),
     listAttachedImageRows: mock(async () => [{ images: [
       imageKey(),
@@ -134,6 +135,30 @@ describe("TenantDouyinProjectsService", () => {
       totalPages: 1,
     });
 
+  });
+
+  test("uses final acceptance display status so project publication matches the project list", async () => {
+    const context = fixture({
+      listFinalAcceptanceCompletedProjectIds: mock(async () => new Set([PROJECT_ID])),
+    });
+
+    const result = await context.service.list(authContext(), {
+      page: 1,
+      pageSize: 20,
+    });
+
+    expect(context.repository.listFinalAcceptanceCompletedProjectIds)
+      .toHaveBeenCalledWith({
+        tenantId: TENANT_ID,
+        projectIds: [PROJECT_ID],
+      });
+    expect(result.list[0]).toMatchObject({
+      id: PROJECT_ID,
+      status: "constructing",
+      status_label: "施工中",
+      display_status: "final_acceptance_completed",
+      display_status_label: "已完成",
+    });
   });
 
   test("writes once through the atomic command and never calls legacy read/write paths", async () => {

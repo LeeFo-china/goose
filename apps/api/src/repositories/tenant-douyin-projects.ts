@@ -8,6 +8,7 @@ import type {
 } from "@/schema/tenant-douyin-projects";
 import type { Database } from "@/types/database";
 import { SupabaseDB } from "@/utils/supabase";
+import { PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE } from "@gooes/domain";
 
 const PROFILE_FIELDS = [
   "public_title",
@@ -68,6 +69,9 @@ const SavedProfileSchema = ProfileSchema.extend({
   project_id: z.uuid(),
   created_at: z.string(),
 }).strict();
+const AcceptanceProjectRowSchema = z.strictObject({
+  project_id: z.uuid().nullable(),
+});
 const PublicationRpcErrorSchema = z.strictObject({
   status_code: z.union([z.literal(400), z.literal(404)]),
   code: z.enum(PUBLICATION_RPC_ERROR_CODES),
@@ -90,6 +94,7 @@ type DatabaseResult = {
 export interface TenantDouyinProjectsQuery extends PromiseLike<DatabaseResult> {
   select(...args: unknown[]): TenantDouyinProjectsQuery;
   eq(...args: unknown[]): TenantDouyinProjectsQuery;
+  in(...args: unknown[]): TenantDouyinProjectsQuery;
   order(...args: unknown[]): TenantDouyinProjectsQuery;
   range(...args: unknown[]): TenantDouyinProjectsQuery;
   limit(...args: unknown[]): TenantDouyinProjectsQuery;
@@ -168,6 +173,30 @@ export class TenantDouyinProjectsRepository {
     assertDatabaseSuccess(result, "查询租户项目失败");
     if (result.data === null) return null;
     return parseData(ProjectOwnershipSchema, result.data, "解析租户项目失败");
+  }
+
+  async listFinalAcceptanceCompletedProjectIds(input: {
+    tenantId: string;
+    projectIds: readonly string[];
+  }): Promise<Set<string>> {
+    const projectIds = [...new Set(input.projectIds)].slice(0, 100);
+    if (projectIds.length === 0) return new Set();
+    const result = await executeDatabase(
+      () => this.client.from("project_acceptances")
+        .select("project_id")
+        .eq("tenant_id", input.tenantId)
+        .in("project_id", projectIds)
+        .eq("stage_code", PROJECT_CONSTRUCTION_COMPLETION_STAGE_CODE)
+        .eq("status", "customer_confirmed"),
+      "查询项目竣工验收完成状态失败",
+    );
+    assertDatabaseSuccess(result, "查询项目竣工验收完成状态失败");
+    const rows = parseData(
+      z.array(AcceptanceProjectRowSchema),
+      result.data ?? [],
+      "解析项目竣工验收完成状态失败",
+    );
+    return new Set(rows.flatMap((row) => row.project_id ? [row.project_id] : []));
   }
 
   async listAttachedImageRows(input: {
