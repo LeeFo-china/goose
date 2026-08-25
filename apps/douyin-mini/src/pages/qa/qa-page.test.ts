@@ -89,6 +89,41 @@ function createPage(options: {
 }
 
 describe("Douyin Q&A page definition", () => {
+  test("form submit uses the current textarea value instead of stale page data", async () => {
+    const askedQuestions: string[] = [];
+    const { page } = createPage({
+      ask: async (question) => {
+        askedQuestions.push(question);
+        return answer;
+      },
+    });
+    page.setData({ question: "装修预算前要先准备哪些信息？" });
+
+    await page.onSubmit({
+      detail: { value: { question: "厨房漏水怎么处理？" } },
+    });
+
+    expect(askedQuestions).toEqual(["厨房漏水怎么处理？"]);
+    expect(page.data.stream?.messages[0].text).toBe("厨房漏水怎么处理？");
+  });
+
+  test("keyboard confirm submits the current textarea value", async () => {
+    const askedQuestions: string[] = [];
+    const { page } = createPage({
+      ask: async (question) => {
+        askedQuestions.push(question);
+        return answer;
+      },
+    });
+
+    await page.onQuestionConfirm({
+      detail: { value: "墙面开裂怎么办？" },
+    });
+
+    expect(askedQuestions).toEqual(["墙面开裂怎么办？"]);
+    expect(page.data.stream?.messages[0].text).toBe("墙面开裂怎么办？");
+  });
+
   test("renders answer chunks through timers before showing suggestions", async () => {
     const { page, clock } = createPage();
 

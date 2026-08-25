@@ -36,11 +36,11 @@
     </view>
   </scroll-view>
 
-  <view class="qa-composer">
-    <textarea class="question-input" value="{{question}}" maxlength="120" placeholder="输入装修问题" placeholder-style="color: #8A8580;" auto-height bindinput="onQuestionInput" />
-    <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{status === 'submitting'}}" bindtap="onSubmit">
+  <form class="qa-composer" bindsubmit="onSubmit">
+    <textarea class="question-input" name="question" value="{{question}}" maxlength="120" placeholder="输入装修问题" placeholder-style="color: #8A8580;" auto-height show-confirm-bar="{{false}}" confirm-type="send" bindinput="onQuestionInput" bindconfirm="onQuestionConfirm" />
+    <button class="submit-button ui-pressable" hover-class="ui-pressable--pressed" disabled="{{status === 'submitting'}}" form-type="submit">
       <view tt:if="{{status === 'submitting'}}" class="submit-button__spinner"></view>
       <view class="submit-button__label">发送</view>
     </button>
-  </view>
+  </form>
 </view>

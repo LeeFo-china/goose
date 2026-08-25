@@ -37,7 +37,13 @@ describe("Douyin Q&A page", () => {
     expect(template).toContain("qa-chat");
     expect(template).toContain("qa-composer");
     expect(template).toContain('maxlength="120"');
-    expect(template).toContain('bindtap="onSubmit"');
+    expect(template).toContain('<form class="qa-composer" bindsubmit="onSubmit">');
+    expect(template).toContain('name="question"');
+    expect(template).toContain('show-confirm-bar="{{false}}"');
+    expect(template).toContain('confirm-type="send"');
+    expect(template).toContain('bindconfirm="onQuestionConfirm"');
+    expect(template).toContain('form-type="submit"');
+    expect(template).not.toContain('bindtap="onSubmit"');
     expect(template).not.toContain('loading="{{status === \'submitting\'}}"');
     expect(template).toContain('submit-button__spinner');
     expect(template).toContain('submit-button__label');

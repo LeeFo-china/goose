@@ -19,6 +19,20 @@ const PRESET_QUESTIONS = [
 
 type QaStatus = "idle" | "submitting" | "answered" | "failed";
 
+type QaSubmitEvent = {
+  detail?: {
+    value?: {
+      question?: unknown;
+    };
+  };
+};
+
+type QaConfirmEvent = {
+  detail?: {
+    value?: unknown;
+  };
+};
+
 export type QaPageClock = {
   setTimeout(callback: () => void, delayMs: number): unknown;
   clearTimeout(timer: unknown): void;
@@ -64,8 +78,11 @@ export function createQaPageDefinition(dependencies: QaPageDependencies) {
       this.setData({ question });
       void this.submit(question);
     },
-    onSubmit() {
-      void this.submit(this.data.question);
+    onSubmit(event?: QaSubmitEvent) {
+      return this.submit(readSubmitQuestion(event) ?? this.data.question);
+    },
+    onQuestionConfirm(event: QaConfirmEvent) {
+      return this.submit(readConfirmQuestion(event) ?? this.data.question);
     },
     onSuggestedQuestionTap(event: { currentTarget: { dataset: { question?: string } } }) {
       const question = event.currentTarget.dataset.question || "";
@@ -150,4 +167,14 @@ function definePage<
   TCustom & { data: TData; setData(patch: Partial<TData>): void }
 >): TCustom & { data: TData } {
   return options;
+}
+
+function readSubmitQuestion(event?: QaSubmitEvent): string | null {
+  const question = event?.detail?.value?.question;
+  return typeof question === "string" ? question : null;
+}
+
+function readConfirmQuestion(event: QaConfirmEvent): string | null {
+  const question = event.detail?.value;
+  return typeof question === "string" ? question : null;
 }
