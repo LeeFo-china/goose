@@ -111,6 +111,7 @@ export function WorkflowNodeConfigFields({
         <ApprovalConfigFields
           config={node.config}
           disabled={disabled}
+          rollbackTargetNodes={rollbackTargetNodes}
           onChangeConfig={updateConfig}
         />
       ) : null}
@@ -218,10 +219,12 @@ function ConstructionStageConfigFields({
 function ApprovalConfigFields({
   config,
   disabled,
+  rollbackTargetNodes,
   onChangeConfig,
 }: {
   config: WorkflowNodeConfig;
   disabled?: boolean;
+  rollbackTargetNodes: WorkflowNode[];
   onChangeConfig: (patch: Partial<WorkflowApprovalNodeConfig>) => void;
 }) {
   const approvalConfig = config as WorkflowApprovalNodeConfig;
@@ -321,14 +324,14 @@ function ApprovalConfigFields({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="workflow-node-reject-target">驳回节点</Label>
-          <Input
-            id="workflow-node-reject-target"
+          <WorkflowNodeTargetSelect
             value={approvalConfig.reject_target_key || ""}
             disabled={disabled}
-            placeholder="节点编码"
-            onChange={(event) =>
+            nodes={rollbackTargetNodes}
+            placeholder="选择驳回节点"
+            onChange={(value) =>
               onChangeConfig({
-                reject_target_key: event.target.value.trim() || null,
+                reject_target_key: value,
               })
             }
           />

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 
 describe("workflow node config contract labels", () => {
-  test("shows procedure and payment node attributes required by runtime contract", () => {
+  test("shows procedure and payment node attributes required by runtime contract without exposing field keys", () => {
     const procedureSource = readFileSync(
       new URL("./workflow-procedure-config-fields.tsx", import.meta.url),
       "utf8",
@@ -14,7 +14,6 @@ describe("workflow node config contract labels", () => {
 
     expect(procedureSource).toContain("require_log");
     expect(procedureSource).toContain("min_image_count");
-    expect(procedureSource).toContain("acceptance_enabled");
     expect(procedureSource).toContain("require_procedure_assignment");
     expect(procedureSource).toContain("default_duration_days");
     expect(procedureSource).toContain("allow_duration_override");
@@ -26,6 +25,32 @@ describe("workflow node config contract labels", () => {
     expect(paymentSource).toContain("收款要求");
     expect(paymentSource).toContain("金额/比例规则");
     expect(paymentSource).toContain("财务负责人");
+    expect(procedureSource).toContain("必须先派工再开工");
+    expect(procedureSource).toContain("默认工期");
+    expect(procedureSource).toContain("开工时允许调整工期");
+    expect(procedureSource).toContain("候选派工部门");
+    expect(procedureSource).toContain("完成后触发阶段验收");
+    expect(procedureSource).toContain("例如 项目部、安装部");
+    expect(procedureSource).toContain("formatCandidateDepartmentInput");
+    expect(procedureSource).toContain("parseCandidateDepartmentInput");
+    expect(procedureSource).not.toContain("（require_procedure_assignment）");
+    expect(procedureSource).not.toContain("（default_duration_days）");
+    expect(procedureSource).not.toContain("（allow_duration_override）");
+    expect(procedureSource).not.toContain("（candidate_department_codes）");
+    expect(procedureSource).not.toContain("（acceptance_enabled）");
+    expect(procedureSource).not.toContain("PROJECT, INSTALLATION");
+    expect(readFileSync(
+      new URL("./workflow-node-config-fields.tsx", import.meta.url),
+      "utf8",
+    )).toContain('placeholder="选择驳回节点"');
+    expect(readFileSync(
+      new URL("./workflow-node-config-fields.tsx", import.meta.url),
+      "utf8",
+    )).not.toContain('placeholder="节点编码"');
+    expect(readFileSync(
+      new URL("./workflow-node-target-select.tsx", import.meta.url),
+      "utf8",
+    )).not.toContain("未知节点：{value}");
   });
 
   test("uses searchable approval assignee selectors instead of raw code input", () => {
@@ -41,7 +66,8 @@ describe("workflow node config contract labels", () => {
     expect(configSource).toContain("WorkflowApprovalAssigneeSelect");
     expect(configSource).not.toContain("员工 ID、部门 ID 或角色编码");
     expect(assigneeSource).toContain("搜索员工姓名或手机号");
-    expect(assigneeSource).toContain("搜索角色名称或编码");
+    expect(assigneeSource).toContain("搜索角色名称");
+    expect(assigneeSource).not.toContain("搜索角色名称或编码");
     expect(configSource).toContain("申请人部门经理");
     expect(assigneeSource).toContain("自动匹配申请人所属部门中具备经理审批权限的员工");
     expect(assigneeSource).toContain("部门审批对象暂未接入待办分配");

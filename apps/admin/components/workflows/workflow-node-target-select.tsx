@@ -42,7 +42,7 @@ export function WorkflowNodeTargetSelect({
       <SelectContent>
         <SelectItem value={EMPTY_TARGET_VALUE}>无回退节点</SelectItem>
         {value && !hasSelectedNode ? (
-          <SelectItem value={value}>未知节点：{value}</SelectItem>
+          <SelectItem value={value}>未知节点</SelectItem>
         ) : null}
         {nodes.map((node) => {
           const labels = getWorkflowNodeDisplayLabels(node);

@@ -20,6 +20,20 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
+const CANDIDATE_DEPARTMENT_LABELS: Record<string, string> = {
+  PROJECT: "项目部",
+  INSTALLATION: "安装部",
+  DESIGN: "设计部",
+  FINANCE: "财务部",
+  CUSTOMER_SERVICE: "客服部",
+  SALES: "销售部",
+  ENGINEERING: "工程部",
+};
+
+const CANDIDATE_DEPARTMENT_CODES = Object.fromEntries(
+  Object.entries(CANDIDATE_DEPARTMENT_LABELS).map(([code, label]) => [label, code]),
+) as Record<string, string>;
+
 export function ProcedureConfigFields({
   config,
   disabled,
@@ -103,14 +117,14 @@ export function ProcedureConfigFields({
       <CheckboxField
         checked={procedureConfig.require_procedure_assignment !== false}
         disabled={disabled}
-        label="必须派工后开工（require_procedure_assignment）"
+        label="必须先派工再开工"
         onCheckedChange={(checked) =>
           onChangeConfig({ require_procedure_assignment: checked })
         }
       />
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-default-duration-days">
-          默认工期天数（default_duration_days）
+          默认工期
         </Label>
         <Input
           id="workflow-node-default-duration-days"
@@ -130,23 +144,27 @@ export function ProcedureConfigFields({
       <CheckboxField
         checked={procedureConfig.allow_duration_override !== false}
         disabled={disabled}
-        label="开工时允许调整工期（allow_duration_override）"
+        label="开工时允许调整工期"
         onCheckedChange={(checked) =>
           onChangeConfig({ allow_duration_override: checked })
         }
       />
       <div className="grid gap-2">
         <Label htmlFor="workflow-node-candidate-department-codes">
-          候选部门编码（candidate_department_codes）
+          候选派工部门
         </Label>
         <Input
           id="workflow-node-candidate-department-codes"
-          value={(procedureConfig.candidate_department_codes || []).join(", ")}
+          value={formatCandidateDepartmentInput(
+            procedureConfig.candidate_department_codes || [],
+          )}
           disabled={disabled}
-          placeholder="例如 PROJECT, INSTALLATION"
+          placeholder="例如 项目部、安装部"
           onChange={(event) =>
             onChangeConfig({
-              candidate_department_codes: parseCodeList(event.target.value),
+              candidate_department_codes: parseCandidateDepartmentInput(
+                event.target.value,
+              ),
             })
           }
         />
@@ -154,7 +172,7 @@ export function ProcedureConfigFields({
       <CheckboxField
         checked={procedureConfig.trigger_acceptance === true}
         disabled={disabled}
-        label="完成后触发阶段验收（acceptance_enabled）"
+        label="完成后触发阶段验收"
         onCheckedChange={(checked) =>
           onChangeConfig({ trigger_acceptance: checked })
         }
@@ -202,9 +220,15 @@ function parseOptionalNumber(value: string) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseCodeList(value: string) {
+export function formatCandidateDepartmentInput(codes: string[]) {
+  return codes.map((code) => CANDIDATE_DEPARTMENT_LABELS[code] || "其他部门")
+    .join("、");
+}
+
+export function parseCandidateDepartmentInput(value: string) {
   return value
-    .split(",")
+    .split(/[,，、]/)
     .map((item) => item.trim())
+    .map((item) => CANDIDATE_DEPARTMENT_CODES[item] || item)
     .filter(Boolean);
 }

@@ -20,7 +20,44 @@ export function getWorkflowPermissionLabel(code: string) {
   if (isPermissionCode(code)) {
     return PermissionCodeConfig[code].label;
   }
-  return code;
+  return "未知权限点";
+}
+
+const PERMISSION_MODULE_LABELS: Record<string, string> = {
+  billing: "计费",
+  branding: "品牌配置",
+  customer: "客户",
+  dashboard: "工作台",
+  douyin_miniapp: "抖音小程序",
+  employee: "员工",
+  expense_request: "费用申请",
+  finance: "财务",
+  ocr: "智能识别",
+  platform: "平台",
+  platform_billing: "平台计费",
+  platform_branding: "平台品牌",
+  platform_entitlement: "平台权益",
+  platform_ocr: "平台智能识别",
+  platform_partner: "平台伙伴",
+  platform_payment: "平台支付",
+  platform_service: "平台服务",
+  platform_supplier: "平台供应商",
+  platform_supplier_catalog: "平台供应商目录",
+  platform_tenant_onboarding: "租户入驻",
+  platform_wechat_pay: "平台微信支付",
+  project: "项目",
+  project_acceptance: "项目验收",
+  project_log: "项目实景",
+  project_procedure: "项目工序",
+  service_provider: "服务商",
+  supplier: "供应商",
+  task_center: "待办中心",
+  wechat_pay: "微信支付",
+};
+
+export function getWorkflowPermissionModuleLabel(module: string | null | undefined) {
+  if (!module) return "未分组";
+  return PERMISSION_MODULE_LABELS[module] ?? "其他权限";
 }
 
 export function WorkflowPermissionMultiSelect({
@@ -142,7 +179,7 @@ export function WorkflowPermissionMultiSelect({
           <Input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
-            placeholder="搜索权限名称或编码"
+            placeholder="搜索权限名称"
             className="h-9"
           />
         </div>
@@ -196,12 +233,12 @@ export function WorkflowPermissionMultiSelect({
                             <span className="flex items-center gap-2">
                               <span className="truncate text-sm font-medium">
                                 {permission.name || permission.description ||
-                                  permission.code}
+                                  getWorkflowPermissionLabel(permission.code)}
                               </span>
                               {checked ? <Check className="size-3.5 shrink-0" /> : null}
                             </span>
                             <span className="mt-0.5 block break-all text-xs text-muted-foreground">
-                              {permission.code}
+                              {permission.description || "权限说明未填写"}
                             </span>
                           </span>
                         </label>
@@ -263,7 +300,9 @@ function SelectedPermissionSummary({
   missingCodes: string[];
 }) {
   const labels = [
-    ...permissions.map((permission) => permission.name || permission.code),
+    ...permissions.map((permission) =>
+      permission.name || getWorkflowPermissionLabel(permission.code)
+    ),
     ...missingCodes.map(getWorkflowPermissionLabel),
   ];
   const visibleLabels = labels.slice(0, 2);
@@ -286,7 +325,7 @@ function SelectedPermissionSummary({
 function groupPermissionsByModule(permissions: PermissionRecord[]) {
   const groups = new Map<string, PermissionRecord[]>();
   for (const permission of permissions) {
-    const moduleName = permission.module || "未分组";
+    const moduleName = getWorkflowPermissionModuleLabel(permission.module);
     const items = groups.get(moduleName) || [];
     items.push(permission);
     groups.set(moduleName, items);

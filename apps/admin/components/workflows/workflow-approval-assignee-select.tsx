@@ -59,15 +59,15 @@ function getEmployeeMeta(employee: WorkflowEmployeeOption) {
 
 function getRoleLabel(role: WorkflowRoleOption | null | undefined) {
   if (!role) return "";
-  return role.name || role.code;
+  return role.name || getWorkflowRoleFallbackLabel(role.code);
 }
 
 function getRoleMeta(role: WorkflowRoleOption) {
-  return [role.code, role.description].filter(Boolean).join(" · ");
+  return role.description || "";
 }
 
 export function getWorkflowRoleFallbackLabel(code: string) {
-  return BUILT_IN_ROLE_LABELS[code] ?? code;
+  return BUILT_IN_ROLE_LABELS[code] ?? "未知角色";
 }
 
 export function WorkflowApprovalAssigneeSelect({
@@ -346,7 +346,7 @@ function RoleAssigneeSelect({
             <CommandInput
               value={keyword}
               onValueChange={setKeyword}
-              placeholder="搜索角色名称或编码"
+              placeholder="搜索角色名称"
             />
             <CommandList className="max-h-[260px]">
               <CommandEmpty>
@@ -380,7 +380,7 @@ function RoleAssigneeSelect({
                         {getRoleLabel(role)}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">
-                        {getRoleMeta(role) || "角色编码未填写"}
+                        {getRoleMeta(role) || "角色说明未填写"}
                       </span>
                     </span>
                     {role.code === value ? <Check className="size-4" /> : null}
