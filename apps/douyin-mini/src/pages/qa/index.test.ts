@@ -38,6 +38,9 @@ describe("Douyin Q&A page", () => {
     expect(template).toContain("qa-composer");
     expect(template).toContain('maxlength="120"');
     expect(template).toContain('bindtap="onSubmit"');
+    expect(template).not.toContain('loading="{{status === \'submitting\'}}"');
+    expect(template).toContain('submit-button__spinner');
+    expect(template).toContain('submit-button__label');
     expect(template).toContain('bindtap="onBookMeasurement"');
     expect(template).toContain('role="status"');
     expect(template).toContain("typing-dot");
@@ -48,6 +51,8 @@ describe("Douyin Q&A page", () => {
     expect(config).toContain('"navigationBarTitleText": "装修问题助手"');
     expect(style).toContain(".message--assistant");
     expect(style).toContain(".qa-composer");
+    expect(style).toContain("white-space: nowrap");
+    expect(style).toContain("@keyframes qaSubmitSpin");
     expect(style).toContain("@keyframes qaTypingPulse");
     expect(style).not.toContain(":nth-child");
   });

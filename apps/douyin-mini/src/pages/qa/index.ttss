@@ -186,9 +186,33 @@
   border-radius: 20rpx;
   background: #191817;
   color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8rpx;
   font-size: 27rpx;
   font-weight: 650;
   line-height: 80rpx;
+  white-space: nowrap;
+}
+
+.submit-button__label {
+  white-space: nowrap;
+}
+
+.submit-button__spinner {
+  width: 22rpx;
+  height: 22rpx;
+  border: 3rpx solid rgba(255, 255, 255, 0.42);
+  border-top-color: #fff;
+  border-radius: 999rpx;
+  animation: qaSubmitSpin 0.8s linear infinite;
+}
+
+@keyframes qaSubmitSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes qaTypingPulse {
