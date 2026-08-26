@@ -6,6 +6,10 @@ const migrationPath = join(
   import.meta.dir,
   "../../../../../supabase/migrations/20260826112000_add_douyin_release_upload_claim_v2.sql",
 );
+const repairMigrationPath = join(
+  import.meta.dir,
+  "../../../../../supabase/migrations/20260826112100_repair_dev_douyin_release_upload_claim.sql",
+);
 
 function sql(): string {
   expect(existsSync(migrationPath)).toBe(true);
@@ -43,5 +47,22 @@ describe("douyin release upload claim v2 migration", () => {
       expect(source).toMatch(new RegExp(`REVOKE ALL ON FUNCTION ${signature} FROM ${role}`));
     }
     expect(source).toMatch(new RegExp(`GRANT EXECUTE ON FUNCTION ${signature} TO service_role`));
+  });
+
+  test("repairs only the known pre-provider development claim", () => {
+    expect(existsSync(repairMigrationPath)).toBe(true);
+    const source = readFileSync(repairMigrationPath, "utf8")
+      .replace(/--.*$/gm, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    expect(source).toContain("id = '3f9460a3-aefe-4b84-a926-a783db0c1b96'::uuid");
+    expect(source).toContain("installation_id = '82061c96-29ac-4426-baff-5efc1061fbc8'::uuid");
+    expect(source).toContain("template_id = '78572'");
+    expect(source).toContain("template_version = '0.1.6'");
+    expect(source).toMatch(/status = 'created'[^;]*douyin_log_id IS NULL[^;]*test_qr_url IS NULL[^;]*latest_test_qr_url IS NULL[^;]*audit_qr_url IS NULL/);
+    expect(source).toMatch(/operation_name = 'upload'[^;]*operation_claim_token IS NOT NULL[^;]*operation_claim_expires_at <= clock_timestamp\(\)/);
+    expect(source).toMatch(/SET operation_name = NULL, operation_claim_token = NULL, operation_claim_expires_at = NULL/);
+    expect(source).not.toMatch(/UPDATE public\.douyin_miniapp_releases(?![\s\S]*WHERE)/);
   });
 });
