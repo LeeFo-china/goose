@@ -1665,7 +1665,22 @@ describe("reusable build workflow", () => {
     '            test "${remote_digest}" = "${digest}"';
   const expectedDigestRefLine =
     '            expected_digest_ref="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}/${image_repo}@${digest}"';
-  const immutablePullLine = '            docker pull "${expected_digest_ref}"';
+  const pullVerifiedImageFunctionBlock = [
+    "          pull_verified_image() {",
+    '            local image="$1"',
+    "            for attempt in 1 2 3 4 5; do",
+    '              if docker pull "${image}"; then',
+    "                return 0",
+    "              fi",
+    '              echo "Immutable image pull failed for ${image} (attempt ${attempt}/5)." >&2',
+    '              if [ "${attempt}" -lt 5 ]; then',
+    "                sleep $((attempt * 10))",
+    "              fi",
+    "            done",
+    "            return 1",
+    "          }",
+  ].join("\n");
+  const immutablePullLine = '            pull_verified_image "${expected_digest_ref}"';
   const revisionInspectLine =
     "            revision=\"$(docker image inspect -f '{{index .Config.Labels \"org.opencontainers.image.revision\"}}' \"${expected_digest_ref}\")\"";
   const runIdInspectLine =
@@ -1994,7 +2009,7 @@ describe("reusable build workflow", () => {
     );
     const digestFunction = pullStep.slice(
       digestFunctionStart,
-      pullStep.indexOf("\n\n          cleanup_images", digestFunctionStart),
+      pullStep.indexOf("\n\n          pull_verified_image", digestFunctionStart),
     );
 
     expect(digestFunctionStart).toBeGreaterThanOrEqual(0);
@@ -2011,6 +2026,36 @@ describe("reusable build workflow", () => {
     expect(pullStep).toContain(remoteDigestResolutionLine);
     expect(pullStep).not.toContain(
       'remote_digest="$(docker buildx imagetools inspect "${expected_image}"',
+    );
+  });
+
+  test("retries production immutable image pulls before inspecting labels", () => {
+    const pullJob = sliceWorkflowJob(
+      buildWorkflow,
+      "verify-production-pull",
+      "# End production pull verification",
+    );
+    const pullStep = sliceWorkflowStep(pullJob, "Pull and verify immutable images");
+    const pullFunctionStart = pullStep.indexOf(
+      "          pull_verified_image() {",
+    );
+    const pullFunction = pullStep.slice(
+      pullFunctionStart,
+      pullStep.indexOf("\n\n          cleanup_images", pullFunctionStart),
+    );
+
+    expect(pullFunctionStart).toBeGreaterThanOrEqual(0);
+    expect(pullFunction.match(/for attempt in 1 2 3 4 5; do/g)).toHaveLength(1);
+    expect(pullFunction).toContain('if docker pull "${image}"; then');
+    expect(pullFunction).toContain(
+      'Immutable image pull failed for ${image} (attempt ${attempt}/5).',
+    );
+    expect(pullFunction).toContain("sleep $((attempt * 10))");
+    expect(pullFunction.trimEnd()).toEndWith("return 1\n          }");
+    expect(pullStep).toContain(immutablePullLine);
+    expect(pullStep).not.toContain('docker pull "${expected_digest_ref}"');
+    expect(pullStep.indexOf(immutablePullLine)).toBeLessThan(
+      pullStep.indexOf(revisionInspectLine),
     );
   });
 

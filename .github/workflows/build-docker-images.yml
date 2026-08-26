@@ -575,6 +575,20 @@ jobs:
             return 1
           }
 
+          pull_verified_image() {
+            local image="$1"
+            for attempt in 1 2 3 4 5; do
+              if docker pull "${image}"; then
+                return 0
+              fi
+              echo "Immutable image pull failed for ${image} (attempt ${attempt}/5)." >&2
+              if [ "${attempt}" -lt 5 ]; then
+                sleep $((attempt * 10))
+              fi
+            done
+            return 1
+          }
+
           cleanup_images=()
           cleanup() {
             for image in "${cleanup_images[@]}"; do
@@ -609,7 +623,7 @@ jobs:
             if ! docker image inspect "${expected_digest_ref}" >/dev/null 2>&1; then
               cleanup_images+=("${expected_digest_ref}")
             fi
-            docker pull "${expected_digest_ref}"
+            pull_verified_image "${expected_digest_ref}"
             revision="$(docker image inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${expected_digest_ref}")"
             test "${revision}" = "${GITHUB_SHA}"
             run_id="$(docker image inspect -f '{{index .Config.Labels "com.goodcms.github.run_id"}}' "${expected_digest_ref}")"
