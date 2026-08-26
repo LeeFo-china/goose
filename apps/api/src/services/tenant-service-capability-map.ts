@@ -27,6 +27,7 @@ export type TenantServiceCapabilityResolution =
 const CAPABILITY_RULES: readonly TenantServiceCapabilityRule[] = [
   capability("projects", "core.projects", /^\/(?:projects|project[-_][^/]+|properties|front|create_project_page|home_stats)(?:\/|$)/),
   capability("customer-projects", "core.projects", /^\/customer\/(?:projects|project-acceptances)(?:\/|$)/, 20),
+  capability("tenant-owner-dashboard", "core.projects", /^\/tenant-owner\/daily-dashboard(?:\/|$)/, 20),
   capability("customers", "core.customers", /^\/(?:customers|customer-service-tickets|customer_follow_ups|external-referrers)(?:\/|$)/),
   capability("customer-self-service", "core.customers", /^\/customer\/(?:service-tickets|profile|bootstrap)(?:\/|$)/, 20),
   capability("employees", "core.employees", /^\/(?:employees|departments|roles|permissions|department-post-rules)(?:\/|$)/),

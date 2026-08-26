@@ -25,6 +25,8 @@ describe("tenant service capability map", () => {
       .toEqual({ kind: "capability", capability: "core.projects" });
     expect(resolveTenantServiceRouteCapability(route("GET", "/customer/projects", "read")))
       .toEqual({ kind: "capability", capability: "core.projects" });
+    expect(resolveTenantServiceRouteCapability(route("GET", "/tenant-owner/daily-dashboard", "read")))
+      .toEqual({ kind: "capability", capability: "core.projects" });
     expect(resolveTenantServiceRouteCapability(route("POST", "/customers", "write")))
       .toEqual({ kind: "capability", capability: "core.customers" });
     expect(resolveTenantServiceRouteCapability(route("GET", "/employees", "read")))
