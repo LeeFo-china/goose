@@ -1,21 +1,12 @@
 import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
 import { projectWorkflowProgressService } from "@/services/project-workflow-progress";
+import {
+  paymentGateGraphFixture,
+  workflowDefinitionFixture,
+} from "./project-acceptance-workflow-runtime.test-fixtures";
 
 const invalidateProjectProgress = spyOn(projectWorkflowProgressService, "invalidateProject").mockImplementation(() => undefined);
-const definition = {
-  id: "definition-1",
-  tenant_id: "tenant-1",
-  workflow_key: "construction_main",
-  name: "工程主流程",
-  description: null,
-  category: "construction",
-  status: "active",
-  active_version_id: "version-1",
-  created_by: null,
-  updated_by: null,
-  created_at: "2026-06-16T00:00:00.000Z",
-  updated_at: "2026-06-16T00:00:00.000Z",
-};
+const definition = workflowDefinitionFixture;
 
 const installationInstance = {
   id: "instance-1",
@@ -122,80 +113,7 @@ const plumbingInstanceWithRequirements = {
   },
 };
 
-const paymentGateGraph = {
-  definition,
-  version: null,
-  nodes: [
-    {
-      id: "node-plumbing",
-      tenant_id: "tenant-1",
-      definition_id: "definition-1",
-      node_key: "procedure_plumbing_electrical",
-      node_type: "procedure",
-      business_kind: "procedure_template",
-      title: "水电",
-      description: null,
-      position: { x: 0, y: 0 },
-      config: {
-        stage_key: "plumbing_electrical",
-        require_log: true,
-        min_image_count: 1,
-        trigger_acceptance: true,
-      },
-      sort_order: 40,
-      created_at: "2026-06-16T00:00:00.000Z",
-      updated_at: "2026-06-16T00:00:00.000Z",
-    },
-    {
-      id: "node-payment",
-      tenant_id: "tenant-1",
-      definition_id: "definition-1",
-      node_key: "payment_stage_2",
-      node_type: "confirmation",
-      business_kind: "payment_collection",
-      title: "中期进度款",
-      description: null,
-      position: { x: 0, y: 0 },
-      config: {
-        payment_type: "stage_2",
-      },
-      sort_order: 50,
-      created_at: "2026-06-16T00:00:00.000Z",
-      updated_at: "2026-06-16T00:00:00.000Z",
-    },
-    {
-      id: "node-tiling",
-      tenant_id: "tenant-1",
-      definition_id: "definition-1",
-      node_key: "procedure_tiling",
-      node_type: "procedure",
-      business_kind: "procedure_template",
-      title: "瓦工",
-      description: null,
-      position: { x: 0, y: 0 },
-      config: {
-        stage_key: "tiling",
-      },
-      sort_order: 60,
-      created_at: "2026-06-16T00:00:00.000Z",
-      updated_at: "2026-06-16T00:00:00.000Z",
-    },
-  ],
-  edges: [
-    {
-      id: "edge-payment-tiling",
-      tenant_id: "tenant-1",
-      definition_id: "definition-1",
-      source_node_id: "node-payment",
-      target_node_id: "node-tiling",
-      label: "瓦工",
-      condition: { operator: "always" },
-      priority: 50,
-      created_at: "2026-06-16T00:00:00.000Z",
-      updated_at: "2026-06-16T00:00:00.000Z",
-    },
-  ],
-};
+const paymentGateGraph = paymentGateGraphFixture;
 
 let runningInstance:
   | typeof installationInstance
@@ -212,6 +130,11 @@ type CompleteRuntimeNodeResultFixture = {
   task: null;
 };
 
+type CompletedRuntimeProcedureNodeFixture = {
+  node_type: string;
+  node_snapshot: typeof plumbingInstanceWithRequirements.current_node_snapshot;
+};
+
 const findDefinitionByKey = mock(async () => null);
 const findDefinitionById = mock(async () => definition);
 const findLatestRunningRuntimeInstance = mock(async () => runningInstance);
@@ -225,6 +148,9 @@ const completeRuntimeNode = mock(async (): Promise<CompleteRuntimeNodeResultFixt
 const syncFromRuntimeInstance = mock(async () => null);
 const markProcedureCompletedByStage = mock(async () => null);
 const getGraph = mock(async () => graphResult);
+const listCompletedRuntimeProcedureNodes = mock(
+  async (): Promise<CompletedRuntimeProcedureNodeFixture[]> => [],
+);
 const getRuntimeInstanceById = mock(async () => ({
   status: "completed",
   current_node_key: "procedure_installation",
@@ -240,6 +166,7 @@ mock.module("@/repositories/workflows", () => ({
     findLatestRunningRuntimeInstance,
     completeRuntimeNode,
     getGraph,
+    listCompletedRuntimeProcedureNodes,
   },
 }));
 
@@ -269,6 +196,8 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
     syncFromRuntimeInstance.mockClear();
     markProcedureCompletedByStage.mockClear();
     getGraph.mockClear();
+    listCompletedRuntimeProcedureNodes.mockClear();
+    listCompletedRuntimeProcedureNodes.mockImplementation(async () => []);
     getRuntimeInstanceById.mockClear();
     getRuntimeInstanceById.mockImplementation(async () => ({ status: "completed", current_node_key: "procedure_installation", current_node_id: "node-1" }));
     listStageLogEvidence.mockClear();
@@ -312,6 +241,46 @@ describe("projectAcceptanceWorkflowRuntimeService", () => {
       instanceId: "instance-1",
     });
     expect(invalidateProjectProgress).toHaveBeenCalledWith({ tenantId: "tenant-1", projectId: "project-1" });
+  });
+
+  test("treats confirmation of an already completed required procedure as already advanced", async () => {
+    runningInstance = finalAcceptanceInstance;
+    listCompletedRuntimeProcedureNodes.mockImplementationOnce(async () => [{
+      node_type: "procedure",
+      node_snapshot: plumbingInstanceWithRequirements.current_node_snapshot,
+    }]);
+
+    const { projectAcceptanceWorkflowRuntimeService } = await import(
+      "./project-acceptance-workflow-runtime"
+    );
+
+    const result = await projectAcceptanceWorkflowRuntimeService
+      .syncCustomerConfirmAcceptance({
+        tenantId: "tenant-1",
+        projectId: "project-1",
+        acceptanceId: "acceptance-water",
+        stageCode: "plumbing_electrical",
+        customerId: "customer-1",
+        comment: "已确认",
+      });
+
+    expect(result).toMatchObject({
+      status: "already_advanced",
+      current_node_key: "final_acceptance",
+      reason: "completed_procedure_already_advanced",
+    });
+    expect(completeRuntimeNode).not.toHaveBeenCalled();
+    expect(markProcedureCompletedByStage).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+      stageCode: "plumbing_electrical",
+      operatorEmployeeId: null,
+    });
+    expect(syncFromRuntimeInstance).toHaveBeenCalled();
+    expect(invalidateProjectProgress).toHaveBeenCalledWith({
+      tenantId: "tenant-1",
+      projectId: "project-1",
+    });
   });
 
   test("uses the project running workflow instance even when workflow key is dynamic", async () => {

@@ -170,6 +170,39 @@ describe("assertProjectWorkflowStageMutationAllowedFromProgress", () => {
     ).not.toThrow();
   });
 
+  test("allows required acceptance catch-up for a completed workflow procedure", () => {
+    const progress = workflowProgress({
+      current_node_key: "final_acceptance",
+      current_node_title: "竣工验收",
+      current_node_type: "construction_stage",
+      current_business_kind: "final_acceptance",
+      current_stage_code: "completion",
+      timeline_nodes: [
+        procedureTimelineNode({
+          stageCode: "plumbing_electrical",
+          title: "水电",
+          status: "blocked",
+          acceptanceEnabled: true,
+        }),
+      ],
+    });
+
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: progress,
+        mutation: "create_stage_acceptance",
+        stageCode: "plumbing_electrical",
+      })
+    ).not.toThrow();
+    expect(() =>
+      assertProjectWorkflowStageMutationAllowedFromProgress({
+        workflowProgress: progress,
+        mutation: "customer_confirm_acceptance",
+        stageCode: "plumbing_electrical",
+      })
+    ).not.toThrow();
+  });
+
   test("reports workflow progress conflict when runtime is unavailable", () => {
     expect(() =>
       assertProjectWorkflowStageMutationAllowedFromProgress({

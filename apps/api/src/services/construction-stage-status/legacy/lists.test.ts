@@ -332,4 +332,50 @@ describe("buildProjectConstructionStagesFromRows", () => {
       reason: null,
     });
   });
+
+  test("allows required acceptance catch-up after workflow advanced to final acceptance", async () => {
+    const result = await buildProjectConstructionStagesFromRows({
+      project,
+      acceptanceRows: [],
+      logRows: [{ stage_code: "plumbing_electrical" }],
+      latestLogRows: [],
+      canReadAcceptance: true,
+      canCreateAcceptance: true,
+      workflowProgress: workflowProgress({
+        current_node_key: "final_acceptance",
+        current_node_title: "竣工验收",
+        current_node_type: "construction_stage",
+        current_business_kind: "final_acceptance",
+        current_stage_code: "completion",
+        current_gate: null,
+        timeline_nodes: [
+          procedureTimelineNode({
+            stageCode: "plumbing_electrical",
+            title: "水电",
+            status: "blocked",
+            acceptanceEnabled: true,
+          }),
+        ],
+      }),
+      sourceMode: "workflow_runtime",
+    });
+
+    const plumbing = result.stages.find((item) =>
+      item.stage_code === "plumbing_electrical"
+    );
+    const completion = result.stages.find((item) =>
+      item.stage_code === "completion"
+    );
+
+    expect(plumbing?.blocked_reason).toBeNull();
+    expect(plumbing?.can_create_acceptance).toBe(true);
+    expect(plumbing?.acceptance_action).toEqual({
+      type: "create",
+      label: "发起验收",
+      enabled: true,
+      reason: null,
+    });
+    expect(completion?.can_create_acceptance).toBe(false);
+    expect(completion?.blocked_reason).toBe("请先完成水电验收");
+  });
 });

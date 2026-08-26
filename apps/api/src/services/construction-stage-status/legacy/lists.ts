@@ -305,6 +305,10 @@ function resolveWorkflowStageBlockedReason(input: {
     return null;
   }
 
+  if (isRequiredAcceptanceCatchUpStage(progress, input.stageCode)) {
+    return null;
+  }
+
   const currentStage = resolveWorkflowCurrentStage(progress);
   if (currentStage === input.stageCode) {
     return null;
@@ -337,6 +341,18 @@ function resolveWorkflowStageBlockedReason(input: {
   return progress.current_node_title
     ? `当前流程在${progress.current_node_title}，暂不可推进${getStageLabel(input.stageCode)}`
     : "当前流程未到此阶段";
+}
+
+function isRequiredAcceptanceCatchUpStage(
+  progress: ProjectWorkflowProgress,
+  stageCode: ProjectLogStageCode,
+) {
+  return progress.timeline_nodes.some((node) =>
+    normalizeStageCode(node.attributes.stage_code) === stageCode &&
+    (node.status === "done" || node.status === "blocked") &&
+    node.attributes.acceptance_enabled === true &&
+    node.attributes.acceptance_required === true
+  );
 }
 
 function resolveWorkflowAcceptanceStageCodes(

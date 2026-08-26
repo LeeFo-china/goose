@@ -115,6 +115,31 @@ class ProjectAcceptanceWorkflowRuntimeService {
         };
       }
 
+      if (await this.isCompletedProcedureAlreadyAdvanced(input, instance)) {
+        await this.markProcedureAssignmentCompleted(input);
+        await workflowSubjectStateService.syncFromRuntimeInstance({
+          tenantId: input.tenantId,
+          subjectType: "project",
+          subjectId: input.projectId,
+          definitionId: definition.id,
+          instanceId: instance.id,
+        });
+        invalidateProjectWorkflowProgress({
+          tenantId: input.tenantId,
+          subjectType: "project",
+          subjectId: input.projectId,
+        });
+
+        return {
+          status: "already_advanced",
+          workflow_key: definition.workflow_key,
+          definition_id: definition.id,
+          instance_id: instance.id,
+          current_node_key: nodeKey,
+          reason: "completed_procedure_already_advanced",
+        };
+      }
+
       return {
         status: "failed",
         workflow_key: definition.workflow_key,
@@ -249,6 +274,26 @@ class ProjectAcceptanceWorkflowRuntimeService {
     }
 
     return getPreviousProjectConstructionStage(nextStageCode) === input.stageCode;
+  }
+
+  private async isCompletedProcedureAlreadyAdvanced(
+    input: SyncCustomerConfirmAcceptanceInput,
+    instance: WorkflowInstanceRow,
+  ): Promise<boolean> {
+    if (!isProjectConstructionStageCode(input.stageCode)) {
+      return false;
+    }
+
+    const completedNodes = await workflowRepository
+      .listCompletedRuntimeProcedureNodes({
+        tenantId: input.tenantId,
+        definitionId: instance.definition_id,
+        instanceId: instance.id,
+      });
+
+    return completedNodes.some((node) =>
+      this.getWorkflowStageCode(node.node_snapshot) === input.stageCode
+    );
   }
 
   private getNextProcedureStageCode(

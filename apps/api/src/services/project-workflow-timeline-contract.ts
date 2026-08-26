@@ -297,6 +297,7 @@ export function enrichWorkflowTimelineNodesWithConstructionStages(
     };
     const shouldExposeAcceptanceAction =
       node.status === "done" || node.status === "blocked" ||
+      (node.status === "current" && attributes.acceptance_type === "final") ||
       Boolean(readString(stage.acceptance_id));
     const acceptanceAction = shouldExposeAcceptanceAction
       ? buildAcceptanceTimelineAction({

@@ -47,6 +47,11 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
     return;
   }
 
+  if (isRequiredAcceptanceCatchUpMutation(input)) {
+    assertAcceptanceEnabledIfNeeded(input);
+    return;
+  }
+
   throw Errors.business(
     409,
     `当前流程在${getCurrentNodeLabel(input.workflowProgress)}，不能操作${
@@ -59,6 +64,23 @@ export function assertProjectWorkflowStageMutationAllowedFromProgress(input: {
       current_node_key: input.workflowProgress.current_node_key,
       current_node_title: input.workflowProgress.current_node_title,
     },
+  );
+}
+
+function isRequiredAcceptanceCatchUpMutation(input: {
+  workflowProgress: ProjectWorkflowProgress;
+  mutation: ProjectWorkflowStageMutation;
+  stageCode: ProjectLogStageCode;
+}) {
+  if (input.mutation === "create_project_log") {
+    return false;
+  }
+
+  return input.workflowProgress.timeline_nodes.some((node) =>
+    node.attributes.stage_code === input.stageCode &&
+    (node.status === "done" || node.status === "blocked") &&
+    node.attributes.acceptance_enabled === true &&
+    node.attributes.acceptance_required === true
   );
 }
 
