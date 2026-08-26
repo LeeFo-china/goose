@@ -1599,7 +1599,7 @@ describe("reusable build workflow", () => {
     "    if: ${{ needs.validate-request.outputs.target_environment == 'production' && needs.validate-request.outputs.no_op != 'true' && needs.build.result == 'success' }}",
     "    runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]",
     "    environment: production",
-    "    timeout-minutes: 30",
+    "    timeout-minutes: 45",
     "      BUILD_SERVICES: ${{ needs.validate-request.outputs.build_services }}",
     ...productionPullJobStepOrderedFragments,
   ] as const;
@@ -1669,7 +1669,7 @@ describe("reusable build workflow", () => {
     "          pull_verified_image() {",
     '            local image="$1"',
     "            for attempt in 1 2 3 4 5; do",
-    '              if docker pull "${image}"; then',
+    '              if timeout 300s docker pull "${image}"; then',
     "                return 0",
     "              fi",
     '              echo "Immutable image pull failed for ${image} (attempt ${attempt}/5)." >&2',
@@ -2046,7 +2046,7 @@ describe("reusable build workflow", () => {
 
     expect(pullFunctionStart).toBeGreaterThanOrEqual(0);
     expect(pullFunction.match(/for attempt in 1 2 3 4 5; do/g)).toHaveLength(1);
-    expect(pullFunction).toContain('if docker pull "${image}"; then');
+    expect(pullFunction).toContain('if timeout 300s docker pull "${image}"; then');
     expect(pullFunction).toContain(
       'Immutable image pull failed for ${image} (attempt ${attempt}/5).',
     );

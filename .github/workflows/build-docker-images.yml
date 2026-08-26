@@ -484,7 +484,7 @@ jobs:
     if: ${{ needs.validate-request.outputs.target_environment == 'production' && needs.validate-request.outputs.no_op != 'true' && needs.build.result == 'success' }}
     runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
     environment: production
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       BUILD_SERVICES: ${{ needs.validate-request.outputs.build_services }}
     steps:
@@ -578,7 +578,7 @@ jobs:
           pull_verified_image() {
             local image="$1"
             for attempt in 1 2 3 4 5; do
-              if docker pull "${image}"; then
+              if timeout 300s docker pull "${image}"; then
                 return 0
               fi
               echo "Immutable image pull failed for ${image} (attempt ${attempt}/5)." >&2
