@@ -88,6 +88,52 @@ describe("evaluateDouyinReleaseReadiness", () => {
     expect(result.blockers.map((item) => item.code)).toContain(code);
   });
 
+  test("reports concrete in-progress project threshold", () => {
+    const result = evaluateDouyinReleaseReadiness({
+      ...passingFacts,
+      projects: [
+        project("11111111-1111-4111-8111-000000000001", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000002", "completed", 0),
+        project("11111111-1111-4111-8111-000000000003", "completed", 0),
+        project("11111111-1111-4111-8111-000000000004", "completed", 0),
+        project("11111111-1111-4111-8111-000000000005", "completed", 0),
+        project("11111111-1111-4111-8111-000000000006", "completed", 0),
+      ],
+    }, now);
+
+    expect(result.blockers).toContainEqual(expect.objectContaining({
+      code: "PUBLIC_PROJECT_PHASE_COVERAGE_LOW",
+      message: "施工中项目至少需要 2 个，当前 1 个",
+      details: {
+        phase: "in_progress",
+        actual_count: 1,
+        expected_count: 2,
+      },
+    }));
+  });
+
+  test("does not require completed projects for release readiness", () => {
+    const result = evaluateDouyinReleaseReadiness({
+      ...passingFacts,
+      projects: [
+        project("11111111-1111-4111-8111-000000000001", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000002", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000003", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000004", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000005", "in_progress", 1),
+        project("11111111-1111-4111-8111-000000000006", "in_progress", 1),
+      ],
+    }, now);
+
+    expect(result.ready).toBe(true);
+    expect(result.blockers.map((item) => item.code))
+      .not.toContain("PUBLIC_PROJECT_PHASE_COVERAGE_LOW");
+    expect(result.metrics).toMatchObject({
+      in_progress_project_count: 6,
+      completed_project_count: 0,
+    });
+  });
+
   test("blocks incomplete projects, privacy risks, disabled hosts and invalid installation state", () => {
     const result = evaluateDouyinReleaseReadiness({
       ...passingFacts,

@@ -244,13 +244,15 @@ function evaluateProjects(
 
   const inProgress = projects.filter((project) => project.phase === "in_progress");
   const completed = projects.filter((project) => project.phase === "completed");
-  if (
-    inProgress.length < MIN_PHASE_PROJECTS ||
-    completed.length < MIN_PHASE_PROJECTS
-  ) {
+  if (inProgress.length < MIN_PHASE_PROJECTS) {
     blockers.push(blocker(
       "PUBLIC_PROJECT_PHASE_COVERAGE_LOW",
-      "施工中和已完工项目数量不足",
+      `施工中项目至少需要 ${MIN_PHASE_PROJECTS} 个，当前 ${inProgress.length} 个`,
+      {
+        phase: "in_progress",
+        actual_count: inProgress.length,
+        expected_count: MIN_PHASE_PROJECTS,
+      },
     ));
   }
 
