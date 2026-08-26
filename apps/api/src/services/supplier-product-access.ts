@@ -71,7 +71,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      permission,
+      [permission],
       false,
     );
   }
@@ -83,7 +83,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.product.manage",
+      ["supplier.product.manage"],
       true,
     );
   }
@@ -92,14 +92,11 @@ export class SupplierProductAccessService {
     auth: AuthContext,
     tenantSupplierId: string,
   ) {
-    this.accessPolicy.assertPermission(auth, "supplier.product.manage");
-    this.accessPolicy.assertPermission(auth, "supplier.cost-price.manage");
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.product.manage",
+      ["supplier.product.manage", "supplier.cost-price.manage"],
       true,
-      { permissionAlreadyChecked: true },
     );
   }
 
@@ -116,7 +113,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      permission,
+      [permission],
       false,
     );
   }
@@ -128,7 +125,7 @@ export class SupplierProductAccessService {
     return this.requireScope(
       auth,
       tenantSupplierId,
-      "supplier.cost-price.manage",
+      ["supplier.cost-price.manage"],
       true,
     );
   }
@@ -136,12 +133,11 @@ export class SupplierProductAccessService {
   private async requireScope(
     auth: AuthContext,
     tenantSupplierId: string,
-    permission: string,
+    permissions: readonly string[],
     write: boolean,
-    options: { permissionAlreadyChecked?: boolean } = {},
   ): Promise<SupplierProxyScope> {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    if (!options.permissionAlreadyChecked) {
+    for (const permission of permissions) {
       this.accessPolicy.assertPermission(auth, permission);
     }
 

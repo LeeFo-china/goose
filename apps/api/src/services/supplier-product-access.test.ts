@@ -46,6 +46,7 @@ function dependencies(overrides: Record<string, unknown> = {}) {
       assertTenantContext: mock((context: AuthContext) => {
         if (!context.tenantId) throw Object.assign(new Error(), {
           code: "TENANT_CONTEXT_REQUIRED",
+          statusCode: 403,
         });
         return context.tenantId;
       }),
@@ -71,6 +72,24 @@ function dependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe("SupplierProductAccessService", () => {
+  test("preserves tenant-context denial before purchasable product permissions and data reads", async () => {
+    const deps = dependencies();
+    const { SupplierProductAccessService } = await import(
+      "./supplier-product-access"
+    );
+    const service = new SupplierProductAccessService(deps as never);
+
+    await expect(service.requirePurchasableProductWrite(
+      { ...auth([]), tenantId: null },
+      TENANT_SUPPLIER_ID,
+    )).rejects.toMatchObject({
+      code: "TENANT_CONTEXT_REQUIRED",
+      statusCode: 403,
+    });
+    expect(deps.repository.getSettings).not.toHaveBeenCalled();
+    expect(deps.repository.findRelationship).not.toHaveBeenCalled();
+  });
+
   test("rejects purchasable product writes with only product permission before data reads", async () => {
     const deps = dependencies();
     const { SupplierProductAccessService } = await import(
