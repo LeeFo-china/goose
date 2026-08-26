@@ -10,6 +10,9 @@ import {
   supplierProductAccessService,
   type SupplierProxyScope,
 } from "@/services/supplier-product-access";
+import { z } from "zod";
+
+const ProductIdSchema = z.uuid();
 
 type ProductAccessPort = Pick<
   typeof supplierProductAccessService,
@@ -47,34 +50,45 @@ export class SupplierPurchasableProductsService {
     input: SupplierPurchasableProductCreateInput,
     idempotencyKey: string,
   ) {
+    const canonicalTenantSupplierId = canonicalUuid(tenantSupplierId);
+    const canonicalSupplierId = canonicalUuid(supplierId);
     const scope = await this.access.requirePurchasableProductWrite(
       auth,
-      tenantSupplierId,
+      canonicalTenantSupplierId,
     );
-    assertPathScope(scope, tenantSupplierId, supplierId);
+    const canonicalScope = canonicalizeScope(scope);
+    assertPathScope(
+      canonicalScope,
+      canonicalTenantSupplierId,
+      canonicalSupplierId,
+    );
 
-    const productId = this.idFactory();
+    const productId = createProductId(this.idFactory);
+    const skuId = canonicalUuid(input.sku_id);
     const result = await this.repository.create({
       product_id: productId,
-      sku_id: input.sku_id,
-      tenant_id: scope.tenantId,
-      tenant_supplier_id: scope.tenantSupplierId,
-      supplier_id: scope.supplierId,
+      sku_id: skuId,
+      tenant_id: canonicalScope.tenantId,
+      tenant_supplier_id: canonicalScope.tenantSupplierId,
+      supplier_id: canonicalScope.supplierId,
       product: {
         ...input.product,
+        category_id: canonicalUuid(input.product.category_id),
+        brand_id: canonicalUuid(input.product.brand_id),
         product_code: generatedCode("TP", productId),
       },
       sku: {
         ...input.sku,
-        sku_code: generatedCode("TS", input.sku_id),
+        purchase_unit_id: canonicalUuid(input.sku.purchase_unit_id),
+        sku_code: generatedCode("TS", skuId),
       },
       price: {
         unit_price: input.price.unit_price,
         tax_rate: input.price.tax_rate,
         tax_inclusive: input.price.tax_inclusive,
       },
-      actor_user_id: scope.authUserId,
-      actor_employee_id: scope.employeeId,
+      actor_user_id: canonicalScope.authUserId,
+      actor_employee_id: canonicalScope.employeeId,
       idempotency_key: idempotencyKey,
     });
 
@@ -106,6 +120,40 @@ function assertPathScope(
   if (scope.supplierId !== supplierId) {
     throw Errors.business(404, "供应商不存在", "SUPPLIER_NOT_FOUND");
   }
+}
+
+function canonicalizeScope(scope: SupplierProxyScope): SupplierProxyScope {
+  return {
+    tenantId: canonicalUuid(scope.tenantId),
+    tenantSupplierId: canonicalUuid(scope.tenantSupplierId),
+    supplierId: canonicalUuid(scope.supplierId),
+    authUserId: canonicalUuid(scope.authUserId),
+    employeeId: canonicalUuid(scope.employeeId),
+  };
+}
+
+function canonicalUuid(value: string): string {
+  return value.toLowerCase();
+}
+
+function createProductId(idFactory: () => string): string {
+  let generatedId: string;
+  try {
+    generatedId = idFactory();
+  } catch {
+    throw productCreateFailed();
+  }
+  const parsed = ProductIdSchema.safeParse(generatedId);
+  if (!parsed.success) throw productCreateFailed();
+  return canonicalUuid(parsed.data);
+}
+
+function productCreateFailed() {
+  return Errors.business(
+    500,
+    "创建可采购商品失败",
+    "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+  );
 }
 
 function generatedCode(prefix: "TP" | "TS", id: string): string {

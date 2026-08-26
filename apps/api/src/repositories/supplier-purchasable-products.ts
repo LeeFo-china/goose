@@ -87,16 +87,20 @@ function matchesCommandIdentity(
   input: SupplierPurchasableProductCommandInput,
 ): boolean {
   if (result.status !== "created") return true;
-  return result.product.id === input.product_id &&
+  return sameUuid(result.product.id, input.product_id) &&
     result.product.product_code === input.product.product_code &&
-    result.product.supplier_id === input.supplier_id &&
-    result.product.owner_tenant_id === input.tenant_id &&
-    result.product.acting_employee_id === input.actor_employee_id &&
-    result.sku.id === input.sku_id &&
+    sameUuid(result.product.supplier_id, input.supplier_id) &&
+    sameUuid(result.product.owner_tenant_id, input.tenant_id) &&
+    sameUuid(result.product.acting_employee_id, input.actor_employee_id) &&
+    sameUuid(result.sku.id, input.sku_id) &&
     result.sku.sku_code === input.sku.sku_code &&
-    result.price.tenant_id === input.tenant_id &&
-    result.price.supplier_id === input.supplier_id &&
-    result.price.acting_employee_id === input.actor_employee_id;
+    sameUuid(result.price.tenant_id, input.tenant_id) &&
+    sameUuid(result.price.supplier_id, input.supplier_id) &&
+    sameUuid(result.price.acting_employee_id, input.actor_employee_id);
+}
+
+function sameUuid(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
 }
 
 export const supplierPurchasableProductsRepository =

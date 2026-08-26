@@ -22,6 +22,8 @@ const UNIT_ID = "a0000000-0000-4000-8000-00000000000a";
 const PRICE_LIST_ID = "b0000000-0000-4000-8000-00000000000b";
 const PRICE_ITEM_ID = "c0000000-0000-4000-8000-00000000000c";
 const NOW = "2026-08-27T08:00:00+00:00";
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const command = {
   product_id: PRODUCT_ID,
@@ -161,6 +163,18 @@ function createdResult(
   };
 }
 
+function uppercaseUuidValues(value: unknown): unknown {
+  if (typeof value === "string") {
+    return UUID_PATTERN.test(value) ? value.toUpperCase() : value;
+  }
+  if (Array.isArray(value)) return value.map(uppercaseUuidValues);
+  if (typeof value !== "object" || value === null) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+    key,
+    uppercaseUuidValues(item),
+  ]));
+}
+
 describe("supplier purchasable product command records", () => {
   test("strictly parses created and replay envelopes with complete stable rows", () => {
     expect(SupplierPurchasableProductCommandEnvelopeSchema.parse(
@@ -206,6 +220,56 @@ describe("supplier purchasable product command records", () => {
     }).success).toBe(false);
   });
 
+  test("rejects a price acting tenant outside the price tenant", () => {
+    const created = createdResult(false);
+    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+      ...created,
+      price: { ...created.price, acting_tenant_id: USER_ID },
+    }).success).toBe(false);
+  });
+
+  test("compares SKU and price base conversions by decimal semantics", () => {
+    const created = createdResult(false);
+    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(created)
+      .success).toBe(true);
+    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+      ...created,
+      sku: { ...created.sku, base_unit_conversion: 2 },
+    }).success).toBe(false);
+  });
+
+  test("rejects inconsistent creator and updater employee IDs on every row", () => {
+    const mutations: Array<(
+      result: SupplierPurchasableProductCreatedResult,
+    ) => void> = [
+      (result) => {
+        result.product.created_by_employee_id = USER_ID;
+      },
+      (result) => {
+        result.sku.created_by_employee_id = USER_ID;
+      },
+      (result) => {
+        result.price.created_by_employee_id = USER_ID;
+      },
+      (result) => {
+        result.product.updated_by_employee_id = USER_ID;
+      },
+      (result) => {
+        result.sku.updated_by_employee_id = USER_ID;
+      },
+      (result) => {
+        result.price.updated_by_employee_id = USER_ID;
+      },
+    ];
+
+    for (const mutate of mutations) {
+      const created = structuredClone(createdResult(false));
+      mutate(created);
+      expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(created)
+        .success).toBe(false);
+    }
+  });
+
   test("parses only stable known failure envelopes", () => {
     expect(SupplierPurchasableProductCommandEnvelopeSchema.parse({
       status: "validation_error",
@@ -237,6 +301,30 @@ describe("supplier purchasable product command records", () => {
       reason: "invalid_price",
       diagnostics: { sql: "select secret" },
     }).success).toBe(false);
+  });
+
+  test("accepts only database-ordered eligibility reason lists", () => {
+    const envelope = {
+      status: "state_conflict",
+      idempotent: false,
+      error_code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      reason: "required_qualification_missing,active_contract_required",
+    };
+
+    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(envelope)
+      .success).toBe(true);
+    for (const reason of [
+      "active_contract_required,required_qualification_missing",
+      "required_qualification_missing, active_contract_required",
+      "required_qualification_missing,,active_contract_required",
+      "required_qualification_missing,unknown_reason",
+      "required_qualification_missing,<script>",
+    ]) {
+      expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+        ...envelope,
+        reason,
+      }).success, reason).toBe(false);
+    }
   });
 });
 
@@ -274,6 +362,35 @@ describe("SupplierPurchasableProductsRepository", () => {
 
   test("returns a replay envelope without changing idempotent", async () => {
     const rpc = mock(async () => ({ data: createdResult(true), error: null }));
+    const { SupplierPurchasableProductsRepository } = await import(
+      "./supplier-purchasable-products"
+    );
+
+    await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
+      .create(command)).resolves.toEqual(createdResult(true));
+  });
+
+  test("returns a stable comma-separated eligibility failure envelope", async () => {
+    const failure = {
+      status: "state_conflict",
+      idempotent: false,
+      error_code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      reason: "required_qualification_missing,active_contract_required",
+    } as const;
+    const rpc = mock(async () => ({ data: failure, error: null }));
+    const { SupplierPurchasableProductsRepository } = await import(
+      "./supplier-purchasable-products"
+    );
+
+    await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
+      .create(command)).resolves.toEqual(failure);
+  });
+
+  test("canonicalizes uppercase UUIDs in a replay before identity checks", async () => {
+    const rpc = mock(async () => ({
+      data: uppercaseUuidValues(createdResult(true)),
+      error: null,
+    }));
     const { SupplierPurchasableProductsRepository } = await import(
       "./supplier-purchasable-products"
     );

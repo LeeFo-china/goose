@@ -20,6 +20,13 @@ const EMPLOYEE_ID = "70000000-0000-4000-8000-000000000007";
 const CATEGORY_ID = "80000000-0000-4000-8000-000000000008";
 const BRAND_ID = "90000000-0000-4000-8000-000000000009";
 const UNIT_ID = "a0000000-0000-4000-8000-00000000000a";
+const MIXED_PRODUCT_ID = "abcdefab-cdef-4abc-8def-abcdefabcdef";
+const MIXED_SKU_ID = "fedcbafe-dcba-4fed-8cba-fedcbafedcba";
+const MIXED_TENANT_ID = "abcdefab-cdef-4abc-8def-abcdefabcded";
+const MIXED_TENANT_SUPPLIER_ID = "abcdefab-cdef-4abc-8def-abcdefabcdec";
+const MIXED_SUPPLIER_ID = "abcdefab-cdef-4abc-8def-abcdefabcdeb";
+const MIXED_USER_ID = "abcdefab-cdef-4abc-8def-abcdefabcdea";
+const MIXED_EMPLOYEE_ID = "abcdefab-cdef-4abc-8def-abcdefabcde9";
 
 const input: SupplierPurchasableProductCreateInput = {
   sku_id: SKU_ID,
@@ -83,6 +90,8 @@ async function setup(options: {
   accessResult?: typeof scope;
   accessError?: unknown;
   repositoryResult?: unknown;
+  idFactoryResult?: string;
+  idFactory?: () => string;
 } = {}) {
   const access = {
     requirePurchasableProductWrite: mock(async () => {
@@ -93,7 +102,9 @@ async function setup(options: {
   const repository = {
     create: mock(async () => options.repositoryResult ?? replay),
   };
-  const idFactory = mock(() => PRODUCT_ID);
+  const idFactorySource = options.idFactory ??
+    (() => options.idFactoryResult ?? PRODUCT_ID);
+  const idFactory = mock(() => idFactorySource());
   const { SupplierPurchasableProductsService } = await import(
     "./supplier-purchasable-products"
   );
@@ -143,6 +154,54 @@ describe("SupplierPurchasableProductsService", () => {
     expect(context.idFactory).not.toHaveBeenCalled();
   });
 
+  test("maps an ID factory exception to a stable create failure", async () => {
+    const context = await setup({
+      idFactory: () => {
+        throw new Error("secret-id-factory-diagnostic");
+      },
+    });
+    let caught: unknown;
+
+    try {
+      await context.service.create(
+        auth,
+        TENANT_SUPPLIER_ID,
+        SUPPLIER_ID,
+        input,
+        "factory-throws-key",
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toMatchObject({
+      statusCode: 500,
+      code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+      message: "创建可采购商品失败",
+    });
+    expect(String(caught)).not.toContain("secret-id-factory-diagnostic");
+    expect(context.idFactory).toHaveBeenCalledTimes(1);
+    expect(context.repository.create).not.toHaveBeenCalled();
+  });
+
+  test("maps an invalid generated UUID to a stable create failure", async () => {
+    const context = await setup({ idFactoryResult: "invalid-secret-uuid" });
+
+    await expect(context.service.create(
+      auth,
+      TENANT_SUPPLIER_ID,
+      SUPPLIER_ID,
+      input,
+      "invalid-uuid-key",
+    )).rejects.toMatchObject({
+      statusCode: 500,
+      code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+      message: "创建可采购商品失败",
+    });
+    expect(context.idFactory).toHaveBeenCalledTimes(1);
+    expect(context.repository.create).not.toHaveBeenCalled();
+  });
+
   test("generates one product UUID and authoritative codes while preserving decimals", async () => {
     const context = await setup();
     const untrustedInput = {
@@ -186,6 +245,66 @@ describe("SupplierPurchasableProductsService", () => {
       actor_employee_id: EMPLOYEE_ID,
       idempotency_key: "idem-key",
     });
+  });
+
+  test("canonicalizes uppercase path, body, generated, and scope UUIDs", async () => {
+    const uppercaseScope = {
+      tenantId: MIXED_TENANT_ID.toUpperCase(),
+      tenantSupplierId: MIXED_TENANT_SUPPLIER_ID.toUpperCase(),
+      supplierId: MIXED_SUPPLIER_ID.toUpperCase(),
+      authUserId: MIXED_USER_ID.toUpperCase(),
+      employeeId: MIXED_EMPLOYEE_ID.toUpperCase(),
+    };
+    const context = await setup({
+      accessResult: uppercaseScope,
+      idFactoryResult: MIXED_PRODUCT_ID.toUpperCase(),
+    });
+
+    await context.service.create(
+      auth,
+      MIXED_TENANT_SUPPLIER_ID.toUpperCase(),
+      MIXED_SUPPLIER_ID.toUpperCase(),
+      {
+        ...input,
+        sku_id: MIXED_SKU_ID.toUpperCase(),
+        product: {
+          ...input.product,
+          category_id: CATEGORY_ID.toUpperCase(),
+          brand_id: BRAND_ID.toUpperCase(),
+        },
+        sku: {
+          ...input.sku,
+          purchase_unit_id: UNIT_ID.toUpperCase(),
+        },
+      },
+      "uppercase-key",
+    );
+
+    expect(context.access.requirePurchasableProductWrite).toHaveBeenCalledWith(
+      auth,
+      MIXED_TENANT_SUPPLIER_ID,
+    );
+    expect(context.idFactory).toHaveBeenCalledTimes(1);
+    expect(context.repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        product_id: MIXED_PRODUCT_ID,
+        sku_id: MIXED_SKU_ID,
+        tenant_id: MIXED_TENANT_ID,
+        tenant_supplier_id: MIXED_TENANT_SUPPLIER_ID,
+        supplier_id: MIXED_SUPPLIER_ID,
+        actor_user_id: MIXED_USER_ID,
+        actor_employee_id: MIXED_EMPLOYEE_ID,
+        product: expect.objectContaining({
+          product_code: "TP-abcdefabcdef4abc",
+          category_id: CATEGORY_ID,
+          brand_id: BRAND_ID,
+        }),
+        sku: expect.objectContaining({
+          sku_code: "TS-fedcbafedcba4fed",
+          purchase_unit_id: UNIT_ID,
+        }),
+      }),
+    );
   });
 
   test("returns a created replay unchanged", async () => {
@@ -277,6 +396,29 @@ describe("SupplierPurchasableProductsService", () => {
       SUPPLIER_ID,
       input,
       "supplier-key",
+    )).rejects.toMatchObject({
+      statusCode: 409,
+      code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+      message: "当前供应商关系不允许继续该操作",
+    });
+  });
+
+  test("maps an ordered eligibility reason list to a stable 409", async () => {
+    const context = await setup({
+      repositoryResult: {
+        status: "state_conflict",
+        idempotent: false,
+        error_code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
+        reason: "required_qualification_missing,active_contract_required",
+      },
+    });
+
+    await expect(context.service.create(
+      auth,
+      TENANT_SUPPLIER_ID,
+      SUPPLIER_ID,
+      input,
+      "eligibility-key",
     )).rejects.toMatchObject({
       statusCode: 409,
       code: "SUPPLIER_ORDER_NOT_ELIGIBLE",
