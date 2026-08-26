@@ -266,12 +266,37 @@ BEGIN
     'idempotency_key', btrim(p_idempotency_key)
   );
   v_parent_fingerprint := pg_catalog.md5(v_parent_request::text);
-  v_parent_key := 'supplier-purchasable-product:' ||
-    pg_catalog.md5(btrim(p_idempotency_key));
+  v_parent_key := 'supplier-purchasable-product:' || pg_catalog.md5(
+    p_tenant_id::text || ':' || btrim(p_idempotency_key)
+  );
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_parent_key, 20260826140000)
   );
+
+  SELECT event.*
+  INTO v_event
+  FROM public.supplier_command_events AS event
+  WHERE event.actor_user_id = p_actor_user_id
+    AND event.idempotency_key = v_parent_key
+  FOR UPDATE;
+
+  IF FOUND THEN
+    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
+      OR v_event.resource_type <> 'supplier_product'
+      OR v_event.resource_id <> p_product_id
+      OR v_event.command <> 'supplier_purchasable_product_v1:create'
+      OR v_event.from_state ->> '_fingerprint' IS DISTINCT FROM
+        v_parent_fingerprint
+      OR v_event.from_state -> '_request' IS DISTINCT FROM v_parent_request
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
+    END IF;
+
+    RETURN jsonb_set(v_event.to_state, '{idempotent}', 'true'::jsonb, true);
+  END IF;
 
   PERFORM employee.id
   FROM public.employees AS employee
@@ -282,9 +307,12 @@ BEGIN
   FOR SHARE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'SUPPLIER_PROXY_ACTOR_INVALID';
+    RETURN jsonb_build_object(
+      'status', 'validation_error',
+      'idempotent', false,
+      'error_code', 'SUPPLIER_PROXY_ACTOR_INVALID',
+      'reason', 'actor_invalid'
+    );
   END IF;
 
   SELECT relationship.*
@@ -309,33 +337,12 @@ BEGIN
   FOR UPDATE OF relationship;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION USING
-      ERRCODE = 'P0001',
-      MESSAGE = 'SUPPLIER_ORDER_NOT_ELIGIBLE';
-  END IF;
-
-  SELECT event.*
-  INTO v_event
-  FROM public.supplier_command_events AS event
-  WHERE event.actor_user_id = p_actor_user_id
-    AND event.idempotency_key = v_parent_key
-  FOR UPDATE;
-
-  IF FOUND THEN
-    IF v_event.tenant_id IS DISTINCT FROM p_tenant_id
-      OR v_event.resource_type <> 'supplier_product'
-      OR v_event.resource_id <> p_product_id
-      OR v_event.command <> 'supplier_purchasable_product_v1:create'
-      OR v_event.from_state ->> '_fingerprint' IS DISTINCT FROM
-        v_parent_fingerprint
-      OR v_event.from_state -> '_request' IS DISTINCT FROM v_parent_request
-    THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT';
-    END IF;
-
-    RETURN jsonb_set(v_event.to_state, '{idempotent}', 'true'::jsonb, true);
+    RETURN jsonb_build_object(
+      'status', 'state_conflict',
+      'idempotent', false,
+      'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE',
+      'reason', 'tenant_supplier_unavailable'
+    );
   END IF;
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
@@ -811,21 +818,98 @@ BEGIN
       100
     ) INTO v_catalog_response;
 
-    SELECT item.value
-    INTO v_catalog_item
-    FROM jsonb_array_elements(
-      COALESCE(v_catalog_response -> 'items', '[]'::jsonb)
-    ) AS item(value)
-    WHERE item.value ->> 'supplier_sku_id' = p_sku_id::text
-      AND item.value ->> 'supplier_price_list_id' = v_price_list_id::text
-    ORDER BY item.value ->> 'supplier_price_list_item_id'
-    LIMIT 1;
-
-    IF v_catalog_item IS NULL THEN
+    IF jsonb_typeof(v_catalog_response) <> 'object'
+      OR jsonb_typeof(v_catalog_response -> 'total') <> 'number'
+      OR COALESCE(v_catalog_response ->> 'total', '') !~ '^[0-9]+$'
+      OR jsonb_typeof(v_catalog_response -> 'items') <> 'array'
+    THEN
       RAISE EXCEPTION USING
         ERRCODE = 'P0001',
         MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
-        DETAIL = 'catalog_item_not_purchasable';
+        DETAIL = 'catalog_result_not_exact';
+    END IF;
+
+    -- sku_code is UUID-derived and unique for this newly-created tenant SKU.
+    -- The resolver is intentionally fuzzy, so its untruncated total must also
+    -- prove that no product/name/code false-positive matched the same keyword.
+    IF (v_catalog_response ->> 'total')::bigint <> 1
+      OR jsonb_array_length(v_catalog_response -> 'items') <> 1
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+        DETAIL = 'catalog_result_not_exact';
+    END IF;
+
+    v_catalog_item := v_catalog_response -> 'items' -> 0;
+
+    IF jsonb_typeof(v_catalog_item) <> 'object'
+      OR v_catalog_item ->> 'supplier_product_id' IS DISTINCT FROM
+        p_product_id::text
+      OR v_catalog_item ->> 'supplier_sku_id' IS DISTINCT FROM p_sku_id::text
+      OR v_catalog_item ->> 'supplier_price_list_id' IS DISTINCT FROM
+        v_price_list_id::text
+      OR v_catalog_item ->> 'supplier_price_list_item_id' IS DISTINCT FROM
+        v_price_item_id::text
+      OR v_catalog_item ->> 'purchase_unit_id' IS DISTINCT FROM
+        v_purchase_unit_id::text
+      OR jsonb_typeof(v_catalog_item -> 'tax_inclusive') <> 'boolean'
+      OR v_catalog_item -> 'tax_inclusive' IS DISTINCT FROM
+        p_price -> 'tax_inclusive'
+      OR v_price_item_response -> 'item' ->> 'id' IS DISTINCT FROM
+        v_price_item_id::text
+      OR v_price_item_response -> 'item' ->> 'supplier_price_list_id'
+        IS DISTINCT FROM v_price_list_id::text
+      OR v_price_item_response -> 'item' ->> 'supplier_product_id'
+        IS DISTINCT FROM p_product_id::text
+      OR v_price_item_response -> 'item' ->> 'supplier_sku_id'
+        IS DISTINCT FROM p_sku_id::text
+      OR v_price_list_response -> 'price_list' ->> 'id' IS DISTINCT FROM
+        v_price_list_id::text
+      OR v_price_list_response -> 'price_list' ->> 'tenant_supplier_id'
+        IS DISTINCT FROM p_tenant_supplier_id::text
+      OR v_price_list_response -> 'price_list' ->> 'supplier_id'
+        IS DISTINCT FROM p_supplier_id::text
+      OR v_price_list_response -> 'price_list' ->> 'currency'
+        IS DISTINCT FROM 'CNY'
+      OR v_price_list_response -> 'price_list' ->> 'lifecycle_status'
+        IS DISTINCT FROM 'published'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+        DETAIL = 'catalog_item_mismatch';
+    END IF;
+
+    IF COALESCE(v_catalog_item ->> 'unit_price', '') !~
+        '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$'
+      OR COALESCE(v_catalog_item ->> 'tax_rate', '') !~
+        '^(0|1)(\.[0-9]{1,6})?$'
+      OR COALESCE(v_price_item_response -> 'item' ->> 'unit_price', '') !~
+        '^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$'
+      OR COALESCE(v_price_item_response -> 'item' ->> 'tax_rate', '') !~
+        '^(0|1)(\.[0-9]{1,6})?$'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+        DETAIL = 'catalog_item_mismatch';
+    END IF;
+
+    IF (v_catalog_item ->> 'unit_price')::numeric(14, 2) <>
+        v_unit_price
+      OR (v_catalog_item ->> 'tax_rate')::numeric(7, 6) <> v_tax_rate
+      OR (v_price_item_response -> 'item' ->> 'unit_price')::numeric(14, 2)
+        <> v_unit_price
+      OR (v_price_item_response -> 'item' ->> 'tax_rate')::numeric(7, 6)
+        <> v_tax_rate
+      OR v_price_item_response -> 'item' -> 'tax_inclusive'
+        IS DISTINCT FROM p_price -> 'tax_inclusive'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+        DETAIL = 'catalog_item_mismatch';
     END IF;
 
     v_response := jsonb_build_object(
@@ -900,6 +984,28 @@ BEGIN
           'status', 'state_conflict',
           'idempotent', false,
           'error_code', 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+          'reason', COALESCE(v_error_detail, 'state_conflict')
+        );
+      ELSIF v_error_message = 'SUPPLIER_PROXY_ACTOR_INVALID' THEN
+        RETURN jsonb_build_object(
+          'status', 'validation_error',
+          'idempotent', false,
+          'error_code', 'SUPPLIER_PROXY_ACTOR_INVALID',
+          'reason', 'actor_invalid'
+        );
+      ELSIF v_error_message IN (
+        'TENANT_SUPPLIER_NOT_FOUND',
+        'SUPPLIER_NOT_FOUND',
+        'SUPPLIER_ORDER_NOT_ELIGIBLE',
+        'SUPPLIER_PRODUCT_STATE_CONFLICT',
+        'SUPPLIER_SKU_STATE_CONFLICT',
+        'SUPPLIER_PRICE_LIST_INVALID_ACTION',
+        'UNIT_CONVERSION_INVALID'
+      ) THEN
+        RETURN jsonb_build_object(
+          'status', 'state_conflict',
+          'idempotent', false,
+          'error_code', v_error_message,
           'reason', COALESCE(v_error_detail, 'state_conflict')
         );
       ELSE

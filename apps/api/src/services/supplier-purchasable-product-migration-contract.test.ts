@@ -27,6 +27,16 @@ function expectOrdered(value: string, patterns: readonly RegExp[]): void {
   }
 }
 
+function expectFragmentsOrdered(value: string, fragments: readonly string[]): void {
+  let cursor = 0;
+
+  for (const fragment of fragments) {
+    const index = value.indexOf(fragment, cursor);
+    expect(index, `missing ordered contract ${fragment}`).toBeGreaterThanOrEqual(0);
+    cursor = index + fragment.length;
+  }
+}
+
 describe("supplier purchasable product command migration", () => {
   test("creates the exact private composite command in a bounded transaction", () => {
     const command = extractFunction("command_supplier_purchasable_product_v1");
@@ -77,23 +87,137 @@ describe("supplier purchasable product command migration", () => {
     expect(normalized).not.toContain("WHEN OTHERS");
   });
 
-  test("derives stable child keys, preserves prior prices, and verifies purchase readiness", () => {
+  test("replays or conflicts under the parent lock before mutable checks", () => {
     const command = compact(
       extractFunction("command_supplier_purchasable_product_v1"),
     );
 
-    expect(command).toContain("v_parent_fingerprint");
-    expect(command).toContain("v_parent_key");
-    expect(command).toContain("v_child_key");
-    expect(command).toContain("p_action => 'new_version'");
-    expect(command).toContain("p_action => 'activate'");
-    expect(command).toContain("p_action => 'publish'");
-    expect(command).toContain("p_action => 'upsert'");
-    expect(command).toContain("supplier_price_list_items");
-    expect(command).toContain("supplier_sku_id");
-    expect(command).toContain("catalog_item");
-    expect(command).toContain("'status', 'created'");
-    expect(command).toContain("'idempotent', false");
+    expectFragmentsOrdered(command, [
+      "v_parent_fingerprint :=",
+      "v_parent_key := 'supplier-purchasable-product:'",
+      "p_tenant_id::text || ':' || btrim(p_idempotency_key)",
+      "pg_advisory_xact_lock",
+      "FROM public.supplier_command_events AS event",
+      "WHERE event.actor_user_id = p_actor_user_id AND event.idempotency_key = v_parent_key",
+      "v_event.tenant_id IS DISTINCT FROM p_tenant_id",
+      "v_event.resource_type <> 'supplier_product'",
+      "v_event.resource_id <> p_product_id",
+      "v_event.command <> 'supplier_purchasable_product_v1:create'",
+      "v_event.from_state ->> '_fingerprint' IS DISTINCT FROM v_parent_fingerprint",
+      "v_event.from_state -> '_request' IS DISTINCT FROM v_parent_request",
+      "MESSAGE = 'SUPPLIER_IDEMPOTENCY_CONFLICT'",
+      "RETURN jsonb_set(v_event.to_state, '{idempotent}', 'true'::jsonb, true)",
+      "FROM public.employees AS employee",
+      "FROM public.tenant_suppliers AS relationship",
+      "FOR UPDATE OF relationship",
+      "'supplier-price-series:'",
+    ]);
+  });
+
+  test("derives child keys and invokes product and SKU commands in lifecycle order", () => {
+    const command = compact(
+      extractFunction("command_supplier_purchasable_product_v1"),
+    );
+
+    expectFragmentsOrdered(command, [
+      "v_child_key := v_parent_key || ':product-create'",
+      "p_action => 'create', p_ownership_scope => 'tenant', p_tenant_id => p_tenant_id, p_tenant_supplier_id => p_tenant_supplier_id, p_supplier_id => p_supplier_id, p_product_id => p_product_id",
+      "p_payload => p_product",
+      "p_idempotency_key => v_child_key",
+      "v_child_key := v_parent_key || ':product-activate'",
+      "p_action => 'activate'",
+      "p_product_id => p_product_id",
+      "p_expected_version => (v_product_response ->> 'version')::integer",
+      "v_child_key := v_parent_key || ':sku-create'",
+      "p_action => 'create'",
+      "p_supplier_product_id => p_product_id, p_sku_id => p_sku_id",
+      "p_payload => p_sku",
+      "v_child_key := v_parent_key || ':sku-activate'",
+      "p_action => 'activate'",
+      "p_supplier_product_id => p_product_id, p_sku_id => p_sku_id",
+      "p_expected_version => (v_sku_response ->> 'version')::integer",
+    ]);
+  });
+
+  test("versions and verifies copied prices before publishing the replacement", () => {
+    const command = compact(
+      extractFunction("command_supplier_purchasable_product_v1"),
+    );
+
+    expectFragmentsOrdered(command, [
+      "v_child_key := v_parent_key || ':price-list-new-version'",
+      "p_action => 'new_version'",
+      "p_price_list_id => v_source_price_list.id, p_new_price_list_id => v_price_list_id",
+      "FROM public.supplier_price_list_items AS old_item",
+      "FROM public.supplier_price_list_items AS copied_item",
+      "v_child_key := v_parent_key || ':price-item-upsert'",
+      "p_action => 'upsert'",
+      "p_item_id => v_price_item_id, p_price_list_id => v_price_list_id",
+      "'sku_id', p_sku_id, 'unit_price', p_price ->> 'unit_price', 'tax_rate', p_price ->> 'tax_rate', 'tax_inclusive', p_price -> 'tax_inclusive'",
+      "v_child_key := v_parent_key || ':price-list-retire-source'",
+      "p_action => 'retire'",
+      "v_child_key := v_parent_key || ':price-list-publish'",
+      "p_action => 'publish'",
+      "p_price_list_id => v_price_list_id",
+    ]);
+  });
+
+  test("requires one exact resolver result and verifies catalog and price facts", () => {
+    const command = compact(
+      extractFunction("command_supplier_purchasable_product_v1"),
+    );
+    const resolver = command.slice(
+      command.indexOf("resolve_supplier_purchase_order_catalog"),
+      command.indexOf("v_response := jsonb_build_object"),
+    );
+
+    expect(resolver).toContain("p_sku ->> 'sku_code', 1, 100");
+    expect(resolver).toContain("v_catalog_response ->> 'total'");
+    expect(resolver).toContain("jsonb_array_length(v_catalog_response -> 'items')");
+    expect(resolver).toContain("(v_catalog_response ->> 'total')::bigint <> 1");
+    expect(resolver).toContain(
+      "jsonb_array_length(v_catalog_response -> 'items') <> 1",
+    );
+    expect(resolver).toContain("v_catalog_item := v_catalog_response -> 'items' -> 0");
+    expect(resolver).not.toContain("LIMIT 1");
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'supplier_product_id' IS DISTINCT FROM p_product_id::text",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'supplier_sku_id' IS DISTINCT FROM p_sku_id::text",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'supplier_price_list_id' IS DISTINCT FROM v_price_list_id::text",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'supplier_price_list_item_id' IS DISTINCT FROM v_price_item_id::text",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'purchase_unit_id' IS DISTINCT FROM v_purchase_unit_id::text",
+    );
+    expect(resolver).toContain(
+      "v_price_list_response -> 'price_list' ->> 'tenant_supplier_id' IS DISTINCT FROM p_tenant_supplier_id::text",
+    );
+    expect(resolver).toContain(
+      "v_price_list_response -> 'price_list' ->> 'supplier_id' IS DISTINCT FROM p_supplier_id::text",
+    );
+    expect(resolver).toContain(
+      "v_price_list_response -> 'price_list' ->> 'currency' IS DISTINCT FROM 'CNY'",
+    );
+    expect(resolver).toContain(
+      "v_price_list_response -> 'price_list' ->> 'lifecycle_status' IS DISTINCT FROM 'published'",
+    );
+    expect(resolver).toContain(
+      "(v_catalog_item ->> 'unit_price')::numeric(14, 2) <> v_unit_price",
+    );
+    expect(resolver).toContain(
+      "(v_catalog_item ->> 'tax_rate')::numeric(7, 6) <> v_tax_rate",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item -> 'tax_inclusive' IS DISTINCT FROM p_price -> 'tax_inclusive'",
+    );
+    expect(resolver).toContain("'catalog_result_not_exact'");
+    expect(resolver).toContain("'catalog_item_mismatch'");
   });
 
   test("exposes the command only to service_role", () => {
@@ -128,8 +252,12 @@ describe("supplier purchasable product command migration", () => {
       extractFunction("command_supplier_purchasable_product_v1"),
     );
 
-    expect(command).toContain("'status', 'validation_error'");
-    expect(command).toContain("'status', 'state_conflict'");
+    expect(command).toMatch(
+      /FROM public\.employees AS employee[\s\S]*?IF NOT FOUND THEN RETURN jsonb_build_object\( 'status', 'validation_error',[\s\S]*?'error_code', 'SUPPLIER_PROXY_ACTOR_INVALID'/,
+    );
+    expect(command).toMatch(
+      /FROM public\.tenant_suppliers AS relationship[\s\S]*?FOR UPDATE OF relationship; IF NOT FOUND THEN RETURN jsonb_build_object\( 'status', 'state_conflict',[\s\S]*?'error_code', 'SUPPLIER_ORDER_NOT_ELIGIBLE'/,
+    );
     expect(command).toContain(
       "GET STACKED DIAGNOSTICS v_error_message = MESSAGE_TEXT, v_error_detail = PG_EXCEPTION_DETAIL",
     );
@@ -137,7 +265,15 @@ describe("supplier purchasable product command migration", () => {
       /BEGIN v_child_key :=[\s\S]*?EXCEPTION[\s\S]*?WHEN SQLSTATE 'P0001' THEN[\s\S]*?v_error_message = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED'[\s\S]*?RETURN jsonb_build_object\( 'status', 'state_conflict'/,
     );
     expect(command).toMatch(
-      /v_error_message = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED'[\s\S]*?ELSE RAISE; END IF/,
+      /v_error_message = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED'[\s\S]*?v_error_message = 'SUPPLIER_PROXY_ACTOR_INVALID'[\s\S]*?v_error_message IN \( 'TENANT_SUPPLIER_NOT_FOUND', 'SUPPLIER_NOT_FOUND', 'SUPPLIER_ORDER_NOT_ELIGIBLE',[\s\S]*?'SUPPLIER_PRICE_LIST_INVALID_ACTION',[\s\S]*?'UNIT_CONVERSION_INVALID' \)[\s\S]*?ELSE RAISE; END IF/,
     );
+    expectFragmentsOrdered(command, [
+      "BEGIN v_child_key := v_parent_key || ':product-create'",
+      "resolve_supplier_purchase_order_catalog",
+      "INSERT INTO public.supplier_command_events",
+      "EXCEPTION WHEN unique_violation THEN",
+      "WHEN SQLSTATE 'P0001' THEN",
+    ]);
+    expect(command).not.toContain("WHEN OTHERS");
   });
 });
