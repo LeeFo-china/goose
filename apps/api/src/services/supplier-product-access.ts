@@ -88,6 +88,21 @@ export class SupplierProductAccessService {
     );
   }
 
+  async requirePurchasableProductWrite(
+    auth: AuthContext,
+    tenantSupplierId: string,
+  ) {
+    this.accessPolicy.assertPermission(auth, "supplier.product.manage");
+    this.accessPolicy.assertPermission(auth, "supplier.cost-price.manage");
+    return this.requireScope(
+      auth,
+      tenantSupplierId,
+      "supplier.product.manage",
+      true,
+      { permissionAlreadyChecked: true },
+    );
+  }
+
   requirePriceRead(
     auth: AuthContext,
     tenantSupplierId: string,
@@ -123,9 +138,12 @@ export class SupplierProductAccessService {
     tenantSupplierId: string,
     permission: string,
     write: boolean,
+    options: { permissionAlreadyChecked?: boolean } = {},
   ): Promise<SupplierProxyScope> {
     const tenantId = this.accessPolicy.assertTenantContext(auth);
-    this.accessPolicy.assertPermission(auth, permission);
+    if (!options.permissionAlreadyChecked) {
+      this.accessPolicy.assertPermission(auth, permission);
+    }
 
     if (!auth.employeeId || !auth.authUserId) {
       throw Errors.forbidden();
