@@ -243,7 +243,7 @@ export class DouyinMiniappReleasesRepository {
     const claim = parseInput(UploadClaimInputSchema, input);
     return execute(async () => {
       const result = await this.client.rpc(
-        "get_or_create_and_claim_douyin_miniapp_release_upload",
+        "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
         {
           p_installation_id: claim.installationId,
           p_template_id: claim.templateId,

@@ -51,7 +51,10 @@ function createClient(results: DouyinMiniappReleaseDatabaseResult[]) {
       calls.push({ method: "from", args: [table] });
       return new Query();
     }),
-    rpc: mock(() => Promise.resolve(results[resultIndex++] ?? { data: null, error: null })),
+    rpc: mock((name: string, args: Record<string, unknown>) => {
+      calls.push({ method: "rpc", args: [name, args] });
+      return Promise.resolve(results[resultIndex++] ?? { data: null, error: null });
+    }),
   };
   return { client, calls };
 }
@@ -85,6 +88,35 @@ const releaseRow = {
 };
 
 describe("DouyinMiniappReleasesRepository reads", () => {
+  test("claims uploads through the full QR-stage v2 response contract", async () => {
+    const claimedRow = {
+      ...releaseRow,
+      latest_test_qr_url: "https://example.test/latest.png",
+      audit_qr_url: "https://example.test/audit.png",
+      operation_name: "upload" as const,
+      operation_claim_token: "77777777-7777-4777-8777-777777777777",
+      operation_claim_expires_at: "2026-07-20T01:02:00.000Z",
+      recovery_required: false,
+    };
+    const { client, calls } = createClient([{ data: [claimedRow], error: null }]);
+
+    await expect(new Repository(client).getOrCreateAndClaimUpload({
+      installationId: releaseRow.installation_id,
+      templateId: releaseRow.template_id,
+      templateVersion: releaseRow.template_version,
+      description: releaseRow.description,
+      channel: releaseRow.channel,
+      extJson: releaseRow.ext_json,
+      platformOperatorId: releaseRow.platform_operator_id,
+      claimToken: claimedRow.operation_claim_token,
+      claimExpiresAt: claimedRow.operation_claim_expires_at,
+    })).resolves.toEqual(claimedRow);
+
+    expect(calls.find((call) => call.method === "rpc")?.args[0]).toBe(
+      "get_or_create_and_claim_douyin_miniapp_release_upload_v2",
+    );
+  });
+
   test("lists one installation with exact projection, count, and bounded range", async () => {
     const { client, calls } = createClient([{ data: [releaseRow], error: null, count: 121 }]);
     await expect(new Repository(client).listByInstallation({

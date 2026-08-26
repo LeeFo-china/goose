@@ -25674,6 +25674,46 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_or_create_and_claim_douyin_miniapp_release_upload_v2: {
+        Args: {
+          p_channel: string
+          p_claim_expires_at: string
+          p_claim_token: string
+          p_description: string
+          p_ext_json: Json
+          p_installation_id: string
+          p_operator_id: string
+          p_template_id: string
+          p_template_version: string
+        }
+        Returns: {
+          audit_host_names: string[]
+          audit_note: string
+          audit_qr_url: string
+          audit_result: Json
+          audited_at: string
+          channel: string
+          created_at: string
+          description: string
+          douyin_log_id: string
+          ext_json: Json
+          id: string
+          installation_id: string
+          latest_test_qr_url: string
+          operation_claim_expires_at: string
+          operation_claim_token: string
+          operation_name: string
+          platform_operator_id: string
+          recovery_required: boolean
+          released_at: string
+          status: string
+          submitted_at: string
+          template_id: string
+          template_version: string
+          test_qr_url: string
+          updated_at: string
+        }[]
+      }
       get_partner_dashboard_monthly_summary: {
         Args: { p_end_at: string; p_partner_id: string; p_start_at: string }
         Returns: {
@@ -25743,6 +25783,29 @@ export type Database = {
       }
       get_supplier_purchase_order_financial_summary: {
         Args: { p_supplier_purchase_order_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      get_tenant_owner_construction_activity_snapshot: {
+        Args: { p_end_at: string; p_start_at: string; p_tenant_id: string }
+        Returns: Json
+      }
+      get_tenant_owner_finance_snapshot: {
+        Args: {
+          p_business_date: string
+          p_due_7d: string
+          p_end_at: string
+          p_start_at: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
+      get_tenant_owner_project_daily_snapshot: {
+        Args: {
+          p_business_date: string
+          p_end_at: string
+          p_start_at: string
+          p_tenant_id: string
+        }
         Returns: Json
       }
       get_tenant_supplier_order_eligibility: {
@@ -26231,6 +26294,37 @@ export type Database = {
           p_visible_assignee_ids: string[]
         }
         Returns: Json
+      }
+      list_tenant_owner_missing_project_logs: {
+        Args: {
+          p_business_date: string
+          p_end_at: string
+          p_limit?: number
+          p_start_at: string
+          p_tenant_id: string
+        }
+        Returns: {
+          assignee_employee_name: string
+          current_node_title: string
+          project_id: string
+          project_name: string
+          total_count: number
+        }[]
+      }
+      list_tenant_owner_risk_projects: {
+        Args: { p_business_date: string; p_limit?: number; p_tenant_id: string }
+        Returns: {
+          current_node_title: string
+          customer_name: string
+          owner_employee_name: string
+          project_id: string
+          project_name: string
+          reason: string
+          risk_level: string
+          risk_types: string[]
+          total_count: number
+          updated_at: string
+        }[]
       }
       list_tenant_service_provider_publications: {
         Args: { p_keyword: string; p_status: string }
