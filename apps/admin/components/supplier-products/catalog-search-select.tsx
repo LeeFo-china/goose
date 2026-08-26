@@ -162,7 +162,7 @@ export function CatalogSearchSelect({
           <Command shouldFilter={false}>
             <CommandInput
               value={keyword}
-              placeholder={`搜索${label}名称或编码`}
+              placeholder={`搜索${label}名称`}
               onValueChange={(nextKeyword) => {
                 setKeyword(nextKeyword);
                 setPage(1);
@@ -250,5 +250,5 @@ export function catalogOptionLabel(option: CatalogOption): string {
   const source = option.ownership_scope
     ? ` · ${option.ownership_scope === "tenant" ? "租户私有" : "平台标准"}`
     : "";
-  return `${name}${symbol} · ${option.code}${source}`;
+  return `${name}${symbol}${source}`;
 }

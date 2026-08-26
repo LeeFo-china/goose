@@ -61,7 +61,7 @@ async function chooseCatalogOption(
   optionName: RegExp,
 ) {
   await dialog.getByRole("combobox", { name: label, exact: true }).click();
-  await page.getByPlaceholder(`搜索${label}名称或编码`).fill(keyword);
+  await page.getByPlaceholder(`搜索${label}名称`).fill(keyword);
   await page.getByRole("option", { name: optionName }).click();
 }
 
@@ -136,7 +136,7 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await expect(dialog.getByLabel("商品编码")).toHaveValue("保存后系统自动生成");
   await dialog.getByLabel("商品名称").fill("E2E 瓷砖");
   await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
-  await page.getByPlaceholder("搜索分类名称或编码").fill("砖");
+  await page.getByPlaceholder("搜索分类名称").fill("砖");
   await expect(
     page.getByRole("option", { name: /主材 \/ 瓷砖 \/ 地砖/ }),
   ).toBeVisible();
@@ -255,12 +255,12 @@ test("租户新增私有商品可快速新建分类和品牌并保持单位只�
   await dialog.getByLabel("商品名称").fill("E2E 快速目录商品");
 
   await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
-  await page.getByPlaceholder("搜索分类名称或编码").fill("E2E 快速分类");
+  await page.getByPlaceholder("搜索分类名称").fill("E2E 快速分类");
   await page.getByRole("option", { name: "新建分类“E2E 快速分类”" }).click();
   await expect(dialog.getByText(/E2E 快速分类 .* 租户私有/)).toBeVisible();
 
   await dialog.getByRole("combobox", { name: "品牌", exact: true }).click();
-  await page.getByPlaceholder("搜索品牌名称或编码").fill("E2E 快速品牌");
+  await page.getByPlaceholder("搜索品牌名称").fill("E2E 快速品牌");
   await page.getByRole("option", { name: "新建品牌“E2E 快速品牌”" }).click();
   await expect(dialog.getByText(/E2E 快速品牌 .* 租户私有/)).toBeVisible();
 
@@ -272,7 +272,7 @@ test("租户新增私有商品可快速新建分类和品牌并保持单位只�
   await page.getByRole("button", { name: "新增 SKU" }).click();
   dialog = page.getByRole("dialog", { name: "新增供应商 SKU" });
   await dialog.getByRole("combobox", { name: "采购单位", exact: true }).click();
-  await page.getByPlaceholder("搜索采购单位名称或编码").fill("E2E 快速单位");
+  await page.getByPlaceholder("搜索采购单位名称").fill("E2E 快速单位");
   await expect(page.getByText("新建采购单位")).toHaveCount(0);
 
   const mutations = await readMutations(request);
