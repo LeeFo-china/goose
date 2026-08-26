@@ -17,6 +17,12 @@ function extractFunction(name: string): string {
   ))?.[0] ?? "";
 }
 
+function extractReplacement(name: string): string {
+  return sql.match(new RegExp(
+    `CREATE OR REPLACE FUNCTION public\\.${name}\\([\\s\\S]*?\\n\\$\\$;`,
+  ))?.[0] ?? "";
+}
+
 function expectOrdered(value: string, patterns: readonly RegExp[]): void {
   let cursor = 0;
 
@@ -38,6 +44,103 @@ function expectFragmentsOrdered(value: string, fragments: readonly string[]): vo
 }
 
 describe("supplier purchasable product command migration", () => {
+  test("tenant-scopes the existing purchase catalog resolver without changing its contract", () => {
+    const resolver = compact(
+      extractReplacement("resolve_supplier_purchase_order_catalog"),
+    );
+
+    expect(resolver).toContain(
+      "p_tenant_id uuid, p_tenant_supplier_id uuid, p_priced_at timestamptz, p_keyword text DEFAULT NULL, p_page integer DEFAULT 1, p_page_size integer DEFAULT 20",
+    );
+    expect(resolver).toContain("RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER");
+    expect(resolver).toContain("SET search_path = pg_catalog, public");
+    expect(resolver).toContain("price_list.tenant_id = p_tenant_id");
+    expect(resolver).toContain(
+      "price_list.tenant_supplier_id = p_tenant_supplier_id",
+    );
+    expect(resolver).toContain("price_list.supplier_id = v_supplier_id");
+    expect(compact(sql)).toMatch(
+      /REVOKE ALL ON FUNCTION public\.resolve_supplier_purchase_order_catalog\( uuid, uuid, timestamptz, text, integer, integer \) FROM PUBLIC, anon, authenticated, service_role;/,
+    );
+    expect(compact(sql)).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.resolve_supplier_purchase_order_catalog\( uuid, uuid, timestamptz, text, integer, integer \) TO service_role;/,
+    );
+    expect(sql).toContain(
+      "Rollback-only smoke plan: seed two active tenant_supplier relationships",
+    );
+    expect(sql).toContain(
+      "assert every returned list belongs to that tenant and tenant_supplier",
+    );
+  });
+
+  test("narrows both price v2 unique handlers to known schema constraints", () => {
+    const priceList = compact(
+      extractReplacement("command_supplier_price_list_v2"),
+    );
+    const priceItem = compact(
+      extractReplacement("command_supplier_price_item_v2"),
+    );
+
+    expect(priceList).toContain(
+      "p_action text, p_price_list_id uuid, p_new_price_list_id uuid, p_tenant_id uuid, p_tenant_supplier_id uuid, p_supplier_id uuid, p_expected_version integer, p_payload jsonb, p_actor_user_id uuid, p_actor_employee_id uuid, p_idempotency_key text",
+    );
+    expect(priceList).toContain(
+      "RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public",
+    );
+
+    expect(priceList).toContain(
+      "GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME",
+    );
+    for (const constraint of [
+      "supplier_price_lists_pkey",
+      "supplier_price_lists_id_supplier_key",
+      "supplier_price_lists_id_tenant_supplier_key",
+      "supplier_price_lists_tenant_series_version_uidx",
+      "supplier_price_lists_tenant_one_draft_uidx",
+      "supplier_command_events_actor_user_id_idempotency_key_key",
+    ]) {
+      expect(priceList, `price-list whitelist must include ${constraint}`)
+        .toContain(`'${constraint}'`);
+    }
+    expect(priceList).toMatch(
+      /WHEN unique_violation THEN GET STACKED DIAGNOSTICS[\s\S]*?IF v_constraint_name IN \([\s\S]*?RETURN jsonb_build_object\([\s\S]*?'status', 'state_conflict'[\s\S]*?ELSE RAISE; END IF/,
+    );
+
+    expect(priceItem).toContain(
+      "GET STACKED DIAGNOSTICS v_constraint_name = CONSTRAINT_NAME",
+    );
+    expect(priceItem).toContain(
+      "p_action text, p_item_id uuid, p_price_list_id uuid, p_tenant_id uuid, p_tenant_supplier_id uuid, p_supplier_id uuid, p_expected_version integer, p_payload jsonb, p_actor_user_id uuid, p_actor_employee_id uuid, p_idempotency_key text",
+    );
+    expect(priceItem).toContain(
+      "RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public",
+    );
+    for (const constraint of [
+      "supplier_price_list_items_pkey",
+      "supplier_price_list_items_list_sku_key",
+      "supplier_command_events_actor_user_id_idempotency_key_key",
+    ]) {
+      expect(priceItem, `price-item whitelist must include ${constraint}`)
+        .toContain(`'${constraint}'`);
+    }
+    expect(priceItem).toMatch(
+      /WHEN unique_violation THEN GET STACKED DIAGNOSTICS[\s\S]*?IF v_constraint_name IN \([\s\S]*?RETURN jsonb_build_object\([\s\S]*?'status', 'state_conflict'[\s\S]*?ELSE RAISE; END IF/,
+    );
+
+    const normalized = compact(sql);
+    for (const name of [
+      "command_supplier_price_list_v2",
+      "command_supplier_price_item_v2",
+    ]) {
+      expect(normalized).toMatch(new RegExp(
+        `REVOKE ALL ON FUNCTION public\\.${name}\\( text, uuid, uuid, uuid, uuid, uuid, integer, jsonb, uuid, uuid, text \\) FROM PUBLIC, anon, authenticated, service_role;`,
+      ));
+      expect(normalized).toMatch(new RegExp(
+        `GRANT EXECUTE ON FUNCTION public\\.${name}\\( text, uuid, uuid, uuid, uuid, uuid, integer, jsonb, uuid, uuid, text \\) TO service_role;`,
+      ));
+    }
+  });
+
   test("creates the exact private composite command in a bounded transaction", () => {
     const command = extractFunction("command_supplier_purchasable_product_v1");
 
@@ -236,7 +339,7 @@ describe("supplier purchasable product command migration", () => {
       command.indexOf("v_response := jsonb_build_object"),
     );
 
-    expect(resolver).toContain("p_sku ->> 'sku_code', 1, 100");
+    expect(resolver).toContain("p_sku ->> 'sku_code', 1, 1");
     expect(resolver).toContain("v_catalog_response ->> 'total'");
     expect(resolver).toContain("jsonb_array_length(v_catalog_response -> 'items')");
     expect(resolver).toContain("(v_catalog_response ->> 'total')::bigint <> 1");
@@ -259,6 +362,12 @@ describe("supplier purchasable product command migration", () => {
     );
     expect(resolver).toContain(
       "v_catalog_item ->> 'purchase_unit_id' IS DISTINCT FROM v_purchase_unit_id::text",
+    );
+    expect(resolver).toContain(
+      "v_catalog_item ->> 'base_unit_id' IS DISTINCT FROM v_purchase_unit_id::text",
+    );
+    expect(resolver).toContain(
+      "(v_catalog_item ->> 'base_unit_conversion')::numeric(18, 8) <> 1::numeric",
     );
     expect(resolver).toContain(
       "v_price_list_response -> 'price_list' ->> 'tenant_supplier_id' IS DISTINCT FROM p_tenant_supplier_id::text",
