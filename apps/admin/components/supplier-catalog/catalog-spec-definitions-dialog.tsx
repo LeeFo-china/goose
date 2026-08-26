@@ -104,7 +104,9 @@ export function CatalogSpecDefinitionsDialogButton({
   }, [load, open]);
 
   const columns: ColumnDef<CatalogSpecDefinition>[] = [
-    { accessorKey: "code", header: "编码" },
+    ...(scope === "platform"
+      ? [{ accessorKey: "code", header: "编码" } satisfies ColumnDef<CatalogSpecDefinition>]
+      : []),
     { accessorKey: "name", header: "规格名称", cell: ({ row }) => <span className="font-semibold">{row.original.name}</span> },
     { accessorKey: "value_type", header: "类型", cell: ({ row }) => valueTypeLabels[row.original.value_type] },
     { accessorKey: "ownership_scope", header: "来源", cell: ({ row }) => <TenantCatalogSourceBadge ownershipScope={row.original.ownership_scope} /> },

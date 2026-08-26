@@ -144,13 +144,29 @@ async function createCatalogOption(request, response, url, kind) {
     version: 1,
     created_at: now,
     updated_at: now,
-    ...(kind === "categories" ? { full_name: name, is_leaf: true } : {}),
+    ...(kind === "categories"
+      ? { full_name: name, is_leaf: true }
+      : {
+          category_id: payload.category_id ?? null,
+          category: catalogCategorySummary(payload.category_id),
+        }),
   };
   const records = kind === "categories" ? categories : brands;
   records.push(record);
   mockStore.createdCatalogIds.push(record.id);
   recordMutation(request, url, payload);
   sendData(response, record, 201);
+}
+
+function catalogCategorySummary(categoryId) {
+  const category = categories.find(({ id }) => id === categoryId);
+  return category ? {
+    id: category.id,
+    code: category.code,
+    name: category.name,
+    full_name: category.full_name,
+    status: category.status,
+  } : null;
 }
 
 async function createProduct(request, response, url, productId, platform) {

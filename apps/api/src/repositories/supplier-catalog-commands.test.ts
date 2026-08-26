@@ -14,6 +14,7 @@ const IDs = {
   unit: "00000000-0000-4000-8000-000000000106",
   suggestion: "00000000-0000-4000-8000-000000000107",
   spec: "00000000-0000-4000-8000-000000000108",
+  brand: "00000000-0000-4000-8000-000000000109",
 } as const;
 
 async function setup(responder?: (request: Request) => unknown) {
@@ -42,11 +43,13 @@ async function setup(responder?: (request: Request) => unknown) {
 }
 
 describe("SupplierCatalogRepository canonical commands", () => {
-  test("creates tenant categories and specs through canonical RPCs", async () => {
+  test("creates tenant categories brands and specs through canonical RPCs", async () => {
     const { repository, requests } = await setup((request) => {
       const name = new URL(request.url).pathname.split("/").at(-1);
       return name === "create_tenant_catalog_category"
         ? commandResult("catalog_category", category)
+        : name === "create_tenant_catalog_brand"
+          ? commandResult("catalog_brand", brand)
         : commandResult("spec_definition", specDefinition);
     });
 
@@ -59,6 +62,18 @@ describe("SupplierCatalogRepository canonical commands", () => {
       sort_order: 100,
       mapped_platform_category_id: IDs.platformCategory,
       ...tenantContext("tenant-category-1"),
+    });
+    await repository.createTenantBrand({
+      brand_id: IDs.brand,
+      category_id: IDs.category,
+      code: "TB-PRIVATE",
+      name: "租户品牌",
+      legal_name: null,
+      logo_file_id: null,
+      status: "active",
+      sort_order: 100,
+      mapped_platform_brand_id: null,
+      ...tenantContext("tenant-brand-1"),
     });
     await repository.createSpecDefinition({
       spec_definition_id: IDs.spec,
@@ -81,6 +96,7 @@ describe("SupplierCatalogRepository canonical commands", () => {
 
     expect(requests.map((request) => new URL(request.url).pathname)).toEqual([
       "/rest/v1/rpc/create_tenant_catalog_category",
+      "/rest/v1/rpc/create_tenant_catalog_brand",
       "/rest/v1/rpc/create_catalog_spec_definition",
     ]);
     expect(await requests[0]!.clone().json()).toMatchObject({
@@ -89,6 +105,11 @@ describe("SupplierCatalogRepository canonical commands", () => {
       p_mapped_platform_category_id: IDs.platformCategory,
     });
     expect(await requests[1]!.clone().json()).toMatchObject({
+      p_tenant_id: IDs.tenant,
+      p_brand_id: IDs.brand,
+      p_category_id: IDs.category,
+    });
+    expect(await requests[2]!.clone().json()).toMatchObject({
       p_tenant_id: IDs.tenant,
       p_spec_definition_id: IDs.spec,
       p_value_type: "single_enum",
@@ -265,6 +286,20 @@ const category = {
   full_name: "租户主材",
   is_leaf: true,
   mapped_platform_category_id: IDs.platformCategory,
+  ownership_scope: "tenant" as const,
+  owner_tenant_id: IDs.tenant,
+  status: "active" as const,
+  sort_order: 100,
+  ...audit,
+};
+const brand = {
+  id: IDs.brand,
+  category_id: IDs.category,
+  code: "TB-PRIVATE",
+  name: "租户品牌",
+  legal_name: null,
+  logo_file_id: null,
+  mapped_platform_brand_id: null,
   ownership_scope: "tenant" as const,
   owner_tenant_id: IDs.tenant,
   status: "active" as const,

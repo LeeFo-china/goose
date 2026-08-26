@@ -30,6 +30,11 @@ export type CatalogCategory = CatalogRecord & {
 };
 
 export type CatalogBrand = CatalogRecord & {
+  category_id: string | null;
+  category?: Pick<CatalogCategory, "id" | "code" | "name"> & {
+    full_name?: string;
+    status?: CatalogStatus;
+  } | null;
   legal_name: string | null;
   logo_file_id: string | null;
 };

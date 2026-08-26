@@ -40,6 +40,22 @@ export function buildTenantCatalogListPath(input: {
   return `/catalog/${input.view}?${query.toString()}`;
 }
 
+export function buildTenantCategoryOptionListPath(input: {
+  page: number;
+  pageSize: number;
+  keyword: string;
+}) {
+  const query = new URLSearchParams({
+    page: String(Math.max(1, input.page)),
+    pageSize: String(Math.min(100, Math.max(1, input.pageSize))),
+    status: "active",
+    is_leaf: "true",
+  });
+  const keyword = input.keyword.trim().slice(0, 80);
+  if (keyword) query.set("keyword", keyword);
+  return `/catalog/categories?${query}`;
+}
+
 export function buildTenantCategoryCommand(input: {
   id?: string;
   payload: object;

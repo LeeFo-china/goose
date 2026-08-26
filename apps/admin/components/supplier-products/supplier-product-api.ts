@@ -201,6 +201,7 @@ export function buildCatalogOptionCreateCommand(
   kind: WritableCatalogKind,
   name: string,
   idempotencyKey: string,
+  options: { categoryId?: string } = {},
 ): {
   path: string;
   init: {
@@ -214,7 +215,12 @@ export function buildCatalogOptionCreateCommand(
     init: {
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
-      body: JSON.stringify({ name: name.trim() }),
+      body: JSON.stringify({
+        name: name.trim(),
+        ...(kind === "brands" && options.categoryId
+          ? { category_id: options.categoryId }
+          : {}),
+      }),
     },
   };
 }
@@ -223,11 +229,13 @@ export function createCatalogOption(
   kind: WritableCatalogKind,
   name: string,
   idempotencyKey: string,
+  options: { categoryId?: string } = {},
 ) {
   const { path, init } = buildCatalogOptionCreateCommand(
     kind,
     name,
     idempotencyKey,
+    options,
   );
   return requestBackendJson<unknown>(path, {
     ...init,

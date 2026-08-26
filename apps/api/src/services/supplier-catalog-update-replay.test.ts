@@ -217,6 +217,7 @@ const categoryRequest = {
 };
 const brandRequest = {
   brand_id: IDs.brand,
+  category_id: IDs.category,
   code: "BR-1",
   name: "品牌",
   legal_name: null,
@@ -332,6 +333,7 @@ const tenantCategory = {
 };
 const tenantBrand = {
   id: IDs.brand,
+  category_id: IDs.category,
   code: "BR-1",
   name: "品牌",
   legal_name: null,

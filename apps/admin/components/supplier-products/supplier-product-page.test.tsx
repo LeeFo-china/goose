@@ -80,7 +80,7 @@ describe("供应商品与供货价行为", () => {
       full_name: "主材 / 瓷砖 / 地砖",
       ownership_scope: "tenant",
       owner_tenant_id: "tenant-1",
-    })).toBe("主材 / 瓷砖 / 地砖 · 租户私有");
+    })).toBe("主材 / 瓷砖 / 地砖");
   });
 
   test("异步请求门只接受最后一次请求结果", () => {
@@ -131,7 +131,7 @@ describe("供应商品与供货价行为", () => {
     );
   });
 
-  test("租户分类和品牌支持快速新建命令并只提交名称", () => {
+  test("租户分类和品牌支持快速新建命令并隐藏系统字段", () => {
     expect(buildCatalogOptionCreateCommand(
       "categories",
       " 防水辅料 ",
@@ -149,7 +149,18 @@ describe("供应商品与供货价行为", () => {
       "brands",
       "立邦油漆",
       "catalog-key-2",
-    ).path).toBe("/catalog/brands");
+      { categoryId: "category-1" },
+    )).toEqual({
+      path: "/catalog/brands",
+      init: {
+        method: "POST",
+        headers: { "Idempotency-Key": "catalog-key-2" },
+        body: JSON.stringify({
+          name: "立邦油漆",
+          category_id: "category-1",
+        }),
+      },
+    });
   });
 
   test("目录快速新建命令结果会归一化为可选中的目录选项", () => {
@@ -254,7 +265,7 @@ describe("供应商品与供货价行为", () => {
     )).toContain("平台共享");
     expect(renderToStaticMarkup(
       <SupplierProductSourceBadge source="tenant_private" />,
-    )).toContain("租户私有");
+    )).toContain("私有");
   });
 
   test("平台商品对租户只读，租户商品仅在 active 合作和权限下可写", () => {

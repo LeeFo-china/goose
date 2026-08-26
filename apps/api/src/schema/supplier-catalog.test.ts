@@ -110,13 +110,17 @@ describe("supplier catalog tenant schemas", () => {
 
   test("tenant brand creates only require user-facing fields", () => {
     const brand = schema("TenantCatalogBrandCreateSchema");
+    const categoryId = crypto.randomUUID();
 
     expect(brand.parse({
+      category_id: categoryId,
       name: "租户品牌",
     })).toEqual({
+      category_id: categoryId,
       name: "租户品牌",
       status: "active",
     });
+    expect(brand.safeParse({ name: "缺少分类" }).success).toBe(false);
   });
 
   test("tenant brand updates reject system-managed fields", () => {
@@ -146,7 +150,7 @@ describe("supplier catalog tenant schemas", () => {
 
   test("validates spec value types and enum contracts", () => {
     const create = schema("CatalogSpecDefinitionCreateSchema");
-    const common = { code: "COLOR", name: "颜色" };
+    const common = { name: "颜色" };
 
     for (const valueType of [
       "text", "number", "boolean", "single_enum", "multi_enum", "date",
@@ -158,6 +162,13 @@ describe("supplier catalog tenant schemas", () => {
         enum_options: enumOptions,
       }).success).toBe(true);
     }
+    expect(create.parse({
+      ...common,
+      value_type: "text",
+    })).toMatchObject({
+      name: "颜色",
+      value_type: "text",
+    });
     expect(create.safeParse({
       ...common,
       value_type: "single_enum",

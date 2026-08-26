@@ -263,6 +263,7 @@ export type Database = {
       }
       ai_models: {
         Row: {
+          category_id: string | null
           code: string
           created_at: string
           id: string
@@ -274,6 +275,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          category_id?: string | null
           code: string
           created_at?: string
           id?: string
@@ -285,6 +287,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          category_id?: string | null
           code?: string
           created_at?: string
           id?: string
@@ -604,6 +607,13 @@ export type Database = {
           version?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "catalog_brands_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "catalog_brands_created_by_employee_id_fkey"
             columns: ["created_by_employee_id"]
@@ -24585,7 +24595,7 @@ export type Database = {
         Args: {
           p_actor_employee_id: string
           p_actor_user_id: string
-          p_category_id: string
+          p_category_id: string | null
           p_code: string
           p_idempotency_key: string
           p_level: number
@@ -25199,6 +25209,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_brand_id: string
+          p_category_id: string
           p_code: string
           p_idempotency_key: string
           p_legal_name: string
@@ -28400,6 +28411,7 @@ export type Database = {
           p_actor_employee_id: string
           p_actor_user_id: string
           p_brand_id: string
+          p_category_id: string | null
           p_code: string
           p_expected_version: number
           p_idempotency_key: string

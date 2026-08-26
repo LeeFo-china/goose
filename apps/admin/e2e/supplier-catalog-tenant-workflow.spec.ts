@@ -179,7 +179,7 @@ test.describe("租户私有供应商目录", () => {
     await expect.poll(async () => (await readCatalogRequests(request)).length)
       .toBeGreaterThan(0);
     let categoryRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-SUPPLIES", exact: true }),
+      hasText: "租户标准辅料",
     });
     await expect(categoryRow).toBeVisible();
     await expect(categoryRow).not.toContainText("平台标准建材");
@@ -189,21 +189,22 @@ test.describe("租户私有供应商目录", () => {
 
     await page.getByRole("tab", { name: "品牌" }).click();
     const brandRow = page.getByRole("row").filter({
-      has: page.getByRole("cell", { name: "TENANT-BRAND", exact: true }),
+      hasText: "租户合作品牌",
     });
     await expect(brandRow).not.toContainText("基准品牌");
     await page.getByRole("button", { name: "新建私有品牌" }).click();
     const brandDialog = page.getByRole("dialog", { name: "新建私有品牌" });
-    await expect(brandDialog.getByLabel("编码")).toBeDisabled();
-    await expect(brandDialog.getByLabel("编码")).toHaveValue("保存后自动生成");
+    await expect(brandDialog.getByLabel("编码")).toHaveCount(0);
     await expect(brandDialog.getByLabel("法定名称")).toHaveCount(0);
     await expect(brandDialog.getByText(/平台品牌映射/)).toHaveCount(0);
     await expect(brandDialog.getByLabel("排序")).toHaveCount(0);
+    await brandDialog.getByRole("combobox", { name: "所属分类" }).click();
+    await page.getByRole("option", { name: "平台标准建材" }).click();
     await brandDialog.getByLabel("品牌名称").fill("租户精选品牌");
     await brandDialog.getByRole("button", { name: "保存品牌" }).click();
     await expect(page.getByText("私有品牌已创建")).toBeVisible();
     await expect(page.getByRole("row").filter({ hasText: "租户精选品牌" }))
-      .toContainText("租户私有");
+      .toContainText("私有");
 
     await page.goto("/supplier-catalog?view=units", { waitUntil: "networkidle" });
     await expect(page.getByText("数量", { exact: true }).first()).toBeVisible();

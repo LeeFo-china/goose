@@ -158,6 +158,7 @@ export class SupplierCatalogTenantService {
     idempotencyKey: string,
   ) {
     const actor = await this.requireWrite(auth);
+    await this.requireActiveBrandCategory(actor.tenantId, input.category_id);
     const brandId = this.commandIdFactory(
       "tenant.catalog.brand.create",
       actor.authUserId,
@@ -190,8 +191,13 @@ export class SupplierCatalogTenantService {
     );
     if (replay) return this.repository.updateTenantBrand(replay);
     const current = await this.requireWritableBrand(actor.tenantId, brandId);
+    const categoryId = input.category_id ?? current.category_id;
+    if (input.category_id) {
+      await this.requireActiveBrandCategory(actor.tenantId, input.category_id);
+    }
     return this.repository.updateTenantBrand({
       brand_id: brandId,
+      category_id: categoryId,
       code: current.code,
       name: input.name ?? current.name,
       legal_name: current.legal_name,
@@ -225,13 +231,15 @@ export class SupplierCatalogTenantService {
   ) {
     const actor = await this.requireWrite(auth);
     await this.requireWritableCategory(actor.tenantId, categoryId);
+    const specDefinitionId = this.commandIdFactory(
+      "tenant.catalog.spec-definition.create",
+      actor.authUserId,
+      idempotencyKey,
+    );
     return this.repository.createSpecDefinition({
       ...input,
-      spec_definition_id: this.commandIdFactory(
-        "tenant.catalog.spec-definition.create",
-        actor.authUserId,
-        idempotencyKey,
-      ),
+      code: input.code ?? generatedTenantSpecCode(specDefinitionId),
+      spec_definition_id: specDefinitionId,
       category_id: categoryId,
       tenant_id: actor.tenantId,
       ...actorCommandContext(actor, idempotencyKey),
@@ -388,6 +396,24 @@ export class SupplierCatalogTenantService {
     return requireTenantOwned(category, tenantId, "目录分类");
   }
 
+  private async requireActiveBrandCategory(tenantId: string, id: string) {
+    const category = await this.repository.findVisibleCategory(
+      id,
+      { kind: "tenant", tenantId },
+    );
+    if (!category) {
+      throw Errors.business(404, "目录分类不存在", "SUPPLIER_CATALOG_NOT_FOUND");
+    }
+    if (category.status !== "active") {
+      throw Errors.business(
+        409,
+        "目录分类未启用，不能绑定品牌",
+        "SUPPLIER_CATALOG_CONFLICT",
+      );
+    }
+    return category;
+  }
+
   private async requireWritableBrand(tenantId: string, id: string) {
     const brand = await this.repository.findVisibleBrand(
       id,
@@ -450,13 +476,12 @@ function tenantOwnedStatus<T extends { status?: "active" | "inactive" }>(
   return { ...input, status: input.status ?? "active" as const };
 }
 
-function generatedTenantCategoryCode(categoryId: string) {
-  return `TC-${categoryId.replaceAll("-", "").toUpperCase()}`;
-}
-
-function generatedTenantBrandCode(brandId: string) {
-  return `TB-${brandId.replaceAll("-", "").toUpperCase()}`;
-}
+const generatedTenantCategoryCode = (categoryId: string) =>
+  `TC-${categoryId.replaceAll("-", "").toUpperCase()}`;
+const generatedTenantBrandCode = (brandId: string) =>
+  `TB-${brandId.replaceAll("-", "").toUpperCase()}`;
+const generatedTenantSpecCode = (specDefinitionId: string) =>
+  `TS-${specDefinitionId.replaceAll("-", "").toUpperCase()}`;
 
 function actorCommandContext(actor: CatalogActor, idempotencyKey: string) {
   return {

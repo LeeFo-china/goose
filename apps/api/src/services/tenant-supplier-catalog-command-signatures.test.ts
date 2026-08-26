@@ -9,6 +9,14 @@ const migrationSql = existsSync(migrationUrl)
   ? readFileSync(migrationUrl, "utf8")
   : "";
 const normalizedSql = migrationSql.replace(/\s+/g, " ");
+const brandCategoryMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260826093000_add_tenant_catalog_brand_category.sql",
+  import.meta.url,
+);
+const brandCategoryMigrationSql = existsSync(brandCategoryMigrationUrl)
+  ? readFileSync(brandCategoryMigrationUrl, "utf8")
+  : "";
+const normalizedBrandCategorySql = brandCategoryMigrationSql.replace(/\s+/g, " ");
 
 const canonicalSignatures = [
   "create_catalog_unit(uuid, text, text, text, uuid, text, text, text, integer, uuid, uuid, text)",
@@ -78,5 +86,17 @@ describe("tenant supplier catalog command signatures", () => {
     expect(migrationSql).toContain(
       "use a separately reviewed validation migration",
     );
+  });
+
+  test("adds category-aware tenant brand command overloads", () => {
+    expect(existsSync(brandCategoryMigrationUrl)).toBe(true);
+    expect(normalizedBrandCategorySql).toContain(
+      "public.create_tenant_catalog_brand( uuid, uuid, text, text, text, uuid, text, integer, uuid, uuid, uuid, uuid, text )",
+    );
+    expect(normalizedBrandCategorySql).toContain(
+      "public.update_tenant_catalog_brand( uuid, uuid, text, text, text, uuid, text, integer, uuid, integer, uuid, uuid, uuid, text )",
+    );
+    expect(brandCategoryMigrationSql).toContain("'category_id', p_category_id");
+    expect(brandCategoryMigrationSql).toContain("catalog_brands_category_id_fkey");
   });
 });

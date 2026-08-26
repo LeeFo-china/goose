@@ -64,6 +64,7 @@ async function setup(settings = enabledSettings) {
     updateTenantCategory: mock(async (input: unknown) => input),
     createTenantBrand: mock(async (input: unknown) => input),
     updateTenantBrand: mock(async (input: unknown) => input),
+    createSpecDefinition: mock(async (input: unknown) => input),
     listUnitSuggestions: mock(async (input: unknown) => input),
     findVisibleCategory: mock(async () => ({
       id: "00000000-0000-4000-8000-000000000201",
@@ -80,6 +81,7 @@ async function setup(settings = enabledSettings) {
       id: BRAND_ID,
       ownership_scope: "tenant",
       owner_tenant_id: TENANT_ID,
+      category_id: CATEGORY_ID,
       code: "TB-OLD",
       name: "旧品牌",
       legal_name: "旧品牌法定名称",
@@ -370,12 +372,15 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
     const { service, repository } = await setup();
 
     await service.createTenantBrand(auth, {
-      name: "系统维护字段品牌", status: "active",
+      category_id: CATEGORY_ID,
+      name: "系统维护字段品牌",
+      status: "active",
     }, "brand-create-system-fields");
 
     expect(repository.createTenantBrand).toHaveBeenCalledWith(
       expect.objectContaining({
         brand_id: "00000000-0000-4000-8000-000000000301",
+        category_id: CATEGORY_ID,
         code: "TB-00000000000040008000000000000301",
         name: "系统维护字段品牌",
         legal_name: null,
@@ -397,6 +402,7 @@ describe("SupplierCatalogService tenant rollout and ownership", () => {
     expect(repository.updateTenantBrand).toHaveBeenCalledWith(
       expect.objectContaining({
         brand_id: BRAND_ID,
+        category_id: CATEGORY_ID,
         code: "TB-OLD",
         name: "更新品牌名称",
         legal_name: "旧品牌法定名称",

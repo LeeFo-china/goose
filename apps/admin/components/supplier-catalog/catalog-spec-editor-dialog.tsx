@@ -80,6 +80,7 @@ export function CatalogSpecEditorDialog({
   );
   const [isFilterable, setIsFilterable] = useState(record?.is_filterable ?? false);
   const [sortOrder, setSortOrder] = useState(String(record?.sort_order ?? 100));
+  const showCodeField = scope === "platform";
 
   function reset() {
     setCode(record?.code ?? "");
@@ -98,7 +99,7 @@ export function CatalogSpecEditorDialog({
     const isEnum = valueType === "single_enum" || valueType === "multi_enum";
     const payload = {
       ...(record ? { expected_version: record.version } : {}),
-      code: code.trim(),
+      ...(showCodeField ? { code: code.trim() } : {}),
       name: name.trim(),
       value_type: valueType,
       enum_options: isEnum
@@ -169,10 +170,12 @@ export function CatalogSpecEditorDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="catalog-spec-code">规格编码</FieldLabel>
-              <Input id="catalog-spec-code" required maxLength={64} value={code} onChange={(event) => setCode(event.target.value)} />
-            </Field>
+            {showCodeField ? (
+              <Field>
+                <FieldLabel htmlFor="catalog-spec-code">规格编码</FieldLabel>
+                <Input id="catalog-spec-code" required maxLength={64} value={code} onChange={(event) => setCode(event.target.value)} />
+              </Field>
+            ) : null}
             <Field>
               <FieldLabel htmlFor="catalog-spec-name">规格名称</FieldLabel>
               <Input id="catalog-spec-name" required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} />

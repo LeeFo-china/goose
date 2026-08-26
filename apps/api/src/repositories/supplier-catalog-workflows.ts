@@ -24,7 +24,8 @@ import type {
 } from "./supplier-catalog-commands";
 
 export type SpecDefinitionCreateCommand =
-  CatalogSpecDefinitionCreateInput & CatalogActorCommand & {
+  Omit<CatalogSpecDefinitionCreateInput, "code"> & CatalogActorCommand & {
+    code: string;
     spec_definition_id: string;
     category_id: string;
     tenant_id: string | null;

@@ -121,7 +121,7 @@ test("租户可检索第21个合作供应商并维护私有商品、规格、换
   await selectTwentyFirstSupplier(page);
 
   await expect(page.getByText("平台共享", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("租户私有", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("私有", { exact: true }).first()).toBeVisible();
 
   const sharedRow = page.getByRole("row").filter({ hasText: "平台共享瓷砖" });
   await expect(sharedRow.getByRole("button", { name: "编辑商品" })).toHaveCount(0);
@@ -257,12 +257,12 @@ test("租户新增私有商品可快速新建分类和品牌并保持单位只�
   await dialog.getByRole("combobox", { name: "分类", exact: true }).click();
   await page.getByPlaceholder("搜索分类名称").fill("E2E 快速分类");
   await page.getByRole("option", { name: "新建分类“E2E 快速分类”" }).click();
-  await expect(dialog.getByText(/E2E 快速分类 .* 租户私有/)).toBeVisible();
+  await expect(dialog.getByText("E2E 快速分类")).toBeVisible();
 
   await dialog.getByRole("combobox", { name: "品牌", exact: true }).click();
   await page.getByPlaceholder("搜索品牌名称").fill("E2E 快速品牌");
   await page.getByRole("option", { name: "新建品牌“E2E 快速品牌”" }).click();
-  await expect(dialog.getByText(/E2E 快速品牌 .* 租户私有/)).toBeVisible();
+  await expect(dialog.getByText("E2E 快速品牌")).toBeVisible();
 
   await dialog.getByRole("button", { name: "保存商品" }).click();
   await expect(page.getByText("E2E 快速目录商品", { exact: true })).toBeVisible();

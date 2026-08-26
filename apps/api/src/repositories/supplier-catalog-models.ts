@@ -11,7 +11,7 @@ export const CATEGORY_SELECT = [
 ].join(",");
 export const CATEGORY_MAPPING_SELECT = "id,code,name,full_name,status";
 export const BRAND_SELECT = [
-  "id", "code", "name", "legal_name", "logo_file_id",
+  "id", "category_id", "code", "name", "legal_name", "logo_file_id",
   "mapped_platform_brand_id", "ownership_scope", "owner_tenant_id",
   "status", "sort_order", "version", "created_by_employee_id",
   "updated_by_employee_id", "created_at", "updated_at",
@@ -73,6 +73,7 @@ export const CatalogCategorySchema = PlatformCategorySchema.extend({
 
 export const PlatformBrandSchema = z.object({
   id: z.uuid(),
+  category_id: z.uuid().nullable(),
   code: z.string(),
   name: z.string(),
   legal_name: z.string().nullable(),
@@ -88,6 +89,7 @@ export const CatalogBrandSummarySchema = z.object({
   status: CatalogStatusSchema,
 }).strict();
 export const CatalogBrandSchema = PlatformBrandSchema.extend({
+  category: CatalogCategorySummarySchema.nullable().optional(),
   mapped_platform_brand_id: z.uuid().nullable(),
   mapped_platform_brand: CatalogBrandSummarySchema.nullable().optional(),
   ...ownership,

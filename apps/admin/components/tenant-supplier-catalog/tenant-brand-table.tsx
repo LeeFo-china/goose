@@ -14,8 +14,16 @@ import type { TenantCatalogBrand } from "./tenant-catalog-types";
 
 export function TenantBrandTable({ records }: { records: TenantCatalogBrand[] }) {
   const columns: ColumnDef<TenantCatalogBrand>[] = [
-    { accessorKey: "code", header: "编码", cell: ({ row }) => <span className="font-medium">{row.original.code}</span> },
     { accessorKey: "name", header: "品牌", cell: ({ row }) => <span className="font-semibold">{row.original.name}</span> },
+    {
+      accessorKey: "category_id",
+      header: "所属分类",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {row.original.category?.full_name ?? row.original.category?.name ?? "-"}
+        </span>
+      ),
+    },
     { accessorKey: "ownership_scope", header: "来源", cell: ({ row }) => <TenantCatalogSourceBadge ownershipScope={row.original.ownership_scope} /> },
     { accessorKey: "status", header: "状态", cell: ({ row }) => { const meta = catalogStatusMeta[row.original.status]; return <Badge variant={meta.variant}>{meta.label}</Badge>; } },
     {

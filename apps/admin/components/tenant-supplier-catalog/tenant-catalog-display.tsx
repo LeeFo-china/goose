@@ -18,7 +18,7 @@ export function TenantCatalogSourceBadge({
 }) {
   return ownershipScope === "platform"
     ? <Badge variant="outline">平台共享</Badge>
-    : <Badge variant="secondary">租户私有</Badge>;
+    : <Badge variant="secondary">私有</Badge>;
 }
 
 export function CatalogUnitDimension({ value }: { value: string }) {

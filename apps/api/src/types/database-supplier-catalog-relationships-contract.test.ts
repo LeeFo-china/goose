@@ -12,6 +12,7 @@ const expectedCategory = [
   relation("catalog_categories_mapped_platform_category_id_fkey", "mapped_platform_category_id", "catalog_categories", "id"),
 ] satisfies readonly Relationship<"catalog_categories">[];
 const expectedBrand = [
+  relation("catalog_brands_category_id_fkey", "category_id", "catalog_categories", "id"),
   relation("catalog_brands_mapped_platform_brand_id_fkey", "mapped_platform_brand_id", "catalog_brands", "id"),
 ] satisfies readonly Relationship<"catalog_brands">[];
 const expectedSpecs = [
@@ -41,6 +42,10 @@ describe("supplier catalog generated database relationships", () => {
       "../../../../supabase/migrations/20260818122000_materialize_tenant_supplier_catalog_schema.sql",
       import.meta.url,
     ), "utf8"));
+    const brandCategorySql = normalized(readFileSync(new URL(
+      "../../../../supabase/migrations/20260826093000_add_tenant_catalog_brand_category.sql",
+      import.meta.url,
+    ), "utf8"));
 
     for (const fragment of [
       "mapped_platform_category_id uuid null references public.catalog_categories(id)",
@@ -54,6 +59,10 @@ describe("supplier catalog generated database relationships", () => {
       "processed_by_employee_id uuid null references public.employees(id)",
     ]) expect(createSql).toContain(fragment);
 
+    expect(brandCategorySql).toContain(
+      "foreign key (category_id) references public.catalog_categories(id)",
+    );
+
     for (const fragment of [
       "rename column processed_by_employee_id to reviewed_by_employee_id",
       "rename column created_by_employee_id to submitted_by_employee_id",
@@ -65,7 +74,7 @@ describe("supplier catalog generated database relationships", () => {
       ...expectedBrand,
       ...expectedSpecs,
       ...expectedSuggestions,
-    ]).toHaveLength(13);
+    ]).toHaveLength(14);
     for (const relationship of [
       ...expectedCategory,
       ...expectedBrand,

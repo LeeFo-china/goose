@@ -236,6 +236,14 @@ const secondPlatformSpec = {
 const initialTenantPrivateBrand = {
   ...structuredClone(initialBrand),
   id: "23000000-0000-4000-8000-000000000001",
+  category_id: initialTenantSharedCategory.id,
+  category: {
+    id: initialTenantSharedCategory.id,
+    code: initialTenantSharedCategory.code,
+    name: initialTenantSharedCategory.name,
+    full_name: initialTenantSharedCategory.full_name,
+    status: initialTenantSharedCategory.status,
+  },
   code: "TENANT-BRAND",
   name: "租户合作品牌",
   legal_name: "租户合作品牌有限公司",

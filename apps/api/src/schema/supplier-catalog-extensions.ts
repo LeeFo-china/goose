@@ -46,17 +46,20 @@ export const TenantCatalogCategoryPinSchema = z.object({
 }).strict();
 
 const tenantBrandFields = {
+  category_id: uuid("无效的目录分类 ID"),
   name: text(120, "目录品牌名称不能为空", "目录品牌名称不能超过 120 个字符"),
   status,
 };
 
 export const TenantCatalogBrandCreateSchema = z.object({
+  category_id: tenantBrandFields.category_id,
   name: tenantBrandFields.name,
   status: status.default("active"),
 }).strict();
 
 export const TenantCatalogBrandUpdateSchema = z.object({
   expected_version: expectedVersion,
+  category_id: tenantBrandFields.category_id.optional(),
   name: tenantBrandFields.name.optional(),
   status: status.optional(),
 }).strict().refine(hasPatch, {
@@ -123,6 +126,7 @@ function validateSpec(
 
 export const CatalogSpecDefinitionCreateSchema = z.object({
   ...specFields,
+  code: specFields.code.optional(),
   enum_options: specFields.enum_options.default([]),
   unit_dimension: specFields.unit_dimension.default(null),
   is_required: specFields.is_required.default(false),

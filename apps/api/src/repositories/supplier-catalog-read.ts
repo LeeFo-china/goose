@@ -101,7 +101,7 @@ export class SupplierCatalogReadRepository {
       "查询供应商目录品牌失败",
     );
     return toPage(
-      await this.hydrateMappedBrands(brands),
+      await this.hydrateBrandCategories(await this.hydrateMappedBrands(brands)),
       pagination,
       count,
     );
@@ -296,6 +296,32 @@ export class SupplierCatalogReadRepository {
       mapped_platform_brand: brand.mapped_platform_brand_id
         ? byId.get(brand.mapped_platform_brand_id) ?? null
         : null,
+    }));
+  }
+
+  private async hydrateBrandCategories(
+    brands: CatalogBrand[],
+  ): Promise<CatalogBrand[]> {
+    const ids = Array.from(new Set(
+      brands.flatMap((brand) => brand.category_id ? [brand.category_id] : []),
+    ));
+    if (ids.length === 0) {
+      return brands.map((brand) => ({ ...brand, category: null }));
+    }
+    const { data, error } = await this.client.from("catalog_categories")
+      .select(CATEGORY_MAPPING_SELECT)
+      .in("id", ids)
+      .limit(ids.length);
+    if (error) throw Errors.dbError("查询供应商目录品牌分类失败", error);
+    const categories = parseRows(
+      CatalogCategorySummarySchema,
+      data,
+      "查询供应商目录品牌分类失败",
+    );
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    return brands.map((brand) => ({
+      ...brand,
+      category: brand.category_id ? byId.get(brand.category_id) ?? null : null,
     }));
   }
 }

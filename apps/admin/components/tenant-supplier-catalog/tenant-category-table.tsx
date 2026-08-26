@@ -40,11 +40,6 @@ export function TenantCategoryTable({
 }) {
   const columns: ColumnDef<TenantCatalogCategory>[] = [
     {
-      accessorKey: "code",
-      header: "编码",
-      cell: ({ row }) => <span className="font-medium">{row.original.code}</span>,
-    },
-    {
       accessorKey: "full_name",
       header: "完整分类名",
       cell: ({ row }) => (

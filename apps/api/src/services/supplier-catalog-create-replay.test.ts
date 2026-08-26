@@ -83,6 +83,7 @@ async function setup() {
     submitUnitSuggestion: mock(async (input: unknown) => input),
     findVisibleCategory: mock(async () => ({
       id: IDs.category,
+      status: "active",
       ownership_scope: "tenant",
       owner_tenant_id: IDs.tenant,
     })),
@@ -116,6 +117,7 @@ const categoryInput = {
   mapped_platform_category_id: null,
 };
 const brandInput = {
+  category_id: IDs.category,
   code: "BR-1",
   name: "品牌",
   status: "active" as const,

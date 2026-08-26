@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import * as display from "./tenant-catalog-display";
@@ -66,9 +67,18 @@ describe("租户供应商目录", () => {
     expect(requests.buildTenantBrandCommand({
       payload: {
         name: "租户品牌",
+        category_id: TENANT_CATEGORY_ID,
       },
       idempotencyKey: "tenant-brand:create-1",
-    }).path).toBe("/catalog/brands");
+    })).toMatchObject({
+      path: "/catalog/brands",
+      init: {
+        body: JSON.stringify({
+          name: "租户品牌",
+          category_id: TENANT_CATEGORY_ID,
+        }),
+      },
+    });
     expect(requests.buildTenantSpecCommand({
       categoryId: TENANT_CATEGORY_ID,
       definitionId: PLATFORM_CATEGORY_ID,
@@ -182,14 +192,31 @@ describe("租户供应商目录", () => {
     const platformBadge = renderToStaticMarkup(
       <display.TenantCatalogSourceBadge ownershipScope="platform" />,
     );
+    const tenantBadge = renderToStaticMarkup(
+      <display.TenantCatalogSourceBadge ownershipScope="tenant" />,
+    );
     const tenantSummary = renderToStaticMarkup(
       <display.TenantCategoryIdentity fullName="主材 / 瓷砖 / 地砖" />,
     );
 
     expect(platformBadge).toContain("平台共享");
+    expect(tenantBadge).toContain("私有");
+    expect(tenantBadge).not.toContain("租户私有");
     expect(platformBadge).toContain("inline-flex items-center");
     expect(tenantSummary).toContain("主材 / 瓷砖 / 地砖");
     expect(tenantSummary).not.toContain("平台标准");
+  });
+
+  test("tenant catalog category brand and unit tables hide internal code columns", () => {
+    for (const file of [
+      "./tenant-category-table.tsx",
+      "./tenant-brand-table.tsx",
+      "./tenant-unit-table.tsx",
+    ]) {
+      const source = readFileSync(new URL(file, import.meta.url), "utf8");
+      expect(source).not.toContain('header: "编码"');
+      expect(source).not.toContain("accessorKey: \"code\"");
+    }
   });
 
   test("renders unit dimensions and suggestion lifecycle badges", () => {

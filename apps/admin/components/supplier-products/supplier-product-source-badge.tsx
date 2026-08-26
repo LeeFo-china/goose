@@ -9,6 +9,6 @@ export function SupplierProductSourceBadge({
   return source === "platform_shared" ? (
     <Badge variant="outline">平台共享</Badge>
   ) : (
-    <Badge variant="secondary">租户私有</Badge>
+    <Badge variant="secondary">私有</Badge>
   );
 }

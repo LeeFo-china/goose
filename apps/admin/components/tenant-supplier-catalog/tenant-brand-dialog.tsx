@@ -25,6 +25,7 @@ import { requestBackendJson } from "@/lib/backend-client";
 
 import { buildTenantBrandCommand } from "./tenant-catalog-requests";
 import { newTenantCatalogCommandKey } from "./tenant-catalog-rules";
+import { TenantCategorySelect } from "./tenant-category-select";
 import type { TenantCatalogBrand } from "./tenant-catalog-types";
 
 export function TenantBrandDialogButton({
@@ -36,17 +37,24 @@ export function TenantBrandDialogButton({
   const intentRef = useRef<CatalogCreateIntent | null>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [categoryId, setCategoryId] = useState(record?.category_id ?? "");
   const [name, setName] = useState(record?.name ?? "");
   const editing = Boolean(record);
 
   function reset() {
+    setCategoryId(record?.category_id ?? "");
     setName(record?.name ?? "");
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!categoryId) {
+      toast.error("请选择所属分类");
+      return;
+    }
     const payload = {
       ...(record ? { expected_version: record.version } : { status: "active" }),
+      category_id: categoryId,
       name: name.trim(),
     };
     const intent = resolveCatalogCreateIntent(
@@ -102,17 +110,12 @@ export function TenantBrandDialogButton({
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor={`tenant-brand-code-${record?.id ?? "new"}`}>
-                编码
-              </FieldLabel>
-              <Input
-                id={`tenant-brand-code-${record?.id ?? "new"}`}
-                value={record?.code ?? "保存后自动生成"}
-                disabled
-                readOnly
-              />
-            </Field>
+            <TenantCategorySelect
+              id={`tenant-brand-category-${record?.id ?? "new"}`}
+              value={categoryId}
+              selectedCategory={record?.category}
+              onChange={setCategoryId}
+            />
             <Field>
               <FieldLabel htmlFor={`tenant-brand-name-${record?.id ?? "new"}`}>
                 品牌名称

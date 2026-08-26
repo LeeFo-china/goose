@@ -76,8 +76,10 @@ export function createCatalogMockRuntime() {
 
   function listTenantCategories(url) {
     const parentId = url.searchParams.get("parent_id");
+    const leafOnly = url.searchParams.get("is_leaf") === "true";
     return paginate(filterCatalogRecords(state.tenantCategories, url).filter((record) =>
-      (parentId ? record.parent_id === parentId : record.parent_id === null) &&
+      (leafOnly || (parentId ? record.parent_id === parentId : record.parent_id === null)) &&
+      (!leafOnly || record.is_leaf) &&
       (url.searchParams.get("scope") !== "platform" ||
         record.ownership_scope === "platform")
     ).sort((left, right) =>
@@ -254,6 +256,10 @@ export function createCatalogMockRuntime() {
     for (const field of ["code", "name", "legal_name", "sort_order", "status"]) {
       if (field in payload) record[field] = payload[field];
     }
+    if ("category_id" in payload) {
+      record.category_id = payload.category_id;
+      record.category = categorySummary(payload.category_id);
+    }
     if ("mapped_platform_brand_id" in payload) {
       record.mapped_platform_brand_id = payload.mapped_platform_brand_id;
       const mapped = state.brands.find(({ id: candidateId }) =>
@@ -279,6 +285,8 @@ export function createCatalogMockRuntime() {
     const now = new Date().toISOString();
     const record = {
       id,
+      category_id: payload.category_id,
+      category: categorySummary(payload.category_id),
       code: payload.code ?? generatedTenantBrandCode(id),
       name: payload.name,
       legal_name: payload.legal_name ?? null,
@@ -296,6 +304,17 @@ export function createCatalogMockRuntime() {
     state.tenantBrands.push(record);
     recordMutation(request, url, payload);
     sendJson(response, 201, { success: true, data: record });
+  }
+
+  function categorySummary(categoryId) {
+    const category = state.tenantCategories.find(({ id }) => id === categoryId);
+    return category ? {
+      id: category.id,
+      code: category.code,
+      name: category.name,
+      full_name: category.full_name,
+      status: category.status,
+    } : null;
   }
 
   async function createSpec(request, response, url, categoryId, scope) {

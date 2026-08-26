@@ -24,6 +24,7 @@ const CategoryRequestSchema = z.object({
 }).strict();
 const BrandRequestSchema = z.object({
   brand_id: z.uuid(),
+  category_id: z.uuid().nullable(),
   code: z.string(),
   name: z.string(),
   legal_name: z.string().nullable(),

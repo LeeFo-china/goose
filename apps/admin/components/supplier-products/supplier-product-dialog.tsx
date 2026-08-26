@@ -176,6 +176,7 @@ export function SupplierProductDialog({
               scope={scope}
               value={brandId}
               selectedOption={product?.brand}
+              createCategoryId={categoryId}
               onChange={setBrandId}
             />
           </div>

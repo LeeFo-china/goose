@@ -50,6 +50,7 @@ export function CatalogSearchSelect({
   value,
   label: customLabel,
   selectedOption,
+  createCategoryId,
   onChange,
 }: {
   id: string;
@@ -58,6 +59,7 @@ export function CatalogSearchSelect({
   value: string;
   label?: string;
   selectedOption?: CatalogOption | null;
+  createCategoryId?: string;
   onChange: (value: string) => void;
 }) {
   const [result, setResult] = useState(emptyPage);
@@ -75,7 +77,7 @@ export function CatalogSearchSelect({
     keyword: createKeyword,
     loading,
     resultCount: result.list.length,
-  });
+  }) && (kind !== "brands" || Boolean(createCategoryId));
 
   useEffect(() => {
     let active = true;
@@ -121,7 +123,12 @@ export function CatalogSearchSelect({
       .slice(2)}`;
     setCreating(true);
     try {
-      const created = await createCatalogOption(kind, createKeyword, idempotencyKey);
+      const created = await createCatalogOption(
+        kind,
+        createKeyword,
+        idempotencyKey,
+        { categoryId: createCategoryId },
+      );
       setResult((current) => ({
         ...current,
         list: [created, ...current.list.filter(({ id }) => id !== created.id)],
@@ -247,8 +254,5 @@ export function CatalogSearchSelect({
 export function catalogOptionLabel(option: CatalogOption): string {
   const name = option.full_name ?? option.name;
   const symbol = option.symbol ? `（${option.symbol}）` : "";
-  const source = option.ownership_scope
-    ? ` · ${option.ownership_scope === "tenant" ? "租户私有" : "平台标准"}`
-    : "";
-  return `${name}${symbol}${source}`;
+  return `${name}${symbol}`;
 }

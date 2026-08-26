@@ -221,6 +221,7 @@ const category = {
 };
 const brand = {
   id: BRAND_ID,
+  category_id: null,
   code: "BR-001",
   name: "雨虹",
   legal_name: null,

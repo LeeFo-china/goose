@@ -55,6 +55,7 @@ export type TenantCategoryUpdateCommand = TenantCategoryCreateCommand & {
 };
 export type TenantBrandCreateCommand = TenantCatalogCommand & {
   brand_id: string;
+  category_id: string | null;
   code: string;
   name: string;
   legal_name?: string | null;
@@ -284,6 +285,7 @@ function categoryParams(input: TenantCategoryCreateCommand) {
 function brandParams(input: TenantBrandCreateCommand) {
   return {
     p_brand_id: input.brand_id,
+    p_category_id: input.category_id,
     p_code: input.code,
     p_name: input.name,
     p_legal_name: input.legal_name ?? null,

@@ -48,9 +48,14 @@ export class SupplierCatalogPlatformWorkflows {
     idempotencyKey: string,
   ) {
     const actor = this.dependencies.requirePlatformActor(authContext);
+    const code = input.code?.trim();
+    if (!code) {
+      throw Errors.badRequest("规格编码不能为空");
+    }
     return this.dependencies.mapCatalogConflict(() =>
       this.dependencies.repository.createSpecDefinition({
         ...input,
+        code,
         spec_definition_id: this.dependencies.commandIdFactory(
           "platform.catalog.spec-definition.create",
           actor.authUserId,
