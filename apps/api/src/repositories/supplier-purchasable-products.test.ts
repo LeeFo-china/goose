@@ -24,6 +24,7 @@ const PRICE_ITEM_ID = "c0000000-0000-4000-8000-00000000000c";
 const NOW = "2026-08-27T08:00:00+00:00";
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type ResultMutation = (result: SupplierPurchasableProductCreatedResult) => void;
 
 const command = {
   product_id: PRODUCT_ID,
@@ -41,7 +42,7 @@ const command = {
     sku_code: "TS-2000000000004000",
     name: "20kg/袋",
     purchase_unit_id: UNIT_ID,
-    spec_values: { weight: "20kg" },
+    spec_values: { weight: "20kg", count: 1, tags: ["bulk", "dry"] },
   },
   price: {
     unit_price: "48.00",
@@ -53,112 +54,56 @@ const command = {
   idempotency_key: "purchasable-product-test-key",
 };
 
-function createdResult(
-  idempotent: boolean,
-): SupplierPurchasableProductCreatedResult {
+function createdResult(idempotent: boolean): SupplierPurchasableProductCreatedResult {
   return {
-    status: "created",
-    idempotent,
+    status: "created", idempotent,
     product: {
-      id: PRODUCT_ID,
-      supplier_id: SUPPLIER_ID,
-      product_code: command.product.product_code,
-      name: command.product.name,
-      category_id: CATEGORY_ID,
-      brand_id: BRAND_ID,
-      description: null,
-      status: "active",
-      version: 2,
-      ownership_scope: "tenant",
-      owner_tenant_id: TENANT_ID,
-      acting_tenant_id: TENANT_ID,
-      acting_employee_id: EMPLOYEE_ID,
-      operation_source: "tenant",
-      proxy_reason: null,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
-      created_at: NOW,
-      updated_at: NOW,
+      id: PRODUCT_ID, supplier_id: SUPPLIER_ID,
+      product_code: command.product.product_code, name: command.product.name,
+      category_id: CATEGORY_ID, brand_id: BRAND_ID, description: null,
+      status: "active", version: 2, ownership_scope: "tenant",
+      owner_tenant_id: TENANT_ID, acting_tenant_id: TENANT_ID,
+      acting_employee_id: EMPLOYEE_ID, operation_source: "tenant",
+      proxy_reason: null, created_by_employee_id: EMPLOYEE_ID,
+      updated_by_employee_id: EMPLOYEE_ID, created_at: NOW, updated_at: NOW,
     },
     sku: {
-      id: SKU_ID,
-      supplier_id: SUPPLIER_ID,
-      supplier_product_id: PRODUCT_ID,
-      sku_code: command.sku.sku_code,
-      name: command.sku.name,
-      specification: null,
-      model: null,
-      spec_values: command.sku.spec_values,
-      purchase_unit_id: UNIT_ID,
-      base_unit_id: UNIT_ID,
-      base_unit_conversion: 1,
-      batch_managed: false,
-      color_managed: false,
-      serial_managed: false,
-      status: "active",
-      version: 2,
-      ownership_scope: "tenant",
-      owner_tenant_id: TENANT_ID,
-      acting_tenant_id: TENANT_ID,
-      acting_employee_id: EMPLOYEE_ID,
-      operation_source: "tenant",
-      proxy_reason: null,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
-      created_at: NOW,
-      updated_at: NOW,
+      id: SKU_ID, supplier_id: SUPPLIER_ID, supplier_product_id: PRODUCT_ID,
+      sku_code: command.sku.sku_code, name: command.sku.name,
+      specification: null, model: null, spec_values: command.sku.spec_values,
+      purchase_unit_id: UNIT_ID, base_unit_id: UNIT_ID,
+      base_unit_conversion: 1, batch_managed: false, color_managed: false,
+      serial_managed: false, status: "active", version: 2,
+      ownership_scope: "tenant", owner_tenant_id: TENANT_ID,
+      acting_tenant_id: TENANT_ID, acting_employee_id: EMPLOYEE_ID,
+      operation_source: "tenant", proxy_reason: null,
+      created_by_employee_id: EMPLOYEE_ID, updated_by_employee_id: EMPLOYEE_ID,
+      created_at: NOW, updated_at: NOW,
     },
     price: {
-      id: PRICE_ITEM_ID,
-      tenant_id: TENANT_ID,
-      supplier_id: SUPPLIER_ID,
-      supplier_price_list_id: PRICE_LIST_ID,
-      supplier_product_id: PRODUCT_ID,
-      supplier_sku_id: SKU_ID,
-      minimum_quantity: "1.0000",
-      maximum_quantity: null,
-      purchase_unit_id: UNIT_ID,
-      base_unit_id: UNIT_ID,
-      base_unit_conversion: "1.00000000",
-      unit_price: "48.00",
-      tax_rate: "0.130000",
-      tax_inclusive: true,
-      acting_tenant_id: TENANT_ID,
-      acting_employee_id: EMPLOYEE_ID,
-      operation_source: "tenant",
-      proxy_reason: null,
-      created_by_employee_id: EMPLOYEE_ID,
-      updated_by_employee_id: EMPLOYEE_ID,
-      created_at: NOW,
-      updated_at: NOW,
+      id: PRICE_ITEM_ID, tenant_id: TENANT_ID, supplier_id: SUPPLIER_ID,
+      supplier_price_list_id: PRICE_LIST_ID, supplier_product_id: PRODUCT_ID,
+      supplier_sku_id: SKU_ID, minimum_quantity: "1.0000",
+      maximum_quantity: null, purchase_unit_id: UNIT_ID, base_unit_id: UNIT_ID,
+      base_unit_conversion: "1.00000000", unit_price: "48.00",
+      tax_rate: "0.130000", tax_inclusive: true,
+      acting_tenant_id: TENANT_ID, acting_employee_id: EMPLOYEE_ID,
+      operation_source: "tenant", proxy_reason: null,
+      created_by_employee_id: EMPLOYEE_ID, updated_by_employee_id: EMPLOYEE_ID,
+      created_at: NOW, updated_at: NOW,
     },
     catalog_item: {
-      supplier_product_id: PRODUCT_ID,
-      product_code: command.product.product_code,
-      product_name: command.product.name,
-      supplier_sku_id: SKU_ID,
-      sku_code: command.sku.sku_code,
-      sku_name: command.sku.name,
-      specification: null,
-      model: null,
-      supplier_price_list_id: PRICE_LIST_ID,
-      price_list_code: "DEFAULT",
-      price_list_version: 1,
-      effective_from: NOW,
-      effective_until: null,
-      supplier_price_list_item_id: PRICE_ITEM_ID,
-      purchase_unit_id: UNIT_ID,
-      purchase_unit_code: "BAG",
-      purchase_unit_name: "袋",
-      purchase_unit_symbol: "袋",
-      base_unit_id: UNIT_ID,
-      base_unit_code: "BAG",
-      base_unit_name: "袋",
-      base_unit_symbol: "袋",
-      base_unit_conversion: "1.00000000",
-      unit_price: "48.00",
-      tax_rate: "0.130000",
-      tax_inclusive: true,
+      supplier_product_id: PRODUCT_ID, product_code: command.product.product_code,
+      product_name: command.product.name, supplier_sku_id: SKU_ID,
+      sku_code: command.sku.sku_code, sku_name: command.sku.name,
+      specification: null, model: null, supplier_price_list_id: PRICE_LIST_ID,
+      price_list_code: "DEFAULT", price_list_version: 1, effective_from: NOW,
+      effective_until: null, supplier_price_list_item_id: PRICE_ITEM_ID,
+      purchase_unit_id: UNIT_ID, purchase_unit_code: "BAG",
+      purchase_unit_name: "袋", purchase_unit_symbol: "袋", base_unit_id: UNIT_ID,
+      base_unit_code: "BAG", base_unit_name: "袋", base_unit_symbol: "袋",
+      base_unit_conversion: "1.00000000", unit_price: "48.00",
+      tax_rate: "0.130000", tax_inclusive: true,
     },
   };
 }
@@ -175,6 +120,11 @@ function uppercaseUuidValues(value: unknown): unknown {
   ]));
 }
 
+function parses(value: unknown): boolean {
+  return SupplierPurchasableProductCommandEnvelopeSchema.safeParse(value)
+    .success;
+}
+
 describe("supplier purchasable product command records", () => {
   test("strictly parses created and replay envelopes with complete stable rows", () => {
     expect(SupplierPurchasableProductCommandEnvelopeSchema.parse(
@@ -189,118 +139,154 @@ describe("supplier purchasable product command records", () => {
     const created = createdResult(false);
     const { idempotent: _missing, ...withoutIdempotent } = created;
 
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(
-      withoutIdempotent,
-    ).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    expect(parses(withoutIdempotent)).toBe(false);
+    expect(parses({
       ...created,
       idempotent: "false",
-    }).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    })).toBe(false);
+    expect(parses({
       ...created,
       debug_sql: "select secret",
-    }).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    })).toBe(false);
+    expect(parses({
       ...created,
       product: { ...created.product, unstable: true },
-    }).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    })).toBe(false);
+    expect(parses({
       ...created,
       catalog_item: {
         ...created.catalog_item,
         supplier_sku_id: PRODUCT_ID,
       },
-    }).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    })).toBe(false);
+    expect(parses({
       ...created,
       catalog_item: {
         ...created.catalog_item,
         unit_price: "49.00",
       },
-    }).success).toBe(false);
+    })).toBe(false);
   });
 
   test("rejects a price acting tenant outside the price tenant", () => {
     const created = createdResult(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    expect(parses({
       ...created,
       price: { ...created.price, acting_tenant_id: USER_ID },
-    }).success).toBe(false);
+    })).toBe(false);
   });
 
   test("compares SKU and price base conversions by decimal semantics", () => {
     const created = createdResult(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(created)
-      .success).toBe(true);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
+    expect(parses(created)).toBe(true);
+    expect(parses({
       ...created,
       sku: { ...created.sku, base_unit_conversion: 2 },
-    }).success).toBe(false);
+    })).toBe(false);
+  });
+
+  test("rejects malformed timestamps and out-of-contract created numerics", () => {
+    const offsetAndMicroseconds = structuredClone(createdResult(false));
+    offsetAndMicroseconds.product.created_at = "2026-08-27T08:00:00.123456Z";
+    offsetAndMicroseconds.sku.updated_at = "2026-08-27T16:00:00+08:00";
+    expect(parses(offsetAndMicroseconds)).toBe(true);
+
+    const cases: Array<{ label: string; mutate: ResultMutation }> = [
+      { label: "invalid timestamp", mutate: (r) => {
+        r.product.created_at = "not-a-timestamp"; } },
+      { label: "tax above one", mutate: (r) => {
+        r.price.tax_rate = r.catalog_item.tax_rate = "1.000001"; } },
+      { label: "unit price scale", mutate: (r) => {
+        r.price.unit_price = r.catalog_item.unit_price = "48.001"; } },
+      { label: "tax scale", mutate: (r) => {
+        r.price.tax_rate = r.catalog_item.tax_rate = "0.1234567"; } },
+      { label: "base conversion scale", mutate: (r) => {
+        r.price.base_unit_conversion =
+          r.catalog_item.base_unit_conversion = "1.000000001"; } },
+      { label: "minimum not one", mutate: (r) => {
+        r.price.minimum_quantity = "2.0000"; } },
+      { label: "minimum scale", mutate: (r) => {
+        r.price.minimum_quantity = "1.00000"; } },
+      { label: "maximum non-null", mutate: (r) => {
+        Reflect.set(r.price, "maximum_quantity", "2.0000"); } },
+      { label: "conversion not one", mutate: (r) => {
+        r.sku.base_unit_conversion = 2;
+        r.price.base_unit_conversion =
+          r.catalog_item.base_unit_conversion = "2.00000000"; } },
+    ];
+    const accepted = cases.filter(({ mutate }) => {
+      const result = structuredClone(createdResult(false));
+      mutate(result);
+      return parses(result);
+    }).map(({ label }) => label);
+    expect(accepted).toEqual([]);
   });
 
   test("rejects inconsistent creator and updater employee IDs on every row", () => {
-    const mutations: Array<(
-      result: SupplierPurchasableProductCreatedResult,
-    ) => void> = [
-      (result) => {
-        result.product.created_by_employee_id = USER_ID;
-      },
-      (result) => {
-        result.sku.created_by_employee_id = USER_ID;
-      },
-      (result) => {
-        result.price.created_by_employee_id = USER_ID;
-      },
-      (result) => {
-        result.product.updated_by_employee_id = USER_ID;
-      },
-      (result) => {
-        result.sku.updated_by_employee_id = USER_ID;
-      },
-      (result) => {
-        result.price.updated_by_employee_id = USER_ID;
-      },
+    const mutations: ResultMutation[] = [
+      (r) => { r.product.created_by_employee_id = USER_ID; },
+      (r) => { r.sku.created_by_employee_id = USER_ID; },
+      (r) => { r.price.created_by_employee_id = USER_ID; },
+      (r) => { r.product.updated_by_employee_id = USER_ID; },
+      (r) => { r.sku.updated_by_employee_id = USER_ID; },
+      (r) => { r.price.updated_by_employee_id = USER_ID; },
     ];
 
     for (const mutate of mutations) {
       const created = structuredClone(createdResult(false));
       mutate(created);
-      expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(created)
-        .success).toBe(false);
+      expect(parses(created)).toBe(false);
     }
   });
 
-  test("parses only stable known failure envelopes", () => {
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.parse({
-      status: "validation_error",
-      idempotent: false,
-      error_code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
-      reason: "invalid_price",
-    })).toEqual({
-      status: "validation_error",
-      idempotent: false,
-      error_code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
-      reason: "invalid_price",
+  test("accepts every real migration failure pair and rejects impossible pairs", () => {
+    const envelope = (status: string, error_code: string, reason: string) => ({
+      status, idempotent: false, error_code, reason,
     });
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.parse({
-      status: "state_conflict",
-      idempotent: false,
-      error_code: "SUPPLIER_PRICE_LIST_INVALID_ACTION",
-      reason: "state_conflict",
-    }).status).toBe("state_conflict");
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
-      status: "state_conflict",
-      idempotent: false,
-      error_code: "DATABASE_INTERNAL_DIAGNOSTIC",
-      reason: "relation public.secret does not exist",
-    }).success).toBe(false);
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
-      status: "validation_error",
-      idempotent: false,
-      error_code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
-      reason: "invalid_price",
-      diagnostics: { sql: "select secret" },
-    }).success).toBe(false);
+    const createValidation = [
+      "validation_error", "invalid_product", "invalid_sku", "invalid_price",
+    ].map((reason) => envelope("validation_error",
+      "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED", reason));
+    const createState = [
+      "default_price_list_draft_exists", "multiple_published_default_price_lists",
+      "category_not_found", "brand_not_found", "purchase_unit_not_found",
+      "product_conflict", "sku_conflict", "unique_conflict", "state_conflict",
+      "product_create_failed", "product_activate_failed", "sku_create_failed",
+      "sku_activate_failed", "price_list_version_failed",
+      "price_list_copy_incomplete", "price_list_prepare_failed",
+      "price_item_upsert_failed", "price_list_retire_failed",
+      "price_list_publish_failed", "catalog_result_not_exact",
+      "catalog_item_mismatch", "SUPPLIER_PRODUCT_NOT_FOUND",
+      "SUPPLIER_PRODUCT_VERSION_CONFLICT", "SUPPLIER_PRODUCT_STATE_CONFLICT",
+      "SUPPLIER_SKU_NOT_FOUND", "SUPPLIER_SKU_VERSION_CONFLICT",
+      "SUPPLIER_SKU_STATE_CONFLICT", "SUPPLIER_PRICE_LIST_NOT_FOUND",
+      "SUPPLIER_PRICE_LIST_VERSION_CONFLICT", "SUPPLIER_PRICE_PERIOD_CONFLICT",
+      "SUPPLIER_PRICE_LIST_INVALID_ACTION", "SUPPLIER_PRICE_ITEM_NOT_FOUND",
+    ].map((reason) => envelope("state_conflict",
+      "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED", reason));
+    const caughtState = [
+      "TENANT_SUPPLIER_NOT_FOUND", "SUPPLIER_NOT_FOUND",
+      "SUPPLIER_PRODUCT_STATE_CONFLICT", "SUPPLIER_SKU_STATE_CONFLICT",
+      "SUPPLIER_PRICE_LIST_INVALID_ACTION", "UNIT_CONVERSION_INVALID",
+    ].map((code) => envelope("state_conflict", code, "state_conflict"));
+    const valid = [...createValidation, ...createState, ...caughtState,
+      envelope("validation_error", "SUPPLIER_PROXY_ACTOR_INVALID", "actor_invalid"),
+      envelope("state_conflict", "SUPPLIER_ORDER_NOT_ELIGIBLE",
+        "tenant_supplier_unavailable"),
+      envelope("state_conflict", "SUPPLIER_ORDER_NOT_ELIGIBLE",
+        "tenant_supplier_not_found"),
+      envelope("state_conflict", "SUPPLIER_ORDER_NOT_ELIGIBLE", "state_conflict")];
+    const impossible = [
+      envelope("validation_error", "SUPPLIER_PROXY_ACTOR_INVALID", "invalid_price"),
+      envelope("state_conflict", "TENANT_SUPPLIER_NOT_FOUND", "actor_invalid"),
+      envelope("state_conflict", "DATABASE_INTERNAL_DIAGNOSTIC", "state_conflict"),
+    ];
+    expect(impossible.filter((value) =>
+      parses(value)
+    )).toEqual([]);
+    expect(valid.filter((value) =>
+      !parses(value)
+    )).toEqual([]);
   });
 
   test("accepts only database-ordered eligibility reason lists", () => {
@@ -311,8 +297,7 @@ describe("supplier purchasable product command records", () => {
       reason: "required_qualification_missing,active_contract_required",
     };
 
-    expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse(envelope)
-      .success).toBe(true);
+    expect(parses(envelope)).toBe(true);
     for (const reason of [
       "active_contract_required,required_qualification_missing",
       "required_qualification_missing, active_contract_required",
@@ -320,10 +305,7 @@ describe("supplier purchasable product command records", () => {
       "required_qualification_missing,unknown_reason",
       "required_qualification_missing,<script>",
     ]) {
-      expect(SupplierPurchasableProductCommandEnvelopeSchema.safeParse({
-        ...envelope,
-        reason,
-      }).success, reason).toBe(false);
+      expect(parses({ ...envelope, reason }), reason).toBe(false);
     }
   });
 });
@@ -361,13 +343,19 @@ describe("SupplierPurchasableProductsRepository", () => {
   });
 
   test("returns a replay envelope without changing idempotent", async () => {
-    const rpc = mock(async () => ({ data: createdResult(true), error: null }));
+    const replay = createdResult(true);
+    replay.sku.spec_values = {
+      tags: ["bulk", "dry"], count: 1.0, weight: "20kg",
+    };
+    replay.price.unit_price = replay.catalog_item.unit_price = "48.0";
+    replay.price.tax_rate = replay.catalog_item.tax_rate = "0.13";
+    const rpc = mock(async () => ({ data: replay, error: null }));
     const { SupplierPurchasableProductsRepository } = await import(
       "./supplier-purchasable-products"
     );
 
     await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
-      .create(command)).resolves.toEqual(createdResult(true));
+      .create(command)).resolves.toEqual(replay);
   });
 
   test("returns a stable comma-separated eligibility failure envelope", async () => {
@@ -399,22 +387,73 @@ describe("SupplierPurchasableProductsRepository", () => {
       .create(command)).resolves.toEqual(createdResult(true));
   });
 
-  test("maps malformed RPC output to a stable 500 without diagnostics", async () => {
-    const rpc = mock(async () => ({
-      data: { status: "created", internal: "unstable" },
-      error: null,
-    }));
+  test("binds every echoed product, SKU, and price value to the command", async () => {
+    const mutations: Array<{ label: string; mutate: ResultMutation }> = [
+      { label: "product name", mutate: (r) => {
+        r.product.name = r.catalog_item.product_name = "错误商品"; } },
+      { label: "category", mutate: (r) => {
+        r.product.category_id = USER_ID; } },
+      { label: "brand", mutate: (r) => {
+        r.product.brand_id = USER_ID; } },
+      { label: "sku name", mutate: (r) => {
+        r.sku.name = r.catalog_item.sku_name = "错误 SKU"; } },
+      { label: "purchase unit", mutate: (r) => {
+        r.sku.purchase_unit_id = r.sku.base_unit_id = CATEGORY_ID;
+        r.price.purchase_unit_id = r.price.base_unit_id = CATEGORY_ID;
+        r.catalog_item.purchase_unit_id = r.catalog_item.base_unit_id = CATEGORY_ID; } },
+      { label: "spec values", mutate: (r) => {
+        r.sku.spec_values = { weight: "25kg" }; } },
+      { label: "unit price", mutate: (r) => {
+        r.price.unit_price = r.catalog_item.unit_price = "49.00"; } },
+      { label: "tax rate", mutate: (r) => {
+        r.price.tax_rate = r.catalog_item.tax_rate = "0.090000"; } },
+      { label: "tax inclusive", mutate: (r) => {
+        r.price.tax_inclusive = r.catalog_item.tax_inclusive = false; } },
+    ];
+    const accepted: string[] = [];
     const { SupplierPurchasableProductsRepository } = await import(
       "./supplier-purchasable-products"
     );
+    for (const idempotent of [false, true]) {
+      for (const { label, mutate } of mutations) {
+        const response = structuredClone(createdResult(idempotent));
+        mutate(response);
+        const rpc = mock(async () => ({ data: response, error: null }));
+        try {
+          await new SupplierPurchasableProductsRepository(() => ({ rpc }))
+            .create(command);
+          accepted.push(`${idempotent ? "replay" : "created"}:${label}`);
+        } catch (error) {
+          expect(error).toMatchObject({
+            statusCode: 500,
+            code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+            details: undefined,
+          });
+        }
+        expect(rpc).toHaveBeenCalledTimes(1);
+      }
+    }
+    expect(accepted).toEqual([]);
+  });
 
-    await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
-      .create(command)).rejects.toMatchObject({
-        statusCode: 500,
-        code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
-        message: "创建可采购商品失败",
-        details: undefined,
-      });
+  test("maps malformed RPC output to a stable 500 without diagnostics", async () => {
+    const { SupplierPurchasableProductsRepository } = await import(
+      "./supplier-purchasable-products"
+    );
+    for (const data of [
+      { status: "created", internal: "unstable" },
+      { status: "validation_error", idempotent: false,
+        error_code: "SUPPLIER_PROXY_ACTOR_INVALID", reason: "invalid_price" },
+      { status: "state_conflict", idempotent: false,
+        error_code: "DATABASE_INTERNAL_DIAGNOSTIC", reason: "state_conflict" },
+    ]) {
+      const rpc = mock(async () => ({ data, error: null }));
+      await expect(new SupplierPurchasableProductsRepository(() => ({ rpc }))
+        .create(command)).rejects.toMatchObject({ statusCode: 500,
+          code: "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED",
+          message: "创建可采购商品失败", details: undefined });
+      expect(rpc).toHaveBeenCalledTimes(1);
+    }
   });
 
   test("maps known Supabase command errors and hides unknown diagnostics", async () => {

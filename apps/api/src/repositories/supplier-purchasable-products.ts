@@ -1,5 +1,6 @@
 import { Errors } from "@/errors/error-factory";
 import {
+  sameLimitedDecimal,
   SupplierPurchasableProductCommandEnvelopeSchema,
   type SupplierPurchasableProductCommandResult,
 } from "@/repositories/supplier-purchasable-product-records";
@@ -89,18 +90,44 @@ function matchesCommandIdentity(
   if (result.status !== "created") return true;
   return sameUuid(result.product.id, input.product_id) &&
     result.product.product_code === input.product.product_code &&
+    result.product.name === input.product.name &&
+    sameUuid(result.product.category_id, input.product.category_id) &&
+    sameUuid(result.product.brand_id, input.product.brand_id) &&
     sameUuid(result.product.supplier_id, input.supplier_id) &&
     sameUuid(result.product.owner_tenant_id, input.tenant_id) &&
     sameUuid(result.product.acting_employee_id, input.actor_employee_id) &&
     sameUuid(result.sku.id, input.sku_id) &&
     result.sku.sku_code === input.sku.sku_code &&
+    result.sku.name === input.sku.name &&
+    sameUuid(result.sku.purchase_unit_id, input.sku.purchase_unit_id) &&
+    sameJsonValue(result.sku.spec_values, input.sku.spec_values) &&
     sameUuid(result.price.tenant_id, input.tenant_id) &&
     sameUuid(result.price.supplier_id, input.supplier_id) &&
-    sameUuid(result.price.acting_employee_id, input.actor_employee_id);
+    sameUuid(result.price.acting_employee_id, input.actor_employee_id) &&
+    sameLimitedDecimal(result.price.unit_price, input.price.unit_price) &&
+    sameLimitedDecimal(result.price.tax_rate, input.price.tax_rate) &&
+    result.price.tax_inclusive === input.price.tax_inclusive;
 }
 
 function sameUuid(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
+}
+
+function sameJsonValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return Array.isArray(left) && Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameJsonValue(value, right[index]));
+  }
+  if (typeof left !== "object" || left === null ||
+    typeof right !== "object" || right === null) return false;
+  const leftRecord = left as Record<string, unknown>;
+  const rightRecord = right as Record<string, unknown>;
+  const leftKeys = Object.keys(leftRecord);
+  return leftKeys.length === Object.keys(rightRecord).length &&
+    leftKeys.every((key) => Object.hasOwn(rightRecord, key) &&
+      sameJsonValue(leftRecord[key], rightRecord[key]));
 }
 
 export const supplierPurchasableProductsRepository =

@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 const uuid = z.uuid().transform((value) => value.toLowerCase());
-const timestamp = z.string().min(1);
-const decimal = z.string().regex(/^(?:0|[1-9]\d*)(?:\.\d+)?$/);
+const timestamp = z.iso.datetime({ offset: true });
+const minimumQuantity = z.string()
+  .regex(/^(?:0|[1-9]\d{0,13})(?:\.\d{1,4})?$/)
+  .refine((value) => sameLimitedDecimal(value, "1"));
 const baseUnitConversionText = z.string()
   .regex(/^(?:0|[1-9]\d{0,9})(?:\.\d{1,8})?$/)
   .refine((value) => canonicalDecimal(value) !== "0");
@@ -17,7 +19,8 @@ const baseUnitConversionNumber = z.number().finite().positive()
 const unitPrice = z.string()
   .regex(/^(?:0|[1-9]\d{0,11})(?:\.\d{1,2})?$/)
   .refine((value) => value !== "0" && !/^0\.0+$/.test(value));
-const taxRate = z.string().regex(/^(?:0|1)(?:\.\d{1,6})?$/);
+const taxRate = z.string()
+  .regex(/^(?:0(?:\.\d{1,6})?|1(?:\.0{1,6})?)$/);
 
 const ELIGIBILITY_REASONS = [
   "module_disabled",
@@ -29,14 +32,13 @@ const ELIGIBILITY_REASONS = [
   "required_qualification_expired",
   "active_contract_required",
 ] as const;
-const SINGLE_FAILURE_REASONS = new Set<string>([
-  ...ELIGIBILITY_REASONS,
+const CREATE_VALIDATION_REASONS = new Set([
   "validation_error",
   "invalid_product",
   "invalid_sku",
   "invalid_price",
-  "actor_invalid",
-  "tenant_supplier_unavailable",
+]);
+const CREATE_STATE_REASONS = new Set([
   "default_price_list_draft_exists",
   "multiple_published_default_price_lists",
   "category_not_found",
@@ -58,9 +60,6 @@ const SINGLE_FAILURE_REASONS = new Set<string>([
   "price_list_publish_failed",
   "catalog_result_not_exact",
   "catalog_item_mismatch",
-  "TENANT_SUPPLIER_NOT_FOUND",
-  "SUPPLIER_NOT_FOUND",
-  "SUPPLIER_ORDER_NOT_ELIGIBLE",
   "SUPPLIER_PRODUCT_NOT_FOUND",
   "SUPPLIER_PRODUCT_VERSION_CONFLICT",
   "SUPPLIER_PRODUCT_STATE_CONFLICT",
@@ -73,10 +72,16 @@ const SINGLE_FAILURE_REASONS = new Set<string>([
   "SUPPLIER_PRICE_PERIOD_CONFLICT",
   "SUPPLIER_PRICE_LIST_INVALID_ACTION",
   "SUPPLIER_PRICE_ITEM_NOT_FOUND",
-  "SUPPLIER_PROXY_ACTOR_INVALID",
+]);
+const DIRECT_STATE_CODES = new Set([
+  "TENANT_SUPPLIER_NOT_FOUND",
+  "SUPPLIER_NOT_FOUND",
+  "SUPPLIER_PRODUCT_STATE_CONFLICT",
+  "SUPPLIER_SKU_STATE_CONFLICT",
+  "SUPPLIER_PRICE_LIST_INVALID_ACTION",
   "UNIT_CONVERSION_INVALID",
 ]);
-const reason = z.string().min(1).max(188).refine(isStableFailureReason);
+const reason = z.string().min(1).max(188);
 
 const SpecValueSchema = z.union([
   z.string(),
@@ -143,8 +148,8 @@ export const SupplierPurchasablePriceRecordSchema = z.object({
   supplier_price_list_id: uuid,
   supplier_product_id: uuid,
   supplier_sku_id: uuid,
-  minimum_quantity: decimal,
-  maximum_quantity: decimal.nullable(),
+  minimum_quantity: minimumQuantity,
+  maximum_quantity: z.null(),
   purchase_unit_id: uuid,
   base_unit_id: uuid,
   base_unit_conversion: baseUnitConversionText,
@@ -242,8 +247,11 @@ const CreatedResultSchema = z.object({
       result.price.base_unit_conversion,
       result.catalog_item.base_unit_conversion,
     ),
-    result.price.unit_price === result.catalog_item.unit_price,
-    result.price.tax_rate === result.catalog_item.tax_rate,
+    sameLimitedDecimal(result.sku.base_unit_conversion, "1"),
+    sameLimitedDecimal(result.price.base_unit_conversion, "1"),
+    sameLimitedDecimal(result.catalog_item.base_unit_conversion, "1"),
+    sameLimitedDecimal(result.price.unit_price, result.catalog_item.unit_price),
+    sameLimitedDecimal(result.price.tax_rate, result.catalog_item.tax_rate),
     result.price.tax_inclusive === result.catalog_item.tax_inclusive,
   ];
   if (matches.every(Boolean)) return;
@@ -261,7 +269,12 @@ const ValidationErrorResultSchema = z.object({
     "SUPPLIER_PROXY_ACTOR_INVALID",
   ]),
   reason,
-}).strict();
+}).strict().superRefine((result, context) => {
+  const valid = result.error_code === "SUPPLIER_PROXY_ACTOR_INVALID"
+    ? result.reason === "actor_invalid"
+    : CREATE_VALIDATION_REASONS.has(result.reason);
+  if (!valid) addFailurePairIssue(context);
+});
 
 const StateConflictResultSchema = z.object({
   status: z.literal("state_conflict"),
@@ -277,7 +290,21 @@ const StateConflictResultSchema = z.object({
     "UNIT_CONVERSION_INVALID",
   ]),
   reason,
-}).strict();
+}).strict().superRefine((result, context) => {
+  let valid = false;
+  if (result.error_code === "SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED") {
+    valid = CREATE_STATE_REASONS.has(result.reason);
+  } else if (result.error_code === "SUPPLIER_ORDER_NOT_ELIGIBLE") {
+    valid = [
+      "tenant_supplier_unavailable",
+      "tenant_supplier_not_found",
+      "state_conflict",
+    ].includes(result.reason) || isStableEligibilityReason(result.reason);
+  } else if (DIRECT_STATE_CODES.has(result.error_code)) {
+    valid = result.reason === "state_conflict";
+  }
+  if (!valid) addFailurePairIssue(context);
+});
 
 export const SupplierPurchasableProductCommandEnvelopeSchema =
   z.discriminatedUnion("status", [
@@ -291,10 +318,9 @@ export type SupplierPurchasableProductCreatedResult =
 export type SupplierPurchasableProductCommandResult =
   z.infer<typeof SupplierPurchasableProductCommandEnvelopeSchema>;
 
-function isStableFailureReason(value: string): boolean {
-  if (SINGLE_FAILURE_REASONS.has(value)) return true;
+function isStableEligibilityReason(value: string): boolean {
   const tokens = value.split(",");
-  if (tokens.length < 2 || tokens.length > ELIGIBILITY_REASONS.length) {
+  if (tokens.length < 1 || tokens.length > ELIGIBILITY_REASONS.length) {
     return false;
   }
   let previousIndex = -1;
@@ -308,7 +334,14 @@ function isStableFailureReason(value: string): boolean {
   return true;
 }
 
-function sameLimitedDecimal(left: number | string, right: number | string) {
+function addFailurePairIssue(context: z.RefinementCtx): void {
+  context.addIssue({ code: "custom", message: "可采购商品命令失败响应不匹配" });
+}
+
+export function sameLimitedDecimal(
+  left: number | string,
+  right: number | string,
+): boolean {
   const canonicalLeft = canonicalDecimal(left);
   return canonicalLeft !== null && canonicalLeft === canonicalDecimal(right);
 }
