@@ -32,23 +32,15 @@ const command = {
   tenant_id: TENANT_ID,
   tenant_supplier_id: TENANT_SUPPLIER_ID,
   supplier_id: SUPPLIER_ID,
-  product: {
-    product_code: "TP-1000000000004000",
-    name: "耐水腻子粉",
-    category_id: CATEGORY_ID,
-    brand_id: BRAND_ID,
-  },
+  product: { product_code: "TP-1000000000004000", name: "耐水腻子粉",
+    category_id: CATEGORY_ID, brand_id: BRAND_ID },
   sku: {
     sku_code: "TS-2000000000004000",
     name: "20kg/袋",
     purchase_unit_id: UNIT_ID,
     spec_values: { weight: "20kg", count: 1, tags: ["bulk", "dry"] },
   },
-  price: {
-    unit_price: "48.00",
-    tax_rate: "0.130000",
-    tax_inclusive: true,
-  },
+  price: { unit_price: "48.00", tax_rate: "0.130000", tax_inclusive: true },
   actor_user_id: USER_ID,
   actor_employee_id: EMPLOYEE_ID,
   idempotency_key: "purchasable-product-test-key",
@@ -213,12 +205,22 @@ describe("supplier purchasable product command records", () => {
         r.sku.base_unit_conversion = 2;
         r.price.base_unit_conversion =
           r.catalog_item.base_unit_conversion = "2.00000000"; } },
+      { label: "product description", mutate: (r) => { Reflect.set(r.product, "description", "unexpected"); } },
+      { label: "product version", mutate: (r) => { Reflect.set(r.product, "version", 3); } },
+      { label: "sku specification", mutate: (r) => { Reflect.set(r.sku, "specification", "unexpected"); Reflect.set(r.catalog_item, "specification", "unexpected"); } },
+      { label: "sku model", mutate: (r) => { Reflect.set(r.sku, "model", "unexpected"); Reflect.set(r.catalog_item, "model", "unexpected"); } },
+      { label: "sku batch", mutate: (r) => { Reflect.set(r.sku, "batch_managed", true); } },
+      { label: "sku color", mutate: (r) => { Reflect.set(r.sku, "color_managed", true); } },
+      { label: "sku serial", mutate: (r) => { Reflect.set(r.sku, "serial_managed", true); } },
+      { label: "sku version", mutate: (r) => { Reflect.set(r.sku, "version", 3); } },
     ];
-    const accepted = cases.filter(({ mutate }) => {
-      const result = structuredClone(createdResult(false));
-      mutate(result);
-      return parses(result);
-    }).map(({ label }) => label);
+    const accepted = [false, true].flatMap((idempotent) =>
+      cases.filter(({ mutate }) => {
+        const result = structuredClone(createdResult(idempotent));
+        mutate(result);
+        return parses(result);
+      }).map(({ label }) => `${idempotent ? "replay" : "created"}:${label}`)
+    );
     expect(accepted).toEqual([]);
   });
 
