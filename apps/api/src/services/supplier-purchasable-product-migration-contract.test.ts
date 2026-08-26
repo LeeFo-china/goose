@@ -91,11 +91,20 @@ describe("supplier purchasable product command migration", () => {
     const command = compact(
       extractFunction("command_supplier_purchasable_product_v1"),
     );
+    const parentKeyExpression = command.slice(
+      command.indexOf("v_parent_key :="),
+      command.indexOf("PERFORM pg_catalog.pg_advisory_xact_lock"),
+    );
+
+    expect(parentKeyExpression).toContain(
+      "v_parent_key := 'supplier-purchasable-product:' || pg_catalog.md5(btrim(p_idempotency_key))",
+    );
+    expect(parentKeyExpression).not.toContain("p_tenant_id");
 
     expectFragmentsOrdered(command, [
       "v_parent_fingerprint :=",
       "v_parent_key := 'supplier-purchasable-product:'",
-      "p_tenant_id::text || ':' || btrim(p_idempotency_key)",
+      "pg_catalog.md5(btrim(p_idempotency_key))",
       "pg_advisory_xact_lock",
       "FROM public.supplier_command_events AS event",
       "WHERE event.actor_user_id = p_actor_user_id AND event.idempotency_key = v_parent_key",
@@ -145,21 +154,77 @@ describe("supplier purchasable product command migration", () => {
     );
 
     expectFragmentsOrdered(command, [
-      "v_child_key := v_parent_key || ':price-list-new-version'",
+      "IF v_source_price_list.id IS NULL THEN",
+      "v_child_key := v_parent_key || ':price-list-create'",
+      "p_action => 'create'",
+      "p_price_list_id => v_price_list_id, p_new_price_list_id => NULL::uuid, p_tenant_id => p_tenant_id, p_tenant_supplier_id => p_tenant_supplier_id, p_supplier_id => p_supplier_id, p_expected_version => NULL::integer",
+      "'price_list_code', 'DEFAULT', 'name', '默认供货价', 'currency', 'CNY', 'effective_from', v_priced_at, 'effective_until', NULL",
+      "p_actor_user_id => p_actor_user_id, p_actor_employee_id => p_actor_employee_id, p_idempotency_key => v_child_key",
+      "ELSE v_child_key := v_parent_key || ':price-list-new-version'",
       "p_action => 'new_version'",
       "p_price_list_id => v_source_price_list.id, p_new_price_list_id => v_price_list_id",
+      "p_expected_version => v_source_price_list.row_version, p_payload => '{}'::jsonb",
+      "p_idempotency_key => v_child_key",
       "FROM public.supplier_price_list_items AS old_item",
       "FROM public.supplier_price_list_items AS copied_item",
+      "copied_item.supplier_product_id = old_item.supplier_product_id",
+      "copied_item.supplier_sku_id = old_item.supplier_sku_id",
+      "copied_item.minimum_quantity = old_item.minimum_quantity",
+      "copied_item.maximum_quantity IS NOT DISTINCT FROM old_item.maximum_quantity",
+      "copied_item.purchase_unit_id = old_item.purchase_unit_id",
+      "copied_item.base_unit_id = old_item.base_unit_id",
+      "copied_item.base_unit_conversion = old_item.base_unit_conversion",
+      "copied_item.unit_price = old_item.unit_price",
+      "copied_item.tax_rate = old_item.tax_rate",
+      "copied_item.tax_inclusive = old_item.tax_inclusive",
+      "v_child_key := v_parent_key || ':price-list-effective-period'",
+      "p_action => 'update'",
+      "p_price_list_id => v_price_list_id",
+      "p_expected_version => (v_price_list_response ->> 'version')::integer",
+      "'effective_from', v_priced_at, 'effective_until', NULL",
+      "p_idempotency_key => v_child_key",
       "v_child_key := v_parent_key || ':price-item-upsert'",
       "p_action => 'upsert'",
       "p_item_id => v_price_item_id, p_price_list_id => v_price_list_id",
       "'sku_id', p_sku_id, 'unit_price', p_price ->> 'unit_price', 'tax_rate', p_price ->> 'tax_rate', 'tax_inclusive', p_price -> 'tax_inclusive'",
       "v_child_key := v_parent_key || ':price-list-retire-source'",
       "p_action => 'retire'",
+      "p_price_list_id => v_source_price_list.id",
+      "p_expected_version => v_source_price_list.row_version",
+      "p_idempotency_key => v_child_key",
       "v_child_key := v_parent_key || ':price-list-publish'",
       "p_action => 'publish'",
       "p_price_list_id => v_price_list_id",
+      "p_expected_version => v_price_list_version",
+      "p_idempotency_key => v_child_key",
     ]);
+  });
+
+  test("persists and replays the complete successful envelope", () => {
+    const command = compact(
+      extractFunction("command_supplier_purchasable_product_v1"),
+    );
+
+    expectFragmentsOrdered(command, [
+      "v_response := jsonb_build_object( 'status', 'created', 'idempotent', false, 'product', v_product_response -> 'product', 'sku', v_sku_response -> 'sku', 'price', v_price_item_response -> 'item', 'catalog_item', v_catalog_item )",
+      "INSERT INTO public.supplier_command_events",
+      "jsonb_build_object( '_fingerprint', v_parent_fingerprint, '_request', v_parent_request )",
+      "v_response, NULL, p_actor_user_id, p_actor_employee_id, v_parent_key",
+      "END; RETURN v_response",
+    ]);
+    expect(command).toContain(
+      "RETURN jsonb_set(v_event.to_state, '{idempotent}', 'true'::jsonb, true)",
+    );
+
+    const eventInsert = command.slice(
+      command.indexOf("INSERT INTO public.supplier_command_events"),
+      command.indexOf("EXCEPTION WHEN unique_violation"),
+    );
+    expect(eventInsert).toContain("from_state, to_state");
+    expect(eventInsert).toContain(
+      "jsonb_build_object( '_fingerprint', v_parent_fingerprint, '_request', v_parent_request ), v_response, NULL",
+    );
+    expect(eventInsert).not.toMatch(/to_state[\s\S]*?'\{\}'::jsonb/);
   });
 
   test("requires one exact resolver result and verifies catalog and price facts", () => {

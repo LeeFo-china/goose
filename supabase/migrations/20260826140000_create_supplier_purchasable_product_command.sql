@@ -266,9 +266,8 @@ BEGIN
     'idempotency_key', btrim(p_idempotency_key)
   );
   v_parent_fingerprint := pg_catalog.md5(v_parent_request::text);
-  v_parent_key := 'supplier-purchasable-product:' || pg_catalog.md5(
-    p_tenant_id::text || ':' || btrim(p_idempotency_key)
-  );
+  v_parent_key := 'supplier-purchasable-product:' ||
+    pg_catalog.md5(btrim(p_idempotency_key));
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(v_parent_key, 20260826140000)
