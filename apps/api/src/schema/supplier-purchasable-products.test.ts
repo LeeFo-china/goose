@@ -59,6 +59,29 @@ describe("supplier purchasable product schema", () => {
     }
   });
 
+  test("rejects missing category, brand, purchase unit, and sku UUIDs", () => {
+    const { sku_id: _skuId, ...withoutSkuId } = payload;
+    const {
+      category_id: _categoryId,
+      ...productWithoutCategoryId
+    } = payload.product;
+    const { brand_id: _brandId, ...productWithoutBrandId } = payload.product;
+    const {
+      purchase_unit_id: _purchaseUnitId,
+      ...skuWithoutPurchaseUnitId
+    } = payload.sku;
+
+    for (const input of [
+      withoutSkuId,
+      { ...payload, product: productWithoutCategoryId },
+      { ...payload, product: productWithoutBrandId },
+      { ...payload, sku: skuWithoutPurchaseUnitId },
+    ]) {
+      expect(SupplierPurchasableProductCreateSchema.safeParse(input).success)
+        .toBe(false);
+    }
+  });
+
   test("keeps prices as bounded decimal strings", () => {
     expect(SupplierPurchasableProductCreateSchema.safeParse({
       ...payload,
