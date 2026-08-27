@@ -1,3 +1,5 @@
+-- gooes:migration-mode=nontransactional
+-- gooes:retry-invalid-indexes=public.supplier_price_list_items_batch_snapshot_uidx
 -- Rollback: forward-only. This non-transactional preflight only prepares the
 -- unique index consumed by 20260826141000. It intentionally performs no
 -- destructive cleanup. Before the next migration is applied, a separately
@@ -14,13 +16,12 @@
 -- WHERE indexrelid =
 --   to_regclass('public.supplier_price_list_items_batch_snapshot_uidx');
 --
--- Retry policy: if an invalid index remains, stop. Reconcile the failure and
--- any duplicate diagnostics first; removal requires manual review and a
--- separately approved operator action. If the index is valid but migration
--- bookkeeping failed, verify its exact six-column definition and repair the
--- migration record under change control instead of rebuilding it.
+-- Retry policy: the release runner validates the machine-readable index list,
+-- drops only a named INVALID partial index concurrently, and reruns this file.
+-- A valid index is retained, allowing a bookkeeping-only retry to finish.
 
-CREATE UNIQUE INDEX CONCURRENTLY supplier_price_list_items_batch_snapshot_uidx
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS
+  supplier_price_list_items_batch_snapshot_uidx
 ON public.supplier_price_list_items(
   id,
   tenant_id,

@@ -98,6 +98,37 @@ export type SupplierPurchaseBatchConcurrencySummary = {
   fixture_cleaned: true;
 };
 
+type ConcurrencyCleanupOptions = {
+  primaryFailure?: unknown;
+  reviewerClosures: readonly (() => Promise<unknown>)[];
+  fixtureCleanup: () => Promise<unknown>;
+  mainClose: () => Promise<unknown>;
+};
+
+export async function settleSupplierPurchaseBatchConcurrencyCleanup(
+  options: ConcurrencyCleanupOptions,
+): Promise<void> {
+  const reviewerResults = await Promise.allSettled(
+    options.reviewerClosures.map((close) => close()),
+  );
+  let cleanupFailure = reviewerResults.find(
+    (result) => result.status === "rejected",
+  )?.reason;
+  try {
+    await options.fixtureCleanup();
+  } catch (error) {
+    cleanupFailure ??= error;
+  } finally {
+    try {
+      await options.mainClose();
+    } catch (error) {
+      cleanupFailure ??= error;
+    }
+  }
+  if (options.primaryFailure !== undefined) throw options.primaryFailure;
+  if (cleanupFailure !== undefined) throw cleanupFailure;
+}
+
 export async function runSupplierPurchaseBatchConcurrency(
   databaseUrl: string | undefined,
 ): Promise<SupplierPurchaseBatchConcurrencySummary> {
@@ -109,6 +140,7 @@ export async function runSupplierPurchaseBatchConcurrency(
   const reviewerB = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
   const runToken = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   let fixture: BatchSmokeFixture | undefined;
+  let primaryFailure: unknown;
   try {
     fixture = await database.begin(async (sql) => {
       const created = await createRuntimeBatchSmokeFixture(sql, runToken);
@@ -166,17 +198,19 @@ export async function runSupplierPurchaseBatchConcurrency(
       total_review_event_count: 2,
       fixture_cleaned: true,
     };
+  } catch (error) {
+    primaryFailure = error;
   } finally {
-    await Promise.all([reviewerA.close(), reviewerB.close()]);
-    if (fixture) {
-      await cleanupRuntimeBatchSmokeFixture(
-        database,
-        fixture,
-        localDatabaseUrl,
-      );
-    }
-    await database.close();
+    await settleSupplierPurchaseBatchConcurrencyCleanup({
+      primaryFailure,
+      reviewerClosures: [() => reviewerA.close(), () => reviewerB.close()],
+      fixtureCleanup: () => fixture
+        ? cleanupRuntimeBatchSmokeFixture(database, fixture, localDatabaseUrl)
+        : Promise.resolve(),
+      mainClose: () => database.close(),
+    });
   }
+  throw primaryFailure;
 }
 
 if (import.meta.main) {

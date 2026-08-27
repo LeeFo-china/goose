@@ -25,6 +25,19 @@ describe("supplier purchase batch smoke manifest", () => {
       .toEqual(["auth.users", "public.employees"]);
   });
 
+  test("selects only platform catalog references and a tenant without settings", async () => {
+    const source = await Bun.file(
+      new URL("./supplier-purchase-batch-smoke-fixture.ts", import.meta.url),
+    ).text();
+
+    expect(source).toContain("category.ownership_scope = 'platform'");
+    expect(source).toContain("category.owner_tenant_id is null");
+    expect(source).toContain("brand.ownership_scope = 'platform'");
+    expect(source).toContain("brand.owner_tenant_id is null");
+    expect(source).toContain("not exists (");
+    expect(source).toContain("public.tenant_supplier_settings as existing_settings");
+  });
+
   test("uses the deterministic purchasable command codes", () => {
     expect(createPurchasableCodes(
       "11000000-0000-4000-8000-000000000001",

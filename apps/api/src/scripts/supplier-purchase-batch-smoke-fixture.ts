@@ -100,11 +100,15 @@ export async function createRuntimeBatchSmokeFixture(
     cross join lateral (
       select category.id from public.catalog_categories as category
       where category.status = 'active'
+        and category.ownership_scope = 'platform'
+        and category.owner_tenant_id is null
       order by category.id limit 1
     ) as category
     cross join lateral (
       select brand.id from public.catalog_brands as brand
       where brand.status = 'active'
+        and brand.ownership_scope = 'platform'
+        and brand.owner_tenant_id is null
       order by brand.id limit 1
     ) as brand
     cross join lateral (
@@ -121,6 +125,10 @@ export async function createRuntimeBatchSmokeFixture(
       ) as cost
     ) as costs
     where cardinality(costs.ids) = 2
+      and not exists (
+        select 1 from public.tenant_supplier_settings as existing_settings
+        where existing_settings.tenant_id = tenant.id
+      )
     order by tenant.id limit 1;
   `;
   const row = rows[0];

@@ -47,4 +47,16 @@ describe("supplier purchase batch EXPLAIN manifest", () => {
     expect(SUPPLIER_PURCHASE_BATCH_EXPLAIN_QUERIES.approval)
       .not.toContain("PER_ITEM_LOOP");
   });
+
+  test("uses the default planner after representative catalog statistics", async () => {
+    const source = await Bun.file(
+      new URL("./supplier-purchase-batch-explain.ts", import.meta.url),
+    ).text();
+
+    expect(source).not.toContain("enable_seqscan");
+    expect(source).toContain("seedCatalogSearchCardinality");
+    expect(source).toContain("analyze public.supplier_products");
+    expect(source).toContain("analyze public.supplier_skus");
+    expect(source).toContain("generate_series(1, 50000)");
+  });
 });

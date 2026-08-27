@@ -36,12 +36,15 @@ function expectOrdered(value: string, patterns: readonly RegExp[]): void {
 describe("supplier purchase batch foundation migration", () => {
   test("prepares the price identity index concurrently outside a transaction", () => {
     expect(existsSync(preflightMigrationUrl)).toBe(true);
-    expect(preflightSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(preflightSql).toMatch(
+      /^-- gooes:migration-mode=nontransactional\n-- gooes:retry-invalid-indexes=public\.supplier_price_list_items_batch_snapshot_uidx\n/,
+    );
+    expect(preflightSql).toMatch(/-- Rollback: forward-only\./);
     expect(preflightSql).toMatch(/failed[\s\S]*pg_catalog\.pg_index[\s\S]*indisvalid/i);
-    expect(preflightSql).toMatch(/retry[\s\S]*invalid[\s\S]*manual review/i);
+    expect(preflightSql).toMatch(/retry[\s\S]*invalid[\s\S]*bookkeeping/i);
     expect(preflightSql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
     expect(compact(preflightSql)).toMatch(
-      /CREATE UNIQUE INDEX CONCURRENTLY supplier_price_list_items_batch_snapshot_uidx ON public\.supplier_price_list_items\( id, tenant_id, supplier_id, supplier_price_list_id, supplier_product_id, supplier_sku_id \)/,
+      /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS supplier_price_list_items_batch_snapshot_uidx ON public\.supplier_price_list_items\( id, tenant_id, supplier_id, supplier_price_list_id, supplier_product_id, supplier_sku_id \)/,
     );
     expect(preflightSql).not.toMatch(/DROP INDEX/);
   });

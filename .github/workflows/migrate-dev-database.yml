@@ -451,6 +451,67 @@ jobs:
             ' "${file}"
           }
 
+          psql_dev() {
+            psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 "$@"
+          }
+
+          migration_mode_for_file() {
+            local file="$1"
+            local first_line
+            first_line="$(sed -n '1p' "${file}")"
+            if [ "${first_line}" = "-- gooes:migration-mode=nontransactional" ]; then
+              printf '%s\n' "nontransactional"
+              return 0
+            fi
+            if grep -q '^-- gooes:migration-mode=' "${file}"; then
+              echo "error=nontransactional_marker_invalid file=${file}" >&2
+              return 1
+            fi
+            printf '%s\n' "transactional"
+          }
+
+          cleanup_invalid_nontransactional_indexes() {
+            local file="$1"
+            local runner="$2"
+            local marker
+            local qualified_name
+            local schema_name
+            local index_name
+            local index_state
+            marker="$(sed -n '2p' "${file}")"
+            marker="${marker#-- gooes:retry-invalid-indexes=}"
+            if [[ ! "${marker}" =~ ^public\.[a-z0-9_]+(,public\.[a-z0-9_]+)*$ ]]; then
+              echo "error=nontransactional_retry_indexes_invalid file=${file}" >&2
+              return 1
+            fi
+            IFS=',' read -r -a retry_indexes <<< "${marker}"
+            for qualified_name in "${retry_indexes[@]}"; do
+              schema_name="${qualified_name%%.*}"
+              index_name="${qualified_name#*.}"
+              index_state="$("${runner}" -Atc "select i.indisready::text || '|' || i.indisvalid::text || '|' || i.indislive::text from pg_catalog.pg_index as i where i.indexrelid = to_regclass('${qualified_name}');")"
+              case "${index_state}" in
+                ""|"t|t|t")
+                  ;;
+                "t|t|f"|"t|f|t"|"t|f|f"|"f|t|t"|"f|t|f"|"f|f|t"|"f|f|f")
+                  "${runner}" -c "DROP INDEX CONCURRENTLY \"${schema_name}\".\"${index_name}\";"
+                  ;;
+                *)
+                  echo "error=nontransactional_index_state_invalid file=${file} index=${qualified_name}" >&2
+                  return 1
+                  ;;
+              esac
+            done
+          }
+
+          apply_nontransactional_migration() {
+            local file="$1"
+            local history_statement="$2"
+            local runner="$3"
+            cleanup_invalid_nontransactional_indexes "${file}" "${runner}"
+            "${runner}" < "${file}"
+            "${runner}" -c "${history_statement}"
+          }
+
           before_count="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select count(*) from supabase_migrations.schema_migrations;")"
           before_latest="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select coalesce(max(version), '') from supabase_migrations.schema_migrations;")"
           db_name="$(psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1 -Atc "select current_database();")"
@@ -496,6 +557,19 @@ jobs:
                 exit 1
               fi
               read -r top_level_start_count top_level_end_count scanned_canonical_begin_count scanned_canonical_commit_count scanned_canonical_commit_line scanned_executable_statement_count scanned_canonical_begin_statement_index scanned_canonical_commit_statement_index <<< "${transaction_scan}"
+
+              if ! migration_mode="$(migration_mode_for_file "${file}")"; then
+                exit 1
+              fi
+              if [ "${migration_mode}" = "nontransactional" ]; then
+                if (( top_level_start_count != 0 || top_level_end_count != 0 )); then
+                  echo "error=nontransactional_migration_has_transaction_control file=${file}" >&2
+                  exit 1
+                fi
+                apply_nontransactional_migration "${file}" "${history_statement}" psql_dev
+                applied_versions+=("${version}")
+                continue
+              fi
 
               if [ "${top_level_start_count}" -ne 0 ] || [ "${top_level_end_count}" -ne 0 ]; then
                 emit_explicit_transaction_migration "${file}" "${history_statement}" | psql "${SUPABASE_DB_URL}" -v ON_ERROR_STOP=1

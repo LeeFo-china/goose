@@ -200,6 +200,7 @@ async function explainQuery(
 async function seedBatchReadCardinality(
   sql: BatchSmokeSql,
   fixture: BatchSmokeFixture,
+  batchId: string,
 ): Promise<void> {
   await sql`
     insert into public.supplier_purchase_batches(
@@ -213,7 +214,122 @@ async function seedBatchReadCardinality(
       ${fixture.actorEmployeeId}::uuid, ${fixture.actorEmployeeId}::uuid
     from generate_series(1, 5000) as generated(no);
   `;
+  await sql`set local session_replication_role = replica`;
+  await sql`
+    insert into public.supplier_purchase_batch_items
+    select (jsonb_populate_record(
+      null::public.supplier_purchase_batch_items,
+      source_item.row_data || jsonb_build_object(
+        'id', md5(${`batch-item-explain-${fixture.runToken}-`} || generated.no)::uuid,
+        'purchase_batch_id',
+          md5(${`batch-explain-${fixture.runToken}-`} || generated.no)::uuid
+      )
+    )).*
+    from generate_series(1, 5000) as generated(no)
+    cross join lateral (
+      select to_jsonb(item) as row_data
+      from public.supplier_purchase_batch_items as item
+      where item.purchase_batch_id = ${batchId}::uuid
+      order by item.line_no limit 1
+    ) as source_item;
+  `;
+  await sql`
+    insert into public.supplier_purchase_requisitions
+    select (jsonb_populate_record(
+      null::public.supplier_purchase_requisitions,
+      source_requisition.row_data || jsonb_build_object(
+        'id', md5(${`requisition-explain-${fixture.runToken}-`} || generated.no)::uuid,
+        'request_no', 'PR-20991230-' || lpad(generated.no::text, 8, '0'),
+        'purchase_batch_id',
+          md5(${`batch-explain-${fixture.runToken}-`} || generated.no)::uuid,
+        'purchase_order_id', null,
+        'status', 'pending_approval',
+        'reviewed_by_employee_id', null,
+        'reviewed_at', null,
+        'review_remark', null
+      )
+    )).*
+    from generate_series(1, 5000) as generated(no)
+    cross join lateral (
+      select to_jsonb(requisition) as row_data
+      from public.supplier_purchase_requisitions as requisition
+      where requisition.purchase_batch_id = ${batchId}::uuid
+      order by requisition.id limit 1
+    ) as source_requisition;
+  `;
+  await sql`
+    insert into public.supplier_purchase_orders
+    select (jsonb_populate_record(
+      null::public.supplier_purchase_orders,
+      source_order.row_data || jsonb_build_object(
+        'id', md5(${`order-explain-${fixture.runToken}-`} || generated.no)::uuid,
+        'order_no', 'PO-EXPLAIN-' || ${fixture.runToken} || '-' || generated.no,
+        'purchase_batch_id',
+          md5(${`batch-explain-${fixture.runToken}-`} || generated.no)::uuid,
+        'purchase_requisition_id', null
+      )
+    )).*
+    from generate_series(1, 5000) as generated(no)
+    cross join lateral (
+      select to_jsonb(purchase_order) as row_data
+      from public.supplier_purchase_orders as purchase_order
+      where purchase_order.purchase_batch_id = ${batchId}::uuid
+      order by purchase_order.id limit 1
+    ) as source_order;
+  `;
+  await sql`set local session_replication_role = origin`;
   await sql`analyze public.supplier_purchase_batches`.simple();
+  await sql`analyze public.supplier_purchase_batch_items`.simple();
+  await sql`analyze public.supplier_purchase_requisitions`.simple();
+  await sql`analyze public.supplier_purchase_orders`.simple();
+}
+
+async function seedCatalogSearchCardinality(
+  sql: BatchSmokeSql,
+  fixture: BatchSmokeFixture,
+): Promise<void> {
+  await sql`set local session_replication_role = replica`;
+  await sql`
+    insert into public.supplier_products(
+      id, supplier_id, product_code, name, category_id, brand_id,
+      status, version, acting_tenant_id, acting_employee_id,
+      operation_source, created_by_employee_id, updated_by_employee_id,
+      ownership_scope, owner_tenant_id
+    )
+    select md5(${`product-explain-${fixture.runToken}-`} || generated.no)::uuid,
+      ${fixture.supplierIds[0]}::uuid,
+      'EP-' || ${fixture.runToken} || '-' || generated.no,
+      '代表性目录商品 ' || generated.no,
+      ${fixture.catalogCategoryId}::uuid, ${fixture.catalogBrandId}::uuid,
+      'active', 1, ${fixture.tenantId}::uuid,
+      ${fixture.actorEmployeeId}::uuid, 'tenant',
+      ${fixture.actorEmployeeId}::uuid, ${fixture.actorEmployeeId}::uuid,
+      'tenant', ${fixture.tenantId}::uuid
+    from generate_series(1, 50000) as generated(no);
+  `;
+  await sql`
+    insert into public.supplier_skus(
+      id, supplier_id, supplier_product_id, sku_code, name,
+      purchase_unit_id, base_unit_id, base_unit_conversion,
+      status, version, acting_tenant_id, acting_employee_id,
+      operation_source, created_by_employee_id, updated_by_employee_id,
+      ownership_scope, owner_tenant_id, spec_values
+    )
+    select md5(${`sku-explain-${fixture.runToken}-`} || generated.no)::uuid,
+      ${fixture.supplierIds[0]}::uuid,
+      md5(${`product-explain-${fixture.runToken}-`} || generated.no)::uuid,
+      'ES-' || ${fixture.runToken} || '-' || generated.no,
+      '代表性目录 SKU ' || generated.no,
+      ${fixture.purchaseUnitId}::uuid, ${fixture.purchaseUnitId}::uuid, 1,
+      'active', 1, ${fixture.tenantId}::uuid,
+      ${fixture.actorEmployeeId}::uuid, 'tenant',
+      ${fixture.actorEmployeeId}::uuid, ${fixture.actorEmployeeId}::uuid,
+      'tenant', ${fixture.tenantId}::uuid, '{}'::jsonb
+    from generate_series(1, 50000) as generated(no);
+  `;
+  await sql`set local session_replication_role = origin`;
+  await sql`analyze public.supplier_products`.simple();
+  await sql`analyze public.supplier_skus`.simple();
 }
 
 class ForcedRollback extends Error {}
@@ -265,8 +381,8 @@ export async function runSupplierPurchaseBatchExplain(
       await seedRuntimeBatchSmokeFixture(sql, fixture);
       const prepared = await prepareSubmittedBatch(sql, fixture, "explain");
       await reviewRuntimeBatch(sql, fixture, prepared.batchId, "explain:review");
-      await seedBatchReadCardinality(sql, fixture);
-      await sql`set local enable_seqscan = off`;
+      await seedBatchReadCardinality(sql, fixture, prepared.batchId);
+      await seedCatalogSearchCardinality(sql, fixture);
       const results = {} as ExplainPlanMap;
       for (
         const name of Object.keys(
