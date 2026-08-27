@@ -41,7 +41,9 @@ Gooes 后端已经完成一张采购批次跨多个供应商选品、按
 - 所有列表均为
   `{ list, pagination: { page, pageSize, total, totalPages } }`。
 - 所有列表默认 `page=1&pageSize=20`，`pageSize` 最大 100；Orange 必须增量加载。
-- 金额、数量、税率、换算系数均按十进制字符串消费，不得转成浮点数后作为写入事实。
+- 金额、数量和税率按十进制字符串消费，不得转成浮点数后作为写入事实。换算系数有一个
+  明确的接口边界：批次 catalog、批次 items，以及快速创建响应中的 `price` / `catalog_item`
+  使用 string；快速创建响应中的 `sku.base_unit_conversion` 按当前 record schema 是 number。
 - 预计交付日期为 `YYYY-MM-DD`；时间字段为带时区 ISO datetime。
 - 四个 mutation 必须把 `Idempotency-Key` 放在请求头，长度 1–120；不能放入 body。
 - 新批次 `:id` 由客户端预生成 UUID；第一次 `save-draft` 使用
@@ -204,7 +206,7 @@ currency, purchasable_status
 ```
 
 `purchasable_status` 当前只会是 `purchasable`。目录卡片可展示服务端单价，但保存草稿时只提交
-SKU、成本分类和数量；后端重新解析价格事实。
+SKU、成本分类和数量；后端重新解析价格事实。这里的 `base_unit_conversion` 是 string。
 
 ### 4.4 `split_preview`
 
@@ -247,6 +249,8 @@ unit_price, tax_rate, tax_inclusive,
 line_subtotal_amount, line_tax_amount, line_total_amount,
 created_at, updated_at
 ```
+
+批次明细的 `base_unit_conversion` 也是 string，与批次 catalog 一致。
 
 `/requisitions` 返回当前和历史拆单代次中归属于该批次的采购申请记录：
 
@@ -402,16 +406,43 @@ updated_by_employee_id, created_at, updated_at
 ```
 
 两个写接口均要求 `supplier.catalog.manage`、供应商模块、所有权读取 rollout 和
-`private_catalog_writes_enabled`。分类/品牌列表是：
+`private_catalog_writes_enabled`。分类/品牌列表都有两种真实读取范围：
 
 ```text
-GET /catalog/categories?page=1&pageSize=20&keyword=...
-GET /catalog/brands?page=1&pageSize=20&keyword=...
-GET /catalog/units?page=1&pageSize=20&keyword=...
+GET /catalog/categories?page=1&pageSize=20&status=active&keyword=...
+GET /catalog/categories?scope=platform&page=1&pageSize=20&status=active&keyword=...
+GET /catalog/brands?page=1&pageSize=20&status=active&keyword=...
+GET /catalog/brands?scope=platform&page=1&pageSize=20&status=active&keyword=...
 ```
 
-它们当前也要求 `supplier.catalog.manage`。创建商品前从单位列表选择 active 单位；小程序不能
-新建正式单位，只能使用现有单位或走独立的单位建议流程。
+`scope` 只有 `platform` 一个合法显式值。省略 `scope` 时不是 tenant-only，而是 tenant-visible：
+`status=active` 的分页结果同时包含平台共享项和当前租户私有项；每项通过
+`ownership_scope: "platform" | "tenant"` 区分。`scope=platform` 返回 platform-only，service
+会强制只读 active 项，即使 query 传 `status=inactive` 也不会返回 inactive 平台项。
+
+普通分类/品牌选择器只请求省略 `scope` 的混合分页，并按 `id` 去重；页面可直接按
+`ownership_scope` 分组，优先让用户选择现有平台项，仅在确实需要独立“平台目录”筛选/分页时
+才请求 `scope=platform`。不要无条件把默认页和 platform-only 页合并，否则平台项会重复。
+两个独立分页器也不能通过当前页差集推导完整 tenant-only 全集。
+
+真实 query 过滤字段如下；所有 schema 都是 strict，不能增加未实现参数：
+
+| 接口 | 可选过滤字段 | 真实行为 |
+| --- | --- | --- |
+| `GET /catalog/categories` | `keyword`（最多 80 字）、`status=active\|inactive`、`parent_id`（UUID/null）、`level`（1–8）、`is_leaf=true\|false`、`scope=platform` | 未传 `status` 时为 active；未传 `parent_id` 且 `is_leaf!=true` 时只查根分类；排序为 `sort_order,id` |
+| `GET /catalog/brands` | `keyword`（最多 80 字）、`status=active\|inactive`、`scope=platform` | 未传 `status` 时为 active；当前没有 `category_id` query，不能伪造该筛选；结果含 `category_id` 和 `category` 摘要 |
+
+两者都支持 `page` / `pageSize`，默认 1/20、`pageSize` 最大 100。当前都要求
+`supplier.catalog.manage`。品牌选择器若必须按分类做大数据量服务端筛选，需要后端另加契约；
+仅过滤已加载的一页不能代表完整结果。
+
+创建商品前另调：
+
+```text
+GET /catalog/units?page=1&pageSize=20&status=active&keyword=...
+```
+
+从中选择 active 单位；小程序不能新建正式单位，只能使用现有单位或走独立的单位建议流程。
 
 ### 5.3 原子新建商品 + SKU + 供货价，成功后立即可采购
 
@@ -465,8 +496,51 @@ type PurchasableProductCreated = {
   status: 'created';
   idempotent: boolean;
   product: { id: string; status: 'active'; version: 2; /* 及主档字段 */ };
-  sku: { id: string; status: 'active'; version: 2; /* 及 SKU 字段 */ };
-  price: { id: string; unit_price: string; tax_rate: string; tax_inclusive: boolean; /* ... */ };
+  sku: {
+    id: string;
+    supplier_id: string;
+    supplier_product_id: string;
+    sku_code: string;
+    name: string;
+    specification: null;
+    model: null;
+    spec_values: Record<string, string | number | boolean | string[]>;
+    purchase_unit_id: string;
+    base_unit_id: string;
+    base_unit_conversion: number;
+    batch_managed: false;
+    color_managed: false;
+    serial_managed: false;
+    status: 'active';
+    version: 2;
+    ownership_scope: 'tenant';
+    owner_tenant_id: string;
+    acting_tenant_id: string;
+    acting_employee_id: string;
+    operation_source: 'tenant';
+    proxy_reason: null;
+    created_by_employee_id: string;
+    updated_by_employee_id: string;
+    created_at: string;
+    updated_at: string;
+  };
+  price: {
+    id: string;
+    tenant_id: string;
+    supplier_id: string;
+    supplier_price_list_id: string;
+    supplier_product_id: string;
+    supplier_sku_id: string;
+    minimum_quantity: string;
+    maximum_quantity: null;
+    purchase_unit_id: string;
+    base_unit_id: string;
+    base_unit_conversion: string;
+    unit_price: string;
+    tax_rate: string;
+    tax_inclusive: boolean;
+    /* 另有 actor/audit/timestamp 字段 */
+  };
   catalog_item: {
     supplier_product_id: string;
     product_code: string;
@@ -502,6 +576,9 @@ type PurchasableProductCreated = {
 成功后该 SKU 已可采购。由于复合命令的 `catalog_item` 不包含批次目录新增的分类、品牌、
 `tenant_supplier_id`、供应商名和 `currency` 字段，Orange 应刷新
 `GET /supplier-purchase-batch-catalog`，再从批次目录选中该 SKU；不要制造缺失字段。
+同一个快速创建响应里 `sku.base_unit_conversion` 是 number，而 `price.base_unit_conversion` 和
+`catalog_item.base_unit_conversion` 是 string。客户端可在边界层把 SKU 数值转成仅供展示的
+十进制文本，但不能据此生成采购请求；刷新后以 batch catalog 的 string 换算系数为准。
 
 ## 6. Orange 推荐页面、模块和文件影响
 
@@ -576,9 +653,12 @@ target URL，再由 Orange 添加映射。
 6. 分页搜索并按 supplier_sku_id 维护本地购物车
 7. 可选快速新建：
    7a. 供应商：POST /suppliers/private -> POST /suppliers/:id/activate
-   7b. 分类/品牌：必要时 POST /catalog/categories -> POST /catalog/brands
-   7c. 商品：POST /supplier-purchasable-products/:supplierId?tenantSupplierId=...
-   7d. 刷新 batch catalog page 1，并选中新 supplier_sku_id
+   7b. 分类：先 GET /catalog/categories 默认混合分页，优先选择现有 active 平台项
+   7c. 品牌：再 GET /catalog/brands 默认混合分页，优先选择现有 active 平台项
+   7d. 仅在没有合适项时 POST /catalog/categories -> POST /catalog/brands
+   7e. 独立平台筛选页才分别追加 scope=platform；按 id/ownership_scope 去重，不与默认页盲合并
+   7f. 商品：POST /supplier-purchasable-products/:supplierId?tenantSupplierId=...
+   7g. 刷新 batch catalog page 1，并选中新 supplier_sku_id
 8. POST /supplier-purchase-batches/:batchId/save-draft
 9. 用响应 batch/version/split_preview 覆盖本地展示
 10. POST /supplier-purchase-batches/:batchId/submit
@@ -912,6 +992,8 @@ await api.post<PurchasableProductCreated>(
 
 - 新建批次进入页面时只生成一次 batch UUID；保存失败保留该 UUID，除非确认是 ID conflict。
 - 使用 string formatter 展示金额；不要 `Number(total_amount)` 后再累加或回传。
+- 快速创建响应的 `sku.base_unit_conversion` 是 number；其 `price` / `catalog_item` 以及批次
+  catalog/items 中的换算系数是 string。刷新批次目录后以 string 字段作为采购页面事实。
 - `expected_delivery_date` 使用日期选择器，传 `YYYY-MM-DD` 或 null；时间戳仅展示。
 - 空项目 scope：列表/项目选项展示空态；详情 404；不要将空数组解释为全项目。
 - 详情按钮只看 `actions`。尤其 `can_review` 已包含创建人/提交人自审限制。
@@ -929,7 +1011,8 @@ await api.post<PurchasableProductCreated>(
 - [ ] 12 个 route wrapper 的 method/path/query/body/header 与第 3 节一致。
 - [ ] 所有 list 默认 1/20、最大 100，使用上拉加载或“加载更多”。
 - [ ] `ApiResponse<T>` 读取 `response.data`，409 读取 `ApiError.code/details`。
-- [ ] 价格、金额、数量、税率类型均为 string。
+- [ ] 价格、金额、数量、税率类型均为 string；仅快速创建响应的
+  `sku.base_unit_conversion` 是 number，批次 catalog/items 的换算系数仍为 string。
 - [ ] 首页入口按采购权限显示；批次详情动作只使用后端 `actions`。
 - [ ] `app.config.ts` 已注册采购分包，页面不落在主包。
 - [ ] 无 token、tenant ID、SQL、数据库 error details 被写入日志/埋点。
@@ -937,8 +1020,13 @@ await api.post<PurchasableProductCreated>(
 ### 15.2 Dev mutation 验收
 
 - [ ] 新建 supplier：创建返回 evaluating；有 manage 权限时激活为 active。
-- [ ] 新建分类、品牌；品牌请求包含 `category_id`。
+- [ ] 分类/品牌默认页是 active 的 platform + 当前 tenant 混合页；`scope=platform` 只返回
+  active 平台项，按 `id` / `ownership_scope` 分组去重，不通过分页差集推导 tenant-only 全集。
+- [ ] 优先选择已有平台分类/品牌；确需新建时品牌请求包含 `category_id`。
 - [ ] 一次请求创建商品 + SKU + 供货价，返回 `status=created` 和 `catalog_item`。
+- [ ] 快速创建响应验证 `typeof sku.base_unit_conversion === "number"`，且
+  `typeof price.base_unit_conversion === "string"`、
+  `typeof catalog_item.base_unit_conversion === "string"`。
 - [ ] 刷新 batch catalog 后新 SKU 可被检索并加入购物车。
 - [ ] 一个项目选择至少两个供应商的 SKU，保存返回 `split_preview.length=2`。
 - [ ] 保存响应覆盖客户端预览；客户端没有上传供应商或金额。
@@ -1029,6 +1117,10 @@ Gooes 当前实现：
 - `apps/api/src/controllers/supplier-catalog/index.ts`
 - `apps/api/src/schema/supplier-catalog.ts`
 - `apps/api/src/schema/supplier-catalog-extensions.ts`
+- `apps/api/src/services/supplier-catalog-tenant.ts`
+- `apps/api/src/repositories/supplier-catalog-read.ts`
+- `apps/api/src/repositories/supplier-catalog-models.ts`
+- `apps/api/src/repositories/supplier-catalog-visibility.test.ts`
 - `packages/domain/src/supplier-purchase-batch.ts`
 - `packages/domain/src/permission.ts`
 - `supabase/migrations/20260826140500_prepare_supplier_price_item_batch_snapshot_key.sql`
