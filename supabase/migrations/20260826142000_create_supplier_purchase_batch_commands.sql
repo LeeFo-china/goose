@@ -1302,9 +1302,12 @@ BEGIN
   WITH requested_items AS MATERIALIZED (
     SELECT requested.supplier_sku_id, requested.cost_category_id,
       requested.quantity::numeric(18, 4) AS quantity, requested.ordinality
-    FROM jsonb_to_recordset(p_items) WITH ORDINALITY AS requested(
-      supplier_sku_id uuid, cost_category_id uuid, quantity numeric,
-      ordinality bigint
+    FROM ROWS FROM (
+      jsonb_to_recordset(p_items) AS (
+        supplier_sku_id uuid, cost_category_id uuid, quantity numeric
+      )
+    ) WITH ORDINALITY AS requested(
+      supplier_sku_id, cost_category_id, quantity, ordinality
     )
   ),
   eligibility AS MATERIALIZED (

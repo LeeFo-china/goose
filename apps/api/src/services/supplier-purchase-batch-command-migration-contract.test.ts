@@ -427,6 +427,19 @@ describe("supplier purchase batch command migrations", () => {
     expect(save).toMatch(/round\(round\(candidate\.quantity \* candidate\.unit_price, 2\)/);
   });
 
+  test("uses PostgreSQL-valid ROWS FROM syntax for recordset ordinality", () => {
+    const save = extractFunction("save_supplier_purchase_batch_draft");
+    expect(save).not.toMatch(
+      /jsonb_to_recordset\(p_items\) WITH ORDINALITY AS requested\(/,
+    );
+    expect(compact(save)).toContain(
+      "ROWS FROM ( jsonb_to_recordset(p_items) AS ( " +
+        "supplier_sku_id uuid, cost_category_id uuid, quantity numeric ) ) " +
+        "WITH ORDINALITY AS requested( supplier_sku_id, cost_category_id, " +
+        "quantity, ordinality )",
+    );
+  });
+
   test("persists strict previews, price-change details, and explicit idempotency", () => {
     const save = extractFunction("save_supplier_purchase_batch_draft");
     expect(save).toMatch(/jsonb_agg\([\s\S]*tenant_supplier_id[\s\S]*supplier_name[\s\S]*item_count[\s\S]*subtotal_amount[\s\S]*tax_amount[\s\S]*total_amount[\s\S]*ORDER BY[\s\S]*tenant_supplier_id/);
