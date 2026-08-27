@@ -23,14 +23,18 @@ class SupplierPurchasableProductsController extends TenantBaseController {
   @Post("/supplier-purchasable-products/:id")
   async createPurchasableProduct(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
-    const key = requireSupplierIdempotencyKey(request);
-    if (Array.isArray(request.headers["idempotency-key"])) {
+    const idempotencyHeader = request.headers["idempotency-key"];
+    if (
+      Array.isArray(idempotencyHeader) ||
+      idempotencyHeader?.includes(",")
+    ) {
       throw Errors.business(
         400,
         "缺少有效的 Idempotency-Key",
         ErrorCodes.VALIDATION_ERROR,
       );
     }
+    const key = requireSupplierIdempotencyKey(request);
     const { id } = this.parse(
       SupplierPurchasableProductParamSchema,
       request.params,

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
+import Fastify from "fastify";
 
 import { Errors } from "@/errors/error-factory";
 import type {
@@ -206,6 +207,37 @@ describe("SupplierPurchasableProductsController", () => {
       "purchasable-product:create",
     );
     expect(response).toEqual({ data: created, message: "success" });
+  });
+
+  test("rejects duplicate idempotency headers through real Fastify", async () => {
+    const value = await controller();
+    const app = Fastify();
+    value.registerExtraRoutes(app);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/supplier-purchasable-products/${SUPPLIER_ID}?tenantSupplierId=${TENANT_SUPPLIER_ID}`,
+        headers: {
+          "idempotency-key": [
+            "purchasable-product:create",
+            "purchasable-product:duplicate",
+          ],
+        },
+        payload: input,
+      });
+
+      expect({
+        statusCode: response.statusCode,
+        serviceCalls: create.mock.calls.length,
+      }).toEqual({ statusCode: 400, serviceCalls: 0 });
+      expect(response.json()).toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: "缺少有效的 Idempotency-Key",
+      });
+    } finally {
+      await app.close();
+    }
   });
 
   test.each([
