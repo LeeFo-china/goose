@@ -46,6 +46,7 @@ type ProductionCandidateArtifact = {
   build_services?: unknown;
   target_environment?: unknown;
   build_plan_artifact?: unknown;
+  deployment_source_artifact?: unknown;
 };
 
 type ProductionBuildPlanArtifact = {
@@ -200,7 +201,7 @@ function normalizeCandidateArtifact(
   buildServices: ProductionReleaseCandidate["build_services"];
 } {
   if (!raw || typeof raw !== "object") throw candidateInvalid("生产候选证据无效");
-  if (raw.schema_version !== 1) throw candidateInvalid("生产候选证据版本无效");
+  if (raw.schema_version !== 2) throw candidateInvalid("生产候选证据版本无效");
   assertRunId(raw.build_run_id, runId, "生产候选构建 Run");
   const tag = typeof raw.tag === "string" && TAG_PATTERN.test(raw.tag)
     ? raw.tag
@@ -215,6 +216,9 @@ function normalizeCandidateArtifact(
   }
   if (raw.build_plan_artifact !== "production-build-plan") {
     throw candidateInvalid("生产候选构建计划证据无效");
+  }
+  if (raw.deployment_source_artifact !== "production-deploy-source") {
+    throw candidateInvalid("生产候选部署源码证据无效");
   }
 
   const services = assertOrderedServices(
