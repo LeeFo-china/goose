@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  commandSupplierPurchasableProduct,
   querySupplierPurchasableProductPriceSeriesSnapshot,
   type SupplierPurchasableProductPriceSeriesItemSnapshot,
   type SupplierPurchasableProductPriceSeriesListSnapshot,
@@ -86,6 +87,47 @@ function createQuery(responses: readonly unknown[][]) {
 }
 
 describe("supplier purchasable product smoke gateway", () => {
+  test("binds command payloads as JSON objects instead of JSON strings", async () => {
+    const fake = createQuery([[{ result: { status: "created" } }]]);
+    const input = {
+      product_id: PRODUCT_ID,
+      sku_id: SKU_ID,
+      tenant_id: SCOPE.tenantId,
+      tenant_supplier_id: SCOPE.tenantSupplierId,
+      supplier_id: SCOPE.supplierId,
+      product: {
+        product_code: "TP-2200000000004000",
+        name: "Smoke product",
+        category_id: UNIT_ID,
+        brand_id: LIST_ID,
+      },
+      sku: {
+        sku_code: "TS-2200000000004000",
+        name: "Smoke SKU",
+        purchase_unit_id: UNIT_ID,
+        spec_values: {},
+      },
+      price: {
+        unit_price: "100.00",
+        tax_rate: "0.130000",
+        tax_inclusive: true,
+      },
+      actor_user_id: EMPLOYEE_ID,
+      actor_employee_id: EMPLOYEE_ID,
+      idempotency_key: "supplier-purchasable-smoke:gateway-json",
+    };
+
+    await expect(commandSupplierPurchasableProduct(fake.query, input))
+      .resolves.toEqual({ status: "created" });
+
+    expect(fake.calls).toHaveLength(1);
+    expect(fake.calls[0]?.values.slice(5, 8)).toEqual([
+      input.product,
+      input.sku,
+      input.price,
+    ]);
+  });
+
   test("snapshots the bounded default CNY series and all its items", async () => {
     const lists = [LIST];
     const items = [ITEM];

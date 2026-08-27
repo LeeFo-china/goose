@@ -236,10 +236,6 @@ describe("supplier purchasable product command migration", () => {
       "p_action => 'create', p_ownership_scope => 'tenant', p_tenant_id => p_tenant_id, p_tenant_supplier_id => p_tenant_supplier_id, p_supplier_id => p_supplier_id, p_product_id => p_product_id",
       "p_payload => p_product",
       "p_idempotency_key => v_child_key",
-      "v_child_key := v_parent_key || ':product-activate'",
-      "p_action => 'activate'",
-      "p_product_id => p_product_id",
-      "p_expected_version => (v_product_response ->> 'version')::integer",
       "v_child_key := v_parent_key || ':sku-create'",
       "p_action => 'create'",
       "p_supplier_product_id => p_product_id, p_sku_id => p_sku_id",
@@ -248,6 +244,10 @@ describe("supplier purchasable product command migration", () => {
       "p_action => 'activate'",
       "p_supplier_product_id => p_product_id, p_sku_id => p_sku_id",
       "p_expected_version => (v_sku_response ->> 'version')::integer",
+      "v_child_key := v_parent_key || ':product-activate'",
+      "p_action => 'activate'",
+      "p_product_id => p_product_id",
+      "p_expected_version => (v_product_response ->> 'version')::integer",
     ]);
   });
 

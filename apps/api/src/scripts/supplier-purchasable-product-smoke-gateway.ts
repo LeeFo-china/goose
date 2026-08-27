@@ -65,6 +65,23 @@ export type SupplierPurchasableProductSmokeQuery = <Rows extends unknown[]>(
   ...values: unknown[]
 ) => PromiseLike<Rows>;
 
+export async function commandSupplierPurchasableProduct(
+  sql: SupplierPurchasableProductSmokeQuery,
+  input: SupplierPurchasableProductCommandInput,
+): Promise<unknown> {
+  const rows = await sql<{ result: unknown }[]>`
+    select public.command_supplier_purchasable_product_v1(
+      ${input.product_id}::uuid, ${input.sku_id}::uuid,
+      ${input.tenant_id}::uuid, ${input.tenant_supplier_id}::uuid,
+      ${input.supplier_id}::uuid, ${input.product}::jsonb,
+      ${input.sku}::jsonb, ${input.price}::jsonb,
+      ${input.actor_user_id}::uuid, ${input.actor_employee_id}::uuid,
+      ${input.idempotency_key}::text
+    ) as result;
+  `;
+  return rows[0]?.result;
+}
+
 export type SupplierPurchasableProductResidualEvidence = Record<
   "products" | "skus" | "priceLists" | "priceItems" | "events",
   boolean
@@ -199,17 +216,7 @@ export class DirectSupplierPurchasableProductSmokeGateway
     sql: CommandSql,
     input: SupplierPurchasableProductCommandInput,
   ): Promise<unknown> {
-    const rows = await sql<{ result: unknown }[]>`
-      select public.command_supplier_purchasable_product_v1(
-        ${input.product_id}::uuid, ${input.sku_id}::uuid,
-        ${input.tenant_id}::uuid, ${input.tenant_supplier_id}::uuid,
-        ${input.supplier_id}::uuid, ${JSON.stringify(input.product)}::jsonb,
-        ${JSON.stringify(input.sku)}::jsonb, ${JSON.stringify(input.price)}::jsonb,
-        ${input.actor_user_id}::uuid, ${input.actor_employee_id}::uuid,
-        ${input.idempotency_key}::text
-      ) as result;
-    `;
-    return rows[0]?.result;
+    return commandSupplierPurchasableProduct(sql, input);
   }
 
   private async resolveCatalog(

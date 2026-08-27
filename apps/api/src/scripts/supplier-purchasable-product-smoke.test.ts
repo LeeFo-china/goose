@@ -353,6 +353,7 @@ describe("supplier purchasable product smoke", () => {
     const fixtureA = createSupplierPurchasableProductSmokeFixture(CONFIG);
     const fixtureB = createSupplierPurchasableProductSmokeFixture(CONFIG);
     expect(fixtureA.created.product_id).not.toBe(fixtureB.created.product_id);
+    expect(fixtureA.created.sku.spec_values).toEqual({});
     expect(fixtureA.invalid.price.unit_price).toBe("0");
 
     const gateway = new FakeGateway();

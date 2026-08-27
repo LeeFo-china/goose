@@ -1837,32 +1837,6 @@ BEGIN
         );
     END IF;
 
-    v_child_key := v_parent_key || ':product-activate';
-    SELECT public.command_supplier_product_v2(
-      p_action => 'activate',
-      p_ownership_scope => 'tenant',
-      p_tenant_id => p_tenant_id,
-      p_tenant_supplier_id => p_tenant_supplier_id,
-      p_supplier_id => p_supplier_id,
-      p_product_id => p_product_id,
-      p_expected_version => (v_product_response ->> 'version')::integer,
-      p_payload => '{}'::jsonb,
-      p_actor_user_id => p_actor_user_id,
-      p_actor_employee_id => p_actor_employee_id,
-      p_idempotency_key => v_child_key
-    ) INTO v_product_response;
-    IF v_product_response ->> 'status' IS DISTINCT FROM 'updated'
-      OR v_product_response -> 'product' ->> 'status' IS DISTINCT FROM 'active'
-    THEN
-      RAISE EXCEPTION USING
-        ERRCODE = 'P0001',
-        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
-        DETAIL = COALESCE(
-          v_product_response ->> 'error_code',
-          'product_activate_failed'
-        );
-    END IF;
-
     v_child_key := v_parent_key || ':sku-create';
     SELECT public.command_supplier_sku_v2(
       p_action => 'create',
@@ -1909,6 +1883,32 @@ BEGIN
         DETAIL = COALESCE(
           v_sku_response ->> 'error_code',
           'sku_activate_failed'
+        );
+    END IF;
+
+    v_child_key := v_parent_key || ':product-activate';
+    SELECT public.command_supplier_product_v2(
+      p_action => 'activate',
+      p_ownership_scope => 'tenant',
+      p_tenant_id => p_tenant_id,
+      p_tenant_supplier_id => p_tenant_supplier_id,
+      p_supplier_id => p_supplier_id,
+      p_product_id => p_product_id,
+      p_expected_version => (v_product_response ->> 'version')::integer,
+      p_payload => '{}'::jsonb,
+      p_actor_user_id => p_actor_user_id,
+      p_actor_employee_id => p_actor_employee_id,
+      p_idempotency_key => v_child_key
+    ) INTO v_product_response;
+    IF v_product_response ->> 'status' IS DISTINCT FROM 'updated'
+      OR v_product_response -> 'product' ->> 'status' IS DISTINCT FROM 'active'
+    THEN
+      RAISE EXCEPTION USING
+        ERRCODE = 'P0001',
+        MESSAGE = 'SUPPLIER_PURCHASABLE_PRODUCT_CREATE_FAILED',
+        DETAIL = COALESCE(
+          v_product_response ->> 'error_code',
+          'product_activate_failed'
         );
     END IF;
 

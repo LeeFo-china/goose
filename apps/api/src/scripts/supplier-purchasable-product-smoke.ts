@@ -117,7 +117,7 @@ function createCommand(
       sku_code: `TS-${skuToken}`,
       name: `Purchasable smoke SKU ${skuToken}`,
       purchase_unit_id: config.purchaseUnitId,
-      spec_values: { smoke_token: skuToken },
+      spec_values: {},
     },
     price: { unit_price: unitPrice, tax_rate: "0.130000", tax_inclusive: true },
     actor_user_id: config.actorUserId,
