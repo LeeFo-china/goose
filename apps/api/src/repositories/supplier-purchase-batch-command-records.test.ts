@@ -249,4 +249,21 @@ describe("supplier purchase batch command records", () => {
       { kind: "unknown", reason: "not allowed" },
     ])).success).toBe(false);
   });
+
+  test("bounds the complete worst-case revision blocker set", () => {
+    const revised = { ...batch, status: "draft", version: 3 };
+    const item = { kind: "item", supplier_sku_id: SKU_ID,
+      reason: "all_concurrent_changes" } as const;
+    const envelope = (count: number) => ({
+      status: "revision_required", idempotent: false, batch: revised,
+      version: 3, error_code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+      details: Array.from({ length: count }, () => item),
+    });
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(
+      envelope(540),
+    ).success).toBe(true);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(
+      envelope(541),
+    ).success).toBe(false);
+  });
 });

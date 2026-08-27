@@ -225,6 +225,27 @@ describe("supplier purchase batch atomic review migration", () => {
     );
   });
 
+  test("appends every item blocker reason in stable evaluation order", () => {
+    const review = extractFunction("review_supplier_purchase_batch");
+    const reasons = [
+      "COST_CATEGORY_CHANGED",
+      "CHILD_FROZEN_FACTS_CHANGED",
+      "BUDGET_COMMITMENT_CHANGED",
+    ] as const;
+    let previousReason = -1;
+    for (const reason of reasons) {
+      const reasonAt = review.indexOf(`'reason', '${reason}'`);
+      const selectAt = review.lastIndexOf("SELECT ", reasonAt);
+      const intoAt = review.indexOf("INTO v_item_blockers", reasonAt);
+      const assignment = review.slice(selectAt, intoAt);
+      expect(reasonAt, `missing ${reason}`).toBeGreaterThan(previousReason);
+      expect(assignment, `${reason} must append`).toStartWith(
+        "SELECT v_item_blockers || COALESCE",
+      );
+      previousReason = reasonAt;
+    }
+  });
+
   test("persists revision-required state and never raises that outcome", () => {
     const review = extractFunction("review_supplier_purchase_batch");
     expectOrdered(review, [

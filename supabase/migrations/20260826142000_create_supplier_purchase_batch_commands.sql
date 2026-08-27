@@ -2648,7 +2648,7 @@ BEGIN
     OR NOT v_child_headers_match OR NOT v_child_items_match
   THEN
     v_requires_revision := true;
-    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    SELECT v_item_blockers || COALESCE(jsonb_agg(jsonb_build_object(
       'kind', 'item', 'supplier_sku_id', item.supplier_sku_id,
       'reason', 'CHILD_FROZEN_FACTS_CHANGED'
     ) ORDER BY item.line_no), '[]'::jsonb)
@@ -2786,11 +2786,10 @@ BEGIN
 
   IF NOT COALESCE(v_commitments_match, false) THEN
     v_requires_revision := true;
-    SELECT CASE WHEN jsonb_array_length(v_item_blockers) > 0
-      THEN v_item_blockers ELSE COALESCE(jsonb_agg(jsonb_build_object(
+    SELECT v_item_blockers || COALESCE(jsonb_agg(jsonb_build_object(
         'kind', 'item', 'supplier_sku_id', item.supplier_sku_id,
         'reason', 'BUDGET_COMMITMENT_CHANGED'
-      ) ORDER BY item.line_no), '[]'::jsonb) END
+      ) ORDER BY item.line_no), '[]'::jsonb)
     INTO v_item_blockers
     FROM public.supplier_purchase_batch_items AS item
     WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;

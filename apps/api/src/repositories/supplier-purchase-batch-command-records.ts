@@ -15,6 +15,9 @@ const uniqueIds = z.array(uuid).min(1).max(20).refine(
   (ids) => new Set(ids.map((id) => id.toLowerCase())).size === ids.length,
   "采购申请 ID 不得重复",
 );
+// Two reasons per 20 suppliers, plus price, three item-reason sets, and
+// budget blockers for each of the at most 100 batch items/categories.
+const MAX_REVISION_BLOCKERS = 20 * 2 + 100 * 5;
 
 export const SupplierPurchaseBatchPriceBlockerSchema = z.object({
   kind: z.literal("price"),
@@ -126,7 +129,7 @@ export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
   split_preview: z.array(SupplierPurchaseBatchSplitPreviewSchema)
     .min(1).max(20).optional(),
   details: z.array(SupplierPurchaseBatchBlockerSchema)
-    .min(1).max(440).optional(),
+    .min(1).max(MAX_REVISION_BLOCKERS).optional(),
   version: z.number().int().nonnegative().optional(),
   error_code: z.string().optional(),
   reason: z.string().trim().min(1).max(500).optional(),
