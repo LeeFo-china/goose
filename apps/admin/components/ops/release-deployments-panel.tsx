@@ -13,7 +13,7 @@ import { ProductionMigrationAssistCard } from "@/components/ops/production-migra
 import { ProductionMigrationCard } from "@/components/ops/production-migration-card";
 import { ReleaseDispatchCard } from "@/components/ops/release-deployments-dispatch-card";
 import { ReleaseRunsCard, SuccessfulRefsCard } from "@/components/ops/release-deployments-sections";
-import { ReleaseCandidateEvidence } from "@/components/ops/release-candidate-evidence";
+import { PRODUCTION_CANDIDATE_EVIDENCE_ID, ReleaseCandidateEvidence } from "@/components/ops/release-candidate-evidence";
 import { createReleaseTag, createRollbackTag, dispatchRelease, RELEASE_RUN_FORCE_POLL_MS, type ReleaseDeploymentsPanelProps } from "@/components/ops/release-deployments-shared";
 import { useReleaseDeploymentSnapshots } from "@/components/ops/release-deployments-snapshots";
 import { Badge } from "@/components/ui/badge";
@@ -308,6 +308,17 @@ export function ReleaseDeploymentsPanel({
     void refreshReleaseSnapshots({ silent: true });
   }
 
+  function selectProductionCandidateRun(runId: string) {
+    setSelectedCandidateRunId(runId);
+    setReleaseMode("service-release");
+    window.requestAnimationFrame(() => {
+      document.getElementById(PRODUCTION_CANDIDATE_EVIDENCE_ID)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <RuntimeVersionsPanel
@@ -344,16 +355,12 @@ export function ReleaseDeploymentsPanel({
                     />
                   )}
                 />
-                {production ? (
-                  <>
-                    <Separator className="my-5" />
-                    <ReleaseCandidateEvidence
-                      run={selectedReadyProductionRun}
-                      configured={Boolean(options?.configured)}
-                      onSubmitted={refreshAfterCandidateSubmitted}
-                    />
-                  </>
-                ) : null}
+                <Separator className="my-5" />
+                <ReleaseCandidateEvidence
+                  run={selectedReadyProductionRun}
+                  configured={Boolean(options?.configured)}
+                  onSubmitted={refreshAfterCandidateSubmitted}
+                />
               </TabsContent>
               <TabsContent value="database-migration" className="mt-0">
                 <ProductionMigrationCard
@@ -376,7 +383,7 @@ export function ReleaseDeploymentsPanel({
 
       <ReleaseRunsCard
         state={{ lastRunsRefreshedAt, runsPollError, hasActiveRuns, currentRunsPagination, runsRefreshing, currentRuns, selectedCandidateRunId }}
-        actions={{ refreshReleaseSnapshots, changeRunsPage, selectCandidateRun: setSelectedCandidateRunId }}
+        actions={{ refreshReleaseSnapshots, changeRunsPage, selectCandidateRun: selectProductionCandidateRun }}
       />
     </div>
   );

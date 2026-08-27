@@ -273,7 +273,7 @@ export function ReleaseRunsCard({ state, actions }: { state: any; actions: any }
                           onClick={() => selectCandidateRun(run.id)}
                         >
                           <ShieldCheck data-icon="inline-start" />
-                          候选证据
+                          部署候选
                         </Button>
                       ) : null}
                       <ReleaseRunDetailsDialog run={run} />
