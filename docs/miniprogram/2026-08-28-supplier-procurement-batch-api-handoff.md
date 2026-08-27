@@ -60,14 +60,14 @@ Gooes 后端已经完成一张采购批次跨多个供应商选品、按
 | `GET /supplier-purchase-batch-project-options` | `supplier.purchase-requisition.view`；`project.read` 可见项目 | Query：`keyword?`、`page?`、`pageSize?` | `Page<{ id, name, status }>` | 是，1/20/100 | 401、403、`SUPPLIER_MODULE_DISABLED` |
 | `GET /supplier-purchase-batch-cost-categories` | `supplier.purchase-requisition.manage`；无单项目参数 | Query：`keyword?`、`page?`、`pageSize?` | `Page<{ id, code, name, status:"active", sort_order }>` | 是，1/20/100 | 401、403、`SUPPLIER_MODULE_DISABLED` |
 | `GET /supplier-purchase-batch-catalog` | `supplier.purchase-requisition.manage`；目标项目须可 `project.update` | Query：必填 `projectId`；可选 `keyword`、`categoryId`、`brandId`、`tenantSupplierId`、`page`、`pageSize` | `Page<PurchaseBatchCatalogItem>` | 是，1/20/100 | 400 `VALIDATION_ERROR`、403、目录/供应商命令错误 |
-| `GET /supplier-purchase-batches` | `supplier.purchase-requisition.view`；按 `project.read` 范围 | Query：`keyword?`、`status?`、`projectId?`、`page?`、`pageSize?` | `Page<PurchaseBatch>`；列表项有 `project`，没有 `actions` | 是，1/20/100 | 400、401、403、`SUPPLIER_MODULE_DISABLED` |
-| `GET /supplier-purchase-batches/:id` | `supplier.purchase-requisition.view`；批次项目须可 `project.read` | Path：批次 UUID | `PurchaseBatch & { project, actions }` | 否 | 400、403、404 `SUPPLIER_PURCHASE_BATCH_NOT_FOUND` |
+| `GET /supplier-purchase-batches` | `supplier.purchase-requisition.view`；按 `project.read` 范围 | Query：`keyword?`、`status?`、`projectId?`、`page?`、`pageSize?` | `Page<PurchaseBatchListItem>`；列表项有 `project`，没有 `actions` | 是，1/20/100 | 400、401、403、`SUPPLIER_MODULE_DISABLED` |
+| `GET /supplier-purchase-batches/:id` | `supplier.purchase-requisition.view`；批次项目须可 `project.read` | Path：批次 UUID | `PurchaseBatchDetail`，含 `project`、`actions` | 否 | 400、403、404 `SUPPLIER_PURCHASE_BATCH_NOT_FOUND` |
 | `GET /supplier-purchase-batches/:id/items` | 同详情 | Query：`page?`、`pageSize?` | `Page<PurchaseBatchItem>` | 是，1/20/100 | 400、403、404 |
 | `GET /supplier-purchase-batches/:id/requisitions` | 同详情 | Query：`page?`、`pageSize?` | `Page<PurchaseBatchRequisition>` | 是，1/20/100 | 400、403、404 |
 | `GET /supplier-purchase-batches/:id/orders` | 同详情 | Query：`page?`、`pageSize?` | `Page<PurchaseBatchOrder>` | 是，1/20/100 | 400、403、404 |
 | `POST /supplier-purchase-batches/:id/save-draft` | `supplier.purchase-requisition.manage`；新建时目标项目须可 `project.update`；修改时旧项目也须在 update 范围，换项目时新项目再校验 | Header：`Idempotency-Key`；body 见 3.1 | `{ status:"saved", idempotent, batch, version, split_preview }` | 否 | 400 验证/重复 SKU/100 行或 20 供应商上限；403；404；409 ID、版本、状态、项目、价格/商品/供应商错误或幂等冲突 |
 | `POST /supplier-purchase-batches/:id/submit` | `supplier.purchase-requisition.manage`；当前项目须可 `project.update` | Header：`Idempotency-Key`；body `{ expected_version }` | `{ status:"submitted", idempotent, batch, version, requisition_ids }` | 否 | 400、403、404；409 版本/状态/项目/价格/预算/供应商/幂等冲突 |
-| `POST /supplier-purchase-batches/:id/review` | `supplier.purchase-requisition.approve`；项目须可 `project.read`；创建人/提交人不得自审；超预算通过时额外 `finance.budget.manage` | Header：`Idempotency-Key`；body `{ expected_version, action:"approve"|"reject", remark? }`；reject 的 `remark` 必填 | approve：`{ status:"ordered", idempotent, batch, version, requisition_ids, orders }`；reject：`{ status:"rejected", idempotent, batch, version }`；漂移见第 8 节 | 否 | 400、403、404；409 版本/状态/自审/预算覆盖/修订/幂等冲突；任一订单失败整事务回滚 |
+| `POST /supplier-purchase-batches/:id/review` | `supplier.purchase-requisition.approve`；项目须可 `project.read`；创建人/提交人不得自审；超预算通过时额外 `finance.budget.manage` | Header：`Idempotency-Key`；body `{ expected_version, action:"approve"|"reject", remark? }`；reject 的 `remark` 必填 | approve：`{ status:"ordered", idempotent, batch, version, requisition_ids, orders }`；reject：`{ status:"rejected", idempotent, batch, version }`；漂移见第 9 节 | 否 | 400、403、404；409 版本/状态/自审/预算覆盖/修订/幂等冲突；任一订单失败整事务回滚 |
 | `POST /supplier-purchase-batches/:id/cancel` | `supplier.purchase-requisition.manage`；当前项目须可 `project.update`；仅 draft / pending_approval | Header：`Idempotency-Key`；body `{ expected_version, reason }` | `{ status:"cancelled", idempotent, batch, version }` | 否 | 400、403、404；409 版本/状态/幂等冲突 |
 
 ### 3.1 mutation 请求体
@@ -334,7 +334,7 @@ id (= tenant_supplier_id), tenant_id, supplier_id,
 relationship_status, internal_supplier_code, version,
 supplier { id, code, name, legal_name, supplier_type,
            onboarding_status, operational_status, ownership_scope,
-           owner_tenant_id, version, ... },
+           owner_tenant_id, version },
 primary_contact, address
 ```
 
@@ -489,88 +489,10 @@ Idempotency-Key: <uuid>
 - 私有供应商属于当前租户，或平台供应商满足现有代录规则；
 - 分类、品牌、采购单位存在且有效。
 
-成功响应：
-
-```ts
-type PurchasableProductCreated = {
-  status: 'created';
-  idempotent: boolean;
-  product: { id: string; status: 'active'; version: 2; /* 及主档字段 */ };
-  sku: {
-    id: string;
-    supplier_id: string;
-    supplier_product_id: string;
-    sku_code: string;
-    name: string;
-    specification: null;
-    model: null;
-    spec_values: Record<string, string | number | boolean | string[]>;
-    purchase_unit_id: string;
-    base_unit_id: string;
-    base_unit_conversion: number;
-    batch_managed: false;
-    color_managed: false;
-    serial_managed: false;
-    status: 'active';
-    version: 2;
-    ownership_scope: 'tenant';
-    owner_tenant_id: string;
-    acting_tenant_id: string;
-    acting_employee_id: string;
-    operation_source: 'tenant';
-    proxy_reason: null;
-    created_by_employee_id: string;
-    updated_by_employee_id: string;
-    created_at: string;
-    updated_at: string;
-  };
-  price: {
-    id: string;
-    tenant_id: string;
-    supplier_id: string;
-    supplier_price_list_id: string;
-    supplier_product_id: string;
-    supplier_sku_id: string;
-    minimum_quantity: string;
-    maximum_quantity: null;
-    purchase_unit_id: string;
-    base_unit_id: string;
-    base_unit_conversion: string;
-    unit_price: string;
-    tax_rate: string;
-    tax_inclusive: boolean;
-    /* 另有 actor/audit/timestamp 字段 */
-  };
-  catalog_item: {
-    supplier_product_id: string;
-    product_code: string;
-    product_name: string;
-    supplier_sku_id: string;
-    sku_code: string;
-    sku_name: string;
-    specification: null;
-    model: null;
-    supplier_price_list_id: string;
-    price_list_code: 'DEFAULT';
-    price_list_version: number;
-    effective_from: string;
-    effective_until: string | null;
-    supplier_price_list_item_id: string;
-    purchase_unit_id: string;
-    purchase_unit_code: string;
-    purchase_unit_name: string;
-    purchase_unit_symbol: string;
-    base_unit_id: string;
-    base_unit_code: string;
-    base_unit_name: string;
-    base_unit_symbol: string;
-    base_unit_conversion: string;
-    unit_price: string;
-    tax_rate: string;
-    tax_inclusive: boolean;
-  };
-};
-```
+成功响应的完整、无省略 TypeScript 定义见
+[supplier-procurement-batch-contract.ts](./supplier-procurement-batch-contract.ts) 中的
+`PurchasableProductCreated`、`PurchasableProductRecord`、`PurchasableSkuRecord`、
+`PurchasablePriceRecord` 和 `PurchasableCreatedCatalogItem`。
 
 商品、SKU、默认价格簿新版本、价格条目发布和目录可采购校验在一个事务中完成，失败不留半成品。
 成功后该 SKU 已可采购。由于复合命令的 `catalog_item` 不包含批次目录新增的分类、品牌、
@@ -846,134 +768,32 @@ UUID/行序排列。`error_code` 取第一个非空家族，所以后续 `detail
 
 ## 12. Orange 可复制的类型与 wrapper 示例
 
-以下示例适配当前 `api` 返回 `ApiResponse<T>` 的方式；省略的批次审计字段应按第 4 节补齐，
-不要将省略号代码原样提交。
+完整且可机器读取的复制模板位于
+[supplier-procurement-batch-contract.ts](./supplier-procurement-batch-contract.ts)。它是文档制品，
+不接入 Gooes 编译，已完整定义：
+
+- `Pagination` / `Page<T>` 和 Orange `ApiResponse<T>` 结构；
+- `ProjectRef`、`BudgetSnapshot`、`PurchaseBatch`、带 `project` 的列表项、带 `actions` 的详情；
+- catalog、batch item、子采购申请、带引用的采购单及全部 nullability；
+- `Saved` / `Submitted` / `Rejected` / `Cancelled` / `Ordered` 判别联合；
+- revision 四类 blocker、四个稳定 code、HTTP 409 `RevisionRequiredApiError.details`；
+- 12 条 batch API wrapper 和快速商品创建 wrapper；
+- 快速创建 `sku.base_unit_conversion: number`，以及 price/catalog/batch 中的 string 边界。
+
+模板通过结构化 `SupplierProcurementApi` 接口适配 Orange 当前 `api`。Orange 团队复制到自己的
+service 文件后，在组装文件中使用现有实例：
 
 ```ts
 import { api } from '@/utils/api';
-import type { RequestOptions } from '@/utils/https';
+import { createSupplierProcurementService } from './supplier_procurement';
 
-export type Page<T> = {
-  list: T[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
-
-export type PurchaseBatchStatus =
-  | 'draft'
-  | 'pending_approval'
-  | 'rejected'
-  | 'cancelled'
-  | 'ordered';
-
-export type PurchaseBatchDraftPayload = {
-  project_id: string;
-  expected_version: number;
-  reason: string;
-  expected_delivery_date?: string | null;
-  remark?: string | null;
-  items: Array<{
-    supplier_sku_id: string;
-    cost_category_id: string;
-    quantity: string;
-  }>;
-};
-
-const commandOptions = (key: string): RequestOptions => ({
-  header: { 'Idempotency-Key': key },
-});
-
-export const SupplierProcurementService = {
-  listBatches: (query: {
-    page?: number;
-    pageSize?: number;
-    keyword?: string;
-    status?: PurchaseBatchStatus;
-    projectId?: string;
-  } = {}) => api.get<Page<PurchaseBatch>>('/supplier-purchase-batches', query),
-
-  getBatch: (id: string) =>
-    api.get<PurchaseBatchDetail>(`/supplier-purchase-batches/${id}`),
-
-  listCatalog: (query: {
-    projectId: string;
-    page?: number;
-    pageSize?: number;
-    keyword?: string;
-    categoryId?: string;
-    brandId?: string;
-    tenantSupplierId?: string;
-  }) => api.get<Page<PurchaseBatchCatalogItem>>(
-    '/supplier-purchase-batch-catalog',
-    query,
-  ),
-
-  saveDraft: (
-    id: string,
-    payload: PurchaseBatchDraftPayload,
-    key: string,
-  ) => api.post<PurchaseBatchSaved>(
-    `/supplier-purchase-batches/${id}/save-draft`,
-    payload,
-    commandOptions(key),
-  ),
-
-  submit: (id: string, expectedVersion: number, key: string) =>
-    api.post<PurchaseBatchSubmitted>(
-      `/supplier-purchase-batches/${id}/submit`,
-      { expected_version: expectedVersion },
-      commandOptions(key),
-    ),
-
-  review: (
-    id: string,
-    payload: {
-      expected_version: number;
-      action: 'approve' | 'reject';
-      remark?: string | null;
-    },
-    key: string,
-  ) => api.post<PurchaseBatchOrdered | PurchaseBatchRejected>(
-    `/supplier-purchase-batches/${id}/review`,
-    payload,
-    commandOptions(key),
-  ),
-
-  cancel: (
-    id: string,
-    expectedVersion: number,
-    reason: string,
-    key: string,
-  ) => api.post<PurchaseBatchCancelled>(
-    `/supplier-purchase-batches/${id}/cancel`,
-    { expected_version: expectedVersion, reason },
-    commandOptions(key),
-  ),
-};
+export const SupplierProcurementService =
+  createSupplierProcurementService(api);
 ```
 
-快速商品 wrapper：
-
-```ts
-const skuId = createUuidV4();
-const key = createUuidV4();
-
-await api.post<PurchasableProductCreated>(
-  `/supplier-purchasable-products/${supplierId}` +
-    `?tenantSupplierId=${encodeURIComponent(tenantSupplierId)}`,
-  {
-    sku_id: skuId,
-    product: { name, category_id: categoryId, brand_id: brandId },
-    sku: { name: skuName, purchase_unit_id: unitId, spec_values: specValues },
-    price: { unit_price: unitPrice, tax_rate: taxRate, tax_inclusive: true },
-  },
-  { header: { 'Idempotency-Key': key } },
-);
-```
+不要在模板中补本地推导字段。`review` 的正常 Promise 只返回 `OrderedCommandResult` 或
+`RejectedCommandResult`；修订结果由 HTTP 层抛为 409，应以
+`RevisionRequiredApiError.details` 收窄，不能当作 2xx command union。
 
 ## 13. 兼容性与禁止调用
 
@@ -1075,8 +895,75 @@ Orange 团队负责：
   submitted orders=2、success event=1、conflict event=1、cleanup=true；
 - 默认 planner `EXPLAIN ANALYZE`：6/6 命中 product/sku GIN、batch、items、
   requisitions、orders 预期索引，fixture 回滚；
-- batch focused tests：139 pass；release orchestration：141 pass；
+- batch focused tests 分两个隔离进程运行：130 pass + route 9 pass = 139 pass；release
+  orchestration：141 pass；
 - `api:check`、typecheck、build、API 文件 `<500` 行门禁和 `git diff --check` 均通过。
+
+上述真实数据库输出由以下三个脚本产生，对应 manifest/边界测试也在同目录：
+
+- `apps/api/src/scripts/supplier-purchase-batch-smoke.ts` 与
+  `supplier-purchase-batch-smoke.test.ts`；
+- `apps/api/src/scripts/supplier-purchase-batch-concurrency.ts` 与
+  `supplier-purchase-batch-concurrency.test.ts`；
+- `apps/api/src/scripts/supplier-purchase-batch-explain.ts` 与
+  `supplier-purchase-batch-explain.test.ts`；
+- 三者共用 `supplier-purchase-batch-local-db.ts` 的本地 URL guard，并由
+  `supplier-purchase-batch-local-db.test.ts` 验证拒绝远端 host、错误端口和错误数据库名。
+
+数据库 migration 契约证据位于：
+
+- `apps/api/src/services/supplier-purchase-batch-foundation-migration-contract.test.ts`；
+- `apps/api/src/services/supplier-purchase-batch-command-migration-contract.test.ts`；
+- `apps/api/src/services/supplier-purchase-batch-review-migration-contract.test.ts`。
+
+发布路径证据位于 `scripts/release-orchestration-contract.test.ts`、
+`.github/workflows/migrate-dev-database.yml`、
+`.github/workflows/migrate-production-database.yml` 和
+`docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`。
+
+关键证据提交：
+
+| Commit | 证据增量 |
+| --- | --- |
+| `b688517d` | 首次加入真实拆单 smoke、并发、EXPLAIN 与清理脚本 |
+| `0b05fdd4` | 收紧 exact drift、第二单失败原子回滚和 local DB guard |
+| `95fea19d` | 强化默认 planner、fixture 选择及 migration workflow 验证 |
+| `a6146766` | 严格验证非事务索引 metadata，并补唯一部署 runbook |
+
+可复现命令必须区分工作目录。batch focused tests 中 route 测试使用全局 `mock.module`，须放到
+独立 Bun 进程，不能与 service tests 合并成一次调用：
+
+```bash
+# cwd: apps/api；130 pass
+bun test ./src/schema/supplier-purchase-batches.test.ts \
+  ./src/repositories/supplier-purchase-batch*.test.ts \
+  ./src/services/supplier-purchase-batch*.test.ts \
+  ./src/scripts/supplier-purchase-batch*.test.ts
+
+# cwd: apps/api；9 pass
+bun test ./src/controllers/supplier-purchase-batches/routes.test.ts
+
+# cwd: 仓库根目录；141 pass
+bun test ./scripts/release-orchestration-contract.test.ts
+```
+
+三个真实数据库脚本必须从 `apps/api` 运行，并且 URL 只能是 PostgreSQL 协议、
+`localhost` / `127.0.0.1` / `[::1]`、端口 `54322`、数据库 `/postgres`，不能带 query 或
+fragment；否则固定失败为 `SUPPLIER_PURCHASE_BATCH_LOCAL_DATABASE_REQUIRED`：
+
+```bash
+# cwd: apps/api
+export SUPPLIER_BATCH_LOCAL_DB_URL='postgresql://postgres:postgres@127.0.0.1:54322/postgres'
+SUPABASE_DB_DIRECT_URL="$SUPPLIER_BATCH_LOCAL_DB_URL" \
+  bun src/scripts/supplier-purchase-batch-smoke.ts
+SUPABASE_DB_DIRECT_URL="$SUPPLIER_BATCH_LOCAL_DB_URL" \
+  bun src/scripts/supplier-purchase-batch-concurrency.ts
+SUPABASE_DB_DIRECT_URL="$SUPPLIER_BATCH_LOCAL_DB_URL" \
+  bun src/scripts/supplier-purchase-batch-explain.ts
+```
+
+这些命令的 fresh 输出只打印到当前终端，没有把 JSON、EXPLAIN 或测试日志持久化为仓库
+artifact。smoke / EXPLAIN fixture 在事务中回滚；并发 fixture 在提交后执行精确 scoped cleanup。
 
 这些都是 local-only 证据。远端 Supabase 没有连接、没有应用本批 migration，API 也没有发布；
 Orange 不应在 dev API 实际部署前开始写 mutation 真机验收。
@@ -1108,7 +995,10 @@ Gooes 当前实现：
 - `apps/api/src/repositories/supplier-purchase-batches.ts`
 - `apps/api/src/repositories/supplier-purchase-batch-records.ts`
 - `apps/api/src/repositories/supplier-purchase-batch-command-records.ts`
+- `apps/api/src/repositories/supplier-purchase-batch-command-gateway.ts`
 - `apps/api/src/repositories/supplier-purchase-batch-errors.ts`
+- `apps/api/src/repositories/supplier-purchase-requisition-records.ts`
+- `apps/api/src/repositories/supplier-purchase-order-records.ts`
 - `apps/api/src/controllers/supplier-purchasable-products/index.ts`
 - `apps/api/src/schema/supplier-purchasable-products.ts`
 - `apps/api/src/repositories/supplier-purchasable-product-records.ts`
@@ -1127,7 +1017,22 @@ Gooes 当前实现：
 - `supabase/migrations/20260826141000_create_supplier_purchase_batches.sql`
 - `supabase/migrations/20260826141500_prepare_supplier_purchase_batch_catalog_search.sql`
 - `supabase/migrations/20260826142000_create_supplier_purchase_batch_commands.sql`
+- `apps/api/src/scripts/supplier-purchase-batch-smoke.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-smoke.test.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-concurrency.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-concurrency.test.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-explain.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-explain.test.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-local-db.ts`
+- `apps/api/src/scripts/supplier-purchase-batch-local-db.test.ts`
+- `apps/api/src/services/supplier-purchase-batch-foundation-migration-contract.test.ts`
+- `apps/api/src/services/supplier-purchase-batch-command-migration-contract.test.ts`
+- `apps/api/src/services/supplier-purchase-batch-review-migration-contract.test.ts`
+- `scripts/release-orchestration-contract.test.ts`
+- `.github/workflows/migrate-dev-database.yml`
+- `.github/workflows/migrate-production-database.yml`
 - `docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`
+- `docs/miniprogram/supplier-procurement-batch-contract.ts`
 
 Orange 只读检查过的具体文件：
 
