@@ -24,6 +24,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: migrate-production-database
@@ -34,9 +35,46 @@ env:
   BACKUP_DIR: /opt/supabase/docker/backups
 
 jobs:
+  package-migration-source:
+    name: Package immutable migration source
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout migration source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          clean: true
+
+      - name: Package and attest migration source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git archive --format=tar.gz --output production-migration-source.tar.gz "${GITHUB_SHA}" supabase/migrations
+          test -s production-migration-source.tar.gz
+          sha256sum production-migration-source.tar.gz > production-migration-source.tar.gz.sha256
+          archive_sha256="$(cut -d' ' -f1 production-migration-source.tar.gz.sha256)"
+          jq -n \
+            --arg commit_sha "${GITHUB_SHA}" \
+            --arg archive_sha256 "${archive_sha256}" \
+            '{schema_version: 1, commit_sha: $commit_sha, archive_sha256: $archive_sha256}' \
+            > production-migration-source.json
+
+      - name: Upload immutable migration source
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-migration-source-${{ github.run_attempt }}
+          path: |
+            production-migration-source.tar.gz
+            production-migration-source.tar.gz.sha256
+            production-migration-source.json
+          if-no-files-found: error
+          retention-days: 7
+
   migrate-production:
+    needs: package-migration-source
     name: Migrate production database
     runs-on: [self-hosted, Linux, X64, gooes-prod-deploy]
+    timeout-minutes: 45
 
     steps:
       - name: Guard production runner
@@ -46,51 +84,42 @@ jobs:
           test -d "${DEPLOY_DIR}"
           docker inspect supabase-db >/dev/null
 
-      - name: Checkout repository
+      - name: Download immutable migration source
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          SOURCE_DIR="${RUNNER_WORKSPACE}/source"
-          BASIC_AUTH="$(printf 'x-access-token:%s' "${GITHUB_TOKEN}" | base64 -w0)"
-          export GIT_CONFIG_COUNT=1
-          export GIT_CONFIG_KEY_0=http.extraheader
-          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${BASIC_AUTH}"
+          source_dir="${RUNNER_TEMP}/migration-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact_dir="${RUNNER_TEMP}/production-migration-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          artifact_name="production-migration-source-${GITHUB_RUN_ATTEMPT}"
+          downloaded=false
 
-          checkout_attempt() {
-            mode="$1"
-            if [ "$mode" = "proxy" ]; then
-              export HTTPS_PROXY=socks5h://127.0.0.1:18080
-              export HTTP_PROXY=socks5h://127.0.0.1:18080
-              export ALL_PROXY=socks5h://127.0.0.1:18080
-              export https_proxy="$HTTPS_PROXY"
-              export http_proxy="$HTTP_PROXY"
-              export all_proxy="$ALL_PROXY"
-              git_timeout=180
-            else
-              unset HTTPS_PROXY HTTP_PROXY ALL_PROXY https_proxy http_proxy all_proxy
-              git_timeout=45
+          for attempt in 1 2 3 4 5; do
+            rm -rf "${artifact_dir}"
+            mkdir -p "${artifact_dir}"
+            if timeout 300 gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "${artifact_name}" -D "${artifact_dir}"; then
+              downloaded=true
+              break
             fi
+            if [ "${attempt}" -lt 5 ]; then
+              echo "::warning::Migration source download attempt ${attempt}/5 failed; retrying."
+              sleep $((attempt * 10))
+            fi
+          done
+          test "${downloaded}" = true
 
-            if [ ! -d "${SOURCE_DIR}/.git" ]; then
-              rm -rf "${SOURCE_DIR}" || return 1
-              timeout "$git_timeout" git clone --filter=blob:none "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}" || return 1
-            fi
-            git -C "${SOURCE_DIR}" remote set-url origin "https://github.com/${GITHUB_REPOSITORY}.git" || return 1
-            timeout "$git_timeout" git -C "${SOURCE_DIR}" fetch --prune --depth=1 origin "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" checkout --force "${GITHUB_SHA}" || return 1
-            git -C "${SOURCE_DIR}" clean -fdx || return 1
-          }
+          cd "${artifact_dir}"
+          test "$(jq -r '.schema_version' production-migration-source.json)" = 1
+          test "$(jq -r '.commit_sha' production-migration-source.json)" = "${GITHUB_SHA}"
+          sha256sum -c production-migration-source.tar.gz.sha256
+          test "$(jq -r '.archive_sha256' production-migration-source.json)" = "$(cut -d' ' -f1 production-migration-source.tar.gz.sha256)"
+          tar -tzf production-migration-source.tar.gz >/dev/null
 
-          if ! checkout_attempt direct; then
-            echo "::warning::Direct GitHub checkout failed; trying local emergency SOCKS proxy."
-            if timeout 2 bash -c '</dev/tcp/127.0.0.1/18080' 2>/dev/null; then
-              checkout_attempt proxy
-            else
-              echo "::error::Direct GitHub checkout failed and local SOCKS proxy 127.0.0.1:18080 is unavailable."
-              exit 1
-            fi
-          fi
+          rm -rf "${source_dir}"
+          mkdir -p "${source_dir}"
+          tar -xzf production-migration-source.tar.gz -C "${source_dir}"
+          test -d "${source_dir}/supabase/migrations"
+          echo "SOURCE_DIR=${source_dir}" >> "${GITHUB_ENV}"
 
       - name: Plan and apply migrations
         env:
@@ -98,7 +127,7 @@ jobs:
           CONFIRM_TEXT: ${{ inputs.confirm_text }}
         run: |
           set -euo pipefail
-          cd "${RUNNER_WORKSPACE}/source"
+          cd "${SOURCE_DIR}"
           test -d supabase/migrations
 
           if [ "${MIGRATE_MODE}" != "plan" ] && [ "${MIGRATE_MODE}" != "apply" ]; then

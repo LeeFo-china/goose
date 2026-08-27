@@ -986,6 +986,54 @@ describe("admin release service resolver", () => {
 });
 
 describe("production migration precheck workflow", () => {
+  test("delivers immutable migration source without cloning GitHub on production", () => {
+    const packageJob = sliceWorkflowJob(
+      migrateProductionWorkflow,
+      "package-migration-source",
+      "migrate-production",
+    );
+    const downloadSource = extractWorkflowRunScript(
+      sliceWorkflowStep(
+        migrateProductionWorkflow,
+        "Download immutable migration source",
+      ),
+    );
+
+    expect(packageJob).toContain("runs-on: ubuntu-24.04");
+    expect(packageJob).toContain("uses: actions/checkout@v6");
+    expect(packageJob).toContain(
+      'git archive --format=tar.gz --output production-migration-source.tar.gz "${GITHUB_SHA}" supabase/migrations',
+    );
+    expect(packageJob).toContain("sha256sum production-migration-source.tar.gz");
+    expect(packageJob).toContain(
+      "name: production-migration-source-${{ github.run_attempt }}",
+    );
+    expect(migrateProductionWorkflow).toContain(
+      "migrate-production:\n    needs: package-migration-source",
+    );
+    expect(migrateProductionWorkflow).toContain("timeout-minutes: 45");
+    expect(downloadSource).toContain(
+      'artifact_name="production-migration-source-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(downloadSource).toContain(
+      'timeout 300 gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "${artifact_name}"',
+    );
+    expect(downloadSource).toContain("for attempt in 1 2 3 4 5");
+    expect(downloadSource).toContain("sha256sum -c production-migration-source.tar.gz.sha256");
+    expect(downloadSource).toContain(
+      'test "$(jq -r \'.commit_sha\' production-migration-source.json)" = "${GITHUB_SHA}"',
+    );
+    expect(downloadSource.trimStart().startsWith("set -euo pipefail")).toBe(true);
+    expect(downloadSource).not.toContain("sha256sum -c production-migration-source.tar.gz.sha256 || true");
+    expect(downloadSource.indexOf("sha256sum -c production-migration-source.tar.gz.sha256")).toBeLessThan(
+      downloadSource.indexOf("tar -xzf production-migration-source.tar.gz"),
+    );
+    expect(downloadSource).toContain(
+      'source_dir="${RUNNER_TEMP}/migration-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(migrateProductionWorkflow).not.toContain("git clone");
+  });
+
   test("publishes a structured JSON artifact for Admin migration comparison", () => {
     expect(migrateProductionWorkflow).toContain("migration-precheck.json");
     expect(migrateProductionWorkflow).toContain("production-migration-precheck");
