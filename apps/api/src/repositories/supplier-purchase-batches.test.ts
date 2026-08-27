@@ -88,7 +88,7 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(requests).toHaveLength(0);
   });
 
-  test("escapes filter-only keywords and applies visible scope with exact count", async () => {
+  test("quotes literal search punctuation and applies visible scope with exact count", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: [batch],
       count: 21,
@@ -98,7 +98,7 @@ describe("SupplierPurchaseBatchesRepository", () => {
       tenant_id: TENANT_ID,
       visible_project_ids: [PROJECT_ID],
       status: "draft",
-      keyword: " %_\\,() ",
+      keyword: ' (),"%_\\.:* ',
       page: 2,
       pageSize: 20,
     });
@@ -113,7 +113,8 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(url.searchParams.get("project_id")).toBe(`in.(${PROJECT_ID})`);
     expect(url.searchParams.get("status")).toBe("eq.draft");
     expect(url.searchParams.get("or")).toBe(
-      "(batch_no.ilike.%\\%\\_\\\\%,reason.ilike.%\\%\\_\\\\%)",
+      '(batch_no.ilike."%(),\\"\\\\%\\\\_\\\\\\\\.:*%",' +
+        'reason.ilike."%(),\\"\\\\%\\\\_\\\\\\\\.:*%")',
     );
     expect(url.searchParams.get("order")).toBe("updated_at.desc,id.desc");
     expect(url.searchParams.get("offset")).toBe("20");

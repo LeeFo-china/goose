@@ -343,16 +343,27 @@ function applyKeyword(
   keyword: string | undefined,
   columns: readonly string[],
 ): Query {
-  const safe = keyword
-    ?.trim()
-    .replace(/\\/g, "\\\\")
-    .replace(/[%_]/g, "\\$&")
-    .replace(/[,()]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return safe
-    ? request.or(columns.map((column) => `${column}.ilike.%${safe}%`).join(","))
+  const value = keyword?.trim();
+  const pattern = value
+    ? quotePostgrestValue(buildIlikePattern(value))
+    : undefined;
+  return pattern
+    ? request.or(
+        columns.map((column) => `${column}.ilike.${pattern}`).join(","),
+      )
     : request;
+}
+
+function buildIlikePattern(value: string) {
+  const escaped = value
+    .replaceAll("\\", "\\\\")
+    .replaceAll("%", "\\%")
+    .replaceAll("_", "\\_");
+  return `%${escaped}%`;
+}
+
+function quotePostgrestValue(value: string) {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 function toPage<T>(
