@@ -293,6 +293,7 @@ export class SupplierPurchaseBatchesService {
     return this.repository[method]({
       tenant_id: scope.tenantId,
       batch_id: batchId,
+      visible_project_ids: visibleProjectIds,
       page: query.page,
       pageSize: query.pageSize,
     });

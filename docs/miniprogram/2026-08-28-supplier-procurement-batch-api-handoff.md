@@ -889,15 +889,16 @@ Orange 团队负责：
 截至本文生成时，本地证据为：
 
 - migration `20260826140500`、`20260826141000`、`20260826141500`、
-  `20260826142000` 在本地 Local/DB 对齐，dry-run 显示 up to date；
+  `20260826142000`、`20260826142500`、`20260826142600` 在本地 Local/DB
+  对齐，dry-run 显示 up to date；
 - 真实 smoke：2 个供应商生成 2 张 submitted orders，幂等重放安全；7 个独立 drift
   场景返回 exact/full revision；第二张订单失败时完整回滚；fixture 最终回滚；
 - 并发 smoke：两个审批人、不同 key，结果为 1 个 winner + 1 个 version conflict；
   submitted orders=2、success event=1、conflict event=1、cleanup=true；
 - 默认 planner `EXPLAIN ANALYZE`：6/6 命中 product/sku GIN、batch、items、
   requisitions、orders 预期索引，fixture 回滚；
-- batch focused tests 分两个隔离进程运行：130 pass + route 9 pass = 139 pass；release
-  orchestration：141 pass；
+- supplier purchase focused tests：520 pass / 56 files；release orchestration +
+  domain contract：144 pass；本轮审查修复涉及的 4 个文件：46 pass；
 - `api:check`、typecheck、build、API 文件 `<500` 行门禁和 `git diff --check` 均通过。
 
 上述真实数据库输出由以下三个脚本产生，对应 manifest/边界测试也在同目录：
@@ -971,17 +972,19 @@ Orange 不应在 dev API 实际部署前开始写 mutation 真机验收。
 
 ### 16.2 非事务 migration 部署要求
 
-`20260826140500` 与 `20260826141500` 使用 `CREATE INDEX CONCURRENTLY`。
-Supabase CLI 2.99 的直接 `db push` / `db reset` 会把 migration 放入事务，不能用于这两份文件。
+`20260826140500`、`20260826141500` 与 `20260826142500` 使用
+`CREATE INDEX CONCURRENTLY`。Supabase CLI 2.99 的直接 `db push` / `db reset`
+会把 migration 放入事务，不能用于这三份文件。
 
 正式部署只能使用仓库的：
 
 - dev：`.github/workflows/migrate-dev-database.yml`；
 - production：`.github/workflows/migrate-production-database.yml`。
 
-workflow 必须按 140500 → 141000 → 141500 → 142000 执行，在事务外建索引，执行严格
-post-DDL catalog 校验后才登记 migration history。部署后在授权环境运行
-`supabase migration list`，确认 Local/Remote 对齐至 `20260826142000`。禁止手工 DDL/DML、
+workflow 必须按 140500 → 141000 → 141500 → 142000 → 142500 → 142600
+执行，在事务外建索引，执行严格 post-DDL catalog 校验后才登记 migration history。
+部署后在授权环境运行 `supabase migration list`，确认 Local/Remote 对齐至
+`20260826142600`。禁止手工 DDL/DML、
 禁止绕过 workflow 手工补 history。详细恢复流程见
 `docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md`。
 
@@ -1018,6 +1021,8 @@ Gooes 当前实现：
 - `supabase/migrations/20260826141000_create_supplier_purchase_batches.sql`
 - `supabase/migrations/20260826141500_prepare_supplier_purchase_batch_catalog_search.sql`
 - `supabase/migrations/20260826142000_create_supplier_purchase_batch_commands.sql`
+- `supabase/migrations/20260826142500_prepare_supplier_purchase_batch_existing_table_indexes.sql`
+- `supabase/migrations/20260826142600_prevent_supplier_purchase_order_batch_reassignment.sql`
 - `apps/api/src/scripts/supplier-purchase-batch-smoke.ts`
 - `apps/api/src/scripts/supplier-purchase-batch-smoke.test.ts`
 - `apps/api/src/scripts/supplier-purchase-batch-concurrency.ts`

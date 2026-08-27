@@ -9,9 +9,23 @@ const preflightMigrationUrl = new URL(
   "../../../../supabase/migrations/20260826140500_prepare_supplier_price_item_batch_snapshot_key.sql",
   import.meta.url,
 );
+const existingTableIndexMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260826142500_prepare_supplier_purchase_batch_existing_table_indexes.sql",
+  import.meta.url,
+);
+const orderOwnershipMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260826142600_prevent_supplier_purchase_order_batch_reassignment.sql",
+  import.meta.url,
+);
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
 const preflightSql = existsSync(preflightMigrationUrl)
   ? readFileSync(preflightMigrationUrl, "utf8")
+  : "";
+const existingTableIndexSql = existsSync(existingTableIndexMigrationUrl)
+  ? readFileSync(existingTableIndexMigrationUrl, "utf8")
+  : "";
+const orderOwnershipSql = existsSync(orderOwnershipMigrationUrl)
+  ? readFileSync(orderOwnershipMigrationUrl, "utf8")
   : "";
 
 function compact(value: string): string {
@@ -56,6 +70,30 @@ describe("supplier purchase batch foundation migration", () => {
     expect(sql).toContain("SET LOCAL statement_timeout = '5min';");
     expect(sql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
     expect(sql).not.toMatch(/\bUPDATE public\.supplier_purchase_(?:requisitions|orders)\b/);
+  });
+
+  test("builds every existing-table index concurrently outside the foundation transaction", () => {
+    expect(existsSync(existingTableIndexMigrationUrl)).toBe(true);
+    expect(existingTableIndexSql).toMatch(
+      /^-- gooes:migration-mode=nontransactional\n/,
+    );
+    for (const indexName of [
+      "projects_name_purchase_batch_trgm_idx",
+      "finance_cost_categories_code_purchase_batch_trgm_idx",
+      "finance_cost_categories_name_purchase_batch_trgm_idx",
+      "supplier_purchase_requisitions_batch_supplier_generation_uidx",
+      "supplier_purchase_orders_batch_supplier_uidx",
+      "supplier_purchase_requisitions_batch_generation_idx",
+      "supplier_purchase_orders_batch_idx",
+    ]) {
+      expect(existingTableIndexSql).toContain(
+        `INDEX CONCURRENTLY IF NOT EXISTS\n  ${indexName}`,
+      );
+      expect(sql).not.toMatch(new RegExp(
+        `CREATE(?: UNIQUE)? INDEX ${indexName}\\b`,
+      ));
+    }
+    expect(existingTableIndexSql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
   });
 
   test("creates the tenant-owned aggregate with exact lifecycle and audit facts", () => {
@@ -221,17 +259,43 @@ describe("supplier purchase batch foundation migration", () => {
     );
   });
 
+  test("makes purchase order batch ownership immutable after insert", () => {
+    expect(existsSync(orderOwnershipMigrationUrl)).toBe(true);
+    const normalized = compact(orderOwnershipSql);
+    expect(orderOwnershipSql).toMatch(/\bBEGIN;[\s\S]*\bCOMMIT;\s*$/);
+    expect(normalized).toContain(
+      "CREATE OR REPLACE FUNCTION public.prevent_supplier_purchase_order_batch_reassignment()",
+    );
+    expect(normalized).toContain(
+      "NEW.purchase_batch_id IS DISTINCT FROM OLD.purchase_batch_id",
+    );
+    expect(normalized).toContain(
+      "SUPPLIER_PURCHASE_BATCH_OWNERSHIP_IMMUTABLE",
+    );
+    expect(normalized).toContain(
+      "CREATE TRIGGER supplier_purchase_orders_prevent_batch_reassignment BEFORE UPDATE OF purchase_batch_id ON public.supplier_purchase_orders FOR EACH ROW EXECUTE FUNCTION public.prevent_supplier_purchase_order_batch_reassignment()",
+    );
+    expect(normalized).toContain(
+      "REVOKE ALL ON FUNCTION public.prevent_supplier_purchase_order_batch_reassignment() FROM PUBLIC, anon, authenticated, service_role",
+    );
+  });
+
   test("adds deterministic list, child, and partial uniqueness indexes", () => {
     const normalized = compact(sql);
+    const onlineIndexes = compact(existingTableIndexSql);
     for (const contract of [
       /CREATE INDEX supplier_purchase_batches_tenant_updated_idx ON public\.supplier_purchase_batches\( tenant_id, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batches_tenant_status_updated_idx ON public\.supplier_purchase_batches\( tenant_id, status, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batches_tenant_project_updated_idx ON public\.supplier_purchase_batches\( tenant_id, project_id, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batch_items_parent_line_idx ON public\.supplier_purchase_batch_items\( tenant_id, purchase_batch_id, line_no, id \)/,
       /CREATE INDEX supplier_purchase_batch_items_price_item_idx ON public\.supplier_purchase_batch_items\( supplier_price_list_item_id, tenant_id, supplier_id, supplier_price_list_id, supplier_product_id, supplier_sku_id \)/,
-      /CREATE UNIQUE INDEX supplier_purchase_requisitions_batch_supplier_generation_uidx ON public\.supplier_purchase_requisitions\( tenant_id, purchase_batch_id, split_generation, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
-      /CREATE UNIQUE INDEX supplier_purchase_orders_batch_supplier_uidx ON public\.supplier_purchase_orders\( tenant_id, purchase_batch_id, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
     ]) expect(normalized).toMatch(contract);
+    for (const contract of [
+      /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS supplier_purchase_requisitions_batch_supplier_generation_uidx ON public\.supplier_purchase_requisitions\( tenant_id, purchase_batch_id, split_generation, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
+      /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS supplier_purchase_orders_batch_supplier_uidx ON public\.supplier_purchase_orders\( tenant_id, purchase_batch_id, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
+      /CREATE INDEX CONCURRENTLY IF NOT EXISTS supplier_purchase_requisitions_batch_generation_idx ON public\.supplier_purchase_requisitions\( tenant_id, purchase_batch_id, split_generation, id \) WHERE purchase_batch_id IS NOT NULL/,
+      /CREATE INDEX CONCURRENTLY IF NOT EXISTS supplier_purchase_orders_batch_idx ON public\.supplier_purchase_orders\(tenant_id, purchase_batch_id, id\) WHERE purchase_batch_id IS NOT NULL/,
+    ]) expect(onlineIndexes).toMatch(contract);
   });
 
   test("indexes every leading-ILIKE purchase batch read field with trigrams", () => {
@@ -239,16 +303,23 @@ describe("supplier purchase batch foundation migration", () => {
     for (const [name, table, column] of [
       ["supplier_purchase_batches_batch_no_trgm_idx", "supplier_purchase_batches", "batch_no"],
       ["supplier_purchase_batches_reason_trgm_idx", "supplier_purchase_batches", "reason"],
-      ["projects_name_purchase_batch_trgm_idx", "projects", "name"],
-      ["finance_cost_categories_code_purchase_batch_trgm_idx", "finance_cost_categories", "code"],
-      ["finance_cost_categories_name_purchase_batch_trgm_idx", "finance_cost_categories", "name"],
     ] as const) {
       expect(normalized).toContain(
         `CREATE INDEX ${name} ON public.${table} USING gin ( ${column} extensions.gin_trgm_ops )`,
       );
     }
-    expect(sql.slice(0, sql.indexOf("BEGIN;"))).toMatch(
-      /Rollback:[\s\S]*drop only these five trigram indexes[\s\S]*keep pg_trgm/i,
+    const onlineIndexes = compact(existingTableIndexSql);
+    for (const [name, table, column] of [
+      ["projects_name_purchase_batch_trgm_idx", "projects", "name"],
+      ["finance_cost_categories_code_purchase_batch_trgm_idx", "finance_cost_categories", "code"],
+      ["finance_cost_categories_name_purchase_batch_trgm_idx", "finance_cost_categories", "name"],
+    ] as const) {
+      expect(onlineIndexes).toContain(
+        `CREATE INDEX CONCURRENTLY IF NOT EXISTS ${name} ON public.${table} USING gin (${column} extensions.gin_trgm_ops)`,
+      );
+    }
+    expect(existingTableIndexSql).toMatch(
+      /Rollback:[\s\S]*drop these seven[\s\S]*keep pg_trgm/i,
     );
   });
 

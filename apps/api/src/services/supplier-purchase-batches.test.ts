@@ -190,14 +190,23 @@ describe("SupplierPurchaseBatchesService reads", () => {
     expect(deps.repository.listItems).toHaveBeenCalledWith({
       tenant_id: TENANT_ID,
       batch_id: BATCH_ID,
+      visible_project_ids: [PROJECT_ID],
       page: 1,
       pageSize: 20,
     });
     expect(deps.repository.listRequisitions).toHaveBeenCalledWith(
-      expect.objectContaining({ batch_id: BATCH_ID, page: 2 }),
+      expect.objectContaining({
+        batch_id: BATCH_ID,
+        visible_project_ids: [PROJECT_ID],
+        page: 2,
+      }),
     );
     expect(deps.repository.listOrders).toHaveBeenCalledWith(
-      expect.objectContaining({ batch_id: BATCH_ID, page: 3 }),
+      expect.objectContaining({
+        batch_id: BATCH_ID,
+        visible_project_ids: [PROJECT_ID],
+        page: 3,
+      }),
     );
   });
 

@@ -73,6 +73,13 @@ const supplierBatchCatalogIndexMigration = readFileSync(
   ),
   "utf8",
 );
+const supplierBatchExistingTableIndexMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260826142500_prepare_supplier_purchase_batch_existing_table_indexes.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 const supplierBatchMigrationRunbookUrl = new URL(
   "../docs/runbooks/supplier-purchase-batch-nontransactional-migrations.md",
   import.meta.url,
@@ -1124,10 +1131,11 @@ describe("production migration precheck workflow", () => {
     }
   });
 
-  test("marks both concurrent index migrations with deterministic retry metadata", () => {
+  test("marks every concurrent index migration with deterministic retry metadata", () => {
     for (const migration of [
       supplierPriceSnapshotIndexMigration,
       supplierBatchCatalogIndexMigration,
+      supplierBatchExistingTableIndexMigration,
     ]) {
       const lines = migration.split(/\r?\n/);
       expect(lines[0]).toBe("-- gooes:migration-mode=nontransactional");
@@ -1135,6 +1143,22 @@ describe("production migration precheck workflow", () => {
       expect(migration).toContain("CREATE");
       expect(migration).toContain("INDEX CONCURRENTLY IF NOT EXISTS");
     }
+  });
+
+  test("accepts only the batch ownership partial-index predicate marker", () => {
+    const partialMarker =
+      "-- gooes:expected-index=public.fixture_idx|public.fixture|true|btree|tenant_id,purchase_batch_id|pg_catalog.uuid_ops,pg_catalog.uuid_ops|expression:(purchase_batch_id IS NOT NULL)";
+    const partialState =
+      "i|public|public|fixture|true|true|true|true|btree|tenant_id,purchase_batch_id|pg_catalog.uuid_ops,pg_catalog.uuid_ops|expression:(purchase_batch_id IS NOT NULL)";
+    const result = runNontransactionalMigrationHelper([
+      "-- gooes:migration-mode=nontransactional",
+      partialMarker,
+      "CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS fixture_idx ON fixture(tenant_id, purchase_batch_id) WHERE purchase_batch_id IS NOT NULL;",
+    ].join("\n"), "", partialState);
+
+    expect(result.exitCode, result.stderr).toBe(0);
+    expect(result.log).toContain("DDL");
+    expect(result.log).toContain("schema_migrations");
   });
 
   test("drops a named invalid partial index before DDL and records history last", () => {
@@ -1261,6 +1285,8 @@ describe("production migration precheck workflow", () => {
     for (const fragment of [
       "20260826140500",
       "20260826141500",
+      "20260826142500",
+      "20260826142600",
       "migrate-dev-database.yml",
       "migrate-production-database.yml",
       "Supabase CLI 2.99",

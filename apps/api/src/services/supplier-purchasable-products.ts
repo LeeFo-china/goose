@@ -10,6 +10,7 @@ import {
   supplierProductAccessService,
   type SupplierProxyScope,
 } from "@/services/supplier-product-access";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 
 const ProductIdSchema = z.uuid();
@@ -26,13 +27,13 @@ type ProductRepositoryPort = Pick<
 export type SupplierPurchasableProductsServiceDependencies = {
   access?: ProductAccessPort;
   repository?: ProductRepositoryPort;
-  idFactory?: () => string;
+  idFactory?: (seed: string) => string;
 };
 
 export class SupplierPurchasableProductsService {
   private readonly access: ProductAccessPort;
   private readonly repository: ProductRepositoryPort;
-  private readonly idFactory: () => string;
+  private readonly idFactory: (seed: string) => string;
 
   constructor(
     dependencies: SupplierPurchasableProductsServiceDependencies = {},
@@ -40,7 +41,7 @@ export class SupplierPurchasableProductsService {
     this.access = dependencies.access ?? supplierProductAccessService;
     this.repository = dependencies.repository ??
       supplierPurchasableProductsRepository;
-    this.idFactory = dependencies.idFactory ?? (() => crypto.randomUUID());
+    this.idFactory = dependencies.idFactory ?? deterministicProductId;
   }
 
   async create(
@@ -63,7 +64,14 @@ export class SupplierPurchasableProductsService {
       canonicalSupplierId,
     );
 
-    const productId = createProductId(this.idFactory);
+    const productId = createProductId(
+      this.idFactory,
+      JSON.stringify([
+        canonicalScope.tenantId,
+        canonicalScope.authUserId,
+        idempotencyKey,
+      ]),
+    );
     const skuId = canonicalUuid(input.sku_id);
     const result = await this.repository.create({
       product_id: productId,
@@ -136,16 +144,26 @@ function canonicalUuid(value: string): string {
   return value.toLowerCase();
 }
 
-function createProductId(idFactory: () => string): string {
+function createProductId(
+  idFactory: (seed: string) => string,
+  seed: string,
+): string {
   let generatedId: string;
   try {
-    generatedId = idFactory();
+    generatedId = idFactory(seed);
   } catch {
     throw productCreateFailed();
   }
   const parsed = ProductIdSchema.safeParse(generatedId);
   if (!parsed.success) throw productCreateFailed();
   return canonicalUuid(parsed.data);
+}
+
+function deterministicProductId(seed: string): string {
+  const hash = createHash("sha256").update(seed, "utf8").digest("hex");
+  const variant = ((Number.parseInt(hash[16]!, 16) & 0b0011) | 0b1000)
+    .toString(16);
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-${variant}${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
 
 function productCreateFailed() {

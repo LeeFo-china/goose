@@ -121,6 +121,44 @@ async function setup(options: {
 }
 
 describe("SupplierPurchasableProductsService", () => {
+  test("reuses the server-generated product identity for the same idempotency key", async () => {
+    const productIds: string[] = [];
+    const access = {
+      requirePurchasableProductWrite: mock(async () => scope),
+    };
+    const repository = {
+      create: mock(async (command: { product_id: string }) => {
+        productIds.push(command.product_id);
+        return replay;
+      }),
+    };
+    const { SupplierPurchasableProductsService } = await import(
+      "./supplier-purchasable-products"
+    );
+    const service = new SupplierPurchasableProductsService({
+      access,
+      repository,
+    });
+
+    await service.create(
+      auth,
+      TENANT_SUPPLIER_ID,
+      SUPPLIER_ID,
+      input,
+      "retry-key",
+    );
+    await service.create(
+      auth,
+      TENANT_SUPPLIER_ID,
+      SUPPLIER_ID,
+      input,
+      "retry-key",
+    );
+
+    expect(productIds).toHaveLength(2);
+    expect(new Set(productIds).size).toBe(1);
+  });
+
   test("does not call the repository when combined permission access is denied", async () => {
     const context = await setup({ accessError: Errors.forbidden() });
 

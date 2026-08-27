@@ -481,7 +481,7 @@ jobs:
               if [[ "${marker}" != "-- gooes:expected-index"* ]]; then
                 continue
               fi
-              if [[ ! "${marker}" =~ ^--\ gooes:expected-index=public\.[a-z0-9_]+\|public\.[a-z0-9_]+\|(true|false)\|(btree|gin)\|[a-z0-9_]+(,[a-z0-9_]+)*\|(pg_catalog|extensions)\.[a-z0-9_]+(,(pg_catalog|extensions)\.[a-z0-9_]+)*\|null$ ]]; then
+              if [[ ! "${marker}" =~ ^--\ gooes:expected-index=public\.[a-z0-9_]+\|public\.[a-z0-9_]+\|(true|false)\|(btree|gin)\|[a-z0-9_]+(,[a-z0-9_]+)*\|(pg_catalog|extensions)\.[a-z0-9_]+(,(pg_catalog|extensions)\.[a-z0-9_]+)*\|(null|expression:\(purchase_batch_id\ IS\ NOT\ NULL\))$ ]]; then
                 echo "error=nontransactional_index_metadata_marker_invalid file=${file}" >&2
                 return 1
               fi

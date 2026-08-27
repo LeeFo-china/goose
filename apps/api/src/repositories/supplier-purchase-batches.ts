@@ -7,15 +7,11 @@ import {
   type SupplierPurchaseBatchCommandResult,
 } from "@/repositories/supplier-purchase-batch-command-gateway";
 import {
-  SUPPLIER_PURCHASE_BATCH_ITEM_SELECT,
   SUPPLIER_PURCHASE_BATCH_SELECT,
   SupplierPurchaseBatchCatalogResultSchema,
   SupplierPurchaseBatchCostCategorySchema,
   SupplierPurchaseBatchDetailSchema,
-  SupplierPurchaseBatchItemSchema,
-  SupplierPurchaseBatchOrderSchema,
   SupplierPurchaseBatchProjectOptionSchema,
-  SupplierPurchaseBatchRequisitionSchema,
   type SupplierPurchaseBatchCatalogItem,
   type SupplierPurchaseBatchCostCategory,
   type SupplierPurchaseBatchDetail,
@@ -25,11 +21,10 @@ import {
   type SupplierPurchaseBatchRequisition,
 } from "@/repositories/supplier-purchase-batch-records";
 import {
-  SUPPLIER_PURCHASE_ORDER_SELECT,
-} from "@/repositories/supplier-purchase-order-records";
-import {
-  SUPPLIER_PURCHASE_REQUISITION_SELECT,
-} from "@/repositories/supplier-purchase-requisition-records";
+  listSupplierPurchaseBatchItems,
+  listSupplierPurchaseBatchOrders,
+  listSupplierPurchaseBatchRequisitions,
+} from "@/repositories/supplier-purchase-batch-children";
 import { SupabaseDB } from "@/utils/supabase";
 
 export type Page<T> = {
@@ -52,6 +47,7 @@ export type BatchListInput = PageInput & {
 export type BatchChildPageInput = PageInput & {
   tenant_id: string;
   batch_id: string;
+  visible_project_ids: string[] | null;
 };
 export type BatchCatalogInput = PageInput & {
   tenant_id: string;
@@ -191,42 +187,19 @@ export class SupplierPurchaseBatchesRepository {
   async listItems(
     input: BatchChildPageInput,
   ): Promise<Page<SupplierPurchaseBatchItem>> {
-    return this.listChild({
-      input,
-      table: "supplier_purchase_batch_items",
-      select: SUPPLIER_PURCHASE_BATCH_ITEM_SELECT,
-      schema: SupplierPurchaseBatchItemSchema,
-      message: "查询供应商采购批次明细失败",
-      order: ["line_no", "id"],
-    });
+    return listSupplierPurchaseBatchItems(this.client, input);
   }
 
   async listRequisitions(
     input: BatchChildPageInput,
   ): Promise<Page<SupplierPurchaseBatchRequisition>> {
-    return this.listChild({
-      input,
-      table: "supplier_purchase_requisitions",
-      select: SUPPLIER_PURCHASE_REQUISITION_SELECT,
-      schema: SupplierPurchaseBatchRequisitionSchema,
-      message: "查询采购批次申请失败",
-      order: ["updated_at", "id"],
-      descending: true,
-    });
+    return listSupplierPurchaseBatchRequisitions(this.client, input);
   }
 
   async listOrders(
     input: BatchChildPageInput,
   ): Promise<Page<SupplierPurchaseBatchOrder>> {
-    return this.listChild({
-      input,
-      table: "supplier_purchase_orders",
-      select: SUPPLIER_PURCHASE_ORDER_SELECT,
-      schema: SupplierPurchaseBatchOrderSchema,
-      message: "查询采购批次采购单失败",
-      order: ["updated_at", "id"],
-      descending: true,
-    });
+    return listSupplierPurchaseBatchOrders(this.client, input);
   }
 
   async listCatalog(
@@ -375,31 +348,6 @@ export class SupplierPurchaseBatchesRepository {
     });
   }
 
-  private async listChild<T>(input: {
-    input: BatchChildPageInput;
-    table: string;
-    select: string;
-    schema: z.ZodType<T>;
-    message: string;
-    order: [string, string];
-    descending?: boolean;
-  }): Promise<Page<T>> {
-    const pagination = normalizePage(input.input);
-    const ascending = !input.descending;
-    const { data, error, count } = await this.client.from(input.table)
-      .select(input.select, { count: "exact" })
-      .eq("tenant_id", input.input.tenant_id)
-      .eq("purchase_batch_id", input.input.batch_id)
-      .order(input.order[0], { ascending })
-      .order(input.order[1], { ascending })
-      .range(...pageRange(pagination));
-    if (error) throw Errors.dbError(input.message, error);
-    return toPage(
-      parseRows(input.schema, data, input.message),
-      pagination,
-      count,
-    );
-  }
 }
 
 function commandParams(input: BatchCommandContext) {

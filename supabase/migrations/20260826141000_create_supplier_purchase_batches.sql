@@ -2,8 +2,9 @@
 -- batch API/UI access first. Preserve batch, item, child-document and command
 -- event audit facts. Remove additive columns or tables only in a separately
 -- reviewed migration after proving that no batch-owned records exist.
--- A forward rollback may drop only these five trigram indexes after disabling
--- the matching search endpoints; keep pg_trgm because other features share it.
+-- A forward rollback may drop only the batch-table trigram indexes after
+-- disabling the matching search endpoints; keep pg_trgm because other
+-- features share it. Existing-table indexes are managed by 20260826142500.
 
 BEGIN;
 
@@ -444,24 +445,6 @@ USING gin (
   reason extensions.gin_trgm_ops
 );
 
-CREATE INDEX projects_name_purchase_batch_trgm_idx
-ON public.projects
-USING gin (
-  name extensions.gin_trgm_ops
-);
-
-CREATE INDEX finance_cost_categories_code_purchase_batch_trgm_idx
-ON public.finance_cost_categories
-USING gin (
-  code extensions.gin_trgm_ops
-);
-
-CREATE INDEX finance_cost_categories_name_purchase_batch_trgm_idx
-ON public.finance_cost_categories
-USING gin (
-  name extensions.gin_trgm_ops
-);
-
 CREATE INDEX supplier_purchase_batch_items_parent_line_idx
 ON public.supplier_purchase_batch_items(
   tenant_id,
@@ -479,36 +462,6 @@ ON public.supplier_purchase_batch_items(
   supplier_product_id,
   supplier_sku_id
 );
-
-CREATE UNIQUE INDEX supplier_purchase_requisitions_batch_supplier_generation_uidx
-ON public.supplier_purchase_requisitions(
-  tenant_id,
-  purchase_batch_id,
-  split_generation,
-  tenant_supplier_id
-)
-WHERE purchase_batch_id IS NOT NULL;
-
-CREATE UNIQUE INDEX supplier_purchase_orders_batch_supplier_uidx
-ON public.supplier_purchase_orders(
-  tenant_id,
-  purchase_batch_id,
-  tenant_supplier_id
-)
-WHERE purchase_batch_id IS NOT NULL;
-
-CREATE INDEX supplier_purchase_requisitions_batch_generation_idx
-ON public.supplier_purchase_requisitions(
-  tenant_id,
-  purchase_batch_id,
-  split_generation,
-  id
-)
-WHERE purchase_batch_id IS NOT NULL;
-
-CREATE INDEX supplier_purchase_orders_batch_idx
-ON public.supplier_purchase_orders(tenant_id, purchase_batch_id, id)
-WHERE purchase_batch_id IS NOT NULL;
 
 CREATE TABLE public.supplier_purchase_batch_command_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

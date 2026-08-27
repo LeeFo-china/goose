@@ -87,7 +87,6 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(projects.pagination).toEqual(page(1, 20, 0));
     expect(requests).toHaveLength(0);
   });
-
   test("quotes literal search punctuation and applies visible scope with exact count", async () => {
     const { repository, requests } = await repositoryFor(() => ({
       body: [batch],
@@ -121,7 +120,6 @@ describe("SupplierPurchaseBatchesRepository", () => {
     expect(url.searchParams.get("limit")).toBe("20");
     expect(requests[0]!.headers.get("prefer")).toContain("count=exact");
   });
-
   test("treats null project scope as all visible and loads one tenant batch", async () => {
     const { repository, requests } = await repositoryFor((_request, index) =>
       index === 0 ? { body: [batch], count: 1 } : { body: batch }
@@ -146,12 +144,17 @@ describe("SupplierPurchaseBatchesRepository", () => {
 
   test("paginates every child with tenant and batch filters", async () => {
     const { repository, requests } = await repositoryFor((_request, index) => ({
-      body: [[batchItem], [requisition], [order]][index],
+      body: [
+        [{ ...batchItem, _batch_scope: { project_id: PROJECT_ID } }],
+        [{ ...requisition, _batch_scope: { project_id: PROJECT_ID } }],
+        [{ ...order, _batch_scope: { project_id: PROJECT_ID } }],
+      ][index],
       count: 1,
     }));
     const input = {
       tenant_id: TENANT_ID,
       batch_id: BATCH_ID,
+      visible_project_ids: [PROJECT_ID],
       page: 2,
       pageSize: 10,
     };
@@ -166,11 +169,15 @@ describe("SupplierPurchaseBatchesRepository", () => {
       const url = new URL(request.url);
       expect(url.searchParams.get("tenant_id")).toBe(`eq.${TENANT_ID}`);
       expect(url.searchParams.get("purchase_batch_id")).toBe(`eq.${BATCH_ID}`);
+      expect(url.searchParams.get("_batch_scope.project_id")).toBe(
+        `in.(${PROJECT_ID})`,
+      );
       expect(url.searchParams.get("offset")).toBe("10");
       expect(url.searchParams.get("limit")).toBe("10");
     }
-    expect(new URL(requests[0]!.url).searchParams.get("select")).toBe(
-      SUPPLIER_PURCHASE_BATCH_ITEM_SELECT,
+    expect(new URL(requests[0]!.url).searchParams.get("select")).toContain(
+      "_batch_scope:supplier_purchase_batches!" +
+        "supplier_purchase_batch_items_parent_tenant_fkey!inner(project_id)",
     );
     expect(new URL(requests[0]!.url).searchParams.get("order")).toBe(
       "line_no.asc,id.asc",
