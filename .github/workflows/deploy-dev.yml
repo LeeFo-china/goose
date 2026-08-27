@@ -202,7 +202,7 @@ jobs:
           esac
           receipt_dir="${RUNNER_TEMP}/image-manifest-${INPUT_BUILD_RUN_ID}"
           rm -rf "${receipt_dir}"
-          gh run download "${INPUT_BUILD_RUN_ID}" \
+          gh run download "${INPUT_BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
             -n "image-manifest-${MANIFEST_SERVICE}" -D "${receipt_dir}"
           manifest="${receipt_dir}/image-manifest-${MANIFEST_SERVICE}.json"
           test "$(jq -r '.commit_sha' "${manifest}")" = "${SOURCE_SHA}"
@@ -240,7 +240,7 @@ jobs:
             test "$(jq -r '.path' <<< "${run_json}")" = ".github/workflows/verify-dev-web-deployment-gate.yml"
             test "$(jq -r '.conclusion' <<< "${run_json}")" = "success"
             test "$(jq -r '.head_sha' <<< "${run_json}")" = "${SOURCE_SHA}"
-            gh run download "${INPUT_GATE_RUN_ID}" -n web-deployment-gate-receipt -D "${receipt_dir}"
+            gh run download "${INPUT_GATE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n web-deployment-gate-receipt -D "${receipt_dir}"
           fi
           node scripts/verify-web-gate-receipt.mjs \
             "${receipt_file}" development "${SOURCE_SHA}" 20260711120000

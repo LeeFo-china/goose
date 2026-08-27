@@ -59,6 +59,13 @@ import {
 
 type ReleaseDispatchStage = "release" | "build";
 type ReleaseRecentRunStage = ReleaseDispatchStage | "deploy";
+const ACTIVE_WORKFLOW_STATUSES = new Set([
+  "queued",
+  "in_progress",
+  "requested",
+  "waiting",
+  "pending",
+]);
 
 export function buildReleaseDispatchRequest(input: ReleaseDispatchInput): {
   workflowId: string;
@@ -96,14 +103,11 @@ export function buildReleaseDispatchRequest(input: ReleaseDispatchInput): {
 }
 
 export async function listActiveRuns(this: any, workflow: ReleaseWorkflow) {
-  const payload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-    `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=in_progress&per_page=10`,
+  const request = (this.githubRequest || githubRequest) as typeof githubRequest;
+  const payload = await request<{ workflow_runs?: GithubWorkflowRun[] }>(
+    `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&per_page=100`,
   );
-  const inProgress = payload.workflow_runs || [];
-  const queuedPayload = await githubRequest<{ workflow_runs?: GithubWorkflowRun[] }>(
-    `/actions/workflows/${workflow.workflowId}/runs?event=workflow_dispatch&status=queued&per_page=10`,
-  );
-  return [...inProgress, ...(queuedPayload.workflow_runs || [])];
+  return (payload.workflow_runs || []).filter((run) => ACTIVE_WORKFLOW_STATUSES.has(run.status));
 }
 
 export async function assertWorkflowIdle(this: any, workflow: ReleaseWorkflow) {

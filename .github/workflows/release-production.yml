@@ -112,6 +112,13 @@ jobs:
           node-version: "22"
           package-manager-cache: false
 
+      - name: Package immutable production deployment source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}"
+          test -s production-deploy-source.tar.gz
+
       - name: Download immutable production build evidence
         env:
           BUILD_SERVICES: ${{ needs.prepare-build.outputs.build_services }}
@@ -121,9 +128,9 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-candidate-${GITHUB_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${BUILD_SERVICES//,/ }; do
-            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
           test -s "${evidence_dir}/build-plan.json"
@@ -153,14 +160,15 @@ jobs:
             --arg requested_services "${REQUESTED_SERVICES}" \
             --arg build_services "${BUILD_SERVICES}" \
             '{
-              schema_version: 1,
+              schema_version: 2,
               build_run_id: $build_run_id,
               tag: $tag,
               commit_sha: $commit_sha,
               requested_services: ($requested_services | split(",")),
               build_services: ($build_services | split(",")),
               target_environment: "production",
-              build_plan_artifact: "production-build-plan"
+              build_plan_artifact: "production-build-plan",
+              deployment_source_artifact: "production-deploy-source"
             }' > production-release-candidate.json
           node scripts/verify-production-release-candidate.mjs \
             production-release-candidate.json \
@@ -179,6 +187,14 @@ jobs:
         with:
           name: production-release-candidate
           path: production-release-candidate.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload immutable production deployment source
+        uses: actions/upload-artifact@v6
+        with:
+          name: production-deploy-source
+          path: production-deploy-source.tar.gz
           if-no-files-found: error
           retention-days: 30
 
@@ -241,10 +257,10 @@ jobs:
           evidence_dir="${RUNNER_TEMP}/production-deploy-${BUILD_RUN_ID}"
           rm -rf "${evidence_dir}"
           mkdir -p "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-release-candidate -D "${evidence_dir}"
-          gh run download "${BUILD_RUN_ID}" -n production-build-plan -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate -D "${evidence_dir}"
+          gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"
           for service in ${build_services//,/ }; do
-            gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"
+            gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"
             test -s "${evidence_dir}/image-manifest-${service}.json"
           done
           test -n "${TENCENT_CCR_REGISTRY}"

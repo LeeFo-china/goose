@@ -70,7 +70,7 @@ jobs:
           plan_dir="${RUNNER_TEMP}/dev-build-plan-${UPSTREAM_RUN_ID}"
           rm -rf "${plan_dir}"
           mkdir -p "${plan_dir}"
-          gh run download "${UPSTREAM_RUN_ID}" -n dev-build-plan -D "${plan_dir}"
+          gh run download "${UPSTREAM_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n dev-build-plan -D "${plan_dir}"
           cd "${plan_dir}"
           test -f build-plan.json
           node "${GITHUB_WORKSPACE}/scripts/verify-dev-build-plan.mjs" build-plan.json "${UPSTREAM_SHA}" "${UPSTREAM_RUN_ID}" > verified-build-plan.json

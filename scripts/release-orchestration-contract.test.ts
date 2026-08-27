@@ -986,6 +986,54 @@ describe("admin release service resolver", () => {
 });
 
 describe("production migration precheck workflow", () => {
+  test("delivers immutable migration source without cloning GitHub on production", () => {
+    const packageJob = sliceWorkflowJob(
+      migrateProductionWorkflow,
+      "package-migration-source",
+      "migrate-production",
+    );
+    const downloadSource = extractWorkflowRunScript(
+      sliceWorkflowStep(
+        migrateProductionWorkflow,
+        "Download immutable migration source",
+      ),
+    );
+
+    expect(packageJob).toContain("runs-on: ubuntu-24.04");
+    expect(packageJob).toContain("uses: actions/checkout@v6");
+    expect(packageJob).toContain(
+      'git archive --format=tar.gz --output production-migration-source.tar.gz "${GITHUB_SHA}" supabase/migrations',
+    );
+    expect(packageJob).toContain("sha256sum production-migration-source.tar.gz");
+    expect(packageJob).toContain(
+      "name: production-migration-source-${{ github.run_attempt }}",
+    );
+    expect(migrateProductionWorkflow).toContain(
+      "migrate-production:\n    needs: package-migration-source",
+    );
+    expect(migrateProductionWorkflow).toContain("timeout-minutes: 45");
+    expect(downloadSource).toContain(
+      'artifact_name="production-migration-source-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(downloadSource).toContain(
+      'timeout 300 gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "${artifact_name}"',
+    );
+    expect(downloadSource).toContain("for attempt in 1 2 3 4 5");
+    expect(downloadSource).toContain("sha256sum -c production-migration-source.tar.gz.sha256");
+    expect(downloadSource).toContain(
+      'test "$(jq -r \'.commit_sha\' production-migration-source.json)" = "${GITHUB_SHA}"',
+    );
+    expect(downloadSource.trimStart().startsWith("set -euo pipefail")).toBe(true);
+    expect(downloadSource).not.toContain("sha256sum -c production-migration-source.tar.gz.sha256 || true");
+    expect(downloadSource.indexOf("sha256sum -c production-migration-source.tar.gz.sha256")).toBeLessThan(
+      downloadSource.indexOf("tar -xzf production-migration-source.tar.gz"),
+    );
+    expect(downloadSource).toContain(
+      'source_dir="${RUNNER_TEMP}/migration-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
+    );
+    expect(migrateProductionWorkflow).not.toContain("git clone");
+  });
+
   test("publishes a structured JSON artifact for Admin migration comparison", () => {
     expect(migrateProductionWorkflow).toContain("migration-precheck.json");
     expect(migrateProductionWorkflow).toContain("production-migration-precheck");
@@ -1618,8 +1666,8 @@ describe("reusable build workflow", () => {
     '          evidence_dir="${RUNNER_TEMP}/production-pull-${GITHUB_RUN_ID}"',
     '          rm -rf "${evidence_dir}"',
     '          mkdir -p "${evidence_dir}"',
-    '          gh run download "${GITHUB_RUN_ID}" -n production-build-plan -D "${evidence_dir}"',
-    '            gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}" -D "${evidence_dir}"',
+    '          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan -D "${evidence_dir}"',
+    '            gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}" -D "${evidence_dir}"',
     '          test "$(jq -r \'.target_environment\' "${evidence_dir}/build-plan.json")" = production',
     '          test "$(jq -r \'.commit_sha\' "${evidence_dir}/build-plan.json")" = "${GITHUB_SHA}"',
     '          test "$(jq -r \'.build_services | join(" ")\' "${evidence_dir}/build-plan.json")" = "${BUILD_SERVICES}"',
@@ -2407,7 +2455,7 @@ describe("reusable build workflow", () => {
 
   test("keeps automatic development deployment bound to successful push evidence", () => {
     expect(autoDeployDevWorkflow).toContain(
-      "gh run download \"${UPSTREAM_RUN_ID}\" -n dev-build-plan",
+      "gh run download \"${UPSTREAM_RUN_ID}\" --repo \"${GITHUB_REPOSITORY}\" -n dev-build-plan",
     );
     expect(autoDeployDevWorkflow).toContain(
       "github.event.workflow_run.event == 'push'",
@@ -2418,6 +2466,28 @@ describe("reusable build workflow", () => {
     expect(autoDeployDevWorkflow).toContain(
       "test \"$(jq -r '.path' <<< \"${run_json}\")\" = \".github/workflows/build-docker-images.yml\"",
     );
+  });
+
+  test("binds every artifact download to the current repository explicitly", () => {
+    const workflows = [
+      ["build", buildWorkflow],
+      ["automatic development deploy", autoDeployDevWorkflow],
+      ["development deploy", deployDevWorkflow],
+      ["production release", releaseProductionWorkflow],
+      ["production deploy", deployProductionWorkflow],
+    ] as const;
+
+    for (const [label, workflow] of workflows) {
+      const downloadLines = workflow
+        .split(/\r?\n/)
+        .filter((line) => line.includes("gh run download"));
+      expect(downloadLines.length, `${label} should download at least one artifact`).toBeGreaterThan(0);
+      for (const line of downloadLines) {
+        expect(line, `${label} artifact download must not depend on a local .git directory`).toContain(
+          '--repo "${GITHUB_REPOSITORY}"',
+        );
+      }
+    }
   });
 });
 
@@ -2784,8 +2854,8 @@ describe("production orchestrator", () => {
     const candidate = sliceWorkflowJob(releaseProductionWorkflow, "candidate", "authorize-deploy");
     const authorize = sliceWorkflowJob(releaseProductionWorkflow, "authorize-deploy", "deploy");
 
-    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n production-build-plan');
-    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" -n "image-manifest-${service}"');
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(candidate).toContain('gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"');
     expect(candidate).toContain("verify-production-release-candidate.mjs");
     expect(candidate).toContain(allowedRegistryPairArm);
     expect(candidate).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
@@ -2808,9 +2878,9 @@ describe("production orchestrator", () => {
       'test "${build_workflow_path}" = ".github/workflows/release-production.yml"',
     );
     expect(authorize).not.toContain('.path | split("@")[0]');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
-    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(authorize).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"');
     expect(authorize).toContain("verify-production-release-candidate.mjs");
     expect(authorize).toContain(allowedRegistryPairArm);
     expect(authorize).toContain('image_base="${TENCENT_CCR_REGISTRY}/${TENCENT_CCR_NAMESPACE}"');
@@ -2836,7 +2906,7 @@ describe("production orchestrator", () => {
   test("revalidates candidate evidence inside the globally serialized production deploy", () => {
     const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
     const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
-    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Download immutable deployment source");
     const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
     const syncStart = deployProductionWorkflow.indexOf("- name: Sync compose fragments");
@@ -2872,9 +2942,11 @@ describe("production orchestrator", () => {
         guard.indexOf('if [ "${normalized_release_service}" = web ]; then'),
       );
     }
-    expect(checkout).toContain('git clone --filter=blob:none --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"');
-    expect(checkout).toContain('git -C "${SOURCE_DIR}" fetch');
-    expect(checkout).toContain('git -C "${SOURCE_DIR}" clean -fdx');
+    expect(checkout).toContain(
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+    );
+    expect(checkout).toContain('tar -xzf "${source_archive}"');
+    expect(checkout).not.toContain("git clone");
     expect(deployProductionWorkflow).not.toContain("${RUNNER_WORKSPACE}/source");
     expect(metadata).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
     expect(metadata).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
@@ -2902,13 +2974,13 @@ describe("production orchestrator", () => {
       "production-deployment-receipt-",
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n production-release-candidate',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate',
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n production-build-plan',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan',
     );
     expect(deployProductionWorkflow.slice(evidenceStart, dockerStart)).toContain(
-      'gh run download "${BUILD_RUN_ID}" -n "image-manifest-${service}"',
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "image-manifest-${service}"',
     );
     const productionEvidence = deployProductionWorkflow.slice(evidenceStart, dockerStart);
     expect(productionEvidence).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
@@ -2984,6 +3056,39 @@ describe("production orchestrator", () => {
     expect(runProductionGuard("").exitCode).not.toBe(0);
   });
 
+  test("deploys from the candidate source artifact without cloning GitHub on production", () => {
+    const candidateStart = releaseProductionWorkflow.indexOf("  candidate:");
+    const authorizeStart = releaseProductionWorkflow.indexOf("  authorize-deploy:");
+    const candidate = releaseProductionWorkflow.slice(candidateStart, authorizeStart);
+    const checkout = sliceWorkflowStep(
+      deployProductionWorkflow,
+      "Download immutable deployment source",
+    );
+
+    expect(candidate).toContain("name: Package immutable production deployment source");
+    expect(candidate).toContain('git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}"');
+    expect(candidate).toContain("name: production-deploy-source");
+    expect(candidate).toContain("path: production-deploy-source.tar.gz");
+    expect(candidate).toContain(
+      'deployment_source_artifact: "production-deploy-source"',
+    );
+
+    expect(checkout).toContain(
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+    );
+    expect(checkout).toContain(
+      'tar -xzf "${source_archive}" --strip-components=0 -C "${SOURCE_DIR}"',
+    );
+    expect(checkout).toContain(
+      'test -s "${SOURCE_DIR}/deploy/docker-compose.api.yml"',
+    );
+    expect(checkout).not.toContain(
+      'test -s "${SOURCE_DIR}/docker-compose.api.yml"',
+    );
+    expect(checkout).not.toContain("git clone");
+    expect(checkout).not.toContain("socks5h://127.0.0.1:18080");
+  });
+
   test("rejects direct non-Web dispatch outside the release-production caller", () => {
     expect(
       runNonWebCandidatePreflight(
@@ -3051,7 +3156,7 @@ describe("production orchestrator", () => {
     const confirmInputStart = dispatch.indexOf("      confirm_text:");
     const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
     const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
-    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Download immutable deployment source");
     const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
     const webGateStart = deployProductionWorkflow.indexOf("- name: Validate web deployment gate");
@@ -3111,7 +3216,7 @@ describe("production orchestrator", () => {
     expect(metadata).toContain(
       'test "${current_workflow_path}" = ".github/workflows/release-production.yml"',
     );
-    expect(evidence).toContain('gh run download "${BUILD_RUN_ID}" -n production-release-candidate');
+    expect(evidence).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-release-candidate');
     expect(evidence).toContain('echo "ADMIN_CANDIDATE=true" >> "${GITHUB_ENV}"');
 
     expect(webGate).toContain('test "${WEB_DIRECT_DEPLOY:-false}" = true');
@@ -3130,8 +3235,8 @@ describe("production orchestrator", () => {
     expect(webGate).toContain(
       'test "${build_workflow_path}" = ".github/workflows/build-docker-images.yml"',
     );
-    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n production-build-plan');
-    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" -n image-manifest-web');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-build-plan');
+    expect(webGate).toContain('gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n image-manifest-web');
     expect(webGate).toContain('printf \'%s\\n\' "${build_run_json}" > "${evidence_dir}/build-run.json"');
     expect(webGate).toContain("verify-production-web-build-evidence.mjs");
     expect(webGate.indexOf(allowedRegistryPairArm)).toBeLessThan(

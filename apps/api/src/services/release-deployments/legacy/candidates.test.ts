@@ -67,7 +67,7 @@ function run(overrides: Partial<GithubWorkflowRun & { workflow_id: number }> = {
 
 function candidate(overrides: Record<string, unknown> = {}) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     build_run_id: 321,
     tag: "v2026.07.13.1",
     commit_sha: SHA,
@@ -75,6 +75,7 @@ function candidate(overrides: Record<string, unknown> = {}) {
     build_services: ["api"],
     target_environment: "production",
     build_plan_artifact: "production-build-plan",
+    deployment_source_artifact: "production-deploy-source",
     ...overrides,
   };
 }
@@ -263,6 +264,54 @@ describe("getProductionCandidate", () => {
     });
     await expect(candidates.getProductionCandidate.call(context(gateway), "321"))
       .rejects.toMatchObject({ code: "RELEASE_CANDIDATE_INVALID" });
+  });
+
+  test("rejects legacy candidate evidence", async () => {
+    const gateway = mockedGateway({
+      artifacts: {
+        "production-release-candidate:production-release-candidate.json": candidate({
+          schema_version: 1,
+        }),
+      },
+    });
+
+    await expect(candidates.getProductionCandidate.call(context(gateway), "321"))
+      .rejects.toMatchObject({
+        code: "RELEASE_CANDIDATE_INVALID",
+        message: "生产候选证据版本无效",
+      });
+  });
+
+  test("rejects candidate evidence without the deployment source artifact", async () => {
+    const gateway = mockedGateway({
+      artifacts: {
+        "production-release-candidate:production-release-candidate.json": candidate({
+          deployment_source_artifact: undefined,
+        }),
+      },
+    });
+
+    await expect(candidates.getProductionCandidate.call(context(gateway), "321"))
+      .rejects.toMatchObject({
+        code: "RELEASE_CANDIDATE_INVALID",
+        message: "生产候选部署源码证据无效",
+      });
+  });
+
+  test("rejects candidate evidence with an unexpected deployment source artifact", async () => {
+    const gateway = mockedGateway({
+      artifacts: {
+        "production-release-candidate:production-release-candidate.json": candidate({
+          deployment_source_artifact: "unexpected-source",
+        }),
+      },
+    });
+
+    await expect(candidates.getProductionCandidate.call(context(gateway), "321"))
+      .rejects.toMatchObject({
+        code: "RELEASE_CANDIDATE_INVALID",
+        message: "生产候选部署源码证据无效",
+      });
   });
 
   test("rejects failed or in-progress build runs as not ready", async () => {

@@ -16,7 +16,7 @@ interface ImageManifestFixture {
   target_environment: string;
 }
 const candidate = {
-  schema_version: 1,
+  schema_version: 2,
   build_run_id: 123,
   tag: "v2026.07.13.1",
   commit_sha: sha,
@@ -24,6 +24,7 @@ const candidate = {
   build_services: ["api"],
   target_environment: "production",
   build_plan_artifact: "production-build-plan",
+  deployment_source_artifact: "production-deploy-source",
 };
 const plan = {
   schema_version: 1,
@@ -163,6 +164,13 @@ describe("production release candidate verifier", () => {
     );
   });
 
+  test("rejects a candidate without the immutable deployment source artifact", () => {
+    expectRejected(
+      (evidence) => { evidence.candidate.deployment_source_artifact = "other-source"; },
+      "invalid deployment source artifact",
+    );
+  });
+
   test("rejects Web in requested services", () => {
     expectRejected(
       (evidence) => { evidence.candidate.requested_services = ["web"]; },
@@ -275,7 +283,7 @@ describe("production release candidate verifier", () => {
 
   test.each([
     ["candidate schema", (evidence: ReturnType<typeof cloneEvidence>) => {
-      evidence.candidate.schema_version = 2;
+      evidence.candidate.schema_version = 1;
     }, "unsupported candidate schema"],
     ["candidate tag", (evidence: ReturnType<typeof cloneEvidence>) => {
       evidence.candidate.tag = "latest";
