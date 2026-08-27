@@ -5,7 +5,14 @@ const migrationUrl = new URL(
   "../../../../supabase/migrations/20260826141000_create_supplier_purchase_batches.sql",
   import.meta.url,
 );
+const preflightMigrationUrl = new URL(
+  "../../../../supabase/migrations/20260826140500_prepare_supplier_price_item_batch_snapshot_key.sql",
+  import.meta.url,
+);
 const sql = existsSync(migrationUrl) ? readFileSync(migrationUrl, "utf8") : "";
+const preflightSql = existsSync(preflightMigrationUrl)
+  ? readFileSync(preflightMigrationUrl, "utf8")
+  : "";
 
 function compact(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -27,6 +34,18 @@ function expectOrdered(value: string, patterns: readonly RegExp[]): void {
 }
 
 describe("supplier purchase batch foundation migration", () => {
+  test("prepares the price identity index concurrently outside a transaction", () => {
+    expect(existsSync(preflightMigrationUrl)).toBe(true);
+    expect(preflightSql).toMatch(/^-- Rollback: forward-only\./);
+    expect(preflightSql).toMatch(/failed[\s\S]*pg_catalog\.pg_index[\s\S]*indisvalid/i);
+    expect(preflightSql).toMatch(/retry[\s\S]*invalid[\s\S]*manual review/i);
+    expect(preflightSql).not.toMatch(/^\s*(?:BEGIN|COMMIT)\s*;/im);
+    expect(compact(preflightSql)).toMatch(
+      /CREATE UNIQUE INDEX CONCURRENTLY supplier_price_list_items_batch_snapshot_uidx ON public\.supplier_price_list_items\( id, tenant_id, supplier_id, supplier_price_list_id, supplier_product_id, supplier_sku_id \)/,
+    );
+    expect(preflightSql).not.toMatch(/DROP INDEX/);
+  });
+
   test("is one bounded forward-only additive transaction", () => {
     expect(existsSync(migrationUrl)).toBe(true);
     expect(sql).toMatch(/^-- Rollback: forward-only\./);
@@ -137,8 +156,11 @@ describe("supplier purchase batch foundation migration", () => {
     expect(item).toMatch(/quantity > 0[\s\S]*scale\(quantity\) <= 4/);
     expect(item).toMatch(/line_no BETWEEN 1 AND 100/);
     expect(item).toMatch(/line_total_amount = line_subtotal_amount \+ line_tax_amount/);
-    expect(sql).toMatch(
-      /ALTER TABLE public\.supplier_price_list_items[\s\S]*ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key[\s\S]*UNIQUE \(\s*id,\s*tenant_id,\s*supplier_id,\s*supplier_price_list_id,\s*supplier_product_id,\s*supplier_sku_id\s*\)/,
+    expect(compact(sql)).toMatch(
+      /ALTER TABLE public\.supplier_price_list_items ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key UNIQUE USING INDEX supplier_price_list_items_batch_snapshot_uidx/,
+    );
+    expect(sql).not.toMatch(
+      /ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key\s+UNIQUE\s*\(/,
     );
     expect(item).not.toMatch(
       /supplier_price_list_item_id uuid NOT NULL\s+REFERENCES/,

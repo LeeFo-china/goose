@@ -17,20 +17,13 @@ MAXVALUE 99999999
 NO CYCLE
 CACHE 1;
 
--- The leading primary-key column makes this compatible with all existing
--- rows, including legacy rows whose normalized product identity is NULL. The
--- complete key exists so batch snapshots can prove one exact tenant price
--- chain with a declarative foreign key instead of trusting command code.
+-- The preceding non-transactional preflight builds this index concurrently.
+-- Attaching it as a constraint keeps this transaction's table lock short. The
+-- leading primary-key column remains compatible with legacy rows whose
+-- normalized product identity is NULL.
 ALTER TABLE public.supplier_price_list_items
 ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key
-UNIQUE (
-  id,
-  tenant_id,
-  supplier_id,
-  supplier_price_list_id,
-  supplier_product_id,
-  supplier_sku_id
-);
+UNIQUE USING INDEX supplier_price_list_items_batch_snapshot_uidx;
 
 CREATE TABLE public.supplier_purchase_batches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
