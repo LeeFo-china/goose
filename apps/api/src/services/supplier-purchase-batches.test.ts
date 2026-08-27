@@ -373,7 +373,6 @@ describe("SupplierPurchaseBatchesService commands", () => {
   });
 
   test.each([
-    ["draft", 2, "approve", "SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT"],
     ["pending_approval", 3, "approve", "SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT"],
   ] as const)(
     "blocks %s version %s before review",

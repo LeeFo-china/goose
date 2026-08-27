@@ -338,13 +338,6 @@ export class SupplierPurchaseBatchesService {
     scope: ActorScope,
     expectedVersion: number,
   ): void {
-    if (batch.status === "draft") {
-      throw Errors.business(
-        409,
-        "采购批次当前状态不允许审批",
-        "SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT",
-      );
-    }
     if (batch.status === "pending_approval" &&
       batch.version !== expectedVersion) {
       throw Errors.business(
