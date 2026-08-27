@@ -2510,19 +2510,26 @@ BEGIN
   PERFORM commitment.id
   FROM public.project_cost_commitments AS commitment
   WHERE commitment.tenant_id = p_tenant_id
-    AND ((commitment.project_id = v_batch.project_id
-      AND commitment.cost_category_id IN (
-        SELECT item.cost_category_id
-        FROM public.supplier_purchase_batch_items AS item
-        WHERE item.tenant_id = p_tenant_id
-          AND item.purchase_batch_id = p_batch_id))
-      OR commitment.source_id IN (
-        SELECT requisition.id
-        FROM public.supplier_purchase_requisitions AS requisition
-        WHERE requisition.tenant_id = p_tenant_id
-          AND requisition.purchase_batch_id = p_batch_id
-          AND requisition.split_generation = v_batch.split_generation))
+    AND commitment.project_id = v_batch.project_id
+    AND commitment.cost_category_id IN (
+      SELECT item.cost_category_id
+      FROM public.supplier_purchase_batch_items AS item
+      WHERE item.tenant_id = p_tenant_id
+        AND item.purchase_batch_id = p_batch_id)
+    AND commitment.status IN ('reserved', 'converted')
   ORDER BY commitment.cost_category_id, commitment.id FOR UPDATE;
+  PERFORM commitment.id
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND commitment.source_type = 'supplier_purchase_requisition'
+    AND commitment.source_id IN (
+      SELECT requisition.id
+      FROM public.supplier_purchase_requisitions AS requisition
+      WHERE requisition.tenant_id = p_tenant_id
+        AND requisition.purchase_batch_id = p_batch_id
+        AND requisition.split_generation = v_batch.split_generation)
+  ORDER BY commitment.source_id, commitment.cost_category_id, commitment.id
+  FOR UPDATE;
   PERFORM requisition.id
   FROM public.supplier_purchase_requisitions AS requisition
   WHERE requisition.tenant_id = p_tenant_id

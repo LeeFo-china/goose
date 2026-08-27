@@ -166,6 +166,7 @@ describe("supplier purchase batch atomic review migration", () => {
       /FROM public\.finance_cost_categories[\s\S]*?FOR UPDATE/,
       /FROM public\.project_cost_budgets[\s\S]*?FOR UPDATE/,
       /FROM public\.project_cost_commitments[\s\S]*?FOR UPDATE/,
+      /FROM public\.project_cost_commitments[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_purchase_requisitions[\s\S]*?FOR UPDATE/,
       /FROM public\.supplier_purchase_orders[\s\S]*?FOR UPDATE/,
       /IF p_action = 'reject'/,
@@ -174,9 +175,6 @@ describe("supplier purchase batch atomic review migration", () => {
 
   test("rejects unless current commitments exactly match frozen budget facts", () => {
     const review = extractFunction("review_supplier_purchase_batch");
-    expect(review).toMatch(
-      /FROM public\.project_cost_commitments AS commitment[\s\S]*?commitment\.project_id = v_batch\.project_id[\s\S]*?OR commitment\.source_id IN \([\s\S]*?purchase_batch_id = p_batch_id[\s\S]*?split_generation = v_batch\.split_generation[\s\S]*?FOR UPDATE/,
-    );
     expectOrdered(review, [
       /expected_commitments AS MATERIALIZED/,
       /commitment\.recognized_amount = 0/,
@@ -198,6 +196,23 @@ describe("supplier purchase batch atomic review migration", () => {
       "expense_amount_snapshot", "other_commitment_amount_snapshot",
       "available_amount_snapshot",
     ]) expect(review, `missing commitment fact ${fact}`).toContain(fact);
+  });
+
+  test("splits active budget and all-state child commitment locks", () => {
+    const review = extractFunction("review_supplier_purchase_batch");
+    const lockStart = review.indexOf("PERFORM commitment.id",
+      review.indexOf("PERFORM budget.id"));
+    const lockEnd = review.indexOf("PERFORM requisition.id", lockStart);
+    const locks = review.slice(lockStart, lockEnd)
+      .match(/PERFORM commitment\.id[\s\S]*?FOR UPDATE;/g) ?? [];
+    expect(locks).toHaveLength(2);
+    expect(locks[0]).toMatch(
+      /project_id = v_batch\.project_id[\s\S]*?cost_category_id IN[\s\S]*?status IN \('reserved', 'converted'\)[\s\S]*?ORDER BY commitment\.cost_category_id, commitment\.id/,
+    );
+    expect(locks[1]).toMatch(
+      /tenant_id = p_tenant_id[\s\S]*?source_type = 'supplier_purchase_requisition'[\s\S]*?source_id IN[\s\S]*?split_generation = v_batch\.split_generation[\s\S]*?ORDER BY commitment\.source_id, commitment\.cost_category_id, commitment\.id/,
+    );
+    expect(locks[1]).not.toContain("commitment.status");
   });
 
   test("validates every approval fact before the first order write", () => {
