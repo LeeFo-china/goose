@@ -5,10 +5,10 @@ import {
   parseSupplierPurchasableProductSmokeEnv,
   runSupplierPurchasableProductSmoke,
   runSupplierPurchasableProductSmokeCli,
-  runSupplierPurchasableProductSmokeRollbackOnly,
   sanitizeSupplierPurchasableProductSmokeError,
   type PriceListSnapshot,
   type SupplierPurchasableProductCommandInput,
+  type SupplierPurchasableProductPriceSeriesSnapshot,
   type SupplierPurchasableProductResidualScope,
   type SupplierPurchasableProductSmokeGateway,
   type SupplierPurchasableProductSmokeTransaction,
@@ -177,6 +177,8 @@ class FakeGateway implements SupplierPurchasableProductSmokeGateway {
   after: PriceListSnapshot | null | undefined;
   failAt: "command" | null = null;
   dirtyAt: "invalid" | "rollback" | null = null;
+  polluteInvalidSeries = false;
+  existingBaselineEvent = false;
   mutateResult?: (result: CommandResult) => void;
   mutateCreatedSnapshot?: (snapshot: PriceListSnapshot) => void;
 
@@ -234,6 +236,42 @@ class FakeGateway implements SupplierPurchasableProductSmokeGateway {
       this.calls.push({ operation: "residual-invalid", scope });
       return this.dirtyAt === "invalid" ? { ...CLEAN, events: true } : CLEAN;
     },
+    snapshotPriceSeries: async (): Promise<
+      SupplierPurchasableProductPriceSeriesSnapshot
+    > => {
+      const previous = this.calls.some((call) =>
+        call.operation === "series-before"
+      );
+      this.calls.push({ operation: previous ? "series-after" : "series-before" });
+      const request = this.calls.find((call) =>
+        call.operation === "command"
+      )?.request;
+      if (!request) throw new Error("missing command");
+      const result = commandResult(request, false);
+      const list = {
+        ...BASELINE,
+        id: PRICE_LIST_ID,
+        name: "Default supplier price",
+        scope_type: "default",
+        version_number: 5,
+        supersedes_price_list_id: BASELINE_ID,
+        operation_source: "tenant",
+        proxy_reason: null,
+        created_by_employee_id: request.actor_employee_id,
+        created_at: NOW,
+        published_at: NOW,
+      };
+      const pollutedList = { ...list, id: smokeId("998") };
+      const pollutedItem = { ...result.price, id: smokeId("999") };
+      return {
+        lists: previous && this.polluteInvalidSeries
+          ? [list, pollutedList]
+          : [list],
+        items: previous && this.polluteInvalidSeries
+          ? [result.price, pollutedItem]
+          : [result.price],
+      };
+    },
   };
 
   async begin<Result>(
@@ -262,6 +300,15 @@ class FakeGateway implements SupplierPurchasableProductSmokeGateway {
 
   async inspectResiduals(scope: SupplierPurchasableProductResidualScope) {
     this.calls.push({ operation: "residual-rollback", scope });
+    const resourceIds = [
+      ...scope.productIds,
+      ...scope.skuIds,
+      scope.newPriceListId,
+      scope.newPriceItemId,
+    ];
+    if (this.existingBaselineEvent && resourceIds.includes(BASELINE_ID)) {
+      return { ...CLEAN, events: true };
+    }
     return this.dirtyAt === "rollback" ? { ...CLEAN, priceItems: true } : CLEAN;
   }
 
@@ -302,70 +349,6 @@ describe("supplier purchasable product smoke", () => {
     expect(sanitized).not.toContain("secret");
   });
 
-  test("rollback helper observes the exact sentinel and returns callback result", async () => {
-    const events: string[] = [];
-    const executor = {
-      async begin<Result>(callback: (value: { marker: true }) => Promise<Result>) {
-        events.push("begin");
-        try {
-          return await callback({ marker: true });
-        } catch (error) {
-          events.push("rollback");
-          throw error;
-        }
-      },
-    };
-    await expect(runSupplierPurchasableProductSmokeRollbackOnly(
-      executor,
-      async (value) => value.marker && "done",
-    )).resolves.toBe("done");
-    expect(events).toEqual(["begin", "rollback"]);
-  });
-
-  test("rollback helper fails closed when executor swallows the sentinel", async () => {
-    const executor = {
-      async begin<Result>(callback: (value: true) => Promise<Result>) {
-        try {
-          return await callback(true);
-        } catch {
-          return undefined as Result;
-        }
-      },
-    };
-    await expect(runSupplierPurchasableProductSmokeRollbackOnly(
-      executor,
-      async () => "done",
-    )).rejects.toThrow("SMOKE_ROLLBACK_NOT_OBSERVED");
-  });
-
-  test("callback failure rolls back then rethrows the same failure", async () => {
-    const events: string[] = [];
-    const failure = new Error("primary");
-    const executor = {
-      async begin<Result>(callback: (value: true) => Promise<Result>) {
-        try {
-          return await callback(true);
-        } catch (error) {
-          events.push("rollback");
-          throw error;
-        }
-      },
-    };
-    let observed: unknown;
-    try {
-      await runSupplierPurchasableProductSmokeRollbackOnly(
-        executor,
-        async () => {
-          throw failure;
-        },
-      );
-    } catch (error) {
-      observed = error;
-    }
-    expect(observed).toBe(failure);
-    expect(events).toEqual(["rollback"]);
-  });
-
   test("uses unique fixtures and executes all bounded evidence in order", async () => {
     const fixtureA = createSupplierPurchasableProductSmokeFixture(CONFIG);
     const fixtureB = createSupplierPurchasableProductSmokeFixture(CONFIG);
@@ -388,7 +371,9 @@ describe("supplier purchasable product smoke", () => {
       "catalog",
       "command",
       "conflict",
+      "series-before",
       "command",
+      "series-after",
       "residual-invalid",
       "rollback",
       "snapshot-after",
@@ -413,8 +398,8 @@ describe("supplier purchasable product smoke", () => {
     expect(scopes).toHaveLength(2);
     expect(scopes[0]?.productIds).toHaveLength(1);
     expect(scopes[1]?.productIds).toHaveLength(2);
-    expect(scopes[0]?.newPriceListId).toBe(scopes[0]?.productIds[0]);
-    expect(scopes[0]?.newPriceItemId).toBe(scopes[0]?.productIds[0]);
+    expect(scopes[0]?.newPriceListId).toBeNull();
+    expect(scopes[0]?.newPriceItemId).toBeNull();
     for (const scope of scopes) {
       expect(scope.tenantId).toBe(ENV.SUPPLIER_PURCHASABLE_SMOKE_TENANT_ID);
       expect(scope.tenantSupplierId).toBe(
@@ -430,7 +415,6 @@ describe("supplier purchasable product smoke", () => {
     expect(scopes[1]).toMatchObject({
       newPriceListId: PRICE_LIST_ID,
       newPriceItemId: PRICE_ITEM_ID,
-      previousPriceListId: BASELINE_ID,
     });
   });
 
@@ -495,5 +479,19 @@ describe("supplier purchasable product smoke", () => {
       "rollback",
       "close",
     ]);
+  });
+
+  test("rejects unknown price series pollution from the invalid command", async () => {
+    const gateway = new FakeGateway();
+    gateway.polluteInvalidSeries = true;
+    await expect(runSupplierPurchasableProductSmoke(CONFIG, gateway)).rejects
+      .toThrow("SMOKE_INVALID_PRICE_SERIES_CHANGED");
+  });
+
+  test("ignores historical events for the pre-existing published list", async () => {
+    const gateway = new FakeGateway();
+    gateway.existingBaselineEvent = true;
+    await expect(runSupplierPurchasableProductSmoke(CONFIG, gateway)).resolves
+      .toMatchObject({ rollback_clean: true });
   });
 });

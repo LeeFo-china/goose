@@ -5,8 +5,23 @@ import type { SupplierPurchasableProductCommandInput } from
 import type { Database } from "@/types/database";
 
 const CONFLICT_CODE = "SUPPLIER_IDEMPOTENCY_CONFLICT";
+const PRICE_SERIES_ROW_LIMIT = 100;
 
 type PriceListRow = Database["public"]["Tables"]["supplier_price_lists"]["Row"];
+type PriceItemRow =
+  Database["public"]["Tables"]["supplier_price_list_items"]["Row"];
+export type SupplierPurchasableProductPriceSeriesListSnapshot = PriceListRow;
+export type SupplierPurchasableProductPriceSeriesItemSnapshot = Omit<
+  PriceItemRow,
+  "minimum_quantity" | "maximum_quantity" | "base_unit_conversion" |
+    "unit_price" | "tax_rate"
+> & {
+  minimum_quantity: string;
+  maximum_quantity: string | null;
+  base_unit_conversion: string;
+  unit_price: string;
+  tax_rate: string;
+};
 export type PriceListSnapshot = Pick<PriceListRow,
   "id" | "tenant_id" | "tenant_supplier_id" | "supplier_id" |
   "price_list_code" | "currency" | "lifecycle_status" | "row_version" |
@@ -35,11 +50,20 @@ export type SupplierPurchasableProductResidualScope =
     productIds: readonly string[];
     skuIds: readonly string[];
     parentKeys: readonly string[];
-    newPriceListId: string;
-    newPriceItemId: string;
-    previousPriceListId: string;
+    newPriceListId: string | null;
+    newPriceItemId: string | null;
     limit: 1;
   };
+
+export type SupplierPurchasableProductPriceSeriesSnapshot = {
+  lists: readonly PriceListRow[];
+  items: readonly SupplierPurchasableProductPriceSeriesItemSnapshot[];
+};
+
+export type SupplierPurchasableProductSmokeQuery = <Rows extends unknown[]>(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => PromiseLike<Rows>;
 
 export type SupplierPurchasableProductResidualEvidence = Record<
   "products" | "skus" | "priceLists" | "priceItems" | "events",
@@ -57,6 +81,9 @@ export type SupplierPurchasableProductSmokeTransaction = {
   snapshotPublishedPriceList(
     scope: SupplierPurchasableProductSmokeScope,
   ): Promise<PriceListSnapshot | null>;
+  snapshotPriceSeries(
+    scope: SupplierPurchasableProductSmokeScope,
+  ): Promise<SupplierPurchasableProductPriceSeriesSnapshot>;
   inspectResiduals(
     scope: SupplierPurchasableProductResidualScope,
   ): Promise<SupplierPurchasableProductResidualEvidence>;
@@ -79,6 +106,60 @@ export type SupplierPurchasableProductSmokeGateway = {
 
 type CommandSql = Bun.SQL | TransactionSQL | SavepointSQL;
 type EvidenceSql = Bun.SQL | TransactionSQL;
+
+export async function querySupplierPurchasableProductPriceSeriesSnapshot(
+  sql: SupplierPurchasableProductSmokeQuery,
+  scope: SupplierPurchasableProductSmokeScope,
+): Promise<SupplierPurchasableProductPriceSeriesSnapshot> {
+  const lists = await sql<PriceListRow[]>`
+    select id, tenant_id, tenant_supplier_id, supplier_id, price_list_code,
+      name, currency, scope_type, version_number, lifecycle_status,
+      effective_from::text as effective_from,
+      effective_until::text as effective_until,
+      supersedes_price_list_id, row_version, acting_tenant_id,
+      acting_employee_id, operation_source, proxy_reason,
+      created_by_employee_id, updated_by_employee_id,
+      created_at::text as created_at, updated_at::text as updated_at,
+      published_at::text as published_at
+    from public.supplier_price_lists
+    where tenant_id = ${scope.tenantId}::uuid
+      and tenant_supplier_id = ${scope.tenantSupplierId}::uuid
+      and supplier_id = ${scope.supplierId}::uuid
+      and upper(btrim(price_list_code)) = 'DEFAULT'
+      and scope_type = 'default' and currency = 'CNY'
+    order by version_number, id limit ${PRICE_SERIES_ROW_LIMIT + 1};
+  `;
+  if (lists.length > PRICE_SERIES_ROW_LIMIT) {
+    throw new Error("SMOKE_PRICE_SERIES_TOO_LARGE");
+  }
+  const items = await sql<SupplierPurchasableProductPriceSeriesItemSnapshot[]>`
+    select item.id, item.tenant_id, item.supplier_id,
+      item.supplier_price_list_id, item.supplier_product_id,
+      item.supplier_sku_id, item.minimum_quantity::text as minimum_quantity,
+      item.maximum_quantity::text as maximum_quantity,
+      item.purchase_unit_id, item.base_unit_id,
+      item.base_unit_conversion::text as base_unit_conversion,
+      item.unit_price::text as unit_price, item.tax_rate::text as tax_rate,
+      item.tax_inclusive,
+      item.acting_tenant_id, item.acting_employee_id, item.operation_source,
+      item.proxy_reason, item.created_by_employee_id,
+      item.updated_by_employee_id, item.created_at::text as created_at,
+      item.updated_at::text as updated_at
+    from public.supplier_price_list_items as item
+    join public.supplier_price_lists as series
+      on series.id = item.supplier_price_list_id
+    where series.tenant_id = ${scope.tenantId}::uuid
+      and series.tenant_supplier_id = ${scope.tenantSupplierId}::uuid
+      and series.supplier_id = ${scope.supplierId}::uuid
+      and upper(btrim(series.price_list_code)) = 'DEFAULT'
+      and series.scope_type = 'default' and series.currency = 'CNY'
+    order by item.id limit ${PRICE_SERIES_ROW_LIMIT + 1};
+  `;
+  if (items.length > PRICE_SERIES_ROW_LIMIT) {
+    throw new Error("SMOKE_PRICE_SERIES_TOO_LARGE");
+  }
+  return { lists, items };
+}
 
 export class DirectSupplierPurchasableProductSmokeGateway
   implements SupplierPurchasableProductSmokeGateway {
@@ -108,6 +189,8 @@ export class DirectSupplierPurchasableProductSmokeGateway
         this.expectIdempotencyConflict(sql, input),
       snapshotPublishedPriceList: (scope) =>
         this.queryPublishedPriceList(sql, scope),
+      snapshotPriceSeries: (scope) =>
+        querySupplierPurchasableProductPriceSeriesSnapshot(sql, scope),
       inspectResiduals: (scope) => this.queryResiduals(sql, scope),
     };
   }
@@ -207,12 +290,15 @@ export class DirectSupplierPurchasableProductSmokeGateway
           where tenant_id = ${scope.tenantId}::uuid
             and tenant_supplier_id = ${scope.tenantSupplierId}::uuid
             and supplier_id = ${scope.supplierId}::uuid
+            and ${scope.newPriceListId}::uuid is not null
             and id = ${scope.newPriceListId}::uuid limit 1) "priceLists",
         exists(select 1 from public.supplier_price_list_items
           where tenant_id = ${scope.tenantId}::uuid
             and supplier_id = ${scope.supplierId}::uuid
-            and (supplier_price_list_id = ${scope.newPriceListId}::uuid
-              or id = ${scope.newPriceItemId}::uuid
+            and ((${scope.newPriceListId}::uuid is not null
+                and supplier_price_list_id = ${scope.newPriceListId}::uuid)
+              or (${scope.newPriceItemId}::uuid is not null
+                and id = ${scope.newPriceItemId}::uuid)
               or supplier_product_id in (${productA}::uuid, ${productB}::uuid)
               or supplier_sku_id in (${skuA}::uuid, ${skuB}::uuid)) limit 1
         ) "priceItems",
@@ -220,9 +306,11 @@ export class DirectSupplierPurchasableProductSmokeGateway
           where tenant_id = ${scope.tenantId}::uuid
             and actor_user_id = ${scope.actorUserId}::uuid
             and (resource_id in (${productA}::uuid, ${productB}::uuid,
-              ${skuA}::uuid, ${skuB}::uuid, ${scope.newPriceListId}::uuid,
-              ${scope.newPriceItemId}::uuid,
-              ${scope.previousPriceListId}::uuid)
+              ${skuA}::uuid, ${skuB}::uuid)
+              or (${scope.newPriceListId}::uuid is not null
+                and resource_id = ${scope.newPriceListId}::uuid)
+              or (${scope.newPriceItemId}::uuid is not null
+                and resource_id = ${scope.newPriceItemId}::uuid)
               or idempotency_key = ${parentA}
               or idempotency_key like ${`${parentA}:%`}
               or idempotency_key = ${parentB}

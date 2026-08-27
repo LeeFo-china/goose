@@ -26,6 +26,7 @@ export type { SupplierPurchasableProductCommandInput } from
   "@/repositories/supplier-purchasable-products";
 export type {
   PriceListSnapshot,
+  SupplierPurchasableProductPriceSeriesSnapshot,
   SupplierPurchasableProductResidualScope,
   SupplierPurchasableProductSmokeGateway,
   SupplierPurchasableProductSmokeTransaction,
@@ -240,7 +241,6 @@ function createResidualScope(
   config: SupplierPurchasableProductSmokeConfig,
   fixture: ReturnType<typeof createSupplierPurchasableProductSmokeFixture>,
   result: SupplierPurchasableProductCreatedResult,
-  baseline: PriceListSnapshot | null,
 ): SupplierPurchasableProductResidualScope {
   return {
     tenantId: config.tenantId,
@@ -255,7 +255,6 @@ function createResidualScope(
     ],
     newPriceListId: result.price.supplier_price_list_id,
     newPriceItemId: result.price.id,
-    previousPriceListId: baseline?.id ?? result.price.supplier_price_list_id,
     limit: 1,
   };
 }
@@ -263,15 +262,13 @@ function createResidualScope(
 function invalidScope(
   scope: SupplierPurchasableProductResidualScope,
 ): SupplierPurchasableProductResidualScope {
-  const invalidProductId = scope.productIds[1] as string;
   return {
     ...scope,
-    productIds: [invalidProductId],
+    productIds: [scope.productIds[1] as string],
     skuIds: [scope.skuIds[1] as string],
     parentKeys: [scope.parentKeys[1] as string],
-    newPriceListId: invalidProductId,
-    newPriceItemId: invalidProductId,
-    previousPriceListId: invalidProductId,
+    newPriceListId: null,
+    newPriceItemId: null,
   };
 }
 
@@ -315,7 +312,7 @@ export async function runSupplierPurchasableProductSmoke(
         assertPublishedIdentity(
           await transaction.snapshotPublishedPriceList(scope), first, config,
         );
-        rollbackScope = createResidualScope(config, fixture, first, baseline);
+        rollbackScope = createResidualScope(config, fixture, first);
         const catalogQuery: SupplierPurchasableProductCatalogQuery = {
           ...scope,
           productId: fixture.created.product_id,
@@ -341,9 +338,14 @@ export async function runSupplierPurchasableProductSmoke(
         };
         if (await transaction.expectIdempotencyConflict(conflict) !==
           CONFLICT_CODE) throw new Error("SMOKE_CONFLICT_NOT_REJECTED");
+        const seriesBeforeInvalid = await transaction.snapshotPriceSeries(scope);
         const invalid = SupplierPurchasableProductCommandEnvelopeSchema.safeParse(
           await transaction.command(fixture.invalid),
         );
+        const seriesAfterInvalid = await transaction.snapshotPriceSeries(scope);
+        if (!isDeepStrictEqual(seriesAfterInvalid, seriesBeforeInvalid)) {
+          throw new Error("SMOKE_INVALID_PRICE_SERIES_CHANGED");
+        }
         if (!invalid.success || !isDeepStrictEqual(invalid.data, {
           status: "validation_error",
           idempotent: false,
