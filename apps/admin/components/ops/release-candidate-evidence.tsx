@@ -16,6 +16,7 @@ import type { ProductionReleaseCandidate, ReleaseRun, ReleaseService } from "@/c
 import { deployProductionReleaseCandidate, fetchProductionReleaseCandidate, formatDateTime } from "@/components/ops/release-deployments-shared";
 
 const PRODUCTION_DEPLOY_CONFIRM_TEXT = "确认部署生产环境";
+export const PRODUCTION_CANDIDATE_EVIDENCE_ID = "production-candidate-evidence";
 
 const RELEASE_SERVICE_LABELS: Record<Exclude<ReleaseService, "all">, string> = {
   api: "API",
@@ -117,7 +118,7 @@ export function ReleaseCandidateEvidence({ run, configured, onSubmitted }: Relea
   }
 
   return (
-    <section className="border-t pt-5">
+    <section id={PRODUCTION_CANDIDATE_EVIDENCE_ID} className="scroll-mt-4 border-t pt-5">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>

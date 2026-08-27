@@ -15,11 +15,11 @@
 **Files:**
 - Modify: `apps/admin/components/ops/release-deployments-workbench.test.ts`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 增加断言，要求工作台包含候选定位处理函数、`scrollIntoView`、始终渲染的候选证据区，并要求记录行文案为“部署候选”。
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `bun test components/ops/release-deployments-workbench.test.ts`
 
@@ -32,19 +32,19 @@ Expected: FAIL，因为当前候选区受 `production` 条件控制，且没有�
 - Modify: `apps/admin/components/ops/release-deployments-panel.tsx`
 - Modify: `apps/admin/components/ops/release-deployments-sections.tsx`
 
-- [ ] **Step 1: Add a stable evidence section ID**
+- [x] **Step 1: Add a stable evidence section ID**
 
 从候选组件导出稳定 DOM ID，并设置到候选证据 `<section>`。
 
-- [ ] **Step 2: Decouple candidate evidence from environment selection**
+- [x] **Step 2: Decouple candidate evidence from environment selection**
 
 在服务发布标签中无条件渲染 `Separator` 和 `ReleaseCandidateEvidence`，继续使用最新或用户选择的可部署候选。
 
-- [ ] **Step 3: Connect the release row action**
+- [x] **Step 3: Connect the release row action**
 
 父组件回调设置候选 Run ID、切换到 `service-release`，并在下一帧调用 `scrollIntoView({ behavior: "smooth", block: "start" })`。记录行按钮文案改为“部署候选”。
 
-- [ ] **Step 4: Run the focused test**
+- [x] **Step 4: Run the focused test**
 
 Run: `bun test components/ops/release-deployments-workbench.test.ts`
 
@@ -55,13 +55,13 @@ Expected: PASS。
 **Files:**
 - Verify: `apps/admin/components/ops/*.test.ts`
 
-- [ ] **Step 1: Run Admin ops tests**
+- [x] **Step 1: Run Admin ops tests**
 
 Run: `bun test components/ops`
 
 Expected: 全部通过。
 
-- [ ] **Step 2: Run Admin checks and build**
+- [x] **Step 2: Run Admin checks and build**
 
 Run: `bun run check`
 

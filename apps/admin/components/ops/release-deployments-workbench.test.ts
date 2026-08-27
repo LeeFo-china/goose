@@ -60,6 +60,23 @@ describe("release deployment workbench contracts", () => {
     expect(sharedSource).toContain("/deploy");
   });
 
+  test("keeps the production candidate deploy action discoverable from release records", () => {
+    const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
+    const candidateSource = readFileSync(join(import.meta.dir, "release-candidate-evidence.tsx"), "utf8");
+    const sectionsSource = readFileSync(join(import.meta.dir, "release-deployments-sections.tsx"), "utf8");
+    const evidenceIndex = panelSource.indexOf("<ReleaseCandidateEvidence");
+    const evidenceRenderContext = panelSource.slice(Math.max(0, evidenceIndex - 160), evidenceIndex);
+
+    expect(evidenceIndex).toBeGreaterThanOrEqual(0);
+    expect(evidenceRenderContext).not.toContain("production ?");
+    expect(panelSource).toContain("selectProductionCandidateRun");
+    expect(panelSource).toContain('setReleaseMode("service-release")');
+    expect(panelSource).toContain("scrollIntoView");
+    expect(candidateSource).toContain("PRODUCTION_CANDIDATE_EVIDENCE_ID");
+    expect(candidateSource).toContain("id={PRODUCTION_CANDIDATE_EVIDENCE_ID}");
+    expect(sectionsSource).toContain("部署候选");
+  });
+
   test("keeps official website publishing as an independent gated entry", () => {
     const panelSource = readFileSync(join(import.meta.dir, "release-deployments-panel.tsx"), "utf8");
     const dispatchSource = readFileSync(join(import.meta.dir, "release-deployments-dispatch-card.tsx"), "utf8");
