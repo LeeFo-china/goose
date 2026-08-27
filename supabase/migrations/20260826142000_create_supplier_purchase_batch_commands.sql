@@ -2150,8 +2150,12 @@ BEGIN
     'actor_user_id', p_actor_user_id,
     'actor_employee_id', p_actor_employee_id
   );
+  -- This server-derived capability is retained in the audit request, but is
+  -- not client intent. Event-first replay must return the first result after
+  -- batch state recalculation changes the capability; first execution is
+  -- still guarded by p_can_override_budget below.
   v_fingerprint := encode(extensions.digest(
-    convert_to(v_request::text, 'UTF8'), 'sha256'
+    convert_to((v_request - 'can_override_budget')::text, 'UTF8'), 'sha256'
   ), 'hex');
   PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
     'supplier-purchase-batch-command:' || p_tenant_id::text || ':' ||

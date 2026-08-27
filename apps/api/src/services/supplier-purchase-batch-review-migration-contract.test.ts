@@ -155,6 +155,29 @@ describe("supplier purchase batch atomic review migration", () => {
     ]) expect(review).toContain(code);
   });
 
+  test("audits budget override without fingerprinting transient capability", () => {
+    const review = extractFunction("review_supplier_purchase_batch");
+    expect(sql).toMatch(
+      /REVOKE ALL ON FUNCTION public\.review_supplier_purchase_batch\([\s\S]*FROM PUBLIC, anon, authenticated, service_role;/,
+    );
+    expect(sql).toMatch(
+      /GRANT EXECUTE ON FUNCTION public\.review_supplier_purchase_batch\([\s\S]*TO service_role;/,
+    );
+    expect(review).toMatch(
+      /v_request := jsonb_build_object\([\s\S]*'expected_version', p_expected_version[\s\S]*'action', p_action[\s\S]*'remark',[\s\S]*'can_override_budget', p_can_override_budget[\s\S]*'actor_user_id', p_actor_user_id[\s\S]*'actor_employee_id', p_actor_employee_id/,
+    );
+    expect(review).toMatch(
+      /convert_to\(\(v_request - 'can_override_budget'\)::text, 'UTF8'\)/,
+    );
+    expect(review).not.toMatch(/convert_to\(v_request::text, 'UTF8'\)/);
+    expect(review).toMatch(
+      /record_supplier_purchase_batch_command_result\([\s\S]*?v_fingerprint,[\s\S]*?v_request, p_actor_user_id, p_actor_employee_id/,
+    );
+    expect(review).toMatch(
+      /v_batch\.budget_status = 'over_budget'[\s\S]*AND NOT p_can_override_budget[\s\S]*SUPPLIER_PURCHASE_BATCH_BUDGET_OVERRIDE_REQUIRED/,
+    );
+  });
+
   test("uses one canonical lock order before either review mutation", () => {
     const review = extractFunction("review_supplier_purchase_batch");
     expectOrdered(review, [

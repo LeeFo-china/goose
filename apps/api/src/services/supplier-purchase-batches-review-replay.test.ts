@@ -37,7 +37,10 @@ const auth: AuthContext = {
   permissions: [],
 };
 
-async function serviceWithReview(review: (input: unknown) => Promise<unknown>) {
+async function serviceWithReview(
+  review: (input: unknown) => Promise<unknown>,
+  batchSequence?: Array<Record<string, unknown>>,
+) {
   const { SupplierPurchaseBatchesService } = await import(
     "./supplier-purchase-batches"
   );
@@ -51,12 +54,14 @@ async function serviceWithReview(review: (input: unknown) => Promise<unknown>) {
     created_by_employee_id: CREATOR_ID,
   };
   const reviewMock = mock(review);
+  const financeMock = mock(() => undefined);
+  const batches = [...(batchSequence ?? [batch])];
   const service = new SupplierPurchaseBatchesService({
     access: {
       requireView: mock(async () => scope()),
       requireManage: mock(async () => scope()),
       requireApprove: mock(async () => scope()),
-      requireFinanceBudgetManage: mock(() => undefined),
+      requireFinanceBudgetManage: financeMock,
       getVisibleProjectIds: mock(async () => [PROJECT_ID]),
       getVisibleProjectUpdateIds: mock(async () => [PROJECT_ID]),
       assertProjectRead: mock(async () => undefined),
@@ -64,7 +69,7 @@ async function serviceWithReview(review: (input: unknown) => Promise<unknown>) {
     },
     repository: {
       listBatches: mock(async () => emptyPage()),
-      findBatch: mock(async () => batch),
+      findBatch: mock(async () => batches.shift() ?? batch),
       listItems: mock(async () => emptyPage()),
       listRequisitions: mock(async () => emptyPage()),
       listOrders: mock(async () => emptyPage()),
@@ -77,7 +82,7 @@ async function serviceWithReview(review: (input: unknown) => Promise<unknown>) {
       cancel: mock(async () => ({})),
     },
   } as never);
-  return { batch, reviewMock, service };
+  return { batch, financeMock, reviewMock, service };
 }
 
 function scope() {
@@ -152,5 +157,91 @@ describe("SupplierPurchaseBatchesService review replay", () => {
       details: rpcDetails,
     });
     expect(fixture.reviewMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("replays after the server-derived budget override changes", async () => {
+    const pendingBatch = {
+      id: BATCH_ID,
+      tenant_id: TENANT_ID,
+      project_id: PROJECT_ID,
+      status: "pending_approval",
+      version: 2,
+      budget_status: "over_budget",
+      created_by_employee_id: CREATOR_ID,
+    };
+    const revisionBatch = {
+      ...pendingBatch,
+      status: "draft",
+      version: 3,
+      budget_status: "unchecked",
+    };
+    const details = [{
+      kind: "item" as const,
+      supplier_sku_id: SKU_ID,
+      reason: "SKU 已停用",
+    }];
+    let isReplay = false;
+    const fixture = await serviceWithReview(async () => {
+      const result = {
+        status: "revision_required",
+        idempotent: isReplay,
+        batch: revisionBatch,
+        version: 3,
+        error_code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+        details,
+      };
+      isReplay = true;
+      return result;
+    }, [pendingBatch, revisionBatch]);
+    const input = { expected_version: 2, action: "approve" as const };
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(fixture.service.review(
+        auth,
+        BATCH_ID,
+        input,
+        "batch:review:budget-drift",
+      )).rejects.toMatchObject({
+        statusCode: 409,
+        code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+        details: {
+          batch: revisionBatch,
+          version: 3,
+          error_code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
+          details,
+        },
+      });
+    }
+
+    expect(fixture.financeMock).toHaveBeenCalledTimes(1);
+    expect(fixture.reviewMock.mock.calls.map(
+      ([request]) => {
+        const command = request as {
+          action: string;
+          can_override_budget: boolean;
+          expected_version: number;
+          idempotency_key: string;
+        };
+        return {
+          action: command.action,
+          can_override_budget: command.can_override_budget,
+          expected_version: command.expected_version,
+          idempotency_key: command.idempotency_key,
+        };
+      },
+    )).toEqual([
+      {
+        action: "approve",
+        can_override_budget: true,
+        expected_version: 2,
+        idempotency_key: "batch:review:budget-drift",
+      },
+      {
+        action: "approve",
+        can_override_budget: false,
+        expected_version: 2,
+        idempotency_key: "batch:review:budget-drift",
+      },
+    ]);
   });
 });

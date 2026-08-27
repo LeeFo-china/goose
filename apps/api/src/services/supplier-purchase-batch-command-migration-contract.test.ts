@@ -195,7 +195,10 @@ describe("supplier purchase batch command migrations", () => {
       expect(fn).toMatch(/'actor_user_id', p_actor_user_id/);
       expect(fn).toMatch(/'actor_employee_id', p_actor_employee_id/);
       expect(fn).toContain("extensions.digest(");
-      expect(fn).toContain("convert_to(v_request::text, 'UTF8')");
+      const fingerprintInput = name === "review_supplier_purchase_batch"
+        ? "convert_to((v_request - 'can_override_budget')::text, 'UTF8')"
+        : "convert_to(v_request::text, 'UTF8')";
+      expect(fn).toContain(fingerprintInput);
       expect(fn).toContain("'sha256'");
       expect(fn).toMatch(/supplier-purchase-batch-command:[\s\S]*p_tenant_id[\s\S]*p_batch_id[\s\S]*p_idempotency_key/);
       expect(fn).toMatch(/SUPPLIER_IDEMPOTENCY_CONFLICT/);
