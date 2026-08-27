@@ -107,6 +107,7 @@ export class SupplierPurchaseBatchesService {
       actions: deriveSupplierPurchaseBatchActions({
         status: batch.status,
         createdByEmployeeId: batch.created_by_employee_id,
+        submittedByEmployeeId: batch.submitted_by_employee_id,
         actorEmployeeId: scope.employeeId,
         permissions,
         canReadProject: true,
@@ -318,15 +319,14 @@ export class SupplierPurchaseBatchesService {
     batchId: string,
     visibleProjectIds: string[] | null,
   ) {
+    if (visibleProjectIds?.length === 0) {
+      throw supplierPurchaseBatchNotFound();
+    }
     const batch = await this.repository.findBatch(tenantId, batchId);
     if (batch && projectIsVisible(batch.project_id, visibleProjectIds)) {
       return batch;
     }
-    throw Errors.business(
-      404,
-      "供应商采购批次不存在",
-      "SUPPLIER_PURCHASE_BATCH_NOT_FOUND",
-    );
+    throw supplierPurchaseBatchNotFound();
   }
 
   private assertReviewBoundary(
@@ -396,6 +396,14 @@ function projectIsVisible(
   visibleProjectIds: string[] | null,
 ): boolean {
   return visibleProjectIds === null || visibleProjectIds.includes(projectId);
+}
+
+function supplierPurchaseBatchNotFound() {
+  return Errors.business(
+    404,
+    "供应商采购批次不存在",
+    "SUPPLIER_PURCHASE_BATCH_NOT_FOUND",
+  );
 }
 
 export const supplierPurchaseBatchesService =

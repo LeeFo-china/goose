@@ -227,6 +227,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     const result = deriveSupplierPurchaseBatchActions({
       status: "draft",
       createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: null,
       actorEmployeeId: EMPLOYEE_ID,
       permissions: [
         "supplier.purchase-requisition.manage",
@@ -257,6 +258,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     const base = {
       status: "draft" as const,
       createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: null,
       actorEmployeeId: EMPLOYEE_ID,
       canReadProject: true,
       canUpdateProject: true,
@@ -278,6 +280,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     const base = {
       status: "pending_approval" as const,
       createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: null,
       permissions: ["supplier.purchase-requisition.approve"],
       canReadProject: true,
       canUpdateProject: false,
@@ -290,6 +293,11 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     expect(deriveSupplierPurchaseBatchActions({
       ...base,
       actorEmployeeId: CREATOR_ID,
+    }).can_review).toBe(false);
+    expect(deriveSupplierPurchaseBatchActions({
+      ...base,
+      submittedByEmployeeId: EMPLOYEE_ID,
+      actorEmployeeId: EMPLOYEE_ID,
     }).can_review).toBe(false);
     expect(deriveSupplierPurchaseBatchActions({
       ...base,
@@ -309,6 +317,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     const base = {
       status: "pending_approval" as const,
       createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: null,
       actorEmployeeId: EMPLOYEE_ID,
       canReadProject: true,
       canUpdateProject: false,
@@ -334,6 +343,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
     const pending = deriveSupplierPurchaseBatchActions({
       status: "pending_approval",
       createdByEmployeeId: CREATOR_ID,
+      submittedByEmployeeId: null,
       actorEmployeeId: EMPLOYEE_ID,
       permissions: ["supplier.purchase-requisition.manage"],
       canReadProject: true,
@@ -347,6 +357,7 @@ describe("deriveSupplierPurchaseBatchActions", () => {
       expect(deriveSupplierPurchaseBatchActions({
         status,
         createdByEmployeeId: CREATOR_ID,
+        submittedByEmployeeId: null,
         actorEmployeeId: EMPLOYEE_ID,
         permissions: [
           "supplier.purchase-requisition.manage",

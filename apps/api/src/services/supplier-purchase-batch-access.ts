@@ -51,6 +51,7 @@ export type SupplierPurchaseBatchActions = {
 export type SupplierPurchaseBatchActionInput = {
   status: SupplierPurchaseBatchStatus;
   createdByEmployeeId: string;
+  submittedByEmployeeId: string | null;
   actorEmployeeId: string | null;
   permissions: readonly string[];
   canReadProject: boolean;
@@ -76,6 +77,7 @@ export function deriveSupplierPurchaseBatchActions(
   const canReview = hasActor && input.status === "pending_approval" &&
     input.canReadProject &&
     input.actorEmployeeId !== input.createdByEmployeeId &&
+    input.actorEmployeeId !== input.submittedByEmployeeId &&
     hasPermission(input.permissions, "supplier.purchase-requisition.approve");
   const canCancel = hasActor &&
     (input.status === "draft" || input.status === "pending_approval") &&
