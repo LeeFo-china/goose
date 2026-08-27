@@ -624,10 +624,11 @@ Orange 已有 `src/utils/idempotency.ts#createUuidV4`。推荐在页面/Hook 的
 ```ts
 import { api } from '@/utils/api';
 import { createUuidV4 } from '@/utils/idempotency';
+import type { SubmittedCommandResult } from '@/services/supplier_procurement';
 
 const key = createUuidV4();
 
-await api.post<PurchaseBatchCommandResult>(
+await api.post<SubmittedCommandResult>(
   `/supplier-purchase-batches/${batchId}/submit`,
   { expected_version: version },
   { header: { 'Idempotency-Key': key } },
