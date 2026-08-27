@@ -17,6 +17,21 @@ MAXVALUE 99999999
 NO CYCLE
 CACHE 1;
 
+-- The leading primary-key column makes this compatible with all existing
+-- rows, including legacy rows whose normalized product identity is NULL. The
+-- complete key exists so batch snapshots can prove one exact tenant price
+-- chain with a declarative foreign key instead of trusting command code.
+ALTER TABLE public.supplier_price_list_items
+ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key
+UNIQUE (
+  id,
+  tenant_id,
+  supplier_id,
+  supplier_price_list_id,
+  supplier_product_id,
+  supplier_sku_id
+);
+
 CREATE TABLE public.supplier_purchase_batches (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL
@@ -215,8 +230,7 @@ CREATE TABLE public.supplier_purchase_batch_items (
   tenant_supplier_id uuid NOT NULL,
   supplier_product_id uuid NOT NULL,
   supplier_price_list_id uuid NOT NULL,
-  supplier_price_list_item_id uuid NOT NULL
-    REFERENCES public.supplier_price_list_items(id) ON DELETE RESTRICT,
+  supplier_price_list_item_id uuid NOT NULL,
   catalog_category_id uuid NOT NULL
     REFERENCES public.catalog_categories(id) ON DELETE RESTRICT,
   category_name_snapshot text NOT NULL,
@@ -277,6 +291,24 @@ CREATE TABLE public.supplier_purchase_batch_items (
   CONSTRAINT supplier_purchase_batch_items_price_list_tenant_fkey
     FOREIGN KEY (supplier_price_list_id, tenant_id, supplier_id)
     REFERENCES public.supplier_price_lists(id, tenant_id, supplier_id)
+    ON DELETE RESTRICT,
+  CONSTRAINT supplier_purchase_batch_items_price_item_chain_fkey
+    FOREIGN KEY (
+      supplier_price_list_item_id,
+      tenant_id,
+      supplier_id,
+      supplier_price_list_id,
+      supplier_product_id,
+      supplier_sku_id
+    )
+    REFERENCES public.supplier_price_list_items(
+      id,
+      tenant_id,
+      supplier_id,
+      supplier_price_list_id,
+      supplier_product_id,
+      supplier_sku_id
+    )
     ON DELETE RESTRICT,
   CONSTRAINT supplier_purchase_batch_items_line_no_check
     CHECK (line_no BETWEEN 1 AND 100),
@@ -390,6 +422,13 @@ ON public.supplier_purchase_batches(
   id DESC
 );
 
+CREATE INDEX supplier_purchase_batches_tenant_updated_idx
+ON public.supplier_purchase_batches(
+  tenant_id,
+  updated_at DESC,
+  id DESC
+);
+
 CREATE INDEX supplier_purchase_batches_tenant_project_updated_idx
 ON public.supplier_purchase_batches(
   tenant_id,
@@ -404,6 +443,16 @@ ON public.supplier_purchase_batch_items(
   purchase_batch_id,
   line_no,
   id
+);
+
+CREATE INDEX supplier_purchase_batch_items_price_item_idx
+ON public.supplier_purchase_batch_items(
+  supplier_price_list_item_id,
+  tenant_id,
+  supplier_id,
+  supplier_price_list_id,
+  supplier_product_id,
+  supplier_sku_id
 );
 
 CREATE UNIQUE INDEX supplier_purchase_requisitions_batch_supplier_generation_uidx

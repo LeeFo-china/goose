@@ -137,6 +137,12 @@ describe("supplier purchase batch foundation migration", () => {
     expect(item).toMatch(/quantity > 0[\s\S]*scale\(quantity\) <= 4/);
     expect(item).toMatch(/line_no BETWEEN 1 AND 100/);
     expect(item).toMatch(/line_total_amount = line_subtotal_amount \+ line_tax_amount/);
+    expect(sql).toMatch(
+      /ALTER TABLE public\.supplier_price_list_items[\s\S]*ADD CONSTRAINT supplier_price_list_items_batch_snapshot_key[\s\S]*UNIQUE \(\s*id,\s*tenant_id,\s*supplier_id,\s*supplier_price_list_id,\s*supplier_product_id,\s*supplier_sku_id\s*\)/,
+    );
+    expect(item).not.toMatch(
+      /supplier_price_list_item_id uuid NOT NULL\s+REFERENCES/,
+    );
     for (const contract of [
       /FOREIGN KEY \(purchase_batch_id, tenant_id\)[\s\S]*REFERENCES public\.supplier_purchase_batches\(id, tenant_id\)/,
       /FOREIGN KEY \(tenant_supplier_id, tenant_id, supplier_id\)[\s\S]*REFERENCES public\.tenant_suppliers\(id, tenant_id, supplier_id\)/,
@@ -144,6 +150,7 @@ describe("supplier purchase batch foundation migration", () => {
       /FOREIGN KEY \(supplier_product_id, supplier_id\)[\s\S]*REFERENCES public\.supplier_products\(id, supplier_id\)/,
       /FOREIGN KEY \(supplier_sku_id, supplier_id\)[\s\S]*REFERENCES public\.supplier_skus\(id, supplier_id\)/,
       /FOREIGN KEY \(supplier_price_list_id, tenant_id, supplier_id\)[\s\S]*REFERENCES public\.supplier_price_lists\(id, tenant_id, supplier_id\)/,
+      /FOREIGN KEY \(\s*supplier_price_list_item_id,\s*tenant_id,\s*supplier_id,\s*supplier_price_list_id,\s*supplier_product_id,\s*supplier_sku_id\s*\)[\s\S]*REFERENCES public\.supplier_price_list_items\(\s*id,\s*tenant_id,\s*supplier_id,\s*supplier_price_list_id,\s*supplier_product_id,\s*supplier_sku_id\s*\)/,
     ]) expect(item).toMatch(contract);
   });
 
@@ -192,9 +199,11 @@ describe("supplier purchase batch foundation migration", () => {
   test("adds deterministic list, child, and partial uniqueness indexes", () => {
     const normalized = compact(sql);
     for (const contract of [
+      /CREATE INDEX supplier_purchase_batches_tenant_updated_idx ON public\.supplier_purchase_batches\( tenant_id, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batches_tenant_status_updated_idx ON public\.supplier_purchase_batches\( tenant_id, status, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batches_tenant_project_updated_idx ON public\.supplier_purchase_batches\( tenant_id, project_id, updated_at DESC, id DESC \)/,
       /CREATE INDEX supplier_purchase_batch_items_parent_line_idx ON public\.supplier_purchase_batch_items\( tenant_id, purchase_batch_id, line_no, id \)/,
+      /CREATE INDEX supplier_purchase_batch_items_price_item_idx ON public\.supplier_purchase_batch_items\( supplier_price_list_item_id, tenant_id, supplier_id, supplier_price_list_id, supplier_product_id, supplier_sku_id \)/,
       /CREATE UNIQUE INDEX supplier_purchase_requisitions_batch_supplier_generation_uidx ON public\.supplier_purchase_requisitions\( tenant_id, purchase_batch_id, split_generation, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
       /CREATE UNIQUE INDEX supplier_purchase_orders_batch_supplier_uidx ON public\.supplier_purchase_orders\( tenant_id, purchase_batch_id, tenant_supplier_id \) WHERE purchase_batch_id IS NOT NULL/,
     ]) expect(normalized).toMatch(contract);
