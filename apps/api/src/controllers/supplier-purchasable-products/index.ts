@@ -24,10 +24,13 @@ class SupplierPurchasableProductsController extends TenantBaseController {
   async createPurchasableProduct(request: FastifyRequest) {
     const auth = await this.getRequiredTenantContext(request);
     const idempotencyHeader = request.headers["idempotency-key"];
-    if (
-      Array.isArray(idempotencyHeader) ||
-      idempotencyHeader?.includes(",")
-    ) {
+    let idempotencyHeaderCount = 0;
+    for (let index = 0; index < request.raw.rawHeaders.length; index += 2) {
+      if (request.raw.rawHeaders[index]?.toLowerCase() === "idempotency-key") {
+        idempotencyHeaderCount += 1;
+      }
+    }
+    if (idempotencyHeaderCount > 1 || Array.isArray(idempotencyHeader)) {
       throw Errors.business(
         400,
         "缺少有效的 Idempotency-Key",

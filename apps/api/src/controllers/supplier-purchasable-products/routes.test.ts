@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import Fastify from "fastify";
+import { createConnection } from "node:net";
 
 import { Errors } from "@/errors/error-factory";
 import type {
@@ -169,8 +170,56 @@ function validRequest() {
     params: { id: SUPPLIER_ID },
     query: { tenantSupplierId: TENANT_SUPPLIER_ID },
     headers: { "idempotency-key": "purchasable-product:create" },
+    raw: {
+      rawHeaders: [
+        "Idempotency-Key",
+        "purchasable-product:create",
+      ],
+    },
     body: input,
   };
+}
+
+async function sendRawHttpRequest(
+  port: number,
+  idempotencyHeaders: readonly string[],
+): Promise<string> {
+  const payload = JSON.stringify(input);
+  const request = [
+    `POST /supplier-purchasable-products/${SUPPLIER_ID}?tenantSupplierId=${TENANT_SUPPLIER_ID} HTTP/1.1`,
+    `Host: 127.0.0.1:${port}`,
+    "Content-Type: application/json",
+    `Content-Length: ${Buffer.byteLength(payload)}`,
+    ...idempotencyHeaders,
+    "Connection: close",
+    "",
+    payload,
+  ].join("\r\n");
+  const socket = createConnection({ host: "127.0.0.1", port });
+
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      let response = "";
+      socket.setTimeout(2_000);
+      socket.once("connect", () => socket.write(request));
+      socket.on("data", (chunk) => {
+        response += chunk.toString();
+      });
+      socket.once("end", () => resolve(response));
+      socket.once("error", reject);
+      socket.once("timeout", () => {
+        socket.destroy(
+          Errors.business(500, "本地 HTTP 测试超时", "TEST_TIMEOUT"),
+        );
+      });
+    });
+  } finally {
+    socket.destroy();
+  }
+}
+
+function rawHttpStatus(response: string): number {
+  return Number(response.match(/^HTTP\/1\.1 (\d{3})/)?.[1]);
 }
 
 describe("SupplierPurchasableProductsController", () => {
@@ -209,32 +258,53 @@ describe("SupplierPurchasableProductsController", () => {
     expect(response).toEqual({ data: created, message: "success" });
   });
 
-  test("rejects duplicate idempotency headers through real Fastify", async () => {
+  test("rejects duplicate raw idempotency headers through TCP", async () => {
     const value = await controller();
     const app = Fastify();
     value.registerExtraRoutes(app);
 
     try {
-      const response = await app.inject({
-        method: "POST",
-        url: `/supplier-purchasable-products/${SUPPLIER_ID}?tenantSupplierId=${TENANT_SUPPLIER_ID}`,
-        headers: {
-          "idempotency-key": [
-            "purchasable-product:create",
-            "purchasable-product:duplicate",
-          ],
-        },
-        payload: input,
-      });
+      const address = await app.listen({ host: "127.0.0.1", port: 0 });
+      const response = await sendRawHttpRequest(
+        Number(new URL(address).port),
+        [
+          "Idempotency-Key: purchasable-product:create",
+          "iDeMpOtEnCy-KeY: purchasable-product:duplicate",
+        ],
+      );
 
       expect({
-        statusCode: response.statusCode,
+        statusCode: rawHttpStatus(response),
         serviceCalls: create.mock.calls.length,
       }).toEqual({ statusCode: 400, serviceCalls: 0 });
-      expect(response.json()).toMatchObject({
-        code: "VALIDATION_ERROR",
-        message: "缺少有效的 Idempotency-Key",
-      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("accepts one idempotency header containing a comma through TCP", async () => {
+    const value = await controller();
+    const app = Fastify();
+    value.registerExtraRoutes(app);
+
+    try {
+      const address = await app.listen({ host: "127.0.0.1", port: 0 });
+      const response = await sendRawHttpRequest(
+        Number(new URL(address).port),
+        ["Idempotency-Key: batch,a"],
+      );
+
+      expect({
+        statusCode: rawHttpStatus(response),
+        serviceCalls: create.mock.calls.length,
+      }).toEqual({ statusCode: 200, serviceCalls: 1 });
+      expect(create).toHaveBeenCalledWith(
+        auth,
+        TENANT_SUPPLIER_ID,
+        SUPPLIER_ID,
+        input,
+        "batch,a",
+      );
     } finally {
       await app.close();
     }
