@@ -16,7 +16,7 @@ import {
 } from "./supplier-purchase-batches";
 
 const PROJECT_ID = "10000000-0000-4000-8000-000000000001";
-const SKU_ID = "10000000-0000-4000-8000-000000000002";
+const SKU_ID = "10000000-0000-4000-8000-0000000000ab";
 const CATEGORY_ID = "10000000-0000-4000-8000-000000000003";
 const BRAND_ID = "10000000-0000-4000-8000-000000000004";
 const TENANT_SUPPLIER_ID = "10000000-0000-4000-8000-000000000005";
@@ -151,6 +151,8 @@ describe("supplier purchase batch draft schema", () => {
   });
 
   test("requires one to one hundred case-insensitively unique SKUs", () => {
+    expect(SKU_ID.toUpperCase()).not.toBe(SKU_ID);
+
     expect(SupplierPurchaseBatchDraftSchema.safeParse(draft({ items: [] }))
       .success).toBe(false);
     expect(SupplierPurchaseBatchDraftSchema.safeParse(draft({
