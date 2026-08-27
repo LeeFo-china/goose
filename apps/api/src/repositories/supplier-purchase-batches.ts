@@ -90,6 +90,11 @@ export type BatchDraftCommandInput = BatchCommandContext & {
     quantity: string;
   }>;
 };
+export type BatchReviewCommandInput = BatchCommandContext & {
+  action: "approve" | "reject";
+  remark: string | null;
+  can_override_budget: boolean;
+};
 export type { SupplierPurchaseBatchCommandResult };
 
 type QueryResult = {
@@ -344,6 +349,19 @@ export class SupplierPurchaseBatchesRepository {
       "取消供应商采购批次失败",
       "cancelled",
     );
+  }
+
+  review(input: BatchReviewCommandInput) {
+    return executeSupplierPurchaseBatchCommand({
+      client: this.client,
+      name: "review_supplier_purchase_batch",
+      params: { ...commandParams(input), p_action: input.action,
+        p_remark: input.remark,
+        p_can_override_budget: input.can_override_budget },
+      message: "审批供应商采购批次失败",
+      successStatus: input.action === "approve" ? "ordered" : "rejected",
+      allowRevisionRequired: input.action === "approve",
+    });
   }
 
   private command(

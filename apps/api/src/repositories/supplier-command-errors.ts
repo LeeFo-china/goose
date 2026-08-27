@@ -1,6 +1,7 @@
 import { Errors } from "@/errors/error-factory";
-
+import { SUPPLIER_PURCHASE_BATCH_ERRORS } from "@/repositories/supplier-purchase-batch-errors";
 const BUSINESS_ERRORS = {
+  ...SUPPLIER_PURCHASE_BATCH_ERRORS,
   SUPPLIER_NOT_FOUND: {
     statusCode: 404,
     message: "供应商不存在",

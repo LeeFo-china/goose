@@ -164,6 +164,25 @@ describe("mapSupplierCommandDatabaseError", () => {
       .toMatchObject({ code, statusCode });
   });
 
+  test.each([
+    ["SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR", 400],
+    ["SUPPLIER_PURCHASE_BATCH_NOT_FOUND", 404],
+    ["SUPPLIER_PURCHASE_BATCH_VERSION_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", 409],
+    ["SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED", 409],
+    ["SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE", 409],
+    ["SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE", 409],
+    ["SUPPLIER_PURCHASE_BATCH_SELF_REVIEW", 409],
+    ["SUPPLIER_PURCHASE_BATCH_MANAGED_REQUISITION", 409],
+    ["SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID", 409],
+    ["SUPPLIER_PURCHASE_BATCH_OWNERSHIP_IMMUTABLE", 409],
+    ["SUPPLIER_PURCHASE_BATCH_BUDGET_OVERRIDE_REQUIRED", 409],
+  ])("maps purchase batch command code %s", (code, statusCode) => {
+    expect(mapSupplierCommandDatabaseError(code))
+      .toMatchObject({ code, statusCode });
+  });
+
   test("maps every P0001 supplier command raised by the pricing migration", () => {
     const sql = readFileSync(
       new URL(

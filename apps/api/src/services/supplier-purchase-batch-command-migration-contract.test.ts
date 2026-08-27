@@ -41,6 +41,7 @@ const commands = [
   "save_supplier_purchase_batch_draft",
   "submit_supplier_purchase_batch",
   "cancel_supplier_purchase_batch",
+  "review_supplier_purchase_batch",
 ] as const;
 const commandSignatures = {
   resolve_supplier_purchase_batch_catalog:
@@ -51,6 +52,8 @@ const commandSignatures = {
     "uuid, uuid, integer, uuid, uuid, text",
   cancel_supplier_purchase_batch:
     "uuid, uuid, integer, text, uuid, uuid, text",
+  review_supplier_purchase_batch:
+    "uuid, uuid, integer, text, text, boolean, uuid, uuid, text",
 } as const;
 
 function hasExactServiceRoleAcl(
@@ -128,7 +131,7 @@ describe("supplier purchase batch command migrations", () => {
     }
   });
 
-  test("exposes four service-role-only fixed-path RPCs", () => {
+  test("exposes five service-role-only fixed-path RPCs", () => {
     for (const name of commands) {
       const fn = extractFunction(name);
       expect(fn).not.toBe("");

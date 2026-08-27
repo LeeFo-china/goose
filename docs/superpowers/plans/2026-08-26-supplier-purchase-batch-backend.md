@@ -342,6 +342,10 @@ git commit -m "feat(procurement): save and submit purchase batches"
 **Files:**
 - Modify: `supabase/migrations/20260826142000_create_supplier_purchase_batch_commands.sql`
 - Modify: `apps/api/src/services/supplier-purchase-batch-command-migration-contract.test.ts`
+- Create: `apps/api/src/services/supplier-purchase-batch-review-migration-contract.test.ts`
+- Modify: `apps/api/src/repositories/supplier-purchase-batches.ts`
+- Modify: `apps/api/src/repositories/supplier-purchase-batch-command-gateway.ts`
+- Create: `apps/api/src/repositories/supplier-purchase-batch-command-records.ts`
 - Modify: `apps/api/src/repositories/supplier-command-errors.ts`
 
 - [ ] **Step 1: Add failing approval transaction tests**
@@ -377,11 +381,13 @@ re-resolve prices, aggregate budget, check self-review, require the API-provided
 `p_can_override_budget` flag only after the service verified
 `finance.budget.manage`, then create and submit orders in supplier UUID order.
 
-Add a service-role-only private helper named
+Add an owner-private helper named
 `convert_supplier_purchase_requisition_for_batch`. It accepts the locked batch,
 child requisition, preallocated order ID, and actor context; copies the child
-requisition's frozen item facts into a draft purchase order; marks the child
-`converted`; and returns the order version. The public legacy
+requisition's frozen item facts into a draft purchase order and returns the
+order version. Only after `submit_supplier_purchase_order` returns a strict
+submitted identity does the review command mark the child `converted` and
+convert its commitment. The public legacy
 `convert_supplier_purchase_requisition` remains guarded against batch-owned
 children. `review_supplier_purchase_batch` calls the private helper and then
 `submit_supplier_purchase_order` for every supplier inside the same transaction.

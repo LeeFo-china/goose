@@ -2,6 +2,10 @@ import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
   SupplierPurchaseBatchCommandEnvelopeSchema,
+  type SupplierPurchaseBatchBlocker,
+  type SupplierPurchaseBatchOrderSummary,
+} from "@/repositories/supplier-purchase-batch-command-records";
+import {
   type SupplierPurchaseBatch,
   type SupplierPurchaseBatchSplitPreview,
 } from "@/repositories/supplier-purchase-batch-records";
@@ -23,12 +27,20 @@ export type SupplierPurchaseBatchCommandResult =
   | (BaseResult & { status: "saved";
     split_preview: SupplierPurchaseBatchSplitPreview[] })
   | (BaseResult & { status: "submitted"; requisition_ids: string[] })
-  | (BaseResult & { status: "cancelled" });
+  | (BaseResult & { status: "rejected" })
+  | (BaseResult & { status: "cancelled" })
+  | (BaseResult & { status: "ordered"; requisition_ids: string[];
+    orders: SupplierPurchaseBatchOrderSummary[] })
+  | (BaseResult & { status: "revision_required"; error_code: string;
+    details: SupplierPurchaseBatchBlocker[] });
 
 const STATUS_BY_RESULT = {
   saved: "draft",
   submitted: "pending_approval",
+  rejected: "rejected",
   cancelled: "cancelled",
+  ordered: "ordered",
+  revision_required: "draft",
 } as const;
 
 const ERROR_STATUS = {
@@ -47,12 +59,23 @@ export async function executeSupplierPurchaseBatchCommand(input: {
   params: Record<string, unknown>;
   message: string;
   successStatus: SupplierPurchaseBatchCommandResult["status"];
+  allowRevisionRequired?: boolean;
 }): Promise<SupplierPurchaseBatchCommandResult> {
   const { data, error } = await input.client.rpc(input.name, input.params);
   if (error) throwSupplierCommandDatabaseError(error, input.message);
   const parsed = SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(data);
   if (!parsed.success) throw Errors.dbError(input.message, parsed.error.issues);
   const envelope = parsed.data;
+  if (envelope.status === "revision_required" &&
+    input.allowRevisionRequired) {
+    assertBatchIdentity(envelope, input.params, input.message);
+    if (!envelope.details || !envelope.error_code) {
+      throw Errors.dbError(input.message, envelope);
+    }
+    return { status: "revision_required", idempotent: envelope.idempotent,
+      batch: envelope.batch!, version: envelope.version!,
+      error_code: envelope.error_code, details: envelope.details };
+  }
   if (envelope.status !== input.successStatus) {
     const statusCode = ERROR_STATUS[
       envelope.status as keyof typeof ERROR_STATUS
@@ -67,24 +90,17 @@ export async function executeSupplierPurchaseBatchCommand(input: {
       envelope.details,
     );
   }
-  const batchId = input.params.p_batch_id;
-  const tenantId = input.params.p_tenant_id;
-  if (!envelope.batch || envelope.version === undefined ||
-    envelope.batch.id !== batchId || envelope.batch.tenant_id !== tenantId ||
-    envelope.batch.version !== envelope.version ||
-    envelope.batch.status !== STATUS_BY_RESULT[input.successStatus]) {
-    throw Errors.dbError(input.message, envelope);
-  }
-  if (input.successStatus === "submitted") {
+  assertBatchIdentity(envelope, input.params, input.message);
+  if (input.successStatus === "submitted" || input.successStatus === "ordered") {
     if (!envelope.requisition_ids?.length ||
-      envelope.requisition_ids.length !== envelope.batch.supplier_count) {
+      envelope.requisition_ids.length !== envelope.batch!.supplier_count) {
       throw Errors.dbError(input.message, envelope);
     }
   } else if (envelope.requisition_ids !== undefined) {
     throw Errors.dbError(input.message, envelope);
   }
   const base = { idempotent: envelope.idempotent, batch: envelope.batch,
-    version: envelope.version };
+    version: envelope.version } as BaseResult;
   if (envelope.status === "saved") {
     if (!envelope.split_preview) throw Errors.dbError(input.message, envelope);
     return { ...base, status: "saved", split_preview: envelope.split_preview };
@@ -96,5 +112,29 @@ export async function executeSupplierPurchaseBatchCommand(input: {
     return { ...base, status: "submitted",
       requisition_ids: envelope.requisition_ids };
   }
+  if (envelope.status === "ordered") {
+    if (!envelope.requisition_ids || !envelope.orders) {
+      throw Errors.dbError(input.message, envelope);
+    }
+    return { ...base, status: "ordered",
+      requisition_ids: envelope.requisition_ids, orders: envelope.orders };
+  }
+  if (envelope.status === "rejected") return { ...base, status: "rejected" };
   return { ...base, status: "cancelled" };
+}
+
+function assertBatchIdentity(
+  envelope: ReturnType<typeof SupplierPurchaseBatchCommandEnvelopeSchema.parse>,
+  params: Record<string, unknown>,
+  message: string,
+) {
+  const expectedStatus = STATUS_BY_RESULT[envelope.status as
+    keyof typeof STATUS_BY_RESULT];
+  if (!expectedStatus || !envelope.batch || envelope.version === undefined ||
+    envelope.batch.id !== params.p_batch_id ||
+    envelope.batch.tenant_id !== params.p_tenant_id ||
+    envelope.batch.version !== envelope.version ||
+    envelope.batch.status !== expectedStatus) {
+    throw Errors.dbError(message, envelope);
+  }
 }

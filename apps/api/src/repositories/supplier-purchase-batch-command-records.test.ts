@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   SupplierPurchaseBatchCommandEnvelopeSchema,
+} from "./supplier-purchase-batch-command-records";
+import {
   SupplierPurchaseBatchRecordSchema,
 } from "./supplier-purchase-batch-records";
 
@@ -15,6 +17,7 @@ const RELATIONSHIP_ID_2 = "b0000000-0000-4000-8000-000000000006";
 const SUPPLIER_ID_2 = "b0000000-0000-4000-8000-000000000007";
 const SKU_ID = "a0000000-0000-4000-8000-000000000008";
 const REQUISITION_ID = "a0000000-0000-4000-8000-000000000009";
+const ORDER_ID = "a0000000-0000-4000-8000-00000000000a";
 const AT = "2026-08-27T08:00:00.000Z";
 
 const batch = {
@@ -130,7 +133,7 @@ describe("supplier purchase batch command records", () => {
     expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
       status: "price_changed", idempotent: false,
       error_code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", version: 1,
-      details: [{ supplier_sku_id: SKU_ID, product_name: "商品",
+      details: [{ kind: "price", supplier_sku_id: SKU_ID, product_name: "商品",
         sku_name: "规格", frozen_unit_price: "100.00",
         current_unit_price: null, frozen_price_version: 1,
         current_price_version: null }],
@@ -156,5 +159,82 @@ describe("supplier purchase batch command records", () => {
         ...batch, budget_snapshot,
       }).success).toBe(false);
     }
+  });
+
+  test("binds ordered results to stable submitted order summaries", () => {
+    const ordered = { ...batch, status: "ordered", version: 3,
+      submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+      reviewed_by_employee_id: EMPLOYEE_ID, reviewed_at: AT };
+    const order = { id: ORDER_ID, order_no: "PO-20260827-00000001",
+      tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
+      supplier_name: "测试供应商", status: "submitted" };
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "ordered", idempotent: false, batch: ordered, version: 3,
+      requisition_ids: [REQUISITION_ID], orders: [order],
+    }).success).toBe(true);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "ordered", idempotent: false, batch: ordered, version: 3,
+      requisition_ids: [REQUISITION_ID], orders: [order, order],
+    }).success).toBe(false);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "ordered", idempotent: false, batch: ordered, version: 3,
+      requisition_ids: [REQUISITION_ID], orders: [{ ...order,
+        status: "draft" }],
+    }).success).toBe(false);
+  });
+
+  test("accepts rejected and persisted revision-required outcomes", () => {
+    const rejected = { ...batch, status: "rejected", version: 3,
+      submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+      reviewed_by_employee_id: EMPLOYEE_ID, reviewed_at: AT,
+      review_remark: "价格需要重新协商" };
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "rejected", idempotent: false, batch: rejected, version: 3,
+    }).success).toBe(true);
+
+    const revised = { ...batch, status: "draft", version: 3 };
+    const details = [{ kind: "price", supplier_sku_id: SKU_ID,
+      product_name: "商品", sku_name: "规格", frozen_unit_price: "100.00",
+      current_unit_price: "101.00", frozen_price_version: 1,
+      current_price_version: 2 }];
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "revision_required", idempotent: false, batch: revised,
+      version: 3, error_code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+      details,
+    }).success).toBe(true);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      status: "revision_required", idempotent: false, batch: revised,
+      version: 3, error_code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
+      details: [{ ...details[0], current_unit_price: 101 }],
+    }).success).toBe(false);
+  });
+
+  test("uses strict discriminated revision blockers", () => {
+    const revised = { ...batch, status: "draft", version: 3 };
+    const envelope = (details: unknown) => ({
+      status: "revision_required", idempotent: false, batch: revised,
+      version: 3, error_code: "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED",
+      details,
+    });
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(envelope([
+      { kind: "budget", cost_category_id: CATEGORY_ID,
+        submitted_requested_amount: "113.00",
+        current_requested_amount: "113.00",
+        submitted_available_amount: "500.00",
+        current_available_amount: "490.00" },
+      { kind: "supplier", tenant_supplier_id: RELATIONSHIP_ID,
+        supplier_id: SUPPLIER_ID, reason: "inactive" },
+      { kind: "item", supplier_sku_id: SKU_ID,
+        reason: "child_snapshot_mismatch" },
+    ])).success).toBe(true);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(envelope([
+      { kind: "budget", cost_category_id: CATEGORY_ID,
+        submitted_requested_amount: 113, current_requested_amount: "113.00",
+        submitted_available_amount: "500.00",
+        current_available_amount: "490.00" },
+    ])).success).toBe(false);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(envelope([
+      { kind: "unknown", reason: "not allowed" },
+    ])).success).toBe(false);
   });
 });

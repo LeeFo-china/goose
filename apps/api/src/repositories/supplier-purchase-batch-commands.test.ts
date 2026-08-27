@@ -14,6 +14,7 @@ const CATEGORY_ID = "a0000000-0000-4000-8000-000000000007";
 const REQUISITION_ID = "a0000000-0000-4000-8000-000000000008";
 const RELATIONSHIP_ID = "a0000000-0000-4000-8000-000000000009";
 const SUPPLIER_ID = "a0000000-0000-4000-8000-000000000010";
+const ORDER_ID = "a0000000-0000-4000-8000-000000000011";
 const AT = "2026-08-27T08:00:00.000Z";
 
 type RpcCall = { name: string; params: Record<string, unknown> };
@@ -183,7 +184,8 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
   });
 
   test("keeps replayed price changes as business errors with strict details", async () => {
-    const details = [{ supplier_sku_id: SKU_ID, product_name: "测试商品",
+    const details = [{ kind: "price", supplier_sku_id: SKU_ID,
+      product_name: "测试商品",
       sku_name: "测试规格", frozen_unit_price: "100.00",
       current_unit_price: "101.00", frozen_price_version: 1,
       current_price_version: 2 }];
@@ -195,6 +197,74 @@ describe("SupplierPurchaseBatchesRepository commands", () => {
     await expect(repository.submit(context)).rejects.toMatchObject({
       statusCode: 409, code: "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
       details,
+    });
+  });
+
+  test("reviews with the exact nine-parameter RPC and returns ordered facts", async () => {
+    const orderedBatch = { ...batch, status: "ordered", version: 2,
+      submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+      reviewed_by_employee_id: EMPLOYEE_ID, reviewed_at: AT } as const;
+    const orders = [{ id: ORDER_ID, order_no: "PO-20260827-00000001",
+      tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
+      supplier_name: "测试供应商", status: "submitted" as const }];
+    const { repository, calls } = await repositoryFor([{ data: {
+      status: "ordered", idempotent: false, batch: orderedBatch, version: 2,
+      requisition_ids: [REQUISITION_ID], orders,
+    }, error: null }]);
+    expect(await repository.review({ ...context, action: "approve",
+      remark: null, can_override_budget: false })).toEqual({
+      status: "ordered", idempotent: false, batch: orderedBatch, version: 2,
+      requisition_ids: [REQUISITION_ID], orders,
+    });
+    expect(calls).toEqual([{ name: "review_supplier_purchase_batch", params: {
+      p_batch_id: BATCH_ID, p_tenant_id: TENANT_ID, p_expected_version: 1,
+      p_action: "approve", p_remark: null, p_can_override_budget: false,
+      p_actor_user_id: USER_ID, p_actor_employee_id: EMPLOYEE_ID,
+      p_idempotency_key: "stable-key-1",
+    } }]);
+  });
+
+  test("returns rejected and revision-required review outcomes", async () => {
+    const rejectedBatch = { ...batch, status: "rejected", version: 2,
+      submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+      reviewed_by_employee_id: EMPLOYEE_ID, reviewed_at: AT,
+      review_remark: "价格需要重新协商" } as const;
+    const revisedBatch = { ...batch, version: 2 };
+    const details = [{ kind: "item" as const, supplier_sku_id: SKU_ID,
+      reason: "child_snapshot_mismatch" }];
+    const { repository } = await repositoryFor([
+      { data: { status: "rejected", idempotent: false,
+        batch: rejectedBatch, version: 2 }, error: null },
+      { data: { status: "revision_required", idempotent: true,
+        batch: revisedBatch, version: 2,
+        error_code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE", details },
+        error: null },
+    ]);
+    expect(await repository.review({ ...context, action: "reject",
+      remark: "价格需要重新协商", can_override_budget: false }))
+      .toMatchObject({ status: "rejected", version: 2 });
+    expect(await repository.review({ ...context, action: "approve",
+      remark: null, can_override_budget: false })).toEqual({
+      status: "revision_required", idempotent: true, batch: revisedBatch,
+      version: 2,
+      error_code: "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE", details,
+    });
+  });
+
+  test("rejects malformed ordered review identity", async () => {
+    const orderedBatch = { ...batch, status: "ordered", version: 2,
+      submitted_by_employee_id: EMPLOYEE_ID, submitted_at: AT,
+      reviewed_by_employee_id: EMPLOYEE_ID, reviewed_at: AT };
+    const { repository } = await repositoryFor([{ data: {
+      status: "ordered", idempotent: false, batch: orderedBatch, version: 2,
+      requisition_ids: [REQUISITION_ID], orders: [{ id: ORDER_ID,
+        order_no: "PO-20260827-00000001",
+        tenant_supplier_id: RELATIONSHIP_ID, supplier_id: SUPPLIER_ID,
+        supplier_name: "测试供应商", status: "draft" }],
+    }, error: null }]);
+    await expect(repository.review({ ...context, action: "approve",
+      remark: null, can_override_budget: false })).rejects.toMatchObject({
+      statusCode: 500, code: "DB_ERROR",
     });
   });
 });
