@@ -132,6 +132,7 @@ describe("supplier purchase batch command migrations", () => {
   });
 
   test("exposes five service-role-only fixed-path RPCs", () => {
+    expect(commandSql).toMatch(/Rollback: revoke the five RPCs/);
     for (const name of commands) {
       const fn = extractFunction(name);
       expect(fn).not.toBe("");

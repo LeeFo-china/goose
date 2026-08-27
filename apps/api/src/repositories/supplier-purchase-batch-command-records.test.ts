@@ -228,6 +228,18 @@ describe("supplier purchase batch command records", () => {
         reason: "child_snapshot_mismatch" },
     ])).success).toBe(true);
     expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(envelope([
+      { kind: "supplier", tenant_supplier_id: RELATIONSHIP_ID,
+        supplier_id: SUPPLIER_ID, reason: "inactive" },
+      { kind: "budget", cost_category_id: CATEGORY_ID,
+        submitted_requested_amount: "113.00",
+        current_requested_amount: "113.00",
+        submitted_available_amount: "500.00",
+        current_available_amount: "490.00" },
+    ])).success).toBe(false);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse({
+      ...envelope([]), details: [],
+    }).success).toBe(false);
+    expect(SupplierPurchaseBatchCommandEnvelopeSchema.safeParse(envelope([
       { kind: "budget", cost_category_id: CATEGORY_ID,
         submitted_requested_amount: 113, current_requested_amount: "113.00",
         submitted_available_amount: "500.00",

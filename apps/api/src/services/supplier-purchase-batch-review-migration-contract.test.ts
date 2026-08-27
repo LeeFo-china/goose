@@ -65,6 +65,14 @@ describe("supplier purchase batch atomic review migration", () => {
       /catalog_categories[\s\S]*?catalog_brands[\s\S]*?ownership_scope/,
     );
     expect(submit).toMatch(
+      /v_checked_at timestamptz := statement_timestamp\(\)/,
+    );
+    for (const amount of ["subtotal_amount", "tax_amount", "total_amount"]) {
+      expect(submit).not.toMatch(new RegExp(
+        `END::numeric\\(18,2\\) AS ${amount}`,
+      ));
+    }
+    expect(submit).toMatch(
       /FOR SHARE OF price_item, price_list, sku, product[\s\S]*purchase_unit[\s\S]*base_unit/,
     );
     for (const fact of [
@@ -106,6 +114,12 @@ describe("supplier purchase batch atomic review migration", () => {
     expect(helper).toMatch(
       /INSERT INTO public\.supplier_purchase_order_items[\s\S]*cost_category_id/,
     );
+    expectOrdered(helper, [
+      /INSERT INTO public\.supplier_purchase_order_items/,
+      /GET DIAGNOSTICS v_inserted_item_count = ROW_COUNT/,
+      /v_inserted_item_count <> v_item_count/,
+      /SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE/,
+    ]);
     expect(helper).not.toMatch(
       /convert_supplier_purchase_requisition_(?:unmanaged|commercial)|create_supplier_purchase_order_from_requisition/,
     );
@@ -118,6 +132,9 @@ describe("supplier purchase batch atomic review migration", () => {
       /p_batch_id uuid,[\s\S]*p_tenant_id uuid,[\s\S]*p_expected_version integer,[\s\S]*p_action text,[\s\S]*p_remark text,[\s\S]*p_can_override_budget boolean,[\s\S]*p_actor_user_id uuid,[\s\S]*p_actor_employee_id uuid,[\s\S]*p_idempotency_key text/,
     );
     expect(review).toMatch(/p_can_override_budget IS NULL/);
+    expect(review).toMatch(
+      /v_reviewed_at timestamptz := statement_timestamp\(\)/,
+    );
     expect(review).toMatch(/p_action NOT IN \('approve', 'reject'\)/);
     expect(review).toMatch(
       /p_action = 'reject'[\s\S]*btrim\(p_remark\)[\s\S]*char_length\(btrim\(p_remark\)\) > 500/,
@@ -138,14 +155,35 @@ describe("supplier purchase batch atomic review migration", () => {
     ]) expect(review).toContain(code);
   });
 
-  test("rejects every locked current child and releases reservations", () => {
+  test("uses one canonical lock order before either review mutation", () => {
     const review = extractFunction("review_supplier_purchase_batch");
     expectOrdered(review, [
+      /FROM public\.supplier_purchase_batches[\s\S]*?FOR UPDATE/,
+      /FROM public\.tenant_suppliers[\s\S]*?FOR UPDATE/,
+      /supplier-price-publish:/,
+      /current_prices AS MATERIALIZED/,
+      /lock_project_cost_budget_scope/,
+      /FROM public\.finance_cost_categories[\s\S]*?FOR UPDATE/,
+      /FROM public\.project_cost_budgets[\s\S]*?FOR UPDATE/,
+      /FROM public\.project_cost_commitments[\s\S]*?FOR UPDATE/,
+      /FROM public\.supplier_purchase_requisitions[\s\S]*?FOR UPDATE/,
+      /FROM public\.supplier_purchase_orders[\s\S]*?FOR UPDATE/,
       /IF p_action = 'reject'/,
-      /FROM public\.supplier_purchase_requisitions[\s\S]*?split_generation = v_batch\.split_generation[\s\S]*?ORDER BY requisition\.tenant_supplier_id, requisition\.id[\s\S]*?FOR UPDATE/,
-      /FROM public\.project_cost_commitments[\s\S]*?ORDER BY commitment\.cost_category_id, commitment\.id[\s\S]*?FOR UPDATE/,
-      /commitment\.status IN \('converted', 'consumed'\)/,
-      /FROM public\.supplier_purchase_orders[\s\S]*?purchase_batch_id = p_batch_id/,
+    ]);
+  });
+
+  test("rejects unless current commitments exactly match frozen budget facts", () => {
+    const review = extractFunction("review_supplier_purchase_batch");
+    expect(review).toMatch(
+      /FROM public\.project_cost_commitments AS commitment[\s\S]*?commitment\.project_id = v_batch\.project_id[\s\S]*?OR commitment\.source_id IN \([\s\S]*?purchase_batch_id = p_batch_id[\s\S]*?split_generation = v_batch\.split_generation[\s\S]*?FOR UPDATE/,
+    );
+    expectOrdered(review, [
+      /expected_commitments AS MATERIALIZED/,
+      /commitment\.recognized_amount = 0/,
+      /actual_commitment_count/,
+      /IF p_action = 'reject'/,
+      /IF NOT COALESCE\(v_commitments_match, false\) THEN/,
+      /SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT/,
       /UPDATE public\.project_cost_commitments[\s\S]*?status = 'released'/,
       /UPDATE public\.supplier_purchase_requisitions[\s\S]*?status = 'rejected'/,
       /UPDATE public\.supplier_purchase_batches[\s\S]*?status = 'rejected'/,
@@ -154,6 +192,12 @@ describe("supplier purchase batch atomic review migration", () => {
     expect(review).toMatch(
       /split_generation = v_batch\.split_generation[\s\S]*status = 'pending_approval'/,
     );
+    for (const fact of [
+      "tenant_id", "project_id", "cost_category_id", "source_type",
+      "source_id", "status", "amount", "budget_amount_snapshot",
+      "expense_amount_snapshot", "other_commitment_amount_snapshot",
+      "available_amount_snapshot",
+    ]) expect(review, `missing commitment fact ${fact}`).toContain(fact);
   });
 
   test("validates every approval fact before the first order write", () => {
@@ -201,6 +245,9 @@ describe("supplier purchase batch atomic review migration", () => {
     expect(revision).not.toMatch(/RAISE EXCEPTION/);
     expect(review.slice(0, review.indexOf("IF v_requires_revision THEN")))
       .not.toMatch(/INSERT INTO public\.supplier_purchase_orders/);
+    expect(review).toMatch(
+      /v_blockers := v_supplier_blockers \|\| v_price_blockers \|\|[\s\S]*?v_item_blockers \|\| v_budget_blockers/,
+    );
   });
 
   test("submits all drafts before converting children and ordering batch", () => {

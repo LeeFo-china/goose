@@ -178,6 +178,9 @@ describe("mapSupplierCommandDatabaseError", () => {
     ["SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID", 409],
     ["SUPPLIER_PURCHASE_BATCH_OWNERSHIP_IMMUTABLE", 409],
     ["SUPPLIER_PURCHASE_BATCH_BUDGET_OVERRIDE_REQUIRED", 409],
+    ["SUPPLIER_PURCHASE_BATCH_ID_CONFLICT", 409],
+    ["SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU", 400],
+    ["SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED", 400],
   ])("maps purchase batch command code %s", (code, statusCode) => {
     expect(mapSupplierCommandDatabaseError(code))
       .toMatchObject({ code, statusCode });

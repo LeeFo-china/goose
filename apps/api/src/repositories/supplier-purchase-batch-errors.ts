@@ -2,6 +2,15 @@ export const SUPPLIER_PURCHASE_BATCH_ERRORS = {
   SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR: {
     statusCode: 400, message: "采购批次参数校验失败",
   },
+  SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU: {
+    statusCode: 400, message: "同一 SKU 不能重复加入采购批次",
+  },
+  SUPPLIER_PURCHASE_BATCH_LIMIT_EXCEEDED: {
+    statusCode: 400, message: "采购批次商品数量超过上限",
+  },
+  SUPPLIER_PURCHASE_BATCH_ID_CONFLICT: {
+    statusCode: 409, message: "采购批次编号已存在",
+  },
   SUPPLIER_PURCHASE_BATCH_NOT_FOUND: {
     statusCode: 404, message: "供应商采购批次不存在",
   },

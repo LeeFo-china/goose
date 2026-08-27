@@ -92,12 +92,18 @@ const ERROR_CODES_BY_STATUS: Record<string, ReadonlySet<string>> = {
   ]),
   project_invalid: new Set(["SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID"]),
 };
-const REVISION_CODES = new Set([
+export const SupplierPurchaseBatchRevisionErrorCodeSchema = z.enum([
   "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED",
   "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED",
   "SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE",
   "SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE",
 ]);
+const REVISION_KIND_BY_CODE = {
+  SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE: "supplier",
+  SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED: "price",
+  SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE: "item",
+  SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED: "budget",
+} as const;
 const VERSION_ZERO_ERROR_CODES = new Set([
   "SUPPLIER_PURCHASE_BATCH_VALIDATION_ERROR",
   "SUPPLIER_PURCHASE_BATCH_DUPLICATE_SKU",
@@ -120,7 +126,7 @@ export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
   split_preview: z.array(SupplierPurchaseBatchSplitPreviewSchema)
     .min(1).max(20).optional(),
   details: z.array(SupplierPurchaseBatchBlockerSchema)
-    .min(1).max(100).optional(),
+    .min(1).max(440).optional(),
   version: z.number().int().nonnegative().optional(),
   error_code: z.string().optional(),
   reason: z.string().trim().min(1).max(500).optional(),
@@ -153,9 +159,13 @@ function validateEnvelope(
   if (success && (envelope.error_code || envelope.reason || envelope.details)) {
     issue(context, "无效的批次命令成功响应");
   }
-  if (revision && (!envelope.error_code || !envelope.details ||
-    !REVISION_CODES.has(envelope.error_code) || envelope.batch?.status !== "draft")) {
-    issue(context, "无效的批次修订响应");
+  if (revision) {
+    const code = SupplierPurchaseBatchRevisionErrorCodeSchema
+      .safeParse(envelope.error_code);
+    if (!code.success || !envelope.details || envelope.batch?.status !== "draft" ||
+      envelope.details[0]?.kind !== REVISION_KIND_BY_CODE[code.data]) {
+      issue(context, "无效的批次修订响应");
+    }
   }
   if (!success && !revision && (!envelope.error_code ||
     envelope.version === undefined || envelope.batch || envelope.requisition_ids ||
@@ -257,3 +267,5 @@ export type SupplierPurchaseBatchBlocker =
   z.infer<typeof SupplierPurchaseBatchBlockerSchema>;
 export type SupplierPurchaseBatchOrderSummary =
   z.infer<typeof SupplierPurchaseBatchOrderSummarySchema>;
+export type SupplierPurchaseBatchRevisionErrorCode =
+  z.infer<typeof SupplierPurchaseBatchRevisionErrorCodeSchema>;

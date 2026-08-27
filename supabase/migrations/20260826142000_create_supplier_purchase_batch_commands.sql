@@ -1,4 +1,4 @@
--- Rollback: revoke the four RPCs before hiding API/UI entry points. Preserve
+-- Rollback: revoke the five RPCs before hiding API/UI entry points. Preserve
 -- batch, item, child requisition, commitment, and command-event audit facts.
 -- The preceding concurrent-index preflight is deliberately non-transactional;
 -- this command migration is transactional and may be retried as a unit.
@@ -1623,11 +1623,11 @@ DECLARE
   v_before jsonb;
   v_request jsonb;
   v_eligibility record;
-  v_checked_at timestamptz := clock_timestamp();
+  v_checked_at timestamptz := statement_timestamp();
   v_item_count integer;
-  v_item_subtotal numeric(18,2);
-  v_item_tax numeric(18,2);
-  v_item_total numeric(18,2);
+  v_item_subtotal numeric;
+  v_item_tax numeric;
+  v_item_total numeric;
   v_price_mismatch_count integer;
 BEGIN
   IF p_order_id IS NULL OR p_tenant_id IS NULL
@@ -1742,9 +1742,9 @@ BEGIN
   END IF;
 
   SELECT count(*)::integer,
-    COALESCE(sum(item.subtotal_amount), 0)::numeric(18,2),
-    COALESCE(sum(item.tax_amount), 0)::numeric(18,2),
-    COALESCE(sum(item.total_amount), 0)::numeric(18,2)
+    COALESCE(sum(item.subtotal_amount), 0),
+    COALESCE(sum(item.tax_amount), 0),
+    COALESCE(sum(item.total_amount), 0)
   INTO v_item_count, v_item_subtotal, v_item_tax, v_item_total
   FROM public.supplier_purchase_order_items AS item
   WHERE item.supplier_purchase_order_id = p_order_id
@@ -1780,20 +1780,20 @@ BEGIN
         round(round(order_item.quantity * price_item.unit_price, 2) /
           (1 + price_item.tax_rate), 2)
       ELSE round(order_item.quantity * price_item.unit_price, 2)
-      END::numeric(18,2) AS subtotal_amount,
+      END AS subtotal_amount,
       CASE WHEN price_item.tax_inclusive THEN
         round(order_item.quantity * price_item.unit_price, 2) -
           round(round(order_item.quantity * price_item.unit_price, 2) /
             (1 + price_item.tax_rate), 2)
       ELSE round(round(order_item.quantity * price_item.unit_price, 2) *
         price_item.tax_rate, 2)
-      END::numeric(18,2) AS tax_amount,
+      END AS tax_amount,
       CASE WHEN price_item.tax_inclusive THEN
         round(order_item.quantity * price_item.unit_price, 2)
       ELSE round(order_item.quantity * price_item.unit_price, 2) +
         round(round(order_item.quantity * price_item.unit_price, 2) *
           price_item.tax_rate, 2)
-      END::numeric(18,2) AS total_amount
+      END AS total_amount
     FROM public.supplier_purchase_order_items AS order_item
     JOIN public.supplier_price_list_items AS price_item
       ON price_item.tenant_id = p_tenant_id
@@ -1953,6 +1953,7 @@ DECLARE
   v_requisition public.supplier_purchase_requisitions%ROWTYPE;
   v_order public.supplier_purchase_orders%ROWTYPE;
   v_item_count integer;
+  v_inserted_item_count integer;
 BEGIN
   IF p_batch_id IS NULL OR p_tenant_id IS NULL
     OR p_split_generation IS NULL OR p_split_generation <= 0
@@ -2044,7 +2045,8 @@ BEGIN
   WHERE item.purchase_requisition_id = p_requisition_id
     AND item.tenant_id = p_tenant_id
   ORDER BY item.line_no, item.id;
-  IF NOT FOUND THEN
+  GET DIAGNOSTICS v_inserted_item_count = ROW_COUNT;
+  IF v_inserted_item_count <> v_item_count THEN
     RAISE EXCEPTION USING ERRCODE = 'P0001',
       MESSAGE = 'SUPPLIER_PURCHASE_BATCH_ITEM_UNAVAILABLE';
   END IF;
@@ -2082,7 +2084,7 @@ DECLARE
   v_request jsonb;
   v_fingerprint text;
   v_result jsonb;
-  v_reviewed_at timestamptz := clock_timestamp();
+  v_reviewed_at timestamptz := statement_timestamp();
   v_supplier_id uuid;
   v_relationship_count integer;
   v_current_price_count integer;
@@ -2092,6 +2094,9 @@ DECLARE
   v_child_headers_match boolean;
   v_child_items_match boolean;
   v_commitments_match boolean;
+  v_expected_commitment_count integer;
+  v_actual_commitment_count integer;
+  v_existing_order_count integer;
   v_category_count integer;
   v_active_category_count integer;
   v_budget_status text;
@@ -2222,92 +2227,6 @@ BEGIN
       jsonb_build_object('status', 'project_invalid',
         'error_code', 'SUPPLIER_PURCHASE_BATCH_PROJECT_INVALID',
         'version', v_batch.version), v_batch.version
-    );
-  END IF;
-
-  IF p_action = 'reject' THEN
-    PERFORM requisition.id
-    FROM public.supplier_purchase_requisitions AS requisition
-    WHERE requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation
-    ORDER BY requisition.tenant_supplier_id, requisition.id
-    FOR UPDATE;
-    SELECT count(*)::integer,
-      count(*) FILTER (WHERE requisition.status <> 'pending_approval'
-        OR requisition.purchase_order_id IS NOT NULL)::integer
-    INTO v_child_count, v_invalid_child_count
-    FROM public.supplier_purchase_requisitions AS requisition
-    WHERE requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation;
-    PERFORM commitment.id
-    FROM public.project_cost_commitments AS commitment
-    JOIN public.supplier_purchase_requisitions AS requisition
-      ON requisition.id = commitment.source_id
-      AND requisition.tenant_id = commitment.tenant_id
-    WHERE requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation
-    ORDER BY commitment.cost_category_id, commitment.id
-    FOR UPDATE OF commitment;
-    IF v_child_count <> v_batch.supplier_count OR v_invalid_child_count > 0
-      OR EXISTS (
-        SELECT 1 FROM public.project_cost_commitments AS commitment
-        JOIN public.supplier_purchase_requisitions AS requisition
-          ON requisition.id = commitment.source_id
-          AND requisition.tenant_id = commitment.tenant_id
-        WHERE requisition.tenant_id = p_tenant_id
-          AND requisition.purchase_batch_id = p_batch_id
-          AND requisition.split_generation = v_batch.split_generation
-          AND commitment.status IN ('converted', 'consumed')
-      ) OR EXISTS (
-        SELECT 1 FROM public.supplier_purchase_orders AS purchase_order
-        WHERE purchase_order.tenant_id = p_tenant_id
-          AND purchase_order.purchase_batch_id = p_batch_id
-      )
-    THEN
-      RETURN public.record_supplier_purchase_batch_command_result(
-        p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
-        v_request, p_actor_user_id, p_actor_employee_id,
-        jsonb_build_object('status', 'state_conflict',
-          'error_code', 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT',
-          'version', v_batch.version), v_batch.version
-      );
-    END IF;
-    UPDATE public.project_cost_commitments AS commitment
-    SET status = 'released', released_by_employee_id = p_actor_employee_id,
-      released_at = v_reviewed_at, release_reason = 'batch rejected',
-      updated_at = v_reviewed_at
-    FROM public.supplier_purchase_requisitions AS requisition
-    WHERE requisition.id = commitment.source_id
-      AND requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation
-      AND commitment.status = 'reserved';
-    UPDATE public.supplier_purchase_requisitions AS requisition
-    SET status = 'rejected', reviewed_by_employee_id = p_actor_employee_id,
-      reviewed_at = v_reviewed_at, review_remark = btrim(p_remark),
-      updated_by_employee_id = p_actor_employee_id,
-      updated_at = v_reviewed_at, version = requisition.version + 1
-    WHERE requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation
-      AND requisition.status = 'pending_approval';
-    UPDATE public.supplier_purchase_batches AS batch
-    SET status = 'rejected', reviewed_by_employee_id = p_actor_employee_id,
-      reviewed_at = v_reviewed_at, review_remark = btrim(p_remark),
-      updated_by_employee_id = p_actor_employee_id,
-      updated_at = v_reviewed_at, version = batch.version + 1
-    WHERE batch.id = p_batch_id AND batch.tenant_id = p_tenant_id
-    RETURNING * INTO v_batch;
-    v_result := jsonb_build_object('status', 'rejected',
-      'batch', public.supplier_purchase_batch_to_jsonb(v_batch),
-      'version', v_batch.version);
-    RETURN public.record_supplier_purchase_batch_command_result(
-      p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
-      v_request, p_actor_user_id, p_actor_employee_id,
-      v_result, v_batch.version
     );
   END IF;
 
@@ -2547,6 +2466,63 @@ BEGIN
     OR v_current_price_count <> v_batch.item_count OR v_changed_count > 0
   THEN v_requires_revision := true; END IF;
 
+  PERFORM public.lock_project_cost_budget_scope(p_tenant_id, v_batch.project_id);
+  PERFORM finance_category.id
+  FROM public.finance_cost_categories AS finance_category
+  WHERE finance_category.tenant_id = p_tenant_id
+    AND finance_category.status = 'active'
+    AND finance_category.id IN (
+      SELECT item.cost_category_id
+      FROM public.supplier_purchase_batch_items AS item
+      WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id
+    )
+  ORDER BY finance_category.id FOR UPDATE;
+  SELECT count(DISTINCT item.cost_category_id)::integer,
+    count(DISTINCT finance_category.id)::integer
+  INTO v_category_count, v_active_category_count
+  FROM public.supplier_purchase_batch_items AS item
+  LEFT JOIN public.finance_cost_categories AS finance_category
+    ON finance_category.id = item.cost_category_id
+    AND finance_category.tenant_id = item.tenant_id
+    AND finance_category.status = 'active'
+  WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;
+  IF v_active_category_count <> v_category_count THEN
+    v_requires_revision := true;
+    SELECT v_item_blockers || COALESCE(jsonb_agg(jsonb_build_object(
+      'kind', 'item', 'supplier_sku_id', item.supplier_sku_id,
+      'reason', 'COST_CATEGORY_CHANGED'
+    ) ORDER BY item.line_no) FILTER (WHERE finance_category.id IS NULL),
+      '[]'::jsonb)
+    INTO v_item_blockers
+    FROM public.supplier_purchase_batch_items AS item
+    LEFT JOIN public.finance_cost_categories AS finance_category
+      ON finance_category.id = item.cost_category_id
+      AND finance_category.tenant_id = item.tenant_id
+      AND finance_category.status = 'active'
+    WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;
+  END IF;
+  PERFORM budget.id FROM public.project_cost_budgets AS budget
+  WHERE budget.tenant_id = p_tenant_id AND budget.project_id = v_batch.project_id
+    AND budget.status = 'active' AND budget.cost_category_id IN (
+      SELECT item.cost_category_id FROM public.supplier_purchase_batch_items AS item
+      WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id)
+  ORDER BY budget.cost_category_id, budget.id FOR UPDATE;
+  PERFORM commitment.id
+  FROM public.project_cost_commitments AS commitment
+  WHERE commitment.tenant_id = p_tenant_id
+    AND ((commitment.project_id = v_batch.project_id
+      AND commitment.cost_category_id IN (
+        SELECT item.cost_category_id
+        FROM public.supplier_purchase_batch_items AS item
+        WHERE item.tenant_id = p_tenant_id
+          AND item.purchase_batch_id = p_batch_id))
+      OR commitment.source_id IN (
+        SELECT requisition.id
+        FROM public.supplier_purchase_requisitions AS requisition
+        WHERE requisition.tenant_id = p_tenant_id
+          AND requisition.purchase_batch_id = p_batch_id
+          AND requisition.split_generation = v_batch.split_generation))
+  ORDER BY commitment.cost_category_id, commitment.id FOR UPDATE;
   PERFORM requisition.id
   FROM public.supplier_purchase_requisitions AS requisition
   WHERE requisition.tenant_id = p_tenant_id
@@ -2554,6 +2530,25 @@ BEGIN
     AND requisition.split_generation = v_batch.split_generation
   ORDER BY requisition.tenant_supplier_id, requisition.id
   FOR UPDATE;
+  SELECT count(*)::integer,
+    count(*) FILTER (WHERE requisition.status <> 'pending_approval'
+      OR requisition.purchase_order_id IS NOT NULL)::integer
+  INTO v_child_count, v_invalid_child_count
+  FROM public.supplier_purchase_requisitions AS requisition
+  WHERE requisition.tenant_id = p_tenant_id
+    AND requisition.purchase_batch_id = p_batch_id
+    AND requisition.split_generation = v_batch.split_generation;
+  PERFORM purchase_order.id
+  FROM public.supplier_purchase_orders AS purchase_order
+  WHERE purchase_order.tenant_id = p_tenant_id
+    AND purchase_order.purchase_batch_id = p_batch_id
+  ORDER BY purchase_order.tenant_supplier_id, purchase_order.id
+  FOR UPDATE;
+  SELECT count(*)::integer INTO v_existing_order_count
+  FROM public.supplier_purchase_orders AS purchase_order
+  WHERE purchase_order.tenant_id = p_tenant_id
+    AND purchase_order.purchase_batch_id = p_batch_id;
+
   SELECT count(*)::integer,
     COALESCE(bool_and(
       requisition.project_id = v_batch.project_id
@@ -2662,77 +2657,20 @@ BEGIN
     WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;
   END IF;
 
-  PERFORM public.lock_project_cost_budget_scope(p_tenant_id, v_batch.project_id);
-  PERFORM finance_category.id
-  FROM public.finance_cost_categories AS finance_category
-  WHERE finance_category.tenant_id = p_tenant_id
-    AND finance_category.status = 'active'
-    AND finance_category.id IN (
-      SELECT item.cost_category_id
-      FROM public.supplier_purchase_batch_items AS item
-      WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id
-    )
-  ORDER BY finance_category.id FOR UPDATE;
-  SELECT count(DISTINCT item.cost_category_id)::integer,
-    count(DISTINCT finance_category.id)::integer
-  INTO v_category_count, v_active_category_count
-  FROM public.supplier_purchase_batch_items AS item
-  LEFT JOIN public.finance_cost_categories AS finance_category
-    ON finance_category.id = item.cost_category_id
-    AND finance_category.tenant_id = item.tenant_id
-    AND finance_category.status = 'active'
-  WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;
-  IF v_active_category_count <> v_category_count THEN
-    v_requires_revision := true;
-    SELECT v_item_blockers || COALESCE(jsonb_agg(jsonb_build_object(
-      'kind', 'item', 'supplier_sku_id', item.supplier_sku_id,
-      'reason', 'COST_CATEGORY_CHANGED'
-    ) ORDER BY item.line_no) FILTER (WHERE finance_category.id IS NULL),
-      '[]'::jsonb)
-    INTO v_item_blockers
-    FROM public.supplier_purchase_batch_items AS item
-    LEFT JOIN public.finance_cost_categories AS finance_category
-      ON finance_category.id = item.cost_category_id
-      AND finance_category.tenant_id = item.tenant_id
-      AND finance_category.status = 'active'
-    WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id;
-  END IF;
-  PERFORM budget.id FROM public.project_cost_budgets AS budget
-  WHERE budget.tenant_id = p_tenant_id AND budget.project_id = v_batch.project_id
-    AND budget.status = 'active' AND budget.cost_category_id IN (
-      SELECT item.cost_category_id FROM public.supplier_purchase_batch_items AS item
-      WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id)
-  ORDER BY budget.cost_category_id, budget.id FOR UPDATE;
-  PERFORM commitment.id
-  FROM public.project_cost_commitments AS commitment
-  WHERE commitment.tenant_id = p_tenant_id
-    AND commitment.project_id = v_batch.project_id
-    AND commitment.status IN ('reserved', 'converted', 'consumed')
-    AND commitment.cost_category_id IN (
-      SELECT item.cost_category_id FROM public.supplier_purchase_batch_items AS item
-      WHERE item.tenant_id = p_tenant_id AND item.purchase_batch_id = p_batch_id)
-  ORDER BY commitment.cost_category_id, commitment.id FOR UPDATE;
-  IF EXISTS (
-    SELECT 1 FROM public.project_cost_commitments AS commitment
-    JOIN public.supplier_purchase_requisitions AS requisition
-      ON requisition.id = commitment.source_id
-      AND requisition.tenant_id = commitment.tenant_id
-    WHERE requisition.tenant_id = p_tenant_id
-      AND requisition.purchase_batch_id = p_batch_id
-      AND requisition.split_generation = v_batch.split_generation
-      AND commitment.status IN ('converted', 'consumed')
-  ) THEN
-    RETURN public.record_supplier_purchase_batch_command_result(
-      p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
-      v_request, p_actor_user_id, p_actor_employee_id,
-      jsonb_build_object('status', 'state_conflict',
-        'error_code', 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT',
-        'version', v_batch.version), v_batch.version
-    );
-  END IF;
   WITH expected_commitments AS MATERIALIZED (
-    SELECT requisition.id AS requisition_id, item.cost_category_id,
-      sum(item.line_total_amount)::numeric(18,2) AS amount
+    SELECT p_tenant_id AS tenant_id, v_batch.project_id AS project_id,
+      item.cost_category_id,
+      'supplier_purchase_requisition'::text AS source_type,
+      requisition.id AS source_id, 'reserved'::text AS status,
+      sum(item.line_total_amount)::numeric(18,2) AS amount,
+      (v_batch.budget_snapshot -> item.cost_category_id::text ->>
+        'budget_amount')::numeric AS budget_amount_snapshot,
+      (v_batch.budget_snapshot -> item.cost_category_id::text ->>
+        'expense_amount')::numeric AS expense_amount_snapshot,
+      (v_batch.budget_snapshot -> item.cost_category_id::text ->>
+        'other_commitment_amount')::numeric AS other_commitment_amount_snapshot,
+      (v_batch.budget_snapshot -> item.cost_category_id::text ->>
+        'available_amount')::numeric AS available_amount_snapshot
     FROM public.supplier_purchase_requisitions AS requisition
     JOIN public.supplier_purchase_requisition_items AS item
       ON item.purchase_requisition_id = requisition.id
@@ -2741,43 +2679,111 @@ BEGIN
       AND requisition.purchase_batch_id = p_batch_id
       AND requisition.split_generation = v_batch.split_generation
     GROUP BY requisition.id, item.cost_category_id
+  ), actual_commitments AS MATERIALIZED (
+    SELECT commitment.*
+    FROM public.project_cost_commitments AS commitment
+    JOIN public.supplier_purchase_requisitions AS requisition
+      ON requisition.id = commitment.source_id
+      AND requisition.tenant_id = commitment.tenant_id
+    WHERE requisition.tenant_id = p_tenant_id
+      AND requisition.purchase_batch_id = p_batch_id
+      AND requisition.split_generation = v_batch.split_generation
   ), comparisons AS MATERIALIZED (
-    SELECT expected.*,
-      commitment.id AS commitment_id
+    SELECT expected.*, commitment.id AS commitment_id
     FROM expected_commitments AS expected
-    LEFT JOIN public.project_cost_commitments AS commitment
-      ON commitment.tenant_id = p_tenant_id
-      AND commitment.project_id = v_batch.project_id
-      AND commitment.source_type = 'supplier_purchase_requisition'
-      AND commitment.source_id = expected.requisition_id
+    LEFT JOIN actual_commitments AS commitment
+      ON commitment.tenant_id = expected.tenant_id
+      AND commitment.project_id = expected.project_id
       AND commitment.cost_category_id = expected.cost_category_id
-      AND commitment.status = 'reserved'
+      AND commitment.source_type = expected.source_type
+      AND commitment.source_id = expected.source_id
+      AND commitment.status = expected.status
       AND commitment.amount = expected.amount
-      AND commitment.budget_amount_snapshot =
-        (v_batch.budget_snapshot -> expected.cost_category_id::text ->>
-          'budget_amount')::numeric
-      AND commitment.expense_amount_snapshot =
-        (v_batch.budget_snapshot -> expected.cost_category_id::text ->>
-          'expense_amount')::numeric
+      AND commitment.recognized_amount = 0
+      AND commitment.budget_amount_snapshot = expected.budget_amount_snapshot
+      AND commitment.expense_amount_snapshot = expected.expense_amount_snapshot
       AND commitment.other_commitment_amount_snapshot =
-        (v_batch.budget_snapshot -> expected.cost_category_id::text ->>
-          'other_commitment_amount')::numeric
-      AND commitment.available_amount_snapshot =
-        (v_batch.budget_snapshot -> expected.cost_category_id::text ->>
-          'available_amount')::numeric
+        expected.other_commitment_amount_snapshot
+      AND commitment.available_amount_snapshot = expected.available_amount_snapshot
   )
-  SELECT count(*) > 0 AND bool_and(commitment_id IS NOT NULL) AND
-    count(*) = (
-      SELECT count(*) FROM public.project_cost_commitments AS commitment
-      JOIN public.supplier_purchase_requisitions AS requisition
-        ON requisition.id = commitment.source_id
-        AND requisition.tenant_id = commitment.tenant_id
-      WHERE requisition.tenant_id = p_tenant_id
-        AND requisition.purchase_batch_id = p_batch_id
-        AND requisition.split_generation = v_batch.split_generation
-        AND commitment.status = 'reserved'
-    ) AS commitments_match
-  INTO v_commitments_match FROM comparisons;
+  SELECT (SELECT count(*)::integer FROM expected_commitments),
+    (SELECT count(*)::integer FROM actual_commitments),
+    COALESCE(bool_and(commitment_id IS NOT NULL), false)
+  INTO v_expected_commitment_count, v_actual_commitment_count,
+    v_commitments_match
+  FROM comparisons;
+  v_commitments_match := v_expected_commitment_count > 0
+    AND v_expected_commitment_count = v_actual_commitment_count
+    AND v_commitments_match;
+
+  IF p_action = 'reject' THEN
+    IF v_child_count <> v_batch.supplier_count OR v_invalid_child_count > 0
+      OR NOT v_child_headers_match OR NOT v_child_items_match
+      OR v_existing_order_count > 0
+    THEN
+      RETURN public.record_supplier_purchase_batch_command_result(
+        p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
+        v_request, p_actor_user_id, p_actor_employee_id,
+        jsonb_build_object('status', 'state_conflict',
+          'error_code', 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT',
+        'version', v_batch.version), v_batch.version
+      );
+    END IF;
+    IF NOT COALESCE(v_commitments_match, false) THEN
+      RETURN public.record_supplier_purchase_batch_command_result(
+        p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
+        v_request, p_actor_user_id, p_actor_employee_id,
+        jsonb_build_object('status', 'state_conflict',
+          'error_code', 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT',
+          'version', v_batch.version), v_batch.version
+      );
+    END IF;
+    UPDATE public.project_cost_commitments AS commitment
+    SET status = 'released', released_by_employee_id = p_actor_employee_id,
+      released_at = v_reviewed_at, release_reason = 'batch rejected',
+      updated_at = v_reviewed_at
+    FROM public.supplier_purchase_requisitions AS requisition
+    WHERE requisition.id = commitment.source_id
+      AND requisition.tenant_id = p_tenant_id
+      AND requisition.purchase_batch_id = p_batch_id
+      AND requisition.split_generation = v_batch.split_generation
+      AND commitment.status = 'reserved';
+    UPDATE public.supplier_purchase_requisitions AS requisition
+    SET status = 'rejected', reviewed_by_employee_id = p_actor_employee_id,
+      reviewed_at = v_reviewed_at, review_remark = btrim(p_remark),
+      updated_by_employee_id = p_actor_employee_id,
+      updated_at = v_reviewed_at, version = requisition.version + 1
+    WHERE requisition.tenant_id = p_tenant_id
+      AND requisition.purchase_batch_id = p_batch_id
+      AND requisition.split_generation = v_batch.split_generation
+      AND requisition.status = 'pending_approval';
+    UPDATE public.supplier_purchase_batches AS batch
+    SET status = 'rejected', reviewed_by_employee_id = p_actor_employee_id,
+      reviewed_at = v_reviewed_at, review_remark = btrim(p_remark),
+      updated_by_employee_id = p_actor_employee_id,
+      updated_at = v_reviewed_at, version = batch.version + 1
+    WHERE batch.id = p_batch_id AND batch.tenant_id = p_tenant_id
+    RETURNING * INTO v_batch;
+    v_result := jsonb_build_object('status', 'rejected',
+      'batch', public.supplier_purchase_batch_to_jsonb(v_batch),
+      'version', v_batch.version);
+    RETURN public.record_supplier_purchase_batch_command_result(
+      p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
+      v_request, p_actor_user_id, p_actor_employee_id,
+      v_result, v_batch.version
+    );
+  END IF;
+
+  IF v_existing_order_count > 0 THEN
+    RETURN public.record_supplier_purchase_batch_command_result(
+      p_tenant_id, p_batch_id, 'review', p_idempotency_key, v_fingerprint,
+      v_request, p_actor_user_id, p_actor_employee_id,
+      jsonb_build_object('status', 'state_conflict',
+        'error_code', 'SUPPLIER_PURCHASE_BATCH_STATE_CONFLICT',
+        'version', v_batch.version), v_batch.version
+    );
+  END IF;
+
   IF NOT COALESCE(v_commitments_match, false) THEN
     v_requires_revision := true;
     SELECT CASE WHEN jsonb_array_length(v_item_blockers) > 0
@@ -2877,12 +2883,8 @@ BEGIN
     INTO v_budget_blockers FROM category_ids;
   END IF;
 
-  v_blockers := CASE
-    WHEN jsonb_array_length(v_supplier_blockers) > 0 THEN v_supplier_blockers
-    WHEN jsonb_array_length(v_price_blockers) > 0 THEN v_price_blockers
-    WHEN jsonb_array_length(v_item_blockers) > 0 THEN v_item_blockers
-    ELSE v_budget_blockers
-  END;
+  v_blockers := v_supplier_blockers || v_price_blockers ||
+    v_item_blockers || v_budget_blockers;
   IF v_requires_revision THEN
     UPDATE public.project_cost_commitments AS commitment
     SET status = 'released', released_by_employee_id = p_actor_employee_id,

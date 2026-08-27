@@ -2,8 +2,10 @@ import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
   SupplierPurchaseBatchCommandEnvelopeSchema,
+  SupplierPurchaseBatchRevisionErrorCodeSchema,
   type SupplierPurchaseBatchBlocker,
   type SupplierPurchaseBatchOrderSummary,
+  type SupplierPurchaseBatchRevisionErrorCode,
 } from "@/repositories/supplier-purchase-batch-command-records";
 import {
   type SupplierPurchaseBatch,
@@ -31,7 +33,8 @@ export type SupplierPurchaseBatchCommandResult =
   | (BaseResult & { status: "cancelled" })
   | (BaseResult & { status: "ordered"; requisition_ids: string[];
     orders: SupplierPurchaseBatchOrderSummary[] })
-  | (BaseResult & { status: "revision_required"; error_code: string;
+  | (BaseResult & { status: "revision_required";
+    error_code: SupplierPurchaseBatchRevisionErrorCode;
     details: SupplierPurchaseBatchBlocker[] });
 
 const STATUS_BY_RESULT = {
@@ -69,12 +72,14 @@ export async function executeSupplierPurchaseBatchCommand(input: {
   if (envelope.status === "revision_required" &&
     input.allowRevisionRequired) {
     assertBatchIdentity(envelope, input.params, input.message);
-    if (!envelope.details || !envelope.error_code) {
+    const revisionCode = SupplierPurchaseBatchRevisionErrorCodeSchema
+      .safeParse(envelope.error_code);
+    if (!envelope.details || !revisionCode.success) {
       throw Errors.dbError(input.message, envelope);
     }
     return { status: "revision_required", idempotent: envelope.idempotent,
       batch: envelope.batch!, version: envelope.version!,
-      error_code: envelope.error_code, details: envelope.details };
+      error_code: revisionCode.data, details: envelope.details };
   }
   if (envelope.status !== input.successStatus) {
     const statusCode = ERROR_STATUS[
