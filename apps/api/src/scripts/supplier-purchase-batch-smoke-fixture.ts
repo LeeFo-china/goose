@@ -9,6 +9,8 @@ export type BatchSmokeFixture = {
   actorEmployeeId: string;
   reviewerUserId: string;
   reviewerEmployeeId: string;
+  secondReviewerUserId: string;
+  secondReviewerEmployeeId: string;
   projectId: string;
   catalogCategoryId: string;
   platformCategoryId: string;
@@ -135,6 +137,8 @@ export async function createRuntimeBatchSmokeFixture(
     actorEmployeeId: crypto.randomUUID(),
     reviewerUserId: crypto.randomUUID(),
     reviewerEmployeeId: crypto.randomUUID(),
+    secondReviewerUserId: crypto.randomUUID(),
+    secondReviewerEmployeeId: crypto.randomUUID(),
     projectId: crypto.randomUUID(),
     catalogCategoryId: crypto.randomUUID(),
     platformCategoryId: row.catalog_category_id,
@@ -206,6 +210,15 @@ export async function seedRuntimeBatchSmokeFixture(
     insert into auth.users(
       id, aud, role, email, encrypted_password,
       raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    ) values (${fixture.secondReviewerUserId}::uuid,
+      'authenticated', 'authenticated',
+      ${`batch-review-2-${fixture.runToken}@smoke.invalid`}, '', '{}'::jsonb,
+      '{}'::jsonb, now(), now());
+  `;
+  await sql`
+    insert into auth.users(
+      id, aud, role, email, encrypted_password,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at
     ) values (${fixture.reviewerUserId}::uuid,
       'authenticated', 'authenticated',
       ${`batch-review-${fixture.runToken}@smoke.invalid`}, '', '{}'::jsonb,
@@ -222,6 +235,12 @@ export async function seedRuntimeBatchSmokeFixture(
     values (${fixture.reviewerEmployeeId}::uuid,
       ${`采购批次验证审批员工 ${fixture.runToken}`}, 'active',
       ${fixture.reviewerUserId}::uuid, ${fixture.tenantId}::uuid);
+  `;
+  await sql`
+    insert into public.employees(id, name, status, user_id, tenant_id)
+    values (${fixture.secondReviewerEmployeeId}::uuid,
+      ${`采购批次验证审批员工 2 ${fixture.runToken}`}, 'active',
+      ${fixture.secondReviewerUserId}::uuid, ${fixture.tenantId}::uuid);
   `;
   await sql`
     insert into public.projects(id, name, status, tenant_id)
@@ -350,12 +369,19 @@ export async function reviewRuntimeBatch(
   fixture: BatchSmokeFixture,
   batchId: string,
   idempotencyKey: string,
+  reviewer: "first" | "second" = "first",
 ) {
+  const reviewerUserId = reviewer === "first"
+    ? fixture.reviewerUserId
+    : fixture.secondReviewerUserId;
+  const reviewerEmployeeId = reviewer === "first"
+    ? fixture.reviewerEmployeeId
+    : fixture.secondReviewerEmployeeId;
   const rows = await sql<CommandRow[]>`
     select public.review_supplier_purchase_batch(
       ${batchId}::uuid, ${fixture.tenantId}::uuid, 2, 'approve', null::text,
-      false, ${fixture.reviewerUserId}::uuid,
-      ${fixture.reviewerEmployeeId}::uuid, ${idempotencyKey}
+      false, ${reviewerUserId}::uuid,
+      ${reviewerEmployeeId}::uuid, ${idempotencyKey}
     ) as result;
   `;
   return rows[0]?.result;

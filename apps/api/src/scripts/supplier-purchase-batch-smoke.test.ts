@@ -62,13 +62,14 @@ describe("supplier purchase batch smoke manifest", () => {
       sameResult: true,
       duplicateSideEffects: 0,
     });
-    expect(SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST.blockers).toEqual([
-      "price_changed",
-      "missing_price",
-      "supplier_suspended",
-      "product_inactive",
-      "sku_inactive",
-      "category_inactive",
+    expect(SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST.driftMatrix).toEqual([
+      ["price_changed", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1]],
+      ["missing_price", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1]],
+      ["supplier_suspended", "SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE", [0]],
+      ["product_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0]],
+      ["sku_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [2]],
+      ["category_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1, 2]],
+      ["budget_changed", "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED", [0, 1]],
     ]);
     expect(SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST.revision).toEqual({
       persistedAsDraft: true,
@@ -80,6 +81,35 @@ describe("supplier purchase batch smoke manifest", () => {
       failAtOrder: 2,
       transactionRolledBack: true,
       exactOrderCount: 0,
+      batchStatusAndVersionUnchanged: true,
+      currentRequisitionStatus: "pending_approval",
+      purchaseOrderId: null,
+      commitmentStatus: "reserved",
+      recognizedAmount: "0.00",
+      exactReviewEventCount: 0,
     });
+  });
+
+  test("uses exact ordered blocker assertions instead of kind or count checks", async () => {
+    const source = await Bun.file(
+      new URL("./supplier-purchase-batch-drift.ts", import.meta.url),
+    ).text();
+    expect(source).not.toContain("details.length <");
+    expect(source).not.toContain("new Set(details.map");
+    expect(source).toContain("assertExactDriftDetails");
+    expect(source).toContain("command_supplier_price_item_v2(");
+    expect(source).not.toContain("command_supplier_price_list_item_v2(");
+  });
+
+  test("asserts every post-failure aggregate at the frozen generation", async () => {
+    const source = await Bun.file(
+      new URL("./supplier-purchase-batch-atomicity.ts", import.meta.url),
+    ).text();
+    for (const evidence of [
+      "split_generation", "purchase_order_id", "recognized_amount",
+      "review_event_count", "BATCH_ATOMICITY_BATCH_CHANGED",
+      "BATCH_ATOMICITY_REQUISITIONS_CHANGED",
+      "BATCH_ATOMICITY_COMMITMENTS_CHANGED",
+    ]) expect(source).toContain(evidence);
   });
 });

@@ -1,5 +1,7 @@
 import { cleanupRuntimeBatchSmokeFixture } from
   "./supplier-purchase-batch-cleanup";
+import { assertLocalSupplierPurchaseBatchDatabaseUrl } from
+  "./supplier-purchase-batch-local-db";
 import {
   countRuntimeOrders,
   createRuntimeBatchSmokeFixture,
@@ -12,11 +14,16 @@ import {
 
 export const SUPPLIER_PURCHASE_BATCH_CONCURRENCY_MANIFEST = {
   concurrentReviewers: 2,
-  acceptedOutcomes: ["winner", "idempotent_replay", "version_conflict"],
+  distinctReviewerIdentities: true,
+  distinctIdempotencyKeys: true,
+  acceptedOutcomes: ["winner", "version_conflict"],
   exactWinnerCount: 1,
+  exactVersionConflictCount: 1,
   exactSubmittedOrderCount: 2,
-  duplicateSideEffects: 0,
-  transactionScopedFixture: true,
+  exactSuccessfulReviewEventCount: 1,
+  exactConflictReviewEventCount: 1,
+  exactTotalReviewEventCount: 2,
+  committedFixtureWithScopedCleanup: true,
 } as const;
 
 type ConcurrentReviewResult = {
@@ -30,14 +37,15 @@ export function classifyConcurrentReviewResults(
   const winnerCount = results.filter((result) =>
     result.status === "ordered" && result.idempotent === false
   ).length;
-  const safeLoserCount = results.filter((result) =>
-    (result.status === "ordered" && result.idempotent === true) ||
-    result.status === "version_conflict"
+  const versionConflictCount = results.filter((result) =>
+    result.status === "version_conflict" && result.idempotent === false
   ).length;
-  if (winnerCount !== 1 || safeLoserCount !== results.length - 1) {
-    throw new Error("concurrent review requires exactly one winner");
+  if (winnerCount !== 1 || versionConflictCount !== 1 || results.length !== 2) {
+    throw new Error(
+      "concurrent review requires one winner and one version conflict",
+    );
   }
-  return { winnerCount, safeLoserCount };
+  return { winnerCount, versionConflictCount };
 }
 
 async function queryConcurrentEvidence(
@@ -47,15 +55,31 @@ async function queryConcurrentEvidence(
 ) {
   const rows = await database<{
     status: string;
-    review_events: number;
+    successful_review_events: number;
+    conflict_review_events: number;
+    total_review_events: number;
   }[]>`
     select batch.status,
+      (select count(*) filter (where event.result ->> 'status' = 'ordered')::integer
+       from public.supplier_purchase_batch_command_events as event
+       where event.tenant_id = batch.tenant_id
+         and event.purchase_batch_id = batch.id
+         and event.command_type = 'review'
+       limit 1) as successful_review_events,
+      (select count(*) filter (
+        where event.result ->> 'status' = 'version_conflict'
+      )::integer
+       from public.supplier_purchase_batch_command_events as event
+       where event.tenant_id = batch.tenant_id
+         and event.purchase_batch_id = batch.id
+         and event.command_type = 'review'
+       limit 1) as conflict_review_events,
       (select count(*)::integer
        from public.supplier_purchase_batch_command_events as event
        where event.tenant_id = batch.tenant_id
          and event.purchase_batch_id = batch.id
          and event.command_type = 'review'
-       limit 1) as review_events
+       limit 1) as total_review_events
     from public.supplier_purchase_batches as batch
     where batch.id = ${batchId}::uuid
       and batch.tenant_id = ${fixture.tenantId}::uuid
@@ -66,18 +90,23 @@ async function queryConcurrentEvidence(
 
 export type SupplierPurchaseBatchConcurrencySummary = {
   winner_count: 1;
-  safe_loser_count: 1;
+  version_conflict_count: 1;
   submitted_order_count: 2;
-  review_event_count: 1;
+  successful_review_event_count: 1;
+  conflict_review_event_count: 1;
+  total_review_event_count: 2;
   fixture_cleaned: true;
 };
 
 export async function runSupplierPurchaseBatchConcurrency(
-  databaseUrl: string,
+  databaseUrl: string | undefined,
 ): Promise<SupplierPurchaseBatchConcurrencySummary> {
-  const database = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
-  const reviewerA = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
-  const reviewerB = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const localDatabaseUrl = assertLocalSupplierPurchaseBatchDatabaseUrl(
+    databaseUrl,
+  );
+  const database = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
+  const reviewerA = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
+  const reviewerB = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
   const runToken = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   let fixture: BatchSmokeFixture | undefined;
   try {
@@ -89,13 +118,18 @@ export async function runSupplierPurchaseBatchConcurrency(
     const prepared = await database.begin((sql) =>
       prepareSubmittedBatch(sql, fixture!, "concurrency")
     );
-    const calls = [reviewerA, reviewerB].map(async (connection) => {
+    const calls = [
+      { connection: reviewerA, reviewer: "first", key: "a" },
+      { connection: reviewerB, reviewer: "second", key: "b" },
+    ] as const;
+    const results = calls.map(async ({ connection, reviewer, key }) => {
       const result = requireSmokeRecord(
         await reviewRuntimeBatch(
           connection,
           fixture!,
           prepared.batchId,
-          "concurrency:review",
+          `concurrency:review:${key}`,
+          reviewer,
         ),
         "concurrent review",
       );
@@ -104,7 +138,9 @@ export async function runSupplierPurchaseBatchConcurrency(
         idempotent: result.idempotent === true,
       };
     });
-    const classified = classifyConcurrentReviewResults(await Promise.all(calls));
+    const classified = classifyConcurrentReviewResults(
+      await Promise.all(results),
+    );
     const orderCount = await countRuntimeOrders(
       database,
       fixture,
@@ -117,18 +153,28 @@ export async function runSupplierPurchaseBatchConcurrency(
     );
     if (
       orderCount !== 2 || evidence?.status !== "ordered" ||
-      evidence.review_events !== 1
+      evidence.successful_review_events !== 1 ||
+      evidence.conflict_review_events !== 1 ||
+      evidence.total_review_events !== 2
     ) throw new Error("BATCH_CONCURRENCY_SIDE_EFFECTS_INVALID");
     return {
       winner_count: classified.winnerCount as 1,
-      safe_loser_count: classified.safeLoserCount as 1,
+      version_conflict_count: classified.versionConflictCount as 1,
       submitted_order_count: 2,
-      review_event_count: 1,
+      successful_review_event_count: 1,
+      conflict_review_event_count: 1,
+      total_review_event_count: 2,
       fixture_cleaned: true,
     };
   } finally {
     await Promise.all([reviewerA.close(), reviewerB.close()]);
-    if (fixture) await cleanupRuntimeBatchSmokeFixture(database, fixture);
+    if (fixture) {
+      await cleanupRuntimeBatchSmokeFixture(
+        database,
+        fixture,
+        localDatabaseUrl,
+      );
+    }
     await database.close();
   }
 }
@@ -136,15 +182,10 @@ export async function runSupplierPurchaseBatchConcurrency(
 if (import.meta.main) {
   const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL ??
     process.env.SUPABASE_DB_URL;
-  if (!databaseUrl) {
-    console.error("SUPPLIER_PURCHASE_BATCH_CONCURRENCY_FAILED");
-    process.exitCode = 1;
-  } else {
-    runSupplierPurchaseBatchConcurrency(databaseUrl)
-      .then((summary) => console.log(JSON.stringify(summary)))
-      .catch(() => {
-        console.error("SUPPLIER_PURCHASE_BATCH_CONCURRENCY_FAILED");
-        process.exitCode = 1;
-      });
-  }
+  runSupplierPurchaseBatchConcurrency(databaseUrl)
+    .then((summary) => console.log(JSON.stringify(summary)))
+    .catch(() => {
+      console.error("SUPPLIER_PURCHASE_BATCH_CONCURRENCY_FAILED");
+      process.exitCode = 1;
+    });
 }

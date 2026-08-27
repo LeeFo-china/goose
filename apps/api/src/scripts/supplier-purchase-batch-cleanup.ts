@@ -1,10 +1,14 @@
 import type { BatchSmokeFixture } from
   "./supplier-purchase-batch-smoke-fixture";
+import { assertLocalSupplierPurchaseBatchDatabaseUrl } from
+  "./supplier-purchase-batch-local-db";
 
 export async function cleanupRuntimeBatchSmokeFixture(
   database: Bun.SQL,
   fixture: BatchSmokeFixture,
+  databaseUrl: string | undefined,
 ): Promise<void> {
+  assertLocalSupplierPurchaseBatchDatabaseUrl(databaseUrl);
   await database.begin(async (sql) => {
     // Local verification cleanup only. Submitted-order immutability correctly
     // blocks application deletes, so the superuser disables ordinary triggers
@@ -14,7 +18,8 @@ export async function cleanupRuntimeBatchSmokeFixture(
       delete from public.supplier_command_events
       where tenant_id = ${fixture.tenantId}::uuid
         and actor_user_id in (${fixture.actorUserId}::uuid,
-          ${fixture.reviewerUserId}::uuid);
+          ${fixture.reviewerUserId}::uuid,
+          ${fixture.secondReviewerUserId}::uuid);
     `;
     await sql`
       delete from public.project_cost_commitments as commitment
@@ -124,9 +129,11 @@ export async function cleanupRuntimeBatchSmokeFixture(
       where id = ${fixture.projectId}::uuid`;
     await sql`delete from public.employees
       where id in (${fixture.actorEmployeeId}::uuid,
-        ${fixture.reviewerEmployeeId}::uuid)`;
+        ${fixture.reviewerEmployeeId}::uuid,
+        ${fixture.secondReviewerEmployeeId}::uuid)`;
     await sql`delete from auth.users
       where id in (${fixture.actorUserId}::uuid,
-        ${fixture.reviewerUserId}::uuid)`;
+        ${fixture.reviewerUserId}::uuid,
+        ${fixture.secondReviewerUserId}::uuid)`;
   });
 }

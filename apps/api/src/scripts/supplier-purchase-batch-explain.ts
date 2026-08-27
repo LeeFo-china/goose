@@ -8,6 +8,8 @@ import {
   type BatchSmokeFixture,
   type BatchSmokeSql,
 } from "./supplier-purchase-batch-smoke-fixture";
+import { assertLocalSupplierPurchaseBatchDatabaseUrl } from
+  "./supplier-purchase-batch-local-db";
 
 export const EXPECTED_SUPPLIER_PURCHASE_BATCH_INDEXES = {
   catalogProduct: ["supplier_products_name_batch_catalog_trgm_idx"],
@@ -249,9 +251,12 @@ export type SupplierPurchaseBatchExplainSummary = {
 };
 
 export async function runSupplierPurchaseBatchExplain(
-  databaseUrl: string,
+  databaseUrl: string | undefined,
 ): Promise<SupplierPurchaseBatchExplainSummary> {
-  const database = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const localDatabaseUrl = assertLocalSupplierPurchaseBatchDatabaseUrl(
+    databaseUrl,
+  );
+  const database = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
   const runToken = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   let fixture: BatchSmokeFixture | undefined;
   try {
@@ -304,15 +309,10 @@ export async function runSupplierPurchaseBatchExplain(
 if (import.meta.main) {
   const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL ??
     process.env.SUPABASE_DB_URL;
-  if (!databaseUrl) {
-    console.error("SUPPLIER_PURCHASE_BATCH_EXPLAIN_FAILED");
-    process.exitCode = 1;
-  } else {
-    runSupplierPurchaseBatchExplain(databaseUrl)
-      .then((summary) => console.log(JSON.stringify(summary)))
-      .catch(() => {
-        console.error("SUPPLIER_PURCHASE_BATCH_EXPLAIN_FAILED");
-        process.exitCode = 1;
-      });
-  }
+  runSupplierPurchaseBatchExplain(databaseUrl)
+    .then((summary) => console.log(JSON.stringify(summary)))
+    .catch(() => {
+      console.error("SUPPLIER_PURCHASE_BATCH_EXPLAIN_FAILED");
+      process.exitCode = 1;
+    });
 }

@@ -1,16 +1,20 @@
-import type { SavepointSQL, TransactionSQL } from "bun";
+import type { TransactionSQL } from "bun";
 
 import {
   countRuntimeOrders,
   createRuntimeBatchSmokeFixture,
-  prepareSubmittedBatch,
   requireSmokeRecord,
   reviewRuntimeBatch,
   saveRuntimeBatch,
   seedRuntimeBatchSmokeFixture,
   type BatchSmokeFixture,
-  type BatchSmokeSql,
 } from "./supplier-purchase-batch-smoke-fixture";
+import { assertLocalSupplierPurchaseBatchDatabaseUrl } from
+  "./supplier-purchase-batch-local-db";
+import { assertSupplierPurchaseBatchDriftMatrix } from
+  "./supplier-purchase-batch-drift";
+import { assertSecondOrderAtomicRollback } from
+  "./supplier-purchase-batch-atomicity";
 
 export const SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST = {
   happyPath: {
@@ -23,13 +27,14 @@ export const SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST = {
     wholeBatchBudgetAggregation: true,
   },
   replay: { sameResult: true, duplicateSideEffects: 0 },
-  blockers: [
-    "price_changed",
-    "missing_price",
-    "supplier_suspended",
-    "product_inactive",
-    "sku_inactive",
-    "category_inactive",
+  driftMatrix: [
+    ["price_changed", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1]],
+    ["missing_price", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1]],
+    ["supplier_suspended", "SUPPLIER_PURCHASE_BATCH_SUPPLIER_INELIGIBLE", [0]],
+    ["product_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0]],
+    ["sku_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [2]],
+    ["category_inactive", "SUPPLIER_PURCHASE_BATCH_PRICE_CHANGED", [0, 1, 2]],
+    ["budget_changed", "SUPPLIER_PURCHASE_BATCH_BUDGET_CHANGED", [0, 1]],
   ],
   revision: {
     persistedAsDraft: true,
@@ -41,6 +46,12 @@ export const SUPPLIER_PURCHASE_BATCH_SMOKE_MANIFEST = {
     failAtOrder: 2,
     transactionRolledBack: true,
     exactOrderCount: 0,
+    batchStatusAndVersionUnchanged: true,
+    currentRequisitionStatus: "pending_approval",
+    purchaseOrderId: null,
+    commitmentStatus: "reserved",
+    recognizedAmount: "0.00",
+    exactReviewEventCount: 0,
   },
 } as const;
 
@@ -81,30 +92,6 @@ async function runWithRollback<Result>(
   }
   if (failure !== undefined) throw failure;
   if (result === undefined) throw new Error("BATCH_SMOKE_NO_RESULT");
-  return result;
-}
-
-async function runRolledBackScenario<Result>(
-  sql: TransactionSQL,
-  callback: (savepoint: SavepointSQL) => Promise<Result>,
-): Promise<Result> {
-  const marker = new ForcedRollback();
-  let result: Result | undefined;
-  let failure: unknown;
-  try {
-    await sql.savepoint(async (savepoint) => {
-      try {
-        result = await callback(savepoint);
-      } catch (error) {
-        failure = error;
-      }
-      throw marker;
-    });
-  } catch (error) {
-    if (error !== marker) throw error;
-  }
-  if (failure !== undefined) throw failure;
-  if (result === undefined) throw new Error("BATCH_SMOKE_SCENARIO_NO_RESULT");
   return result;
 }
 
@@ -209,188 +196,6 @@ async function assertHappyPath(
   ) throw new Error("BATCH_SMOKE_REVIEW_REPLAY_INVALID");
 }
 
-async function assertMissingPriceRevision(
-  sql: TransactionSQL,
-  fixture: BatchSmokeFixture,
-) {
-  return runRolledBackScenario(sql, async (scenario) => {
-    const { batchId } = await prepareSubmittedBatch(
-      scenario,
-      fixture,
-      "missing-price",
-    );
-    const priceRows = await scenario<{ id: string; row_version: number }[]>`
-      select id, row_version from public.supplier_price_lists
-      where tenant_id = ${fixture.tenantId}::uuid
-        and tenant_supplier_id = ${fixture.relationshipIds[0]}::uuid
-        and lifecycle_status = 'published'
-      order by id limit 2;
-    `;
-    if (priceRows.length !== 1 || !priceRows[0]) {
-      throw new Error("BATCH_SMOKE_PUBLISHED_PRICE_AMBIGUOUS");
-    }
-    const retiredRows = await scenario<{ result: unknown }[]>`
-      select public.command_supplier_price_list_v2(
-        'retire', ${priceRows[0].id}::uuid, null::uuid,
-        ${fixture.tenantId}::uuid, ${fixture.relationshipIds[0]}::uuid,
-        ${fixture.supplierIds[0]}::uuid, ${priceRows[0].row_version}::integer,
-        '{}'::jsonb, ${fixture.actorUserId}::uuid,
-        ${fixture.actorEmployeeId}::uuid, 'missing-price:retire'
-      ) as result;
-    `;
-    expectStatus(retiredRows[0]?.result, "retired", "missing price retire");
-    const revision = expectStatus(
-      await reviewRuntimeBatch(
-        scenario,
-        fixture,
-        batchId,
-        "missing-price:review",
-      ),
-      "revision_required",
-      "missing price review",
-    );
-    if (await countRuntimeOrders(scenario, fixture, batchId) !== 0) {
-      throw new Error("BATCH_SMOKE_MISSING_PRICE_ORDER_CREATED");
-    }
-    return revision;
-  });
-}
-
-async function assertFullRevision(
-  sql: TransactionSQL,
-  fixture: BatchSmokeFixture,
-) {
-  return runRolledBackScenario(sql, async (scenario) => {
-    const { batchId } = await prepareSubmittedBatch(
-      scenario,
-      fixture,
-      "full-revision",
-    );
-    await scenario`
-      update public.suppliers set operational_status = 'suspended',
-        version = version + 1
-      where id = ${fixture.supplierIds[0]}::uuid;
-    `;
-    await scenario`
-      update public.supplier_products set status = 'inactive', version = version + 1
-      where id in (${fixture.productIds[0]}::uuid,
-        ${fixture.productIds[1]}::uuid, ${fixture.productIds[2]}::uuid);
-    `;
-    await scenario`
-      update public.supplier_skus set status = 'inactive', version = version + 1
-      where id = ${fixture.skuIds[2]}::uuid;
-    `;
-    await scenario`
-      update public.catalog_categories set status = 'inactive'
-      where id = ${fixture.catalogCategoryId}::uuid;
-    `;
-    await scenario`
-      update public.project_cost_budgets set budget_amount = budget_amount - 1,
-        updated_at = statement_timestamp()
-      where tenant_id = ${fixture.tenantId}::uuid
-        and project_id = ${fixture.projectId}::uuid
-        and cost_category_id = ${fixture.costCategoryIds[0]}::uuid;
-    `;
-    const revision = expectStatus(
-      await reviewRuntimeBatch(
-        scenario,
-        fixture,
-        batchId,
-        "full-revision:review",
-      ),
-      "revision_required",
-      "full revision review",
-    );
-    const batch = requireSmokeRecord(revision.batch, "revision batch");
-    const details = Array.isArray(revision.details) ? revision.details : [];
-    const kinds = new Set(details.map((detail) =>
-      requireSmokeRecord(detail, "revision detail").kind
-    ));
-    if (
-      batch.status !== "draft" || revision.version !== 3 ||
-      !kinds.has("supplier") || !kinds.has("price") || !kinds.has("budget") ||
-      details.length < 5 ||
-      await countRuntimeOrders(scenario, fixture, batchId) !== 0
-    ) throw new Error(`BATCH_SMOKE_FULL_REVISION_INVALID:${JSON.stringify({
-      batch,
-      revision,
-      kinds: [...kinds],
-    })}`);
-    return revision;
-  });
-}
-
-async function installSecondOrderFailure(
-  sql: BatchSmokeSql,
-  batchId: string,
-) {
-  await sql`create temporary table supplier_batch_order_fail_counter(
-    batch_id uuid primary key, insert_count integer not null default 0
-  ) on commit drop`;
-  await sql`insert into supplier_batch_order_fail_counter(batch_id)
-    values (${batchId}::uuid)`;
-  await sql`
-    create function pg_temp.fail_supplier_batch_second_order()
-    returns trigger language plpgsql as $$
-    declare v_count integer;
-    begin
-      update supplier_batch_order_fail_counter
-      set insert_count = insert_count + 1
-      where batch_id = new.purchase_batch_id
-      returning insert_count into v_count;
-      if v_count = 2 then
-        raise exception using errcode = 'P0001',
-          message = 'SUPPLIER_BATCH_INJECTED_SECOND_ORDER_FAILURE';
-      end if;
-      return new;
-    end;
-    $$
-  `;
-  await sql`
-    create trigger supplier_batch_injected_order_failure
-    before insert on public.supplier_purchase_orders
-    for each row execute function pg_temp.fail_supplier_batch_second_order()
-  `;
-}
-
-async function assertSecondOrderRollback(
-  sql: TransactionSQL,
-  fixture: BatchSmokeFixture,
-) {
-  const { batchId } = await prepareSubmittedBatch(
-    sql,
-    fixture,
-    "second-order-failure",
-  );
-  await installSecondOrderFailure(sql, batchId);
-  try {
-    await sql.savepoint((attempt) => reviewRuntimeBatch(
-      attempt,
-      fixture,
-      batchId,
-      "second-order-failure:review",
-    ));
-  } catch (error) {
-    if (
-      !(error instanceof Bun.SQL.PostgresError) ||
-      error.message !== "SUPPLIER_BATCH_INJECTED_SECOND_ORDER_FAILURE"
-    ) throw error;
-  }
-  const batchRows = await sql<{ status: string }[]>`
-    select status from public.supplier_purchase_batches
-    where id = ${batchId}::uuid and tenant_id = ${fixture.tenantId}::uuid
-    limit 1;
-  `;
-  const orderCount = await countRuntimeOrders(sql, fixture, batchId);
-  if (batchRows[0]?.status !== "pending_approval" || orderCount !== 0) {
-    throw new Error(`BATCH_SMOKE_SECOND_ORDER_NOT_ATOMIC:${JSON.stringify({
-      status: batchRows[0]?.status,
-      orderCount,
-    })}`);
-  }
-  return true;
-}
-
 export type SupplierPurchaseBatchSmokeSummary = {
   split_orders: 2;
   replay_safe: true;
@@ -401,9 +206,12 @@ export type SupplierPurchaseBatchSmokeSummary = {
 };
 
 export async function runSupplierPurchaseBatchSmoke(
-  databaseUrl: string,
+  databaseUrl: string | undefined,
 ): Promise<SupplierPurchaseBatchSmokeSummary> {
-  const database = new Bun.SQL(databaseUrl, { max: 1, prepare: false });
+  const localDatabaseUrl = assertLocalSupplierPurchaseBatchDatabaseUrl(
+    databaseUrl,
+  );
+  const database = new Bun.SQL(localDatabaseUrl, { max: 1, prepare: false });
   const runToken = crypto.randomUUID().replaceAll("-", "").slice(0, 12);
   let fixture: BatchSmokeFixture | undefined;
   try {
@@ -411,9 +219,8 @@ export async function runSupplierPurchaseBatchSmoke(
       fixture = await createRuntimeBatchSmokeFixture(sql, runToken);
       await seedRuntimeBatchSmokeFixture(sql, fixture);
       await assertHappyPath(sql, fixture);
-      await assertMissingPriceRevision(sql, fixture);
-      await assertFullRevision(sql, fixture);
-      await assertSecondOrderRollback(sql, fixture);
+      await assertSupplierPurchaseBatchDriftMatrix(sql, fixture);
+      await assertSecondOrderAtomicRollback(sql, fixture);
       return true;
     });
     const residualRows = await database<{ count: number }[]>`
@@ -439,15 +246,10 @@ export async function runSupplierPurchaseBatchSmoke(
 if (import.meta.main) {
   const databaseUrl = process.env.SUPABASE_DB_DIRECT_URL ??
     process.env.SUPABASE_DB_URL;
-  if (!databaseUrl) {
-    console.error("SUPPLIER_PURCHASE_BATCH_SMOKE_FAILED");
-    process.exitCode = 1;
-  } else {
-    runSupplierPurchaseBatchSmoke(databaseUrl)
-      .then((summary) => console.log(JSON.stringify(summary)))
-      .catch(() => {
-        console.error("SUPPLIER_PURCHASE_BATCH_SMOKE_FAILED");
-        process.exitCode = 1;
-      });
-  }
+  runSupplierPurchaseBatchSmoke(databaseUrl)
+    .then((summary) => console.log(JSON.stringify(summary)))
+    .catch(() => {
+      console.error("SUPPLIER_PURCHASE_BATCH_SMOKE_FAILED");
+      process.exitCode = 1;
+    });
 }
