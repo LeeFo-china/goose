@@ -3,6 +3,10 @@ import { z } from "zod";
 import { Errors } from "@/errors/error-factory";
 import { throwSupplierCommandDatabaseError } from "@/repositories/supplier-command-errors";
 import {
+  executeSupplierPurchaseBatchCommand,
+  type SupplierPurchaseBatchCommandResult,
+} from "@/repositories/supplier-purchase-batch-command-gateway";
+import {
   SUPPLIER_PURCHASE_BATCH_ITEM_SELECT,
   SUPPLIER_PURCHASE_BATCH_SELECT,
   SupplierPurchaseBatchCatalogResultSchema,
@@ -67,6 +71,26 @@ export type BatchCostCategoryInput = PageInput & {
   tenant_id: string;
   keyword?: string;
 };
+export type BatchCommandContext = {
+  tenant_id: string;
+  batch_id: string;
+  expected_version: number;
+  actor_user_id: string;
+  actor_employee_id: string;
+  idempotency_key: string;
+};
+export type BatchDraftCommandInput = BatchCommandContext & {
+  project_id: string;
+  reason: string;
+  expected_delivery_date?: string | null;
+  remark?: string | null;
+  items: Array<{
+    supplier_sku_id: string;
+    cost_category_id: string;
+    quantity: string;
+  }>;
+};
+export type { SupplierPurchaseBatchCommandResult };
 
 type QueryResult = {
   data: unknown;
@@ -288,6 +312,51 @@ export class SupplierPurchaseBatchesRepository {
     );
   }
 
+  saveDraft(input: BatchDraftCommandInput) {
+    return this.command(
+      "save_supplier_purchase_batch_draft",
+      {
+        ...commandParams(input),
+        p_project_id: input.project_id,
+        p_reason: input.reason,
+        p_expected_delivery_date: input.expected_delivery_date ?? null,
+        p_remark: input.remark ?? null,
+        p_items: input.items,
+      },
+      "保存供应商采购批次草稿失败",
+      "saved",
+    );
+  }
+
+  submit(input: BatchCommandContext) {
+    return this.command(
+      "submit_supplier_purchase_batch",
+      commandParams(input),
+      "提交供应商采购批次失败",
+      "submitted",
+    );
+  }
+
+  cancel(input: BatchCommandContext & { reason: string }) {
+    return this.command(
+      "cancel_supplier_purchase_batch",
+      { ...commandParams(input), p_reason: input.reason },
+      "取消供应商采购批次失败",
+      "cancelled",
+    );
+  }
+
+  private command(
+    name: string,
+    params: Record<string, unknown>,
+    message: string,
+    successStatus: SupplierPurchaseBatchCommandResult["status"],
+  ) {
+    return executeSupplierPurchaseBatchCommand({
+      client: this.client, name, params, message, successStatus,
+    });
+  }
+
   private async listChild<T>(input: {
     input: BatchChildPageInput;
     table: string;
@@ -313,6 +382,17 @@ export class SupplierPurchaseBatchesRepository {
       count,
     );
   }
+}
+
+function commandParams(input: BatchCommandContext) {
+  return {
+    p_batch_id: input.batch_id,
+    p_tenant_id: input.tenant_id,
+    p_expected_version: input.expected_version,
+    p_actor_user_id: input.actor_user_id,
+    p_actor_employee_id: input.actor_employee_id,
+    p_idempotency_key: input.idempotency_key,
+  };
 }
 
 function scopeIsEmpty(

@@ -272,6 +272,43 @@ export const SupplierPurchaseBatchCostCategorySchema = z.object({
   sort_order: z.number().int(),
 }).strict();
 
+export const SupplierPurchaseBatchCommandEnvelopeSchema = z.object({
+  status: z.enum([
+    "saved",
+    "submitted",
+    "cancelled",
+    "validation_error",
+    "not_found",
+    "version_conflict",
+    "state_conflict",
+    "price_changed",
+    "supplier_not_eligible",
+    "project_invalid",
+  ]),
+  idempotent: z.boolean().optional(),
+  batch: SupplierPurchaseBatchRecordSchema.optional(),
+  requisition_ids: z.array(uuid).max(20).optional(),
+  version: z.number().int().positive().optional(),
+  error_code: z.string().optional(),
+  reason: z.string().optional(),
+}).strict().superRefine((envelope, context) => {
+  const success = ["saved", "submitted", "cancelled"].includes(
+    envelope.status,
+  );
+  if (success && (!envelope.batch || envelope.version === undefined ||
+    envelope.error_code !== undefined || envelope.reason !== undefined)) {
+    context.addIssue({ code: "custom", message: "无效的批次命令成功响应" });
+  }
+  if (!success && (!envelope.error_code || envelope.batch !== undefined ||
+    envelope.requisition_ids !== undefined || envelope.idempotent !== undefined)) {
+    context.addIssue({ code: "custom", message: "无效的批次命令错误响应" });
+  }
+  if ((envelope.status === "submitted") !==
+    (envelope.requisition_ids !== undefined)) {
+    context.addIssue({ code: "custom", message: "无效的批次拆单结果" });
+  }
+});
+
 export type SupplierPurchaseBatch =
   z.infer<typeof SupplierPurchaseBatchRecordSchema>;
 export type SupplierPurchaseBatchDetail =
