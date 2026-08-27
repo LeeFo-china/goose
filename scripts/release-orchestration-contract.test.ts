@@ -2858,7 +2858,7 @@ describe("production orchestrator", () => {
   test("revalidates candidate evidence inside the globally serialized production deploy", () => {
     const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
     const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
-    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Download immutable deployment source");
     const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
     const syncStart = deployProductionWorkflow.indexOf("- name: Sync compose fragments");
@@ -2894,9 +2894,11 @@ describe("production orchestrator", () => {
         guard.indexOf('if [ "${normalized_release_service}" = web ]; then'),
       );
     }
-    expect(checkout).toContain('git clone --filter=blob:none --no-checkout "https://github.com/${GITHUB_REPOSITORY}.git" "${SOURCE_DIR}"');
-    expect(checkout).toContain('git -C "${SOURCE_DIR}" fetch');
-    expect(checkout).toContain('git -C "${SOURCE_DIR}" clean -fdx');
+    expect(checkout).toContain(
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+    );
+    expect(checkout).toContain('tar -xzf "${source_archive}"');
+    expect(checkout).not.toContain("git clone");
     expect(deployProductionWorkflow).not.toContain("${RUNNER_WORKSPACE}/source");
     expect(metadata).not.toContain('if [ -z "${BUILD_RUN_ID}" ]; then');
     expect(metadata).toContain('[[ "${BUILD_RUN_ID}" =~ ^[1-9][0-9]*$ ]]');
@@ -3006,6 +3008,39 @@ describe("production orchestrator", () => {
     expect(runProductionGuard("").exitCode).not.toBe(0);
   });
 
+  test("deploys from the candidate source artifact without cloning GitHub on production", () => {
+    const candidateStart = releaseProductionWorkflow.indexOf("  candidate:");
+    const authorizeStart = releaseProductionWorkflow.indexOf("  authorize-deploy:");
+    const candidate = releaseProductionWorkflow.slice(candidateStart, authorizeStart);
+    const checkout = sliceWorkflowStep(
+      deployProductionWorkflow,
+      "Download immutable deployment source",
+    );
+
+    expect(candidate).toContain("name: Package immutable production deployment source");
+    expect(candidate).toContain('git archive --format=tar.gz --output production-deploy-source.tar.gz "${GITHUB_SHA}"');
+    expect(candidate).toContain("name: production-deploy-source");
+    expect(candidate).toContain("path: production-deploy-source.tar.gz");
+    expect(candidate).toContain(
+      'deployment_source_artifact: "production-deploy-source"',
+    );
+
+    expect(checkout).toContain(
+      'gh run download "${BUILD_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n production-deploy-source',
+    );
+    expect(checkout).toContain(
+      'tar -xzf "${source_archive}" --strip-components=0 -C "${SOURCE_DIR}"',
+    );
+    expect(checkout).toContain(
+      'test -s "${SOURCE_DIR}/deploy/docker-compose.api.yml"',
+    );
+    expect(checkout).not.toContain(
+      'test -s "${SOURCE_DIR}/docker-compose.api.yml"',
+    );
+    expect(checkout).not.toContain("git clone");
+    expect(checkout).not.toContain("socks5h://127.0.0.1:18080");
+  });
+
   test("rejects direct non-Web dispatch outside the release-production caller", () => {
     expect(
       runNonWebCandidatePreflight(
@@ -3073,7 +3108,7 @@ describe("production orchestrator", () => {
     const confirmInputStart = dispatch.indexOf("      confirm_text:");
     const guardStart = deployProductionWorkflow.indexOf("- name: Guard production runner");
     const metadataStart = deployProductionWorkflow.indexOf("- name: Preflight Admin candidate metadata");
-    const checkoutStart = deployProductionWorkflow.indexOf("- name: Checkout compose files");
+    const checkoutStart = deployProductionWorkflow.indexOf("- name: Download immutable deployment source");
     const evidenceStart = deployProductionWorkflow.indexOf("- name: Validate production release evidence");
     const dockerStart = deployProductionWorkflow.indexOf("- name: Ensure Docker daemon");
     const webGateStart = deployProductionWorkflow.indexOf("- name: Validate web deployment gate");

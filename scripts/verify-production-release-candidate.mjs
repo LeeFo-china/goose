@@ -86,7 +86,7 @@ export function verifyProductionReleaseCandidate(candidate, plan, manifests, exp
     "unsupported expected image base",
   );
 
-  assert(candidate.schema_version === 1, "unsupported candidate schema");
+  assert(candidate.schema_version === 2, "unsupported candidate schema");
   assert(
     Number.isSafeInteger(expected.runId) && expected.runId > 0,
     "invalid expected run ID",
@@ -103,6 +103,10 @@ export function verifyProductionReleaseCandidate(candidate, plan, manifests, exp
   assert(
     candidate.build_plan_artifact === "production-build-plan",
     "invalid build plan artifact",
+  );
+  assert(
+    candidate.deployment_source_artifact === "production-deploy-source",
+    "invalid deployment source artifact",
   );
 
   assertOrderedServices(expected.services, REQUESTED_ORDER, "expected services");
